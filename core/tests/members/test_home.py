@@ -63,7 +63,7 @@ async def test_home_and_sidebar_do_not_read_receipt_transport_as_a_report(home, 
 
 async def test_five_minute_rhythm_marks_every_day_of_the_month_grid(home, rig):
     await rig.call("routines.create", {"member_id":0,"title":"Sample rhythm","prompt":"Review samples","schedule":{"kind":"every","minutes":5}})
-    value = await rig.call("home.overview")
+    value = await rig.call("home.overview", {"month": "2026-11"})
     bars = [item for item in value["calendar_items"] if item.get("rhythm")]
     assert len(bars) == 42
     assert len({item["at_ms"] for item in bars}) == 42
@@ -186,8 +186,8 @@ async def test_month_marks_routines_and_events_beyond_the_week_without_changing_
     home.calendar_events = events
     before = rig.conn.total_changes
     value = await rig.call("home.overview", {"refresh": True})
-    assert len(value["calendar_days"]) == 42
-    assert "2026-10-01" in value["calendar_days"]
+    assert len(value["calendar_days"]) == 17
+    assert value["calendar_days"][0] == "2026-10-23"
     assert "2026-10-31" in value["calendar_days"]
     assert all(item["at_ms"] < event_at for item in value["calendar"])
     assert value["calendar_events"][0]["title"] == "Month end"
@@ -217,7 +217,7 @@ async def test_month_agenda_keeps_three_earliest_items_and_full_daily_counts(hom
     for hour in range(8, 12):
         await rig.call("routines.create", {"member_id": 0, "title": "Daily review", "prompt": "Report",
                                           "schedule": {"kind": "daily", "time": f"{hour:02}:00"}})
-    value = await rig.call("home.overview")
+    value = await rig.call("home.overview", {"month": "2026-11"})
     assert len(value["calendar_counts"]) == 42
     assert set(value["calendar_counts"].values()) == {4}
     assert len(value["calendar_items"]) == 42 * 3
@@ -256,7 +256,8 @@ async def test_today_includes_every_event_and_high_frequency_routine_in_time_ord
     home.calendar_events = events
     value = await rig.call("home.overview", {"refresh": True})
     assert len([item for item in value["today"] if item["kind"] == "event"]) == 20
-    assert len([item for item in value["today"] if item["kind"] == "routine"]) == 288
+    assert [item["at_ms"] for item in value["today"] if item["kind"] == "routine"] == list(
+        range(rig.wall.now + 300_000, start + 86_400_000, 300_000))
     assert value["counts"]["today"] == len(value["today"])
     assert [item["at_ms"] for item in value["today"]] == sorted(item["at_ms"] for item in value["today"])
 
@@ -289,3 +290,42 @@ async def test_today_keeps_recorded_runs_of_a_paused_or_exhausted_routine(home, 
                      (routine["id"], rig.wall.now, rig.wall.now, rig.wall.now))
     value = await rig.call("home.overview")
     assert [item["routine_id"] for item in value["today"]] == [routine["id"]]
+
+
+async def test_audited_hourly_calendar_uses_saved_phase_and_recorded_past(home, rig):
+    hour = 3_600_000
+    rig.wall.now -= 42 * 60_000  # Created at 08:17, first run at 09:17.
+    created = rig.wall.now
+    routine = (await rig.call("routines.create", {"member_id": 0, "title": "Review", "prompt": "Review",
+        "schedule": {"kind": "every", "hours": 1}}))["routine"]
+    assert await home.between(created - 24 * hour, created, home.tz) == []
+    overview = await rig.call("home.overview")
+    assert overview["today"][0]["at_ms"] == created + hour
+    assert overview["calendar_days"][0] == "2026-10-23"
+    start = created + 24 * hour - 17 * 60_000
+    assert [item["at_ms"] for item in await home.between(start, start + 3 * hour, home.tz)] == [
+        created + n * hour for n in (24, 25, 26)]
+    rig.wall.now += 5 * hour
+    rig.conn.execute("INSERT INTO routine_runs(routine_id,scheduled,started,status) VALUES(?,?,?,'done')",
+                     (routine["id"], created + hour, created + hour))
+    assert [item["at_ms"] for item in await home.between(created, rig.wall.now, home.tz)] == [created + hour]
+
+
+async def test_audited_google_overlap_at_all_three_range_filters(home):
+    from datetime import UTC, datetime
+    from raphael_core.home import ConnectedCalendar
+    day = lambda n: int(datetime(2026, 11, n, tzinfo=UTC).timestamp() * 1000)
+    trip = {"id": "trip", "start": {"date": "2026-11-19"}, "end": {"date": "2026-11-22"}}
+    calendar = ConnectedCalendar(None, None)
+    response = {"items": [trip]}
+    events = calendar._parse(response, day(20), day(21))
+    assert len(events) == 1 and events[0]["end_ms"] == day(22)
+    assert calendar._parse(response, day(22), day(23)) == []
+    calendar._cache[(day(18), day(24))] = events
+    assert calendar._kept(day(20), day(21)) == events
+    assert calendar._kept(day(22), day(23)) == []
+    async def read(*_):
+        return events
+    home.calendar_events = read
+    assert await home.between(day(20), day(21), UTC) == events
+    assert await home.between(day(22), day(23), UTC) == []

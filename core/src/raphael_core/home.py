@@ -12,7 +12,7 @@ from .clock import wall_clock_ms
 from .agent.speaker import RAPHAEL_NAMES
 from .agent.owner_questions import OwnerQuestions
 from .connectors.http import ConnectorFailure
-from .members.schedule import next_run
+from .members.schedule import first_eligible_slot, next_run
 from .members.store import ROUTINE_RUN_STATUS_SQL
 from .own_calendar import CalendarStore, own_item
 from .protocol import RpcError, invalid_params
@@ -80,6 +80,10 @@ def _event_end(event: dict, at: int, zone: tzinfo) -> int:
     except (KeyError, TypeError, ValueError, AttributeError, OverflowError, OSError):
         return at + (3_600_000 if "dateTime" in event.get("start", {}) else 86_400_000)
     return over if over > at else at + 3_600_000
+
+
+def _overlaps(item, start, end):
+    return item["at_ms"] < end and item.get("end_ms", item["at_ms"] + 1) > start
 
 
 class ConnectedCalendar:
@@ -154,7 +158,7 @@ class ConnectedCalendar:
         for (first, last), items in reversed(self._cache.items()):
             if first <= start_ms and last >= end_ms:
                 self._cache.move_to_end((first, last))
-                return [item for item in items if start_ms <= item["at_ms"] < end_ms]
+                return [item for item in items if _overlaps(item, start_ms, end_ms)]
         return None
 
     async def read(self, start_ms: int, end_ms: int) -> list[HomeItem]:
@@ -221,10 +225,11 @@ class ConnectedCalendar:
                 at = int(when.timestamp() * 1000)
             except (KeyError, TypeError, ValueError, OverflowError, OSError):
                 continue
-            if start_ms <= at < end_ms:
+            over = _event_end(event, at, zone)
+            if at < end_ms and over > start_ms:
                 title = event.get("summary") or "Untitled event"
                 events.append({"id": f"event:{event['id']}", "kind": "event", "title": " ".join(title.split())[:120],
-                               "summary": "", "at_ms": at, "end_ms": _event_end(event, at, zone), "member_id": 0, "name": "Google Calendar", "avatar": "",
+                               "summary": "", "at_ms": at, "end_ms": over, "member_id": 0, "name": "Google Calendar", "avatar": "",
                                "turn_id": None, "conversation_id": None, "routine_id": None, "all_day": "dateTime" not in start})
         return events
 
@@ -309,20 +314,25 @@ class HomeOverview:
             return own_item(event, zone, member.get("name", ""), member.get("avatar", ""))
         return [of(event) for event in self.own.between(start, end, zone)]
 
-    def _due(self, routine, start: int, end: int, zone: tzinfo | None) -> list[int]:
+    def _due(self, routine, start: int, end: int, zone: tzinfo | None, now: int) -> list[int]:
         """When a routine runs or has run in a period: what its schedule says from then on, and its past runs."""
-        if routine.schedule is None:
-            return []
-        completed = self.conn.execute("SELECT COUNT(*) FROM routine_runs WHERE routine_id=?", (routine.id,)).fetchone()[0]
-        remaining = CALENDAR_LIMIT if routine.schedule.max_runs is None else max(0, routine.schedule.max_runs - completed)
-        due = next_run(routine.schedule, start - 1, tz=zone) if routine.schedule.max_runs is None else routine.next_run_ms
         at = []
-        for _ in range(min(42 * 24 * 12, 42 * 24 * 12 if routine.schedule.max_runs is None else remaining)):
-            if due is None or due >= end:
-                break
-            if due >= start:
-                at.append(due)
-            due = next_run(routine.schedule, due, tz=zone)
+        due = routine.next_run_ms if routine.enabled and routine.schedule else None
+        cutoff = max(start, now)
+        if due is not None and cutoff < end:
+            maximum = routine.schedule.max_runs
+            # Only future slots spend the remaining allowance. For an unlimited routine we
+            # can jump directly to the requested range without losing its original phase.
+            due = first_eligible_slot(routine.schedule, due, cutoff if maximum is None else now, tz=zone)
+            if maximum is not None:
+                completed = self.conn.execute("SELECT COUNT(*) FROM routine_runs WHERE routine_id=?", (routine.id,)).fetchone()[0]
+                maximum = max(0, maximum - completed)
+            while due is not None and due < end and (maximum is None or maximum > 0):
+                if due >= cutoff:
+                    at.append(due)
+                due = next_run(routine.schedule, due, tz=zone)
+                if maximum is not None:
+                    maximum -= 1
         at += [run["at"] for run in self.conn.execute(
             "SELECT COALESCE(scheduled, started) AS at FROM routine_runs WHERE routine_id=? AND COALESCE(scheduled, started)>=? AND COALESCE(scheduled, started)<?",
             (routine.id, start, end))]
@@ -342,17 +352,18 @@ class HomeOverview:
         """Everything the calendar shows in a period, for a member who reads it (`calendar_list`): own events,
         routine occurrences and, when connected, Google events read now. An unavailable connection adds none."""
         people = await self._people({})
+        now = self.now_ms()
         items = self._own_items(start, end, zone, people)
         for routine in self.members.store.routines():
-            if routine.enabled and routine.next_run_ms is not None and routine.member_id in people:
+            if routine.member_id in people:
                 member = people[routine.member_id]
                 items += [{"id": f"routine:{routine.id}:{at}", "kind": "routine", "title": " ".join(routine.title.split())[:120], "summary": "",
                            "at_ms": at, "member_id": routine.member_id, "name": member["name"], "avatar": member.get("avatar", ""),
                            "turn_id": None, "conversation_id": None, "routine_id": routine.id, "all_day": False}
-                          for at in self._due(routine, start, end, zone)]
+                          for at in self._due(routine, start, end, zone, now)]
         try:
             read = self.calendar_events.read if isinstance(self.calendar_events, ConnectedCalendar) else self.calendar_events
-            items += [event for event in await read(start, end) if start <= event["at_ms"] < end]
+            items += [event for event in await read(start, end) if _overlaps(event, start, end)]
             self._calendar_failed = False
         except (ConnectionError, TimeoutError):
             self._calendar_failed = True
@@ -458,36 +469,20 @@ class HomeOverview:
                 if month_start <= at < month_end:
                     month_day({**value, "at_ms": at, "all_day": True}, day.date().isoformat())
         for routine in routines:
-            if routine.member_id in people:
-                # Completed/event-triggered runs remain part of today even when the
-                # routine has exhausted its schedule or has since been paused.
-                if routine.enabled and routine.schedule is not None and routine.next_run_ms is not None:
-                    today_runs = self._due(routine, start, tomorrow, zone)
-                else:
-                    today_runs = sorted({row[0] for row in self.conn.execute(
-                        "SELECT COALESCE(scheduled,started) FROM routine_runs WHERE routine_id=?"
-                        " AND COALESCE(scheduled,started)>=? AND COALESCE(scheduled,started)<?", (routine.id, start, tomorrow))})
-                today.extend(item("routine", f"{routine.id}:{at}", routine.member_id, routine.title, at, routine=routine.id) for at in today_runs)
-            if routine.schedule is None or not routine.enabled or routine.next_run_ms is None or routine.member_id not in people:
+            if routine.member_id not in people:
                 continue
-            due = routine.next_run_ms
-            completed = self.conn.execute("SELECT COUNT(*) FROM routine_runs WHERE routine_id=?", (routine.id,)).fetchone()[0]
-            remaining = CALENDAR_LIMIT if routine.schedule.max_runs is None else max(0, routine.schedule.max_runs - completed)
-            # At most one page of occurrences per routine, even for hourly schedules.
-            for _ in range(min(CALENDAR_LIMIT, remaining)):
-                if due is None or due >= end:
-                    break
-                if due >= start:
-                    occurrence = item("routine", f"{routine.id}:{due}", routine.member_id, routine.title, due, routine=routine.id)
-                    calendar.append(occurrence)
-                due = next_run(routine.schedule, due, tz=zone)
+            def occurrence(at):
+                return item("routine", f"{routine.id}:{at}", routine.member_id, routine.title, at, routine=routine.id)
+            today.extend(occurrence(at) for at in self._due(routine, start, tomorrow, zone, now))
+            if routine.enabled and routine.next_run_ms is not None:
+                calendar.extend(occurrence(at) for at in self._due(routine, max(start, now), end, zone, now)[:CALENDAR_LIMIT])
             # The month marks every scheduled day, independently of the bounded seven-day preview.
             schedule = routine.schedule
             minute = lambda time: int(time[:2]) * 60 + int(time[3:])
-            rhythm = schedule.kind == "every" and schedule.interval_minutes < 1440 and (
+            rhythm = schedule is not None and schedule.kind == "every" and schedule.interval_minutes < 1440 and (
                 not schedule.from_time or minute(schedule.to_time) - minute(schedule.from_time) >= schedule.interval_minutes)
             marked = set()
-            for at in self._due(routine, month_start, month_end, zone):
+            for at in self._due(routine, month_start, month_end, zone, now):
                 if not rhythm:
                     month_item(item("routine", f"{routine.id}:{at}", routine.member_id, routine.title, at, routine=routine.id))
                     continue
@@ -516,7 +511,7 @@ class HomeOverview:
         today_events = events if month_start <= start and tomorrow <= month_end else [
             *self._own_items(start, tomorrow, zone, people), *await self._events(start, tomorrow, refresh)]
         today.extend(event for event in today_events if event["at_ms"] < tomorrow and event.get("end_ms", event["at_ms"] + 1) > start)
-        calendar.extend(event for event in events if start <= event["at_ms"] < end)
+        calendar.extend(event for event in events if _overlaps(event, start, end))
         today.sort(key=lambda r: (r["at_ms"], r["id"]))
         calendar.sort(key=lambda r: (r["at_ms"], r["id"]))
         google = await self.google_state()

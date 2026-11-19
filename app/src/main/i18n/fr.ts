@@ -1858,6 +1858,8 @@ export const fr = {
   "members.offerTitle": "Ajouter une routine ?",
   "members.offerNo": "Pas maintenant",
   "members.nameEmpty": "Entrez un nom",
+  "members.groupNameTaken": "Un groupe porte déjà ce nom.",
+  "members.chooseGroup": "Ajoutez un de ces identifiants après le nom du groupe : {p0}",
   "members.nameTaken": "Un membre nommé {p0} existe déjà",
   "members.routineLine": "Routine",
   "auto.waiting": "En attente de vous",

@@ -3,10 +3,12 @@
 Bot tokens stay in the shared vault.
 """
 
+import asyncio
 import time
+from decimal import Decimal
 
-from .base import ChannelError, ChannelType, Identity, Incoming
-from .work import download, file_attachment, quiet_busy, receive, request, token, trusted_url
+from .base import ChannelError, ChannelType, Identity, Incoming, send_through_rate_limits
+from .work import PairedHistory, download, file_attachment, quiet_busy, receive, request, token, trusted_url
 
 ROOT = "https://slack.com/api/"
 FILES = {"files.slack.com"}
@@ -23,14 +25,20 @@ def incoming(data):
                     caption=text if files else None, attachments=files)
 
 
-class SlackChannel:
+class SlackChannel(PairedHistory):
     kind = "slack"
+    retries_rate_limits = True
 
     def __init__(self, token, http):
         self.http, self.headers = http, {"Authorization": f"Bearer {token}"}
         self.error = None
         self.since = {}
-        self.started = str(time.time())
+        self.started = f"{time.time():.6f}"
+        self.before = {}
+        self.list_cursor = None
+
+    def pair_position(self, chat):
+        return self.since.get(chat, f"{time.time():.6f}")
 
     async def api(self, method, **params):
         response = await request(self.http, "POST", ROOT + method, headers=self.headers, json=params)
@@ -44,44 +52,72 @@ class SlackChannel:
         return data
 
     async def poll(self, deliver):
-        cursor = None
         for _ in range(20):
-            listing = await self.api("conversations.list", types="im", limit=100, **({"cursor": cursor} if cursor else {}))
+            listing = await self.api("conversations.list", types="im", limit=100,
+                                     **({"cursor": self.list_cursor} if self.list_cursor else {}))
             for chat in listing.get("channels", []):
-                identifier = chat.get("id")
-                if not isinstance(identifier, str):
-                    continue
-                oldest = self.since.get(identifier, self.started)
-                page_cursor = None
-                messages = []
-                for _ in range(20):
-                    page = await self.api("conversations.history", channel=identifier, oldest=oldest, limit=100,
-                                          **({"cursor": page_cursor} if page_cursor else {}))
-                    messages.extend(page.get("messages", []))
-                    page_cursor = page.get("response_metadata", {}).get("next_cursor")
-                    if not page_cursor:
-                        break
+                if isinstance(identifier := chat.get("id"), str):
+                    await self._history(identifier, deliver)
+            self.list_cursor = listing.get("response_metadata", {}).get("next_cursor")
+            if not self.list_cursor:
+                break
+
+    async def _history(self, chat, deliver):
+        user = self.paired(chat)
+        oldest = user.position if user else self.since.get(chat, self.started)
+        before = user.history_before if user else self.before.get(chat)
+        for _ in range(20):
+            recovering = user and user.find_last_reply
+            page = await self.api("conversations.history", channel=chat, oldest="0" if recovering else oldest, limit=100,
+                                  **({"latest": before} if before else {}))
+            messages = sorted((m for m in page.get("messages", []) if isinstance(m.get("ts"), str)),
+                              key=lambda m: Decimal(m["ts"]))
+            more = messages and (page.get("has_more") or page.get("response_metadata", {}).get("next_cursor"))
+            if recovering:
+                bot = self.config.bot_id.rsplit(":", 1)[-1]
+                reply = next((m for m in reversed(messages) if m.get("user") == bot), None)
+                if more and reply is None:
+                    before = messages[0]["ts"]
                 else:
-                    raise ChannelError("rate_limited", 60)
-                for data in sorted(messages, key=lambda item: item.get("ts", "")):
-                    if not isinstance(data.get("ts"), str) or data["ts"] <= self.since.get(identifier, oldest):
+                    # With no retained reply there is no safe way to replay pre-pairing history.
+                    oldest = reply["ts"] if reply else oldest
+                    user.find_last_reply = False
+                    before = None
+            elif more:
+                # History is newest first. Narrow the time window until its oldest page fits.
+                # A timestamp survives restart and cursor expiry without storing private messages.
+                first = Decimal(messages[0]["ts"])
+                midpoint = ((Decimal(oldest) + first) / 2).quantize(Decimal("0.000001"))
+                before = str(max(Decimal(oldest) + Decimal("0.000002"), midpoint))
+            else:
+                for data in messages:
+                    if Decimal(data["ts"]) <= Decimal(oldest):
                         continue
-                    event = incoming({**data, "channel": identifier, "channel_type": "im"})
-                    if event:
-                        deliver(event)
-                    if data.get("ts"):
-                        self.since[identifier] = max(self.since.get(identifier, oldest), data["ts"])
-            cursor = listing.get("response_metadata", {}).get("next_cursor")
-            if not cursor:
-                return
-        raise ChannelError("rate_limited", 60)
+                    event = incoming({**data, "channel": chat, "channel_type": "im"})
+                    if event and deliver(event) is False:
+                        return
+                    oldest = self.since[chat] = data["ts"]
+                    if user:
+                        user.position = oldest
+                        self.save()
+                if not before:
+                    return
+                # Even an empty subrange is known to be clear strictly before its upper bound.
+                oldest = self.since[chat] = str(max(Decimal(oldest), Decimal(before) - Decimal("0.000001")))
+                before = None
+            self.before[chat] = before
+            if user:
+                user.position, user.history_before = oldest, before or ""
+                self.save()
 
     async def run(self, deliver):
         await receive(self, self.poll, deliver)
 
     async def send(self, chat, text):
         for start in range(0, len(text), 3500):
-            await self.api("chat.postMessage", channel=chat, text=text[start:start + 3500], unfurl_links=False, unfurl_media=False)
+            part = text[start:start + 3500]
+            await send_through_rate_limits(lambda: self.api("chat.postMessage", channel=chat, text=part,
+                unfurl_links=False, unfurl_media=False), asyncio.sleep)
 
     async def send_attachment(self, chat, file):
         if len(file.data) > 1024 * 1024 * 1024:

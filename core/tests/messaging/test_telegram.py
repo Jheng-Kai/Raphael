@@ -641,3 +641,23 @@ async def test_a_background_report_goes_to_its_chat_only_if_allowed(rig, fake):
     await rig.service.report("overlay-1", "leak")
     assert fake.sent == [(OWNER, "《告》done")]
     await rig.service.aclose()
+
+
+async def test_refused_delivery_keeps_offset_before_the_rest_of_the_batch(fake, http):
+    fake.message(OWNER, "first")
+    fake.message(OWNER, "wait")
+    fake.message(OWNER, "last")
+    channel = TelegramChannel(TelegramApi(TOKEN, http), sleep=lambda _: asyncio.sleep(0))
+    attempts = []
+    def deliver(message):
+        attempts.append(message.text)
+        return attempts != ["first", "wait"]
+    task = asyncio.create_task(channel.run(deliver))
+    try:
+        await settle(lambda: channel._offset == 4)
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+    assert attempts == ["first", "wait", "wait", "last"]
+    offsets = [p.get("offset") for method, p in fake.requests if method == "getUpdates"]
+    assert offsets[:2] == [None, 2]

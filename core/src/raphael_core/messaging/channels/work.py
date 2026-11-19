@@ -70,6 +70,24 @@ async def quiet_busy():
     yield
 
 
+class PairedHistory:
+    """Keep replay boundaries with the pairing, so removing a pairing also removes its history."""
+    config = None
+
+    def track(self, config, save):
+        self.config, self.save = config, save
+        for user in config.allowed:
+            if not user.position:
+                user.position = self.started
+                # New pairings already have a position. Only older Slack accounts need
+                # to locate their last outgoing reply before ordinary polling starts.
+                user.find_last_reply = self.kind == "slack" and bool(config.bot_id)
+                save()
+
+    def paired(self, chat):
+        return next((u for u in self.config.allowed if u.chat == chat), None) if self.config else None
+
+
 async def receive(channel, poll, deliver):
     backoff = 1
     while True:

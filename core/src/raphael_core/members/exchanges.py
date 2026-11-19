@@ -7,6 +7,7 @@ Speech uses the shared worker with a separate admission pool. Durable private wo
 member dispatches another member's speech. A reply that does not finish is a status line (a blocked intent), never words
 in anyone's mouth.
 """
+from contextlib import nullcontext
 import asyncio
 import json
 import logging
@@ -182,8 +183,8 @@ class RoomExchanges:
             "AND (i.origin_message_id=? OR i.state='blocked') ORDER BY i.id", (room_id,thread_id,thread_id,row['origin_message_id']))]
         return result
 
-    def intents(self, origin, source, recipients):
-        with self.conn:
+    def intents(self, origin, source, recipients, *, in_transaction=False):
+        with nullcontext() if in_transaction else self.conn:
             for member in recipients:
                 speaker = self.rooms._members.speaker(member)
                 self.conn.execute("INSERT OR IGNORE INTO room_reply_intents "

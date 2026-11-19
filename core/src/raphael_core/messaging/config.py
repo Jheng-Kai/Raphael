@@ -28,6 +28,10 @@ class AllowedUser:
     name: str
     chat_id: str = ""  # where a message to this user goes; the user id itself when it is empty
 
+    position: str = ""
+    history_before: str = ""
+    find_last_reply: bool = False
+
     @property
     def chat(self) -> str:
         return self.chat_id or self.user_id
@@ -80,7 +84,9 @@ def _parse_channel(raw: object) -> ChannelConfig:
         label = item.get("name")
         chat_id = _id(item.get("chat")) or ""
         allowed.append(
-            AllowedUser(user_id, label[:MAX_NAME_CHARS] if isinstance(label, str) else "", chat_id)
+            AllowedUser(user_id, label[:MAX_NAME_CHARS] if isinstance(label, str) else "", chat_id,
+                        _id(item.get("position")) or "", _id(item.get("history_before")) or "",
+                        item.get("find_last_reply") is True)
         )
     return ChannelConfig(
         enabled=raw.get("enabled") is True and bot_id is not None,
@@ -127,7 +133,10 @@ class MessagingStore:
                     if channel.bot_id is None
                     else {"id": channel.bot_id, "name": channel.bot_username},
                     "allowed": [
-                        {"user": u.user_id, "name": u.name, "chat": u.chat} for u in channel.allowed
+                        {"user": u.user_id, "name": u.name, "chat": u.chat,
+                         **({"position": u.position} if u.position else {}),
+                         **({"history_before": u.history_before} if u.history_before else {}),
+                         **({"find_last_reply": True} if u.find_last_reply else {})} for u in channel.allowed
                     ],
                 }
                 for kind, channel in config.channels.items()

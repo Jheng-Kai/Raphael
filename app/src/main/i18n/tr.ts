@@ -1858,6 +1858,8 @@ export const tr = {
   "members.offerTitle": "Rutin eklensin mi?",
   "members.offerNo": "Şimdi değil",
   "members.nameEmpty": "Ad girin",
+  "members.groupNameTaken": "Bu ada sahip bir grup zaten var.",
+  "members.chooseGroup": "Grup adının sonuna şu kimliklerden birini ekleyin: {p0}",
   "members.nameTaken": "{p0} adlı bir üye zaten var",
   "members.routineLine": "Rutin",
   "auto.waiting": "Sizi bekliyor",

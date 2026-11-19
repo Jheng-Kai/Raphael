@@ -1858,6 +1858,8 @@ export const ru = {
   "members.offerTitle": "Добавить регулярную задачу?",
   "members.offerNo": "Не сейчас",
   "members.nameEmpty": "Укажите имя",
+  "members.groupNameTaken": "Группа с таким названием уже существует.",
+  "members.chooseGroup": "Добавьте один из этих идентификаторов после названия группы: {p0}",
   "members.nameTaken": "Участник с именем {p0} уже существует",
   "members.routineLine": "Регулярная задача",
   "auto.waiting": "Ожидает вас",

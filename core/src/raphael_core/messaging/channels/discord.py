@@ -4,11 +4,13 @@
 
 import asyncio
 import json
+import time
+from urllib.parse import urlsplit
 from contextlib import asynccontextmanager
 
-from .base import ChannelError, ChannelType, Identity, Incoming
+from .base import ChannelError, ChannelType, Identity, Incoming, send_through_rate_limits
 from .socket import GatewaySocket
-from .work import download, file_attachment, request, token
+from .work import PairedHistory, download, file_attachment, request, token
 
 ROOT = "https://discord.com/api/v10"
 FILES = {"cdn.discordapp.com", "media.discordapp.net"}
@@ -25,14 +27,18 @@ def incoming(data):
                     text=None if files else text, caption=text if files else None, attachments=files)
 
 
-class DiscordChannel:
+class DiscordChannel(PairedHistory):
     kind = "discord"
+    retries_rate_limits = True
 
     def __init__(self, token, http, *, connect=GatewaySocket):
         self.token, self.http, self.connect = token, http, connect
         self.headers = {"Authorization": f"Bot {token}"}
         self.error = None
         self.seen = {}
+        self.started = str((int(time.time() * 1000) - 1420070400000) << 22)
+        self.session_id = None
+        self.resume_host = None
         self.sequence = None
         self.acknowledged = True
 
@@ -43,19 +49,58 @@ class DiscordChannel:
         except ValueError:
             raise ChannelError("bad_request") from None
 
+    def pair_position(self, chat):
+        return str((int(time.time() * 1000) - 1420070400000) << 22)
+
+    async def _message(self, data, deliver):
+        identifier = data.get("id")
+        if not identifier:
+            return
+        user = self.paired(data.get("channel_id"))
+        if user and int(identifier) <= int(user.position):
+            return
+        if identifier not in self.seen and (message := incoming(data)):
+            while deliver(message) is False:
+                await asyncio.sleep(0.25)
+            self.seen[identifier] = True
+            if len(self.seen) > 2000:
+                self.seen.pop(next(iter(self.seen)))
+        if user:
+            user.position = identifier
+            self.save()
+
+    async def _catch_up(self, deliver):
+        for user in list(self.config.allowed if self.config else []):
+            for _ in range(20):
+                if self.paired(user.chat) is not user:
+                    break
+                page = await self.api("GET", f"/channels/{user.chat}/messages",
+                                      params={"after": user.position, "limit": 100})
+                for data in sorted(page, key=lambda m: int(m["id"])):
+                    await self._message(data, deliver)
+                if len(page) < 100:
+                    break
+            else:
+                # Identify again from the saved boundary before accepting newer live events.
+                raise ChannelError("network")
+
     async def run(self, deliver):
         backoff = 1
         while True:
             heartbeat = None
             try:
-                async with self.connect() as socket:
+                connection = GatewaySocket(self.resume_host) if self.resume_host and self.connect is GatewaySocket else self.connect()
+                async with connection as socket:
                     hello = await asyncio.wait_for(socket.recv(), 30)
                     interval = hello.get("d", {}).get("heartbeat_interval")
                     if hello.get("op") != 10 or type(interval) not in (float, int) or not 1000 <= interval <= 120000:
                         raise ChannelError("network")
-                    self.sequence, self.acknowledged = None, True
-                    await socket.send({"op": 2, "d": {"token": self.token, "intents": 1 << 12,
-                        "properties": {"os": "windows", "browser": "Raphael", "device": "Raphael"}}})
+                    self.acknowledged = True
+                    if self.session_id and self.sequence is not None:
+                        await socket.send({"op": 6, "d": {"token": self.token, "session_id": self.session_id, "seq": self.sequence}})
+                    else:
+                        await socket.send({"op": 2, "d": {"token": self.token, "intents": 1 << 12,
+                            "properties": {"os": "windows", "browser": "Raphael", "device": "Raphael"}}})
                     async def beat():
                         while True:
                             await asyncio.sleep(interval / 1000)
@@ -76,36 +121,42 @@ class DiscordChannel:
                             if not reading.done():
                                 reading.cancel()
                                 await asyncio.gather(reading, return_exceptions=True)
-                        if packet.get("s") is not None:
-                            self.sequence = packet["s"]
                         if packet.get("op") == 11:
                             self.acknowledged = True
                         elif packet.get("op") == 1:
                             await socket.send({"op": 1, "d": self.sequence})
                         elif packet.get("op") in (7, 9):
+                            if packet["op"] == 9 and not packet.get("d"):
+                                self.session_id = self.sequence = self.resume_host = None
                             raise ChannelError("network")
+                        elif packet.get("t") == "READY":
+                            await self._catch_up(deliver)
+                            self.session_id = packet["d"]["session_id"]
+                            host = urlsplit(packet["d"].get("resume_gateway_url", "")).hostname
+                            self.resume_host = host if host and host.endswith(".discord.gg") else None
                         elif packet.get("t") == "MESSAGE_CREATE":
-                            data = packet.get("d") or {}
-                            identifier = data.get("id")
-                            if identifier and identifier not in self.seen and (message := incoming(data)):
-                                self.seen[identifier] = True
-                                if len(self.seen) > 2000:
-                                    self.seen.pop(next(iter(self.seen)))
-                                deliver(message)
+                            await self._message(packet.get("d") or {}, deliver)
+                        if packet.get("s") is not None:
+                            self.sequence = packet["s"]
             except (ChannelError, OSError, TimeoutError, asyncio.IncompleteReadError) as error:
+                retry_after = error.retry_after if isinstance(error, ChannelError) else 0
                 self.error = error.kind if isinstance(error, ChannelError) else "network"
+                if self.error == "invalid_session":
+                    self.session_id = self.sequence = self.resume_host = None
+                    self.error = "network"
                 if self.error == "unauthorized":
                     return
             finally:
                 if heartbeat:
                     heartbeat.cancel()
                     await asyncio.gather(heartbeat, return_exceptions=True)
-            await asyncio.sleep(backoff)
+            await asyncio.sleep(max(backoff, retry_after))
             backoff = min(60, backoff * 2)
 
     async def send(self, chat, text):
         for start in range(0, len(text), 1900):
-            await self.api("POST", f"/channels/{chat}/messages", json={"content": text[start:start + 1900], "allowed_mentions": {"parse": []}})
+            payload = {"content": text[start:start + 1900], "allowed_mentions": {"parse": []}}
+            await send_through_rate_limits(lambda: self.api("POST", f"/channels/{chat}/messages", json=payload), asyncio.sleep)
 
     async def send_attachment(self, chat, file):
         if len(file.data) > 10 * 1024 * 1024:

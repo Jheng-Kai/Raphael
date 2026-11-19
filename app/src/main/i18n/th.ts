@@ -1858,6 +1858,8 @@ export const th = {
   "members.offerTitle": "เพิ่มงานประจำไหม?",
   "members.offerNo": "ไว้ก่อน",
   "members.nameEmpty": "ใส่ชื่อ",
+  "members.groupNameTaken": "มีกลุ่มที่ใช้ชื่อนี้แล้ว",
+  "members.chooseGroup": "เพิ่มรหัสใดรหัสหนึ่งต่อท้ายชื่อกลุ่ม: {p0}",
   "members.nameTaken": "มีสมาชิกชื่อ {p0} แล้ว",
   "members.routineLine": "งานประจำ",
   "auto.waiting": "กำลังรอคุณ",

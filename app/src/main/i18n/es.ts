@@ -1858,6 +1858,8 @@ export const es = {
   "members.offerTitle": "¿Añadir una rutina?",
   "members.offerNo": "Ahora no",
   "members.nameEmpty": "Escribe un nombre",
+  "members.groupNameTaken": "Ya existe un grupo con este nombre.",
+  "members.chooseGroup": "Añade uno de estos identificadores al final del nombre del grupo: {p0}",
   "members.nameTaken": "Ya hay un miembro llamado {p0}",
   "members.routineLine": "Rutina",
   "auto.waiting": "Esperándote",
