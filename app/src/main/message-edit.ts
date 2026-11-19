@@ -69,18 +69,17 @@ export interface OwnerEditing {
 
 /**
  * The owner's bubble itself, its words in a field: the same `.bubble` as the sent message's, under the files and the quote it
- * keeps, so its colour, shape, type and width are the bubble's own and it grows with its words. 取消 and the primary 送出 are
- * small and under it, at its right edge, in no box of their own. The caller puts it in the message element that carries
+ * keeps, so its colour, shape and type are the bubble's own and it grows with its words and controls. The caller puts it in the message element that carries
  * `data-msg-editor`.
  */
 export function ownerEditorHTML(editing: OwnerEditing, files: string, quote: string): string {
   const chips = editing.missing.map((file, index) => `<span class="cmp-chip" data-missing><span class="cmp-chip-t">${esc(file.name)} · ${esc(t("chat.reattach"))}</span>` +
     `<button type="button" class="chip-x" data-act="drop-edit-missing" data-index="${index}" aria-label="${esc(t("agent.unattach"))}" title="${esc(t("agent.unattach"))}">${ico("x")}</button></span>`).join("");
   const bubble = `<div class="bubble">${quote}<div class="message-text">` +
-    `<textarea class="msg-editor-input" data-edit-input rows="1" aria-label="${esc(t("chat.edit"))}">${esc(editing.text)}</textarea></div></div>`;
-  return (files ? `<div class="owner-content">${files}${bubble}</div>` : bubble) +
+    `<textarea class="msg-editor-input" data-edit-input rows="1" aria-label="${esc(t("chat.edit"))}">${esc(editing.text)}</textarea></div>` +
     `<div class="msg-editor-under">${chips ? `<div class="msg-editor-files">${chips}</div>` : ""}` +
-    `<div class="msg-editor-actions">${btn(`<span>${esc(t("common.cancel"))}</span>`, "sm", ' data-act="edit-cancel"')}${btn(esc(t("chat.send")), "sm pri", ` data-act="edit-send"${editing.sendable ? "" : " disabled"}`)}</div></div>`;
+    `<div class="msg-editor-actions">${btn(`<span>${esc(t("common.cancel"))}</span>`, "sm", ' data-act="edit-cancel"')}${btn(esc(t("chat.send")), "sm pri", ` data-act="edit-send"${editing.sendable ? "" : " disabled"}`)}</div></div></div>`;
+  return files ? `<div class="owner-content">${files}${bubble}</div>` : bubble;
 }
 
 /**

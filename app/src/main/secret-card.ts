@@ -42,7 +42,7 @@ export function connectionMarkHTML(name: string, inline = false): string {
 }
 
 /** Whether the card still waits for the owner to type the key. */
-const typing = (card: SecretCard): boolean => card.state === "pending" || (card.state === "failed" && card.error !== "gone");
+export const secretNeedsInput = (card: SecretCard): boolean => card.state === "pending" || (card.state === "failed" && card.error !== "gone");
 
 /** What the card says of where its key stands (the secret's own name while it waits). */
 export function secretStateText(card: SecretCard): string {
@@ -60,13 +60,13 @@ export function secretStateText(card: SecretCard): string {
 /** The field and Save (or Try again), for the states that have an action. */
 function actionHTML(card: SecretCard): string {
   const on = (act: string): string => ` data-act="${act}" data-card="${esc(card.id)}"`;
-  if (typing(card)) {
+  if (secretNeedsInput(card)) {
     // A bot's token is named in the window's language; a connection's secret keeps its own declared name.
     const label = card.platform ? `${card.name} ${t("msg.tg.token")}` : card.key ? card.name : `${card.name} ${card.secret}`;
     if (card.login) return `<div class="sc-form sc-login"><label><span>${esc(t("card.loginUser"))}</span><span class="field sc-field"><input data-login-user="${esc(card.id)}" autocomplete="off" spellcheck="false"></span></label>` +
       `<label><span>${esc(t("card.loginPassword"))}</span><span class="field sc-field">${ico("lock")}<input type="password" data-secret-input="${esc(card.id)}" autocomplete="off" spellcheck="false" autocapitalize="off"></span></label>` +
       btn(esc(t("card.keySave")), "sm pri", `${on("card-save")} disabled`) + `</div>`;
-    return `<div class="sc-form"><label class="field sc-field">${ico("lock")}` +
+    return `<div class="sc-form"><label class="field sc-field">${card.key ? "" : ico("lock")}` +
       `<input type="password" data-secret-input="${esc(card.id)}" placeholder="${esc(card.login ? t("card.loginPassword") : card.platform ? t("msg.tg.tokenHint") : t("card.keyField"))}" aria-label="${esc(label)}" ` +
       `autocomplete="off" spellcheck="false" autocapitalize="off"></label>` +
       btn(esc(t("card.keySave")), "sm pri", `${on("card-save")} disabled`) + `</div>`;
@@ -80,8 +80,8 @@ function actionHTML(card: SecretCard): string {
  * field; the core checks the token and connects the member's own bot (`connect_messaging`).
  */
 const SLACK_SCOPES = ["im:read", "im:history", "chat:write", "files:read", "files:write"] as const;
-function botCardHTML(card: SecretCard & { platform: "telegram" | "slack" | "discord" }): string {
-  const active = typing(card);
+function botCardHTML(card: SecretCard & { platform: "telegram" | "slack" | "discord" }, cancel: string): string {
+  const active = secretNeedsInput(card);
   const failed = card.state === "failed" ? plain(card.error === "offline" ? "cards.botOffline" : card.error === "invalid" ? "cards.botInvalid" : (FAILURES[card.error ?? ""] ?? "card.keyVault")) : "";
   const make = btn(`<span>${esc(t(card.platform === "telegram" ? "cards.botFather" : "msg.createBot"))}</span>${ico("link")}`, "sm", ` data-act="bot-link" data-platform="${card.platform}"`);
   return cardHTML({ title: active ? t("cards.botTitle", { p0: card.name }) : card.name, mark: connectionMarkHTML(card.name),
@@ -90,40 +90,44 @@ function botCardHTML(card: SecretCard & { platform: "telegram" | "slack" | "disc
     body: active ? failed || plain(card.platform === "telegram" ? "cards.botHowTelegram" : card.platform === "slack" ? "cards.botHowSlack" : "cards.botHowDiscord") : undefined,
     // Slack's scopes are names to copy, set apart as code beside the words.
     content: active ? (card.platform === "slack" ? `<p class="card-body bot-scopes">${SLACK_SCOPES.map((scope) => `<code>${scope}</code>`).join(" ")}</p>` : "") + `<div class="card-actions-inline">${make}</div>` + actionHTML(card) + `<p class="card-shield">${ico("lock")}<span>${esc(t("cards.vault"))}</span></p>` : "",
+    actions: cancel,
     cls: "secret-card bot-card", attrs: ` data-secret-card="${esc(card.id)}" data-card-state="${esc(card.state)}" data-platform="${card.platform}"${card.error ? ` data-card-error="${esc(card.error)}"` : ""}`,
   });
 }
 
 /** A key for a program in a member's computer: its variable's name, what it is for and where it goes, then the same masked field. */
-function keyCardHTML(card: SecretCard): string {
-  const active = typing(card), action = actionHTML(card);
-  return cardHTML({ title: active ? t("cards.keyTitle", { p0: card.name }) : card.name, mark: `<span class="mono md" aria-hidden="true">${ico("lock")}</span>`,
+function keyCardHTML(card: SecretCard, cancel: string): string {
+  const active = secretNeedsInput(card), action = actionHTML(card);
+  return cardHTML({ title: active ? t("cards.keyTitle") : card.name,
     status: card.state === "failed" || card.error ? "failed" : active || card.state === "resuming" ? "waiting" : "done",
     statusText: active ? cardPromptText("key") : card.error ? t("cards.failed") : card.state === "resuming" ? t("cards.needsYou") : t("cards.done"),
-    body: active ? card.state === "failed" ? secretStateText(card) : card.purpose || t("cards.keyWhy") : card.error ? secretStateText(card) : card.purpose,
-    content: active ? `<p class="card-body key-where">${esc(t("cards.keyForComputer"))}</p>` + action + `<p class="card-shield">${ico("lock")}<span>${esc(t("cards.vault"))}</span></p>` : card.error ? "" : cardDisclosureHTML(`key-${card.id}`, `<p class="card-body">${esc(secretStateText(card))}</p>`),
-    actions: active ? undefined : action,
+    body: active ? undefined : card.error ? secretStateText(card) : card.purpose,
+    content: active ? `<div class="key-context"><code class="key-name" translate="no">${esc(card.name)}</code><p class="card-body cc-state">${esc(card.purpose || t("cards.keyWhy"))}</p></div>` +
+      (card.state === "failed" ? `<p class="card-body cc-state">${esc(secretStateText(card))}</p>` : "") +
+      action + `<p class="card-shield"><span>${esc(t("cards.vault"))}</span></p>` : card.error ? "" : cardDisclosureHTML(`key-${card.id}`, `<p class="card-body">${esc(secretStateText(card))}</p>`),
+    actions: active ? cancel : action,
     cls: "secret-card key-card", attrs: ` data-secret-card="${esc(card.id)}" data-card-state="${esc(card.state)}" data-key-card=""${card.error ? ` data-card-error="${esc(card.error)}"` : ""}`,
   });
 }
 
-export function secretCardHTML(card: SecretCard): string {
-  if (card.platform) return botCardHTML(card as SecretCard & { platform: "telegram" | "slack" | "discord" });
-  if (card.key) return keyCardHTML(card);
-  const active = typing(card), action = actionHTML(card);
+export function secretCardHTML(card: SecretCard, canCancelTurn = false): string {
+  const cancel = canCancelTurn && secretNeedsInput(card) ? btn(esc(t("common.cancel")), "sm card-quiet", ' data-act="cancel-secret-turn"') : "";
+  if (card.platform) return botCardHTML(card as SecretCard & { platform: "telegram" | "slack" | "discord" }, cancel);
+  if (card.key) return keyCardHTML(card, cancel);
+  const active = secretNeedsInput(card), action = actionHTML(card);
   return cardHTML({ title: active ? t("cards.connect", { p0: card.name }) : card.name, mark: connectionMarkHTML(card.name),
     status: card.state === "failed" || card.error ? "failed" : active || card.state === "resuming" ? "waiting" : "done",
     statusText: active ? cardPromptText("key") : card.error ? t("cards.failed") : card.state === "resuming" ? t("cards.needsYou") : t("cards.done"),
     body: active ? card.state === "failed" ? secretStateText(card) : t("cards.keyWhy") : card.error ? secretStateText(card) : undefined,
     content: active ? action + `<p class="card-shield">${ico("lock")}<span>${esc(t("cards.vault"))}</span></p>` + cardDisclosureHTML(`key-${card.id}`, `<div class="card-well card-body" data-secret-guide="${esc(card.name)}">${esc(card.login ? t("card.loginHint") : card.secret)}</div>`, t("setup.where")) : card.error ? "" : cardDisclosureHTML(`key-${card.id}`, `<p class="card-body">${esc(secretStateText(card))}</p>`),
-    actions: active ? undefined : action,
+    actions: active ? cancel : action,
     cls: "secret-card", attrs: ` data-secret-card="${esc(card.id)}" data-card-state="${esc(card.state)}"${card.error ? ` data-card-error="${esc(card.error)}"` : ""}`,
   });
 }
 
 /** The cards of the keys a turn waits for, below what it said. */
-export function secretCardsHTML(turn: AgentTurn): string {
-  return (turn.secrets ?? []).map(secretCardHTML).join("");
+export function secretCardsHTML(turn: AgentTurn, canCancelTurn = false): string {
+  return (turn.secrets ?? []).map(card => secretCardHTML(card, canCancelTurn)).join("");
 }
 
 /** The centred line a task resumed after its key was saved opens with, in place of the owner's words it carries on. */

@@ -399,7 +399,7 @@ Still working with a bubble already sent counts as answered: the edit is in the 
 
 **The editor in the bubble.** `editInBubble` reads the message as the composer would (`draftFor`), `openEditor` keeps it as `bubbleEdit` (the conversation's
 key and the files and quote) and sets `TimelineState.bubbleEditing`; `turnHTML` draws `ownerEditorHTML` in place of the bubble (`.owner-message.is-editing[data-msg-editor]`,
-the `.bubble` with a `[data-edit-input]` textarea sized by `field-sizing: content`, `.msg-editor-under` with 取消 and the primary 送出), the actions beside it held
+the `.bubble` with a `[data-edit-input]` textarea sized by `field-sizing: content` and the 取消 / 送出 row inside its bottom right), the actions beside it held
 (`is-held`, `inert`) so nothing moves. `carryEditor` keeps the words, the caret and the focus across redraws. Enter (`sendsOnEnter`, the composer's rule) or
 送出 runs `sendBubbleEdit`: the same `agentAskText` call as the composer's edit (`replaceTurnId`, the files by their stored copies, the quote) with an `Outgoing`
 that `replaces` the message, so the edit stands in its place on its way; a failure opens the editor again with the words as typed. Escape is a cancel gesture of
@@ -3063,8 +3063,7 @@ npm run look -- voice-flyer-emblem --theme both --width 1120,720,1920x1080
 The panel's 設定 and share send an intent into the member's conversation (chat-ask.ts). The member answers with
 cards there: a bot token card (secret-card.ts `platform`: where to make the bot through a fixed link, Slack's scopes
 as code, one masked field, the token straight to the vault), a pairing card for someone messaging that bot (code,
-Allow first, then Deny; `messaging.pairing.answer`) and a template card (what it brings, no face; Prepare publish request,
-Save file and View contents on the core's snapshot, then Open GitHub page once the request is prepared; a key inside stops saving and preparing it). chat-cards.ts draws the last two.
+Allow first, then Deny; `messaging.pairing.answer`) and a template card (what it brings, no face; Save file and View contents on the core’s snapshot, or Copy link when the service is available; a key inside stops saving and sharing). chat-cards.ts draws the last two.
 
 ```powershell
 npm run look -- chat-setup-cards chat-pairing-allowed chat-pairing-bottom --theme both --width 1120,720,1920x1080

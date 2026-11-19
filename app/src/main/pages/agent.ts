@@ -254,7 +254,7 @@ interface ComposerDraft {
   quote?: MessageQuote;
 }
 
-export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loadSidebar(): Promise<void>; settingsOf(): number | null; navView(): string; showNavView(key: string): void } {
+export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loadSidebar(): Promise<void>; memberFace(id: number, size: number): string; settingsOf(): number | null; navView(): string; showNavView(key: string): void } {
   const el = document.createElement("div");
   el.className = "page page-agent";
   el.dataset.page = "agent";
@@ -2214,7 +2214,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const ownerAct = pending ? "cancel" : control.dataset.ownerAct;
     // 編輯 only on the owner's last message, decided now by the one rule (`ownerEditOf`, R-UI-163); 取消 while its work goes on.
     if (source && ownerAct && owner && ownerEditFor(source.turn) !== null) items.push({ id: "edit", label: t("chat.edit"), icon: "pencil" });
-    // 立即送出 stands beside 「排隊中」 itself, not in this menu (R-QUEUE-05).
     if (ownerAct === "cancel") items.push({ id: "cancel", label: t("common.cancel"), icon: "x" });
     const reactions = source && !owner && message?.querySelector('[data-act="react-message"]') ? ownReaction(source.turn.reactions?.[source.key]) : null;
     openActions(control, items, pick => {
@@ -2637,8 +2636,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
 
   async function cancelMessage(control?: HTMLElement): Promise<void> {
     const source = control ? messageSource(control) : null;
+    const cardTurnId = control?.dataset.act === "cancel-secret-turn" ? Number(control.closest<HTMLElement>(".tn[data-id]")?.dataset.id) : undefined;
+    const cardTurn = cardTurnId === undefined ? undefined : turns.find(item => item.id === cardTurnId);
     const pending = control ? outgoing.find(item => item.requestId === control.closest<HTMLElement>("[data-session]")?.dataset.session) : [...outgoing].reverse().find(item => item.member === memberId());
-    const turn = pending ? turns.find(turn => turn.session_id === pending.requestId) : source?.turn ?? (!control ? own().find(turn => sourceOf(turn) !== "routine" && sourceOf(turn) !== "member" && !delegatedTurn(turn) && (turn.status === "running" || turn.status === "confirm" || isLive(turn.task) || turn.task?.state === "waiting")) : undefined);
+    const turn = pending ? turns.find(turn => turn.session_id === pending.requestId) : source?.turn ?? cardTurn ?? (!control ? own().find(turn => sourceOf(turn) !== "routine" && sourceOf(turn) !== "member" && !delegatedTurn(turn) && (turn.status === "running" || turn.status === "confirm" || isLive(turn.task) || turn.task?.state === "waiting")) : undefined);
     const session = pending?.requestId ?? turn?.session_id;
     if (!session || retracting.has(session)) return;
     const member = memberId(), sentConversation = conversationId();
@@ -2890,6 +2891,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         void showVersion(act, 1);
         break;
       case "cancel-message":
+      case "cancel-secret-turn":
         void cancelMessage(act);
         break;
       case "send-now":
@@ -2982,12 +2984,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       case "pairing-deny":
       case "template-view":
       case "template-save":
-      case "template-publish":
       case "template-share":
       case "template-copy-link":
       case "template-unshare":
-      case "template-folder":
-      case "template-open":
         chatCardAction(act);
         break;
       case "card-save":
@@ -3372,6 +3371,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     el,
     sidebar: members.column,
     loadSidebar: () => members.load(),
+    memberFace: (id, size) => members.faceOf(id, size),
     settingsOf: () => members.settings.isOpen() ? members.current() : null,
     navView,
     showNavView,

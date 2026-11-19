@@ -165,7 +165,6 @@
    under it as a turn's reply stands under its question. */
 .thread > .tn.is-owner-only + .tn[data-after] { margin-top: calc(var(--pa-gap-in) - var(--pa-gap)); }
 .tn.is-owner-only > .ra:not(:has(.live-presence, .conversation-card, .chat-message, .work-section, .turn-question)) { display: none; }
-.message-actions:has(.queued-send-now) { opacity: 1; }
 .tn.is-new { animation: ra-turn-in 0.22s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
 .me { display: flex; align-items: flex-end; justify-content: flex-end; gap: var(--sp-1); }
 .bubble { max-width: min(var(--pa-bw), 78%); padding: var(--pa-bpy) var(--pa-bpx); border-radius: var(--pa-br); background: var(--bubble); color: var(--on-bubble); font: var(--pa-fs-b)/var(--pa-lh-b) var(--voice); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
@@ -191,14 +190,13 @@
 .owner-message > * { grid-column: 2; }
 .owner-message > .message-actions { grid-column: 1; }
 .owner-message .bubble { box-sizing: border-box; max-width: 100%; }
-/* The owner's answered message open as an editor (R-UI-163): the bubble itself, with its colour, shape, padding, type and width,
-   and its words in a field that takes the words' own size, so the bubble grows with them. 取消 and 送出 are small, under it at its
-   right edge, in no box. */
+/* The owner's bubble grows with the editor and keeps its controls inside (R-UI-163). */
 .msg-editor-input { display: block; box-sizing: content-box; width: auto; min-width: 1ch; max-width: 100%; margin: 0; padding: 0; border: 0; outline: 0; background: transparent; color: inherit; caret-color: currentColor; font: inherit; field-sizing: content; resize: none; max-height: 10lh; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 .owner-message.is-editing > .message-actions.is-held { visibility: hidden; }
 .msg-editor-under { justify-self: end; display: grid; grid-template-columns: minmax(0, auto); justify-items: end; gap: var(--sp-1); max-width: 100%; margin-top: var(--sp-1); }
 .msg-editor-files { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-1); }
-.msg-editor-actions { display: flex; justify-content: flex-end; gap: var(--sp-2); }
+.msg-editor-actions, .queued-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-2); }
+.queued-actions { margin-top: var(--sp-1); }
 /* The armed 取消 says 「再按一次取消」 below it, not above: above it would cover the words being edited. */
 .msg-editor-actions [data-cancel-armed="true"]::after { bottom: auto; top: calc(100% + 8px); }
 /* The height of the buttons of a card in the thread (`.conversation-card .card-actions`): the same kind of control, the same size. */

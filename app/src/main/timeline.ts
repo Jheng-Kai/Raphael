@@ -10,7 +10,7 @@ import { mailCardsHTML, mailHandedLinesHTML } from "./mail-card";
 import { pageCardsHTML } from "./page-card";
 import { ownerQuestionsHTML, permissionCardsHTML, settledQuestions } from "./permission-card";
 import { chatCardsHTML } from "./chat-cards";
-import { secretCardsHTML, secretResumedLineHTML } from "./secret-card";
+import { secretCardsHTML, secretResumedLineHTML, secretNeedsInput } from "./secret-card";
 import { mcpProposalsHTML } from "./mcp-proposal";
 import { liveAction, pastStep, workActions } from "./work-actions";
 // Shared conversation rendering and message controls.
@@ -690,8 +690,8 @@ export function waitsAtCard(turn: AgentTurn): boolean {
 }
 
 /** Media stands above the owner's bubble, whose quote precedes the words. */
-function bubbleHTML(words: string, files: readonly TurnAttachment[] | undefined, quote?: MessageQuote | null, expand = ""): string {
-  const bubble = words || quote ? `<div class="bubble">${quote ? quoteHTML(quote, true) : ""}<div class="message-text">${words}</div>${expand}</div>` : "";
+function bubbleHTML(words: string, files: readonly TurnAttachment[] | undefined, quote?: MessageQuote | null, expand = "", actions = ""): string {
+  const bubble = words || quote || actions ? `<div class="bubble">${quote ? quoteHTML(quote, true) : ""}${words || quote ? `<div class="message-text">${words}</div>` : ""}${expand}${actions}</div>` : "";
   return files?.length ? `<div class="owner-content">${filesHTML(files)}${bubble}</div>` : bubble;
 }
 
@@ -703,15 +703,16 @@ function bubbleHTML(words: string, files: readonly TurnAttachment[] | undefined,
  * owner's own message: `cancel` while its work goes on, `own` once it is over. Whether its ⋯ offers 編輯, and which editor, is
  * decided when the menu opens (`ownerEditOf`, message-edit.ts), so a message that stops being the owner's last is not drawn again.
  */
-export function messageActionsHTML(_time: number, regenerate = false, owner?: "own" | "cancel", actionable = true, extra = "", queued = false): string {
-  // A message that waits its turn offers 立即送出 in sight: it is the exception, not a menu item. The button alone says the
-  // message waits, with no words beside it (R-QUEUE-05).
-  const waiting = queued ? btn(esc(t("chat.sendNow")), "sm queued-send-now", ' data-act="send-now"') : "";
-  return `<div class="message-actions">${waiting}` + extra +
+export function messageActionsHTML(_time: number, regenerate = false, owner?: "own" | "cancel", actionable = true, extra = ""): string {
+  return `<div class="message-actions">` + extra +
     (actionable ? reactionControlHTML() : "") +
     (actionable ? action("reply", t("chat.reply"), "reply-message") : "") +
     (actionable ? "" : action("copy", t("chat.copy"), "copy-message")) +
-    (actionable ? action("more", t("chat.more"), "more-message").replace('data-act="more-message"', `data-act="more-message" data-regenerate="${regenerate}"${owner ? ` data-owner-act="${owner}"` : ""}${queued ? ' data-queued="true"' : ""} aria-haspopup="menu"`) : "") + `</div>`;
+    (actionable ? action("more", t("chat.more"), "more-message").replace('data-act="more-message"', `data-act="more-message" data-regenerate="${regenerate}"${owner ? ` data-owner-act="${owner}"` : ""} aria-haspopup="menu"`) : "") + `</div>`;
+}
+
+function queuedActionsHTML(): string {
+  return `<div class="queued-actions">${btn(esc(t("common.cancel")), "sm", ' data-act="cancel-message"')}${btn(esc(t("chat.sendNow")), "sm queued-send-now", ' data-act="send-now"')}</div>`;
 }
 
 /**
@@ -1254,6 +1255,10 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
   // and only its last one holds what ends the turn.
   const part = look.part, first = part?.from === undefined, ends = part?.until === undefined;
   const settledCards = first ? permissionCardsHTML(turn, look.answerable, true, name) : "";
+  const queued = turn.status === "queued" && !earlierVersion(turn);
+  const cancellable = live || turn.status === "confirm" || turn.task?.state === "waiting";
+  const secretCancel = asked && !queued && !earlierVersion(turn) && !!turn.session_id &&
+    !!turn.secrets?.some(card => secretNeedsInput(card) && (card.key || cancellable));
   const line = (classes: string, body: string): string => `<li class="tn${classes}" data-id="${id}" data-status="${esc(turn.status)}"${live ? ' data-live="true"' : ""}` +
     `${part?.after !== undefined ? ` data-after="${esc(part.after)}"` : ""}>${body}</li>`;
   const head = !first ? "" :
@@ -1263,17 +1268,16 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
     // The message the composer holds for editing is not drawn: it is taken back into the composer, and returns if the edit is given up.
     (asked && state.editingTurnId === turn.id
       ? ""
-      // A message its member answered is edited in its own bubble (R-UI-163): the bubble is the editor, 取消 and 送出 under it.
+      // The answered message holds its editor and its actions in the bubble (R-UI-163).
       : asked && state.bubbleEditing?.turnId === turn.id && !earlierVersion(turn)
       ? `<div class="me"><div class="chat-message owner-message is-editing" data-message="question" data-msg-editor>${ownerEditorHTML(state.bubbleEditing, filesHTML(turn.attachments), turn.quote ? quoteHTML(turn.quote, true) : "")}${heldActionsHTML(turn.created_at_ms)}</div></div>`
       : asked
       ? `<div class="me">` +
         `<div class="chat-message owner-message${state.expandedMessages.has(`${id}:question`) ? " is-expanded" : ""}" data-message="question" data-expandable="true">` +
-        withReactions(bubbleHTML(said ? messageHTML(turn.question.trim(), query, false, look.mentions) : "", turn.attachments, turn.quote, messageExpandHTML(turn.question, state.expandedMessages.has(`${id}:question`))), turn.reactions?.owner) +
-        // An earlier version shown again is read only: Copy in sight, no menu. The newest offers 取消 while its work goes on, and its
-        // ⋯ decides 編輯 when it opens (the owner's last message only).
+        withReactions(bubbleHTML(said ? messageHTML(turn.question.trim(), query, false, look.mentions) : "", turn.attachments, turn.quote, messageExpandHTML(turn.question, state.expandedMessages.has(`${id}:question`)), queued ? queuedActionsHTML() : ""), turn.reactions?.owner) +
+        // The read-only earlier version has Copy. The current message's menu decides whether Edit is available.
         (earlierVersion(turn) ? messageActionsHTML(turn.created_at_ms, false, undefined, false)
-          : messageActionsHTML(turn.created_at_ms, false, live || turn.status === "queued" || turn.status === "confirm" || turn.task?.state === "waiting" ? "cancel" : "own", true, "", turn.status === "queued")) +
+          : messageActionsHTML(turn.created_at_ms, false, !queued && !secretCancel && cancellable ? "cancel" : "own")) +
         versionPagerHTML(turn) + `</div>` +
         `</div>`
       : "") +
@@ -1293,7 +1297,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
       ? turnMessagesHTML(turn, state, query, regenerate, revealing, settledCards, textAnswer, waitingForOwner, turn.id === look.signinTurnId, part)
       : settledCards + ownerQuestionsHTML(turn, true) + textAnswer + workSectionHTML(turn, state, query, revealing, waitingForOwner)) +
     (settledDraft ? settledDraftHTML(turn, detailOpen, query) : "") +
-    connectorCardsHTML(turn) + mcpProposalsHTML(turn) + secretCardsHTML(turn) + chatCardsHTML(turn) + computerCardsHTML(turn) +
+    connectorCardsHTML(turn) + mcpProposalsHTML(turn) + secretCardsHTML(turn, secretCancel) + chatCardsHTML(turn) + computerCardsHTML(turn) +
     `<div data-desktop-slot="${id}"></div>` +
     permissionCardsHTML(turn, look.answerable, false, name) + mailCardsHTML(turn, look) + pageCardsHTML(turn) +
     ownerQuestionsHTML(turn, false) +

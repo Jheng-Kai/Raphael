@@ -730,6 +730,14 @@ body:has(.page-agent:not([hidden])[data-det="open"]:not(.is-room)) .toast { max-
 .toast .btn:hover:not(:disabled), .toast .btn:active:not(:disabled) { background: var(--toast-hover); border-color: var(--toast-action); }
 .toast .btn:active:not(:disabled) { background: color-mix(in srgb, var(--toast-hover) 85%, var(--toast-action)); }
 .toast .btn:focus-visible { outline-color: var(--toast-action); }
+.toast.question-reminder-toast { overflow: visible; min-height: 0; padding: 0; border-radius: var(--r-pill); background: transparent; box-shadow: none; }
+.toast .btn.question-reminder { min-height: var(--h-field); min-width: 0; max-width: 100%; gap: var(--sp-2); padding: 0 var(--sp-2); border: 1px solid var(--edge-rim); border-radius: var(--r-pill); background: var(--float); color: var(--text); box-shadow: var(--pop); }
+.toast .btn.question-reminder:hover:not(:disabled) { background: var(--float-hover); border-color: var(--edge-rim); }
+.toast .btn.question-reminder:active:not(:disabled) { background: var(--float-pressed); border-color: var(--edge-rim); }
+.toast .btn.question-reminder:focus-visible { outline-color: var(--focus); }
+.question-reminder > .av, .question-reminder > .i { flex-shrink: 0; }
+.question-reminder > .i { color: var(--text-2); }
+.question-reminder-text { overflow: hidden; text-overflow: ellipsis; }
 .toast > span { min-width: 0; overflow-wrap: anywhere; }
 .toast .btn { flex: none; }
 .main, .modal-body, .menu, .lang-list, .ob-body { scroll-padding-block: 16px; }

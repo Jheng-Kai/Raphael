@@ -604,11 +604,10 @@ export function installMock(fixture, config = {}, target = window) {
     turn.secrets = [{...turn.secrets[0], id: "card-login", name: "https://research.example", secret: "login", login: true}];
     data.turns.push(turn);
   }
-  // A key a member asked for, for a program in its computer (`request_secret` with `key`): the same card, titled by the
-  // variable's name, with what the key is for.
+  // A key a member asked for, for a program in its computer (`request_secret` with `key`): the secure card names the variable and its purpose.
   if (variant.keyCard) {
     const turn = structuredClone(data.secretTurns.notion);
-    Object.assign(turn, {id: 133, member_id: 1, conversation_id: 11, question: "幫我用 OpenRouter 跑價格腳本。", text: "請在安全卡片貼上金鑰，儲存後我會接著執行。", steps: [], messages: []});
+    Object.assign(turn, {id: 133, session_id: "look-computer-key", member_id: 1, conversation_id: 11, question: "幫我用 OpenRouter 跑價格腳本。", text: "請在安全卡片貼上金鑰，儲存後我會接著執行。", steps: [], messages: []});
     turn.secrets = [{...turn.secrets[0], id: "card-key", name: "OPENROUTER_API_KEY", secret: "OPENROUTER_API_KEY", key: true, purpose: "價格腳本要呼叫模型"}];
     data.turns.push(turn);
   }
@@ -619,9 +618,12 @@ export function installMock(fixture, config = {}, target = window) {
     const turn = (id, question, text, extra) => ({ ...base, id, member_id: 1, conversation_id: 11, question, text, steps: [], messages: [], secrets: [], ...extra });
     data.turns.push(turn(141, "幫我設定 Slack", "我需要一個 Slack 機器人權杖：照卡片上的步驟建立機器人，再把權杖貼進來。", { secrets: [{ id: "card-slack", name: "Slack", secret: "bot_token", state: "pending", error: null, expires_at_ms: data.now + 600000, resumed: false, platform: "slack", link: "https://api.slack.com/apps" }],
       pairings: [{ id: "pair-1", platform: "slack", member_id: 1, code: "SL7Q2K", who: "Sam", expires_at_ms: data.now + 300000, state: "pending" }] }));
-    data.turns.push(turn(142, "把你自己打包成範本，讓別人也能用", "範本做好了，可以先看內容，再儲存成檔案或準備發布請求。", { templates: [{ id: "tpl-1", state: "draft", name: "研究與資訊整理", avatar: "slime:horn-lavender", description: "幫人查證來源、整理成一份能直接讀的研究摘要。", counts: { skills: 2, routines: 1 }, connections: ["Gmail", "Notion"], findings: [] }] }));
+    data.turns.push(turn(142, "把你自己打包成範本，讓別人也能用", "範本做好了，可以先看內容，再儲存成檔案。", { templates: [{ id: "tpl-1", state: "draft", name: "研究與資訊整理", avatar: "slime:horn-lavender", description: "幫人查證來源、整理成一份能直接讀的研究摘要。", counts: { skills: 2, routines: 1 }, connections: ["Gmail", "Notion"], findings: [] }] }));
     // With the owner's share service set, the template card offers its link (R-SHARE-01).
     if (variant.templateShare) data.turns.at(-1).templates[0].shareable = true;
+    if (variant.legacyTemplate) Object.assign(data.turns.at(-1).templates[0], {
+      state: "published", url: "https://github.example/compare", folder: "C:/Raphael/template-exports/3f9a1c07d2e84b56", folder_id: "3f9a1c07d2e84b56",
+    });
     // A code that came later is a turn of its own at the bottom, with no words (the core's pairing turn).
     if (variant.latePairing) data.turns.push(turn(143, "", "", { route: "pairing", source: "messaging", session_id: "pairing-late", created_at_ms: data.now + 1000,
       pairings: [{ id: "pair-late", platform: "slack", member_id: 1, code: "SL9X4M", who: "Sam", expires_at_ms: data.now + 600000, state: "pending" }] }));
@@ -2049,13 +2051,6 @@ export function installMock(fixture, config = {}, target = window) {
         notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
         return {};
       }
-      case "members.template_card_publish": {
-        const turn = data.turns.find(item => item.templates?.some(card => card.id === p.id));
-        const prepared = { folder: ["C:", "Users", "owner", "AppData", "Roaming", "Raphael", "template-exports", "3f9a1c07d2e84b56"].join(String.fromCharCode(92)), folder_id: "3f9a1c07d2e84b56", url: "https://github.com/Jheng-Kai/SlimesStore/compare/main...main?quick_pull=1" };
-        Object.assign(turn.templates[0], { state: "published", ...prepared });
-        notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
-        return prepared;
-      }
       case "integrations.card_save": {
         const turn = data.turns.find(item => item.secrets?.some(card => card.id === p.id));
         const card = turn?.secrets.find(item => item.id === p.id);
@@ -2528,7 +2523,6 @@ export function installMock(fixture, config = {}, target = window) {
         if (variant.templateSaveCancel) return null;
         state.exportedTemplate = args.text; return "";
       }
-      if (command === "show_template_export") { state.shownTemplateFolder = args.folderId; return; }
       if (command === "member_template_pending") return null;
       if (command === "save_usage_csv") { state.exported = args.csv; return true; }
       if (["agent_page_shown", "hotkeys_pause", "hotkeys_practice", "plugin:event|unlisten", "plugin:window|set_focus", "plugin:window|minimize", "plugin:window|close", "plugin:window|start_dragging", "plugin:webview|set_webview_zoom"].includes(command)) return;
