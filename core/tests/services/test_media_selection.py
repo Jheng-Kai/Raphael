@@ -91,12 +91,15 @@ async def test_catalog_offers_generation_only_models_and_preserves_media_prices(
         brain = Brain(conn, ProviderRouter(providers, legacy), keys, providers=providers)
         router = Router()
         brain.register(router)
+        await router.call('models.catalog')
+        await brain._provider_refresh
         view = await router.call('models.catalog')
         assert 'test/image-only' not in [row['id'] for row in view['llm']]
         row = next(row for row in view['image'] if row['id'] == 'test/image-only')
         assert row['per_image'] == .04 and row['per_request'] == .05 and row['image_output_per_mtok'] == 30
         assert view['video'] == []
         assert SettingsStore(conn).get('image_model') == SettingsStore(conn).get('video_model') == ''
+        await brain.aclose()
         await providers.aclose()
 
 
@@ -137,7 +140,8 @@ def test_media_spend_remains_named_in_the_usage_bill(conn):
     assert bill['cost_usd'] == pytest.approx(.162)
 
 
-async def test_image_only_model_requests_only_its_declared_output(conn, tmp_path):
+@pytest.mark.parametrize("usage,expected", [({}, .05), ({"cost": .04}, .04)])
+async def test_image_only_model_requests_only_its_declared_output(conn, tmp_path, usage, expected):
     from raphael_core.brain.openrouter import OpenRouterClient
     from raphael_core.brain.providers.registry import ProviderRegistry
     from raphael_core.brain.secrets import MemoryKeyStore
@@ -150,14 +154,14 @@ async def test_image_only_model_requests_only_its_declared_output(conn, tmp_path
         assert request.url.path == '/api/v1/chat/completions'
         assert seen[-1]['model'] == 'test/image-only' and seen[-1]['modalities'] == ['image']
         return httpx.Response(200, json={'choices': [{'message': {'images': [{'image_url': {
-            'url': 'data:image/png;base64,' + base64.b64encode(PNG).decode()}}]}}], 'usage': {'cost': .04}})
+            'url': 'data:image/png;base64,' + base64.b64encode(PNG).decode()}}]}}], 'usage': usage})
     async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
         legacy = OpenRouterClient(keys.get, http=http)
         providers = ProviderRegistry(conn, legacy, keys, credential=lambda pid: keys, http=http)
-        providers.remember_openrouter_media([{'id': 'test/image-only', 'architecture': {
+        providers.remember_openrouter_media([{'id': 'test/image-only', 'pricing': {'per_image': '.04', 'request': '.01'}, 'architecture': {
             'input_modalities': ['text'], 'output_modalities': ['image']}}])
         tools = GenerationTools(SimpleNamespace(offered_for=lambda member: []), Generation(providers, AttachmentStore(tmp_path)), conn)
         result = await tools.call('mcp:media/image_generate', {'prompt': 'Office'}, approver='auto')
         assert result.ok and len(seen) == 1
-        assert result.billing == {'model': 'test/image-only', 'cost_usd': .04}
+        assert result.billing == {'model': 'test/image-only', 'cost_usd': expected}
         await providers.aclose()

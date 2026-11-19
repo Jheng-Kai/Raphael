@@ -2611,12 +2611,13 @@ def cloud_says(text="cloud words", cost=0.0001):
     )
 
 
-async def choose_from_the_list(app, key, model):
-    """Choose `model` for `key` as the settings page does: from OpenRouter's list of models, which
-    `models.catalog` reads first."""
+async def choose_cloud_stt_from_the_list(app, model):
+    """Choose a cloud speech model after the catalog has refreshed in the background."""
+    await app.call("models.catalog")
+    await app.brain._provider_refresh
     catalog = await app.call("models.catalog")
-    assert catalog["source"] == "live"
-    await app.call("settings.set", {"key": key, "value": model})
+    assert model in {entry["id"] for entry in catalog["stt"]}
+    await app.call("settings.set", {"key": "stt_cloud_model", "value": model})
 
 
 async def test_speech_to_text_is_in_the_cloud_by_default(make_app, openrouter_mock):
@@ -2624,7 +2625,7 @@ async def test_speech_to_text_is_in_the_cloud_by_default(make_app, openrouter_mo
     app = make_app(kit, fake_llm=False)
     requests = openrouter_mock(app, cloud_says())
     await app.call("settings.set", {"key": "languages", "value": ["zh-TW"]})
-    await choose_from_the_list(app, "stt_cloud_model", "openai/gpt-transcribe")
+    await choose_cloud_stt_from_the_list(app, "openai/gpt-transcribe")
     result = await dictate(app)
     assert result["text"] == "cloud words cloud words"
     assert kit.transcriptions == []  # the local engine heard nothing
@@ -2648,7 +2649,7 @@ async def test_several_languages_go_to_gpt_transcribe_as_the_ones_to_detect_amon
     requests = openrouter_mock(app, cloud_says())
     languages = ["zh-HK", "en-GB", "ja-JP"]
     await app.call("settings.set", {"key": "languages", "value": languages})
-    await choose_from_the_list(app, "stt_cloud_model", "openai/gpt-transcribe")
+    await choose_cloud_stt_from_the_list(app, "openai/gpt-transcribe")
     await dictate(app)
     body = requests["transcriptions"][0]
     assert body["provider"]["options"]["openai"]["languages"] == ["zh", "en", "ja"]

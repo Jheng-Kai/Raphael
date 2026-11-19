@@ -80,9 +80,10 @@ def _cost(ledger: Ledger, found: object) -> None:
     )
 
 
-def _failed(error: OpenRouterError) -> ServiceError:
+def _failed(error: OpenRouterError, model: str) -> ServiceError:
     logger.warning("The vision model failed: kind=%s status=%s", error.kind, error.status)
-    return ServiceError(error.kind if error.kind in ("auth", "credits", "timeout") else "http_error")
+    kind = "network" if error.kind == "offline" else error.kind
+    return ServiceError(kind if kind in ("auth", "credits", "timeout", "network", "rate_limit") else "http_error", service=model)
 
 
 class Vision:
@@ -112,7 +113,7 @@ class Vision:
         model cannot see, and of the kind of the failure when the call fails."""
         model, sees = self.model()
         if sees is False:
-            raise ServiceError("vision_unsupported")
+            raise ServiceError("vision_unsupported", service=model)
         parts: list[dict] = [{"type": "text", "text": f"The user's question:\n{question}"}]
         for image in images:
             url = image.data_url() if isinstance(image, Attachment) else image
@@ -124,7 +125,7 @@ class Vision:
         ("Frame at 0:35"). ServiceError("vision_unsupported") when the model cannot see."""
         model, sees = self.model()
         if sees is False:
-            raise ServiceError("vision_unsupported")
+            raise ServiceError("vision_unsupported", service=model)
         parts: list[dict] = [{"type": "text", "text": f"The user's question:\n{question}\n\nFrames of one video, in order:"}]
         for frame, label in zip(frames, labels):
             parts.append({"type": "text", "text": label + ":"})
@@ -168,6 +169,9 @@ class Vision:
         plugins: list[dict] | None = None,
     ) -> dict:
         try:
+            if isinstance(self._client, ProviderRouter) and self._client.purpose == "vision" and not plugins:
+                if not self._client.available(model):
+                    raise ServiceError("not_configured", service=model)
             found = await asyncio.wait_for(
                 (for_purpose(self._client, "pdf") if plugins else self._client).chat_text(
                     model=model,
@@ -184,6 +188,6 @@ class Vision:
             logger.warning("The vision model timed out after %.0f s", timeout_s)
             raise ServiceError("timeout") from None
         except OpenRouterError as error:
-            raise _failed(error) from None
+            raise _failed(error, model) from None
         _cost(ledger, found)
         return {"text": found.text}

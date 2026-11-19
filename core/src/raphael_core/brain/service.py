@@ -619,6 +619,7 @@ class Brain:
             if len(pieces) > 1
             else None
         )
+        selected = self._settings.get("cleanup_model")
         result = await self._cleanup.clean(
             normalized,
             audio_seconds=len(body) / CHARS_PER_SECOND,
@@ -631,6 +632,12 @@ class Brain:
             self._openrouter.latency_ms = result.llm_ms
         failure = {"cleaned": False, "llm_ms": result.llm_ms, "model": result.model}
         if not result.cleaned:
+            if self._providers and selected and result.fallback_reason in ("no_key", "error:auth", "error:auth_expired"):
+                from .model_ref import cli_name
+                try:
+                    failure["connection"] = cli_name(selected) or self._providers.config(self._providers.resolve(selected)[0])["name"]
+                except ValueError:
+                    failure["connection"] = selected
             return {**failure, "fallback_reason": result.fallback_reason or "error:unexpected"}
 
         def finish(source: str, reply: str) -> str:
@@ -1175,15 +1182,12 @@ class Brain:
         """Show the catalogue without changing any saved choice."""
         if self._providers and not self._providers.config("openrouter")["enabled"]:
             entries, fetched_at_ms, source = [], None, "builtin"
+        elif self._providers:
+            entries, fetched_at_ms, source = self._pricing.cached_catalog()
         else:
             entries, fetched_at_ms, source = await self._pricing.catalog()
         if self._providers:
-            # The saved lists answer at once (the window asks at every start); they are renewed after the answer
-            # and the window is told if that changed them. A provider with no list yet is waited for, as before.
-            if self._providers.uncached():
-                await self._providers.refresh_catalog()
-            else:
-                self._renew_providers_later()
+            self._renew_providers_later()
             entries = [*entries, *self._providers.catalog_entries()]
         view = catalog_view(entries, fetched_at_ms, source, [])
         for kind in ("llm", "stt"):
@@ -1218,17 +1222,21 @@ class Brain:
         self._provider_refresh = asyncio.get_running_loop().create_task(self._renew_providers())
 
     async def _renew_providers(self) -> None:
-        before = self._providers.catalog_signature()
+        async def pricing():
+            if self._providers.config("openrouter")["enabled"]:
+                before = self._pricing.cached_catalog()
+                media = self._providers.media_choices("image"), self._providers.media_choices("video")
+                await self._pricing.catalog()
+                if (self._pricing.cached_catalog() != before or
+                        media != (self._providers.media_choices("image"), self._providers.media_choices("video"))):
+                    self._notify_providers()
         try:
-            await self._providers.refresh_catalog()
+            await asyncio.gather(pricing(), self._providers.refresh_catalog(self._notify_providers))
         except asyncio.CancelledError:
             raise
         except Exception as exc:
             # A failed renewal keeps the lists the window has; the next `models.catalog` tries again.
             logger.info("The providers' model lists were not renewed: %s", type(exc).__name__)
-            return
-        if self._providers.catalog_signature() != before:
-            self._notify_providers()
 
     async def _stats_summary(self, params: dict) -> dict:
         days = _opt_int(params, "days")

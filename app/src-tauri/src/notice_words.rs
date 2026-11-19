@@ -2,6 +2,88 @@
 
 pub(super) fn text(source: &str, language: &str) -> Option<&'static str> {
     match source {
+        "《Notice. Tidied text copied. Paste it where you want it.》" => match language {
+            "zh-CN" => Some("《已复制整理好的文本，请粘贴到需要的位置。》"),
+            "ko" => Some("《정리한 텍스트를 복사했습니다. 원하는 곳에 붙여넣으세요.》"),
+            "es" => Some("《Texto corregido copiado. Pégalo donde quieras.》"),
+            "fr" => Some("《Texte révisé copié. Collez-le à l’endroit voulu.》"),
+            "de" => {
+                Some("《Überarbeiteter Text kopiert. Füge ihn an der gewünschten Stelle ein.》")
+            }
+            "pt-BR" => Some("《Texto revisado copiado. Cole onde quiser.》"),
+            "it" => Some("《Testo revisionato copiato. Incollalo dove desideri.》"),
+            "ru" => Some("《Исправленный текст скопирован. Вставьте его в нужное место.》"),
+            "vi" => Some("《Đã sao chép văn bản đã chỉnh. Hãy dán vào nơi bạn muốn.》"),
+            "th" => Some("《คัดลอกข้อความที่ปรับแล้ว วางในตำแหน่งที่ต้องการ》"),
+            "id" => {
+                Some("《Teks yang dirapikan telah disalin. Tempel di tempat yang diinginkan.》")
+            }
+            "tr" => Some("《Düzenlenen metin kopyalandı. İstediğiniz yere yapıştırın.》"),
+            _ => None,
+        },
+        "《Negative. Text tidying timed out. Try again.》" => match language {
+            "zh-CN" => Some("《文本整理超时，请重试。》"),
+            "ko" => Some("《텍스트 정리 시간이 초과되었습니다. 다시 시도하세요.》"),
+            "es" => Some("《La corrección de texto tardó demasiado. Inténtalo de nuevo.》"),
+            "fr" => Some("《La révision du texte a expiré. Réessayez.》"),
+            "de" => Some("《Die Textüberarbeitung dauerte zu lange. Versuche es erneut.》"),
+            "pt-BR" => Some("《A revisão do texto demorou demais. Tente novamente.》"),
+            "it" => Some("《Tempo scaduto per la revisione del testo. Riprova.》"),
+            "ru" => Some("《Время правки текста истекло. Попробуйте ещё раз.》"),
+            "vi" => Some("《Chỉnh văn bản đã hết thời gian. Hãy thử lại.》"),
+            "th" => Some("《การปรับข้อความหมดเวลา โปรดลองอีกครั้ง》"),
+            "id" => Some("《Waktu perapian teks habis. Coba lagi.》"),
+            "tr" => Some("《Metin düzenleme zaman aşımına uğradı. Yeniden deneyin.》"),
+            _ => None,
+        },
+        "《Negative. Reconnect the model selected for text tidying in Models & usage.》" => {
+            match language {
+                "zh-CN" => Some("《请在「模型与用量」重新连接文本整理所选的模型。》"),
+                "ko" => Some("《모델 및 사용량에서 텍스트 정리 모델을 다시 연결하세요.》"),
+                "es" => {
+                    Some("《Vuelve a conectar el modelo de corrección de texto en Modelos y uso.》")
+                }
+                "fr" => Some(
+                    "《Reconnectez le modèle de révision de texte dans Modèles et utilisation.》",
+                ),
+                "de" => Some(
+                    "《Verbinde das Modell zur Textüberarbeitung unter Modelle und Nutzung erneut.》",
+                ),
+                "pt-BR" => Some("《Reconecte o modelo de revisão de texto em Modelos e uso.》"),
+                "it" => {
+                    Some("《Ricollega il modello di revisione del testo in Modelli e utilizzo.》")
+                }
+                "ru" => Some(
+                    "《Восстановите подключение модели для правки текста в разделе «Модели и использование».》",
+                ),
+                "vi" => Some("《Kết nối lại mô hình chỉnh văn bản trong Mô hình và mức dùng.》"),
+                "th" => Some("《เชื่อมต่อโมเดลปรับข้อความอีกครั้งใน โมเดลและการใช้งาน》"),
+                "id" => Some("《Hubungkan kembali model perapian teks di Model dan penggunaan.》"),
+                "tr" => Some(
+                    "《Modeller ve kullanım bölümünde metin düzenleme modelini yeniden bağlayın.》",
+                ),
+                _ => None,
+            }
+        }
+        "《Negative. Choose a text tidying model in Models & usage.》" => match language {
+            "zh-CN" => Some("《请在「模型与用量」选择文本整理模型。》"),
+            "ko" => Some("《모델 및 사용량에서 텍스트 정리 모델을 선택하세요.》"),
+            "es" => Some("《Elige un modelo para corregir texto en Modelos y uso.》"),
+            "fr" => {
+                Some("《Choisissez un modèle de révision de texte dans Modèles et utilisation.》")
+            }
+            "de" => Some("《Wähle unter Modelle und Nutzung ein Modell zur Textüberarbeitung.》"),
+            "pt-BR" => Some("《Escolha um modelo de revisão de texto em Modelos e uso.》"),
+            "it" => Some("《Scegli un modello di revisione del testo in Modelli e utilizzo.》"),
+            "ru" => {
+                Some("《Выберите модель для правки текста в разделе «Модели и использование».》")
+            }
+            "vi" => Some("《Chọn mô hình chỉnh văn bản trong Mô hình và mức dùng.》"),
+            "th" => Some("《เลือกโมเดลปรับข้อความใน โมเดลและการใช้งาน》"),
+            "id" => Some("《Pilih model perapian teks di Model dan penggunaan.》"),
+            "tr" => Some("《Modeller ve kullanım bölümünde metin düzenleme modeli seçin.》"),
+            _ => None,
+        },
         "《Negative. The microphone is not allowed. Allow Raphael in System Settings > Privacy & Security > Microphone.》" => {
             match language {
                 "zh-CN" => Some(

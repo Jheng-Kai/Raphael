@@ -25,13 +25,13 @@ from .. import first_models
 from ..settings import SettingsStore, api_model
 from .base import ModelProvider
 from .presets import BY_KIND, KINDS, OPTIONAL_KEY_KINDS
-from .clients import AnthropicProvider, CompatibleProvider, is_transcription, model_info, validate_base_url
+from .clients import AnthropicProvider, CompatibleProvider, is_transcription, media_eligible, model_info, validate_base_url
 from .presets import IMAGE_KINDS, VIDEO_KINDS
 from .bedrock import BedrockProvider
 from .vertex import VertexProvider
 from .secrets import ProviderCredentialStore
 from .chatgpt import ChatGPTProvider
-from .chatgpt_auth import ChatGPTAuth
+from .chatgpt_auth import ChatGPTAuth, PLAN_SCOPE
 
 CONFIG_KEY = "providers.config.v1"
 MODELS_KEY = "providers.models.v1"
@@ -74,6 +74,7 @@ class ProviderRegistry:
         self.image_subscriptions = None
         self.cli_brains = None
         self.chatgpt.auth.on_connected = self.fill_connected
+        self.chatgpt.auth.on_models_cleared = self._clear_chatgpt_rows
         try:
             first_models.migrate(conn, self.config("openrouter")["enabled"], keys)
         except Exception as exc:
@@ -184,7 +185,7 @@ class ProviderRegistry:
         except Exception:
             has_key, status = False, "auth"
         return {k: config[k] for k in ("id", "kind", "name", "base_url", "enabled")} | {
-            "has_key": has_key, "status": status, "models": len(self._models.get(pid, []))}
+            "has_key": has_key, "status": status, "models": len(self._chatgpt_rows() if pid == "chatgpt" else self._models.get(pid, []))}
 
     def register(self, router):
         self._notify = router.notify
@@ -379,6 +380,7 @@ class ProviderRegistry:
 
     async def discover(self, pid):
         revision = self._revisions.get(pid, 0)
+        session = self.chatgpt.auth.session() if pid == "chatgpt" else None
         rows = await asyncio.wait_for(self.client(pid).models(timeout_s=5), 6)
         if self._revisions.get(pid, 0) != revision:
             raise OpenRouterError(0, "error", "Provider changed during discovery")
@@ -391,7 +393,11 @@ class ProviderRegistry:
                 row["stt"] = entry is not None and entry.kind == "stt"
                 row["text_eligible"] = entry is not None and refusal(entry, ROLE_OF_SETTING["cleanup_model"]) is None
             rows = metadata
-        self._models[pid] = rows
+        if pid == "chatgpt":
+            self.chatgpt.auth.check_session(session)
+            self._models[pid] = {"account": session[0], "rows": rows}
+        else:
+            self._models[pid] = rows
         self._status[pid] = "ok"
         self._save()
         self._fill_from_catalog(pid, rows)
@@ -429,7 +435,7 @@ class ProviderRegistry:
                 continue
             for row in self._models.get(pid, []):
                 reference = row["id"] if pid == "openrouter" else f"@{pid}:{row['id']}"
-                if kind in row.get("media", []) and self.available(reference):
+                if media_eligible(config["kind"], row["id"]) and kind in row.get("media", []) and self.available(reference):
                     choices.append({**row, "reference": reference})
         if kind == "image" and self.image_subscriptions is not None:
             choices.extend(self.image_subscriptions.choices())
@@ -462,37 +468,43 @@ class ProviderRegistry:
                     default_effort=row.get("default_effort")))
         return entries
 
+    def _clear_chatgpt_rows(self):
+        if self._models.pop("chatgpt", None) is not None:
+            self._save()
+
     def _chatgpt_rows(self):
-        """ChatGPT's models: those read in this run, else, while it is signed in, those kept at the last reading, so a
-        choice opened right after start lists them at once and the reading in the background only updates them."""
-        if self.chatgpt.auth.model_rows:
-            return self.chatgpt.auth.model_rows
-        state = self.chatgpt.auth._state() or {}
-        account = state.get("active", "") if isinstance(state, dict) else ""
+        auth = self.chatgpt.auth
+        state = auth._state()
+        account = state.get("active")
+        kept = self._models.get("chatgpt")
+        if not account or not isinstance(kept, dict) or kept.get("account") != account:
+            return []
         try:
-            # Whether its tokens are kept, from the store's attributes alone: nothing is read and nothing asks (keychain.py).
-            signed_in = bool(account) and self.chatgpt.auth._vault(account).filled()
+            # Peek never opens the Keychain. After a restart use the last known plan grant.
+            secret = auth._vault(account).peek()
+            if secret is keychain.UNREAD:
+                allowed = state.get("accounts", {}).get(account, {}).get("plan_scope", False)
+            else:
+                tokens = json.loads(secret or "{}")
+                allowed = tokens.get("refresh_token") and PLAN_SCOPE in tokens.get("scope", "").split()
         except Exception:
-            signed_in = False
-        return self._models.get("chatgpt", []) if signed_in else []
+            # Credential stores can be locked. An unconfirmed grant exposes no saved rows.
+            return []
+        return kept["rows"] if allowed else []
 
-    def uncached(self):
-        """Whether an enabled provider has no model list saved yet (its first use): the catalog then waits for
-        it. ChatGPT's list is only in memory and is never waited for; it arrives with `providers.changed`."""
-        return any(pid not in ("openrouter", "chatgpt") and self.config(pid)["enabled"] and not self._models.get(pid)
-                   for pid in self.ids())
-
-    def catalog_signature(self):
-        """What `models.catalog` would add to OpenRouter's list now, to tell a refresh that changed it from one that did not."""
-        return repr((self.catalog_entries(), self.media_choices("image"), self.media_choices("video")))
-
-    async def refresh_catalog(self):
+    async def refresh_catalog(self, changed):
         async def drawing():
             if self.image_subscriptions is not None:
+                before = self.image_subscriptions.choices()
                 await self.image_subscriptions.refresh()
+                if self.image_subscriptions.choices() != before:
+                    changed()
         async def fetch(pid):
+            before = self._models.get(pid)
             try:
                 await self.discover(pid)
+                if self._models.get(pid) != before:
+                    changed()
             except (OpenRouterError, TimeoutError):
                 pass  # A failed refresh keeps the last known metadata and never resets choices.
         # The Codex drawing check starts a program; the providers' lists never wait for it.
@@ -543,7 +555,7 @@ class ProviderRouter:
     def model_for(self, reference):
         if self.purpose in ("router", "memory", "pdf"):
             reference = self.registry.settings.get(self.purpose + "_model") or reference
-        if self.purpose == "cleanup":
+        if self.purpose in ("cleanup", "vision"):
             return reference
         return api_model(self.registry.settings, reference) if reference.startswith("cli:") else reference
 
@@ -588,6 +600,8 @@ class ProviderRouter:
     def owner_fallbacks(self):
         # Conversation fallback controls were removed. Hidden legacy settings do not
         # authorize switching the owner's chosen conversation or routing model.
+        if self.purpose == "vision" and self.registry.settings.get("vision_model"):
+            return []
         if self.purpose in ("agent", "router", "cleanup"):
             return []
         return self.registry.configured_fallbacks(self.purpose) or []
@@ -696,9 +710,15 @@ class ProviderRouter:
         self.openrouter.warm_up()
 
     def start_connection_warmup(self):
-        warm = getattr(self.openrouter, "start_connection_warmup", None)
-        if warm is not None:
-            warm()
+        reference = self.registry.settings.get("stt_cloud_model")
+        try:
+            if reference and self.registry.available(reference):
+                pid, _ = self.registry.resolve(reference)
+                warm = getattr(self.registry.client(pid), "start_connection_warmup", None)
+                if warm is not None:
+                    warm()
+        except Exception as exc:
+            logger.debug("Skipped speech connection warmup: %s", type(exc).__name__)
 
     async def aclose(self):
         await self.registry.aclose()

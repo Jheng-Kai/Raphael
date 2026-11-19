@@ -1677,8 +1677,7 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
     }
 
     /// The work of [`Self::tidy_at`] for the session `id`: copy, tidy, paste. Whenever it ends
-    /// without a paste, the selection and the clipboard are as they were and the overlay says
-    /// why; the text is never replaced by anything that was not tidied.
+    /// without tidied text, the original stays. A changed selection gets the result on the clipboard.
     async fn tidy_selection(&self, id: String, target: Option<Target>) {
         let paster = self.paster.clone();
         let at_key = target.clone();
@@ -1771,9 +1770,25 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
                 Err(err) if err.code == CORE_EXITED => {
                     self.failure_notice(err).unwrap_or(notices::TIDY_FAILED)
                 }
+                Err(err) if err.code == TIMEOUT => notices::TIDY_TIMEOUT,
+                Ok(reply) => match reply.get("fallback_reason").and_then(Value::as_str) {
+                    Some("no_model") => notices::TIDY_MODEL,
+                    Some("no_key" | "error:auth" | "error:auth_expired") => {
+                        notices::TIDY_CONNECTION
+                    }
+                    Some("timeout" | "error:timeout") => notices::TIDY_TIMEOUT,
+                    _ => notices::TIDY_FAILED,
+                },
                 _ => notices::TIDY_FAILED,
             };
-            self.finish(&id, |this| this.show(notice));
+            let connection = reply
+                .as_ref()
+                .ok()
+                .and_then(|reply| reply.get("connection"))
+                .and_then(Value::as_str)
+                .filter(|_| notice == notices::TIDY_CONNECTION)
+                .map(str::to_owned);
+            self.finish(&id, |this| this.show_with_connection(notice, connection));
             return;
         };
         {
@@ -1783,11 +1798,20 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
             }
             self.overlay.progress(Progress::DONE);
         }
-        let delivery = self.deliver(tidied, target, Some(&id)).await;
+        let delivery = self
+            .deliver_checked(tidied, target, Some(&id), Some(text))
+            .await;
         let language = self.language.get();
         // Nothing is learned from it: the words are not the dictation's.
         self.finish(&id, |this| {
-            this.report_in_language(delivery.as_ref(), None, true, &language);
+            if delivery
+                .as_ref()
+                .is_some_and(|d| d.outcome == PasteOutcome::CopiedOnly(CopyReason::NoTarget))
+            {
+                this.show(notices::TIDY_COPIED);
+            } else {
+                this.report_in_language(delivery.as_ref(), None, true, &language);
+            }
         });
     }
 
@@ -1840,6 +1864,16 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
         target: Option<Target>,
         session: Option<&str>,
     ) -> Option<PasteDelivery> {
+        self.deliver_checked(text, target, session, None).await
+    }
+
+    async fn deliver_checked(
+        &self,
+        text: String,
+        target: Option<Target>,
+        session: Option<&str>,
+        selection: Option<String>,
+    ) -> Option<PasteDelivery> {
         let this = self.clone();
         let session = session.map(str::to_owned);
         let delivered = tokio::task::spawn_blocking(move || {
@@ -1849,7 +1883,16 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
                 log::info!("the dictation was cancelled before it was pasted; not pasting");
                 return None;
             }
-            Some(this.paster.deliver_with_receipt(&text, target.as_ref()))
+            let mut destination = target.as_ref();
+            if let Some(original) = selection {
+                if this.paster.copy_selection(destination) != Selection::Text(original) {
+                    destination = None;
+                }
+                if session.as_ref().is_some_and(|id| !this.is_current(id)) {
+                    return None;
+                }
+            }
+            Some(this.paster.deliver_with_receipt(&text, destination))
         })
         .await;
         match delivered {
@@ -1909,6 +1952,20 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
 
     /// Shows `notice` in the interface language, and only in that one.
     fn show(&self, notice: Notice) {
+        self.show_with_connection(notice, None);
+    }
+
+    fn show_with_connection(&self, notice: Notice, connection: Option<String>) {
+        let show = move |this: &Self| {
+            let language = this.language.get();
+            let text = notice.text(&language);
+            if let Some(connection) = connection.as_ref() {
+                this.overlay
+                    .notice(&format!("{} ({connection})》", text.trim_end_matches('》')));
+            } else {
+                this.overlay.notice(text);
+            }
+        };
         if self.voice.is_some() && !self.overlay_available() {
             let this = self.clone();
             tokio::spawn(async move {
@@ -1917,7 +1974,7 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
                     let _transition = lock(&this.transitions);
                     if this.overlay_available() {
                         this.claim_typed_overlay();
-                        this.overlay.notice(notice.text(&this.language.get()));
+                        show(&this);
                         break;
                     }
                 }
@@ -1925,7 +1982,7 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
             return;
         }
         self.claim_typed_overlay();
-        self.overlay.notice(notice.text(&self.language.get()));
+        show(self);
     }
 
     /// The end of a dictation whose `dictation.start` or `dictation.stop` failed: Raphael's
@@ -3960,6 +4017,7 @@ mod tests {
         refocused: Mutex<Vec<Target>>,
         /// What copying the selection finds.
         selection: Selection,
+        next_selection: Option<Selection>,
         /// How many times the selection was copied.
         copies: Mutex<u32>,
         /// The user's clipboard. A copy and a paste both put it back, but a text that is only
@@ -3986,6 +4044,7 @@ mod tests {
                 stolen: Mutex::default(),
                 refocused: Mutex::default(),
                 selection: Selection::Nothing,
+                next_selection: None,
                 copies: Mutex::default(),
                 clipboard: Mutex::new(USER_CLIPBOARD.to_owned()),
             }
@@ -4035,6 +4094,11 @@ mod tests {
             );
             *self.copies.lock().unwrap() += 1;
             // The program's copy goes through the clipboard; what was on it comes back.
+            if self.copies() > 1
+                && let Some(next) = &self.next_selection
+            {
+                return next.clone();
+            }
             self.selection.clone()
         }
 
@@ -4057,6 +4121,10 @@ mod tests {
         }
 
         fn deliver(&self, text: &str, at_stop: Option<&Target>) -> PasteOutcome {
+            if at_stop.is_none() && self.foreground.is_some() {
+                *self.clipboard.lock().unwrap() = text.to_owned();
+                return PasteOutcome::CopiedOnly(CopyReason::NoTarget);
+            }
             assert_eq!(
                 at_stop,
                 self.foreground.as_ref(),
@@ -5512,7 +5580,7 @@ mod tests {
                 tidied("我今天去公園玩，很開心。"),
             );
             run(&c, HotkeyEvent::Tidy, 5000).await;
-            assert_eq!(c.paster().copies(), 1, "{mode:?}");
+            assert_eq!(c.paster().copies(), 2, "{mode:?}");
             assert_eq!(
                 c.core().call_params("dictation.tidy"),
                 json!({"text": "我今天去公園玩 ，很開心", "target_app": "notepad.exe"}),
@@ -5546,6 +5614,20 @@ mod tests {
             assert_eq!(c.core().count("dictation.cancel"), 0, "{mode:?}");
             assert_eq!(c.core().count("dictation.tidy"), 1, "{mode:?}");
         }
+    }
+
+    #[tokio::test]
+    async fn tidy_copies_the_result_when_the_selection_changed_in_the_same_window() {
+        let mut paster = FakePaster::pasting("editor").selecting(Selection::Text("A".into()));
+        paster.next_selection = Some(Selection::Text("B".into()));
+        let c = controller(FakeCore::with("dictation.tidy", tidied("A!")), paster);
+        run(&c, HotkeyEvent::Tidy, 5000).await;
+        assert!(c.paster().delivered().is_empty());
+        assert_eq!(c.paster().clipboard(), "A!");
+        assert_eq!(
+            c.overlay().events().last(),
+            Some(&notice(notices::TIDY_COPIED.zh))
+        );
     }
 
     #[tokio::test]
@@ -5630,8 +5712,16 @@ mod tests {
 
     #[tokio::test]
     async fn a_tidy_that_fails_pastes_nothing_and_never_pastes_the_raw_text() {
-        let replies: [(&str, Result<Value, RpcError>); 6] = [
+        let replies: [(&str, Result<Value, RpcError>); 8] = [
             ("the call failed", Err(RpcError::new(-32603, "boom"))),
+            (
+                "no model",
+                Ok(json!({"cleaned": false, "fallback_reason": "no_model"})),
+            ),
+            (
+                "auth expired",
+                Ok(json!({"cleaned": false, "fallback_reason": "error:auth_expired"})),
+            ),
             ("it timed out", Err(RpcError::new(TIMEOUT, "slow"))),
             (
                 "no key",
@@ -5660,7 +5750,16 @@ mod tests {
             assert_eq!(c.paster().clipboard(), USER_CLIPBOARD, "{what}");
             assert_eq!(
                 c.overlay().events(),
-                vec!["show:thinking".to_owned(), notice(TIDY_FAILED.zh)],
+                vec![
+                    "show:thinking".to_owned(),
+                    notice(match what {
+                        "no key" => notices::TIDY_CONNECTION.zh,
+                        "no model" => notices::TIDY_MODEL.zh,
+                        "auth expired" => notices::TIDY_CONNECTION.zh,
+                        "it timed out" => notices::TIDY_TIMEOUT.zh,
+                        _ => TIDY_FAILED.zh,
+                    })
+                ],
                 "{what}"
             );
             assert_eq!(*c.overlay().completions.lock().unwrap(), 0, "{what}");
@@ -5684,6 +5783,20 @@ mod tests {
             &notice(NO_PASTE_PERMISSION.zh)
         );
         assert_eq!(c.phase(), Phase::Idle);
+    }
+
+    #[tokio::test]
+    async fn tidy_connection_notice_names_the_selected_source() {
+        let c = tidy_controller(
+            DictationMode::Hold,
+            "A",
+            json!({
+                "cleaned": false, "fallback_reason": "no_key", "connection": "Office"
+            }),
+        );
+        run(&c, HotkeyEvent::Tidy, 5000).await;
+        assert!(c.overlay().events().last().unwrap().contains("Office"));
+        assert!(c.paster().delivered().is_empty());
     }
 
     #[tokio::test]

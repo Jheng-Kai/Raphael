@@ -180,6 +180,12 @@ async def claude_cli_models(command, environ, folder, *, cwd=None):
     return claude_rows(rows, read_settings(folder / "settings.json"), registry)
 
 
+def runnable_model(row):
+    """A grouped effort row runs the listed default variant, or its first listed variant."""
+    variants = row.get("effort_models") or {}
+    return variants.get(row.get("default_effort")) or next(iter(variants.values()), row["id"])
+
+
 def agy_models(output, settings):
     """Group public model variants while retaining the exact runnable model refs."""
     default = read_settings(settings).get("model")
@@ -198,7 +204,7 @@ def agy_models(output, settings):
             model["id"] = f"cli:gemini:{family}"
             model["reasoning_efforts"].append(effort)
             model["effort_models"][effort] = f"cli:gemini:{identifier}"
-        if default == display:
+        if default in (display, identifier):
             model.update(is_default=True, default_effort=effort)
     for model in families.values():
         model["reasoning_efforts"].sort(key=EFFORTS.index)
@@ -267,7 +273,9 @@ async def codex_models(command, environ, config_path):
         default = identifier == config["model"] if config.get("model") else bool(row.get("isDefault"))
         effort = config.get("model_reasoning_effort") if default else None
         effort = effort if effort in levels else row.get("defaultReasoningEffort")
-        models.append({"id": f"cli:codex:{identifier}", "name": row.get("displayName") or identifier,
+        alias = row.get("id")
+        aliases = [alias] if isinstance(alias, str) and alias != identifier and re.fullmatch(r"[\w./-]{1,200}", alias) else []
+        models.append({"id": f"cli:codex:{identifier}", "aliases": aliases, "name": row.get("displayName") or identifier,
                        "description": row.get("description") or "", "is_default": default,
                        "reasoning_efforts": levels, "default_effort": effort if effort in levels else None})
     return models
