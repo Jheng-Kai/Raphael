@@ -1,4 +1,4 @@
-import { scene, check, click, focus, frameCheck, frameExpect, frameScroll, hover, key, lookCall, member, room, scroll, type, wait, waitScrollEnd } from "./steps.mjs";
+import { scene, check, click, focus, frameCheck, frameExpect, frameScroll, hover, key, lookCall, member, room, scroll, type, wait, waitCall, waitScrollEnd } from "./steps.mjs";
 
 const shown = [member(1), wait('.pg-body[data-state="ready"] iframe'), { action: "frame-wait", selector: "#buy" }];
 // A page in a card is only a preview (inert): the owner presses the card and the page opens in the conversation's place, where it
@@ -25,8 +25,15 @@ const dropdown = "[data-report-filter]";
 const pick = value => click(`.menu .menu-choice[data-value="${value}"]`);
 const baseOpen = [member(1), wait('.pg-body[data-state="ready"] iframe'), { action: "frame-wait", selector: "table" }, click(".pg-card .pg-body"), wait(".pgv-frame-box iframe"), { action: "frame-wait", selector: ".kpis" }];
 const baseFixture = { baseTurn: true, pageBase: true };
+// R-PAGE-14: a checklist page as the core serves it (its helper, the owner's state put back); the frame is the real one.
+const stateOpen = [member(1), wait('.pg-body[data-state="ready"] iframe'), { action: "frame-wait", selector: "#passport" },
+  click(".pg-card .pg-body"), wait(".pgv-frame-box iframe"), { action: "frame-wait", selector: "#passport" }];
 
 export default [
+  scene("page-state-kept", "Ticking a box and writing a note on an open page sends what was done to the core, and never the password", [
+    ...stateOpen, frameCheck("page-state-fill"), waitCall("pages.state", "記得帶護照"), check("page-state-kept")], { stateTurn: true, pageState: "fresh" }),
+  scene("page-state-restored", "A page opened again shows what the owner left on it: the box ticked, the note, the bag, the page's own count and storage, no password", [
+    ...stateOpen, frameCheck("page-state-restored")], { stateTurn: true, pageState: "saved" }),
   // A side column `height: 100vh` with padding said a taller
   // page each time its frame grew, up to 20000 px. It opens at its own height and stops there.
   scene("page-window-sized", "A page whose side column is one window tall plus its padding opens at its own height and never grows on", [member(1), wait('.pg-body[data-state="ready"] iframe'), click(".pg-card .pg-body"), wait(".pgv-frame-box iframe"), { ...lookCall("letTimePass"), wait: 800 }, check("page-window-height"), { ...lookCall("letTimePass"), wait: 2500 }, check("page-window-stable"), { action: "wheel", selector: ".pgv-page", deltaY: 6000 }, { ...lookCall("letTimePass"), wait: 600 }], { baseTurn: true, pageWindow: true }),

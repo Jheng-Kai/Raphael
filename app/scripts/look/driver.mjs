@@ -1063,6 +1063,13 @@ export async function perform(page, step, evidenceDirectory) {
       return {check:'desktop-boot-connect',before,after,fade};
     }
     case "wait": { const element = await visible(step.selector, step.timeout); await element.dispose(); break; }
+    // A call the window makes on its own, after a debounce or from a frame (a page's state): waited for, never slept for.
+    case "wait-call":
+      try {
+        await page.waitForFunction(({ method, holding }) => window.__look.calls.some(call => call.method === method && (!holding || JSON.stringify(call.params).includes(holding))),
+          { timeout: 6000 }, { method: step.method, holding: step.holding ?? "" });
+      } catch (error) { throw new Error(`The window never called ${step.method}${step.holding ? ` with ${step.holding}` : ""}`, { cause: error }); }
+      break;
     case "wait-text":
       try {
         await page.waitForFunction(({ selector, text }) => [...document.querySelectorAll(selector)].some(element =>

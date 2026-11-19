@@ -4857,6 +4857,16 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name };
   }
+  if (name === "page-state-kept") {
+    // R-PAGE-14: the frame told the window what was done, and the window gave it to the core for this page, without the password.
+    const saves = window.__look.calls.filter(call => call.method === "pages.state");
+    require(saves.length >= 1 && saves.every(call => call.params.id === "page-state"), `the page's state went to the core for this page: ${saves.length}`);
+    const last = saves.at(-1).params.state;
+    require(last.fields["#passport"] === true && last.fields["#ticket"] === false && last.fields["name:note"] === "記得帶護照" && last.fields["#bag"] === "carry", `every field as it was left: ${JSON.stringify(last.fields)}`);
+    require(!("#pin" in last.fields) && !JSON.stringify(last).includes("1234"), "the password was never sent");
+    require(last.storage.opened === "1" && JSON.stringify(last.custom) === '{"tab":2}', `the page's storage and the script's value: ${JSON.stringify(last)}`);
+    return { check: name, saves: saves.length };
+  }
   if (name === "keychain-refused") {
     // R-PRIV-KEYCHAIN-01: told twice, said once; the words and the one button to be asked again, inside the window.
     const notes = [...document.querySelectorAll(".toast .keychain-refused")].filter(visible);
@@ -11173,6 +11183,27 @@ export function checkFrame(name) {
   // The words of the theme the page is given (core agent/pages.py THEME), as colours.
   const words = dark ? { bg: "rgb(10, 10, 10)", fg: "rgb(245, 245, 245)", surface: "rgb(22, 22, 22)", muted: "rgb(153, 153, 153)", link: "rgb(122, 174, 245)", line: "rgb(38, 38, 38)" }
     : { bg: "rgb(255, 255, 255)", fg: "rgb(10, 10, 10)", surface: "rgb(247, 247, 247)", muted: "rgb(89, 89, 89)", link: "rgb(31, 99, 209)", line: "rgb(235, 235, 235)" };
+  // R-PAGE-14: what the owner does on a page stays with it. The owner's own moves, as the page hears them from a press and
+  // from typing (input and change), on the real frame the core serves.
+  if (name === "page-state-fill") {
+    const passport = document.getElementById("passport"), note = document.querySelector("[name=note]"), pin = document.getElementById("pin");
+    passport.checked = true; passport.dispatchEvent(new Event("change", { bubbles: true }));
+    note.value = "記得帶護照"; note.dispatchEvent(new Event("input", { bubbles: true }));
+    pin.value = "1234"; pin.dispatchEvent(new Event("input", { bubbles: true }));
+    window.raphael.state.set({ tab: 2 });
+    require(document.getElementById("count").textContent === "1 項完成", "the page heard the box");
+    require(document.getElementById("count").dataset.opened === "1" && localStorage.getItem("opened") === "1", "the page's localStorage works in its sandbox");
+    return { check: name };
+  }
+  if (name === "page-state-restored") {
+    require(document.getElementById("passport").checked && !document.getElementById("ticket").checked, "the box the owner ticked is ticked, and only it");
+    require(document.querySelector("[name=note]").value === "記得帶護照" && document.getElementById("bag").value === "check", "the note and the bag are as they were left");
+    require(document.getElementById("pin").value === "", "a password is never put back");
+    require(document.getElementById("count").textContent === "1 項完成", `the page's own count was drawn again from the fields: ${document.getElementById("count").textContent}`);
+    require(document.getElementById("count").dataset.opened === "4" && localStorage.getItem("opened") === "4", `the page's storage came back and went on: ${localStorage.getItem("opened")}`);
+    require(JSON.stringify(window.raphael.state.get()) === '{"tab":2}', "the script's own value came back");
+    return { check: name };
+  }
   if (name === "page-base") {
     // An HTML page that writes no style of its own is drawn by the app's base style (core agent/page_style.py, R-PAGE-06): a document
     // page, in type, table, note, contents box, tabs, cards and figures; and its one rule of its own (h3) wins over it.

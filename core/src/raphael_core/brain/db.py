@@ -2225,6 +2225,22 @@ def _template_card_links(conn):
 
 _MIGRATIONS[89] = _template_card_links
 
+# What the owner did on a page (its fields, what its script kept) stays with the page and goes with it (R-PAGE-14).
+# Running it again on a database that has the table changes nothing.
+_MIGRATIONS[90] = """
+BEGIN;
+CREATE TABLE IF NOT EXISTS page_state (
+    page_id TEXT PRIMARY KEY,
+    state TEXT NOT NULL,
+    updated_at_ms INTEGER NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS clear_page_state AFTER DELETE ON pages BEGIN
+  DELETE FROM page_state WHERE page_id=OLD.id;
+END;
+PRAGMA user_version = 90;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 

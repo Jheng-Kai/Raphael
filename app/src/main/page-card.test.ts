@@ -898,3 +898,19 @@ test("a failed page has no preview to press, and its card keeps 再試一次 and
   expect(document.querySelector(".ra-stage.is-page")).toBeNull();
   expect(thread.querySelector('[data-page-act="retry"]')).not.toBeNull();
 });
+
+test("what the owner left on the page goes to the core for that page, and nothing else does (R-PAGE-14)", async () => {
+  const keep = vi.spyOn(api, "pagesState").mockResolvedValue({ kept: true });
+  const { frame } = mount();
+  await flush();
+  const state = { fields: { "#done": true, "name:note": "記得帶護照" }, storage: { todo: "[1]" }, custom: { tab: 2 } };
+  fromFrame(frame, { raphaelPage: 1, type: "state", state });
+  expect(keep).toHaveBeenCalledExactlyOnceWith("p1", state);
+  fromFrame(frame, { raphaelPage: 1, type: "state", state: "text" });
+  fromFrame(frame, { raphaelPage: 1, type: "state", state: { custom: "x".repeat(70 * 1024) } });
+  const elsewhere = new MessageEvent("message", { data: { raphaelPage: 1, type: "state", state } });
+  Object.defineProperty(elsewhere, "source", { value: window });
+  window.dispatchEvent(elsewhere);
+  expect(keep).toHaveBeenCalledTimes(1);
+  keep.mockRestore();
+});

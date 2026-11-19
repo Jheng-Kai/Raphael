@@ -52,9 +52,10 @@ export function corePython() {
   return process.env.RAPHAEL_CORE_PYTHON || join(app, "../core/.venv", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
 }
 
-export async function pageBaseDocuments(html, python = corePython()) {
-  const code = "import json,sys; from raphael_core.agent.pages import document; page={'title':'page','html':sys.argv[1],'source':'html'}; print(json.dumps({theme: document(page, theme) for theme in ('light', 'dark')}))";
-  const { stdout } = await promisify(execFile)(python, ["-c", code, html], { windowsHide: true, maxBuffer: 16 * 1024 * 1024,
+export async function pageBaseDocuments(html, python = corePython(), state = null) {
+  // `state`: what the owner left on the page (R-PAGE-14), which the core serves back with it.
+  const code = "import json,sys; from raphael_core.agent.pages import document; page={'title':'page','html':sys.argv[1],'source':'html'}; state=json.loads(sys.argv[2]); print(json.dumps({theme: document(page, theme, state) for theme in ('light', 'dark')}))";
+  const { stdout } = await promisify(execFile)(python, ["-c", code, html, JSON.stringify(state)], { windowsHide: true, maxBuffer: 16 * 1024 * 1024,
     env: { ...process.env, PYTHONPATH: join(app, "../core/src"), PYTHONDONTWRITEBYTECODE: "1", PYTHONIOENCODING: "utf-8" } });
   return JSON.parse(stdout);
 }
@@ -124,6 +125,11 @@ export async function run(options) {
     }
     if (options.selected.some(scene => scene.fixture?.pageBase)) fixture.pageBaseDocs = await pageBaseDocuments(fixture.pageBaseHtml);
     if (options.selected.some(scene => scene.fixture?.pageWindow)) fixture.pageWindowDocs = await pageBaseDocuments(fixture.pageWindowHtml);
+    // A checklist page as the core serves it, with nothing left on it and with what the owner left on it (R-PAGE-14).
+    if (options.selected.some(scene => scene.fixture?.pageState)) {
+      const { html, saved } = JSON.parse(await readFile(join(import.meta.dirname, "fixtures/page-state.json"), "utf8"));
+      fixture.pageStateDocs = { fresh: await pageBaseDocuments(html), saved: await pageBaseDocuments(html, undefined, saved) };
+    }
     if (options.selected.some(scene => scene.fixture?.coreFixtures)) Object.assign(fixture, await coreFixtures());
     // Match avatar_get's data URL contract using the full-resolution public fixture artwork.
     if (fixture.avatar?.url?.startsWith('/brand/')) fixture.avatar.url = `data:image/png;base64,${(await readFile(join(app, 'public', fixture.avatar.url))).toString('base64')}`;
