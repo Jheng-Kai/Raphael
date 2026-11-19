@@ -407,7 +407,7 @@ its own (immediate on the original words, armed on 取消 once they changed). `r
 is no longer the owner's last (the owner sent something from the composer). The composer is never touched.
 
 **Versions.** The core keeps each earlier version in `agent_turn_versions` (migration 87, `AgentHistory.snapshot`/`versions`): the words, files and quote and
-the reply, media and event lines its member answered with, taken after the old work was stopped and before the old turn goes (`_history_retract(keep=...)`).
+the reply, media and event lines its member answered with, taken after the old work was stopped and before the old turn goes in the same transaction that admits the replacement, after its files are stored. Stop returns an unanswered edit to the composer and restores its preceding exchange. A visible progress line counts as work already shown.
 `AgentHistory.add(versions=...)` writes them back with the new turn in one transaction (the `agent_turn_versions_delete` trigger takes them with any deleted
 turn, so an id the table gives again never shows them). `_turn_views` adds `version`/`versions`; `agent.history.version {member_id, conversation_id, turn_id,
 version}` returns one version in the shape of a turn (an earlier one with no steps, task or cards). `versionPagerHTML` draws ‹ n/n › under the bubble
@@ -2513,7 +2513,7 @@ npm run look -- composer-send-while-working composer-queued composer-queued-with
 R-QUEUE-07 narrows migration 58's request uniqueness to nonterminal inbox rows.
 Queued, steering and started duplicates return queued with the existing turn ID;
 terminal requests admit a new turn at the FIFO tail, with no cached answer replay.
-Restart never replays started work, but its lost request ID can be sent again.
+Restart preserves a terminal answer written before inbox settlement. Interrupted work expires and its request ID can be sent again.
 Failed, cancelled and withdrawn requests can also be sent again. Stop and implicit
 withdrawal prefer in-flight admissions when that ID also has terminal history.
 Cancel before first delivery and a new cancel during retry attachment saving remain effective.
@@ -2555,9 +2555,10 @@ Evidence: core/tests/agent/test_background_unread_steering.py (API worker and CL
 task stops, a task waiting for a yes, 「立即送出」, a restart) and core/tests/test_e2e_steering.py
 (a real core and worker process with the fake LLM: the parked `[native-steer:ask]` work goes on
 in the worker once its card is answered; words written to it are answered as their own turn when
-it is stopped, and read there once, surviving a restart, when it is not). Not covered: a quick
-question or a messaging app's message that joins background work has no inbox row, so it carries
-no ticket and is not given back.
+it is stopped, and read there once, surviving a restart, when it is not). Quick questions can still join background work without a ticket.
+Formal voice transcripts and platform messages enter the durable inbox. Unread platform messages run in FIFO order
+and their replies go to the chat identified by the original session. Stop can return the transcript or a request
+whose files were still being stored when the owner pressed Stop (core/tests/agent/test_inbox.py).
 
 The existing test_retry_turns.py::test_a_colleagues_question_is_answered_while_the_member_is_at_work
 also preserves the colleague bypass and verifies that an owner CLI turn waits

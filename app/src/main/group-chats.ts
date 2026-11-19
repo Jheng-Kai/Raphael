@@ -76,6 +76,8 @@ export function configureRooms(app: AppContext): void {
 }
 let selectedRoom: number | null = null;
 export const currentRoomId = (): number | null => selectedRoom;
+let knownRooms: Set<number> | undefined;
+export const roomExists = (id: number): boolean => knownRooms?.has(id) ?? true;
 export function clearRoomSelection(): void { selectedRoom = null; changed(); }
 const changed = (): void => { for (const listener of listeners) listener(); };
 const responderChoices = (list: MembersList, selected: Set<number>) => [
@@ -133,7 +135,7 @@ export async function openNewGroupChat(opts: { onCreated?(room: Room): void } = 
       const member_ids = [...selected];
       if (!name || member_ids.length<2 || member_ids.length>6) { toaster.info(t("rooms.memberCount")); return; }
       saving = true; dialog.el.querySelector<HTMLButtonElement>('[data-dlg="create"]')!.disabled = true;
-      try { const { room } = await api.roomsCreate({ name, member_ids, group_id: group === "none" ? null : Number(group), default_responder:responder, request_id:creationRequestId }); dialog.close(); changed(); opts.onCreated?.(room); void openGroupChat(room.id); }
+      try { const { room } = await api.roomsCreate({ name, member_ids, group_id: group === "none" ? null : Number(group), default_responder:responder, request_id:creationRequestId }); knownRooms?.add(room.id); dialog.close(); changed(); opts.onCreated?.(room); void openGroupChat(room.id); }
       catch (error) { toaster.info(describeError(error)); }
       finally { saving = false; const b = dialog.el.querySelector<HTMLButtonElement>('[data-dlg="create"]'); if (b) b.disabled = false; }
     }
@@ -237,7 +239,7 @@ function roomActions(anchor: HTMLElement, room: Room, saved: () => void = () => 
       if (name) { await api.roomsUpdate(room.id, { name }); changed(); saved(); }
     }).catch(error => toaster.info(describeError(error)));
     else void confirmDelete(room.name).then(async yes => {
-      if (yes) { await api.roomsDelete(room.id); window.dispatchEvent(new CustomEvent("room-deleted",{detail:room.id})); deleted(); changed(); toaster.info(t("members.deleted",{p0:room.name})); }
+      if (yes) { await api.roomsDelete(room.id); knownRooms?.delete(room.id); window.dispatchEvent(new CustomEvent("room-deleted",{detail:room.id})); deleted(); changed(); toaster.info(t("members.deleted",{p0:room.name})); }
     }).catch(error => toaster.info(describeError(error)));
   });
 }
@@ -516,12 +518,13 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   }
   async function refresh(fromEvent=false, readRoom=true):Promise<void>{
     const mine=++generation,id=roomId;if(!opened||!id)return;
-    const missing=():void=>{forgetRoomDraft(id);toaster.info(t("rooms.deleted"));};
+    const missing=():void=>{knownRooms?.delete(id);forgetRoomDraft(id);toaster.info(t("rooms.deleted"));};
     try{
       const peopleRead=()=>api.membersList(getLocale()), roomsRead=()=>api.roomsList();
       const [people,rooms]=await Promise.all([rosterDirty ? (fromEvent ? eventRead(`members.list:${getLocale()}`,peopleRead,context) : peopleRead()) : Promise.resolve(list),readRoom || !room ? (fromEvent ? eventRead('rooms.list',roomsRead,context) : roomsRead()) : Promise.resolve({rooms:[room]})]);
       if(mine!==generation||!opened)return;
       const found=rooms.rooms.find(r=>r.id===id);if(!found){missing();return;}
+      knownRooms?.add(id);
       const history=await (fromEvent ? eventRead(`rooms.messages:${id}`,()=>api.roomMessages(id),context) : api.roomMessages(id));if(mine!==generation||!opened)return;
       list=people;rosterDirty=false;room=found;exchange=history.exchange;
       pendingQuestions={room:id,questions:history.pending_questions??[]};floatingQuestions.sync();
@@ -671,7 +674,10 @@ export function createRoomsSection(active: () => boolean = () => true): HTMLElem
     try {
       const roomRead=()=>api.roomsList(), peopleRead=()=>api.membersList(getLocale());
       const [result, people] = await Promise.all([readRooms ? (fromEvent ? eventRead('rooms.list',roomRead,context) : roomRead()) : Promise.resolve({rooms}), rosterDirty ? (fromEvent ? eventRead(`members.list:${getLocale()}`,peopleRead,context) : peopleRead()) : Promise.resolve(list)]);
-      if (mine !== generation) return; rooms = result.rooms; list = people; rosterDirty = false; loaded = true; draw();
+      if (mine !== generation) return;
+      rooms = result.rooms; list = people; rosterDirty = false; loaded = true;
+      if (readRooms) knownRooms = new Set(rooms.map(room => room.id));
+      draw();
     }
     catch {
       // Startup cannot depend on one ready event. Stop retrying after the first successful snapshot, even if empty.

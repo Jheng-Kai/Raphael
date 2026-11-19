@@ -94,36 +94,20 @@ and fails if `models.catalog` or `brains.cli` began while `members.list` or `roo
 overlapped, or if a first-view read was never asked for. The roster carries no pictures (`members.picture`, R-START-06): the look mock
 still inlines `avatar_url`, so the picture path is covered by vitest, not by look.
 
-## Every view is a step back
+## Keyboard navigation through views
 
-R-NAV-03: the mouse's side buttons and Alt+Left / Alt+Right walk through every view the owner went into: conversations and groups,
-an older conversation, a page open in the thread's place, the member settings page with its tabs and a skill's or a command's page,
-each tab of Settings with the models sub-tab and the provider and service dialogs, and Connect Apps' connected list and app pages.
-Back in Settings walks the opened tabs first and closes Settings last; the page under it never moves. The history (nav-history.ts)
-looks at the window after each press and key (nav-input.ts), after each `go` and before each step; each surface only names its view
-(`navView`) and comes back from that name (`showNavView`). An on-screen way back (`data-nav-back`, Escape) that lands on the place
-before is that step back, so the arrow and the side button share one history. The look steps press the real mouse's back and
-forward buttons (`sideButton`).
+R-NAV-03. Left Alt with an arrow or Command with a bracket retraces conversations, groups, pages, and views within Settings or member settings. An on-screen Back arrow and Escape share that history when they land on the preceding view. These scenes drive the platform's keyboard shortcuts.
 
 ```powershell
-npm run look -- nav-steps-member-settings nav-steps-skill-arrow nav-steps-settings nav-steps-conversations --theme both --width 1120,720,1920x1080
+npm run look -- nav-steps-member-settings nav-steps-skill-arrow nav-steps-settings nav-steps-conversations nav-layer-settings --theme both --width 1120,720,1920x1080
 ```
 
-## Navigation inside open layers
+## Mouse side buttons
 
-R-NAV-04. Back and forward go to the uppermost dialog, menu, popover or inline editor first.
-Back retraces its own pages or closes one layer. Forward can return to a view just left.
-A forward press at the end stays in the layer. A changed message uses the same two presses
-to abandon the edit as Escape. The main window receives mouse buttons 3 and 4, left Alt
-with an arrow on Windows, and Command with a bracket on macOS.
+R-NAV-04. Mouse Back dismisses the topmost transient layer. With no transient layer, Back and Forward retrace a member's conversation, a group room or a page such as the calendar. A new place switch discards the forward entries and deleted destinations are skipped. Docked details keeps its open state and selected tab during a conversation history step. Back dismisses floating details, and Forward leaves dismissed layers closed. The first-run guide keeps its own steps.
 
 ```powershell
-npm run look -- nav-layer-settings --theme both --width 1120,720,1920x1080
-npm run look -- nav-layer-plus --theme both --width 1120,720,1920x1080
-npm run look -- nav-layer-picture --theme both --width 1120,720,1920x1080
-npm run look -- nav-layer-maker --theme both --width 1120,720,1920x1080
+npm run look -- nav-side-members nav-side-settings nav-layer-plus nav-layer-picture nav-layer-maker --theme both --width 1120,720,1920x1080
 ```
 
-The four scenes end on Models after leaving Usage, the composer menu after leaving its apps
-submenu, the group draft after closing its picture, and the maker's first avatar tab with
-the name still entered. The maker has one form with a tabbed avatar picker.
+The member scene checks the selected member and conversation header after each press and the details panel's open state and tab across both steps. The Settings scene checks that one Back closes Settings over the second member and Forward leaves that conversation visible. The other side-button scenes show the composer menu after its apps submenu closes, the group draft after its picture closes, and the member maker with its draft restored when reopened.

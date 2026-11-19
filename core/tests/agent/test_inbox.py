@@ -279,15 +279,15 @@ async def test_stop_takes_back_the_request_nothing_answered_yet_instead_of_leavi
         await asyncio.gather(first, return_exceptions=True)
 
 
-@pytest.mark.parametrize("answer", ["line", "step"])
+@pytest.mark.parametrize("answer", ["reply", "progress", "step"])
 async def test_stop_keeps_a_request_that_was_answered_or_acted_on(make_rig, monkeypatch, tmp_path, answer):
     # Once a line was said or a step taken, Stop only stops: taking it back would hide what was said or done.
     from raphael_core.agent.steps import Step
     rig, first, release, calls = await blocked_cli(make_rig, monkeypatch, tmp_path)
     try:
         running = next(t for t in await rig.turns() if t["status"] == "running")
-        if answer == "line":
-            rig.history.add_message(running["id"], "reply", "Looking at it now.")
+        if answer != "step":
+            rig.history.add_message(running["id"], answer, "Looking at it now.")
         else:
             rig.history.add_steps(running["id"], [Step(kind="tool", tool="web_search", server="Raphael", outcome="ok", ms=10)])
         stopped = await rig.call("agent.history.stop", {"session_id": running["session_id"], "member_id": 0})
@@ -298,3 +298,95 @@ async def test_stop_keeps_a_request_that_was_answered_or_acted_on(make_rig, monk
         await asyncio.gather(first, return_exceptions=True)
 
 
+
+async def test_retract_leaves_other_work_in_the_same_session_running(make_rig, monkeypatch, tmp_path):
+    rig, first, release, calls = await blocked_cli(make_rig, monkeypatch, tmp_path)
+    try:
+        [running] = rig.history.for_session("live")
+        earlier = rig.history.add(session_id="live", question="Earlier question", route="answer", prefix="",
+                                  text="Earlier answer", status="done", source="app")
+        result = await rig.call("agent.history.retract", dict(session_id="live", turn_id=earlier))
+        assert result == {"deleted": 1}
+        assert rig.history.get(running.id).status == "running"
+        release.set()
+        assert (await first)["text"] == "Answer 1"
+    finally:
+        release.set()
+        await asyncio.gather(first, return_exceptions=True)
+
+
+@pytest.mark.parametrize("text", ["Read this", ""])
+async def test_stop_during_attachment_storage_returns_the_request(make_rig, tmp_path, monkeypatch, text):
+    import threading
+    from raphael_core.services.attachment_store import AttachmentStore
+    from raphael_core.services.attachments import Attachment
+
+    store = AttachmentStore(tmp_path)
+    rig = make_rig(attachment_store=store)
+    entered, release = threading.Event(), threading.Event()
+    save = store.save
+    def blocked(file):
+        entered.set()
+        assert release.wait(8)
+        return save(file)
+    monkeypatch.setattr(store, "save", blocked)
+    quote = {"text": "Earlier", "author": "owner"}
+    file = Attachment("note.txt", "text/plain", b"note")
+    request = asyncio.create_task(rig.service.ask("upload", text, "en", "app", attachments=[file], quote=quote))
+    try:
+        assert await asyncio.to_thread(entered.wait, 5)
+        stop = asyncio.create_task(rig.call("agent.history.stop", dict(session_id="upload")))
+        await until(lambda: rig.service._admitting[0].admission_stopped)
+        release.set()
+        [draft] = (await stop)["returned"]
+        [stored] = draft.pop("attachments")
+        assert store.path(stored["id"]).read_bytes() == b"note"
+        assert stored["name"] == file.name
+        assert draft == dict(session_id="upload", text=text, quote=quote)
+        assert (await request)["turn_id"] == 0
+        assert not rig.history.for_session("upload")
+    finally:
+        release.set()
+        await asyncio.gather(request, return_exceptions=True)
+
+
+async def test_stop_returns_formal_voice_transcript(make_rig, client):
+    rig = make_rig()
+    entered = asyncio.Event()
+    async def thinking(**kwargs):
+        entered.set()
+        await asyncio.Event().wait()
+    client.chats.append(thinking)
+    quote = {"text": "Earlier", "author": "owner"}
+    request = asyncio.create_task(rig.service.ask("spoken", "My transcript", "en", "voice", quote=quote,
+                                                   conversation_id=rig.service.conversations.main(0)))
+    try:
+        await asyncio.wait_for(entered.wait(), 5)
+        stopped = await rig.call("agent.history.stop", dict(session_id="spoken"))
+        assert stopped["returned"] == [dict(session_id="spoken", text="My transcript", attachments=[], quote=quote)]
+        assert not rig.history.for_session("spoken")
+    finally:
+        request.cancel()
+        await asyncio.gather(request, return_exceptions=True)
+
+
+async def test_platform_words_unread_by_cli_run_in_order_and_reply_to_their_chat(make_rig, monkeypatch, tmp_path):
+    rig, first, release, calls = await blocked_cli(make_rig, monkeypatch, tmp_path, brain="claude")
+    delivered = []
+    async def report(session, language, reply):
+        delivered.append((session, reply["text"]))
+    rig.service.report_platform_reply = report
+    try:
+        for words in ("Second", "Third"):
+            reply = await rig.service.ask("telegram:42", words, "en", "telegram")
+            assert reply["status"] == "queued"
+            assert rig.service._inbox.get(reply["turn_id"])["state"] in ("steering", "queued")
+        release.set()
+        await first
+        await until(lambda: not rig.service._drains)
+        assert len(calls) == 3
+        assert "Second" in calls[1]["user"] and "Third" in calls[2]["user"]
+        assert delivered == [("telegram:42", "Answer 2"), ("telegram:42", "Answer 3")]
+    finally:
+        release.set()
+        await asyncio.gather(first, return_exceptions=True)

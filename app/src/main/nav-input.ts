@@ -1,5 +1,5 @@
 // The mouse's side buttons and Alt+Left / Alt+Right (⌘[ / ⌘] on a Mac) as back and forward in the main
-// window. The steps themselves are in nav-history.ts. This file hears the buttons and keys, and keeps WebView2
+// window. Place history handles the mouse and view history handles the keyboard. This file keeps WebView2
 // from acting on them: it would go back or forward in its own history, which holds no page of ours.
 // It also hears every other press and key, so the history can see each view the person goes into.
 
@@ -86,7 +86,7 @@ export function reduceNavKey(previous: NavKeyState, event: NavKeyInput, mac = IS
   return { state, step, preventDefault };
 }
 
-/** The window's own ways back are marked with this attribute: a press on one is a step back, as the side button is. */
+/** The window's own ways back are marked with this attribute so the keyboard history can retrace them. */
 export const NAV_BACK_ATTR = "data-nav-back";
 
 /** Whether a key may take the window elsewhere. A letter typed into a field never does, nor a modifier on its own. */
@@ -126,7 +126,10 @@ export function installNavNotes(target: EventTarget, heard: (back: boolean) => v
  * Listens on `target` (the window) for the side buttons and the keys. `step` is called once for each
  * press and decides whether there is anywhere to go. Returns how to stop listening.
  */
-export function installNavInput(target: EventTarget, step: (direction: NavStep) => void, layerOwnsKeys: () => boolean = () => false): () => void {
+export function installNavInput(
+  target: EventTarget, step: (direction: NavStep) => void, layerOwnsKeys: () => boolean = () => false,
+  sideStep = step,
+): () => void {
   let state = emptyNavKeyState();
   const mouse = (raw: Event): void => {
     const event = raw as MouseEvent;
@@ -138,7 +141,7 @@ export function installNavInput(target: EventTarget, step: (direction: NavStep) 
     event.preventDefault();
     // The step comes with the press, as it does with the keys: a release that began in another
     // program is no request.
-    if (event.type === "mousedown") step(direction);
+    if (event.type === "mousedown") sideStep(direction);
   };
   const key = (raw: Event): void => {
     const event = raw as KeyboardEvent;

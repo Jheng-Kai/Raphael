@@ -305,16 +305,19 @@ class AgentHistory:
         thread_id: int | None = None,
         source_turn_id: int | None = None,
         admission: str | None = None,
+        request_id: str | None = None,
         failure: dict | None = None,
         place: tuple[int, int] | None = None,
         versions: Sequence[Mapping[str, object]] = (),
+        replacing_session: str | None = None,
+        keep_answer: bool = False,
         in_transaction: bool = False,
     ) -> int:
         """Store a new turn, made now, in the thread of `member_id`, with the steps taken for it,
         and return its id. `attachments` are the names and the types of the files handed with the
         request; `peer_id` is the other member of an exchange. `place` is `(id, created_at_ms)` of a
         turn that was removed: the new turn stands where that one stood (an edited message keeps its
-        place in the thread). The id must be free. `versions` are the earlier versions of an edited message
+        place in the thread). When replacing a stored message, its removal and admission share this transaction. `versions` are the earlier versions of an edited message
         (`versions`, `snapshot`), kept with the new turn, which is the newest, in the same transaction."""
         files = [{key: item[key] for key in ("name", "mime", "id", "size") if key in item} for item in attachments]
         if scope == "private" and (source == "member" or route == "exchange"):
@@ -331,6 +334,26 @@ class AgentHistory:
         with nullcontext() if in_transaction else self._conn:
             conversations = Conversations(self._conn, self._now_ms)
             conversation_id = conversations.resolve(member_id, conversation_id) if scope in ("private", "exchange") else None
+            if replacing_session is not None:
+                if not self._conn.in_transaction:
+                    self._conn.execute("BEGIN IMMEDIATE")
+                old = self.get(place[0])
+                if old is None or old.session_id != replacing_session or old.conversation_id != conversation_id:
+                    raise ValueError("the message being edited has changed")
+                versions = self.versions(old.id)
+                if keep_answer:
+                    versions.append(self.snapshot(old, len(versions) + 1))
+                waiting = self._conn.execute(
+                    "SELECT 1 FROM agent_inbox WHERE turn_id=? AND state IN ('queued','steering')", (old.id,),
+                ).fetchone()
+                if waiting:
+                    self._conn.execute("UPDATE agent_inbox SET state='terminal', outcome='cancelled', settled_at_ms=?"
+                                       " WHERE turn_id=?", (self._now_ms(), old.id))
+                    self._conn.execute("UPDATE agent_turns SET status='withdrawn' WHERE id=?", (old.id,))
+                    self._conn.execute("DELETE FROM agent_turns_fts WHERE rowid=?", (old.id,))
+                    place = None
+                else:
+                    self._delete(old.id)
             cursor = self._conn.execute(
                 "INSERT INTO agent_turns (id, created_at_ms, session_id, question, route, prefix,"
                 " text, detail, status, cost_usd, source, model, attachments, member_id, peer_id, quote, conversation_id, scope, room_id, thread_id, source_turn_id, failure)"
@@ -367,7 +390,7 @@ class AgentHistory:
                 self._conn.execute(
                     "INSERT INTO agent_inbox(turn_id,request_id,member_id,conversation_id,seq,state,payload_json,created_at_ms)"
                     " SELECT ?,?,?,?,COALESCE(MAX(seq),0)+1,'queued',?,? FROM agent_inbox WHERE member_id=? AND conversation_id=?",
-                    (turn_id, session_id, member_id, conversation_id, admission, self._now_ms(), member_id, conversation_id),
+                    (turn_id, request_id or session_id, member_id, conversation_id, admission, self._now_ms(), member_id, conversation_id),
                 )
         return turn_id
 
@@ -808,11 +831,14 @@ class AgentHistory:
     def delete(self, turn_id: int) -> bool:
         """Remove a single turn and its public lines, steps and search terms."""
         with self._conn:
-            self._conn.execute("UPDATE worker_tasks SET turn_id = NULL WHERE turn_id = ?", (turn_id,))
-            self._conn.execute("DELETE FROM agent_messages WHERE turn_id = ?", (turn_id,))
-            self._conn.execute("DELETE FROM agent_steps WHERE turn_id = ?", (turn_id,))
-            self._conn.execute("DELETE FROM agent_turns_fts WHERE rowid = ?", (turn_id,))
-            cursor = self._conn.execute("DELETE FROM agent_turns WHERE id = ?", (turn_id,))
+            return self._delete(turn_id)
+
+    def _delete(self, turn_id: int) -> bool:
+        self._conn.execute("UPDATE worker_tasks SET turn_id = NULL WHERE turn_id = ?", (turn_id,))
+        self._conn.execute("DELETE FROM agent_messages WHERE turn_id = ?", (turn_id,))
+        self._conn.execute("DELETE FROM agent_steps WHERE turn_id = ?", (turn_id,))
+        self._conn.execute("DELETE FROM agent_turns_fts WHERE rowid = ?", (turn_id,))
+        cursor = self._conn.execute("DELETE FROM agent_turns WHERE id = ?", (turn_id,))
         return cursor.rowcount > 0
 
     # --- the versions of an edited message ------------------------------------------------------------
@@ -881,6 +907,32 @@ class AgentHistory:
                  kept.get("attachments"), kept.get("quote"), kept["source"], kept["route"], kept["prefix"], kept["text"],
                  kept.get("detail"), kept["status"], kept.get("model"), kept.get("failure"), kept.get("messages") or "[]"),
             )
+
+    def restore_previous(self, turn_id: int) -> bool:
+        """Replace an unanswered edit with the preceding exchange and its earlier versions."""
+        with self._conn:
+            if not self._conn.in_transaction:
+                self._conn.execute("BEGIN IMMEDIATE")
+            versions = self.versions(turn_id)
+            if not versions:
+                return False
+            last = versions.pop()
+            turn = self.get(turn_id)
+            self._delete(turn_id)
+            fields = ("created_at_ms", "session_id", "question", "attachments", "quote", "source", "route",
+                      "prefix", "text", "detail", "status", "model", "failure")
+            self._conn.execute(
+                f"INSERT INTO agent_turns (id, member_id, conversation_id, {', '.join(fields)})"
+                f" VALUES (?, ?, ?, {', '.join('?' for _ in fields)})",
+                (turn_id, turn.member_id, turn.conversation_id, *(last[key] for key in fields)),
+            )
+            self._insert_versions(turn_id, versions)
+            self._conn.executemany(
+                "INSERT INTO agent_messages(turn_id, seq, kind, text, at_ms) VALUES (?,?,?,?,?)",
+                [(turn_id, line["seq"], line["kind"], line["text"], line["at_ms"]) for line in json.loads(last["messages"])],
+            )
+            self.reindex(turn_id)
+            return True
 
     def version_counts(self, turn_ids: Iterable[int]) -> dict[int, int]:
         """How many versions each of `turn_ids` has, the turn itself the newest; only turns with more than one."""

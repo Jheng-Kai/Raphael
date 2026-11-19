@@ -55,7 +55,7 @@ export interface DetailsPanel {
   overview(): void;
   select(tab: DetailsTab): void;
   /** Reads the selected member's routines and work, and opens Details. */
-  showMember(): void;
+  showMember(keepTab?: boolean): void;
   refreshRoutines(): void;
   refreshResources(): void;
   /** The member stopped working: its bots may have been set up in the conversation, so their rows are read again. */
@@ -334,8 +334,8 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     refreshChannels() { if (!el.hidden && tab === "details") for (const channel of Object.values(channelsOf(host.member().id))) void channel.load(); },
     refreshResources() { if (tab === 'details' || tab === 'library') void loadWork(true); },
     refreshWork(cause) { if (!el.hidden && (tab === 'library' || (cause === 'task' && tab === 'details'))) scheduleWork(); },
-    showMember() {
-      tab = "details";
+    showMember(keepTab) {
+      if (!keepTab) tab = "details";
       for (const channel of Object.values(channelsOf(host.member().id))) { channel.reset(); void channel.load(); }
       work = null; workFailed = false; libraryFilter = "all"; void loadWork();
       routines = "loading";

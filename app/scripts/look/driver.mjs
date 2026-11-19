@@ -1085,6 +1085,15 @@ export async function perform(page, step, evidenceDirectory) {
     case "require":
       if (!await page.$(step.selector)) throw new Error(`Unavailable in this checkout: ${step.reason} (${step.selector})`);
       break;
+    case "nav-key": {
+      const mac = await primaryKey(page) === "Meta";
+      const modifier = mac ? "Meta" : "AltLeft";
+      const back = step.direction === "back";
+      await page.keyboard.down(modifier);
+      try { await page.keyboard.press(mac ? (back ? "BracketLeft" : "BracketRight") : (back ? "ArrowLeft" : "ArrowRight")); }
+      finally { await page.keyboard.up(modifier); }
+      break;
+    }
     case "key": {
       // `ctrl` is the window's command key: Ctrl on Windows, ⌘ where the page runs as on a Mac (shared/platform.ts `primaryKey`).
       const primary = step.ctrl ? await primaryKey(page) : null;

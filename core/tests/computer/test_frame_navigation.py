@@ -13,3 +13,9 @@ def test_the_computer_keeps_its_side_buttons_and_keys_while_the_owner_holds_the_
     assert FRAME_NAVIGATION.count("owned()") == 2
     assert "event.button !== 3 && event.button !== 4 || owned()" in FRAME_NAVIGATION
     assert "if (owned()) return;" in FRAME_NAVIGATION
+
+
+def test_the_frame_distinguishes_mouse_side_presses_from_keyboard_shortcuts():
+    assert "direction, input}, '*')" in FRAME_NAVIGATION
+    assert "send(event.button === 3 ? 'back' : 'forward', 'side')" in FRAME_NAVIGATION
+    assert "send(index === 0 ? 'back' : 'forward')" in FRAME_NAVIGATION
