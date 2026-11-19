@@ -275,7 +275,7 @@ async def test_a_task_resumed_twice_fails(tmp_path, monkeypatch):
 
 
 async def test_a_stopped_card_that_still_saves_fails(tmp_path, monkeypatch):
-    monkeypatch.setattr(SecretCardStore, "cancel_session", lambda self, session: [])
+    monkeypatch.setattr(SecretCardStore, "cancel_session", lambda self, session, turn_id=None: [])
     reasons, _ = await run_s15(SECRET, tmp_path, monkeypatch)
     assert "stop" in reasons
 
