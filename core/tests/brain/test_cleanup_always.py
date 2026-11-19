@@ -1,4 +1,4 @@
-"""Mandatory cleanup retries and reasoning budgets, using fake HTTP only."""
+"""Single-model cleanup and reasoning budgets, using fake HTTP only."""
 
 import asyncio
 import json
@@ -17,12 +17,12 @@ from raphael_core.brain.providers.clients import AnthropicProvider, CompatiblePr
 from raphael_core.brain.providers.registry import ProviderRegistry, ProviderRouter
 from raphael_core.brain.secrets import MemoryKeyStore
 from raphael_core.brain.service import Brain
-from raphael_core.brain.settings import DEFAULTS, SettingsStore
+from raphael_core.brain.settings import SettingsStore
 from raphael_core.brain.spend import SpendTracker
 from raphael_core.router import Router
 
 
-async def test_empty_reasoning_response_retries_and_records_actual_cleanup_model():
+async def test_empty_reasoning_response_preserves_raw_dictation():
     seen = []
 
     def handler(request):
@@ -54,16 +54,11 @@ async def test_empty_reasoning_response_retries_and_records_actual_cleanup_model
         result = await router.call("brain.finalize_dictation", {
             "raw_text": "Hello world", "audio_seconds": 3, "stt_ms": 1,
         })
-        assert result["cleaned"] and result["text"] == "Hello world."
-        assert result["fallback_reason"] is None
-        assert len(seen) == 2
+        assert not result["cleaned"] and result["fallback_reason"] == "error:truncated"
+        assert result["text"] == "Hello world"
+        assert len(seen) == 1
         assert seen[0][1]["reasoning_effort"] == "low"
         assert seen[0][1]["max_completion_tokens"] == 256 + 2048
-        assert seen[1][1]["model"] == DEFAULTS["cleanup_model"]
-        history = conn.execute("SELECT * FROM history").fetchone()
-        assert history["model"] == DEFAULTS["cleanup_model"]
-        assert seen[0][2] <= 11 * 0.6
-        assert 0 < seen[1][2] <= 11
         await brain.aclose()
         await registry.aclose()
     conn.close()
@@ -82,7 +77,12 @@ async def cleanup_case(handler, *, openrouter_key=True, timeout=1):
     conn, keys, vault = connect(":memory:"), MemoryKeyStore(), {}
     if openrouter_key:
         keys.set("openrouter-secret")
-    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+    async def transport(request):
+        if request.method == "GET":
+            return httpx.Response(200, json={"data": [{"id": "unproven"}]})
+        result = handler(request)
+        return await result if asyncio.iscoroutine(result) else result
+    async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as http:
         legacy = OpenRouterClient(keys.get, http=http)
         registry = ProviderRegistry(conn, legacy, keys,
             credential=lambda pid: vault.setdefault(pid, MemoryKeyStore()), http=http)
@@ -106,7 +106,7 @@ async def cleanup_case(handler, *, openrouter_key=True, timeout=1):
 
 
 @pytest.mark.parametrize("failure", [401, 402, 403, 408, 429, 500, "empty", "invalid", "suspicious", "unexpected"])
-async def test_any_chosen_model_failure_retries_only_once(failure):
+async def test_chosen_model_failure_never_switches_models(failure):
     calls = []
 
     def handler(request):
@@ -121,26 +121,21 @@ async def test_any_chosen_model_failure_retries_only_once(failure):
         return response()
 
     async with cleanup_case(handler) as case:
-        # Even an explicit generic chain must not create a third HTTP attempt.
+        # Saved fallback lists do not authorize another HTTP request.
         case.settings.set("cleanup_fallbacks", ["some/third-model"])
         result = await case.svc.clean("Hello world", audio_seconds=1)
-        assert result.cleaned and result.text == "Hello world."
-        assert result.model == DEFAULTS["cleanup_model"]
-        assert result.fallback_reason is None
-        assert len(calls) == 2
-        assert all("models" not in call for call in calls)
-        expected_cost = 0.02 if failure == "suspicious" else 0.01
-        assert result.cost_usd == pytest.approx(expected_cost)
-        assert case.conn.execute("SELECT SUM(cost_usd) FROM spend").fetchone()[0] == pytest.approx(expected_cost)
+        assert not result.cleaned and result.text == "Hello world"
+        assert result.fallback_reason
+        assert len(calls) == 1 and "models" not in calls[0]
 
 
 @pytest.mark.parametrize("second", ["empty", 401, 429, 500, "suspicious"])
-async def test_both_fail_returns_raw_with_final_failure_reason(second, caplog):
+async def test_single_failure_returns_raw_with_its_reason(second, caplog):
     calls = []
 
     def handler(request):
         calls.append(request)
-        if len(calls) == 1 or second == "empty":
+        if second == "empty":
             return response("", "length")
         if second == "suspicious":
             return response('{"text":""}')
@@ -153,11 +148,11 @@ async def test_both_fail_returns_raw_with_final_failure_reason(second, caplog):
             "empty": "error:truncated", 401: "error:auth", 429: "error:rate_limit",
             500: "error:server", "suspicious": "suspicious",
         }[second]
-        assert len(calls) == 2
+        assert len(calls) == 1
     assert "Hello world" not in caplog.text and "private failure" not in caplog.text
 
 
-async def test_timeout_reserves_retry_time_inside_original_deadline():
+async def test_selected_model_receives_the_full_deadline():
     budgets, attempted, cancelled = [], [], []
 
     async def handler(request):
@@ -174,12 +169,8 @@ async def test_timeout_reserves_retry_time_inside_original_deadline():
         started = time.perf_counter()
         result = await case.svc.clean("Hello world", audio_seconds=1)
         elapsed = time.perf_counter() - started
-        assert result.cleaned and cancelled == [True]
-        assert budgets[0] == pytest.approx(0.12)
-        # Windows timers may wake slightly before 120 ms. Check the actual deadline,
-        # rather than assuming the first timeout consumed exactly its nominal budget.
-        assert 0 < budgets[1] < 0.2
-        assert budgets[1] == pytest.approx(0.2 - (attempted[1] - started), abs=0.01)
+        assert not result.cleaned and cancelled == [True]
+        assert budgets == [0.2]
         assert elapsed < 0.4
 
 
@@ -225,7 +216,7 @@ async def test_cancel_dictation_rpc_does_not_start_a_retry_or_keep_history():
         await brain.aclose()
 
 
-async def test_without_openrouter_key_uses_answer_model():
+async def test_cleanup_never_borrows_the_answer_model():
     calls = []
 
     def handler(request):
@@ -235,11 +226,11 @@ async def test_without_openrouter_key_uses_answer_model():
     async with cleanup_case(handler, openrouter_key=False) as case:
         case.settings.set("agent_model", f"@{case.pid}:gpt-4o")
         result = await case.svc.clean("Hello world", audio_seconds=1)
-        assert result.cleaned and result.model == f"@{case.pid}:gpt-4o"
-        assert calls == ["gpt-6-luna", "gpt-4o"]
+        assert not result.cleaned and result.fallback_reason == "error:truncated"
+        assert calls == ["gpt-6-luna"]
 
 
-async def test_successful_provider_model_is_persisted_and_discovery_alone_is_not_success():
+async def test_cleanup_never_switches_to_a_previously_successful_model():
     calls = []
 
     def handler(request):
@@ -261,11 +252,8 @@ async def test_successful_provider_model_is_persisted_and_discovery_alone_is_not
         restored_service = CleanupService(ProviderRouter(restored, restored.openrouter),
             case.settings, DictionaryStore(case.conn), SpendTracker(case.conn), has_key=lambda: True)
         result = await restored_service.clean("Hello world", audio_seconds=1)
-        assert result.cleaned and result.model == f"@{proven}:proven"
-        assert calls == ["gpt-6-luna", "proven"]
-        await case.rpc.call("providers.update", {"id": proven, "enabled": False})
-        # The live registry must not select a disabled provider, even with a past success.
-        assert case.dispatcher.for_purpose("cleanup").cleanup_fallback(f"@{case.pid}:gpt-6-luna") == f"@{case.pid}:gpt-6-luna"
+        assert not result.cleaned and result.fallback_reason == "error:truncated"
+        assert calls == ["gpt-6-luna"]
         await restored.aclose()
 
 

@@ -72,7 +72,7 @@ async def test_failed_turn_names_its_chosen_model_without_using_another(conn, ac
     rig = Rig(conn, router, actions)
     try:
         result = await rig.call("agent.ask", {"session_id": "failure", "text": "Hello", "ui_language": "en", "source": "app"})
-        assert "openai/owner-chosen-model" in result["text"]
+        assert ("model for answers" if failure == "auth" else "openai/owner-chosen-model") in result["text"]
         assert (await rig.turns())[0]["status"] == "error"
         assert len(provider.calls) == 1
     finally:
@@ -102,7 +102,7 @@ async def test_registry_ignores_implicit_conversation_chain_and_keeps_full_budge
     assert provider.calls[0]["fallbacks"] == []
 
 
-async def test_cleanup_still_asks_the_next_model_when_a_429_says_the_quota_of_one_provider_is_spent(conn, monkeypatch):
+async def test_cleanup_keeps_its_selected_model_when_its_quota_is_spent(conn, monkeypatch):
     class Spent(Provider):
         async def complete_json(self, **kwargs):
             self.calls.append(kwargs)
@@ -113,17 +113,17 @@ async def test_cleanup_still_asks_the_next_model_when_a_429_says_the_quota_of_on
     provider = Spent()
     registry, router = routed(conn, monkeypatch, provider)
     registry.settings.set("cleanup_fallbacks", ["saved-backup"])
-    result = await router.for_purpose("cleanup").complete_json(model="chosen", fallbacks=[], timeout_s=60,
-        system="s", user="u", schema={}, schema_name="reply", max_tokens=20)
-    assert [call["model"] for call in provider.calls] == ["chosen", "saved-backup"] and result.model == "saved-backup"
+    with pytest.raises(OpenRouterError):
+        await router.for_purpose("cleanup").complete_json(model="chosen", fallbacks=[], timeout_s=60,
+            system="s", user="u", schema={}, schema_name="reply", max_tokens=20)
+    assert [(call["model"], call["timeout_s"]) for call in provider.calls] == [("chosen", 60)]
 
 
-async def test_cleanup_explicit_fallback_keeps_each_full_budget_and_actual_model(conn, monkeypatch):
+async def test_cleanup_ignores_saved_fallbacks_and_keeps_the_full_budget(conn, monkeypatch):
     provider = Provider()
     registry, router = routed(conn, monkeypatch, provider)
     registry.settings.set("cleanup_fallbacks", ["saved-backup"])
-    result = await router.for_purpose("cleanup").complete_json(model="chosen", fallbacks=[], timeout_s=60,
-        system="s", user="u", schema={}, schema_name="reply", max_tokens=20)
-    assert [call["model"] for call in provider.calls] == ["chosen", "saved-backup"]
-    assert [call["timeout_s"] for call in provider.calls] == [60, 60]
-    assert result.model == "saved-backup"
+    with pytest.raises(OpenRouterError):
+        await router.for_purpose("cleanup").complete_json(model="chosen", fallbacks=[], timeout_s=60,
+            system="s", user="u", schema={}, schema_name="reply", max_tokens=20)
+    assert [(call["model"], call["timeout_s"]) for call in provider.calls] == [("chosen", 60)]

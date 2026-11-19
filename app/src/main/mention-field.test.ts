@@ -229,3 +229,20 @@ test("a link chip carries the link class apart from a mention beside it", () => 
   expect(chips()).toEqual([LINK, "@小森"]);
 });
 
+test("a skill is drawn as a chip but corrected a letter at a time, as a link is, and an address is still one unit", () => {
+  typeText("先 /research-summary 再說", 19);
+  expect(press("Backspace").defaultPrevented).toBe(false);
+  expect(input.value).toBe("先 /research-summary 再說");
+  input.setSelectionRange(8, 8);
+  document.dispatchEvent(new Event("selectionchange"));
+  expect(caret()).toEqual([8, 8]);
+  expect(press("ArrowLeft").defaultPrevented).toBe(false);
+  typeText("/每日新聞摘要", 3);
+  expect(press("Delete").defaultPrevented).toBe(false);
+  // One letter gone, it is still a skill's chip.
+  typeText("先 /research-summar 再說");
+  expect(chips()).toEqual(["/research-summar"]);
+  typeText("@小森 /research-summary", 3);
+  expect(press("Backspace").defaultPrevented).toBe(true);
+  expect(input.value).toBe(" /research-summary");
+});

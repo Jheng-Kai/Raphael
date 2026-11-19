@@ -88,6 +88,8 @@ class AssistantRig:
             conn, client, keys, actions=NullActions(), background=_Background(), computer=computer,
             decider=Decider(client, jev_total_s=1.0, jev_first_s=0.6, luna_s=1.0),
         )  # fmt: skip
+        self.service._settings.set("agent_model", "fake/model")
+        self.service._settings.set("quick_model", "fake/model")
         self.rpc = Router()
         self.service.register(self.rpc)
 

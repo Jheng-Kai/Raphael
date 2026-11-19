@@ -6444,7 +6444,7 @@ class AgentService:
         effort = split_api_ref(model)[1] or "none"
         quick = bool(conversation_id and self.conversations.get(conversation_id, speaker.id)["kind"] == "quick")
         if quick:
-            model = self._settings.get("quick_model") or model
+            model = self._settings.get("quick_model")
             effort = self._settings.get("quick_effort")
             if brain_ref(model):
                 model = self._cli_brains.with_effort(model, effort)
@@ -6455,7 +6455,7 @@ class AgentService:
         return _Settings(
             quick=quick,
             effort=effort,
-            model=_text_or(model, DEFAULTS["agent_model"]),
+            model=_text_or(model, ""),
             city=_text_or(city, DEFAULTS["agent_city"]),
             limit_usd=self._settings.get("monthly_limit_usd"),
         )
@@ -6487,6 +6487,8 @@ class AgentService:
 
     def _blocked(self, settings: _Settings) -> str | AgentFailure | None:
         """The known provider prerequisite, a failed key-store read, or None."""
+        if not settings.model:
+            return "no_model"
         if brain_ref(settings.model):
             return None
         if self._over_budget(settings.limit_usd):
@@ -6524,6 +6526,8 @@ class AgentService:
             missing = diagnostic.missing
             reason = (diagnostic.kind if diagnostic.kind.startswith("chatgpt_") else "provider_" + missing.state)
             ask.steps.append(self._step("model", "provider", None, "error", time.perf_counter(), reason, missing.resource))
+        if kind in ("auth", "auth_expired", "no_key", "no_model"):
+            return self._finish(ask, route, "negative", phrase(ask.language, "no_model" if kind == "no_model" else "auth"), ledger, status="error", failure=failure)
         if model:
             diagnostic = diagnostic or classify(kind, record=False)
             return self._finish(ask, route, "negative", diagnostic.sentence(self._model_name(model), ask.language), ledger, status="error", failure=failure)

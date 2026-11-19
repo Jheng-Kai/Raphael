@@ -12,10 +12,10 @@ import httpx
 import keyring.errors
 import pytest
 
+from .conftest import WIRE_FALLBACKS
+
 from raphael_core.brain import openrouter
 from raphael_core.brain.openrouter import (
-    CLEANUP_FALLBACKS,
-    DEFAULT_CLEANUP_MODEL,
     Completion,
     KeyInfo,
     OpenRouterClient,
@@ -101,7 +101,7 @@ async def complete(client, **overrides):
     """`client.complete_json` with typical arguments; override any of them by keyword."""
     args = {
         "model": "openai/gpt-6-luna",
-        "fallbacks": CLEANUP_FALLBACKS,
+        "fallbacks": WIRE_FALLBACKS,
         "system": "s",
         "user": "u",
         "schema": SCHEMA,
@@ -144,7 +144,7 @@ async def test_complete_json_sends_schema_and_fallbacks(client_with):
 
     c = await client_with(handler).complete_json(
         model="openai/gpt-6-luna",
-        fallbacks=CLEANUP_FALLBACKS,
+        fallbacks=WIRE_FALLBACKS,
         system="s",
         user="u",
         schema={
@@ -162,7 +162,7 @@ async def test_complete_json_sends_schema_and_fallbacks(client_with):
     assert c.prompt_tokens == 120
     assert seen["response_format"]["type"] == "json_schema"
     assert seen["response_format"]["json_schema"]["strict"] is True
-    assert seen["models"] == CLEANUP_FALLBACKS
+    assert seen["models"] == WIRE_FALLBACKS
     assert seen["provider"]["require_parameters"] is True
     assert seen["reasoning"] == {"effort": "none"}
     assert "temperature" not in seen
@@ -1036,9 +1036,8 @@ async def test_warm_up_leaves_a_client_it_was_given_alone():
 # --- models -----------------------------------------------------------------------------------
 
 
-def test_the_cleanup_model_is_the_default_and_the_fallbacks_are_the_other_two():
-    assert DEFAULTS["cleanup_model"] == DEFAULT_CLEANUP_MODEL == "openai/gpt-6-luna"
-    assert CLEANUP_FALLBACKS == ["anthropic/claude-haiku-5.5", "google/gemini-3.1-flash-lite"]
+def test_cleanup_starts_without_a_model():
+    assert DEFAULTS["cleanup_model"] == ""
     # No list of models to offer is kept here: the settings page takes them from OpenRouter.
     assert not hasattr(openrouter, "CLEANUP_MODEL_CHOICES")
 

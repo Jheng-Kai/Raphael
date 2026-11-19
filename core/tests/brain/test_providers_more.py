@@ -149,6 +149,8 @@ async def test_router_fallback_policy_and_secret_free_logs(status, explicit, exp
     conn, vault, requests = connect(":memory:"), {}, []
     settings = SettingsStore(conn)
     def handler(request):
+        if request.method == "GET":
+            return httpx.Response(200, json={"data": []})
         requests.append(request)
         if request.url.host == "api.openai.com":
             return httpx.Response(status, json={"error": "private-secret"})
@@ -159,8 +161,8 @@ async def test_router_fallback_policy_and_secret_free_logs(status, explicit, exp
         primary = (await registry.add({"kind": "openai", "key": "private-secret"}))["provider"]["id"]
         backup = (await registry.add({"kind": "groq", "key": "private-secret"}))["provider"]["id"]
         if explicit:
-            settings.set("cleanup_fallbacks", [f"@{backup}:backup"])
-        client = ProviderRouter(registry, registry.openrouter).for_purpose("cleanup")
+            settings.set("pdf_fallbacks", [f"@{backup}:backup"])
+        client = ProviderRouter(registry, registry.openrouter).for_purpose("pdf")
         args = dict(model=f"@{primary}:primary", system="private-prompt", user="private-text", timeout_s=1, max_tokens=10)
         if expected == "answer":
             result = await client.chat_text(**args)
@@ -180,6 +182,8 @@ async def test_fallback_exhaustion_reports_last_error_kind():
     conn, vault = connect(":memory:"), {}
     requests = []
     def handler(request):
+        if request.method == "GET":
+            return httpx.Response(200, json={"data": []})
         requests.append(request)
         return httpx.Response(429 if len(requests) == 1 else 504, json={})
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
@@ -187,8 +191,8 @@ async def test_fallback_exhaustion_reports_last_error_kind():
             credential=lambda pid: vault.setdefault(pid, MemoryKeyStore()), http=http)
         primary = (await registry.add({"kind": "openai", "key": "secret"}))["provider"]["id"]
         backup = (await registry.add({"kind": "groq", "key": "secret"}))["provider"]["id"]
-        SettingsStore(conn).set("cleanup_fallbacks", [f"@{backup}:backup"])
-        client = ProviderRouter(registry, registry.openrouter).for_purpose("cleanup")
+        SettingsStore(conn).set("pdf_fallbacks", [f"@{backup}:backup"])
+        client = ProviderRouter(registry, registry.openrouter).for_purpose("pdf")
         with pytest.raises(OpenRouterError) as error:
             await client.chat_text(model=f"@{primary}:primary", system="s", user="u", timeout_s=1, max_tokens=10)
         assert error.value.kind == "server" and error.value.status == 504
@@ -265,6 +269,8 @@ async def test_transport_failures_and_per_attempt_deadlines_try_the_configured_f
     import asyncio
     conn, vault, seen = connect(":memory:"), {}, []
     async def handler(request):
+        if request.method == "GET":
+            return httpx.Response(200, json={"data": []})
         seen.append(request.url.host)
         if len(seen) == 1:
             if failure == "hang":
@@ -278,8 +284,8 @@ async def test_transport_failures_and_per_attempt_deadlines_try_the_configured_f
             credential=lambda pid: vault.setdefault(pid, MemoryKeyStore()), http=http)
         pid = (await registry.add({"kind": "openai", "key": "secret"}))["provider"]["id"]
         backup = (await registry.add({"kind": "groq", "key": "secret"}))["provider"]["id"]
-        SettingsStore(conn).set("cleanup_fallbacks", [f"@{backup}:backup"])
-        result = await ProviderRouter(registry, registry.openrouter).for_purpose("cleanup").chat_text(model=f"@{pid}:primary", system="s", user="u", timeout_s=0.05, max_tokens=10)
+        SettingsStore(conn).set("pdf_fallbacks", [f"@{backup}:backup"])
+        result = await ProviderRouter(registry, registry.openrouter).for_purpose("pdf").chat_text(model=f"@{pid}:primary", system="s", user="u", timeout_s=0.05, max_tokens=10)
         assert result.text == "answer" and len(seen) == 2
         assert registry.view(pid)["status"] == "offline"
         await registry.aclose()
@@ -290,6 +296,8 @@ async def test_transport_failures_and_per_attempt_deadlines_try_the_configured_f
 async def test_content_refusal_never_tries_another_provider(status):
     conn, vault, requests = connect(":memory:"), {}, []
     def handler(request):
+        if request.method == "GET":
+            return httpx.Response(200, json={"data": []})
         requests.append(request)
         if status == 403:
             return httpx.Response(403, json={"error": {"code": "content_filter", "message": "private-refusal"}})
@@ -309,11 +317,13 @@ async def test_content_refusal_never_tries_another_provider(status):
 
 
 @pytest.mark.parametrize("primary_key", [None, "rejected"])
-async def test_brain_cleanup_rpc_uses_its_fallback_setting_without_an_openrouter_key(primary_key):
+async def test_brain_cleanup_rpc_ignores_saved_fallbacks_when_primary_is_unavailable(primary_key):
     from raphael_core.brain.service import Brain
     from raphael_core.router import Router
     conn, vault, requests = connect(":memory:"), {}, []
     def handler(request):
+        if request.method == "GET":
+            return httpx.Response(200, json={"data": []})
         requests.append(request)
         if request.url.host == "openrouter.ai":
             return httpx.Response(401, json={})
@@ -333,9 +343,8 @@ async def test_brain_cleanup_rpc_uses_its_fallback_setting_without_an_openrouter
         assert (await rpc.call("settings.get"))["settings"]["cleanup_fallbacks"] == [f"@{pid}:backup"]
         await rpc.call("status.get", {})
         result = await rpc.call("brain.finalize_dictation", {"raw_text": "Hello world", "audio_seconds": 1, "stt_ms": 1})
-        assert result["cleaned"]
-        assert (await rpc.call("history.list", {}))["items"][0]["model"] == f"@{pid}:backup"
-        assert len([r for r in requests if r.url.host == "api.groq.com"]) == 1
+        assert not result["cleaned"] and result["text"] == "Hello world"
+        assert not any(r.url.host == "api.groq.com" for r in requests)
         assert (await rpc.call("status.get", {}))["openrouter"]["state"] != "ok"
         await brain.aclose()
         await registry.aclose()
@@ -357,6 +366,8 @@ def test_large_credentials_use_the_real_store_on_the_in_memory_keyring(memory_ke
 async def test_each_purpose_uses_only_its_ordered_chain(purpose):
     conn, vault, seen = connect(":memory:"), {}, []
     def handler(request):
+        if request.method == "GET":
+            return httpx.Response(200, json={"data": []})
         seen.append(json.loads(request.content)["model"])
         if len(seen) == 1:
             return httpx.Response(429, json={})
@@ -372,7 +383,7 @@ async def test_each_purpose_uses_only_its_ordered_chain(purpose):
         client = ProviderRouter(registry, registry.openrouter).for_purpose(purpose)
         assert client.available(f"@{pid}:primary")
         first = "override" if purpose in ("router", "pdf", "memory") else "primary"
-        if purpose in ("agent", "router"):
+        if purpose in ("agent", "router", "cleanup"):
             with pytest.raises(OpenRouterError):
                 await client.chat_text(model=f"@{pid}:primary", system="s", user="u", timeout_s=1, max_tokens=10)
             assert seen == [first]  # Hidden legacy chains do not authorize conversation fallback.
@@ -401,6 +412,8 @@ async def test_bedrock_json_schema_uses_a_forced_tool_and_filters_refusals():
     schema = {"type": "object", "properties": {"answer": {"type": "string"}}}
     requests = []
     def handler(request):
+        if request.method == "GET":
+            return httpx.Response(200, json={"data": []})
         body = json.loads(request.content)
         requests.append(body)
         assert body["toolConfig"]["toolChoice"] == {"tool": {"name": "result"}}
@@ -454,6 +467,8 @@ async def test_explicitly_empty_fallback_setting_disables_legacy_openrouter_defa
     conn, requests, keys = connect(":memory:"), [], MemoryKeyStore()
     keys.set("secret")
     def handler(request):
+        if request.method == "GET":
+            return httpx.Response(200, json={"data": []})
         requests.append(request)
         return httpx.Response(429, json={})
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
@@ -472,6 +487,8 @@ async def test_router_purpose_configuration_bypasses_jev_with_its_chosen_model()
     from raphael_core.brain.spend import SpendTracker
     conn, vault, seen = connect(":memory:"), {}, []
     def handler(request):
+        if request.method == "GET":
+            return httpx.Response(200, json={"data": []})
         seen.append(request)
         assert request.url.host == "api.groq.com" and request.url.path.endswith("/chat/completions")
         answer = {"route": "chat", "command": "none", "needs_weather": False, "needs_search": False, "needs_time": False, "target": ""}
@@ -494,6 +511,8 @@ async def test_vision_and_pdf_scans_use_distinct_chains():
     from raphael_core.brain.spend import SpendTracker
     conn, vault, seen = connect(":memory:"), {}, []
     def handler(request):
+        if request.method == "GET":
+            return httpx.Response(200, json={"data": []})
         seen.append(json.loads(request.content)["model"])
         return httpx.Response(200, json={"choices": [{"message": {"content": "answer"}}]})
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
@@ -525,6 +544,8 @@ async def test_stt_rpc_uses_its_chain_without_a_primary_credential():
         wav.setframerate(16000)
         wav.writeframes(b"\0\0" * 16000)
     def handler(request):
+        if request.method == "GET":
+            return httpx.Response(200, json={"data": []})
         seen.append(request)
         assert request.url.host == "api.groq.com" and request.url.path.endswith("/audio/transcriptions")
         return httpx.Response(200, json={"text": "Hello", "duration": 1})
@@ -535,6 +556,7 @@ async def test_stt_rpc_uses_its_chain_without_a_primary_credential():
         brain, rpc = Brain(conn, ProviderRouter(registry, registry.openrouter), keys, providers=registry), Router()
         brain.register(rpc)
         pid = (await registry.add({"kind": "groq", "key": "secret"}))["provider"]["id"]
+        SettingsStore(conn).set("stt_cloud_model", "elevenlabs/scribe-v2")
         await rpc.call("settings.set", {"key": "stt_fallbacks", "value": [f"@{pid}:whisper-large-v3"]})
         result = await rpc.call("stt.transcribe", {"audio": base64.b64encode(buffer.getvalue()).decode()})
         assert result["text"] == "Hello" and len(seen) == 1
@@ -554,8 +576,9 @@ async def test_explicit_fallback_can_pass_preflight_when_primary_vault_read_fail
         pid = (await registry.add({"kind": "openai", "key": "secret"}))["provider"]["id"]
         backup = (await registry.add({"kind": "groq", "key": "secret"}))["provider"]["id"]
         vault[pid] = BrokenCredential()
-        SettingsStore(conn).set("cleanup_fallbacks", [f"@{backup}:backup"])
-        client = ProviderRouter(registry, registry.openrouter).for_purpose("cleanup")
+        await registry.update({"id": pid, "name": "Primary"})
+        SettingsStore(conn).set("pdf_fallbacks", [f"@{backup}:backup"])
+        client = ProviderRouter(registry, registry.openrouter).for_purpose("pdf")
         assert client.available(f"@{pid}:primary")
         result = await client.chat_text(model=f"@{pid}:primary", system="s", user="u", timeout_s=1, max_tokens=10)
         assert result.text == "answer" and result.model == f"@{backup}:backup"

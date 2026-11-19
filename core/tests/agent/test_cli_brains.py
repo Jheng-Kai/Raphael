@@ -383,6 +383,24 @@ async def test_antigravity_final_excludes_progress_from_the_turn_result(monkeypa
     assert events[-1] == Event("final", answer if has_answer else "")
 
 
+async def test_antigravity_final_keeps_words_only_the_result_carries(monkeypatch):
+    # A finished response step, then a result that adds the real answer: the answer is not dropped for the step alone.
+    from raphael_core.agent.cli.drivers import Driver, Event
+
+    packets = iter([
+        {"event": "step_update", "step_update": {"step_type": "agent_response", "state": "DONE", "text": "Working it out."}},
+        {"event": "result", "result": {"status": "SUCCESS", "response": "Working it out.\nThe total is 42."}},
+    ])
+
+    async def read():
+        return next(packets)
+
+    driver = Driver("gemini", [])
+    monkeypatch.setattr(driver, "_read", read)
+    events = [event async for event in driver._antigravity()]
+    assert events[-1] == Event("final", "Working it out.\nThe total is 42.")
+
+
 @pytest.mark.parametrize("name", ["claude", "codex", "gemini"])
 async def test_driver_subscription_events_permissions_and_resume(tmp_path, name):
     from raphael_core.agent.cli.drivers import Driver

@@ -893,7 +893,7 @@ class DictationService:
                     "stt": "+".join(session.stt_used) or None,
                     "session_id": session.id,
                     "incomplete": cut_short,
-                    **({"ui_language": session.ui_language} if cut_short else {}),
+                    "ui_language": session.ui_language,
                 },
             )
         except Exception:
@@ -907,6 +907,10 @@ class DictationService:
             raise RpcError(NOT_FOUND, f"The dictation session {session_id!r} was cancelled")
         if session.purpose == PURPOSE_AGENT:
             return self._agent_result(result["text"], session, speech, silent=False)
+        if "cleanup_failure" in result:
+            # The window receives models.missing. Keep the typed failure for callers and avoid
+            # asking the paste handler to show a second, provider-specific fallback notice.
+            result.pop("fallback_reason", None)
         return {
             **result,
             "audio_seconds": speech,

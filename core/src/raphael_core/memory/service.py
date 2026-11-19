@@ -80,12 +80,14 @@ PURPOSE = SUMMARY_PURPOSE  # "memory", in the spend
 QUIET_S = 25 * 60.0
 REFLECT_AFTER_TURNS = 6
 CONSOLIDATE_EVERY_MS = 86_400_000
+PRUNE_JOURNALS_EVERY_MS = 86_400_000
 # How long after the app starts the memory looks for turns it has not read.
 START_DELAY_S = 60.0
 # A pass that failed is not tried again for this long.
 RETRY_S = 15 * 60.0
 _REFLECTED = "reflected_through"
 _CONSOLIDATED = "consolidated_at_ms"
+_JOURNALS_PRUNED = "journals_pruned_at_ms"
 # What a search gives of a turn, in characters, at most.
 SNIPPET_CHARS = 150
 SPACES = ("shared", "own")
@@ -199,6 +201,7 @@ class MemoryService(Growth):
         # methods make no folder for an id that is nobody's. Until then any id goes.
         self.member_exists: Callable[[int], bool] = lambda member_id: True
         self._timer: asyncio.TimerHandle | None = None
+        self._journal_task: asyncio.Task[None] | None = None
         self._running: asyncio.Task[None] | None = None
         self._failed_at: float | None = None
         self._failure_count = self._state("background_failures")
@@ -576,8 +579,29 @@ class MemoryService(Growth):
             self._arm(self._quiet_s)
 
     def start(self) -> None:
-        """The app is up: look for turns the reflection pass has not read, soon."""
+        """The app is up: check unread turns and old journal revisions after the startup delay."""
         self._arm(self._start_delay_s)
+        if self._journal_task is None:
+            self._journal_task = asyncio.create_task(self._prune_journals_daily())
+
+    async def _prune_journals_daily(self) -> None:
+        from ..bots.homes import JOURNAL_KEEP_S
+
+        await asyncio.sleep(self._start_delay_s)
+        while True:
+            now_ms = self._now_ms()
+            delay_ms = self._state(_JOURNALS_PRUNED) + PRUNE_JOURNALS_EVERY_MS - now_ms
+            if delay_ms > 0:
+                await asyncio.sleep(delay_ms / 1000)
+                continue
+            try:
+                pruned = self.homes.prune_journals(now_ms / 1000)
+                self._set_state(_JOURNALS_PRUNED, self._now_ms())
+                if pruned:
+                    logger.info("Removed %d memory revisions older than %d days", pruned, JOURNAL_KEEP_S // 86_400)
+            except (OSError, ValueError, sqlite3.Error) as error:
+                logger.warning("Memory revisions were not trimmed (%s)", type(error).__name__)
+                await asyncio.sleep(RETRY_S)
 
     def _arm(self, delay_s: float) -> None:
         try:
@@ -820,13 +844,6 @@ class MemoryService(Growth):
         """The tidy of every file near or past its limit, each by itself; the next one is a day away
         once the model has answered for each."""
         total = Applied()
-        from ..bots.homes import JOURNAL_KEEP_S
-        try:
-            pruned = self.homes.prune_journals(self._now_ms() / 1000)
-            if pruned:
-                logger.info('Removed %d memory revisions older than %d days', pruned, JOURNAL_KEEP_S // 86_400)
-        except (OSError, ValueError) as error:
-            logger.warning('Memory revisions were not trimmed (%s)', type(error).__name__)
         for memory, member_id in self._filling():
             stale = memory.prune_stale(self._today(), self._settings.get('memory_max_unused_days'))
             if stale is not None:
@@ -868,6 +885,10 @@ class MemoryService(Growth):
         if self._running is not None and not self._running.done():
             self._running.cancel()
             await asyncio.gather(self._running, return_exceptions=True)
+        if self._journal_task is not None:
+            self._journal_task.cancel()
+            await asyncio.gather(self._journal_task, return_exceptions=True)
+            self._journal_task = None
         await self.conversation.aclose()
         for conversation in list(self._conversations.values()):
             await conversation.aclose()

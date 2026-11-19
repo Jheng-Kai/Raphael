@@ -109,7 +109,12 @@ class Phrases:
     cannot: str  # a request for an action Raphael has no command for
     vision_off: str  # an image came, and the owner turned off reading images
     pdf_off: str  # a PDF came, and the owner turned off reading PDFs
-    no_key: str  # no OpenRouter key is stored
+    cleanup_no_model: str
+    cleanup_auth: str
+    stt_no_model: str
+    stt_auth: str
+    no_model: str
+    no_key: str
     auth: str  # OpenRouter does not accept the key
     budget: str  # this month's limit is used up
     credits: str  # OpenRouter says the account has no credit left
@@ -211,8 +216,13 @@ PHRASES: dict[str, Phrases] = with_ui_words({
         cannot="目前無法執行此操作。",
         vision_off="看圖片已關閉，請到「設定 › 工具 › 服務 › 看圖片」開啟後重新送出圖片。",
         pdf_off="讀 PDF 已關閉，請到「設定 › 工具 › 服務 › 讀 PDF」開啟後重新送出檔案。",
-        no_key="未設定 OpenRouter 金鑰。",
-        auth="OpenRouter 金鑰無法使用。",
+        cleanup_no_model="整理文字還沒選模型，這次先貼上原文。",
+        cleanup_auth="整理文字用的模型目前連不上，換一個模型就好。",
+        stt_no_model="語音轉文字還沒選模型。",
+        stt_auth="語音轉文字用的模型目前連不上，換一個模型就好。",
+        no_model="回答還沒選模型，按輸入框右下角的模型選一個就好。",
+        no_key="回答用的模型目前連不上，換一個模型就好。",
+        auth="回答用的模型目前連不上，換一個模型就好。",
         budget="本月可用額度已用完，請到「設定 › 模型與用量 › 用量」確認供應商額度，或改用其他模型。",
         credits="這個模型的服務點數已用完，請到供應商帳戶補充點數，或在模型選單改用其他來源。",
         offline="無法連線至網路。",
@@ -292,8 +302,13 @@ PHRASES: dict[str, Phrases] = with_ui_words({
         cannot="That action is not yet within my capabilities.",
         vision_off="Image reading is off. Enable it in Settings > Tools > Services > Images, then send the image again.",
         pdf_off="PDF reading is off. Enable it in Settings > Tools > Services > PDFs, then send the file again.",
-        no_key="No OpenRouter key is set.",
-        auth="The OpenRouter key cannot be used.",
+        cleanup_no_model="No model is selected for text cleanup. Pasting the original text.",
+        cleanup_auth="The text cleanup model cannot connect right now. Choose another model.",
+        stt_no_model="No model is selected for speech to text.",
+        stt_auth="The speech-to-text model cannot connect right now. Choose another model.",
+        no_model="No answer model yet. Choose one with the model button below the message box.",
+        no_key="The model for answers cannot connect right now. Choose another model.",
+        auth="The model for answers cannot connect right now. Choose another model.",
         budget="This month's allowance is spent. Check provider usage in Settings > Models & usage > Usage, or choose another model.",
         credits="This model's service credits are spent. Add credits in the provider's account or choose another source in the model menu.",
         offline="The network is unreachable.",
@@ -380,8 +395,13 @@ PHRASES: dict[str, Phrases] = with_ui_words({
         cannot="その操作は現在の機能では実行できません。",
         vision_off="画像の読み取りはオフです。「設定 › ツール › サービス › 画像」で有効にして再送してください。",
         pdf_off="PDF の読み取りはオフです。「設定 › ツール › サービス › PDF を読む」で有効にして再送してください。",
-        no_key="OpenRouter のキーが未設定です。",
-        auth="OpenRouter のキーを使用できません。",
+        cleanup_no_model="文章整理用のモデルが未選択です。今回は原文を貼り付けます。",
+        cleanup_auth="文章整理用のモデルに接続できません。別のモデルを選んでください。",
+        stt_no_model="音声文字起こし用のモデルが未選択です。",
+        stt_auth="音声文字起こし用のモデルに接続できません。別のモデルを選んでください。",
+        no_model="回答用のモデルが未選択です。入力欄の右下のモデルから選んでください。",
+        no_key="回答用のモデルに接続できません。別のモデルを選んでください。",
+        auth="回答用のモデルに接続できません。別のモデルを選んでください。",
         budget="今月の利用枠を使い切りました。「設定 › モデルと使用量 › 使用量」で確認するか、別のモデルを選んでください。",
         credits="モデルのクレジットを使い切りました。プロバイダーのアカウントで補充するか、モデルメニューで別の接続元を選んでください。",
         offline="ネットワークに接続できません。",

@@ -16,7 +16,7 @@ from ..agent.tools import without_internal_ids
 from ..agent.speaker import MAX_DEPTH, RAPHAEL_NAMES
 from ..background.handback import internal_ids, title
 from ..background.tasks import Refused
-from ..brain.settings import SettingsStore, DEFAULTS
+from ..brain.settings import SettingsStore
 from ..clock import wall_clock_ms
 from ..conversation_language import chat_language
 from ..failures import Failure
@@ -54,7 +54,7 @@ _OWNER_STOPS = ('owner', 'interjection')
 # the closed set (`failures.KINDS`), which a CLI's loop names with `cli_` before it. Each kind the owner can act on
 # has its own words (never "an error occurred" for a brain that only ran out of credits); a
 # kind whose cause is not known stays an error.
-_UNFINISHED = {'rate_limit':'rate_limit', 'rate_limited':'rate_limit', 'usage_limit':'quota', 'quota':'quota', 'credits':'credits',
+_UNFINISHED = {'no_model':'no_model', 'rate_limit':'rate_limit', 'rate_limited':'rate_limit', 'usage_limit':'quota', 'quota':'quota', 'credits':'credits',
                'context_overflow':'context_overflow', 'cost':'budget', 'reply_budget':'reply_cap', 'revoked':'removed', 'restart':'restart',
                # What asking again did not mend: the provider is busy, down or out of reach, or the reply went silent.
                **dict.fromkeys(('stalled', 'no_reply', 'overloaded', 'server', 'network', 'timeout', 'cli_stopped',
@@ -64,16 +64,16 @@ _UNFINISHED = {'rate_limit':'rate_limit', 'rate_limited':'rate_limit', 'usage_li
 # A CLI signs in on the owner's computer, not with a key in Settings.
 _CLI_UNFINISHED = {'login':'login', 'login_expired':'login_expired', 'missing':'not_installed', 'auth_expired':'login'}
 _UNFINISHED_WORDS = with_ui_words({
-    'zh-TW':{'rate_limit':'請求太頻繁而被限流', 'quota':'訂閱額度已用完', 'login':'需要登入 CLI', 'login_expired':'CLI 的登入已過期',
+    'zh-TW':{'no_model':'尚未選擇回答用的模型', 'rate_limit':'請求太頻繁而被限流', 'quota':'訂閱額度已用完', 'login':'需要登入 CLI', 'login_expired':'CLI 的登入已過期',
              'not_installed':'CLI 還沒安裝', 'budget':'預算已用完',
              'removed':'已不在房間', 'restart':'重新啟動後中斷', 'error':'發生錯誤', 'unavailable':'暫時無法回應',
              'credits':'服務點數已用完', 'sign_in':'需要登入或設定金鑰', 'refused':'拒絕了這項請求',
              'reply_cap':'這次討論的回覆次數已達上限'},
-    'en':{'rate_limit':'rate-limited (too many requests)', 'quota':'subscription quota used up', 'login':'CLI sign-in needed',
+    'en':{'no_model':'no answer model selected', 'rate_limit':'rate-limited (too many requests)', 'quota':'subscription quota used up', 'login':'CLI sign-in needed',
           'login_expired':'CLI sign-in expired', 'not_installed':'CLI not installed', 'budget':'budget exhausted', 'removed':'no longer in the room', 'restart':'interrupted by a restart', 'error':'an error occurred', 'unavailable':'unavailable',
           'credits':'credits used up', 'sign_in':'sign-in or key needed', 'refused':'declined the request',
           'reply_cap':'reached the reply limit for this discussion'},
-    'ja':{'rate_limit':'リクエスト過多で制限中', 'quota':'サブスクリプションの上限', 'login':'CLI のログインが必要', 'login_expired':'CLI のログインの期限切れ',
+    'ja':{'no_model':'回答用モデルが未選択', 'rate_limit':'リクエスト過多で制限中', 'quota':'サブスクリプションの上限', 'login':'CLI のログインが必要', 'login_expired':'CLI のログインの期限切れ',
           'not_installed':'CLI が未インストール', 'budget':'予算の上限',
           'removed':'ルームから外れました', 'restart':'再起動で中断', 'error':'エラーが発生', 'unavailable':'応答できません',
           'credits':'クレジット切れ', 'sign_in':'ログインまたはキーが必要', 'refused':'リクエストを拒否',
@@ -928,7 +928,7 @@ class RoomsService:
         roles = room.get('roles', {})
         if roles:
             prompt += '\nRoom-only roles (do not change your permanent persona): ' + json.dumps(roles)
-        model = speaker.model or self._settings.get("agent_model") or DEFAULTS["agent_model"]
+        model = speaker.model or self._settings.get("agent_model")
         # What stays the same from one reply to the next is a section a CLI member's session is sent again only when it
         # changed; an API brain reads it all in the prompt as before.
         # The snapshot names Raphael in the language the owner writes in here, never the interface's.

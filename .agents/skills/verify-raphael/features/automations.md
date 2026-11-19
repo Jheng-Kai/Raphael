@@ -71,6 +71,12 @@ npm run look -- routine-guard-reason --theme both --width 1120,720,1920x1080
 Inspect the full-size paused reason in both themes/all sizes, comparing its
 existing row, icon and typography with ordinary routines and event error rows.
 
+R-RT-07: after the core resumes ticking, a timed routine catches up at most once within twelve
+hours, even if an older pending slot was already outside the window. History records the
+selected slot and the actual start separately, including after a precheck. The saved timezone
+sets the first weekly slot, and a failed run leaves the following slot scheduled. Core coverage
+is in `core/tests/members/test_routines.py` and `core/tests/members/test_routine_precheck.py`.
+
 ## Calendar navigation review
 
 The account menu's 行事曆 resumes its in-memory date and view. Explicit date/event links still jump. View choice persists in guarded browser storage across reload; the date starts on today in a fresh launch. Week uses all seven columns at content widths of at least 520px, otherwise a short range with an explicit date title. All-day and rhythm bars align with the hour columns. Previous/Today/next share a quiet borderless group; Today dims in its current range without moving.

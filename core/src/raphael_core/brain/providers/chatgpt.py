@@ -156,6 +156,7 @@ class ChatGPTProvider:
             window = next((row[key] for key in ("context_window", "max_context_window")
                            if type(row.get(key)) is int and row[key] > 0), None)
             rows.append({"id": row["slug"], "slug": row["slug"], "name": row["display_name"],
+                "is_default": row.get("is_default") is True,
                 "display_name": row["display_name"], "tools": True, "vision": True,
                 "context": window, "price_in": None, "price_out": None,
                 "reasoning_efforts": efforts, "default_effort": default if default in efforts else None})

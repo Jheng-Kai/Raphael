@@ -136,6 +136,10 @@ class Rig:
         self.clock = Clock()
         self.meteo = Meteo()
         self.settings = SettingsStore(conn)
+        if not self.settings.chosen("agent_model"):
+            self.settings.set("agent_model", "openai/gpt-6-luna")
+        if not self.settings.chosen("quick_model"):
+            self.settings.set("quick_model", "openai/gpt-6-luna")
         self.history = AgentHistory(conn, self.wall)
         self.spend = SpendTracker(conn, now_ms=self.wall, tz=timezone.utc)
         kwargs = {
@@ -959,7 +963,7 @@ async def test_when_jev_fails_the_language_model_routes(rig, client):
 
 
 async def test_the_model_of_the_settings_answers(rig, client):
-    rig.settings.set("agent_model", "anthropic/claude-haiku-5.5")
+    rig.settings.set("quick_model", "anthropic/claude-haiku-5.5")
     client.decisions.append(decision("chat"))
     client.replies.append(spoken())
     await rig.ask("你好")
@@ -971,7 +975,10 @@ async def test_the_model_of_the_settings_answers(rig, client):
     [("agent_model", '"  "'), ("agent_city", '""')],
 )
 async def test_a_saved_setting_that_is_not_valid_reads_as_its_default(rig, client, key, saved):
-    rig.conn.execute("INSERT INTO settings (key, value) VALUES (?, ?)", (key, saved))
+    rig.conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, saved))
+    if key == "agent_model":
+        assert rig.service._read_settings().model == ""
+        return
     client.decisions.append(decision("answer", weather=0.9))
     client.replies.append(spoken())
     await rig.ask("天氣")
@@ -992,7 +999,7 @@ async def test_without_a_key_the_commands_still_work_and_the_rest_is_refused_wit
     assert (await rig.ask("靜音"))["prefix"] == "了"
     assert actions.calls == [("press_key", "volume_mute", 1)]
     result = await rig.ask("台北天氣如何")
-    assert (result["prefix"], result["text"]) == ("否", "未設定 OpenRouter 金鑰。")
+    assert (result["prefix"], result["text"]) == ("否", "回答用的模型目前連不上，換一個模型就好。")
     assert client.calls == 0 and rig.meteo.requests == []
     assert [t["status"] for t in await rig.turns()] == ["error", "done"]
 
@@ -1040,7 +1047,7 @@ async def test_a_key_store_that_fails_is_a_key_that_does_not_work(rig, client, c
     rig.service._keys = Broken()
     with caplog.at_level(logging.DEBUG):
         result = await rig.ask("你好")
-    assert (result["prefix"], result["text"]) == ("否", "OpenRouter 金鑰無法使用。")
+    assert (result["prefix"], result["text"]) == ("否", "回答用的模型目前連不上，換一個模型就好。")
     assert client.calls == 0 and KEY not in caplog.text
 
 
@@ -1049,8 +1056,7 @@ async def test_a_key_openrouter_refuses_is_still_auth_after_the_harness_attempt(
     client.chats.append(OpenRouterError(401, "auth", "bad key"))
     result = await rig.ask("你好")
     # An API model's refused key is the provider's card to put right (開啟設定), never a sign-in to do.
-    assert result["text"] == Failure("auth_expired", "", missing=Missing("openrouter", "provider", "broken", "models")).sentence("openai/gpt-6-luna", "zh-TW") and client.json_calls == []
-    assert "更新憑證" in result["text"] and "還沒登入" not in result["text"]
+    assert result["text"] == "回答用的模型目前連不上，換一個模型就好。" and client.json_calls == []
     (turn,) = await rig.turns()
     assert turn["steps"][-1]["missing"] == Missing("openrouter", "provider", "broken", "models").wire()
     assert turn["failure"] == {"kind": "auth_expired", "provider": "openrouter", "resets_at": None}
@@ -1847,3 +1853,12 @@ async def test_private_stop_rejects_a_room_source(rig):
     with pytest.raises(RpcError):
         await rig.call('agent.history.stop',{'session_id':'room-task','member_id':0})
     assert not rig.service._was_cancelled('room-task')
+
+
+async def test_answer_without_a_model_names_the_feature_and_makes_no_call(rig, client):
+    rig.settings.set("agent_model", "")
+    reply = await rig.call("agent.ask", {"session_id": "empty", "text": "Hello", "source": "app", "ui_language": "zh-TW"})
+    assert reply["text"] == "回答還沒選模型，按輸入框右下角的模型選一個就好。"
+    assert not client.chat_calls and not client.json_calls
+    [turn] = await rig.turns()
+    assert turn["failure"]["kind"] == "no_model"

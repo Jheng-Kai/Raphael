@@ -55,6 +55,7 @@ SCREENS_READY = "/dev/shm/raphael-screens.ready"
 LABEL = "org.raphael.computer"
 IMAGE_LABELS = {LABEL: "1", f"{LABEL}.driver": VERSION, f"{LABEL}.base": BASE, f"{LABEL}.layer": "14"}
 MAX_OUTPUT = 50_000  # what a task may be shown of a result at most (`worker.guards`)
+JOB_LOG_MAX = 256 * 1024  # bytes of combined stdout and stderr kept per detached job
 # The owner's hold of a screen ends by itself after this long without a click or a key of theirs (a sign-in request that
 # waits for them and a recording are held until they say so): a lease nobody uses blocks every member.
 OWNER_IDLE_S = 300
@@ -313,8 +314,11 @@ def scratch_args(target):
     whose name starts with a dot: the display's lock and sockets are there), and the logs and exit files of background
     jobs (`LocalVm._detached`) older than seven days. A job lasts BACKGROUND_S (six hours) at most, so one that old is
     over; nothing else is named."""
-    script = ('find /tmp -xdev -mindepth 1 -type f ! -path "/tmp/.*" -mmin +4320 -amin +4320 -delete 2>/dev/null; '
-              'find "$1" -maxdepth 1 -type f \\( -name "*.log" -o -name "*.exit" \\) -mmin +10080 -delete 2>/dev/null; true')
+    script = ('status=0; '
+              'find /tmp -xdev -mindepth 1 -type f ! -path "/tmp/.*" -mmin +4320 -amin +4320 -delete || status=$?; '
+              '{ mkdir -p -- "$1" && '
+              'find "$1" -maxdepth 1 -type f \\( -name "*.log" -o -name "*.exit" \\) -mmin +10080 -delete; } || status=$?; '
+              'exit "$status"')
     return exec_args(target, ["sh", "-c", script, "sh", f"{GUEST}/.raphael-jobs"])
 
 
@@ -1607,12 +1611,14 @@ class LocalVm:
         last = self.scratch_cleaned.get(key)
         if last is not None and 0 <= now - last < 86_400:
             return
-        self.scratch_cleaned[key] = now
         try:
-            if (await self.run_for(target, scratch_args(target), timeout=60)).code:
-                logger.warning("A computer's old scratch could not be cleared")
+            result = await self.run_for(target, scratch_args(target), timeout=60)
+            if result.code == 0:
+                self.scratch_cleaned[key] = self.clock()
+                return
         except (OSError, TimeoutError, VmError):
-            logger.warning("A computer's old scratch could not be cleared")
+            pass
+        logger.warning("A computer's old scratch could not be cleared")
 
     async def _wallpaper(self, target):
         """Put the desktop's picture up: once for each run of a computer, and again when the owner's picture changed.
@@ -1881,9 +1887,13 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
         job = secrets.token_hex(6)
         base = f"{GUEST}/.raphael-jobs/{job}"
         shell = "env -u DISPLAY sh" if target.container else "sh"
-        script = ('mkdir -p "$1" && { timeout --signal=TERM --kill-after=2 "$2" ' + shell + ' -lc "$3"; echo $? > "$5"; } > "$4" 2>&1')
+        # Drain output beyond the cap so a chatty job never blocks or receives SIGPIPE at the limit.
+        script = ('mkdir -p "$1" || exit; '
+                  '{ { timeout --signal=TERM --kill-after=2 "$2" ' + shell + ' -lc "$3"; echo $? > "$5"; } 2>&1 '
+                  '| { head -c "$6"; cat >/dev/null; }; } > "$4"')
         args = exec_args(target, ["sh", "-c", script, "sh", f"{GUEST}/.raphael-jobs", str(timeout),
-                                  f"cd {GUEST} && {command}", f"{base}.log", f"{base}.exit"], detached=True, env=tuple(keys or ()))
+                                  f"cd {GUEST} && {command}", f"{base}.log", f"{base}.exit", str(JOB_LOG_MAX)],
+                         detached=True, env=tuple(keys or ()))
         result = await self.run_for(target, args, timeout=30, **({"env": keys} if keys else {}))
         if result.code:
             raise VmError("start_failed")
