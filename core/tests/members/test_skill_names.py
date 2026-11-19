@@ -10,10 +10,11 @@ from .test_skill_growth import DOCUMENT
 
 
 INVALID = ["台中天氣與空品日報", "daily weather", "Daily-weather", "daily_weather", "1weather",
-           "daily--weather", "a", "weather-", "a" * 49, "a" * 101]
+           "daily--weather", "a", "weather-", "a" * 101]
 
 
-@pytest.mark.parametrize("name", ["taichung-weather-air", "a1", "a" * 48])
+@pytest.mark.parametrize("name", ["taichung-weather-air", "a1", "a" * 48, "principle-migrate-callers-then-delete-legacy-apis",
+                                  "principle-separate-before-serializing-shared-state", "a" * 100])
 @pytest.mark.parametrize("member", [False, True])
 async def test_each_member_learns_a_slug_with_an_owner_language_description(rig, name, member):
     owner = (await rig.call("members.create", {"name": "Writer"}))["member"]["id"] if member else 0
@@ -28,7 +29,7 @@ async def test_each_member_learns_a_slug_with_an_owner_language_description(rig,
 @pytest.mark.parametrize("name", INVALID)
 async def test_learning_refuses_non_slugs_without_writes_and_with_value_free_guidance(rig, name):
     cap = rig.service.capabilities
-    with pytest.raises(MemberError, match="name must be a short English slug") as caught:
+    with pytest.raises(MemberError, match="name must be an English slug") as caught:
         rig.service.learn_skill(0, {"text": DOCUMENT.replace("research-summary", name)})
     from raphael_core.members.skill_names import SKILL_NAME_RULE
     assert str(caught.value) == SKILL_NAME_RULE
@@ -37,11 +38,11 @@ async def test_learning_refuses_non_slugs_without_writes_and_with_value_free_gui
 
 
 @pytest.mark.parametrize("path", ["remote", "local", "recipe", "plugin-set"])
-@pytest.mark.parametrize("name", ["台中天氣與空品日報", "weather_report", "a" * 49, "a" * 101])
+@pytest.mark.parametrize("name", ["台中天氣與空品日報", "weather_report", "a" * 101])
 async def test_every_import_writer_refuses_new_non_slugs(rig, tmp_path, monkeypatch, path, name):
     cap = rig.service.capabilities
     text = DOCUMENT.replace("research-summary", name)
-    with pytest.raises((MemberError, RpcError), match="name must be a short English slug"):
+    with pytest.raises((MemberError, RpcError), match="name must be an English slug"):
         if path == "remote":
             async def download(source):
                 return [(source, text)]
@@ -61,6 +62,16 @@ async def test_every_import_writer_refuses_new_non_slugs(rig, tmp_path, monkeypa
             files["skills/write/SKILL.md"] = text.encode("utf-8")
             cap.install_set("local:" + str(tmp_path / "desk/1.0.0"), files)
     assert cap.skills(0) == [] and cap.plugin_sets() == []
+
+
+@pytest.mark.parametrize("name", ["principle-migrate-callers-then-delete-legacy-apis", "principle-separate-before-serializing-shared-state"])
+async def test_a_third_party_skill_longer_than_48_characters_imports_with_its_own_name(rig, monkeypatch, name):
+    """Issue 234: two of 36 skills from one GitHub source failed on a 48-character cap the slug no longer has."""
+    async def download(source):
+        return [(source, DOCUMENT.replace("research-summary", name))]
+    monkeypatch.setattr("raphael_core.members.service.download_skills", download)
+    await rig.call("members.skills.import", {"member_id": 0, "source": "backnotprop/pstack"})
+    assert [skill["name"] for skill in rig.service.capabilities.skills(0)] == [name]
 
 
 @pytest.mark.parametrize("name", ["台中天氣與空品日報", "Old Weather", "weather_report", "1weather"])
@@ -85,7 +96,7 @@ async def test_existing_non_slug_can_toggle_run_and_edit_without_a_rename(rig, n
                                         "expected_hash": cap._skill(0, identifier)["revision"]})
     assert learned["name"] == name and learned["slash_name"] == original["slash_name"]
     assert "A reusable check." in cap.expand(0, command)
-    with pytest.raises(MemberError, match="name must be a short English slug"):
+    with pytest.raises(MemberError, match="name must be an English slug"):
         cap.rewrite_skill(0, identifier, edited.replace(name, "Another title"))
     assert cap._skill(0, identifier)["name"] == name
 
@@ -102,7 +113,7 @@ async def test_plugin_skill_keeps_its_namespace_and_rejects_an_invalid_update_at
     before = cap._path(0, plugin["id"]).read_bytes()
     files = package("2.0.0")
     files["skills/write/SKILL.md"] = DOCUMENT.replace("research-summary", "Weather Report").encode()
-    with pytest.raises(MemberError, match="name must be a short English slug"):
+    with pytest.raises(MemberError, match="name must be an English slug"):
         cap.install_set("local:" + str(folder), files)
     assert cap.plugin_sets()[0]["id"] == installed["id"] and cap.plugin_sets()[0]["version"] == "1.0.0"
     assert cap._path(0, plugin["id"]).read_bytes() == before

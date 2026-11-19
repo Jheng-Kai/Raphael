@@ -188,10 +188,10 @@ def skill_metadata(text: str, *, writing=False, previous_name=None) -> tuple[str
                     field = key
                 else:
                     values[key] = value.strip("\"'")
+    from .skill_names import NAME_MAX, validate_skill_name
     if writing:
-        from .skill_names import validate_skill_name
         validate_skill_name(values.get("name", ""), previous_name=previous_name)
-    name = _text(values.get("name", ""), "name", 100, blank=False)
+    name = _text(values.get("name", ""), "name", NAME_MAX, blank=False)
     description = _text(values.get("description", ""), "description", 1000, blank=False)
     return name, description
 
