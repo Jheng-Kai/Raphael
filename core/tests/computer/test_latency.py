@@ -220,6 +220,7 @@ async def test_browser_open_waits_for_a_late_window_with_a_bounded_deadline(desk
         assert result.ok is not missing
         if missing:
             assert result.kind == "browser_window_missing"
+            assert "started and closed" in result.text and "tell the owner" in result.text
             assert not any(params.get("name") == "browser_navigate" for _, params in Driver.calls)
     finally:
         await hub.aclose()

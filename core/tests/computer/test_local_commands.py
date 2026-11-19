@@ -93,6 +93,8 @@ async def test_where_no_card_can_be_shown_a_command_runs_only_when_nothing_waits
 
 # R-PC-06: what shows something on the owner's screen, in PowerShell and cmd, typed as a model would.
 ON_SCREEN = [
+    "Start-Process x.mp4", r'& "C:\Tools\app.exe"', r'Get-Date; & "C:\Tools\app.exe"',
+    "$shell = New-Object -ComObject 'Shell.Application'",
     "Start-Process chrome", "Start-Process 'https://www.youtube.com'", "saps notepad", "start https://www.youtube.com",
     'start "" "C:\\Users\\me\\Documents\\report.pdf"', "explorer C:\\Users\\me\\Documents", "explorer.exe https://www.youtube.com",
     "Invoke-Item C:\\Users\\me\\report.pdf", "ii .", "rundll32 url.dll,FileProtocolHandler https://www.youtube.com",
@@ -104,6 +106,10 @@ ON_SCREEN = [
 ]
 # What shows nothing and must still run: reads, programs run directly, and a URL that is only downloaded.
 SHOWS_NOTHING = [
+    '"free: {0:N2} GB" -f $x', '"/home/u/x.mp4"', r'$f="$d\SKILL.md"', r'$f=C:\work\x.mp4',
+    '"https://example.com"', r'"C:\Tools\app.exe"', '"ShellExecute"', '$f = "Shell.Application"',
+    r'& "C:\Python312\python.exe" -m pip list',
+    """powershell -Command '"free: {0:N2} GB" -f $x'""", 'Get-Date; "/home/u/x.mp4"',
     "git status", "dir", "Get-ChildItem C:\\Users\\me", "python script.py", "npm test", "npm start",
     "curl https://www.youtube.com", 'curl "https://example.com/?q=1&start"', 'curl.exe -s "https://example.com/a?x=1&ii=2"',
     "Invoke-WebRequest https://www.youtube.com -OutFile page.html", "Invoke-RestMethod https://api.example.com/status",
@@ -161,6 +167,17 @@ async def test_a_quick_question_still_opens_things_on_the_owners_screen(conn, mo
     with_mode(hub, mode)
     tier, result = await called(hub, QUICK, "Start-Process https://www.youtube.com")
     assert result.kind != "shows_on_screen" and host.execute.await_count == (1 if runs else 0)
+
+
+@pytest.mark.parametrize("command", ['"free: {0:N2} GB" -f $x', '"/home/u/x.mp4"', r'$f="$d\SKILL.md"'])
+async def test_local_exec_allows_powershell_expressions_outside_a_quick_question(conn, command):
+    host = AsyncMock()
+    host.execute.return_value = {"exit_code": 0, "stdout": "", "stderr": "", "truncated": False}
+    hub = LocalTools(EmptyHub(), conn, host=host)
+    with_mode(hub, "bypass")
+    _, result = await called(hub, CHAT, command)
+    assert result.ok
+    host.execute.assert_awaited_once()
 
 
 async def test_unapproved_command_names_the_missing_owner_approval(local):

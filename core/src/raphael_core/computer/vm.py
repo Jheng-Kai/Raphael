@@ -685,14 +685,15 @@ class LocalVm:
     async def seat_browser(self, target):
         from .seat_view import rectangle
         from .carry import before_browser
+        from .seat_browser import LAUNCH
         await before_browser(self, target)
-        result = await self.run_for(target, exec_args(target, ["raphael-seat-browser",
-            *map(str, rectangle(target.screen, target.screens))]), timeout=self.seat_browser_s)
+        result = await self.run_for(target, exec_args(target, ["/usr/bin/python3", "-", "raphael-seat-browser",
+            *map(str, rectangle(target.screen, target.screens))], interactive=True),
+            input=LAUNCH.encode("utf-8"), timeout=self.seat_browser_s)
         match = re.fullmatch(r"pid=([1-9][0-9]*) window_id=([1-9][0-9]*)", result.stdout.strip())
         if result.code or result.truncated or not match:
-            # The launcher says which of its waits ran out (the window's, or its settling on the screen); the member's
-            # answer is one code for both, so the log is where the two are told apart.
-            logger.info("raphael-seat-browser failed (exit %s): %s", result.code, (result.stderr or "").strip()[-300:])
+            # Keep diagnostics in the core log; the member gets fixed recovery guidance.
+            logger.info("raphael-seat-browser failed (exit %s): %s", result.code, (result.stderr or "").strip()[-2300:])
             raise VmError("browser_window_missing")
         return dict(zip(("pid", "window_id"), map(int, match.groups())))
 
