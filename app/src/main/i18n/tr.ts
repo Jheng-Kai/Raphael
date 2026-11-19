@@ -473,7 +473,6 @@ export const tr = {
   "missing.slack": "Uygulama bağla (kenar çubuğu) bölümünden Slack’i bağlayın, taslağa dönüp kullanılabilir bağlantıyı seçin.",
   "missing.attachment": "Ekin içeriği kullanılamıyor. Açmak için özgün dosyayı yeniden ekleyin.",
   "missing.allowance": "Abonelik kotası yüklenemedi. Ayarlar > Modeller ve kullanım > Modeller > Abonelik hesapları bölümünde oturumu kontrol edip kullanımı yenileyin.",
-  "missing.conversation": "Görüşme hazır değil. Yüklenmesini bekleyin; kullanılamıyorsa yeniden açın.",
   "missing.encrypted": "PDF parola korumalı. Bilgisayarınızda kilidini açıp okunabilir kopyasını kaydedin ve yeniden ekleyin.",
   "missing.bad_pdf": "Dosya PDF olarak okunamadı. Özgün dosyanın açıldığını kontrol edip yeni PDF dışa aktarın ve yeniden ekleyin.",
   "missing.no_text": "Bu PDF için görsel tanıma gerekir. Ayarlar > Araçlar > Hizmetler > Görselleri gör özelliğini açıp görsel destekli model seçin.",

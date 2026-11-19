@@ -473,7 +473,6 @@ export const vi = {
   "missing.slack": "Kết nối Slack tại Kết nối ứng dụng (thanh bên) rồi trở lại bản nháp và chọn kết nối khả dụng.",
   "missing.attachment": "Nội dung đính kèm không khả dụng. Đính kèm lại tệp gốc để mở.",
   "missing.allowance": "Không tải được hạn mức đăng ký. Kiểm tra đăng nhập tại Cài đặt > Mô hình và mức dùng > Mô hình > Tài khoản đăng ký rồi làm mới mức dùng.",
-  "missing.conversation": "Cuộc trò chuyện chưa sẵn sàng. Đợi tải; nếu vẫn không có, mở lại cuộc trò chuyện.",
   "missing.encrypted": "PDF được bảo vệ bằng mật khẩu. Mở khóa trên máy tính, lưu bản đọc được rồi đính kèm lại.",
   "missing.bad_pdf": "Không đọc được tệp dưới dạng PDF. Kiểm tra bản gốc mở được, xuất PDF mới rồi đính kèm lại.",
   "missing.no_text": "PDF này cần nhận dạng ảnh. Bật Cài đặt > Công cụ > Dịch vụ > Hình ảnh và chọn mô hình hỗ trợ ảnh.",

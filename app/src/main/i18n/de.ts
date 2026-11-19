@@ -473,7 +473,6 @@ export const de = {
   "missing.slack": "Slack unter Apps verbinden (Seitenleiste) verbinden, zu diesem Entwurf zurückkehren und verfügbare Verbindung wählen.",
   "missing.attachment": "Anhangsinhalt nicht verfügbar. Zum Öffnen Originaldatei erneut anhängen.",
   "missing.allowance": "Abonnementkontingent konnte nicht geladen werden. Anmeldung unter Einstellungen > Modelle und Nutzung > Modelle > Abonnementkonten prüfen, dann Nutzung aktualisieren.",
-  "missing.conversation": "Das Gespräch ist nicht bereit. Laden abwarten; bleibt es nicht verfügbar, erneut öffnen.",
   "missing.encrypted": "Dieses PDF ist passwortgeschützt. Auf Ihrem Computer entsperren, lesbare Kopie speichern und erneut anhängen.",
   "missing.bad_pdf": "Datei konnte nicht als PDF gelesen werden. Original auf korrektes Öffnen prüfen, neues PDF exportieren und erneut anhängen.",
   "missing.no_text": "Dieses PDF braucht Bilderkennung. Einstellungen > Werkzeuge > Dienste > Bilder aktivieren und bildfähiges Modell wählen.",

@@ -473,7 +473,6 @@ export const ptBR = {
   "missing.slack": "Conecte o Slack em Conectar aplicativos (barra lateral), volte ao rascunho e escolha uma conexão disponível.",
   "missing.attachment": "O conteúdo do anexo está indisponível. Anexe o original novamente para abri-lo.",
   "missing.allowance": "Não foi possível carregar a cota. Confira o login em Configurações > Modelos e uso > Modelos > Contas de assinatura e atualize o uso.",
-  "missing.conversation": "A conversa não está pronta. Aguarde carregar; se continuar indisponível, reabra.",
   "missing.encrypted": "Este PDF é protegido por senha. Desbloqueie no computador, salve uma cópia legível e anexe novamente.",
   "missing.bad_pdf": "Não foi possível ler como PDF. Confira se o original abre, exporte um novo PDF e anexe novamente.",
   "missing.no_text": "Este PDF precisa de reconhecimento de imagem. Ative Configurações > Ferramentas > Serviços > Imagens e escolha um modelo compatível.",

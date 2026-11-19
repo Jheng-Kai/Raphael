@@ -473,7 +473,6 @@ export const fr = {
   "missing.slack": "Connectez Slack dans Connecter des applications (barre latérale), revenez à ce brouillon et choisissez une connexion disponible.",
   "missing.attachment": "Le contenu de la pièce jointe est indisponible. Joignez à nouveau le fichier original pour l’ouvrir.",
   "missing.allowance": "Impossible de charger le quota. Vérifiez la connexion dans Réglages > Modèles et utilisation > Modèles > Comptes d’abonnement, puis actualisez l’utilisation.",
-  "missing.conversation": "La conversation n’est pas prête. Attendez son chargement ; si elle reste indisponible, rouvrez-la.",
   "missing.encrypted": "Ce PDF est protégé par mot de passe. Déverrouillez-le sur votre ordinateur, enregistrez une copie lisible et joignez-la à nouveau.",
   "missing.bad_pdf": "Ce fichier n’a pas pu être lu comme PDF. Vérifiez l’ouverture de l’original, exportez un nouveau PDF et joignez-le à nouveau.",
   "missing.no_text": "Ce PDF nécessite la reconnaissance d’images. Activez Réglages > Outils > Services > Images et choisissez un modèle compatible.",

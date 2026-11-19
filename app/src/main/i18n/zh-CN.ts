@@ -473,7 +473,6 @@ export const zhCN = {
   "missing.slack": "请先到侧边栏的「链接应用程序」连接 Slack，再回到草稿选择可用连接后发送。",
   "missing.attachment": "这个附件的内容已无法取得，请重新附加原档后再打开。",
   "missing.allowance": "目前无法取得订阅额度，请先确认「设置 › 模型与用量 › 模型 › 订阅帐号」已登录，再刷新用量页。",
-  "missing.conversation": "对话尚未准备好，请等待加载完成，若持续无法使用请重新打开这段对话。",
   "missing.encrypted": "这份 PDF 受密码保护，请先在自己的电脑解锁并另存可读取的副本，再重新附加。",
   "missing.bad_pdf": "这份文件无法当作 PDF 读取，请确认原档可正常打开并重新导出 PDF 后再附加。",
   "missing.no_text": "这份 PDF 需要图片辨识才能读取，请打开「设置 › 工具 › 服务 › 看图片」并选择支持图片的模型。",

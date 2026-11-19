@@ -473,7 +473,6 @@ export const id = {
   "missing.slack": "Hubungkan Slack di Hubungkan aplikasi (bilah samping), lalu kembali ke draf ini dan pilih koneksi tersedia.",
   "missing.attachment": "Isi lampiran tidak tersedia. Lampirkan berkas asli lagi untuk membukanya.",
   "missing.allowance": "Kuota langganan tidak dapat dimuat. Periksa login di Pengaturan > Model dan penggunaan > Model > Akun langganan lalu segarkan penggunaan.",
-  "missing.conversation": "Percakapan belum siap. Tunggu hingga dimuat; jika tetap tidak tersedia, buka lagi.",
   "missing.encrypted": "PDF ini dilindungi kata sandi. Buka kunci di komputer, simpan salinan terbaca, lalu lampirkan lagi.",
   "missing.bad_pdf": "Berkas tidak dapat dibaca sebagai PDF. Pastikan aslinya terbuka dengan benar, ekspor PDF baru dan lampirkan lagi.",
   "missing.no_text": "PDF ini perlu pengenalan gambar. Aktifkan Pengaturan > Alat > Layanan > Gambar dan pilih model pendukung gambar.",

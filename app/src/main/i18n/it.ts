@@ -473,7 +473,6 @@ export const it = {
   "missing.slack": "Collega Slack in Connetti app (barra laterale), torna a questa bozza e scegli una connessione disponibile.",
   "missing.attachment": "Il contenuto dell’allegato non è disponibile. Allega di nuovo l’originale per aprirlo.",
   "missing.allowance": "Impossibile caricare la quota. Controlla l’accesso in Impostazioni > Modelli e utilizzo > Modelli > Account in abbonamento, poi aggiorna l’utilizzo.",
-  "missing.conversation": "La conversazione non è pronta. Attendi il caricamento; se resta indisponibile, riaprila.",
   "missing.encrypted": "Questo PDF è protetto da password. Sbloccalo sul computer, salva una copia leggibile e allegala di nuovo.",
   "missing.bad_pdf": "Impossibile leggere il file come PDF. Controlla che l’originale si apra, esporta un nuovo PDF e allegalo di nuovo.",
   "missing.no_text": "Questo PDF richiede riconoscimento immagini. Attiva Impostazioni > Strumenti > Servizi > Immagini e scegli un modello compatibile.",
