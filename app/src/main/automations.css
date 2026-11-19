@@ -213,6 +213,9 @@
 .au-grid-head.is-open > .au-all-day-row { border-bottom: 1px solid var(--line); }
 /* The band's button keeps its focus ring inside its own box, so the ring is whole at the band's edge and the count keeps its width. */
 .au-all-day-row > .btn.cal-more:focus-visible { outline-offset: -2px; }
+/* The open band's one 收合: a chevron in the margin under the time zone, on its last row. */
+.au-all-day-row > .btn.icon.cal-fold { justify-self: center; align-self: center; justify-content: center; width: 22px; height: 22px; min-height: 22px; padding: 0; color: var(--text-2); }
+.au-all-day-row > .btn.icon.cal-fold .i { width: 16px; height: 16px; }
 .au-event { z-index: 1; min-width: 0; }
 .au-day-col > .au-event { position: absolute; }
 .au-bar { position: relative; margin: 0 3px 0 2px; }
