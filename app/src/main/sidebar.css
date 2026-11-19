@@ -4,7 +4,9 @@
 /* The list is dragged by its edge (edge-drag.ts): no handle is drawn, the cursor changes over it, and a thin
    line shows only while it moves or has the keyboard. */
 .side-edge { position: absolute; top: 0; right: 0; bottom: 0; z-index: 5; width: 6px; cursor: col-resize; touch-action: none; outline: none; }
-.side-edge:focus-visible::after, .side-edge.is-dragging::after { content: ""; position: absolute; top: 0; right: 0; bottom: 0; width: 1px; background: var(--edge); }
+/* The sidebar's edge is a quiet line that brightens under the pointer, where it can be dragged. */
+.side-edge::after { content: ""; position: absolute; top: 0; right: 0; bottom: 0; width: 1px; background: var(--line); transition: background-color 0.16s ease; }
+.side-edge:hover::after, .side-edge:focus-visible::after, .side-edge.is-dragging::after { background: var(--line-lit); }
 :root[data-resizing] body { cursor: col-resize; user-select: none; }
 .side .btn.icon:hover:not(:disabled) { background: var(--hover); }
 .side .btn.icon:active:not(:disabled) { background: var(--pressed); }
@@ -29,12 +31,12 @@
 .side .mb-row-p { font-size: var(--fs-xs); line-height: 1.4; }
 .side .mb-row > .av, .side .mb-row > .room-avatar { --av: 40px !important; }
 /* Only a pinned member leaves the rows: a larger face centered above its name, side by side when there are several. */
-.side .mb-pinned { display: grid; grid-template-columns: minmax(0, 136px); justify-content: center; gap: var(--sp-1); padding: 0 0 var(--sp-2); }
-.side .mb-pinned[data-count="2"] { grid-template-columns: repeat(2, minmax(0, 120px)); }
+.side .mb-pinned { display: grid; grid-template-columns: minmax(0, 112px); justify-content: center; gap: var(--sp-1); padding: 0 0 var(--sp-2); }
+.side .mb-pinned[data-count="2"] { grid-template-columns: repeat(2, minmax(0, 100px)); }
 .side .mb-pinned[data-count="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.side .mb-item .nav.mb-tile.mb-row { position: relative; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: 2px; min-height: 0; padding: var(--sp-3) var(--sp-2) var(--sp-2); border-radius: var(--r-lg); text-align: center; }
-.side .nav.mb-tile.mb-row > .av { --av: 48px !important; margin-bottom: var(--sp-1); }
-.side .mb-pinned[data-count="1"] .nav.mb-tile.mb-row > .av { --av: 72px !important; }
+.side .mb-item .nav.mb-tile.mb-row { position: relative; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: 2px; min-height: 0; padding: var(--sp-2); border-radius: var(--r-lg); text-align: center; }
+.side .nav.mb-tile.mb-row > .av { --av: 44px !important; margin-bottom: var(--sp-1); }
+.side .mb-pinned[data-count="1"] .nav.mb-tile.mb-row > .av { --av: 56px !important; }
 .side .nav.mb-tile small { display: block; max-width: 100%; overflow: hidden; color: var(--text-3); font-size: var(--fs-xs); text-overflow: ellipsis; white-space: nowrap; }
 .side .nav.mb-tile b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-md); font-weight: var(--weight-semibold); }
 .side .mb-pinned:not([data-count="1"]) .nav.mb-tile b { font-size: var(--fs-sm); }
