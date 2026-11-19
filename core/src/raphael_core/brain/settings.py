@@ -57,10 +57,7 @@ DEFAULTS: dict[str, Any] = {
     "monthly_limit_usd": 10.0,
     "memory_threshold_tokens_cap": 24000,
     "memory_max_unused_days": 90,
-    # Chosen from the cleanup eval for its cost and its speed (~1.25 s on average).
-    # The cases and the prompt have changed since, so no pass rate is claimed for it: compare the
-    # models again with `python -m raphael_core.evaluate.cleanup`.
-    "cleanup_model": "openai/gpt-6-luna",
+    "cleanup_model": "",
     # The dictation languages, in the user's order of priority (raphael_core.languages).
     "languages": list(DEFAULT_LANGUAGES),
     "history_retention_days": 30,
@@ -71,12 +68,10 @@ DEFAULTS: dict[str, Any] = {
     # Which of the catalogue's models (device/models.py) the local engine is. The one Raphael has
     # always used, so that nobody who runs locally needs a new download.
     "stt_local_model": "qwen3-asr",
-    # The most accurate on the samples tried live (gpt-transcribe returned nothing
-    # for an English clip and garbled Chinese).
-    "stt_cloud_model": "elevenlabs/scribe-v2",
+    "stt_cloud_model": "",
     # The voice assistant (raphael_core.agent). The model that words its answers, and that decides
     # what a request is when Jev (agent/routing.py, not a setting) fails or is unsure.
-    "agent_model": "openai/gpt-6-luna",
+    "agent_model": "",
     "quick_model": "",
     # Separate paid media calls require an explicit owner choice; empty never inherits a brain.
     "image_model": "",
@@ -369,7 +364,7 @@ def checked(key: str, value: Any) -> tuple[str, Any]:
     if key == "owner_photo" and value:
         if len(value) > 400000 or not re.fullmatch(r"data:image/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+=*", value):
             raise ValueError("Owner photo must be a small PNG, JPEG or WebP data URL")
-    if key in _TRIMMED:
+    if key in _TRIMMED and not (key in MODEL_SETTINGS and value == ""):
         value = _trimmed(key, value)
     if key == "model_favorites":
         value = _favorites(value)
@@ -404,19 +399,19 @@ def hosted_providers(client) -> set[str]:
 def api_model(settings, *candidates: object, api_providers=()) -> str:
     """Select a model for API work without inheriting a CLI or local model reference.
 
-    Explicit API candidates retain their order. The owner's auxiliary API preference and the
-    built-in answer model are used only when none of those candidates can be sent to the API.
+    Explicit API candidates retain their order. The owner's auxiliary API preference is used
+    only when none of those candidates can be sent to the API.
     A provider router may explicitly identify hosted API providers whose references it resolves.
     """
     try:
         assistant = settings.get("assistant_model")
     except (KeyError, sqlite3.Error):
         assistant = ""
-    for value in (*candidates, assistant, DEFAULTS["agent_model"]):
+    for value in (*candidates, assistant):
         if isinstance(value, str) and (model := value.strip()) and not model.startswith("cli:"):
             if not model.startswith("@") or model[1:].partition(":")[0] in api_providers:
                 return model
-    return DEFAULTS["agent_model"]
+    return ""
 
 
 class SettingsStore:
@@ -438,6 +433,26 @@ class SettingsStore:
             return checked_languages("languages", saved)
         except (TypeError, ValueError):
             return list(DEFAULT_LANGUAGES)
+
+    def fill_models(self, source, choices, notify):
+        """Claim each empty setting atomically before announcing the roles this source filled."""
+        from .first_models import SETTINGS
+
+        roles = []
+        with self._conn:
+            for role, model in choices.items():
+                key = SETTINGS[role]
+                try:
+                    _, model = checked(key, model)
+                except (ValueError, TypeError):
+                    continue
+                if model and self._conn.execute(
+                    "INSERT INTO settings(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE "
+                    "SET value=excluded.value WHERE settings.value=?", (key, json.dumps(model), '""')
+                ).rowcount:
+                    roles.append(role)
+        if roles and notify:
+            notify("models.filled", {"source": source[:200], "roles": roles})
 
     def chosen(self, key: str) -> bool:
         """Whether `key` has a saved value, as against reading as its default."""

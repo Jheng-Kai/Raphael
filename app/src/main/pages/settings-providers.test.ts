@@ -292,12 +292,12 @@ test("settings delegates the CLI row menu and refreshes an open model chooser on
   click('#app-popover [data-pick="disconnect"]'); await flush();
   expect(api.brainsCliDisconnect).toHaveBeenCalledExactlyOnceWith("claude");
   expect(page.el.querySelector('[data-cli="claude"]')?.textContent).toBe("Connect");
+  // A subscription disconnected is no longer offered (it holds no choice here), and comes back once it is connected again.
   click('[data-model-picker="answer"] .mp-trigger');
-  click('[data-source="cli:claude"]');
-  expect(document.querySelectorAll('.mc-row')).toHaveLength(0);
-  expect(document.querySelector('.mc-pane')?.textContent).toContain("Disconnected");
+  expect(document.querySelector('[data-source="cli:claude"]')).toBeNull();
   api.brainsCli.mockResolvedValue({ clis: [claude] });
   send({ type: "BrainsChanged" }); await flush();
+  click('[data-source="cli:claude"]');
   expect(document.querySelector('.mc-row')?.textContent).toContain("Claude Sonnet");
   expect(closeSettings).not.toHaveBeenCalled();
 });
@@ -591,6 +591,8 @@ test.each([
   const legacy = { ...direct, llm: direct.llm.map((model) => ({ ...model, id: "openai/example", provider_id: "openrouter", provider_name: "OpenRouter", name: "OpenRouter example" })) };
   legacy.stt = legacy.llm;
   api.modelsCatalog.mockResolvedValue(legacy);
+  // OpenRouter is offered once it is connected, never before (R-DEFAULT-05).
+  api.providersList.mockResolvedValue({ providers: [{ id: "openrouter", kind: "openrouter", name: "OpenRouter", enabled: true, has_key: true }] });
   send({ type: "ProvidersChanged" }); await flush();
   click(`[data-model-picker="${role}"] .mp-trigger`);
   click('[data-source="openrouter"]'); click('[data-id="openai/example"]'); click('[data-dlg="use"]'); await flush();

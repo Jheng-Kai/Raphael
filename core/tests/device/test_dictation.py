@@ -412,6 +412,29 @@ def test_join_segments_ignores_blank_pieces_and_trims():
 # --- the main path -------------------------------------------------------------------------------
 
 
+async def test_missing_cleanup_delivers_original_with_one_window_notice(rig, router, conn):
+    from raphael_core.brain.secrets import MemoryKeyStore
+    from raphael_core.brain.service import Brain
+
+    core = Brain(conn, object(), MemoryKeyStore())
+    notices = []
+    core._notify = lambda method, params: notices.append((method, params))
+    router._handlers["brain.finalize_dictation"] = core._finalize_dictation
+    rig.engine.texts = ["Keep these words"]
+    rig.recorder.chunks = [chunk(2)]
+    try:
+        await start(router)
+        await rig.recorder.fed(1)
+        result = await stop(router)
+        assert result["text"] == "Keep these words"
+        assert result["cleanup_failure"]["kind"] == "no_model"
+        assert "fallback_reason" not in result
+        assert core._history.latest().fallback_reason == "no_model"
+        assert notices == [("models.missing", {"role": "cleanup"})]
+    finally:
+        await core.aclose()
+
+
 async def test_stop_joins_segments_and_calls_the_brain(rig, router, brain):
     rig.engine.texts = ["明天", "下午", "開會"]
     rig.recorder.chunks = [chunk(1.0)] * 3
@@ -1742,6 +1765,7 @@ async def test_rate_limited_middle_audio_is_retained_through_final_retry_and_hea
     keys = MemoryKeyStore()
     keys.set("synthetic-key")
     core = Brain(conn, Client(), keys)
+    core._settings.set("cleanup_model", "synthetic-cleanup")
     await core._settings_set({"key": "languages", "value": ["en-US"]})
     router._handlers["brain.finalize_dictation"] = core._finalize_dictation
     rig.engine = Engine()
@@ -2610,7 +2634,7 @@ async def test_an_agent_session_answers_with_polished_text_and_nothing_to_paste(
     assert brain.finalize_params == [{
         "session_id": "s1", "raw_text": "\u6253\u958b YouTube", "stt": "fake",
         "audio_seconds": 2.0, "target_app": None, "purpose": "agent",
-        "incomplete": False, "stt_ms": brain.finalize_params[0]["stt_ms"],
+        "incomplete": False, "ui_language": "zh-TW", "stt_ms": brain.finalize_params[0]["stt_ms"],
     }]
     assert brain.finalize_params[0]["stt_ms"] >= 0
     assert not rig.service.active

@@ -97,7 +97,7 @@ from ..agent.history import AgentHistory, Turn
 from ..agent.persona import normalize_language, phrase
 from ..agent.speaker import BUILTIN_TOOL_IDS, RAPHAEL_NAMES, Speaker, is_raphael_name
 from ..background.tasks import Refused
-from ..brain.settings import DEFAULTS, SettingsStore
+from ..brain.settings import SettingsStore
 from ..clock import wall_clock_ms
 from ..home_digest import FAILED_TASKS, FAILED_TURNS
 from ..protocol import INVALID_PARAMS, RpcError, invalid_params
@@ -491,7 +491,7 @@ class MembersService:
     def _starting_model(self) -> str:
         """A new member starts on Raphael's model and holds it as its own, so that its next change moves no one else."""
         model = self._settings.get("agent_model")
-        return model.strip() if isinstance(model, str) and model.strip() else DEFAULTS["agent_model"]
+        return model.strip() if isinstance(model, str) and model.strip() else ""
 
     def _changed(self, method: str = "members.changed", member_id: int | None = None) -> None:
         """Announce committed data changes using identifiers only."""
@@ -2369,7 +2369,7 @@ class MembersService:
                 "INSERT INTO routine_runs (routine_id, scheduled, started, status, turn_id, trigger_json) VALUES (?, ?, ?, 'running', ?, ?)",
                 (routine.id, routine.next_run_ms, self._now_ms(), turn_id, json.dumps({key: value for key, value in routine_view(routine).items() if key in ("id", "member_id", "title", "schedule", "when", "app_name")})),
             )
-        model = model.strip() if isinstance(model, str) and model.strip() else DEFAULTS["agent_model"]
+        model = model.strip() if isinstance(model, str) and model.strip() else ""
         task_id = None
         try:
             task_id = self._background.submit(

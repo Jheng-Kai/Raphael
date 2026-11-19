@@ -31,7 +31,6 @@ from .meter import Usage
 from .meter import chat as _chat_usage
 from .prompt_cache import mark as mark_cache
 from .reasoning import REASONING_PARTS, TEXT_PARTS, split_reasoning
-from .settings import DEFAULTS
 from .streams import MalformedStream, chat_completion
 from ..failures import classify, redact
 from ..retry_utils import CONNECT_TIMEOUT_S, provider_retry_after_seconds
@@ -41,11 +40,6 @@ logger = logging.getLogger(__name__)
 BASE_URL = "https://openrouter.ai/api/v1"
 # Jev's decisions are an alpha API, outside /api/v1.
 ALPHA_URL = "https://openrouter.ai/api/alpha"
-
-DEFAULT_CLEANUP_MODEL: str = DEFAULTS["cleanup_model"]
-# Tried in this order when the chosen model fails. All three models can run with reasoning off,
-# which google/gemini-3.8-flash cannot.
-CLEANUP_FALLBACKS = ["anthropic/claude-haiku-5.5", "google/gemini-3.1-flash-lite"]
 
 # Sent with every request: OpenRouter lists them as the name of the app that made the call.
 _APP_HEADERS = {"HTTP-Referer": "http://localhost/raphael", "X-OpenRouter-Title": "Raphael"}

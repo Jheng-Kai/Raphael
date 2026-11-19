@@ -486,6 +486,12 @@ export function createSettings(app: AppContext): SettingsPage {
   translateNav();
 
   /** Goes to a tab: what the tab before it had open is dropped, and the new one comes in. */
+  /** 連接其他來源 in a model's choice: the list of every way to connect one, subscriptions first (providers.ts directory). */
+  function connectSource(): void {
+    openPane("models", "models");
+    void loadProviders().then(() => { if (visible) providers.openRepair("connect"); });
+  }
+
   function openPane(next: SettingsPane, tab?: ModelsTab): void {
     closeMenu();
     // 模型與用量 opens at 模型 unless the way in names 用量: it never stays on what was looked at last.
@@ -782,7 +788,7 @@ export function createSettings(app: AppContext): SettingsPage {
     const quick = body.querySelector<HTMLElement>('[data-row="quick-model"] .mp-slot');
     if (quick) pickers.set("quick", mountModelPicker(quick, {
       ...quickPickerLook(v),
-      onSources: () => openPane("models", "models"),
+      onSources: connectSource,
       onChoose: (id) => {
         const chosen = splitEffort(id, quickModels(view()));
         void changeBrain("quick_model", chosen.model).then(() => chosen.effort ? changeBrain("quick_effort", chosen.effort) : undefined);
@@ -803,7 +809,7 @@ export function createSettings(app: AppContext): SettingsPage {
         "vision",
         mountModelPicker(vision, {
           ...visionPickerLook(v),
-          onSources: () => openPane("models", "models"),
+          onSources: connectSource,
           onChoose: (id) => void services.chooseVision(id),
           onFavorite: (id, on) => void changeFavorite("answer", id, on),
         }),
@@ -816,7 +822,7 @@ export function createSettings(app: AppContext): SettingsPage {
           role,
           mountModelPicker(slot, {
             ...modelPickerLook(v, role),
-            onSources: () => openPane("models", "models"),
+            onSources: connectSource,
             onCliAction: (id) => {
               const button = document.createElement("button"); button.dataset.cli = id;
               void cliBrains.click(button);
@@ -1288,6 +1294,10 @@ export function createSettings(app: AppContext): SettingsPage {
           if (resource === "image" || resource === "video") {
             const control = el.querySelector<HTMLElement>(`[data-row="${resource}-model"] [data-k="${resource}-model"]`);
             control?.scrollIntoView({block: "center"}); control?.focus({preventScroll: true});
+          } else if (resource === "quick" || resource === "cleanup" || resource === "stt") {
+            // A feature with no model: its own row, and its choice open.
+            const trigger = el.querySelector<HTMLButtonElement>(`[data-row="${({ quick: "quick-model", cleanup: "model", stt: "stt-model" })[resource]}"] .mp-trigger`);
+            trigger?.scrollIntoView({block: "center"}); trigger?.focus({preventScroll: true}); trigger?.click();
           } else if (resource === "chatgpt") {
             const card = el.querySelector<HTMLElement>('[data-chatgpt-card]');
             card?.scrollIntoView({block: "center"}); card?.querySelector<HTMLElement>('button')?.focus();

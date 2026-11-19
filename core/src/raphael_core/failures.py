@@ -12,7 +12,7 @@ from datetime import datetime
 
 from .retry_utils import RETRY_AFTER_CAP_S, reset_delay_from_message
 
-KINDS = frozenset(("credits", "usage_limit", "rate_limit", "overloaded", "server", "auth_expired",
+KINDS = frozenset(("no_model", "credits", "usage_limit", "rate_limit", "overloaded", "server", "auth_expired",
                    "network", "cli_stopped", "permission_denied", "not_found", "tool_broken", "invalid_request", "timeout", "refused", "unknown",
                    "chatgpt_unavailable", "chatgpt_plan_unavailable", "chatgpt_scope",
                    "context_overflow", "payload_too_large", "content_policy"))

@@ -1206,10 +1206,10 @@ COMMIT;
 """
 
 # Each member answers on its own model again. Those migration 47 cleared keep what they answer on today, so that Raphael's
-# next change moves none of them. The literal is the default of this version, for an owner who has never chosen one.
+# next change moves none of them. Without an explicit answer model they inherit the migrated global choice.
 _MIGRATIONS[51] = """
 BEGIN;
-UPDATE members SET model = COALESCE((SELECT json_extract(value, '$') FROM settings WHERE key = 'agent_model'), 'openai/gpt-6-luna')
+UPDATE members SET model = COALESCE((SELECT json_extract(value, '$') FROM settings WHERE key = 'agent_model'), '')
 WHERE model = '';
 PRAGMA user_version = 51;
 COMMIT;

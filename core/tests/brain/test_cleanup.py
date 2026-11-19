@@ -25,12 +25,11 @@ from raphael_core.brain.cleanup import (
 )
 from raphael_core.brain.dictionary import DictionaryStore
 from raphael_core.brain.openrouter import (
-    CLEANUP_FALLBACKS,
     Completion,
     OpenRouterClient,
     OpenRouterError,
 )
-from raphael_core.brain.settings import DEFAULTS, SettingsStore
+from raphael_core.brain.settings import SettingsStore
 from raphael_core.brain.spend import SpendTracker
 
 NOW_MS = int(datetime(2026, 10, 17, 12, tzinfo=UTC).timestamp() * 1000)
@@ -74,7 +73,9 @@ def fake_client():
 
 @pytest.fixture
 def settings(conn):
-    return SettingsStore(conn)
+    settings = SettingsStore(conn)
+    settings.set("cleanup_model", "openai/gpt-6-luna")
+    return settings
 
 
 @pytest.fixture
@@ -259,8 +260,8 @@ async def test_the_request_matches_what_the_client_takes(make_svc, fake_client):
     (call,) = fake_client.calls
     # The keyword arguments must bind to the real client's method, or the real call would fail.
     inspect.signature(OpenRouterClient.complete_json).bind(object(), **call)
-    assert call["model"] == DEFAULTS["cleanup_model"]
-    assert call["fallbacks"] == CLEANUP_FALLBACKS
+    assert call["model"] == "openai/gpt-6-luna"
+    assert call["fallbacks"] == []
     assert call["schema_name"] == "cleaned_dictation"
     assert call["timeout_s"] == 4.0  # the timeout function's answer for the audio's length
     assert call["max_tokens"] == 256
@@ -556,7 +557,8 @@ async def test_a_function_given_to_the_service_that_fails_falls_back_to_raw(
         raise RuntimeError("broken")
 
     r = await make_svc(**{which: broken}).clean("你好", audio_seconds=1)
-    assert (r.text, r.cleaned, r.fallback_reason) == ("你好", False, "error:unexpected")
+    reason = "no_key" if which == "has_key" else "error:unexpected"
+    assert (r.text, r.cleaned, r.fallback_reason) == ("你好", False, reason)
     assert fake_client.calls == []
 
 

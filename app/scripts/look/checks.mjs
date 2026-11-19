@@ -4928,7 +4928,7 @@ export function checkRendered(name, context = {}) {
     require(saved.length === 1 && saved[0].params.id === 1 && saved[0].params.model.startsWith("cli:codex"), "a member's composer saves that member's model");
     require(!window.__look.calls.some(call => call.method === "settings.set" && call.params.key === "agent_model"), "Raphael's model is not touched");
     require(window.__look.data.members.filter(member => member.id !== 1).every(member => !member.model?.startsWith("cli:codex")), "no other member moves");
-    require(document.querySelector('.cb-menu [aria-checked="true"]') || document.querySelector('.cb-menu .cb-pick b')?.textContent.includes("GPT-6.1"), "the menu shows the choice");
+    require(document.querySelector('.cb-menu [aria-checked="true"]') || document.querySelector('.cb-menu .cb-pick-name span')?.textContent.includes("GPT-6.1"), "the menu shows the choice");
     require(document.querySelector('.composer .cmp-model .mp-trigger').textContent.includes("Codex"), "reopened details show the selected CLI source");
     return { check: name, model: saved[0].params.model };
   }
@@ -7752,13 +7752,13 @@ export function checkRendered(name, context = {}) {
     return { check: name, saved };
   }
   if (name === "composer-model-reading") {
-    const pane = document.querySelector(".cb-menu .cb-pane");
+    const pane = document.querySelector(".cb-menu .cb-body");
     require(!pane.textContent.includes("尚無可用模型"), "a signed-in CLI whose models are coming is not called empty");
     require(pane.querySelector('[role="status"]'), "it says the models are being read");
     return { check: name };
   }
   if (name === "composer-model-arrived") {
-    require(document.querySelectorAll(".cb-menu .cb-pane [data-model]").length >= 1 && !document.querySelector('.cb-menu .cb-pane [role="status"]'), "the models took the place of the message without reopening");
+    require(document.querySelectorAll(".cb-menu .cb-body [data-model]").length >= 1 && !document.querySelector('.cb-menu .cb-body [role="status"]'), "the models took the place of the message without reopening");
     return { check: name };
   }
   if (name === "depth-fill-covers-thumb") {
@@ -7770,45 +7770,73 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name === "composer-favorites") {
+    // What is starred comes first in its provider's list, before what is chosen and the rest.
     const rows = [...document.querySelectorAll(".cb-menu .cb-list [data-model]")];
-    require(rows.map(row => row.dataset.model).join() === "openai/gpt-6-luna,cli:codex:gpt-6.1", `what is starred, in order: ${rows.map(row => row.dataset.model)}`);
-    require(rows.every(row => row.querySelector("small")?.textContent.trim()), "each says its source");
-    require(document.querySelector(".cb-rail .cb-source")?.dataset.cbSource === "favorites", "first on the rail");
-    require(document.querySelectorAll(".cb-menu .cb-source").length >= 3, "with the sources under it");
+    require(rows[0]?.dataset.model === "openai/gpt-6-luna", `what is starred comes first: ${rows.map(row => row.dataset.model)}`);
+    require(rows.some(row => row.getAttribute("aria-checked") === "true"), "and what is chosen is in the list, checked");
     return { check: name };
   }
   if (name === "composer-card-same") {
-    const now = document.querySelector(".cb-now"), pick = now.querySelector(".cb-pick"), range = now.querySelector(".mc-range");
-    require(visible(pick.querySelector("small")) && pick.querySelector("small").textContent.trim() && pick.querySelector("b").textContent.trim(), "the source above the model");
-    require(pick.querySelector("small").getBoundingClientRect().bottom <= pick.querySelector("b").getBoundingClientRect().top + 1, "in that order");
+    const now = document.querySelector(".cb-now"), pick = now.querySelector(".cb-pick"), range = now.querySelector(".mc-range"), mark = now.querySelector(".cb-src");
+    const model = pick.querySelector(".cb-pick-name span");
+    require(visible(mark) && mark.getAttribute("aria-label")?.startsWith("更換供應商：") && model.textContent.trim(), "the provider's mark and the model");
+    require(mark.getBoundingClientRect().right <= pick.getBoundingClientRect().left + 1, "the mark at the top left, the model beside it in the middle");
     require(!/訂閱|方案|用量/.test(now.textContent) && !now.querySelector(".btn"), "no plan or usage on the card");
     require(range.max === "4" && now.querySelectorAll(".mc-dot").length === 5, "the same ruler of five stops");
     const offered = range.dataset.levels.split(",").filter(Boolean).length;
-    require(offered ? now.querySelector('.mc-stop[data-on="true"]')?.dataset.effort : range.disabled && /不分思考程度/.test(now.textContent), "the stop it is on is named, or it says there is nothing to choose");
+    require(offered ? now.querySelector(".cb-effort")?.textContent.trim() : range.disabled && /不分思考程度/.test(now.textContent), "the depth it is on is the title, or it says there is nothing to choose");
     const card = now.getBoundingClientRect(), track = range.getBoundingClientRect();
     const shape = [card.width, card.height, track.top - card.top, track.width].map(Math.round).join();
     window.__cbShape ??= shape;
     require(shape === window.__cbShape, `the same card whatever the source: ${shape} / ${window.__cbShape}`);
-    return { check: name, source: pick.querySelector("small").textContent, model: pick.querySelector("b").textContent, offered, shape };
+    return { check: name, source: mark.getAttribute("aria-label"), model: model.textContent, offered, shape };
   }
-  if (name === "composer-model-fold") {
-    const all = document.querySelector(".cb-all");
-    require(document.querySelectorAll(".cb-list [data-model]").length === 5, "five to begin with");
-    require(/43/.test(all.textContent) && all.getAttribute("aria-expanded") === "false", "and says how many there are");
-    require(document.querySelector('.cb-list [data-model="openai/gpt-6-luna"]') && document.querySelector('.cb-list [data-model="openai/gpt-6-sol"]'), "what is starred and what is chosen are among them");
-    require(!document.querySelector(".cb-search"), "no search until the list is opened");
-    return { check: name };
-  }
-  if (name === "composer-model-unfolded") {
+  if (name === "composer-model-long") {
     const list = document.querySelector(".cb-list");
     require(list.querySelectorAll("[data-model]").length === 43 && list.scrollHeight > list.clientHeight, "all of them, scrolling inside the card");
-    require(visible(document.querySelector(".cb-search")) && document.querySelector(".cb-all").getAttribute("aria-expanded") === "true", "with a search and the way to fold them");
+    require(visible(document.querySelector(".cb-search")) && !document.querySelector(".cb-all"), "with a search, and nothing folded");
     // Each row keeps the height of its two lines: a long list never squeezes them onto each other.
     const rows = [...list.querySelectorAll(".cb-row")];
     const squeezed = rows.filter(row => row.scrollHeight > row.clientHeight + 1).length;
     const overlapping = rows.slice(1).filter((row, i) => row.getBoundingClientRect().top < rows[i].getBoundingClientRect().bottom - 0.5).length;
     require(!squeezed && !overlapping, `every model row holds its name and price apart (${squeezed} squeezed, ${overlapping} overlapping)`);
     return { check: name };
+  }
+  if (name === "composer-model-providers") {
+    // The connected providers only (R-DEFAULT-05), the one holding the choice checked, and 新增供應商 under them.
+    const rows = [...document.querySelectorAll(".cb-menu .cb-source")];
+    const ids = rows.map(row => row.dataset.cbSource);
+    require(ids.length >= 2 && !ids.includes("chatgpt"), `the connected providers, not a signed-out one: ${ids}`);
+    require(rows.filter(row => row.getAttribute("aria-pressed") === "true").length === 1, "the one holding the choice is checked");
+    require(rows.every(row => row.querySelector(".cb-name b").scrollWidth <= row.querySelector(".cb-name b").clientWidth), "every name whole");
+    const add = document.querySelector(".cb-menu .cb-add");
+    require(visible(add) && add.textContent.trim() === "新增供應商" && add.getBoundingClientRect().top >= rows.at(-1).getBoundingClientRect().bottom - 1, "新增供應商 under them");
+    return { check: name, ids };
+  }
+  if (name === "composer-model-none") {
+    const none = document.querySelector(".cb-menu .cb-none");
+    require(visible(none) && none.textContent.includes("還沒有能回答的模型"), "it says nothing can answer yet");
+    require(visible(none.querySelector(".cb-add-first")) && none.querySelectorAll("button").length === 1, "with its one way forward");
+    require(!document.querySelector(".cb-menu .mc-range") && !document.querySelector(".cb-menu .cb-src"), "no slider and no provider to change");
+    return { check: name };
+  }
+  if (name === "composer-model-off") {
+    const off = document.querySelector(".cb-menu .cb-now small.is-off");
+    require(visible(off) && off.textContent.trim() === "OpenRouter 未連上", `the choice says its provider is off: ${off?.textContent}`);
+    require(document.querySelector(".cb-menu .cb-pick-name span")?.textContent.trim() === "GPT-6 Sol", "and the model chosen stays shown");
+    const chip = document.querySelector(".composer .cmp-model .mp-source.is-off");
+    require(!chip || getComputedStyle(chip).color !== getComputedStyle(document.querySelector(".composer .cmp-model .mp-tname")).color, "the chip says it in the warning colour");
+    return { check: name };
+  }
+  if (name === "provider-directory") {
+    // Every way to connect, subscriptions first, and each kind says what it means and what it costs.
+    const dialog = document.querySelector("#pv-dialog"), sections = [...dialog.querySelectorAll(".pv-directory > .sgroup")];
+    require(sections[0]?.querySelector("h3")?.textContent === "訂閱帳號" && sections[0].querySelector('[data-chatgpt="sign-in"]'), "the subscriptions first, ChatGPT to sign in to right there");
+    require(sections.every(section => visible(section.querySelector(".pv-group-note")) && section.querySelector(".pv-group-note").textContent.trim()), "every kind says what it means");
+    require(!dialog.querySelector('[data-k="chatgpt:sign-in"]'), "its buttons have keys of their own, apart from the page behind");
+    const box = dialog.getBoundingClientRect();
+    require(box.left >= 0 && box.right <= innerWidth + 0.5 && box.top >= 0 && box.bottom <= innerHeight + 0.5, "the dialog fits the window");
+    return { check: name, kinds: sections.length };
   }
   if (name === "composer-quick-read") {
     const composer = document.querySelector(".composer .cmp-model .mp-tname").textContent;
@@ -7917,28 +7945,23 @@ export function checkRendered(name, context = {}) {
     require(visible(now) !== visible(list), "the card shows one view at a time");
     if (name === "composer-model-small") {
       require(visible(now) && !menu.querySelector(".cb-source, [data-model]"), "it opens on the model and its depth, no list");
-      require(menu.querySelector(".cb-pick b")?.textContent.trim() && now.getBoundingClientRect().height < 200, "the small card says what is chosen");
+      require(menu.querySelector(".cb-pick-name span")?.textContent.trim() && now.getBoundingClientRect().height < 200, "the small card says what is chosen");
+      const mark = now.querySelector(".cb-src").getBoundingClientRect(), card = now.getBoundingClientRect();
+      require(mark.left - card.left <= 16 && mark.top - card.top <= 16, "the provider's mark stands at the top left");
     } else {
-      const head = list.querySelector(".cb-head"), title = head.querySelector("h3 span").getBoundingClientRect(), card = list.getBoundingClientRect();
+      const head = list.querySelector(".cb-head"), title = head.querySelector("h3").getBoundingClientRect(), card = list.getBoundingClientRect();
       require(visible(head.querySelector(".cb-back")), "a way back");
-      const centre = (head.querySelector("h3").getBoundingClientRect().left + head.querySelector("h3").getBoundingClientRect().right) / 2;
-      require(Math.abs(centre - (card.left + card.right) / 2) <= 2 && title.width > 0, "the title stands in the middle of the card");
-      const rail = list.querySelector(".cb-rail"), pane = list.querySelector(".cb-pane");
-      require(visible(rail) && visible(pane) && rail.getBoundingClientRect().right <= pane.getBoundingClientRect().left + 1, "the sources on the left, the models on the right");
-      require(rail.querySelectorAll('[aria-pressed="true"]').length === 1, "the source shown is marked");
-      require([...rail.querySelectorAll(".cb-name b")].every(name => name.scrollWidth <= name.clientWidth), "every source's name is whole");
+      require(Math.abs((title.left + title.right) / 2 - (card.left + card.right) / 2) <= 2 && title.width > 0, "the title stands in the middle of the card");
+      const rows = [...list.querySelectorAll(".cb-row, .cb-source")];
+      require(rows.length && rows.every(row => row.querySelector(".cb-name b").scrollWidth <= row.querySelector(".cb-name b").clientWidth + 1), "every name is whole");
       const box = menu.getBoundingClientRect();
       require(box.left >= 0 && box.right <= innerWidth && box.top >= 0, "the card fits the window");
-      const first = rail.querySelector(".cb-source").getBoundingClientRect(), place = `${Math.round(first.left)},${Math.round(first.top)},${Math.round(list.getBoundingClientRect().height)}`;
-      const wasPlace = window.__cbRail;
-      window.__cbRail = place;
-      if (wasPlace !== undefined) require(wasPlace === place, `a source pressed stays where it was: ${wasPlace} / ${place}`);
     }
     require(menu.getBoundingClientRect().bottom <= document.querySelector(".composer .cmp-model .mp-trigger").getBoundingClientRect().top + 1, "the card opens above the button, wherever the composer stands");
     const bottom = menu.getBoundingClientRect().bottom, was = window.__cbBottom;
     window.__cbBottom = bottom;
     if (was !== undefined) require(Math.abs(was - bottom) <= 1, "the card keeps standing on the composer when it turns");
-    require(!/跟隨|連接其他來源/.test(menu.textContent), "nothing about following a default or adding a source");
+    require(!/跟隨|連接其他來源/.test(menu.textContent), "nothing about following a default");
     return { check: name };
   }
   if (["member-maker", "member-maker-box", "member-maker-tab", "member-maker-chosen", "member-maker-taken"].includes(name)) {
@@ -8059,10 +8082,10 @@ export function checkRendered(name, context = {}) {
     require(!document.querySelector(".model-chooser"), "no separate dialog");
     require(box.bottom <= composer.top + 1 || box.top >= composer.bottom - 1 || box.bottom <= innerHeight, "the menu opens from the composer, inside the window");
     require(box.left >= 0 && box.right <= innerWidth && box.top >= 0, "the menu fits the window");
-    require(!visible(menu.querySelector(".cb-body")) && menu.querySelector(".cb-pick b")?.textContent.includes("GPT-6.1"), "choosing a model turned the card back to it");
+    require(!visible(menu.querySelector(".cb-body")) && menu.querySelector(".cb-pick-name span")?.textContent.includes("GPT-6.1"), "choosing a model turned the card back to it");
     const range = menu.querySelector(".cb-now .mc-range");
     require(range && menu.querySelectorAll(".mc-stop").length >= 2, "its depth of thought is a slider right there");
-    require([...menu.querySelectorAll(".mc-stop")].filter(visible).length === 1, "only the stop it is on is named");
+    require([...menu.querySelectorAll(".mc-stop")].filter(visible).length === 0 && menu.querySelector(".cb-now .cb-effort")?.textContent.trim(), "the stop it is on is the card's title, and no word stands under the slider");
     if (name === "composer-model-depth") {
       const last = [...menu.querySelectorAll(".mc-stop")].filter(stop => stop.dataset.effort).at(-1);
       require(Number(range.value) === range.dataset.levels.split(",").findLastIndex(Boolean), "the slider stands at the chosen stop");

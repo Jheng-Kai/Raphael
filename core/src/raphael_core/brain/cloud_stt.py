@@ -1,11 +1,12 @@
-"""Cloud speech-to-text: `stt.transcribe`, a stretch of speech sent to OpenRouter.
+"""Cloud speech-to-text: `stt.transcribe`, a stretch of speech sent to the selected model.
 
 The device side records and cuts the speech; when the settings say "cloud" it sends each stretch
 here as a WAV file in base64 and falls back to the engine on this computer when this refuses or
 fails. So this never falls back itself: it answers with the text, or raises an RpcError whose
 `data.kind` says why not (the device side logs that kind, once):
 
-- no_key (NOT_CONFIGURED): no OpenRouter key is stored
+- no_model (NOT_CONFIGURED): no speech model is selected
+- no_key (NOT_CONFIGURED): the selected source is disconnected
 - key_store (INTERNAL_ERROR): the key store failed
 - the kind of the OpenRouterError (INTERNAL_ERROR): network, timeout, server, auth, credits, ...
 
@@ -141,36 +142,47 @@ class CloudTranscriber:
         settings: SettingsStore,
         spend: SpendTracker,
         has_key: Callable[[], bool],
+        ui_language: Callable[[], str | None] = lambda: None,
     ) -> None:
         self._client = for_purpose(client, "stt")
         self._settings = settings
         self._spend = spend
         self._has_key = has_key
+        self._ui_language = ui_language
         self._slots = asyncio.Semaphore(2)
 
     async def transcribe(self, params: dict) -> dict[str, Any]:
         audio, seconds = _audio_seconds(params)
         hints = _hints(params)
         language = _language(params)
+        from ..agent.persona import DEFAULT_LANGUAGE, phrase
+        locale = params.get("ui_language") or self._ui_language() or DEFAULT_LANGUAGE
+        model = self._settings.get("stt_cloud_model")
+        if not model:
+            raise _refusal(NOT_CONFIGURED, "no_model", phrase(locale, "stt_no_model"))
         try:
             has_key = self._has_key()
         except Exception as exc:
             logger.warning(
-                "The key store failed to read the OpenRouter key: %s", type(exc).__name__
+                "Could not read speech model credentials: %s", type(exc).__name__
             )
             raise _refusal(
-                INTERNAL_ERROR, "key_store", "Could not read the OpenRouter key"
+                INTERNAL_ERROR, "key_store", phrase(locale, "stt_auth")
             ) from None
         if not has_key:
-            raise _refusal(NOT_CONFIGURED, "no_key", "No OpenRouter key is stored")
+            raise _refusal(NOT_CONFIGURED, "no_key", phrase(locale, "stt_auth"))
 
-        model = self._settings.get("stt_cloud_model")
         spoken = stt_languages(self._settings.get("languages"))
         candidates: list[str] = []
         if language is None:
             codes = (LANGUAGES[code] for code in spoken)
             candidates = [code for code in dict.fromkeys(codes) if code]
-        result = await self._hear(model, audio, hints, language, candidates, seconds)
+        try:
+            result = await self._hear(model, audio, hints, language, candidates, seconds)
+        except RpcError as error:
+            if error.data.get("kind") in ("auth", "auth_expired", "chatgpt_scope"):
+                raise RpcError(error.code, phrase(locale, "stt_auth"), error.data) from None
+            raise
         if language is None and _foreign(result.text, spoken):
             # Automatic detection heard a language the user does not speak (seen: Thai for a
             # Chinese speaker). The same speech is heard once more as the first of their languages;

@@ -565,9 +565,27 @@ export function chooserSources(o: ModelPickerLook): ChooserSource[] {
       sources.push({ id, name, kind, group, models: models.filter((m) => connectionId(m) === id) });
     }
   }
+  // The provider of the model chosen now is listed even when it is turned off, so the choice is never without its provider.
+  const ref = baseRef(o.current), held = ref ? connectionOfRef(ref) : "";
+  if (held && o.providers !== undefined && !held.startsWith("cli:") && !sources.some((source) => source.id === held)) {
+    const provider = o.providers?.find((p) => p.id === held);
+    sources.push({ id: held, name: provider?.name ?? (held === "openrouter" ? "OpenRouter" : held === "chatgpt" ? "ChatGPT" : held),
+      kind: provider?.kind ?? (held === "chatgpt" ? "openai" : held), group: provider && isLocal(provider.kind) ? "local" : "api", models: [] });
+  }
   if (o.local) sources.push({ id: "local-speech", name: t("chooser.localSpeech"), kind: "", group: "local", models: [] });
-  return sources;
+  // Only what is connected, and the source of the model chosen now so it is never hidden: no service is offered by default,
+  // and the others are connected from 新增供應商 (R-DEFAULT-05).
+  return sources.filter((source) => source.id === "local-speech" || connectedTo(o, source.id) || holdsCurrent(o, source));
 }
+
+/** Whether the model chosen now runs through `source`, whether or not its models can be listed (a signed-out CLI's are not). */
+export const holdsCurrent = (o: ModelPickerLook, source: ChooserSource): boolean => {
+  const ref = baseRef(o.current);
+  return !!ref && (connectionOfRef(ref) === source.id || source.models.some((model) => model.id === concreteCurrent(o, source.models)));
+};
+
+/** Whether the source can answer now, as far as the picker was told. */
+export const sourceConnected = (o: ModelPickerLook, source: ChooserSource): boolean => source.id === "local-speech" || connectedTo(o, source.id);
 
 /** A fallback is allowed only for an exact maker and model identifier, never a similar name. */
 export function chooserPrice(model: CatalogModel, models: readonly CatalogModel[], role: PickerRole): string {
@@ -622,10 +640,30 @@ const unconnectedChoice = (o: ModelPickerLook): boolean => {
 };
 
 /** The same model name and connection source for picker buttons and read-only cards. */
-export function modelPickerSelection(o: ModelPickerLook): { name: string; source: string; provider: string; model?: CatalogModel } {
+export function modelPickerSelection(o: ModelPickerLook): { name: string; source: string; provider: string; model?: CatalogModel; off?: boolean } {
+  const chosen = choiceOf(o);
+  // A choice whose source is turned off or signed out stays shown, and says so instead of looking as if it still worked
+  // (or as if its model were gone, when a signed-out plan's models cannot be listed).
+  const ref = baseRef(o.current);
+  if (!ref || o.local?.active || unconnectedChoice(o)) return chosen;
+  const connection = connectionOfRef(chosen.model?.id ?? ref);
+  const told = connection === "chatgpt" ? o.chatgpt !== undefined : connection.startsWith("cli:") ? o.clis !== undefined : o.providers !== undefined;
+  if (!told || connectedTo(o, connection)) return chosen;
+  return { ...chosen, source: t("chooser.off", { p0: connectionLabel(o, connection) }), off: true };
+}
+
+/** The name a connection is known by: the provider's, ChatGPT, or the subscription program's. */
+function connectionLabel(o: ModelPickerLook, id: string): string {
+  if (id === "chatgpt") return "ChatGPT";
+  if (id.startsWith("cli:")) return CLIS.find((cli) => `cli:${cli.id}` === id)?.name ?? id.slice(4);
+  return o.providers?.find((provider) => provider.id === id)?.name ?? (id === "openrouter" ? "OpenRouter" : id);
+}
+
+function choiceOf(o: ModelPickerLook): { name: string; source: string; provider: string; model?: CatalogModel } {
+  if (!baseRef(o.current) && !o.lead && !o.local?.active) return { name: t("media.unset"), source: "", provider: "" };
   if (unconnectedChoice(o)) return { name: t("media.unset"), source: "", provider: "" };
   // Public cached names remain useful after logout; only pickerModels can supply runnable rows.
-  const models = [...pickerModels(o).filter((m) => !m.id.startsWith("cli:")), ...cliModels(o.clis ?? [], false)];
+  const models = [...(o.catalog ? modelsFor(o.catalog, o.role).filter((m) => !m.id.startsWith("cli:")).map(localName) : []), ...cliModels(o.clis ?? [], false)];
   const inherited = baseRef(o.current) === o.lead?.id && o.inheritFrom;
   const ref = concreteCurrent(inherited ? { ...o, current: inherited } : o, models), model = models.find((m) => m.id === ref);
   const local = o.local?.active ? faceTitle(o.local) : null;
@@ -642,8 +680,8 @@ export function modelPickerSelection(o: ModelPickerLook): { name: string; source
 }
 
 function buttonFace(o: ModelPickerLook): { inner: string; label: string } {
-  const { name, source, model } = modelPickerSelection(o);
-  return { inner: `${model ? modelMark(model) : ""}<span class="mp-ttext"><strong class="mp-tname">${esc(name)}</strong><span class="mp-source">${esc(source)}</span></span>${ico("down")}`,
+  const { name, source, model, off } = modelPickerSelection(o);
+  return { inner: `${model ? modelMark(model) : ""}<span class="mp-ttext"><strong class="mp-tname">${esc(name)}</strong><span class="mp-source${off ? " is-off" : ""}">${esc(source)}</span></span>${ico("down")}`,
     label: `${o.label}: ${name}${source ? ` · ${source}` : ""}` };
 }
 

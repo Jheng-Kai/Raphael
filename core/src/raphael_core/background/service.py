@@ -898,7 +898,7 @@ class BackgroundService:
     def capabilities_for(self, speaker: Speaker) -> dict:
         """Describe the same tool catalog a worker receives, without preparing or calling providers."""
         from ..agent.cli.discovery import brain_ref
-        model = speaker.model or self._settings.get("agent_model") or DEFAULTS["agent_model"]
+        model = speaker.model or self._settings.get("agent_model")
         cli = brain_ref(model)
         snapshot = take_snapshot(self._gate.plugins, speaker=speaker, memory=self._memory_of(speaker.id) is not None,
             team=team_tools_for(self._team, speaker, always=True), turned_off=self._tools.turned_off(),
@@ -1103,7 +1103,7 @@ class BackgroundService:
             # The conversation turn waits for what it handed on as a task, to come back with it and go on. Live, a chief
             # that handed out work in a chat was never told how it went, and the rest of the job stayed undone.
             parent = self._store.asker(source, language=language, model=getattr(self._speaker(source.member_id), 'model', None)
-                                       or self._settings.get('agent_model') or DEFAULTS['agent_model'])
+                                       or self._settings.get('agent_model'))
         # Bound durable task chains independently from conversational @ reply hops.
         ancestor = parent
         depth = 0
@@ -1122,7 +1122,7 @@ class BackgroundService:
         if parent is not None and self._metrics_conn.execute('SELECT COUNT(*) FROM worker_tasks WHERE parent_task_id=?',
                                                              (parent.id,)).fetchone()[0] >= MAX_HANDOFFS:
             return refused('handoff_depth_limit')
-        model = getattr(target, 'model', None) or self._settings.get('agent_model') or DEFAULTS['agent_model']
+        model = getattr(target, 'model', None) or self._settings.get('agent_model')
         try:
             task_id, duplicate = self._store.accept_handoff(source=source,parent=parent,assignee=member,
                 model=model,request=request.strip(),stage=stage.strip(),mode=mode,done_when=done_when.strip(),language=language,
@@ -1840,8 +1840,12 @@ class BackgroundService:
         # What the spend calls this work (brain/meter.py): speaking in a group, a hand-off's work, a consultation.
         ledger.job = "room" if task.scope == "room" else task.mode if task.mode in ("work", "consult") else "task"
         ledger.member_id = task.member_id
-        selected_model = self._models.pop(task.id, task.model_ref or self._settings.get("agent_model") or DEFAULTS["agent_model"])
+        selected_model = self._models.pop(task.id, task.model_ref or self._settings.get("agent_model"))
         selected_model = speaker.model or selected_model
+        if not selected_model:
+            self._conclude(task, None, "failed", PREFIXES[language].negative,
+                           phrase(language, "no_model"), None, "no_model")
+            return
         if task.routine_id is not None and self._sign_in_gate(task, selected_model):
             return
         recovered = json.loads(task.continuation) if task.continuation else None

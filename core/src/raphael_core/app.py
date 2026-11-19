@@ -850,7 +850,9 @@ class App(Router):
                 transport=offline_transport() if fake_llm else None,
             )
             self.client = ProviderRouter(self.providers, self.client)
-            self.brain = Brain(self._conn, self.client, self.keys, providers=self.providers)
+            from .agent.owner_language import configured_language
+            self.brain = Brain(self._conn, self.client, self.keys, providers=self.providers,
+                               ui_language=lambda: configured_language(data_dir))
         except BaseException:
             self._conn.close()
             raise
@@ -1001,7 +1003,6 @@ class App(Router):
         # The summary of a room thread is written by the memory's own choice of model (members/room_summary.py).
         self.rooms.summaries.summarize = self.memory.summarize_room
         self.memory.member_exists = self.members.member_exists
-        from .agent.owner_language import configured_language
         self.agent = AgentService(
             self._conn,
             self.client,
@@ -1038,6 +1039,7 @@ class App(Router):
         # fake brain: a test's run must not reach the records of whoever runs it.
         from .agent.cli.records import CliRecords
         brains = self.agent._cli_brains
+        self.providers.cli_brains = brains
         self.cli_records = None if fake_llm else CliRecords(self._conn, brains.home, data_dir, claude_folder=brains._claude_folder())
         def computer_scope_busy(scope):
             if scope[0] == "task":

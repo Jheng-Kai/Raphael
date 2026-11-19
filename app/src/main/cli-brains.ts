@@ -55,7 +55,7 @@ export function cliModels(clis: readonly CliBrain[], availableOnly = true): Cata
     }));
   });
 }
-function chatgptCardHTML(v: CliBrainsView): string {
+function chatgptCardHTML(v: CliBrainsView, k = ""): string {
   const account = v.chatgpt;
   const signing = !!account?.signing_in;
   const signedIn = !!account?.signed_in && !signing;
@@ -63,23 +63,32 @@ function chatgptCardHTML(v: CliBrainsView): string {
     signing ? t("brains.chatgptSigning") : !signedIn ? t("brains.signedOut") :
     account?.plan_scope_granted === false ? t("brains.chatgptNoPlan") : [t("brains.usingPlan"), account?.email].filter(Boolean).join(" · ");
   const action = v.state !== "ready" ? "" : signing ?
-    btn(esc(t("common.cancel")), "", ' data-chatgpt="cancel" data-k="chatgpt:cancel"') : signedIn && account?.plan_scope_granted !== false ?
-    iconButton("more", t("members.more", { p0: "ChatGPT" }), ' data-chatgpt-menu data-k="chatgpt-menu" aria-haspopup="menu" aria-expanded="false"') :
-    btn(esc(t("brains.chatgptSignIn")), "", ' data-chatgpt="sign-in" data-k="chatgpt:sign-in"');
+    btn(esc(t("common.cancel")), "", ` data-chatgpt="cancel" data-k="${k}chatgpt:cancel"`) : signedIn && account?.plan_scope_granted !== false ?
+    iconButton("more", t("members.more", { p0: "ChatGPT" }), ` data-chatgpt-menu data-k="${k}chatgpt-menu" aria-haspopup="menu" aria-expanded="false"`) :
+    btn(esc(t("brains.chatgptSignIn")), "", ` data-chatgpt="sign-in" data-k="${k}chatgpt:sign-in"`);
   return `<div class="pv-card cli-card" data-chatgpt-card><span class="ic">${providerMark("openai")}</span><span class="tx"><span class="nm">ChatGPT</span><span class="ds">${esc(status)}</span></span>${action}</div>`;
 }
 export function cliBrainsHTML(v: CliBrainsView): string {
-  return `<section class="sgroup cli-accounts"><h2>${esc(t("brains.accounts"))}</h2><div class="pv-grid">` + chatgptCardHTML(v) + CLIS.map((known) => {
+  return `<section class="sgroup cli-accounts"><h2>${esc(t("brains.accounts"))}</h2><div class="pv-grid">` + cliCardsHTML(v) + `</div>${v.error ? `<p class="note" role="alert">${esc(t("missing.cli"))}</p>` : ""}${v.chatgptError ? `<p class="note" role="alert">${esc(v.chatgptError)}</p>` : ""}</section>`;
+}
+
+/** The subscriptions at the head of the providers to connect: the same cards, with keys of their own (`k`). */
+export function cliDirectoryHTML(v: CliBrainsView): string {
+  return `<section class="sgroup"><h3>${esc(t("brains.accounts"))}</h3><p class="note pv-group-note">${esc(t("providers.subscriptionsNote"))}</p><div class="pv-grid">` + cliCardsHTML(v, "dir:") + `</div></section>`;
+}
+
+function cliCardsHTML(v: CliBrainsView, k = ""): string {
+  return chatgptCardHTML(v, k) + CLIS.map((known) => {
     const cli = v.clis.find((c) => c.id === known.id);
     const status = v.state !== "ready" ? t(v.state === "loading" ? "common.loading" : "missing.cli") :
       t(cli?.disconnected ? "brains.disconnected" : !cli?.installed ? "brains.missing" : cli.available ? "brains.ready" : "brains.signedOut");
     const version = cli?.available ? cli.version?.match(/\d+(?:\.\d+)+(?:[-+][\w.-]+)?/)?.[0] : null;
     const label = t(cli?.installed ? "brains.connect" : "brains.install");
     const action = v.state !== "ready" ? "" : cli?.available ?
-      iconButton("more", t("members.more", { p0: known.name }), ` data-cli-menu="${known.id}" data-k="cli-menu:${known.id}" aria-haspopup="menu" aria-expanded="false"${v.busy ? " disabled" : ""}`) :
-      btn(esc(label), "", ` data-cli="${known.id}" data-k="cli:${known.id}" aria-label="${esc(label + " " + known.name)}"${v.busy ? " disabled" : ""}`);
+      iconButton("more", t("members.more", { p0: known.name }), ` data-cli-menu="${known.id}" data-k="${k}cli-menu:${known.id}" aria-haspopup="menu" aria-expanded="false"${v.busy ? " disabled" : ""}`) :
+      btn(esc(label), "", ` data-cli="${known.id}" data-k="${k}cli:${known.id}" aria-label="${esc(label + " " + known.name)}"${v.busy ? " disabled" : ""}`);
     return `<div class="pv-card cli-card"><span class="ic">${providerMark(known.mark)}</span><span class="tx"><span class="nm">${esc(known.name)}</span><span class="ds">${esc(status)}${version ? ` · v${esc(version)}` : ""}</span></span>${action}</div>`;
-  }).join("") + `</div>${v.error ? `<p class="note" role="alert">${esc(t("missing.cli"))}</p>` : ""}${v.chatgptError ? `<p class="note" role="alert">${esc(v.chatgptError)}</p>` : ""}</section>`;
+  }).join("");
 }
 
 export function createCliBrains(host: { visible(): boolean; redraw(): void }) {

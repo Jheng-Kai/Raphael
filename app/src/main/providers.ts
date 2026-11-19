@@ -44,6 +44,7 @@ const FIELD_CHOICES = {
 };
 const choicesFor = (field: "region" | "location") => FIELD_CHOICES[field].map((value) => ({ value, label: value }));
 const GROUP_TITLES = { official: () => t("providers.official"), gateway: () => t("providers.gateway"), local: () => t("providers.local") };
+const GROUP_NOTES = { official: () => t("providers.officialNote"), gateway: () => t("providers.gatewayNote"), local: () => t("providers.localNote") };
 const POPULAR = ["openrouter", "litellm", "portkey", "vercel"];
 const allowsMultiple = (kind: ProviderKind): boolean => kind.group === "local" || ["openai_compatible", "litellm", "bifrost"].includes(kind.kind);
 /** What a provider is, in one line: its official API, a model gateway, a cloud host or a server on this computer. */
@@ -54,7 +55,7 @@ export function description(kind: ProviderKind): string {
   return t(POPULAR.includes(kind.kind) || kind.kind === "bifrost" ? "providers.modelGateway" : "providers.cloudInference");
 }
 
-function directoryHTML(v: ProvidersView): string {
+function directoryHTML(v: ProvidersView, lead = ""): string {
   let count = 0;
   const groups = (["official", "gateway", "local"] as const).map((group) => {
     const kinds = v.kinds.filter((k) => k.group === group && k.name.toLowerCase().includes((v.kindQuery ?? "").trim().toLowerCase()));
@@ -63,7 +64,7 @@ function directoryHTML(v: ProvidersView): string {
       return rank(a.kind) - rank(b.kind) || a.name.localeCompare(b.name, "en");
     });
     count += kinds.length;
-    return kinds.length ? `<section class="sgroup"><h3>${esc(GROUP_TITLES[group]())}</h3><div class="pv-grid">` + kinds.map((k) => {
+    return kinds.length ? `<section class="sgroup"><h3>${esc(GROUP_TITLES[group]())}</h3><p class="note pv-group-note">${esc(GROUP_NOTES[group]())}</p><div class="pv-grid">` + kinds.map((k) => {
       const note = k.available ? description(k) : t("providers.soon");
       const connected = v.providers.some((p) => p.kind === k.kind);
       const action = t(connected ? "providers.manage" : "providers.connect");
@@ -74,7 +75,7 @@ function directoryHTML(v: ProvidersView): string {
   return `<div class="cs-scrim" data-pv="scrim" data-dialog="provider:add"><div class="cs-dialog pv-dialog pv-catalog" id="pv-dialog" role="dialog" aria-modal="true" aria-labelledby="pv-title" tabindex="-1" data-trap>` +
     `<div class="cs-dlg-head"><h2 id="pv-title">${esc(t("providers.add"))}</h2><span class="sp"></span>${iconButton("x", t("providers.close"), ' data-pv="close" data-k="pv-close" data-nav-back')}</div>` +
     `<p class="note">${esc(t("providers.choose"))}</p>${fieldHTML(t("providers.searchKinds"), v.kindQuery ?? "", { id: "pv-kind-search", icon: "search" })}` +
-    `<div class="pv-directory">${groups || `<p class="note" role="status">${esc(t("providers.noMatches"))}</p>`}</div><p class="pv-results note" role="status">${esc(t("providers.results", { p0: count }))}</p></div></div>`;
+    `<div class="pv-directory">${(v.kindQuery ?? "").trim() ? "" : lead}${groups || `<p class="note" role="status">${esc(t("providers.noMatches"))}</p>`}</div><p class="pv-results note" role="status">${esc(t("providers.results", { p0: count }))}</p></div></div>`;
 }
 const errorText = (error: ProvidersView["error"]): string => t(error === "account" ? "providers.invalidAccount" : error === "required" ? "providers.required" : "providers.error");
 function validAccount(value: string): boolean {
@@ -85,9 +86,9 @@ function validAccount(value: string): boolean {
   } catch { return false; }
 }
 
-function dialogHTML(v: ProvidersView): string {
+function dialogHTML(v: ProvidersView, lead = ""): string {
   const kind = kindOf(v);
-  if (!v.open) return v.adding ? directoryHTML(v) : "";
+  if (!v.open) return v.adding ? directoryHTML(v, lead) : "";
   if (!kind) return "";
   const provider = providerOf(v);
   const disabled = v.busy ? " disabled" : "";
@@ -159,8 +160,9 @@ export function providersHTML(v: ProvidersView): string {
     `</section>`;
 }
 
-export function providersAddHTML(v: ProvidersView): string {
-  return dialogHTML(v);
+/** `lead`: what comes before the providers in the directory, the subscription sign-ins (cli-brains.ts cliDirectoryHTML). */
+export function providersAddHTML(v: ProvidersView, lead = ""): string {
+  return dialogHTML(v, lead);
 }
 
 export interface ProvidersHost { root: HTMLElement; visible(): boolean; redraw(): void; }

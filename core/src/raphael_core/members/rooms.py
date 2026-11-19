@@ -16,7 +16,7 @@ from ..agent.tools import without_internal_ids
 from ..agent.speaker import MAX_DEPTH, RAPHAEL_NAMES
 from ..background.handback import internal_ids, title
 from ..background.tasks import Refused
-from ..brain.settings import SettingsStore, DEFAULTS
+from ..brain.settings import SettingsStore
 from ..clock import wall_clock_ms
 from ..conversation_language import chat_language
 from ..failures import Failure
@@ -928,7 +928,7 @@ class RoomsService:
         roles = room.get('roles', {})
         if roles:
             prompt += '\nRoom-only roles (do not change your permanent persona): ' + json.dumps(roles)
-        model = speaker.model or self._settings.get("agent_model") or DEFAULTS["agent_model"]
+        model = speaker.model or self._settings.get("agent_model")
         # What stays the same from one reply to the next is a section a CLI member's session is sent again only when it
         # changed; an API brain reads it all in the prompt as before.
         # The snapshot names Raphael in the language the owner writes in here, never the interface's.

@@ -21,7 +21,8 @@ from ..catalog import CatalogEntry, ModelPrice
 from ..model_ref import split_api_ref
 from ..openrouter import OpenRouterError
 from ..secrets import KeyStore
-from ..settings import DEFAULTS, SettingsStore, api_model
+from .. import first_models
+from ..settings import SettingsStore, api_model
 from .base import ModelProvider
 from .presets import BY_KIND, KINDS, OPTIONAL_KEY_KINDS
 from .clients import AnthropicProvider, CompatibleProvider, is_transcription, model_info, validate_base_url
@@ -33,7 +34,6 @@ from .chatgpt_auth import ChatGPTAuth
 
 CONFIG_KEY = "providers.config.v1"
 MODELS_KEY = "providers.models.v1"
-SUCCESSES_KEY = "providers.successful_models.v1"
 logger = logging.getLogger(__name__)
 
 
@@ -67,22 +67,16 @@ class ProviderRegistry:
         self._notify = lambda method, params: None
         self._configs = self._load(CONFIG_KEY, {})
         self._models = self._load(MODELS_KEY, {})
-        self._successful_models = self._load(SUCCESSES_KEY, {})
+        self._awaiting_models = set()
         self.settings = SettingsStore(conn)
         self.chatgpt = ChatGPTProvider(ChatGPTAuth(conn, self._credential, http=self._http))
         self.image_subscriptions = None
-
-    def record_success(self, reference):
-        """Remember only models that actually answered, never model-list discoveries."""
-        pid, model = self.resolve(reference)
-        models = self._successful_models.get(pid, [])
-        models = models if isinstance(models, list) else []
-        if model in models:
-            return
-        self._successful_models[pid] = [*models[-19:], model]
-        with self._conn:
-            self._conn.execute("INSERT INTO settings(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-                               (SUCCESSES_KEY, json.dumps(self._successful_models)))
+        self.cli_brains = None
+        self.chatgpt.auth.on_connected = self.fill_connected
+        try:
+            first_models.migrate(conn, self.config("openrouter")["enabled"], keys)
+        except Exception as exc:
+            logger.warning("Model choices migration deferred: %s", type(exc).__name__)
 
     def _load(self, key, default):
         row = self._conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
@@ -333,6 +327,28 @@ class ProviderRegistry:
             await client.aclose()
         self._status.pop(pid, None)
         self._notify("providers.changed", {})
+        if pid not in previous or changed_secret or (not previous[pid]["enabled"] and config["enabled"]):
+            await self.fill_connected(pid)
+
+    async def fill_connected(self, pid):
+        if not self.available(f"@{pid}:catalog") or all(self.settings.get(k) for k in first_models.SETTINGS.values()):
+            return
+        self._awaiting_models.add(pid)
+        try:
+            await self.discover(pid)
+        except Exception as exc:
+            logger.info("Connected source catalogue unavailable: %s", type(exc).__name__)
+
+    def _fill_from_catalog(self, pid, rows):
+        if pid not in self._awaiting_models or not self.available(f"@{pid}:catalog"):
+            return
+        choices = first_models.recommendations(rows)
+        if not choices:
+            return
+        if pid != "openrouter":
+            choices = {role: f"@{pid}:{model}" for role, model in choices.items()}
+        self.settings.fill_models(self.config(pid)["name"], choices, self._notify)
+        self._awaiting_models.discard(pid)
 
     async def remove(self, params):
         pid = _text(params["id"])
@@ -356,6 +372,7 @@ class ProviderRegistry:
         if client:
             await client.aclose()
         self._status.pop(pid, None)
+        self._awaiting_models.discard(pid)
         self._notify("providers.changed", {})
         return {"removed": True}
 
@@ -365,10 +382,18 @@ class ProviderRegistry:
         if self._revisions.get(pid, 0) != revision:
             raise OpenRouterError(0, "error", "Provider changed during discovery")
         if pid == "openrouter":
-            rows = [model_info(row, kind="openrouter") for row in rows]
+            from ..catalog import parse_catalog, refusal, ROLE_OF_SETTING
+            entries = {entry.id: entry for entry in parse_catalog(rows)}
+            metadata = [model_info(row, kind="openrouter") for row in rows]
+            for row in metadata:
+                entry = entries.get(row["id"])
+                row["stt"] = entry is not None and entry.kind == "stt"
+                row["text_eligible"] = entry is not None and refusal(entry, ROLE_OF_SETTING["cleanup_model"]) is None
+            rows = metadata
         self._models[pid] = rows
         self._status[pid] = "ok"
         self._save()
+        self._fill_from_catalog(pid, rows)
         return rows
 
     async def test(self, params):
@@ -503,18 +528,22 @@ class ProviderRouter:
     def model_for(self, reference):
         if self.purpose in ("router", "memory", "pdf"):
             reference = self.registry.settings.get(self.purpose + "_model") or reference
+        if self.purpose == "cleanup":
+            return reference
         return api_model(self.registry.settings, reference) if reference.startswith("cli:") else reference
 
     def available(self, model):
-        if self.model_for(model).startswith("@chatgpt:"):
+        if self.purpose == "cleanup" and model.startswith("cli:"):
+            from ...agent.cli.discovery import brain_ref
+            found = brain_ref(model)
+            return bool(found and self.registry.cli_brains and self.registry.cli_brains.available(found[0]))
+        if not model:
+            return False
+        if self.purpose != "cleanup" and self.model_for(model).startswith("@chatgpt:"):
             # The provider reports missing sign-in/scope locally with the selected model's
             # classified failure, rather than the legacy OpenRouter missing-key message.
             return True
         references = [self.model_for(model), *self.owner_fallbacks()]
-        if self.purpose == "cleanup":
-            fallback = self.cleanup_fallback(model)
-            if fallback:
-                references.append(fallback)
         unreadable = False
         for reference in references:
             try:
@@ -541,47 +570,17 @@ class ProviderRouter:
         """The services a model reference may name for API work: all but those on this computer."""
         return {pid for pid in self.registry.ids() if BY_KIND.get(self.registry.config(pid)["kind"], {}).get("group") != "local"}
 
-    def cleanup_fallback(self, primary):
-        """The mandatory cleanup retry follows the owner's provider preference order."""
-        candidates = [DEFAULTS["cleanup_model"], api_model(self.registry.settings, self.registry.settings.get("agent_model"), api_providers=self.api_providers()),
-                      *self.registry.settings.get("cleanup_fallbacks")]
-        for pid in self.registry.ids():
-            models = self.registry._successful_models.get(pid, [])
-            if isinstance(models, list):
-                candidates.extend(model if pid == "openrouter" else f"@{pid}:{model}"
-                                  for model in models if isinstance(model, str))
-        # Prefer a different working model; retry the primary only when it is the
-        # sole configured option (transient failures can still recover on retry).
-        candidates = [ref for ref in candidates if ref != primary] + [primary]
-        for reference in dict.fromkeys(candidates):
-            try:
-                if self.registry.available(reference):
-                    return reference
-            except Exception:
-                continue  # An unreadable credential must not hide a usable alternative.
-        return None
-
-    async def complete_json_once(self, **kwargs):
-        """Cleanup owns its two-attempt deadline; do not nest the generic fallback chain."""
-        return await self._attempt("complete_json", kwargs)
-
     def owner_fallbacks(self):
         # Conversation fallback controls were removed. Hidden legacy settings do not
         # authorize switching the owner's chosen conversation or routing model.
-        if self.purpose in ("agent", "router"):
+        if self.purpose in ("agent", "router", "cleanup"):
             return []
         return self.registry.configured_fallbacks(self.purpose) or []
 
     async def _call(self, method, kwargs):
         reference = self.model_for(kwargs["model"])
-        configured = self.registry.configured_fallbacks(self.purpose)
         explicit = self.owner_fallbacks()
-        # Only dictation cleanup retains its documented legacy retry behavior.
-        implicit = [ref for ref in kwargs.get("fallbacks", []) if not ref.startswith("@")]
-        fallbacks = explicit
-        if self.purpose == "cleanup" and configured is None and not reference.startswith("@"):
-            fallbacks = implicit
-        chain = list(dict.fromkeys([reference, *fallbacks]))
+        chain = list(dict.fromkeys([reference, *explicit]))
         if reference.startswith("@chatgpt:"):
             chain = [reference]
         # Each selected model receives the complete caller budget, never a fraction
@@ -615,6 +614,8 @@ class ProviderRouter:
 
     async def _attempt(self, method, kwargs):
         reference = kwargs["model"]
+        if not reference:
+            raise OpenRouterError(0, "no_model", "No model selected for " + self.purpose)
         try:
             reference, effort = split_api_ref(reference)
             pid, model = self.registry.resolve(reference)
@@ -638,14 +639,17 @@ class ProviderRouter:
         self.registry.record_result(pid)
         if pid != "openrouter":
             result = replace(result, model=f"@{pid}:{result.model}")
-        if method != "transcribe":
-            try:
-                self.registry.record_success(reference)
-            except Exception as error:
-                logger.warning("Could not remember successful model: %s", type(error).__name__)
         return result
 
     async def complete_json(self, **kwargs):
+        if self.purpose == "cleanup" and kwargs["model"].startswith("cli:"):
+            from ...agent.ledger import Ledger
+            from ...memory.brain import subscription_json
+            from ..spend import SpendTracker
+            if not self.available(kwargs["model"]):
+                raise OpenRouterError(0, "auth", "Text cleanup model unavailable")
+            return await subscription_json(self.registry.cli_brains, 0, "cleanup-" + uuid.uuid4().hex,
+                                           Ledger(SpendTracker(self.registry._conn), "cleanup"), **kwargs)
         return await self._call("complete_json", kwargs)
 
     async def chat_text(self, **kwargs):

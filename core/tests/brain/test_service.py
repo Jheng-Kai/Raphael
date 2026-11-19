@@ -317,6 +317,7 @@ def clock():
 @pytest.fixture
 async def make_brain(conn, fake_client, keys, clock):
     """`make_brain(**overrides)` is a Brain on the fakes and the database above."""
+    SettingsStore(conn).set("cleanup_model", "openai/gpt-6-luna")
     brains = []
 
     def make(**overrides):
@@ -1183,7 +1184,8 @@ async def test_retyping_the_same_word_is_no_correction(router, conn):
 # --- settings -----------------------------------------------------------------------------------
 
 
-async def test_settings_get_and_set_round_trip(router):
+async def test_settings_get_and_set_round_trip(conn, fake_client, keys):
+    router = routed(Brain(conn, fake_client, keys))
     assert await router.call("settings.get", {}) == {"settings": DEFAULTS}
     after = await router.call("settings.set", {"key": "languages", "value": ["ja-JP", "en-GB"]})
     expected = {**DEFAULTS, "languages": ["ja-JP", "en-GB"]}
@@ -1194,7 +1196,8 @@ async def test_settings_get_and_set_round_trip(router):
     assert limit["settings"]["monthly_limit_usd"] == 5.0
 
 
-async def test_a_rejected_setting_changes_nothing(router):
+async def test_a_rejected_setting_changes_nothing(conn, fake_client, keys):
+    router = routed(Brain(conn, fake_client, keys))
     with pytest.raises(RpcError):
         await router.call("settings.set", {"key": "monthly_limit_usd", "value": "lots"})
     assert (await router.call("settings.get", {}))["settings"] == DEFAULTS
@@ -1210,7 +1213,7 @@ async def test_an_invalid_selection_of_languages_is_invalid_params(router, value
 
 async def test_the_assistants_settings_are_in_settings_get_and_can_be_set(router):
     settings = (await router.call("settings.get", {}))["settings"]
-    assert (settings["agent_model"], settings["agent_city"]) == ("openai/gpt-6-luna", "")
+    assert (settings["agent_model"], settings["agent_city"]) == ("", "")
     assert "agent_router" not in settings  # Jev always routes: there is no choice to show
     # Before OpenRouter's list of models has been read, the model is one of Raphael's own
     # (test_model_choice.py has the rest).
@@ -1478,10 +1481,11 @@ async def test_a_client_that_breaks_is_an_internal_error_without_its_message(
 
 
 async def test_dictation_survives_a_failing_key_store(conn, fake_client, caplog):
+    SettingsStore(conn).set("cleanup_model", "chosen")
     caplog.set_level(logging.DEBUG)
     router = routed(Brain(conn, fake_client, BrokenKeyStore(), now_ms=Clock()))
     r = await finalize(router, "你好")
-    assert (r["text"], r["cleaned"], r["fallback_reason"]) == ("你好", False, "error:unexpected")
+    assert (r["text"], r["cleaned"], r["fallback_reason"]) == ("你好", False, "no_key")
     assert fake_client.calls == []
     assert SECRET not in caplog.text
     assert_no_traceback_logged(caplog)
@@ -1760,6 +1764,7 @@ async def real_router(conn, keys, clock):
     opened = []
 
     def make(handler):
+        SettingsStore(conn).set("cleanup_model", "openai/gpt-6-luna")
         http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
         brain = Brain(conn, OpenRouterClient(keys.get, http=http), keys, now_ms=clock)
         opened.append((brain, http))
@@ -2036,7 +2041,7 @@ async def test_tidy_runs_the_dictation_cleanup_with_its_model_dictionary_tone_an
     assert result["text"] == "Ask Raphael about it, please."
     assert result["fallback_reason"] is None
     (call,) = fake_client.calls
-    assert call["model"] == DEFAULTS["cleanup_model"], "the cleanup's model, not another"
+    assert call["model"] == "openai/gpt-6-luna", "the cleanup's model, not another"
     assert "WINWORD.EXE (email or document)" in call["system"], "the target app sets the tone"
     assert "- Raphael" in call["system"], "the dictionary reaches the model"
     assert "American spelling" in call["system"], "the languages reach the model"
@@ -2187,3 +2192,35 @@ async def test_one_piece_that_fails_makes_the_whole_selection_a_failure(router, 
     result = await tidy(router, text)
     assert result["cleaned"] is False
     assert "text" not in result, "a text that is only partly tidied is never pasted"
+
+
+async def test_missing_cleanup_recovers_text_and_notifies_at_most_once_per_minute(router, fake_client, conn, monkeypatch):
+    now = [100.0]
+    notices = []
+    router.set_notifier(lambda method, params: notices.append((method, params)))
+    monkeypatch.setattr(service, "time", type("Clock", (), {"monotonic": lambda: now[0]}))
+    settings = SettingsStore(conn)
+    settings.set("cleanup_model", "")
+    for elapsed, count in [(0, 1), (59.9, 1), (60, 2)]:
+        now[0] = 100 + elapsed
+        reply = await finalize(router, raw_text="Keep these words", ui_language="zh-TW")
+        assert reply["text"] == "Keep these words"
+        assert reply["fallback_reason"] == "no_model"
+        assert reply["cleanup_failure"] == {"kind": "no_model", "message": "整理文字還沒選模型，這次先貼上原文。"}
+        assert notices.count(("models.missing", {"role": "cleanup"})) == count
+    assert fake_client.calls == []
+
+
+async def test_a_removed_cleanup_model_returns_the_transcript_and_one_model_notice(router, fake_client, keys, conn):
+    keys.set(KEY)
+    settings = SettingsStore(conn)
+    settings.set("cleanup_model", "chosen/removed")
+    notices = []
+    router.set_notifier(lambda method, params: notices.append((method, params)))
+    fake_client.next_error = OpenRouterError(404, "error", "Model not found")
+    reply = await finalize(router, "Keep these words", ui_language="zh-TW")
+    assert reply["text"] == "Keep these words"
+    assert reply["cleanup_failure"] == {"kind": "error:missing", "message": "整理文字用的模型目前連不上，換一個模型就好。"}
+    assert settings.get("cleanup_model") == "chosen/removed"
+    assert [call["model"] for call in fake_client.calls] == ["chosen/removed"]
+    assert notices.count(("models.missing", {"role": "cleanup"})) == 1

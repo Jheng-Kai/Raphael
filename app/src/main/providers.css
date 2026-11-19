@@ -32,6 +32,8 @@
 .pv-directory { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-6); }
 .pv-directory .sgroup { margin: 0; }
 .pv-directory h3 { margin: 0 0 var(--sp-3); font-size: var(--fs-md); }
+/* What a kind of provider means and costs, right under its name and above its cards. */
+.pv-directory .pv-group-note { margin: calc(var(--sp-2) * -1) 0 var(--sp-3); color: var(--text-2); }
 .pv-results { margin: 0; }
 .pv-dialog { width: min(480px, 100%); }
 .pv-catalog { width: min(940px, 100%); gap: var(--sp-4); container: providers / inline-size; }

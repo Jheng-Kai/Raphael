@@ -121,7 +121,7 @@ async def test_without_the_list_the_answer_is_the_models_raphael_calls(router, c
     view = await router.call("models.catalog", {})
     assert (view["source"], view["fetched_at_ms"], view["replaced"]) == ("builtin", None, [])
     assert [m["id"] for m in view["llm"]] == DEFAULT_LANGUAGE_MODELS
-    assert [m["id"] for m in view["stt"]] == [DEFAULTS["stt_cloud_model"]]
+    assert [m["id"] for m in view["stt"]] == ["elevenlabs/scribe-v2"]
 
 
 async def test_models_catalog_needs_no_key(conn, client, clock):
@@ -182,7 +182,7 @@ async def test_a_model_of_the_other_kind_or_off_the_list_is_refused(router):
 
 
 async def test_blank_or_spaced_model_ids_are_refused_before_the_catalog_is_asked(router):
-    for value in ["", "  ", "openai/gpt 6 luna"]:
+    for value in ["  ", "openai/gpt 6 luna"]:
         await refused(router, "cleanup_model", value)
     with pytest.raises(RpcError) as raised:
         await router.call("settings.set", {"key": "stt_cloud_model", "value": 3})
@@ -240,7 +240,7 @@ async def test_the_default_can_always_be_chosen(router, client):
     await router.call("models.catalog", {})
     await choose(router, "cleanup_model", "tencent/hunyuan-a13b-instruct")
     # The list lacks the default, but the setting reads as it anyway when nobody chose.
-    assert await choose(router, "cleanup_model", "openai/gpt-6-luna") == "openai/gpt-6-luna"
+    assert await choose(router, "cleanup_model", "") == ""
 
 
 async def test_a_stale_catalog_kept_from_before_a_restart_is_what_a_choice_is_checked_against(
@@ -258,7 +258,7 @@ async def test_a_stale_catalog_kept_from_before_a_restart_is_what_a_choice_is_ch
 # --- a chosen model that OpenRouter no longer lists ---------------------------------------------
 
 
-async def test_a_model_gone_from_the_list_goes_back_to_the_default_and_is_reported_once(
+async def test_a_model_gone_from_the_list_keeps_its_setting_across_refreshes(
     router, client, clock
 ):
     await router.call("models.catalog", {})
@@ -269,35 +269,18 @@ async def test_a_model_gone_from_the_list_goes_back_to_the_default_and_is_report
     clock.now_ms += PRICING_TTL_MS
     view = await router.call("models.catalog", {})
     assert view["source"] == "live"
-    assert view["replaced"] == [
-        {
-            "key": "cleanup_model",
-            "role": "cleanup",
-            "model": "tencent/hunyuan-a13b-instruct",
-            "default": "openai/gpt-6-luna",
-        },
-        {
-            "key": "stt_cloud_model",
-            "role": "stt",
-            "model": "deepgram/nova-3",
-            "default": "elevenlabs/scribe-v2",
-        },
-    ]
+    assert view["replaced"] == []
     settings = (await router.call("settings.get", {}))["settings"]
-    assert (settings["cleanup_model"], settings["stt_cloud_model"]) == (
-        "openai/gpt-6-luna",
-        "elevenlabs/scribe-v2",
-    )
+    assert settings["cleanup_model"] == "tencent/hunyuan-a13b-instruct"
+    assert settings["stt_cloud_model"] == "deepgram/nova-3"
     assert (await router.call("models.catalog", {}))["replaced"] == []
 
 
-async def test_a_model_kept_from_an_older_raphael_that_is_not_listed_is_replaced(conn, router):
+async def test_a_model_kept_from_an_older_raphael_that_is_not_listed_stays_selected(conn, router):
     SettingsStore(conn).set("agent_model", "some/older-choice")
     view = await router.call("models.catalog", {})
-    assert [(r["key"], r["model"]) for r in view["replaced"]] == [
-        ("agent_model", "some/older-choice")
-    ]
-    assert (await router.call("settings.get", {}))["settings"]["agent_model"] == "openai/gpt-6-luna"
+    assert view["replaced"] == []
+    assert (await router.call("settings.get", {}))["settings"]["agent_model"] == "some/older-choice"
 
 
 @pytest.mark.parametrize("chosen", ["cli:gemini:gemini-3.8-flash-high", "cli:claude:opus?effort=high", "@p1:gpt-6-luna"])
@@ -346,7 +329,7 @@ async def test_the_lists_models_and_prices_are_not_logged(router, client, clock,
     with caplog.at_level(logging.DEBUG):
         await router.call("models.catalog", {})
         await router.call("models.catalog", {})
-    assert "cleanup_model" in caplog.text  # the setting that went back is named...
+    assert "cleanup_model" not in caplog.text
     for model in RECORDED:
         assert model["id"] not in caplog.text  # ...but no model
     assert "0.1" not in caplog.text and "$" not in caplog.text
