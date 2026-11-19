@@ -42,6 +42,7 @@ def test_speech_libraries_overlap_the_application_import_and_finish_before_stdin
         events.append("application_done")
         return type("Module", (), {"build_app": staticmethod(lambda **kw: events.append("build_app") or _FakeApp())})
 
+    monkeypatch.setattr(entry, "trust_the_system_certificates", lambda: events.append("trust"))
     monkeypatch.setattr(entry, "import_speech_libraries", libraries)
     monkeypatch.setattr(entry, "load_application", application)
     monkeypatch.setattr(entry, "claim_stdout", lambda: events.append("claim_stdout") or object())
@@ -51,6 +52,7 @@ def test_speech_libraries_overlap_the_application_import_and_finish_before_stdin
 
     entry.main()
 
+    assert events[0] == "trust"  # before anything can connect
     assert events.index("claim_stdout") < events.index("libraries_start")  # nothing native before the claim
     assert events.index("libraries_start") < events.index("application_done")
     assert events.index("application_start") < events.index("libraries_done")  # they ran at the same time
@@ -65,3 +67,32 @@ def test_the_application_module_is_imported_by_a_statement_the_frozen_build_can_
     imported = {(node.module, alias.name) for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) for alias in node.names}
     assert ("raphael_core", "app") in imported
     assert not any(isinstance(node, ast.Call) and getattr(node.func, "attr", "") == "import_module" for node in ast.walk(tree))
+
+
+def test_a_background_worker_trusts_the_system_certificates_too(monkeypatch):
+    from raphael_core.worker import runner
+
+    events.clear()
+    monkeypatch.setattr(entry, "trust_the_system_certificates", lambda: events.append("trust"))
+    monkeypatch.setattr(runner, "main", lambda: events.append("worker"))
+    monkeypatch.setattr(entry.sys, "argv", ["raphael_core", "--worker"])
+    entry.main()
+    assert events == ["trust", "worker"]
+
+
+def test_tls_is_verified_against_the_systems_store_for_every_client():
+    """A root that security software adds to the system store (Kaspersky's HTTPS scanning) is trusted as in the
+    browser: the contexts `httpx` and a plain `ssl` socket make are truststore's, which asks the operating system."""
+    import ssl
+
+    import httpx
+    import truststore
+
+    try:
+        entry.trust_the_system_certificates()
+        assert isinstance(httpx.create_ssl_context(), truststore.SSLContext)
+        assert isinstance(ssl.create_default_context(), truststore.SSLContext)
+        assert httpx.create_ssl_context().verify_mode == ssl.CERT_REQUIRED
+    finally:
+        truststore.extract_from_ssl()
+    assert not isinstance(ssl.create_default_context(), truststore.SSLContext)

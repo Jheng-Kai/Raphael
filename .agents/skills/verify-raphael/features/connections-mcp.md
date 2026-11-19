@@ -409,6 +409,12 @@ API/CLI MCP definitions for Raphael and members without a restart.
 
 ## Gotchas
 
+The core verifies TLS against the operating system's certificate store (R-NET-TLS-01, `__main__.trust_the_system_certificates`,
+truststore). On a PC whose security software inspects HTTPS (Kaspersky Endpoint Security re-signs every site with
+`Kaspersky Endpoint Security Personal Certification Authority`), certifi's own bundle refused every connection to Composio
+and the models while the browser opened them: 「連不上 Composio，請稍後再試。」 with a key that works elsewhere. To tell it
+apart on such a PC, the issuer PowerShell reads for `backend.composio.dev` is the security software's, not `Google Trust Services`.
+
 Composio opens the login in the core and polls there; no frontend OAuth URL or token
 is stored. A chat's connector card (see [Conversation](conversation.md)) signs in through these same
 `connectors.google.connect` and `connectors.connect` methods, so their lock and value-free failures apply. connectors.changed maps to ConnectionsChanged. Status reads here use
