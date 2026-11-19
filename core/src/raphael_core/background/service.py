@@ -195,7 +195,7 @@ _JUDGED_ENDINGS = frozenset(("routine_nothing", "routine_refused", "missing_arti
                              "work_without_action", "missing_terminal", "child_work_incomplete"))
 # Endings that are the app's own state, no fault of the model either: the member was removed, the background is switched off, the
 # worker could not start or broke (`worker_` and the name of the error). A brain failure recorded for them says the model failed.
-_APP_ENDINGS = frozenset(("member_unknown_or_removed", "member_removed_from_room", "disabled", "gone", "worker"))
+_APP_ENDINGS = frozenset(("no_model", "member_unknown_or_removed", "member_removed_from_room", "disabled", "gone", "worker"))
 
 
 def _brainless(reason: str | None) -> bool:

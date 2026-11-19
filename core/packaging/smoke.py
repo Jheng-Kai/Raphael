@@ -275,6 +275,8 @@ def smoke_with_the_fake_llm(executable: Path) -> dict:
             require(rpc.call("core.hello").get("protocol") == 1, "Incompatible JSON-RPC protocol")
             require(rpc.call("secrets.status")["has_key"] is True, "The fake LLM did not get its in-memory key")
             rpc.call("dictionary.add", {"word": "Raphael Smoke", "misheard": ["smoke token"]})
+            for key in ("agent_model", "quick_model", "cleanup_model"):
+                rpc.call("settings.set", {"key": key, "value": "openai/gpt-6-luna"})
             for languages, spoken, expected in CLEANED_VARIANTS:
                 rpc.call("settings.set", {"key": "languages", "value": languages})
                 finalized = rpc.call("brain.finalize_dictation", {

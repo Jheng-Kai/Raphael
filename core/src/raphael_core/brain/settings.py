@@ -374,6 +374,12 @@ def checked(key: str, value: Any) -> tuple[str, Any]:
         value = _url(key, value)
     if key in OPTIONAL_MODEL_SETTINGS:
         value = _optional_model(key, value)
+    if key in (*MODEL_SETTINGS, *OPTIONAL_MODEL_SETTINGS) and value.startswith("cli:"):
+        from ..agent.cli.discovery import brain_ref
+        # Text tidying and speech to text never run on a subscription program; the other purposes may name one (the
+        # router, memory and PDF readers then use the auxiliary API model), and a program Raphael does not know is refused.
+        if key in ("cleanup_model", "stt_cloud_model") or not brain_ref(value):
+            raise ValueError(f"Invalid CLI model for {key}")
     if key in FALLBACK_SETTINGS:
         if len(value) > 3:
             raise ValueError("At most three fallback models")

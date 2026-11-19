@@ -399,7 +399,7 @@ async def test_rpc_detection_is_registered_without_exposing_process_details(setu
 
 async def test_raphaels_quick_cli_answer_skips_auxiliary_api_routing(setup, tmp_path, client):
     rig, _ = setup
-    rig.settings.set("agent_model", "cli:claude")
+    rig.settings.set("quick_model", "cli:claude")
     rig.settings.set("assistant_model", "anthropic/claude-haiku-5.5")
     fake_brain(rig, tmp_path, '''import json, sys
 json.loads(sys.stdin.readline())
@@ -447,7 +447,7 @@ async def test_a_rate_limited_cli_turn_is_run_again_with_one_public_line(setup, 
 
 async def test_a_quick_cli_question_fails_at_once_when_rate_limited(setup, tmp_path, monkeypatch):
     rig, _ = setup
-    rig.settings.set("agent_model", "cli:codex")
+    rig.settings.set("quick_model", "cli:codex")
     monkeypatch.setattr("raphael_core.agent.cli.loop.RATE_LIMIT_WAITS_S", (0.0, 0.0))
     launches = tmp_path / "launches.txt"
     fake_brain(rig, tmp_path, RATE_LIMITED_CODEX.replace("LAUNCHES", repr(str(launches))).replace("ANSWER_ON", "99"), name="codex")

@@ -91,7 +91,8 @@ async def test_provider_rpc_storage_resolution_and_legacy_migration():
             await dispatcher.chat_text(model=f"@{pid}:llama3.1:8b", system="s", user="u", timeout_s=1, max_tokens=10)
         await router.call("providers.remove", {"id": pid})
         assert vault[pid].get() is None
-        assert notices == [("providers.changed", {})] * 3
+        changed = ("providers.changed", {})
+        assert notices == [changed, ("models.filled", {"source": "Ollama", "roles": ["quick"]}), changed, changed]
         await registry.aclose()
     conn.close()
 
@@ -166,6 +167,9 @@ async def test_models_catalog_answers_from_the_saved_lists_and_renews_them_after
         router.set_notifier(lambda method, params: notices.append(method))
         brain.register(router)
         registry.register(router)
+        # With all roles chosen, connecting does not fetch a list to fill empty roles.
+        for key in ("agent_model", "quick_model", "cleanup_model", "stt_cloud_model"):
+            registry.settings.set(key, "test/chosen")
         gate.set()
         pid = (await router.call("providers.add", {"kind": "ollama"}))["provider"]["id"]
         # First use: no list is saved yet, so the answer waits for the provider, as it always did.
