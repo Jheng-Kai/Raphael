@@ -75,7 +75,7 @@ function directoryHTML(v: ProvidersView, lead = ""): string {
       const note = k.available ? description(k) : t("providers.soon");
       const connected = v.providers.some((p) => p.kind === k.kind);
       const action = t(connected ? "providers.manage" : "providers.connect");
-      return `<div class="pv-card pv-add"><span class="ic">${providerMark(k.kind)}</span><span class="tx"><span class="pv-kind-title"><span class="nm">${esc(k.name)}</span>${connected ? `<span class="pv-connected">${esc(t("providers.connected"))}</span>` : ""}</span><span class="ds" title="${esc(note)}">${esc(note)}</span></span>` +
+      return `<div class="pv-card pv-add"><span class="ic">${providerMark(k.kind, true) || (k.group === "local" ? `<span class="mono md" aria-hidden="true">${ico("monitor")}</span>` : providerMark(k.kind))}</span><span class="tx"><span class="pv-kind-title"><span class="nm">${esc(k.name)}</span>${connected ? `<span class="pv-connected">${esc(t("providers.connected"))}</span>` : ""}</span><span class="ds" title="${esc(note)}">${esc(note)}</span></span>` +
         btn(esc(action), "", ` data-pv="add" data-id="${esc(k.kind)}" data-k="pv-add:${esc(k.kind)}" aria-label="${esc(action + " " + k.name)}"${(k.available || connected) && !v.busy ? "" : " disabled"}`) + `</div>`;
     }).join("") + `</div></section>` : "";
   }).join("");

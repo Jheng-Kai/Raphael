@@ -4434,6 +4434,8 @@ export function checkRendered(name, context = {}) {
   if (name === "local-model-menu") {
     require(document.querySelector('#app-popover [data-pick="delete"]').textContent.includes("SenseVoice"), "the item names the model");
     require(!document.querySelector('.lm-row [data-act="delete"], .lm-del'), "no delete stands in the row");
+    const mores = [...document.querySelectorAll('.lm-row [data-act="local-menu"]')];
+    require(mores.length >= 1 && mores.every(visible), "every downloaded model shows its ⋯, with no right click needed");
     return { check: name };
   }
   if (name === "local-model-asks") {
@@ -5970,8 +5972,10 @@ export function checkRendered(name, context = {}) {
       require(selected?.dataset.name === 'qwen3-asr', "the preview selects exactly the requested local model");
       require(dialog.querySelectorAll('.lm-main[aria-checked="true"]').length === 1, "only one local radio is selected");
       require(document.activeElement === selected && parseFloat(getComputedStyle(selected).outlineWidth) >= 2, "keyboard focus stays visible on the choice");
-      const mark = selected.querySelector('.ck svg');
-      require(visible(mark) && mark.getBoundingClientRect().width <= 16 && getComputedStyle(mark).fill === 'none' && getComputedStyle(mark).stroke !== 'none', "the selected model has a bounded, visible check mark");
+      // The same radio as every chosen row of the choices, filled with its dot; the state where a price stands, not louder.
+      const mark = selected.querySelector('.mc-radio'), state = selected.querySelector('.lm-state');
+      require(visible(mark) && !selected.querySelector('.ck') && getComputedStyle(mark).backgroundColor !== 'rgba(0, 0, 0, 0)' && getComputedStyle(mark, '::after').content !== 'none', "the selected model has the radio every chosen row has");
+      require(state && parseFloat(getComputedStyle(state).fontWeight) <= 500 && state.getBoundingClientRect().left > selected.querySelector('.mp-name').getBoundingClientRect().right, "its state stands at the right in a price's weight");
       require(!window.__look.calls.some(call => ['models.download', 'models.use', 'settings.set'].includes(call.method)), "previewing does not download or save settings");
       require(getComputedStyle(selected.closest('.lm-row')).backgroundColor !== getComputedStyle(rows[1]).backgroundColor, "selection has a distinct themed surface");
       return { check: name, selected: selected.dataset.name };

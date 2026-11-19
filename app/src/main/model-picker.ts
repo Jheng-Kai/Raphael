@@ -770,7 +770,7 @@ export function moveEffortSlider(range: HTMLInputElement): string {
 export const sourceMarkHTML = (source: ChooserSource): string => sourceMark(source);
 
 const sourceMark = (source: ChooserSource): string =>
-  providerMark(source.kind, true) || (source.id === "local-speech" ? `<span class="mono md" aria-hidden="true">${ico("mic")}</span>` : genericMark("md"));
+  providerMark(source.kind, true) || (source.id === "local-speech" || source.group === "local" ? `<span class="mono md" aria-hidden="true">${ico("monitor")}</span>` : genericMark("md"));
 
 /** What a source's row says under its name: whether it is ready, or how many models it has. */
 export function sourceStatus(source: ChooserSource, o: ModelPickerLook): string {
