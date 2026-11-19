@@ -1517,10 +1517,10 @@ class BackgroundService:
             },
         )
 
-    def clear(self) -> None:
+    def clear(self) -> list[asyncio.Task]:
         """Clear the tasks with the history: the finished ones and the ones that wait are deleted,
         and the one that runs is stopped, emptied of what the user said at once and deleted when it
-        has stopped, without a report to the overlay or the history."""
+        has stopped, without a report to the overlay or the history. Return its writers for the history clear to join."""
         try:
             # A task that waits for the owner goes with the rest; its question is gone with it.
             self._paused.clear()
@@ -1540,6 +1540,7 @@ class BackgroundService:
                 self._host.cancel(run)
         except sqlite3.Error as exc:
             logger.warning("Could not clear the background tasks: %s", type(exc).__name__)
+        return [task for task, _ in self._active.values() if not task.done()]
 
     def forget_member(self, member_id: int) -> None:
         """A member was deleted: its tasks go with it. The ones that wait leave the queue and are

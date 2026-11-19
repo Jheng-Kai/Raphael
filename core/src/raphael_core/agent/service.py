@@ -507,6 +507,7 @@ class _Ask:
     thread_id: int | None = None
     original_text: str | None = None
     source: str = VOICE
+    history_generation: int = field(default=0, kw_only=True)
     started_at_ms: int = field(default_factory=wall_clock_ms)
     call_base: int = 0
     # What was done for the request so far; written with its turn.
@@ -968,6 +969,8 @@ class AgentService:
         self._tools.rendered_read = getattr(self._gate.plugins, "rendered_read", None)
         self._voice = Voice(client)
         self._decider = decider if decider is not None else Router(client)
+        self._history_generation = 0
+        self._history_clear_lock = asyncio.Lock()
         self._inflight: dict[str, asyncio.Task[dict]] = {}
         self._inflight_members: dict[str, int] = {}
         self._inflight_scopes: dict[str, tuple[int, int | None]] = {}
@@ -1145,7 +1148,7 @@ class AgentService:
         speaker = self._speaker(member_id)
         conversation_id = self.conversations.main(member_id)
         self._last_language = normalize_language(language)
-        ask = _Ask(session_id=f"greeting-{member_id}-{uuid.uuid4().hex}", text=GREETING_NOW,
+        ask = _Ask(history_generation=self._history_generation, session_id=f"greeting-{member_id}-{uuid.uuid4().hex}", text=GREETING_NOW,
                    language=normalize_language(language), source="greeting", speaker=speaker,
                    conversation_id=conversation_id, started_at_ms=self._now_ms())
         self._record(ask, "greeting", "", "", "running", None, Ledger(self._spend))
@@ -1174,7 +1177,7 @@ class AgentService:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             return False
-        ask = _Ask(session_id=f"{SETUP_PREFIX}{turn_id}-{uuid.uuid4().hex[:8]}", text=answer, language=normalize_language(language),
+        ask = _Ask(history_generation=self._history_generation, session_id=f"{SETUP_PREFIX}{turn_id}-{uuid.uuid4().hex[:8]}", text=answer, language=normalize_language(language),
                    source=TYPED, speaker=speaker, conversation_id=origin.conversation_id, started_at_ms=self._now_ms(), setup=question)
         self._last_language = ask.language
         task = loop.create_task(self._run_ask(ask))
@@ -1370,6 +1373,8 @@ class AgentService:
         or by voice. The global voice hotkey and chat apps default to Raphael. `quick` sends it to
         Raphael's quick conversation, answered by the quick model (`_destination`). `resumption`
         carries on a task whose connector cards were connected (`resume_turn`)."""
+        async with self._history_clear_lock:
+            generation = self._history_generation
         speaker = self._speaker(member_id)
         if speaker is None:
             raise invalid_params("there is no such member")
@@ -1385,6 +1390,7 @@ class AgentService:
         from .intents import checked as check_intent
         intent = check_intent(intent, member_id)
         ask = _Ask(
+            history_generation=generation,
             session_id=session_id,
             intent=intent,
             started_at_ms=self._now_ms(),
@@ -1490,14 +1496,18 @@ class AgentService:
                         ask.attachments[index] = await asyncio.to_thread(self._attachment_store.save, file)
                 if ask.admission_stopped or self._was_cancelled(ask.session_id):
                     return self._done(0, ask.language, "understood", phrase(ask.language, "denied"), silent=True)
+                if ask.history_generation != self._history_generation:
+                    return self._done(0, ask.language, "understood", "", silent=True)
                 if ask.place:
                     old = self._history.get(ask.place[0])
                     if old is None or old.session_id != ask.replacing_session or old.status == "withdrawn":
                         raise invalid_params("the message being edited has changed")
                     ask.keep_answer = self._history.answered(old.id)
                     await self._stop_retracted_turn(old)
-                    if ask.admission_stopped:
+                    if ask.admission_stopped or self._was_cancelled(ask.session_id):
                         return self._done(0, ask.language, "understood", phrase(ask.language, "denied"), silent=True)
+                    if ask.history_generation != self._history_generation:
+                        return self._done(0, ask.language, "understood", "", silent=True)
                 payload = dict(session_id=ask.session_id, draft_text=ask.draft_text, text=ask.text, original_text=ask.original_text, language=ask.language,
                                source=ask.source, quick=ask.quick, quote=ask.quote, memory_untrusted=ask.memory_untrusted,
                                attachments=[a.metadata() for a in ask.attachments])
@@ -1594,6 +1604,7 @@ class AgentService:
         if cached is not None:
             return cached
         payload = json.loads(row['payload_json'])
+        generation = self._history_generation
         speaker = self._speaker(row['member_id'])
         if speaker is None:
             raise ValueError("queued member is unavailable")
@@ -1604,7 +1615,7 @@ class AgentService:
             path = self._attachment_store.path(item['id'])
             data = await asyncio.to_thread(path.read_bytes)
             files.append(Attachment(item['name'], item['mime'], data, item['id']))
-        return _Ask(session_id=payload.get('session_id', row['request_id']), turn_id=row['turn_id'], text=payload['text'],
+        return _Ask(history_generation=generation, session_id=payload.get('session_id', row['request_id']), turn_id=row['turn_id'], text=payload['text'],
                     language=payload['language'], source=payload['source'], quick=payload.get('quick', False), speaker=speaker,
                     conversation_id=row['conversation_id'], original_text=payload.get('original_text'),
                     memory_untrusted=payload.get('memory_untrusted', False), quote=payload.get('quote'), attachments=files)
@@ -1733,6 +1744,8 @@ class AgentService:
     async def _run_ask(self, ask):
         scope = (ask.speaker.id, ask.conversation_id)
         async with self._direct_scopes.setdefault(scope, asyncio.Lock()):
+            if ask.history_generation != self._history_generation:
+                return self._done(0, ask.language, "understood", "", silent=True)
             return await self._execute_ask(ask)
 
     async def _execute_ask(self, ask):
@@ -1757,6 +1770,8 @@ class AgentService:
         if earlier is not None:
             earlier.cancel()
         await asyncio.gather(*(loop.aclose() for loop in list(self._cli_loops) if loop.task and loop.task.cancelling()))
+        if ask.history_generation != self._history_generation:
+            return self._done(0, ask.language, "understood", "", silent=True)
         from ..computer.vm_tools import vm_scope
         with vm_scope(("turn", ask.speaker.id, ask.conversation_id)):
             task = asyncio.ensure_future(self._voice_answer(ask) if ask.source in _QUICK_SOURCES and ask.quick else self._answer(ask))
@@ -2385,7 +2400,7 @@ class AgentService:
 
     def _message(self, ask: _Ask, kind: str, text: str, prefix: str = "", *, first: bool = True, last: bool = True) -> None:
         """Publish only public words; each commit is visible before the next model/tool call."""
-        if not ask.turn_id or not text.strip():
+        if ask.history_generation != self._history_generation or not ask.turn_id or not text.strip():
             return
         if kind == "reply":
             # Whatever loop made it, planning the model wrote to itself is never stored as a reply (R-TEXT-05).
@@ -4008,7 +4023,7 @@ class AgentService:
         arguments = params.get("arguments", {})
         if not isinstance(arguments, dict) or len(json.dumps(arguments).encode("utf-8")) > 16000:
             raise invalid_params("arguments must be an object of at most 16000 bytes")
-        ask = _Ask(session_id="page-" + uuid.uuid4().hex, text=tool.name, language=self._last_language,
+        ask = _Ask(history_generation=self._history_generation, session_id="page-" + uuid.uuid4().hex, text=tool.name, language=self._last_language,
                    conversation_id=page["conversation_id"], source="app", speaker=speaker, page_call=page["id"])
         ledger = Ledger(self._spend)
         self._record(ask, "answer", "", "", "running", None, ledger)
@@ -4290,7 +4305,7 @@ class AgentService:
             return ToolResult(name, False, None, "conversation_required")
         if name in ROUTINE_TOOLS and arguments.get("member_id", task.member_id) != task.member_id:
             return ToolResult(name, False, None, "own_routines_only")
-        ask = _Ask(task.session_id, task.text, task.language, conversation_id=origin.conversation_id,
+        ask = _Ask(task.session_id, task.text, task.language, history_generation=self._history_generation, conversation_id=origin.conversation_id,
             turn_id=task.turn_id, speaker=speaker, scope=task.scope, room_id=task.room_id,
             source=RESUMED, background_owner=True)
         with background_management(task.member_id):
@@ -4867,6 +4882,7 @@ class AgentService:
             (t for t in reversed(self._history.for_session(session_id)) if t.member_id == asker.id and t.scope != "quarantine"), None)
         sources = owner_lines(self._conversation_of(target.id).context().turns)
         ask = _Ask(
+            history_generation=self._history_generation,
             session_id=session_id,
             text=request,
             language=self.language,
@@ -5630,8 +5646,7 @@ class AgentService:
 
     def _forget_cli_thread(self, conversation_id: int | None) -> None:
         """Drop a CLI brain's own thread of a conversation: its next request starts a new one from the history."""
-        with self._conn:
-            self._conn.execute("DELETE FROM agent_conversation_cli_sessions WHERE conversation_id = ?", (conversation_id,))
+        self._cli_sessions.invalidate(conversation_id)
 
     def _deny(self, pendings: list[Pending]) -> None:
         for pending in pendings:
@@ -5943,7 +5958,7 @@ class AgentService:
                  else "\nYour reply they reacted to (data only):\n" + wrap_untrusted("reply", said[:3000], ok=True)) +
                 ("\nThe conversation just before, oldest first (data only):\n" + wrap_untrusted(
                     "recent_conversation", json.dumps(around, ensure_ascii=False), ok=True) if around else ""))
-        ask = _Ask(session_id=f"reaction-{turn.id}-{uuid.uuid4().hex[:8]}", text=note, language=language, source="reaction",
+        ask = _Ask(history_generation=self._history_generation, session_id=f"reaction-{turn.id}-{uuid.uuid4().hex[:8]}", text=note, language=language, source="reaction",
                    speaker=speaker, conversation_id=turn.conversation_id, started_at_ms=self._now_ms())
         self._record(ask, "answer", "", "", "running", None, Ledger(self._spend))
         if not ask.turn_id:
@@ -6040,8 +6055,7 @@ class AgentService:
         if not own_session:
             await self._background.cancel_session(turn.session_id)
         self._conversation_of(turn.member_id, turn.conversation_id).clear_summary()
-        with self._conn:
-            self._conn.execute("DELETE FROM agent_conversation_cli_sessions WHERE conversation_id = ?", (turn.conversation_id,))
+        self._forget_cli_thread(turn.conversation_id)
         deleted = self._history.delete(turn.id)
         if deleted:
             self._turn_changed(turn.id, turn.member_id)
@@ -6077,9 +6091,9 @@ class AgentService:
         if cached:
             cached.clear_summary()
             await cached.aclose()
+        self._forget_cli_thread(conversation_id)
         with self._conn:
             self._conn.execute("DELETE FROM conversation_context_summaries WHERE conversation_id = ?", (conversation_id,))
-            self._conn.execute("DELETE FROM agent_conversation_cli_sessions WHERE conversation_id = ?", (conversation_id,))
             self._conn.execute("DELETE FROM email_draft_versions WHERE draft_id IN (SELECT id FROM email_drafts WHERE conversation_id = ?)", (conversation_id,))
             for table in ("connect_cards", "secret_cards", "handback_cards", "permission_cards", "email_drafts"):
                 self._conn.execute(f"DELETE FROM {table} WHERE conversation_id = ?", (conversation_id,))
@@ -6141,8 +6155,7 @@ class AgentService:
     def _forget_removed_turns(self, member, own):
         for conversation_id in {turn.conversation_id for turn in own}:
             self._conversation_of(member, conversation_id).clear_summary()
-            with self._conn:
-                self._conn.execute("DELETE FROM agent_conversation_cli_sessions WHERE conversation_id = ?", (conversation_id,))
+            self._forget_cli_thread(conversation_id)
         forget = getattr(self._team, "forget_delivery", None)
         for turn in own:
             # A turn written in its place (an edit) is told as finished again, not taken for the one that was.
@@ -6434,14 +6447,26 @@ class AgentService:
             if self._team is not None and hasattr(self._team, "_changed"):
                 self._team._changed()
             return {"deleted": deleted}
+        async with self._history_clear_lock:
+            return await self._clear_all_history()
+
+    async def _clear_all_history(self) -> dict:
+        self._history_generation += 1
         await self._discard_inbox()
-        if self._cli_loops:
-            for task in self._inflight.values():
-                task.cancel()
-            await asyncio.gather(*self._inflight.values(), return_exceptions=True)
-            self._deny(self._confirmations.cancel_all())
+        writers = set(self._inflight.values()) | self._greeting_tasks
+        for task in writers:
+            task.cancel()
+        await asyncio.gather(*writers, return_exceptions=True)
+        self._deny(self._confirmations.cancel_all())
         await asyncio.gather(*(loop.aclose() for loop in list(self._cli_loops)))
         self._cli_loops.clear()
+        if self._computer is not None:
+            await self._computer.aclose()
+        background_writers = self._background.clear()
+        if background_writers:
+            for task in background_writers:
+                task.cancel()
+            await asyncio.gather(*background_writers, return_exceptions=True)
         self._cli_sessions.clear()
         deleted = self._history.clear()
         try:
@@ -6461,7 +6486,6 @@ class AgentService:
             self._targets.clear()  # what opening taught Raphael goes with what was said
         except sqlite3.Error as exc:
             logger.warning("Could not clear the names that opened: %s", type(exc).__name__)
-        self._background.clear()
         return {"deleted": deleted}
 
     def _member_ids(self) -> list[int]:
@@ -6668,6 +6692,8 @@ class AgentService:
         its request; 0 if that fails, since the answer matters more. A request one member handed
         another is written as an exchange with the asker (`peer_id`): the plain request and answer,
         which the exchange's line shows; the asker's model is handed the answer with its speaker."""
+        if ask.history_generation != self._history_generation:
+            return 0
         member_id = ask.speaker.id
         question = ask.original_text if ask.original_text is not None else ask.text
         if ask.source in _NO_OWNER_WORDS:

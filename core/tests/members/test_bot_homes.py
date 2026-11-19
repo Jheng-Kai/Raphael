@@ -183,3 +183,28 @@ def test_old_revisions_leave_the_journal_but_each_skills_newest_and_every_recent
     assert homes.prune_journals(datetime.now().timestamp()) == 0
     written = set((tmp_path / "bot-state/1/journal").glob("*.json")) - before
     assert [json.loads(path.read_text(encoding="utf-8"))["path"] for path in written] == ["MEMORY.md"]
+
+
+async def test_private_batch_corrects_a_shared_fact_only_in_the_members_memory(rig):
+    member = (await rig.call("members.create", {"name": "Reviewer"}))["member"]["id"]
+    memory = rig.memory
+    memory.apply_edits([Edit("user", "add", "The owner has an office in London.")], member, share=True)
+    memory.apply_edits([Edit("memory", "add", "Private meeting tomorrow.")], member)
+    shared = memory.shared.read()
+    result = memory.apply_edits([Edit("user", "replace", "Paris", "London"),
+                                 Edit("user", "remove", "", "Private meeting")],
+                                member, private_request=True)
+    assert result.written == ["memory"] and result.deleted == ["memory"]
+    assert "office in Paris" in memory.own(member).read()
+    assert "Private meeting" not in memory.own(member).read()
+    assert memory.shared.read() == shared
+    assert "Paris" not in str(memory.snapshot(0))
+
+    result = memory.apply_edits([Edit("user", "remove", "", "London")], member, private_request=True)
+    assert result.refused == ["no_match"]
+    assert memory.shared.read() == shared
+
+    before = memory.own(member).read()
+    result = memory.apply_edits([Edit("memory", "add", "Tomorrow's meeting is private."),
+                                 Edit("user", "remove", "", "missing")], member, private_request=True)
+    assert result.refused and memory.own(member).read() == before

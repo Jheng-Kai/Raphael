@@ -441,3 +441,23 @@ async def test_the_memory_logs_no_memory_and_no_turn(memory, history, model, cap
         memory.search("秘密")
     assert SECRET_WORDS in memory.own(0).read()
     assert "秘密" not in caplog.text and SECRET_WORDS not in caplog.text and "烏龍" not in caplog.text
+
+
+@pytest.mark.parametrize("reuse_id", [False, True])
+async def test_reflection_discards_changed_source_turns(memory, history, model, reuse_id):
+    add_turn(history, "An earlier turn")
+    source = add_turn(history, "Withdraw this fact")
+
+    def retract_during_request(**_):
+        history.delete(source)
+        if reuse_id:
+            assert add_turn(history, "Different words") == source
+        return PLAN
+
+    model.replies.append(retract_during_request)
+    await memory.reflect()
+    assert memory.own(0).read() == ""
+    assert memory.reflected_through() == 0
+    model.replies.append({"actions": []})
+    await memory.reflect()
+    assert memory.reflected_through() > 0
