@@ -757,10 +757,11 @@ export function installMock(fixture, config = {}, target = window) {
   // A document-style report and an HTML page that writes no style of its own, so that
   // only the app's base style (core agent/page_style.py) draws it: each is a member's turn with the page's card.
   for (const [flag, id, title, kind, text] of [["documentTurn", "page-document", () => data.pageDocument.title, "report", "整理好了，點開就能用篩選慢慢挑。"],
-    ["baseTurn", "page-base", () => "東京行程候選清單", undefined, "整理好了，點開就能讀。"]]) {
+    ["baseTurn", "page-base", () => "東京行程候選清單", undefined, "整理好了，點開就能讀。"],
+    ["stateTurn", "page-state", () => "出發前清單", undefined, "清單在這裡，勾完的會幫你記住。"]]) {
     if (!variant[flag]) continue;
     const base = data.turns.find(turn => turn.member_id === 1);
-    data.turns.push({ ...structuredClone(base), id: id === "page-document" ? 805 : 806, question: "幫我整理東京行程的候選清單。", text, status: "done", route: "answer", steps: [],
+    data.turns.push({ ...structuredClone(base), id: id === "page-document" ? 805 : id === "page-state" ? 807 : 806, question: "幫我整理東京行程的候選清單。", text, status: "done", route: "answer", steps: [],
       messages: [{ seq: 1, kind: "reply", text, at_ms: data.now }], attachments: [],
       pages: [{ id, title: title(), rev: 1, height: id === "page-base" ? 900 : 320, source: "html", server: null, fallback: title(), ...(kind ? { kind } : {}) }] });
   }
@@ -1305,6 +1306,8 @@ export function installMock(fixture, config = {}, target = window) {
         // What the core serves of an HTML page that writes no style of its own: the page with the app's base style in front of it,
         // made by the core itself for each theme before the run (runner.mjs `pageBaseDocuments`).
         // `pageWindow`: a page laid out as a screen, a side column one window tall plus its padding (R-PAGE-12).
+        // A checklist as the core serves it: with nothing left on it, or with what the owner left on it (R-PAGE-14).
+        if (p.id === "page-state") return { url: `data:text/html;charset=utf-8,${encodeURIComponent(data.pageStateDocs[variant.pageState === "saved" ? "saved" : "fresh"][p.theme === "dark" ? "dark" : "light"])}`, title: "出發前清單", rev: 1, height: 420, source: "html", server: null };
         if (p.id === "page-base") return { url: `data:text/html;charset=utf-8,${encodeURIComponent((variant.pageWindow ? data.pageWindowDocs : data.pageBaseDocs)[p.theme === "dark" ? "dark" : "light"])}`, title: "東京行程候選清單", rev: 1, height: 900, source: "html", server: null };
         // Not a file of the dev server, which would write its own client into the page.
         // A page its member changed (`state.updatePage`) is another page: the news page's last heading, the product's price.
@@ -1312,6 +1315,7 @@ export function installMock(fixture, config = {}, target = window) {
         return { url: `data:text/html;charset=utf-8,${encodeURIComponent(data.pageProductHtml.replace("__THEME__", p.theme === "dark" ? "dark" : "").replace("NT$ 1,280", (state.pageRevs[p.id] ?? 1) > 1 ? "NT$ 990（已降價）" : "NT$ 1,280"))}`, title: "輕量後背包", rev: state.pageRevs[p.id] ?? 1, height: 320, source: "html", server: null };
       // The page that stands open beside the composer, told before a message is sent (what the member is then told "here" means).
       case "pages.viewing": state.viewing.push(p.id ?? null); return { viewing: p.id ?? null };
+      case "pages.state": return { kept: true };
       case "computer.wallpaper": return variant.ownWallpaper ? { image: variant.ownWallpaper } : {};
       case "computer.lifecycle": {
         if (p.target !== data.desktop.target || p.host !== data.desktop.host || p.action === 'reset' && p.confirmed !== true) throw new Error('Maintenance confirmation or target missing');

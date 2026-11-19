@@ -588,6 +588,8 @@ export const pagesVideoBase = (): Promise<{ base: string }> => core("pages.video
  * that answers knows what "here" and "this" mean and changes that page in place (core agent/pages.py `viewing`).
  */
 export const pagesViewing = (id: string | null): Promise<{ viewing: string | null }> => core("pages.viewing", { id });
+/** What the owner left on a page (its fields, its storage, its script's value), kept with the page and served back (R-PAGE-14). */
+export const pagesState = (id: string, state: unknown): Promise<{ kept: boolean }> => core("pages.state", { id, state });
 /** A report page's checked content: the app draws it (report-page.ts), in whichever theme, with no frame. */
 export const reportOpen = (id: string): Promise<ReportOpened> => core("pages.open", { id, theme: "light" });
 /**

@@ -143,10 +143,70 @@ FONT = '"Inter","Noto Sans TC","PingFang TC","Microsoft JhengHei UI","Microsoft 
 _HELPER = "<script>" + FRAME_NAVIGATION + """
 (() => {
   const post = (type, data) => parent.postMessage({raphaelPage: 1, type, ...data}, '*');
+  // What the owner does on the page is kept (R-PAGE-14): every field's value, what the page keeps in localStorage (the frame
+  // has none of its own) and what its script keeps with raphael.state go to the window, which saves them with the page, and
+  // they come back when it opens again, after a reload, a theme change, a new revision or a restart. Passwords, files and a
+  // field marked autocomplete="off" or data-raphael-forget are never kept.
+  const saved = window.__raphaelState && typeof window.__raphaelState === 'object' ? window.__raphaelState : {};
+  const store = new Map(Object.entries(saved.storage || {}).filter(([, value]) => typeof value === 'string'));
+  let custom = saved.custom === undefined ? null : saved.custom, restoring = false, timer = 0;
+  const FIELD = 'input, textarea, select, [contenteditable]';
+  const kept = el => el instanceof Element && el.matches(FIELD) && el.getAttribute('contenteditable') !== 'false'
+    && !el.matches('input[type=password i], input[type=file i], input[type=hidden i], input[type=submit i], input[type=button i], input[type=reset i], input[type=image i], [autocomplete~="off" i], [data-raphael-forget]');
+  const all = () => [...document.querySelectorAll(FIELD)].filter(kept);
+  const keyOf = (el, index) => el.id ? '#' + el.id : el.name ? 'name:' + el.name + (el.type === 'radio' || el.type === 'checkbox' ? '=' + el.value : '') : 'at:' + index;
+  const valueOf = el => el.isContentEditable ? el.innerHTML : el.type === 'checkbox' || el.type === 'radio' ? el.checked : el.multiple ? [...el.selectedOptions].map(o => o.value) : el.value;
+  const save = () => { clearTimeout(timer); timer = setTimeout(() => {
+    const fields = {}; all().forEach((el, index) => { fields[keyOf(el, index)] = valueOf(el); });
+    post('state', {state: {fields, storage: Object.fromEntries(store), custom}}); }, 400); };
+  const applied = new Set();
+  const restore = () => {
+    const values = saved.fields && typeof saved.fields === 'object' ? saved.fields : {};
+    restoring = true;
+    try {
+      all().forEach((el, index) => {
+        const key = keyOf(el, index), value = values[key];
+        if (applied.has(key) || !(key in values)) return;
+        applied.add(key);
+        if (el.isContentEditable) { if (typeof value === 'string') el.innerHTML = value; }
+        else if (el.type === 'checkbox' || el.type === 'radio') { if (typeof value === 'boolean') el.checked = value; }
+        else if (el.multiple) { if (Array.isArray(value)) [...el.options].forEach(o => { o.selected = value.includes(o.value); }); }
+        else if (typeof value === 'string') el.value = value;
+        // The page's own script hears it as it hears the owner, so what it shows from the fields is drawn again.
+        el.dispatchEvent(new Event('input', {bubbles: true}));
+        el.dispatchEvent(new Event('change', {bubbles: true}));
+      });
+    } finally { restoring = false; }
+  };
+  for (const type of ['input', 'change']) addEventListener(type, event => { if (!restoring && kept(event.target)) save(); }, true);
+  let own = null;
+  try { own = window.localStorage; own.length; } catch { own = null; }
+  if (!own) try {
+    Object.defineProperty(window, 'localStorage', {configurable: true, value: Object.freeze({
+      get length() { return store.size; },
+      key(index) { return [...store.keys()][index] ?? null; },
+      getItem(key) { key = String(key); return store.has(key) ? store.get(key) : null; },
+      setItem(key, value) { store.set(String(key), String(value)); save(); },
+      removeItem(key) { store.delete(String(key)); save(); },
+      clear() { store.clear(); save(); },
+    })});
+  } catch {}
   window.raphael = Object.freeze({
-    send(text) { if (typeof text === 'string' && text.trim() && text.length <= 4000) post('send', {text}); },
-    open(url) { try { const u = new URL(url); if (u.protocol === 'https:' && !u.username && !u.password && u.href.length <= 2048) post('open', {url:u.href}); } catch {} }
+    send(text) { if (!restoring && typeof text === 'string' && text.trim() && text.length <= 4000) post('send', {text}); },
+    open(url) { if (restoring) return; try { const u = new URL(url); if (u.protocol === 'https:' && !u.username && !u.password && u.href.length <= 2048) post('open', {url:u.href}); } catch {} },
+    state: Object.freeze({
+      get() { return custom === null ? null : JSON.parse(JSON.stringify(custom)); },
+      set(value) { try { custom = value === undefined ? null : JSON.parse(JSON.stringify(value)); } catch { return; } save(); },
+    }),
   });
+  addEventListener('DOMContentLoaded', () => {
+    restore();
+    // A page that draws its fields from its script after it loads gets their values as they appear, for a few seconds.
+    const appear = new MutationObserver(restore);
+    appear.observe(document.documentElement, {childList: true, subtree: true});
+    setTimeout(() => appear.disconnect(), 3000);
+  }, {once: true});
+  addEventListener('load', restore, {once: true});
   // Where the owner is reading: the window keeps it, so a page changed while open comes back to the same place.
   let scrolling = 0;
   addEventListener('scroll', () => { if (!scrolling) scrolling = requestAnimationFrame(() => { scrolling = 0; post('scroll', {y: Math.round(scrollY)}); }); }, {passive: true});
@@ -189,8 +249,40 @@ _HELPER = "<script>" + FRAME_NAVIGATION + """
 </script>"""
 
 
-def document(page, theme):
-    """Prepend host styles/helper to a fragment or a full document, after its preamble."""
+STATE_BYTES = 64 * 1024
+
+
+def checked_state(value):
+    """What the window saves of a page (R-PAGE-14): its fields, its storage and its script's own value, at most 64 KB as
+    JSON, and no credential in it (a page that holds one keeps nothing until it is gone)."""
+    if not isinstance(value, dict) or set(value) - {"fields", "storage", "custom"}:
+        raise invalid_params("state must hold fields, storage and custom only")
+    fields, storage = value.get("fields", {}), value.get("storage", {})
+    if not isinstance(fields, dict) or not all(
+            isinstance(key, str) and (isinstance(item, (str, bool)) or (isinstance(item, list) and all(isinstance(v, str) for v in item)))
+            for key, item in fields.items()):
+        raise invalid_params("fields must name text, a choice or a list of choices")
+    if not isinstance(storage, dict) or not all(isinstance(key, str) and isinstance(item, str) for key, item in storage.items()):
+        raise invalid_params("storage must name text")
+    try:
+        checked_text(json.dumps(value, ensure_ascii=False), "the page's state", STATE_BYTES)
+    except PageError as error:
+        raise invalid_params(str(error)) from None
+    return value
+
+
+def state_script(state):
+    """The saved state of a page as the script the helper reads first (`window.__raphaelState`), empty for none. A `<` is
+    written as its escape, so nothing in it can close the script."""
+    if not state:
+        return ""
+    text = json.dumps(state, ensure_ascii=False, separators=(",", ":"))
+    return "<script>window.__raphaelState=" + text.replace("<", "\\u003c").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029") + ";</script>"
+
+
+def document(page, theme, state=None):
+    """Prepend host styles/helper to a fragment or a full document, after its preamble. `state` is what the owner left on
+    the page (R-PAGE-14): the helper puts it back."""
     content = page["html"]
     while True:
         before = content
@@ -209,7 +301,7 @@ def document(page, theme):
     base = BASE if page["source"] == "html" else ""
     return ('<!DOCTYPE html><meta charset="utf-8"><meta name="viewport" content="width=device-width">'
             f"<title>{html_lib.escape(page['title'])}</title><style>:root{{{variables};color-scheme:{theme}}}"
-            f"body{{background:var(--bg);color:var(--fg);font-family:var(--font)}}{base}</style>" + _HELPER + content)
+            f"body{{background:var(--bg);color:var(--fg);font-family:var(--font)}}{base}</style>" + state_script(state) + _HELPER + content)
 
 
 def page_file(page):
@@ -228,6 +320,17 @@ def page_file(page):
 class PageStore:
     def __init__(self, conn, now_ms=wall_clock_ms):
         self.conn, self.now_ms = conn, now_ms
+
+    def state(self, page_id):
+        """What the owner left on the page (R-PAGE-14), or None."""
+        row = self.conn.execute("SELECT state FROM page_state WHERE page_id=?", (page_id,)).fetchone()
+        return json.loads(row[0]) if row else None
+
+    def keep_state(self, page_id, state):
+        with self.conn:
+            self.conn.execute("INSERT INTO page_state (page_id, state, updated_at_ms) VALUES (?, ?, ?)"
+                              " ON CONFLICT(page_id) DO UPDATE SET state=excluded.state, updated_at_ms=excluded.updated_at_ms",
+                              (page_id, json.dumps(state, ensure_ascii=False, separators=(",", ":")), self.now_ms()))
 
     def get(self, page_id):
         row = self.conn.execute("SELECT * FROM pages WHERE id=?", (page_id,)).fetchone()
@@ -416,7 +519,7 @@ class PageHost:
                     if page is not None and not url.scheme and not url.netloc:
                         theme = parse_qs(url.query).get("theme", ["light"])[0]
                         theme = "dark" if theme == "dark" else "light"
-                        status, body, csp = 200, document(page, theme).encode("utf-8"), page_csp(page)
+                        status, body, csp = 200, document(page, theme, self.store.state(page_id)).encode("utf-8"), page_csp(page)
                 response = (f"HTTP/1.1 {status} { {200:'OK', 403:'Forbidden', 404:'Not Found'}[status]}\r\n"
                             "Content-Type: text/html; charset=utf-8\r\nCache-Control: no-store\r\n"
                             f"Referrer-Policy: {referrer}\r\nX-Content-Type-Options: nosniff\r\n"
@@ -448,6 +551,7 @@ class Pages:
         router.register("pages.open", self.open)
         router.register("pages.video_base", self.video_base)
         router.register("pages.viewing", self.viewing)
+        router.register("pages.state", self.keep_state)
         router.register("pages.tool_call", self.call)
         # The shell's alone (`report_save`): the window may not call it, so it never names a folder.
         router.register("pages.export", self.export)
@@ -481,6 +585,12 @@ class Pages:
         if page["source"] == "mcp":
             result.update(tool_input=page["tool_input"], tool_result=page["tool_result"], tool=page["tool"])
         return result
+
+    async def keep_state(self, params):
+        """What the owner left on a page, as its frame told the window (R-PAGE-14): served back with the page next time."""
+        page = self.of(params)
+        self.store.keep_state(page["id"], checked_state(params.get("state")))
+        return {"kept": True}
 
     async def viewing(self, params):
         """The window's word, before it sends what the owner wrote, of the page that stands open beside it (null: none).

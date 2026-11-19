@@ -418,7 +418,7 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
 
   window.addEventListener("message", event => {
     const live = event.source ? [...frames.values()].find(item => item.frame.contentWindow === event.source || item.next?.contentWindow === event.source) : undefined;
-    const data = event.data as { raphaelPage?: number; jsonrpc?: string; type?: string; text?: unknown; url?: unknown; height?: unknown; y?: unknown } | null;
+    const data = event.data as { raphaelPage?: number; jsonrpc?: string; type?: string; text?: unknown; url?: unknown; height?: unknown; y?: unknown; state?: unknown } | null;
     if (!live || !data || typeof data !== "object") return;
     const loading = live.next !== null && live.next.contentWindow === event.source;
     // A changed page still loading says how tall it is before it takes its place.
@@ -436,6 +436,11 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
     if (data.type === "height") { heard(live, data.height); applyHeight(live); }
     else if (data.type === "send" && placeText(live, data.text)) post(live, { raphaelPage: 1, type: "result", status: "placed" });
     else if (data.type === "open") openLink(live, data.url);
+    // What the owner did on the page goes to the core, which serves it back when the page opens again (R-PAGE-14). The page
+    // is the one this frame shows: what a frame says never names another page.
+    else if (data.type === "state" && data.state && typeof data.state === "object" && JSON.stringify(data.state).length <= 64 * 1024) {
+      api.pagesState(live.id, data.state).catch((error) => console.warn("page-card: the page's state was not kept", describeError(error)));
+    }
     // Escape pressed in the page goes back, as it does outside it, unless a task's Stop or a recording has it first.
     else if (data.type === "escape" && live.expanded && pressOf(live.frame) !== "none" && !cancelGesture().hasTarget()) pageView?.close();
   });

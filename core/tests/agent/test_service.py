@@ -56,6 +56,7 @@ METHODS = [
     "messages.search",
     "pages.export",
     "pages.open",
+    "pages.state",
     "pages.tool_call",
     "pages.video_base",
     "pages.viewing",
