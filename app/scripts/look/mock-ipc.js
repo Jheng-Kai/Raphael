@@ -160,6 +160,11 @@ export function installMock(fixture, config = {}, target = window) {
   // Notion's sign-in ran out: the inventory says needs_sign_in, and the @ menu shows it with 「需要登入」.
   if (variant.mentionSignIn) data.managedConnectors.find(connector => connector.id === "composio:notion").status = "EXPIRED";
   if (variant.computerHost) data.settings.computer_ssh_alias = variant.computerHost;
+  // Speech to text on this PC with SenseVoice, the cloud model kept for later (issue 232).
+  if (variant.localSpeech) {
+    Object.assign(data.settings, { stt_engine: "local", stt_local_model: "sensevoice" });
+    data.localModels = data.localModels.map(model => model.name === "sensevoice" ? { ...model, ready: true } : model);
+  }
   if (variant.routineEmpty) data.routines = [];
   // What the first member's personality page holds (member-settings.ts): its name, role, personality and instructions as the scene gives them.
   if (variant.persona) Object.assign(data.members.find(member => member.id === 1), variant.persona);

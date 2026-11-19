@@ -202,8 +202,11 @@ npm run look -- profile appearance appearance-menu appearance-keyboard models di
 npm run look -- sidebar sidebar-search sidebar-group-avatar-pair sidebar-group-avatar-four chat appearance appearance-menu appearance-keyboard desktop-takeover-owner foot-account-calendar dictation-dictionary theme-clarity --theme both --width 1120,720,1920x1080
 npm run look -- appearance --theme both --width 1120,720,1920x1080 --locale ja
 npm run look -- chatgpt-signed-out chatgpt-signed-in chooser-chatgpt-signed-out chooser-chatgpt-signed-in chooser-claude-models chooser-claude-older cli-account-menu cli-account-disconnected cli-account-reconnected window-hover-minimize window-hover-maximize window-hover-restore window-hover-close window-hover-modal --theme both --width 1120,720,1920x1080
-npm run look -- model-choices-answer model-choices-cleanup model-choices-stt model-choices-local model-choices-local-selected --theme both --width 1120,720,1920x1080
+npm run look -- model-choices-answer model-choices-cleanup model-choices-stt model-choices-local model-choices-local-selected settings-local-stt --theme both --width 1120,720,1920x1080
 ```
+
+Speech to text on this PC (`settings-local-stt`, the fixture flag `localSpeech`, R-MODEL-07) reads the local model's name over 本機 with no mark: the
+cloud model kept for later lends it neither its name nor its maker's mark (issue 232), and the name lines up with the other unmarked choices.
 
 Claude Code's tab of the chooser (`chooser-claude-models`, R-MODEL-04) lists what Claude Code
 says and knows: its own four first, in its order, then the older models its program still runs,
