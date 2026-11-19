@@ -1548,6 +1548,7 @@ export const th = {
   "conn.status.relogin": "ต้องลงชื่อเข้าใช้",
   "conn.status.error": "เชื่อมต่อไม่ได้: {p0}",
   "conn.relogin": "ลงชื่อเข้าใช้อีกครั้ง",
+  "conn.lost": "การเชื่อมต่อ {p0} ขาดหาย ลงชื่อเข้าใช้อีกครั้งเพื่อใช้งานต่อ",
   "conn.device.hint": "วางรหัสนี้ในหน้าที่เปิดขึ้น",
   "conn.device.open": "คัดลอกรหัสและเปิด {p0}",
   "conn.revokeOpen": "ถอนสิทธิ์เข้าถึงบน {p0}",

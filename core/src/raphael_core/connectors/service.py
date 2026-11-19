@@ -10,6 +10,7 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from contextvars import ContextVar
 
+from .. import keychain
 from ..agent.policy import Tier
 from ..integrations.config import ServerConfig, tool_record
 from ..integrations.oauth import open_in_browser
@@ -40,6 +41,9 @@ CATALOG_FILE = "connectors-catalog.json"
 # and the account Composio made for it goes with it.
 WAITING = ("INITIALIZING", "INITIATED")
 SIGN_IN_LIMIT_S = 600
+# The accounts are read this long after start and then this often, so that one that stopped is told while the apps are shut.
+WATCH_FIRST_S = 60
+WATCH_EVERY_S = 1200
 # What `_signing_in` holds while the built-in Google sign-in waits: the account ids of Composio never look like this.
 GOOGLE_SIGN_IN = "google"
 
@@ -127,6 +131,10 @@ class ConnectorsService:
         self._store_catalog: tuple[float, dict] | None = None
         self._important: dict[str, set[str]] = {}
         self._notify = lambda: None
+        self._tell_lost = lambda entry: None
+        # The accounts told as lost in this run: each is told once, and again only after it worked in between.
+        self._told_lost: set[str] = set()
+        self._watch: asyncio.Task | None = None
         self._transport = transport
         integrations.managed = self
         integrations._connector.managed_opener = self.open_managed
@@ -144,6 +152,7 @@ class ConnectorsService:
         for name, handler in methods.items():
             router.register("connectors." + name, self._handler(handler, name))
         self._notify = lambda: router.notify("connectors.changed", {})
+        self._tell_lost = lambda entry: router.notify("connectors.lost", {"id": entry.id, "name": entry.name or entry.id.split(":", 1)[1]})
 
     def _handler(self, handler, name):
         async def operation(params):
@@ -461,10 +470,11 @@ class ConnectorsService:
             self._notify()
 
     async def aclose(self) -> None:
-        task, self._catalog_renewal = self._catalog_renewal, None
-        if task is not None and not task.done():
-            task.cancel()
-            await asyncio.gather(task, return_exceptions=True)
+        for task in (self._catalog_renewal, self._watch):
+            if task is not None and not task.done():
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+        self._catalog_renewal = self._watch = None
         # A sign-in still waiting in the browser ends here, so that nothing is left half done when the core goes.
         await self._end_sign_in(set(self._signing_in))
 
@@ -681,6 +691,9 @@ class ConnectorsService:
         body = {"toolkit": slug}
         if "alias" in params:
             body["alias"] = _text(params, "alias")
+        replace = params.get("replace", [])
+        if not isinstance(replace, list) or len(replace) > 20 or any(not isinstance(i, str) or not i for i in replace):
+            raise invalid_params("replace must be a list of account ids")
         connected = permitted = False
         try:
             # The lock is taken to set the sign-in up and to finish it, never for the wait between: the owner goes on working
@@ -729,6 +742,7 @@ class ConnectorsService:
                         async with self._lock:
                             if auth_id:
                                 entry.auth_config_id = auth_id
+                            await self._replace(entry, account_id, replace)
                             self._save()
                             await self._load_tools(entry)
                             await self._patch()
@@ -758,6 +772,22 @@ class ConnectorsService:
                 # permitted (an app the owner switched off or took away while the sign-in waited stays so), not what they were.
                 async with self._lock:
                     await self._patch(self._config(), refresh=False)
+
+    async def _replace(self, entry: Connector, new_id: str, replace: list[str]) -> None:
+        """A sign-in again takes the place of the accounts it was for (`replace`, ones that stopped working): the new account
+        keeps the name the owner gave the old one, and each old one goes back to Composio and off the list, so that
+        signing in again never leaves a second account beside a dead one. One Composio cannot take back stays as it was."""
+        new = next((a for a in entry.accounts if a["id"] == new_id), None)
+        for old in [a for a in entry.accounts if a["id"] in replace and a["id"] != new_id and a["status"] != "ACTIVE"]:
+            try:
+                await self._delete_account(old)
+            except ConnectorFailure:
+                continue
+            if new is not None and old.get("label"):
+                new["label"] = old["label"]
+            entry.accounts.remove(old)
+            self._told_lost.discard(old["id"])
+        self._settle(entry)
 
     async def ensure_tools(self, entry):
         """Load provider classification hints once per toolkit, including after restart."""
@@ -844,21 +874,7 @@ class ConnectorsService:
             raise invalid_params("refresh must be boolean")
         if refresh and self.vault.filled(KEY) and not self._lock.locked() and not self.login_pending:
             async with self._lock:
-                accounts = await self.composio.pages("/connected_accounts", {"user_ids": self.store.user_id, "limit": 500})
-                by_slug = {}
-                for account in accounts:
-                    slug = account.get("toolkit", {}).get("slug")
-                    status = account.get("status")
-                    if isinstance(slug, str) and status in STATUSES and isinstance(account.get("id"), str):
-                        prior = self.store.connectors.get("composio:" + slug)
-                        view = self.account_view(account, prior.accounts if prior else [])
-                        if self._stale(view) and await self._delete_quietly(view):
-                            continue  # a sign-in nobody finished is given back, not listed
-                        by_slug.setdefault(slug, []).append(view)
-                for entry in self.store.connectors.values():
-                    if entry.kind == "composio":
-                        entry.accounts = by_slug.get(entry.id.split(":", 1)[1], [])
-                        self._settle(entry)
+                await self._read_accounts()
                 await self._session()
                 await self.composio.pages("/tool_router/session/" + segment(self.store.session_id) + "/toolkits",
                                           {"is_connected": "true", "limit": 50})
@@ -874,6 +890,66 @@ class ConnectorsService:
                 "duplicate_google_paths": "google" in self.store.connectors and any(
                     c.id in ("composio:gmail", "composio:googlecalendar") and c.status == "ACTIVE"
                     for c in self.store.connectors.values())}
+
+    async def _read_accounts(self) -> None:
+        """Every app's accounts as Composio has them now (under the lock). A sign-in nobody finished is given back, and an
+        account that was connected and has stopped working (expired, failed, revoked, gone) is told to the window once."""
+        before = {c.id: {a["id"]: a["status"] for a in c.accounts} for c in self.store.connectors.values() if c.kind == "composio"}
+        accounts = await self.composio.pages("/connected_accounts", {"user_ids": self.store.user_id, "limit": 500})
+        by_slug = {}
+        for account in accounts:
+            slug = account.get("toolkit", {}).get("slug")
+            status = account.get("status")
+            if isinstance(slug, str) and status in STATUSES and isinstance(account.get("id"), str):
+                prior = self.store.connectors.get("composio:" + slug)
+                view = self.account_view(account, prior.accounts if prior else [])
+                if self._stale(view) and await self._delete_quietly(view):
+                    continue  # a sign-in nobody finished is given back, not listed
+                by_slug.setdefault(slug, []).append(view)
+        for entry in self.store.connectors.values():
+            if entry.kind == "composio":
+                entry.accounts = by_slug.get(entry.id.split(":", 1)[1], [])
+                self._settle(entry)
+                self._tell_losses(entry, before.get(entry.id, {}))
+
+    def _tell_losses(self, entry: Connector, before: dict[str, str]) -> None:
+        """Tell the window once that an account of `entry` which was connected has stopped working or is gone. One that
+        works again may be told again later; an app the owner turned off is not told."""
+        now = {a["id"]: a["status"] for a in entry.accounts}
+        self._told_lost -= {ident for ident, status in now.items() if status == "ACTIVE"}
+        lost = [ident for ident, status in before.items()
+                if status == "ACTIVE" and now.get(ident) != "ACTIVE" and ident not in self._told_lost]
+        if lost and entry.enabled:
+            self._told_lost.update(lost)
+            self._tell_lost(entry)
+
+    def start_watch(self) -> None:
+        """Read the accounts a minute after start and then every twenty minutes, so that one that stopped working is told
+        while the apps are shut (the window reads what is stored, never Composio)."""
+        if self._watch is None or self._watch.done():
+            self._watch = asyncio.get_running_loop().create_task(self._watch_accounts())
+
+    async def _watch_accounts(self) -> None:
+        delay = WATCH_FIRST_S
+        while True:
+            await asyncio.sleep(delay)
+            delay = WATCH_EVERY_S * 2 if await self.watch_once() == "rate_limit" else WATCH_EVERY_S
+
+    async def watch_once(self) -> str:
+        """One read for the watch: only while some app is connected, the key is there, nothing holds the lock or waits for a
+        sign-in, and (on a Mac, where reading the key asks the owner) the key was already read in this run."""
+        connected = any(a["status"] == "ACTIVE" for c in self.store.connectors.values() if c.kind == "composio" for a in c.accounts)
+        if (not connected or not self.vault.filled(KEY) or self._lock.locked() or self.login_pending
+                or (keychain.asks() and not self.composio.key_read)):
+            return "skipped"
+        try:
+            async with self._lock:
+                await self._read_accounts()
+                self._save()
+        except ConnectorFailure as error:
+            logger.info("The accounts were not read: %s", error.kind)
+            return error.kind
+        return "read"
 
     def _remove_managed(self, ident):
         self.hub._connector.invalidate(ident)

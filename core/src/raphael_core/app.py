@@ -1641,7 +1641,8 @@ class App(Router):
         if self._closed or self._deferred_started:
             return
         self._deferred_started = True
-        starts = [self.vm.start_monitor, self.agent.prewarm, self.memory.start, self.members.start, self.rooms.start]
+        starts = [self.vm.start_monitor, self.agent.prewarm, self.memory.start, self.members.start, self.rooms.start,
+                  self.connectors.start_watch]
         if self.cli_records is not None:
             starts.append(self.cli_records.start)
         for start in starts:

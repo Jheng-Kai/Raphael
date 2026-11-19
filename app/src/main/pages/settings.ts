@@ -1237,7 +1237,7 @@ export function createSettings(app: AppContext): SettingsPage {
     async show(open?: PageArgument) {
       const repair = open?.startsWith("repair:") ? open.split(":").slice(1) : null;
       if (repair?.[0] === "computer") { app.closeSettings(); app.go("agent", "computer"); return; }
-      if (repair) open = ({ search: "tools", read: "tools", vision: "tools", pdf: "tools", store: "connections" } as Record<string, SettingsPane>)[repair[0]] ?? repair[0] as SettingsPane;
+      if (repair) open = ({ search: "tools", read: "tools", vision: "tools", pdf: "tools", store: "connections", relogin: "connections" } as Record<string, SettingsPane>)[repair[0]] ?? repair[0] as SettingsPane;
       visible = true;
       stopOutside();
       stopOutside = registerDismissal(el.querySelector<HTMLElement>(".modal")!, () => app.closeSettings(), () => !recording.active(), undefined,
@@ -1296,6 +1296,11 @@ export function createSettings(app: AppContext): SettingsPage {
           await connections.load();
           if (mine !== loads || !visible) return;
           if (resource === "composio" || resource === "google") el.querySelector<HTMLButtonElement>('[data-conn="configure-composio"]')?.click();
+        } else if (target === "relogin") {
+          // `repair:relogin:composio:<slug>`: the notice of a lost connection signs in to that app again, on its own page.
+          await connections.load();
+          if (mine !== loads || !visible) return;
+          connections.relogin(repair.slice(1).join(":"));
         }
       }
       if (!el.contains(document.activeElement)) el.querySelector<HTMLElement>("#set-title")?.focus();
