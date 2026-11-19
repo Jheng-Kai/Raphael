@@ -422,7 +422,6 @@ export const ptBR = {
   "media.unavailable": "O modelo ou provedor escolhido está indisponível",
   "media.perImage": "{p0} por imagem",
   "media.perRequest": "{p0} por solicitação",
-  "media.imageTokens": "Saída de imagem: {p0} por milhão de unidades",
   "media.bill": "Modelo: {p0} · Custo da API: {p1}",
   "media.costUnknown": "Custo não informado",
   "teach.start": "Ensinar uma tarefa",

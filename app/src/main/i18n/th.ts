@@ -422,7 +422,6 @@ export const th = {
   "media.unavailable": "โมเดลหรือผู้ให้บริการที่เลือกไม่พร้อมใช้งาน",
   "media.perImage": "{p0} ต่อภาพ",
   "media.perRequest": "{p0} ต่อคำขอ",
-  "media.imageTokens": "ผลลัพธ์ภาพ {p0} ต่อล้านหน่วย",
   "media.bill": "โมเดล: {p0} · ค่า API: {p1}",
   "media.costUnknown": "ไม่มีรายงานค่าใช้จ่าย",
   "teach.start": "สอนงาน",

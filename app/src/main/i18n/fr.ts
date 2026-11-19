@@ -422,7 +422,6 @@ export const fr = {
   "media.unavailable": "Le modèle ou fournisseur choisi est indisponible",
   "media.perImage": "{p0} par image",
   "media.perRequest": "{p0} par requête",
-  "media.imageTokens": "Sortie image : {p0} par million d’unités",
   "media.bill": "Modèle : {p0} · Coût API : {p1}",
   "media.costUnknown": "Coût non communiqué",
   "teach.start": "Enseigner une tâche",

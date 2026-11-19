@@ -422,7 +422,6 @@ export const ko = {
   "media.unavailable": "선택한 모델 또는 제공업체를 사용할 수 없습니다",
   "media.perImage": "이미지당 {p0}",
   "media.perRequest": "요청당 {p0}",
-  "media.imageTokens": "이미지 출력 백만 단위당 {p0}",
   "media.bill": "모델: {p0} · API 비용: {p1}",
   "media.costUnknown": "비용이 보고되지 않았습니다",
   "teach.start": "작업 가르치기",

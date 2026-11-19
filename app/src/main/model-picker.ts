@@ -130,11 +130,10 @@ export function priceHTML(text: string): string {
 }
 
 function mediaPrice(model: CatalogModel): string {
-  const units = [model.per_image == null ? "" : t("media.perImage", { p0: formatPerMtok(model.per_image) }),
-    model.per_request == null || model.per_request === 0 && (hasTokenPrice(model) || model.image_output_per_mtok != null) ? "" : t("media.perRequest", { p0: formatPerMtok(model.per_request) })];
-  const tokens = hasTokenPrice(model) ? t("pricing.002", { p0: perMtok(model.input_per_mtok), p1: perMtok(model.output_per_mtok) }) : "";
-  const images = model.image_output_per_mtok == null ? "" : t("media.imageTokens", { p0: formatPerMtok(model.image_output_per_mtok) });
-  return [...units, tokens, images].filter(Boolean).join(" · ") || t("pricing.001");
+  // A model that draws is priced by the picture (or the call); its text prices are zero and its image tokens mean nothing
+  // to the owner, so neither is said, and with no price of its own it says nothing rather than a wrong unit.
+  return [model.per_image == null ? "" : t("media.perImage", { p0: formatPerMtok(model.per_image) }),
+    !model.per_request ? "" : t("media.perRequest", { p0: formatPerMtok(model.per_request) })].filter(Boolean).join(" · ");
 }
 
 /** A context length in tokens, short: 1050000 -> `1.05M`, 131072 -> `131K`. */
@@ -791,7 +790,9 @@ export function listHTML(list: PickerList, selected = list.current, models: read
     const key = refsOf(model).map((ref) => descriptions[ref as keyof typeof descriptions]).find(Boolean);
     const starred = refsOf(model).some((ref) => list.favorites.includes(ref));
     const description = key ? t(key) : getLocale() === "en" ? model.description : "";
-    const sub = [description || [model.provider, model.context_length ? formatContext(model.context_length) : ""].filter(Boolean).join(" · "),
+    // A context length is a text model's measure; a drawing or a video shows none.
+    const media = list.role === "image" || list.role === "video";
+    const sub = [description || [model.provider, model.context_length && !media ? formatContext(model.context_length) : ""].filter(Boolean).join(" · "),
       !usable ? reasonText(fitFor(model, list.role).reason) : ""].filter(Boolean).join(" · ");
     const price = lead ? "" : chooserPrice(model, models, list.role);
     return `<div class="mc-item"><button type="button" role="radio" class="mc-row mp-opt${lead ? " mp-lead" : ""}" aria-checked="${chosen}" data-model="${esc(model.id)}" data-id="${esc(model.id)}"${chosen ? ' data-current="true"' : ""}${!usable ? ' disabled aria-disabled="true"' : ""}>` +

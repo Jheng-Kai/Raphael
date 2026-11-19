@@ -342,7 +342,6 @@ export const ja = {
   "media.unavailable": "選択したモデルまたはプロバイダーが利用できません",
   "media.perImage": "1 枚あたり {p0}",
   "media.perRequest": "1 リクエストあたり {p0}",
-  "media.imageTokens": "画像出力 100 万単位あたり {p0}",
   "media.bill": "モデル：{p0} · API 料金：{p1}",
   "media.costUnknown": "料金の報告なし",
   "teach.start": "一度やって教える",

@@ -422,7 +422,6 @@ export const ru = {
   "media.unavailable": "Выбранная модель или провайдер недоступны",
   "media.perImage": "{p0} за изображение",
   "media.perRequest": "{p0} за запрос",
-  "media.imageTokens": "Вывод изображений: {p0} за миллион единиц",
   "media.bill": "Модель: {p0} · Стоимость API: {p1}",
   "media.costUnknown": "Стоимость не сообщена",
   "teach.start": "Обучить задаче",

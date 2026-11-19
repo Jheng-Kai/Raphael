@@ -304,7 +304,7 @@ export function mediaRowPrice(v: SettingsView, role: "image" | "video"): string 
   const models = catalogOf(v) ? modelsFor(catalogOf(v)!, role) : [];
   const model = models.find(m => m.id === chosen);
   if (model && onPlan(model)) return t("brains.subscription");
-  return `${model ? priceDescription(model, role) : chosen ? t("media.unavailable") : t("media.unset")} · ${t("media.paid")}` +
+  return [model ? priceDescription(model, role) : chosen ? t("media.unavailable") : t("media.unset"), t("media.paid")].filter(Boolean).join(" · ") +
     (!chosen && !models.length && v.catalog !== "loading" ? ` · ${t("media.none")}` : "");
 }
 const modelRow = (v: SettingsView, { role, k, label }: (typeof MODEL_ROWS)[number]): string =>

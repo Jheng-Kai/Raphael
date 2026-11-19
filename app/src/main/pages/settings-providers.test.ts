@@ -682,3 +682,11 @@ test("連接其他來源 from a feature's choice lists only the ways that can do
   expect(document.querySelector("#pv-dialog [data-chatgpt]")).not.toBeNull();
   expect(document.querySelector("#pv-dialog [data-cli], #pv-dialog [data-cli-menu]")).toBeNull();
 });
+
+test("a provider change told while Settings is closed is read at once, so a source found after start is there when it opens", async () => {
+  await mount();
+  page.hide();
+  api.modelsCatalog.mockClear();
+  send({ type: "ProvidersChanged" }); await flush();
+  expect(api.modelsCatalog).toHaveBeenCalled();
+});

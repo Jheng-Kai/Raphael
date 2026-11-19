@@ -341,7 +341,6 @@ export const zhTW = {
   "media.unavailable": "已選模型或供應商目前不可用",
   "media.perImage": "每張 {p0}",
   "media.perRequest": "每次請求 {p0}",
-  "media.imageTokens": "圖片輸出 {p0} 每百萬單位",
   "media.bill": "模型：{p0} · API 費用：{p1}",
   "media.costUnknown": "費用未回報",
   "teach.start": "教他做一次",

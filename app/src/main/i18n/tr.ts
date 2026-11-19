@@ -422,7 +422,6 @@ export const tr = {
   "media.unavailable": "Seçilen model veya sağlayıcı kullanılamıyor",
   "media.perImage": "Görsel başına {p0}",
   "media.perRequest": "İstek başına {p0}",
-  "media.imageTokens": "Görsel çıktısı milyon birim başına {p0}",
   "media.bill": "Model: {p0} · API ücreti: {p1}",
   "media.costUnknown": "Ücret bildirilmedi",
   "teach.start": "Görev öğret",

@@ -422,7 +422,6 @@ export const id = {
   "media.unavailable": "Model atau penyedia terpilih tidak tersedia",
   "media.perImage": "{p0} per gambar",
   "media.perRequest": "{p0} per permintaan",
-  "media.imageTokens": "Keluaran gambar {p0} per juta unit",
   "media.bill": "Model: {p0} · Biaya API: {p1}",
   "media.costUnknown": "Biaya tidak dilaporkan",
   "teach.start": "Ajarkan tugas",

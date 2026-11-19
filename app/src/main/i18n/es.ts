@@ -422,7 +422,6 @@ export const es = {
   "media.unavailable": "El modelo o proveedor elegido no está disponible",
   "media.perImage": "{p0} por imagen",
   "media.perRequest": "{p0} por solicitud",
-  "media.imageTokens": "Salida de imagen: {p0} por millón de unidades",
   "media.bill": "Modelo: {p0} · Coste API: {p1}",
   "media.costUnknown": "Coste no comunicado",
   "teach.start": "Enseñar una tarea",

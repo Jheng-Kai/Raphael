@@ -252,7 +252,7 @@ export function createSettings(app: AppContext): SettingsPage {
     // Closed too: Settings open at once on what they hold, and a choice made at the composer must already be in it.
     if (event.type === "SettingsChanged") void api.settingsGet().then(result => { brain = result.settings; if (visible) render(); }, () => {});
     cliBrains.followEvent(event);
-    if (event.type === "ProvidersChanged" && visible) void loadCatalog(true);
+    if (event.type === "ProvidersChanged") void loadCatalog(true);
     // A QuotaChanged while this page's own reading is under way is that reading's own finding (the core tells every
     // reader when a live read changed the windows): it brings the numbers, and asking again would start a second read.
     if (event.type === "QuotaChanged" && (backgroundRead || usageRefresh)) return;

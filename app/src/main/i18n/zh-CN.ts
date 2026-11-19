@@ -422,7 +422,6 @@ export const zhCN = {
   "media.unavailable": "已选模型或供应商目前不可用",
   "media.perImage": "每张 {p0}",
   "media.perRequest": "每次请求 {p0}",
-  "media.imageTokens": "图片输出 {p0} 每百万单位",
   "media.bill": "模型：{p0} · API 费用：{p1}",
   "media.costUnknown": "费用未回报",
   "teach.start": "教他做一次",

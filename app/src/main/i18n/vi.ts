@@ -422,7 +422,6 @@ export const vi = {
   "media.unavailable": "Mô hình hoặc nhà cung cấp đã chọn không khả dụng",
   "media.perImage": "{p0} mỗi ảnh",
   "media.perRequest": "{p0} mỗi yêu cầu",
-  "media.imageTokens": "Đầu ra ảnh {p0} mỗi triệu đơn vị",
   "media.bill": "Mô hình: {p0} · Phí API: {p1}",
   "media.costUnknown": "Chưa báo chi phí",
   "teach.start": "Dạy công việc",
