@@ -320,11 +320,13 @@ async def test_connecting_github_tells_the_window_the_code_and_adds_the_server(g
             "integrations.device_code",
             {
                 "catalog_id": "github",
+                "name": "GitHub",
                 "user_code": "WDJB-MJHT",
                 "verification_uri": "https://github.com/login/device",
                 "expires_in": 900,
             },
-        )
+        ),
+        ("integrations.device_done", {"catalog_id": "github"}),
     ]
     listed = (await github.router.call("integrations.catalog"))["services"]
     assert [s["server_id"] for s in listed if s["id"] == "github"] == [done["server"]["id"]]
@@ -344,6 +346,7 @@ async def test_a_denied_code_adds_nothing(github):
     done = await github.router.call("integrations.connect", {"catalog_id": "github"})
     assert done == {"connected": False, "error": "denied"}
     assert github.vault.names() == [] and (await github.router.call("toolsets.list"))["groups"] == []
+    assert github.sent[-1] == ("integrations.device_done", {"catalog_id": "github"})
 
 
 async def test_the_wait_can_be_cancelled(github):
@@ -362,6 +365,7 @@ async def test_the_wait_can_be_cancelled(github):
     assert await github.router.call("integrations.connect_cancel") == {"cancelled": True}
     assert await call == {"connected": False, "error": "cancelled"}
     assert github.vault.names() == []
+    assert [method for method, _ in github.sent] == ["integrations.device_code", "integrations.device_done"]
 
 
 async def test_disconnecting_clears_the_vault_and_asks_nobody(github):

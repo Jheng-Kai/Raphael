@@ -40,7 +40,7 @@
 .modal-body:has(.cs-apps) { display: flex; flex-direction: column; overflow: hidden; }
 .modal-body:has(.cs-apps) > .set-content { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .cs-apps { display: flex; flex-direction: column; flex: 1; min-height: 0; }
-.cs-apps > :is(.cs-top, .cs-bar, .cs-chips, .cs-device, .core-note) { flex: none; }
+.cs-apps > :is(.cs-top, .cs-bar, .cs-chips, .core-note) { flex: none; }
 .cs-results { flex: 1; min-height: 0; margin-top: var(--sp-3); contain: strict; overflow-y: auto; overflow-x: hidden; scroll-padding-block: var(--sp-4); }
 
 /* The picture of a service: its mark bare, or the one generic app mark. Marks use the text colour, or the brand's where it reads on both themes. */
@@ -215,7 +215,7 @@
 .cs-dlg-name { margin: 0; font: 500 var(--fs-lg)/1.3 var(--display); overflow-wrap: anywhere; }
 .cs-dialog em.num { margin-left: var(--sp-1); font-style: normal; font-weight: 500; color: var(--text-3); }
 .cs-dialog .cs-desc { margin: 0; }
-.cs-dialog .ca-alert, .cs-dialog .cs-device { margin: 0; }
+.cs-dialog .ca-alert { margin: 0; }
 /* The row stands after the list, and when the list is longer than the dialog it stays on the dialog's bottom edge, whole, with the apps scrolling under it: it is never a row the edge cuts. */
 .cs-composio-setup { position: sticky; bottom: 0; z-index: 1; display: flex; align-items: center; gap: var(--sp-3); margin-top: var(--sp-5); padding: var(--sp-4) 0; border-top: 1px solid var(--float-edge); background: var(--content); }
 .cs-composio-setup > span:nth-child(2) { flex: 1; min-width: 0; font-size: var(--fs-sm); }
@@ -282,13 +282,6 @@
   .cs-scrim { padding: var(--sp-4); }
 }
 
-/* The code of a device login: large fixed-width keycaps and the one button that copies it and opens the page */
-.cs-device { display: flex; flex-direction: column; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-4); padding: var(--sp-4) var(--sp-4); border: 0; border-radius: 0; background: transparent; }
-.cs-device-hint { margin: 0; font-size: var(--fs-xs); color: var(--text-2); text-align: center; text-wrap: pretty; }
-.cs-code { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: var(--sp-1); user-select: text; }
-.cs-cap { display: inline-grid; place-items: center; width: 36px; height: 46px; border: 1px solid var(--key-edge); border-bottom-width: 3px; border-radius: var(--r-sm); background: var(--key); color: var(--text); font: 500 var(--fs-h1)/1 var(--mono); }
-.cs-dash { padding: 0 var(--sp-1); color: var(--text-3); font: 500 var(--fs-h1)/1 var(--mono); }
-.cs-device-acts { gap: var(--sp-2); }
 .mcp-lines { width: 100%; min-height: 96px; padding: var(--sp-2) var(--sp-3); resize: vertical; font-family: var(--mono); white-space: pre; }
 .mcp-row-actions { display: flex; align-items: center; gap: var(--sp-1); }
 .modal-body:has(.cs-form) { display:flex; flex-direction:column; overflow:hidden; }

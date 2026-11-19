@@ -102,7 +102,7 @@ describe("action rows", () => {
 
   test("form footers use the shared row instead of hand-written button containers", () => {
     // Provider/model-picker work is owned by another branch; gold approval cards keep their product order.
-    const rows = /<(?:div|span) class="(?:mb-dlg-act|mb-ract|av-crop-act|cs-acts|cs-device-acts|add-acts|svc-acts|addword-actions|rules-acts)"/;
+    const rows = /<(?:div|span) class="(?:mb-dlg-act|mb-ract|av-crop-act|cs-acts|add-acts|svc-acts|addword-actions|rules-acts)"/;
     expect(sources.filter((f) => !["providers.ts", "model-picker.ts"].includes(rel(f)) && rows.test(read(f))).map(rel)).toEqual([]);
     for (const file of ["member-dialogs.ts", "avatar-settings.ts", "connections.ts", "services.ts", "messaging.ts", "pages/dictionary.ts", "setup-rows.ts", "onboarding/mount.ts", "safety-rules.ts", "local-models.ts"]) {
       expect(read(join(MAIN, file)), file).toContain("actionRow(");

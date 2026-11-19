@@ -4821,6 +4821,42 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, toasts: toasts.length, targets: targets.length };
   }
+  // R-APPS-DEVICE-01: the code of a device sign-in, in the window's one dialog over whatever is open.
+  if (name.startsWith("device-code")) {
+    const log = window.__look.calls, made = method => log.filter(call => call.method === method);
+    const dialogs = [...document.querySelectorAll(".mb-dialog.dl-dialog")].filter(visible);
+    if (name === "device-code") {
+      require(dialogs.length === 1, `one dialog shows the code: ${dialogs.length}`);
+      const dialog = dialogs[0], box = dialog.getBoundingClientRect();
+      require(dialog.querySelector("h2").textContent === "連結 GitHub", `its title names the app: ${dialog.querySelector("h2").textContent}`);
+      require(dialog.querySelector(".dl-hint").textContent === "在開啟的頁面貼上這組代碼", "it says what to do with the code");
+      const caps = [...dialog.querySelectorAll(".dl-cap")], first = caps[0].getBoundingClientRect();
+      require(caps.map(cap => cap.textContent).join("") === "WDJBMJHT" && dialog.querySelector(".dl-code").getAttribute("aria-label") === "WDJB-MJHT", "the code is in keycaps and read out whole");
+      require(caps.every(cap => { const r = cap.getBoundingClientRect(); return Math.abs(r.top - first.top) < 1 && Math.abs(r.width - first.width) < 0.5 && Math.abs(r.height - first.height) < 0.5; }), "the keycaps are one size on one line");
+      const code = dialog.querySelector(".dl-code").getBoundingClientRect(), body = dialog.querySelector(".mb-dlg-body").getBoundingClientRect();
+      require(Math.abs((code.left + code.right) / 2 - (body.left + body.right) / 2) < 1.5, "the code stands in the middle of the dialog");
+      const buttons = [...dialog.querySelectorAll(".mb-dlg-act .btn")].filter(visible);
+      require(buttons.map(b => b.textContent).join("|") === "取消|複製代碼並開啟 GitHub", `取消 then the one copy-and-open button: ${buttons.map(b => b.textContent).join("|")}`);
+      require(buttons.every(b => b.tagName === "BUTTON" && b.scrollWidth <= b.clientWidth + 1), "the buttons are real buttons and their words are whole");
+      require(document.activeElement === dialog.querySelector('[data-dlg="open"]'), "the copy-and-open button has the focus");
+      require(box.left >= 0 && box.top >= 0 && box.right <= innerWidth + 0.5 && box.bottom <= innerHeight + 0.5, `the dialog is whole in the window: ${JSON.stringify(box)}`);
+      require(Math.abs((box.left + box.right) / 2 - innerWidth / 2) < 1.5, "the dialog stands in the middle of the window");
+      const top = document.elementFromPoint((box.left + box.right) / 2, (code.top + code.bottom) / 2);
+      require(top && dialog.contains(top), "nothing stands over the code: it is the top layer");
+      require(dialog.scrollWidth <= dialog.clientWidth + 1, "nothing in the dialog is cut at its side");
+      return { check: name, width: Math.round(box.width), height: Math.round(box.height) };
+    }
+    require(dialogs.length === 0, "the code is gone");
+    if (name === "device-code-done") {
+      require(made("integrations.connect_cancel").length === 0, "the end the core told cancels nothing");
+      require(visible(document.querySelector(".cs-page .cs-wait")), "the page still waits for the core's answer");
+    }
+    if (name === "device-code-cancelled") {
+      require(made("integrations.connect_cancel").length === 1, "取消 told the core once");
+      require(!document.querySelector('[data-conn="cancel-login"]') && !document.querySelector(".toast"), "no wait is left and nothing is said");
+    }
+    return { check: name };
+  }
   if (name === "keychain-refused") {
     // R-PRIV-KEYCHAIN-01: told twice, said once; the words and the one button to be asked again, inside the window.
     const notes = [...document.querySelectorAll(".toast .keychain-refused")].filter(visible);
@@ -8155,7 +8191,7 @@ export function checkRendered(name, context = {}) {
     const dialogRgb = colourOf('backgroundColor', '--dialog'), cardRgb = colourOf('backgroundColor', '--float');
     const surfaces = [...document.querySelectorAll('.menu:not(.cb-menu), .cb-card, .mb-dialog, .modal, .au-pop, .cs-dialog, .av-crop')].filter(node => visible(node) && getComputedStyle(node).backgroundColor !== 'rgba(0, 0, 0, 0)');
     require(surfaces.length > 0, "something floats in this picture");
-    const control = 'button, input, textarea, select, .btn, .sel, .field, .tab, .tg, .mb-fin, .mail-in, [role="switch"], [role="tab"], [role="menuitem"], [role="option"], [role="slider"], .mc-range, .mc-track, .emoji-find, .chip, .cs-chip, kbd, .cs-cap';
+    const control = 'button, input, textarea, select, .btn, .sel, .field, .tab, .tg, .mb-fin, .mail-in, [role="switch"], [role="tab"], [role="menuitem"], [role="option"], [role="slider"], .mc-range, .mc-track, .emoji-find, .chip, .cs-chip, kbd, .dl-cap';
     const selected = '[aria-pressed="true"], [aria-selected="true"], [aria-current], [aria-checked="true"], [data-on="true"], .is-selected, .is-active, .active, .on, [data-selected]';
     const bad = [];
     const seen = new Set();
