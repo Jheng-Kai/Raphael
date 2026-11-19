@@ -315,10 +315,10 @@ export default [
   scene("empty", "Conversation without turns", [], { turns: [] }),
   // 新增成員 is one small dialog over the dimmed window: the slime, the name, the shared picker, 取消 and 建立.
   scene("member-maker", "新增成員 is a small centred dialog: the large slime, the name under it, the tabbed picker, 取消 and a 建立 that waits for a name", [...makerOpen, check("member-maker")]),
-  scene("nav-layer-maker", "Back from the second avatar tab keeps the new member and its name on the first tab", [
+  scene("nav-layer-maker", "Mouse Back dismisses the member maker and keeps its name for the next opening", [
     ...makerOpen, type("#mb-new-name", "Robin"), click('.cr-dialog [data-slime-tab="characters"]'),
-    wait('.cr-dialog [data-slime-tab="characters"][aria-selected="true"]'), sideButton("back"),
-    wait('.cr-dialog [data-slime-tab="colors"][aria-selected="true"]'), wait('.cr-dialog [data-dlg="create"]:enabled'),
+    wait('.cr-dialog [data-slime-tab="characters"][aria-selected="true"]'), sideButton("back"), waitGone(".cr-dialog"),
+    sideButton("forward"), check("member-maker-closed"), ...makerOpen, check("nav-maker-draft"),
   ]),
   scene("member-maker-chosen", "A tab moves nothing, a slime changes the large one, a name makes 建立 pressable", [...makerOpen, check("member-maker-box"), click('.cr-dialog [data-slime-tab="characters"]'), check("member-maker-tab"), click('.cr-dialog [data-slime-character="horn-lavender"]'), type("#mb-new-name", "小葵"), check("member-maker-chosen")]),
   scene("member-maker-made", "建立 opens the member, which speaks first and asks what it is for", [...makerOpen, ...makerGoggles, click('.cr-dialog [data-dlg="create"]'), waitGone(".cr-dialog"), { action: "wait-text", selector: ".page-agent .ra-body", text: "小綠" }, check("member-maker-made")]),

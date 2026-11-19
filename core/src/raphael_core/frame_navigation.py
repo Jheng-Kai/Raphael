@@ -6,7 +6,7 @@ controls), the side buttons and the keys go to that computer, as every other key
 FRAME_NAVIGATION = """(() => {
   const mac = /Mac/i.test(navigator.platform);
   const owned = () => typeof window.raphaelOwnsInput === 'function' && window.raphaelOwnsInput();
-  const send = direction => parent.postMessage({type: 'raphael-frame-navigation', direction}, '*');
+  const send = (direction, input) => parent.postMessage({type: 'raphael-frame-navigation', direction, input}, '*');
   const consume = event => { event.preventDefault(); event.stopImmediatePropagation(); };
   let leftAlt = false, rightAlt = false, usedAlt = false;
   addEventListener('blur', () => { leftAlt = rightAlt = usedAlt = false; });
@@ -15,7 +15,7 @@ FRAME_NAVIGATION = """(() => {
       if (event.button !== 3 && event.button !== 4 || owned()) return;
       if (type.startsWith('pointer')) { event.stopImmediatePropagation(); return; }
       consume(event);
-      if (type === 'mousedown') send(event.button === 3 ? 'back' : 'forward');
+      if (type === 'mousedown') send(event.button === 3 ? 'back' : 'forward', 'side');
     }, true);
   }
   for (const type of ['keydown', 'keyup']) {

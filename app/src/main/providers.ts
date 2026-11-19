@@ -220,7 +220,7 @@ export function createProviders(host: ProvidersHost) {
     const key = navView();
     if ((state.open || state.adding) && !stopOutside) {
       views = new LayerViews(state.open?.id ? key : "pv:dir");
-      stopOutside = registerDismissal(() => host.root.querySelector<HTMLElement>("#pv-dialog"), close, undefined, undefined,
+      stopOutside = registerDismissal(() => host.root.querySelector<HTMLElement>("#pv-dialog"), close, () => !state.busy, undefined,
         direction => state.busy || views!.step(direction, showNavView));
     } else if (!state.open && !state.adding) { stopOutside?.(); stopOutside = null; }
     if (state.open || state.adding) views?.visit(key);

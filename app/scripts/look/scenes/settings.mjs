@@ -1,4 +1,4 @@
-import { scene, click, hover, type, wait, waitGone, codexArrives, page, settings, scroll, key, check, member, rightClick, sideButton } from "./steps.mjs";
+import { scene, click, hover, type, wait, waitGone, codexArrives, page, settings, scroll, key, navKey, check, member, rightClick, sideButton } from "./steps.mjs";
 
 const connections = settings("connections");
 // A long 關於我: eight sentences, more than the four lines the field shows at rest.
@@ -23,7 +23,12 @@ const downloaded = [
 const dictation = tab => [page("dictation"), click(`[data-dictation-tab="${tab}"]`), check("dictation-navigation"), ...(tab === "overview" ? [wait('.page-overview .icard'), check("dictation-overview")] : [])];
 export default [
   scene("nav-layer-settings", "Back from Usage returns to Models inside the same Settings dialog", [
-    ...usage, sideButton("back"), wait('.modal [data-models-tab="models"][aria-selected="true"]'), wait('.modal [data-model-picker="stt"]'),
+    ...usage, navKey("back"), wait('.modal [data-models-tab="models"][aria-selected="true"]'), wait('.modal [data-model-picker="stt"]'),
+  ]),
+  scene("nav-side-settings", "Mouse Back closes Settings in one step and Forward leaves the conversation in view", [
+    member(1), member(2), check("nav-conversation-2"), ...settings("tools"), check("nav-settings-tools"),
+    sideButton("back"), waitGone('.modal-scrim[data-page="settings"]:not([hidden])'), check("nav-side-settings-closed"),
+    sideButton("forward"), check("nav-side-settings-closed"),
   ]),
 
 

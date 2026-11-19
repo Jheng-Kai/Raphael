@@ -366,6 +366,21 @@ describe("the window's history", () => {
     expect(window.shown).toEqual([view("m:3>s:tools"), view("m:3")]);
   });
 
+  test("forward can follow the page's own Back before its deferred note runs", () => {
+    const window = fakeWindow();
+    const navigation = new Navigation(window);
+    const skills = view("m:3>s:skills"), skill = view("m:3>s:skills/skill:4");
+    visit(navigation, window, skills);
+    visit(navigation, window, skill);
+
+    navigation.heard(true);
+    window.at = skills;
+    navigation.step("forward");
+
+    expect(window.shown).toEqual([skill]);
+    expect(window.at).toEqual(skill);
+  });
+
   test("back from the open settings panel walks its tabs, closes it and does not load the page under it again", () => {
     const window = fakeWindow();
     const navigation = new Navigation(window);

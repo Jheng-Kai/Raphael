@@ -20,6 +20,7 @@ export const cliSigninEnds = (cli, outcome) => ({ action: "cli-signin-ends", cli
 export const check = name => ({ action: "check", name });
 /** The mouse's side button, back or forward, pressed with the real mouse where the window has nothing to press. */
 export const sideButton = button => ({ action: "side-button", button });
+export const navKey = direction => ({ action: "nav-key", direction });
 export const focus = selector => ({ action: "focus", selector });
 export const key = value => ({ action: "key", key: value });
 // What an input method hands the page, in order: `{ compose }` is a composition in progress, `{ commit }` the text it finishes with.
