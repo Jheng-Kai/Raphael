@@ -22,8 +22,9 @@ import { DeviceState } from "./device";
 import { resumeModels } from "./models";
 import { mountOnboarding } from "./onboarding";
 import { fitGuideWindow, releaseGuideWindow } from "./guide-window";
-import { Navigation, type Place } from "./nav-history";
-import { frameNavigation, hasOpenLayer, stepOpenLayer } from "./dismissals";
+import { Navigation, type NavStep, type Place } from "./nav-history";
+import { PlaceHistory, stepPlace, type MainPlace } from "./place-history";
+import { frameNavigation, hasOpenLayer, stepOpenLayer, stepSideLayer } from "./dismissals";
 import { installNavInput, installNavNotes } from "./nav-input";
 import { createSidebar } from "./sidebar";
 import { setOwnerProfile } from "./owner-avatar";
@@ -186,8 +187,16 @@ async function start(): Promise<void> {
   const history = createHistory(ctx);
   const dictionary = createDictionary(ctx);
   const overview = createDictationOverview(ctx);
-  const dictation = createDictation(ctx, { overview, history, dictionary }, tab => navigation.visit(() => { dictation.setTab(tab); main.scrollTop = 0; }));
-  const agent = createAgent(ctx);
+  const placeHistory = new PlaceHistory();
+  let stepping = false;
+  const dictation = createDictation(ctx, { overview, history, dictionary }, tab => {
+    navigation.visit(() => { dictation.setTab(tab); main.scrollTop = 0; });
+    notePlace();
+  });
+  const agent = createAgent(ctx, {
+    changed: notePlace,
+    resolved: (member, conversation) => placeHistory.resolveConversation(member, conversation),
+  });
   const settings = createSettings(ctx);
   configureRooms(ctx);
   mountQuestionReminder(ctx, agent.memberFace);
@@ -267,10 +276,7 @@ watchChipRows(document.body);
     return place;
   }
 
-  /**
-   * What the mouse's side buttons and Alt+Left / Alt+Right walk through: every view the person went into, noted after each press, after each `go` and before each step; a step shows a place again and records
-   * nothing.
-   */
+  /** Keyboard shortcuts can retrace the views within each page and layer. */
   const navigation = new Navigation({
     inGuide: () => !guide.hidden,
     stepLayer: stepOpenLayer,
@@ -297,10 +303,47 @@ watchChipRows(document.body);
       tellAgentPage();
     },
   });
-  installNavInput(window, (step) => navigation.step(step), hasOpenLayer);
+  function notePlace(): void {
+    if (stepping || !current || !guide.hidden) return;
+    const place: MainPlace = current === "agent" ? agent.currentChatPlace()
+      : current === "dictation" ? { page: current, tab: dictation.tab() } : { page: current };
+    placeHistory.arrive(place);
+  }
+
+  function keyboardStep(direction: NavStep): void {
+    stepping = true;
+    try { navigation.step(direction); }
+    finally { stepping = false; }
+    notePlace();
+  }
+
+  function sideStep(direction: NavStep): void {
+    if (!guide.hidden) { keyboardStep(direction); return; }
+    notePlace();
+    stepping = true;
+    try {
+      stepPlace(direction, placeHistory, {
+        layer: stepSideLayer,
+        exists: place => place.page === "member" || place.page === "room" ? agent.chatPlaceExists(place) : true,
+        show(place) {
+          if (place.page === "member" || place.page === "room") {
+            agent.showChatPlace(place);
+            if (current !== "agent") showPage("agent");
+          } else {
+            if (place.page === "dictation") dictation.setTab(place.tab, false);
+            showPage(place.page);
+          }
+        },
+      });
+    } finally { stepping = false; }
+  }
+
+  installNavInput(window, keyboardStep, hasOpenLayer, sideStep);
   window.addEventListener("message", event => {
     const direction = frameNavigation(event);
-    if (direction) navigation.step(direction);
+    if (!direction) return;
+    if (event.data.input === "side") sideStep(direction);
+    else keyboardStep(direction);
   });
   installNavNotes(window, (back) => navigation.heard(back));
 
@@ -313,6 +356,7 @@ watchChipRows(document.body);
       if (id === "settings") openSettings(arg?.startsWith("draft:") ? undefined : (arg as SettingsPane | undefined));
       else showPage(id, id === "automations" || arg?.startsWith("draft:") || id === "agent" && (arg === "computer" || arg?.startsWith("member-settings:")) ? arg : undefined);
     });
+    notePlace();
   }
 
   /**

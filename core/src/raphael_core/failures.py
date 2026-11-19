@@ -313,6 +313,8 @@ class Failure:
 
     def sentence(self, name, language="en", *, now=None):
         language = _language(language)
+        if self.kind == "invalid_request" and self.reason == "model_mismatch":
+            return _MODEL_MISMATCH[language].format(models=self.detail)
         if self.kind == 'tool_broken' and self.reason in ('CLI tool is missing', 'CLI tool failed'):
             messages = (with_ui_words({'zh-TW': '{name} 找不到這次工作需要的工具，請更新拉斐爾；若已是最新版，請保留對話並回報問題。',
                 'en': '{name} could not find a required tool. Update Raphael; if it is current, keep this conversation and report the problem.',
@@ -339,6 +341,25 @@ class Failure:
         language = _language(language)
         family = ("rate_limit" if self.kind == "rate_limit" else "busy" if self.kind in ("overloaded", "server") else "silent")
         return _WAITING_MESSAGES[language][family].format(name=name, when=_when(time.time() + seconds, language))
+
+
+_MODEL_MISMATCH = {
+    "en": "Codex selected a different model. Requested ≠ reported: {models}.",
+    "zh-TW": "Codex 選用了其他模型。指定模型 ≠ 回報模型：{models}。",
+    "ja": "Codex が別のモデルを選択しました。指定 ≠ 応答：{models}。",
+    "zh-CN": "Codex 选择了其他模型。指定模型 ≠ 返回模型：{models}。",
+    "ko": "Codex가 다른 모델을 선택했습니다. 요청 ≠ 응답: {models}.",
+    "es": "Codex eligió otro modelo. Solicitado ≠ indicado: {models}.",
+    "fr": "Codex a choisi un autre modèle. Demandé ≠ annoncé : {models}.",
+    "de": "Codex hat ein anderes Modell gewählt. Angefordert ≠ gemeldet: {models}.",
+    "pt-BR": "O Codex escolheu outro modelo. Solicitado ≠ informado: {models}.",
+    "it": "Codex ha scelto un altro modello. Richiesto ≠ comunicato: {models}.",
+    "ru": "Codex выбрал другую модель. Запрошена ≠ получена: {models}.",
+    "vi": "Codex đã chọn mô hình khác. Yêu cầu ≠ phản hồi: {models}.",
+    "th": "Codex เลือกโมเดลอื่น โมเดลที่ขอ ≠ โมเดลที่รายงาน: {models}",
+    "id": "Codex memilih model lain. Diminta ≠ dilaporkan: {models}.",
+    "tr": "Codex başka bir model seçti. İstenen ≠ bildirilen: {models}.",
+}
 
 
 _ALIASES = {"auth": "auth_expired", "login": "auth_expired", "not_configured": "auth_expired", "missing_key": "auth_expired",

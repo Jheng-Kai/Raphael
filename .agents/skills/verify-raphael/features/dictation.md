@@ -101,11 +101,10 @@ copy chord (Ctrl+C; Ctrl+Shift+C for a terminal, whose Ctrl+C is an interrupt; C
 the clipboard's sequence number to change, reads the text and puts the snapshot back. Nothing new on the clipboard is "nothing
 selected": nothing is pasted and the overlay says 《告。未選取任何文字。》. The text goes to the core's `dictation.tidy` (Brain: the
 cleanup's model, dictionary, languages, target-app tone, chunking, guards and spend, plus `brain/tidy.py`'s addendum that the text
-was typed, not spoken, so the prompt template is untouched), and the reply is pasted through the dictation's own paster into the
-same window; if the focus moved meanwhile it stays on the clipboard with the dictation's notice. A failure (no key or model, no
-connection, a reply that is no tidying, a window that cannot be copied from, a selection of more than 30,000 characters) pastes
-nothing, keeps the selection and the clipboard, and says 《否。這次沒有整理成功，原文未更動。》: the raw text is never pasted as
-if it were tidied, and the answer of the core carries no `text` unless it was tidied.
+was typed, not spoken, so the prompt template is untouched), and the paster copies the selection again before replacing it.
+If the text differs or the selection cannot be confirmed, the tidied result stays on the clipboard for manual paste.
+An unavailable tidy model or connection points to Models & usage, and a timeout invites a retry.
+An unsuccessful tidy keeps the original selection and clipboard. Its RPC reply carries no replacement text.
 
 ```powershell
 npm run look -- settings-tidy-key settings-mic-undecided settings-mic-denied settings-accessibility-off dictation-overview dictation --theme both --width 1120,720,1920x1080

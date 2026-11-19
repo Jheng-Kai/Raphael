@@ -739,7 +739,11 @@ export function openPopover(anchor: HTMLElement, html: string, o: PopoverOptions
   // A submenu dismissed closes itself alone: a press outside everything closes the menu under it by that menu's own dismissal,
   // and a press on the row that opened it (its toggle, R-UI-124) leaves the menu under it open.
   const dismiss = parent
-    ? () => { while (menu && menu !== parent) closeMenuLevel(); }
+    ? () => {
+      const focused = el.contains(document.activeElement);
+      while (menu && menu !== parent) closeMenuLevel();
+      if (focused && !pressWentThrough()) anchor.focus({ preventScroll: true });
+    }
     : () => { const root = menuRootAnchor(); closeMenu(); if (!pressWentThrough()) root?.focus({ preventScroll: true }); };
   menu = { el, anchor, rect, parent, placement: at ? "pointer" : o.placement, anchorRect: at ? () => pointRect(at) : o.anchorRect, at,
     stopOutside: registerDismissal(el, dismiss, undefined, parent?.el ?? anchor, direction => {

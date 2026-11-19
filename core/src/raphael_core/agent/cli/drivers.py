@@ -108,6 +108,7 @@ def _antigravity_final(response: str, responses: list[str], answer: list[str], t
 class Driver:
     def __init__(self, name, command, *, model=None, effort=None, environ=None, quota=None, home=None):
         self.name, self.command, self.model = name, list(command), model
+        self.model_aliases = ()
         self.effort = effort
         self.environ = environ
         self.home = home
@@ -569,6 +570,12 @@ class Driver:
                     self.session = (result.get("thread") or {}).get("id")
                     actual_model = result.get("model") or (result.get("thread") or {}).get("model")
                     if isinstance(actual_model, str) and actual_model:
+                        def normalized(value):
+                            return value.strip().casefold().removeprefix("cli:codex:").removeprefix("openai/")
+                        if self.model and normalized(actual_model) not in {
+                                normalized(value) for value in (self.model, *self.model_aliases)}:
+                            yield Event("model_mismatch", self.model, {"actual": actual_model.strip()[:200]})
+                            return
                         yield Event("model", actual_model)
                     if not self.session:
                         raise ValueError("missing_session")

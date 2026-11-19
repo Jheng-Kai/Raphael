@@ -1037,6 +1037,8 @@ class OpenRouterClient:
         """
         self._client()
 
+    base_url = BASE_URL
+
     def start_connection_warmup(self) -> None:
         """Start TLS while recording, without delaying the microphone or making a paid call."""
         if self._connection_warm is None or self._connection_warm.done():
@@ -1045,7 +1047,7 @@ class OpenRouterClient:
     async def warm_connection(self) -> None:
         try:
             client = await asyncio.to_thread(self._client)
-            await client.head(BASE_URL + "/models", headers=_APP_HEADERS, timeout=2.0)
+            await client.head(self.base_url + "/models", timeout=2.0, follow_redirects=False)
         except Exception as exc:
             logger.debug("OpenRouter connection warmup failed: %s", type(exc).__name__)
 

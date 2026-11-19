@@ -132,6 +132,9 @@ async def test_brain_catalog_and_settings_use_provider_references_without_legacy
         assert result["fallback_reason"] != "no_key"
         assert any(e.id == model for e in brain.known_models())
         await router.call("providers.update", {"id": "openrouter", "enabled": False})
+        await router.call("providers.update", {"id": pid, "enabled": False})
+        failure = await router.call("dictation.tidy", {"text": "Sample text"})
+        assert (failure["fallback_reason"], failure["connection"]) == ("no_key", "Ollama")
         disabled_catalog = await router.call("models.catalog")
         assert all(e["provider_id"] != "openrouter" for e in disabled_catalog["llm"])
         await brain.aclose()
@@ -153,6 +156,7 @@ async def test_models_catalog_answers_from_the_saved_lists_and_renews_them_after
     status = [200]
     async def handler(request):
         if request.url.host == "openrouter.ai":
+            await gate.wait()
             return httpx.Response(503)
         asked.append(request.url.path)
         await gate.wait()  # the provider answers only when the test lets it
@@ -170,12 +174,12 @@ async def test_models_catalog_answers_from_the_saved_lists_and_renews_them_after
         # With all roles chosen, connecting does not fetch a list to fill empty roles.
         for key in ("agent_model", "quick_model", "cleanup_model", "stt_cloud_model"):
             registry.settings.set(key, "test/chosen")
-        gate.set()
         pid = (await router.call("providers.add", {"kind": "ollama"}))["provider"]["id"]
-        # First use: no list is saved yet, so the answer waits for the provider, as it always did.
-        first = await router.call("models.catalog")
-        assert f"@{pid}:old-model" in {e["id"] for e in first["llm"]}
-        assert brain._provider_refresh is None  # it was waited for, not renewed
+        first = await asyncio.wait_for(router.call("models.catalog"), 1)
+        assert not any(e["provider_id"] == pid for e in first["llm"])
+        gate.set()
+        await brain._provider_refresh
+        assert "providers.changed" in notices
         gate.clear(); asked.clear(); notices.clear()
 
         # The list is saved: the answer comes at once, with the provider still holding its reply.

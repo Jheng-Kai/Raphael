@@ -148,6 +148,30 @@ pub const TIDY_FAILED: Notice = Notice {
     ja: "《否。今回は整えられませんでした。テキストはそのままです。》",
 };
 
+pub const TIDY_MODEL: Notice = Notice {
+    zh: "《否。請到「模型與用量」選擇文字整理模型。》",
+    en: "《Negative. Choose a text tidying model in Models & usage.》",
+    ja: "《否。「モデルと使用量」で文章整理モデルを選んでください。》",
+};
+
+pub const TIDY_CONNECTION: Notice = Notice {
+    zh: "《否。請到「模型與用量」重新連線文字整理使用的模型。》",
+    en: "《Negative. Reconnect the model selected for text tidying in Models & usage.》",
+    ja: "《否。「モデルと使用量」で文章整理に選んだモデルに再接続してください。》",
+};
+
+pub const TIDY_TIMEOUT: Notice = Notice {
+    zh: "《否。文字整理逾時，請再試一次。》",
+    en: "《Negative. Text tidying timed out. Try again.》",
+    ja: "《否。文章整理がタイムアウトしました。もう一度お試しください。》",
+};
+
+pub const TIDY_COPIED: Notice = Notice {
+    zh: "《告。已複製整理好的文字，請貼到需要的位置。》",
+    en: "《Notice. Tidied text copied. Paste it where you want it.》",
+    ja: "《告。整理した文章をコピーしました。必要な場所に貼り付けてください。》",
+};
+
 /// The core found no microphone to record from.
 pub const NO_MIC: Notice = Notice {
     zh: "《否。未偵測到麥克風。請接上裝置，再到「設定 › 聽寫與快捷鍵 › 麥克風」選擇。》",
@@ -316,13 +340,17 @@ mod tests {
     use super::*;
 
     /// Every notice, with the Windows and the macOS wording of those that differ.
-    const ALL: [Notice; 23] = [
+    const ALL: [Notice; 27] = [
         NOTHING_SELECTED,
         MIC_DENIED,
         MIC_ASKED,
         NO_PASTE_PERMISSION,
         NO_TIDY_PERMISSION,
         TIDY_FAILED,
+        TIDY_COPIED,
+        TIDY_MODEL,
+        TIDY_CONNECTION,
+        TIDY_TIMEOUT,
         NOT_CLEANED,
         CORE_RECOVERED,
         ELEVATED,

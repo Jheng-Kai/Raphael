@@ -1,7 +1,7 @@
 // The way back through the main window, as in a browser: every screen the person has been on, in the
 // order they went, and a step back or forward through them. A screen is any view the person goes into,
 // however small: another conversation, a page opened in it, a tab of the settings or of a member's
-// settings page, a skill's page, an app's page in Connect Apps. The mouse's side buttons and Alt+Left / Alt+Right take the steps (nav-input.ts);
+// settings page, a skill's page, an app's page in Connect Apps. The keyboard shortcuts take these steps (nav-input.ts);
 // main.ts says where the window is and puts it where a step lands. Nothing here reads the page, so the
 // rules can be tested without a browser.
 
@@ -56,7 +56,7 @@ export class NavHistory {
   /**
    * The window is at `place`. The place it is at already adds nothing. The window's own way back (an arrow, Escape,
    * a close button: `back`) that lands on the place before is that step back, as a page's back arrow is in a browser,
-   * so the side button and the arrow walk the same history. Anything else is a new place.
+   * so the shortcut and the arrow walk the same history. Anything else is a new view.
    */
   arrive(place: Place, back = false): void {
     if (this.at >= 0 && samePlace(this.places[this.at], place)) return;
@@ -174,7 +174,8 @@ export class Navigation {
 
   /** Takes one step. The window shows the place it lands on and nothing is recorded. */
   step(direction: NavStep): void {
-    this.note();
+    // A shortcut can arrive before the note scheduled by the window's own Back action.
+    this.note(this.pressBack);
     const withinLayer = (): boolean => {
       const here = this.target.where(), next = this.history.adjacent(direction);
       if (!here || !next) return false;

@@ -1,4 +1,5 @@
 import { bindNavLayer } from "../nav-layers";
+import type { ChatPlace } from "../place-history";
 import { visibilityGate, windowVisible } from "../window-visibility";
 import { readDraftWords, writeDraftWords } from "../composer-drafts";
 import { cardDisclosureHTML, cardFailure, cardHTML, cardPromptText } from "../card";
@@ -122,7 +123,7 @@ import type { PageArgument, AgentQuestion, AgentTurn, AppContext, CliBrainId, Gr
 import { closeAndPress } from "../dismissals";
 import { closeMenu, copyButton, esc, ico, iconButton, openMenu, patchHTML, toaster } from "../ui";
 import { askInChat } from "../chat-ask";
-import { createRoomPane, currentRoomId, openGroupChat } from "../group-chats";
+import { createRoomPane, currentRoomId, openGroupChat, roomExists } from "../group-chats";
 import { bindActionMode, bindComposerRow, bindPageComposer, composerHTML, drawTaskSlot } from "../chat-composer";
 import { mountComposerBrain } from "../composer-brain";
 import { mountComposerFolder } from "../composer-folder";
@@ -253,7 +254,14 @@ interface ComposerDraft {
   quote?: MessageQuote;
 }
 
-export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loadSidebar(): Promise<void>; memberFace(id: number, size: number): string; settingsOf(): number | null; navView(): string; showNavView(key: string): void } {
+export function createAgent(app: AppContext, places?: {
+  changed(): void;
+  resolved(member: number, conversation: number): void;
+}): Page & {
+  sidebar: HTMLElement; loadSidebar(): Promise<void>; memberFace(id: number, size: number): string; settingsOf(): number | null;
+  navView(): string; showNavView(key: string): void;
+  currentChatPlace(): ChatPlace; chatPlaceExists(place: ChatPlace): boolean; showChatPlace(place: ChatPlace): void;
+} {
   const el = document.createElement("div");
   el.className = "page page-agent";
   el.dataset.page = "agent";
@@ -333,9 +341,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       // Another member's thread is switched to before the page is shown, so the page asks for that thread once,
       // before anything else (opening a conversation was slow); show() then joins the read under way.
       if (!sameThread) { switchThread(); app.go("agent"); return; }
-      app.go("agent");
       if (openingThread) openedAt = Date.now();
-      roomPane.close(); void load(false); focusComposer();
+      roomPane.close(); app.go("agent"); void load(false); focusComposer();
     },
     onUpdate: () => {
       composerBrain?.draw();
@@ -440,7 +447,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       }
       if (!result.conversations.some(c => c.id === chosen)) {
         const next = newestConversation(result.conversations);
-        if (next) chosenConversations.set(member, next.id);
+        if (next) {
+          chosenConversations.set(member, next.id);
+          if (chosen === undefined) places?.resolved(member, next.id);
+        }
         else chosenConversations.delete(member);
       }
       if (member === memberId() && composerKey !== draftKey()) {
@@ -460,11 +470,12 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     } catch { /* A core that is restarting keeps the last selection until the next refresh. */ }
   }
 
-  function openConversation(member: number, id: number, turnId?: number, quiet = false): void {
+  function openConversation(member: number, id: number, turnId?: number, quiet = false, keepDetailsTab = false): void {
     const changed = memberId() !== member;
     if (!changed && !roomPane.active && conversationId() === id && turnId === undefined) return;
     chosenConversations.set(member, id); targetTurn = turnId; targetQuiet = quiet;
-    if (changed) members.select(member); else switchThread();
+    if (changed) members.select(member, keepDetailsTab);
+    else { switchThread(); places?.changed(); }
     drawConversation();
     window.dispatchEvent(new CustomEvent("conversation-opened", { detail: member }));
   }
@@ -1578,7 +1589,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     // and what it says shows under the page while it works.
     const pageTold = pagesHost.sent();
     // Something was said about the page opened from the Library: the exchange is in its conversation, which stays when the page is put away.
-    if (libraryReturn && pagesHost.shown()) libraryReturn.spoke = true;
+    if (libraryReturn && pagesHost.shown()) {
+      libraryReturn.spoke = true;
+      places?.changed();
+    }
     const sending = files;
     const dictation = correctionLearning.snapshot();
     const corrections = correctionLearning.take(input.value);
@@ -3281,10 +3295,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   let memberJump = 0;
   window.addEventListener("raphael:open-member", event => {
     if (!el.isConnected) return;
-    if (roomPane.active) roomPane.close();
     const jump = ++memberJump;
     const { memberId, turnId, draft } = (event as CustomEvent<{ memberId: number; turnId?: number; draft?: string }>).detail;
     void members.load().then(async () => {
+      if (jump !== memberJump) return;
       members.select(memberId);
       // Words handed with the member (the calendar's ask for a routine) wait in its composer once it is the open one.
       if (typeof draft === "string" && jump === memberJump && memberId === members.current()) { putDraft(draft.slice(0, TYPED_MAX_CHARS)); focusComposer(); }
@@ -3305,6 +3319,26 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   });
 
   // ---------- the way back (nav-history.ts) ----------
+
+  function currentChatPlace(): ChatPlace {
+    const room = currentRoomId();
+    if (room !== null) return { page: "room", room };
+    const preview = libraryReturn?.member === memberId() && !libraryReturn.spoke;
+    return { page: "member", member: memberId(), conversation: preview ? libraryReturn?.conversation : conversationId() };
+  }
+
+  function chatPlaceExists(place: ChatPlace): boolean {
+    if (place.page === "room") return roomExists(place.room);
+    if (!members.nameOf(place.member)) return false;
+    const list = conversationCache.get(place.member);
+    return place.conversation === undefined || !list || list.some(conversation => conversation.id === place.conversation);
+  }
+
+  function showChatPlace(place: ChatPlace): void {
+    if (place.page === "room") { void openGroupChat(place.room); return; }
+    if (place.conversation !== undefined) openConversation(place.member, place.conversation, undefined, false, true);
+    else members.select(place.member, true);
+  }
 
   /** The titles of the pages opened here, so a step forward can open one again with its name. */
   const pageTitles = new Map<string, string>();
@@ -3370,6 +3404,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     settingsOf: () => members.settings.isOpen() ? members.current() : null,
     navView,
     showNavView,
+    currentChatPlace,
+    chatPlaceExists,
+    showChatPlace,
     show(arg) {
       const wasVisible = visible;
       // The member settings page (member-settings.ts) is asked for by the gear; any other way here is the conversation.

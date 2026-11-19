@@ -113,4 +113,36 @@ describe("real app entry with the shared look fixture", () => {
     expect(document.querySelector('#app-popover')).toBeNull();
     expect(state.errors).toEqual([]);
   });
+  it("routes mouse side buttons between members and the calendar and dismisses Settings independently", async () => {
+    const press = button => {
+      const event = new MouseEvent("mousedown", { button, bubbles: true, cancelable: true });
+      document.body.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(true);
+    };
+    const select = id => document.querySelector(`#nav [data-member="${id}"]`).click();
+    const selected = () => document.querySelector('#nav [data-member][aria-current="true"]')?.dataset.member;
+    select(1);
+    select(2);
+    expect(selected()).toBe("2");
+    await viaAccountMenu("settings");
+    document.querySelector('.modal-scrim [data-pane="about"]').click();
+    expect(document.documentElement.dataset.windowModal).toBe("true");
+    press(3);
+    expect(document.documentElement.dataset.windowModal).toBeUndefined();
+    expect(selected()).toBe("2");
+    press(4);
+    expect(document.documentElement.dataset.windowModal).toBeUndefined();
+    expect(selected()).toBe("2");
+    press(3);
+    expect(selected()).toBe("1");
+    press(4);
+    expect(selected()).toBe("2");
+    await viaAccountMenu("calendar");
+    expect(document.querySelector(".au-page:not([hidden])")).not.toBeNull();
+    press(3);
+    expect(selected()).toBe("2");
+    press(4);
+    expect(document.querySelector(".au-page:not([hidden])")).not.toBeNull();
+    expect(state.errors).toEqual([]);
+  });
 });

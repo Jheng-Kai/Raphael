@@ -94,6 +94,10 @@ def generation_model(raw, kind):
     return model_id not in ("babbage-002", "davinci-002")
 
 
+def media_eligible(kind, model_id):
+    return kind != "openrouter" or not model_id.startswith("openrouter/")
+
+
 def model_info(raw: dict, *, kind: str) -> dict:
     """Discovery metadata. Missing capabilities and prices stay conservative."""
     model_id = raw.get("id", raw.get("name", ""))
@@ -117,7 +121,7 @@ def model_info(raw: dict, *, kind: str) -> dict:
     media = [value for value in ("image", "video") if isinstance(outputs, list) and value in outputs]
     # OpenRouter's own routers (openrouter/auto, auto-beta, auto-code) list every output a model behind them might give;
     # they are not drawing models, so they never stand among the models that draw or make video.
-    if kind == "openrouter" and model_id.startswith("openrouter/"):
+    if not media_eligible(kind, model_id):
         media = []
     # These endpoint families have a published media contract; discovery still supplies the model id.
     if kind in ("openai", "xai") and model_id.startswith(("gpt-image-", "dall-e-", "grok-imagine-image")):
