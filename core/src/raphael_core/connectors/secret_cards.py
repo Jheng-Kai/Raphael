@@ -196,13 +196,14 @@ class SecretCardStore:
                 self._conn.execute("UPDATE secret_cards SET state='saved', error='resume_failed', done=?, updated_at_ms=?"
                                    " WHERE id=?", (json.dumps(done), now, row["id"]))
 
-    def cancel_session(self, session_id: str) -> list[SecretCard]:
+    def cancel_session(self, session_id: str, *, turn_id: int | None = None) -> list[SecretCard]:
         """Stop: the cards of the turns of this session that still wait are cancelled and never resume
         anything. The cards that changed."""
         with self._conn:
             ids = [row["id"] for row in self._conn.execute(
                 "SELECT c.id FROM secret_cards c JOIN agent_turns t ON t.id=c.turn_id"
-                " WHERE t.session_id=? AND c.state IN ('pending','failed','saved')", (session_id,))]
+                " WHERE t.session_id=? AND (? IS NULL OR c.turn_id=?) AND c.state IN ('pending','failed','saved')",
+                (session_id, turn_id, turn_id))]
             if ids:
                 self._conn.execute(
                     f"UPDATE secret_cards SET state='cancelled', updated_at_ms=? WHERE id IN ({','.join('?' * len(ids))})",
@@ -310,9 +311,9 @@ class SecretCards:
     def cards_of(self, turn_id: int) -> list[SecretCard]:
         return self.store.for_turns([turn_id]).get(turn_id, [])
 
-    def cancel_session(self, session_id: str) -> None:
+    def cancel_session(self, session_id: str, *, turn_id: int | None = None) -> None:
         """Stop for the session of a turn whose cards still wait: they never resume."""
-        for card in self.store.cancel_session(session_id):
+        for card in self.store.cancel_session(session_id, turn_id=turn_id):
             self._changed(card)
 
     # --- the window's methods ---------------------------------------------------------------------

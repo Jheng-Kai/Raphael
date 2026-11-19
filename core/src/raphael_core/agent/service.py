@@ -324,7 +324,8 @@ _AT_THIS_COMPUTER = frozenset({*_QUICK_SOURCES, TYPED})
 # Private owner management has the same offer across authenticated chat transports.
 _OWNER_CHAT_SOURCES = _AT_THIS_COMPUTER | {"telegram", "slack", "discord", RESUMED}
 # What the owner writes in a conversation with a member: typed in the app, or sent from a messaging chat.
-_OWNER_TEXT_SOURCES = frozenset({TYPED, "telegram", "slack", "discord"})
+_PLATFORMS = frozenset({"telegram", "slack", "discord"})
+_OWNER_TEXT_SOURCES = _PLATFORMS | {TYPED}
 
 
 def owner_words_language(history, *, member_id: int, conversation_id: int | None, profile: str = "") -> str | None:
@@ -531,8 +532,13 @@ class _Ask:
     turn_id: int = 0
     # Where an edited message stands: the id and time of the turn it replaces, which it takes over (`_ask`).
     place: tuple[int, int] | None = None
-    # The earlier versions of an edited message (`AgentHistory.versions`), kept with the turn written in its place.
-    versions: list[dict] = field(default_factory=list)
+    # Identity of the version being replaced, checked again after storing its files.
+    replacing_session: str | None = None
+    keep_answer: bool = False
+    draft_text: str | None = None
+    admission_stopped: bool = False
+    direct_reply: bool = False
+    files_ready: asyncio.Event = field(default_factory=asyncio.Event, compare=False)
     page_call: str | None = None
     recorded_cost: float = 0.0
     recorded_steps: int = 0
@@ -974,7 +980,10 @@ class AgentService:
         # Turns of messages being handed to running work right now: theirs is the steer's answer, not `_release_steering`'s.
         self._handing = set()
         self._drains = {}
+        self.report_platform_reply = None
         self._admissions = {}
+        self._admitting: list[_Ask] = []
+        self._running_requests: dict[str, _Ask] = {}
         self._direct_scopes = {}
         self._closing = False
         self._clock = clock
@@ -1255,8 +1264,8 @@ class AgentService:
             raise invalid_params("quotes are supported for composer requests")
         replacement = _opt_int(params, "replace_turn_id")
         place = None
-        versions: list[dict] = []
-        if replacement is not None and not self._was_cancelled(session):
+        old = None
+        if replacement is not None:
             if not text.strip() and not attachments:
                 raise invalid_params("a replacement must contain text or attachments")
             if self._speaker(member_id) is None:
@@ -1266,29 +1275,7 @@ class AgentService:
                     or old.scope != "private" or old.source in ("member", "routine") or params.get("source") != "app"):
                 raise invalid_params("replace_turn_id must name an owner message in this thread")
 
-            # Whether its member had answered it, as the owner saw it when they sent the edit: a turn stopped now gets the
-            # stop's own words as its answer, which are not the member's.
-            answered = self._history.answered(replacement)
-
-            def keep(stopped: list[Turn]) -> None:
-                # Read once the old work has stopped, before it goes: a message its member had answered stays as a version of
-                # the message, with every line of that answer up to the stop; one it had not answered is only replaced.
-                kept = self._history.versions(replacement)
-                turn = next((item for item in stopped if item.id == replacement), None)
-                if turn is not None and answered:
-                    kept.append(self._history.snapshot(turn, len(kept) + 1))
-                versions[:] = kept
-
-            # Work still under way for the message (thinking, a reply on its way, a card that waits) is stopped as Stop stops it.
-            await self._history_retract({"session_id": old.session_id, "turn_id": replacement, "member_id": member_id}, keep=keep)
-            # An edited message is the same message with new words: it takes the place of the one it replaces (its
-            # id and its time), so it stands where it stood among what came after it, never at the end of the
-            # thread. A turn that is still there (it was only withdrawn) leaves the new one to be written at the end,
-            # with the versions the withdrawn one had.
-            if self._history.get(replacement) is None:
-                place = (replacement, old.created_at_ms)
-            else:
-                versions[:] = self._history.versions(replacement)
+            place = (replacement, old.created_at_ms)
         return await self.ask(
             session,
             text,
@@ -1302,7 +1289,7 @@ class AgentService:
             intent=intent,
             transcript_ms=params.get("transcript_ms"),
             place=place,
-            versions=versions,
+            replacing_session=old.session_id if old else None,
         )
 
     def _destination(self, member_id: int, conversation_id: int | None, source: object, *, quick: bool) -> int:
@@ -1374,7 +1361,7 @@ class AgentService:
         resumption: Resumption | None = None,
         intent: str | None = None,
         place: tuple[int, int] | None = None,
-        versions: Sequence[dict] = (),
+        replacing_session: str | None = None,
     ) -> dict:
         """One request, as `agent.ask` answers it. `attachments` are the files handed with it
         (`services.attachments.Attachment`, at most MAX_ATTACHMENTS), saved on typed admission; with
@@ -1413,7 +1400,7 @@ class AgentService:
             resumption=resumption,
             source_turn_id=resumption.turn_id if resumption is not None else None,
             place=place,
-            versions=list(versions),
+            replacing_session=replacing_session,
         )
         if resumption is not None and resumption.report is not None:
             ask.steps.extend(resumption.report.steps)
@@ -1433,6 +1420,7 @@ class AgentService:
             raise RpcError(
                 INVALID_PARAMS, "Invalid params: attachments (count)", {"kind": "count"}
             )
+        ask.draft_text = ask.original_text if ask.original_text is not None else ask.text
         if ask.attachments and not ask.text.strip():
             ask.text = _LOOK_AT_THIS[self._chat_language(ask)]
         self._last_language = ask.language
@@ -1442,7 +1430,7 @@ class AgentService:
             # A messaging chat's reply that answers the question waiting there is that answer, and nothing else to run.
             self._record(ask, "owner_input", "", "", "done", None, Ledger(self._spend))
             return {"status": "done", "turn_id": ask.turn_id, "prefix": "", "text": "", "steered": True}
-        if ask.source == TYPED and not ask.quick and resumption is None:
+        if resumption is None and (ask.place or not ask.quick and ask.source in (_OWNER_TEXT_SOURCES | {VOICE})):
             return await self._queue_ask(ask)
         if self._was_cancelled(ask.session_id):
             # Esc came first: the request is answered as cancelled and nothing runs or is kept.
@@ -1482,30 +1470,48 @@ class AgentService:
     async def _queue_ask(self, ask):
         scope = (ask.speaker.id, ask.conversation_id)
         lock = self._admissions.setdefault(scope, asyncio.Lock())
-        async with lock:
-            existing = self._inbox.find(*scope, ask.session_id)
-            if existing:
-                return {"status": "queued", "turn_id": existing['turn_id']}
-            if self._was_cancelled(ask.session_id):
-                terminal = self._conn.execute(
-                    "SELECT 1 FROM agent_inbox WHERE member_id=? AND conversation_id=? AND request_id=? AND state='terminal'",
-                    (*scope, ask.session_id),
-                ).fetchone()
-                if not terminal:
+        self._admitting.append(ask)
+        try:
+            async with lock:
+                existing = self._inbox.find(*scope, ask.session_id)
+                if existing and ask.source not in _PLATFORMS and (not ask.place or existing['turn_id'] != ask.place[0]):
+                    return {"status": "queued", "turn_id": existing['turn_id']}
+                if not ask.admission_stopped and self._was_cancelled(ask.session_id):
+                    terminal = self._conn.execute(
+                        "SELECT 1 FROM agent_inbox WHERE member_id=? AND conversation_id=? AND request_id=? AND state='terminal'",
+                        (*scope, ask.session_id),
+                    ).fetchone()
+                    if not terminal:
+                        return self._done(0, ask.language, "understood", phrase(ask.language, "denied"), silent=True)
+                    # A settled request ID may be reused; a cancel before first delivery still wins.
+                    self._cancelled.pop(ask.session_id, None)
+                if self._attachment_store and ask.attachments:
+                    for index, file in enumerate(ask.attachments):
+                        ask.attachments[index] = await asyncio.to_thread(self._attachment_store.save, file)
+                if ask.admission_stopped or self._was_cancelled(ask.session_id):
                     return self._done(0, ask.language, "understood", phrase(ask.language, "denied"), silent=True)
-                # A settled request ID may be reused; a cancel before first delivery still wins.
-                self._cancelled.pop(ask.session_id, None)
-            if self._attachment_store and ask.attachments:
-                ask.attachments = [await asyncio.to_thread(self._attachment_store.save, a) for a in ask.attachments]
-            if self._was_cancelled(ask.session_id):
-                return self._done(0, ask.language, "understood", phrase(ask.language, "denied"), silent=True)
-            payload = dict(text=ask.text, original_text=ask.original_text, language=ask.language,
-                           source=ask.source, quick=ask.quick, quote=ask.quote, memory_untrusted=ask.memory_untrusted,
-                           attachments=[a.metadata() for a in ask.attachments])
-            row, _ = self._inbox.admit(ask, payload)
-            ask.turn_id = row['turn_id']
-            self._queued_asks[ask.turn_id] = ask
-            self._turn_changed(ask.turn_id, ask.speaker.id)
+                if ask.place:
+                    old = self._history.get(ask.place[0])
+                    if old is None or old.session_id != ask.replacing_session or old.status == "withdrawn":
+                        raise invalid_params("the message being edited has changed")
+                    ask.keep_answer = self._history.answered(old.id)
+                    await self._stop_retracted_turn(old)
+                    if ask.admission_stopped:
+                        return self._done(0, ask.language, "understood", phrase(ask.language, "denied"), silent=True)
+                payload = dict(session_id=ask.session_id, draft_text=ask.draft_text, text=ask.text, original_text=ask.original_text, language=ask.language,
+                               source=ask.source, quick=ask.quick, quote=ask.quote, memory_untrusted=ask.memory_untrusted,
+                               attachments=[a.metadata() for a in ask.attachments])
+                row, _ = self._inbox.admit(ask, payload)
+                if ask.place and row['turn_id'] != old.id:
+                    self._withdraw_admission(old.id, scope)
+                elif ask.place:
+                    self._forget_removed_turns(ask.speaker.id, [old])
+                ask.turn_id = row['turn_id']
+                self._queued_asks[ask.turn_id] = ask
+                self._turn_changed(ask.turn_id, ask.speaker.id)
+        finally:
+            ask.files_ready.set()
+            self._admitting.remove(ask)
         active = self._owner_loops.get(scope)
         if active and (origin := self._history.get(active.owner_turn_id)) is not None and origin.status not in ("running", "confirm"):
             self._owner_loops.pop(scope, None)
@@ -1525,7 +1531,7 @@ class AgentService:
                 self._handing.discard(ask.turn_id)
             if accepted:
                 self._turn_changed(ask.turn_id, ask.speaker.id)
-                return {"status": "done", "turn_id": ask.turn_id, "prefix": "", "text": "", "steered": True}
+                return self._steering_receipt(ask)
             self._inbox.requeue(ask.turn_id)
             self._turn_changed(ask.turn_id, ask.speaker.id)
         steer = getattr(self._background, "steer", None)
@@ -1545,11 +1551,17 @@ class AgentService:
                 self._release_steering(scope)
                 if self._inbox.get(ask.turn_id)['state'] != 'queued':
                     self._turn_changed(ask.turn_id, ask.speaker.id)
-                    return {"status": "done", "turn_id": ask.turn_id, "prefix": "", "text": "", "steered": True}
+                    return self._steering_receipt(ask)
         first = self._start_drain(scope)
         if first is not None and first[0] == ask.turn_id:
+            ask.direct_reply = True
             return await asyncio.shield(first[1])
         return {"status": "queued", "turn_id": ask.turn_id}
+
+    def _steering_receipt(self, ask):
+        if ask.source in _PLATFORMS and self._inbox.get(ask.turn_id)["state"] != "terminal":
+            return {"status": "queued", "turn_id": ask.turn_id}
+        return {"status": "done", "turn_id": ask.turn_id, "prefix": "", "text": "", "steered": True}
 
     def start(self):
         for scope in self._inbox.scopes():
@@ -1592,7 +1604,7 @@ class AgentService:
             path = self._attachment_store.path(item['id'])
             data = await asyncio.to_thread(path.read_bytes)
             files.append(Attachment(item['name'], item['mime'], data, item['id']))
-        return _Ask(session_id=row['request_id'], turn_id=row['turn_id'], text=payload['text'],
+        return _Ask(session_id=payload.get('session_id', row['request_id']), turn_id=row['turn_id'], text=payload['text'],
                     language=payload['language'], source=payload['source'], quick=payload.get('quick', False), speaker=speaker,
                     conversation_id=row['conversation_id'], original_text=payload.get('original_text'),
                     memory_untrusted=payload.get('memory_untrusted', False), quote=payload.get('quote'), attachments=files)
@@ -1609,7 +1621,9 @@ class AgentService:
                     asyncio.get_running_loop().call_soon(checkpoint.set_result, None)
                     await checkpoint
                     current = self._inbox.get(turn_id)
-                    if current is None or current['state'] != 'started' or self._was_cancelled(ask.session_id):
+                    if current is None or current['request_id'] != row['request_id'] or current['state'] != 'started':
+                        result = self._done(0, ask.language, "understood", phrase(ask.language, "denied"), silent=True)
+                    elif self._was_cancelled(ask.session_id):
                         self._inbox.settle(turn_id, 'cancelled')
                         result = self._done(0, ask.language, "understood", phrase(ask.language, "denied"), silent=True)
                     else:
@@ -1623,6 +1637,12 @@ class AgentService:
                     if turn and turn.status == 'queued' and self._was_cancelled(ask.session_id):
                         self._history.resolve(turn_id, prefix='', text='', detail=None, status='cancelled', cost_usd=0)
                         self._turn_changed(turn_id, scope[0])
+                    if (ask.source in _PLATFORMS and not ask.direct_reply and self.report_platform_reply
+                            and result.get("turn_id")):
+                        try:
+                            await self.report_platform_reply(ask.session_id, ask.language, result)
+                        except Exception as error:
+                            logger.warning("Platform reply delivery failed: %s", type(error).__name__)
                     if first and not waiter.done():
                         waiter.set_result(result)
                 except asyncio.CancelledError:
@@ -1740,6 +1760,7 @@ class AgentService:
         from ..computer.vm_tools import vm_scope
         with vm_scope(("turn", ask.speaker.id, ask.conversation_id)):
             task = asyncio.ensure_future(self._voice_answer(ask) if ask.source in _QUICK_SOURCES and ask.quick else self._answer(ask))
+        self._running_requests[ask.session_id] = ask
         self._inflight[ask.session_id] = task
         self._inflight_members[ask.session_id] = ask.speaker.id
         self._inflight_scopes[ask.session_id] = (ask.speaker.id, ask.conversation_id)
@@ -1775,6 +1796,7 @@ class AgentService:
         """The work of `task` in `scope` is over, however it began (a request, an answered card, a run on the desktop that
         went on): the conversation's inbox goes on with its next message, or with what that work left unread."""
         if self._inflight.get(session_id) is task:
+            self._running_requests.pop(session_id, None)
             del self._inflight[session_id]
             self._inflight_members.pop(session_id, None)
             self._inflight_scopes.pop(session_id, None)
@@ -5501,6 +5523,7 @@ class AgentService:
                 return self._failed(ask, "answer", "error", run.ledger)
 
         task = asyncio.ensure_future(resume())
+        self._running_requests[ask.session_id] = ask
         self._inflight[ask.session_id] = task
         self._inflight_members[ask.session_id] = ask.speaker.id
         self._inflight_scopes[ask.session_id] = (ask.speaker.id, ask.conversation_id)
@@ -5542,6 +5565,7 @@ class AgentService:
             self._confirm_plugin(pending, approval, followup, drafts=drafts, groups=groups, expired=expired)
         )
         session_id = followup.ask.session_id
+        self._running_requests[session_id] = followup.ask
         self._inflight[session_id] = task
         self._inflight_members[session_id] = followup.ask.speaker.id
         self._inflight_scopes[session_id] = (followup.ask.speaker.id, followup.ask.conversation_id)
@@ -5652,11 +5676,12 @@ class AgentService:
     async def _history_stop(self, params):
         session = _str(params, 'session_id')
         member = self._member_param(params)
+        pending = [ask for ask in self._admitting if ask.session_id == session]
         rows = self._conn.execute(
             "SELECT t.member_id,t.scope,t.conversation_id FROM agent_inbox i JOIN agent_turns t ON t.id=i.turn_id"
-            " WHERE i.request_id=? AND i.state!='terminal' ORDER BY (i.state='started'),i.seq", (session,),
+            " WHERE t.session_id=? AND i.state!='terminal' ORDER BY (i.state='started'),i.seq", (session,),
         ).fetchall()
-        if not rows:
+        if not rows and not pending:
             # An exchange the work had with a colleague (ask_member) is written under the same session in that colleague's
             # thread: it is not a message of this conversation, and counting it refused every Stop of the work that asked
             # (seen on a real computer: the owner's Stop did nothing while a member waited on Raphael's answer).
@@ -5664,22 +5689,35 @@ class AgentService:
                                       (session,)).fetchall()
         if any(row['member_id'] != member or row['scope'] != 'private' for row in rows):
             raise invalid_params('stop must identify this private conversation')
+        if any(ask.speaker.id != member for ask in pending):
+            raise invalid_params("stop must identify this private conversation")
+        scope = None
+        if rows:
+            scope = (member, rows[-1]['conversation_id'])
+        elif pending:
+            scope = (member, pending[0].conversation_id)
+        preparing = []
+        for ask in self._admitting:
+            if not ask.admission_stopped and (ask.speaker.id, ask.conversation_id) == scope:
+                ask.admission_stopped = True
+                preparing.append(ask)
         returned = []
         # The message being worked on that nothing has answered yet (no line said, nothing shown, no step taken) is taken back
         # as a waiting one is: its words go back to the composer and its turn goes, instead of staying with 已取消 under it,
         # which no one could take back (R-CHAT-STOP-01). Once anything was said or done, Stop only stops it.
         untouched = []
-        if rows:
-            scope = (member, rows[-1]['conversation_id'])
+        if scope:
             untouched = [row for row in self._conn.execute(
                 "SELECT i.turn_id,i.request_id,i.payload_json FROM agent_inbox i JOIN agent_turns t ON t.id=i.turn_id"
-                " WHERE i.request_id=? AND i.state='started' AND t.member_id=? AND t.scope='private'", (session, member)).fetchall()
+                " WHERE t.session_id=? AND i.state='started' AND t.member_id=? AND t.scope='private'", (session, member)).fetchall()
                 if self._untouched(row['turn_id'])]
             for row in self._inbox.cancel_scope(scope):
                 payload = json.loads(row['payload_json'])
-                returned.append(dict(session_id=row['request_id'], text=payload.get('original_text') or payload['text'],
+                returned.append(dict(session_id=payload.get('session_id', row['request_id']), text=payload.get('draft_text', payload.get('original_text') or payload['text']),
                                      attachments=payload.get('attachments', []), quote=payload.get('quote')))
                 self._withdraw_admission(row['turn_id'], scope)
+                if self._history.restore_previous(row['turn_id']):
+                    self._turn_changed(row['turn_id'], member)
         inflight = self._inflight.get(session)
         # What exists when Stop is pressed is what was said and done; the words a stop writes come after this mark.
         mark = self._marks()
@@ -5695,11 +5733,20 @@ class AgentService:
             if turn is None or not self._untouched(row['turn_id'], mark):
                 continue
             payload = json.loads(row['payload_json'])
-            taken.append(dict(session_id=row['request_id'], text=payload.get('original_text') or payload['text'],
+            taken.append(dict(session_id=payload.get('session_id', row['request_id']), text=payload.get('draft_text', payload.get('original_text') or payload['text']),
                               attachments=payload.get('attachments', []), quote=payload.get('quote')))
-            self._remove_turns(member, [turn])
+            if self._history.restore_previous(turn.id):
+                self._forget_removed_turns(member, [turn])
+            else:
+                self._remove_turns(member, [turn])
         # What was being worked on was said before what waited, and goes back first.
         returned = taken + returned
+        for ask in preparing:
+            # Inline files need their stored IDs for a composer that no longer has its local copy.
+            if self._attachment_store and any(not file.stored_id for file in ask.attachments):
+                await ask.files_ready.wait()
+            returned.append(dict(session_id=ask.session_id, text=ask.draft_text,
+                                 attachments=[file.metadata() for file in ask.attachments], quote=ask.quote))
         return {'stopped':True, **({'returned': returned} if returned else {})}
 
     def _marks(self) -> tuple[int, int]:
@@ -5712,10 +5759,12 @@ class AgentService:
         """Whether nothing answered the turn yet: no line said, no picture shown, no step taken, so taking it back loses
         nothing and hides nothing that was done. `before` counts only what was written up to those marks: the words a stop
         writes (「Understood. Cancelled.」) come after them and are no answer."""
+        if before is None and (turn := self._history.get(turn_id)) and turn.status == "done" and turn.text.strip():
+            return False
         line, step = before if before is not None else (None, None)
         steps = self._conn.execute("SELECT 1 FROM agent_steps WHERE turn_id=? AND (? IS NULL OR rowid<=?) LIMIT 1",
                                    (turn_id, step, step)).fetchone()
-        said = self._conn.execute("SELECT 1 FROM agent_messages WHERE turn_id=? AND kind IN ('reply','media') AND trim(text)<>''"
+        said = self._conn.execute("SELECT 1 FROM agent_messages WHERE turn_id=? AND kind IN ('reply','media','progress') AND trim(text)<>''"
                                   " AND (? IS NULL OR rowid<=?) LIMIT 1", (turn_id, line, line)).fetchone()
         return steps is None and said is None
 
@@ -5773,13 +5822,16 @@ class AgentService:
             self._conn.execute("DELETE FROM agent_turns_fts WHERE rowid=?", (turn_id,))
         self._turn_changed(turn_id, scope[0])
 
-    async def _cancel(self, params: dict) -> dict:
+    async def _cancel(self, params: dict, *, turn_id=None) -> dict:
         session_id = _str(params, "session_id")
         if hasattr(self._plugins, "stop_session"):
             self._plugins.stop_session(session_id)
         self._forget_old_cancels()
-        self._cancelled[session_id] = self._clock()
+        if turn_id is None:
+            self._cancelled[session_id] = self._clock()
         for row in self._conn.execute("SELECT turn_id,member_id,conversation_id FROM agent_inbox WHERE request_id=? AND state IN ('queued','steering')", (session_id,)).fetchall():
+            if turn_id is not None and row['turn_id'] != turn_id:
+                continue
             self._inbox.settle(row['turn_id'], 'cancelled')
             self._withdraw_admission(row['turn_id'], (row['member_id'], row['conversation_id']))
         task = self._inflight.get(session_id)
@@ -5789,14 +5841,17 @@ class AgentService:
                 await asyncio.gather(task, return_exceptions=True)
         if self._computer is not None:
             self._computer.stop_session(session_id)
-        if self._secret_cards is not None:
-            self._secret_cards.cancel_session(session_id)
-        if self._connection_proposals:
-            self._connection_proposals.cancel_session(session_id)
+        self._cancel_session_cards(session_id, turn_id)
         self._expire(self._confirmations.sweep())
-        self._deny(self._confirmations.cancel_session(session_id))
+        self._deny(self._confirmations.cancel_session(session_id, turn_id=turn_id))
         await asyncio.gather(*(loop.aclose() for loop in list(self._cli_loops) if loop.task and loop.task.cancelling()))
         return {}
+
+    def _cancel_session_cards(self, session, turn_id=None):
+        if self._secret_cards is not None:
+            self._secret_cards.cancel_session(session, turn_id=turn_id)
+        if self._connection_proposals:
+            self._connection_proposals.cancel_session(session, turn_id=turn_id)
 
     def stop_session(self, session_id: str) -> bool:
         """End the request of a session that still thinks and deny its question, like Esc but
@@ -6029,9 +6084,21 @@ class AgentService:
             for table in ("connect_cards", "secret_cards", "handback_cards", "permission_cards", "email_drafts"):
                 self._conn.execute(f"DELETE FROM {table} WHERE conversation_id = ?", (conversation_id,))
 
-    async def _history_retract(self, params: dict, keep: Callable[[list[Turn]], None] | None = None) -> dict:
-        """Stop one owner's request and permanently remove its turn, including partial lines. `keep` is told the turns once
-        their work has stopped and before they go (an edit keeps an answered message as a version, `_ask`)."""
+    async def _stop_retracted_turn(self, turn):
+        session = turn.session_id
+        running = self._running_requests.get(session)
+        if running is not None and running.turn_id == turn.id:
+            task = self._inflight[session]
+            await self._cancel({"session_id": session}, turn_id=turn.id)
+            await asyncio.gather(task, return_exceptions=True)
+        else:
+            self._cancel_session_cards(session, turn.id)
+            self._deny(self._confirmations.cancel_session(session, turn_id=turn.id))
+        if self._conn.execute("SELECT 1 FROM worker_tasks WHERE session_id=? AND turn_id=?", (session, turn.id)).fetchone():
+            await self._background.cancel_session(session, turn_id=turn.id)
+
+    async def _history_retract(self, params: dict) -> dict:
+        """Stop and remove the specified owner message."""
         member = self._member_param(params)
         session = _str(params, "session_id")
         turn_id = _opt_int(params, "turn_id")
@@ -6046,6 +6113,13 @@ class AgentService:
             self._inbox.settle(admitted_id, 'cancelled')
             self._withdraw_admission(admitted_id, (member, admission['conversation_id']))
             return {"deleted": 1}
+        if turn_id is not None:
+            target = next(turn for turn in own if turn.id == turn_id)
+            await self._stop_retracted_turn(target)
+            current = self._history.get(turn_id)
+            if current is None or current.session_id != session:
+                return {"deleted": 0}
+            return {"deleted": self._remove_turns(member, [target])}
         inflight = self._inflight.get(session)
         await self._cancel({"session_id": session})
         if inflight is not None:
@@ -6054,8 +6128,6 @@ class AgentService:
         # Read again after stopping: a request may have written its first row before cancellation.
         own = [turn for turn in self._history.for_session(session)
                if turn.scope == "private" and turn.member_id == member and turn.source not in ("member", "routine")]
-        if keep is not None:
-            keep(own)
         return {"deleted": self._remove_turns(member, own)}
 
     def _remove_turns(self, member: int, own: list[Turn]) -> int:
@@ -6063,17 +6135,20 @@ class AgentService:
         and the subscription program's session, which would remember them."""
         deleted = sum(self._history.delete(turn.id) for turn in own if turn.id is not None)
         if deleted:
-            for conversation_id in {turn.conversation_id for turn in own}:
-                self._conversation_of(member, conversation_id).clear_summary()
-                with self._conn:
-                    self._conn.execute("DELETE FROM agent_conversation_cli_sessions WHERE conversation_id = ?", (conversation_id,))
-            forget = getattr(self._team, "forget_delivery", None)
-            for turn in own:
-                # A turn written in its place (an edit) is told as finished again, not taken for the one that was.
-                if forget is not None and turn.id is not None:
-                    forget(turn.id)
-                self._turn_changed(turn.id or 0, member)
+            self._forget_removed_turns(member, own)
         return deleted
+
+    def _forget_removed_turns(self, member, own):
+        for conversation_id in {turn.conversation_id for turn in own}:
+            self._conversation_of(member, conversation_id).clear_summary()
+            with self._conn:
+                self._conn.execute("DELETE FROM agent_conversation_cli_sessions WHERE conversation_id = ?", (conversation_id,))
+        forget = getattr(self._team, "forget_delivery", None)
+        for turn in own:
+            # A turn written in its place (an edit) is told as finished again, not taken for the one that was.
+            if forget is not None and turn.id is not None:
+                forget(turn.id)
+            self._turn_changed(turn.id or 0, member)
 
     async def _history_version(self, params: dict) -> dict:
         """`agent.history.version`: one version of an owner's message they edited, as the app reads a turn, for the owner to

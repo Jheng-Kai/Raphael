@@ -783,6 +783,29 @@ def _import_kit() -> SimpleNamespace:
     )
 
 
+async def _messaging_answer(app: "App", reply: dict, language: str) -> str:
+    """Render the direct or deferred reply for the originating messaging chat."""
+    if reply.get("status") == "confirm":
+        question = reply["confirm"]
+        await app.call("agent.confirm", {"id": question["id"], "approved": False})
+        return f"{question['text']}\n{words(language, 'confirm')}"
+    from .messaging.core import Answer
+    from .services.artifacts import turn_files
+    from .answer_forms import forms_plain_text
+    # Every message of the reply, unframed, as the app shows them: never only the last one.
+    shown = [m for m in (reply.get("messages") or []) if isinstance(m, str) and m.strip()]
+    parts = [forms_plain_text(m) for m in plain_replies(shown or [reply.get("text", "")])]
+    if reply.get("status") == "done" and type(reply.get("turn_id")) is int:
+        # A question the member put to the owner is written out with its choices: a chat cannot draw the card.
+        from .messaging.words import question_text
+        questions = getattr(app.background, "owner_questions", None)
+        waiting = [q for q in questions.for_turn(reply["turn_id"]) if q["state"] == "asked" and q["kind"] == "ask_owner"] if questions is not None else []
+        if waiting:
+            written = question_text(language, waiting[0])
+            parts = [*parts[:-1], written] if parts and parts[-1].strip() == waiting[0]["question"] else [*parts, written]
+    return Answer("\n\n".join(parts), list(turn_files(app.agent._history, reply.get("turn_id", 0), app.attachment_store)), parts)
+
+
 class App(Router):
     """The Router of the whole core. `start()` begins loading the speech side; `aclose()` closes
     what the app opened (the microphone, the HTTP client, the database).
@@ -1090,6 +1113,7 @@ class App(Router):
             members=lambda: {0: self.members.name_of(0) or "Raphael", **{
                 member.id: member.name for member in self.members.store.members() if member.id not in self.members.deleting}},
         )
+        self.agent.report_platform_reply = self._report_platform_reply
         from .messaging.cards import MessagingCards
         self.messaging.cards = MessagingCards(self._conn, self.messaging, self._agent_notice)
         self.secret_cards.messaging = self.messaging
@@ -1477,25 +1501,11 @@ class App(Router):
                 for a in attachments
             ]
         reply = await self.call("agent.ask", params)
-        if reply.get("status") == "confirm":
-            question = reply["confirm"]
-            await self.call("agent.confirm", {"id": question["id"], "approved": False})
-            return f"{question['text']}\n{words(language, 'confirm')}"
-        from .messaging.core import Answer
-        from .services.artifacts import turn_files
-        from .answer_forms import forms_plain_text
-        # Every message of the reply, unframed, as the app shows them: never only the last one.
-        shown = [m for m in (reply.get("messages") or []) if isinstance(m, str) and m.strip()]
-        parts = [forms_plain_text(m) for m in plain_replies(shown or [reply.get("text", "")])]
-        if reply.get("status") == "done" and type(reply.get("turn_id")) is int:
-            # A question the member put to the owner is written out with its choices: a chat cannot draw the card.
-            from .messaging.words import question_text
-            questions = getattr(self.background, "owner_questions", None)
-            waiting = [q for q in questions.for_turn(reply["turn_id"]) if q["state"] == "asked" and q["kind"] == "ask_owner"] if questions is not None else []
-            if waiting:
-                written = question_text(language, waiting[0])
-                parts = [*parts[:-1], written] if parts and parts[-1].strip() == waiting[0]["question"] else [*parts, written]
-        return Answer("\n\n".join(parts), list(turn_files(self.agent._history, reply.get("turn_id", 0), self.attachment_store)), parts)
+        return await _messaging_answer(self, reply, language)
+
+    async def _report_platform_reply(self, session, language, reply):
+        answer = await _messaging_answer(self, reply, language)
+        await self.messaging.report(session, getattr(answer, "parts", answer), files=getattr(answer, "files", ()))
 
     async def _transcribe_room(self, audio: bytes, language: str) -> str:
         return await self._transcribe_from_messaging(audio, language, cleanup=True)

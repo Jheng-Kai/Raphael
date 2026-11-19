@@ -20,14 +20,16 @@ class AgentInbox:
 
     def admit(self, ask, payload):
         existing = self.find(ask.speaker.id, ask.conversation_id, ask.session_id)
-        if existing:
+        if existing and not ask.place and ask.source not in ("telegram", "slack", "discord"):
             return existing, False
         turn_id = self.history.add(
             session_id=ask.session_id, question=ask.original_text if ask.original_text is not None else ask.text,
             route="answer", prefix="", text="", status="queued", source=ask.source,
             member_id=ask.speaker.id, conversation_id=ask.conversation_id,
             attachments=[a.metadata() for a in ask.attachments], quote=ask.quote,
-            admission=json.dumps(payload, ensure_ascii=False), place=ask.place, versions=ask.versions,
+            admission=json.dumps(payload, ensure_ascii=False), place=ask.place,
+            request_id=uuid.uuid4().hex if existing and not ask.place else ask.session_id,
+            replacing_session=ask.replacing_session, keep_answer=ask.keep_answer,
         )
         return self.get(turn_id), True
 
@@ -106,6 +108,12 @@ class AgentInbox:
 
     def recover(self):
         with self.conn:
+            self.conn.execute(
+                "UPDATE agent_inbox AS i SET state='terminal', settled_at_ms=?, outcome=CASE t.status"
+                " WHEN 'done' THEN 'completed' WHEN 'error' THEN 'failed' WHEN 'expired' THEN 'failed' ELSE 'cancelled' END"
+                " FROM agent_turns AS t WHERE i.turn_id=t.id AND i.state='started'"
+                " AND t.status IN ('done','error','expired','cancelled','denied','withdrawn')", (self.now_ms(),),
+            )
             self.conn.execute("UPDATE agent_turns SET status='expired' WHERE id IN (SELECT turn_id FROM agent_inbox WHERE state='started')")
             self.conn.execute("UPDATE agent_inbox SET state='terminal',outcome='lost',settled_at_ms=? WHERE state='started'", (self.now_ms(),))
             # Handed to work of a process that is gone, and never read by its model (a read one was settled as it was read):

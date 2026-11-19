@@ -216,3 +216,63 @@ def test_the_versions_table_and_its_trigger_come_with_migration_87(tmp_path):
         conn.execute("DELETE FROM agent_turns WHERE id=5")
     assert conn.execute("SELECT COUNT(*) FROM agent_turn_versions").fetchone()[0] == 0
     conn.close()
+
+
+@pytest.mark.parametrize("failure", ["storage", "inbox"])
+async def test_failed_edit_preserves_the_entire_answer(team_rig, client, conn, tmp_path, monkeypatch, failure):
+    from raphael_core.services.attachment_store import AttachmentStore
+
+    rig = team_rig
+    original = await say(rig, client, "original", "Original question", "Original answer")
+    before = await listed(rig)
+    store = AttachmentStore(tmp_path)
+    rig.service._attachment_store = store
+    if failure == "storage":
+        def fail(attachment):
+            raise OSError("storage unavailable")
+        monkeypatch.setattr(store, "save", fail)
+    else:
+        conn.execute("CREATE TRIGGER reject_edit BEFORE INSERT ON agent_inbox BEGIN SELECT RAISE(ABORT, 'full'); END")
+    with pytest.raises(RpcError):
+        await say(rig, client, "edit", "Edited question", "New answer", replace_turn_id=original["turn_id"],
+                  attachments=[dict(name="file.txt", mime="text/plain", data="YQ==")])
+    assert await listed(rig) == before
+    assert rig.service._inbox.get(original["turn_id"])["request_id"] == "original"
+
+
+async def test_stopping_an_unanswered_third_version_restores_the_second(team_rig, client):
+    rig = team_rig
+    first = await say(rig, client, "one", "First question", "First answer")
+    turn_id = first["turn_id"]
+    await say(rig, client, "two", "Second question", "Second answer", replace_turn_id=turn_id)
+    entered = asyncio.Event()
+
+    async def thinking(**kwargs):
+        entered.set()
+        await asyncio.Event().wait()
+
+    client.chats.append(thinking)
+    edit = asyncio.create_task(rig.call("agent.ask", dict(session_id="three", text="Third question", ui_language="en",
+        source="app", member_id=rig.member, conversation_id=rig.conversation, replace_turn_id=turn_id)))
+    try:
+        await asyncio.wait_for(entered.wait(), 5)
+        stopped = await rig.call("agent.history.stop", dict(session_id="three", member_id=rig.member))
+        assert [draft["text"] for draft in stopped["returned"]] == ["Third question"]
+        [current] = (await listed(rig))["turns"]
+        assert (current["id"], current["version"], current["question"], said(current)) == (turn_id, 2, "Second question", ["Second answer"])
+        assert said((await version(rig, turn_id, 1))["turn"]) == ["First answer"]
+    finally:
+        edit.cancel()
+        await asyncio.gather(edit, return_exceptions=True)
+
+
+async def test_edit_and_retract_select_one_answer_in_a_reused_session(team_rig, client):
+    rig = team_rig
+    earlier = await say(rig, client, "chat", "Earlier question", "Earlier answer")
+    second = await say(rig, client, "chat", "Second question", "Second answer")
+    await say(rig, client, "chat", "Edited question", "Edited answer", replace_turn_id=second["turn_id"])
+    assert said((await version(rig, second["turn_id"], 1))["turn"]) == ["Second answer"]
+    result = await rig.call("agent.history.retract", dict(member_id=rig.member, session_id="chat", turn_id=second["turn_id"]))
+    assert result == {"deleted": 1}
+    [remaining] = (await listed(rig))["turns"]
+    assert (remaining["id"], remaining["question"], said(remaining)) == (earlier["turn_id"], "Earlier question", ["Earlier answer"])
