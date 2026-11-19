@@ -20,6 +20,7 @@ const moved = async (): Promise<void> => {
   await flush();
 };
 const waiting = (...items: object[]): void => { api.core.mockResolvedValue({ waiting: items }); };
+const memberFace = vi.fn((id: number, size: number) => `<span class="av" data-member-face="${id}" data-face-size="${size}" aria-hidden="true"></span>`);
 const toasts = (): Element[] => [...document.querySelectorAll(".toast")];
 
 beforeEach(async () => {
@@ -28,7 +29,7 @@ beforeEach(async () => {
   vi.clearAllMocks();
   setLocale("zh-TW");
   waiting();
-  mountQuestionReminder({ onEvent: (handler: (event: MainEvent) => void) => events.push(handler) } as unknown as AppContext);
+  mountQuestionReminder({ onEvent: (handler: (event: MainEvent) => void) => events.push(handler) } as unknown as AppContext, memberFace);
   await flush();
 });
 
@@ -39,7 +40,13 @@ test("says once who waits, with a way there, unless it is on screen", async () =
   expect(toasts()[0].textContent).toContain("小森 等你回答");
   await moved();
   expect(toasts()).toHaveLength(1);
-  toasts()[0].querySelector<HTMLElement>("[data-question-room]")!.click();
+  const buttons = toasts()[0].querySelectorAll<HTMLButtonElement>("button");
+  expect(buttons).toHaveLength(1);
+  expect(buttons[0].getAttribute("aria-label")).toBe("小森 等你回答");
+  expect(buttons[0].querySelector('[data-member-face="3"][data-face-size="22"]')).not.toBeNull();
+  expect(buttons[0].lastElementChild?.matches("svg[aria-hidden=true]")).toBe(true);
+  expect(buttons[0].dataset.questionRoom).toBe("7");
+  buttons[0].click();
   expect(open.room).toHaveBeenCalledWith(7);
   expect(toasts()).toHaveLength(0);
 });
@@ -55,7 +62,7 @@ test("what was waiting when the app opened is in the sidebar, not a toast", asyn
   document.body.innerHTML = "";
   events = [];
   waiting({ id: "old", member_id: 3, member_name: "小森", room_id: null });
-  mountQuestionReminder({ onEvent: (handler: (event: MainEvent) => void) => events.push(handler) } as unknown as AppContext);
+  mountQuestionReminder({ onEvent: (handler: (event: MainEvent) => void) => events.push(handler) } as unknown as AppContext, memberFace);
   await flush();
   expect(toasts()).toHaveLength(0);
 });

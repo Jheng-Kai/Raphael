@@ -137,6 +137,35 @@ async function finish(ending: Ending, target: number, extra: { words: string }):
   }
 }
 
+test("Cancel in the key card retracts its own turn and restores the draft", async () => {
+  const agent = mount([turn(8, { status: "confirm", question: "Run the script", secrets: [{
+    id: "key-8", name: "SAMPLE_API_KEY", secret: "SAMPLE_API_KEY", key: true, state: "pending", error: null, expires_at_ms: 0, resumed: false,
+  }] })]);
+  await flush(); await pickMember(3);
+  api.agentRetract.mockImplementation(async (session: string) => { rows = rows.filter(item => item.session_id !== session); });
+  const card = $('.tn[data-id="8"] .key-card');
+  expect(card).not.toBeNull();
+  expect(document.querySelector('.tn[data-id="8"] [data-owner-act="cancel"]')).toBeNull();
+  const cancel = card.querySelector<HTMLButtonElement>('.card-actions [data-act="cancel-secret-turn"]')!;
+  expect(cancel.textContent).toBe("取消");
+  cancel.click(); await flush();
+  expect(api.agentRetract).toHaveBeenCalledExactlyOnceWith("s8", 3, 8);
+  expect(document.querySelector('[data-secret-card="key-8"]')).toBeNull();
+  expect(box().value).toBe("Run the script");
+  agent.hide();
+});
+
+test("Cancel inside a queued bubble withdraws that message", async () => {
+  const agent = mount([turn(8, { status: "queued", text: "", question: "Queued draft" })]);
+  await flush(); await pickMember(3);
+  api.agentRetract.mockImplementation(async (session: string) => { rows = rows.filter(item => item.session_id !== session); });
+  $('.tn[data-id="8"] .bubble [data-act="cancel-message"]').click(); await flush();
+  expect(api.agentRetract).toHaveBeenCalledExactlyOnceWith("s8", 3, 8);
+  expect(document.querySelector('.tn[data-id="8"]')).toBeNull();
+  expect(box().value).toBe("Queued draft");
+  agent.hide();
+});
+
 describe("every kind of message, edited from an empty composer", () => {
   test.each(KINDS.flatMap(kind => ENDINGS.map(ending => [kind.name, ending, kind] as const)))("%s, ending: %s", async (_name, ending, kind) => {
     const original = asked(8, kind.turn);

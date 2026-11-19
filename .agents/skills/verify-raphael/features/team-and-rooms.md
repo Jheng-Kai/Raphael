@@ -134,7 +134,7 @@ turn of their own: no one is asked beforehand (see "No listener" below). An addr
 answered. Nothing hands out the floor or sums up unasked, and no turn is given a template: a meeting
 closes and finished work reports back in plain words (R-AG-02).
 A member's question waits above the room's composer, the room's row says so, and
-`question-reminder.ts` says it once when the owner is elsewhere (R-AG-34).
+`question-reminder.ts` says it once when the owner is elsewhere (R-AG-34). The notice is one floating button with the member’s face, waiting words and chevron. Pressing it opens the room and dismisses the notice.
 
 ```powershell
 npm run look -- room-question-card question-reminder --theme both --width 1120,720,1920x1080

@@ -101,17 +101,16 @@ describe("the review shows everything a shared member holds", () => {
 });
 
 describe("the words say what sharing does", () => {
-  // Sharing saves a file, or prepares a publish request on GitHub; it never makes a link.
-  const keys = ["template.copyHint", "template.export", "cards.templateSave", "cards.templatePublish", "cards.templatePublished", "cards.templateOpen", "cards.templatePrepared", "cards.templateWhere", "cards.templateFolder", "store.publish", "store.notOpen", "store.unavailable"] as const;
+  const keys = ["template.export", "cards.templateSave", "store.notOpen", "store.unavailable"] as const;
   const link = /link|連結|链接|リンク|링크|enlace|\blien\b|tautan|collegamento|ссылк|ลิงก์|bağlant|liên kết/i;
   const locales = { de, en, es, fr, id, it: itLocale, ja, ko, ptBR, ru, th, tr, vi, zhCN, zhTW } as Record<string, Record<string, string>>;
 
-  test.each(Object.keys(locales))("%s names no link where a file or a publish request is meant", name => {
+  test.each(Object.keys(locales))("%s names no link where a file or store status is meant", name => {
     for (const key of keys) expect(locales[name]![key], `${name} ${key}`).not.toMatch(link);
   });
 
-  test("the share menu line says a file is saved or a publish request is prepared", () => {
-    expect(en["template.copyHint"]).toBe("Save a file, or prepare a publish request on GitHub");
-    expect(zhTW["template.copyHint"]).toBe("存成檔案，或在 GitHub 準備發布請求");
+  test("the share menu describes file saving and optional link sharing", () => {
+    expect(en["template.copyHint"]).toBe("Save a file or share a link when available");
+    expect(zhTW["template.copyHint"]).toBe("儲存為檔案，或在支援時分享連結");
   });
 });

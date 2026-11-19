@@ -182,14 +182,12 @@ export function checkRendered(name, context = {}) {
       require([...card.querySelectorAll(".card-actions button")].every(button => !button.disabled), "the card's buttons are back");
     }
     if (name === "colleague-published") {
-      const card = document.querySelector('[data-template-card-id="tpl-1"]'), where = card.querySelector("[data-template-where]"), next = card.querySelector(".template-next");
-      require(card.dataset.cardState === "published" && visible(where) && visible(next), "the card says where the files are and what to do next");
-      require(where.textContent.includes("template-exports") && where.textContent.includes("3f9a1c07d2e84b56"), "the path of the prepared folder is written out");
-      const edge = card.getBoundingClientRect().right;
-      require(where.getBoundingClientRect().right <= edge + 0.5 && next.getBoundingClientRect().right <= edge + 0.5, "the path and the sentence wrap inside the card");
+      const card = document.querySelector('[data-template-card-id="tpl-1"]');
       const buttons = [...card.querySelectorAll(".card-actions button")];
-      require(buttons.map(button => button.dataset.act).join() === "template-open,template-folder,template-view" && buttons.every(visible), "open the GitHub page, show the files, view");
-      require(buttons[0].classList.contains("pri") && !buttons[1].classList.contains("pri"), "the GitHub page is the one primary button");
+      require(card.dataset.cardState === "published" && buttons.map(button => button.dataset.act).join() === "template-save,template-view" && buttons.every(visible), "a legacy published card offers Save file and View contents");
+      require(buttons[0].classList.contains("pri") && !buttons[1].classList.contains("pri"), "Save file is primary");
+      require(!card.innerHTML.includes("github.example") && !card.innerHTML.includes("template-exports"), "the old link and folder are absent");
+      require(!calls.some(call => call.method === "members.template_card_publish" || call.command === "show_template_export"), "the card uses no publishing path");
     }
     if (name === "colleague-shareable") {
       const card = document.querySelector('[data-template-card-id="tpl-1"]');
@@ -2098,20 +2096,23 @@ export function checkRendered(name, context = {}) {
     return {check:name};
   }
   if (["key-private", "key-saved"].includes(name)) {
-    // R-KEY-01: a key for a program in a member's computer is pasted on the same secure card, and the page keeps no copy of it.
     const card = document.querySelector('[data-secret-card=card-key]');
     require(visible(card) && card.hasAttribute('data-key-card'), 'the key uses the existing secret card, in its key form');
-    for (const secret of ['sk-or-v1-private-look-key']) require(!document.body.innerText.includes(secret) && !document.documentElement.outerHTML.includes(secret) && !JSON.stringify(window.__look.calls).includes(secret), 'the key value stays out of the markup, the text and the calls recorded');
+    const sample = 'sk-or-v1-private-look-key';
+    require(!document.body.innerText.includes(sample) && !document.documentElement.outerHTML.includes(sample) && !JSON.stringify(window.__look.calls).includes(sample), 'the key value stays out of the markup, the text and the recorded calls');
     const title = card.querySelector('.card-title')?.textContent.trim();
-    require(title === (name === 'key-private' ? '儲存 OPENROUTER_API_KEY' : 'OPENROUTER_API_KEY'), `the card is titled by the variable's name: ${title}`);
     if (name === 'key-private') {
-      const field = card.querySelector('[data-secret-input]');
-      require(field.type === 'password' && !card.querySelector('[data-act=card-save]').disabled, 'the key is masked and Save works once it is typed');
-      require(card.innerText.includes('價格腳本要呼叫模型') && card.innerText.includes('不會出現在對話裡'), 'what the key is for and where it goes are said');
-      const box = card.getBoundingClientRect(), input = field.getBoundingClientRect();
-      require(input.left >= box.left && input.right <= box.right + 1 && field.getBoundingClientRect().width > 120, 'the field sits inside the card at a usable width');
+      require(title === '儲存金鑰' && card.querySelector('.key-context code')?.textContent === 'OPENROUTER_API_KEY', 'the variable is separate from the localized title');
+      const field = card.querySelector('[data-secret-input]'), save = card.querySelector('[data-act=card-save]');
+      const status = card.querySelector('.card-status'), cancel = card.querySelector('.card-actions [data-act=cancel-secret-turn]');
+      require(field.type === 'password' && !save.disabled && !field.closest('.sc-field').querySelector('svg'), 'a masked field without an icon and an enabled Save');
+      require(card.querySelector('.key-context .cc-state')?.textContent === '價格腳本要呼叫模型' && card.querySelector('.card-shield')?.textContent.includes('作業系統憑證庫'), 'the purpose and vault hint each appear once');
+      require(status.textContent === '等你填入' && getComputedStyle(status).backgroundColor === 'rgba(0, 0, 0, 0)' && getComputedStyle(status.querySelector('i')).animationName === 'none', 'waiting is shown as words and a static dot');
+      const box = card.getBoundingClientRect(), input = field.closest('.sc-field').getBoundingClientRect(), primary = save.getBoundingClientRect();
+      require(Math.abs(primary.top - input.top) <= 1 && input.right <= primary.left && primary.right <= box.right && input.width > 120, 'the field and Save share one usable row');
+      require(visible(cancel) && cancel.getBoundingClientRect().bottom <= box.bottom && !card.closest('.tn').querySelector('[data-owner-act="cancel"]'), 'Cancel belongs to the card footer');
     } else {
-      require(!card.querySelector('input') && window.__look.calls.filter(call => call.method === 'integrations.card_save').length === 1, 'save empties the field and crosses one call');
+      require(title === 'OPENROUTER_API_KEY' && !card.querySelector('input, [data-act=cancel-secret-turn]') && window.__look.calls.filter(call => call.method === 'integrations.card_save').length === 1, 'save clears the field and Cancel and crosses one call');
     }
     return {check:name};
   }
@@ -3378,7 +3379,7 @@ export function checkRendered(name, context = {}) {
     require(visible(bot)&&bot.querySelector('input[type=password][data-secret-input]')&&bot.querySelector('[data-act="bot-link"][data-platform="slack"]'),"the bot card has where to make the bot and one masked field");
     require(!bot.innerHTML.includes('xoxb')&&!bot.querySelector('input')?.value,"no token in the markup");
     require(pair&&pair.querySelector('.code')?.textContent==='SL7Q2K'&&pair.querySelector('[data-act="pairing-allow"]')&&pair.querySelector('[data-act="pairing-deny"]'),"the pairing card shows its code with Allow and Deny");
-    require(tpl&&tpl.querySelector('[data-act="template-view"]')&&tpl.querySelector('[data-act="template-save"]')&&tpl.querySelector('[data-act="template-publish"]')&&tpl.textContent.includes('Gmail'),"the template card says what it brings and can be viewed, saved or published");
+    require(tpl&&tpl.querySelector('[data-act="template-view"]')&&tpl.querySelector('.pri[data-act="template-save"]')&&tpl.textContent.includes('Gmail'),"the template card says what it brings and offers Save file as primary and View contents");
     return {check:name};
   }
   if(name==='voice-flyer-emblem'){
@@ -3768,14 +3769,14 @@ export function checkRendered(name, context = {}) {
     return {check:name,place};
   }
   if (name === "composer-queued-sendnow-menu") {
-    // 立即送出 is the exception and stands in sight, first in the row, with no 「排隊中」 words; the menu does not repeat it.
-    const labels = [...document.querySelectorAll('#app-popover [data-pick]')].map(node => `${node.dataset.pick}:${node.textContent.trim()}`);
-    require(!labels.some(item => item.startsWith("send-now:")) && labels.some(item => item.startsWith("cancel:")), `the menu keeps Cancel and has no 立即送出: ${labels}`);
-    const button = document.querySelector('.tn[data-id="901"] .message-actions [data-act="send-now"]');
-    require(visible(button) && button.textContent.trim() === "立即送出" && !button.previousElementSibling, "立即送出 stands in sight, first in the row");
-    require(!document.querySelector('.tn[data-id="901"]').textContent.includes("排隊中"), "no 排隊中 words beside the message");
-    const box = button.getBoundingClientRect(), bubble = document.querySelector('.tn[data-id="901"] .bubble').getBoundingClientRect();
-    require(box.right <= bubble.left + 1 && Math.abs((box.top + box.bottom) / 2 - (bubble.top + bubble.bottom) / 2) <= bubble.height / 2, "beside the bubble, on its line");
+    const labels = [...document.querySelectorAll('#app-popover [data-pick]')].map(node => node.dataset.pick);
+    require(labels.includes("copy") && !labels.some(item => ["send-now", "cancel", "edit"].includes(item)), "the menu does not repeat the waiting actions or offer Edit");
+    const turn = document.querySelector('.tn[data-id="901"]'), bubble = turn.querySelector('.bubble');
+    const [cancel, send] = bubble.querySelectorAll('.queued-actions button');
+    require(visible(cancel) && visible(send) && cancel.textContent.trim() === "取消" && send.textContent.trim() === "立即送出", "both waiting actions are visible inside the bubble");
+    require(!turn.textContent.includes("排隊中"), "no 排隊中 words beside the message");
+    const box = bubble.getBoundingClientRect(), exit = cancel.getBoundingClientRect(), submit = send.getBoundingClientRect();
+    require(exit.right <= submit.left && submit.right <= box.right && submit.bottom <= box.bottom && submit.top >= bubble.querySelector('.message-text').getBoundingClientRect().bottom, "the action row sits below the text inside the bubble");
     const icons = [...document.querySelectorAll('#app-popover [data-pick] svg')].map(node => node.innerHTML);
     require(new Set(icons).size === icons.length, "each menu action has its own icon");
     require(!document.querySelector('.tn[data-id="902"]'), "only the one queued bubble exists");
@@ -3798,8 +3799,8 @@ export function checkRendered(name, context = {}) {
       const queued = [...document.querySelectorAll('.tn[data-status="queued"]')];
       require(queued.length === 2, "both queued messages are visible");
       require(queued.map(node => node.querySelector('.message-text').textContent).join('|') === "第二個範例請求|第三個範例請求", "the bubbles retain send order");
-      require(queued.every(node => node.querySelector('button[data-act="more-message"][data-owner-act="cancel"]') && !node.querySelector('[data-owner-act="edit"]')), "queued bubbles offer withdraw instead of edit in their menu");
-      require(queued.every(node => visible(node.querySelector('.queued-send-now')) && !node.textContent.includes("排隊中")), "each queued message shows 立即送出 and no 排隊中 words");
+      require(queued.every(node => visible(node.querySelector('.bubble [data-act="cancel-message"]')) && !node.querySelector('[data-owner-act="cancel"]')), "each queued bubble owns its withdraw button");
+      require(queued.every(node => visible(node.querySelector('.bubble .queued-send-now')) && !node.textContent.includes("排隊中")), "each queued message shows 立即送出 and no 排隊中 words");
       const presence = [...document.querySelectorAll('.thread .live-presence')];
       require(presence.length === 1 && presence[0].getBoundingClientRect().top >= queued[1].getBoundingClientRect().bottom, "one live presence follows the newest message");
       const bubbles = queued.map(node => node.querySelector('.bubble').getBoundingClientRect());
@@ -4976,8 +4977,13 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name === "question-reminder") {
-    const toast = document.querySelector('.toast [data-question-room]').closest('.toast');
-    require(toast.textContent.includes("小晴") && toast.textContent.includes("等你回答"), `says who waits: ${toast.textContent}`);
+    const button = document.querySelector('.toast button[data-question-room]'), toast = button.closest('.toast');
+    require(visible(button) && toast.querySelectorAll('button, [role="button"]').length === 1, "the whole reminder is the only button");
+    const label = button.querySelector('.question-reminder-text').textContent;
+    require(label.includes("小晴") && label.includes("等你回答") && button.getAttribute("aria-label") === label, "the visible words also name the button");
+    require(button.firstElementChild.matches('.av[aria-hidden=true]') && button.lastElementChild.matches('svg[aria-hidden=true]'), "the member's face and chevron flank the words");
+    const style = getComputedStyle(button);
+    require(style.borderTopWidth === "1px" && style.borderRadius === style.getPropertyValue("--r-pill").trim() && style.boxShadow !== "none", "the reminder uses a floating pill with a hairline");
     return { check: name };
   }
   // The composer's line (R-UI-118): quiet when the app put the caret there on its own, brighter while the owner is in it.
@@ -11185,22 +11191,21 @@ export function checkRendered(name, context = {}) {
     require(composerField.value === '' && !composer.hasAttribute('data-replacing'), 'the composer keeps its own (empty) draft: nothing of the message went into it');
     const field = turn.querySelector('[data-edit-input]'), message = turn.querySelector('.owner-message[data-msg-editor]'), bubble = field.closest('.bubble'), me = turn.querySelector('.me');
     require(visible(field) && visible(bubble) && message && message.classList.contains('is-editing'), 'the message is open as an editor');
-    require(!bubble.querySelector('.btn'), 'the bubble holds no button: it is not wrapped in another box');
     require(document.activeElement === field && field.selectionStart === field.value.length && field.selectionEnd === field.value.length, 'the field has the focus, the caret after its words');
     require(field.value === window.__look.beforeBubble.text, 'the words are the message\'s own');
     require([...turn.querySelectorAll('.owner-message .message-actions')].every(held => held.hasAttribute('inert') && getComputedStyle(held).visibility === 'hidden'), 'no action can be pressed beside the bubble while it is edited (its room is held)');
     require(turn.querySelector('.ra .chat-message[data-reply]') && visible(turn.querySelector('.ra .chat-message[data-reply]')), 'what the member answered stays under it');
     const before = window.__look.beforeBubble, b = bubble.getBoundingClientRect(), style = getComputedStyle(bubble), m = me.getBoundingClientRect();
     for (const [key, value] of Object.entries(before.style)) require(style[key] === value, `the editor is the bubble's own: ${key} is ${style[key]}, it was ${value}`);
-    require(Math.abs(b.right - before.rect.right) <= 1 && Math.abs(b.top - before.rect.top) <= 1, `the bubble stays where it stood (right ${Math.round(b.right)} vs ${Math.round(before.rect.right)}, top ${Math.round(b.top)} vs ${Math.round(before.rect.top)})`);
+    require(Math.abs(b.right - before.rect.right) <= 1, 'the editor keeps the bubble’s alignment');
     require(b.right <= m.right + 1, 'the bubble ends inside its column');
-    if (field.value.length < 40) require(Math.abs(b.width - before.rect.width) <= 2 && Math.abs(b.height - before.rect.height) <= 2, `a short message keeps its bubble's size (${Math.round(b.width)}x${Math.round(b.height)} vs ${Math.round(before.rect.width)}x${Math.round(before.rect.height)})`);
+    require(b.height > before.rect.height, 'the bubble grows to hold the action row');
     require(field.scrollWidth <= field.clientWidth + 1 && field.scrollHeight <= field.clientHeight + 1, 'all of the words are in view');
-    const under = turn.querySelector('.msg-editor-under'), buttons = [...under.querySelectorAll('.msg-editor-actions .btn')].filter(visible);
+    const under = bubble.querySelector('.msg-editor-under'), buttons = [...under.querySelectorAll('.msg-editor-actions .btn')].filter(visible);
     require(buttons.length === 2 && buttons[1].classList.contains('pri') && !buttons[1].disabled, '取消 and, last, the primary 送出, ready');
-    const [cancel, sendButton] = buttons.map(button => button.getBoundingClientRect()), box = getComputedStyle(under);
+    const [cancel, sendButton] = buttons.map(button => button.getBoundingClientRect());
     require(cancel.right <= sendButton.left && Math.abs(cancel.height - sendButton.height) < .5 && Math.abs(sendButton.height - 30) < .5, `取消 and 送出 are the thread cards' buttons: 30 px (${Math.round(cancel.height)} px high)`);
-    require(Math.abs(sendButton.right - b.right) <= 1.5 && cancel.top >= b.bottom - 1 && box.borderTopWidth === '0px' && /^rgba\(0, 0, 0, 0\)$|^transparent$/.test(box.backgroundColor), `送出 ends at the bubble's right edge and under it, in no box (${Math.round(sendButton.right)} vs ${Math.round(b.right)})`);
+    require(Math.abs(sendButton.right - (b.right - parseFloat(style.paddingRight))) <= 1.5 && cancel.top >= field.getBoundingClientRect().bottom && sendButton.bottom <= b.bottom, 'the action row sits inside the bottom right of the editor');
     require(!buttons[0].dataset.cancelArmed, '取消 is not armed');
     require(!document.querySelector('.tn.is-pending') && !window.__look.calls.some(call => call.command === 'agent_ask_text'), 'nothing was sent');
     return { check: name, bubble: `${Math.round(b.width)}x${Math.round(b.height)}`, was: `${Math.round(before.rect.width)}x${Math.round(before.rect.height)}`, words: field.value.length };

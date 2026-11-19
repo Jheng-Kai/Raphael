@@ -111,7 +111,7 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); closeMenu(); });
 
 describe("the owner's answered message is edited in its own bubble", () => {
-  test("編輯 makes the bubble the editor where it stands: the words ready, the composer untouched, 取消 and 送出 under it", async () => {
+  test("編輯 makes the bubble the editor where it stands: the words ready, the composer untouched, 取消 and 送出 inside it", async () => {
     const agent = mount([turn(8)]); await flush(); await pickMember(3);
     typeInto(composer(), "my own draft");
     await edit(8);
@@ -127,7 +127,7 @@ describe("the owner's answered message is edited in its own bubble", () => {
     expect(said(8)).toEqual(["回答 8"]);
     // The actions beside it keep their room and cannot be pressed meanwhile.
     expect(message.querySelector(":scope > .message-actions.is-held[inert]")).not.toBeNull();
-    const buttons = [...message.querySelectorAll<HTMLButtonElement>(".msg-editor-actions .btn")];
+    const buttons = [...message.querySelectorAll<HTMLButtonElement>(".bubble .msg-editor-actions .btn")];
     expect(buttons.map(button => button.textContent)).toEqual(["取消", "送出"]);
     expect(buttons[1]!.classList.contains("pri")).toBe(true);
     expect(composer().value).toBe("my own draft");

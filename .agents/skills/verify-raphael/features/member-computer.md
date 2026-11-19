@@ -2190,8 +2190,7 @@ grant/target before and after the final observation; revoked reads return no tre
 ## A key for a program in a member's computer, and paste into the computer (R-KEY-01, R-KEY-02, R-KEY-03, R-PASTE-01)
 
 A member that needs the owner's key for a script in its computer calls `request_secret` with `key` (an environment
-variable name) and `purpose`; the existing secure card (`secret-card.ts`, `keyCardHTML`) is titled 「儲存 NAME」, says
-what it is for and that it goes to a program in the member's computer, and takes the value in its one masked field
+variable name) and `purpose`; the secure card (`secret-card.ts`, `keyCardHTML`) is titled 「儲存金鑰」, with the variable in monospace, its purpose below and a quiet waiting dot. It takes the value in one masked field beside Save, with a vault hint and Cancel in the footer
 (Credential Manager, a `vault_entries` row of kind `key`, never the conversation, a row or a log). The member then
 runs `vm_exec` with `keys: [NAME]`: the core hands the values to that one process's environment (`docker exec -e NAME`,
 the value in the docker process's own environment, never an argument) and replaces them in everything returned,
@@ -2207,7 +2206,7 @@ npm run look -- computer-key-card computer-key-saved computer-login-card chat-se
 ```
 
 Compare the key card with the login card and chat-secret-masked at the same theme/width: the same shell, one masked
-field, Save below, no value in the markup, text or recorded calls. Core: `tests/computer/test_computer_keys.py`,
+field, and no value in the markup, text or recorded calls. The variable key uses a horizontal field and Save row and a quiet status dot. Cancel withdraws its own request and restores the original message to the composer. Core: `tests/computer/test_computer_keys.py`,
 `tests/evaluate/test_card_tools.py`, `tests/brain/test_db.py`. App: `secret-card.test.ts`, `vault.test.ts`,
 `desktop-viewer.test.ts`, `desktop-paste-page.test.ts`; Rust: `cargo test paste::clipboard`. Not proved offline: a paste
 into a real container and a real Credential Manager write.

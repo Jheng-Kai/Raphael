@@ -1036,9 +1036,9 @@ class Toaster implements Notifier {
     this.show(message);
   }
 
-  notice(render: () => string): void {
+  notice(render: () => string, cls = ""): void {
     const toast = document.createElement("div");
-    toast.className = "toast";
+    toast.className = cls ? `toast ${cls}` : "toast";
     toast.innerHTML = render();
     const stop = onLocaleChange(() => { toast.innerHTML = render(); });
     this.container().append(toast);
