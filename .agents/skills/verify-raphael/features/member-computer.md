@@ -271,6 +271,9 @@ Layer 12 (`image/layer12/`, one Dockerfile step after layer 11's, so a PC that b
 - `raphael-browser`: the Browser icon brings the screen's browser window back with a new tab, or makes one when there is none.
 - `raphael-seat-browser`: the browser places and maximizes the found window (`fit`), then shows the new tab page in its marker
   tab and clears its history (`settle`).
+- On layer 14, the core runs the installed launcher as `cua` with startup recovery. It removes stale `Singleton*` and
+  `DevToolsActivePort` entries only when no process uses the shared profile. The core logs early browser exits with a
+  bounded stderr tail, and a missing window gives the member retry and owner-escalation guidance.
 - `raphael-browser-tabs` (standard library, the browser's own DevTools port): `settle`, `list`, `new`, `show`, `fit`.
   A window of the browser is found by its screen, then its title, then (two alike) by which tab has the focus once it is
   brought forward. A new tab opens in the window brought to the front last, so it is checked and, when it landed in another
@@ -1681,6 +1684,8 @@ or a document typed as the command, a windowed program, `open` on a Mac) is refu
 member is told to open it on its own computer (`computer/on_screen.py`, checked in `LocalTools.tier_for_call` and `call`,
 `AgentService._cli_permission` and the background CLI loop). It stops a model that picked the wrong computer; it is no
 defence against someone set on getting round it.
+PowerShell string expressions, format strings and assignments do not open anything. Explicit invocations such as
+`& "C:\Tools\app.exe"` still take the screen route.
 
 A quick question keeps the owner's PC as its default for everything, commands and what is seen alike, and also holds the
 member's own computer for a request whose words name it (`persona._OWNER_PC_RULES` says which is the default and how the

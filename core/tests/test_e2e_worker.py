@@ -30,6 +30,8 @@ def spawn(tmp_path):
     def make(**env):
         core = Core(tmp_path, **env)
         started.append(core)
+        for key in ("agent_model", "quick_model"):
+            result(core, "settings.set", {"key": key, "value": "openai/gpt-6-luna"})
         return core
 
     yield make

@@ -2,6 +2,16 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.checkVisibility() && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  // The providers' directory keeps its title and x at the top however far its list is scrolled (the way out is never lost).
+  const directoryCloseStays = dialog => {
+    const close = dialog.querySelector('[data-pv="close"]'), list = dialog.querySelector('.pv-scroll');
+    require(list && !list.contains(close), "the x stands outside the list that scrolls");
+    const top = list.scrollTop;
+    list.scrollTop = list.scrollHeight;
+    const frame = dialog.getBoundingClientRect(), box = close.getBoundingClientRect();
+    require(visible(close) && box.top >= frame.top - 0.5 && box.bottom <= frame.bottom + 0.5, `the x stays in view when the list is scrolled: x ${Math.round(box.top)}..${Math.round(box.bottom)}, dialog ${Math.round(frame.top)}..${Math.round(frame.bottom)}`);
+    list.scrollTop = top;
+  };
   // A computer that is not showing its live screen draws nothing over its wallpaper: no words, face,
   // progress, status sentence, recovery button, Open pill or caption. One press anywhere on the screen (its cover) starts it.
   const shownText = root => {
@@ -2203,11 +2213,12 @@ export function checkRendered(name, context = {}) {
       require(/未設定/.test(image.textContent) && /未設定/.test(video.textContent) && /沒有可用模型/.test(video.textContent), 'unset never chooses a model and video has no invented capability');
       require(!/與回答相同/.test(image.textContent + video.textContent), 'unset media never inherits the conversational model');
     } else if (name === 'media-models-set') {
-      require(/Gemini Image/.test(image.textContent) && /圖片輸出.*30/.test(image.textContent), 'the selected drawing model has its image token price');
+      require(/Gemini Image/.test(image.textContent) && !/圖片輸出|每百萬/.test(image.textContent), 'the selected drawing model is named, and priced by no text or image token');
       require(/影片模型範例/.test(video.textContent) && /每次請求.*0.12/.test(video.textContent), 'video shows the explicit synthetic provider and request price');
     } else if (name === 'media-models-menu') {
       const menu = document.querySelector('.model-chooser');
-      require(visible(menu) && /每張.*0.04/.test(menu.textContent) && /每次請求.*0.025/.test(menu.textContent) && /圖片輸出/.test(menu.textContent), 'image-only models keep their real pricing units');
+      require(visible(menu) && /每張.*0.04/.test(menu.textContent) && /每次請求.*0.025/.test(menu.textContent) && !/圖片輸出|每百萬|\d+K\b|\d+(\.\d+)?M\b/.test(menu.querySelector('.mc-list')?.textContent ?? ''), 'drawing models are priced by the picture or the request, with no token price and no context length');
+      require(!/每百萬/.test(menu.querySelector('.mc-pane-head')?.textContent ?? ''), 'the source of drawing models says it is paid by use, not by words');
       for (const price of menu.querySelectorAll('.mc-price')) {
         const row = price.closest('.mc-row'), model = row.querySelector('.mc-model');
         require(model.getBoundingClientRect().width >= 80 && price.getBoundingClientRect().right <= row.getBoundingClientRect().right,
@@ -3159,7 +3170,7 @@ export function checkRendered(name, context = {}) {
     const header=nav.querySelector('.mb-top');
     const rail=document.documentElement.hasAttribute('data-sidebar-collapsed');
     require(!nav.querySelector('.brand, .app-icon, [data-sidebar="collapse"]')&&nav.querySelector('.sidebar-foot-row > .sidebar-account'),'no brand and no fold button (the edge drags); the owner\'s face stands in the foot');
-    if(!compact){const edge=nav.querySelector(':scope > .side-edge'),box=edge?.getBoundingClientRect(),side=nav.getBoundingClientRect();require(edge&&edge.getAttribute('role')==='separator'&&getComputedStyle(edge).cursor==='col-resize'&&Math.abs(box.right-side.right)<1&&box.width<=8&&getComputedStyle(edge,'::after').content!=='none'&&getComputedStyle(edge,'::after').width==='1px','the list has a draggable edge at its right, drawn as a quiet 1px line (R-UI-110)');}
+    if(!compact){const edge=nav.querySelector(':scope > .side-edge'),box=edge?.getBoundingClientRect(),side=nav.getBoundingClientRect();require(edge&&edge.getAttribute('role')==='separator'&&getComputedStyle(edge).cursor==='col-resize'&&Math.abs(box.right-side.right)<1&&box.width<=8&&getComputedStyle(edge,'::after').content!=='none'&&getComputedStyle(edge,'::after').borderRightStyle==='solid'&&parseFloat(getComputedStyle(edge,'::after').borderRightWidth)>0&&parseFloat(getComputedStyle(edge,'::after').borderRightWidth)<=1&&parseFloat(getComputedStyle(edge,'::after').width)===0,'the list has a draggable edge at its right, drawn as a quiet hairline border (R-UI-110)');}
     const pair=[...nav.querySelectorAll('[data-col]')];
     require(pair.map(button=>button.dataset.col).join()==='search,add'&&!column.querySelector('input'),'search then plus, with no field standing in the list');
     // The rail has no search: only the plus stands in its foot.
@@ -4427,6 +4438,8 @@ export function checkRendered(name, context = {}) {
   if (name === "local-model-menu") {
     require(document.querySelector('#app-popover [data-pick="delete"]').textContent.includes("SenseVoice"), "the item names the model");
     require(!document.querySelector('.lm-row [data-act="delete"], .lm-del'), "no delete stands in the row");
+    const mores = [...document.querySelectorAll('.lm-row [data-act="local-menu"]')];
+    require(mores.length >= 1 && mores.every(visible), "every downloaded model shows its ⋯, with no right click needed");
     return { check: name };
   }
   if (name === "local-model-asks") {
@@ -4938,7 +4951,7 @@ export function checkRendered(name, context = {}) {
     require(saved.length === 1 && saved[0].params.id === 1 && saved[0].params.model.startsWith("cli:codex"), "a member's composer saves that member's model");
     require(!window.__look.calls.some(call => call.method === "settings.set" && call.params.key === "agent_model"), "Raphael's model is not touched");
     require(window.__look.data.members.filter(member => member.id !== 1).every(member => !member.model?.startsWith("cli:codex")), "no other member moves");
-    require(document.querySelector('.cb-menu [aria-checked="true"]') || document.querySelector('.cb-menu .cb-pick b')?.textContent.includes("GPT-6.1"), "the menu shows the choice");
+    require(document.querySelector('.cb-menu [aria-checked="true"]') || document.querySelector('.cb-menu .cb-pick-name span')?.textContent.includes("GPT-6.1"), "the menu shows the choice");
     require(document.querySelector('.composer .cmp-model .mp-trigger').textContent.includes("Codex"), "reopened details show the selected CLI source");
     return { check: name, model: saved[0].params.model };
   }
@@ -5979,8 +5992,10 @@ export function checkRendered(name, context = {}) {
       require(selected?.dataset.name === 'qwen3-asr', "the preview selects exactly the requested local model");
       require(dialog.querySelectorAll('.lm-main[aria-checked="true"]').length === 1, "only one local radio is selected");
       require(document.activeElement === selected && parseFloat(getComputedStyle(selected).outlineWidth) >= 2, "keyboard focus stays visible on the choice");
-      const mark = selected.querySelector('.ck svg');
-      require(visible(mark) && mark.getBoundingClientRect().width <= 16 && getComputedStyle(mark).fill === 'none' && getComputedStyle(mark).stroke !== 'none', "the selected model has a bounded, visible check mark");
+      // The same radio as every chosen row of the choices, filled with its dot; the state where a price stands, not louder.
+      const mark = selected.querySelector('.mc-radio'), state = selected.querySelector('.lm-state');
+      require(visible(mark) && !selected.querySelector('.ck') && getComputedStyle(mark).backgroundColor !== 'rgba(0, 0, 0, 0)' && getComputedStyle(mark, '::after').content !== 'none', "the selected model has the radio every chosen row has");
+      require(state && parseFloat(getComputedStyle(state).fontWeight) <= 500 && state.getBoundingClientRect().left > selected.querySelector('.mp-name').getBoundingClientRect().right, "its state stands at the right in a price's weight");
       require(!window.__look.calls.some(call => ['models.download', 'models.use', 'settings.set'].includes(call.method)), "previewing does not download or save settings");
       require(getComputedStyle(selected.closest('.lm-row')).backgroundColor !== getComputedStyle(rows[1]).backgroundColor, "selection has a distinct themed surface");
       return { check: name, selected: selected.dataset.name };
@@ -6716,43 +6731,37 @@ export function checkRendered(name, context = {}) {
       require(toggle.getBoundingClientRect().bottom <= band.getBoundingClientRect().bottom + 1 && toggle.scrollWidth <= toggle.clientWidth + 1, "the toggle stands whole inside the band");
       for (const chip of chips) require(!overlapping(toggle.getBoundingClientRect(), chip.getBoundingClientRect()), "the toggle covers no chip");
     }
-    // Each day opens by itself (R-CAL-07): an open day shows every item of its own with its 「收合」 under them, any other day stays folded with its 「還有 N 個」, and the band is as tall as its tallest day.
-    const expandedDays = toggles.filter(toggle => toggle.getAttribute('aria-expanded') === 'true').map(toggle => toggle.dataset.date).sort();
-    const wantedDays = { "calendar-more-one": ["2026-10-22"], "calendar-more-two": ["2026-10-22", "2026-10-24"], "calendar-more-cross": ["2026-10-24"], "calendar-more-fold": ["2026-10-24"] }[name];
-    if (wantedDays) require(JSON.stringify(expandedDays) === JSON.stringify(wantedDays), `the open days are ${wantedDays}, not ${expandedDays}`);
-    require(open === (expandedDays.length > 0), "the band's head is open exactly while a day is");
-    for (const column of columns) {
-      const key = column.dataset.allDay, wanted = expected(column), here = standing(column), toggle = toggles.find(item => item.dataset.date === key);
-      if (expandedDays.includes(key)) {
-        const seen = new Set(here.map(chip => chip.dataset.entry)), box = column.getBoundingClientRect(), at = toggle.getBoundingClientRect();
+    // The whole range opens and folds together (R-CAL-08): open, every day shows every item it has and one 「收合」 stands in the
+    // margin under the time zone, on the band's last row; folded, each day draws three rows and counts what it hides.
+    require(open === toggles.some(toggle => toggle.getAttribute('aria-expanded') === 'true'), "the band's head is open exactly while the band is");
+    if (open) {
+      const fold = toggles[0], at = fold.getBoundingClientRect(), first = columns[0].getBoundingClientRect(), label = band.querySelector('.au-all-day-label').getBoundingClientRect();
+      require(toggles.length === 1 && fold.getAttribute('aria-expanded') === 'true' && fold.getAttribute('aria-label') === '收合' && fold.querySelector('svg'), "open, one 「收合」 folds the whole band");
+      require(at.right <= first.left + 1 && at.bottom <= band.getBoundingClientRect().bottom + 1 && at.top >= label.bottom - 1, "the 「收合」 stands in the margin, under the time zone");
+      require(fold.style.gridRow === band.dataset.rows, "the 「收合」 is on the band's last row");
+      for (const column of columns) {
+        const key = column.dataset.allDay, wanted = expected(column), seen = new Set(standing(column).map(chip => chip.dataset.entry));
         require(wanted.length === seen.size && wanted.every(item => seen.has(item.id)), `every item of ${key} is in the band: ${seen.size} of ${wanted.length}`);
-        require(toggle.textContent === '收合' && at.left >= box.left - 1 && at.right <= box.right + 1, `${key} has its own 「收合」, standing in its day`);
-        require(here.every(chip => chip.getBoundingClientRect().bottom <= at.top + 1), `${key}'s 「收合」 stands under all its items`);
-      } else {
-        const words = toggle?.textContent.match(/^還有 (\d+) 個$/);
-        require(new Set(here.map(chip => chip.closest('.au-bar').style.gridRow)).size <= 3, `${key} is folded to three rows at most`);
-        if (wanted.length > here.length) require(words && toggle.getAttribute('aria-expanded') === 'false' && Number(words[1]) === wanted.length - here.length, `${key} counts the items it hides: ${wanted.length - here.length}`);
-        else require(!toggle, `${key} has nothing hidden and no button`);
       }
-    }
-    if (expandedDays.length) {
-      const tallest = Math.max(...[...band.querySelectorAll('.au-bar:not(.au-draft), [data-au="all-day-toggle"]')].map(node => Number.parseInt(node.style.gridRowStart, 10)));
-      require(Number(band.dataset.rows) === tallest, "the band is as tall as its tallest day");
+      const tallest = Math.max(...[...band.querySelectorAll('.au-bar:not(.au-draft)')].map(node => Number.parseInt(node.style.gridRowStart, 10)));
+      require(Number(band.dataset.rows) >= tallest, "the band is as tall as its tallest day");
+    } else for (const column of columns) {
+      const key = column.dataset.allDay, wanted = expected(column), here = standing(column), toggle = toggles.find(item => item.dataset.date === key);
+      const words = toggle?.textContent.match(/^還有 (\d+) 個$/);
+      require(new Set(here.map(chip => chip.closest('.au-bar').style.gridRow)).size <= 3, `${key} is folded to three rows at most`);
+      if (wanted.length > here.length) require(words && toggle.getAttribute('aria-expanded') === 'false' && Number(words[1]) === wanted.length - here.length, `${key} counts the items it hides: ${wanted.length - here.length}`);
+      else require(!toggle, `${key} has nothing hidden and no button`);
     }
     if (name === "calendar-more-cross") {
-      // One bar crosses the open Saturday and the folded Sunday: it stays whole on Saturday, is cut at the fold and is nowhere else.
+      // One bar crosses Saturday and Sunday: with the week open it is drawn once and whole across both days.
       const pieces = chips.filter(chip => chip.textContent.includes("週末專案 D")), sunday = columns.find(column => column.dataset.allDay === "2026-10-25");
-      require(pieces.length === 1 && pieces[0].closest('.au-bar').classList.contains('ends-after'), "the bar that crosses the open and the folded day is drawn once, cut at the fold");
-      require(standing(sunday).length === 3 && !standing(sunday).includes(pieces[0]), "the folded day shows its three rows and not the piece");
+      require(pieces.length === 1 && !pieces[0].closest('.au-bar').classList.contains('ends-after') && standing(sunday).includes(pieces[0]), "the bar across Saturday and Sunday is drawn once and whole");
     }
     if (name === "calendar-more-fold") {
       const thursday = toggles.find(toggle => toggle.dataset.date === "2026-10-22");
-      require(thursday && document.activeElement === thursday && thursday.getAttribute('aria-expanded') === 'false', "folding a day returns the keyboard to that day's 「還有 N 個」");
+      require(thursday && document.activeElement === thursday && thursday.getAttribute('aria-expanded') === 'false', "folding returns the keyboard to the 「還有 N 個」 that opened it");
     }
-    if (name === "calendar-more-one" || name === "calendar-more-two") {
-      const thursday = toggles.find(toggle => toggle.dataset.date === "2026-10-22"), sat = toggles.find(toggle => toggle.dataset.date === "2026-10-24");
-      require(document.activeElement === (name === "calendar-more-one" ? thursday : sat), "after opening, the keyboard is on that day's 「收合」");
-    }
+    if (name === "calendar-more-one") require(document.activeElement === toggles[0], "after opening, the keyboard is on the 「收合」");
     if (open) {
       // Every chip is in the document and, once scrolled to, whole and under the pointer (the day names that stay on top do not cover it).
       const port = scroll.getBoundingClientRect(), top = port.top + Math.max(...[...head.querySelectorAll('.au-day-head')].map(day => day.getBoundingClientRect().height));
@@ -7778,13 +7787,13 @@ export function checkRendered(name, context = {}) {
     return { check: name, saved };
   }
   if (name === "composer-model-reading") {
-    const pane = document.querySelector(".cb-menu .cb-pane");
+    const pane = document.querySelector(".cb-menu .cb-body");
     require(!pane.textContent.includes("尚無可用模型"), "a signed-in CLI whose models are coming is not called empty");
     require(pane.querySelector('[role="status"]'), "it says the models are being read");
     return { check: name };
   }
   if (name === "composer-model-arrived") {
-    require(document.querySelectorAll(".cb-menu .cb-pane [data-model]").length >= 1 && !document.querySelector('.cb-menu .cb-pane [role="status"]'), "the models took the place of the message without reopening");
+    require(document.querySelectorAll(".cb-menu .cb-body [data-model]").length >= 1 && !document.querySelector('.cb-menu .cb-body [role="status"]'), "the models took the place of the message without reopening");
     return { check: name };
   }
   if (name === "depth-fill-covers-thumb") {
@@ -7796,45 +7805,100 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name === "composer-favorites") {
+    // What is starred comes first in its provider's list, before what is chosen and the rest.
     const rows = [...document.querySelectorAll(".cb-menu .cb-list [data-model]")];
-    require(rows.map(row => row.dataset.model).join() === "openai/gpt-6-luna,cli:codex:gpt-6.1", `what is starred, in order: ${rows.map(row => row.dataset.model)}`);
-    require(rows.every(row => row.querySelector("small")?.textContent.trim()), "each says its source");
-    require(document.querySelector(".cb-rail .cb-source")?.dataset.cbSource === "favorites", "first on the rail");
-    require(document.querySelectorAll(".cb-menu .cb-source").length >= 3, "with the sources under it");
+    require(rows[0]?.dataset.model === "openai/gpt-6-luna", `what is starred comes first: ${rows.map(row => row.dataset.model)}`);
+    require(rows.some(row => row.getAttribute("aria-checked") === "true"), "and what is chosen is in the list, checked");
     return { check: name };
   }
   if (name === "composer-card-same") {
-    const now = document.querySelector(".cb-now"), pick = now.querySelector(".cb-pick"), range = now.querySelector(".mc-range");
-    require(visible(pick.querySelector("small")) && pick.querySelector("small").textContent.trim() && pick.querySelector("b").textContent.trim(), "the source above the model");
-    require(pick.querySelector("small").getBoundingClientRect().bottom <= pick.querySelector("b").getBoundingClientRect().top + 1, "in that order");
+    const now = document.querySelector(".cb-now"), pick = now.querySelector(".cb-pick"), range = now.querySelector(".mc-range"), mark = now.querySelector(".cb-src");
+    const model = pick.querySelector(".cb-pick-name span");
+    require(visible(mark) && mark.getAttribute("aria-label")?.startsWith("更換供應商：") && model.textContent.trim(), "the provider's mark and the model");
+    require(mark.getBoundingClientRect().right <= pick.getBoundingClientRect().left + 1, "the mark at the top left, the model beside it in the middle");
     require(!/訂閱|方案|用量/.test(now.textContent) && !now.querySelector(".btn"), "no plan or usage on the card");
     require(range.max === "4" && now.querySelectorAll(".mc-dot").length === 5, "the same ruler of five stops");
     const offered = range.dataset.levels.split(",").filter(Boolean).length;
-    require(offered ? now.querySelector('.mc-stop[data-on="true"]')?.dataset.effort : range.disabled && /不分思考程度/.test(now.textContent), "the stop it is on is named, or it says there is nothing to choose");
+    require(offered ? now.querySelector(".cb-effort")?.textContent.trim() : range.disabled && /不分思考程度/.test(now.textContent), "the depth it is on is the title, or it says there is nothing to choose");
     const card = now.getBoundingClientRect(), track = range.getBoundingClientRect();
     const shape = [card.width, card.height, track.top - card.top, track.width].map(Math.round).join();
     window.__cbShape ??= shape;
     require(shape === window.__cbShape, `the same card whatever the source: ${shape} / ${window.__cbShape}`);
-    return { check: name, source: pick.querySelector("small").textContent, model: pick.querySelector("b").textContent, offered, shape };
+    return { check: name, source: mark.getAttribute("aria-label"), model: model.textContent, offered, shape };
   }
-  if (name === "composer-model-fold") {
-    const all = document.querySelector(".cb-all");
-    require(document.querySelectorAll(".cb-list [data-model]").length === 5, "five to begin with");
-    require(/43/.test(all.textContent) && all.getAttribute("aria-expanded") === "false", "and says how many there are");
-    require(document.querySelector('.cb-list [data-model="openai/gpt-6-luna"]') && document.querySelector('.cb-list [data-model="openai/gpt-6-sol"]'), "what is starred and what is chosen are among them");
-    require(!document.querySelector(".cb-search"), "no search until the list is opened");
-    return { check: name };
-  }
-  if (name === "composer-model-unfolded") {
+  if (name === "composer-model-long") {
     const list = document.querySelector(".cb-list");
     require(list.querySelectorAll("[data-model]").length === 43 && list.scrollHeight > list.clientHeight, "all of them, scrolling inside the card");
-    require(visible(document.querySelector(".cb-search")) && document.querySelector(".cb-all").getAttribute("aria-expanded") === "true", "with a search and the way to fold them");
+    require(visible(document.querySelector(".cb-search")) && !document.querySelector(".cb-all"), "with a search, and nothing folded");
     // Each row keeps the height of its two lines: a long list never squeezes them onto each other.
     const rows = [...list.querySelectorAll(".cb-row")];
     const squeezed = rows.filter(row => row.scrollHeight > row.clientHeight + 1).length;
     const overlapping = rows.slice(1).filter((row, i) => row.getBoundingClientRect().top < rows[i].getBoundingClientRect().bottom - 0.5).length;
     require(!squeezed && !overlapping, `every model row holds its name and price apart (${squeezed} squeezed, ${overlapping} overlapping)`);
     return { check: name };
+  }
+  if (name === "composer-model-providers") {
+    // The connected providers only (R-DEFAULT-05), the one holding the choice checked, and 新增供應商 under them.
+    const rows = [...document.querySelectorAll(".cb-menu .cb-source")];
+    const ids = rows.map(row => row.dataset.cbSource);
+    require(ids.length >= 2 && !ids.includes("chatgpt"), `the connected providers, not a signed-out one: ${ids}`);
+    require(rows.filter(row => row.getAttribute("aria-pressed") === "true").length === 1, "the one holding the choice is checked");
+    require(rows.every(row => row.querySelector(".cb-name b").scrollWidth <= row.querySelector(".cb-name b").clientWidth), "every name whole");
+    const add = document.querySelector(".cb-menu .cb-add");
+    require(visible(add) && add.textContent.trim() === "新增供應商" && add.getBoundingClientRect().top >= rows.at(-1).getBoundingClientRect().bottom - 1, "新增供應商 under them");
+    return { check: name, ids };
+  }
+  if (name === "composer-model-none") {
+    const none = document.querySelector(".cb-menu .cb-none");
+    require(visible(none) && none.textContent.includes("還沒有能回答的模型"), "it says nothing can answer yet");
+    require(visible(none.querySelector(".cb-add-first")) && none.querySelectorAll("button").length === 1, "with its one way forward");
+    require(!document.querySelector(".cb-menu .mc-range") && !document.querySelector(".cb-menu .cb-src"), "no slider and no provider to change");
+    return { check: name };
+  }
+  if (name === "composer-model-off") {
+    const off = document.querySelector(".cb-menu .cb-now small.is-off");
+    require(visible(off) && off.textContent.trim() === "OpenRouter 未連上", `the choice says its provider is off: ${off?.textContent}`);
+    require(document.querySelector(".cb-menu .cb-pick-name span")?.textContent.trim() === "GPT-6 Sol", "and the model chosen stays shown");
+    const chip = document.querySelector(".composer .cmp-model .mp-source.is-off");
+    require(!chip || getComputedStyle(chip).color !== getComputedStyle(document.querySelector(".composer .cmp-model .mp-tname")).color, "the chip says it in the warning colour");
+    return { check: name };
+  }
+  if (name === "settings-models-fresh") {
+    // A fresh install: every model row unset and no provider named on the page (R-DEFAULT-05).
+    const page = document.querySelector(".modal-scrim .modal");
+    const rows = ["model", "stt-model"].map(row => page.querySelector(`[data-row="${row}"] .mp-tname`)?.textContent.trim());
+    require(rows.every(text => text === "未設定"), `the tidying and speech rows are unset: ${rows}`);
+    require(!/OpenRouter/.test(page.textContent), "no provider is named before one is connected");
+    return { check: name };
+  }
+  if (name === "chooser-no-unconnected") {
+    // Only what is connected: a provider off or never connected is not in the list, whatever is kept from before.
+    const ids = [...document.querySelectorAll(".model-chooser [data-source]")].map(row => row.dataset.source);
+    require(ids.length >= 1 && !ids.includes("openrouter"), `the sources listed are connected ones: ${ids}`);
+    require(!/OpenRouter/.test(document.querySelector(".model-chooser").textContent), "OpenRouter is not named in the choice");
+    return { check: name, ids };
+  }
+  if (name === "provider-directory") {
+    // Every way to connect, subscriptions first, and each kind says what it means and what it costs.
+    const dialog = document.querySelector("#pv-dialog"), sections = [...dialog.querySelectorAll(".pv-directory > .sgroup")];
+    require(sections[0]?.querySelector("h3")?.textContent === "訂閱帳號" && sections[0].querySelector('[data-chatgpt="sign-in"]'), "the subscriptions first, ChatGPT to sign in to right there");
+    require(sections.every(section => visible(section.querySelector(".pv-group-note")) && section.querySelector(".pv-group-note").textContent.trim()), "every kind says what it means");
+    require(!dialog.querySelector('[data-k="chatgpt:sign-in"]'), "its buttons have keys of their own, apart from the page behind");
+    const box = dialog.getBoundingClientRect();
+    require(box.left >= 0 && box.right <= innerWidth + 0.5 && box.top >= 0 && box.bottom <= innerHeight + 0.5, "the dialog fits the window");
+    directoryCloseStays(dialog);
+    return { check: name, kinds: sections.length };
+  }
+  if (name === "provider-directory-stt") {
+    // Connected from speech to text: only the kinds that turn speech into text, no subscription, and the reason said.
+    const dialog = document.querySelector("#pv-dialog");
+    require(dialog.querySelector(".pv-for")?.textContent.includes("語音轉文字"), "the dialog says what it is for");
+    require(!dialog.querySelector("[data-chatgpt], [data-cli], [data-cli-menu]"), "no subscription is offered: none turns speech into text");
+    const ids = [...dialog.querySelectorAll('[data-pv="add"]')].map(button => button.dataset.id);
+    require(ids.length >= 1 && ids.every(id => ["openrouter", "openai", "groq"].includes(id)), `only the kinds that turn speech into text: ${ids}`);
+    require(dialog.querySelector(".pv-scroll > .note")?.textContent.includes("訂閱帳號都沒有"), "and it says why the subscriptions are not there");
+    directoryCloseStays(dialog);
+    return { check: name, ids };
   }
   if (name === "composer-quick-read") {
     const composer = document.querySelector(".composer .cmp-model .mp-tname").textContent;
@@ -7943,28 +8007,23 @@ export function checkRendered(name, context = {}) {
     require(visible(now) !== visible(list), "the card shows one view at a time");
     if (name === "composer-model-small") {
       require(visible(now) && !menu.querySelector(".cb-source, [data-model]"), "it opens on the model and its depth, no list");
-      require(menu.querySelector(".cb-pick b")?.textContent.trim() && now.getBoundingClientRect().height < 200, "the small card says what is chosen");
+      require(menu.querySelector(".cb-pick-name span")?.textContent.trim() && now.getBoundingClientRect().height < 200, "the small card says what is chosen");
+      const mark = now.querySelector(".cb-src").getBoundingClientRect(), card = now.getBoundingClientRect();
+      require(mark.left - card.left <= 16 && mark.top - card.top <= 16, "the provider's mark stands at the top left");
     } else {
-      const head = list.querySelector(".cb-head"), title = head.querySelector("h3 span").getBoundingClientRect(), card = list.getBoundingClientRect();
+      const head = list.querySelector(".cb-head"), title = head.querySelector("h3").getBoundingClientRect(), card = list.getBoundingClientRect();
       require(visible(head.querySelector(".cb-back")), "a way back");
-      const centre = (head.querySelector("h3").getBoundingClientRect().left + head.querySelector("h3").getBoundingClientRect().right) / 2;
-      require(Math.abs(centre - (card.left + card.right) / 2) <= 2 && title.width > 0, "the title stands in the middle of the card");
-      const rail = list.querySelector(".cb-rail"), pane = list.querySelector(".cb-pane");
-      require(visible(rail) && visible(pane) && rail.getBoundingClientRect().right <= pane.getBoundingClientRect().left + 1, "the sources on the left, the models on the right");
-      require(rail.querySelectorAll('[aria-pressed="true"]').length === 1, "the source shown is marked");
-      require([...rail.querySelectorAll(".cb-name b")].every(name => name.scrollWidth <= name.clientWidth), "every source's name is whole");
+      require(Math.abs((title.left + title.right) / 2 - (card.left + card.right) / 2) <= 2 && title.width > 0, "the title stands in the middle of the card");
+      const rows = [...list.querySelectorAll(".cb-row, .cb-source")];
+      require(rows.length && rows.every(row => row.querySelector(".cb-name b").scrollWidth <= row.querySelector(".cb-name b").clientWidth + 1), "every name is whole");
       const box = menu.getBoundingClientRect();
       require(box.left >= 0 && box.right <= innerWidth && box.top >= 0, "the card fits the window");
-      const first = rail.querySelector(".cb-source").getBoundingClientRect(), place = `${Math.round(first.left)},${Math.round(first.top)},${Math.round(list.getBoundingClientRect().height)}`;
-      const wasPlace = window.__cbRail;
-      window.__cbRail = place;
-      if (wasPlace !== undefined) require(wasPlace === place, `a source pressed stays where it was: ${wasPlace} / ${place}`);
     }
     require(menu.getBoundingClientRect().bottom <= document.querySelector(".composer .cmp-model .mp-trigger").getBoundingClientRect().top + 1, "the card opens above the button, wherever the composer stands");
     const bottom = menu.getBoundingClientRect().bottom, was = window.__cbBottom;
     window.__cbBottom = bottom;
     if (was !== undefined) require(Math.abs(was - bottom) <= 1, "the card keeps standing on the composer when it turns");
-    require(!/跟隨|連接其他來源/.test(menu.textContent), "nothing about following a default or adding a source");
+    require(!/跟隨|連接其他來源/.test(menu.textContent), "nothing about following a default");
     return { check: name };
   }
   if (["member-maker", "member-maker-box", "member-maker-tab", "member-maker-chosen", "member-maker-taken"].includes(name)) {
@@ -8085,10 +8144,10 @@ export function checkRendered(name, context = {}) {
     require(!document.querySelector(".model-chooser"), "no separate dialog");
     require(box.bottom <= composer.top + 1 || box.top >= composer.bottom - 1 || box.bottom <= innerHeight, "the menu opens from the composer, inside the window");
     require(box.left >= 0 && box.right <= innerWidth && box.top >= 0, "the menu fits the window");
-    require(!visible(menu.querySelector(".cb-body")) && menu.querySelector(".cb-pick b")?.textContent.includes("GPT-6.1"), "choosing a model turned the card back to it");
+    require(!visible(menu.querySelector(".cb-body")) && menu.querySelector(".cb-pick-name span")?.textContent.includes("GPT-6.1"), "choosing a model turned the card back to it");
     const range = menu.querySelector(".cb-now .mc-range");
     require(range && menu.querySelectorAll(".mc-stop").length >= 2, "its depth of thought is a slider right there");
-    require([...menu.querySelectorAll(".mc-stop")].filter(visible).length === 1, "only the stop it is on is named");
+    require([...menu.querySelectorAll(".mc-stop")].filter(visible).length === 0 && menu.querySelector(".cb-now .cb-effort")?.textContent.trim(), "the stop it is on is the card's title, and no word stands under the slider");
     if (name === "composer-model-depth") {
       const last = [...menu.querySelectorAll(".mc-stop")].filter(stop => stop.dataset.effort).at(-1);
       require(Number(range.value) === range.dataset.levels.split(",").findLastIndex(Boolean), "the slider stands at the chosen stop");

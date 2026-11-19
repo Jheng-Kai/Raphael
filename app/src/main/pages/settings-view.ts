@@ -32,7 +32,7 @@ import type { LocalView } from "../local-models";
 import { type ModelPickerLook, modelDisplayName, modelPickerHTML, modelsFor, onPlan, planRef, priceDescription, priceHTML, splitEffort } from "../model-picker";
 import { type ServicesView, servicesHTML } from "../services";
 import { type ProvidersView, providersHTML, providersAddHTML, emptyProvidersView } from "../providers";
-import { type CliBrainsView, cliBrainsHTML, cliModels, emptyCliBrainsView } from "../cli-brains";
+import { type CliBrainsView, cliBrainsHTML, cliDirectoryHTML, cliModels, emptyCliBrainsView } from "../cli-brains";
 import { pricingNote } from "../pricing";
 import type { HotkeyField } from "../hotkey-recording";
 import type { AudioDevices, BrainSettings, DeviceSettings, LocalModel, ModelCatalog, ModelRole, SettingsPane, Status } from "../types";
@@ -304,7 +304,7 @@ export function mediaRowPrice(v: SettingsView, role: "image" | "video"): string 
   const models = catalogOf(v) ? modelsFor(catalogOf(v)!, role) : [];
   const model = models.find(m => m.id === chosen);
   if (model && onPlan(model)) return t("brains.subscription");
-  return `${model ? priceDescription(model, role) : chosen ? t("media.unavailable") : t("media.unset")} · ${t("media.paid")}` +
+  return [model ? priceDescription(model, role) : chosen ? t("media.unavailable") : t("media.unset"), t("media.paid")].filter(Boolean).join(" · ") +
     (!chosen && !models.length && v.catalog !== "loading" ? ` · ${t("media.none")}` : "");
 }
 const modelRow = (v: SettingsView, { role, k, label }: (typeof MODEL_ROWS)[number]): string =>
@@ -502,7 +502,7 @@ function modelsHTML(v: SettingsView): string {
   const providers = v.providers ?? emptyProvidersView();
   const selected = v.modelsTab ?? (v.pane === "usage" ? "usage" : "models");
   const content = selected === "models" ? section(t("models.used"), [quickRow(v), ...MODEL_ROWS.slice(1).map(r => modelRow(v, r))], v.catalog === "failed" ? priceSpan(v, "note") : "") +
-    cliBrainsHTML(v.cliBrains ?? emptyCliBrainsView()) + providersHTML(providers) + providersAddHTML(providers) :
+    cliBrainsHTML(v.cliBrains ?? emptyCliBrainsView()) + providersHTML(providers) + providersAddHTML(providers, cliDirectoryHTML(v.cliBrains ?? emptyCliBrainsView(), providers.role)) :
     // An OpenRouter key is that provider's, on its card among the others (模型 › 供應商), never a section of its own here.
     spendCardHTML(v) + `<div data-usage-host></div>`;
   // No refresh of its own: opening Settings reads it all again, unseen (settings.ts `refreshInBackground`).

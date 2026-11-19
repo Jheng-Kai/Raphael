@@ -1170,7 +1170,15 @@ class VmTools:
                                   note="every screen of the computer is in use" if str(error) == "seats_full"
                                   else self.vm.owner_note(target) if self.vm.unit_held(target) else None,
                                   held_by="the owner" if self.vm.unit_held(target) else None)
-            result = PluginResult(False, str(error), self.vm.owner_note(target) if str(error) == "owner_holds_control" else ENGINE_FAILURES.get(str(error), ""))
+            kind = str(error)
+            if kind == "browser_window_missing":
+                note = "The browser did not open a window. It may have started and closed."
+                if target.container:
+                    note += " Its profile may have been locked. If the profile was idle, stale locks were cleared before this attempt."
+                note += " Try again, and tell the owner if it keeps failing."
+            else:
+                note = self.vm.owner_note(target) if kind == "owner_holds_control" else ENGINE_FAILURES.get(kind, "")
+            result = PluginResult(False, kind, note)
             return result
         except ConnectionError:
             self.vm.invalidate(target)

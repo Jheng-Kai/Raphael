@@ -24,7 +24,7 @@ from importlib import resources
 
 from .cleanup import PROMPT_MAX_CHARS, PROMPT_MAX_FORMS, PROMPT_MAX_WORDS, describe_languages
 from .dictionary import DictionaryStore
-from .openrouter import CLEANUP_FALLBACKS, Completion, OpenRouterError
+from .openrouter import Completion, OpenRouterError
 from .providers.base import ModelProvider
 from .providers.registry import for_purpose
 from .settings import SettingsStore
@@ -188,7 +188,7 @@ class LearnReviewer:
         if window is None:
             logger.info("Learning: nothing to review (unchanged or rewritten)")
             return []
-        if not self._has_key():
+        if not self._settings.get("cleanup_model") or not self._has_key():
             logger.info("Learning: no model to review the edit with")
             return []
         before, after = window
@@ -199,12 +199,11 @@ class LearnReviewer:
             before + "\n" + after,
         )
         model = self._settings.get("cleanup_model")
-        complete = getattr(self._client, "complete_json_once", self._client.complete_json)
         try:
             completion = await asyncio.wait_for(
-                complete(
+                self._client.complete_json(
                     model=model,
-                    fallbacks=CLEANUP_FALLBACKS,
+                    fallbacks=[],
                     system=system,
                     user=build_review_message(before, after),
                     schema=REVIEW_SCHEMA,
@@ -223,7 +222,8 @@ class LearnReviewer:
         except Exception as exc:  # anything else the client lets out learns nothing
             logger.warning("Learning: the review failed: %s", type(exc).__name__)
             return []
-        self._record_spend(completion)
+        if not model.startswith("cli:"):
+            self._record_spend(completion)
         pairs = checked_pairs(completion.data, before, after, limit)
         named = completion.data.get("words") if isinstance(completion.data, dict) else None
         logger.info(

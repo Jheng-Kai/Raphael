@@ -273,6 +273,13 @@ pub enum MainEvent {
     DeviceDone {
         catalog_id: String,
     },
+    ModelsFilled {
+        source: String,
+        roles: Vec<String>,
+    },
+    ModelMissing {
+        role: String,
+    },
     /// A connected app's account stopped working at Composio (`connectors.lost`): the window says so once, with a way
     /// to sign in again. `id` is the app's (`composio:<slug>`), `name` the name it is shown by.
     ConnectionLost {
@@ -1316,6 +1323,11 @@ fn whole(value: &Value) -> Option<u64> {
     })
 }
 
+fn model_role(value: &serde_json::Value) -> Option<String> {
+    let role = value.as_str()?;
+    matches!(role, "answer" | "quick" | "cleanup" | "stt").then(|| role.to_owned())
+}
+
 /// The event for a notification from the core, if the main window wants it: the loudness of the
 /// microphone while it is monitored, the progress of a model download, a turn of the conversations
 /// and a background task that moved on. The loudness of a dictation (it has a `session_id`) is the
@@ -1439,6 +1451,28 @@ pub fn main_event_from(notification: &Notification, monitoring: bool) -> Option<
         }
         "integrations.device_done" => Some(MainEvent::DeviceDone {
             catalog_id: params.get("catalog_id")?.as_str()?.to_owned(),
+        }),
+        "models.filled" => {
+            let source = params.get("source")?.as_str()?;
+            let roles = params.get("roles")?.as_array()?;
+            if !(1..=200).contains(&source.chars().count()) || !(1..=4).contains(&roles.len()) {
+                return None;
+            }
+            let roles = roles.iter().map(model_role).collect::<Option<Vec<_>>>()?;
+            if roles
+                .iter()
+                .enumerate()
+                .any(|(i, role)| roles[..i].contains(role))
+            {
+                return None;
+            }
+            Some(MainEvent::ModelsFilled {
+                source: source.to_owned(),
+                roles,
+            })
+        }
+        "models.missing" => Some(MainEvent::ModelMissing {
+            role: model_role(params.get("role")?)?,
         }),
         "connectors.lost" => {
             let id = params.get("id")?.as_str()?;
@@ -3490,6 +3524,42 @@ mod tests {
             .unwrap(),
             r#"{"type":"DeviceCode","catalog_id":"github","name":"GitHub","user_code":"ABCD-EFGH","verification_uri":"https://github.com/login/device","expires_in":900}"#
         );
+    }
+
+    #[test]
+    fn model_notices_only_forward_valid_sources_and_roles() {
+        let filled = |source, roles| {
+            main_event_from(
+                &notification("models.filled", json!({ "source": source, "roles": roles })),
+                false,
+            )
+        };
+        assert_eq!(
+            filled("Local", vec!["quick"]),
+            Some(MainEvent::ModelsFilled {
+                source: "Local".into(),
+                roles: vec!["quick".into()]
+            })
+        );
+        assert_eq!(filled("", vec!["quick"]), None);
+        assert_eq!(filled("Local", vec![]), None);
+        assert_eq!(filled("Local", vec!["agent"]), None);
+        assert_eq!(filled("Local", vec!["stt", "stt"]), None);
+        assert_eq!(filled("Local", vec!["stt"; 5]), None);
+        assert_eq!(filled(&"界".repeat(201), vec!["answer"]), None);
+        let missing = |role: &str| {
+            main_event_from(
+                &notification("models.missing", json!({"role": role})),
+                false,
+            )
+        };
+        assert_eq!(
+            missing("cleanup"),
+            Some(MainEvent::ModelMissing {
+                role: "cleanup".into()
+            })
+        );
+        assert_eq!(missing("other"), None);
     }
 
     #[test]

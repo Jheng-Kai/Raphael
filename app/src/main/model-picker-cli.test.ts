@@ -29,7 +29,8 @@ const click = (selector: string) => document.querySelector<HTMLButtonElement>(se
 test("subscriptions are separate; bare refs show the concrete default and source", () => {
   const html = modelPickerHTML({ role: "answer", current: "cli:claude", catalog: null, clis, label: "Answer" });
   expect(html).toContain("Claude Sonnet 5.5"); expect(html).toContain("Claude Code");
-  mount(); expect(document.querySelectorAll('[data-source^="cli:"]')).toHaveLength(3);
+  // A subscription that is not set up is not offered: it is connected from 連接其他來源 (R-DEFAULT-05).
+  mount(); expect([...document.querySelectorAll<HTMLElement>('[data-source^="cli:"]')].map((row) => row.dataset.source)).toEqual(["cli:claude", "cli:codex"]);
   expect(document.querySelector('.mc-row[aria-checked="true"]')?.textContent).toContain("Claude Sonnet 5.5");
   expect(document.querySelector('.mc-default')).toBeNull(); expect(document.querySelector(".mc-tools")).toBeNull();
 });
@@ -40,9 +41,8 @@ test("selection is staged and effort is saved with the concrete model only on co
   expect(document.querySelector('[role="dialog"]')).toBeNull(); expect(document.activeElement).toBe(picker.button);
 });
 test("cancel and Escape discard drafts; install and connection buttons perform real actions", () => {
-  const { choose, sources, login } = mount(); click('[data-model="cli:claude:opus"]'); click('[data-dlg="close"]');
-  expect(choose).not.toHaveBeenCalled(); picker.open(); click('[data-source="cli:gemini"]');
-  expect(document.querySelector(".mc-row")).toBeNull(); click('[data-dlg="login"]'); expect(login).toHaveBeenCalledWith("gemini");
+  const { choose, sources } = mount(); click('[data-model="cli:claude:opus"]'); click('[data-dlg="close"]');
+  expect(choose).not.toHaveBeenCalled(); picker.open(); expect(document.querySelector('[data-source="cli:gemini"]')).toBeNull();
   click('[data-dlg="sources"]'); expect(sources).toHaveBeenCalledOnce(); picker.open();
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); expect(picker.isOpen).toBe(false);
 });
@@ -65,7 +65,8 @@ describe("ChatGPT in the chooser", () => {
   const open = (chatgpt: object | null, extra: object = {}) => {
     const slot = document.createElement("div"); document.body.append(slot);
     const action = vi.fn();
-    picker = mountModelPicker(slot, { role: "answer", catalog: null, clis, current: "cli:claude", label: "Answer", chatgpt: chatgpt as never, onChoose: vi.fn(), onChatgpt: action, ...extra });
+    // ChatGPT is listed signed out only while it holds the model chosen: then it signs in again right there.
+    picker = mountModelPicker(slot, { role: "answer", catalog: null, clis, current: "@chatgpt:gpt-6-sol", label: "Answer", chatgpt: chatgpt as never, onChoose: vi.fn(), onChatgpt: action, ...extra });
     picker.open(); click('[data-source="chatgpt"]');
     return action;
   };
@@ -238,4 +239,16 @@ test.each(["openai/old", "openai/test?effort=high"])("cleanup omits effort contr
   expect(document.querySelector(".mc-selection")?.textContent).not.toContain(t("chooser.effort"));
   click('[data-dlg="use"]');
   expect(choose).toHaveBeenCalledWith("openai/test");
+});
+
+test("a provider that is not connected is never listed, even when it holds the cloud model kept for later", () => {
+  // Speech to text on this computer, a cloud model of OpenRouter kept from before, and OpenRouter not connected (R-DEFAULT-05).
+  const slot = document.createElement("div"); document.body.append(slot);
+  const kept: CatalogModel = { ...apiModel, id: "microsoft/mai-transcribe-2", name: "MAI-Transcribe 2", per_minute: 0.0017, roles: { stt: { usable: true, reason: null } } } as CatalogModel;
+  picker = mountModelPicker(slot, { role: "stt", current: kept.id, label: "Speech", onChoose: vi.fn(), providers: [],
+    catalog: { llm: [], stt: [kept], source: "cached", fetched_at_ms: null, replaced: [] },
+    local: { active: "qwen3-asr", download: null, models: [{ name: "qwen3-asr", title: "Qwen3-ASR", ready: true, languages: ["en"], size: 1000, note: "dictionary" }] } });
+  picker.open();
+  expect([...document.querySelectorAll<HTMLElement>("[data-source]")].map((row) => row.dataset.source)).toEqual(["local-speech"]);
+  expect(document.body.textContent).not.toContain("OpenRouter");
 });

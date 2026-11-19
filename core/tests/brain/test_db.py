@@ -793,7 +793,7 @@ def test_a_member_47_cleared_gets_a_model_of_its_own_again_at_51(tmp_path):
     raw.close()
     migrated = db.connect(path)
     assert migrated.execute("PRAGMA user_version").fetchone()[0] == LATEST
-    assert tuple(migrated.execute("SELECT name,model FROM members WHERE id=5").fetchone()) == ("Kept", "openai/gpt-6-luna")
+    assert tuple(migrated.execute("SELECT name,model FROM members WHERE id=5").fetchone()) == ("Kept", "")
 
 
 def test_v44_preserves_rooms_and_persists_sidebar_state(tmp_path):

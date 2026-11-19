@@ -48,7 +48,7 @@ export function createAutomationsPage(app: AppContext): Page {
   let visible = false, awake = false, loads = 0, pending = true;
   let resetPosition = true;
   /** The days of one range (view and first day) whose all-day column shows every item, each open by itself; any other range folds them again. */
-  let band = { range: "", days: new Set<string>() };
+  let band: { range: string; days: Set<string>; from?: string } = { range: "", days: new Set<string>() };
   let timer: ReturnType<typeof setInterval> | undefined;
   let tools: HTMLElement | null = null;
   let draft: EventDraft | null = null;
@@ -216,26 +216,25 @@ export function createAutomationsPage(app: AppContext): Page {
     const days = Array.from({ length: n }, (_, i) => shiftDay(start, i));
     const zone = Intl.DateTimeFormat(getLocale(), { timeZoneName: "shortOffset" }).formatToParts(now).find(p => p.type === "timeZoneName")?.value ?? "";
     const folded = allDayBars(entries, days);
-    // Each day opens by itself: only a day that has more than fits can be open.
-    const openDays = new Set(band.range === bandKey(start) ? days.map(dateKey).filter((key, i) => band.days.has(key) && folded.more[i]! > 0) : []);
-    const open = openDays.size > 0;
-    const { bars, more, used, bottoms } = open ? allDayBars(entries, days, 3, openDays) : folded;
+    // The whole range opens and folds together (R-CAL-08): an all-day item may cross several days, and an open band
+    // shows every item of every day, each bar whole.
+    const open = band.range === bandKey(start) && band.days.size > 0 && folded.more.some(n => n > 0);
+    const { bars, more, used, bottoms } = open ? allDayBars(entries, days, Infinity) : folded;
     const draftColumn = draft?.allDay ? days.findIndex(day => dateKey(day) === dateKey(new Date(draft!.start))) : -1;
-    // The grid row under each day's last drawn bar, where its button stands; the band is as tall as its tallest day.
-    const buttonRow = days.map((day, i) => openDays.has(dateKey(day)) ? bottoms[i]! + 1 : used + 1);
-    const heights = days.map((day, i) => (openDays.has(dateKey(day)) || more[i]! > 0 ? buttonRow[i]! : bottoms[i]!) + (i === draftColumn ? 1 : 0));
+    // Folded, each day with items left counts them on the row under the three it draws; the band is as tall as its tallest day.
+    const heights = days.map((_, i) => (more[i]! > 0 ? used + 1 : bottoms[i]!) + (i === draftColumn ? 1 : 0));
     const foldedHeights = days.map((_, i) => (folded.more[i]! > 0 ? folded.used + 1 : folded.bottoms[i]!) + (i === draftColumn ? 1 : 0));
-    const rows = Math.max(1, ...heights), foldedRows = Math.max(1, ...foldedHeights);
-    const toggle = days.map((day, i) => {
-      const key = dateKey(day), place = `data-date="${key}" aria-controls="au-all-day-band" style="grid-column:${i + 2};grid-row:${buttonRow[i]}"`;
-      if (openDays.has(key)) return btn(esc(t("common.showLess")), "cal-more", ` data-au="all-day-toggle" aria-expanded="true" ${place}`);
+    const rows = Math.max(open ? 2 : 1, ...heights), foldedRows = Math.max(1, ...foldedHeights);
+    // Open, one 收合 folds it all, in the band's own margin at its last row, under the time zone.
+    const toggle = open ? iconButton("up", t("common.showLess"), ` data-au="all-day-toggle" aria-expanded="true" aria-controls="au-all-day-band" style="grid-column:1;grid-row:${rows}"`, "cal-fold") : days.map((day, i) => {
+      const key = dateKey(day), place = `data-date="${key}" aria-controls="au-all-day-band" style="grid-column:${i + 2};grid-row:${used + 1}"`;
       return more[i]! > 0 ? btn(esc(t("overview.moreEvents", { p0: more[i]! })), "cal-more", ` data-au="all-day-toggle" aria-expanded="false" ${place}`) : "";
     }).join("");
     const heads = days.map(day => {
       const key = dateKey(day), label = day.toLocaleDateString(getLocale(), { month: "long", day: "numeric", weekday: "long" });
       return `<div class="au-day-head${key === today ? " is-today" : ""}"${key === today ? ' aria-current="date"' : ""}><span>${esc(dayName(day.getDay()))}</span>${btn(String(day.getDate()), "au-day-num", ` data-au="open-day" data-date="${key}" aria-label="${esc(label)}"`)}</div>`;
     }).join("");
-    const allDay = `<div class="au-all-day-row" id="au-all-day-band" data-rows="${rows}" data-folded-rows="${foldedRows}" style="--au-rows:${rows}"><span class="au-all-day-label">${esc(zone)}</span>` +
+    const allDay = `<div class="au-all-day-row" id="au-all-day-band" data-rows="${rows}" data-folded-rows="${foldedRows}" style="--au-rows:${rows}"><span class="au-all-day-label"${open ? ` style="grid-row:1 / ${rows}"` : ""}>${esc(zone)}</span>` +
       days.map((day, i) => `<div class="au-all-day" data-all-day="${dateKey(day)}" style="grid-column:${i + 2}"></div>`).join("") +
       bars.map(bar => barHTML(bar.entry, bar.column, bar.span, bar.row, bar.startsBefore, bar.endsAfter)).join("") +
       toggle +
@@ -428,12 +427,14 @@ export function createAutomationsPage(app: AppContext): Page {
       navigate(localDay(target.dataset.date!));
     }
     else if (act === "all-day-toggle") {
-      const key = bandKey(range().start), day = target.dataset.date!;
-      if (band.range !== key) band = { range: key, days: new Set() };
-      if (target.getAttribute("aria-expanded") === "true") band.days.delete(day); else band.days.add(day);
+      // Any day's 「還有 N 個」 opens the whole range, and its one 「收合」 folds it all (R-CAL-08).
+      const key = bandKey(range().start), opening = target.getAttribute("aria-expanded") !== "true";
+      const from = opening ? target.dataset.date : band.range === key ? band.from : undefined;
+      band = { range: key, days: opening ? new Set([from!]) : new Set(), from };
       resetPosition = true; draw();
-      // The keyboard stays on that day's button: its 「收合」 once opened, its 「還有 N 個」 once folded.
-      el.querySelector<HTMLElement>(`[data-au="all-day-toggle"][data-date="${day}"]`)?.focus({ preventScroll: true });
+      // The keyboard goes to 「收合」 once opened, and back to the 「還有 N 個」 it pressed once folded.
+      const toggles = [...el.querySelectorAll<HTMLElement>('[data-au="all-day-toggle"]')];
+      (toggles.find(item => opening || item.dataset.date === from) ?? toggles[0])?.focus({ preventScroll: true });
     }
     else if (act === "source") {
       const key = target.dataset.source!;

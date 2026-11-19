@@ -80,6 +80,11 @@ class PieceClient:
             self.running -= 1
 
 
+@pytest.fixture(autouse=True)
+def select_cleanup_model(conn):
+    SettingsStore(conn).set("cleanup_model", "openai/gpt-6-luna")
+
+
 @pytest.fixture
 def client():
     return PieceClient()

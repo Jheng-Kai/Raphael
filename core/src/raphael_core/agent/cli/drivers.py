@@ -450,7 +450,8 @@ class Driver:
                 return
 
     async def _antigravity(self):
-        text = ""
+        text, final_text = "", ""
+        responses = []
         while True:
             packet = await self._read()
             kind = packet.get("event")
@@ -467,12 +468,18 @@ class Driver:
                         text += step["text_delta"]
                         yield Event("text_delta", step["text_delta"])
                     if step.get("state") in ("DONE", "COMPLETED"):
-                        yield Event("message", step.get("text") or text, data={"id": step.get("id")})
+                        message = step.get("text") or text
+                        if message:
+                            responses.append(message)
+                            final_text = message
+                        yield Event("message", message, data={"id": step.get("id")})
                         text = ""
                 elif step.get("step_type") == "tool":
                     name = step.get("tool_name") or "tool"
                     if step.get("state") == "ACTIVE":
-                        text = ""
+                        if text:
+                            responses.append(text)
+                        text, final_text = "", ""
                         yield Event("tool_start", data={"name": name})
                     elif step.get("state") in ("DONE", "ERROR"):
                         self._last_tool_error = redact(step.get('error') or step.get('text') or 'CLI tool failed', secrets=self._diagnostic_secrets, limit=1800) if step.get('state') == 'ERROR' else None
@@ -486,7 +493,14 @@ class Driver:
                 if result.get("status") != "SUCCESS":
                     yield self._event("error", result.get("error") or "CLI failed")
                 else:
-                    yield self._event("final", result.get("response") or "")
+                    if text or not final_text:
+                        # A result-only answer may be appended to the earlier response steps.
+                        answer = result.get("response") or ""
+                        prefix = "\n".join(responses)
+                        if prefix and (answer == prefix or answer.startswith(prefix + "\n")):
+                            answer = answer[len(prefix):].lstrip("\n")
+                        final_text = answer if answer.startswith(text) else text
+                    yield self._event("final", final_text)
                 return
 
     async def _rpc(self, user, system, endpoint, token, session, permission, image_paths=(), *, fresh_context=None, image_labels=()):

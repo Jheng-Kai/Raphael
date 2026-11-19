@@ -87,11 +87,12 @@ async def test_a_due_routine_runs_once_as_a_task_of_its_member_and_is_moved_on_f
 
 
 async def test_raphael_has_routines_too_run_on_the_answer_model(rig, conn):
+    rig.service._settings.set("agent_model", "fake/routine")
     routine = await make(rig, member_id=0, schedule={"kind": "every", "hours": 2})
     rig.wall.now += 2 * HOUR
     assert rig.service.tick() == [routine["id"]]
     (task,) = rig.background.submitted
-    assert task["member_id"] == 0 and task["model"]  # the answer model, from the settings
+    assert task["member_id"] == 0 and task["model"] == "fake/routine"
 
 
 async def test_an_unfinished_routine_run_exposes_its_real_owner_question_status(rig, conn):

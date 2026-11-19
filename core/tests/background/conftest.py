@@ -308,6 +308,8 @@ class Rig:
             tz=timezone.utc,
             **({} if clock is None else {"clock": clock}),
         )
+        if not self.service._settings.chosen("agent_model"):
+            self.service._settings.set("agent_model", "fake/model")
         self.rpc = RpcRouter()
         self.service.register(self.rpc)
 

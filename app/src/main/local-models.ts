@@ -11,7 +11,7 @@
 import { GB, MB } from "./format";
 import { t } from "./i18n";
 import type { LocalModel } from "./types";
-import { CHECK, actionRow, btn, esc, iconButton } from "./ui";
+import { actionRow, btn, esc, iconButton } from "./ui";
 
 /** What the local tab is drawn from. */
 export interface LocalView {
@@ -141,9 +141,9 @@ function rowHTML(model: LocalModel, view: LocalView, confirm: LocalConfirm | nul
     : "";
   const main =
     `<button type="button" class="lm-main"${selectionOnly ? ' role="radio"' : ""} data-act="use" data-name="${esc(model.name)}"${state.kind === "active" ? ' aria-current="true"' : ""}${busy ? " disabled" : ""} aria-label="${esc(label)}">` +
-    `<span class="ck">${state.kind === "active" ? CHECK : ""}</span>` +
-    `<span class="mp-main"><span class="mp-line"><span class="mp-name">${esc(model.title)}</span><span class="lm-state num" data-state>${esc(stateText(state))}</span></span>` +
-    `<span class="mp-sub">${esc(sub)}</span>${bar}</span></button>`;
+    `<span class="mc-radio" aria-hidden="true"></span>` +
+    `<span class="mp-main"><span class="mp-line"><span class="mp-name">${esc(model.title)}</span></span>` +
+    `<span class="mp-sub">${esc(sub)}</span>${bar}</span><span class="lm-state mc-price num" data-state>${esc(stateText(state))}</span></button>`;
   let action = "";
   if (fetching) {
     action = btn(esc(t("local.cancel")), "sm", ` data-act="cancel" aria-label="${esc(t("local.cancelDownload", { p0: model.title }))}"`);

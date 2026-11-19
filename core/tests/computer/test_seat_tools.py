@@ -299,6 +299,19 @@ async def test_shared_browser_attaches_computer_window_and_never_launches_driver
     assert client.calls[-1] == ("browser_prepare", prepared[0])
 
 
+@pytest.mark.parametrize("name,args", [
+    ("browser_open", {"url": "about:blank"}),
+    ("browser_prepare", {"allow_launch": True}),
+])
+async def test_shared_browser_start_failure_gives_the_member_recovery_steps(seat_tools, name, args):
+    hub, vm, _ = seat_tools
+    vm.seat_browser = AsyncMock(side_effect=module.VmError("browser_window_missing"))
+    result = await call(hub, 2, name, args)
+    assert not result.ok and result.kind == "browser_window_missing"
+    assert "started and closed" in result.text and "profile may have been locked" in result.text
+    assert "stale locks were cleared" in result.text and "Try again, and tell the owner" in result.text
+
+
 async def test_browser_launcher_pid_must_match_the_fresh_own_window(seat_tools):
     hub, vm, _ = seat_tools
     vm.seat_browser = AsyncMock(return_value=dict(pid=999, window_id=20))
@@ -441,16 +454,23 @@ def test_disconnected_window_listing_joins_geometry_and_class_without_losing_tit
         (10, "xfce4-terminal", "Terminal with spaces"), (11, "xfce4-panel", "Panel")]
 
 
-async def test_launcher_uses_only_the_seat_rectangle_and_checks_its_output(seat_tools):
+async def test_launcher_uses_only_the_seat_rectangle_and_checks_its_output(seat_tools, caplog):
+    from raphael_core.computer.seat_browser import LAUNCH
+
     _, vm, _ = seat_tools
+    caplog.set_level("INFO", logger=module.__name__)
     vm.run_for = AsyncMock(return_value=module.Result(0, "pid=99 window_id=301\n"))
     assert await vm.seat_browser(vm.target(2)) == dict(pid=99, window_id=301)
     args = vm.run_for.call_args.args[1]
-    assert args[-5:] == ["raphael-seat-browser", "1280", "0", "1280", "900"]
-    for result in (module.Result(1, ""), module.Result(0, "pid=0 window_id=301"), module.Result(0, "unrecognized")):
+    assert args[:4] == ["exec", "-i", "-u", "cua"]
+    assert args[-7:] == ["/usr/bin/python3", "-", "raphael-seat-browser", "1280", "0", "1280", "900"]
+    assert vm.run_for.call_args.kwargs["input"] == LAUNCH.encode("utf-8")
+    for result in (module.Result(1, "", "browser exited: failed to create SingletonLock"),
+                   module.Result(0, "pid=0 window_id=301"), module.Result(0, "unrecognized")):
         vm.run_for.return_value = result
         with pytest.raises(module.VmError, match="browser_window_missing"):
             await vm.seat_browser(vm.target(2))
+    assert "failed to create SingletonLock" in caplog.text
 
 
 def test_layer_seven_installs_computer_browser_and_existing_profile_grant():

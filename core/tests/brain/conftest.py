@@ -4,6 +4,10 @@ from raphael_core.brain.dictionary import DictionaryStore, Learned
 from raphael_core.brain.history import HistoryItem
 
 
+# Explicit multi-model inputs for testing the OpenRouter wire protocol.
+WIRE_FALLBACKS = ["anthropic/claude-haiku-5.5", "google/gemini-3.1-flash-lite"]
+
+
 def item(**overrides) -> HistoryItem:
     """A valid HistoryItem; override any field by keyword."""
     fields = {

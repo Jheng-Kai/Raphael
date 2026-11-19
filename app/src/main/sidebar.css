@@ -5,8 +5,9 @@
    line shows only while it moves or has the keyboard. */
 .side-edge { position: absolute; top: 0; right: 0; bottom: 0; z-index: 5; width: 6px; cursor: col-resize; touch-action: none; outline: none; }
 /* The sidebar's edge is a quiet line that brightens under the pointer, where it can be dragged. */
-.side-edge::after { content: ""; position: absolute; top: 0; right: 0; bottom: 0; width: 1px; background: var(--line); transition: background-color 0.16s ease; }
-.side-edge:hover::after, .side-edge:focus-visible::after, .side-edge.is-dragging::after { background: var(--line-lit); }
+/* A border, not a 1px box: the browser snaps a border to whole device pixels, so the line stays a hairline at any window zoom. */
+.side-edge::after { content: ""; position: absolute; top: 0; right: 0; bottom: 0; width: 0; border-right: 1px solid var(--line); transition: border-color 0.16s ease; }
+.side-edge:hover::after, :root[data-keys] .side-edge:focus-visible::after, .side-edge.is-dragging::after { border-right-color: var(--line-lit); }
 :root[data-resizing] body { cursor: col-resize; user-select: none; }
 .side .btn.icon:hover:not(:disabled) { background: var(--hover); }
 .side .btn.icon:active:not(:disabled) { background: var(--pressed); }

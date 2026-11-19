@@ -16,6 +16,8 @@ from pathlib import Path
 
 import pytest
 
+from .conftest import WIRE_FALLBACKS
+
 from raphael_core.brain import catalog, pricing
 from raphael_core.brain.catalog import (
     ROLE_OF_SETTING,
@@ -26,9 +28,8 @@ from raphael_core.brain.catalog import (
     entry_to_json,
     parse_catalog,
 )
-from raphael_core.brain.openrouter import CLEANUP_FALLBACKS, OpenRouterError
+from raphael_core.brain.openrouter import OpenRouterError
 from raphael_core.brain.pricing import PRICING_TTL_MS, PricingService, builtin_catalog
-from raphael_core.brain.settings import DEFAULTS
 
 FIXTURE = Path(__file__).parent / "fixtures" / "openrouter_catalog.json"
 RECORDED: list[dict] = json.loads(FIXTURE.read_text(encoding="utf-8"))["data"]
@@ -63,7 +64,7 @@ SPEECH_MODELS = [
 ]
 # The models Raphael calls when nobody chose another: the default and the fallbacks of the language
 # models, and the default speech model.
-DEFAULT_LANGUAGE_MODELS = [DEFAULTS["cleanup_model"], *CLEANUP_FALLBACKS]
+DEFAULT_LANGUAGE_MODELS = ["openai/gpt-6-luna", *WIRE_FALLBACKS]
 LEFT_OUT = [
     "anthropic/claude-haiku-5.5:batch",  # answers within a day: never in time
     "google/gemini-3.1-flash-image",  # writes images too
@@ -548,7 +549,7 @@ async def test_without_the_list_the_catalog_is_the_models_raphael_calls(conn, cl
     assert (source, fetched_at_ms) == ("builtin", None)
     view = catalog_view(entries, fetched_at_ms, source)
     assert [m["id"] for m in view["llm"]] == DEFAULT_LANGUAGE_MODELS
-    assert [m["id"] for m in view["stt"]] == [DEFAULTS["stt_cloud_model"]]
+    assert [m["id"] for m in view["stt"]] == ["elevenlabs/scribe-v2"]
     for model in [*view["llm"], *view["stt"]]:
         assert all(role["usable"] for role in model["roles"].values())
     luna = by_id(view["llm"])["openai/gpt-6-luna"]
@@ -590,7 +591,7 @@ def test_a_choice_is_checked_against_the_catalog_the_page_shows():
     assert choice_problem(stt, "anthropic/claude-haiku-5.5", builtin, "x") == "not_listed"
     # The current model and the default always go, listed or not.
     assert choice_problem(stt, "openai/gpt-transcribe", builtin, "openai/gpt-transcribe") is None
-    assert choice_problem(stt, DEFAULTS["stt_cloud_model"], [], "x") is None
+    assert choice_problem(stt, "", [], "x") is None
     # With the list, any model it lists that the role can use.
     assert choice_problem(cleanup, "tencent/hunyuan-a13b-instruct", entries, "x") is None
     assert choice_problem(stt, "openai/gpt-transcribe", entries, "x") is None
@@ -605,8 +606,8 @@ def test_the_model_chosen_now_and_the_default_may_always_be_chosen():
     entries = parse_catalog(RECORDED)
     assert choice_problem(cleanup, "nobody/model", entries, "nobody/model") is None
     assert choice_problem(cleanup, "nobody/model", None, "nobody/model") is None
-    assert choice_problem(cleanup, "openai/gpt-6-luna", [], "x") is None
-    assert choice_problem(stt, "elevenlabs/scribe-v2", None, "x") is None
+    assert choice_problem(cleanup, "", [], "x") is None
+    assert choice_problem(stt, "", None, "x") is None
 
 
 @pytest.mark.parametrize("kind", ["off", "absent", "mandatory"])

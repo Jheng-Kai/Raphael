@@ -175,7 +175,7 @@ async def test_a_model_the_catalog_does_not_list_is_tried(rig, plugins, client, 
     assert result["text"] == "查到茶了。" and calls == ["look"]
 
 
-async def test_before_any_list_was_read_the_default_model_is_tried(
+async def test_before_any_list_was_read_the_selected_model_is_tried(
     rig, plugins, client, catalog, calls
 ):
     await plugins.connect(look="T0")
@@ -192,7 +192,7 @@ async def test_the_picking_call_goes_to_the_model_that_is_set_whichever_it_is(
     await plugins.connect(look="T0")
     for model in ("anthropic/claude-haiku-5.5", "meta-llama/llama-9-70b:nitro"):
         catalog.entries = [llm(model)]
-        rig.settings.set("agent_model", model)
+        rig.settings.set("quick_model", model)
         route(client)
         client.plans.append(tool_plan())
         client.replies.append(spoken("答", "好。"))
@@ -206,12 +206,12 @@ async def test_changing_the_model_changes_what_is_known_about_it(
 ):
     await plugins.connect(look="T0")
     catalog.entries = [llm(DEFAULT), llm("no/tools", tools=False)]
-    rig.settings.set("agent_model", "no/tools")
+    rig.settings.set("quick_model", "no/tools")
     route(client)
     client.replies.append(spoken("答", "好。"))
     await rig.ask("你好嗎")
     assert client.plan_calls == []
-    rig.settings.set("agent_model", DEFAULT)  # back to one that takes tools
+    rig.settings.set("quick_model", DEFAULT)  # back to one that takes tools
     route(client)
     client.plans.append(tool_plan(("Notes__look", {"topic": "tea"})))
     client.replies.append(spoken("答", "查到茶了。"))
