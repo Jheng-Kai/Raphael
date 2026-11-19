@@ -5665,17 +5665,59 @@ class AgentService:
         if any(row['member_id'] != member or row['scope'] != 'private' for row in rows):
             raise invalid_params('stop must identify this private conversation')
         returned = []
+        # The message being worked on that nothing has answered yet (no line said, nothing shown, no step taken) is taken back
+        # as a waiting one is: its words go back to the composer and its turn goes, instead of staying with 已取消 under it,
+        # which no one could take back (owner, 2026-11-19). Once anything was said or done, Stop only stops it.
+        untouched = []
         if rows:
             scope = (member, rows[-1]['conversation_id'])
+            untouched = [row for row in self._conn.execute(
+                "SELECT i.turn_id,i.request_id,i.payload_json FROM agent_inbox i JOIN agent_turns t ON t.id=i.turn_id"
+                " WHERE i.request_id=? AND i.state='started' AND t.member_id=? AND t.scope='private'", (session, member)).fetchall()
+                if self._untouched(row['turn_id'])]
             for row in self._inbox.cancel_scope(scope):
                 payload = json.loads(row['payload_json'])
                 returned.append(dict(session_id=row['request_id'], text=payload.get('original_text') or payload['text'],
                                      attachments=payload.get('attachments', []), quote=payload.get('quote')))
                 self._withdraw_admission(row['turn_id'], scope)
+        inflight = self._inflight.get(session)
+        # What exists when Stop is pressed is what was said and done; the words a stop writes come after this mark.
+        mark = self._marks()
         await self._cancel({'session_id':session})
+        if untouched and inflight is not None:
+            await asyncio.gather(inflight, return_exceptions=True)
         if self._background:
             await self._background.cancel_session(session)
+        taken = []
+        for row in untouched:
+            # Read again once the work has stopped: an answer may have come between the look and the stop.
+            turn = self._history.get(row['turn_id'])
+            if turn is None or not self._untouched(row['turn_id'], mark):
+                continue
+            payload = json.loads(row['payload_json'])
+            taken.append(dict(session_id=row['request_id'], text=payload.get('original_text') or payload['text'],
+                              attachments=payload.get('attachments', []), quote=payload.get('quote')))
+            self._remove_turns(member, [turn])
+        # What was being worked on was said before what waited, and goes back first.
+        returned = taken + returned
         return {'stopped':True, **({'returned': returned} if returned else {})}
+
+    def _marks(self) -> tuple[int, int]:
+        """The last line and the last step written so far, to tell what came before a moment from what came after."""
+        line = self._conn.execute("SELECT COALESCE(MAX(rowid),0) FROM agent_messages").fetchone()[0]
+        step = self._conn.execute("SELECT COALESCE(MAX(rowid),0) FROM agent_steps").fetchone()[0]
+        return line, step
+
+    def _untouched(self, turn_id: int, before: tuple[int, int] | None = None) -> bool:
+        """Whether nothing answered the turn yet: no line said, no picture shown, no step taken, so taking it back loses
+        nothing and hides nothing that was done. `before` counts only what was written up to those marks: the words a stop
+        writes (「Understood. Cancelled.」) come after them and are no answer."""
+        line, step = before if before is not None else (None, None)
+        steps = self._conn.execute("SELECT 1 FROM agent_steps WHERE turn_id=? AND (? IS NULL OR rowid<=?) LIMIT 1",
+                                   (turn_id, step, step)).fetchone()
+        said = self._conn.execute("SELECT 1 FROM agent_messages WHERE turn_id=? AND kind IN ('reply','media') AND trim(text)<>''"
+                                  " AND (? IS NULL OR rowid<=?) LIMIT 1", (turn_id, line, line)).fetchone()
+        return steps is None and said is None
 
     async def _history_send_now(self, params):
         """「立即送出」: a message that waits its turn is read now. It goes to the front of its conversation's inbox and the
@@ -6014,6 +6056,11 @@ class AgentService:
                if turn.scope == "private" and turn.member_id == member and turn.source not in ("member", "routine")]
         if keep is not None:
             keep(own)
+        return {"deleted": self._remove_turns(member, own)}
+
+    def _remove_turns(self, member: int, own: list[Turn]) -> int:
+        """Removes the owner's turns for good (a message taken back), with what their conversations kept of them: the summary
+        and the subscription program's session, which would remember them."""
         deleted = sum(self._history.delete(turn.id) for turn in own if turn.id is not None)
         if deleted:
             for conversation_id in {turn.conversation_id for turn in own}:
@@ -6026,7 +6073,7 @@ class AgentService:
                 if forget is not None and turn.id is not None:
                     forget(turn.id)
                 self._turn_changed(turn.id or 0, member)
-        return {"deleted": deleted}
+        return deleted
 
     async def _history_version(self, params: dict) -> dict:
         """`agent.history.version`: one version of an owner's message they edited, as the app reads a turn, for the owner to

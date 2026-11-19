@@ -259,7 +259,8 @@ async def test_stop_selects_inflight_scope_instead_of_a_later_terminal_row(make_
         other_ask = _Ask(session_id='other-queued', text='Keep waiting elsewhere', language='en', source='app', conversation_id=other)
         kept, _ = rig.service._inbox.admit(other_ask, dict(text=other_ask.text, language='en', source='app'))
         stopped = await rig.call('agent.history.stop', {'session_id': 'live'})
-        assert [item['text'] for item in stopped['returned']] == ['Return this queued message']
+        # The in-flight request had no answer yet, so it comes back first, before the one that waited (R-CHAT-STOP-01).
+        assert [item['text'] for item in stopped['returned']] == ['Request A', 'Return this queued message']
         assert rig.service._inbox.get(queued['turn_id'])['outcome'] == 'cancelled'
         assert rig.service._inbox.get(kept['turn_id'])['state'] == 'queued'
         assert rig.service.turn(terminal).text == 'Old answer'

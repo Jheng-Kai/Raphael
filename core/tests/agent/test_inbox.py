@@ -109,8 +109,9 @@ async def test_stop_returns_all_queued_payloads_in_order_and_does_not_drain(make
         await asyncio.wait_for(rig.call("agent.ask", {"session_id": "with-file", "source": "app", "text": "Third request", "ui_language": "en", "attachments": [attachment]}), .5)
         running = next(t for t in await rig.turns() if t["status"] == "running")
         stopped = await rig.call("agent.history.stop", {"session_id": running["session_id"]})
-        assert [item["text"] for item in stopped["returned"]] == ["Second request", "Third request"]
-        assert stopped["returned"][1]["attachments"][0]["name"] == "example.txt"
+        # The request being worked on had no answer yet, so it comes back too, first, as it was said first.
+        assert [item["text"] for item in stopped["returned"]] == ["Request A", "Second request", "Third request"]
+        assert stopped["returned"][2]["attachments"][0]["name"] == "example.txt"
         release.set()
         await first
         await until(lambda: not rig.service._drains)
@@ -262,3 +263,38 @@ async def test_a_message_the_background_work_turns_down_waits_for_its_own_turn(m
     await until(lambda: not rig.service._drains)
     assert rig.service._inbox.get(answer["turn_id"])["outcome"] == "completed"
     assert len(client.chat_calls) == 1
+
+
+async def test_stop_takes_back_the_request_nothing_answered_yet_instead_of_leaving_it_cancelled(make_rig, monkeypatch, tmp_path):
+    # Owner, 2026-11-19: a Stop before any answer wrote 已取消 under the message, and an answered message cannot be taken back.
+    rig, first, release, calls = await blocked_cli(make_rig, monkeypatch, tmp_path)
+    try:
+        running = next(t for t in await rig.turns() if t["status"] == "running")
+        stopped = await rig.call("agent.history.stop", {"session_id": running["session_id"], "member_id": 0})
+        assert [item["text"] for item in stopped["returned"]] == ["Request A"]
+        assert rig.history.get(running["id"]) is None
+        assert not [t for t in await rig.turns() if t["question"] == "Request A"]
+    finally:
+        release.set()
+        await asyncio.gather(first, return_exceptions=True)
+
+
+@pytest.mark.parametrize("answer", ["line", "step"])
+async def test_stop_keeps_a_request_that_was_answered_or_acted_on(make_rig, monkeypatch, tmp_path, answer):
+    # Once a line was said or a step taken, Stop only stops: taking it back would hide what was said or done.
+    from raphael_core.agent.steps import Step
+    rig, first, release, calls = await blocked_cli(make_rig, monkeypatch, tmp_path)
+    try:
+        running = next(t for t in await rig.turns() if t["status"] == "running")
+        if answer == "line":
+            rig.history.add_message(running["id"], "reply", "Looking at it now.")
+        else:
+            rig.history.add_steps(running["id"], [Step(kind="tool", tool="web_search", server="Raphael", outcome="ok", ms=10)])
+        stopped = await rig.call("agent.history.stop", {"session_id": running["session_id"], "member_id": 0})
+        assert "returned" not in stopped
+        assert rig.history.get(running["id"]) is not None
+    finally:
+        release.set()
+        await asyncio.gather(first, return_exceptions=True)
+
+
