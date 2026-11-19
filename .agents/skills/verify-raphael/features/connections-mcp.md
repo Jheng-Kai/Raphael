@@ -136,8 +136,13 @@ A sign-in cancelled half way can be removed, so no useless accounts pile up, and
   `integrations.connect_cancel`).
 
 ```powershell
-npm run look -- accounts-card accounts-menu accounts-remove-ask accounts-remove-yes accounts-remove-waiting accounts-remove-last account-labels account-label-edit sign-in-waits sign-in-replaced sign-in-cancelled --theme both --width 1120,720,1920x1080
+npm run look -- accounts-card accounts-menu accounts-relogin-menu connection-lost accounts-remove-ask accounts-remove-yes accounts-remove-waiting accounts-remove-last account-labels account-label-edit sign-in-waits sign-in-replaced sign-in-cancelled --theme both --width 1120,720,1920x1080
 ```
+
+A connection that drops (R-ACCT-04): the core reads the accounts a minute after start and every twenty minutes (`watch_once`; on a Mac only once the key
+was read in that run) and tells `connectors.lost` once; the window's toast (`connection-lost.ts`) has 重新登入, which goes to `repair:relogin:composio:<slug>`
+and signs in again in place of the dead accounts. A dead row's menu has 重新登入 first (`accounts-relogin-menu`); `connection-lost` sends the event twice
+and sees one toast. The replacement itself is the core's (`test_connector_accounts.py`), not the mock's.
 
 ## The code of a device sign-in (GitHub): R-APPS-DEVICE-01
 

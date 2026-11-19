@@ -1548,6 +1548,7 @@ export const id = {
   "conn.status.relogin": "Perlu masuk",
   "conn.status.error": "Tidak dapat terhubung: {p0}",
   "conn.relogin": "Masuk lagi",
+  "conn.lost": "{p0} berhenti berfungsi. Masuk lagi untuk terus menggunakannya.",
   "conn.device.hint": "Tempel kode ini di halaman yang terbuka",
   "conn.device.open": "Salin kode dan buka {p0}",
   "conn.revokeOpen": "Cabut akses di {p0}",

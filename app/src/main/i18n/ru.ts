@@ -1548,6 +1548,7 @@ export const ru = {
   "conn.status.relogin": "Требуется вход",
   "conn.status.error": "Не удалось подключиться: {p0}",
   "conn.relogin": "Войти снова",
+  "conn.lost": "{p0} больше не подключено. Войдите снова, чтобы продолжить.",
   "conn.device.hint": "Вставьте этот код на открывшейся странице",
   "conn.device.open": "Скопировать код и открыть {p0}",
   "conn.revokeOpen": "Отозвать доступ в {p0}",

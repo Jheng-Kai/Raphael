@@ -53,6 +53,7 @@ import { bindMissing, missingHTML, noticeHTML } from "./missing";
 import { warnQuota } from "./quota-warning";
 import { warnKeychainRefused } from "./keychain-refused";
 import { followDeviceLogin } from "./device-login";
+import { warnConnectionLost } from "./connection-lost";
 import "./styles.css";
 import "./sidebar.css";
 
@@ -407,6 +408,7 @@ watchChipRows(document.body);
     if (event.type === "QuotaWarning") warnQuota(event);
     if (event.type === "KeychainRefused") warnKeychainRefused();
     followDeviceLogin(event);
+    if (event.type === "ConnectionLost") warnConnectionLost(event, (id) => go("settings", `repair:relogin:${id}`));
     if (event.type === "Dictation") followDictation(event.phase, event.agent);
     if (event.type === "DictationPasted" && document.activeElement instanceof HTMLTextAreaElement) {
       document.activeElement.dispatchEvent(new CustomEvent("dictation-pasted", { detail: event.text }));

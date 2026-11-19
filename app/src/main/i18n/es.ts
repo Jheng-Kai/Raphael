@@ -1548,6 +1548,7 @@ export const es = {
   "conn.status.relogin": "Hay que iniciar sesión",
   "conn.status.error": "No se pudo conectar: {p0}",
   "conn.relogin": "Volver a iniciar sesión",
+  "conn.lost": "{p0} dejó de funcionar. Vuelve a iniciar sesión para seguir usándolo.",
   "conn.device.hint": "Pega este código en la página que se abra",
   "conn.device.open": "Copiar código y abrir {p0}",
   "conn.revokeOpen": "Quitar acceso en {p0}",

@@ -1275,6 +1275,7 @@ export const en = {
   "conn.status.relogin": "Sign-in needed",
   "conn.status.error": "Could not connect: {p0}",
   "conn.relogin": "Sign in again",
+  "conn.lost": "{p0} stopped working. Sign in again to keep using it.",
   "conn.device.hint": "Paste this code on the page that opens",
   "conn.device.open": "Copy code and open {p0}",
   "conn.revokeOpen": "Remove access on {p0}",

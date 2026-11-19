@@ -13,6 +13,7 @@ from raphael_core.agent.team_context import snapshot
 from raphael_core.connectors.apps import APPS
 from raphael_core.connectors.cards import Card, CardStore, ConnectorCards
 from raphael_core.connectors.service import ConnectorsService
+from raphael_core.connectors.store import Connector
 from raphael_core.evaluate.google_fixture import CLIENT_ID, GoogleFixture
 from raphael_core.integrations.service import IntegrationsService
 from raphael_core.integrations.vault import MemoryVault
@@ -312,3 +313,27 @@ def test_only_a_google_app_is_told_about_the_google_sign_in():
 def test_a_card_that_timed_out_asks_for_no_setup():
     assert "missing" not in _shown("twitter", "expired", "not_configured")
     assert "missing" not in _shown("gmail", "expired", "needs_composio_key")
+
+
+async def test_a_composio_card_signing_in_again_replaces_the_account_that_stopped(tmp_path, conn):
+    """R-ACCT-04: a card that reconnects an app hands its dead accounts to the sign-in, which takes their place."""
+    deleted = []
+    platform = Platform()
+
+    def transport(request):
+        path = request.url.path.removeprefix("/api/v3.1")
+        if request.method == "DELETE" and path == "/connected_accounts/ca_dead":
+            deleted.append(path)
+            return httpx.Response(200, json={"success": True})
+        return platform(request)
+
+    async def browser(url):
+        pass
+    rig = Rig(tmp_path, conn, GoogleFixture("n0nce"), transport=httpx.MockTransport(transport), browser=browser)
+    rig.vault.set("connectors:composio:key", "ak_test")
+    rig.connectors.store.connectors["composio:gmail"] = Connector("composio:gmail", "composio", status="EXPIRED", name="Gmail",
+        accounts=[{"id": "ca_dead", "status": "EXPIRED", "label": "公司信箱"}])
+    card = rig.cards.show(turn_id=rig.turn, member_id=0, conversation_id=None, app=APPS["gmail"], language="zh-TW", reconnect=True)
+    _, card = await rig.connect(card)
+    assert card.state == "connected" and deleted == ["/connected_accounts/ca_dead"]
+    assert [(a["id"], a["label"]) for a in rig.connectors.store.connectors["composio:gmail"].accounts] == [("ca_test", "公司信箱")]

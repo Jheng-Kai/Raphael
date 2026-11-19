@@ -283,6 +283,11 @@ function entryOf(g: ConnectionGroup, v: ConnectionsView): StoreService | undefin
 
 /** The login of a service ran out or was never finished: it asks to sign in again. */
 export const needsLogin = (g: ConnectionGroup): boolean => g.auth !== "none" && g.status === "error" && g.error === "auth";
+/** A sign-in still under way at Composio: an account that is neither working nor dead. */
+const WAITING_ACCOUNT: readonly string[] = ["INITIALIZING", "INITIATED"];
+/** The accounts of a Composio app that stopped working (expired, failed, revoked): what signing in again takes the place of. */
+export const deadAccounts = (g: ConnectionGroup): string[] =>
+  g.source === "composio" ? (g.accounts ?? []).filter((a) => a.status !== "ACTIVE" && !WAITING_ACCOUNT.includes(a.status)).flatMap((a) => a.id ? [a.id] : []) : [];
 
 /** The first thing to say to 拉斐爾 with a service of the store, in the language of the window: what 「試試看」 puts in the composer. */
 export function examplePrompt(s: StoreService | undefined): string | null {
@@ -940,6 +945,9 @@ export interface Connections {
   scrolled(target: Element): void;
   /** An event of the main window: the connections changed. */
   followEvent(event: MainEvent): void;
+  /** Opens a Composio app's page and signs in to it again in place of its accounts that stopped working (the notice of a
+   *  lost connection leads here). Nothing happens for an app that is not on the list. */
+  relogin(id: string): void;
   /** The panel is closed or leaves the dialog: drop what must not stay (an unsent form, a pending disconnect). */
   reset(): void;
   /** The view on screen in words the way back keeps: the connected list (`connected`) and an app's page over it (`group:github`). */
@@ -1286,8 +1294,9 @@ export function createConnections(host: ConnectionsHost): Connections {
     for (let waited = 0; login && waited < LOGIN_STOP_MS; waited += 50) await new Promise((resolve) => setTimeout(resolve, 50));
   }
 
-  /** Opens the browser login for a store entry (`catalog_id`) or for a service that must sign in again (`id`). */
-  async function signIn(target: { catalog_id: string } | { id: string }, name: string, again: boolean): Promise<void> {
+  /** Opens the browser login for a store entry (`catalog_id`) or for a service that must sign in again (`id`). A Composio
+   *  app signed in to again takes the place of its accounts in `replace` (ones that stopped working, R-ACCT-04). */
+  async function signIn(target: { catalog_id: string } | { id: string }, name: string, again: boolean, replace: string[] = []): Promise<void> {
     const key = "catalog_id" in target ? target.catalog_id : target.id;
     // One sign-in waits at a time, and it holds no other app back: the next one ends it (the core gives back the account it made).
     if (login) {
@@ -1306,7 +1315,7 @@ export function createConnections(host: ConnectionsHost): Connections {
       result = ("catalog_id" in target ? !entryById(target.catalog_id)?.source : !groupById(target.id)?.source) ? await api.integrationsConnect(target)
         : "id" in target && groupById(target.id)?.source === "google"
         ? await api.connectorsGoogleConnect()
-        : await api.connectorsConnect(key.replace(/^composio:/, ""));
+        : await api.connectorsConnect(key.replace(/^composio:/, ""), undefined, replace);
     } catch (error) {
       result = { connected: false, error: error instanceof Error && error.message === "toolkit_not_allowed" ? "toolkit_not_allowed" : "error" };
     }
@@ -1324,7 +1333,8 @@ export function createConnections(host: ConnectionsHost): Connections {
     if (result.connected) {
       const group = groupById(result.connector?.id || (key.startsWith("composio:") || key === "google" ? key : "composio:" + key));
       const account = result.connector?.accounts?.find(account => !previousAccounts.has(account.id)) || group?.accounts?.find(account => !previousAccounts.has(account.id));
-      if (group && account) nameAccount(group.id, account);
+      // An account that took the place of one keeps its name: only a new one is asked for a name.
+      if (group && account && !replace.length) nameAccount(group.id, account);
     }
   }
 
@@ -1547,7 +1557,7 @@ export function createConnections(host: ConnectionsHost): Connections {
       }
       case "relogin": {
         const group = groupById(id);
-        if (group) void signIn({ id }, group.name, true);
+        if (group) void signIn({ id }, group.name, true, deadAccounts(group));
         break;
       }
       case "open-grants": {
@@ -1572,7 +1582,9 @@ export function createConnections(host: ConnectionsHost): Connections {
         const accountId = button.dataset.account ?? "";
         if (!group?.accounts?.some((a) => a.id === accountId)) return true;
         const attrs = ` data-id="${esc(id)}" data-account="${esc(accountId)}"`;
+        const dead = deadAccounts(group).includes(accountId);
         const panel = openPopover(button,
+          (dead ? `<button type="button" role="menuitem" data-conn="account-relogin"${attrs}>${esc(t("conn.relogin"))}</button>` : "") +
           `<button type="button" role="menuitem" data-conn="account-label"${attrs}>${esc(t("members.rename"))}</button>` +
           `<button type="button" role="menuitem" class="danger" data-conn="account-remove"${attrs}>${esc(t("account.remove"))}</button>`,
           { className: "menu", role: "menu", label: t("mcp.actions") });
@@ -1591,7 +1603,12 @@ export function createConnections(host: ConnectionsHost): Connections {
         if (account) nameAccount(id, account);
         break;
       }
-      case "add-account": { const group = groupById(id); if (group) void signIn({id}, group.name, true); break; }
+      case "account-relogin": {
+        const group = groupById(id);
+        if (group) void signIn({ id }, group.name, true, [button.dataset.account ?? ""].filter(Boolean));
+        break;
+      }
+      case "add-account": { const group = groupById(id); if (group) void signIn({id}, group.name, false); break; }
       case "retry-connections": void load(); break;
       case "retry-builtin-store": void load(); break;
       case "store-group":
@@ -1784,5 +1801,12 @@ export function createConnections(host: ConnectionsHost): Connections {
     redraw();
   }
 
-  return { view, load, click, input, key, menuFor, painted, scrolled, followEvent, reset, navView, showNavView };
+  function relogin(id: string): void {
+    const group = groupById(id);
+    if (!group) return;
+    openPage({ kind: "group", id });
+    void signIn({ id }, group.name, true, deadAccounts(group));
+  }
+
+  return { view, load, click, input, key, menuFor, painted, scrolled, followEvent, reset, navView, showNavView, relogin };
 }

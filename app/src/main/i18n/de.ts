@@ -1548,6 +1548,7 @@ export const de = {
   "conn.status.relogin": "Anmeldung erforderlich",
   "conn.status.error": "Verbindung fehlgeschlagen: {p0}",
   "conn.relogin": "Erneut anmelden",
+  "conn.lost": "{p0} ist nicht mehr verbunden. Melden Sie sich erneut an, um es weiter zu nutzen.",
   "conn.device.hint": "Diesen Code auf der geöffneten Seite einfügen",
   "conn.device.open": "Code kopieren und {p0} öffnen",
   "conn.revokeOpen": "Zugriff auf {p0} entfernen",

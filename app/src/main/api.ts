@@ -435,8 +435,9 @@ export const connectorsToolkit = (toolkit: string): Promise<import("./plugins-da
  * Adds an app of the store. `fields` are what its form asked for (the owner's own key, or a developer app's id and secret):
  * they go to the core in this call, which hands them to Composio, and to nothing else.
  */
-export const connectorsConnect = (toolkit: string, fields?: Record<string, string>): Promise<{ connected: boolean; error?: string; connector?: import("./plugins-data").ManagedConnector }> =>
-  connectorCall("connectors.connect", fields ? { toolkit, fields } : { toolkit });
+/** Adds a Composio app, or signs in to it again in place of the accounts in `replace` (ones that stopped working). */
+export const connectorsConnect = (toolkit: string, fields?: Record<string, string>, replace: string[] = []): Promise<{ connected: boolean; error?: string; connector?: import("./plugins-data").ManagedConnector }> =>
+  connectorCall("connectors.connect", { toolkit, ...(fields ? { fields } : {}), ...(replace.length ? { replace } : {}) });
 export const connectorsGoogleConnect = (): Promise<{ connected: boolean; error?: string; connector?: import("./plugins-data").ManagedConnector }> => connectorCall("connectors.google.connect");
 export const connectorsDisconnect = (id: string): Promise<unknown> => connectorCall("connectors.disconnect", { id });
 /** Removes one account of an app: a waiting, expired or failed one at once, a connected one after the owner's yes (the last connected one is a disconnect). */

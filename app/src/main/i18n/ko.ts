@@ -1548,6 +1548,7 @@ export const ko = {
   "conn.status.relogin": "로그인 필요",
   "conn.status.error": "연결하지 못했습니다: {p0}",
   "conn.relogin": "다시 로그인",
+  "conn.lost": "{p0} 연결이 끊어졌습니다. 다시 로그인하면 계속 사용할 수 있습니다.",
   "conn.device.hint": "열린 페이지에 이 코드를 붙여넣으세요",
   "conn.device.open": "코드 복사 후 {p0} 열기",
   "conn.revokeOpen": "{p0}에서 접근 권한 삭제",

@@ -1548,6 +1548,7 @@ export const ptBR = {
   "conn.status.relogin": "Login necessário",
   "conn.status.error": "Não foi possível conectar: {p0}",
   "conn.relogin": "Entrar novamente",
+  "conn.lost": "{p0} parou de funcionar. Entre novamente para continuar usando.",
   "conn.device.hint": "Cole este código na página que abrir",
   "conn.device.open": "Copiar código e abrir {p0}",
   "conn.revokeOpen": "Remover acesso em {p0}",

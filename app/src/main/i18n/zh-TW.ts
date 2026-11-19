@@ -1274,6 +1274,7 @@ export const zhTW = {
   "conn.status.relogin": "需要重新登入",
   "conn.status.error": "連線失敗：{p0}",
   "conn.relogin": "重新登入",
+  "conn.lost": "{p0} 的連線中斷了，重新登入就能繼續使用。",
   "conn.device.hint": "在開啟的頁面貼上這組代碼",
   "conn.device.open": "複製代碼並開啟 {p0}",
   "conn.revokeOpen": "到 {p0} 移除授權",

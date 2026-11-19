@@ -1548,6 +1548,7 @@ export const zhCN = {
   "conn.status.relogin": "需要重新登录",
   "conn.status.error": "连接失败：{p0}",
   "conn.relogin": "重新登录",
+  "conn.lost": "{p0} 的连接已中断，重新登录即可继续使用。",
   "conn.device.hint": "在打开的页面粘贴这组代码",
   "conn.device.open": "拷贝代码并打开 {p0}",
   "conn.revokeOpen": "到 {p0} 移除授权",
