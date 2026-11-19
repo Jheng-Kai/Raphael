@@ -414,8 +414,6 @@ export const id = {
   "template.review.skills": "Keterampilan",
   "members.profile.skillsTitle": "Keterampilan",
   "members.panelSkills": "Keterampilan",
-  "completion.previous": "Sebelumnya",
-  "completion.next": "Berikutnya",
   "media.image": "Gambar ilustrasi",
   "media.video": "Buat video",
   "media.unset": "Belum diatur",

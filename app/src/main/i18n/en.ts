@@ -334,8 +334,6 @@ export const en = {
   "completion.kindApp": "App",
   "completion.commands": "Commands",
   "completion.skills": "Skills",
-  "completion.previous": "Previous",
-  "completion.next": "Next",
   "media.image": "Draw images",
   "media.video": "Make videos",
   "media.unset": "Not set",

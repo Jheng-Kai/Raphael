@@ -414,8 +414,6 @@ export const ptBR = {
   "template.review.skills": "Habilidades",
   "members.profile.skillsTitle": "Habilidades",
   "members.panelSkills": "Habilidades",
-  "completion.previous": "Anterior",
-  "completion.next": "Próximo",
   "media.image": "Desenhar imagens",
   "media.video": "Criar vídeos",
   "media.unset": "Não definido",

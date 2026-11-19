@@ -414,8 +414,6 @@ export const tr = {
   "template.review.skills": "Beceriler",
   "members.profile.skillsTitle": "Beceriler",
   "members.panelSkills": "Beceriler",
-  "completion.previous": "Önceki",
-  "completion.next": "Sonraki",
   "media.image": "Görsel çiz",
   "media.video": "Video oluştur",
   "media.unset": "Ayarlanmadı",

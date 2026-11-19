@@ -414,8 +414,6 @@ export const fr = {
   "template.review.skills": "Compétences",
   "members.profile.skillsTitle": "Compétences",
   "members.panelSkills": "Compétences",
-  "completion.previous": "Précédent",
-  "completion.next": "Suivant",
   "media.image": "Dessiner des images",
   "media.video": "Créer des vidéos",
   "media.unset": "Non défini",
