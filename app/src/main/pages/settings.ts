@@ -208,6 +208,7 @@ export function createSettings(app: AppContext): SettingsPage {
   const pickers = new Map<PickerRole | "quick", ModelPicker>();
   /** The speech models of this computer, and the download of one that is under way. */
   let localModels: LocalModel[] | "loading" | "failed" = "loading";
+  let localLoads = 0;
   let localDownload: { name: string; done: number; total: number } | null = null;
   let devices: AudioDevices | null = null;
   let altgr = false;
@@ -251,7 +252,7 @@ export function createSettings(app: AppContext): SettingsPage {
     // Closed too: Settings open at once on what they hold, and a choice made at the composer must already be in it.
     if (event.type === "SettingsChanged") void api.settingsGet().then(result => { brain = result.settings; if (visible) render(); }, () => {});
     cliBrains.followEvent(event);
-    if (event.type === "ProvidersChanged" && visible) void loadCatalog(true);
+    if (event.type === "ProvidersChanged") void loadCatalog(true);
     // A QuotaChanged while this page's own reading is under way is that reading's own finding (the core tells every
     // reader when a live read changed the windows): it brings the numbers, and asking again would start a second read.
     if (event.type === "QuotaChanged" && (backgroundRead || usageRefresh)) return;
@@ -486,6 +487,13 @@ export function createSettings(app: AppContext): SettingsPage {
   translateNav();
 
   /** Goes to a tab: what the tab before it had open is dropped, and the new one comes in. */
+  /** 連接其他來源 in a model's choice: the ways to connect a source that can do that feature, subscriptions first
+   *  (providers.ts directory). The answer and quick questions take every way. */
+  function connectSource(role = ""): void {
+    openPane("models", "models");
+    void loadProviders().then(() => { if (visible) providers.openRepair(role ? `connect:${role}` : "connect"); });
+  }
+
   function openPane(next: SettingsPane, tab?: ModelsTab): void {
     closeMenu();
     // 模型與用量 opens at 模型 unless the way in names 用量: it never stays on what was looked at last.
@@ -663,7 +671,6 @@ export function createSettings(app: AppContext): SettingsPage {
    * A chosen model that OpenRouter no longer lists went back to its default: that is told, and drawn.
    */
   async function loadCatalog(force = false): Promise<void> {
-    const mine = loads;
     const request = ++catalogLoads;
     let next: ModelCatalog | "failed";
     try {
@@ -673,8 +680,10 @@ export function createSettings(app: AppContext): SettingsPage {
       next = typeof catalog === "object" ? catalog : "failed";
     }
     if (typeof next === "object") rememberCatalog(next);
-    if (mine !== loads || request !== catalogLoads || !visible) return;
+    // As the speech models: the newest read is kept even while Settings is closed, and only drawn while it is open.
+    if (request !== catalogLoads) return;
     catalog = next;
+    if (!visible) return;
     if (typeof next === "object" && next.replaced.length > 0) {
       if (brain) for (const r of next.replaced) brain = { ...brain, [r.key]: r.default };
       for (const message of replacementNotices(next)) toaster.info(message);
@@ -696,7 +705,9 @@ export function createSettings(app: AppContext): SettingsPage {
 
   /** Reads the catalogue (`models.local`); one that is not to be had is said in the local tab. */
   async function loadLocalModels(): Promise<void> {
-    const mine = loads;
+    // The newest read wins, whether or not Settings is open: a read the warm-up started while it was closed is kept, or
+    // the list said 正在載入 for good, since a reopening within REFRESH_REUSE_MS does not read again.
+    const request = ++localLoads;
     let next: LocalModel[] | "failed";
     try {
       const listing = await api.modelsLocal();
@@ -706,9 +717,9 @@ export function createSettings(app: AppContext): SettingsPage {
     } catch {
       next = Array.isArray(localModels) ? localModels : "failed";
     }
-    if (mine !== loads || !visible) return;
+    if (request !== localLoads) return;
     localModels = next;
-    paintLocal();
+    if (visible) paintLocal();
   }
 
   /** The speech-to-text picker and the price under its row follow the local models. */
@@ -782,7 +793,7 @@ export function createSettings(app: AppContext): SettingsPage {
     const quick = body.querySelector<HTMLElement>('[data-row="quick-model"] .mp-slot');
     if (quick) pickers.set("quick", mountModelPicker(quick, {
       ...quickPickerLook(v),
-      onSources: () => openPane("models", "models"),
+      onSources: () => connectSource("quick"),
       onChoose: (id) => {
         const chosen = splitEffort(id, quickModels(view()));
         void changeBrain("quick_model", chosen.model).then(() => chosen.effort ? changeBrain("quick_effort", chosen.effort) : undefined);
@@ -803,7 +814,7 @@ export function createSettings(app: AppContext): SettingsPage {
         "vision",
         mountModelPicker(vision, {
           ...visionPickerLook(v),
-          onSources: () => openPane("models", "models"),
+          onSources: connectSource,
           onChoose: (id) => void services.chooseVision(id),
           onFavorite: (id, on) => void changeFavorite("answer", id, on),
         }),
@@ -816,7 +827,7 @@ export function createSettings(app: AppContext): SettingsPage {
           role,
           mountModelPicker(slot, {
             ...modelPickerLook(v, role),
-            onSources: () => openPane("models", "models"),
+            onSources: () => connectSource(role),
             onCliAction: (id) => {
               const button = document.createElement("button"); button.dataset.cli = id;
               void cliBrains.click(button);
@@ -1288,6 +1299,10 @@ export function createSettings(app: AppContext): SettingsPage {
           if (resource === "image" || resource === "video") {
             const control = el.querySelector<HTMLElement>(`[data-row="${resource}-model"] [data-k="${resource}-model"]`);
             control?.scrollIntoView({block: "center"}); control?.focus({preventScroll: true});
+          } else if (resource === "quick" || resource === "cleanup" || resource === "stt") {
+            // A feature with no model: its own row, and its choice open.
+            const trigger = el.querySelector<HTMLButtonElement>(`[data-row="${({ quick: "quick-model", cleanup: "model", stt: "stt-model" })[resource]}"] .mp-trigger`);
+            trigger?.scrollIntoView({block: "center"}); trigger?.focus({preventScroll: true}); trigger?.click();
           } else if (resource === "chatgpt") {
             const card = el.querySelector<HTMLElement>('[data-chatgpt-card]');
             card?.scrollIntoView({block: "center"}); card?.querySelector<HTMLElement>('button')?.focus();

@@ -53,4 +53,4 @@ def test_an_owner_who_never_chose_a_model_gets_the_default_of_that_version(tmp_p
     conn.execute("INSERT INTO members(name, role, instructions, avatar, model, position, created_at_ms) VALUES('Cleared', '', '', '', '', 1, 1)")
     conn.commit()
     db.migrate(conn)
-    assert conn.execute("SELECT model FROM members").fetchone()[0] == "openai/gpt-6-luna"
+    assert conn.execute("SELECT model FROM members").fetchone()[0] == ""

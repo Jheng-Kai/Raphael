@@ -13,13 +13,11 @@ from httpx import ConnectError, TimeoutException
 from ..brain.openrouter import OpenRouterError
 from ..failures import CAUSES, KINDS as SHARED_KINDS
 
-# no_key: no OpenRouter key is stored. auth: OpenRouter does not accept it. budget: this month's
-# limit is used up. credits: the OpenRouter account has none left. offline: the network cannot
-# be reached. timeout: the request did not finish in time. no_answer: the model gave no answer (a reply that was only
-# reasoning has none). error: anything else.
-KINDS = ("no_key", "auth", "budget", "credits", "offline", "timeout", "error", "no_answer")
+# Feature prerequisites and failures that have their own short localized reply.
+KINDS = ("no_model", "no_key", "auth", "budget", "credits", "offline", "timeout", "error", "no_answer")
 
 _KIND_OF_OPENROUTER = {
+    "no_model": "no_model",
     "auth": "auth",
     "credits": "credits",
     "network": "offline",
@@ -80,7 +78,7 @@ def provider_of(model):
         return ":".join(model.split(":", 2)[:2])
     if isinstance(model, str) and model.startswith("@"):
         return model[1:].split(":", 1)[0]
-    return "openrouter"
+    return "openrouter" if model else "unknown"
 
 
 def failure_kind(error: BaseException) -> str:

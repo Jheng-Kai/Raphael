@@ -24,7 +24,6 @@ from jsonschema import ValidationError, validate
 from ..agent.cli.drivers import CODEX_ISOLATION
 from ..agent.cli.process import PrivateFiles
 from ..brain.cleanup import CLEANUP_SCHEMA, build_system_prompt, build_user_message
-from ..brain.settings import DEFAULTS
 from ..brain.textnorm import finish_cleaned_text
 from . import use_utf8_output
 from .cleanup import Case, failed_checks, load_cases
@@ -727,7 +726,7 @@ def main(argv=None):
     parser.add_argument("--out", required=True, type=Path, help="Private directory under eval/data; matching report.json resumes")
     parser.add_argument("--cases", nargs="+", type=Path, help="Defaults to both files in ../eval/")
     parser.add_argument("--noise", type=Path, help="Complete same-prompt report.json; required for a switch recommendation")
-    parser.add_argument("--cleaner-model", help="Codex subscription model; defaults to the cleanup setting")
+    parser.add_argument("--cleaner-model", default="gpt-6-luna", help="Codex subscription model to evaluate")
     parser.add_argument("--judge-brain", choices=("claude", "codex"), default="claude")
     parser.add_argument("--judge-model", default="haiku")
     parser.add_argument("--timeout", type=float, default=240)
@@ -744,9 +743,7 @@ def main(argv=None):
         for template in templates.values():
             if any(template.count("{" + field + "}") != 1 for field in ("languages", "script_rules", "target_app", "dictionary")):
                 raise ValueError("invalid_prompt_placeholders")
-        model = args.cleaner_model or DEFAULTS["cleanup_model"].removeprefix("openai/")
-        if not args.cleaner_model and not DEFAULTS["cleanup_model"].startswith("openai/"):
-            raise ValueError("cleanup_default_is_not_openai")
+        model = args.cleaner_model
         noise = json.loads(args.noise.read_text(encoding="utf-8-sig")) if args.noise else None
         cleaner = SubscriptionCli("codex", model, timeout=args.timeout)
         judge = SubscriptionCli(args.judge_brain, args.judge_model, timeout=args.timeout)

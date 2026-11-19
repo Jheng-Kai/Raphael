@@ -93,12 +93,11 @@ def app_folders(projects, root, temp):
 
 def recorded(conn):
     """The ids of every native session a conversation, room thread or member of this database resumes."""
+    tables = {row[0] for row in conn.execute("SELECT lower(name) FROM main.sqlite_master WHERE type IN ('table', 'view')")}
     ids = set()
     for table in SESSION_TABLES:
-        try:
-            ids.update(row[0] for row in conn.execute(f"SELECT session_id FROM {table}"))
-        except sqlite3.OperationalError:
-            pass  # a database older than the table records none there
+        if table in tables:
+            ids.update(row[0] for row in conn.execute(f"SELECT session_id FROM main.{table}"))
     return ids
 
 
@@ -107,8 +106,17 @@ def other_databases(data_dir):
     data_dir = Path(data_dir)
     if data_dir.name not in IDENTITY_FOLDERS:
         return []
-    return [path for name in IDENTITY_FOLDERS if name != data_dir.name
-            for path in [data_dir.parent / name / "raphael.db"] if path.is_file()]
+    paths = []
+    for name in IDENTITY_FOLDERS:
+        if name == data_dir.name:
+            continue
+        path = data_dir.parent / name / "raphael.db"
+        try:
+            path.lstat()
+        except FileNotFoundError:
+            continue
+        paths.append(path)
+    return paths
 
 
 def recorded_elsewhere(paths):
@@ -211,13 +219,22 @@ class CliRecords:
         """One sweep, when one is due: the database is read here, on its own thread, and the folders in another."""
         if not self.due():
             return None
-        keep = recorded(self.conn)
+        try:
+            keep = recorded(self.conn)
+        except sqlite3.Error as error:
+            logger.warning("The members' CLI records were not swept (%s)", type(error).__name__)
+            return None
 
         def work():
             elsewhere = recorded_elsewhere(other_databases(self.data_dir))
-            return sweep(self.projects, workspace_root(self.home), self.temp or tempfile.gettempdir(), keep | (elsewhere or set()),
-                         now=self.clock(), busy=lambda member: ACTIVE.get(member, 0) > 0, members=elsewhere is not None)
+            if elsewhere is None:
+                return None
+            return sweep(self.projects, workspace_root(self.home), self.temp or tempfile.gettempdir(), keep | elsewhere,
+                         now=self.clock(), busy=lambda member: ACTIVE.get(member, 0) > 0)
         removed = await asyncio.to_thread(work)
+        if removed is None:
+            logger.warning("The members' CLI records were not swept (another build's database could not be read)")
+            return None
         self.stamp.touch()
         if any(removed):
             logger.info("Removed %d old CLI sessions and %d empty CLI record folders of the members' runs", *removed)

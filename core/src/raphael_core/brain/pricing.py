@@ -24,14 +24,13 @@ from typing import Any
 from .catalog import (
     CAPABILITIES,
     LLM,
-    ROLES,
     CatalogEntry,
     ModelPrice,
     entry_from_json,
     entry_to_json,
     parse_catalog,
 )
-from .openrouter import CLEANUP_FALLBACKS, STT_MODELS_WITH_HINTS, OpenRouterError
+from .openrouter import STT_MODELS_WITH_HINTS, OpenRouterError
 
 logger = logging.getLogger(__name__)
 
@@ -47,13 +46,7 @@ CACHE_KEY = "cache.pricing"
 # reads images and files, as capabilities).
 CACHE_READING = 7
 
-# The models Raphael calls when nobody chose another: the default of each role (the settings'
-# DEFAULTS) and the fallbacks of the language models (openrouter.CLEANUP_FALLBACKS), at their
-# prices in a snapshot of OpenRouter's model list, read the way `parse_catalog` reads it (a test
-# keeps the two alike, with tests/brain/fixtures/openrouter_models.json, a trimmed copy of that
-# list). It is no offering of models: every model the settings page offers comes from OpenRouter's
-# list. It is what the page shows, and what may be chosen, before that list could ever be read, and
-# the prices of those models for what has to know them without it.
+# Offline catalogue and price snapshot for explicit choices before the first refresh.
 BUILTIN_PRICES: dict[str, ModelPrice] = {
     "openai/gpt-6-luna": ModelPrice(input_per_mtok=0.1, output_per_mtok=0.5),
     "anthropic/claude-haiku-5.5": ModelPrice(input_per_mtok=0.1, output_per_mtok=0.5),
@@ -71,11 +64,8 @@ BUILTIN_LISTING: dict[str, tuple[str, str]] = {
 
 
 def builtin_kinds() -> dict[str, str]:
-    """The kind of each model the builtin table must hold: the default of each role is of the
-    role's kind, and the fallbacks of the language models are language models."""
-    kinds = {role.default: role.kind for role in ROLES}
-    kinds.update(dict.fromkeys(CLEANUP_FALLBACKS, LLM))
-    return kinds
+    """Kinds in the offline price snapshot, independent of feature settings."""
+    return {key: "stt" if price.per_minute is not None else LLM for key, price in BUILTIN_PRICES.items()}
 
 
 def builtin_catalog() -> list[CatalogEntry]:

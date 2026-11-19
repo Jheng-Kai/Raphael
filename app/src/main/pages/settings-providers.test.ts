@@ -292,12 +292,12 @@ test("settings delegates the CLI row menu and refreshes an open model chooser on
   click('#app-popover [data-pick="disconnect"]'); await flush();
   expect(api.brainsCliDisconnect).toHaveBeenCalledExactlyOnceWith("claude");
   expect(page.el.querySelector('[data-cli="claude"]')?.textContent).toBe("Connect");
+  // A subscription disconnected is no longer offered (it holds no choice here), and comes back once it is connected again.
   click('[data-model-picker="answer"] .mp-trigger');
-  click('[data-source="cli:claude"]');
-  expect(document.querySelectorAll('.mc-row')).toHaveLength(0);
-  expect(document.querySelector('.mc-pane')?.textContent).toContain("Disconnected");
+  expect(document.querySelector('[data-source="cli:claude"]')).toBeNull();
   api.brainsCli.mockResolvedValue({ clis: [claude] });
   send({ type: "BrainsChanged" }); await flush();
+  click('[data-source="cli:claude"]');
   expect(document.querySelector('.mc-row')?.textContent).toContain("Claude Sonnet");
   expect(closeSettings).not.toHaveBeenCalled();
 });
@@ -591,6 +591,8 @@ test.each([
   const legacy = { ...direct, llm: direct.llm.map((model) => ({ ...model, id: "openai/example", provider_id: "openrouter", provider_name: "OpenRouter", name: "OpenRouter example" })) };
   legacy.stt = legacy.llm;
   api.modelsCatalog.mockResolvedValue(legacy);
+  // OpenRouter is offered once it is connected, never before (R-DEFAULT-05).
+  api.providersList.mockResolvedValue({ providers: [{ id: "openrouter", kind: "openrouter", name: "OpenRouter", enabled: true, has_key: true }] });
   send({ type: "ProvidersChanged" }); await flush();
   click(`[data-model-picker="${role}"] .mp-trigger`);
   click('[data-source="openrouter"]'); click('[data-id="openai/example"]'); click('[data-dlg="use"]'); await flush();
@@ -645,3 +647,46 @@ test("vision keeps its primary image picker without fallback controls", async ()
   expect(api.settingsSet).toHaveBeenCalledWith("vision_model", "@p4:local:8b");
 });
 
+test("the speech models read while Settings is closed are kept, so the list never stays loading", async () => {
+  let release: (value: unknown) => void = () => {};
+  api.modelsLocal.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
+  await mount();
+  page.hide();
+  release({ models: [{ name: "sensevoice", title: "SenseVoice", ready: true, languages: ["zh"], size: 163_000_000, note: "fast" }] });
+  await flush();
+  await page.show("models"); await flush();
+  click('[data-model-picker="stt"] .mp-trigger');
+  click('[data-source="local-speech"]');
+  const chooser = document.querySelector(".model-chooser")!;
+  expect(chooser.textContent).toContain("SenseVoice");
+  expect(chooser.textContent).not.toContain("Loading");
+});
+
+test("連接其他來源 from a feature's choice lists only the ways that can do that feature", async () => {
+  api.providersKinds.mockResolvedValue({ kinds: [
+    { kind: "openai", name: "OpenAI", group: "official", fields: ["key"], available: true, default_base_url: null, features: ["text", "stt", "image", "video"] },
+    { kind: "anthropic", name: "Anthropic", group: "official", fields: ["key"], available: true, default_base_url: null, features: ["text"] },
+    { kind: "ollama", name: "Ollama", group: "local", fields: ["base_url", "key"], available: true, default_base_url: null, features: ["text"] },
+  ] });
+  await mount();
+  const listed = () => [...document.querySelectorAll<HTMLElement>('#pv-dialog [data-pv="add"]')].map((button) => button.dataset.id);
+  click('[data-model-picker="stt"] .mp-trigger');
+  click('[data-dlg="sources"]'); await flush();
+  expect(listed()).toEqual(["openai"]);
+  expect(document.querySelector("#pv-dialog [data-chatgpt], #pv-dialog [data-cli], #pv-dialog [data-cli-menu]")).toBeNull();
+  expect(document.querySelector("#pv-dialog .pv-for")!.textContent).toContain("Speech to text");
+  click('[data-pv="close"]'); await flush();
+  click('[data-model-picker="cleanup"] .mp-trigger');
+  click('[data-dlg="sources"]'); await flush();
+  expect(listed()).toEqual(["openai", "anthropic", "ollama"]);
+  expect(document.querySelector("#pv-dialog [data-chatgpt]")).not.toBeNull();
+  expect(document.querySelector("#pv-dialog [data-cli], #pv-dialog [data-cli-menu]")).toBeNull();
+});
+
+test("a provider change told while Settings is closed is read at once, so a source found after start is there when it opens", async () => {
+  await mount();
+  page.hide();
+  api.modelsCatalog.mockClear();
+  send({ type: "ProvidersChanged" }); await flush();
+  expect(api.modelsCatalog).toHaveBeenCalled();
+});

@@ -25,7 +25,7 @@ from raphael_core.agent.routing import (
     build_state,
     parse_answers,
 )
-from raphael_core.brain.openrouter import CLEANUP_FALLBACKS, Decision, OpenRouterError
+from raphael_core.brain.openrouter import Decision, OpenRouterError
 from raphael_core.brain.spend import SpendTracker
 
 from .conftest import answers, classification, completion, decision

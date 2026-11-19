@@ -97,7 +97,7 @@ from ..agent.history import AgentHistory, Turn
 from ..agent.persona import normalize_language, phrase
 from ..agent.speaker import BUILTIN_TOOL_IDS, RAPHAEL_NAMES, Speaker, is_raphael_name
 from ..background.tasks import Refused
-from ..brain.settings import DEFAULTS, SettingsStore
+from ..brain.settings import SettingsStore
 from ..clock import wall_clock_ms
 from ..home_digest import FAILED_TASKS, FAILED_TURNS
 from ..protocol import INVALID_PARAMS, RpcError, invalid_params
@@ -105,7 +105,7 @@ from ..router import Router
 from ..slime_ids import current_avatar
 from ..services.attachments import IMAGE_TYPES, MAX_IMAGE_BYTES, AttachmentError, checked, sniff_ok
 from .capabilities import MemberCapabilities, download_skills
-from .schedule import Schedule, next_run
+from .schedule import Schedule, first_eligible_slot, next_run
 from .covers import Covers, selection as cover_selection
 from .store import (
     ROUTINE_RUN_STATUS_SQL,
@@ -491,7 +491,7 @@ class MembersService:
     def _starting_model(self) -> str:
         """A new member starts on Raphael's model and holds it as its own, so that its next change moves no one else."""
         model = self._settings.get("agent_model")
-        return model.strip() if isinstance(model, str) and model.strip() else DEFAULTS["agent_model"]
+        return model.strip() if isinstance(model, str) and model.strip() else ""
 
     def _changed(self, method: str = "members.changed", member_id: int | None = None) -> None:
         """Announce committed data changes using identifiers only."""
@@ -2210,14 +2210,15 @@ class MembersService:
 
     def tick(self, now_ms: int | None = None) -> list[int]:
         """Run the routines that are due now; the ids of those that were run. Each is moved to its
-        next time before it runs. One due longer ago than CATCH_UP_MS is not run, only moved."""
+        next time before it runs. At most one pending slot in the catch-up window runs."""
         now = self._now_ms() if now_ms is None else now_ms
         self.pause_absent_routines()
         ran: list[int] = []
         for routine in self.store.due(now):
             assert routine.next_run_ms is not None
-            missed_ms = now - routine.next_run_ms
-            catch_up = missed_ms <= CATCH_UP_MS and not self.routine_busy(routine.id)
+            slot = first_eligible_slot(routine.schedule, routine.next_run_ms, now - CATCH_UP_MS, tz=self._tz)
+            due = slot is not None and slot <= now
+            catch_up = due and not self.routine_busy(routine.id)
             following = next_run(routine.schedule, now, tz=self._tz)
             count = self._conn.execute(
                 "SELECT COUNT(*) FROM routine_runs WHERE routine_id = ?", (routine.id,)
@@ -2241,8 +2242,10 @@ class MembersService:
                 continue
             self._changed("routines.changed", routine.member_id)
             if not catch_up:
-                logger.info("A routine was missed too long ago to run: %d", routine.id)
+                reason = "busy" if due else "outside the catch-up window"
+                logger.info("A routine slot was skipped: %d (%s)", routine.id, reason)
                 continue
+            routine = replace(routine, next_run_ms=slot)
             if checked:
                 self._start_checked(routine, now)
             else:
@@ -2282,7 +2285,7 @@ class MembersService:
             logger.info("A routine run was skipped: its precheck has not changed: %d", routine.id)
             self._changed("routines.changed", routine.member_id)
             return
-        self._ran(current, now, digest)
+        self._ran(replace(current, next_run_ms=routine.next_run_ms), now, digest)
 
     def _ran(self, routine: Routine, now: int, digest: str | None) -> None:
         """The run of a routine with a precheck: when it ran, and what its precheck had returned for it, are written down once
@@ -2369,7 +2372,7 @@ class MembersService:
                 "INSERT INTO routine_runs (routine_id, scheduled, started, status, turn_id, trigger_json) VALUES (?, ?, ?, 'running', ?, ?)",
                 (routine.id, routine.next_run_ms, self._now_ms(), turn_id, json.dumps({key: value for key, value in routine_view(routine).items() if key in ("id", "member_id", "title", "schedule", "when", "app_name")})),
             )
-        model = model.strip() if isinstance(model, str) and model.strip() else DEFAULTS["agent_model"]
+        model = model.strip() if isinstance(model, str) and model.strip() else ""
         task_id = None
         try:
             task_id = self._background.submit(

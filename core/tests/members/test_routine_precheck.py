@@ -57,6 +57,18 @@ async def due(rig, days=1):
     return ran
 
 
+async def test_a_caught_up_precheck_run_records_the_missed_slot(rig):
+    _, routine = await make(rig)
+    slot = routine["next_run"] + 2 * DAY
+    rig.wall.now = slot + 60_000
+    assert rig.service.tick() == [routine["id"]]
+    await asyncio.gather(*rig.service._prechecks)
+
+    [run] = (await rig.call("routines.runs", {"routine_id": routine["id"]}))["runs"]
+    assert run["scheduled"] == slot and run["started"] == rig.wall.now
+    assert rig.service.store.routine(routine["id"]).next_run_ms == slot + DAY
+
+
 async def test_a_precheck_is_kept_shown_and_changed_by_the_routine_tools(rig):
     hub, routine = await make(rig)
     assert routine["precheck"] == CHECK and routine["last_skipped"] is None

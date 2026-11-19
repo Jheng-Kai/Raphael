@@ -7,6 +7,13 @@ current documentation; the others are still to be checked.
 
 import importlib.util
 
+# What a kind can do in Raphael besides text. The speech path (clients.is_transcription) and the drawing and video
+# choices (registry.media_choices) read these same sets, and the window shows only the kinds that can do the feature
+# a choice is for when the owner connects another source from it.
+SPEECH_KINDS = frozenset({"openrouter", "openai", "groq"})
+IMAGE_KINDS = frozenset({"openai", "xai", "openrouter", "google"})
+VIDEO_KINDS = frozenset({"openai", "xai"})
+
 
 def preset(kind, name, group, url, docs, *, fields=("key",), auth="bearer",
            confidence="high", available=True):
@@ -97,6 +104,8 @@ KINDS.extend(preset(kind, name, "local", url, docs, fields=("base_url", "key"), 
 VERIFIED = {"arcee", "lambda", "nebius", "novita", "ollama_cloud", "opencode_zen", "siliconflow", "siliconflow_cn"}
 for item in KINDS:
     item["verified"] = item["kind"] in VERIFIED
+    item["features"] = ["text", *(["stt"] if item["kind"] in SPEECH_KINDS else []),
+                        *(["image"] if item["kind"] in IMAGE_KINDS else []), *(["video"] if item["kind"] in VIDEO_KINDS else [])]
 BY_KIND = {item["kind"]: item for item in KINDS}
 OPTIONAL_KEY_KINDS = {row["kind"] for row in KINDS if row["group"] == "local"} | {
     "openai_compatible", "litellm", "bifrost"}

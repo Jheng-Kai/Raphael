@@ -215,7 +215,7 @@ def read_models(config=None):
                 row = conn.execute("SELECT value FROM settings WHERE key='agent_model'").fetchone()
                 if row:
                     current = json.loads(row[0])
-        value = {"models": [current, "google/gemini-3.1-flash-lite"]}
+        value = {"models": [model for model in (current, "google/gemini-3.1-flash-lite") if model]}
     models = list(dict.fromkeys(value["models"]))
     if not 1 <= len(models) <= 6 or any(not isinstance(m, str) or not m or len(m) > 220 for m in models):
         raise ValueError("invalid_models_config")

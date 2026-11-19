@@ -165,6 +165,7 @@ async def test_status_usage_refreshes_expired_cache_without_blocking_dictation(u
     await asyncio.sleep(0)
     assert endpoint.requests == [KEY]
 
+    await router.call("settings.set", {"key": "cleanup_model", "value": "openai/gpt-6-luna"})
     # A newer cleanup contact must not make the older key usage look fresh.
     await finalize(router, "Hello")
     endpoint.data[KEY]["usage_monthly"] = 4.5

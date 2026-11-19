@@ -50,12 +50,12 @@ def test_the_defaults_are_the_documented_ones():
         "routine_run_window": [],
         "owner_photo": "",
         "monthly_limit_usd": 10.0,
-        "cleanup_model": "openai/gpt-6-luna",
+        "cleanup_model": "",
         "languages": ["zh-TW"],
         "history_retention_days": 30,
         "stt_engine": "cloud",
-        "stt_cloud_model": "elevenlabs/scribe-v2",
-        "agent_model": "openai/gpt-6-luna",
+        "stt_cloud_model": "",
+        "agent_model": "",
         "quick_model": "",
         "quick_effort": "low",
         "assistant_model": "",
@@ -175,10 +175,10 @@ def test_non_finite_numbers_are_rejected_and_not_saved(conn):
 # --- speech-to-text ----------------------------------------------------------------------------
 
 
-def test_speech_to_text_is_in_the_cloud_with_scribe_by_default(conn):
+def test_speech_to_text_starts_without_a_cloud_model(conn):
     s = SettingsStore(conn)
     assert s.get("stt_engine") == "cloud"
-    assert s.get("stt_cloud_model") == "elevenlabs/scribe-v2"
+    assert s.get("stt_cloud_model") == ""
     assert STT_ENGINES == ("cloud", "local")
 
 
@@ -217,7 +217,7 @@ def test_the_store_takes_any_cloud_model_id_and_leaves_the_list_to_the_brain(con
     s = SettingsStore(conn)
     s.set("stt_cloud_model", " deepgram/nova-3 ")
     assert s.get("stt_cloud_model") == "deepgram/nova-3"
-    for model in ("", "   ", "openai/gpt transcribe", "m" * 101):
+    for model in ("   ", "openai/gpt transcribe", "m" * 101):
         with pytest.raises(ValueError, match="stt_cloud_model"):
             s.set("stt_cloud_model", model)
     assert s.get("stt_cloud_model") == "deepgram/nova-3"
@@ -289,10 +289,10 @@ def test_learning_corrections_is_no_longer_a_setting_and_a_saved_off_is_ignored(
 # --- the voice assistant -----------------------------------------------------------------------
 
 
-def test_the_assistant_answers_with_luna_and_knows_no_city_by_default(conn):
+def test_the_assistant_has_no_answer_model_or_city_by_default(conn):
     # Nobody's city is a default (R-DEFAULT-01): the weather asks, and a city said is looked up.
     s = SettingsStore(conn)
-    assert s.get("agent_model") == "openai/gpt-6-luna"
+    assert s.get("agent_model") == ""
     assert s.get("agent_city") == ""
 
 
@@ -322,7 +322,6 @@ def test_the_answer_model_and_the_city_are_saved_without_the_spaces_around_them(
 @pytest.mark.parametrize(
     ("key", "value"),
     [
-        ("agent_model", ""),
         ("agent_model", "   "),
         ("agent_model", "openai/gpt 6"),  # a model id has no spaces
         ("agent_model", "m" * 101),
@@ -504,3 +503,47 @@ def test_disconnected_clis_deduplicates_validates_and_repairs_damaged_values(con
     conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('disconnected_clis', ?)", (json.dumps("not-a-list"),))
     assert settings.get("disconnected_clis") == []
     assert settings.all()["disconnected_clis"] == []
+
+
+@pytest.mark.parametrize("enabled,key", [(True, True), (False, True), (True, False)])
+def test_migration_preserves_only_implicit_connected_choices(conn, enabled, key):
+    from raphael_core.brain.first_models import migrate
+    from raphael_core.brain.secrets import MemoryKeyStore
+
+    keys = MemoryKeyStore()
+    if key:
+        keys.set("synthetic")
+    settings = SettingsStore(conn)
+    settings.set("cleanup_model", "")
+    migrate(conn, enabled, keys)
+    assert settings.get("cleanup_model") == ""
+    assert settings.get("agent_model") == ("openai/gpt-6-luna" if enabled and key else "")
+    assert settings.get("stt_cloud_model") == ("elevenlabs/scribe-v2" if enabled and key else "")
+    keys.set("later")
+    settings.set("agent_model", "chosen")
+    migrate(conn, True, keys)
+    assert settings.get("agent_model") == "chosen"
+    assert settings.chosen("stt_cloud_model") == (enabled and key)
+
+
+def test_missing_feature_words_in_every_language():
+    from raphael_core.agent.persona import phrase
+    from raphael_core.ui_languages import LANGUAGES
+
+    for language in LANGUAGES:
+        for missing, unavailable in (("no_model", "auth"), ("stt_no_model", "stt_auth"),
+                                     ("cleanup_no_model", "cleanup_auth")):
+            words = [phrase(language, key) for key in (missing, unavailable, "no_key")]
+            assert words[0] != words[1] and all(w and "openrouter" not in w.lower() for w in words)
+
+
+def test_recommendations_use_catalogue_default_and_cheapest_fast_text_model():
+    from raphael_core.brain.first_models import recommendations
+    rows = [
+        {"id": "image-only", "generation_only": True},
+        {"id": "full", "is_default": True, "price_in": 0, "price_out": 0},
+        {"id": "fast-a", "price_in": 1, "price_out": 2},
+        {"id": "fast-b", "price_in": .5, "price_out": 1},
+        {"id": "speech", "stt": True},
+    ]
+    assert recommendations(rows) == {"answer": "full", "quick": "fast-b", "cleanup": "fast-b", "stt": "speech"}

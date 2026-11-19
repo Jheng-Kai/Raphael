@@ -317,3 +317,18 @@ test("a delivered paste starts the next draft filename at the base name", async 
  paste(view.input,[],'y'.repeat(2000));await new Promise(resolve=>setTimeout(resolve,0));await flush();
  expect(view.el.querySelector('.cmp-chip-t')!.textContent).toBe('Pasted text.txt');
 });
+
+test("the composer is marked while the owner is in it, never by a focus the app gives it (R-UI-118)", () => {
+ const {view}=mount(),outside=document.createElement("button");document.body.append(outside);
+ view.input.focus();
+ expect(view.el.hasAttribute("data-engaged")).toBe(false);
+ view.input.dispatchEvent(new KeyboardEvent("keydown",{key:"a",bubbles:true}));
+ expect(view.el.hasAttribute("data-engaged")).toBe(true);
+ outside.focus();
+ expect(view.el.hasAttribute("data-engaged")).toBe(false);
+ view.input.dispatchEvent(new PointerEvent("pointerdown",{bubbles:true}));view.input.focus();
+ expect(view.el.hasAttribute("data-engaged")).toBe(true);
+ // Moving between the composer's own controls keeps it.
+ view.el.querySelector<HTMLElement>(".cmp-attach")!.focus();
+ expect(view.el.hasAttribute("data-engaged")).toBe(true);
+});

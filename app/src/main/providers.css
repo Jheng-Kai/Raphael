@@ -32,9 +32,16 @@
 .pv-directory { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-6); }
 .pv-directory .sgroup { margin: 0; }
 .pv-directory h3 { margin: 0 0 var(--sp-3); font-size: var(--fs-md); }
+/* What a kind of provider means and costs, right under its name and above its cards. */
+.pv-directory .pv-group-note { margin: calc(var(--sp-2) * -1) 0 var(--sp-3); color: var(--text-2); }
 .pv-results { margin: 0; }
 .pv-dialog { width: min(480px, 100%); }
 .pv-catalog { width: min(940px, 100%); gap: var(--sp-4); container: providers / inline-size; }
+/* The title and its x stay at the top while the list scrolls under them: the way out is never scrolled away. */
+.pv-catalog .pv-for { min-width: 0; overflow: hidden; color: var(--text-2); font-size: var(--fs-sm); text-overflow: ellipsis; white-space: nowrap; }
+/* The title and its x stay above the list, which scrolls on its own: the way out is never scrolled away, nor covered. */
+.pv-dir { grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }
+.pv-dir > .pv-scroll { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--sp-4); min-height: 0; margin: 0 calc(var(--sp-4) * -1) calc(var(--sp-4) * -1); padding: 0 var(--sp-4) var(--sp-4); overflow-y: auto; }
 .pv-setup { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); width: 100%; max-width: 520px; margin-inline: auto; }
 .cs-dialog.pv-editor { display: flex; flex-direction: column; overflow: hidden; gap: 0; padding: 0; }
 .pv-editor > .cs-dlg-head { flex: none; padding: var(--sp-4); }
@@ -49,7 +56,7 @@
 .pv-footer { display: flex; flex: none; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-2); padding: var(--sp-4); border-top: 1px solid var(--line); background: var(--panel); }
 .pv-footer-actions { display: flex; align-items: center; gap: var(--sp-2); margin-inline-start: auto; }
 .pv-setup > .btn { justify-self: start; }
-.pv-catalog > .field { width: 100%; }
+.pv-catalog > .field, .pv-scroll > .field { width: 100%; }
 .pv-dialog .ic { display: inline-flex; align-items: center; flex: none; }
 .pv-dialog h2 { font-size: var(--fs-lg); min-width: 0; overflow-wrap: anywhere; margin: 0; }
 .pv-field { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }

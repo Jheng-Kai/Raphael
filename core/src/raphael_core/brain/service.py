@@ -26,11 +26,7 @@ handler below; what a handler alone does not show is here:
 - A model is chosen (`settings.set` of `cleanup_model`, `agent_model` or `stt_cloud_model`) from
   the catalog OpenRouter gave last, as `models.catalog` showed it: any model it lists that the
   role can use (catalog.choice_problem). Before any list could be had, the catalog is the builtin
-  table of the models Raphael calls when nobody chose another (pricing.builtin_catalog).
-  Choosing fetches nothing. When `models.catalog` finds a chosen model gone from OpenRouter's
-  list, the setting goes back to its default, and the answer's `replaced` says so for the app to
-  tell the user, as it tells of a setting it could not change. The model that reads images
-  (`vision_model`) is "" for the answer model, or a model of that list that reads images.
+  price snapshot (pricing.builtin_catalog). Refreshing never changes a choice.
 - Nothing here logs the dictated text, a key or the message of a failure. A failure of OpenRouter
   is logged by its kind and status, any other by the name of its type: the message, cause or
   traceback of an OpenRouterError can hold the text of the key store.
@@ -56,7 +52,6 @@ from .catalog import (
     IMAGE_INPUT,
     LLM,
     ROLE_OF_SETTING,
-    ROLES,
     CatalogEntry,
     Role,
     catalog_view,
@@ -111,6 +106,7 @@ _DAY_MS = 86_400_000
 _MODEL_PROBLEMS = {
     "not_listed": "Setting {key!r} must be a model that OpenRouter lists",
 }
+_MISSING_CLEANUP = {"no_model", "no_key", "error:auth", "error:auth_expired", "error:chatgpt_scope", "error:missing"}
 _MODEL_UNUSABLE = "Setting {key!r} must be a model it can use, and this one cannot: {reason}"
 # SQLite stores integers in 64 bits and refuses to bind a larger one.
 _SQLITE_MAX_INT = 2**63 - 1
@@ -239,10 +235,13 @@ class Brain:
         key_check_timeout_s: float = KEY_CHECK_TIMEOUT_S,
         tz: tzinfo | None = None,
         providers: ProviderRegistry | None = None,
+        ui_language: Callable[[], str | None] = lambda: None,
     ) -> None:
         self._conn = conn
         self._client = client
         self._providers = providers
+        self._last_missing_cleanup = float("-inf")
+        self._notify = lambda method, params: None
         self._notify_providers = lambda: None
         self._notify_settings = lambda: None
         from .runs import RunAnalytics
@@ -284,7 +283,7 @@ class Brain:
             has_key=lambda: self._model_available("cleanup_model"),
         )
         self._stt = CloudTranscriber(client, self._settings, self._spend,
-                                     has_key=lambda: self._model_available("stt_cloud_model"))
+                                     has_key=lambda: self._model_available("stt_cloud_model"), ui_language=ui_language)
         self._prune_history()
 
     def known_models(self) -> list[CatalogEntry] | None:
@@ -321,6 +320,7 @@ class Brain:
 
     def register(self, router: Router) -> None:
         """Put every method of the brain on `router`."""
+        self._notify = router.notify
         self._notify_settings = lambda: router.notify("settings.changed", {})
         self._notify_action_mode = lambda: router.notify("action_mode.changed", {})
         if self._providers:
@@ -445,7 +445,7 @@ class Brain:
         finally:
             # Taken in the same breath as the text is saved, so that no cancel comes in between.
             cancelled = self._cleaning.pop(session_id, False)
-        if result.model is not None and not result.model.startswith("@") and self._openrouter.state == "ok":
+        if result.model is not None and not result.model.startswith(("@", "cli:")) and self._openrouter.state == "ok":
             # The model answered, so the time it took is a round trip to OpenRouter.
             self._openrouter.latency_ms = result.llm_ms
         if result.cleaned or (incomplete and result.parts):
@@ -517,12 +517,27 @@ class Brain:
             cost_usd=result.cost_usd,
             stt=stt,
         )
+        reason = result.fallback_reason
+        missing = reason in _MISSING_CLEANUP
         if cancelled:
             logger.info("A dictation was cancelled while its text was cleaned; not keeping it")
             entry_id = None
         else:
             entry_id = self._save(item)
+        message = {}
+        if missing:
+            now = time.monotonic()
+            if not cancelled and now - self._last_missing_cleanup >= 60:
+                self._last_missing_cleanup = now
+                self._notify("models.missing", {"role": "cleanup"})
+            from ..agent.persona import DEFAULT_LANGUAGE, phrase
+            message["cleanup_failure"] = {
+                "kind": reason,
+                "message": phrase(params.get("ui_language") or DEFAULT_LANGUAGE,
+                                  "cleanup_no_model" if reason == "no_model" else "cleanup_auth"),
+            }
         return {
+            **message,
             "id": entry_id,
             "text": text,
             "raw_text": normalized,
@@ -561,7 +576,7 @@ class Brain:
                 chunks.append((marker, marker))
         # Even when every heard region succeeds, missing speech must remain visibly incomplete.
         return CleanupResult(
-            join_parts(parts), False, "incomplete_stt",
+            join_parts(parts), False, next((r.fallback_reason for r in results if r.fallback_reason in _MISSING_CLEANUP), "incomplete_stt"),
             next((result.model for result in results if result.model), None),
             sum(result.cost_usd for result in results), sum(result.llm_ms for result in results), tuple(parts),
         ), chunks
@@ -612,7 +627,7 @@ class Brain:
             chunks=chunks,
             system_suffix=TIDY_ADDENDUM,
         )
-        if result.model is not None and not result.model.startswith("@") and self._openrouter.state == "ok":
+        if result.model is not None and not result.model.startswith(("@", "cli:")) and self._openrouter.state == "ok":
             self._openrouter.latency_ms = result.llm_ms
         failure = {"cleaned": False, "llm_ms": result.llm_ms, "model": result.model}
         if not result.cleaned:
@@ -867,7 +882,7 @@ class Brain:
         settings page showed (catalog.choice_problem)."""
         from ..agent.cli.discovery import brain_ref
         _, model_id = checked(role.setting, value)
-        if role.setting in ("agent_model", "quick_model") and brain_ref(model_id):
+        if not model_id or (role.setting in ("agent_model", "quick_model", "cleanup_model") and brain_ref(model_id)):
             return
         current = self._settings.get(role.setting)
         known = self.known_models()
@@ -958,6 +973,8 @@ class Brain:
         self._key_check_revision += 1
         self._note("ok", latency_ms=latency_ms, key=info)
         self._notify_providers()
+        if self._providers:
+            await self._providers.fill_connected("openrouter")
         return {
             "valid": True,
             "label": info.label,
@@ -1020,7 +1037,7 @@ class Brain:
 
     def _on_cleanup_result(self, model: str, error: Exception | None) -> None:
         """How a call to the model went, as the cleanup service reports it."""
-        if model.startswith("@"):
+        if model.startswith(("@", "cli:")):
             return
         if error is None:
             self._note("ok")
@@ -1107,7 +1124,7 @@ class Brain:
         """Whether a dictation could be tidied now. A key store that cannot be read is not ready, and says nothing more
         here than `openrouter` already does."""
         if not isinstance(self._client, ProviderRouter):
-            return bool(has_key)
+            return bool(has_key and self._settings.get("cleanup_model"))
         try:
             return self._model_available("cleanup_model")
         except Exception:
@@ -1155,8 +1172,7 @@ class Brain:
     # --- the catalog and statistics ------------------------------------------------------------
 
     async def _models_catalog(self, params: dict) -> dict:
-        """Every OpenRouter model Raphael could use (catalog.py). A chosen model that OpenRouter no
-        longer lists goes back to its role's default first, which `replaced` reports."""
+        """Show the catalogue without changing any saved choice."""
         if self._providers and not self._providers.config("openrouter")["enabled"]:
             entries, fetched_at_ms, source = [], None, "builtin"
         else:
@@ -1169,8 +1185,7 @@ class Brain:
             else:
                 self._renew_providers_later()
             entries = [*entries, *self._providers.catalog_entries()]
-        replaced = [] if source == "builtin" else self._replace_vanished(entries)
-        view = catalog_view(entries, fetched_at_ms, source, replaced)
+        view = catalog_view(entries, fetched_at_ms, source, [])
         for kind in ("llm", "stt"):
             for model in view[kind]:
                 pid = model["id"][1:].partition(":")[0] if model["id"].startswith("@") else "openrouter"
@@ -1214,39 +1229,6 @@ class Brain:
             return
         if self._providers.catalog_signature() != before:
             self._notify_providers()
-
-    def _replace_vanished(self, entries: list[CatalogEntry]) -> list[dict[str, str]]:
-        """Set each chosen OpenRouter model that is not on its list (`entries`) back to its role's
-        default (a model of another provider, `@id:…`, or of a subscription, `cli:…`, is not on that
-        list and stays), and say which: `{key, role, model, default}`. Only while the default is on the
-        list: if it went too, it is no better a choice. A value that is no text is no choice and is
-        left alone: the store's readers fall back on their own."""
-        replaced: list[dict[str, str]] = []
-        for role in ROLES:
-            chosen, default = self._settings.get(role.setting), role.default
-            if (
-                not isinstance(chosen, str)
-                or chosen.startswith(("@", "cli:"))  # another provider's, or a subscription's
-                or chosen == default
-                or find(entries, role.kind, chosen) is not None
-                or find(entries, role.kind, default) is None
-            ):
-                continue
-            try:
-                self._settings.set(role.setting, default)
-            except sqlite3.Error as exc:
-                logger.warning(
-                    "Could not set %s back to its default: %s", role.setting, type(exc).__name__
-                )
-                continue
-            logger.warning(
-                "The model of %s is no longer on OpenRouter's list: back to the default",
-                role.setting,
-            )
-            replaced.append(
-                {"key": role.setting, "role": role.name, "model": chosen, "default": default}
-            )
-        return replaced
 
     async def _stats_summary(self, params: dict) -> dict:
         days = _opt_int(params, "days")

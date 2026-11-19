@@ -81,7 +81,8 @@ def chosen_efforts(kind, model_id):
 
 
 def is_transcription(kind, model_id):
-    return kind in ("openai", "groq") and (model_id.startswith("whisper") or "transcribe" in model_id)
+    from .presets import SPEECH_KINDS
+    return kind in SPEECH_KINDS - {"openrouter"} and (model_id.startswith("whisper") or "transcribe" in model_id)
 
 
 def generation_model(raw, kind):
@@ -114,6 +115,10 @@ def model_info(raw: dict, *, kind: str) -> dict:
     outputs = arch.get("output_modalities", raw.get("output_modalities", []))
     outputs = outputs if isinstance(outputs, list) else []
     media = [value for value in ("image", "video") if isinstance(outputs, list) and value in outputs]
+    # OpenRouter's own routers (openrouter/auto, auto-beta, auto-code) list every output a model behind them might give;
+    # they are not drawing models, so they never stand among the models that draw or make video.
+    if kind == "openrouter" and model_id.startswith("openrouter/"):
+        media = []
     # These endpoint families have a published media contract; discovery still supplies the model id.
     if kind in ("openai", "xai") and model_id.startswith(("gpt-image-", "dall-e-", "grok-imagine-image")):
         media = ["image"]
@@ -123,6 +128,8 @@ def model_info(raw: dict, *, kind: str) -> dict:
         media = ["image"]
     return {
         "id": model_id, "name": name if isinstance(name, str) else model_id,
+        "is_default": raw.get("is_default") is True, "is_fast": raw.get("is_fast") is True,
+        "stt": is_transcription(kind, model_id),
         "reasoning_efforts": chosen_efforts(kind, model_id),
         "context": next((value for field in ("context_length", "inputTokenLimit", "max_model_len")
                          if (value := token_count(raw.get(field))) and value > 0), None),
@@ -210,7 +217,7 @@ class CompatibleProvider(OpenRouterClient):
             body_error = decoded if decoded is not None else {"message": f"Provider request failed ({status})"}
             failure = classify({"status": status, "retry_after": wait, "error": body_error.get("error", body_error) if isinstance(body_error, dict) else
                                 f"Provider request failed ({status})"},
-                               secrets=[value.removeprefix("Bearer ") for value in headers.values()])
+                               secrets=[value.removeprefix("Bearer ") for value in headers.values()], record=False)
             kind = {"auth_expired": "auth", "permission_denied": "permission_denied"}.get(failure.kind, failure.kind)
             error = OpenRouterError(status, kind, failure.reason)
             error.diagnostic = failure

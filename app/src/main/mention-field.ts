@@ -2,23 +2,23 @@
 // chip cannot live inside it. While the words hold an address, the textarea stops painting its text and a copy of it is drawn over
 // it with each address as a chip (`.cmp-mirror`, aria-hidden, never taking a click); the caret, selection and input method are the
 // textarea's own. A chip is derived from the words, not stored: change a letter of it and it is plain text again, which is the
-// rule the core applies. Deleting, moving over and selecting treat an address or a skill as one unit. A link is drawn the same
-// way, in the link colour, but stays ordinary words (R-UI-168): a mistyped address is corrected a letter at a time, so
+// rule the core applies. Deleting, moving over and selecting treat an address (@) as one unit. A link and a skill (/) are drawn
+// the same way, in the link colour, but stay ordinary words (R-UI-168): a mistyped one is corrected a letter at a time, so
 // backspace takes one letter and the caret rests anywhere in it. The words hold its whole address (composer-links.ts), and
 // copying or sending gives the same text.
 import { esc } from "./ui";
 import { linkRanges, shortenLinks, wholeLinks } from "./composer-links";
 import { mentionChipHTML, mentionRanges, type MentionTarget } from "./mention-text";
 
-/** A stretch of the words drawn as a chip: an address when it has a target, otherwise a link (`url`) or a skill. */
-interface ChipRange { start: number; end: number; target?: MentionTarget; url?: true }
+/** A stretch of the words drawn as a chip: an address when it has a target, otherwise a link (`url`) or a skill (`skill`). */
+interface ChipRange { start: number; end: number; target?: MentionTarget; url?: true; skill?: true }
 
 /** A skill or command called by its name, `/name`, at the start of the words or after a space, in any script (「/每日新聞摘要」 too) and with a plugin's prefix (`/field-notes:review`). A path
  * such as /usr/bin is not one: the name ends at a space or the end of the words, and holds no other slash. */
 export function skillRanges(text: string): ChipRange[] {
   return [...text.matchAll(/(^|\s)(\/[\p{L}\p{N}][\p{L}\p{N}_:-]{0,63})(?=\s|$)/gu)].map(match => {
     const start = match.index! + match[1]!.length;
-    return { start, end: start + match[2]!.length };
+    return { start, end: start + match[2]!.length, skill: true as const };
   });
 }
 
@@ -28,7 +28,7 @@ export function bindMentionField(input: HTMLTextAreaElement, targets: () => read
   const field = input.closest<HTMLElement>(".cmp-field"), mirror = field?.querySelector<HTMLElement>(".cmp-mirror");
   if (!field || !mirror) return { refresh() {} };
   let ranges: ChipRange[] = [];
-  /** The chips that move, select and delete as one unit: every one but a link. */
+  /** The chips that move, select and delete as one unit: the addresses; a link and a skill are words. */
   let units: ChipRange[] = [];
   /** The words an input method has not committed yet, drawn underlined as the field would draw them. */
   let composing: { start: number; end: number } | null = null, composed = "";
@@ -50,7 +50,7 @@ export function bindMentionField(input: HTMLTextAreaElement, targets: () => read
     const free = (item: ChipRange, taken: readonly ChipRange[]): boolean => !taken.some(other => other.start < item.end && item.start < other.end);
     const chips = [...links, ...mentions.filter(item => free(item, links))];
     ranges = [...chips, ...(text.includes("/") ? skillRanges(text).filter(item => free(item, chips)) : [])].sort((a, b) => a.start - b.start);
-    units = ranges.filter(range => !range.url);
+    units = ranges.filter(range => !range.url && !range.skill);
     field.classList.toggle("has-mentions", ranges.length > 0);
     if (!ranges.length) { mirror.textContent = ""; return; }
     let html = "", at = 0;
@@ -104,8 +104,8 @@ export function bindMentionField(input: HTMLTextAreaElement, targets: () => read
   input.addEventListener("scroll", place);
 
   const inside = (at: number): ChipRange | undefined => units.find(range => range.start < at && at < range.end);
-  /** A caret or selection edge never rests inside an address or a skill: it goes to the nearer edge, a selection takes the whole
-   * chip. A link is words, and the caret rests anywhere in it. */
+  /** A caret or selection edge never rests inside an address: it goes to the nearer edge, a selection takes the whole chip. A link
+   * and a skill are words, and the caret rests anywhere in them. */
   const snap = (): void => {
     if (composing || !units.length || document.activeElement !== input) return;
     const { selectionStart: from, selectionEnd: to, selectionDirection: direction } = input;

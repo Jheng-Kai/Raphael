@@ -34,7 +34,7 @@ async def test_cleanup_fallback_does_not_inherit_non_api_brain(setup_registry, b
         model = f"@{pid}:local-model"
     SettingsStore(conn).set("agent_model", model)
     SettingsStore(conn).set("assistant_model", "anthropic/claude-haiku-5.5")
-    assert ProviderRouter(registry, legacy).for_purpose("cleanup").cleanup_fallback(DEFAULTS["cleanup_model"]) == "anthropic/claude-haiku-5.5"
+    assert not ProviderRouter(registry, legacy).for_purpose("cleanup").available("")
 
 
 async def test_subscription_reference_is_never_resolved_as_an_api_slug(setup_registry):
@@ -97,7 +97,7 @@ async def test_invalid_reference_never_defaults_to_openrouter(setup_registry, re
         registry.resolve(reference)
     with pytest.raises(OpenRouterError) as error:
         await ProviderRouter(registry, legacy).chat_text(model=reference, system="s", user="u", timeout_s=1, max_tokens=10)
-    assert error.value.kind == "error"
+    assert error.value.kind == ("no_model" if not reference else "error")
 
 
 @pytest.mark.parametrize("params", [
@@ -175,3 +175,37 @@ async def test_discovery_in_flight_cannot_restore_a_removed_provider(setup_regis
         assert registry.catalog_entries() == []
         assert (await router.call("providers.list")) == {"providers": []}
         await registry.aclose()
+
+
+async def test_connecting_sources_fill_only_empty_roles_and_notify_once(setup_registry):
+    conn, keys, vault, credential, http, legacy, registry, router, notices = setup_registry
+    registry.settings.set("agent_model", "chosen")
+    await asyncio.gather(registry.add({"kind": "openai", "key": "one", "name": "One"}),
+                         registry.add({"kind": "openai", "key": "two", "name": "Two"}))
+    [(source, roles)] = [(payload["source"], payload["roles"]) for method, payload in notices
+                         if method == "models.filled"]
+    pid = next(pid for pid in registry.ids() if registry.config(pid)["name"] == source)
+    assert roles == ["quick", "cleanup", "stt"]
+    assert registry.settings.get("agent_model") == "chosen"
+    assert registry.settings.get("quick_model") == registry.settings.get("cleanup_model") == f"@{pid}:gpt-4o"
+    assert registry.settings.get("stt_cloud_model") == f"@{pid}:whisper-1"
+
+
+async def test_cleanup_uses_connected_subscription_without_calling_an_api(setup_registry, monkeypatch):
+    from raphael_core.agent.cli.loop import CliLoop
+    from raphael_core.worker.loop import Outcome
+    conn, keys, _, _, _, legacy, registry, router, notices = setup_registry
+    class Brains:
+        def available(self, name):
+            return name == "codex"
+    seen = []
+    async def work(loop):
+        seen.append(loop)
+        loop._queue.put_nowait(Outcome("done", final='{"text":"Kept"}'))
+    monkeypatch.setattr(CliLoop, "_work", work)
+    registry.cli_brains = Brains()
+    client = ProviderRouter(registry, legacy).for_purpose("cleanup")
+    result = await client.complete_json(model="cli:codex:chosen", system="Correct text", user="Kept",
+        timeout_s=2, schema={"type": "object", "properties": {"text": {"type": "string"}}})
+    assert result.model == "cli:codex:chosen" and result.data == {"text": "Kept"}
+    assert len(seen) == 1

@@ -13,13 +13,15 @@ from pathlib import Path
 
 import pytest
 
+from .conftest import WIRE_FALLBACKS
+
 from raphael_core.brain import pricing
 from raphael_core.brain.catalog import ModelPrice, parse_catalog
-from raphael_core.brain.openrouter import CLEANUP_FALLBACKS, OpenRouterError
+from raphael_core.brain.openrouter import OpenRouterError
 from raphael_core.brain.pricing import BUILTIN_PRICES, CACHE_READING, PRICING_TTL_MS, PricingService
 from raphael_core.brain.secrets import MemoryKeyStore
 from raphael_core.brain.service import Brain
-from raphael_core.brain.settings import DEFAULTS, SettingsStore
+from raphael_core.brain.settings import SettingsStore
 from raphael_core.router import Router
 
 FIXTURE = Path(__file__).parent / "fixtures" / "openrouter_models.json"
@@ -29,10 +31,9 @@ HOUR_MS = 3_600_000
 # The models Raphael calls when nobody chose another: the defaults of the roles, and the fallbacks
 # of the language models. They are the builtin table.
 CALLED = {
-    DEFAULTS["cleanup_model"],
-    DEFAULTS["agent_model"],
-    DEFAULTS["stt_cloud_model"],
-    *CLEANUP_FALLBACKS,
+    "openai/gpt-6-luna",
+    "elevenlabs/scribe-v2",
+    *WIRE_FALLBACKS,
 }
 
 
@@ -363,10 +364,10 @@ async def test_without_a_cache_a_network_failure_gives_the_builtin_prices(servic
     entries, fetched_at_ms, source = await service.catalog()
     assert (source, fetched_at_ms) == ("builtin", None)
     assert [e.id for e in entries if e.kind == "llm"] == [
-        DEFAULTS["cleanup_model"],
-        *CLEANUP_FALLBACKS,
+        "openai/gpt-6-luna",
+        *WIRE_FALLBACKS,
     ]
-    assert [e.id for e in entries if e.kind == "stt"] == [DEFAULTS["stt_cloud_model"]]
+    assert [e.id for e in entries if e.kind == "stt"] == ["elevenlabs/scribe-v2"]
     listed = {entry.id: entry.price for entry in entries}
     luna = listed["openai/gpt-6-luna"]
     assert (luna.input_per_mtok, luna.output_per_mtok) == (0.1, 0.5)

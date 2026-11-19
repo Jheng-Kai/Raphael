@@ -8,14 +8,16 @@ const state = vi.hoisted(() => ({
   clis: [] as object[],
   favorites: [] as string[],
   extra: [] as object[],
+  empty: false,
+  providers: undefined as object[] | undefined,
   model: (id: string, name: string, over: object = {}): object => ({
     input_per_mtok: null, output_per_mtok: null, per_minute: null, free: false, variable_price: false, context_length: null, created_at_ms: null,
     id, provider_id: "p", provider_name: "P", provider: "P", name, roles: { answer: { usable: true, reason: null } }, capabilities: {}, ...over,
   }),
 }));
 const api = vi.hoisted(() => ({
-  core: vi.fn(async (method: string) => method === "settings.get" ? { settings: { agent_model: state.agent_model, quick_model: state.quick_model, quick_effort: state.quick_effort, model_favorites: { answer: state.favorites } } } : method === "brains.cli" ? { clis: state.clis } : {
-    llm: [
+  core: vi.fn(async (method: string) => method === "providers.list" ? (state.providers ? { providers: state.providers } : undefined) : method === "chatgpt.status" ? undefined : method === "settings.get" ? { settings: { agent_model: state.agent_model, quick_model: state.quick_model, quick_effort: state.quick_effort, model_favorites: { answer: state.favorites } } } : method === "brains.cli" ? { clis: state.clis } : {
+    llm: state.empty ? [] : [
       state.model("global", "Global", { reasoning_efforts: ["low", "high"], default_effort: "low" }),
       state.model("mine", "Mine"),
       state.model("wide", "Wide", { reasoning_efforts: ["low", "medium", "high", "xhigh", "max"], default_effort: "medium" }),
@@ -49,8 +51,8 @@ function mount(member: Member = { id: 0, name: "Raphael", model: "" } as Member,
   return { slot, brain, emit, member, name: () => slot.querySelector(".mp-tname")!.textContent, open: () => slot.querySelector<HTMLElement>(".mp-trigger")!.click() };
 }
 
-/** The card opens on the model; a press on it opens the sources beside their models, and a press on a source lists its models. */
-const browse = (): void => { q(".cb-pick")!.click(); };
+/** The card opens on the model; its mark lists the providers, and a provider pressed lists its models. */
+const browse = (): void => { q(".cb-src")!.click(); };
 const toModels = (source = "p"): void => { browse(); q(`[data-cb-source="${source}"]`)!.click(); };
 const listed = (): string[] => [...document.querySelectorAll<HTMLElement>(".cb-list [data-model]")].map(row => row.dataset.model!);
 const choose = (model: string): void => { q(`[data-model="${model}"]`)!.click(); };
@@ -72,49 +74,77 @@ async function opened(member?: Member, host?: ComposerBrainHost) {
 
 beforeEach(() => {
   closeMenu(); document.body.innerHTML = ""; vi.clearAllMocks();
-  state.agent_model = "@p:global"; state.quick_model = ""; state.quick_effort = "low"; state.clis = []; state.favorites = []; state.extra = [];
+  state.agent_model = "@p:global"; state.quick_model = ""; state.quick_effort = "low"; state.clis = []; state.favorites = []; state.extra = []; state.empty = false; state.providers = undefined;
 });
 
 test.each([
   ["a provider's model", "@p:global", "P", "Global"],
   ["a CLI's model", "cli:codex:gpt-6.1", "Codex", "GPT-6.1"],
   ["a ChatGPT model", "@chatgpt:gpt", "ChatGPT", "GPT"],
-])("the small card of %s names the source over the model", async (_kind, ref, source, model) => {
+])("the small card of %s has its provider's mark at the top left and the model in the middle", async (_kind, ref, source, model) => {
   state.clis = [CODEX([RUNNABLE])];
   state.extra = [CHATGPT()];
   state.agent_model = ref;
   await opened();
-  expect(q(".cb-pick small")!.textContent).toBe(source);
-  expect(q(".cb-pick b")!.textContent).toBe(model);
+  expect(q(".cb-src")!.getAttribute("aria-label")).toBe(`更換供應商：${source}`);
+  expect(q(".cb-pick-name span")!.textContent).toBe(model);
 });
 
 test("a ChatGPT model's card has no plan line and no usage button", async () => {
   state.extra = [CHATGPT()];
   state.agent_model = "@chatgpt:gpt";
   await opened();
-  expect(q(".cb-pick small")!.textContent).toBe("ChatGPT");
-  expect(q(".cb-pick b")!.textContent).toBe("GPT");
-  expect(q(".cb-now")!.querySelectorAll("button")).toHaveLength(1);
+  expect(q(".cb-src")!.getAttribute("aria-label")).toBe("更換供應商：ChatGPT");
+  expect(q(".cb-pick-name span")!.textContent).toBe("GPT");
+  expect(q(".cb-now")!.querySelectorAll("button")).toHaveLength(2);
   expect(q(".cb-menu")!.textContent).not.toContain("使用 ChatGPT 方案");
   expect(q(".cb-menu")!.textContent).not.toContain("管理用量");
 });
 
-test("what the owner starred is the rail's first row, lists those models across sources, and choosing one works", async () => {
-  state.favorites = ["@p:mine", "@gone:model", "cli:codex:gpt-6.1"];
-  state.clis = [CODEX([RUNNABLE])];
+test("the mark lists the connected providers, the one holding the chosen model checked, 新增供應商 under them, and a provider pressed shows its models", async () => {
+  state.clis = [CODEX([RUNNABLE]), { ...CODEX([]), id: "gemini", name: "Gemini", available: false, installed: false }];
   await opened();
   browse();
-  const first = q(".cb-rail .cb-source")!;
-  expect(first.dataset.cbSource).toBe("favorites");
-  expect(first.textContent).toContain("我的最愛");
-  first.click();
-  expect(q('[data-cb-source="favorites"]')!.getAttribute("aria-pressed")).toBe("true");
-  expect(listed()).toEqual(["@p:mine", "cli:codex:gpt-6.1"]);
-  expect([...document.querySelectorAll(".cb-list small")].map(small => small.textContent)).toEqual(["P", "Codex"]);
-  choose("@p:mine");
+  expect(q(".cb-head h3")!.textContent).toBe("供應商");
+  expect([...document.querySelectorAll<HTMLElement>(".cb-source")].map(row => row.dataset.cbSource)).toEqual(["cli:codex", "p"]);
+  expect(q('[data-cb-source="p"]')!.getAttribute("aria-pressed")).toBe("true");
+  const add = q<HTMLElement>(".cb-add")!;
+  expect(add.textContent).toBe("新增供應商");
+  expect([add.dataset.missingRepair, add.dataset.missingResource]).toEqual(["models", "connect"]);
+  q('[data-cb-source="cli:codex"]')!.click();
+  expect(q(".cb-head h3 > span:last-child")!.textContent).toBe("Codex");
+  expect(listed()).toEqual(["cli:codex:gpt-6.1"]);
+  expect(api.settingsSet).not.toHaveBeenCalled();
+});
+
+test("with nothing connected the card says so and its one button leads to 新增供應商", async () => {
+  state.empty = true;
+  state.agent_model = "";
+  await opened();
+  expect(q(".cb-none")!.textContent).toContain("還沒有能回答的模型");
+  const add = q<HTMLElement>(".cb-none .cb-add-first")!;
+  expect([add.dataset.missingRepair, add.dataset.missingResource]).toEqual(["models", "connect"]);
+  expect(q(".cb-now .mc-range")).toBeNull();
+});
+
+test("a provider that is not connected is never offered, and a choice whose provider is off stays shown and says so", async () => {
+  state.extra = [state.model("openai/gpt-6-luna", "GPT-6 Luna", { provider_id: undefined, provider_name: undefined, provider: "OpenAI" })];
+  state.providers = [{ id: "p", name: "P", kind: "openai", enabled: true, has_key: true, status: "ok", models: 3 }];
+  await opened();
+  browse();
+  expect([...document.querySelectorAll<HTMLElement>(".cb-source")].map(row => row.dataset.cbSource)).toEqual(["p"]);
+  closeMenu();
+  state.agent_model = "openai/gpt-6-luna";
+  const { open } = mount();
   await flush();
-  expect(api.settingsSet).toHaveBeenCalledExactlyOnceWith("agent_model", "@p:mine");
-  expect(q<HTMLElement>(".cb-now")!.hidden).toBe(false);
+  open();
+  await flush();
+  expect(q(".cb-pick-name span")!.textContent).toBe("GPT-6 Luna");
+  expect(q(".cb-pick small.is-off")!.textContent).toBe("OpenRouter 未連上");
+  expect(q(".cb-src")!.getAttribute("aria-label")).toBe("供應商");
+  browse();
+  expect([...document.querySelectorAll<HTMLElement>(".cb-source")].map(row => row.dataset.cbSource)).toEqual(["p"]);
+  expect(q(".cb-source[aria-pressed=\"true\"]")).toBeNull();
 });
 
 test("in a source's own list the starred models come first, then the chosen one, then the rest, with no headings", async () => {
@@ -123,8 +153,8 @@ test("in a source's own list the starred models come first, then the chosen one,
   toModels();
   expect(listed()).toEqual(["@p:wide", "@p:global", "@p:mine"]);
   expect([...q(".cb-list")!.children].every(row => row.matches("[data-model]"))).toBe(true);
-  expect(q(".cb-pane")!.textContent).not.toContain("我的最愛");
-  expect(q(".cb-pane")!.textContent).not.toContain("所有模型");
+  expect(q(".cb-body")!.textContent).not.toContain("我的最愛");
+  expect(q(".cb-body")!.textContent).not.toContain("所有模型");
 });
 
 test("nothing starred, no favourites row", async () => {
@@ -234,8 +264,8 @@ test("a CLI's models that arrive after the first read reach a menu already open,
   state.clis = [CODEX([])];
   const { emit } = await opened();
   toModels("cli:codex");
-  expect(q(".cb-pane")!.textContent).toContain("正在讀取模型");
-  expect(q(".cb-pane")!.textContent).not.toContain("尚無可用模型");
+  expect(q(".cb-body")!.textContent).toContain("正在讀取模型");
+  expect(q(".cb-body")!.textContent).not.toContain("尚無可用模型");
   state.clis = [CODEX([RUNNABLE])];
   emit("BrainsChanged");
   await flush();
@@ -252,7 +282,7 @@ test("a CLI that stays silent is said to be so, with a way to try again", async 
     await vi.advanceTimersByTimeAsync(0);
     toModels("cli:codex");
     await vi.advanceTimersByTimeAsync(41_000);
-    expect(q(".cb-pane")!.textContent).toContain("讀不到模型");
+    expect(q(".cb-body")!.textContent).toContain("讀不到模型");
     state.clis = [CODEX([RUNNABLE])];
     q('[data-cb-act="retry"]')!.click();
     await vi.advanceTimersByTimeAsync(0);
@@ -268,7 +298,7 @@ test("Raphael's choice is the global setting", async () => {
   expect(api.settingsSet).toHaveBeenCalledExactlyOnceWith("agent_model", "@p:mine");
   expect(api.membersUpdate).not.toHaveBeenCalled();
   expect(name()).toBe("Mine");
-  expect(q(".cb-pick b")!.textContent).toBe("Mine");
+  expect(q(".cb-pick-name span")!.textContent).toBe("Mine");
 });
 
 test("a member's choice is its own: Raphael's model and Settings stay as they were", async () => {
@@ -302,7 +332,7 @@ test("a quick conversation shows the quick model at the quick depth", async () =
   const { name, slot } = await opened(undefined, QUICK);
   expect(name()).toBe("Wide");
   expect(slot.querySelector(".cb-depth")!.textContent).toBe("高");
-  expect(q(".cb-pick b")!.textContent).toBe("Wide");
+  expect(q(".cb-pick-name span")!.textContent).toBe("Wide");
   expect(q('[data-effort="high"]')!.getAttribute("data-on")).toBe("true");
 });
 
@@ -381,38 +411,41 @@ test("choosing a model that lacks the depth takes the model's own default", asyn
   expect(q('[data-effort="low"]')!.getAttribute("data-on")).toBe("true");
 });
 
-test("one view at a time: the model and its depth, then the sources beside their models, with a title and a way back", async () => {
-  state.clis = [CODEX([RUNNABLE]), { ...CODEX([]), id: "gemini", name: "Gemini", available: false, installed: false }];
+test("one view at a time: what is chosen, then a provider's models or the providers, each with a title and a way back", async () => {
+  state.clis = [CODEX([RUNNABLE])];
   await opened();
   const showing = (): string => (q<HTMLElement>(".cb-now")!.hidden ? "" : "now") + (q<HTMLElement>(".cb-body")!.hidden ? "" : "list");
-  const pressed = (): (string | undefined)[] => [...document.querySelectorAll<HTMLElement>(".cb-source")].filter(row => row.getAttribute("aria-pressed") === "true").map(row => row.dataset.cbSource);
   expect(showing()).toBe("now");
   expect(q(".cb-source")).toBeNull();
   expect(q(".cb-now .mc-range")).not.toBeNull();
+  q(".cb-pick")!.click();
+  expect(showing()).toBe("list");
+  expect(q(".cb-head h3 > span:last-child")!.textContent).toBe("P");
+  expect(q(".cb-head .cb-back")).not.toBeNull();
+  expect(listed()).toEqual(["@p:global", "@p:mine", "@p:wide"]);
+  q(".cb-back")!.click();
+  expect(showing()).toBe("now");
   browse();
   expect(showing()).toBe("list");
-  expect(q(".cb-head h3")!.textContent).toBe("選擇模型");
-  expect(q(".cb-head .cb-back")).not.toBeNull();
-  expect([...document.querySelectorAll<HTMLElement>(".cb-rail .cb-source")].map(row => row.dataset.cbSource)).toEqual(["cli:codex", "p"]);
-  expect(pressed()).toEqual(["p"]);
-  expect(listed()).toEqual(["@p:global", "@p:mine", "@p:wide"]);
   q('[data-cb-source="cli:codex"]')!.click();
-  expect(showing()).toBe("list");
-  expect(q(".cb-head h3")!.textContent).toBe("選擇模型");
-  expect(pressed()).toEqual(["cli:codex"]);
   expect(listed()).toEqual(["cli:codex:gpt-6.1"]);
+  q(".cb-back")!.click();
+  expect(q(".cb-source")).not.toBeNull();
   q(".cb-back")!.click();
   expect(showing()).toBe("now");
 });
 
-test("the list opens on the source holding the chosen model", async () => {
+test("pressing the model lists the provider holding it, and that provider is the one checked", async () => {
   state.clis = [CODEX([RUNNABLE])];
   state.agent_model = "cli:codex:gpt-6.1";
   await opened();
+  q(".cb-pick")!.click();
+  expect(listed()).toEqual(["cli:codex:gpt-6.1"]);
+  expect(q('[data-model="cli:codex:gpt-6.1"]')!.getAttribute("aria-checked")).toBe("true");
+  q(".cb-back")!.click();
   browse();
   expect(q('[data-cb-source="cli:codex"]')!.getAttribute("aria-pressed")).toBe("true");
   expect(q('[data-cb-source="p"]')!.getAttribute("aria-pressed")).toBe("false");
-  expect(q('[data-model="cli:codex:gpt-6.1"]')!.getAttribute("aria-checked")).toBe("true");
 });
 
 test("choosing a model turns back to it, with its depth right there, and the menu stays", async () => {
@@ -429,21 +462,12 @@ test("choosing a model turns back to it, with its depth right there, and the men
   expect(q(".cb-now .mc-range")).not.toBeNull();
 });
 
-test("a source of more than six models shows five rows and a button for the rest, which folds them again", async () => {
+test("a provider's models are all in one list that scrolls, with no fold", async () => {
   crowd(8);
   await opened();
   toModels();
-  expect(listed()).toEqual(["@p:global", "@p:n4", "@p:n3", "@p:n2", "@p:n1"]);
-  const all = q('.cb-all[data-cb-act="all"]')!;
-  expect(all.textContent).toContain("顯示全部 8 個");
-  expect(all.getAttribute("aria-expanded")).toBe("false");
-  all.click();
   expect(listed()).toHaveLength(8);
-  expect(q(".cb-all")!.textContent).toContain("收合");
-  expect(q(".cb-all")!.getAttribute("aria-expanded")).toBe("true");
-  q(".cb-all")!.click();
-  expect(listed()).toHaveLength(5);
-  expect(q(".cb-all")!.getAttribute("aria-expanded")).toBe("false");
+  expect(q(".cb-all")).toBeNull();
 });
 
 test.each([3, 6])("a source of %i models never folds", async count => {
@@ -454,12 +478,10 @@ test.each([3, 6])("a source of %i models never folds", async count => {
   expect(q(".cb-all")).toBeNull();
 });
 
-test.each<[number, boolean]>([[12, false], [13, true]])("a source of %i models has a search box once unfolded: %s", async (count, found) => {
+test.each<[number, boolean]>([[12, false], [13, true]])("a provider of %i models has a search box: %s", async (count, found) => {
   crowd(count);
   await opened();
   toModels();
-  expect(q(".cb-search")).toBeNull();
-  q(".cb-all")!.click();
   expect(q(".cb-search") !== null).toBe(found);
 });
 
@@ -467,46 +489,45 @@ test("a search looks through all the models of the source", async () => {
   crowd(13);
   await opened();
   toModels();
-  q(".cb-all")!.click();
   const search = q<HTMLInputElement>(".cb-search")!;
   search.value = "newer 0";
   search.dispatchEvent(new Event("input", { bubbles: true }));
   expect(listed()).toEqual(["@p:n0"]);
 });
 
-test("the chosen model and the starred ones are among the rows shown even when they would sort later", async () => {
+test("the starred models and the chosen one come first, before the newest", async () => {
   crowd(10);
   state.favorites = ["@p:mine", "@p:wide"];
   await opened();
   toModels();
-  expect(listed()).toEqual(["@p:mine", "@p:wide", "@p:global", "@p:n6", "@p:n5"]);
+  expect(listed().slice(0, 5)).toEqual(["@p:mine", "@p:wide", "@p:global", "@p:n6", "@p:n5"]);
+  expect(listed()).toHaveLength(10);
 });
 
-test("every starred model stays in view even when there are more than five", async () => {
+test("every starred model comes first however many there are", async () => {
   crowd(10);
   state.favorites = ["@p:n0", "@p:n1", "@p:n2", "@p:n3", "@p:n4", "@p:n5"];
   await opened();
   toModels();
-  expect(listed()).toEqual(["@p:n0", "@p:n1", "@p:n2", "@p:n3", "@p:n4", "@p:n5", "@p:global"]);
-  expect(q(".cb-all")).not.toBeNull();
+  expect(listed().slice(0, 7)).toEqual(["@p:n0", "@p:n1", "@p:n2", "@p:n3", "@p:n4", "@p:n5", "@p:global"]);
+  expect(q(".cb-all")).toBeNull();
 });
 
-test("pressing another source resets the fold and the search", async () => {
+test("another provider starts with no search", async () => {
   crowd(13);
   state.clis = [CODEX([RUNNABLE])];
   await opened();
   toModels();
-  q(".cb-all")!.click();
   const search = q<HTMLInputElement>(".cb-search")!;
   search.value = "newer 0";
   search.dispatchEvent(new Event("input", { bubbles: true }));
+  expect(listed()).toEqual(["@p:n0"]);
+  q(".cb-back")!.click();
   q('[data-cb-source="cli:codex"]')!.click();
   expect(listed()).toEqual(["cli:codex:gpt-6.1"]);
   expect(q(".cb-search")).toBeNull();
+  q(".cb-back")!.click();
   q('[data-cb-source="p"]')!.click();
-  expect(listed()).toHaveLength(5);
-  expect(q(".cb-all")!.getAttribute("aria-expanded")).toBe("false");
-  q(".cb-all")!.click();
   expect(q<HTMLInputElement>(".cb-search")!.value).toBe("");
   expect(listed()).toHaveLength(13);
 });

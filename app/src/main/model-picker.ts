@@ -130,11 +130,10 @@ export function priceHTML(text: string): string {
 }
 
 function mediaPrice(model: CatalogModel): string {
-  const units = [model.per_image == null ? "" : t("media.perImage", { p0: formatPerMtok(model.per_image) }),
-    model.per_request == null || model.per_request === 0 && (hasTokenPrice(model) || model.image_output_per_mtok != null) ? "" : t("media.perRequest", { p0: formatPerMtok(model.per_request) })];
-  const tokens = hasTokenPrice(model) ? t("pricing.002", { p0: perMtok(model.input_per_mtok), p1: perMtok(model.output_per_mtok) }) : "";
-  const images = model.image_output_per_mtok == null ? "" : t("media.imageTokens", { p0: formatPerMtok(model.image_output_per_mtok) });
-  return [...units, tokens, images].filter(Boolean).join(" · ") || t("pricing.001");
+  // A model that draws is priced by the picture (or the call); its text prices are zero and its image tokens mean nothing
+  // to the owner, so neither is said, and with no price of its own it says nothing rather than a wrong unit.
+  return [model.per_image == null ? "" : t("media.perImage", { p0: formatPerMtok(model.per_image) }),
+    !model.per_request ? "" : t("media.perRequest", { p0: formatPerMtok(model.per_request) })].filter(Boolean).join(" · ");
 }
 
 /** A context length in tokens, short: 1050000 -> `1.05M`, 131072 -> `131K`. */
@@ -566,8 +565,20 @@ export function chooserSources(o: ModelPickerLook): ChooserSource[] {
     }
   }
   if (o.local) sources.push({ id: "local-speech", name: t("chooser.localSpeech"), kind: "", group: "local", models: [] });
-  return sources;
+  // Only what is connected: no service is offered by default, and the others are connected from 新增供應商 (R-DEFAULT-05).
+  // A subscription signed out stays while it holds the choice, since it signs in again right there; a provider that is off
+  // or has no key is never listed (the choice's own row says it is not connected).
+  return sources.filter((source) => source.id === "local-speech" || connectedTo(o, source.id) || (source.group === "subscriptions" && holdsCurrent(o, source)));
 }
+
+/** Whether the model chosen now runs through `source`, whether or not its models can be listed (a signed-out CLI's are not). */
+export const holdsCurrent = (o: ModelPickerLook, source: ChooserSource): boolean => {
+  const ref = baseRef(o.current);
+  return !!ref && !o.local?.active && (connectionOfRef(ref) === source.id || source.models.some((model) => model.id === concreteCurrent(o, source.models)));
+};
+
+/** Whether the source can answer now, as far as the picker was told. */
+export const sourceConnected = (o: ModelPickerLook, source: ChooserSource): boolean => source.id === "local-speech" || connectedTo(o, source.id);
 
 /** A fallback is allowed only for an exact maker and model identifier, never a similar name. */
 export function chooserPrice(model: CatalogModel, models: readonly CatalogModel[], role: PickerRole): string {
@@ -622,10 +633,30 @@ const unconnectedChoice = (o: ModelPickerLook): boolean => {
 };
 
 /** The same model name and connection source for picker buttons and read-only cards. */
-export function modelPickerSelection(o: ModelPickerLook): { name: string; source: string; provider: string; model?: CatalogModel } {
+export function modelPickerSelection(o: ModelPickerLook): { name: string; source: string; provider: string; model?: CatalogModel; off?: boolean } {
+  const chosen = choiceOf(o);
+  // A choice whose source is turned off or signed out stays shown, and says so instead of looking as if it still worked
+  // (or as if its model were gone, when a signed-out plan's models cannot be listed).
+  const ref = baseRef(o.current);
+  if (!ref || o.local?.active || unconnectedChoice(o)) return chosen;
+  const connection = connectionOfRef(chosen.model?.id ?? ref);
+  const told = connection === "chatgpt" ? o.chatgpt !== undefined : connection.startsWith("cli:") ? o.clis !== undefined : o.providers !== undefined;
+  if (!told || connectedTo(o, connection)) return chosen;
+  return { ...chosen, source: t("chooser.off", { p0: connectionLabel(o, connection) }), off: true };
+}
+
+/** The name a connection is known by: the provider's, ChatGPT, or the subscription program's. */
+function connectionLabel(o: ModelPickerLook, id: string): string {
+  if (id === "chatgpt") return "ChatGPT";
+  if (id.startsWith("cli:")) return CLIS.find((cli) => `cli:${cli.id}` === id)?.name ?? id.slice(4);
+  return o.providers?.find((provider) => provider.id === id)?.name ?? (id === "openrouter" ? "OpenRouter" : id);
+}
+
+function choiceOf(o: ModelPickerLook): { name: string; source: string; provider: string; model?: CatalogModel } {
+  if (!baseRef(o.current) && !o.lead && !o.local?.active) return { name: t("media.unset"), source: "", provider: "" };
   if (unconnectedChoice(o)) return { name: t("media.unset"), source: "", provider: "" };
   // Public cached names remain useful after logout; only pickerModels can supply runnable rows.
-  const models = [...pickerModels(o).filter((m) => !m.id.startsWith("cli:")), ...cliModels(o.clis ?? [], false)];
+  const models = [...(o.catalog ? modelsFor(o.catalog, o.role).filter((m) => !m.id.startsWith("cli:")).map(localName) : []), ...cliModels(o.clis ?? [], false)];
   const inherited = baseRef(o.current) === o.lead?.id && o.inheritFrom;
   const ref = concreteCurrent(inherited ? { ...o, current: inherited } : o, models), model = models.find((m) => m.id === ref);
   const local = o.local?.active ? faceTitle(o.local) : null;
@@ -642,8 +673,8 @@ export function modelPickerSelection(o: ModelPickerLook): { name: string; source
 }
 
 function buttonFace(o: ModelPickerLook): { inner: string; label: string } {
-  const { name, source, model } = modelPickerSelection(o);
-  return { inner: `${model ? modelMark(model) : ""}<span class="mp-ttext"><strong class="mp-tname">${esc(name)}</strong><span class="mp-source">${esc(source)}</span></span>${ico("down")}`,
+  const { name, source, model, off } = modelPickerSelection(o);
+  return { inner: `${model ? modelMark(model) : ""}<span class="mp-ttext"><strong class="mp-tname">${esc(name)}</strong><span class="mp-source${off ? " is-off" : ""}">${esc(source)}</span></span>${ico("down")}`,
     label: `${o.label}: ${name}${source ? ` · ${source}` : ""}` };
 }
 
@@ -738,7 +769,7 @@ export function moveEffortSlider(range: HTMLInputElement): string {
 export const sourceMarkHTML = (source: ChooserSource): string => sourceMark(source);
 
 const sourceMark = (source: ChooserSource): string =>
-  providerMark(source.kind, true) || (source.id === "local-speech" ? `<span class="mono md" aria-hidden="true">${ico("mic")}</span>` : genericMark("md"));
+  providerMark(source.kind, true) || (source.id === "local-speech" || source.group === "local" ? `<span class="mono md" aria-hidden="true">${ico("monitor")}</span>` : genericMark("md"));
 
 /** What a source's row says under its name: whether it is ready, or how many models it has. */
 export function sourceStatus(source: ChooserSource, o: ModelPickerLook): string {
@@ -759,7 +790,9 @@ export function listHTML(list: PickerList, selected = list.current, models: read
     const key = refsOf(model).map((ref) => descriptions[ref as keyof typeof descriptions]).find(Boolean);
     const starred = refsOf(model).some((ref) => list.favorites.includes(ref));
     const description = key ? t(key) : getLocale() === "en" ? model.description : "";
-    const sub = [description || [model.provider, model.context_length ? formatContext(model.context_length) : ""].filter(Boolean).join(" · "),
+    // A context length is a text model's measure; a drawing or a video shows none.
+    const media = list.role === "image" || list.role === "video";
+    const sub = [description || [model.provider, model.context_length && !media ? formatContext(model.context_length) : ""].filter(Boolean).join(" · "),
       !usable ? reasonText(fitFor(model, list.role).reason) : ""].filter(Boolean).join(" · ");
     const price = lead ? "" : chooserPrice(model, models, list.role);
     return `<div class="mc-item"><button type="button" role="radio" class="mc-row mp-opt${lead ? " mp-lead" : ""}" aria-checked="${chosen}" data-model="${esc(model.id)}" data-id="${esc(model.id)}"${chosen ? ' data-current="true"' : ""}${!usable ? ' disabled aria-disabled="true"' : ""}>` +
@@ -816,6 +849,8 @@ class MountedPicker implements ModelPicker {
     const shown = this.inherits() ? this.effortModel()?.id ?? this.draft : this.draft;
     this.source = this.localDraft ? "local-speech" : models.find((m) => m.id === shown)?.provider_id ??
       (shown.startsWith("cli:") ? shown.split(":").slice(0, 2).join(":") : shown.startsWith("@") ? shown.slice(1).split(":")[0] : "openrouter");
+    // A choice whose provider is not listed (turned off, no key) opens on the first source listed.
+    if (!this.sources().some((source) => source.id === this.source)) this.source = this.sources()[0]?.id ?? this.source;
     this.query = query; this.maker = ""; this.sort = "name";
     this.sourceViews = new LayerViews(this.source);
     this.show();
@@ -903,7 +938,9 @@ class MountedPicker implements ModelPicker {
     const source = this.selectedSource(), pane = this.dialog?.el.querySelector(".mc-pane");
     if (!pane) return;
     if (!source) { pane.innerHTML = `<p class="mc-empty">${esc(t("chooser.empty"))}</p>`; this.paintFooter(); return; }
-    const note = source.group === "subscriptions" ? "chooser.subscriptionNote" : source.group === "local" ? "chooser.localNote" : "chooser.apiNote";
+    // A drawing or a video is not priced by words, so its source says only that it is paid by use.
+    const media = this.o.role === "image" || this.o.role === "video";
+    const note = source.group === "subscriptions" ? "chooser.subscriptionNote" : source.group === "local" ? "chooser.localNote" : media ? "chooser.apiMediaNote" : "chooser.apiNote";
     pane.innerHTML = `<header class="mc-pane-head">${sourceMark(source)}<span><h3>${esc(source.name)}</h3><p>${esc(t(note))}</p></span></header>`;
     if (source.id === "chatgpt" && source.account !== undefined && (!source.account?.signed_in || source.account.plan_scope_granted === false || source.account.signing_in)) {
       const account = source.account;

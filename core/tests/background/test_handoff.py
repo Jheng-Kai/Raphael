@@ -52,6 +52,9 @@ def team_of(target,*others):
 
 
 def setup(rig, *, model='fake/model', room=True):
+    settings = SettingsStore(rig.conn)
+    if not settings.chosen("agent_model"):
+        settings.set("agent_model", "fake/model")
     member = MemberStore(rig.conn).create_member(name='Writer',role='Writer')
     target = Speaker(id=member.id,name=member.name,model=model)
     rig.service.use_team(team_of(target),unused)
