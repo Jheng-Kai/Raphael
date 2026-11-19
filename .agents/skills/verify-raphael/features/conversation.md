@@ -912,6 +912,9 @@ only one opening said before the first step becomes a bubble (「可以，我先
 so an answer split with `<<<next message>>>` appears whole. `MESSAGE_RULES` (`agent/answers.py`) ask for at most
 one short opening, an answer that opens with the result and keeps to what the owner needs, long material in a
 file or page, and a second message only for a separate question or exercise. Tests: `tests/agent/test_live_replies.py`.
+Antigravity's final reply uses the response step after the last tool, so the turn's aggregated
+result does not replay its progress. The offline protocol regression is in
+`core/tests/agent/test_cli_brains.py`.
 Judge it from a real database by counts only, never text: messages per turn, the share of turns with
 three or more, and the share opening with process words, per brain family (Claude Code, Codex, API).
 
@@ -3074,7 +3077,8 @@ npm run look -- chat-setup-cards chat-pairing-allowed chat-pairing-bottom --them
 
 R-UI-50 wins over the old R-AG-PARITY-03 report length: every authored message and paragraph
 reaches the owner, parent, task storage, follow-up, platform chat and voice transcript.
-Long replies split at paragraph boundaries without dropping messages or cutting code blocks.
+Long replies split at paragraph boundaries. A heading or a paragraph ending in a colon stays
+with what it introduces, even if the combined block exceeds the size limit. Code blocks stay whole.
 Only a whole JSON object, or one whole fenced object, is a reply envelope; quoted JSON
 inside prose stays authored content. Detail holds receipts only. Room cards retain their
 600-character boundary (R-ROOM-07/R-AG-02); the closed colleague line remains R-UI-72.
