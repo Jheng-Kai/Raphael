@@ -250,6 +250,9 @@ class EchoClient:
         elif schema_name == "raphael_skill_review":
             from .native_journeys import native_skill_review
             data = native_skill_review(user)
+        elif schema_name == "dictionary_words":  # which corrected words the dictionary learns
+            from .native_journeys import native_learn_review
+            data = native_learn_review(user)
         elif schema_name == "raphael_memory":  # the reflection pass: nothing to change
             data = {"actions": []}
         else:  # the cleanup

@@ -458,8 +458,8 @@ npm.cmd run native -- conversation-and-learned-pill voice-conversation locale-sw
 
 `conversation-and-learned-pill` uses the bundled debug shell, real Rust correction Tracker, core
 acceptance and SQLite evidence. It checks owner expansion, conversation scrolling,
-two Escape presses for a pending fake answer, a complete learned batch, five-second
-hover retention, exact batch/evidence Undo and expiry. Read-only Win32 inspection
+two Escape presses for a pending fake answer, that nothing is learned while `auto_learn` is off, a complete learned
+batch once it is on, hover retention past the ten-second Undo window, exact batch/evidence Undo and expiry. Read-only Win32 inspection
 checks the learned window's NOACTIVATE style, rounded click region, click-through
 expiry, active-monitor placement and foreground continuity. The passive learned
 window starts independently of the ordinary overlay, including native isolation.

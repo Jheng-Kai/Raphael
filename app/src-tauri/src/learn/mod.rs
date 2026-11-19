@@ -540,7 +540,6 @@ async fn learn<C: CoreApi>(core: &C, revision: &Revision) -> (Vec<String>, Optio
 
 #[cfg(test)]
 impl<C: CoreApi, O: OverlayApi, P: FieldProbe> Learner<C, O, P> {
-    /// No waiting between reads, and a short watch.
     /// No waiting between reads, a short watch, and learning on.
     pub fn quick(core: Arc<C>, overlay: Arc<O>, probe: Arc<P>) -> Self {
         let switch = LearnSwitch::default();

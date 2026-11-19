@@ -99,6 +99,27 @@ def test_native_model_manager_never_downloads_missing_models(tmp_path, monkeypat
         manager.ensure_spec(REGISTRY["silero-vad"])
 
 
+@pytest.mark.asyncio
+async def test_the_offline_learn_review_names_one_for_one_replacements_only_in_native_mode(monkeypatch):
+    from raphael_core.brain.learn_review import REVIEW_SCHEMA, build_review_message
+
+    user = build_review_message(
+        "Please ask Allice and Cloude to review the notes.", "Please ask Alice and Claude to review the notes today."
+    )
+
+    async def review() -> dict:
+        completion = await EchoClient().complete_json(
+            model="fake", fallbacks=[], system="", user=user, schema=REVIEW_SCHEMA,
+            schema_name="dictionary_words", timeout_s=1.0, max_tokens=300,
+        )
+        return completion.data
+
+    monkeypatch.delenv("RAPHAEL_TEST_NATIVE", raising=False)
+    assert await review() == {"words": []}
+    monkeypatch.setenv("RAPHAEL_TEST_NATIVE", "1")
+    assert await review() == {"words": [{"word": "Alice", "misheard": "Allice"}, {"word": "Claude", "misheard": "Cloude"}]}
+
+
 def test_gmail_requires_fake_llm_and_both_explicit_native_flags(monkeypatch):
     monkeypatch.delenv("RAPHAEL_TEST_NATIVE", raising=False)
     monkeypatch.delenv("RAPHAEL_TEST_NATIVE_GMAIL", raising=False)
