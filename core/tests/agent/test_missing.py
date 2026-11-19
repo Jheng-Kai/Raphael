@@ -35,7 +35,7 @@ async def test_an_unavailable_provider_never_asks_for_an_openrouter_key(conn, ac
     try:
         result = await rig.call("agent.ask", {"session_id": "missing", "text": "Hello", "ui_language": "zh-TW", "source": "app"})
         assert "OpenRouter" not in result["text"]
-        assert "設定 › 模型與用量 › 模型" in result["text"]
+        assert "回答用的模型目前連不上，換一個模型" in result["text"]
         (turn,) = await rig.turns()
         assert turn["steps"][-1]["missing"] == Missing("removed", "provider", "missing", "models").wire()
     finally:

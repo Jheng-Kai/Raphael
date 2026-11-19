@@ -52,38 +52,44 @@ class MemoryBrain:
                                 ms=result.latency_ms,
                                 billing_source="subscription" if model.startswith("@chatgpt:") else None)
             return result
-        from ..agent.cli.loop import CliLoop
-        from ..background.cli import RoomCliSessions
         from ..agent.ledger import Ledger
-        from ..worker.loop import ToolOutcome
+        ledger = self.ledger if self.ledger is not None else Ledger(self.memory._spend, "memory")
+        return await subscription_json(self.memory._cli_brains, self.member_id, f"memory-{self.member_id}", ledger, **kwargs)
 
-        async def refuse(*args):
-            return ToolOutcome(False, "memory_pass_has_no_tools")
 
-        loop = CliLoop(brains=self.memory._cli_brains, sessions=RoomCliSessions(), member_id=self.member_id,
-                       conversation_id=f"memory-{self.member_id}", model=model,
-                       ledger=self.ledger if self.ledger is not None else Ledger(self.memory._spend, "memory"), language="en", plain=True,
-                       system=kwargs["system"], user=kwargs["user"], tools=[],
-                       progress=lambda text: None, thinking=lambda text: None, event=lambda text: None,
-                       execute=refuse, resume_session=False, rate_limit_waits=(), structured=kwargs["schema"], no_tools=True)
-        try:
-            import asyncio
-            outcome = await asyncio.wait_for(loop.run(), kwargs.get("timeout_s", 90))
-            failure = getattr(loop, "failure", None)
-            if failure:
-                aliases = {"login": "auth_expired", "quota": "usage_limit", "rate_limited": "rate_limit"}
-                reason = getattr(loop, "failure_reason", None)
-                kind, message = failure_summary(reason or MemoryBrainError(0, aliases.get(failure, failure), ""))
-                raise MemoryBrainError(0, kind, message)
-            if outcome.status != "done":
-                kind = outcome.kind or ("cancelled" if outcome.status == "cancelled" else "cli_stopped")
-                raise MemoryBrainError(0, kind, "Memory brain stopped before completion")
-            from ..brain.structured import structured_object
-            data = structured_object(outcome.final, kwargs["schema"])
-            return Completion(data=data, model=model, cost_usd=0, prompt_tokens=0, completion_tokens=0, latency_ms=0)
-        except TimeoutError as exc:
-            raise MemoryBrainError(0, "timeout", "Memory brain timed out") from exc
-        except (ValueError, TypeError, KeyError) as exc:
-            raise MemoryBrainError(0, "bad_response", "Memory brain returned invalid JSON") from exc
-        finally:
-            await loop.aclose()
+async def subscription_json(brains, member_id, conversation_id, ledger, **kwargs):
+    model = kwargs["model"]
+    from ..agent.cli.loop import CliLoop
+    from ..background.cli import RoomCliSessions
+    from ..worker.loop import ToolOutcome
+
+    async def refuse(*args):
+        return ToolOutcome(False, "no_tools")
+
+    loop = CliLoop(brains=brains, sessions=RoomCliSessions(), member_id=member_id,
+                   conversation_id=conversation_id, model=model,
+                   ledger=ledger, language="en", plain=True,
+                   system=kwargs["system"], user=kwargs["user"], tools=[],
+                   progress=lambda text: None, thinking=lambda text: None, event=lambda text: None,
+                   execute=refuse, resume_session=False, rate_limit_waits=(), structured=kwargs["schema"], no_tools=True)
+    try:
+        import asyncio
+        outcome = await asyncio.wait_for(loop.run(), kwargs.get("timeout_s", 90))
+        failure = getattr(loop, "failure", None)
+        if failure:
+            aliases = {"login": "auth_expired", "quota": "usage_limit", "rate_limited": "rate_limit"}
+            reason = getattr(loop, "failure_reason", None)
+            kind, message = failure_summary(reason or MemoryBrainError(0, aliases.get(failure, failure), ""))
+            raise MemoryBrainError(0, kind, message)
+        if outcome.status != "done":
+            kind = outcome.kind or ("cancelled" if outcome.status == "cancelled" else "cli_stopped")
+            raise MemoryBrainError(0, kind, "Memory brain stopped before completion")
+        from ..brain.structured import structured_object
+        data = structured_object(outcome.final, kwargs["schema"])
+        return Completion(data=data, model=model, cost_usd=0, prompt_tokens=0, completion_tokens=0, latency_ms=0)
+    except TimeoutError as exc:
+        raise MemoryBrainError(0, "timeout", "Memory brain timed out") from exc
+    except (ValueError, TypeError, KeyError) as exc:
+        raise MemoryBrainError(0, "bad_response", "Memory brain returned invalid JSON") from exc
+    finally:
+        await loop.aclose()

@@ -10,8 +10,9 @@ import logging
 import httpx
 import pytest
 
+from .conftest import WIRE_FALLBACKS
+
 from raphael_core.brain.openrouter import (
-    CLEANUP_FALLBACKS,
     ChatToolCall,
     ChatTurn,
     OpenRouterClient,
@@ -82,7 +83,7 @@ def tool_call(name="Notes__look", arguments='{"topic": "tea"}', id="call_1"):
 async def turn(client, **overrides) -> ChatTurn:
     args = {
         "model": "openai/gpt-6-luna",
-        "fallbacks": CLEANUP_FALLBACKS,
+        "fallbacks": WIRE_FALLBACKS,
         "messages": MESSAGES,
         "tools": TOOLS,
         "timeout_s": 8,
@@ -110,7 +111,7 @@ async def test_the_whole_conversation_and_the_tools_are_sent_and_every_parameter
     assert body["provider"] == {"require_parameters": True, "sort": "latency", "data_collection": "deny"}
     assert body["reasoning"] == {"effort": "none"}
     assert body["max_tokens"] == 900
-    assert body["models"] == CLEANUP_FALLBACKS
+    assert body["models"] == WIRE_FALLBACKS
     assert "temperature" not in body and "response_format" not in body
     assert request.headers["authorization"] == "Bearer sk-or-v1-test"
 
@@ -141,8 +142,8 @@ async def test_the_chosen_model_is_not_listed_again_as_a_fallback(client_with):
         seen.append(json.loads(request.content))
         return reply("done")
 
-    await turn(client_with(handler), model=CLEANUP_FALLBACKS[0])
-    assert CLEANUP_FALLBACKS[0] not in seen[0]["models"]
+    await turn(client_with(handler), model=WIRE_FALLBACKS[0])
+    assert WIRE_FALLBACKS[0] not in seen[0]["models"]
 
 
 async def test_the_words_and_the_calls_come_back_with_the_ids_and_the_arguments_as_written(

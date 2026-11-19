@@ -29,7 +29,6 @@ const messages: Record<string, MissingKey> = {
   "slack": "missing.slack",
   "attachment": "missing.attachment",
   "allowance": "missing.allowance",
-  "conversation": "missing.conversation",
   "encrypted": "missing.encrypted",
   "bad_pdf": "missing.bad_pdf",
   "no_text": "missing.no_text",

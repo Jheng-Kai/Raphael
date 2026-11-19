@@ -10,7 +10,7 @@ const messages = (id: (typeof LOCALES)[number]["id"]): Messages => catalogs[id] 
 /** The messages that a person who has never heard of the words reads (the forms of a custom connection are not among them). */
 const WITHOUT_MCP = ["agent.reason.protocol", "conn.err.not_found", "conn.err.protocol", "conn.err.missing_secret"];
 const WITHOUT_CLI = ["missing.cli", "agent.reason.cliStopped", "rooms.blockedLogin", "rooms.blockedBusy"];
-const PRICES = ["pricing.002", "pricing.004", "chooser.apiNote", "media.imageTokens"];
+const PRICES = ["pricing.002", "pricing.004", "chooser.apiNote", "chooser.apiMediaNote"];
 /** The word for a token in each language that has one of its own (the others write Token or token). */
 const TOKEN = /token|トークン|토큰|jeton|токен|โทเคน/i;
 

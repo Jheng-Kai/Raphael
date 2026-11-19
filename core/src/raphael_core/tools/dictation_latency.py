@@ -91,6 +91,9 @@ async def measure(*, legacy: bool, local: bool = False, scale: float = .02,
     conn, rpc = connect(":memory:"), Router()
     provider, keys = FakeProvider(text, scale), MemoryKeyStore()
     keys.set("fake-key")
+    settings = SettingsStore(conn)
+    settings.set("stt_cloud_model", "fake/speech")
+    settings.set("cleanup_model", "fake/cleanup")
     brain = Brain(conn, provider, keys)
     brain.register(rpc)
     loop = asyncio.get_running_loop()
@@ -119,7 +122,7 @@ async def measure(*, legacy: bool, local: bool = False, scale: float = .02,
     try:
         if legacy:
             # Explicitly model the old sequential path with the same cloud and cleanup fakes.
-            cleanup = CleanupService(provider, SettingsStore(conn), DictionaryStore(conn),
+            cleanup = CleanupService(provider, settings, DictionaryStore(conn),
                                      SpendTracker(conn), has_key=lambda: True)
             started = time.perf_counter()
             heard = await asyncio.to_thread(engine.transcribe, np.full(16_000, .1, dtype=np.float32))

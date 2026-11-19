@@ -10,9 +10,10 @@ import logging
 import httpx
 import pytest
 
+from .conftest import WIRE_FALLBACKS
+
 from raphael_core.brain import openrouter
 from raphael_core.brain.openrouter import (
-    CLEANUP_FALLBACKS,
     Decision,
     OpenRouterClient,
     OpenRouterError,
@@ -229,7 +230,7 @@ async def test_json_is_asked_without_reasoning_unless_the_caller_wants_some(clie
     client = client_with(answering(lambda: json_reply({"text": "x"}), seen))
     kwargs = {
         "model": "openai/gpt-6-luna",
-        "fallbacks": CLEANUP_FALLBACKS,
+        "fallbacks": WIRE_FALLBACKS,
         "system": "s",
         "user": "u",
         "schema": SCHEMA,

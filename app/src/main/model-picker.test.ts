@@ -25,19 +25,30 @@ import {
   replacementNotices,
   sortChoices,
   withFavorite,
+  listHTML,
 } from "./model-picker";
 import type { CatalogModel, ModelCatalog } from "./types";
 
 afterEach(() => setLocale("zh-TW"));
 
-test("media chooser shows fixed and image-token prices without requiring text token prices", () => {
+test("a drawing or video model is priced by the picture or the call, or says nothing: never text words or image tokens", () => {
   setLocale("zh-TW");
   for (const role of ["image", "video"] as const) {
     const model = llm("test/media", { input_per_mtok: null, output_per_mtok: null });
     expect(chooserPrice({ ...model, per_image: .04 }, [], role)).toBe("每張 $0.04");
     expect(chooserPrice({ ...model, per_request: .12 }, [], role)).toBe("每次請求 $0.12");
-    expect(chooserPrice({ ...model, image_output_per_mtok: 30 }, [], role)).toBe("圖片輸出 $30 每百萬單位");
+    // FLUX on OpenRouter: text prices of zero and a price per million image tokens, which says nothing of a picture.
+    expect(chooserPrice({ ...model, input_per_mtok: 0, output_per_mtok: 0, image_output_per_mtok: 9.82 }, [], role)).toBe("");
   }
+});
+
+test("a drawing model's row shows no context length", () => {
+  setLocale("zh-TW");
+  const flux = llm("black-forest-labs/flux-3-image", { name: "FLUX 3 Image", provider: "Black Forest Labs", input_per_mtok: 0, output_per_mtok: 0, context_length: 46864, image_output_per_mtok: 9.82 });
+  const html = listHTML(new PickerList("image", [flux], "", {}, []));
+  expect(html).not.toContain("47K");
+  expect(html).not.toContain("$0");
+  expect(html).toContain("Black Forest Labs");
 });
 
 test("direct connections stay grouped with favourites inside each group and OpenRouter last", () => {

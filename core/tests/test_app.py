@@ -245,6 +245,9 @@ async def make_app(tmp_path):
             load_kit=lambda: make_kit() if kit is None else kit,
             agent_actions=agent_actions,
         )
+        for key in ("agent_model", "quick_model", "cleanup_model"):
+            app.brain._settings.set(key, "fake/echo")
+        app.brain._settings.set("stt_cloud_model", "openai/gpt-transcribe")
         apps.append(app)
         app.start()
         return app
@@ -1917,7 +1920,7 @@ async def test_without_a_key_the_text_comes_back_as_spoken(make_app):
     assert await app.call("secrets.status") == {"has_key": False}
     result = await dictate(app)
     assert result["text"] == WORDS + WORDS
-    assert result["cleaned"] is False and result["fallback_reason"] == "no_key"
+    assert result["cleaned"] is False and result["cleanup_failure"]["kind"] == "no_key"
 
 
 async def test_the_fake_llm_has_a_key(make_app):
@@ -2119,7 +2122,7 @@ async def test_without_a_key_the_assistant_still_runs_commands_and_says_why_it_c
     assert (done["prefix"], done["text"]) == ("了", "")
     assert actions.calls == [("press_key", "volume_mute", 1)]
     refused = await app.call("agent.ask", ask_params("what is the weather", "en", "a2"))
-    assert refused["prefix"] == "Negative" and "provider is not connected" in refused["text"]
+    assert refused["prefix"] == "Negative" and "model for answers cannot connect" in refused["text"]
 
 
 async def test_a_dictation_for_the_assistant_and_its_question_go_together(make_app):

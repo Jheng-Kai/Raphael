@@ -29,11 +29,12 @@ async def test_api_effort_respects_selected_models_supported_levels(make_rig, cl
     assert client.chat_calls[-1]["reasoning_effort"] == expected
 
 
-async def test_quick_inheritance_overrides_the_answers_reference_effort(make_rig, client):
+async def test_quick_effort_is_independent_of_the_answers_reference_effort(make_rig, client):
     from .test_plugin_model import llm
     entry = replace(llm("openai/reasoner"), reasoning_efforts=("low", "high"))
     rig = make_rig(models=lambda: [entry])
     rig.settings.set("agent_model", entry.id + "?effort=high")
+    rig.settings.set("quick_model", entry.id)
     rig.settings.set("quick_effort", "low")
     client.chats.append(chat('{"text":"Quick answer","prefix":"Answer"}'))
     await rig.call("agent.ask", {"session_id": "quick-effort", "text": "Hello", "ui_language": "en",
@@ -90,7 +91,7 @@ async def test_the_quick_destination_reuses_quick_context_and_never_the_formal_t
     assert (await rig.call("conversations.list"))["conversations"][0]["kind"] == "quick"
 
 
-@pytest.mark.parametrize("selected,expected", [("", "openai/gpt-6-luna"), ("openai/quick", "openai/quick")])
+@pytest.mark.parametrize("selected,expected", [("", ""), ("openai/quick", "openai/quick")])
 async def test_model_and_effort_follow_kind_for_voice_and_typed_continuation(make_rig, client, selected, expected):
     rig = make_rig()
     rig.settings.set("quick_model", selected)
@@ -102,6 +103,9 @@ async def test_model_and_effort_follow_kind_for_voice_and_typed_continuation(mak
         client.chats.append(chat('{"text":"Hello","prefix":"Answer"}'))
         await rig.call("agent.ask", {"session_id": source, "text": "Hello", "ui_language": "en",
             "source": source, "destination": "quick", "conversation_id": quick})
+        if not expected:
+            assert client.chat_calls == []
+            continue
         assert client.chat_calls[-1]["model"] == expected
         assert client.chat_calls[-1]["reasoning_effort"] == "medium"
     formal = rig.service.conversations.main()

@@ -12,7 +12,7 @@ from datetime import datetime
 
 from .retry_utils import RETRY_AFTER_CAP_S, reset_delay_from_message
 
-KINDS = frozenset(("credits", "usage_limit", "rate_limit", "overloaded", "server", "auth_expired",
+KINDS = frozenset(("no_model", "credits", "usage_limit", "rate_limit", "overloaded", "server", "auth_expired",
                    "network", "cli_stopped", "permission_denied", "not_found", "tool_broken", "invalid_request", "timeout", "refused", "unknown",
                    "chatgpt_unavailable", "chatgpt_plan_unavailable", "chatgpt_scope",
                    "context_overflow", "payload_too_large", "content_policy"))
@@ -40,6 +40,7 @@ _OWNER_MESSAGES = {
         "rate_limit": "{name} 暫時收到太多請求，請稍後再試。",
         "overloaded": "{name} 目前忙碌中，請稍後再試或選擇其他模型。",
         "server": "{name} 的服務暫時出問題了，請稍後再試。",
+        "no_model": "{name} 還沒選擇回答用的模型。",
         "auth_expired": "{name} 還沒登入或缺少金鑰，請到側欄的「連結應用程式」完成連線。",
         "network": "{name} 目前無法連線，請確認網路後再試。",
         "cli_stopped": "{name} 在回答完成前停止了。",
@@ -57,6 +58,7 @@ _OWNER_MESSAGES = {
         "rate_limit": "{name} へのリクエストが一時的に多すぎます。しばらくしてから再試行してください。",
         "overloaded": "{name} は現在混み合っています。しばらく待つか、別のモデルを選んでください。",
         "server": "{name} のサービスで一時的な問題が起きています。しばらくしてから再試行してください。",
+        "no_model": "{name} の回答用モデルが未選択です。",
         "auth_expired": "{name} にログインしていないか、必要なキーがありません。サイドバーの「アプリを連携」で接続を完了してください。",
         "network": "{name} に接続できません。ネットワークを確認してから再試行してください。",
         "cli_stopped": "{name} は回答を完了する前に停止しました。",
@@ -74,6 +76,7 @@ _OWNER_MESSAGES = {
         "rate_limit": "{name} is receiving too many requests right now. Try again shortly.",
         "overloaded": "{name} is busy right now. Wait a little or choose another model.",
         "server": "{name} is having a temporary service problem. Try again later.",
+        "no_model": "No answer model has been chosen for {name}.",
         "auth_expired": "{name} is signed out or missing a required key. Complete the connection in Connect apps (sidebar).",
         "network": "{name} cannot connect right now. Check your network and try again.",
         "cli_stopped": "{name} stopped before finishing its answer.",

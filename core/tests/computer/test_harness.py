@@ -18,7 +18,7 @@ async def test_cli_computer_tool_uses_auxiliary_api_model_and_keeps_approval_flo
     from raphael_core.brain.settings import SettingsStore
 
     settings = SettingsStore(conn)
-    settings.set("agent_model", "cli:claude")
+    settings.set("quick_model", "cli:claude")
     settings.set("assistant_model", "anthropic/claude-haiku-5.5")
     # The desktop is seldom called, so it is found, not listed (decision 2): the CLI calls it through use_tool.
     fake_mcp(operating, tmp_path, [("use_tool", {"name": "computer", "arguments": {"request": "Press seven in Calculator"}})])

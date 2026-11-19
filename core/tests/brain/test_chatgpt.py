@@ -183,6 +183,31 @@ def loop(rig, execute, *, tools=None):
         tools=tools or [], progress=lambda text: None, execute=execute)
 
 
+async def test_sign_in_fills_only_vacant_text_roles_without_a_socket(rig, monkeypatch):
+    from unittest.mock import AsyncMock, Mock
+
+    server = Mock()
+    server.sockets = [Mock()]
+    server.sockets[0].getsockname.return_value = ("127.0.0.1", 1455)
+    server.wait_closed = AsyncMock()
+    monkeypatch.setattr(asyncio, "start_server", AsyncMock(return_value=server))
+
+    def browser(url):
+        rig.query = parse_qs(urlsplit(url).query)
+        rig.auth._pending.set_result({"code": "synthetic-code", "client_id": rig.client_id})
+        return True
+
+    rig.auth._browser = browser
+    notices = []
+    rig.router.set_notifier(lambda method, params: notices.append((method, params)))
+    rig.registry.settings.set("agent_model", "already-chosen")
+    await rig.sign_in()
+    settings = rig.registry.settings
+    assert settings.get("quick_model") == settings.get("cleanup_model") == "@chatgpt:chosen-model"
+    assert settings.get("agent_model") == "already-chosen" and settings.get("stt_cloud_model") == ""
+    assert [p for method, p in notices if method == "models.filled"] == [{"source": "ChatGPT", "roles": ["quick", "cleanup"]}]
+
+
 async def test_full_sign_in_rpc_models_and_vault_only_storage(rig, caplog):
     status = await rig.router.call("chatgpt.sign_in", {"timeout_s": 2})
     assert status["signed_in"] and status["plan_scope_granted"]
@@ -948,3 +973,13 @@ async def test_reasoning_items_and_reasoning_written_into_the_answer_are_not_the
     with pytest.raises(AgentFailure) as failure:
         second.reply(outcome)
     assert failure.value.kind == "no_answer"
+
+
+async def test_chatgpts_models_are_listed_from_the_last_reading_until_they_are_read_again(rig):
+    # Signed in and read once, then a new run: the list in memory is empty, the kept one answers at once.
+    await rig.router.call("chatgpt.sign_in", {"timeout_s": 2})
+    await rig.router.call("chatgpt.models", {})
+    rig.auth.model_rows = []
+    assert [entry.id for entry in rig.registry.catalog_entries()] == ["@chatgpt:chosen-model"]
+    await rig.router.call("chatgpt.sign_out", {})
+    assert rig.registry.catalog_entries() == []

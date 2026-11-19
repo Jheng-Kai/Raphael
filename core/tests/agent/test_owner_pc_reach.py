@@ -188,7 +188,7 @@ async def test_a_quick_question_still_has_the_owners_pc_and_the_words_for_it(mak
         result = await ask(rig, "quick", source="app", destination="quick", conversation_id=quick)
         tools, system = names(client.chat_calls[0]["tools"]), prompt_of(client.chat_calls[0])
     else:
-        rig.settings.set("agent_model", "cli:claude")
+        rig.settings.set("quick_model", "cli:claude")
         seen = []
 
         async def work(loop):

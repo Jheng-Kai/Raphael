@@ -68,6 +68,8 @@ export interface ProviderKind {
   docs_url?: string | null;
   verified?: boolean;
   local_context_hint?: boolean;
+  /** What the kind can do: text always, and speech to text, drawing or video where it can (presets.py). */
+  features?: ("text" | "stt" | "image" | "video")[];
 }
 /** Public provider metadata. Secrets never come back from the core. */
 /** The owner's ChatGPT sign-in; tokens never reach the window. */
@@ -932,6 +934,8 @@ export type MainEvent =
   | { type: "DeviceDone"; catalog_id: string }
   /** A connected app's account stopped working at Composio: said once, with a way to sign in again. */
   | { type: "ConnectionLost"; id: string; name: string }
+  | { type: "ModelsFilled"; source: string; roles: string[] }
+  | { type: "ModelMissing"; role: string }
   /** A key of Raphael went down or up (from the hook or from the window itself), whether or not the guide practises. */
   | { type: "Hotkey"; kind: HotkeyKind }
   /** A dictation (`agent` false) or a question to Raphael (`agent` true) moved on. */

@@ -2567,7 +2567,25 @@
         "key"
       ],
       "default_base_url": "https://openrouter.ai/api/v1",
-      "available": true
+      "available": true,
+      "features": [
+        "text",
+        "stt",
+        "image"
+      ]
+    },
+    {
+      "kind": "anthropic",
+      "name": "Anthropic (Claude)",
+      "group": "official",
+      "fields": [
+        "key"
+      ],
+      "default_base_url": "https://api.anthropic.com",
+      "available": true,
+      "features": [
+        "text"
+      ]
     }
   ],
   "catalog": {
