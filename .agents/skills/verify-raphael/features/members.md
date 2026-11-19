@@ -1161,9 +1161,8 @@ catalogue; 從範本開始, the eight starter templates and 開啟檔案, is one
 characters and shared buttons. Preview shows full instructions, personality, skill
 documents/dependencies, routine schedules and individual disabled app connect cards.
 Adding installs skills and routines off and grants no apps; only subsequent per-app
-Connect can request login. Export opens Review contents before Export file or
-Prepare publish request. A secret finding disables both. Publishing prepares only a local
-package folder and opens GitHub's prefilled PR page; the owner submits through GitHub.
+Connect can request login. The template card offers View contents and Save file, plus Copy link when the share service is configured.
+A secret finding disables saving and sharing.
 
 The catalogue uses Ed25519 over exact index bytes, two compiled trust roots for
 rotation, a monotonic sequence, permanent revoked IDs and per-package SHA256. Reads
@@ -1178,14 +1177,12 @@ A template card's 查看內容 and the export review share one review (template-
 first page of the face, the name and what it is for, then one
 tinted card of rows 內容 (role, instructions, personality, reply style, skills), 例行工作 and 整合, each opening a page with a
 back arrow and its title in the head; a skill page is its description and text (no front matter) and its files, a routine page
-its content and its trigger in words with "starts paused". The dialog's foot is the card's next step (準備發布請求 while it
-is a draft, else none). The import preview keeps its own layout.
+its content and its trigger in words with "starts paused". The review footer offers 複製連結 when the template can create a share link. The import preview keeps its own layout.
 R-COLLEAGUE-01 and R-STORE-04: the review shows every field of a raphael-member and no other: a template
 carries no memory (so there is no 記憶 row), no 最後更新, and a routine holds only its title, prompt and trigger (no
 description, fires_on or ask: an importer is asked nothing). `template-contract.test.ts` reads
 `core/tests/fixtures/member-template/full.raphael-member`, the one recipe the core and the catalogue schema also accept.
-The words say what happens: the conversation header's share line reads 「存成檔案，或在 GitHub 準備發布請求」, the card's
-buttons 儲存檔案 / 準備發布請求 / 查看內容, then 開啟 GitHub 頁面 and 「已準備發布請求」. No string promises a link. Inspect
+The conversation header’s share line reads 「儲存為檔案，或在支援時分享連結」. Inspect
 template-export-review, template-review-pages, chat-setup-cards, member-template-export and conversation-share at both
 themes and the three widths.
 
@@ -1193,7 +1190,7 @@ Inspect every contact sheet and each new scene at light 720 and dark 1120. Compa
 store chips/buttons with the starter gallery (reached from the store page) and sidebar-plus, and preview/export cards
 with member-template-preview at matching dimensions. Run judge on that same run;
 missing external reference images/login are blocked, never design acceptance.
-Native file picker, OS browser/folder opening, persistence across desktop restart,
+Native file picker, persistence across desktop restart,
 public catalogue hosting, production trust-root provisioning and GitHub CI remain
 separate acceptance. No live provider calls, public repository creation or tokens.
 
@@ -1340,7 +1337,7 @@ npm run look -- opener-toggle-connect-apps opener-toggle-settings opener-toggle-
 
 R-SHARE-01. With the owner's share service set (`SHARE_URL`, share-template/), the template card's primary button is 複製連結: the core
 sends the recipe to the service and keeps the link and its key; the page copies the link and says 已複製連結. The shared card shows its
-link, 複製連結 again (nothing is sent) and 停止分享. With no service the card keeps 準備發布請求 and sends nothing. Whoever opens the link
+link, 複製連結 again (nothing is sent) and 停止分享. With no service the card offers 儲存檔案 as primary and 查看內容, including legacy published cards. Whoever opens the link
 sees the service's preview page and downloads the .raphael-member file, which opens in the import review.
 
 npm run look -- member-template-shared --theme both --width 1120,720,1920x1080
@@ -1348,15 +1345,14 @@ npm run look -- member-template-shared --theme both --width 1120,720,1920x1080
 Inspect the contact sheet and, at light 720 and dark 1120, the shared card: the link wraps inside the card and 複製連結 is the one primary button.
 Only a deployed service shows the link's own page and a real download; the offline tests drive the Worker with an in-memory store.
 
-## Sharing finished: cancelled saves, where the files are, files from the file manager, the store before it opens
+## Sharing templates as files
 
 R-STORE-05, R-STORE-06, R-STORE-07, R-COLLEAGUE-07. Sharing is finished end to end, remote computers included.
 What it does, and how to see it:
 
 - A save dialog the owner cancels leaves the template card a draft (member-template-save-cancelled): the core's `members.template_card_export`
   gives the text only, and the page sends `saved: true` after the dialog wrote a file.
-- A prepared publish request shows the path of its files, the one next step in a sentence and 顯示檔案, which opens the folder in the file
-  manager (member-template-published). The shell resolves the 16-character folder id through the core; the window names no path.
+- A legacy published card opens with 儲存檔案 and 查看內容 (member-template-published).
 - A file Notepad saved (byte-order mark) opens (member-template-notepad-file); a file cut short, or no template, or from a newer Raphael, says so in
   words (member-template-bad-file); an empty name is marked in the field (member-template-name-empty). The name field takes the core's NAME_MAX.
 - A store with no catalogue key says it is not open yet (store-closed). The app holds the key of the owner's catalogue
@@ -1366,6 +1362,6 @@ What it does, and how to see it:
 
 npm run look -- member-template-save-cancelled member-template-published member-template-bad-file member-template-notepad-file member-template-name-empty store-closed member-template-export member-template-preview member-template-imported store-empty store-offline chat-setup-cards --theme both --width 1120,720,1920x1080
 
-Inspect every contact sheet and, at light 720 and dark 1120, the published card (the path wraps inside the card), the toast of a bad file, and the empty name's red edge and line.
+Inspect every contact sheet and, at light 720 and dark 1120, the legacy card’s primary save action, the toast of a bad file, and the empty name's red edge and line.
 
 Starting a meeting validates the posting member and room membership before writing. Its room, agenda, roles and first exchange commit together. New group names are unique after case folding. An ambiguous legacy group mention asks the sender to use its displayed name followed by `#` and the group ID. The room tests cover rollback and routing, and `team-mentions.test.ts` checks the qualified chip.

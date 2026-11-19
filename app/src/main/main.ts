@@ -199,7 +199,7 @@ async function start(): Promise<void> {
   });
   const settings = createSettings(ctx);
   configureRooms(ctx);
-  mountQuestionReminder(ctx);
+  mountQuestionReminder(ctx, agent.memberFace);
   registerNavigationPages({ automations: createAutomationsPage });
   const pages: Record<MainPageId | "settings", Page> = { dictation, agent, settings, automations: createNavigationPage("automations", ctx) };
 

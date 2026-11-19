@@ -201,12 +201,17 @@ test("settled secrets have a short pill and keep the saved/resumed decision fold
 
 describe("a key for a program in a member's computer", () => {
   const key = (over: Partial<SecretCard> = {}): SecretCard => card({ key: true, name: "OPENROUTER_API_KEY", secret: "OPENROUTER_API_KEY", purpose: "價格腳本要呼叫模型", ...over });
-  test("names the variable and what it is for, says where it goes, and shows the same masked field and Save", () => {
+  test("shows the localized title, variable, purpose, one vault hint and masked field beside Save", () => {
     const html = secretCardHTML(key());
     const text = visible(html);
-    expect(text).toContain("儲存 OPENROUTER_API_KEY");
+    document.body.innerHTML = html;
+    expect(document.querySelector(".card-title")?.textContent).toBe("儲存金鑰");
+    expect(document.querySelector(".key-context code")?.textContent).toBe("OPENROUTER_API_KEY");
+    expect(document.querySelector(".card-status")?.textContent).toBe(t("cards.inputWaiting"));
+    expect(document.querySelector(".sc-field svg")).toBeNull();
+    expect(document.querySelectorAll(".key-card svg").length).toBeLessThanOrEqual(1);
     expect(text).toContain("價格腳本要呼叫模型");
-    expect(text).toContain(t("cards.keyForComputer"));
+    expect(document.querySelector(".card-shield")?.textContent).toBe(t("cards.vault"));
     expect(html).toContain('type="password"');
     expect(html).toContain('aria-label="OPENROUTER_API_KEY"');
     expect(html).toContain('class="btn sm pri" data-act="card-save" data-card="k1" disabled');
@@ -235,7 +240,7 @@ describe("a key for a program in a member's computer", () => {
       setLocale(locale);
       const text = visible(secretCardHTML(key()));
       expect(text).toContain("OPENROUTER_API_KEY");
-      expect(text).toContain(t("cards.keyForComputer").replace("'", "&#39;"));
+      expect(text).toContain(t("cards.keyTitle"));
     }
   });
 });

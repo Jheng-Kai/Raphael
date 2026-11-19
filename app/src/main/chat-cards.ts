@@ -41,32 +41,25 @@ function templateCardHTML(card: TemplateCard): string {
   const on = (act: string): string => ` data-act="${act}" data-template-card="${esc(card.id)}"`;
   const facts = [t("cards.templateSkills", { p0: card.counts.skills }), t("cards.templateRoutines", { p0: card.counts.routines }),
     card.connections.length ? t("cards.templateNeeds", { p0: card.connections.join("、") }) : ""].filter(Boolean);
-  const prepared = card.state === "published" && card.url;
   const view = btn(esc(t("cards.templateView")), "sm", on("template-view"));
-  const keep = btn(esc(t("cards.templateSave")), "sm", `${on("template-save")}${blocked ? " disabled" : ""}`);
-  // A shared card keeps its link (R-SHARE-01): copying it again sends nothing. With a share service the link takes the
-  // place of the GitHub publish request; without one the card offers that request as before.
+  const keep = btn(esc(t("cards.templateSave")), card.shareable ? "sm" : "sm pri", `${on("template-save")}${blocked ? " disabled" : ""}`);
+  // A shared card keeps its link (R-SHARE-01): copying it again sends nothing.
   const actions = card.share_url
     ? btn(esc(t("cards.templateCopyLink")), "sm pri", `${on("template-copy-link")} data-template-link="${esc(card.share_url)}"`) +
       btn(esc(t("cards.templateUnshare")), "sm", on("template-unshare")) + view
-    : prepared
-    ? btn(esc(t("cards.templateOpen")), "sm pri", `${on("template-open")} data-template-url="${esc(card.url!)}"`) +
-      (card.folder_id ? btn(esc(t("cards.templateFolder")), "sm", `${on("template-folder")} data-template-folder="${esc(card.folder_id)}"`) : "") + view
     : card.shareable
     ? btn(esc(t("cards.templateCopyLink")), "sm pri", `${on("template-share")}${blocked ? " disabled" : ""}`) + keep + view
-    : btn(esc(t("cards.templatePublish")), "sm pri", `${on("template-publish")}${blocked ? " disabled" : ""}`) + keep + view;
+    : keep + view;
+  const saved = card.state === "saved";
   return cardHTML({
     title: card.name,
     // No face inside a card (R-CARD-01): the share mark stands for the member's template.
     mark: `<span class="mono md" aria-hidden="true">${ico("share")}</span>`,
-    status: blocked ? "failed" : card.state === "draft" && !card.share_url ? "ready" : "done",
-    statusText: blocked ? t("cards.templateBlocked") : card.share_url ? t("cards.templateShared") : card.state === "published" ? t("cards.templatePublished") : card.state === "saved" ? t("cards.templateSaved") : t("cards.templateReady"),
+    status: blocked ? "failed" : saved || card.share_url ? "done" : "ready",
+    statusText: blocked ? t("cards.templateBlocked") : card.share_url ? t("cards.templateShared") : saved ? t("cards.templateSaved") : t("cards.templateReady"),
     body: card.description || undefined,
-    // A prepared publish request says what the owner does next and where the files are to be found.
     content: `<p class="card-body template-facts">${facts.map((fact) => `<span>${esc(fact)}</span>`).join("")}</p>` +
-      (card.share_url ? `<p class="card-body template-where" data-template-link-line><span class="template-path">${esc(card.share_url)}</span></p>` : "") +
-      (prepared && !card.share_url ? `<p class="card-body template-next">${esc(t("cards.templatePrepared"))}</p>` +
-        (card.folder ? `<p class="card-body template-where" data-template-where><span>${esc(t("cards.templateWhere"))}</span><span class="template-path">${esc(card.folder)}</span></p>` : "") : ""),
+      (card.share_url ? `<p class="card-body template-where" data-template-link-line><span class="template-path">${esc(card.share_url)}</span></p>` : ""),
     actions,
     cls: "template-card", attrs: ` data-template-card-id="${esc(card.id)}" data-card-state="${esc(card.state)}" data-template-avatar="${esc(card.avatar ?? "")}"`,
   });
@@ -81,13 +74,13 @@ export function chatCardsHTML(turn: AgentTurn): string {
 async function viewTemplate(id: string, avatar = ""): Promise<void> {
   const { template, findings = [] } = await api.core<{ template: MemberTemplate; findings?: ScanFinding[] }>("members.template_card", { id });
   const face = avatar ? slimeFaceHTML({ id: -1, avatar }, 64) : "";
-  // The review's foot is the card's own next step while it is a draft, its link or its publish request, else nothing: its × closes it
+  // The review offers sharing when the card can create a link.
   const card = document.querySelector<HTMLElement>(`[data-template-card-id="${CSS.escape(id)}"]`);
-  const publish = card?.querySelector<HTMLButtonElement>('[data-act="template-share"]:not(:disabled), [data-act="template-publish"]:not(:disabled)') ?? null;
+  const share = card?.querySelector<HTMLButtonElement>('[data-act="template-share"]:not(:disabled)');
   const dialog = openDialog({ title: t("store.review"), cls: "template-preview template-card-review", body: "",
-    actions: publish ? { primary: { label: esc(publish.textContent?.trim() || t("store.publish")), attrs: ' data-dlg="publish"' } } : {},
+    actions: share ? { primary: { label: esc(t("cards.templateCopyLink")), attrs: ' data-dlg="share"' } } : {},
     onAct(action) {
-      if (action === "publish") publish?.click();
+      if (action === "share") share?.click();
       dialog.close();
     } });
   mountTemplateReview(dialog, template, { face, notes: reviewNotes(findings) });
@@ -140,19 +133,6 @@ export function chatCardAction(act: HTMLElement): boolean {
   if (kind === "template-unshare") {
     busy(true);
     void api.core("members.template_card_unshare", { id: template }).catch(() => toaster.info(t("cards.templateUnshareFailed"))).finally(() => busy(false));
-    return true;
-  }
-  if (kind === "template-publish") {
-    // The card then shows where the prepared files are (templateCardHTML); the GitHub page opens beside it.
-    run(async () => { const { url } = await api.core<{ url: string }>("members.template_card_publish", { id: template }); await api.openExternalUrl(url); });
-    return true;
-  }
-  if (kind === "template-folder") {
-    run(() => api.showTemplateExport(act.dataset.templateFolder ?? ""));
-    return true;
-  }
-  if (kind === "template-open") {
-    run(() => api.openExternalUrl(act.dataset.templateUrl ?? ""));
     return true;
   }
   return false;
