@@ -2013,6 +2013,47 @@ describe("what the dialog does", () => {
       } finally { await done(); }
     });
 
+    test("a row that stopped working has 重新登入 first, which signs in again in its place and asks no new name (R-ACCT-04)", async () => {
+      const c = await openGmail([{ id: "a1", status: "ACTIVE", label: "Work" }, { id: "a9", status: "EXPIRED", label: "公司信箱" }]);
+      const { document, done } = await mounted(c);
+      try {
+        c.click(document.querySelector<HTMLElement>('.cs-acct [data-conn="account-menu"][data-account="a9"]')!);
+        const items = Array.from(document.querySelectorAll<HTMLElement>('#app-popover [role="menuitem"]'));
+        expect(items.map((item) => item.textContent)).toEqual(["重新登入", "重新命名", "移除"]);
+        api.connectorsConnect.mockResolvedValueOnce({ connected: true, connector: gmail([{ id: "a1", status: "ACTIVE", label: "Work" }, { id: "a10", status: "ACTIVE", label: "公司信箱" }]) });
+        c.click(items[0]!);
+        await settle();
+        expect(api.connectorsConnect).toHaveBeenCalledWith("gmail", undefined, ["a9"]);
+        expect(document.querySelector('[data-account-name]')).toBeNull();  // it keeps the name it had
+      } finally { await done(); c.reset(); }
+    });
+
+    test("重新登入 on the app takes the place of every account that stopped, and 加入另一個帳號 replaces nothing", async () => {
+      const c = await openGmail([{ id: "a1", status: "ACTIVE" }, { id: "a8", status: "FAILED" }, { id: "a9", status: "REVOKED" }, { id: "a3", status: "INITIATED" }]);
+      api.connectorsConnect.mockReturnValue(new Promise(() => undefined));
+      c.click(button("relogin", { id: "composio:gmail" }));
+      await settle();
+      expect(api.connectorsConnect).toHaveBeenLastCalledWith("gmail", undefined, ["a8", "a9"]);
+      await c.click(button("cancel-login"));
+      c.reset();
+      const d = await openGmail([{ id: "a1", status: "ACTIVE" }, { id: "a9", status: "EXPIRED" }]);
+      d.click(button("add-account", { id: "composio:gmail" }));
+      await settle();
+      expect(api.connectorsConnect).toHaveBeenLastCalledWith("gmail", undefined, []);
+      d.reset();
+    });
+
+    test("relogin() from a lost connection's notice opens that app's page and signs in again in place of the dead account", async () => {
+      const c = await openGmail([{ id: "a9", status: "EXPIRED" }]);
+      api.connectorsConnect.mockReturnValue(new Promise(() => undefined));
+      c.relogin("composio:gmail");
+      await settle();
+      expect(c.view().open).toEqual({ kind: "group", id: "composio:gmail" });
+      expect(api.connectorsConnect).toHaveBeenLastCalledWith("gmail", undefined, ["a9"]);
+      c.relogin("composio:nothing");
+      c.reset();
+    });
+
     test.each(["INITIATED", "INITIALIZING", "EXPIRED", "REVOKED", "FAILED", "INACTIVE"])("a row that is %s is removed at once, with no question", async (status) => {
       const c = await openGmail([{ id: "a1", status: "ACTIVE" }, { id: "a9", status }]);
       c.click(button("account-remove", { id: "composio:gmail", account: "a9" }));

@@ -38,11 +38,14 @@ class ComposioClient:
         # Retained as a constructor compatibility seam; v3.1 rejects this request field.
         self.expected_version = expected_version
         self._cache: dict[tuple, tuple[float, dict]] = {}
+        # Whether the key was read in this run: on a Mac a read asks the owner once, so a read nobody asked for waits for this.
+        self.key_read = False
 
     async def request(self, method: str, path: str, **kwargs) -> dict:
         key = self._key()
         if not key:
             raise ConnectorFailure("missing_key")
+        self.key_read = True
         return await self.http.json(method, BASE + path, headers={"x-api-key": key}, **kwargs)
 
     async def page(self, path: str, params: dict | None = None, *, cache: bool = False) -> dict:

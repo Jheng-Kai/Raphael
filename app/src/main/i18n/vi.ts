@@ -1548,6 +1548,7 @@ export const vi = {
   "conn.status.relogin": "Cần đăng nhập",
   "conn.status.error": "Không thể kết nối: {p0}",
   "conn.relogin": "Đăng nhập lại",
+  "conn.lost": "{p0} đã ngừng hoạt động. Đăng nhập lại để tiếp tục sử dụng.",
   "conn.device.hint": "Dán mã này vào trang được mở",
   "conn.device.open": "Sao chép mã và mở {p0}",
   "conn.revokeOpen": "Thu hồi quyền truy cập trên {p0}",

@@ -137,6 +137,15 @@ export default [
   scene("device-code-chat", "A code that a chat's card asked for stands over the conversation the same way", [
     member(1), { action: "main-event", event: DEVICE_CODE }, wait(".dl-dialog .dl-code"), check("device-code"),
   ]),
+  // R-ACCT-04: a dead account signs in again in its own place, and a connection that stopped is told without opening the apps.
+  scene("accounts-relogin-menu", "A row that stopped working has 重新登入 first in its menu, then 重新命名 and 移除", [
+    ...accountsPage, click('[data-conn="account-menu"][data-account="ca_dead"]'), wait('#app-popover [data-conn="account-relogin"]'), check("accounts-relogin-menu"),
+  ], { managedConnectors: [connector("composio:gmail", { name: "Gmail", description: "搜尋郵件、撰寫草稿與回覆", enabled_tools: ["GMAIL_FETCH_EMAILS"],
+    accounts: [{ id: "ca_main", status: "ACTIVE", label: "Alex" }, { id: "ca_dead", status: "EXPIRED", label: "公司信箱" }] })] }),
+  scene("connection-lost", "A connection that stopped is said in one toast above the composer, with 重新登入", [
+    member(1), { action: "main-event", event: { type: "ConnectionLost", id: "composio:gmail", name: "Gmail" } },
+    { action: "main-event", event: { type: "ConnectionLost", id: "composio:gmail", name: "Gmail" } }, wait(".toast .connection-lost"), check("connection-lost"), check("toast-clearance"),
+  ]),
   scene("sign-in-cancelled", "取消 ends the waiting sign-in at the core: the row is 連結 again and nothing is said", [
     ...open, wait(".cs-card"), click('[data-conn="join"][data-id="slack"]'), wait('[data-conn="cancel-login"]'), click('[data-conn="cancel-login"]'),
     wait('[data-conn="join"][data-id="slack"]'), check("sign-in-cancelled"),

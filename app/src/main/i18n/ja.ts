@@ -1275,6 +1275,7 @@ export const ja = {
   "conn.status.relogin": "再ログインが必要です",
   "conn.status.error": "接続できません：{p0}",
   "conn.relogin": "再ログイン",
+  "conn.lost": "{p0} の接続が切れました。もう一度ログインすると引き続き使えます。",
   "conn.device.hint": "開いたページにこのコードを貼り付けてください",
   "conn.device.open": "コードをコピーして {p0} を開く",
   "conn.revokeOpen": "{p0} で許可を取り消す",

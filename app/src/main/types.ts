@@ -930,6 +930,8 @@ export type MainEvent =
   /** A service is signed in to with a code typed at its own page: show the code, open the address. */
   | { type: "DeviceCode"; catalog_id: string; name: string; user_code: string; verification_uri: string; expires_in: number }
   | { type: "DeviceDone"; catalog_id: string }
+  /** A connected app's account stopped working at Composio: said once, with a way to sign in again. */
+  | { type: "ConnectionLost"; id: string; name: string }
   /** A key of Raphael went down or up (from the hook or from the window itself), whether or not the guide practises. */
   | { type: "Hotkey"; kind: HotkeyKind }
   /** A dictation (`agent` false) or a question to Raphael (`agent` true) moved on. */

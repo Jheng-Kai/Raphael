@@ -1548,6 +1548,7 @@ export const it = {
   "conn.status.relogin": "Accesso necessario",
   "conn.status.error": "Connessione non riuscita: {p0}",
   "conn.relogin": "Accedi di nuovo",
+  "conn.lost": "{p0} ha smesso di funzionare. Accedi di nuovo per continuare a usarlo.",
   "conn.device.hint": "Incolla questo codice nella pagina che si apre",
   "conn.device.open": "Copia codice e apri {p0}",
   "conn.revokeOpen": "Rimuovi accesso su {p0}",

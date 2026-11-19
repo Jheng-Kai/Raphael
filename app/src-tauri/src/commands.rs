@@ -273,6 +273,12 @@ pub enum MainEvent {
     DeviceDone {
         catalog_id: String,
     },
+    /// A connected app's account stopped working at Composio (`connectors.lost`): the window says so once, with a way
+    /// to sign in again. `id` is the app's (`composio:<slug>`), `name` the name it is shown by.
+    ConnectionLost {
+        id: String,
+        name: String,
+    },
     /// A key of Raphael went down or up, from the global hook or from the window itself. Sent for
     /// every key event, whether or not the guide is practising; the keys are never named.
     Hotkey {
@@ -1432,6 +1438,23 @@ pub fn main_event_from(notification: &Notification, monitoring: bool) -> Option<
         "integrations.device_done" => Some(MainEvent::DeviceDone {
             catalog_id: params.get("catalog_id")?.as_str()?.to_owned(),
         }),
+        "connectors.lost" => {
+            let id = params.get("id")?.as_str()?;
+            let slug = id.strip_prefix("composio:")?;
+            let name = params.get("name")?.as_str()?;
+            let valid = !slug.is_empty()
+                && slug.len() <= 100
+                && slug
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-');
+            if !valid || name.is_empty() || name.chars().count() > 200 {
+                return None;
+            }
+            Some(MainEvent::ConnectionLost {
+                id: id.to_owned(),
+                name: name.to_owned(),
+            })
+        }
         _ => None,
     }
 }
@@ -3462,6 +3485,36 @@ mod tests {
             })
             .unwrap(),
             r#"{"type":"DeviceCode","catalog_id":"github","name":"GitHub","user_code":"ABCD-EFGH","verification_uri":"https://github.com/login/device","expires_in":900}"#
+        );
+    }
+
+    #[test]
+    fn a_lost_connection_goes_to_the_window_and_a_strange_one_does_not() {
+        let lost =
+            |id: &str, name: &str| notification("connectors.lost", json!({"id": id, "name": name}));
+        assert_eq!(
+            main_event_from(&lost("composio:gmail", "Gmail"), false),
+            Some(MainEvent::ConnectionLost {
+                id: "composio:gmail".to_owned(),
+                name: "Gmail".to_owned()
+            })
+        );
+        for (id, name) in [
+            ("gmail", "Gmail"),
+            ("composio:", "Gmail"),
+            ("composio:Gmail", "Gmail"),
+            ("composio:gm ail", "Gmail"),
+            ("composio:gmail", ""),
+        ] {
+            assert_eq!(main_event_from(&lost(id, name), false), None, "{id} {name}");
+        }
+        assert_eq!(
+            serde_json::to_string(&MainEvent::ConnectionLost {
+                id: "composio:gmail".to_owned(),
+                name: "Gmail".to_owned()
+            })
+            .unwrap(),
+            r#"{"type":"ConnectionLost","id":"composio:gmail","name":"Gmail"}"#
         );
     }
 

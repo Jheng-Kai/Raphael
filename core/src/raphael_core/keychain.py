@@ -119,6 +119,10 @@ class Keychain:
                 self._backend, self._kept, self._present, self._refused, self._told_at = backend, {}, {}, False, None
         return _keychain_backend(backend) if self._asks is None else self._asks
 
+    def asks(self) -> bool:
+        """Whether reading a secret may put a question to the owner (the macOS Keychain)."""
+        return self._asks_now()
+
     @property
     def refused(self) -> bool:
         self._asks_now()
@@ -232,6 +236,10 @@ def write(service: str, account: str, value: str) -> None:
 
 def remove(service: str, account: str) -> None:
     DOOR.remove(service, account)
+
+
+def asks() -> bool:
+    return DOOR.asks()
 
 
 def filled(value: "str | None | _Unread") -> bool:

@@ -643,3 +643,113 @@ async def test_a_google_sign_in_finishes_and_keeps_the_switch_pressed_while_it_w
     assert entry.enabled is False and [a["label"] for a in entry.accounts] == ["me@example.com"]  # not undone by the finish
     assert vault.get(REFRESH) == "refresh-private" and service._signing_in == set() and not service._lock.locked()
     assert ConnectorStore(tmp_path).connectors["google"].status == "ACTIVE"
+
+
+# R-ACCT-04: signing in again takes the place of a dead account, and a connection that stopped is told once.
+
+async def test_signing_in_again_replaces_the_expired_account_and_keeps_its_name(tmp_path, conn):
+    fake = Accounts(statuses=("ACTIVE",))
+    router, service, hub, vault = setup_service(tmp_path, conn, fake, sleep=no_wait, wall=lambda: NOW)
+    await router.call("connectors.set_key", {"key": "ak_private"})
+    old = Connector("composio:gmail", "composio", status="EXPIRED", name="Gmail",
+                    accounts=[account("ca_work", "EXPIRED", label="公司信箱"), account("ca_home", "ACTIVE", label="家裡")])
+    service.store.connectors[old.id] = old
+    result = await router.call("connectors.connect", {"toolkit": "gmail", "replace": ["ca_work"]})
+    assert result["connected"] is True
+    assert fake.deleted == [("ca_work", False)]  # given back at Composio; an expired login holds nothing to revoke
+    assert [(a["id"], a["status"], a["label"]) for a in result["connector"]["accounts"]] == [("ca_home", "ACTIVE", "家裡"), ("ca_test", "ACTIVE", "公司信箱")]
+    assert [a["id"] for a in ConnectorStore(tmp_path).connectors["composio:gmail"].accounts] == ["ca_home", "ca_test"]
+
+
+async def test_replace_never_removes_a_connected_account_or_one_composio_will_not_take_back(tmp_path, conn):
+    fake = Accounts(statuses=("ACTIVE",), delete_status=503)
+    router, service, hub, vault = setup_service(tmp_path, conn, fake, sleep=no_wait, wall=lambda: NOW)
+    await router.call("connectors.set_key", {"key": "ak_private"})
+    service.store.connectors["composio:gmail"] = Connector("composio:gmail", "composio", status="ACTIVE", name="Gmail",
+        accounts=[account("ca_live", "ACTIVE"), account("ca_dead", "EXPIRED")])
+    result = await router.call("connectors.connect", {"toolkit": "gmail", "replace": ["ca_live", "ca_dead"]})
+    assert result["connected"] is True
+    assert [a["id"] for a in result["connector"]["accounts"]] == ["ca_live", "ca_dead", "ca_test"]  # nothing given back: it stays as it was
+    with pytest.raises(RpcError):
+        await router.call("connectors.connect", {"toolkit": "gmail", "replace": "ca_dead"})
+
+
+async def test_a_sign_in_that_fails_replaces_nothing(tmp_path, conn):
+    fake = Accounts(statuses=("FAILED",))
+    router, service, hub, vault = setup_service(tmp_path, conn, fake, sleep=no_wait, wall=lambda: NOW)
+    await router.call("connectors.set_key", {"key": "ak_private"})
+    service.store.connectors["composio:gmail"] = Connector("composio:gmail", "composio", status="EXPIRED", name="Gmail",
+        accounts=[account("ca_dead", "EXPIRED", label="公司信箱")])
+    result = await router.call("connectors.connect", {"toolkit": "gmail", "replace": ["ca_dead"]})
+    assert result["connected"] is False and fake.deleted == []
+    assert "ca_dead" in [a["id"] for a in service.store.connectors["composio:gmail"].accounts]
+
+
+def told(service):
+    seen = []
+    service._tell_lost = lambda entry: seen.append(entry.id)
+    return seen
+
+
+async def test_a_connection_that_stops_is_told_once_and_again_only_after_it_worked(tmp_path, conn):
+    fake = Accounts([listed("ca_main", "EXPIRED")])
+    router, service, hub, entry = make(tmp_path, conn, fake, [account("ca_main", "ACTIVE")])
+    seen = told(service)
+    assert await service.watch_once() == "read"
+    assert seen == ["composio:gmail"] and entry.status == "EXPIRED"
+    assert await service.watch_once() == "skipped"  # nothing is connected any more: Composio is not asked
+    await router.call("connectors.status")
+    assert seen == ["composio:gmail"]  # told once
+    fake.listing = [listed("ca_main", "ACTIVE")]
+    await router.call("connectors.status")
+    fake.listing = [listed("ca_main", "REVOKED")]
+    await service.watch_once()
+    assert seen == ["composio:gmail", "composio:gmail"]
+
+
+async def test_an_account_gone_from_composio_is_told_and_one_still_working_is_not(tmp_path, conn):
+    fake = Accounts([listed("ca_b", "ACTIVE")])
+    router, service, hub, entry = make(tmp_path, conn, fake, [account("ca_a", "ACTIVE"), account("ca_b", "ACTIVE")])
+    seen = told(service)
+    await service.watch_once()
+    assert seen == ["composio:gmail"] and entry.status == "ACTIVE"
+    await service.watch_once()
+    assert seen == ["composio:gmail"]
+
+
+async def test_an_app_turned_off_is_not_told_and_a_sign_in_ending_is_no_loss(tmp_path, conn):
+    fake = Accounts([listed("ca_main", "EXPIRED")])
+    router, service, hub, entry = make(tmp_path, conn, fake, [account("ca_main", "ACTIVE")])
+    entry.enabled = False
+    seen = told(service)
+    await service.watch_once()
+    assert seen == []
+    entry.enabled, entry.accounts = True, [account("ca_wait", "INITIATED", since=30)]
+    fake.listing = [listed("ca_wait", "EXPIRED")]
+    await router.call("connectors.status")
+    assert seen == []  # a sign-in that never connected was not a connection
+
+
+async def test_the_watch_reads_only_when_it_may(tmp_path, conn, monkeypatch):
+    from raphael_core import keychain
+    fake = Accounts([listed("ca_main", "ACTIVE")])
+    router, service, hub, entry = make(tmp_path, conn, fake, [account("ca_main", "ACTIVE")])
+    monkeypatch.setattr(keychain, "asks", lambda: True)
+    assert await service.watch_once() == "skipped"  # a Mac: the key was not read in this run, so the watch asks nothing
+    service.composio.key_read = True
+    assert await service.watch_once() == "read"
+    async with service._lock:
+        assert await service.watch_once() == "skipped"
+    service.vault.delete("connectors:composio:key")
+    assert await service.watch_once() == "skipped"
+    reads = [r for r in fake.requests if r.method == "GET" and r.url.path.endswith("/connected_accounts")]
+    assert len(reads) == 1 and not [r for r in fake.requests if "/tool_router/" in r.url.path]
+
+
+async def test_the_loss_is_told_to_the_window_with_the_apps_name(tmp_path, conn):
+    fake = Accounts([listed("ca_main", "EXPIRED")])
+    router, service, hub, entry = make(tmp_path, conn, fake, [account("ca_main", "ACTIVE")])
+    sent = []
+    router.notify = lambda method, params: sent.append((method, params))
+    await service.watch_once()
+    assert ("connectors.lost", {"id": "composio:gmail", "name": "Gmail"}) in sent

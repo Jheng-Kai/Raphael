@@ -301,6 +301,14 @@ export function checkRendered(name, context = {}) {
       require(visible(card.querySelector('[data-conn="add-account"]')), "加入另一個帳號 is still there");
       require(made("connectors.status").length > 0, "the list was read from the core");
     }
+    if (name === "accounts-relogin-menu") {
+      // R-ACCT-04: a dead account is signed in to again in its own place, so the way to do it stands first in its menu.
+      const items = [...document.querySelectorAll('#app-popover [role="menuitem"]')];
+      require(items.map(item => item.textContent).join("|") === "重新登入|重新命名|移除", `重新登入, then 重新命名 and 移除: ${items.map(item => item.textContent).join("|")}`);
+      require(items.every(item => visible(item)) && inside(document.querySelector("#app-popover"), document.documentElement), "the menu is whole in the window");
+      require(items[2].classList.contains("danger") && !items[0].classList.contains("danger"), "only 移除 is red");
+      require(rows.map(row => row.querySelector(".st").textContent).join("|") === "已連結|已過期", "the dead row says 已過期");
+    }
     if (name === "accounts-menu") {
       const items = [...document.querySelectorAll('#app-popover [role="menuitem"]')];
       require(items.map(item => item.textContent).join("|") === "重新命名|移除", "the menu has 重新命名 and 移除, in that order");
@@ -4856,6 +4864,19 @@ export function checkRendered(name, context = {}) {
       require(!document.querySelector('[data-conn="cancel-login"]') && !document.querySelector(".toast"), "no wait is left and nothing is said");
     }
     return { check: name };
+  }
+  if (name === "connection-lost") {
+    // R-ACCT-04: a connection that stopped, told twice, is said once, with the one button that signs in again.
+    const notes = [...document.querySelectorAll(".toast .connection-lost")].filter(visible);
+    require(notes.length === 1, `one toast says the connection stopped: ${notes.length}`);
+    require(notes[0].textContent === "Gmail 的連線中斷了，重新登入就能繼續使用。" && notes[0].getAttribute("role") === "status", `which app and what to do: ${notes[0].textContent}`);
+    const toast = notes[0].closest(".toast"), box = toast.getBoundingClientRect();
+    const buttons = [...toast.querySelectorAll("button")].filter(visible);
+    require(buttons.length === 1 && buttons[0].textContent === "重新登入" && buttons[0].dataset.connectionRelogin === "composio:gmail", "its one button signs in again");
+    require(box.left >= 0 && box.top >= 0 && box.right <= innerWidth + 0.5 && box.bottom <= innerHeight + 0.5, `the toast is inside the window: ${JSON.stringify(box)}`);
+    const button = buttons[0].getBoundingClientRect(), text = notes[0].getBoundingClientRect();
+    require(button.left >= text.right - 0.5 || button.top >= text.bottom - 0.5, "the button stands beside or under the words, never over them");
+    return { check: name, width: Math.round(box.width) };
   }
   if (name === "keychain-refused") {
     // R-PRIV-KEYCHAIN-01: told twice, said once; the words and the one button to be asked again, inside the window.

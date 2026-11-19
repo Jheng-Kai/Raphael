@@ -1548,6 +1548,7 @@ export const tr = {
   "conn.status.relogin": "Oturum açılması gerekiyor",
   "conn.status.error": "Bağlanılamadı: {p0}",
   "conn.relogin": "Yeniden oturum aç",
+  "conn.lost": "{p0} artık çalışmıyor. Kullanmaya devam etmek için yeniden oturum açın.",
   "conn.device.hint": "Bu kodu açılan sayfaya yapıştırın",
   "conn.device.open": "Kodu kopyala ve {p0} aç",
   "conn.revokeOpen": "{p0} erişimini kaldır",
