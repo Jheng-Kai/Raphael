@@ -52,10 +52,22 @@ def load_application() -> object:
     return app
 
 
+def trust_the_system_certificates() -> None:
+    """TLS is verified against the operating system's certificate store, as a browser verifies it. `httpx` alone trusts
+    only certifi's bundle, and security software that inspects HTTPS (Kaspersky Endpoint Security, for one) re-signs
+    every site with a root it adds to the system store: the browser opened the sites while every connection of the core
+    (Composio, the models) was refused. From here on every SSLContext of the process is truststore's (`httpx2`, the
+    plugins' client, used it already)."""
+    import truststore
+
+    truststore.inject_into_ssl()
+
+
 def main() -> None:
     # stderr is drained into the shell's log for the entire sidecar lifetime.
     # Enable before importing native audio, ONNX, SQLite or credential modules.
     faulthandler.enable(file=sys.stderr, all_threads=True)
+    trust_the_system_certificates()  # the worker connects too
     if "--worker" in sys.argv[1:]:
         from raphael_core.worker.runner import main as worker_main  # light: no native libraries
 
