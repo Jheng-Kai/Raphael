@@ -120,7 +120,7 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
   function currentSource(sources: ChooserSource[]): ChooserSource | undefined {
     const { model } = chosen();
     const o = look();
-    return sources.find(item => holdsCurrent(o, item)) ?? sources.find(item => model && item.models.some(row => row.id === model.id)) ?? sources[0];
+    return sources.find(item => holdsCurrent(o, item)) ?? sources.find(item => model && item.models.some(row => row.id === model.id)) ?? (o.current ? undefined : sources[0]);
   }
 
   /** What the owner starred and what is chosen come first; then a subscription's own order, or the newest of a long list. */
@@ -183,15 +183,15 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
     if (!sources.length) {
       return `<div class="cb-none"><b>${esc(t("chooser.noSource"))}</b><small>${esc(t("chooser.noSourceNote"))}</small>${addSourceHTML("pri sm cb-add-first")}</div>`;
     }
-    const o = look(), { name, off } = modelPickerSelection(o), { model, effort } = chosen(), item = currentSource(sources);
+    const o = look(), { name, off, source: words } = modelPickerSelection(o), { model, effort } = chosen(), item = currentSource(sources);
     const levels = model?.reasoning_efforts ?? [];
-    const mark = item ? sourceMarkHTML(item) : "";
+    const mark = sourceMarkHTML(item ?? { id: "", name: "", kind: "", group: "api", models: [] });
     return `<div class="cb-now-top">` +
-      `<button type="button" class="menu-action cb-src" data-cb-act="sources" aria-label="${esc(t("chooser.switchSource", { p0: item?.name ?? "" }))}">${mark}</button>` +
+      `<button type="button" class="menu-action cb-src" data-cb-act="sources" aria-label="${esc(item ? t("chooser.switchSource", { p0: item.name }) : t("chooser.rail"))}">${mark}</button>` +
       `<button type="button" class="menu-action cb-pick" data-cb-act="models">` +
       (levels.length && effort ? `<b class="cb-effort">${esc(effortText(effort))}</b>` : model && !levels.length ? `<b class="cb-effort is-none">${esc(t("chooser.noDepth"))}</b>` : `<b class="cb-effort"></b>`) +
       `<span class="cb-pick-name"><span>${esc(o.current.split("?effort=")[0] ? name : t("chooser.title"))}</span>${ico("right")}</span>` +
-      (off ? `<small class="is-off">${esc(t("chooser.off", { p0: item?.name ?? "" }))}</small>` : "") +
+      (off ? `<small class="is-off">${esc(words)}</small>` : "") +
       `</button><span class="cb-top-end" aria-hidden="true"></span></div>`;
   }
 
@@ -206,7 +206,7 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
   function paintMenu(): void {
     if (!menu?.isConnected) return;
     const sources = answering();
-    if (!sources.some(row => row.id === source)) source = currentSource(sources)?.id ?? "";
+    if (!sources.some(row => row.id === source)) source = (currentSource(sources) ?? sources[0])?.id ?? "";
     // A change that arrives while the owner is here must not take the keyboard from them.
     const held = document.activeElement instanceof HTMLElement && menu.contains(document.activeElement) ? document.activeElement : null;
     const heldAt = held instanceof HTMLInputElement ? held.selectionStart : null;
@@ -273,7 +273,7 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
     if (!target || (target as HTMLButtonElement).disabled) return;
     const act = target.dataset.cbAct;
     if (act === "back") { menuViews.step("back", turnTo); return; }
-    if (act === "models") { source = currentSource(answering())?.id ?? ""; turnTo("models"); return; }
+    if (act === "models") { const sources = answering(); source = (currentSource(sources) ?? sources[0])?.id ?? ""; turnTo("models"); return; }
     if (act === "sources") { turnTo("sources"); return; }
     if (act === "retry") { modelTries = 0; paintMenu(); void reload(); return; }
     if (target.dataset.cbSource !== undefined) {

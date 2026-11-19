@@ -127,7 +127,7 @@ test("with nothing connected the card says so and its one button leads to 新增
   expect(q(".cb-now .mc-range")).toBeNull();
 });
 
-test("a provider that is not connected is not offered, and a choice whose provider is off stays shown and says so", async () => {
+test("a provider that is not connected is never offered, and a choice whose provider is off stays shown and says so", async () => {
   state.extra = [state.model("openai/gpt-6-luna", "GPT-6 Luna", { provider_id: undefined, provider_name: undefined, provider: "OpenAI" })];
   state.providers = [{ id: "p", name: "P", kind: "openai", enabled: true, has_key: true, status: "ok", models: 3 }];
   await opened();
@@ -141,8 +141,10 @@ test("a provider that is not connected is not offered, and a choice whose provid
   await flush();
   expect(q(".cb-pick-name span")!.textContent).toBe("GPT-6 Luna");
   expect(q(".cb-pick small.is-off")!.textContent).toBe("OpenRouter 未連上");
+  expect(q(".cb-src")!.getAttribute("aria-label")).toBe("供應商");
   browse();
-  expect([...document.querySelectorAll<HTMLElement>(".cb-source")].map(row => row.dataset.cbSource)).toEqual(["p", "openrouter"]);
+  expect([...document.querySelectorAll<HTMLElement>(".cb-source")].map(row => row.dataset.cbSource)).toEqual(["p"]);
+  expect(q(".cb-source[aria-pressed=\"true\"]")).toBeNull();
 });
 
 test("in a source's own list the starred models come first, then the chosen one, then the rest, with no headings", async () => {

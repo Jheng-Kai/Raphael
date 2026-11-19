@@ -565,23 +565,17 @@ export function chooserSources(o: ModelPickerLook): ChooserSource[] {
       sources.push({ id, name, kind, group, models: models.filter((m) => connectionId(m) === id) });
     }
   }
-  // The provider of the model chosen now is listed even when it is turned off, so the choice is never without its provider.
-  const ref = baseRef(o.current), held = ref ? connectionOfRef(ref) : "";
-  if (held && o.providers !== undefined && !held.startsWith("cli:") && !sources.some((source) => source.id === held)) {
-    const provider = o.providers?.find((p) => p.id === held);
-    sources.push({ id: held, name: provider?.name ?? (held === "openrouter" ? "OpenRouter" : held === "chatgpt" ? "ChatGPT" : held),
-      kind: provider?.kind ?? (held === "chatgpt" ? "openai" : held), group: provider && isLocal(provider.kind) ? "local" : "api", models: [] });
-  }
   if (o.local) sources.push({ id: "local-speech", name: t("chooser.localSpeech"), kind: "", group: "local", models: [] });
-  // Only what is connected, and the source of the model chosen now so it is never hidden: no service is offered by default,
-  // and the others are connected from 新增供應商 (R-DEFAULT-05).
-  return sources.filter((source) => source.id === "local-speech" || connectedTo(o, source.id) || holdsCurrent(o, source));
+  // Only what is connected: no service is offered by default, and the others are connected from 新增供應商 (R-DEFAULT-05).
+  // A subscription signed out stays while it holds the choice, since it signs in again right there; a provider that is off
+  // or has no key is never listed (the choice's own row says it is not connected).
+  return sources.filter((source) => source.id === "local-speech" || connectedTo(o, source.id) || (source.group === "subscriptions" && holdsCurrent(o, source)));
 }
 
 /** Whether the model chosen now runs through `source`, whether or not its models can be listed (a signed-out CLI's are not). */
 export const holdsCurrent = (o: ModelPickerLook, source: ChooserSource): boolean => {
   const ref = baseRef(o.current);
-  return !!ref && (connectionOfRef(ref) === source.id || source.models.some((model) => model.id === concreteCurrent(o, source.models)));
+  return !!ref && !o.local?.active && (connectionOfRef(ref) === source.id || source.models.some((model) => model.id === concreteCurrent(o, source.models)));
 };
 
 /** Whether the source can answer now, as far as the picker was told. */
@@ -854,6 +848,8 @@ class MountedPicker implements ModelPicker {
     const shown = this.inherits() ? this.effortModel()?.id ?? this.draft : this.draft;
     this.source = this.localDraft ? "local-speech" : models.find((m) => m.id === shown)?.provider_id ??
       (shown.startsWith("cli:") ? shown.split(":").slice(0, 2).join(":") : shown.startsWith("@") ? shown.slice(1).split(":")[0] : "openrouter");
+    // A choice whose provider is not listed (turned off, no key) opens on the first source listed.
+    if (!this.sources().some((source) => source.id === this.source)) this.source = this.sources()[0]?.id ?? this.source;
     this.query = query; this.maker = ""; this.sort = "name";
     this.sourceViews = new LayerViews(this.source);
     this.show();

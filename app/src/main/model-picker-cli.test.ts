@@ -240,3 +240,15 @@ test.each(["openai/old", "openai/test?effort=high"])("cleanup omits effort contr
   click('[data-dlg="use"]');
   expect(choose).toHaveBeenCalledWith("openai/test");
 });
+
+test("a provider that is not connected is never listed, even when it holds the cloud model kept for later", () => {
+  // Speech to text on this computer, a cloud model of OpenRouter kept from before, and OpenRouter not connected (R-DEFAULT-05).
+  const slot = document.createElement("div"); document.body.append(slot);
+  const kept: CatalogModel = { ...apiModel, id: "microsoft/mai-transcribe-2", name: "MAI-Transcribe 2", per_minute: 0.0017, roles: { stt: { usable: true, reason: null } } } as CatalogModel;
+  picker = mountModelPicker(slot, { role: "stt", current: kept.id, label: "Speech", onChoose: vi.fn(), providers: [],
+    catalog: { llm: [], stt: [kept], source: "cached", fetched_at_ms: null, replaced: [] },
+    local: { active: "qwen3-asr", download: null, models: [{ name: "qwen3-asr", title: "Qwen3-ASR", ready: true, languages: ["en"], size: 1000, note: "dictionary" }] } });
+  picker.open();
+  expect([...document.querySelectorAll<HTMLElement>("[data-source]")].map((row) => row.dataset.source)).toEqual(["local-speech"]);
+  expect(document.body.textContent).not.toContain("OpenRouter");
+});

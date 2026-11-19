@@ -7838,6 +7838,21 @@ export function checkRendered(name, context = {}) {
     require(!chip || getComputedStyle(chip).color !== getComputedStyle(document.querySelector(".composer .cmp-model .mp-tname")).color, "the chip says it in the warning colour");
     return { check: name };
   }
+  if (name === "settings-models-fresh") {
+    // A fresh install: every model row unset and no provider named on the page (R-DEFAULT-05).
+    const page = document.querySelector(".modal-scrim .modal");
+    const rows = ["model", "stt-model"].map(row => page.querySelector(`[data-row="${row}"] .mp-tname`)?.textContent.trim());
+    require(rows.every(text => text === "未設定"), `the tidying and speech rows are unset: ${rows}`);
+    require(!/OpenRouter/.test(page.textContent), "no provider is named before one is connected");
+    return { check: name };
+  }
+  if (name === "chooser-no-unconnected") {
+    // Only what is connected: a provider off or never connected is not in the list, whatever is kept from before.
+    const ids = [...document.querySelectorAll(".model-chooser [data-source]")].map(row => row.dataset.source);
+    require(ids.length >= 1 && !ids.includes("openrouter"), `the sources listed are connected ones: ${ids}`);
+    require(!/OpenRouter/.test(document.querySelector(".model-chooser").textContent), "OpenRouter is not named in the choice");
+    return { check: name, ids };
+  }
   if (name === "provider-directory") {
     // Every way to connect, subscriptions first, and each kind says what it means and what it costs.
     const dialog = document.querySelector("#pv-dialog"), sections = [...dialog.querySelectorAll(".pv-directory > .sgroup")];
