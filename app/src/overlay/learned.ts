@@ -6,6 +6,9 @@ export interface LearnedActions {
   finish(token: string, undo: boolean): Promise<unknown>;
 }
 
+/** How long the pill, and its Undo, stays while the pointer is not on it: as long as every other Undo of the app (`main/undo.ts`). */
+export const LEARNED_UNDO_MS = 10_000;
+
 /** The pill has its own lifetime and never changes the dictation emblem or its subtitles. */
 export function learnedPill(root: HTMLElement, actions: LearnedActions): { show(notice: LearnedNotice): void } {
   const text = root.querySelector<HTMLElement>(".learned-text")!;
@@ -22,7 +25,7 @@ export function learnedPill(root: HTMLElement, actions: LearnedActions): { show(
     clearTimeout(timer);
     if (!current || hovered) return;
     const notice = current;
-    timer = setTimeout(() => { close(notice); void actions.finish(notice.token, false).catch(() => {}); }, 5000);
+    timer = setTimeout(() => { close(notice); void actions.finish(notice.token, false).catch(() => {}); }, LEARNED_UNDO_MS);
   };
   root.addEventListener("mouseenter", () => { hovered = true; clearTimeout(timer); });
   root.addEventListener("mouseleave", () => { hovered = false; arm(); });

@@ -1,5 +1,6 @@
 """Opt-in native diagnostics: only Composio may read an existing credential; writes stay in memory."""
 import asyncio
+import difflib
 import os
 import re
 import json
@@ -608,6 +609,17 @@ def native_skill_review(user):
     return {"changes": [{"text": "---\nname: clock-audit\ndescription: Audit repeated clock observations\n---\n"
                         "## When to use\nUse for a clock audit.\n## Procedure\nRead and compare ten observations.\n"
                         "## Pitfalls\nKeep time zones consistent.\n## Verification\nCheck all observations."}]}
+
+
+def native_learn_review(user):
+    """The offline provider names each word replaced one for one; the real review checks and stores it."""
+    found = re.fullmatch(r"<pasted>(.*)</pasted>\n<sent>(.*)</sent>", user, re.S)
+    if not native_enabled(True) or not found:
+        return {"words": []}
+    pasted, sent = found.group(1).split(), found.group(2).split()
+    matcher = difflib.SequenceMatcher(a=pasted, b=sent, autojunk=False)
+    return {"words": [{"word": sent[j1].strip(".,!?"), "misheard": pasted[i1].strip(".,!?")}
+                      for op, i1, i2, j1, j2 in matcher.get_opcodes() if op == "replace" and i2 - i1 == j2 - j1 == 1]}
 
 
 def native_skills(messages, offered, seen):

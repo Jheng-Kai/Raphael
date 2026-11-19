@@ -67,6 +67,7 @@ from .cleanup import CleanedPart, CleanupResult, CleanupService, join_parts, spl
 from .cloud_stt import CloudTranscriber
 from .dictionary import DictionaryStore, Learned
 from .history import HistoryItem, HistoryStore
+from .learn_review import LearnReviewer, changed_window
 from .openrouter import KeyInfo, OpenRouterError
 from .providers.base import ModelProvider
 from .pricing import PricingService, builtin_catalog
@@ -95,6 +96,9 @@ HISTORY_MAX_LIMIT = 200
 IMPORT_MAX = 5000
 # The most corrections `dictionary.learn` takes from one dictation.
 LEARN_MAX = 3
+# The longest text of either side of a `dictionary.learn` revision (the app reads at most 20 000
+# characters of a field).
+REVISION_MAX_CHARS = 20_000
 # How long a key check may take in all. The client's timeout applies to each stage of a request
 # (connect, send, wait, read), so by itself a check could outlast the 15 s the app waits for it.
 KEY_CHECK_TIMEOUT_S = 10.0
@@ -271,6 +275,13 @@ class Brain:
             self._spend,
             has_key=lambda: self._model_available("cleanup_model"),
             on_model_result=self._on_cleanup_result,
+        )
+        self._reviewer = LearnReviewer(
+            client,
+            self._settings,
+            self._dictionary,
+            self._spend,
+            has_key=lambda: self._model_available("cleanup_model"),
         )
         self._stt = CloudTranscriber(client, self._settings, self._spend,
                                      has_key=lambda: self._model_available("stt_cloud_model"))
@@ -734,24 +745,47 @@ class Brain:
         with _store_call():
             return {"deleted": self._dictionary.delete(entry_id)}
 
+    def _reverted_rules(self, pasted: str, sent: str) -> list[tuple[str, str]]:
+        """`(form, word)` for each replacement rule whose word the changed stretch of `pasted`
+        holds and whose form the user wrote there instead: the rule wrote the word, and the user
+        changed it back. `learn_pair` withdraws such a rule."""
+        window = changed_window(pasted, sent)
+        if window is None:
+            return []
+        before, after = window
+        found: list[tuple[str, str]] = []
+        for entry in self._dictionary.list():
+            if entry.word not in before or entry.word in after:
+                continue
+            found += [(form, entry.word) for form in entry.misheard if form in after and form not in before]
+        return found
+
     async def _dictionary_undo(self, params: dict) -> dict:
         return {"undone": self._dictionary.undo_learning(_str(params, "token"))}
 
     async def _dictionary_learn(self, params: dict) -> dict:
-        """`{corrections: [{word, misheard}]}` from the app's correction watch: the user replaced
-        `misheard` with `word` in a dictation it pasted. Learns at most LEARN_MAX different ones
-        and returns `{learned: [word]}`: the words that changed the dictionary. Learning is always
-        on: there is no setting to turn it off.
+        """What the user's edit of a pasted dictation teaches the dictionary. The app only asks
+        when the owner turned on learning in its settings (the device setting `auto_learn`).
 
-        The core decides what a correction becomes (`DictionaryStore.learn_pair`): the word is a
-        term of the dictionary, and the pair a hint for the models until it has been seen again
-        and is fit for a replacement rule. So a word in `learned` need not have a rule. Two
-        optional fields are left out when empty: `rules`, the words of `learned` that gained a
-        replacement rule, and `reverted`, the words of which a learned rule was withdrawn
-        because the user changed the text back (those are not in `learned`). The words are never
-        logged, only how many. An optional `history_id` must name a plain dictation;
-        ask history and explicit ask/agent origins never supply learning evidence."""
-        corrections = _required(params, "corrections")
+        `{revision: {pasted, sent}}` is the dictated part of the field as it was pasted and as the
+        user left it. The cleanup model compares the two with the dictionary and names the
+        misheard terms (`learn_review.LearnReviewer`); a learned rule whose output the user changed
+        back is found without the model, and withdrawn. `{corrections: [{word, misheard}]}`, pairs
+        already named, is taken as it is. Learns at most LEARN_MAX different pairs and returns
+        `{learned: [word]}`: the words that changed the dictionary.
+
+        The core decides what a pair becomes (`DictionaryStore.learn_pair`): the word is a term of
+        the dictionary, and the pair a hint for the models until it has been seen again and is fit
+        for a replacement rule. So a word in `learned` need not have a rule. Two optional fields
+        are left out when empty: `rules`, the words of `learned` that gained a replacement rule,
+        and `reverted`, the words of which a learned rule was withdrawn because the user changed
+        the text back (those are not in `learned`). The words are never logged, only how many. An
+        optional `history_id` must name a plain dictation; ask history and explicit ask/agent
+        origins never supply learning evidence."""
+        revision = params.get("revision")
+        if revision is not None and not isinstance(revision, dict):
+            raise invalid_params("revision must be an object")
+        corrections = [] if revision is not None else _required(params, "corrections")
         if not isinstance(corrections, list):
             raise invalid_params("corrections must be a list")
         if "history_id" in params:
@@ -766,6 +800,12 @@ class Brain:
             if not isinstance(correction, dict):
                 raise invalid_params("corrections must be a list of objects")
             pairs.append((_str(correction, "word").strip(), _str(correction, "misheard").strip()))
+        if revision is not None:
+            pasted, sent = _str(revision, "pasted"), _str(revision, "sent")
+            if len(pasted) > REVISION_MAX_CHARS or len(sent) > REVISION_MAX_CHARS:
+                raise invalid_params("revision texts are too long")
+            pairs = self._reverted_rules(pasted, sent)
+            pairs += await self._reviewer.review(pasted, sent, LEARN_MAX)
         snapshots: list[dict] = []
         learned: list[str] = []
         rules: list[str] = []

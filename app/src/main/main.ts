@@ -75,6 +75,7 @@ const DEFAULT_DEVICE: DeviceSettings = {
   ui_language: "zh-TW",
   autostart: true,
   auto_update: true,
+  auto_learn: false,
   onboarded: false,
   computer_apps: [],
 };

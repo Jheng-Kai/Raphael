@@ -1453,6 +1453,8 @@ export const zhCN = {
   "data.retention": "保留听写纪录",
   "settings.groupStart": "开始方式",
   "settings.groupListen": "聆听方式",
+  "settings.autoLearn": "自动加入字典",
+  "settings.autoLearnHelp": "你修改粘贴的听写文字时，由 AI 判断哪些是听错的词并加入字典。每次判断会花少量 token。",
   "settings.searchingMicrophones": "搜索中…",
   "mic.automaticShort": "自动（{p0}）",
   "languages.variantsOf": "{p0}的写法：{p1}",

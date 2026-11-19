@@ -3,6 +3,10 @@
 //! the right one, the word goes into the dictionary by itself, with the misheard text as its
 //! misheard form, and Raphael says so (《了。「手機」已加入詞典。》).
 //!
+//! Only while the owner has it on (the device setting `auto_learn`, off by default, held in a
+//! [`LearnSwitch`]): the core asks the cleanup model which words an edit teaches, which costs a
+//! little. Off, no field is watched and nothing is sent.
+//!
 //! - [`Learner`] is the controller's [`AfterPaste`] hook. After a paste (not a copy) it runs a
 //!   watch on a thread of its own.
 //! - The watch ([`watch`]) asks the [`FieldProbe`] for the field that has the keyboard focus (on
@@ -11,12 +15,16 @@
 //!   box cleared), the focus moved on, 60 seconds passed, or a new dictation started. The last
 //!   text read before that moment is the one compared with the text right after the paste
 //!   ([`Tracker`]).
-//! - The corrections go to the core (`dictionary.learn`), which skips dismissed words and words it
-//!   knows, and answers with the words that changed the dictionary. Those get one notice.
+//! - The dictated part of the field as pasted and as it was left ([`Revision`]) goes to the core
+//!   (`dictionary.learn`), whose model names the misheard words and which skips dismissed words
+//!   and words it knows, and answers with the words that changed the dictionary. Those get one
+//!   notice.
 //!
 //! Privacy: the text is read only from the field the dictation was pasted into, only for this
 //! short while, and only on this computer. It is never logged (only lengths and counts) and never
-//! kept: the word pairs that are learned are the only thing that is stored.
+//! kept: the word pairs that are learned are the only thing that is stored. The dictated part is
+//! sent to the core only when it was changed, and the core sends only the changed stretch with a
+//! little context to the cleanup model.
 
 mod apps;
 #[cfg(target_os = "macos")]
@@ -29,11 +37,10 @@ mod keystrokes;
 mod native_tests;
 #[cfg_attr(not(windows), allow(dead_code))]
 mod terminal;
-mod terms;
 #[cfg(windows)]
 mod uia;
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
@@ -43,7 +50,7 @@ use tokio::task::JoinHandle;
 
 #[cfg(target_os = "macos")]
 pub use ax::AxProbe;
-pub use corrections::{Correction, MIN_KEPT_SHARE, Tracker};
+pub use corrections::{MIN_KEPT_SHARE, Revision, Tracker};
 #[cfg(windows)]
 pub use uia::UiaProbe;
 
@@ -74,8 +81,9 @@ pub enum Snapshot {
 pub trait WatchedField {
     fn read(&mut self) -> Snapshot;
 
-    /// Sources that observe individual edits preserve their own finer-grained origin history.
-    fn corrections(&self) -> Option<Vec<Correction>> {
+    /// Sources that observe individual edits keep their own finer-grained origin history: `Some`
+    /// is their answer (which may be no revision), `None` leaves it to the text reads.
+    fn revision(&self) -> Option<Option<Revision>> {
         None
     }
 }
@@ -100,6 +108,21 @@ pub trait FieldProbe: Send + Sync + 'static {
 }
 
 const WATCH_LIMIT: Duration = Duration::from_secs(60);
+
+/// Whether the owner turned on learning (the device setting `auto_learn`). The device settings put
+/// the saved choice in it at start and change it when the owner does.
+#[derive(Clone, Default)]
+pub struct LearnSwitch(Arc<AtomicBool>);
+
+impl LearnSwitch {
+    pub fn get(&self) -> bool {
+        self.0.load(Ordering::SeqCst)
+    }
+
+    pub fn set(&self, on: bool) {
+        self.0.store(on, Ordering::SeqCst);
+    }
+}
 
 /// Validity travels into discovery too, so a cancelled probe cannot arm a fresh observer.
 #[derive(Clone)]
@@ -231,15 +254,15 @@ enum End {
     Stopped,
 }
 
-/// Watches `field` after `pasted` went into it, and returns the corrections the user made. `wait`
-/// waits one poll and says whether to go on (false: a new dictation started). Logs lengths and
-/// counts only, never the text.
+/// Watches `field` after `pasted` went into it, and returns what the user made of the dictated
+/// part, if they changed it. `wait` waits one poll and says whether to go on (false: a new
+/// dictation started). Logs lengths and counts only, never the text.
 pub fn watch(
     field: &mut dyn WatchedField,
     pasted: &str,
     timing: Timing,
     mut wait: impl FnMut() -> bool,
-) -> Vec<Correction> {
+) -> Option<Revision> {
     let mut tracker = None;
     for attempt in 0..=timing.find_polls {
         match field.read() {
@@ -251,7 +274,7 @@ pub fn watch(
             }
             Snapshot::Left => {
                 log::info!("learn: the field was left before the dictation showed in it");
-                return Vec::new();
+                return None;
             }
         }
         if attempt == timing.find_polls || !wait() {
@@ -263,7 +286,7 @@ pub fn watch(
             "learn: the pasted text ({} characters) is not in the field; not watching",
             pasted.chars().count()
         );
-        return Vec::new();
+        return None;
     };
 
     let mut last = String::new();
@@ -279,10 +302,7 @@ pub fn watch(
                     continue;
                 }
                 let next = tracker.advanced(&text);
-                if next.kept() < MIN_KEPT_SHARE
-                    && field.corrections().is_none()
-                    && next.corrections().is_empty()
-                {
+                if next.kept() < MIN_KEPT_SHARE && field.revision().is_none() {
                     end = End::Sent;
                     break;
                 }
@@ -295,12 +315,16 @@ pub fn watch(
             }
         }
     }
-    let corrections = field.corrections().unwrap_or_else(|| tracker.corrections());
+    let revision = field.revision().unwrap_or_else(|| tracker.revision());
     log::info!(
-        "learn: the watch ended ({end:?}) with {} correction(s)",
-        corrections.len()
+        "learn: the watch ended ({end:?}) {}",
+        if revision.is_some() {
+            "with an edit"
+        } else {
+            "unedited"
+        }
     );
-    corrections
+    revision
 }
 
 /// The controller's [`AfterPaste`]: watches the field after each paste and learns the
@@ -316,6 +340,8 @@ pub struct Learner<C: CoreApi, O: OverlayApi, P: FieldProbe> {
     timing: Timing,
     /// The language of the notice that names the learned words.
     language: LanguageCell,
+    /// Whether the owner turned learning on.
+    switch: LearnSwitch,
 }
 
 impl<C: CoreApi, O: OverlayApi, P: FieldProbe> Learner<C, O, P> {
@@ -328,7 +354,14 @@ impl<C: CoreApi, O: OverlayApi, P: FieldProbe> Learner<C, O, P> {
             latest_delivery: Mutex::new(0),
             timing: TIMING,
             language: LanguageCell::default(),
+            switch: LearnSwitch::default(),
         }
+    }
+
+    /// The learner, watching only while `switch` is on.
+    pub fn with_switch(mut self, switch: LearnSwitch) -> Self {
+        self.switch = switch;
+        self
     }
 
     /// The learner, naming the learned words in the language `language` holds, which the device
@@ -386,11 +419,14 @@ impl<C: CoreApi, O: OverlayApi, P: FieldProbe> Learner<C, O, P> {
             });
             return None;
         }
+        if !self.switch.get() {
+            return None;
+        }
         let timing = self.timing;
         let language = self.language.clone();
         let (text, target) = (text.to_owned(), target.clone());
         Some(tokio::spawn(async move {
-            let (found, corrections) = oneshot::channel();
+            let (found, revision) = oneshot::channel();
             // UI Automation is used from a thread of its own (COM, multithreaded apartment), which
             // the field never leaves.
             let thread = std::thread::Builder::new()
@@ -398,12 +434,12 @@ impl<C: CoreApi, O: OverlayApi, P: FieldProbe> Learner<C, O, P> {
                 .spawn(move || {
                     let active = || scope.active();
                     if !active() {
-                        drop(found.send(Vec::new()));
+                        drop(found.send(None));
                         return;
                     }
                     let Some(mut field) = probe.after_paste(&target, &text, scope.clone()) else {
                         log::info!("learn: the focused field cannot be read; not watching");
-                        drop(found.send(Vec::new()));
+                        drop(found.send(None));
                         return;
                     };
                     let wait = || {
@@ -417,7 +453,7 @@ impl<C: CoreApi, O: OverlayApi, P: FieldProbe> Learner<C, O, P> {
                     let result = if active() {
                         watch(field.as_mut(), &text, timing, wait)
                     } else {
-                        Vec::new()
+                        None
                     };
                     // Drop the UIA field and its observer before making any RPC or notice.
                     drop(field);
@@ -427,11 +463,12 @@ impl<C: CoreApi, O: OverlayApi, P: FieldProbe> Learner<C, O, P> {
                 log::error!("learn: could not start the watch: {err}");
                 return;
             }
-            let Ok(corrections) = corrections.await else {
+            let Ok(revision) = revision.await else {
                 log::error!("learn: the watch ended without an answer");
                 return;
             };
-            let (words, undo) = learn(core.as_ref(), &corrections).await;
+            let Some(revision) = revision else { return };
+            let (words, undo) = learn(core.as_ref(), &revision).await;
             if words.is_empty() {
                 return;
             }
@@ -473,17 +510,11 @@ impl<C: CoreApi, O: OverlayApi, P: FieldProbe> AfterPaste for Learner<C, O, P> {
     }
 }
 
-/// Hands the corrections to the core; the words it learned. Nothing is sent if there are none.
-async fn learn<C: CoreApi>(core: &C, corrections: &[Correction]) -> (Vec<String>, Option<String>) {
-    if corrections.is_empty() {
-        return (Vec::new(), None);
-    }
+/// Hands the edited dictation to the core; the words it learned.
+async fn learn<C: CoreApi>(core: &C, revision: &Revision) -> (Vec<String>, Option<String>) {
     let params = json!({
         "undoable": true,
-        "corrections": corrections
-            .iter()
-            .map(|c| json!({ "word": c.word, "misheard": c.misheard }))
-            .collect::<Vec<_>>(),
+        "revision": { "pasted": revision.pasted, "sent": revision.sent },
     });
     match core.call("dictionary.learn", params).await {
         Ok(reply) => (
@@ -509,16 +540,23 @@ async fn learn<C: CoreApi>(core: &C, corrections: &[Correction]) -> (Vec<String>
 
 #[cfg(test)]
 impl<C: CoreApi, O: OverlayApi, P: FieldProbe> Learner<C, O, P> {
-    /// No waiting between reads, and a short watch.
+    /// No waiting between reads, a short watch, and learning on.
     pub fn quick(core: Arc<C>, overlay: Arc<O>, probe: Arc<P>) -> Self {
+        let switch = LearnSwitch::default();
+        switch.set(true);
         Self {
             timing: Timing {
                 poll: Duration::ZERO,
                 find_polls: 2,
                 watch_polls: 20,
             },
+            switch,
             ..Self::new(core, overlay, probe)
         }
+    }
+
+    pub fn switch(&self) -> LearnSwitch {
+        self.switch.clone()
     }
 
     pub fn generation(&self) -> Arc<AtomicU64> {
@@ -724,27 +762,26 @@ mod tests {
             ],
             0,
         );
-        let corrections = watch(&mut field, pasted, QUICK, || true);
+        let revision = watch(&mut field, pasted, QUICK, || true);
         assert_eq!(
-            misheard_and_word(&corrections),
-            [("Sample Tool Ex", "SampleToolX")]
+            pasted_and_sent(&revision),
+            Some((pasted, "Please use SampleToolX"))
         );
         assert_eq!(field.1, 3, "never read output after a cleared field");
     }
 
-    fn misheard_and_word(corrections: &[Correction]) -> Vec<(&str, &str)> {
-        corrections
-            .iter()
-            .map(|c| (c.misheard.as_str(), c.word.as_str()))
-            .collect()
+    fn pasted_and_sent(revision: &Option<Revision>) -> Option<(&str, &str)> {
+        revision
+            .as_ref()
+            .map(|r| (r.pasted.as_str(), r.sent.as_str()))
     }
 
     #[test]
     fn the_text_before_the_field_was_cleared_is_the_final_one() {
         let fixed = fixed();
         let mut field = Script(vec![t(PASTED), t(&fixed), t(""), t("下一則訊息")], 0);
-        let corrections = watch(&mut field, PASTED, QUICK, || true);
-        assert_eq!(misheard_and_word(&corrections), [("首機", "手提電話")]);
+        let revision = watch(&mut field, PASTED, QUICK, || true);
+        assert_eq!(pasted_and_sent(&revision), Some((PASTED, fixed.as_str())));
         assert_eq!(field.1, 3, "no read after the send");
     }
 
@@ -752,14 +789,14 @@ mod tests {
     fn the_watch_waits_for_the_pasted_text_to_show_up() {
         let fixed = fixed();
         let mut field = Script(vec![t(""), t(PASTED), t(&fixed)], 0);
-        let corrections = watch(&mut field, PASTED, QUICK, || true);
-        assert_eq!(misheard_and_word(&corrections), [("首機", "手提電話")]);
+        let revision = watch(&mut field, PASTED, QUICK, || true);
+        assert_eq!(pasted_and_sent(&revision), Some((PASTED, fixed.as_str())));
     }
 
     #[test]
     fn a_field_that_never_shows_the_text_is_given_up() {
         let mut field = Script(vec![t(""), t(""), t(""), t(PASTED), t(&fixed())], 0);
-        assert!(watch(&mut field, PASTED, QUICK, || true).is_empty());
+        assert!(watch(&mut field, PASTED, QUICK, || true).is_none());
         assert_eq!(field.1, 3, "find_polls + 1 reads");
     }
 
@@ -767,8 +804,8 @@ mod tests {
     fn leaving_the_field_ends_the_watch_with_what_was_read() {
         let fixed = fixed();
         let mut field = Script(vec![t(PASTED), t(&fixed), Snapshot::Left, t(PASTED)], 0);
-        let corrections = watch(&mut field, PASTED, QUICK, || true);
-        assert_eq!(misheard_and_word(&corrections), [("首機", "手提電話")]);
+        let revision = watch(&mut field, PASTED, QUICK, || true);
+        assert_eq!(pasted_and_sent(&revision), Some((PASTED, fixed.as_str())));
         assert_eq!(field.1, 3);
     }
 
@@ -778,8 +815,8 @@ mod tests {
         let mut reads = vec![t(PASTED), t(&fixed)];
         reads.extend(std::iter::repeat_n(t(&fixed), 20));
         let mut field = Script(reads, 0);
-        let corrections = watch(&mut field, PASTED, QUICK, || true);
-        assert_eq!(corrections.len(), 1);
+        let revision = watch(&mut field, PASTED, QUICK, || true);
+        assert!(revision.is_some());
         assert_eq!(field.1, 1 + QUICK.watch_polls as usize);
     }
 
@@ -788,11 +825,11 @@ mod tests {
         let fixed = fixed();
         let mut field = Script(vec![t(PASTED), t(&fixed), t(PASTED)], 0);
         let mut waits = 0;
-        let corrections = watch(&mut field, PASTED, QUICK, || {
+        let revision = watch(&mut field, PASTED, QUICK, || {
             waits += 1;
             waits < 2
         });
-        assert_eq!(misheard_and_word(&corrections), [("首機", "手提電話")]);
+        assert_eq!(pasted_and_sent(&revision), Some((PASTED, fixed.as_str())));
         assert_eq!(field.1, 2);
     }
 
@@ -827,16 +864,19 @@ mod tests {
                     _ => Snapshot::Left,
                 }
             }
-            fn corrections(&self) -> Option<Vec<Correction>> {
-                Some(self.keys.corrections())
+            fn revision(&self) -> Option<Option<Revision>> {
+                Some(self.keys.revision())
             }
         }
         let mut field = KeyboardField {
             keys: Keystrokes::new(ENGLISH).unwrap(),
             step: 0,
         };
-        let corrections = watch(&mut field, ENGLISH, QUICK, || true);
-        assert_eq!(misheard_and_word(&corrections), [("Allice", "Alice")]);
+        let revision = watch(&mut field, ENGLISH, QUICK, || true);
+        assert_eq!(
+            pasted_and_sent(&revision),
+            Some((ENGLISH, "Please ask Alice about the release plan today."))
+        );
         assert_eq!(field.step, 3);
     }
 
@@ -945,7 +985,7 @@ mod tests {
         run(&learner, &target("LINE.exe")).await;
         assert_eq!(
             core.calls("dictionary.learn"),
-            [json!({"undoable": true, "corrections": [{"word": "手提電話", "misheard": "首機"}]})]
+            [json!({"undoable": true, "revision": {"pasted": PASTED, "sent": fixed()}})]
         );
         assert_eq!(
             *overlay.0.lock().unwrap(),
@@ -1016,6 +1056,26 @@ mod tests {
         assert_eq!(probe.asked.lock().unwrap().len(), 1);
         assert_eq!(core.calls("dictionary.learn").len(), 1);
         assert_eq!(overlay.0.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn with_learning_off_no_field_is_watched_and_nothing_is_sent() {
+        let core = Core::default().on("dictionary.learn", json!({"learned": ["手提電話"]}));
+        let (core, overlay, probe, learner) = learner(core, sent_field());
+        learner.switch().set(false);
+        assert!(learner.start(PASTED, &target("LINE.exe")).is_none());
+        assert!(probe.asked.lock().unwrap().is_empty());
+        assert!(core.calls("dictionary.learn").is_empty());
+        assert!(overlay.0.lock().unwrap().is_empty());
+        // Turned on again, the next paste is watched.
+        learner.switch().set(true);
+        run(&learner, &target("LINE.exe")).await;
+        assert_eq!(core.calls("dictionary.learn").len(), 1);
+    }
+
+    #[test]
+    fn learning_is_off_until_the_owner_turns_it_on() {
+        assert!(!LearnSwitch::default().get());
     }
 
     #[tokio::test]

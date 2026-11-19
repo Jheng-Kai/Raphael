@@ -871,6 +871,14 @@ pub async fn core_call(
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     };
     let method = if method == "dictionary.correct" {
+        // Learning asks the cleanup model, which costs; only while the owner has it on.
+        let on = match app.try_state::<DeviceStore>() {
+            Some(store) => store.get().await.auto_learn,
+            None => false,
+        };
+        if !on {
+            return Ok(json!({"learned": []}));
+        }
         params = crate::learned::composer_params(params)?;
         "dictionary.learn".to_owned()
     } else {
@@ -1507,6 +1515,8 @@ pub trait Effects: Send + Sync {
     fn dictation_mode(&self, mode: DictationMode);
     /// Hands the interface language to the controller, which shows its notices in it.
     fn ui_language(&self, language: &str);
+    /// Turns the learning from the owner's corrections on or off (`learn::LearnSwitch`).
+    fn auto_learn(&self, on: bool);
     /// Draws the tray menu again: it names the microphone in use and speaks the interface
     /// language.
     fn tray_menu(&self);
@@ -1571,6 +1581,9 @@ pub async fn apply_changes<E: Effects>(
     }
     if old.ui_language != new.ui_language {
         effects.ui_language(&new.ui_language);
+    }
+    if old.auto_learn != new.auto_learn {
+        effects.auto_learn(new.auto_learn);
     }
     if microphone_changed || old.ui_language != new.ui_language {
         effects.tray_menu();
@@ -1799,6 +1812,16 @@ impl Effects for AppEffects {
         match self.app.try_state::<LanguageCell>() {
             Some(cell) => cell.set(language),
             None => log::warn!("there is no dictation controller to hand the language to"),
+        }
+    }
+
+    fn auto_learn(&self, on: bool) {
+        match self.app.try_state::<crate::learn::LearnSwitch>() {
+            Some(switch) => switch.set(on),
+            None => log::warn!(
+                "there is no learner to turn {}",
+                if on { "on" } else { "off" }
+            ),
         }
     }
 
@@ -2498,6 +2521,9 @@ fn apply_saved(app: &AppHandle, settings: &DeviceSettings) {
     }
     if settings.ui_language != fresh.ui_language {
         effects.ui_language(&settings.ui_language);
+    }
+    if settings.auto_learn != fresh.auto_learn {
+        effects.auto_learn(settings.auto_learn);
     }
     // A debug build runs from the target folder; it must not put itself in the registry.
     if !cfg!(debug_assertions)
@@ -4458,6 +4484,10 @@ mod tests {
             let _ = self.record("ui_language", language.to_owned());
         }
 
+        fn auto_learn(&self, on: bool) {
+            let _ = self.record("auto_learn", on.to_string());
+        }
+
         fn tray_menu(&self) {
             self.log.lock().unwrap().push("tray_menu".to_owned());
         }
@@ -4603,6 +4633,17 @@ mod tests {
         let (old, new) = changed(json!({"tidy_keys": []}));
         apply_changes(&fake, &old, &new).await.unwrap();
         assert!(fake.bound.lock().unwrap().clone().unwrap().tidy.is_empty());
+    }
+
+    #[tokio::test]
+    async fn turning_learning_on_or_off_is_handed_to_the_learner() {
+        let fake = Fake::default();
+        let (old, new) = changed(json!({"auto_learn": true}));
+        apply_changes(&fake, &old, &new).await.unwrap();
+        assert_eq!(fake.done(), ["auto_learn true"]);
+        let fake = Fake::default();
+        apply_changes(&fake, &new, &old).await.unwrap();
+        assert_eq!(fake.done(), ["auto_learn false"]);
     }
 
     #[tokio::test]

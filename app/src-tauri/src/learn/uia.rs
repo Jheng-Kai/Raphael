@@ -35,8 +35,7 @@ use super::apps::{AppKind, classify, editor_id, needs_accessibility_hint};
 use super::keystrokes::{EnterKey, Keystrokes};
 use super::terminal::{TerminalDecision, TerminalTracker, collapsed_pastes};
 use super::{
-    Correction, FieldProbe, LimitReason, Snapshot, Tracker, WatchScope, WatchedField,
-    report_limited,
+    FieldProbe, LimitReason, Revision, Snapshot, Tracker, WatchScope, WatchedField, report_limited,
 };
 use crate::paste::Target;
 
@@ -920,20 +919,13 @@ impl WatchedField for UiaField {
         }
     }
 
-    fn corrections(&self) -> Option<Vec<Correction>> {
+    fn revision(&self) -> Option<Option<Revision>> {
         match &self.mode {
-            ReadMode::Terminal { tracker, .. } => Some(
-                self.keys
-                    .as_ref()
-                    .map(Keystrokes::corrections)
-                    .unwrap_or_else(|| tracker.corrections()),
-            ),
-            ReadMode::Keys => Some(
-                self.keys
-                    .as_ref()
-                    .map(Keystrokes::corrections)
-                    .unwrap_or_default(),
-            ),
+            ReadMode::Terminal { tracker, .. } => Some(match self.keys.as_ref() {
+                Some(keys) => keys.revision(),
+                None => tracker.revision(),
+            }),
+            ReadMode::Keys => Some(self.keys.as_ref().and_then(Keystrokes::revision)),
             _ => None,
         }
     }
@@ -1579,6 +1571,14 @@ fn checked_read<S, T>(
 mod tests {
     use super::*;
 
+    /// The dictated span changed, from a text holding `misheard` to one holding `word`.
+    fn assert_revised(revision: Option<Revision>, misheard: &str, word: &str) {
+        let revision = revision.expect("a revision");
+        assert!(revision.pasted.contains(misheard), "{revision:?}");
+        assert!(revision.sent.contains(word), "{revision:?}");
+        assert_ne!(revision.pasted, revision.sent);
+    }
+
     #[test]
     fn logged_terminal_paste_overlay_backspaces_and_retyping_learns_the_name() {
         let pasted = "Please use Sample Tool Ex";
@@ -1595,13 +1595,7 @@ mod tests {
         }
         keys.apply(EditEvent::Enter);
         assert_eq!(keys.text(), Some("Please use SampleToolX"));
-        assert_eq!(
-            keys.corrections(),
-            [Correction {
-                word: "SampleToolX".into(),
-                misheard: "Sample Tool Ex".into(),
-            }]
-        );
+        assert_revised(keys.revision(), "Sample Tool Ex", "SampleToolX");
     }
 
     #[test]

@@ -1174,6 +1174,8 @@ export const zhTW = {
   "data.retention": "保留聽寫紀錄",
   "settings.groupStart": "開始方式",
   "settings.groupListen": "聆聽方式",
+  "settings.autoLearn": "自動加入字典",
+  "settings.autoLearnHelp": "你改了貼上的聽寫文字時，由 AI 判斷哪些是聽錯的詞並加入字典。每次判斷會花少量 token。",
   "settings.sttLocalPrice": "免費",
   "settings.searchingMicrophones": "搜尋中…",
   "mic.automaticShort": "自動（{p0}）",

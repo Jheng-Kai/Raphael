@@ -1453,6 +1453,8 @@ export const it = {
   "data.retention": "Conserva cronologia dettatura",
   "settings.groupStart": "Come iniziare",
   "settings.groupListen": "Come ascolta",
+  "settings.autoLearn": "Aggiungi automaticamente le parole corrette",
+  "settings.autoLearnHelp": "Quando modifichi una dettatura incollata, l’IA individua le parole capite male e le aggiunge al dizionario. Ogni controllo usa alcuni token.",
   "settings.searchingMicrophones": "Ricerca…",
   "mic.automaticShort": "Automatico ({p0})",
   "languages.variantsOf": "Come si scrive {p0}: {p1}",

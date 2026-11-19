@@ -37,7 +37,7 @@ import { pricingNote } from "../pricing";
 import type { HotkeyField } from "../hotkey-recording";
 import type { AudioDevices, BrainSettings, DeviceSettings, LocalModel, ModelCatalog, ModelRole, SettingsPane, Status } from "../types";
 import { micRow } from "../setup-rows";
-import { type Choice, type IconName, btn, esc, ico, iconBtn, keys, note, row, sel, st, tabs } from "../ui";
+import { type Choice, type IconName, btn, esc, ico, iconBtn, keys, note, row, sel, st, tabs, tg } from "../ui";
 
 /** The models the core reads when none is chosen (brain/settings.py), shown while it does not answer. */
 const DEFAULT_MODELS = { cleanup: "openai/gpt-6-luna", answer: "openai/gpt-6-luna", stt: "elevenlabs/scribe-v2" } as const;
@@ -456,6 +456,10 @@ function dictationHTML(v: SettingsView): string {
         meter: { place: "after", segments: MIC_METER_SEGMENTS },
         row: { cls: "row-mic" },
       }),
+    ]) +
+    // Learning from corrections asks the cleanup model, so it is the owner's choice.
+    section(t("main.003"), [
+      row(t("settings.autoLearn"), t("settings.autoLearnHelp"), tg(d.auto_learn ?? false, t("settings.autoLearn"), ' data-k="auto-learn"')),
     ]) +
     // How long the history is kept lives with dictation; there is no separate Data page.
     section(t("data.groupDictation"), [row(t("data.retention"), "", sel(retentionChoices(v), retentionOf(v), t("data.retention"), ` data-k="retention"${v.brain === null ? " disabled" : ""}`))])

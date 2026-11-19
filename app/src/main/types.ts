@@ -882,6 +882,8 @@ export interface DeviceSettings {
   ui_language: UiLocale;
   autostart: boolean;
   auto_update?: boolean;
+  /** Learn the words the owner corrects in pasted dictations; asks the cleanup model, off by default. */
+  auto_learn?: boolean;
   onboarded: boolean;
   /**
    * The apps Raphael may always operate on this PC (the 一律允許 answer of a question), by the

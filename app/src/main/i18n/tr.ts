@@ -1453,6 +1453,8 @@ export const tr = {
   "data.retention": "Dikte geçmişini sakla",
   "settings.groupStart": "Nasıl başlanır",
   "settings.groupListen": "Nasıl dinler",
+  "settings.autoLearn": "Düzeltilen kelimeleri otomatik ekle",
+  "settings.autoLearnHelp": "Yapıştırılan dikteyi düzenlediğinizde yapay zekâ yanlış duyulan kelimeleri bulup sözlüğe ekler. Her kontrol birkaç token kullanır.",
   "settings.searchingMicrophones": "Aranıyor…",
   "mic.automaticShort": "Otomatik ({p0})",
   "languages.variantsOf": "{p0} nasıl yazılır: {p1}",

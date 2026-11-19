@@ -99,7 +99,7 @@ pub fn publish(app: &AppHandle, words: &[String], undo: Option<&str>, language: 
     }
 }
 
-/// Only bounded dictation evidence enters the same pure term rule as external-app learning.
+/// Only bounded dictation evidence reaches the core, as the same revision external-app learning sends.
 pub fn composer_params(params: Value) -> Result<Value, String> {
     let edits = params
         .get("edits")
@@ -131,10 +131,7 @@ pub fn composer_params(params: Value) -> Result<Value, String> {
         }
         previous = after;
     }
-    let corrections = crate::learn::corrections::term_corrections(first, previous);
-    Ok(
-        json!({"undoable": true, "corrections": corrections.iter().map(|c| json!({"word": c.word, "misheard": c.misheard})).collect::<Vec<_>>()}),
-    )
+    Ok(json!({"undoable": true, "revision": {"pasted": first, "sent": previous}}))
 }
 
 #[tauri::command]
@@ -464,42 +461,23 @@ mod tests {
     }
 
     #[test]
-    fn composer_uses_the_same_pure_term_rule_as_external_dictation() {
-        let before = "Please ask Allice to review the next release notes carefully.";
-        let after = before.replace("Allice", "Alice");
-        assert_eq!(
-            composer_params(json!({"edits": [{"before": before, "after": after}]})).unwrap(),
-            json!({"undoable": true, "corrections": [{"word": "Alice", "misheard": "Allice"}]})
-        );
+    fn composer_sends_the_dictated_text_as_first_dictated_and_as_last_edited() {
         let before = "Please ask Allice and Cloude to review the next release notes carefully.";
         let middle = before.replace("Allice", "Alice");
         let after = middle.replace("Cloude", "Claude");
-        assert_eq!(composer_params(json!({"edits": [{"before": before, "after": middle}, {"before": middle, "after": after}]})).unwrap(),
-            json!({"undoable": true, "corrections": [{"word": "Alice", "misheard": "Allice"}, {"word": "Claude", "misheard": "Cloude"}]}));
+        assert_eq!(
+            composer_params(json!({"edits": [{"before": before, "after": middle}]})).unwrap(),
+            json!({"undoable": true, "revision": {"pasted": before, "sent": middle}})
+        );
+        assert_eq!(
+            composer_params(json!({"edits": [{"before": before, "after": middle}, {"before": middle, "after": after}]})).unwrap(),
+            json!({"undoable": true, "revision": {"pasted": before, "sent": after}})
+        );
         assert!(composer_params(json!({"edits": [{"before": before, "after": middle}, {"before": before, "after": after}]})).is_err());
         assert!(composer_params(json!({"edits": []})).is_err());
         assert!(
             composer_params(json!({"edits": [{"before": "x", "after": "x".repeat(20_001)}]}))
                 .is_err()
         );
-    }
-
-    #[test]
-    fn composer_counts_insertions_and_rewrites_across_the_complete_dictated_text() {
-        for (before, after) in [
-            (
-                "Allice and Cloude will review",
-                "Alice and Claude will review tomorrow",
-            ),
-            ("hello", "hello Alice"),
-            ("不錯", "真的很好"),
-            ("こんにちわ", "こんにちは"),
-        ] {
-            assert_eq!(
-                composer_params(json!({"edits": [{"before": before, "after": after}]})).unwrap(),
-                json!({"undoable": true, "corrections": []}),
-                "{before:?} -> {after:?}"
-            );
-        }
     }
 }

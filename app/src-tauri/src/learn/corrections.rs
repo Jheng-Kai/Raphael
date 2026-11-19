@@ -1,24 +1,22 @@
-//! What the user corrected in a pasted dictation, with pure rules over character origins.
+//! What the user changed in a pasted dictation.
 //!
 //! [`Tracker`] anchors the pasted dictation inside the field and follows scalar-character origins
-//! across snapshots, including selection, deletion and later retyping. Only the dictated span
-//! reaches the shared pure term rule; neighboring typing never becomes dictionary evidence.
+//! across snapshots, including selection, deletion and later retyping. Only the dictated span is
+//! reported: neighboring typing never becomes dictionary evidence.
 //!
-//! [`Tracker::corrections`] applies the shared pure term rule to the final dictated span.
+//! [`Tracker::revision`] gives the dictated span as it was pasted and as it is now. Which of its
+//! changes teach the dictionary is judged by the core (`dictionary.learn`), with the model, in
+//! whatever language was spoken: no rule of spelling or script decides it here.
 
 use std::ops::Range;
 
-pub(crate) use super::terms::term_corrections;
-
-/// The user replaced `misheard` with `word` in the pasted text.
+/// The dictated span of a field as it was pasted (`pasted`) and as the user left it (`sent`).
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Correction {
-    pub word: String,
-    pub misheard: String,
+pub struct Revision {
+    pub pasted: String,
+    pub sent: String,
 }
 
-/// The most corrections taken from one dictation.
-pub const MAX_CORRECTIONS: usize = 2;
 /// Below this share of the pasted text still in the field, the field was cleared (the message
 /// was sent) or replaced.
 pub const MIN_KEPT_SHARE: f64 = 0.5;
@@ -216,16 +214,17 @@ impl Tracker {
             .collect()
     }
 
-    /// Apply the same pure term rule to the dictated span in every capture surface.
-    pub fn corrections(&self) -> Vec<Correction> {
+    /// The dictated span as pasted and as it is now; `None` when it is unchanged, or when an
+    /// edit reaches across either of its edges (that edit cannot be told apart from typing
+    /// around the dictation).
+    pub fn revision(&self) -> Option<Revision> {
         let edits = self.edits();
-        // A replacement across either pasted edge cannot be attributed to dictation alone.
         if edits.iter().any(|edit| {
             edit.old.start < self.span.end
                 && edit.old.end > self.span.start
                 && (edit.old.start < self.span.start || edit.old.end > self.span.end)
         }) {
-            return Vec::new();
+            return None;
         }
         let mut positions: Vec<usize> = self
             .origin
@@ -238,12 +237,10 @@ impl Tracker {
             positions.push(edit.new.start);
             end = end.max(edit.new.end);
         }
-        let Some(start) = positions.into_iter().min() else {
-            return Vec::new();
-        };
-        let before: String = self.before[self.span.clone()].iter().collect();
-        let after: String = self.current[start..end.max(start)].iter().collect();
-        term_corrections(&before, &after)
+        let start = positions.into_iter().min()?;
+        let pasted: String = self.before[self.span.clone()].iter().collect();
+        let sent: String = self.current[start..end.max(start)].iter().collect();
+        (pasted != sent).then_some(Revision { pasted, sent })
     }
 }
 
@@ -258,25 +255,94 @@ pub fn is_cjk(c: char) -> bool {
         | '\u{20000}'..='\u{2FFFF}')
 }
 
+/// For tests of where a revision comes from: the stretches that differ between its two texts, as
+/// `(pasted, sent)`, with Latin words whole and every other character on its own, whitespace
+/// left out of the comparison. Only stretches that replace something with something count.
+#[cfg(test)]
+pub(crate) fn changed_words(revision: &Revision) -> Vec<(String, String)> {
+    fn tokens(text: &str) -> Vec<(usize, usize)> {
+        let mut out = Vec::new();
+        let mut start = None;
+        for (at, c) in text.char_indices() {
+            let latin = c.is_alphanumeric() && !is_cjk(c);
+            if latin {
+                start.get_or_insert(at);
+                continue;
+            }
+            if let Some(from) = start.take() {
+                out.push((from, at));
+            }
+            if !c.is_whitespace() {
+                out.push((at, at + c.len_utf8()));
+            }
+        }
+        if let Some(from) = start {
+            out.push((from, text.len()));
+        }
+        out
+    }
+    let (old_text, new_text) = (&revision.pasted, &revision.sent);
+    let (old, new) = (tokens(old_text), tokens(new_text));
+    let word = |text: &str, (a, b): (usize, usize)| text[a..b].to_owned();
+    let (old_words, new_words): (Vec<String>, Vec<String>) = (
+        old.iter().map(|t| word(old_text, *t)).collect(),
+        new.iter().map(|t| word(new_text, *t)).collect(),
+    );
+    let mut lcs = vec![vec![0usize; new.len() + 1]; old.len() + 1];
+    for i in (0..old.len()).rev() {
+        for j in (0..new.len()).rev() {
+            lcs[i][j] = if old_words[i] == new_words[j] {
+                lcs[i + 1][j + 1] + 1
+            } else {
+                lcs[i + 1][j].max(lcs[i][j + 1])
+            };
+        }
+    }
+    let (mut i, mut j) = (0, 0);
+    let mut runs = Vec::new();
+    type Span = Option<(usize, usize)>;
+    let (mut from, mut to): (Span, Span) = (None, None);
+    let widen = |span: &mut Span, (a, b): (usize, usize)| {
+        *span = Some(span.map_or((a, b), |(start, _)| (start, b)));
+    };
+    loop {
+        let same = i < old.len() && j < new.len() && old_words[i] == new_words[j];
+        if same || (i == old.len() && j == new.len()) {
+            if let (Some((a, b)), Some((c, d))) = (from.take(), to.take()) {
+                runs.push((old_text[a..b].to_owned(), new_text[c..d].to_owned()));
+            }
+            if !same {
+                break;
+            }
+            i += 1;
+            j += 1;
+        } else if j < new.len() && (i == old.len() || lcs[i][j + 1] >= lcs[i + 1][j]) {
+            widen(&mut to, new[j]);
+            j += 1;
+        } else {
+            widen(&mut from, old[i]);
+            i += 1;
+        }
+    }
+    runs
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// The corrections from the field right after the paste, through each later snapshot.
-    fn learned(pasted: &str, snapshots: &[&str]) -> Vec<(String, String)> {
+    /// The revision from the field right after the paste, through each later snapshot, as
+    /// `(pasted, sent)`.
+    fn learned(pasted: &str, snapshots: &[&str]) -> Option<(String, String)> {
         let mut tracker = Tracker::new(snapshots[0], pasted).expect("the pasted text is found");
         for text in &snapshots[1..] {
             tracker = tracker.advanced(text);
         }
-        tracker
-            .corrections()
-            .into_iter()
-            .map(|c| (c.misheard, c.word))
-            .collect()
+        tracker.revision().map(|r| (r.pasted, r.sent))
     }
 
-    /// The corrections when `pasted` is edited with each `(from, to)` in turn, one snapshot each.
-    fn learned_after(pasted: &str, replacements: &[(&str, &str)]) -> Vec<(String, String)> {
+    /// The revision when `pasted` is edited with each `(from, to)` in turn, one snapshot each.
+    fn learned_after(pasted: &str, replacements: &[(&str, &str)]) -> Option<(String, String)> {
         let mut snapshots = vec![pasted.to_owned()];
         for (from, to) in replacements {
             let last = snapshots.last().unwrap();
@@ -287,13 +353,11 @@ mod tests {
         learned(pasted, &snapshots)
     }
 
-    fn pairs(list: &[(&str, &str)]) -> Vec<(String, String)> {
-        list.iter()
-            .map(|(misheard, word)| ((*misheard).to_owned(), (*word).to_owned()))
-            .collect()
+    fn pair(pasted: &str, sent: &str) -> Option<(String, String)> {
+        Some((pasted.to_owned(), sent.to_owned()))
     }
 
-    const NONE: Vec<(String, String)> = Vec::new();
+    const NONE: Option<(String, String)> = None;
 
     const PASTED: &str = "我昨天買了一支新的首機，拍照很漂亮，電池也很耐用，整體來說我很滿意";
 
@@ -331,12 +395,9 @@ mod tests {
         assert_eq!(Tracker::new(field, "Wornote").unwrap().span, 20..27);
         let tracker = Tracker::with_span(field, 0..7).unwrap();
         let tracker = tracker.advanced("Wordnote is here and Wornote again");
-        let learned: Vec<_> = tracker
-            .corrections()
-            .into_iter()
-            .map(|c| (c.misheard, c.word))
-            .collect();
-        assert_eq!(learned, [("Wornote".to_owned(), "Wordnote".to_owned())]);
+        let revision = tracker.revision().unwrap();
+        assert_eq!(revision.pasted, "Wornote");
+        assert_eq!(revision.sent, "Wordnote");
     }
 
     #[test]
@@ -390,23 +451,29 @@ mod tests {
         assert!(Tracker::new("什麼", "   ").is_none());
     }
 
-    // ---------- CJK ----------
+    // ---------- the revision ----------
 
     #[test]
-    fn a_common_word_is_not_learned_even_when_selected_and_retyped() {
-        // select 首機 and delete it, type 手機 (the IME's composition shows in between)
+    fn no_edit_is_no_revision() {
+        assert_eq!(learned(PASTED, &[PASTED, PASTED]), NONE);
+    }
+
+    #[test]
+    fn a_word_typed_over_gives_the_whole_dictated_span() {
+        let fixed = PASTED.replacen("首機", "手機", 1);
         assert_eq!(
-            learned_after(
-                PASTED,
-                &[("首機", ""), ("新的，", "新的shou，"), ("shou", "手機")]
-            ),
-            NONE
+            learned_after(PASTED, &[("首機", "手機")]),
+            pair(PASTED, &fixed)
+        );
+        let pasted = "Please ask Allice to confirm the meeting tomorrow.";
+        assert_eq!(
+            learned_after(pasted, &[("Allice", "Alice")]),
+            pair(pasted, "Please ask Alice to confirm the meeting tomorrow.")
         );
     }
 
     #[test]
-    fn a_word_selected_and_retyped_the_same_is_no_correction() {
-        // speech-to-text had it right: deleting 電池 and typing 電池 again teaches nothing
+    fn a_word_selected_and_retyped_the_same_is_no_revision() {
         assert_eq!(
             learned_after(PASTED, &[("電池", ""), ("漂亮，也", "漂亮，電池也")]),
             NONE
@@ -421,165 +488,22 @@ mod tests {
     }
 
     #[test]
-    fn a_word_typed_over_in_one_go() {
-        // straight from the wrong word to the right one: only 首 differs, too short for a term
-        assert_eq!(learned_after(PASTED, &[("首機", "手機")]), NONE);
-        assert_eq!(
-            learned_after(PASTED, &[("首機", "手提電話")]),
-            pairs(&[("首機", "手提電話")])
-        );
+    fn deletions_and_insertions_are_revisions_too() {
+        // Which of them teach a word is the core's judgement, not the tracker's.
+        assert!(learned_after(PASTED, &[("新的首機", "新的")]).is_some());
+        assert!(learned_after(PASTED, &[("拍照", "拍照和錄影")]).is_some());
     }
 
     #[test]
-    fn no_edit_learns_nothing() {
-        assert_eq!(learned(PASTED, &[PASTED, PASTED]), NONE);
-    }
-
-    #[test]
-    fn a_deletion_alone_is_no_correction() {
-        assert_eq!(learned_after(PASTED, &[("新的首機", "新的")]), NONE);
-    }
-
-    #[test]
-    fn an_insertion_alone_is_no_correction() {
-        assert_eq!(learned_after(PASTED, &[("拍照很", "拍照真的很")]), NONE);
-    }
-
-    #[test]
-    fn a_long_cjk_run_is_no_term() {
-        assert_eq!(
-            learned_after(
-                PASTED,
-                &[("電池也很耐用", "電池也是非常非常非常非常非常非常的耐用")]
-            ),
-            NONE
-        );
-    }
-
-    #[test]
-    fn punctuation_decorated_cjk_text_is_not_a_term() {
-        assert_eq!(learned_after(PASTED, &[("首機", "「手提電話」")]), NONE);
-    }
-
-    #[test]
-    fn digits_or_punctuation_alone_are_not_learned() {
-        let pasted = "會議改到下午三點，大家準時到場喔，記得帶筆電和充電器過來";
-        assert_eq!(learned_after(pasted, &[("三點", "15:00")]), NONE);
-        assert_eq!(learned_after(pasted, &[("三點，", "三點！！")]), NONE);
-    }
-
-    // ---------- Latin ----------
-
-    const EN: &str = "I tried word note yesterday and it works really well for long emails";
-
-    #[test]
-    fn latin_words_replaced_by_a_term_are_learned() {
-        assert_eq!(
-            learned_after(EN, &[("word note", "Wordnote")]),
-            pairs(&[("word note", "Wordnote")])
-        );
-    }
-
-    #[test]
-    fn a_word_fixed_from_inside_is_learned_whole() {
-        let pasted = "We moved the servers to tailscail last week and it just works";
-        assert_eq!(
-            learned_after(pasted, &[("tailscail", "Tailscale")]),
-            pairs(&[("tailscail", "Tailscale")])
-        );
-        // one letter typed into the word
-        let pasted = "I tried Wornote yesterday and it works really well for long emails";
-        assert_eq!(
-            learned_after(pasted, &[("Wornote", "Wordnote")]),
-            pairs(&[("Wornote", "Wordnote")])
-        );
-    }
-
-    #[test]
-    fn capitalized_terms_are_candidates_for_the_dictionary() {
-        assert_eq!(
-            learned_after(EN, &[("word note", "Word Note")]),
-            pairs(&[("word note", "Word Note")])
-        );
-    }
-
-    #[test]
-    fn a_name_in_lower_case_typed_over_a_mishearing_is_a_candidate() {
-        // What speech-to-text wrote for the name 「pinebot」.
-        let pasted = "你可以看一下Pinebox是怎麼做的，他們是直接可以開啟來";
-        assert_eq!(
-            learned_after(pasted, &[("Pinebox", "pinebot")]),
-            pairs(&[("Pinebox", "pinebot")])
-        );
-        let pasted = "你這邊的話就是跟Pine Bus一樣，設計是滑鼠滾輪往下這樣子";
-        assert_eq!(
-            learned_after(pasted, &[("Pine Bus", "pinebot")]),
-            pairs(&[("Pine Bus", "pinebot")])
-        );
-        let pasted = "幫我用 Herder 開兩個分頁";
-        assert_eq!(
-            learned_after(pasted, &[("Herder", "herdr")]),
-            pairs(&[("Herder", "herdr")])
-        );
-    }
-
-    #[test]
-    fn a_common_word_in_lower_case_is_still_no_term() {
-        assert_eq!(learned_after(EN, &[("yesterday", "today")]), NONE);
-        assert_eq!(learned_after(EN, &[("long", "it")]), NONE);
-        // Two letters are no name.
-        assert_eq!(learned_after(EN, &[("emails", "pr")]), NONE);
-    }
-
-    #[test]
-    fn short_words_are_not_terms() {
-        assert_eq!(learned_after(EN, &[("it works", "it is")]), NONE);
-    }
-
-    #[test]
-    fn more_than_three_words_are_no_term() {
-        let pasted = "Please send the report to the whole team before the meeting on Friday morning ok thanks";
-        assert_eq!(
-            learned_after(pasted, &[("the whole team", "every single person here")]),
-            NONE
-        );
-    }
-
-    // ---------- mixed ----------
-
-    #[test]
-    fn a_cross_script_replacement_must_have_comparable_lengths() {
-        let pasted = "我們用泰斯克連回家裡的電腦，速度還不錯，設定也很簡單";
-        assert_eq!(learned_after(pasted, &[("泰斯克", "Tailscale")]), NONE);
-    }
-
-    #[test]
-    fn latin_words_joined_in_chinese_text_are_learned_whole() {
-        let pasted = "我今天試了 Open Router 的新模型，感覺回答比較快一點點";
-        assert_eq!(
-            learned_after(pasted, &[("Open Router", "OpenRouter")]),
-            pairs(&[("Open Router", "OpenRouter")])
-        );
-    }
-
-    #[test]
-    fn katakana_counts_as_cjk() {
-        let pasted = "明日はラファエロ先生に会いに行きますので、よろしくお願いします";
+    fn several_edits_are_one_revision() {
+        let pasted = "Ask Jon and Mery about Zentrova today";
         assert_eq!(
             learned_after(
                 pasted,
-                &[("ラファエロ", ""), ("は先生", "はラファエル先生")]
+                &[("Jon", "John"), ("Mery", "Mary"), ("Zentrova", "Zentrovo")]
             ),
-            pairs(&[("ラファエロ", "ラファエル")])
+            pair(pasted, "Ask John and Mary about Zentrovo today")
         );
-    }
-
-    // ---------- the whole dictation ----------
-
-    #[test]
-    fn a_rewrite_of_most_of_the_text_learns_nothing() {
-        let pasted = "明天下午三點開會，記得帶筆電";
-        assert_eq!(learned_after(pasted, &[("明天下午三", "後天早上十")]), NONE);
     }
 
     #[test]
@@ -591,42 +515,36 @@ mod tests {
     }
 
     #[test]
-    fn more_than_two_changed_spans_reject_the_whole_dictation() {
-        let pasted = "甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥天干地支，這是一段很長的文字用來測試最多兩個修正的規則是不是有效";
+    fn an_edit_across_an_edge_of_the_pasted_text_is_no_revision() {
+        let field = format!("前面{PASTED}");
+        let crossing = field.replacen("前面我", "你", 1);
+        assert_eq!(learned(PASTED, &[&field, &crossing]), NONE);
+    }
+
+    #[test]
+    fn text_typed_after_the_dictation_is_left_out() {
+        let fixed = PASTED.replacen("首機", "手機", 1);
         assert_eq!(
-            learned_after(
-                pasted,
-                &[
-                    ("甲乙", "一二"),
-                    ("戊己", "三四"),
-                    ("子丑", "五六"),
-                    ("辰巳", "七八")
-                ]
-            ),
-            NONE
+            learned(PASTED, &[PASTED, &fixed, &format!("{fixed} 謝謝")]),
+            pair(PASTED, &fixed)
         );
     }
 
     #[test]
-    fn two_corrections_in_one_dictation() {
-        let pasted =
-            "我用泰斯刻爾連回家，再用歐噴肉特叫模型，整體來說還算順利，大概花了十分鐘左右就弄好了";
+    fn the_changed_words_of_a_revision_name_each_replaced_stretch() {
+        let revision = Revision {
+            pasted: "Use Wornote and Open Router for 首機".into(),
+            sent: "Use Wordnote and OpenRouter for 電話 now".into(),
+        };
         assert_eq!(
-            learned_after(
-                pasted,
-                &[("泰斯刻爾", "Tailscale"), ("歐噴肉特", "OpenRouter")]
-            ),
-            pairs(&[("泰斯刻爾", "Tailscale"), ("歐噴肉特", "OpenRouter")])
+            changed_words(&revision),
+            [
+                ("Wornote".to_owned(), "Wordnote".to_owned()),
+                ("Open Router".to_owned(), "OpenRouter".to_owned()),
+                ("首機".to_owned(), "電話 now".to_owned()),
+            ]
         );
     }
-
-    #[test]
-    fn a_change_across_a_line_break_is_not_learned() {
-        let pasted = "第一點是首機\n第二點是電腦，還有其他的東西要說明一下";
-        assert_eq!(learned_after(pasted, &[("首機\n第二點是", "手機")]), NONE);
-    }
-
-    // ---------- the field emptied ----------
 
     #[test]
     fn kept_drops_when_the_field_is_cleared() {

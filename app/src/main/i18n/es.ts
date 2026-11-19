@@ -1453,6 +1453,8 @@ export const es = {
   "data.retention": "Conservar historial de dictado",
   "settings.groupStart": "Cómo empezar",
   "settings.groupListen": "Cómo escucha",
+  "settings.autoLearn": "Añadir automáticamente las palabras corregidas",
+  "settings.autoLearnHelp": "Cuando editas un dictado pegado, la IA detecta las palabras mal entendidas y las añade al diccionario. Cada revisión usa algunos tokens.",
   "settings.searchingMicrophones": "Buscando…",
   "mic.automaticShort": "Automático ({p0})",
   "languages.variantsOf": "Cómo se escribe {p0}: {p1}",

@@ -30,14 +30,17 @@ test.each([
   expect(root.hidden).toBe(true);
 });
 
-test("five seconds without interaction fades; hovering keeps the pill open", () => {
+test("ten seconds without interaction fades; hovering keeps the pill open", () => {
   learnedPill(root, actions).show({ words: ["Composio"], token: "batch-1", language: "en" });
-  vi.advanceTimersByTime(4900);
+  vi.advanceTimersByTime(9900);
+  expect(root.classList.contains("is-leaving")).toBe(false);
   root.dispatchEvent(new MouseEvent("mouseenter"));
   vi.advanceTimersByTime(20_000);
   expect(root.hidden).toBe(false); expect(actions.finish).not.toHaveBeenCalled();
   root.dispatchEvent(new MouseEvent("mouseleave"));
-  vi.advanceTimersByTime(5000);
+  vi.advanceTimersByTime(9900);
+  expect(root.classList.contains("is-leaving")).toBe(false);
+  vi.advanceTimersByTime(100);
   expect(root.classList.contains("is-leaving")).toBe(true);
   expect(actions.finish).toHaveBeenCalledWith("batch-1", false);
   vi.advanceTimersByTime(180); expect(root.hidden).toBe(true);

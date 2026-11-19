@@ -205,7 +205,12 @@ when `agent_ask_text` returned, which is when the whole answer ended, so a long 
 learns as the message goes (a group composer still learns on delivery). Outside the app, a paste into Claude's desktop composer never started a
 watch (`probe stopped (stage: focused_ancestry)` in `%LOCALAPPDATA%\Raphael Dev\logs`): the composer is
 36 levels deep and the walk stopped at 32. The walk now allows 128 and every `Chrome_WidgetWin_*` window is Chromium
-(retries). A lower-case name corrected from a plausible mishearing is learned; rewording never is. The first correction
+(retries). Learning is a switch, Settings › 聽寫 › 字典 › 自動加入字典 (device setting `auto_learn`), off by default
+because the cleanup model judges each edit (`brain/learn_review.py`, a few tokens): off, no field is watched and the
+composer learns nothing. On, the watch sends the dictated part as pasted and as left (`dictionary.learn` `revision`), and
+the model names the misheard terms in any language; rewording is never learned, and the code checks only shape (at most
+40 characters and three words, no sentence punctuation). A learned rule the owner changes back is withdrawn without
+the model. The first correction
 makes the word a term and the pair a hint: in the phrase list and the prompt from the next dictation, shown under
 常被聽成 in the Dictionary row (`dictionary.list` `heard`), and a replacement rule when the same pair is seen again.
 
@@ -603,9 +608,10 @@ npm.cmd run native -- conversation-and-learned-pill voice-conversation locale-sw
 ```
 
 `conversation-and-learned-pill` uses the bundled debug shell, real Rust correction Tracker, core
-acceptance and SQLite evidence. It checks owner expansion, conversation scrolling,
-two Escape presses for a pending fake answer, a complete learned batch, five-second
-hover retention, exact batch/evidence Undo and expiry. Read-only Win32 inspection
+acceptance (the offline model's `native_learn_review` names the replaced words) and SQLite evidence. It checks owner
+expansion, conversation scrolling, two Escape presses for a pending fake answer, that nothing is learned while
+`auto_learn` is off, a complete learned batch once it is on, hover retention past the ten-second Undo window, exact
+batch/evidence Undo and expiry. Read-only Win32 inspection
 checks the learned window's NOACTIVATE style, that its window style has no title bar
 (R-LEARN-WIN-01: while shown, after Undo and after expiry), rounded click region, click-through
 expiry, active-monitor placement and foreground continuity. The passive learned

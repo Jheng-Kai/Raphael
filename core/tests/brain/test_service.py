@@ -1117,8 +1117,9 @@ async def test_the_hints_of_the_dictionary_reach_the_cleanup_prompt(router, fake
 
 
 async def test_dictionary_learn_learns_even_if_an_older_version_saved_learning_off(router, conn):
-    # Learning is always on now. A database from a version with the switch may hold it off: that
-    # must neither be offered again nor stop the learning.
+    # The switch is the app's device setting now (`auto_learn`): the app asks only while it is on.
+    # A database from a version with the core's old switch may hold it off: that must neither be
+    # offered again nor stop the learning.
     conn.execute("INSERT INTO settings (key, value) VALUES ('learn_corrections', 'false')")
     assert "learn_corrections" not in (await router.call("settings.get", {}))["settings"]
     learned = await router.call(

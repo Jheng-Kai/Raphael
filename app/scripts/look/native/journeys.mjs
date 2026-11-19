@@ -1828,11 +1828,15 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     const before = "Please ask Allice and Cloude to review the next release notes carefully.";
     const middle = before.replace("Allice","Alice"), after = middle.replace("Cloude","Claude");
     const edits = [{before,after:middle},{before:middle,after}];
+    // Learning is the owner's switch, off by default (R-LEARN-TERM-01): off, the batch learns nothing.
+    result.learningOff = await context.rpc("dictionary.correct",{edits});
+    if (result.learningOff.learned.length) throw new Error(`Learning ran while its switch was off: ${JSON.stringify(result.learningOff)}`);
+    await page.evaluate(() => window.__TAURI_INTERNALS__.invoke("device_settings_set", { patch: { auto_learn: true } }));
     result.batch = await context.rpc("dictionary.correct",{edits});
     if (JSON.stringify([...result.batch.learned].sort()) !== JSON.stringify(["Alice","Claude"])) throw new Error(`Native Tracker did not learn the complete batch: ${JSON.stringify(result.batch)}`);
     await learned.waitForSelector('#learned-pill:not([hidden])',{visible:true});
     await learned.hover('#learned-pill');
-    await pause(6200);
+    await pause(11200);
     if (!await learned.$('#learned-pill:not([hidden])')) throw new Error("Hover did not retain the native learned pill");
     result.focusDuring = await context.windows();
     // The learned window has no title (R-LEARN-WIN-02: nothing a system could paint of it is a word the owner never chose), and it is
@@ -1862,7 +1866,7 @@ if (!pillWindow || !(pillWindow.style & 0x08000000) || !pillWindow.rounded) thro
     result.expiringBatch = await context.rpc("dictionary.correct",{edits});
     await learned.waitForSelector('#learned-pill:not([hidden])',{visible:true});
     await learned.mouse.move(-20,-20);
-    await learned.waitForSelector('#learned-pill[hidden]',{timeout:9000});
+    await learned.waitForSelector('#learned-pill[hidden]',{timeout:14000});
     for (let waited = 0; waited < 20; waited++) { result.afterExpiry = await context.windows(); if (!learnedWindow(result.afterExpiry)?.visible) break; await pause(100); }
     if (learnedWindow(result.afterExpiry)?.visible) throw new Error("Expiry left the learned window on the screen");
     if (!(learnedWindow(result.afterExpiry).style & 0x20)) throw new Error("Expired learned window is not click-through");
