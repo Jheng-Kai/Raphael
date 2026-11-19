@@ -127,10 +127,10 @@ class Generation:
                                           http=provider.client._client())
         billing = {"cost_usd": None, "prompt_tokens": 0, "completion_tokens": 0}
         contacted = False
-        def charge(data):
+        def charge(data, image_count=None):
             nonlocal contacted
             contacted = True
-            found = media_cost(data, choice)
+            found = media_cost(data, choice, image_count)
             if found["cost_usd"] is not None or billing["cost_usd"] is None:
                 billing.update(found)
         try:
@@ -237,12 +237,12 @@ class Generation:
         except httpx.TransportError:
             raise ServiceError("network") from None
 
-    async def _image(self, provider, model, prompt, images, *, image_only=False, charge=lambda data: None, square=False):
+    async def _image(self, provider, model, prompt, images, *, image_only=False, charge=lambda data, image_count: None, square=False):
         if provider.kind == "openrouter":
             content = [{"type": "text", "text": prompt}, *({"type": "image_url", "image_url": {"url": image.data_url()}} for image in images)]
             data = await self._json(provider, "POST", "/chat/completions", body={"model": model, "modalities": ["image"] if image_only else ["image", "text"], "messages": [{"role": "user", "content": content}],
                 **({"image_config": {"aspect_ratio": "1:1"}} if square else {})})
-            charge(data)
+            charge(data, sum(len((choice.get("message") or {}).get("images") or []) for choice in data.get("choices", [])))
             if data["choices"][0]["message"].get("refusal"):
                 raise ServiceError("content_policy")
             value = data["choices"][0]["message"]["images"][0]["image_url"]["url"]
@@ -253,7 +253,8 @@ class Generation:
             provider = CompatibleProvider("google", base if base.endswith("/v1beta") else base + "/v1beta", provider._key_provider, http=provider._client())
             data = await self._json(provider, "POST", f"/models/{model}:generateContent", body={"contents": [{"parts": parts}], "generationConfig": {"responseModalities": ["TEXT", "IMAGE"],
                 **({"imageConfig": {"aspectRatio": "1:1"}} if square else {})}})
-            charge(data)
+            charge(data, sum("inlineData" in part for candidate in data.get("candidates", [])
+                             for part in candidate.get("content", {}).get("parts", [])))
             if data.get("promptFeedback", {}).get("blockReason") or any(
                     candidate.get("finishReason") in ("SAFETY", "IMAGE_SAFETY", "PROHIBITED_CONTENT") for candidate in data.get("candidates", [])):
                 raise ServiceError("content_policy")
@@ -273,7 +274,7 @@ class Generation:
                     raise ServiceError("bad_arguments")
                 body["image"] = {"url": images[0].data_url(), "type": "image_url"}
             data = await self._json(provider, "POST", "/images/edits" if images else "/images/generations", body=body)
-        charge(data)
+        charge(data, len(data.get("data") or []))
         result = data["data"][0]
         if result.get("b64_json"):
             raw = base64.b64decode(result["b64_json"], validate=True)
@@ -346,7 +347,7 @@ class Generation:
         return Attachment(f"generated.{suffix}", mime, data)
 
 
-def media_cost(data, choice):
+def media_cost(data, choice, image_count=None):
     """Prefer the provider's actual charge; otherwise use reported usage and published unit prices."""
     usage = data.get("usage") or data.get("usageMetadata") or {}
     if not isinstance(usage, dict):
@@ -359,9 +360,9 @@ def media_cost(data, choice):
         image = amount(choice.get("per_image"))
         price_in, price_out = amount(choice.get("price_in")), amount(choice.get("price_out"))
         image_price = amount(choice.get("image_output_per_mtok"))
-        fixed = (unit or 0) + (image * len(data['data']) if image is not None and isinstance(data.get('data'), list) else 0)
+        fixed = (unit or 0) + ((image or 0) * (image_count or 0))
         token_priced = any(value is not None and value > 0 for value in (price_in, price_out, image_price))
-        if not token_priced and (unit is not None or image is not None and isinstance(data.get('data'), list)):
+        if not token_priced and (unit is not None or image is not None and image_count is not None):
             cost = fixed
         if incoming or outgoing:
             details = usage.get("output_tokens_details") or {}

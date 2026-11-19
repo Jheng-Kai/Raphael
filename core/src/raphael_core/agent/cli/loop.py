@@ -915,6 +915,8 @@ class CliLoop:
 
     async def _run(self):
         name, model = brain_ref(self.model)
+        if name == "gemini" and model and hasattr(self.brains, "antigravity_model"):
+            model = self.brains.antigravity_model(self.model)
         try:
             command = self.brains.command(name)
         except OSError:
@@ -1175,6 +1177,8 @@ class CliLoop:
         if getattr(self,"speech_only",False) and name == "claude":
             command = [*command,"--max-turns",str(getattr(self,"speech_max_turns",4))]
         self.driver = Driver(name, command, model=model, effort=brain_effort(self.model), environ=self.brains.environ, quota=self.quota, home=self.brains.home)
+        if name == "codex" and model and hasattr(self.brains, "model_ids"):
+            self.driver.model_aliases = self.brains.model_ids(self.model)
         stream_records = {}
         async with aclosing(self.driver.run(user=user, system=self.system, endpoint=server.url,
                 fresh_context=self._fresh_user,
@@ -1198,6 +1202,10 @@ class CliLoop:
                 elif event.kind == "context_reset":
                     self._context_state = {}
                     self._submitted_user = self._fresh_user()
+                elif event.kind == "model_mismatch":
+                    self.failure_reason = Failure("invalid_request", "model_mismatch",
+                                                  detail=f"{event.text} ≠ {event.data['actual']}")
+                    return self.failure_reason.kind
                 elif event.kind == "model":
                     self.actual_model = event.text
                 elif event.kind == "text_delta":

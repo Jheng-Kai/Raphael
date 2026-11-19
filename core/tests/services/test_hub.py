@@ -22,13 +22,21 @@ from brain.test_catalog import RECORDED, Clock, FakeModelsClient, edited
 KEY = "BSA-the-owners-brave-key-0123456789"
 
 
-@pytest.mark.parametrize("model", ["cli:codex:gpt-5.6-terra?effort=high", "cli:claude", "cli:gemini", "@local:vision"])
+@pytest.mark.parametrize("model", ["cli:codex:gpt-5.6-terra?effort=high", "cli:claude", "cli:gemini"])
 @pytest.mark.parametrize("assistant", ["anthropic/claude-haiku-5.5", "", "cli:codex", "@local:text"])
-async def test_vision_inherits_an_api_model_for_subscription_and_local_brains(rig, model, assistant):
+async def test_vision_inherits_an_api_model_for_subscription_brains(rig, model, assistant):
     rig.settings.set("agent_model", model)
     rig.settings.set("assistant_model", assistant)
     expected = "anthropic/claude-haiku-5.5" if assistant.startswith("anthropic/") else ""
     assert rig.hub.vision_model()[0] == expected
+
+
+def test_explicit_local_vision_model_keeps_its_provider(rig):
+    rig.settings.set("assistant_model", "acme/remote")
+    rig.settings.set("agent_model", "@office:answer")
+    assert rig.hub.vision.model()[0] == "@office:answer"
+    rig.settings.set("vision_model", "@office:llava")
+    assert rig.hub.vision.model() == ("@office:llava", None)
 
 
 class Rig:

@@ -108,6 +108,7 @@ class ChatGPTAuth:
         self._cancel_requested = False
         self._notify = lambda method, params: None
         self.on_connected = None
+        self.on_models_cleared = lambda: None
         self.model_rows = []
         self.revision = 0
 
@@ -177,6 +178,10 @@ class ChatGPTAuth:
                     if acquired:
                         fcntl.flock(handle, fcntl.LOCK_UN)
                     os.close(handle)
+
+    def clear_models(self):
+        self.model_rows = []
+        self.on_models_cleared()
 
     def session(self):
         return self._state().get("active", ""), self.revision
@@ -430,10 +435,11 @@ class ChatGPTAuth:
                 step = "vault"
                 self._store(account_id, tokens)
                 state = self._state()
-                state.setdefault("accounts", {})[account_id] = {**identity, "client_id": client_id}
+                state.setdefault("accounts", {})[account_id] = {**identity, "client_id": client_id,
+                    "plan_scope": PLAN_SCOPE in tokens.get("scope", "").split()}
                 state["active"] = account_id
                 self._save(state)
-                self.model_rows = []
+                self.clear_models()
                 self.revision += 1
             self._notify("providers.changed", {})
             status = await self.status({})
@@ -514,13 +520,21 @@ class ChatGPTAuth:
             # Only a token OpenAI says is spent is forgotten; a bad moment leaves the account signed in.
             if getattr(error, "details", {}).get("code") in TERMINAL_REFRESH:
                 self._vault(account_id).clear()
-                self.model_rows = []
+                self.clear_models()
             raise
         renewed = self._token_set(body, tokens)
         if body.get("id_token"):
             renewed["identity_pending"] = True
         # Save the rotated token before validating optional identity or using new access.
         self._store(account_id, renewed)
+        state = self._state()
+        account = state["accounts"][account_id]
+        granted = PLAN_SCOPE in renewed.get("scope", "").split()
+        if account.get("plan_scope") != granted:
+            account["plan_scope"] = granted
+            self.clear_models()
+            self._save(state)
+            self._notify("providers.changed", {})
         return renewed
 
     async def sign_out(self, params):
@@ -549,7 +563,7 @@ class ChatGPTAuth:
             finally:
                 if account:
                     self._vault(account_id).clear()
-                self.model_rows = []
+                self.clear_models()
                 self._notify("providers.changed", {})
             return {"signed_out": True, "remote_revocation_confirmed": revoked,
                 "warning": "" if revoked or not tokens else "Remote sign-out was not confirmed. Disconnect Raphael in ChatGPT Settings."}
