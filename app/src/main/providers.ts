@@ -20,6 +20,8 @@ export interface ProvidersView {
   query: string;
   kindQuery?: string;
   adding?: boolean;
+  /** The feature the directory was opened for from a model's choice (cleanup, stt, image, video): only kinds that can do it. */
+  role?: string;
   accountSet?: boolean;
   fieldValues?: Partial<Record<"region" | "location", string>>;
   confirming: boolean;
@@ -44,6 +46,11 @@ const FIELD_CHOICES = {
 };
 const choicesFor = (field: "region" | "location") => FIELD_CHOICES[field].map((value) => ({ value, label: value }));
 const GROUP_TITLES = { official: () => t("providers.official"), gateway: () => t("providers.gateway"), local: () => t("providers.local") };
+/** What a kind must do for the feature the directory is for; the answer, quick questions and anything else take every kind. */
+const ROLE_NEEDS: Record<string, "text" | "stt" | "image" | "video"> = { cleanup: "text", stt: "stt", image: "image", video: "video" };
+const ROLE_LABELS: Record<string, () => string> = { quick: () => t("settings.quickModel"), cleanup: () => t("settings.035"), stt: () => t("settings.031"), image: () => t("media.image"), video: () => t("media.video") };
+const ROLE_NOTES: Record<string, () => string> = { cleanup: () => t("providers.forCleanup"), stt: () => t("providers.forStt"), image: () => t("providers.forImage"), video: () => t("providers.forVideo") };
+const fitsRole = (kind: ProviderKind, role = ""): boolean => !ROLE_NEEDS[role] || (kind.features ?? ["text"]).includes(ROLE_NEEDS[role]);
 const GROUP_NOTES = { official: () => t("providers.officialNote"), gateway: () => t("providers.gatewayNote"), local: () => t("providers.localNote") };
 const POPULAR = ["openrouter", "litellm", "portkey", "vercel"];
 const allowsMultiple = (kind: ProviderKind): boolean => kind.group === "local" || ["openai_compatible", "litellm", "bifrost"].includes(kind.kind);
@@ -58,7 +65,7 @@ export function description(kind: ProviderKind): string {
 function directoryHTML(v: ProvidersView, lead = ""): string {
   let count = 0;
   const groups = (["official", "gateway", "local"] as const).map((group) => {
-    const kinds = v.kinds.filter((k) => k.group === group && k.name.toLowerCase().includes((v.kindQuery ?? "").trim().toLowerCase()));
+    const kinds = v.kinds.filter((k) => k.group === group && fitsRole(k, v.role) && k.name.toLowerCase().includes((v.kindQuery ?? "").trim().toLowerCase()));
     if (group === "gateway") kinds.sort((a, b) => {
       const rank = (id: string) => POPULAR.includes(id) ? POPULAR.indexOf(id) : POPULAR.length;
       return rank(a.kind) - rank(b.kind) || a.name.localeCompare(b.name, "en");
@@ -73,8 +80,8 @@ function directoryHTML(v: ProvidersView, lead = ""): string {
     }).join("") + `</div></section>` : "";
   }).join("");
   return `<div class="cs-scrim" data-pv="scrim" data-dialog="provider:add"><div class="cs-dialog pv-dialog pv-catalog" id="pv-dialog" role="dialog" aria-modal="true" aria-labelledby="pv-title" tabindex="-1" data-trap>` +
-    `<div class="cs-dlg-head"><h2 id="pv-title">${esc(t("providers.add"))}</h2><span class="sp"></span>${iconButton("x", t("providers.close"), ' data-pv="close" data-k="pv-close" data-nav-back')}</div>` +
-    `<p class="note">${esc(t("providers.choose"))}</p>${fieldHTML(t("providers.searchKinds"), v.kindQuery ?? "", { id: "pv-kind-search", icon: "search" })}` +
+    `<div class="cs-dlg-head"><h2 id="pv-title">${esc(t("providers.add"))}</h2>${ROLE_LABELS[v.role ?? ""] ? `<span class="pv-for">${esc(t("chooser.slot", { name: ROLE_LABELS[v.role!]() }))}</span>` : ""}<span class="sp"></span>${iconButton("x", t("providers.close"), ' data-pv="close" data-k="pv-close" data-nav-back')}</div>` +
+    `<p class="note">${esc(ROLE_NOTES[v.role ?? ""]?.() ?? t("providers.choose"))}</p>${fieldHTML(t("providers.searchKinds"), v.kindQuery ?? "", { id: "pv-kind-search", icon: "search" })}` +
     `<div class="pv-directory">${(v.kindQuery ?? "").trim() ? "" : lead}${groups || `<p class="note" role="status">${esc(t("providers.noMatches"))}</p>`}</div><p class="pv-results note" role="status">${esc(t("providers.results", { p0: count }))}</p></div></div>`;
 }
 const errorText = (error: ProvidersView["error"]): string => t(error === "account" ? "providers.invalidAccount" : error === "required" ? "providers.required" : "providers.error");
@@ -263,14 +270,14 @@ export function createProviders(host: ProvidersHost) {
     const from = state.open;
     const adding = state.adding;
     accountDraft = null; accountReads++; state.accountSet = false;
-    clearConfirmation(); modelLoads++; state.open = null; state.adding = false; state.kindQuery = ""; redraw();
+    clearConfirmation(); modelLoads++; state.open = null; state.adding = false; state.kindQuery = ""; state.role = ""; redraw();
     if (adding) host.root.querySelector<HTMLElement>('[data-pv="directory"]')?.focus();
     else [...host.root.querySelectorAll<HTMLElement>('button[data-pv="open"]')].find((el) => el.dataset.id === from?.id)?.focus();
   }
-  function directory() {
+  function directory(role = state.role ?? "") {
     const from = state.open?.kind;
     accountDraft = null; accountReads++; modelLoads++; clearConfirmation();
-    state = { ...state, adding: true, open: null, error: null, result: null, models: [], accountSet: false, fieldValues: {}, dirty: false };
+    state = { ...state, adding: true, open: null, error: null, result: null, models: [], accountSet: false, fieldValues: {}, dirty: false, role };
     redraw();
     const previous = [...host.root.querySelectorAll<HTMLElement>('[data-pv="add"]')].find((el) => el.dataset.id === from);
     (previous ?? host.root.querySelector<HTMLElement>("#pv-kind-search"))?.focus();
@@ -381,6 +388,8 @@ export function createProviders(host: ProvidersHost) {
   return {
     view: () => state, load,
     openRepair(id: string): void {
+      // `connect` opens the directory; `connect:<feature>` opens it for one feature, with only the kinds that can do it.
+      if (id === "connect" || id.startsWith("connect:")) { directory(id.slice("connect:".length)); return; }
       const provider = state.providers.find(p => p.id === id);
       if (provider) {
         show(provider.kind, provider.id);

@@ -2,6 +2,13 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.checkVisibility() && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  // The providers' directory keeps its title and x at the top however far its list is scrolled (the way out is never lost).
+  const directoryCloseStays = dialog => {
+    const close = dialog.querySelector('[data-pv="close"]');
+    dialog.scrollTop = dialog.scrollHeight;
+    const frame = dialog.getBoundingClientRect(), box = close.getBoundingClientRect();
+    require(visible(close) && box.top >= frame.top - 0.5 && box.bottom <= frame.bottom + 0.5, `the x stays in view when the list is scrolled: x ${Math.round(box.top)}..${Math.round(box.bottom)}, dialog ${Math.round(frame.top)}..${Math.round(frame.bottom)}`);
+  };
   // A computer that is not showing its live screen draws nothing over its wallpaper: no words, face,
   // progress, status sentence, recovery button, Open pill or caption. One press anywhere on the screen (its cover) starts it.
   const shownText = root => {
@@ -7861,7 +7868,19 @@ export function checkRendered(name, context = {}) {
     require(!dialog.querySelector('[data-k="chatgpt:sign-in"]'), "its buttons have keys of their own, apart from the page behind");
     const box = dialog.getBoundingClientRect();
     require(box.left >= 0 && box.right <= innerWidth + 0.5 && box.top >= 0 && box.bottom <= innerHeight + 0.5, "the dialog fits the window");
+    directoryCloseStays(dialog);
     return { check: name, kinds: sections.length };
+  }
+  if (name === "provider-directory-stt") {
+    // Connected from speech to text: only the kinds that turn speech into text, no subscription, and the reason said.
+    const dialog = document.querySelector("#pv-dialog");
+    require(dialog.querySelector(".pv-for")?.textContent.includes("語音轉文字"), "the dialog says what it is for");
+    require(!dialog.querySelector("[data-chatgpt], [data-cli], [data-cli-menu]"), "no subscription is offered: none turns speech into text");
+    const ids = [...dialog.querySelectorAll('[data-pv="add"]')].map(button => button.dataset.id);
+    require(ids.length >= 1 && ids.every(id => ["openrouter", "openai", "groq"].includes(id)), `only the kinds that turn speech into text: ${ids}`);
+    require(dialog.querySelector(":scope > .note")?.textContent.includes("訂閱帳號都沒有"), "and it says why the subscriptions are not there");
+    directoryCloseStays(dialog);
+    return { check: name, ids };
   }
   if (name === "composer-quick-read") {
     const composer = document.querySelector(".composer .cmp-model .mp-tname").textContent;

@@ -68,6 +68,8 @@ export interface ProviderKind {
   docs_url?: string | null;
   verified?: boolean;
   local_context_hint?: boolean;
+  /** What the kind can do: text always, and speech to text, drawing or video where it can (presets.py). */
+  features?: ("text" | "stt" | "image" | "video")[];
 }
 /** Public provider metadata. Secrets never come back from the core. */
 /** The owner's ChatGPT sign-in; tokens never reach the window. */

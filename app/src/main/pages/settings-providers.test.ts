@@ -647,3 +647,38 @@ test("vision keeps its primary image picker without fallback controls", async ()
   expect(api.settingsSet).toHaveBeenCalledWith("vision_model", "@p4:local:8b");
 });
 
+test("the speech models read while Settings is closed are kept, so the list never stays loading", async () => {
+  let release: (value: unknown) => void = () => {};
+  api.modelsLocal.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
+  await mount();
+  page.hide();
+  release({ models: [{ name: "sensevoice", title: "SenseVoice", ready: true, languages: ["zh"], size: 163_000_000, note: "fast" }] });
+  await flush();
+  await page.show("models"); await flush();
+  click('[data-model-picker="stt"] .mp-trigger');
+  click('[data-source="local-speech"]');
+  const chooser = document.querySelector(".model-chooser")!;
+  expect(chooser.textContent).toContain("SenseVoice");
+  expect(chooser.textContent).not.toContain("Loading");
+});
+
+test("連接其他來源 from a feature's choice lists only the ways that can do that feature", async () => {
+  api.providersKinds.mockResolvedValue({ kinds: [
+    { kind: "openai", name: "OpenAI", group: "official", fields: ["key"], available: true, default_base_url: null, features: ["text", "stt", "image", "video"] },
+    { kind: "anthropic", name: "Anthropic", group: "official", fields: ["key"], available: true, default_base_url: null, features: ["text"] },
+    { kind: "ollama", name: "Ollama", group: "local", fields: ["base_url", "key"], available: true, default_base_url: null, features: ["text"] },
+  ] });
+  await mount();
+  const listed = () => [...document.querySelectorAll<HTMLElement>('#pv-dialog [data-pv="add"]')].map((button) => button.dataset.id);
+  click('[data-model-picker="stt"] .mp-trigger');
+  click('[data-dlg="sources"]'); await flush();
+  expect(listed()).toEqual(["openai"]);
+  expect(document.querySelector("#pv-dialog [data-chatgpt], #pv-dialog [data-cli], #pv-dialog [data-cli-menu]")).toBeNull();
+  expect(document.querySelector("#pv-dialog .pv-for")!.textContent).toContain("Speech to text");
+  click('[data-pv="close"]'); await flush();
+  click('[data-model-picker="cleanup"] .mp-trigger');
+  click('[data-dlg="sources"]'); await flush();
+  expect(listed()).toEqual(["openai", "anthropic", "ollama"]);
+  expect(document.querySelector("#pv-dialog [data-chatgpt]")).not.toBeNull();
+  expect(document.querySelector("#pv-dialog [data-cli], #pv-dialog [data-cli-menu]")).toBeNull();
+});

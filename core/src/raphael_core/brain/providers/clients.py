@@ -81,7 +81,8 @@ def chosen_efforts(kind, model_id):
 
 
 def is_transcription(kind, model_id):
-    return kind in ("openai", "groq") and (model_id.startswith("whisper") or "transcribe" in model_id)
+    from .presets import SPEECH_KINDS
+    return kind in SPEECH_KINDS - {"openrouter"} and (model_id.startswith("whisper") or "transcribe" in model_id)
 
 
 def generation_model(raw, kind):

@@ -26,6 +26,7 @@ from ..settings import SettingsStore, api_model
 from .base import ModelProvider
 from .presets import BY_KIND, KINDS, OPTIONAL_KEY_KINDS
 from .clients import AnthropicProvider, CompatibleProvider, is_transcription, model_info, validate_base_url
+from .presets import IMAGE_KINDS, VIDEO_KINDS
 from .bedrock import BedrockProvider
 from .vertex import VertexProvider
 from .secrets import ProviderCredentialStore
@@ -424,9 +425,7 @@ class ProviderRegistry:
         choices = []
         for pid in self.ids():
             config = self.config(pid)
-            if config["kind"] not in ("openai", "xai", "openrouter", "google"):
-                continue
-            if kind == "video" and config["kind"] not in ("openai", "xai"):
+            if config["kind"] not in (VIDEO_KINDS if kind == "video" else IMAGE_KINDS):
                 continue
             for row in self._models.get(pid, []):
                 reference = row["id"] if pid == "openrouter" else f"@{pid}:{row['id']}"

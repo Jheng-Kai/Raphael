@@ -208,6 +208,7 @@ export function createSettings(app: AppContext): SettingsPage {
   const pickers = new Map<PickerRole | "quick", ModelPicker>();
   /** The speech models of this computer, and the download of one that is under way. */
   let localModels: LocalModel[] | "loading" | "failed" = "loading";
+  let localLoads = 0;
   let localDownload: { name: string; done: number; total: number } | null = null;
   let devices: AudioDevices | null = null;
   let altgr = false;
@@ -486,10 +487,11 @@ export function createSettings(app: AppContext): SettingsPage {
   translateNav();
 
   /** Goes to a tab: what the tab before it had open is dropped, and the new one comes in. */
-  /** 連接其他來源 in a model's choice: the list of every way to connect one, subscriptions first (providers.ts directory). */
-  function connectSource(): void {
+  /** 連接其他來源 in a model's choice: the ways to connect a source that can do that feature, subscriptions first
+   *  (providers.ts directory). The answer and quick questions take every way. */
+  function connectSource(role = ""): void {
     openPane("models", "models");
-    void loadProviders().then(() => { if (visible) providers.openRepair("connect"); });
+    void loadProviders().then(() => { if (visible) providers.openRepair(role ? `connect:${role}` : "connect"); });
   }
 
   function openPane(next: SettingsPane, tab?: ModelsTab): void {
@@ -669,7 +671,6 @@ export function createSettings(app: AppContext): SettingsPage {
    * A chosen model that OpenRouter no longer lists went back to its default: that is told, and drawn.
    */
   async function loadCatalog(force = false): Promise<void> {
-    const mine = loads;
     const request = ++catalogLoads;
     let next: ModelCatalog | "failed";
     try {
@@ -679,8 +680,10 @@ export function createSettings(app: AppContext): SettingsPage {
       next = typeof catalog === "object" ? catalog : "failed";
     }
     if (typeof next === "object") rememberCatalog(next);
-    if (mine !== loads || request !== catalogLoads || !visible) return;
+    // As the speech models: the newest read is kept even while Settings is closed, and only drawn while it is open.
+    if (request !== catalogLoads) return;
     catalog = next;
+    if (!visible) return;
     if (typeof next === "object" && next.replaced.length > 0) {
       if (brain) for (const r of next.replaced) brain = { ...brain, [r.key]: r.default };
       for (const message of replacementNotices(next)) toaster.info(message);
@@ -702,7 +705,9 @@ export function createSettings(app: AppContext): SettingsPage {
 
   /** Reads the catalogue (`models.local`); one that is not to be had is said in the local tab. */
   async function loadLocalModels(): Promise<void> {
-    const mine = loads;
+    // The newest read wins, whether or not Settings is open: a read the warm-up started while it was closed is kept, or
+    // the list said 正在載入 for good, since a reopening within REFRESH_REUSE_MS does not read again.
+    const request = ++localLoads;
     let next: LocalModel[] | "failed";
     try {
       const listing = await api.modelsLocal();
@@ -712,9 +717,9 @@ export function createSettings(app: AppContext): SettingsPage {
     } catch {
       next = Array.isArray(localModels) ? localModels : "failed";
     }
-    if (mine !== loads || !visible) return;
+    if (request !== localLoads) return;
     localModels = next;
-    paintLocal();
+    if (visible) paintLocal();
   }
 
   /** The speech-to-text picker and the price under its row follow the local models. */
@@ -788,7 +793,7 @@ export function createSettings(app: AppContext): SettingsPage {
     const quick = body.querySelector<HTMLElement>('[data-row="quick-model"] .mp-slot');
     if (quick) pickers.set("quick", mountModelPicker(quick, {
       ...quickPickerLook(v),
-      onSources: connectSource,
+      onSources: () => connectSource("quick"),
       onChoose: (id) => {
         const chosen = splitEffort(id, quickModels(view()));
         void changeBrain("quick_model", chosen.model).then(() => chosen.effort ? changeBrain("quick_effort", chosen.effort) : undefined);
@@ -822,7 +827,7 @@ export function createSettings(app: AppContext): SettingsPage {
           role,
           mountModelPicker(slot, {
             ...modelPickerLook(v, role),
-            onSources: connectSource,
+            onSources: () => connectSource(role),
             onCliAction: (id) => {
               const button = document.createElement("button"); button.dataset.cli = id;
               void cliBrains.click(button);

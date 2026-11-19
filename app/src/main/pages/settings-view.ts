@@ -502,7 +502,7 @@ function modelsHTML(v: SettingsView): string {
   const providers = v.providers ?? emptyProvidersView();
   const selected = v.modelsTab ?? (v.pane === "usage" ? "usage" : "models");
   const content = selected === "models" ? section(t("models.used"), [quickRow(v), ...MODEL_ROWS.slice(1).map(r => modelRow(v, r))], v.catalog === "failed" ? priceSpan(v, "note") : "") +
-    cliBrainsHTML(v.cliBrains ?? emptyCliBrainsView()) + providersHTML(providers) + providersAddHTML(providers, cliDirectoryHTML(v.cliBrains ?? emptyCliBrainsView())) :
+    cliBrainsHTML(v.cliBrains ?? emptyCliBrainsView()) + providersHTML(providers) + providersAddHTML(providers, cliDirectoryHTML(v.cliBrains ?? emptyCliBrainsView(), providers.role)) :
     // An OpenRouter key is that provider's, on its card among the others (模型 › 供應商), never a section of its own here.
     spendCardHTML(v) + `<div data-usage-host></div>`;
   // No refresh of its own: opening Settings reads it all again, unseen (settings.ts `refreshInBackground`).

@@ -72,13 +72,19 @@ export function cliBrainsHTML(v: CliBrainsView): string {
   return `<section class="sgroup cli-accounts"><h2>${esc(t("brains.accounts"))}</h2><div class="pv-grid">` + cliCardsHTML(v) + `</div>${v.error ? `<p class="note" role="alert">${esc(t("missing.cli"))}</p>` : ""}${v.chatgptError ? `<p class="note" role="alert">${esc(v.chatgptError)}</p>` : ""}</section>`;
 }
 
-/** The subscriptions at the head of the providers to connect: the same cards, with keys of their own (`k`). */
-export function cliDirectoryHTML(v: CliBrainsView): string {
-  return `<section class="sgroup"><h3>${esc(t("brains.accounts"))}</h3><p class="note pv-group-note">${esc(t("providers.subscriptionsNote"))}</p><div class="pv-grid">` + cliCardsHTML(v, "dir:") + `</div></section>`;
+/** Which subscriptions can serve a feature: ChatGPT's plan tidies text, Codex draws; none hears speech or makes video. */
+const ROLE_SUBSCRIPTIONS: Record<string, readonly string[]> = { cleanup: ["chatgpt"], image: ["codex"], stt: [], video: [] };
+
+/** The subscriptions at the head of the providers to connect: the same cards, with keys of their own (`k`), only those
+ *  that can serve the feature the directory is for (`role`). */
+export function cliDirectoryHTML(v: CliBrainsView, role = ""): string {
+  const only = ROLE_SUBSCRIPTIONS[role];
+  const cards = cliCardsHTML(v, "dir:", only);
+  return cards ? `<section class="sgroup"><h3>${esc(t("brains.accounts"))}</h3><p class="note pv-group-note">${esc(t("providers.subscriptionsNote"))}</p><div class="pv-grid">` + cards + `</div></section>` : "";
 }
 
-function cliCardsHTML(v: CliBrainsView, k = ""): string {
-  return chatgptCardHTML(v, k) + CLIS.map((known) => {
+function cliCardsHTML(v: CliBrainsView, k = "", only?: readonly string[]): string {
+  return (!only || only.includes("chatgpt") ? chatgptCardHTML(v, k) : "") + CLIS.filter((known) => !only || only.includes(known.id)).map((known) => {
     const cli = v.clis.find((c) => c.id === known.id);
     const status = v.state !== "ready" ? t(v.state === "loading" ? "common.loading" : "missing.cli") :
       t(cli?.disconnected ? "brains.disconnected" : !cli?.installed ? "brains.missing" : cli.available ? "brains.ready" : "brains.signedOut");
