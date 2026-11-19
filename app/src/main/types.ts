@@ -1063,6 +1063,7 @@ export interface MemberSource {
 
 /** A group of `members.list`. */
 export interface MemberGroup {
+  mention?: string;
   id: number;
   name: string;
   position: number;

@@ -83,7 +83,7 @@ class Incoming:
     group: str | None = None
 
 
-Deliver = Callable[[Incoming], None]
+Deliver = Callable[[Incoming], bool]
 
 
 class Channel(Protocol):
@@ -91,7 +91,7 @@ class Channel(Protocol):
     error: str | None  # why the last attempt to receive failed; None while it works
 
     async def run(self, deliver: Deliver) -> None:
-        """Receive messages, giving each to `deliver` (which returns at once), until cancelled or
+        """Receive messages, giving each to `deliver` (False requests replay), until cancelled or
         until the credentials are refused."""
         ...
 

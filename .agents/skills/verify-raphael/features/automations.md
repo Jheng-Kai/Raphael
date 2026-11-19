@@ -392,3 +392,5 @@ R-COLLEAGUE-05: Edit a saved webhook routine > External URL. Choose Tailscale Fu
 (Its scenes were retired with the routine editor.)
 
 The self-post uses a short-lived authenticated nonce and must reach this exact hook without executing its work or consuming admission. Private addresses, redirects, credentials and unrelated endpoints fail. Fakes prove these boundaries; no tunnel, public network or live form service is started during offline checks.
+
+Routine occurrences in past calendar ranges come from recorded runs. Future ranges use the saved pending slot, including its minute within a rolling interval. Google events cover every day up to their exclusive end in both the window and a member's list. Offline coverage lives in `core/tests/members/test_home.py`.

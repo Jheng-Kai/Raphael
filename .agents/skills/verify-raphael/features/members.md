@@ -1363,3 +1363,5 @@ What it does, and how to see it:
 npm run look -- member-template-save-cancelled member-template-published member-template-bad-file member-template-notepad-file member-template-name-empty store-closed member-template-export member-template-preview member-template-imported store-empty store-offline chat-setup-cards --theme both --width 1120,720,1920x1080
 
 Inspect every contact sheet and, at light 720 and dark 1120, the legacy card’s primary save action, the toast of a bad file, and the empty name's red edge and line.
+
+Starting a meeting validates the posting member and room membership before writing. Its room, agenda, roles and first exchange commit together. New group names are unique after case folding. An ambiguous legacy group mention asks the sender to use its displayed name followed by `#` and the group ID. The room tests cover rollback and routing, and `team-mentions.test.ts` checks the qualified chip.

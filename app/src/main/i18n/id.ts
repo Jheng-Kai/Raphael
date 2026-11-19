@@ -1851,6 +1851,8 @@ export const id = {
   "members.offerTitle": "Tambah rutinitas?",
   "members.offerNo": "Nanti saja",
   "members.nameEmpty": "Isi nama",
+  "members.groupNameTaken": "Sudah ada grup dengan nama ini.",
+  "members.chooseGroup": "Tambahkan salah satu ID ini setelah nama grup: {p0}",
   "members.nameTaken": "Sudah ada anggota bernama {p0}",
   "members.routineLine": "Rutinitas",
   "auto.waiting": "Menunggu Anda",

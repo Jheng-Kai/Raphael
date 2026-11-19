@@ -332,11 +332,12 @@ class TelegramChannel:
                 logger.info("Telegram: %d update(s)", len(updates))
             for update in updates:
                 update_id = update.get("update_id")
+                message = _incoming(update)
+                if message is not None and deliver(message) is False:
+                    await self._sleep(1)
+                    break
                 if type(update_id) is int:
                     self._offset = update_id + 1
-                message = _incoming(update)
-                if message is not None:
-                    deliver(message)
 
     # The pieces of a text are retried one by one here, so the switchboard must not send the whole
     # text again when this gives up (it would repeat the pieces that went out).

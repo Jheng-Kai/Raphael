@@ -1851,6 +1851,8 @@ export const it = {
   "members.offerTitle": "Aggiungere una routine?",
   "members.offerNo": "Non ora",
   "members.nameEmpty": "Digita un nome",
+  "members.groupNameTaken": "Esiste già un gruppo con questo nome.",
+  "members.chooseGroup": "Aggiungi uno di questi ID dopo il nome del gruppo: {p0}",
   "members.nameTaken": "Esiste già un membro chiamato {p0}",
   "members.routineLine": "Routine",
   "auto.waiting": "In attesa di te",

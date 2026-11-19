@@ -12,16 +12,17 @@ from .base import ChannelError
 
 
 class GatewaySocket:
-    def __init__(self):
+    def __init__(self, host="gateway.discord.gg"):
+        self.host = host
         self.writer = None
         self.lock = asyncio.Lock()
 
     async def __aenter__(self):
         try:
             async with asyncio.timeout(15):
-                self.reader, self.writer = await asyncio.open_connection("gateway.discord.gg", 443, ssl=ssl.create_default_context())
+                self.reader, self.writer = await asyncio.open_connection(self.host, 443, ssl=ssl.create_default_context())
                 key = base64.b64encode(secrets.token_bytes(16)).decode()
-                self.writer.write((f"GET /?v=10&encoding=json HTTP/1.1\r\nHost: gateway.discord.gg\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: {key}\r\n\r\n").encode())
+                self.writer.write((f"GET /?v=10&encoding=json HTTP/1.1\r\nHost: {self.host}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: {key}\r\n\r\n").encode())
                 await self.writer.drain()
                 response = await self.reader.readuntil(b"\r\n\r\n")
                 expected = base64.b64encode(hashlib.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode()).digest())
@@ -64,6 +65,8 @@ class GatewaySocket:
             payload = await self.reader.readexactly(length)
             if opcode == 8:
                 code = int.from_bytes(payload[:2], "big")
+                if code in (4007, 4009):
+                    raise ChannelError("invalid_session")
                 raise ChannelError("unauthorized" if code in (4004, 4013, 4014) else "network")
             if opcode == 9:
                 await self.send_frame(payload, 10)

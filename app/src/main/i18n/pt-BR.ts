@@ -1851,6 +1851,8 @@ export const ptBR = {
   "members.offerTitle": "Adicionar uma rotina?",
   "members.offerNo": "Agora não",
   "members.nameEmpty": "Insira um nome",
+  "members.groupNameTaken": "Já existe um grupo com esse nome.",
+  "members.chooseGroup": "Acrescente um destes IDs após o nome do grupo: {p0}",
   "members.nameTaken": "Já existe um membro chamado {p0}",
   "members.routineLine": "Rotina",
   "auto.waiting": "Aguardando você",

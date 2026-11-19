@@ -19,6 +19,9 @@ const detailed = [
 ] as const;
 
 export function backendMessage(text: string): string {
+  if (text === "Invalid params: duplicate group name") return t("members.groupNameTaken");
+  const groupPrefix = "Invalid params: choose group: ";
+  if (text.startsWith(groupPrefix)) return t("members.chooseGroup", { p0: text.slice(groupPrefix.length) });
   if (text === t("mcp.badPair") || text === zhTW["mcp.badPair"]) return t("mcp.badPair");
   // The shell writes its messages in Traditional Chinese, with the Mac's own words on a Mac (notice_words.rs).
   const said = (key: MessageKey): string[] => [zhTW[key], systemMessage(key, "zh-TW")];

@@ -1,5 +1,6 @@
 """Room messages and settings, with bounded exchanges on the shared member worker."""
 from raphael_core.ui_words import ui_word, with_ui_words
+from contextlib import nullcontext
 import asyncio
 import base64
 import binascii
@@ -252,7 +253,7 @@ class RoomsService:
             "SELECT 1 FROM room_exchange_turns x JOIN room_messages m ON m.turn_id=x.turn_id"
             " WHERE x.origin_message_id=e.origin_message_id AND m.id>?) LIMIT 1", (room_id, read_message_id)).fetchone() is not None
 
-    async def _create(self, params):
+    async def _create(self, params, *, in_transaction=False):
         request_id = params.get("request_id")
         if request_id is not None:
             if not isinstance(request_id, str) or not re.fullmatch(r"[a-zA-Z0-9_-]{1,100}", request_id):
@@ -279,14 +280,15 @@ class RoomsService:
         if group_id is not None and (type(group_id) is not int or self._members.store.group(group_id) is None):
             raise invalid_params("no such group")
         responder = self._responder(params.get("default_responder", "auto"), ids if not team else [s.id for s in self._members.roster()])
-        with self._conn:
+        with nullcontext() if in_transaction else self._conn:
             cursor = self._conn.execute(
                 "INSERT INTO rooms (name, group_id, created, is_team, default_responder, creation_request_id) VALUES (?, ?, ?, ?, ?, ?)",
                 (name, group_id, self._now(), int(team), responder, request_id),
             )
             room_id = cursor.lastrowid
             self._conn.executemany("INSERT INTO room_members VALUES (?, ?)", [(room_id,i) for i in sorted(set(ids))])
-        self._changed(room_id)
+        if not in_transaction:
+            self._changed(room_id)
         return {"room":self._view(self._conn.execute("SELECT * FROM rooms WHERE id = ?", (room_id,)).fetchone())}
 
     async def _update(self, params):
@@ -353,7 +355,7 @@ class RoomsService:
                           for row in self._conn.execute("SELECT * FROM rooms ORDER BY id")
                           if member_id in (room := self._view(row))["member_ids"]]}
 
-    def post(self, member_id, arguments, source_turn_id, language='en'):
+    def post(self, member_id, arguments, source_turn_id, language='en', *, meeting=False):
         import hashlib
         room = self._room(arguments)
         if member_id not in self._ids(room):
@@ -379,6 +381,7 @@ class RoomsService:
         existing = self._conn.execute("SELECT id FROM room_messages WHERE room_id=? AND request_id=?", (room["id"], request)).fetchone()
         if existing:
             return {"room_id": room["id"], "message_id": existing[0], "member_id": member_id, "duplicate": True}
+        self._targets(room, text, require_unique=True)
         recent = self._conn.execute('SELECT member_id,text,created FROM room_messages WHERE room_id=? AND created>? AND member_id IS NOT NULL ORDER BY id DESC',
                                     (room['id'], self._now()-60000)).fetchall()
         if any(row['member_id']==member_id and row['text']==text.strip() for row in recent):
@@ -390,49 +393,62 @@ class RoomsService:
                 f'{MEMBER_POSTS_PER_MINUTE} from each member). Posting works again in about {wait} seconds. It has nothing to do '
                 'with money or a usage limit: if you tell the owner, say the room is pausing because replies came too fast, and when '
                 'it goes on. Meanwhile read what others said and post only what is new.')
-        with self._conn:
+        with nullcontext() if meeting else self._conn:
             turn = self._history.add(session_id=request, question="", route="exchange", source="member", prefix="",
                 text=text.strip(), status="done", member_id=member_id, scope="room", room_id=room["id"],
-                thread_id=thread, source_turn_id=source_turn_id, model=source.model)
+                thread_id=thread, source_turn_id=source_turn_id, model=source.model, in_transaction=True)
             cursor = self._conn.execute(
                 "INSERT INTO room_messages(room_id,thread_id,member_id,text,created,request_id,turn_id) VALUES(?,?,?,?,?,?,?)",
                 (room["id"], thread, member_id, text.strip(), self._now(), request, turn))
             row = self._conn.execute("SELECT id FROM room_messages WHERE room_id=? AND request_id=?", (room["id"], request)).fetchone()
-        with self._conn:
             self._conn.execute('UPDATE room_messages SET kind=? WHERE id=?', (kind,row[0]))
         digest_source = self._conn.execute('SELECT 1 FROM room_messages m JOIN room_exchanges e ON e.origin_message_id=m.origin_message_id '
                                           'WHERE m.turn_id=? AND e.meeting=2', (source_turn_id,)).fetchone()
-        if not digest_source:
+        if not meeting and not digest_source:
             self._exchanges.digest(room['id'],row[0],language)
-        self._changed(room["id"])
+        if not meeting:
+            self._changed(room["id"])
         return {"room_id": room["id"], "message_id": row[0], "member_id": member_id, "duplicate": cursor.rowcount == 0}
 
     async def meeting(self, arguments, language, source_turn_id):
-        target_room = self._view(self._room(arguments)) if arguments.get('room_id') is not None else None
-        ids = self._validated_ids(arguments.get('member_ids', target_room['member_ids'] if target_room else None))
-        agenda = arguments.get('agenda')
-        if not isinstance(agenda, str) or not agenda.strip() or len(agenda) > 9000:
-            raise invalid_params('agenda must contain 1 to 9000 characters')
-        source = self._history.get(source_turn_id)
-        if (not source or source.scope != 'private' or source.source == 'member'
-                or self._members.speaker(source.member_id or 0) is None):
-            raise invalid_params('only an owner-private conversation may start a meeting')
-        roles = self._roles(self._meeting_roles(arguments.get('roles', {}), ids), ids)
-        if target_room is not None:
-            room = target_room
-            if not set(ids).issubset(room['member_ids']):
-                raise invalid_params('add the requested members to this room before starting the meeting')
-        else:
-            room = next((self._view(r) for r in self._conn.execute('SELECT * FROM rooms WHERE is_team=0 ORDER BY id')
-                         if set(self._ids(dict(r))) == set(ids) or
-                         (arguments.get('name') == r['name'] and set(ids).issubset(self._ids(dict(r))))), None)
-        if room is None:
-            room = (await self._create({'member_ids': ids, 'name': arguments.get('name')}))['room']
-        room = (await self._update({'room_id': room['id'], 'roles': roles}))['room']
-        result = self.post(source.member_id or 0,{'room_id':room['id'],'text':agenda.strip()},source_turn_id,language)
+        with self._conn:
+            if not self._conn.in_transaction:
+                self._conn.execute("BEGIN IMMEDIATE")
+            target_room = self._view(self._room(arguments)) if arguments.get('room_id') is not None else None
+            ids = self._validated_ids(arguments.get('member_ids', target_room['member_ids'] if target_room else None))
+            agenda = arguments.get('agenda')
+            if not isinstance(agenda, str) or not agenda.strip() or len(agenda) > 9000:
+                raise invalid_params('agenda must contain 1 to 9000 characters')
+            source = self._history.get(source_turn_id)
+            if (not source or source.scope != 'private' or source.source == 'member'
+                    or self._members.speaker(source.member_id or 0) is None):
+                raise invalid_params('only an owner-private conversation may start a meeting')
+            roles = self._roles(self._meeting_roles(arguments.get('roles', {}), ids), ids)
+            if target_room is not None:
+                room = target_room
+                if not set(ids).issubset(room['member_ids']):
+                    raise invalid_params('add the requested members to this room before starting the meeting')
+            else:
+                room = next((self._view(r) for r in self._conn.execute('SELECT * FROM rooms WHERE is_team=0 ORDER BY id')
+                             if set(self._ids(dict(r))) == set(ids) or
+                             (arguments.get('name') == r['name'] and set(ids).issubset(self._ids(dict(r))))), None)
+            poster = source.member_id or 0
+            if poster not in (room['member_ids'] if room else ids):
+                raise invalid_params("only a room member may post")
+            if room and room['membership_state'] != 'ready':
+                raise invalid_params("adjust room membership before sending")
+            if room is None:
+                room = (await self._create({'member_ids': ids, 'name': arguments.get('name')}, in_transaction=True))['room']
+            result = self.post(poster, {'room_id': room['id'], 'text': agenda.strip()}, source_turn_id, language, meeting=True)
+            if not result['duplicate']:
+                self._conn.execute("UPDATE rooms SET roles=? WHERE id=?", (json.dumps(roles), room['id']))
+                pending = [{'member': member, 'reply_to': None, 'reply_to_member': None, 'handoff': False} for member in ids]
+                self._conn.execute("INSERT INTO room_exchanges(origin_message_id,room_id,state,language,meeting,pending) "
+                                   "VALUES (?,?,'queued',?,1,?)", (result['message_id'], room['id'], language, json.dumps(pending)))
+                self._exchanges.intents(result['message_id'], result['message_id'],
+                    [m for m in self._targets(room, agenda) if m != poster], in_transaction=True)
         if not result['duplicate']:
-            self._exchanges.update(result['message_id'],meeting=1,
-                pending=json.dumps([{'member':member,'reply_to':None,'reply_to_member':None,'handoff':False} for member in ids]))
+            self._changed(room['id'])
             await self._exchanges.drive(room['id'])
         return {'room_id':room['id'],'name':room['name'],'message_id':result['message_id'],
                 'member_ids':ids,'duplicate':result['duplicate'],
@@ -765,7 +781,9 @@ class RoomsService:
                 "handoffs":self._background.handoff_views(room_id=room['id'],thread_id=thread_id),
                 **self.speech_context(room['id'],thread_id or self._thread(room))}
 
-    def _targets(self, room, text):
+    def _targets(self, room, text, *, require_unique=False):
+        if "@" not in text and "＠" not in text:
+            return []
         # Code and quotations are evidence, not accepted addresses.
         text = re.sub(r'```[\s\S]*?```|`[^`\n]*`|(?m:^\s*>.*$)|[“「][^”」]*[”」]|"[^"\n]*"',
                       lambda match: ' ' * len(match.group()), text)
@@ -775,9 +793,15 @@ class RoomsService:
             if speaker.id in allowed:
                 names = [speaker.name] if speaker.id else ["Raphael", "拉斐爾", "ラファエル"]
                 candidates.extend((name, [speaker.id]) for name in names if name)
-        for group in self._members.store.groups():
-            ids = [m.id for m in self._members.store.members() if m.group_id == group.id and m.id in allowed]
-            if ids:
+        groups = self._members.store.groups()
+        members = self._members.store.members() if groups else []
+        for group in groups:
+            ids = [m.id for m in members if m.group_id == group.id and m.id in allowed]
+            if group.mention:
+                choices = " / ".join(f"#{g.id}" for g in groups if g.name.casefold() == group.name.casefold())
+                candidates.append((group.mention, ids))
+                candidates.append((group.name, choices))
+            elif ids:
                 candidates.append((group.name, ids))
         # Whole names, longest match at each @, then textual order. Emails are not addresses.
         hits = []
@@ -787,6 +811,10 @@ class RoomsService:
         targets = []
         for start, end, ids in sorted(hits, key=lambda hit: (hit[0], -hit[1])):
             if any(other_start == start and other_end > end for other_start, other_end, _ in hits):
+                continue
+            if isinstance(ids, str):
+                if require_unique:
+                    raise invalid_params("choose group: " + ids)
                 continue
             for member_id in ids:
                 if member_id not in targets:
@@ -814,6 +842,7 @@ class RoomsService:
         ).fetchone()
         if existing:
             return {"message_id":existing[0], "duplicate":True}
+        self._targets(room, text, require_unique=True)
         if self._attachment_store:
             attachments = [self._attachment_store.save(a) for a in attachments]
         metadata = [a.metadata() for a in attachments]

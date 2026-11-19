@@ -227,6 +227,7 @@ def group_view(group: Group) -> dict[str, Any]:
         "id": group.id,
         "name": group.name,
         "position": group.position,
+        **({"mention": group.mention} if group.mention else {}),
         "sources": [source.to_json() for source in group.sources],
     }
 
@@ -1954,7 +1955,10 @@ class MembersService:
                 if not isinstance(group_name, str):
                     raise invalid_params("invalid group name")
                 group_name = group_name.strip()
-                group = self.store.group_by_name(group_name) if group_name else None
+                try:
+                    group = self.store.group_by_name(group_name) if group_name else None
+                except MemberError as error:
+                    raise _rpc_error(error) from None
                 if group_name and group is None:
                     created_group = (await self._group_create({"name": group_name}))["group"]
                 params["group_id"] = group.id if group else created_group["id"] if created_group else None

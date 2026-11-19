@@ -1649,6 +1649,8 @@ export const ja = {
   "members.offerNo": "今はしない",
   "members.offerYes": "追加",
   "members.nameEmpty": "名前を入力してください",
+  "members.groupNameTaken": "同じ名前のグループがすでにあります。",
+  "members.chooseGroup": "グループ名の後に次のいずれかの ID を付けてください：{p0}",
   "members.nameTaken": "「{p0}」というメンバーはすでにいます",
   "members.routineLine": "定期タスク",
   "auto.waiting": "回答待ち",

@@ -24,6 +24,7 @@ nothing here logs one; a refusal says which field was wrong, never what was in i
 Use it on the thread that owns `conn` (the event loop).
 """
 
+from collections import Counter
 import json
 import re
 import sqlite3
@@ -117,6 +118,7 @@ class Group:
     name: str
     position: int
     sources: tuple[Source, ...] = ()
+    mention: str | None = None
 
 
 @dataclass(frozen=True)
@@ -432,20 +434,34 @@ class MemberStore:
         rows = self._conn.execute(
             "SELECT id, name, position, sources FROM member_groups ORDER BY position, id"
         ).fetchall()
-        return [Group(r["id"], r["name"], r["position"], _sources_of(r["sources"])) for r in rows]
+        counts = Counter(row["name"].casefold() for row in rows)
+        return [Group(r["id"], r["name"], r["position"], _sources_of(r["sources"]),
+                      f"{r['name']}#{r['id']}" if counts[r["name"].casefold()] > 1 else None) for r in rows]
 
     def group(self, group_id: int) -> Group | None:
         return next((group for group in self.groups() if group.id == group_id), None)
 
     def group_by_name(self, name: str) -> Group | None:
         folded = " ".join(name.split()).casefold()
-        return next((g for g in self.groups() if g.name.casefold() == folded), None)
+        matches = [g for g in self.groups() if g.name.casefold() == folded or g.mention and g.mention.casefold() == folded]
+        if len(matches) > 1:
+            raise MemberError("name", "choose group: " + " / ".join(f"#{g.id}" for g in matches))
+        return next(iter(matches), None)
+
+    def _unique_group_name(self, name, group_id=None):
+        # Serialize the check and the following write, including across database connections.
+        if not self._conn.in_transaction:
+            self._conn.execute("BEGIN IMMEDIATE")
+        groups = self.groups()
+        if group_id is None and len(groups) >= MAX_GROUPS:
+            raise MemberError("full", f"there are {MAX_GROUPS} groups already")
+        if any(g.id != group_id and g.name.casefold() == name.casefold() for g in groups):
+            raise MemberError("name", "duplicate group name")
 
     def create_group(self, name: Any) -> Group:
         name = clean_group_name(name)
-        if len(self.groups()) >= MAX_GROUPS:
-            raise MemberError("full", f"there are {MAX_GROUPS} groups already")
         with self.transaction():
+            self._unique_group_name(name)
             (position,) = self._conn.execute(
                 "SELECT COALESCE(MAX(position), -1) + 1 FROM member_groups"
             ).fetchone()
@@ -470,7 +486,9 @@ class MemberStore:
             raise MemberError("not_found", "there is no such group")
         changes: dict[str, Any] = {}
         if name is not None:
-            changes["name"] = clean_group_name(name)
+            cleaned = clean_group_name(name)
+            if cleaned != group.name:
+                changes["name"] = cleaned
         if position is not None:
             _check_position(position)
         if sources is not None:
@@ -480,6 +498,8 @@ class MemberStore:
         if changes:
             assignments = ", ".join(f"{column} = ?" for column in changes)
             with self.transaction():
+                if "name" in changes:
+                    self._unique_group_name(changes["name"], group_id)
                 self._conn.execute(
                     f"UPDATE member_groups SET {assignments} WHERE id = ?",
                     [*changes.values(), group_id],

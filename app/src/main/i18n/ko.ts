@@ -1851,6 +1851,8 @@ export const ko = {
   "members.offerTitle": "정기 작업을 추가할까요?",
   "members.offerNo": "나중에",
   "members.nameEmpty": "이름 입력",
+  "members.groupNameTaken": "같은 이름의 그룹이 이미 있습니다.",
+  "members.chooseGroup": "그룹 이름 뒤에 다음 ID 중 하나를 붙이세요: {p0}",
   "members.nameTaken": "{p0} 이름의 멤버가 이미 있습니다",
   "members.routineLine": "정기 작업",
   "auto.waiting": "응답 대기 중",

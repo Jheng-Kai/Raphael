@@ -46,6 +46,8 @@ conversation; an earlier version is read for the owner alone (`version_view`), n
 # builtin in the annotations of the methods defined after it.
 from __future__ import annotations
 
+from contextlib import nullcontext
+
 import json
 import re
 import sqlite3
@@ -309,6 +311,7 @@ class AgentHistory:
         versions: Sequence[Mapping[str, object]] = (),
         replacing_session: str | None = None,
         keep_answer: bool = False,
+        in_transaction: bool = False,
     ) -> int:
         """Store a new turn, made now, in the thread of `member_id`, with the steps taken for it,
         and return its id. `attachments` are the names and the types of the files handed with the
@@ -328,7 +331,7 @@ class AgentHistory:
             raise ValueError("non-room turns cannot name a room")
         if (source == "room" or route == "room") and scope != "room":
             raise ValueError("room source requires room scope")
-        with self._conn:
+        with nullcontext() if in_transaction else self._conn:
             conversations = Conversations(self._conn, self._now_ms)
             conversation_id = conversations.resolve(member_id, conversation_id) if scope in ("private", "exchange") else None
             if replacing_session is not None:

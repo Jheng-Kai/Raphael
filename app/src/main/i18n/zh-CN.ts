@@ -1851,6 +1851,8 @@ export const zhCN = {
   "members.offerTitle": "加入例行任务？",
   "members.offerNo": "不用",
   "members.nameEmpty": "请输入名字",
+  "members.groupNameTaken": "已有同名群组。",
+  "members.chooseGroup": "请在群组名称后加上其中一个编号：{p0}",
   "members.nameTaken": "已经有叫「{p0}」的成员",
   "members.routineLine": "例行任务",
   "auto.waiting": "等你回复",

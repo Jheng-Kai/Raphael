@@ -1649,6 +1649,8 @@ export const en = {
   "members.offerNo": "Not now",
   "members.offerYes": "Add",
   "members.nameEmpty": "Enter a name",
+  "members.groupNameTaken": "A group with this name already exists.",
+  "members.chooseGroup": "Add one of these IDs after the group name: {p0}",
   "members.nameTaken": "There is already a member called {p0}",
   "members.routineLine": "Routine",
   "auto.waiting": "Waiting for you",

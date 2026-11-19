@@ -200,10 +200,11 @@ class Switchboard:
         finally:
             await self.aclose()
 
-    def _deliver(self, message: Incoming) -> None:
+    def _deliver(self, message: Incoming) -> bool:
         if len(self._tasks) >= MAX_PENDING_MESSAGES:
-            return
+            return False
         self._spawn(lambda: self._route(message))
+        return True
 
     def _spawn(self, work: Callable[[], Awaitable[None]]) -> asyncio.Task[None]:
         task = asyncio.ensure_future(self._handle(work))

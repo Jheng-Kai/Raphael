@@ -375,3 +375,52 @@ def test_room_message_metadata_migrates_existing_rows_and_reopens(tmp_path):
     row = conn.execute("SELECT * FROM room_messages").fetchone()
     assert row["reply_to_member"] == 0 and row["kind"] == "wrapup"
     conn.close()
+
+
+@pytest.mark.parametrize("existing", [True, False])
+async def test_audited_failed_meeting_leaves_room_untouched(rig, rooms, existing):
+    peer = (await rig.call("members.create", {"name": "Peer"}))["member"]["id"]
+    poster = (await rig.call("members.create", {"name": "Poster"}))["member"]["id"]
+    if existing:
+        await create(rig, [0, peer])
+    turn = AgentHistory(rig.conn).add(session_id="source", question="Meet", route="answer",
+        prefix="", text="", status="done", member_id=poster)
+    before = list(rig.conn.execute("SELECT * FROM rooms"))
+    with pytest.raises(RpcError, match="only a room member"):
+        await rooms.meeting({"member_ids": [0, peer], "roles": {str(peer): "moderator"}, "agenda": "Review"}, "en", turn)
+    assert list(rig.conn.execute("SELECT * FROM rooms")) == before
+
+
+async def test_audited_meeting_rolls_back_a_late_database_failure(rig, rooms):
+    import sqlite3
+    peer = (await rig.call("members.create", {"name": "Peer"}))["member"]["id"]
+    turn = AgentHistory(rig.conn).add(session_id="source", question="Meet", route="answer",
+        prefix="", text="", status="done")
+    rig.conn.execute("CREATE TRIGGER inject_failure BEFORE INSERT ON room_exchanges "
+                     "BEGIN SELECT RAISE(ABORT, 'injected failure'); END")
+    with pytest.raises(sqlite3.IntegrityError, match="injected"):
+        await rooms.meeting({"member_ids": [0, peer], "agenda": "Review"}, "en", turn)
+    for table in ("rooms", "room_messages", "room_threads", "room_exchanges"):
+        assert rig.conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0] == 0
+    assert rig.conn.execute("SELECT count(*) FROM agent_turns").fetchone()[0] == 1
+
+
+async def test_audited_group_names_and_legacy_mentions(rig, rooms):
+    store = rig.service.store
+    from raphael_core.members.store import MemberError
+    ops = store.create_group("Ops")
+    other = store.create_group("Other")
+    with pytest.raises(MemberError):
+        store.create_group(" OPS ")
+    with pytest.raises(MemberError):
+        store.update_group(other.id, name="ops")
+    rig.conn.execute("UPDATE member_groups SET name='OPS' WHERE id=?", (other.id,))
+    members = [(await rig.call("members.create", {"name": name, "group_id": group.id}))["member"]["id"]
+               for name, group in (("Alice", ops), ("Bob", other))]
+    room = await create(rig, [0, *members])
+    groups = (await rig.call("members.list"))["groups"]
+    assert {g["mention"] for g in groups} == {f"Ops#{ops.id}", f"OPS#{other.id}"}
+    with pytest.raises(RpcError, match="choose group:"):
+        await rig.call("rooms.send", {"room_id": room["id"], "request_id": "ambiguous", "text": "@Ops"})
+    assert rig.conn.execute("SELECT count(*) FROM room_messages").fetchone()[0] == 0
+    assert rooms._targets(room, f"@Ops#{other.id}") == [members[1]]

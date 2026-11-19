@@ -198,8 +198,11 @@ class MessagingService:
             found = self.linked_files
             return None if found is None else await found(member if speaker is None else speaker, kind, target)
 
+        channel = self._types[kind].make(secrets, self._client())
+        if hasattr(channel, "track"):
+            channel.track(self._config.channel(kind), lambda: self._store.save(self._config))
         switchboard = Switchboard(
-            self._types[kind].make(secrets, self._client()),
+            channel,
             ask=ask,
             stop=stop,
             transcribe=self._transcribe,
@@ -370,7 +373,11 @@ class MessagingService:
         if not config.is_allowed(pairing.user):
             if len(config.allowed) >= MAX_ALLOWED:
                 raise invalid_params("too many people are allowed")
-            config.allowed.append(AllowedUser(pairing.user, pairing.name, pairing.chat))
+            user = AllowedUser(pairing.user, pairing.name, pairing.chat)
+            channel = running.switchboard._channel
+            if hasattr(channel, "pair_position"):
+                user.position = channel.pair_position(pairing.chat)
+            config.allowed.append(user)
             self._store.save(self._config)
         if self.cards:
             self.cards.finish_code(kind, code, "approved")

@@ -27,7 +27,7 @@ export function mentionTargets(list: MembersList, allowed?: number[]): TargetRos
   const people = primaryFirst<{ id: number; name: string }>(list.team_context?.members ?? list.members, primaryIdOf(list));
   // Presence ticks do not change an address. Keep the roster identity shared by composer and finished messages.
   const version = JSON.stringify([getLocale(), people.map(person => [person.id, person.name, list.members.find(member => member.id === person.id)?.avatar]),
-    list.groups.map(group => [group.id, group.name]), list.team_context?.apps, allowed]);
+    list.groups.map(group => [group.id, group.mention ?? group.name]), list.team_context?.apps, allowed]);
   const known = targetRosters.get(version);
   if (known) return known;
   const team = (): string => ico("grid");
@@ -36,7 +36,7 @@ export function mentionTargets(list: MembersList, allowed?: number[]): TargetRos
     { name: t("team.everyone"), kind: "everyone", aliases: EVERYONE, mark: team },
     ...people.filter(m => !allowed || allowed.includes(m.id)).map(m => ({ id: m.id, name: m.name, kind: "member" as const, aliases: m.id === RAPHAEL_ID ? RAPHAEL : [],
       mark: (size: number) => faceHTML(list.members.find(other => other.id === m.id) ?? m, size) })),
-    ...(!allowed ? list.groups.map(g => ({ name: g.name, kind: "group" as const, mark: team })) : []),
+    ...(!allowed ? list.groups.map(g => ({ name: g.mention ?? g.name, kind: "group" as const, mark: team })) : []),
     ...[...(list.team_context?.apps ?? [])].sort((a, b) => Number(b.state === "ready") - Number(a.state === "ready") || (b.last_used_at ?? 0) - (a.last_used_at ?? 0)).map(app => ({ name: app.name, kind: "app" as const, aliases: app.aliases, source: app.plugin, state: app.state, mark: () => entryIcon({ name: app.name, logo: app.logo, icon: app.id === "google" ? "google" : serviceIconOf({ name: app.name }) }, "md"),
       tag: app.state === "needs_sign_in" ? t("rooms.appSignIn") : app.state === "needs_secret" ? t("rooms.appKey") : undefined })),
   ];

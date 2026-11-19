@@ -1648,6 +1648,8 @@ export const zhTW = {
   "members.offerNo": "不用",
   "members.offerYes": "加入",
   "members.nameEmpty": "請輸入名字",
+  "members.groupNameTaken": "已有同名群組。",
+  "members.chooseGroup": "請在群組名稱後加上其中一個編號：{p0}",
   "members.nameTaken": "已經有叫「{p0}」的成員",
   "members.routineLine": "例行任務",
   "auto.askRoutine": "幫我在 {p0} {p1} 建立一個例行任務：",

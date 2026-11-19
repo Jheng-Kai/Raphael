@@ -225,3 +225,9 @@ test("Arrow keys walk the rows and Tab picks without sending or interrupting an 
   input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
   expect(input.value).toBe('@Notion '); expect(menu()).toBeNull(); expect(send).toHaveBeenCalledTimes(1);
 });
+
+test("legacy groups are addressed by their qualified names", () => {
+  const groups = [1, 2].map(id => ({ id, name: "Ops", mention: `Ops#${id}`, position: id, sources: [] }));
+  const roster = mentionTargets({ ...list, groups });
+  expect(mentionRanges("@Ops @Ops#2", roster).map(hit => hit.target.name)).toEqual(["Ops#2"]);
+});

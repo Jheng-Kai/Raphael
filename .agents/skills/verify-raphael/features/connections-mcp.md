@@ -893,3 +893,5 @@ list's chevron and title are one back button; a search orders apps by how well t
 ```powershell
 npm run look -- connect-apps-connect-hover connect-apps-back-title connect-apps-back-title-press connect-apps-row-hover connect-apps-connected-hover connect-apps-connected-rows --theme both --width 1120,720,1920x1080
 ```
+
+The Telegram, Slack and Discord receivers acknowledge messages after switchboard admission. Paired Slack DMs retain their history boundary across restarts. For an older pairing without a saved boundary, Slack looks for the bot’s last retained reply. With no such reply, collection starts at the first launch after upgrade. Discord resumes its gateway session or catches up paired DMs on Identify. Each adapter retries only the rate-limited piece of an outgoing text. Offline coverage lives in `core/tests/messaging/test_telegram.py` and `test_work_channels.py`.

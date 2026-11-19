@@ -1851,6 +1851,8 @@ export const vi = {
   "members.offerTitle": "Thêm tác vụ định kỳ?",
   "members.offerNo": "Để sau",
   "members.nameEmpty": "Điền tên",
+  "members.groupNameTaken": "Đã có nhóm dùng tên này.",
+  "members.chooseGroup": "Thêm một trong các mã sau vào cuối tên nhóm: {p0}",
   "members.nameTaken": "Đã có thành viên tên {p0}",
   "members.routineLine": "Tác vụ định kỳ",
   "auto.waiting": "Đang chờ bạn",

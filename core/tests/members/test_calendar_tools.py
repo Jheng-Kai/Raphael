@@ -20,6 +20,9 @@ TODAY = "2026-10-21"
 def home(setup):
     rig, team = setup
     rig.wall.now = int(datetime.fromisoformat(TODAY).replace(tzinfo=timezone.utc).timestamp() * 1000)
+    # Create routines on the same day and in the same zone that the calendar is reading.
+    team.members._now_ms = team.members.store._now_ms = rig.wall
+    team.members._tz = timezone.utc
 
     async def status(_):
         return {"spend": {"month_usd": 0, "limit_usd": 20, "daily": [0] * 14}, "openrouter": {"state": "ok"}}

@@ -1851,6 +1851,8 @@ export const de = {
   "members.offerTitle": "Routine hinzufügen?",
   "members.offerNo": "Nicht jetzt",
   "members.nameEmpty": "Geben Sie einen Namen ein",
+  "members.groupNameTaken": "Eine Gruppe mit diesem Namen existiert bereits.",
+  "members.chooseGroup": "Füge eine dieser IDs an den Gruppennamen an: {p0}",
   "members.nameTaken": "Es gibt bereits ein Mitglied namens {p0}",
   "members.routineLine": "Routine",
   "auto.waiting": "Wartet auf Sie",
