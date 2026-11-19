@@ -264,9 +264,14 @@ pub enum MainEvent {
     /// the window shows `user_code` and opens `verification_uri`. The code is not logged.
     DeviceCode {
         catalog_id: String,
+        name: String,
         user_code: String,
         verification_uri: String,
         expires_in: u64,
+    },
+    /// That sign-in ended, however it ended (`integrations.device_done`): the code goes.
+    DeviceDone {
+        catalog_id: String,
     },
     /// A key of Raphael went down or up, from the global hook or from the window itself. Sent for
     /// every key event, whether or not the guide is practising; the keys are never named.
@@ -1418,11 +1423,15 @@ pub fn main_event_from(notification: &Notification, monitoring: bool) -> Option<
             }
             Some(MainEvent::DeviceCode {
                 catalog_id: params.get("catalog_id")?.as_str()?.to_owned(),
+                name: params.get("name")?.as_str()?.to_owned(),
                 user_code: params.get("user_code")?.as_str()?.to_owned(),
                 verification_uri: verification_uri.to_owned(),
                 expires_in: whole(params.get("expires_in")?)?,
             })
         }
+        "integrations.device_done" => Some(MainEvent::DeviceDone {
+            catalog_id: params.get("catalog_id")?.as_str()?.to_owned(),
+        }),
         _ => None,
     }
 }
@@ -3418,7 +3427,7 @@ mod tests {
         let issued = |uri: &str| {
             notification(
                 "integrations.device_code",
-                json!({"catalog_id": "github", "user_code": "WDJB-MJHT",
+                json!({"catalog_id": "github", "name": "GitHub", "user_code": "WDJB-MJHT",
                        "verification_uri": uri, "expires_in": 900}),
             )
         };
@@ -3426,6 +3435,7 @@ mod tests {
             main_event_from(&issued("https://github.com/login/device"), false),
             Some(MainEvent::DeviceCode {
                 catalog_id: "github".to_owned(),
+                name: "GitHub".to_owned(),
                 user_code: "WDJB-MJHT".to_owned(),
                 verification_uri: "https://github.com/login/device".to_owned(),
                 expires_in: 900
@@ -3445,12 +3455,35 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&MainEvent::DeviceCode {
                 catalog_id: "github".to_owned(),
+                name: "GitHub".to_owned(),
                 user_code: "ABCD-EFGH".to_owned(),
                 verification_uri: "https://github.com/login/device".to_owned(),
                 expires_in: 900
             })
             .unwrap(),
-            r#"{"type":"DeviceCode","catalog_id":"github","user_code":"ABCD-EFGH","verification_uri":"https://github.com/login/device","expires_in":900}"#
+            r#"{"type":"DeviceCode","catalog_id":"github","name":"GitHub","user_code":"ABCD-EFGH","verification_uri":"https://github.com/login/device","expires_in":900}"#
+        );
+    }
+
+    #[test]
+    fn the_end_of_a_device_sign_in_goes_to_the_window() {
+        let ended = notification("integrations.device_done", json!({"catalog_id": "github"}));
+        assert_eq!(
+            main_event_from(&ended, false),
+            Some(MainEvent::DeviceDone {
+                catalog_id: "github".to_owned()
+            })
+        );
+        assert_eq!(
+            main_event_from(&notification("integrations.device_done", json!({})), false),
+            None
+        );
+        assert_eq!(
+            serde_json::to_string(&MainEvent::DeviceDone {
+                catalog_id: "github".to_owned()
+            })
+            .unwrap(),
+            r#"{"type":"DeviceDone","catalog_id":"github"}"#
         );
     }
 

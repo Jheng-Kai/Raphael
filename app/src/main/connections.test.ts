@@ -1071,16 +1071,6 @@ describe("the page of an app that is not connected", () => {
     // another sign-in under way: this page's button stays pressable (pressing it ends the other one)
     expect(dom(appPage("linear", { login: { target: "sentry", name: "Sentry" } })).querySelector<HTMLButtonElement>('[data-conn="join"]')!.disabled).toBe(false);
   });
-
-  test("a code to type, while a device login waits for it, stands over the view and over the page", () => {
-    const device = { catalog_id: "linear", user_code: "AB-12", verification_uri: "https://example.com/device" };
-    const login = { target: "linear", name: "Linear" };
-    const inView = dom(connectionsHTML(view({ login, device })));
-    expect(inView.querySelector(".cs-apps > .cs-device")).not.toBeNull();
-    expect(texts(inView, ".cs-code .cs-cap").join("")).toBe("AB12");
-    expect(inView.querySelector('[data-conn="device-open"]')).not.toBeNull();
-    expect(inView.querySelector('.cs-device [data-conn="cancel-login"]')).not.toBeNull();
-  });
 });
 
 describe("the form that connects a server of the user's own", () => {

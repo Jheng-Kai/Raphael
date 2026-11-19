@@ -24,7 +24,7 @@ import { serviceIconOf } from "./service-icons";
 import { entryIcon } from "./service-mark";
 export { entryIcon, iconHTML } from "./service-mark";
 import type { AuditEntry, ConnectionGroup, ConnectionTool, MainEvent, NewConnection, StoreService, Words } from "./types";
-import { DISCONNECT_CONFIRM_MS, type Choice, actionRow, btn, closeMenu, copyButton, esc, fieldHTML, ico, iconBtn, iconButton, openPopover, row, sel, st, tg, toaster } from "./ui";
+import { DISCONNECT_CONFIRM_MS, type Choice, actionRow, btn, closeMenu, esc, fieldHTML, ico, iconBtn, iconButton, openPopover, row, sel, st, tg, toaster } from "./ui";
 
 /** How long the next sign-in waits for the one it cancelled to give its account back before it gives up beginning. */
 const LOGIN_STOP_MS = 15_000;
@@ -99,12 +99,6 @@ export interface Login {
   name: string;
 }
 
-/** The code of a device login that is waiting for the user to type it at the service. */
-export interface DeviceCode {
-  catalog_id: string;
-  user_code: string;
-  verification_uri: string;
-}
 
 export interface ConnectionsView {
   configured: boolean | null;
@@ -142,8 +136,6 @@ export interface ConnectionsView {
   /** The services a call is under way for. */
   busy: ReadonlySet<string>;
   login: Login | null;
-  /** The code to type, while a device login waits for it. */
-  device: DeviceCode | null;
   /** What went wrong with the latest login, for the app's page. */
   loginError: { target: string; kind: string } | null;
   /** Feedback stays inside the open dialog, clear of its actions. */
@@ -167,7 +159,6 @@ export const emptyConnectionsView = (): ConnectionsView => ({
   confirmingDisconnect: null,
   busy: new Set(),
   login: null,
-  device: null,
   loginError: null,
   dialogNotice: null,
   form: null,
@@ -822,7 +813,6 @@ function appPageHTML(s: StoreService | undefined, g: ConnectionGroup | undefined
     : "";
   return (
     backHTML() + head + about + lead + alert + loginErrorHTML(v, key) + dialogNoticeHTML(v) +
-    (loggingIn && g ? deviceHTML(v) : "") +
     (g ? accountsHTML(g) : "") +
     (tryItems ? `<section class="cs-sec"><h3>${esc(t("conn.try"))}</h3><ul class="cs-say">${tryItems}</ul></section>` : "") +
     (g ? toolsHTML(g, v, busy, loggingIn) : "") +
@@ -872,21 +862,6 @@ function formHTML(f: ConnectionForm): string {
   );
 }
 
-// ---------- the code of a device login ----------
-
-/** The code in keycaps, the one button that copies it and opens the service's page, and a cancel button. */
-function deviceHTML(v: ConnectionsView): string {
-  const d = v.device;
-  if (!d || !v.login) return "";
-  const name = (Array.isArray(v.catalog) ? v.catalog.find((s) => s.id === d.catalog_id)?.name : undefined) ?? v.login.name;
-  const caps = [...d.user_code].map((ch) => (ch === "-" ? '<span class="cs-dash">-</span>' : `<span class="cs-cap">${esc(ch)}</span>`)).join("");
-  return (
-    `<div class="cs-device" role="group" aria-label="${esc(name)}"><p class="cs-device-hint">${esc(t("conn.device.hint"))}</p>` +
-    `<div class="cs-code" aria-label="${esc(d.user_code)}">${caps}</div>` +
-    actionRow({ cls: "cs-device-acts", secondary: btn(esc(t("conn.cancel")), "", ' data-conn="cancel-login"'), primary: { label: esc(t("conn.device.open", { p0: name })), attrs: ' data-conn="device-open"' } }) + `</div>`
-  );
-}
-
 // ---------- the dialog ----------
 
 /** What is open: the page of an app of the catalog, of a connected one, or of a server of the owner's own. */
@@ -914,12 +889,12 @@ export function connectionsHTML(v: ConnectionsView, heading = ""): string {
   const target = openTarget(v);
   if (target) return `<div class="cs cs-page">${quietHeading(heading)}${appPageHTML(target.entry, target.group, v)}</div>` + key;
   if (v.screen === "connected" && Array.isArray(v.groups) && v.groups.length) {
-    return `<div class="cs cs-connected"><div class="cs-top"><h2 class="cs-top-t">${backTitleHTML(t("conn.tab.installed"))}</h2></div>${quietHeading(heading)}${deviceHTML(v)}` +
+    return `<div class="cs cs-connected"><div class="cs-top"><h2 class="cs-top-t">${backTitleHTML(t("conn.tab.installed"))}</h2></div>${quietHeading(heading)}` +
       `<div class="cs-body" data-cs-body>${installedHTML(v)}</div></div>` + key;
   }
   // The connected apps could not be read: the chip that would open them says so instead, with the way to read them again.
   const unread = v.groups === "failed" ? `<div class="alert core-note">${st("err", t("conn.loadFailed"))}${btn(esc(t("plugins.retry")), "sm", ' data-conn="retry-connections"')}</div>` : "";
-  return `<div class="cs cs-apps">${deviceHTML(v)}<div class="cs-top">${heading}${haveChipHTML(v)}</div>${unread}${barHTML(v)}${chipsHTML(v)}` +
+  return `<div class="cs cs-apps"><div class="cs-top">${heading}${haveChipHTML(v)}</div>${unread}${barHTML(v)}${chipsHTML(v)}` +
     `<div class="cs-results" data-cs-scroll><div class="cs-body" data-cs-body>${bodyHTML(v)}</div></div></div>` + key;
 }
 
@@ -963,7 +938,7 @@ export interface Connections {
   painted(): void;
   /** Something scrolled: a long list draws its next rows when its end is near. */
   scrolled(target: Element): void;
-  /** An event of the main window: the code of a device login. */
+  /** An event of the main window: the connections changed. */
   followEvent(event: MainEvent): void;
   /** The panel is closed or leaves the dialog: drop what must not stay (an unsent form, a pending disconnect). */
   reset(): void;
@@ -1000,7 +975,6 @@ export function createConnections(host: ConnectionsHost): Connections {
   let confirmTimer: ReturnType<typeof setTimeout> | undefined;
   const busy = new Set<string>();
   let login: Login | null = null;
-  let device: DeviceCode | null = null;
   let loginError: ConnectionsView["loginError"] = null;
   let dialogNotice: ConnectionsView["dialogNotice"] = null;
   let form: ConnectionForm | null = null;
@@ -1040,7 +1014,7 @@ export function createConnections(host: ConnectionsHost): Connections {
 
   const view = (): ConnectionsView => ({
     configured, categories, category, keyOpen, keyBusy, keyError,
-    groups, catalog, composioCatalog, inventory, placed, audit, screen, search, shown, recommendedAll, open, toolsOpen, auditOpen, confirmingDisconnect: confirming, busy, login, device, loginError, dialogNotice, form, now: Date.now(),
+    groups, catalog, composioCatalog, inventory, placed, audit, screen, search, shown, recommendedAll, open, toolsOpen, auditOpen, confirmingDisconnect: confirming, busy, login, loginError, dialogNotice, form, now: Date.now(),
   });
 
   /** The dialog's scrolling list. */
@@ -1337,7 +1311,6 @@ export function createConnections(host: ConnectionsHost): Connections {
       result = { connected: false, error: error instanceof Error && error.message === "toolkit_not_allowed" ? "toolkit_not_allowed" : "error" };
     }
     login = null;
-    device = null;
     if (result.connected) {
       loginError = null;
       if (!fromDialog || open === fromDialog || !dialogOpen()) notify(t(again ? "conn.relogged" : "conn.connected", { p0: name }));
@@ -1385,22 +1358,7 @@ export function createConnections(host: ConnectionsHost): Connections {
   }
 
   function followEvent(event: MainEvent): void {
-    if (event.type === "ConnectionsChanged" && host.visible()) { void load(); return; }
-    if (event.type !== "DeviceCode" || !login) return;
-    device = { catalog_id: event.catalog_id, user_code: event.user_code, verification_uri: event.verification_uri };
-    redraw();
-  }
-
-  /** Puts the code on the clipboard, so that it is pasted at the page that opens, and opens the page. */
-  async function openDevicePage(control: HTMLElement): Promise<void> {
-    const d = device;
-    if (!d) return;
-    try {
-      if (!await copyButton(control, d.user_code)) return;
-      await api.openLink(d.verification_uri);
-    } catch (err) {
-      notify(describeError(err), "err");
-    }
+    if (event.type === "ConnectionsChanged" && host.visible()) void load();
   }
 
   async function connectCustom(): Promise<void> {
@@ -1592,9 +1550,6 @@ export function createConnections(host: ConnectionsHost): Connections {
         if (group) void signIn({ id }, group.name, true);
         break;
       }
-      case "device-open":
-        void openDevicePage(button);
-        break;
       case "open-grants": {
         const url = GRANTS_URL[groupById(id)?.catalog_id ?? ""];
         if (url) void api.openLink(url).catch((err) => notify(describeError(err), "err"));

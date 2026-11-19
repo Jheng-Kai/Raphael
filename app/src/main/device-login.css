@@ -1,0 +1,8 @@
+/* The code of a device sign-in (device-login.ts): the app's compact dialog (members.css `.mb-confirm`) with what to do
+   with the code over large fixed-width keycaps, and the one button that copies it and opens the page */
+.mb-dialog.mb-confirm.dl-dialog { width: max-content; min-width: min(360px, 100%); max-width: min(480px, 100%); }
+.dl-dialog .mb-dlg-body { justify-items: center; gap: var(--sp-3); padding: var(--sp-5) var(--sp-4); }
+.dl-hint { margin: 0; font-size: var(--fs-sm); color: var(--text-2); text-align: center; text-wrap: pretty; }
+.dl-code { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: var(--sp-1); user-select: text; }
+.dl-cap { display: inline-grid; place-items: center; width: 36px; height: 46px; border: 1px solid var(--key-edge); border-bottom-width: 3px; border-radius: var(--r-sm); background: var(--key); color: var(--text); font: 500 var(--fs-h1)/1 var(--mono); }
+.dl-dash { padding: 0 var(--sp-1); color: var(--text-3); font: 500 var(--fs-h1)/1 var(--mono); }

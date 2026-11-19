@@ -1,11 +1,17 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { scene, click, wait, waitGone, check, key } from "./steps.mjs";
+import { scene, click, wait, waitGone, check, key, member, type } from "./steps.mjs";
 
 // Connect apps (the sidebar's dialog) owns the app inventory and its connected count.
 // Every scene uses the real account footer and Settings entry.
 const base = JSON.parse(readFileSync(resolve(import.meta.dirname, "../fixture.json"), "utf8"));
 const open = [click("#nav .sidebar-apps"), wait('.modal-scrim[data-standalone="connections"] .modal-body .cs'), check("settings-shell")];
+const DEVICE_CODE = { type: "DeviceCode", catalog_id: "github", name: "GitHub", user_code: "WDJB-MJHT", verification_uri: "https://github.com/login/device", expires_in: 900 };
+const deviceCode = [
+  ...open, wait(".cs-card"), type("#conn-search", "github"), wait('[data-conn="open-store"][data-id="github"]'), click('[data-conn="open-store"][data-id="github"]'),
+  wait('.cs-page [data-conn="join"][data-id="github"]'), click('.cs-page [data-conn="join"][data-id="github"]'), wait(".cs-page .cs-wait"),
+  { action: "main-event", event: DEVICE_CODE }, wait(".dl-dialog .dl-code"), check("device-code"),
+];
 
 const tool = (slug, name, kind, description) => ({ slug, name, description, kind, enabled: true });
 const notionTools = [
@@ -119,6 +125,18 @@ export default [
     ...open, wait(".cs-card"), click('[data-conn="join"][data-id="slack"]'), wait('[data-conn="cancel-login"]'),
     click('[data-conn="join"][data-id="gmail"]'), wait('[data-conn="join"][data-id="slack"]'), check("sign-in-replaced"),
   ], { composioConfigured: true, pluginsConnecting: true }),
+  // A device sign-in (GitHub's) shows its code in the window's one dialog over whatever is open, wherever it began
+  // (R-APPS-DEVICE-01): here from GitHub's own page in the store. Only the core's two events are synthetic.
+  scene("device-code", "A device sign-in begun on GitHub's page shows its code over the dialog: keycaps, 取消 and one copy-and-open button", deviceCode, { pluginsConnecting: true }),
+  scene("device-code-done", "The code goes when the core says the sign-in ended, and nothing is cancelled", [
+    ...deviceCode, { action: "main-event", event: { type: "DeviceDone", catalog_id: "github" } }, waitGone(".dl-dialog"), check("device-code-done"),
+  ], { pluginsConnecting: true }),
+  scene("device-code-cancelled", "取消 on the code ends the sign-in at the core: GitHub's page has 連結 again", [
+    ...deviceCode, click('.dl-dialog [data-dlg="cancel"]'), wait('.cs-page [data-conn="join"][data-id="github"]'), check("device-code-cancelled"),
+  ], { pluginsConnecting: true }),
+  scene("device-code-chat", "A code that a chat's card asked for stands over the conversation the same way", [
+    member(1), { action: "main-event", event: DEVICE_CODE }, wait(".dl-dialog .dl-code"), check("device-code"),
+  ]),
   scene("sign-in-cancelled", "取消 ends the waiting sign-in at the core: the row is 連結 again and nothing is said", [
     ...open, wait(".cs-card"), click('[data-conn="join"][data-id="slack"]'), wait('[data-conn="cancel-login"]'), click('[data-conn="cancel-login"]'),
     wait('[data-conn="join"][data-id="slack"]'), check("sign-in-cancelled"),

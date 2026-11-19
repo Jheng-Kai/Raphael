@@ -139,6 +139,25 @@ A sign-in cancelled half way can be removed, so no useless accounts pile up, and
 npm run look -- accounts-card accounts-menu accounts-remove-ask accounts-remove-yes accounts-remove-waiting accounts-remove-last account-labels account-label-edit sign-in-waits sign-in-replaced sign-in-cancelled --theme both --width 1120,720,1920x1080
 ```
 
+## The code of a device sign-in (GitHub): R-APPS-DEVICE-01
+
+GitHub signs in with a code typed at github.com (the device flow), not with a browser login. The code has one place: the window's
+own dialog (`device-login.ts`, the shared compact dialog) over whatever is open, with 「連結 GitHub」, 「在開啟的頁面貼上這組代碼」, the code
+in keycaps, 取消 and the one button 「複製代碼並開啟 GitHub」 (it has the focus; it copies the code and opens the page, and the code stays
+while the sign-in waits). It comes up wherever the sign-in began: GitHub's page in the store (where it once only said 請在瀏覽器登入…
+with no code and never opened the site), the connected list's 重新登入, a chat's connector card, the guide and a template.
+The core sends `integrations.device_code {catalog_id, name, user_code, verification_uri, expires_in}` and, however the sign-in ended,
+`integrations.device_done {catalog_id}`; the shell turns them into `DeviceCode` and `DeviceDone`. The dialog goes on `DeviceDone` (or a
+core that started again) and cancels nothing; 取消, Escape or a press beside it end the sign-in (`integrations.connect_cancel`).
+
+- Driving it: Connect Apps, search 「github」, GitHub's row, 連結 on its page with the fixture flag `pluginsConnecting`, then the
+  synthetic main event `DeviceCode`. A real code needs a person at github.com: the device flow, the token and the GitHub MCP server
+  are covered by `core/tests/integrations/test_device.py`, not by look.
+
+```powershell
+npm run look -- device-code device-code-done device-code-cancelled device-code-chat --theme both --width 1120,720,1920x1080
+```
+
 ## Setup in the conversation
 
 Every such setup, Composio or otherwise, is done in the conversation, unless it ends with a sign-in or with entering a key. In the

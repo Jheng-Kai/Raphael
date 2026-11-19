@@ -14,8 +14,10 @@ The window manages the plugins with:
   with the kind of what went wrong (`denied` for a login the user refused, `cancelled`, `timeout`...);
   `integrations.connect_cancel` ends the wait. The tokens go to the vault and nowhere else. A service
   with the device flow (GitHub) opens no browser: when the code is issued the core sends the
-  notification `integrations.device_code {catalog_id, user_code, verification_uri, expires_in}`,
-  the window shows it, and the call waits for the user to type it at the service;
+  notification `integrations.device_code {catalog_id, name, user_code, verification_uri, expires_in}`,
+  the window shows it, and the call waits for the user to type it at the service. Whoever started
+  the login (the 「連接」 tab, a chat's card, the guide, a template), `integrations.device_done
+  {catalog_id}` follows when it ends, however it ended, and the window takes the code down;
 - `integrations.add {name, transport, command, args, env, url, headers}` connect a server of the
   user's own. The values of `env` and `headers` are secrets: they go to the vault at once and are
   never sent back, logged or kept anywhere else; the list shows only their names;
@@ -399,6 +401,8 @@ class IntegrationsService:
             if self._login is login:
                 self._login = None
                 self._login_for = ""
+            if server.auth == "device" and self._notify is not None:
+                self._notify("integrations.device_done", {"catalog_id": server.catalog_id})
         if not new and self._config.get(server.id) is not server:
             return {"connected": False, "error": "cancelled"}  # removed while the browser was open
         server.tools = result.tools
@@ -429,6 +433,7 @@ class IntegrationsService:
                     "integrations.device_code",
                     {
                         "catalog_id": server.catalog_id,
+                        "name": server.name,
                         "user_code": code.user_code,
                         "verification_uri": code.verification_uri,
                         "expires_in": code.expires_in,
