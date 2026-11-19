@@ -84,6 +84,12 @@ class Folder:
         else:
             os.replace(os.path.join(self.ref, source), os.path.join(self.ref, name))
 
+    def link(self, source, name):
+        if SAFE:
+            os.link(source, name, src_dir_fd=self.ref, dst_dir_fd=self.ref, follow_symlinks=False)
+        else:
+            os.link(os.path.join(self.ref, source), os.path.join(self.ref, name))
+
     def remove(self, name):
         if SAFE:
             os.unlink(name, dir_fd=self.ref)
@@ -184,8 +190,8 @@ def read(request):
 
 def write(request):
     """Write a whole file in place of what is there, only if what is there is what the caller last saw (`expected`:
-    its sha256, or "absent" for a new file); parent folders are made. Written to a new name and renamed over the old,
-    keeping its mode, so a reader never sees half a file."""
+    its sha256, or "absent" for a new file); parent folders are made. The completed temporary file is linked into a
+    free name or renamed over the old file, keeping its mode, so a reader never sees half a file."""
     data = base64.b64decode(request["data"], validate=True)
     folder, name = locate(request["path"], request["roots"], create=True)
     try:
@@ -194,6 +200,8 @@ def write(request):
         except FileNotFoundError:
             info, current = None, None
         else:
+            if request["expected"] == "absent":
+                return {"error": "changed"}
             if kind_of(info.st_mode) != "file":
                 return {"error": "not_a_file", "kind": kind_of(info.st_mode)}
             current = digest_of(folder, name, 0)[0]
@@ -209,13 +217,18 @@ def write(request):
                 os.fsync(stream.fileno())
             if info and hasattr(os, "chmod") and SAFE:
                 os.chmod(temporary, mode, dir_fd=folder.ref)
-            folder.replace(temporary, name)
-        except BaseException:
+            if info is None:
+                try:
+                    folder.link(temporary, name)
+                except FileExistsError:
+                    return {"error": "changed"}
+            else:
+                folder.replace(temporary, name)
+        finally:
             try:
                 folder.remove(temporary)
             except OSError:
                 pass
-            raise
         return {"sha256": hashlib.sha256(data).hexdigest(), "size": len(data), "created": info is None}
     finally:
         folder.close()

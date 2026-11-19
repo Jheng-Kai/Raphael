@@ -127,8 +127,38 @@ wmctrl() {
         assert "fake browser stderr: could not create SingletonLock" in result.stderr
 
 
-def test_a_launcher_it_does_not_know_runs_as_it_is_instead_of_being_refused(guest):
-    # Another image's launcher must still start its browser: the stale locks are cleared, the launcher is not patched.
-    assert guest["launch_script"]("#!/bin/sh\necho other launcher\n", PROFILE) is None
-    patched = guest["launch_script"](LAUNCHER.read_text(encoding="utf-8"), PROFILE)
-    assert patched is not None and "browser_error" in patched
+@pytest.mark.parametrize("kind", ["python", "native", "layer12"])
+def test_the_guest_entry_cleans_the_profile_and_executes_the_launcher_with_its_arguments(tmp_path, monkeypatch, kind):
+    profile = tmp_path / ".browser-profiles" / "driver" / "main"
+    profile.mkdir(parents=True)
+    lock = profile / "SingletonLock"
+    lock.touch()
+    launcher = tmp_path / "raphael-seat-browser"
+    source = {
+        "python": b"#!/usr/bin/python3\nprint('started')\n",
+        "native": b"\x7fELF\xff",
+        "layer12": LAUNCHER.read_text(encoding="utf-8").replace(str(PROFILE), str(profile)).encode(),
+    }[kind]
+    launcher.write_bytes(source)
+    argv = ["0", "900", "1280", "900", "https://example.test/?q=two words"]
+    monkeypatch.setattr(sys, "argv", ["-", "raphael-seat-browser", *argv])
+    calls = []
+
+    def execv(path, args):
+        assert not lock.exists()
+        calls.append((path, args))
+
+    monkeypatch.setattr(os, "execv", execv)
+    script = seat_browser.LAUNCH.replace(f'"{PROFILE}"', repr(str(profile)))
+    script = script.replace('"/usr/local/bin/raphael-seat-browser"', repr(str(launcher)))
+    script = script.replace('"/proc"', repr(str(tmp_path / "proc")))
+    exec(script, {"__name__": "__main__"})
+
+    assert len(calls) == 1
+    path, args = calls[0]
+    if kind == "layer12":
+        assert path == "/bin/sh" and args[:2] == ["sh", "-c"]
+        assert "browser_error" in args[2]
+        assert args[3:] == ["raphael-seat-browser", *argv]
+    else:
+        assert path == str(launcher) and args == [str(launcher), *argv]
