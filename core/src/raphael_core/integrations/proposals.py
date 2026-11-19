@@ -250,8 +250,10 @@ class ConnectionProposals:
             self.conn.execute("UPDATE secret_cards SET state='cancelled' WHERE turn_id=? AND server_id=? AND state IN ('pending','failed','saved')",
                               (row["turn_id"], row["server_id"]))
 
-    def cancel_session(self, session):
-        rows = self.conn.execute("SELECT p.* FROM connection_proposals p JOIN agent_turns t ON t.id=p.turn_id WHERE t.session_id=? AND p.state NOT IN ('enabled','cancelled')", (session,)).fetchall()
+    def cancel_session(self, session, *, turn_id=None):
+        rows = self.conn.execute("SELECT p.* FROM connection_proposals p JOIN agent_turns t ON t.id=p.turn_id WHERE t.session_id=?"
+                                 " AND (? IS NULL OR p.turn_id=?) AND p.state NOT IN ('enabled','cancelled')",
+                                 (session, turn_id, turn_id)).fetchall()
         for item in rows:
             row = dict(item)
             self._move(row, "cancelled")

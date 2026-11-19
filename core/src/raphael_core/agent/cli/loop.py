@@ -352,6 +352,7 @@ class CliLoop:
         self._serial = asyncio.Lock()
         self._handoff_pending = False
         self._buffer = ""
+        self._confirmed_final = []
         self._publish_reply, self._published, self._message_ids = reply, [], set()
         self._completed_buffer, self._separated = False, []
         # Speech not yet shown (`_release_held`), whether the one opening was shown, and whether a step has started.
@@ -405,7 +406,7 @@ class CliLoop:
         effort = brain_effort(self.model)
         return f"cli:{brain_ref(self.model)[0]}:{self.actual_model}" + (f"?effort={effort}" if effort else "")
 
-    def _publish(self, text, *, final=False, previous=(), settled=False):
+    def _publish(self, text, *, final=False, previous=(), settled=False, confirmed=False):
         """Show public speech. A message the CLI marks as its answer (`settled`) or the terminal result
         (`final`) is shown at once, after anything held; other speech waits for the next event."""
         if self._publish_reply is None:
@@ -421,13 +422,15 @@ class CliLoop:
         if reply is None:
             return
         lines = reply.messages or [reply.text]
+        if confirmed:
+            self._confirmed_final.extend(pending_replies(self._confirmed_final, lines))
         lines = pending_replies(self._published if final else previous, lines)
         if self._again and not final:
             # Started again (the completion check, a changed tool list), the CLI gives its answer a second time: what
             # the owner has already been shown in this turn is not shown again, what is new is.
             shown = {line.strip() for line in self._published}
             lines = [line for line in lines if line.strip() not in shown]
-        if lines and not (final or settled):
+        if lines and not (final or settled or confirmed):
             # Speech before the outcome waits for the CLI's next event: work after it makes it progress.
             self._held.append((reply, lines))
         elif lines:
@@ -1255,7 +1258,7 @@ class CliLoop:
                     public = bool(event.data.get("final") or public_reply(words, self.language, plain=self.plain, explicit=True))
                     if not key[1] or key not in self._message_ids:
                         if public:
-                            self._publish(words, previous=self._separated, settled=bool(event.data.get("final")))
+                            self._publish(words, previous=self._separated, confirmed=bool(event.data.get("final")))
                         self._message_ids.add(key)
                     self._buffer = "" if public else words
                     self._completed_buffer, self._separated = True, []
@@ -1359,9 +1362,9 @@ class CliLoop:
             self.catalog_changed = True
             return "tools_changed"
         self.owner_input.closed = True
-        if self._published:
+        if self._confirmed_final:
             self._save_context()
-            self._queue.put_nowait(Outcome("done", final="\n<<<next message>>>\n".join(self._published)))
+            self._queue.put_nowait(Outcome("done", final="\n<<<next message>>>\n".join(self._confirmed_final)))
             return None
         self._queue.put_nowait(Outcome("stopped", kind="missing_terminal"))
         return None

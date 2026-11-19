@@ -307,10 +307,11 @@ class Confirmations:
             self._expired.popitem(last=False)
         return overdue
 
-    def cancel_session(self, session_id: str) -> list[Pending]:
+    def cancel_session(self, session_id: str, *, turn_id: int | None = None) -> list[Pending]:
         """Deny the questions of a session that was cancelled; return them. Their yes, if it still
         comes, finds nothing to approve."""
-        return self.cancel_where(lambda pending: pending.session_id == session_id)
+        return self.cancel_where(lambda pending: pending.session_id == session_id
+                                 and (turn_id is None or pending.turn_id == turn_id))
 
     def cancel_all(self) -> list[Pending]:
         """Deny every question that waits; return them."""

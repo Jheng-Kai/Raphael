@@ -73,3 +73,21 @@ for line in sys.stdin:
         user="Inspect", system="Persona", endpoint="http://127.0.0.1:1/mcp", token="ephemeral", permission=None,
     )]
     assert events[-1].kind == "final" and events[-1].text == expected
+
+
+async def test_opening_before_work_is_never_the_missing_final(monkeypatch, tmp_path):
+    from raphael_core.agent.cli.drivers import Event
+    from .test_cli_recovery import recovery_rig
+
+    spoken = []
+    async def play(loop, attempt):
+        if attempt == 1:
+            yield Event("text_delta", "Checking now.\n<<<next message>>>\n")
+            yield Event("tool_start", data={"id": "step", "name": "read_attachment"})
+            yield Event("tool_end", data={"id": "step"})
+        yield Event("final", "")
+    rig = recovery_rig(monkeypatch, tmp_path, play, reply=spoken.append)
+    result = await rig.loop.run()
+    assert [reply.text for reply in spoken] == ["Checking now."]
+    assert (result.status, result.kind, result.final) == ("stopped", "missing_terminal", "")
+    assert len(rig.calls) == 2

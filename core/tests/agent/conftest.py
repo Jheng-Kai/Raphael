@@ -62,7 +62,7 @@ class FakeBackground:
     def clear(self):
         self.cleared += 1
 
-    async def cancel_session(self, session_id):
+    async def cancel_session(self, session_id, *, turn_id=None):
         return any(request[0] == session_id for request in self.submitted)
 
     def tasks_for_turns(self, turn_ids):

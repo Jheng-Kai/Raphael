@@ -3482,7 +3482,7 @@ class BackgroundService:
         for identifier in sorted(identifiers,reverse=True):
             await self._cancel({'task_id':identifier,'_tree':True})
 
-    async def cancel_session(self, session_id: str) -> bool:
+    async def cancel_session(self, session_id: str, *, turn_id: int | None = None) -> bool:
         """Stop the task of this session that runs and take its queued ones out of the queue; the
         tasks of other sessions are left alone. Whether anything was stopped."""
         stopped = False
@@ -3490,7 +3490,7 @@ class BackgroundService:
         waiting += [row[0] for row in self._metrics_conn.execute("SELECT id FROM worker_tasks WHERE session_id=? AND state='waiting' AND continuation IS NOT NULL", (session_id,))]
         for task_id in dict.fromkeys([*self._runs, *self._active, *self._queue, *waiting]):
             task = self.task(task_id)
-            if task is not None and task.session_id == session_id:
+            if task is not None and task.session_id == session_id and (turn_id is None or task.turn_id == turn_id):
                 stopped = bool((await self._cancel({"task_id": task_id}))["cancelled"]) or stopped
         return stopped
 
