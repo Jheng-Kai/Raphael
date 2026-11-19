@@ -38,7 +38,6 @@ import { composioAction } from "../composio-result";
 // thread is its own: the search looks in it alone, and no turn of another thread shows in it but
 // the closed line of what a colleague asked it (exchange-line.ts).
 
-import { noticeHTML } from "../missing";
 import { conversationTitle, conversationChange, newestConversation, type ConversationInfo } from "../conversation-list";
 import { eventRead } from '../event-read';
 import { cancelGesture } from "../../shared/cancel-gesture";
@@ -2580,12 +2579,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const task = composerTask();
     if (!task) patchHTML(voiceButton, avatarHTML({ size: 32, avatar: null }));
     voiceButton.setAttribute("aria-label", t("agent.voice"));
+    // A conversation still being read only leaves the button unavailable: no line under the composer moves it about.
     voiceButton.disabled = !task && conversationId() === undefined;
-    let note = composer.querySelector<HTMLElement>("[data-conversation-missing]");
-    if (voiceButton.disabled && !note) {
-      note = document.createElement("div"); note.dataset.conversationMissing = ""; composer.append(note);
-    }
-    if (note) { note.hidden = !voiceButton.disabled; note.innerHTML = voiceButton.disabled ? noticeHTML("conversation") : ""; }
     if (task) { if (!listening || voiceMember !== memberId()) voice.drop(); voiceButton.classList.remove("vm-away"); }
     drawTaskSlot(composer, task ? question ? "waiting" : task.state : "idle", task !== null && stoppingComposerTasks.has(task.key));
     watchStop();

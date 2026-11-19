@@ -107,6 +107,7 @@ class ChatGPTAuth:
         self._sign_in_task = None
         self._cancel_requested = False
         self._notify = lambda method, params: None
+        self.on_connected = None
         self.model_rows = []
         self.revision = 0
 
@@ -304,7 +305,10 @@ class ChatGPTAuth:
         self._cancel_requested = False
         try:
             async with asyncio.timeout(timeout):
-                return await self._sign_in(params)
+                status = await self._sign_in(params)
+            if status["plan_scope_granted"] and self.on_connected:
+                await self.on_connected("chatgpt")
+            return status
         except TimeoutError:
             raise OpenRouterError(0, "timeout", "ChatGPT sign-in timed out; try signing in again") from None
         except asyncio.CancelledError:

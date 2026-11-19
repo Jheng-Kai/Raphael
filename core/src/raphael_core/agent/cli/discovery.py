@@ -111,6 +111,7 @@ class CliBrains:
         self._watcher = None
         self._last_used = 0.0
         self._models = {}
+        self._fill_after_refresh = set()
         self._model_refresh = None
         self._models_at = {}
         self._clock = clock
@@ -291,6 +292,16 @@ class CliBrains:
         chosen = effort if effort in levels else next((e for e in ("low", "medium", "none", "minimal") if e in levels), levels[0])
         return entry.get("effort_models", {}).get(chosen) or f"{base}?effort={chosen}"
 
+    def _fill_models(self, name):
+        from ...brain.first_models import recommendations
+        from ...brain.settings import SettingsStore
+        if isinstance(self.settings, SettingsStore):
+            rows = self._known_models(name) or [{"id": f"cli:{name}"}]
+            # A subscription program answers and takes quick questions; dictation's tidying stays fast, so it is never filled
+            # with a program started for every phrase, and the program hears nothing (R-DEFAULT-05).
+            choices = {role: model for role, model in recommendations(rows).items() if role in ("answer", "quick")}
+            self.settings.fill_models(NAMES[name], choices, self.notify)
+
     async def _one(self, name):
         command = await asyncio.to_thread(self.command, name)
         logged_in = self.logged_in(name) if command else False
@@ -332,6 +343,13 @@ class CliBrains:
         self._last_used = asyncio.get_running_loop().time()
         async with self._lock:
             value = {"clis": list(await asyncio.gather(*(self._one(name) for name in NAMES)))}
+            before = {item["id"] for item in (self._previous or {}).get("clis", []) if item["available"]}
+            for item in value["clis"]:
+                if item["available"] and item["id"] not in before:
+                    if item["models"] or not self._needs_models(item["id"]):
+                        self._fill_models(item["id"])
+                    else:
+                        self._fill_after_refresh.add(item["id"])
             if self._previous is not None and self._previous != value and self.notify:
                 self.notify("brains.changed", {})
             self._previous = value
@@ -367,6 +385,11 @@ class CliBrains:
             # The owner may be looking at an empty list: the next read tries again soon, a known list can wait.
             self._models_at[name] = asyncio.get_running_loop().time() - (0 if self._models.get(name) else 50)
             return
+        finally:
+            if name in self._fill_after_refresh:
+                self._fill_after_refresh.discard(name)
+                if self.available(name, command=command):
+                    self._fill_models(name)
         self._models_at[name] = asyncio.get_running_loop().time()
 
     async def _refresh_models(self):
@@ -418,6 +441,7 @@ class CliBrains:
             return {"started": True, "running": True}
         if self.logged_in(name) is True and not again:
             self._reconnect(name)
+            self._fill_models(name)
             if self.notify:
                 self.notify("brains.changed", {})
             return {"started": False, "reconnected": True}
@@ -485,6 +509,7 @@ class CliBrains:
             if done:
                 self.sign_in_back(name)
                 self._reconnect(name)
+                self._fill_models(name)
         self._previous = None
         if self.notify:
             self.notify("brains.changed", {})

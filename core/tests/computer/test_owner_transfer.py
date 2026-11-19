@@ -1,14 +1,17 @@
 """The owner's paste into a member's computer, their copy out of it, and files they hand it (R-PASTE-01, R-PASTE-02,
 R-COMP-FILE-01), and the files a member copies into it itself (R-COMP-FILE-02), without Docker: the driver and the upload
 store are stand-ins."""
+import asyncio
 import base64
 import json
+import os
 from pathlib import Path
+from threading import Barrier
 
 import pytest
 
 from raphael_core.agent.policy import Tier
-from raphael_core.computer import owner_files, vm_tools
+from raphael_core.computer import files_guest, owner_files, vm_tools
 from raphael_core.computer.owner_transfer import REMOTE_FILE_MAX, clipboard_text, numbered, place_copy, place_remote, safe_name
 from raphael_core.computer.vm import VmError
 from raphael_core.computer.vm_tools import VmTools
@@ -204,6 +207,53 @@ async def test_a_file_for_a_computer_on_another_machine_travels_over_the_engine_
     with pytest.raises(VmError, match="file_too_large"):
         await place_remote(bridge.vm, bridge.vm.target(1), stored, "big.bin")
     assert requests == []
+
+
+@pytest.fixture
+def remote_team(viewer, tmp_path):
+    bridge, _, _ = viewer
+    team = tmp_path / "team"
+    team.mkdir()
+
+    async def file_request(target, request):
+        path = Path(request["path"]).name
+        return await asyncio.to_thread(files_guest.handle, {**request, "path": f"{team.as_posix()}/{path}",
+                                                           "roots": [team.as_posix()]})
+
+    bridge.vm.file_request = file_request
+    return bridge.vm, bridge.vm.target(1), team
+
+
+async def test_remote_deliveries_that_both_saw_a_free_name_do_not_overwrite(remote_team, tmp_path, monkeypatch):
+    vm, target, team = remote_team
+    first, second = tmp_path / "first", tmp_path / "second"
+    first.write_bytes(b"first report")
+    second.write_bytes(b"second report")
+    both_absent = Barrier(2)
+    original_open = files_guest.Folder.open
+
+    def open_after_both_saw_absent(folder, name, flags, mode=0o644):
+        if name.startswith(".report.txt.raphael-") and flags & os.O_EXCL:
+            both_absent.wait(timeout=5)
+        return original_open(folder, name, flags, mode)
+
+    monkeypatch.setattr(files_guest.Folder, "open", open_after_both_saw_absent)
+    names = await asyncio.gather(*(place_remote(vm, target, source, "report.txt") for source in (first, second)))
+
+    assert set(names) == {"report.txt", "report (2).txt"}
+    assert set(path.name for path in team.iterdir()) == set(names)
+    assert [(team / name).read_bytes() for name in names] == [first.read_bytes(), second.read_bytes()]
+
+
+async def test_a_remote_delivery_numbers_a_name_taken_by_a_folder(remote_team, tmp_path):
+    vm, target, team = remote_team
+    (team / "report.txt").mkdir()
+    source = tmp_path / "upload"
+    source.write_bytes(b"report")
+
+    assert await place_remote(vm, target, source, "report.txt") == "report (2).txt"
+    assert (team / "report.txt").is_dir()
+    assert (team / "report (2).txt").read_bytes() == b"report"
 
 
 def copy_tool(hub):

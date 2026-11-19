@@ -1,8 +1,8 @@
 """Exercise an installed or relocated core using isolated data and no credential access.
 
 Three passes. The first two each have a core of its own and temporary data. The first has the
-fail-closed keyring, so cleanup stops before it would ask the model, and checks the plain local
-operations. The second has the fake LLM (RAPHAEL_FAKE_LLM=1: an in-memory key and a client that
+fail-closed keyring and no model chosen, so cleanup stops before it would ask one, and checks the
+plain local operations. The second has the fake LLM (RAPHAEL_FAKE_LLM=1: an in-memory key and a client that
 returns the transcript, no network), so a dictation really goes through cleanup. That loads the
 prompt resource and the OpenCC configurations (s2twp, s2hk, t2s and tw2sp) from the bundle, which the
 first pass never reaches: a missing file would otherwise switch cleanup off without a word. The
@@ -275,6 +275,8 @@ def smoke_with_the_fake_llm(executable: Path) -> dict:
             require(rpc.call("core.hello").get("protocol") == 1, "Incompatible JSON-RPC protocol")
             require(rpc.call("secrets.status")["has_key"] is True, "The fake LLM did not get its in-memory key")
             rpc.call("dictionary.add", {"word": "Raphael Smoke", "misheard": ["smoke token"]})
+            for key in ("agent_model", "quick_model", "cleanup_model"):
+                rpc.call("settings.set", {"key": key, "value": "openai/gpt-6-luna"})
             for languages, spoken, expected in CLEANED_VARIANTS:
                 rpc.call("settings.set", {"key": "languages", "value": languages})
                 finalized = rpc.call("brain.finalize_dictation", {

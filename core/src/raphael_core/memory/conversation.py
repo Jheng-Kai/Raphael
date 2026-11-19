@@ -677,6 +677,16 @@ class Conversation:
                 if not is_context_overflow(caught):
                     break
                 logger.info("The conversation's fold was given too much: asking again with less")
+        if completion is not None:
+            ledger.add(
+                model=completion.model,
+                cost_usd=completion.cost_usd,
+                usage=getattr(completion, "usage", None), prompt_tokens=completion.prompt_tokens,
+                completion_tokens=completion.completion_tokens,
+            )
+        # A fallback writes progress too. Discard every stale result after accounting for the call.
+        if self._clears != clears or self.summary() != summary:
+            return False
         if completion is None:
             assert error is not None
             if is_context_overflow(error):
@@ -687,20 +697,10 @@ class Conversation:
             if self._failures >= FOLD_FALLBACK_AFTER:
                 return self._fall_back(summary, all_due, through, f"failed {self._failures} times")
             return False
-        ledger.add(
-            model=completion.model,
-            cost_usd=completion.cost_usd,
-            usage=getattr(completion, "usage", None), prompt_tokens=completion.prompt_tokens,
-            completion_tokens=completion.completion_tokens,
-        )
         data = completion.data
         text = data.get("summary") if isinstance(data, dict) else None
         if not isinstance(text, str) or not text.strip():
             self._failed("empty")
-            return False
-        # The turns may have changed while the model wrote: the summary covers what it was given,
-        # and nothing at all when it was cleared meanwhile (with the conversation, maybe).
-        if self._clears != clears or self.summary() != summary:
             return False
         self._save(cap_summary(text, budget), batch_through)
         self._save_fragment(*progress)

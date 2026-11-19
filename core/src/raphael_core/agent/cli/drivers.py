@@ -89,6 +89,22 @@ def assistant_error(packet):
     return None
 
 
+def _antigravity_final(response: str, responses: list[str], answer: list[str], text: str) -> str:
+    """The final reply of an Antigravity turn: what was said after the last tool, plus anything the result adds beyond the
+    response steps already seen. The result joins every step of the turn, so taking it whole would replay the progress
+    said between tools; taking only the last step would lose words the result alone carries."""
+    known = "\n".join(responses)
+    extra = ""
+    if not known:
+        extra = response
+    elif response == known or response.startswith(known + "\n"):
+        extra = response[len(known):].strip("\n")
+    elif not answer and not text:
+        extra = response
+    parts = [*answer, *([text] if text and not extra.startswith(text) else []), *([extra] if extra else [])]
+    return "\n".join(part for part in parts if part)
+
+
 class Driver:
     def __init__(self, name, command, *, model=None, effort=None, environ=None, quota=None, home=None):
         self.name, self.command, self.model = name, list(command), model
@@ -450,7 +466,10 @@ class Driver:
                 return
 
     async def _antigravity(self):
+        # `responses` holds every finished response step in order; `answer` only those since the last tool, which are the
+        # answer (the earlier ones were progress, already shown as such).
         text = ""
+        responses, answer = [], []
         while True:
             packet = await self._read()
             kind = packet.get("event")
@@ -467,12 +486,18 @@ class Driver:
                         text += step["text_delta"]
                         yield Event("text_delta", step["text_delta"])
                     if step.get("state") in ("DONE", "COMPLETED"):
-                        yield Event("message", step.get("text") or text, data={"id": step.get("id")})
+                        message = step.get("text") or text
+                        if message:
+                            responses.append(message)
+                            answer.append(message)
+                        yield Event("message", message, data={"id": step.get("id")})
                         text = ""
                 elif step.get("step_type") == "tool":
                     name = step.get("tool_name") or "tool"
                     if step.get("state") == "ACTIVE":
-                        text = ""
+                        if text:
+                            responses.append(text)
+                        text, answer = "", []
                         yield Event("tool_start", data={"name": name})
                     elif step.get("state") in ("DONE", "ERROR"):
                         self._last_tool_error = redact(step.get('error') or step.get('text') or 'CLI tool failed', secrets=self._diagnostic_secrets, limit=1800) if step.get('state') == 'ERROR' else None
@@ -486,7 +511,7 @@ class Driver:
                 if result.get("status") != "SUCCESS":
                     yield self._event("error", result.get("error") or "CLI failed")
                 else:
-                    yield self._event("final", result.get("response") or "")
+                    yield self._event("final", _antigravity_final(result.get("response") or "", responses, answer, text))
                 return
 
     async def _rpc(self, user, system, endpoint, token, session, permission, image_paths=(), *, fresh_context=None, image_labels=()):

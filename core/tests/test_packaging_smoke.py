@@ -71,8 +71,8 @@ def test_the_second_pass_dictates_with_cleanup_and_the_first_without(smoke, repo
         if call["method"] == "brain.finalize_dictation"
     ]
     first, *cleaned = dictations
-    # The fail-closed keyring raises when the key is asked for, before the prompt is read.
-    assert first["cleaned"] is False and first["fallback_reason"] == "error:unexpected"
+    # A fresh install has no tidying model, so the first pass pastes the words as spoken before any key is asked.
+    assert first["cleaned"] is False and first["fallback_reason"] == "no_model"
     assert [item["cleaned"] for item in cleaned] == [True, True, True]
     assert [item["text"] for item in cleaned] == [
         expected for _, _, expected in smoke.CLEANED_VARIANTS

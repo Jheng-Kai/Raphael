@@ -39,8 +39,8 @@ def test_failed_reply_names_its_speaking_member(make_rig, monkeypatch, language,
     speaker = Speaker(id=7, name="小晴") if member else Speaker()
     ask = _Ask("failed-member", "Hello", language, speaker=speaker)
     monkeypatch.setattr(rig.service, "_finish", lambda ask, route, which, text, ledger, **kwargs: text)
-    diagnostic = Failure("auth_expired", "not_configured")
-    text = rig.service._failed(ask, "answer", AgentFailure("auth", diagnostic=diagnostic), None)
+    diagnostic = Failure("timeout", "request timed out")
+    text = rig.service._failed(ask, "answer", AgentFailure("timeout", diagnostic=diagnostic), None)
     assert text == diagnostic.sentence(speaker.name if member else name, language)
     if member:
         assert not any(chief in text for chief in ("Raphael", "拉斐爾", "ラファエル"))

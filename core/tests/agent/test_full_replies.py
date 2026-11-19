@@ -47,6 +47,30 @@ def test_long_code_block_is_not_cut_or_split():
     assert split_messages(text) == [text]
 
 
+@pytest.mark.parametrize(("intro", "body"), [
+    ("The checks are:", "- First check\n- Second check"),
+    ("Results\uff1a", "| Check | Result |\n| --- | --- |\n| Import | OK |"),
+    ("### Results", "The import succeeded."),
+    ("Results\n=======", "The import succeeded."),
+    ("Results\n-------", "The import succeeded."),
+    ("### Results\n\nThe checks are:\n\n", "- First check\n- Second check"),
+])
+def test_reply_chunk_keeps_an_introduction_with_its_body(intro, body):
+    from raphael_core.agent.persona import MEMBER_TEXT_MAX
+
+    previous = "x" * (MEMBER_TEXT_MAX - len(intro) - 2)
+    assert split_messages(f"{previous}\n\n{intro}\n\n{body}") == [previous, f"{intro}\n\n{body}"]
+
+
+def test_reply_chunk_keeps_an_introduction_with_an_oversized_fence():
+    from raphael_core.agent.persona import MEMBER_TEXT_MAX
+
+    intro = "Example:"
+    code = "~~~text\n" + ("x" * MEMBER_TEXT_MAX) + ":\n\n### Inside the fence\n~~~"
+    text = f"Previous paragraph.\n\n{intro}\n\n{code}\n\nNext paragraph."
+    assert split_messages(text) == ["Previous paragraph.", f"{intro}\n\n{code}", "Next paragraph."]
+
+
 def test_task_followup_receives_entire_report():
     report = "Result paragraph. " * 500
     assert report in background_block([TaskBrief(1, "Task", "done", 1, (), report, 0)])

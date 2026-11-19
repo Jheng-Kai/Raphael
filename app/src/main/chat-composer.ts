@@ -180,9 +180,15 @@ function fitComposerRow(bar: HTMLElement): void {
   for (const element of [mode, model, ...(folder ? [folder] : [])]) new MutationObserver(fit).observe(element, { childList: true, subtree: true, characterData: true, attributes: element === folder, attributeFilter: element === folder ? ["hidden"] : undefined });
 }
 
-/** The row under a composer's field, wherever the composer is built: it gives way in order (R-UI-160). */
+/** The row under a composer's field, wherever the composer is built: it gives way in order (R-UI-160). It also marks
+ *  the composer while the owner is in it, pressed into or typed in (`data-engaged`), so its line brightens; a focus the
+ *  app gave it on its own, as opening a conversation does, marks nothing, since a jump lights nothing (R-UI-118). */
 export function bindComposerRow(form: HTMLElement): void {
   fitComposerRow(form.querySelector<HTMLElement>(".cmp-bar")!);
+  const engage = (): void => { form.dataset.engaged = ""; };
+  form.addEventListener("pointerdown", engage);
+  form.addEventListener("keydown", engage);
+  form.addEventListener("focusout", event => { if (!form.contains(event.relatedTarget as Node | null)) delete form.dataset.engaged; });
 }
 
 export function wavBytes(channels: readonly Float32Array[], rate: number): Uint8Array {

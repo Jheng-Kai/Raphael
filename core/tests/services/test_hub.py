@@ -27,7 +27,7 @@ KEY = "BSA-the-owners-brave-key-0123456789"
 async def test_vision_inherits_an_api_model_for_subscription_and_local_brains(rig, model, assistant):
     rig.settings.set("agent_model", model)
     rig.settings.set("assistant_model", assistant)
-    expected = "anthropic/claude-haiku-5.5" if assistant.startswith("anthropic/") else "openai/gpt-6-luna"
+    expected = "anthropic/claude-haiku-5.5" if assistant.startswith("anthropic/") else ""
     assert rig.hub.vision_model()[0] == expected
 
 
@@ -93,8 +93,8 @@ async def test_the_status_says_what_is_chosen_and_what_each_service_needs(rig):
         "vision": {
             "enabled": True,
             "model": "",
-            "resolved_model": "openai/gpt-6-luna",
-            "supports_images": True,
+            "resolved_model": "",
+            "supports_images": None,
         },
     }  # fmt: skip
 
@@ -166,6 +166,7 @@ async def test_a_model_the_list_says_reads_no_images_is_said_so(conn):
     text_only = {"input_modalities": ["text"], "output_modalities": ["text"]}
     listed = parse_catalog(edited("openai/gpt-6-luna", architecture=text_only))
     rig = Rig(conn, models=lambda: listed)
+    rig.settings.set("agent_model", "openai/gpt-6-luna")
     assert (await rig.call("services.status"))["vision"]["supports_images"] is False
 
 

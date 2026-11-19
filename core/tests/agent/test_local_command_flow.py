@@ -90,7 +90,7 @@ async def test_a_quick_question_publishes_running_action_before_completion_and_s
     if brain == 'api':
         client.chats = [chat('Inspecting.', ('local__local_exec', {'command': COMMAND})), chat('Finished.')]
     else:
-        rig.settings.set('agent_model', 'cli:' + brain)
+        rig.settings.set('quick_model', 'cli:' + brain)
         async def work(loop):
             result = await loop._tool('command', 'local__local_exec', {'command': COMMAND})
             loop._queue.put_nowait(Outcome('done', final='Finished.' if result.ok else result.content))

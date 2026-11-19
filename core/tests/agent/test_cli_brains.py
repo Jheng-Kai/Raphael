@@ -347,6 +347,60 @@ async def test_codex_malformed_login_fails_without_launching_child_or_logging_co
     assert auth.read_text(encoding="utf-8") == content
 
 
+@pytest.mark.parametrize(("answer_state", "has_answer"), [
+    ("DONE", True), ("COMPLETED", True), ("ACTIVE", True), (None, True), (None, False),
+])
+async def test_antigravity_final_excludes_progress_from_the_turn_result(monkeypatch, answer_state, has_answer):
+    from raphael_core.agent.cli.drivers import Driver, Event
+
+    def step(**fields):
+        return {"event": "step_update", "step_update": fields}
+
+    progress = ["I will check the source.", "I will compare the results."]
+    answer = "The two sources agree.\n\nHere is the report."
+    packets = []
+    for line in progress:
+        packets.extend([
+            step(step_type="agent_response", state="DONE", text=line),
+            step(step_type="tool", state="ACTIVE", tool_name="read"),
+            step(step_type="tool", state="DONE", tool_name="read"),
+        ])
+    if answer_state:
+        packets.append(step(step_type="agent_response", state="ACTIVE", text_delta=answer[:15]))
+        if answer_state != "ACTIVE":
+            packets.append(step(step_type="agent_response", state=answer_state, text_delta=answer[15:]))
+    aggregate = "\n".join([*progress, *([answer] if has_answer else [])])
+    packets.append({"event": "result", "result": {"status": "SUCCESS", "response": aggregate}})
+    packets = iter(packets)
+
+    async def read():
+        return next(packets)
+
+    driver = Driver("gemini", [])
+    monkeypatch.setattr(driver, "_read", read)
+    events = [event async for event in driver._antigravity()]
+    assert [event.text for event in events if event.kind == "message"][:2] == progress
+    assert events[-1] == Event("final", answer if has_answer else "")
+
+
+async def test_antigravity_final_keeps_words_only_the_result_carries(monkeypatch):
+    # A finished response step, then a result that adds the real answer: the answer is not dropped for the step alone.
+    from raphael_core.agent.cli.drivers import Driver, Event
+
+    packets = iter([
+        {"event": "step_update", "step_update": {"step_type": "agent_response", "state": "DONE", "text": "Working it out."}},
+        {"event": "result", "result": {"status": "SUCCESS", "response": "Working it out.\nThe total is 42."}},
+    ])
+
+    async def read():
+        return next(packets)
+
+    driver = Driver("gemini", [])
+    monkeypatch.setattr(driver, "_read", read)
+    events = [event async for event in driver._antigravity()]
+    assert events[-1] == Event("final", "Working it out.\nThe total is 42.")
+
+
 @pytest.mark.parametrize("name", ["claude", "codex", "gemini"])
 async def test_driver_subscription_events_permissions_and_resume(tmp_path, name):
     from raphael_core.agent.cli.drivers import Driver

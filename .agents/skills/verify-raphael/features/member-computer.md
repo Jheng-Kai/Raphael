@@ -93,19 +93,19 @@ itself and nothing moves. Sizes are the ones read on the owner's PC when the lay
 | Small settings (`device.json`, `integrations.json`, `connectors.json`, `messaging.json`, `schedule-awake.json`, `.window-state.json`) | `%APPDATA%\<F>` | shell `device_settings.rs`, `schedule_awake.rs`; core `IntegrationsService`, `MessagingStore` (data folder) | under 1 MB | rewritten | fixed shape |
 | `connectors-catalog.json` (a downloaded catalogue) | `%APPDATA%\<F>` | `connectors/service.py` `CATALOG_FILE` | 3.8 MB | replaced | one file |
 | Attachments | `%APPDATA%\<F>\attachments` | `services/attachment_store.py` (`root / "attachments"`) | 988 MB, 262 files | each attached file | nothing |
-| Members' memory: `bots/<id>` (SOUL.md, MEMORY.md, skills, `memory/log/<day>.md`), `shared/USER.md`, `bot-state` (journals, mirrors, locks, backups) | `%LOCALAPPDATA%\<F>` | `paths.memory_dir`, whose parent `memory/service.py` gives `BotHomes` | bots 3.0 MB, bot-state 0.8 MB | each memory write; a log line | MEMORY.md 2,200 and USER.md 1,375 characters, 128 KB a file, unused entries 90 days; daily logs: nothing; journal 30 days (R-MEM-15) |
+| Members' memory: `bots/<id>` (SOUL.md, MEMORY.md, skills, `memory/log/<day>.md`), `shared/USER.md`, `bot-state` (journals, mirrors, locks, backups) | `%LOCALAPPDATA%\<F>` | `paths.memory_dir`, whose parent `memory/service.py` gives `BotHomes` | bots 3.0 MB, bot-state 0.8 MB | each memory write; a log line | MEMORY.md 2,200 and USER.md 1,375 characters, 128 KB a file, unused entries 90 days; daily logs: nothing; journal pruned daily, independent of consolidation, keeping 30 days and each skill's latest applied revision before the cutoff (R-MEM-15) |
 | Conversation folding | database (`conversation_summaries`, `conversation_context_summaries`, `room_thread_summaries`) | `memory/conversation.py`, `members/room_summary.py` | in the database | one row per conversation or thread | `SUMMARY_MAX_TOKENS`; goes with its conversation |
 | Vault, keys, sign-ins | Windows Credential Manager, macOS Keychain (never a file) | `keychain.py`, through `brain/secrets.py` `CredentialKeyStore` and `integrations/vault.py` `CredentialVault` | none on disk | per secret | none needed |
 | Logs | `%LOCALAPPDATA%\<F>\logs` | shell `lib.rs` `log_plugin`, `identity.rs` | 3.5 MB | per line | 1 MB files, three kept |
 | Speech models | `%LOCALAPPDATA%\Raphael\models` (both builds) | `paths.models_dir`; `identity.rs` `data_env` | 956 MB | per model fetched | a fixed set; deleted from Settings |
 | Webview data | `%LOCALAPPDATA%\<F>\WebView2` | shell `data_layout.rs` `WEBVIEW_DIR` | 211 MB dev, 82 MB release | the webview's cache | WebView2's own |
-| Members' computer homes `vm-homes/<key>` and the team folder `vm-shared` | `%LOCALAPPDATA%\<F>` (were `%APPDATA%\<F>`; an earlier install moves them at a start, or as soon as a computer stops if that start found one running, R-COMP-PLACE-01) | `computer/vm.py` `placed`, `target_for`, `relocate` | 3,776 MB (the shared computer's home 3,021 MB) and 3,507 MB (projects 2,055 MB, bot-office 1,312 MB) | members' files, browser profiles, checkpoints | nothing on this PC: the 90% disk notice, a reset, a member's deletion; inside a computer `/tmp` and job logs (`scratch_args`) |
+| Members' computer homes `vm-homes/<key>` and the team folder `vm-shared` | `%LOCALAPPDATA%\<F>` (were `%APPDATA%\<F>`; an earlier install moves them at a start, or as soon as a computer stops if that start found one running, R-COMP-PLACE-01) | `computer/vm.py` `placed`, `target_for`, `relocate` | 3,776 MB (the shared computer's home 3,021 MB) and 3,507 MB (projects 2,055 MB, bot-office 1,312 MB) | members' files, browser profiles, checkpoints | nothing on this PC: the 90% disk notice, a reset, a member's deletion; inside a computer `/tmp` and job logs (`scratch_args`), with failed cleanup retried on the next preparation |
 | The owner's desktop picture for the computers | `%APPDATA%\<F>\computer-wallpaper.jpg` | `vm.py` `OWN_WALLPAPER` | none (a `wallpaper-own-kept` folder of 0.2 MB that no code writes) | one file | 8 MB |
 | Pictures of members | `%LOCALAPPDATA%\<F>\avatars`, `avatar` | shell `avatar.rs`; `MembersService` | 7.2 MB | one per member | replaced |
 | Exported templates | `%LOCALAPPDATA%\<F>\template-exports` | `members/member_catalog.py` | 4 folders, under 1 MB | per export | nothing |
 | CLI workspaces | `~\.raphael\cli-workspaces\<member>\claude`, `<member>\<conversation>\codex` and `\gemini` (Gemini's private home inside) | `agent/cli/records.py` `workspace_root` | 140 MB, 38 member folders | a folder per conversation for Codex and Gemini | nothing |
 | Members' Codex homes (their own `CODEX_HOME`, with Codex's records) | `~\.raphael\codex-brains\<sha256 of the workspace>` | `agent/cli/drivers.py` `codex_home` | 1,945 MB, 192 homes | one per conversation workspace | nothing |
-| Claude Code's records of the members' runs | `~\.claude\projects\<folder named after the working folder>` | Claude Code; the names come from `workspace_root` and `process.PRIVATE_PREFIX` | 1,225 folders: 336 of member workspaces (1,000 sessions), 822 of the model listing's temporary folders (an empty `memory` each), the rest the owner's own; none older than 19 days | a folder per working folder, a file per session | R-CLI-12 |
+| Claude Code's records of the members' runs | `~\.claude\projects\<folder named after the working folder>` | Claude Code; the names come from `workspace_root` and `process.PRIVATE_PREFIX` | 1,225 folders: 336 of member workspaces (1,000 sessions), 822 of the model listing's temporary folders (an empty `memory` each), the rest the owner's own; none older than 19 days | a folder per working folder, a file per session | R-CLI-12, with cleanup deferred until both builds' databases can be read |
 | The CLIs' own homes `~\.codex`, `~\.gemini` | the owner's | the CLIs | not measured | | not Raphael's |
 | Swap backups `backup-<time>` | `%APPDATA%\Raphael Dev` | the owner's swap script, outside the repository | 3 x 190 MB | per swap | three kept |
 | Look and judge output | `app\.look` in the checkout, never in a user's data | `app/scripts/look` | | per run | git-ignored |
@@ -271,6 +271,9 @@ Layer 12 (`image/layer12/`, one Dockerfile step after layer 11's, so a PC that b
 - `raphael-browser`: the Browser icon brings the screen's browser window back with a new tab, or makes one when there is none.
 - `raphael-seat-browser`: the browser places and maximizes the found window (`fit`), then shows the new tab page in its marker
   tab and clears its history (`settle`).
+- On layer 14, the core runs the installed launcher as `cua` with startup recovery. It removes stale `Singleton*` and
+  `DevToolsActivePort` entries only when no process uses the shared profile. The core logs early browser exits with a
+  bounded stderr tail, and a missing window gives the member retry and owner-escalation guidance.
 - `raphael-browser-tabs` (standard library, the browser's own DevTools port): `settle`, `list`, `new`, `show`, `fit`.
   A window of the browser is found by its screen, then its title, then (two alike) by which tab has the focus once it is
   brought forward. A new tab opens in the window brought to the front last, so it is checked and, when it landed in another
@@ -1681,6 +1684,8 @@ or a document typed as the command, a windowed program, `open` on a Mac) is refu
 member is told to open it on its own computer (`computer/on_screen.py`, checked in `LocalTools.tier_for_call` and `call`,
 `AgentService._cli_permission` and the background CLI loop). It stops a model that picked the wrong computer; it is no
 defence against someone set on getting round it.
+PowerShell string expressions, format strings and assignments do not open anything. Explicit invocations such as
+`& "C:\Tools\app.exe"` still take the screen route.
 
 A quick question keeps the owner's PC as its default for everything, commands and what is seen alike, and also holds the
 member's own computer for a request whose words name it (`persona._OWNER_PC_RULES` says which is the default and how the
@@ -1852,7 +1857,7 @@ is used. Contract tests check the actual snapshot and every CLI/API/worker perso
 `vm_exec` defaults to 60 seconds, caps at 1800 seconds and 20,000 combined output
 characters, and times out in the guest as well as the host. With `background` it starts
 detached and returns a job, its log and its `.exit` file under `.raphael-jobs/` in the
-workspace (at most six hours); the member reads them with later commands. `attach_file` only
+workspace (at most six hours); the log keeps the first 256 KiB of combined output. The member reads the log and actual job exit code with later commands. `attach_file` only
 copies regular files under `/home/cua/workspace` into the existing attachment
 store. Guest directory traversal and symlinks are refused with openat/no-follow.
 Screenshot blocks reach CLI and API brains, are treated as untrusted screen
@@ -2221,7 +2226,8 @@ what this view last knew. Code: `computer/owner_transfer.py`, `DesktopViewer.cli
 A file dropped on the computer's screen (watching or holding it) or chosen with 傳送檔案到電腦 in the held computer's ⋯ goes
 to the upload store a megabyte at a time and `computer.viewer_put_file` copies it into `/home/cua/team` under its own
 name, ` (2)` added when the name is taken; one quiet line under the screen says where it went. A remote computer gets it
-over the engine, at most 32 MB.
+over the engine, at most 32 MB. The guest publishes to a free name atomically and retries with a number when a file,
+folder or concurrent transfer takes that name.
 
 A member does the same itself with `copy_from_owner {path}`, one of its computer's tools (R-COMP-FILE-02): a file of
 the owner's computer, by an absolute path or one from `~`, goes into `/home/cua/team` through the same placing

@@ -2,7 +2,10 @@
 
 import os
 import sqlite3
+from contextlib import closing
 from pathlib import PureWindowsPath
+
+import pytest
 
 from raphael_core.agent.cli import records
 from raphael_core.agent.cli.records import CliRecords, app_folders, other_databases, project_name, recorded_elsewhere, sweep
@@ -165,6 +168,40 @@ async def test_the_sweep_runs_at_most_once_a_day_and_reads_what_the_database_res
     assert await sweeper.sweep_once() is None  # not again the same day
     clock[0] = NOW + DAY
     assert await sweeper.sweep_once() == (0, 0)
+
+
+@pytest.mark.parametrize("unreadable", ["locked", "incomplete"])
+async def test_a_failed_database_read_keeps_every_record_and_retries_the_same_day(tmp_path, monkeypatch, unreadable):
+    roaming = tmp_path / "Roaming"
+    current = roaming / "Raphael Dev" / "raphael.db"
+    other = roaming / "Raphael" / "raphael.db"
+    database(current, [RECORDED])
+    database(other, [OTHER], table="room_cli_sessions")
+    monkeypatch.setattr(records, "native_directory", lambda name: None)
+    projects = tmp_path / "claude" / "projects"
+    temp = tmp_path / "Temp"
+    member = folder(projects, ROOT / "3" / "claude", sessions=[(SESSION, OLD), (RECORDED, OLD), (OTHER, OLD)])
+    private = folder(projects, temp / "raphael-cli-ab_cd1e2", sessions=[(SESSION, OLD)])
+
+    with closing(sqlite3.connect(current)) as conn, closing(sqlite3.connect(other)) as blocked:
+        sweeper = CliRecords(conn, HOME, current.parent, clock=lambda: NOW, temp=temp, claude_folder=projects.parent)
+        if unreadable == "locked":
+            blocked.execute("BEGIN EXCLUSIVE")
+        else:
+            blocked.execute("ALTER TABLE room_cli_sessions RENAME COLUMN session_id TO old_id")
+        assert await sweeper.sweep_once() is None
+        assert not sweeper.stamp.exists()
+        assert all((member / f"{session}.jsonl").exists() for session in (SESSION, RECORDED, OTHER))
+        assert (private / f"{SESSION}.jsonl").exists()
+
+        if unreadable == "locked":
+            blocked.rollback()
+        else:
+            blocked.execute("ALTER TABLE room_cli_sessions RENAME COLUMN old_id TO session_id")
+        assert await sweeper.sweep_once() == (2, 1)
+        assert sweeper.stamp.exists()
+        assert (member / f"{RECORDED}.jsonl").exists() and (member / f"{OTHER}.jsonl").exists()
+        assert not (member / f"{SESSION}.jsonl").exists() and not private.exists()
 
 
 def test_a_member_at_work_is_counted_until_its_run_ends():

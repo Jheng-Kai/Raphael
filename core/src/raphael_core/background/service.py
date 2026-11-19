@@ -195,7 +195,7 @@ _JUDGED_ENDINGS = frozenset(("routine_nothing", "routine_refused", "missing_arti
                              "work_without_action", "missing_terminal", "child_work_incomplete"))
 # Endings that are the app's own state, no fault of the model either: the member was removed, the background is switched off, the
 # worker could not start or broke (`worker_` and the name of the error). A brain failure recorded for them says the model failed.
-_APP_ENDINGS = frozenset(("member_unknown_or_removed", "member_removed_from_room", "disabled", "gone", "worker"))
+_APP_ENDINGS = frozenset(("no_model", "member_unknown_or_removed", "member_removed_from_room", "disabled", "gone", "worker"))
 
 
 def _brainless(reason: str | None) -> bool:
@@ -898,7 +898,7 @@ class BackgroundService:
     def capabilities_for(self, speaker: Speaker) -> dict:
         """Describe the same tool catalog a worker receives, without preparing or calling providers."""
         from ..agent.cli.discovery import brain_ref
-        model = speaker.model or self._settings.get("agent_model") or DEFAULTS["agent_model"]
+        model = speaker.model or self._settings.get("agent_model")
         cli = brain_ref(model)
         snapshot = take_snapshot(self._gate.plugins, speaker=speaker, memory=self._memory_of(speaker.id) is not None,
             team=team_tools_for(self._team, speaker, always=True), turned_off=self._tools.turned_off(),
@@ -1103,7 +1103,7 @@ class BackgroundService:
             # The conversation turn waits for what it handed on as a task, to come back with it and go on. Live, a chief
             # that handed out work in a chat was never told how it went, and the rest of the job stayed undone.
             parent = self._store.asker(source, language=language, model=getattr(self._speaker(source.member_id), 'model', None)
-                                       or self._settings.get('agent_model') or DEFAULTS['agent_model'])
+                                       or self._settings.get('agent_model'))
         # Bound durable task chains independently from conversational @ reply hops.
         ancestor = parent
         depth = 0
@@ -1122,7 +1122,7 @@ class BackgroundService:
         if parent is not None and self._metrics_conn.execute('SELECT COUNT(*) FROM worker_tasks WHERE parent_task_id=?',
                                                              (parent.id,)).fetchone()[0] >= MAX_HANDOFFS:
             return refused('handoff_depth_limit')
-        model = getattr(target, 'model', None) or self._settings.get('agent_model') or DEFAULTS['agent_model']
+        model = getattr(target, 'model', None) or self._settings.get('agent_model')
         try:
             task_id, duplicate = self._store.accept_handoff(source=source,parent=parent,assignee=member,
                 model=model,request=request.strip(),stage=stage.strip(),mode=mode,done_when=done_when.strip(),language=language,
@@ -1517,10 +1517,10 @@ class BackgroundService:
             },
         )
 
-    def clear(self) -> None:
+    def clear(self) -> list[asyncio.Task]:
         """Clear the tasks with the history: the finished ones and the ones that wait are deleted,
         and the one that runs is stopped, emptied of what the user said at once and deleted when it
-        has stopped, without a report to the overlay or the history."""
+        has stopped, without a report to the overlay or the history. Return its writers for the history clear to join."""
         try:
             # A task that waits for the owner goes with the rest; its question is gone with it.
             self._paused.clear()
@@ -1540,6 +1540,7 @@ class BackgroundService:
                 self._host.cancel(run)
         except sqlite3.Error as exc:
             logger.warning("Could not clear the background tasks: %s", type(exc).__name__)
+        return [task for task, _ in self._active.values() if not task.done()]
 
     def forget_member(self, member_id: int) -> None:
         """A member was deleted: its tasks go with it. The ones that wait leave the queue and are
@@ -1840,8 +1841,12 @@ class BackgroundService:
         # What the spend calls this work (brain/meter.py): speaking in a group, a hand-off's work, a consultation.
         ledger.job = "room" if task.scope == "room" else task.mode if task.mode in ("work", "consult") else "task"
         ledger.member_id = task.member_id
-        selected_model = self._models.pop(task.id, task.model_ref or self._settings.get("agent_model") or DEFAULTS["agent_model"])
+        selected_model = self._models.pop(task.id, task.model_ref or self._settings.get("agent_model"))
         selected_model = speaker.model or selected_model
+        if not selected_model:
+            self._conclude(task, None, "failed", PREFIXES[language].negative,
+                           phrase(language, "no_model"), None, "no_model")
+            return
         if task.routine_id is not None and self._sign_in_gate(task, selected_model):
             return
         recovered = json.loads(task.continuation) if task.continuation else None

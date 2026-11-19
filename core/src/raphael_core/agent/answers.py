@@ -294,21 +294,33 @@ def message_parts(text: str) -> list[str]:
     return [*parts, "".join(current)]
 
 
+_TRAILING_HEADING = re.compile(r"^(?: {0,3}#{1,6}(?:[ \t]+.*)?| {0,3}\S.*\n {0,3}(?:=+|-+))\Z", re.M)
+
+
 def split_messages(text):
-    """Keep complete paragraphs and code blocks; a large block remains whole."""
+    """Keep complete blocks and their introductions together, even over the size limit."""
     if not text:
         return []
     parts = message_parts(text)
     if len(parts) > 1:
         return [message for part in parts for message in split_messages(part.strip())]
     chunks, current, fenced = [], [], False
-    for paragraph in text.split("\n\n"):
-        if current and not fenced and len("\n\n".join([*current, paragraph])) > MEMBER_TEXT_MAX:
-            chunks.append("\n\n".join(current))
-            current = []
-        current.append(paragraph)
+    paragraphs = text.split("\n\n")
+    block_start = 0
+    for index, paragraph in enumerate(paragraphs):
         if sum(line.lstrip().startswith(("```", "~~~")) for line in paragraph.splitlines()) % 2:
             fenced = not fenced
+        ending = paragraph.rstrip()
+        if index + 1 < len(paragraphs) and (
+            fenced or not ending or ending.endswith((":", "\uff1a")) or _TRAILING_HEADING.search(ending)
+        ):
+            continue
+        block = "\n\n".join(paragraphs[block_start:index + 1])
+        block_start = index + 1
+        if current and len("\n\n".join([*current, block])) > MEMBER_TEXT_MAX:
+            chunks.append("\n\n".join(current))
+            current = []
+        current.append(block)
     if current:
         chunks.append("\n\n".join(current))
     return chunks

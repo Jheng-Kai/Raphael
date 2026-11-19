@@ -138,8 +138,8 @@
 /* The panel's left edge drags it (members-shell.ts): no handle, a thin line only while it moves or has the keyboard. */
 .det-edge { position: absolute; top: 0; left: 0; bottom: 0; z-index: 5; width: 6px; cursor: col-resize; touch-action: none; outline: none; }
 /* The details' edge, as the sidebar's: a quiet line that brightens under the pointer. */
-.det-edge::after { content: ""; position: absolute; top: 0; left: 0; bottom: 0; width: 1px; background: var(--line); transition: background-color 0.16s ease; }
-.det-edge:hover::after, .det-edge:focus-visible::after, .det-edge.is-dragging::after { background: var(--line-lit); }
+.det-edge::after { content: ""; position: absolute; top: 0; left: 0; bottom: 0; width: 0; border-left: 1px solid var(--line); transition: border-color 0.16s ease; }
+.det-edge:hover::after, :root[data-keys] .det-edge:focus-visible::after, .det-edge.is-dragging::after { border-left-color: var(--line-lit); }
 :root[data-desktop-expanded] .det-edge, :root[data-desktop-watch] .det-edge { display: none; }
 .mb-det.is-in { animation: mb-det-in 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
 .mb-det.leaving { animation: mb-det-out 0.16s ease-in forwards; pointer-events: none; }

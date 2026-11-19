@@ -54,3 +54,26 @@ async def test_cold_discovery_runs_off_the_event_loop_and_missing_commands_are_c
         assert len(threads) == 3 and all(thread != main for thread in threads)
     finally:
         await brains.aclose()
+
+
+async def test_newly_available_cli_fills_the_answer_and_quick_questions_but_never_the_tidying(conn, tmp_path, monkeypatch):
+    from raphael_core.brain.settings import SettingsStore
+    settings = SettingsStore(conn)
+    notices = []
+    brains = CliBrains(home=tmp_path, commands={"codex": ["synthetic"]}, settings=settings,
+                       notify=lambda method, params: notices.append((method, params)))
+    monkeypatch.setattr(brains, "logged_in", lambda name: name == "codex")
+    monkeypatch.setattr(brains, "_needs_models", lambda name: False)
+    async def version(*args):
+        return {}
+    monkeypatch.setattr(brains, "_read_version", version)
+    brains._models["codex"] = [{"id": "cli:codex:mini"}, {"id": "cli:codex:large", "is_default": True}]
+    try:
+        await brains.list()
+        await brains.list()
+        assert settings.get("agent_model") == "cli:codex:large"
+        assert settings.get("quick_model") == "cli:codex:mini"
+        assert settings.get("cleanup_model") == settings.get("stt_cloud_model") == ""
+        assert notices == [("models.filled", {"source": "Codex CLI", "roles": ["answer", "quick"]})]
+    finally:
+        await brains.aclose()

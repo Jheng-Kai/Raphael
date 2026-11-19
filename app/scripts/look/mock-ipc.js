@@ -165,6 +165,17 @@ export function installMock(fixture, config = {}, target = window) {
     Object.assign(data.settings, { stt_engine: "local", stt_local_model: "sensevoice" });
     data.localModels = data.localModels.map(model => model.name === "sensevoice" ? { ...model, ready: true } : model);
   }
+  // Nothing connected (R-DEFAULT-05): no provider, no subscription, no model chosen.
+  if (variant.noSources) {
+    data.providers = [];
+    data.clis = data.clis.map(cli => ({ ...cli, installed: false, logged_in: false, available: false, models: [] }));
+    Object.assign(data.settings, { agent_model: "", quick_model: "" });
+    for (const member of data.members) member.model = "";
+  }
+  // The owner turned OpenRouter off: the models chosen on it stay chosen, and say so.
+  if (variant.openrouterOff) data.providers = data.providers.map(provider => provider.id === "openrouter" ? { ...provider, enabled: false } : provider);
+  // The quick questions chosen on the ChatGPT plan: signed out, ChatGPT stays listed to sign in again (R-DEFAULT-05).
+  if (variant.quickChatgpt) data.settings.quick_model = "@chatgpt:gpt-6-sol";
   if (variant.routineEmpty) data.routines = [];
   // What the first member's personality page holds (member-settings.ts): its name, role, personality and instructions as the scene gives them.
   if (variant.persona) Object.assign(data.members.find(member => member.id === 1), variant.persona);

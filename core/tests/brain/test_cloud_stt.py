@@ -94,6 +94,7 @@ def keys():
 
 @pytest.fixture
 def router(conn, fake_client, keys):
+    SettingsStore(conn).set("stt_cloud_model", "elevenlabs/scribe-v2")
     router = Router()
     Brain(conn, fake_client, keys, now_ms=lambda: NOW_MS).register(router)
     return router
@@ -430,3 +431,12 @@ async def test_gpt_transcribe_gets_every_chosen_language_when_automatic(conn):
     assert seen[0]["provider"]["options"]["openai"]["languages"] == ["zh", "en", "ja"]
     assert "language" not in seen[0]
     assert "language" not in seen[1]  # the others detect it themselves
+
+
+async def test_no_speech_model_refuses_before_contacting_a_source(router, conn, fake_client):
+    SettingsStore(conn).set("stt_cloud_model", "")
+    with pytest.raises(RpcError) as caught:
+        await transcribe(router, ui_language="zh-TW")
+    assert caught.value.data["kind"] == "no_model"
+    assert "語音轉文字還沒選模型。" in str(caught.value)
+    assert not fake_client.calls
