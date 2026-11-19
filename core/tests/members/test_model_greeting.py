@@ -265,3 +265,21 @@ async def test_stop_before_the_greeting_task_starts_settles_its_running_turn(set
     await rig.call('agent.cancel', {'session_id': turn['session_id']})
     await until(lambda: rig.history.get(turn['id']).status == 'cancelled')
     assert client.chat_calls == []
+
+
+async def test_a_new_members_first_options_are_read_from_its_own_name_before_the_connected_apps(setup, client):
+    """Issue 240: 語音小助手 offered Gmail, the calendar, Asana and Notion, the owner's apps, and nothing a voice assistant is
+    for. Its own name, role and instructions come first; the apps only shape options where they fit."""
+    rig, team = setup
+    team.members._connections = lambda: [{'name': 'Gmail', 'enabled': True, 'state': 'ready'},
+                                         {'name': 'Notion', 'enabled': True, 'state': 'ready'}]
+    client.chats = [live_said('嗨，我是語音小助手。')]
+    new = (await rig.call('members.create', {'name': '語音小助手', 'greet': True}))['member']
+    [turn] = await rig.turns(member_id=new['id'])
+    await until(lambda: rig.history.get(turn['id']).status == 'done')
+    instruction = client.chat_calls[0]['messages'][0]['content']
+    assert 'read first from your own name, role and instructions' in instruction
+    assert 'never takes their place' in instruction
+    assert 'built only from the known context' not in instruction
+    assert 'You are 語音小助手. \n<personality>\n(unspecified)\n</personality>\n<instructions>\n(none)\n</instructions>' in instruction
+    assert 'Gmail' in instruction and 'Notion' in instruction
