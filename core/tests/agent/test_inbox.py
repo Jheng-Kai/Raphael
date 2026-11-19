@@ -266,7 +266,7 @@ async def test_a_message_the_background_work_turns_down_waits_for_its_own_turn(m
 
 
 async def test_stop_takes_back_the_request_nothing_answered_yet_instead_of_leaving_it_cancelled(make_rig, monkeypatch, tmp_path):
-    # Owner, 2026-11-19: a Stop before any answer wrote 已取消 under the message, and an answered message cannot be taken back.
+    # A Stop before any answer wrote 已取消 under the message, and an answered message cannot be taken back (R-CHAT-STOP-01).
     rig, first, release, calls = await blocked_cli(make_rig, monkeypatch, tmp_path)
     try:
         running = next(t for t in await rig.turns() if t["status"] == "running")

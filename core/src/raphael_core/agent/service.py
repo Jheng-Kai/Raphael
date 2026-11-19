@@ -5667,7 +5667,7 @@ class AgentService:
         returned = []
         # The message being worked on that nothing has answered yet (no line said, nothing shown, no step taken) is taken back
         # as a waiting one is: its words go back to the composer and its turn goes, instead of staying with 已取消 under it,
-        # which no one could take back (owner, 2026-11-19). Once anything was said or done, Stop only stops it.
+        # which no one could take back (R-CHAT-STOP-01). Once anything was said or done, Stop only stops it.
         untouched = []
         if rows:
             scope = (member, rows[-1]['conversation_id'])
