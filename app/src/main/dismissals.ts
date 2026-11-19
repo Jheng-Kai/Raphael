@@ -15,7 +15,7 @@
 // is drawn again, as a key that finds its twin. A press on that control closes the panel and does nothing else, wherever it
 // lands: through a scrim, beside a popover, on the anchor of a menu, or as Enter / Space on the focused control.
 import type { NavStep } from "./nav-history";
-import { frameStep, hasInlineLayer, stepInlineLayer, type LayerStep } from "./nav-layers";
+import { frameStep, hasInlineLayer, stepInlineLayer, stepInlineSideLayer, type LayerStep } from "./nav-layers";
 
 interface Layer {
   step?: LayerStep;
@@ -369,6 +369,14 @@ export function stepOpenLayer(direction: NavStep, withinLayer: () => boolean): b
   if (!current) return false;
   const { layer } = current;
   if (!layer.step?.(direction, withinLayer) && direction === "back" && layer.canClose()) layer.close();
+  return true;
+}
+
+export function stepSideLayer(direction: NavStep): boolean {
+  const current = top(true);
+  if (stepInlineSideLayer(current?.panel ?? document, direction)) return true;
+  if (!current) return false;
+  if (direction === "back" && current.layer.canClose()) current.layer.close();
   return true;
 }
 

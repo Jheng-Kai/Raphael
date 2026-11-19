@@ -115,7 +115,7 @@ export interface MembersShell {
   /** What the words of a message may address, for the chips of the owner's bubbles. */
   mentionTargets(): readonly MentionTarget[];
   /** Opens the thread of member `id`. */
-  select(id: number): void;
+  select(id: number, keepDetailsTab?: boolean): void;
   /** Reads the list (and what the column and the panel need with it) again. */
   load(): Promise<void>;
   /** Changes member `id` and reads the list again, as the settings page does; false (with a toast) when the core refused. */
@@ -399,7 +399,7 @@ export function createMembers(host: MembersHost): MembersShell {
 
   // ---------- choosing ----------
 
-  function select(id: number): void {
+  function select(id: number, keepDetailsTab = false): void {
     // Another member (or the same one, from the sidebar) leaves the settings page for the conversation.
     panelBeforeSettings = null;
     settings.close();
@@ -413,7 +413,7 @@ export function createMembers(host: MembersHost): MembersShell {
     current = id;
     fresh = new Set();
     host.onSelect(id);
-    details.showMember();
+    details.showMember(keepDetailsTab);
     drawAll();
     if (host.visible()) tellViewing(id);
     void readThread();
@@ -430,6 +430,7 @@ export function createMembers(host: MembersHost): MembersShell {
       // it stands over the conversation, and walks its tabs either way.
       active: () => open && (innerWidth < DETAILS_COLUMN_MIN_PX || trail.canStep("back") || trail.canStep("forward")),
       step: direction => trail.step(direction, details.select),
+      side: () => open && currentRoomId() === null && getComputedStyle(details.el).position === "absolute",
       place: true,
     });
   }

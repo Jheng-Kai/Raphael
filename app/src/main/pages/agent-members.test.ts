@@ -49,6 +49,10 @@ import { openGroupChat } from "../group-chats";
 import { closeMenu } from "../ui";
 import { resetAsks } from "../chat-ask";
 import { describeError } from "../format";
+import { stepSideLayer } from "../dismissals";
+import { installNavInput } from "../nav-input";
+import { PlaceHistory, stepPlace } from "../place-history";
+import { sendNavInput } from "../test-support/nav-layer-input";
 
 const member = (id: number, more: Partial<Member> = {}): Member => ({
   id, name: `成員${id}`, role: "", instructions: "", avatar: "", group_id: null, model: "", tools: null, position: id, created: 0, unread: false, waiting: false, preview: "", last_at: null, ...more,
@@ -76,9 +80,10 @@ const flush = async (): Promise<void> => {
   for (let i = 0; i < 20; i++) await Promise.resolve();
 };
 
-function mount(mode: "hold" | "toggle" = "hold") {
+function mount(mode: "hold" | "toggle" = "hold", history?: PlaceHistory) {
+  const notePlace = (): void => history?.arrive(agent.currentChatPlace());
   const app = {
-    go: vi.fn(),
+    go: vi.fn(notePlace),
     device: () => ({ dictation_mode: mode }),
     onEvent(handler: (event: MainEvent) => void) {
       send = handler;
@@ -87,10 +92,11 @@ function mount(mode: "hold" | "toggle" = "hold") {
     undo: { begin: vi.fn() },
     cleared: new Cleared(),
   } as unknown as AppContext;
-  const agent = createAgent(app);
+  const agent = createAgent(app, { changed: notePlace, resolved: (member, conversation) => history?.resolveConversation(member, conversation) });
   document.body.append(agent.el);
   agent.el.hidden=false;
   agent.show();
+  notePlace();
   return agent;
 }
 const $ = <T extends HTMLElement>(q: string) => document.querySelector<T>(q)!;
@@ -100,6 +106,38 @@ const pick = async (id: number) => {
   $(`.mb-col [data-member="${id}"]`).click();
   await flush();
 };
+
+test.each(["relative", "absolute"])("mouse Back leaves the docked details panel open and dismisses the floating panel (%s)", async position => {
+  const history = new PlaceHistory();
+  const agent = mount("hold", history);
+  const stop = installNavInput(window, vi.fn(), undefined, direction => stepPlace(direction, history, {
+    layer: stepSideLayer,
+    exists: place => place.page === "member" && agent.chatPlaceExists(place),
+    show: place => { if (place.page === "member") agent.showChatPlace(place); },
+  }));
+  try {
+    await flush();
+    await pick(3);
+    const first = agent.currentChatPlace();
+    await pick(4);
+    const second = agent.currentChatPlace();
+    const trigger = $(".conversation-trigger");
+    if (trigger.getAttribute("aria-expanded") !== "true") trigger.click();
+    const panel = $("#member-details");
+    panel.style.position = position;
+    $('[data-det="tab"][data-tab="library"]').click();
+    sendNavInput("mouse", "back");
+    if (position === "absolute") {
+      expect(agent.currentChatPlace()).toEqual(second);
+      expect(trigger.getAttribute("aria-expanded")).toBe("false");
+      sendNavInput("mouse", "back");
+    } else {
+      expect(trigger.getAttribute("aria-expanded")).toBe("true");
+      expect(panel.dataset.detailsTab).toBe("library");
+    }
+    expect(agent.currentChatPlace()).toEqual(first);
+  } finally { stop(); agent.hide(); }
+});
 
 test.each(["member", "page", "room"])("the first unseen turn has its own stable line until the thread is left (%s)", async leave => {
   vi.useFakeTimers();

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { frameNavigation } from "./dismissals";
+import { frameNavigation, stepSideLayer } from "./dismissals";
 import { bindLayerCancels, bindNavFrame, bindNavLayer, stepInlineLayer } from "./nav-layers";
 import { openEventEditor } from "./calendar-popover";
 import { mountConversationFind } from "./conversation-find";
@@ -18,14 +18,17 @@ test("a focused frame can navigate only its own topmost viewer", () => {
   Object.defineProperty(frame, "contentWindow", { value: { postMessage: vi.fn() }, configurable: true });
   bindNavLayer(viewer, vi.fn());
   bindNavFrame(frame, viewer);
-  const step = (source: MessageEventSource | null = frame.contentWindow, origin = "null") => frameNavigation(new MessageEvent("message", {
-    source, origin, data: {type: "raphael-frame-navigation", direction: "back"},
+  const step = (source: MessageEventSource | null = frame.contentWindow, origin = "null", input?: "side") => frameNavigation(new MessageEvent("message", {
+    source, origin, data: {type: "raphael-frame-navigation", direction: "back", input},
   }));
   expect(step()).toBeUndefined();
   frame.focus();
   expect(step()).toBe("back");
   expect(step(window)).toBeUndefined();
   expect(step(frame.contentWindow, "https://example.invalid")).toBeUndefined();
+  expect(step(frame.contentWindow, "null", "side")).toBe("back");
+  bindNavLayer(viewer, vi.fn(), { side: () => false });
+  expect(step(frame.contentWindow, "null", "side")).toBeUndefined();
   const dialog = openDialog({ title: "Question", body: "", actions: {}, onAct() {} });
   frame.focus();
   expect(step()).toBeUndefined();
@@ -47,6 +50,28 @@ test("back never throws away typed words: an edited editor only takes the focus,
   field.value = "Original";
   stepInlineLayer(document, "back", () => false);
   expect(cancel).toHaveBeenCalledOnce();
+});
+
+test("mouse Back focuses an edited inline field and closes the dialog once the field is unchanged", () => {
+  const dialog = openDialog({ title: "Editor", body: '<section><textarea>Original</textarea><button type="button" data-cancel>Cancel</button></section>', actions: {}, onAct() {} });
+  const field = dialog.el.querySelector("textarea")!;
+  const cancelButton = dialog.el.querySelector<HTMLButtonElement>("[data-cancel]")!;
+  const cancel = vi.fn();
+  cancelButton.addEventListener("click", cancel);
+  bindLayerCancels(dialog.el, "[data-cancel]");
+  try {
+    field.value = "Typed instructions";
+    cancelButton.focus();
+    expect(stepSideLayer("back")).toBe(true);
+    expect(dialog.el.isConnected).toBe(true);
+    expect(document.activeElement).toBe(field);
+    expect(field.value).toBe("Typed instructions");
+
+    field.value = "Original";
+    expect(stepSideLayer("back")).toBe(true);
+    expect(dialog.el.isConnected).toBe(false);
+    expect(cancel).not.toHaveBeenCalled();
+  } finally { dialog.close(); }
 });
 
 test("forward goes on through a layer that is itself a place, and stops at a dialog", () => {

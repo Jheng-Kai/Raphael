@@ -5,6 +5,7 @@
 import "./member-creator.css";
 import { t } from "./i18n";
 import { type Dialog, openDialog } from "./member-dialogs";
+import { bindNavLayer } from "./nav-layers";
 import { NAME_MAX, cleanName, isMemberNameTaken } from "./members";
 import { defaultSlimeAvatar, pickSlime, slimeFaceHTML } from "./slime";
 import { selectSlimeTab, slimeKeys, slimePickerHTML } from "./slime-tabs";
@@ -12,6 +13,7 @@ import type { Member, NewMember } from "./types";
 import { btn, esc } from "./ui";
 
 const FACE_SIZE = 96, ARRIVING_MS = 700;
+let sideDraft: Pick<NewMember, "group_id" | "name" | "avatar"> | undefined;
 
 export interface MemberCreatorOptions {
   /** The group it starts in (the one the menu was opened from), null for 未分組. */
@@ -23,7 +25,9 @@ export interface MemberCreatorOptions {
 }
 
 export function openMemberCreator(o: MemberCreatorOptions): Dialog {
-  let avatar = defaultSlimeAvatar(o.taken.length);
+  const draft = sideDraft?.group_id === o.groupId ? sideDraft : undefined;
+  if (draft) sideDraft = undefined;
+  let avatar = draft?.avatar ?? defaultSlimeAvatar(o.taken.length);
   let busy = false;
   let hop: ReturnType<typeof setTimeout> | undefined;
 
@@ -55,6 +59,11 @@ export function openMemberCreator(o: MemberCreatorOptions): Dialog {
   const cancel = dialog.el.querySelector<HTMLButtonElement>('[data-dlg="cancel"]')!;
   const picker = dialog.el.querySelector<HTMLElement>(".cr-picker")!;
   const refusal = dialog.el.querySelector<HTMLElement>(".field-error")!;
+  bindNavLayer(dialog.el, () => {
+    if (busy) return;
+    sideDraft = { group_id: o.groupId, name: name.value, avatar };
+    dialog.close();
+  }, { active: () => false, side: () => true });
 
   function drawFace(arriving: boolean): void {
     const face = dialog.el.querySelector<HTMLElement>(".cr-face")!;
@@ -115,6 +124,7 @@ export function openMemberCreator(o: MemberCreatorOptions): Dialog {
   });
   picker.addEventListener("keydown", event => { if (slimeKeys(picker, event)) event.preventDefault(); });
   name.addEventListener("input", nameChanged);
+  if (draft) { name.value = draft.name; nameChanged(); }
   drawFace(false);
   name.focus({ preventScroll: true });
   return dialog;

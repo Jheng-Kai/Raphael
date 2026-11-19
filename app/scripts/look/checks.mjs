@@ -9718,7 +9718,26 @@ export function checkRendered(name, context = {}) {
     require(!document.body.textContent.includes("Transcribing") && !document.body.textContent.includes("\u8f49\u9304\u4e2d"), "elapsed-time captions are absent");
     return { check: name, caption: caption.textContent };
   }
-  // Where a step of the side buttons landed (R-NAV-03): every view the owner went into is one step.
+  // Where the keyboard or mouse navigation landed (R-NAV-03 and R-NAV-04).
+  if (name === "nav-details-before" || name === "nav-details-after") {
+    const trigger = document.querySelector(".mb-chat .conversation-trigger");
+    const panel = document.getElementById("member-details");
+    const state = { open: trigger.getAttribute("aria-expanded"), tab: panel.dataset.detailsTab };
+    if (name === "nav-details-before") window.__navDetails = state;
+    else require(state.open === window.__navDetails.open && state.tab === window.__navDetails.tab, "the details panel keeps its state");
+    return { check: name, ...state };
+  }
+  if (name === "nav-side-settings-closed") {
+    require(!document.documentElement.dataset.windowModal, "the modal is dismissed");
+    require(visible(document.querySelector(".page-agent .mb-chat .composer")), "the conversation is visible");
+    require(document.querySelector('.mb-col [data-member="2"]')?.getAttribute("aria-current") === "true", "the same member is still selected");
+    return { check: name };
+  }
+  if (name === "nav-maker-draft") {
+    const nameField = document.querySelector(".cr-dialog #mb-new-name");
+    require(visible(nameField) && nameField.value === "Robin", "the draft name is restored when the maker is opened again");
+    return { check: name };
+  }
   if (name.startsWith("nav-ms-")) {
     const want = name.slice("nav-ms-".length), pane = document.querySelector(".ms-pane");
     require(visible(pane), "the member's settings page is still on screen");
@@ -9734,9 +9753,13 @@ export function checkRendered(name, context = {}) {
     const id = name.slice("nav-conversation-".length);
     require(!visible(document.querySelector(".ms-pane")), "the settings page is gone");
     require(visible(document.querySelector(".page-agent .mb-chat .composer")), "the conversation is on screen");
-    const current = document.querySelector('.mb-col [data-member][aria-current="true"]')?.dataset.member;
+    const row = document.querySelector('.mb-col [data-member][aria-current="true"]');
+    const current = row?.dataset.member;
     require(current === id, `member ${id}'s conversation is the open one (${current})`);
-    return { check: name, current };
+    const memberName = row.querySelector(".mb-row-t b")?.textContent ?? row.getAttribute("aria-label")?.split(" · ")[0];
+    const conversation = document.querySelector(".mb-chat .conversation-trigger")?.getAttribute("aria-label");
+    require(memberName && conversation?.startsWith(memberName), "the main conversation header names the selected member");
+    return { check: name, current, conversation };
   }
   if (name.startsWith("nav-settings-")) {
     const want = name.slice("nav-settings-".length), scrim = document.querySelector('.modal-scrim[data-page="settings"]');
