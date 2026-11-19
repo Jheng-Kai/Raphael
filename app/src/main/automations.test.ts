@@ -350,7 +350,7 @@ test("an opened all-day band draws every item of the days in view, and its folde
  expect(open.bars.length-folded.bars.length).toBe(folded.more[0]);
 });
 
-describe("each day of the all-day band opens by itself",()=>{
+describe("allDayBars draws chosen days open and cuts a bar where a folded day hides it",()=>{
  const days=[localDay("2026-10-24"),localDay("2026-10-25"),localDay("2026-10-26")];
  const allDay=(id:string,from:number,to:number)=>entry(id,at(0,0,from),at(0,0,to+1),{allDay:true});
  // Day one holds seven all-day items and day three five; three whole-range bars fill the first rows, so "late" (days one and two) sits in row 3.
@@ -513,41 +513,36 @@ describe("the calendar's own events",()=>{
   expect(panel.querySelector('[data-pop="edit"]')).toBeNull();expect(panel.querySelector('[data-pop="more"]')).toBeNull();
   page.hide();
  });
- test("in the week, a day's 「還有 N 個」 opens only that day, days open and fold one by one, and the keyboard stays on that day's button",async()=>{
+ test("in the week, any day's 「還有 N 個」 opens the whole week, one 「收合」 folds it all, and the keyboard follows",async()=>{
   const dayEntry=(id:number,title:string,from:number,to=from)=>own(id,title,at(0,0,from),at(0,0,to+1),{all_day:true});
   const thu=[0,1,2,3,4].map(n=>dayEntry(10+n,`thu${n}`,22)), sat=[0,1,2,3,4].map(n=>dayEntry(20+n,`sat${n}`,24));
   const page=await open([dayEntry(1,"trip",22,24),...thu,...sat],"calendar-week:2026-10-24");
-  const toggle=(day:string)=>page.el.querySelector<HTMLElement>(`[data-au="all-day-toggle"][data-date="${day}"]`)!;
+  const toggle=(day:string)=>page.el.querySelector<HTMLElement>(`[data-au="all-day-toggle"][data-date="${day}"]`);
+  const fold=()=>page.el.querySelector<HTMLElement>('[data-au="all-day-toggle"][aria-expanded="true"]');
   const drawn=(title:string)=>!!page.el.querySelector(`.au-all-day-row [data-wrap="own:${title}"]`);
   const band=()=>page.el.querySelector<HTMLElement>(".au-all-day-row")!;
   expect(page.el.querySelectorAll('[data-au="all-day-toggle"]')).toHaveLength(2);
-  expect(toggle("2026-10-22").getAttribute("aria-expanded")).toBe("false");
+  expect(toggle("2026-10-22")!.getAttribute("aria-expanded")).toBe("false");
   expect(drawn("12")).toBe(false);expect(Number(band().dataset.rows)).toBe(Number(band().dataset.foldedRows));
-  toggle("2026-10-22").click();
-  // Thursday is open with its own 收合 under its five items; Saturday is folded and keeps its count.
-  expect(toggle("2026-10-22").getAttribute("aria-expanded")).toBe("true");
-  expect(toggle("2026-10-22").textContent).toBe("Show less");
-  expect(toggle("2026-10-24").getAttribute("aria-expanded")).toBe("false");
-  expect(toggle("2026-10-24").textContent).not.toBe("Show less");
-  expect(document.activeElement).toBe(toggle("2026-10-22"));
-  for(const n of [10,11,12,13,14]) expect(drawn(String(n)),`thu ${n}`).toBe(true);
-  for(const n of [22,23,24]) expect(drawn(String(n)),`sat ${n}`).toBe(false);
+  // Saturday's count opens every day: both days show all their items, and the trip across them stays one bar.
+  toggle("2026-10-24")!.click();
+  expect(page.el.querySelectorAll('[data-au="all-day-toggle"]')).toHaveLength(1);
+  expect(fold()!.getAttribute("aria-label")).toBe("Show less");
+  expect(fold()!.getAttribute("aria-controls")).toBe("au-all-day-band");
+  expect(fold()!.style.gridColumn).toBe("1");
+  expect(fold()!.style.gridRow).toBe(String(Number(band().dataset.rows)));
+  expect(document.activeElement).toBe(fold());
+  for(const n of [10,11,12,13,14,20,21,22,23,24]) expect(drawn(String(n)),`open ${n}`).toBe(true);
+  expect(page.el.querySelectorAll('.au-all-day-row [data-wrap="own:1"]')).toHaveLength(1);
   expect(Number(band().dataset.rows)).toBeGreaterThan(Number(band().dataset.foldedRows));
-  expect(toggle("2026-10-22").style.gridRow).toBe(String(Number(band().dataset.rows)));
-  // Saturday opens too, and both stay open.
-  toggle("2026-10-24").click();
+  // One 收合 folds it all, and the keyboard returns to the count it pressed.
+  fold()!.click();
+  expect(fold()).toBeNull();
+  expect(page.el.querySelectorAll('[data-au="all-day-toggle"]')).toHaveLength(2);
   expect(document.activeElement).toBe(toggle("2026-10-24"));
-  expect(toggle("2026-10-24").textContent).toBe("Show less");
-  expect(toggle("2026-10-22").getAttribute("aria-expanded")).toBe("true");
-  for(const n of [10,11,12,13,14,20,21,22,23,24]) expect(drawn(String(n)),`both ${n}`).toBe(true);
-  // Folding Thursday leaves Saturday open, and the keyboard returns to Thursday's count.
-  toggle("2026-10-22").click();
-  expect(toggle("2026-10-22").getAttribute("aria-expanded")).toBe("false");
-  expect(toggle("2026-10-22").textContent).not.toBe("Show less");
-  expect(document.activeElement).toBe(toggle("2026-10-22"));
-  expect(toggle("2026-10-24").getAttribute("aria-expanded")).toBe("true");
-  expect(drawn("12")).toBe(false);expect(drawn("24")).toBe(true);
+  expect(drawn("12")).toBe(false);expect(drawn("24")).toBe(false);
   // Another week folds everything again, and coming back finds it folded.
+  toggle("2026-10-22")!.click();
   click('[data-au="next"]');click('[data-au="prev"]');
   expect(page.el.querySelectorAll('[data-au="all-day-toggle"]')).toHaveLength(2);
   expect(page.el.querySelectorAll('[aria-expanded="true"][data-au="all-day-toggle"]')).toHaveLength(0);
