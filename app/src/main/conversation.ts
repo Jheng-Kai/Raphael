@@ -69,22 +69,32 @@ export function visibleTurn(turn: AgentTurn): boolean {
  */
 const stoppedQuietly = (turn: AgentTurn): boolean => turn.task?.state === "cancelled" && !turn.steps?.length;
 
+/** Whether `work` has shown something since the owner's message `input`: a reply or a file, or anything once it is over. */
+const shownSince = (work: AgentTurn, input: AgentTurn): boolean => {
+  const over = work.status !== "running" && work.status !== "confirm";
+  return (work.messages ?? []).some(message => message.at_ms >= input.created_at_ms && (over || message.kind === "reply" || message.kind === "media"));
+};
+
 /**
  * The owner messages that joined each turn's work while it ran (the core's `owner_input` rows: words the work read at its
- * next step, R-BATCH-01, R-QUEUE-08), by the id of that turn: the turn just before them, when it is the owner's own work (not
- * queued words, which are answered as a turn of their own, nor a colleague's question). Only the messages the work showed
- * something after are in it (a reply or a file, or anything once the work is over): the newest may still be on its way to
- * the model, and it stays below the whole line until then, with the slime under it.
+ * next step, R-BATCH-01, R-QUEUE-08), by the id of that turn: the newest owner's work before them that has shown something
+ * since (a reply or a file, or anything once it is over). That is usually the turn just before them, but the core also hands
+ * them to older work still under way, a background task, with other turns in between (R-QUEUE-09). Queued words are
+ * answered as a turn of their own and nothing after them joins earlier work; a colleague's question is no work to join.
+ * A message no work has shown anything since may still be on its way to the model, and it stays below every line until then,
+ * with the slime under it.
  */
 function joinedWork(oldestFirst: readonly AgentTurn[]): Map<number, AgentTurn[]> {
   const joined = new Map<number, AgentTurn[]>();
-  let work: AgentTurn | undefined;
-  for (const turn of oldestFirst) {
-    if (turn.route !== "owner_input") { work = turn.status === "queued" || exchangeTurn(turn) ? undefined : turn; continue; }
-    const over = work?.status !== "running" && work?.status !== "confirm";
-    const shown = (work?.messages ?? []).some(message => message.at_ms >= turn.created_at_ms && (over || message.kind === "reply" || message.kind === "media"));
-    if (work && shown) joined.set(work.id, [...joined.get(work.id) ?? [], turn]);
-  }
+  oldestFirst.forEach((input, index) => {
+    if (input.route !== "owner_input") return;
+    for (let earlier = index - 1; earlier >= 0; earlier--) {
+      const work = oldestFirst[earlier]!;
+      if (work.route === "owner_input" || exchangeTurn(work)) continue;
+      if (work.status === "queued") return;
+      if (shownSince(work, input)) { joined.set(work.id, [...joined.get(work.id) ?? [], input]); return; }
+    }
+  });
   return joined;
 }
 
@@ -95,11 +105,14 @@ function joinedWork(oldestFirst: readonly AgentTurn[]): Map<number, AgentTurn[]>
  * A message the owner sent while a turn worked, and that the work took in, stands where it was sent: the turn's line
  * breaks there into stretches (`TurnPart`), what the work said before it above the message and what it said after,
  * the reply that answers it among them, below it (otherwise the owner's words mid-work would stand last, under the reply).
+ * Each message and the stretch after it stand in the message's own place in time, so the answer to a message taken by older
+ * work is never drawn above the turns that came between.
  */
 export function threadItems(turns: readonly AgentTurn[], nowMs: number): ThreadItem[] {
   const oldestFirst = [...turns].sort((a, b) => a.created_at_ms - b.created_at_ms || a.id - b.id).filter(visibleTurn);
   const joined = joinedWork(oldestFirst);
-  const placed = new Set<number>();
+  const workOf = new Map([...joined].flatMap(([work, inputs]) => inputs.map(input => [input.id, work] as const)));
+  const byId = new Map(oldestFirst.map(turn => [turn.id, turn]));
   const items: ThreadItem[] = [];
   let previous: number | null = null;
   const dated = (turn: AgentTurn): void => {
@@ -110,7 +123,6 @@ export function threadItems(turns: readonly AgentTurn[], nowMs: number): ThreadI
     previous = turn.created_at_ms;
   };
   for (const turn of oldestFirst) {
-    if (placed.has(turn.id)) continue;
     dated(turn);
     // The same colleague again, right after its last exchange on the same day: one line 「與 X 的 4 則訊息」.
     const last = items[items.length - 1];
@@ -119,19 +131,18 @@ export function threadItems(turns: readonly AgentTurn[], nowMs: number): ThreadI
       continue;
     }
     const inputs = joined.get(turn.id);
-    if (!inputs) {
-      items.push({ kind: "turn", key: `turn:${turn.id}`, turn });
+    if (inputs) {
+      items.push({ kind: "turn", key: `turn:${turn.id}`, turn, part: { until: inputs[0]!.created_at_ms } });
       continue;
     }
-    items.push({ kind: "turn", key: `turn:${turn.id}`, turn, part: { until: inputs[0]!.created_at_ms } });
-    inputs.forEach((input, index) => {
-      dated(input);
-      items.push({ kind: "turn", key: `turn:${input.id}`, turn: input });
-      placed.add(input.id);
-      const until = inputs[index + 1]?.created_at_ms;
-      items.push({ kind: "turn", key: `turn:${turn.id}:after:${input.id}`, turn,
-        part: { from: input.created_at_ms, ...(until === undefined ? {} : { until }), after: input.id } });
-    });
+    items.push({ kind: "turn", key: `turn:${turn.id}`, turn });
+    const work = byId.get(workOf.get(turn.id) ?? -1);
+    if (work) {
+      const taken = joined.get(work.id)!;
+      const until = taken[taken.indexOf(turn) + 1]?.created_at_ms;
+      items.push({ kind: "turn", key: `turn:${work.id}:after:${turn.id}`, turn: work,
+        part: { from: turn.created_at_ms, ...(until === undefined ? {} : { until }), after: turn.id } });
+    }
   }
   return items;
 }

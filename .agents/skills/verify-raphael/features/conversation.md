@@ -2016,7 +2016,7 @@ Unverified by definition: a real model choosing the new fields, and a real Teleg
 ## Owner input
 
 ```powershell
-npm run look -- owner-addition owner-addition-answered composer-send-while-working --theme both --width 1120,720,1920x1080
+npm run look -- owner-addition owner-addition-answered owner-addition-older-work composer-send-while-working --theme both --width 1120,720,1920x1080
 ```
 
 An owner message in an active private conversation is an ordinary owner bubble and
@@ -2041,6 +2041,12 @@ nothing after yet (no reply or file; its steps alone do not count), and queued w
 below the whole line. Before this, the
 owner's mid-work message (read by Claude Code at its next tool result) stood last, under
 the reply that answered it. `owner-addition-answered` checks the finished order.
+The work that took the message is the newest owner's work before it that has shown something
+since (`joinedWork`): usually the turn just before, but the core also hands it to older work
+still under way, a background task, with other turns between. Each message and the stretch
+after it stand in the message's own place in time, so that work's answer stands under the
+message, below the turns between, never up in the work's first line (issue 231).
+`owner-addition-older-work` checks that order.
 CLI handoffs preserve accepted input in their saved continuation.
 Room messages use that inbox for a single active recipient in the same room and
 thread. Several addressees, files or a sealed inbox start a new room turn without
@@ -2062,7 +2068,7 @@ core/tests/agent/test_cli_steering.py, core/tests/worker/test_owner_input.py,
 core/tests/background/test_steering.py, core/tests/agent/test_background_unread_steering.py,
 core/tests/messaging/test_outgoing_files.py,
 core/tests/agent/test_scrub.py.
-Selected real-entry scenes: owner-addition, owner-addition-answered and composer-send-while-working, both themes, 1120, 720 and 1920x1080.
+Selected real-entry scenes: owner-addition, owner-addition-answered, owner-addition-older-work and composer-send-while-working, both themes, 1120, 720 and 1920x1080.
 Fake Telegram and fake CLI are not live or native acceptance.
 
 

@@ -19,11 +19,23 @@ const steered = [
     {seq: 3, kind: "reply", text: "海報做好了，照你說的改用生成圖片。", at_ms: 1792807172000}] }),
   turn(1, { id: 810, session_id: "look-steer", route: "owner_input", question: "生成一張圖片就好，不用自己排。", text: "", messages: [], created_at_ms: 1792807160000 }),
 ];
+// Work still going in the background, the owner's next request answered meanwhile, then a message the core handed to that
+// older work (issue 231): its answer comes after the message, so it stands under the message, below the turn in between.
+const olderWork = [
+  turn(1, { question: "把桌面上 4 號和 5 號的筆記連截圖一起放進 Notion。", text: "", status: "running", messages: [
+    {seq: 1, kind: "reply", text: "好，我先把截圖一張張上傳。", at_ms: 1792807156000},
+    {seq: 2, kind: "reply", text: "4 號和 5 號的筆記已經建好，截圖也上傳完了。我先檢查哪裡重複，再把 11 號補進去。", at_ms: 1792807200000}] }),
+  turn(1, { id: 805, session_id: "look-between", created_at_ms: 1792807170000, question: "每天 18:00 幫我問學習群組今天做了什麼。",
+    text: "每天 18:00 的詢問設好了。", messages: [{seq: 1, kind: "reply", text: "每天 18:00 的詢問設好了。", at_ms: 1792807180000}] }),
+  turn(1, { id: 811, session_id: "look-older-steer", route: "owner_input", question: "等一下，你重複了，11 號也可以放進去。", text: "", messages: [], created_at_ms: 1792807190000 }),
+];
 export default [
   scene("owner-addition", "An owner addition appears immediately beside continuing work and Stop", [member(1), type('.cmp-input', "也請保留原始檔案。"), key("Enter"), wait('.tn[data-id="901"] .owner-message'), waitGone('.tn[data-id="901"] .ra-face'), wait('.composer[data-task-state="running"]')],
     {running: true, runningMember: 1, ownerAddition: true}),
   scene("owner-addition-answered", "A message sent while the work ran stands where it was sent, with what the work made after it and the reply below it", [member(1), wait('.tn[data-after="810"] img[data-attachment][src]'), check("owner-addition-in-place")],
     {turns: steered, generatedFile: drawn, generatedData: png}),
+  scene("owner-addition-older-work", "A message taken by older work still under way stands last, with that work's answer under it, below the turn in between", [member(1), wait('.tn[data-after="811"] .chat-message[data-reply]'), check("owner-addition-older-work")],
+    {turns: olderWork}),
   scene("composer-send-while-working", "Words in the field make the slot Send while work runs; message after message goes out at once and nothing stops", [member(1), wait('.composer[data-task-state="running"]'), check("composer-slot-stop"), type('.cmp-input', "第一則補充"), check("composer-slot-send"), click('.cmp-send'), wait('.tn[data-id="901"] .owner-message'), check("composer-slot-stop"), type('.cmp-input', "第二則補充"), key("Enter"), wait('.tn[data-id="902"] .owner-message'), type('.cmp-input', "第三則補充"), key("Enter"), wait('.tn[data-id="903"] .owner-message'), check("composer-slot-stop"), check("owner-additions-in-order")],
     {running: true, runningMember: 1, ownerAddition: true}),
   scene("composer-queued", "Queued bubbles retain sent order, real withdraw controls and one live presence below the newest", [member(1), type('.cmp-input', "第二個範例請求"), key("Enter"), wait('.tn[data-id="901"] .queued-send-now'), type('.cmp-input', "第三個範例請求"), key("Enter"), wait('.tn[data-id="902"] .queued-send-now'), check("composer-queued")],

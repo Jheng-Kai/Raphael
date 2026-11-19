@@ -3834,6 +3834,24 @@ export function checkRendered(name, context = {}) {
     require(document.querySelectorAll('.thread .owner-message').length === 2 && !lines[answer].querySelector('.owner-message'), "each owner message once, none repeated in the answer");
     return {check:name,lines:lines.length};
   }
+  if (name === "owner-addition-older-work") {
+    // The work's start, the turn answered meanwhile, the message the work took, then the work's answer to it as the last line
+    // of the turns (the working slime's own line may follow).
+    const lines = [...document.querySelectorAll('.thread > li.tn[data-id]')];
+    const started = lines.findIndex(line => line.matches('[data-id="802"]:not([data-after])'));
+    const between = lines.findIndex(line => line.matches('[data-id="805"]'));
+    const message = lines.findIndex(line => line.matches('[data-id="811"]') && line.querySelector('.owner-message'));
+    const answer = lines.findIndex(line => line.matches('[data-id="802"][data-after="811"]'));
+    require(started >= 0 && between > started && message > between && answer === message + 1 && answer === lines.length - 1,
+      `work, the turn between, the message, then the answer last: ${[started, between, message, answer, lines.length]}`);
+    const bubble = lines[message].querySelector('.owner-message').getBoundingClientRect();
+    const reply = lines[answer].querySelector('.chat-message[data-reply]');
+    require(visible(reply) && reply.getBoundingClientRect().top >= bubble.bottom && reply.textContent.includes("11 號"), "the answer to the message stands under it");
+    require(![...lines[started].querySelectorAll('.chat-message[data-reply]')].some(node => node.textContent.includes("11 號")), "nothing said after the message is left up in the work's first line");
+    const presence = [...document.querySelectorAll('.thread .live-presence')];
+    require(presence.every(node => node.getBoundingClientRect().top >= bubble.bottom), "the working slime stays under the message");
+    return {check:name,lines:lines.length};
+  }
   if (name === "link-chips") {
     // As inline source chips: each link once, in the words, with no row of cards under the reply.
     const reply = [...document.querySelectorAll('.thread .chat-message[data-reply]')].filter(visible).at(-1);
