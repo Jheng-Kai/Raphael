@@ -473,6 +473,8 @@ const ALLOWED_METHODS: &[&str] = &[
     // Where a YouTube video plays inside the window on a Mac (the core's page host, `/v/<id>`).
     "pages.video_base",
     "pages.viewing",
+    // What the owner left on a page (its fields, its storage), kept with the page (R-PAGE-14).
+    "pages.state",
     "owner_questions.answer",
     "owner_questions.bring",
     "pages.tool_call",
@@ -2809,6 +2811,8 @@ mod tests {
         assert!(is_allowed_method("pages.video_base"));
         // The window tells the core which page stands open beside the composer before it sends (a page the member may then change).
         assert!(is_allowed_method("pages.viewing"));
+        // And what the owner left on a page, which the core serves back with it (R-PAGE-14).
+        assert!(is_allowed_method("pages.state"));
     }
 
     // ---- the window's own way to Raphael ----

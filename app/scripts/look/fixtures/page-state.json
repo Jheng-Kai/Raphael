@@ -1,0 +1,8 @@
+{
+  "html": "<h1>出發前清單</h1>\n<p id=\"count\" data-opened=\"\">0 項完成</p>\n<label><input id=\"passport\" type=\"checkbox\"> 護照</label>\n<label><input id=\"ticket\" type=\"checkbox\"> 機票</label>\n<p><input name=\"note\" placeholder=\"備註\"></p>\n<p><select id=\"bag\"><option value=\"carry\">登機箱</option><option value=\"check\">托運</option></select></p>\n<p><input id=\"pin\" type=\"password\" placeholder=\"密碼\"></p>\n<script>\nconst count = () => { document.getElementById('count').textContent = document.querySelectorAll('input[type=checkbox]:checked').length + ' 項完成'; };\ndocument.addEventListener('change', count);\nconst opened = Number(localStorage.getItem('opened') || 0) + 1;\nlocalStorage.setItem('opened', String(opened));\ndocument.getElementById('count').dataset.opened = String(opened);\n</script>\n",
+  "saved": {
+    "fields": { "#passport": true, "#ticket": false, "name:note": "記得帶護照", "#bag": "check", "#pin": "1234" },
+    "storage": { "opened": "3" },
+    "custom": { "tab": 2 }
+  }
+}

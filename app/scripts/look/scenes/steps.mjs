@@ -26,6 +26,8 @@ export const key = value => ({ action: "key", key: value });
 export const ime = (selector, sequence) => ({ action: "ime", selector, sequence });
 // What the mock's core does while the scene waits (`window.__look[name](...args)`): `lookCall("updatePage", "page-news")`.
 export const lookCall = (name, ...args) => ({ action: "look-call", name, args });
+// `holding`: a call whose parameters hold these words (an earlier call of the same method does not count).
+export const waitCall = (method, holding) => ({ action: "wait-call", method, ...(holding ? { holding } : {}) });
 // A page open in the conversation's place: wheel over it, and what it must show once it has (frame-expect: its words, how far down it is).
 export const frameScroll = deltaY => ({ action: "frame-scroll", deltaY });
 export const frameExpect = (text, scrollAtLeast) => ({ action: "frame-expect", ...(text ? { text } : {}), ...(scrollAtLeast !== undefined ? { scrollAtLeast } : {}) });

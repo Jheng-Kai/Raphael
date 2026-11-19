@@ -999,3 +999,59 @@ async def test_a_youtube_video_plays_from_the_page_host_which_names_itself_to_yo
         assert base == await host.video_base()
     finally:
         await host.aclose()
+
+
+# R-PAGE-14: what the owner does on a page stays with it.
+
+async def test_what_the_owner_left_on_a_page_is_served_back_with_it_and_never_in_its_file(conn):
+    from raphael_core.agent.pages import Pages
+    page = stored(conn, html='<input id="done" type="checkbox"><textarea name="note"></textarea>')
+    pages = Pages(conn)
+    state = {"fields": {"#done": True, "name:note": "記得帶護照</script><script>alert(1)</script>"}, "storage": {"todo": "[1,2]"}, "custom": {"tab": 2}}
+    assert await pages.keep_state({"id": page["id"], "state": state}) == {"kept": True}
+    assert PageStore(conn).state(page["id"]) == state
+    try:
+        url = await pages.host.url(page["id"], "light")
+        body = (await fetch(url)).split("\r\n\r\n", 1)[1]
+        script = body[body.index("window.__raphaelState="):body.index(";</script>", body.index("window.__raphaelState="))]
+        assert "</script>" not in script and "\\u003c/script>" in script  # nothing in it can close the script
+        assert json.loads(script.removeprefix("window.__raphaelState=")) == state
+        assert body.index("window.__raphaelState=") < body.index("window.raphael =")  # read before the helper runs
+        assert "window.__raphaelState=" not in page_file(PageStore(conn).get(page["id"]))  # what the owner did never leaves in the file
+    finally:
+        await pages.host.aclose()
+    # a page with nothing left on it is served as before
+    other = stored(conn, html="<p>plain</p>")
+    from raphael_core.agent.pages import document
+    assert "window.__raphaelState=" not in document(PageStore(conn).get(other["id"]), "light", PageStore(conn).state(other["id"]))
+
+
+@pytest.mark.parametrize("state", [
+    "text", {"fields": {"a": 1}}, {"fields": {"a": [1]}}, {"storage": {"k": 2}}, {"other": {}},
+    {"custom": "x" * (64 * 1024)}, {"fields": {"key": "my api key sk-or-v1-" + "a" * 64}},
+])
+async def test_a_state_that_is_not_fields_storage_and_a_value_or_holds_a_secret_is_refused(conn, state):
+    from raphael_core.agent.pages import Pages
+    page = stored(conn)
+    with pytest.raises(RpcError):
+        await Pages(conn).keep_state({"id": page["id"], "state": state})
+    assert PageStore(conn).state(page["id"]) is None
+    with pytest.raises(RpcError):
+        await Pages(conn).keep_state({"id": "gone", "state": {}})
+
+
+def test_the_state_goes_with_its_page_and_a_later_save_replaces_it(conn):
+    page = stored(conn)
+    store = PageStore(conn)
+    store.keep_state(page["id"], {"fields": {"#a": "1"}})
+    store.keep_state(page["id"], {"fields": {"#a": "2"}})
+    assert store.state(page["id"]) == {"fields": {"#a": "2"}}
+    conn.execute("DELETE FROM pages WHERE id=?", (page["id"],))
+    assert conn.execute("SELECT COUNT(*) FROM page_state").fetchone()[0] == 0
+
+
+def test_the_helper_keeps_fields_storage_and_the_scripts_value_and_never_a_password():
+    from raphael_core.agent.pages import _HELPER
+    for text in ("post('state'", "window.__raphaelState", "localStorage", "state: Object.freeze", "input[type=password i]",
+                 "[autocomplete~=\"off\" i]", "[data-raphael-forget]", "MutationObserver(restore)", "if (!restoring"):
+        assert text in _HELPER, text
