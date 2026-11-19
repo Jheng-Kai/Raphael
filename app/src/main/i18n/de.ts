@@ -822,6 +822,7 @@ export const de = {
   "chooser.noDepth": "Für dieses Modell lässt sich keine Denktiefe wählen",
   "chooser.subscriptionNote": "Verwendet Ihr Abonnementkontingent; keine separate API-Gebühr",
   "chooser.apiNote": "Nutzungsabrechnung · Eingabe / Ausgabe pro Million Wörter (ca.)",
+  "chooser.apiMediaNote": "Nach Verbrauch",
   "chooser.localNote": "Läuft kostenlos auf diesem Computer",
   "chooser.modelCount": "{n} Modelle",
   "chooser.localCount": "Lokal · {n} Modelle",

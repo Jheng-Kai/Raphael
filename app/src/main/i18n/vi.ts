@@ -822,6 +822,7 @@ export const vi = {
   "chooser.noDepth": "Mô hình này không có độ sâu để chọn",
   "chooser.subscriptionNote": "Dùng hạn mức đăng ký; không tính phí API riêng",
   "chooser.apiNote": "Tính theo mức dùng · đầu vào / ra mỗi triệu từ (xấp xỉ)",
+  "chooser.apiMediaNote": "Trả theo mức dùng",
   "chooser.localNote": "Chạy miễn phí trên máy tính này",
   "chooser.modelCount": "{n} mô hình",
   "chooser.localCount": "Cục bộ · {n} mô hình",

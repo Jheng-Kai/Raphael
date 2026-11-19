@@ -532,6 +532,7 @@ export const en = {
   "chooser.noDepth": "This model has no depth to choose",
   "chooser.subscriptionNote": "Uses your subscription allowance; no separate API charge",
   "chooser.apiNote": "Usage billing · input / output per million words (approx.)",
+  "chooser.apiMediaNote": "Pay as you go",
   "chooser.localNote": "Runs on this computer, free",
   "chooser.modelCount": "{n} models",
   "chooser.localCount": "Local · {n} models",

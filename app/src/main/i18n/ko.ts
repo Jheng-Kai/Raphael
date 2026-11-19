@@ -822,6 +822,7 @@ export const ko = {
   "chooser.noDepth": "이 모델은 깊이를 선택할 수 없습니다",
   "chooser.subscriptionNote": "구독 사용량을 사용하며 별도 API 요금은 없습니다",
   "chooser.apiNote": "사용량 과금 · 약 백만 단어당 입력 / 출력",
+  "chooser.apiMediaNote": "사용량 기반 과금",
   "chooser.localNote": "이 컴퓨터에서 무료 실행",
   "chooser.modelCount": "모델 {n}개",
   "chooser.localCount": "로컬 · 모델 {n}개",

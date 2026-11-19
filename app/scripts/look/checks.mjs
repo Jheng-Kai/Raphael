@@ -2213,11 +2213,12 @@ export function checkRendered(name, context = {}) {
       require(/未設定/.test(image.textContent) && /未設定/.test(video.textContent) && /沒有可用模型/.test(video.textContent), 'unset never chooses a model and video has no invented capability');
       require(!/與回答相同/.test(image.textContent + video.textContent), 'unset media never inherits the conversational model');
     } else if (name === 'media-models-set') {
-      require(/Gemini Image/.test(image.textContent) && /圖片輸出.*30/.test(image.textContent), 'the selected drawing model has its image token price');
+      require(/Gemini Image/.test(image.textContent) && !/圖片輸出|每百萬/.test(image.textContent), 'the selected drawing model is named, and priced by no text or image token');
       require(/影片模型範例/.test(video.textContent) && /每次請求.*0.12/.test(video.textContent), 'video shows the explicit synthetic provider and request price');
     } else if (name === 'media-models-menu') {
       const menu = document.querySelector('.model-chooser');
-      require(visible(menu) && /每張.*0.04/.test(menu.textContent) && /每次請求.*0.025/.test(menu.textContent) && /圖片輸出/.test(menu.textContent), 'image-only models keep their real pricing units');
+      require(visible(menu) && /每張.*0.04/.test(menu.textContent) && /每次請求.*0.025/.test(menu.textContent) && !/圖片輸出|每百萬|\d+K\b|\d+(\.\d+)?M\b/.test(menu.querySelector('.mc-list')?.textContent ?? ''), 'drawing models are priced by the picture or the request, with no token price and no context length');
+      require(!/每百萬/.test(menu.querySelector('.mc-pane-head')?.textContent ?? ''), 'the source of drawing models says it is paid by use, not by words');
       for (const price of menu.querySelectorAll('.mc-price')) {
         const row = price.closest('.mc-row'), model = row.querySelector('.mc-model');
         require(model.getBoundingClientRect().width >= 80 && price.getBoundingClientRect().right <= row.getBoundingClientRect().right,

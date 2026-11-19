@@ -822,6 +822,7 @@ export const id = {
   "chooser.noDepth": "Model ini tidak memiliki pilihan kedalaman",
   "chooser.subscriptionNote": "Memakai kuota langganan; tanpa biaya API terpisah",
   "chooser.apiNote": "Tagihan penggunaan · input / output per juta kata (perkiraan)",
+  "chooser.apiMediaNote": "Bayar sesuai pemakaian",
   "chooser.localNote": "Berjalan di komputer ini, gratis",
   "chooser.modelCount": "{n} model",
   "chooser.localCount": "Lokal · {n} model",

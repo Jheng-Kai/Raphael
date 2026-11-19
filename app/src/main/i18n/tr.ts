@@ -822,6 +822,7 @@ export const tr = {
   "chooser.noDepth": "Bu modelde derinlik seçilemez",
   "chooser.subscriptionNote": "Abonelik kotanızı kullanır; ayrı API ücreti yok",
   "chooser.apiNote": "Kullanıma göre · milyon kelime başına (yaklaşık) girdi / çıktı",
+  "chooser.apiMediaNote": "Kullandıkça öde",
   "chooser.localNote": "Bu bilgisayarda ücretsiz çalışır",
   "chooser.modelCount": "{n} model",
   "chooser.localCount": "Yerel · {n} model",

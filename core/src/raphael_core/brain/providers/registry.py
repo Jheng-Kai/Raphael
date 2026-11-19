@@ -446,7 +446,7 @@ class ProviderRegistry:
             if pid == "openrouter" or not self.config(pid)["enabled"]:
                 continue
             config = self.config(pid)
-            for row in (self.chatgpt.auth.model_rows if pid == "chatgpt" else self._models.get(pid, [])):
+            for row in (self._chatgpt_rows() if pid == "chatgpt" else self._models.get(pid, [])):
                 if row.get("generation_only"):
                     continue
                 caps = {"structured_output", "reasoning", "reasoning_off", "max_tokens"}
@@ -462,6 +462,20 @@ class ProviderRegistry:
                     default_effort=row.get("default_effort")))
         return entries
 
+    def _chatgpt_rows(self):
+        """ChatGPT's models: those read in this run, else, while it is signed in, those kept at the last reading, so a
+        choice opened right after start lists them at once and the reading in the background only updates them."""
+        if self.chatgpt.auth.model_rows:
+            return self.chatgpt.auth.model_rows
+        state = self.chatgpt.auth._state() or {}
+        account = state.get("active", "") if isinstance(state, dict) else ""
+        try:
+            # Whether its tokens are kept, from the store's attributes alone: nothing is read and nothing asks (keychain.py).
+            signed_in = bool(account) and self.chatgpt.auth._vault(account).filled()
+        except Exception:
+            signed_in = False
+        return self._models.get("chatgpt", []) if signed_in else []
+
     def uncached(self):
         """Whether an enabled provider has no model list saved yet (its first use): the catalog then waits for
         it. ChatGPT's list is only in memory and is never waited for; it arrives with `providers.changed`."""
@@ -473,14 +487,16 @@ class ProviderRegistry:
         return repr((self.catalog_entries(), self.media_choices("image"), self.media_choices("video")))
 
     async def refresh_catalog(self):
-        if self.image_subscriptions is not None:
-            await self.image_subscriptions.refresh()
+        async def drawing():
+            if self.image_subscriptions is not None:
+                await self.image_subscriptions.refresh()
         async def fetch(pid):
             try:
                 await self.discover(pid)
             except (OpenRouterError, TimeoutError):
                 pass  # A failed refresh keeps the last known metadata and never resets choices.
-        await asyncio.gather(*(fetch(pid) for pid in self.ids()
+        # The Codex drawing check starts a program; the providers' lists never wait for it.
+        await asyncio.gather(drawing(), *(fetch(pid) for pid in self.ids()
             if pid != "openrouter" and self.config(pid)["enabled"] and
             (pid != "chatgpt" or self.available("@chatgpt:catalog"))))
 

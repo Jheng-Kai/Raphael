@@ -822,6 +822,7 @@ export const ru = {
   "chooser.noDepth": "У этой модели нельзя выбрать глубину",
   "chooser.subscriptionNote": "Использует квоту подписки; без отдельной платы за API",
   "chooser.apiNote": "По использованию · ввод / вывод за миллион слов (примерно)",
+  "chooser.apiMediaNote": "Оплата по использованию",
   "chooser.localNote": "Работает на этом компьютере бесплатно",
   "chooser.modelCount": "Моделей: {n}",
   "chooser.localCount": "Локально · Моделей: {n}",

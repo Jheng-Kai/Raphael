@@ -822,6 +822,7 @@ export const th = {
   "chooser.noDepth": "โมเดลนี้ไม่มีความลึกให้เลือก",
   "chooser.subscriptionNote": "ใช้โควตาสมาชิก ไม่มีค่า API แยก",
   "chooser.apiNote": "คิดตามการใช้งาน · อินพุต / เอาต์พุต ต่อล้านคำ (โดยประมาณ)",
+  "chooser.apiMediaNote": "จ่ายตามการใช้งาน",
   "chooser.localNote": "ทำงานบนคอมพิวเตอร์นี้ฟรี",
   "chooser.modelCount": "{n} โมเดล",
   "chooser.localCount": "ภายใน · {n} โมเดล",

@@ -822,6 +822,7 @@ export const ptBR = {
   "chooser.noDepth": "Este modelo não permite escolher profundidade",
   "chooser.subscriptionNote": "Usa a cota da assinatura; sem cobrança de API separada",
   "chooser.apiNote": "Cobrança por uso · entrada / saída por milhão de palavras (aprox.)",
+  "chooser.apiMediaNote": "Pagamento por uso",
   "chooser.localNote": "Executa neste computador, grátis",
   "chooser.modelCount": "{n} modelos",
   "chooser.localCount": "Local · {n} modelos",

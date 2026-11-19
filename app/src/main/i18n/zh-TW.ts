@@ -531,6 +531,7 @@ export const zhTW = {
   "chooser.noDepth": "這個模型不分思考程度",
   "chooser.subscriptionNote": "使用你的訂閱額度，不另計費",
   "chooser.apiNote": "按量計費 · 輸入／輸出 約每百萬字",
+  "chooser.apiMediaNote": "按量計費",
   "chooser.localNote": "在這台電腦上執行，免費",
   "chooser.modelCount": "{n} 個模型",
   "chooser.localCount": "本機 · {n} 個模型",

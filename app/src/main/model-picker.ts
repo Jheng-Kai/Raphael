@@ -938,7 +938,9 @@ class MountedPicker implements ModelPicker {
     const source = this.selectedSource(), pane = this.dialog?.el.querySelector(".mc-pane");
     if (!pane) return;
     if (!source) { pane.innerHTML = `<p class="mc-empty">${esc(t("chooser.empty"))}</p>`; this.paintFooter(); return; }
-    const note = source.group === "subscriptions" ? "chooser.subscriptionNote" : source.group === "local" ? "chooser.localNote" : "chooser.apiNote";
+    // A drawing or a video is not priced by words, so its source says only that it is paid by use.
+    const media = this.o.role === "image" || this.o.role === "video";
+    const note = source.group === "subscriptions" ? "chooser.subscriptionNote" : source.group === "local" ? "chooser.localNote" : media ? "chooser.apiMediaNote" : "chooser.apiNote";
     pane.innerHTML = `<header class="mc-pane-head">${sourceMark(source)}<span><h3>${esc(source.name)}</h3><p>${esc(t(note))}</p></span></header>`;
     if (source.id === "chatgpt" && source.account !== undefined && (!source.account?.signed_in || source.account.plan_scope_granted === false || source.account.signing_in)) {
       const account = source.account;

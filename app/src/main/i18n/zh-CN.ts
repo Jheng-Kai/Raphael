@@ -822,6 +822,7 @@ export const zhCN = {
   "chooser.noDepth": "这个模型不分思考程度",
   "chooser.subscriptionNote": "使用你的订阅额度，不另计费",
   "chooser.apiNote": "按量计费 · 输入／输出 约每百万字",
+  "chooser.apiMediaNote": "按量计费",
   "chooser.localNote": "在这台电脑上运行，免费",
   "chooser.modelCount": "{n} 个模型",
   "chooser.localCount": "本机 · {n} 个模型",

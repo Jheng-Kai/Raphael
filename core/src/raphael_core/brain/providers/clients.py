@@ -115,6 +115,10 @@ def model_info(raw: dict, *, kind: str) -> dict:
     outputs = arch.get("output_modalities", raw.get("output_modalities", []))
     outputs = outputs if isinstance(outputs, list) else []
     media = [value for value in ("image", "video") if isinstance(outputs, list) and value in outputs]
+    # OpenRouter's own routers (openrouter/auto, auto-beta, auto-code) list every output a model behind them might give;
+    # they are not drawing models, so they never stand among the models that draw or make video.
+    if kind == "openrouter" and model_id.startswith("openrouter/"):
+        media = []
     # These endpoint families have a published media contract; discovery still supplies the model id.
     if kind in ("openai", "xai") and model_id.startswith(("gpt-image-", "dall-e-", "grok-imagine-image")):
         media = ["image"]

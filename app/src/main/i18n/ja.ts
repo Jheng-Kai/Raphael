@@ -532,6 +532,7 @@ export const ja = {
   "chooser.noDepth": "このモデルは思考の深さを選べません",
   "chooser.subscriptionNote": "サブスクリプションの利用枠を使用",
   "chooser.apiNote": "従量課金 · 約100万文字あたりの入力／出力",
+  "chooser.apiMediaNote": "従量課金",
   "chooser.localNote": "このコンピューターで無料実行",
   "chooser.modelCount": "{n} モデル",
   "chooser.localCount": "ローカル · {n} モデル",

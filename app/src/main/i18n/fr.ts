@@ -822,6 +822,7 @@ export const fr = {
   "chooser.noDepth": "Ce modèle n’a pas de profondeur à choisir",
   "chooser.subscriptionNote": "Utilise le quota d’abonnement ; aucun coût API distinct",
   "chooser.apiNote": "Facturation à l’usage · entrée / sortie par million de mots (environ)",
+  "chooser.apiMediaNote": "Paiement à l’usage",
   "chooser.localNote": "Fonctionne gratuitement sur cet ordinateur",
   "chooser.modelCount": "{n} modèles",
   "chooser.localCount": "Local · {n} modèles",

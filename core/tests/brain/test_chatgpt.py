@@ -973,3 +973,13 @@ async def test_reasoning_items_and_reasoning_written_into_the_answer_are_not_the
     with pytest.raises(AgentFailure) as failure:
         second.reply(outcome)
     assert failure.value.kind == "no_answer"
+
+
+async def test_chatgpts_models_are_listed_from_the_last_reading_until_they_are_read_again(rig):
+    # Signed in and read once, then a new run: the list in memory is empty, the kept one answers at once.
+    await rig.router.call("chatgpt.sign_in", {"timeout_s": 2})
+    await rig.router.call("chatgpt.models", {})
+    rig.auth.model_rows = []
+    assert [entry.id for entry in rig.registry.catalog_entries()] == ["@chatgpt:chosen-model"]
+    await rig.router.call("chatgpt.sign_out", {})
+    assert rig.registry.catalog_entries() == []
