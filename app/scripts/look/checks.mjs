@@ -4,10 +4,13 @@ export function checkRendered(name, context = {}) {
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
   // The providers' directory keeps its title and x at the top however far its list is scrolled (the way out is never lost).
   const directoryCloseStays = dialog => {
-    const close = dialog.querySelector('[data-pv="close"]');
-    dialog.scrollTop = dialog.scrollHeight;
+    const close = dialog.querySelector('[data-pv="close"]'), list = dialog.querySelector('.pv-scroll');
+    require(list && !list.contains(close), "the x stands outside the list that scrolls");
+    const top = list.scrollTop;
+    list.scrollTop = list.scrollHeight;
     const frame = dialog.getBoundingClientRect(), box = close.getBoundingClientRect();
     require(visible(close) && box.top >= frame.top - 0.5 && box.bottom <= frame.bottom + 0.5, `the x stays in view when the list is scrolled: x ${Math.round(box.top)}..${Math.round(box.bottom)}, dialog ${Math.round(frame.top)}..${Math.round(frame.bottom)}`);
+    list.scrollTop = top;
   };
   // A computer that is not showing its live screen draws nothing over its wallpaper: no words, face,
   // progress, status sentence, recovery button, Open pill or caption. One press anywhere on the screen (its cover) starts it.
@@ -7882,7 +7885,7 @@ export function checkRendered(name, context = {}) {
     require(!dialog.querySelector("[data-chatgpt], [data-cli], [data-cli-menu]"), "no subscription is offered: none turns speech into text");
     const ids = [...dialog.querySelectorAll('[data-pv="add"]')].map(button => button.dataset.id);
     require(ids.length >= 1 && ids.every(id => ["openrouter", "openai", "groq"].includes(id)), `only the kinds that turn speech into text: ${ids}`);
-    require(dialog.querySelector(":scope > .note")?.textContent.includes("訂閱帳號都沒有"), "and it says why the subscriptions are not there");
+    require(dialog.querySelector(".pv-scroll > .note")?.textContent.includes("訂閱帳號都沒有"), "and it says why the subscriptions are not there");
     directoryCloseStays(dialog);
     return { check: name, ids };
   }

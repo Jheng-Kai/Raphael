@@ -79,10 +79,10 @@ function directoryHTML(v: ProvidersView, lead = ""): string {
         btn(esc(action), "", ` data-pv="add" data-id="${esc(k.kind)}" data-k="pv-add:${esc(k.kind)}" aria-label="${esc(action + " " + k.name)}"${(k.available || connected) && !v.busy ? "" : " disabled"}`) + `</div>`;
     }).join("") + `</div></section>` : "";
   }).join("");
-  return `<div class="cs-scrim" data-pv="scrim" data-dialog="provider:add"><div class="cs-dialog pv-dialog pv-catalog" id="pv-dialog" role="dialog" aria-modal="true" aria-labelledby="pv-title" tabindex="-1" data-trap>` +
+  return `<div class="cs-scrim" data-pv="scrim" data-dialog="provider:add"><div class="cs-dialog pv-dialog pv-catalog pv-dir" id="pv-dialog" role="dialog" aria-modal="true" aria-labelledby="pv-title" tabindex="-1" data-trap>` +
     `<div class="cs-dlg-head"><h2 id="pv-title">${esc(t("providers.add"))}</h2>${ROLE_LABELS[v.role ?? ""] ? `<span class="pv-for">${esc(t("chooser.slot", { name: ROLE_LABELS[v.role!]() }))}</span>` : ""}<span class="sp"></span>${iconButton("x", t("providers.close"), ' data-pv="close" data-k="pv-close" data-nav-back')}</div>` +
-    `<p class="note">${esc(ROLE_NOTES[v.role ?? ""]?.() ?? t("providers.choose"))}</p>${fieldHTML(t("providers.searchKinds"), v.kindQuery ?? "", { id: "pv-kind-search", icon: "search" })}` +
-    `<div class="pv-directory">${(v.kindQuery ?? "").trim() ? "" : lead}${groups || `<p class="note" role="status">${esc(t("providers.noMatches"))}</p>`}</div><p class="pv-results note" role="status">${esc(t("providers.results", { p0: count }))}</p></div></div>`;
+    `<div class="pv-scroll"><p class="note">${esc(ROLE_NOTES[v.role ?? ""]?.() ?? t("providers.choose"))}</p>${fieldHTML(t("providers.searchKinds"), v.kindQuery ?? "", { id: "pv-kind-search", icon: "search" })}` +
+    `<div class="pv-directory">${(v.kindQuery ?? "").trim() ? "" : lead}${groups || `<p class="note" role="status">${esc(t("providers.noMatches"))}</p>`}</div><p class="pv-results note" role="status">${esc(t("providers.results", { p0: count }))}</p></div></div></div>`;
 }
 const errorText = (error: ProvidersView["error"]): string => t(error === "account" ? "providers.invalidAccount" : error === "required" ? "providers.required" : "providers.error");
 function validAccount(value: string): boolean {
