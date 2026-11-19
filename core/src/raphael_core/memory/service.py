@@ -227,13 +227,23 @@ class MemoryService(Growth):
         """Backfill existing logs once at startup; normal appends update the same index directly."""
         from .recall_index import write_document
         for folder in self.homes.safe(self.homes.root / 'bots').glob('*'):
-            if not folder.name.isdigit():
+            if not folder.name.isascii() or not folder.name.isdigit():
                 continue
             member_id = int(folder.name)
-            for path in self.homes.safe(folder / 'memory/log').glob('*.md'):
-                safe = self.homes.path(member_id, 'memory/log/' + path.name)
-                write_document(self._conn, 'log', 'memory/log/' + path.name, member_id,
-                               safe.read_text(encoding='utf-8'), int(safe.stat().st_mtime * 1000))
+            try:
+                log_dir = self.homes.safe(folder / "memory/log")
+            except (OSError, ValueError):
+                continue
+            for path in log_dir.glob("????-??-??.md"):
+                relative = "memory/log/" + path.name
+                try:
+                    safe = self.homes.path(member_id, relative)
+                    body = safe.read_text(encoding="utf-8")
+                    updated = int(safe.stat().st_mtime * 1000)
+                except (OSError, ValueError) as exc:
+                    logger.warning("Skipped unreadable memory log: %s", type(exc).__name__)
+                    continue
+                write_document(self._conn, "log", relative, member_id, body, updated)
 
     def _state(self, key: str) -> int:
         try:
@@ -393,6 +403,9 @@ class MemoryService(Growth):
         # What the host writes beside an entry is in the language of the owner's words, else of the entries.
         written_in = self._written_in(owner_text, " ".join(content(op) for op in operations if isinstance(op, dict)))
         mark = self._mark(written_in) if untrusted else ""
+        if private_request or keeps_private(owner_text):
+            return own.apply(operations, mark=mark, unattended=unattended, owner_text=owner_text,
+                             shared_sources=self.shared.entries())
         # What came from outside stays with the member that read it, unless the owner asked to tell everyone.
         if target != "user" or (untrusted and not share):
             # One fact keeps one line across the two files too.
@@ -403,15 +416,17 @@ class MemoryService(Growth):
                         "message": "USER.md already says this, so nothing was added.", "note": "This update is complete: do not repeat it."}
             return own.apply(fresh, mark=mark, unattended=unattended, owner_text=owner_text)
         told = told_stamp(self._told_name(member_id, written_in), self._today().isoformat())
-        kept = [] if share else [op for op in operations if added(op) and (private_request or not about_the_owner(content(op)))]
+        kept = [] if share else [op for op in operations if added(op) and not about_the_owner(content(op))]
         rest = [op for op in operations if not any(op is item for item in kept)]
+        if kept and rest:
+            return {"success": False, "kind": "mixed_targets",
+                    "error": "This batch needs two files. Submit separate private and shared batches."}
         if kept:
             result = own.apply(kept, mark=mark, unattended=unattended, owner_text=owner_text)
             if result["success"]:
                 result["message"] = ("Kept in your own MEMORY.md, not USER.md: it is about this conversation or a plan, or "
                                      "the owner wants it kept from the others.")
-            if not rest or not result["success"]:
-                return result
+            return result
         pending = [entry for entry in own.entries() if is_unconfirmed(entry)]
         rest = [{**op, "content": self._mark(written_in) + content(op)} if added(op) and not owner_stated(content(op), owner_text)
                 and any(relation(content(op), entry) in ("same", "inside", "wider", "near") for entry in pending) else op for op in rest]
@@ -424,13 +439,14 @@ class MemoryService(Growth):
                     private_request: bool = False, unattended: bool = False, owner_text: str = "") -> Applied:
         """What came of the edits of a reply or a pass, each file by itself."""
         applied = Applied()
-        for target in ("memory", "user"):
-            batch = [edit for edit in edits if edit.target == target]
+        private_request = private_request or keeps_private(owner_text)
+        for target in (("memory",) if private_request else ("memory", "user")):
+            batch = edits if private_request else [edit for edit in edits if edit.target == target]
             if not batch:
                 continue
             result = self.edit_memory(member_id, target, [asdict(edit) for edit in batch], untrusted=untrusted, share=share,
                                       private_request=private_request, unattended=unattended, owner_text=owner_text)
-            applied.record(result, batch, target)
+            applied.record(result, batch, result.get("target", target))
         return applied
 
     def forget_member_turns(self, member_id: int) -> None:
@@ -746,9 +762,6 @@ class MemoryService(Growth):
         own = self.own(member_id)
         file_clears = (own.clears, self.shared.clears)
 
-        def current() -> bool:
-            return self._turn_clears == clears and file_clears == (own.clears, self.shared.clears)
-
         from .growth import tainted_turn
         from .reflection import readable_turns
         steps = self._history.steps([turn.id for turn in turns if turn.id is not None])
@@ -758,6 +771,17 @@ class MemoryService(Growth):
         from .reflection import reflection_limit
         turns = readable_turns(self._today(), own, self.shared, turns, outside, self._name_of(member_id),
                                limit=reflection_limit(window_of(self._model(member_id))))
+        source_ids = [turn.id for turn in turns]
+        sources = self._history.get_many(source_ids)
+        versions = self._history.version_counts(source_ids)
+
+        def sources_current() -> bool:
+            return (self._turn_clears == clears and self._history.get_many(source_ids) == sources
+                    and self._history.version_counts(source_ids) == versions)
+
+        def current() -> bool:
+            return file_clears == (own.clears, self.shared.clears) and sources_current()
+
         private_request = any(keeps_private(turn.question) for turn in turns)
         applied = await Reflector(self._brain(member_id)).reflect(
             own, self.shared, turns,
@@ -769,9 +793,11 @@ class MemoryService(Growth):
             agent=self._name_of(member_id),
             apply=lambda edits: self.apply_edits(edits, member_id, private_request=private_request, unattended=True),
         )
-        if applied.failed:
+        if not sources_current():
+            self._arm_next()
+        elif applied.failed:
             self._record_failure()
-        elif self._turn_clears == clears:
+        else:
             self._recovered()
             through = max(turns[-1].id or 0, self.reflected_through(member_id))
             self._set_state(_watermark(member_id), through)
