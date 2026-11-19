@@ -284,6 +284,8 @@ export default [
   scene("bot-exchange-expanded", "The line opens the two members' conversation on what was asked",
     [member(1), wait('.exchange-event'), click('.exchange-event'), wait('.mb-chat:not([hidden]) > .peer-chat'), check("bot-exchange-expanded")], { colleagues: 2 }),
   scene("slash-commands", "Slash command menu follows the slash character", [type(".composer textarea", "/"), wait(".slash-menu"), check("slash-commands")], { commands: [{ id: 1, member_id: 0, name: "review", description: "整理研究重點", template: "整理研究重點" }] }),
+  scene("slash-many", "Thirty skills under a / are one list that scrolls, as the @ menu: no 下一頁", [type(".composer textarea", "/"), wait(".slash-menu"), check("slash-many"), check("slash-commands")],
+    { skills: Array.from({ length: 30 }, (_, index) => ({ id: 300 + index, member_id: 0, name: `skill-${index}`, slash_name: `skill-${index}`, description: `整理第 ${index + 1} 類資料，寫成可以直接使用的摘要與清單`, enabled: true, source: "owner" })) }),
   // R-MENU-05: a / opens the menu wherever it begins a word, as an @ does; a / inside a word or an address does not.
   scene("slash-after-words", "Slash menu opens beside a slash typed after other words", [type(".composer textarea", "請幫我整理這份報告"), type(".composer textarea", "請幫我整理這份報告 /"), wait(".slash-menu"), check("slash-after-words")], slashAfterWords),
   scene("slash-after-words-pick", "Picking a name after words puts it where the slash was", [type(".composer textarea", "請幫我整理這份報告 /"), wait(".slash-menu"), key("Tab"), check("slash-after-words-picked")], slashAfterWords),

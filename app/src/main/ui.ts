@@ -825,21 +825,10 @@ export function openMenu(
   onPick: (value: string) => void,
   head?: string,
   actions: readonly MenuAction[] = [],
-  placement?: Pick<PopoverOptions, "placement" | "anchorRect"> & { selectionIndicator?: boolean; /** `false`: the focus stays where it is (a field an input method is composing in). */ focus?: boolean; completion?: boolean; className?: string; pageSize?: number;
-    /** The menu has a fixed height in its CSS and every row stays on one list that scrolls (a mouse wheel, the arrow keys), never in pages. */ scroll?: boolean },
+  placement?: Pick<PopoverOptions, "placement" | "anchorRect"> & { selectionIndicator?: boolean; /** `false`: the focus stays where it is (a field an input method is composing in). */ focus?: boolean; completion?: boolean; className?: string;
+    /** The menu has a fixed height in its CSS and every row stays on one list that scrolls (a mouse wheel, the arrow keys). A completion menu always does: no menu of the app is ever in pages. */ scroll?: boolean },
 ): void {
-  if (placement?.pageSize && options.length > placement.pageSize) {
-    const pageSize = placement.pageSize;
-    const draw = (page: number): void => {
-      const start = page * pageSize;
-      openMenu(anchor, options.slice(start, start + pageSize), current, onPick, head, [
-        ...(page ? [{ label: t("completion.previous"), run: () => draw(page - 1) }] : []),
-        ...(start + pageSize < options.length ? [{ label: t("completion.next"), run: () => draw(page + 1) }] : []),
-        ...actions,
-      ], { ...placement, pageSize: undefined });
-    };
-    draw(0); return;
-  }
+  const scrolls = !!(placement?.scroll || placement?.completion);
   const active = document.activeElement as HTMLElement | null;
   const again = menu && (menu.anchor === anchor || (!menu.anchor.isConnected && menu.anchor.dataset.k === anchor.dataset.k)) &&
     active && menu.el.contains(active) ? active : null;
@@ -875,18 +864,11 @@ export function openMenu(
       .join("");
   const el = openPopover(anchor, html, {
     ...placement,
-    className: `menu${detailed ? " detailed" : ""}${described ? " described" : ""}${placement?.placement === "beside" ? " menu-submenu" : ""}${placement?.completion ? " completion-menu" : ""}${placement?.scroll ? " menu-scroll" : ""}${placement?.className ? " " + placement.className : ""}`,
+    className: `menu${detailed ? " detailed" : ""}${described ? " described" : ""}${placement?.placement === "beside" ? " menu-submenu" : ""}${placement?.completion ? " completion-menu" : ""}${scrolls ? " menu-scroll" : ""}${placement?.className ? " " + placement.className : ""}`,
     role: placement?.completion ? "listbox" : "menu",
     label: anchor.getAttribute("aria-label") ?? undefined,
     onClose: placement?.completion ? () => { anchor.removeEventListener("keydown", completionKey, true); anchor.removeAttribute("aria-activedescendant"); } : undefined,
   });
-  if (placement?.completion && !placement.scroll && options.length > 1 && el.scrollHeight > el.clientHeight + 1) {
-    const rowHeight = Math.max(34, ...[...el.querySelectorAll("button")].map(row => row.getBoundingClientRect().height));
-    const headingsHeight = [...el.querySelectorAll(".menu-head")].reduce((height, head) => height + (head.getBoundingClientRect().height || 24) + 4, 0);
-    const pageSize = Math.max(1, Math.min(8, options.length - 1, Math.floor((el.clientHeight - headingsHeight - 34 * (actions.length + 2) - 16) / rowHeight)));
-    openMenu(anchor, options, current, onPick, head, actions, { ...placement, pageSize });
-    return;
-  }
   let selected = 0;
   const buttons = [...el.querySelectorAll<HTMLButtonElement>("button")];
   function highlight(keyboard = false): void {
@@ -898,7 +880,7 @@ export function openMenu(
     });
     if (buttons[selected]) anchor.setAttribute("aria-activedescendant", buttons[selected].id);
     // The arrow keys carry the highlight out of sight in a list that scrolls: the row they land on comes into view.
-    if (keyboard && placement?.scroll) buttons[selected]?.scrollIntoView?.({ block: "nearest" });
+    if (keyboard && scrolls) buttons[selected]?.scrollIntoView?.({ block: "nearest" });
   }
   function completionKey(event: KeyboardEvent): void {
     if (event.isComposing || event.keyCode === 229 || !["ArrowDown", "ArrowUp", "Enter", "Tab", "Escape"].includes(event.key)) return;

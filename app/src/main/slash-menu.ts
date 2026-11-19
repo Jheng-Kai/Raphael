@@ -40,6 +40,7 @@ export function mountSlashMenu(input: HTMLTextAreaElement | HTMLInputElement, op
       ...skills.filter(skill => skill.enabled).map(skill => ({ value: skill.slash_name ?? skill.name, label: "/" + (skill.slash_name ?? skill.name), desc: skill.description,
         aliases: [skill.name], source: skill.plugin, group: t("completion.skills") })),
     ];
+    // As the @ menu: everything on one list that scrolls, and the best eight of what was typed.
     const matched = matchingChoices(choices, query);
     const shown = query ? matched.slice(0, 8) : matched;
     if (!shown.length) { close(); return; }

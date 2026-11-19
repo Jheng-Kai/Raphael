@@ -653,6 +653,9 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .menu.team-mentions-menu { width: 360px; }
 /* Every member and app on one list in a menu of a fixed height: seven rows and half of the next, so that the cut row says it scrolls (the scrollbar is hidden, R-UI-62). */
 .menu.menu-scroll { max-height: calc(var(--h-menu) * 7.5 + var(--sp-1) * 2); overflow-y: auto; overscroll-behavior: contain; }
+/* Choices of two lines (the / menu's commands and skills with what they do) under their group's heading: six of them and
+   most of the next, so that the cut row says it scrolls. */
+.menu.menu-scroll.described { max-height: calc(var(--h-row) * 7 + var(--sp-1) * 2); }
 .menu.team-mentions-menu .mt { flex: 0 1 auto; }
 .menu.team-mentions-menu .mlead { width: 16px; height: 16px; }
 .menu.team-mentions-menu .mlead .av { --av: 16px !important; }

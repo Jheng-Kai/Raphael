@@ -414,8 +414,6 @@ export const zhCN = {
   "template.review.skills": "技能",
   "members.profile.skillsTitle": "技能",
   "members.panelSkills": "技能",
-  "completion.previous": "上一页",
-  "completion.next": "下一页",
   "media.image": "画图",
   "media.video": "做视频",
   "media.unset": "未设置",

@@ -334,8 +334,6 @@ export const ja = {
   "completion.kindApp": "アプリ",
   "completion.commands": "コマンド",
   "completion.skills": "スキル",
-  "completion.previous": "前へ",
-  "completion.next": "次へ",
   "media.image": "画像を描く",
   "media.video": "動画を作る",
   "media.unset": "未設定",

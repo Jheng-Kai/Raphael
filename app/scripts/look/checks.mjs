@@ -6165,6 +6165,18 @@ export function checkRendered(name, context = {}) {
     require(chip.length === 1 && chip[0] === "/review", `the picked name is drawn as one chip: ${JSON.stringify(chip)}`);
     return { check: name, value: input.value };
   }
+  if (name === "slash-many") {
+    // Issue 241: no menu of the app is in pages. Thirty skills are one list that scrolls, as the @ menu's members and apps are.
+    const menu = document.querySelector('#app-popover.slash-menu'), box = menu.getBoundingClientRect();
+    require(menu.classList.contains('menu-scroll') && getComputedStyle(menu).overflowY === 'auto', "the / menu scrolls");
+    require(!/下一頁|上一頁/.test(menu.textContent) && !menu.querySelector('.menu-action'), "it has no 下一頁 or 上一頁");
+    require(menu.querySelectorAll('[data-value^="skill-"]').length === 30, "every skill is on the list");
+    require(menu.scrollHeight > menu.clientHeight + 40, "the list is longer than the menu, so it scrolls");
+    const rows = [...menu.querySelectorAll('button.menu-choice')], cut = rows.find(row => row.getBoundingClientRect().bottom > box.bottom + 1);
+    require(cut && cut.getBoundingClientRect().top < box.bottom - 8, "a row is cut at the bottom edge, which says there is more below");
+    require(box.top >= 0 && box.bottom <= innerHeight && box.left >= 8 && box.right <= innerWidth - 8, `the menu is whole in the window: ${JSON.stringify(box)}`);
+    return { check: name, height: Math.round(box.height), rows: rows.length };
+  }
   if (name === "team-mentions" || name === "slash-commands" || name === "slash-after-words") {
     const input = [...document.querySelectorAll('.composer textarea')].find(visible);
     const menu = document.querySelector('#app-popover');

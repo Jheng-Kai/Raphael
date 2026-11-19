@@ -414,8 +414,6 @@ export const ru = {
   "template.review.skills": "Навыки",
   "members.profile.skillsTitle": "Навыки",
   "members.panelSkills": "Навыки",
-  "completion.previous": "Назад",
-  "completion.next": "Далее",
   "media.image": "Рисовать изображения",
   "media.video": "Создавать видео",
   "media.unset": "Не задано",

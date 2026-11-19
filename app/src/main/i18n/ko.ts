@@ -414,8 +414,6 @@ export const ko = {
   "template.review.skills": "스킬",
   "members.profile.skillsTitle": "스킬",
   "members.panelSkills": "스킬",
-  "completion.previous": "이전",
-  "completion.next": "다음",
   "media.image": "이미지 그리기",
   "media.video": "동영상 만들기",
   "media.unset": "설정 안 됨",

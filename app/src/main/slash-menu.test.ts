@@ -237,3 +237,20 @@ test('a member change while the menu is open reads again at once', async () => {
   expect(document.querySelector('.slash-menu')!.textContent).toContain('just-added');
   menu.destroy();
 });
+
+test('thirty skills are one list that scrolls, as the @ menu: no pages and no 下一頁 (issue 241)', async () => {
+  vi.mocked(membersSkillsList).mockResolvedValue({ skills: Array.from({ length: 30 }, (_, index) => (
+    { id: 100 + index, name: `skill-${index}`, description: `Does thing ${index}`, source: 'owner', enabled: true, slash_name: `skill-${index}` })) });
+  const { input, menu } = setup(); type(input, '/'); await flush();
+  const panel = document.querySelector('.slash-menu')!;
+  expect(panel.classList.contains('menu-scroll')).toBe(true);
+  expect(panel.querySelector('.menu-action, .menu-sep')).toBeNull();
+  expect(panel.textContent).not.toMatch(/下一頁|上一頁/);
+  expect(panel.querySelectorAll('[data-value^="skill-"]')).toHaveLength(30);
+  for (let index = 0; index < 31; index++) input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+  expect(document.querySelector('.slash-menu .is-active')?.getAttribute('data-value')).toBe('skill-29');
+  type(input, '/skill'); await flush();
+  expect(document.querySelectorAll('.slash-menu [data-value^="skill-"]')).toHaveLength(8);
+  expect(document.querySelector('.slash-menu')!.textContent).not.toMatch(/下一頁|上一頁/);
+  menu.destroy();
+});
