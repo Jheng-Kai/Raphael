@@ -94,6 +94,17 @@ async def test_a_secret_card_names_only_a_connection_the_owner_has_and_a_secret_
     assert rows(driver, "secret_cards") == 0 and ask.waiting_secrets == []
 
 
+async def test_a_value_that_is_no_secret_gets_no_key_card_and_the_member_is_told_to_ask_in_chat(driver):
+    """#281: a user name, an e-mail or a site is no secret. No card is shown, and the member asks the owner in the conversation."""
+    for name in ("JIRA_USERNAME", "SMTP_USER", "JIRA_EMAIL", "ATLASSIAN_SITE"):
+        ask = ask_of(driver)
+        shown = driver.app.agent._show_secret(ask, {"key": name, "purpose": "the Jira user"})
+        assert shown["card"] == "not_shown" and "ask the owner" in shown["note"] and ask.waiting_secrets == []
+    assert rows(driver, "secret_cards") == 0
+    shown = driver.app.agent._show_secret(ask_of(driver), {"key": "JIRA_API_TOKEN", "purpose": "the Jira API"})
+    assert shown["card"] == "shown" and rows(driver, "secret_cards") == 1
+
+
 async def test_a_managed_connection_gets_no_secret_card(driver):
     driver.app.integrations._config.add(ServerConfig("google", "Google (private)", "http", url="https://example.invalid/mcp",
                                                     managed_by="google", headers=["x-api-key"]))

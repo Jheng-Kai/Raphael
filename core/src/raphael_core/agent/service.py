@@ -4239,6 +4239,13 @@ class AgentService:
             raise HarnessToolError("unavailable")
         if not ask.background_owner and (ask.nested or ask.quick or ask.scope != "private" or ask.source not in AT_A_CHAT):
             raise HarnessToolError("private_chat_only")
+        if key is not None:
+            from ..computer.vault_entries import no_secret_name
+            if no_secret_name(key):
+                return {"key": key, "card": "not_shown", "note": (
+                    f"{key} names a value that is no secret, such as a user name, an e-mail or a site: ask the owner for it in "
+                    "this conversation, then pass it to the program yourself (for example KEY=value before the command in vm_exec). "
+                    "request_secret is for secret values only: a password, a token or an API key.")}
         try:
             if key is not None:
                 card = self._secret_cards.show_key(turn_id=ask.turn_id, member_id=ask.speaker.id, conversation_id=ask.conversation_id,

@@ -67,14 +67,12 @@ function actionHTML(card: SecretCard): string {
     if (card.login) return `<div class="sc-form sc-login"><label><span>${esc(t("card.loginUser"))}</span><span class="field sc-field"><input data-login-user="${esc(card.id)}" autocomplete="off" spellcheck="false"></span></label>` +
       `<label><span>${esc(t("card.loginPassword"))}</span><span class="field sc-field">${ico("lock")}<input type="password" data-secret-input="${esc(card.id)}" autocomplete="off" spellcheck="false" autocapitalize="off"></span></label>` +
       btn(esc(t("card.keySave")), "sm pri", `${on("card-save")} disabled`) + `</div>`;
-    // A program key may be no secret (a user name, an address): the owner says so under its field, and it may then be
-    // short and is shown as typed (#281). A secret one needs six characters, said while it is typed.
-    const plainChoice = card.key ? `<label class="sc-plain"><input type="checkbox" data-secret-plain="${esc(card.id)}">${esc(t("card.keyPlain"))}</label>` +
-      `<p class="sc-hint" data-secret-hint hidden>${esc(t("card.keyMin"))}</p>` : "";
+    // A program key needs six characters, said under its field while it is shorter (#281).
+    const hint = card.key ? `<p class="sc-hint" data-secret-hint hidden>${esc(t("card.keyMin"))}</p>` : "";
     return `<div class="sc-form"><label class="field sc-field">${card.key ? "" : ico("lock")}` +
       `<input type="password" data-secret-input="${esc(card.id)}" placeholder="${esc(card.login ? t("card.loginPassword") : card.platform ? t("msg.tg.tokenHint") : t("card.keyField"))}" aria-label="${esc(label)}" ` +
       `autocomplete="off" spellcheck="false" autocapitalize="off"></label>` +
-      btn(esc(t("card.keySave")), "sm pri", `${on("card-save")} disabled`) + `</div>` + plainChoice;
+      btn(esc(t("card.keySave")), "sm pri", `${on("card-save")} disabled`) + `</div>` + hint;
   }
   if (card.state === "saved" && card.error) return btn(esc(t("card.retry")), "sm pri", on("card-resume"));
   return "";
@@ -103,11 +101,11 @@ function botCardHTML(card: SecretCard & { platform: "telegram" | "slack" | "disc
 /** A key for a program in a member's computer: its variable's name, what it is for and where it goes, then the same masked field. */
 function keyCardHTML(card: SecretCard, close: string | undefined): string {
   const active = secretNeedsInput(card), action = actionHTML(card);
-  return cardHTML({ title: active ? t("cards.keyTitle") : card.name,
+  return cardHTML({ title: active ? (card.purpose ? t("cards.keyTitleFor", { p0: card.purpose }) : t("cards.keyTitle")) : card.name,
     status: card.state === "failed" || card.error ? "failed" : active || card.state === "resuming" ? "waiting" : "done",
     statusText: active ? cardPromptText("key") : card.error ? t("cards.failed") : card.state === "resuming" ? t("cards.needsYou") : t("cards.done"),
     body: active ? undefined : card.error ? secretStateText(card) : card.purpose,
-    content: active ? `<div class="key-context"><code class="key-name" translate="no">${esc(card.name)}</code><p class="card-body cc-state">${esc(card.purpose || t("cards.keyWhy"))}</p></div>` +
+    content: active ? `<div class="key-context"><code class="key-name" translate="no">${esc(card.name)}</code>${card.purpose ? "" : `<p class="card-body cc-state">${esc(t("cards.keyWhy"))}</p>`}</div>` +
       (card.state === "failed" ? `<p class="card-body cc-state">${esc(secretStateText(card))}</p>` : "") +
       action + `<p class="card-shield"><span>${esc(t("cards.vault"))}</span></p>` : card.error ? "" : cardDisclosureHTML(`key-${card.id}`, `<p class="card-body">${esc(secretStateText(card))}</p>`),
     actions: active ? "" : action, close, statusInHeading: !!close,

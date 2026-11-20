@@ -83,8 +83,6 @@
 .key-card .sc-form :is(input, .btn) { box-sizing: border-box; height: var(--h-field); min-height: var(--h-field); }
 .key-card .sc-form .btn { flex-shrink: 0; }
 /* A program key that is no secret (#281): one quiet choice under the field, and the least length while a secret one is shorter. */
-.key-card .sc-plain { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; font-size: var(--fs-sm); color: var(--text-2); cursor: pointer; }
-.key-card .sc-plain input { margin: 0; accent-color: var(--text); }
 .key-card .sc-hint { margin: 4px 0 0; font-size: var(--fs-xs); color: var(--text-3); }
 .conversation-card .sc-login { flex-direction: column; }
 .card-shield { display: flex; align-items: start; gap: 6px; font-size: var(--fs-2xs); color: var(--text-3); margin: 0; }

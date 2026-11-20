@@ -205,7 +205,7 @@ describe("a key for a program in a member's computer", () => {
     const html = secretCardHTML(key());
     const text = visible(html);
     document.body.innerHTML = html;
-    expect(document.querySelector(".card-title")?.textContent).toBe("儲存金鑰");
+    expect(document.querySelector(".card-title")?.textContent).toBe("儲存金鑰：價格腳本要呼叫模型");
     expect(document.querySelector(".key-context code")?.textContent).toBe("OPENROUTER_API_KEY");
     expect(document.querySelector(".card-status")?.textContent).toBe(t("cards.inputWaiting"));
     expect(document.querySelector(".sc-field svg")).toBeNull();
@@ -222,16 +222,14 @@ describe("a key for a program in a member's computer", () => {
     expect(html).not.toContain("連結");
   });
 
-  test("a key that may be no secret has one quiet choice under its field, and the least length waits hidden (#281)", () => {
+  test("a key card has no choice of its own under its field, only the least length waiting hidden (#281)", () => {
     document.body.innerHTML = secretCardHTML(key());
-    const choice = document.querySelector<HTMLInputElement>('.key-card .sc-plain input[type="checkbox"][data-secret-plain="k1"]');
-    expect(choice?.checked).toBe(false);
-    expect(document.querySelector(".sc-plain")?.textContent).toBe(t("card.keyPlain"));
+    expect(document.querySelector("[data-secret-plain], .sc-plain, input[type=checkbox]")).toBeNull();
     expect(document.querySelector<HTMLElement>("[data-secret-hint]")?.hidden).toBe(true);
-    expect(document.querySelector(".sc-form .sc-plain")).toBeNull();  // under the row of the field and Save, not in it
+    expect(document.querySelector(".sc-form [data-secret-hint]")).toBeNull();  // under the row of the field and Save, not in it
     expect(visible(secretCardHTML(key({ state: "failed", error: "too_short" })))).toContain(t("card.keyTooShort"));
-    // A connection's secret, a bot's token and a sign-in have no such choice.
-    expect(secretCardHTML(card())).not.toContain("data-secret-plain");
+    // The title says what the key is for, and the purpose is no second line under it.
+    expect(visible(secretCardHTML(key())).split("價格腳本要呼叫模型").length).toBe(2);
   });
 
   test("each state has the one action it can take, as the other secret cards", () => {
