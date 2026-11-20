@@ -338,9 +338,6 @@ class SecretCards:
         if not isinstance(value, str):
             raise invalid_params("value must be text")
         # A program key the owner marked as no secret (a user name, an address): short, and shown where it appears (#281).
-        plain = params.get("plain", False)
-        if type(plain) is not bool or plain and card.kind != "key":
-            raise invalid_params("plain is for a program key, true or false")
         if card.state not in ("pending", "failed"):
             return {"card": card.view(), "saved": False}
         error = ""
@@ -367,7 +364,7 @@ class SecretCards:
                 elif card.kind == "key":
                     if self.logins is None or not hasattr(self.logins, "put_key"):
                         raise ValueError("keys unavailable")
-                    self.logins.put_key(card.member_id, card.server_id, card.name, value, secret=not plain)
+                    self.logins.put_key(card.member_id, card.server_id, card.name, value)
                 else:
                     self._integrations.fill_secret(card.server_id, card.kind, card.secret, value)
             except SecretTooLong:

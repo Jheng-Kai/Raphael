@@ -2,6 +2,14 @@
 
 Connected apps and accounts, the store, skills, shared templates and the cards that set them up. Part of [the product rules](../RULES.md); a rule's ID is unique across every file.
 
+## A private Google connection with a dead token can be disconnected
+
+The owner could never remove a private Google connection whose sign-in had run out: every 中斷連線 failed.
+
+| ID | Date | Rule | Check | Severity | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-GOOGLE-OFF-01 | | Disconnecting the private Google connection revokes its refresh token, and Google answering 400 (the token is dead: its seven days in Testing ran out, the owner removed the access, the client is gone) counts as revoked: the connection, its client ID, secret and refresh token all go. Only a failure that may pass (a 5xx, the network) keeps them for a retry. | pytest | hard | core/tests/test_connectors.py::test_google_disconnect_with_a_token_google_no_longer_knows_still_removes_everything; core/tests/test_connectors.py::test_google_revocation_failure_can_be_retried |
+
 ## Deleting or copying a member leaves the shared skill library alone
 
 With skills in the shared library, every member delete failed half way and every copy took the library's skills as its own (#278).
