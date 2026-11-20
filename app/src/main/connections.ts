@@ -1300,17 +1300,14 @@ export function createConnections(host: ConnectionsHost): Connections {
     for (let waited = 0; login && waited < LOGIN_STOP_MS; waited += 50) await new Promise((resolve) => setTimeout(resolve, 50));
   }
 
-  /** Opens the browser login for a store entry (`catalog_id`) or for a service that must sign in again (`id`). A Composio
-   *  app signed in to `again` takes the place of the row in `replace`, or with none of what the core holds as stopped and
-   *  of the app's only other account: the core chooses, since this window's list may be older than its last read (R-ACCT-04). */
-  /** A connected app whose store entry is not one click (a key, a developer app, the private Google): signing it in again or
-   *  adding an account is done with Raphael as connecting it was. */
   /** Hands an app to Raphael (the host's way), or drafts the same words where the host has none. */
   function askConnect(slug: string, name: string): void {
     if (host.askConnect) host.askConnect(slug, name);
     else host.tryPrompt(slug === OWN_GOOGLE ? t("store.googleSetUp") : t("store.setUpInChat", { p0: name }));
   }
 
+  /** A connected app whose store entry is not one click (a key, a developer app): signing it in again or adding an account
+   *  is done with Raphael as connecting it was. */
   function chatGroup(group: { id: string; catalog_id?: string | null; source?: string | null }): boolean {
     // The private Google, once connected, keeps its client: signing it in again is one click.
     if (group.source === "google" || group.id === OWN_GOOGLE) return false;
@@ -1318,6 +1315,9 @@ export function createConnections(host: ConnectionsHost): Connections {
     return !!entry && inChat(entry);
   }
 
+  /** Opens the browser login for a store entry (`catalog_id`) or for a service that must sign in again (`id`). A Composio
+   *  app signed in to `again` takes the place of the row in `replace`, or with none of what the core holds as stopped and
+   *  of the app's only other account: the core chooses, since this window's list may be older than its last read (R-ACCT-04). */
   async function signIn(target: { catalog_id: string } | { id: string }, name: string, again: boolean, replace: string[] = []): Promise<void> {
     const key = "catalog_id" in target ? target.catalog_id : target.id;
     // One sign-in waits at a time, and it holds no other app back: the next one ends it (the core gives back the account it made).

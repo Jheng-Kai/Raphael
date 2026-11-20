@@ -8506,7 +8506,10 @@ export function checkRendered(name, context = {}) {
   }
   if (name === "connect-apps-connected") {
     const view = connectModal().querySelector('.cs-connected'), back = view?.querySelector('[data-conn="back"]');
-    require(visible(view) && visible(back) && back.tagName === 'BUTTON' && back.getAttribute('aria-label') === '返回', "the connected list has a back chevron at the top left");
+    // Its title is the way back: one button of the chevron and 已連結 (R-APPS-02).
+    require(visible(view) && visible(back) && back.tagName === 'BUTTON' && back.matches('.cs-back-title') && back.textContent.trim() === '已連結' && back.querySelector('svg'), "the connected list's title, with its chevron, is the button back");
+    const box = back.getBoundingClientRect(), x = connectModal().querySelector('.modal-x').getBoundingClientRect(), glyph = back.querySelector('svg').getBoundingClientRect();
+    require(Math.abs((box.top + box.bottom) / 2 - (x.top + x.bottom) / 2) <= 1 && Math.abs(glyph.left - connectModal().querySelector('.cs').getBoundingClientRect().left) <= 3, "it stands on the ✕'s line, its chevron on the content's left edge");
     require(!view.querySelector('.cs-chips, #conn-search') && view.querySelector('.cs-top-t')?.textContent === '已連結', "it is the list alone, under its own title");
     const rows = [...view.querySelectorAll('.cs-linked')];
     require(rows.length > 0 && rows.every(row => visible(row.querySelector('.cs-tile')) && row.querySelector('[role="switch"]')), "each row has its tile, its name and its switch");
@@ -8628,7 +8631,7 @@ export function checkRendered(name, context = {}) {
     require(parseFloat(border.borderTopWidth) === 1 && border.borderTopColor === colourOf('borderTopColor', '--float-edge') && parseFloat(border.borderTopLeftRadius) > 4, "the card has a 1 px edge on the dialog surface, rounded");
     const facts = Object.fromEntries(rows.map(row => [row.querySelector('.k').textContent, row.querySelector('.v').textContent]));
     if (name === "connect-app-oauth") require(facts['登入方式'] === 'OAuth' && facts['類別'] && facts['提供者'], `the facts we have: ${JSON.stringify(facts)}`);
-    if (name === "connect-app-key") require(facts['登入方式'] === 'API 金鑰' && visible(page.querySelector('.cs-needs')), `the key page says how it signs in, once (${JSON.stringify(facts)})`);
+    if (name === "connect-app-key") require(facts['登入方式'] === 'API 金鑰' && !page.querySelector('.cs-needs'), `the key page says how it signs in in its info and asks nothing more (${JSON.stringify(facts)})`);
     const body = modal.querySelector('.modal-body');
     require(body.scrollWidth <= body.clientWidth + 1, "the page never scrolls sideways");
     return { check: name, facts };
@@ -10225,11 +10228,13 @@ export function checkRendered(name, context = {}) {
     return { check: name, measure: Math.round(measure), column: Math.round(column) };
   }
   if (name === "store-in-chat") {
-    // More than a sign-in or one key is set up in the conversation: 加入 leaves for it with the owner's words.
-    const box = document.querySelector(".page-agent:not([hidden]) .composer textarea");
-    require(visible(box) && /^幫我連接 \S/.test(box.value), `the composer holds the owner's words to connect it (${box?.value})`);
+    // An app that is not one click is handed to Raphael (R-CONNECT-CHAT-02): his conversation opens, and the owner's words go
+    // to him with the intent connect-app:<slug>; nothing is drafted, no form opens, and nothing is connected before he asks.
+    const sent = window.__look.calls.filter(call => call.command === "agent_ask_text").at(-1);
+    require(sent && /^幫我連接/.test(sent.text) && /^connect-app:[a-z0-9_-]+$/.test(sent.intent ?? "") && !sent.memberId, `Raphael was sent the owner's words with the intent (${JSON.stringify(sent && { text: sent.text, intent: sent.intent, member: sent.memberId })})`);
+    require(visible(document.querySelector(".page-agent:not([hidden]) .composer")) && !document.querySelector(".modal:not([hidden]) .settings-pane, .modal-backdrop:not([hidden])"), "Raphael's conversation is on screen, Settings closed");
     require(!document.querySelector(".cn-setup-dialog, #conn-url"), "no form was opened");
-    require(!window.__look.calls.some(call => /^(integrations\.(add|connect)|connectors\.connect)$/.test(call.method)), "nothing was connected before the member is asked");
+    require(!window.__look.calls.some(call => /^(integrations\.(add|connect)|connectors\.connect)$/.test(call.method)), "nothing was connected before Raphael is asked");
     return { check: name };
   }
   if (name === "routine-asked") {
@@ -10474,20 +10479,12 @@ export function checkRendered(name, context = {}) {
     return { check: name, rows: 3 };
   }
   if (name === "plugins-store-needs-page") {
-    const line = document.querySelector('.cs-page .cs-needs'), join = document.querySelector('.cs-page [data-conn="join"]');
-    require(visible(line) && line.textContent.includes("API 金鑰") && line.textContent.includes("Acme Ledger"), `the page says what the app needs (${line?.textContent})`);
+    // The page asks nothing of the owner (Raphael explains it); its info still says how the app signs in.
+    const join = document.querySelector('.cs-page [data-conn="join"]');
+    require(!document.querySelector('.cs-page .cs-needs'), "no line asks the owner for a key on the page");
     const way = [...document.querySelectorAll('.cs-page .cs-info-row')].find(row => row.querySelector('.k').textContent === '登入方式');
     require(way?.querySelector('.v').textContent === 'API 金鑰', "its 登入方式 row says API 金鑰");
     require(join && !join.disabled && join.textContent.includes("連結"), "連結 on the page is live");
-    return { check: name, words: line.textContent };
-  }
-  if (name === "setup-added") {
-    const key = "zk-look-0123456789", calls = window.__look.calls;
-    require(!document.querySelector('.cn-setup-dialog'), "the form closed once the app was added");
-    const sent = calls.filter(call => call.method === "connectors.connect");
-    require(sent.length === 1 && sent[0].params.fields.generic_api_key === key && sent[0].params.toolkit === "acme-ledger", "the key crossed one call, connectors.connect, and no other");
-    require(!JSON.stringify(calls.filter(call => call.method !== "connectors.connect")).includes(key) && !document.body.textContent.includes(key), "the key is on no page text and in no other call");
-    require(visible(document.querySelector('.cs-card:has([data-conn="open-store"][data-id="acme-ledger"]) .cs-state')), "the app is connected: its row says so");
     return { check: name };
   }
   if (name === "card-setup-form") {
@@ -10497,58 +10494,6 @@ export function checkRendered(name, context = {}) {
     require(slot.querySelector('.card-detail').hidden && visible(slot.querySelector('.card-shield')), 'guide starts folded and storage is explained');
     require(!JSON.stringify(window.__look.calls).includes(field.value), 'typing sent no credential');
     return {check:name};
-  }
-  if (name.startsWith("setup-")) {
-    // The form that asks for an app's own key, or its own developer app (connection-setup.ts).
-    const key = "zk-look-0123456789", calls = window.__look.calls;
-    const dialog = document.querySelector('.cn-setup-dialog'), frame = dialog.getBoundingClientRect();
-    require(visible(dialog), "the form is open");
-    require(frame.left >= 0 && frame.top >= 0 && frame.right <= window.innerWidth + 1 && frame.bottom <= window.innerHeight + 1, "the form fits the window");
-    const add = dialog.querySelector('[data-dlg="add"]'), cancel = dialog.querySelector('[data-dlg="cancel"]');
-    for (const button of [add, cancel]) {
-      const box = button.getBoundingClientRect();
-      require(visible(button) && box.top >= frame.top && box.bottom <= frame.bottom + 1 && box.right <= frame.right + 1, "the footer actions are inside the form");
-    }
-    const body = dialog.querySelector('.mb-dlg-body');
-    require(body.scrollWidth <= body.clientWidth + 1, "nothing in the form runs sideways");
-    const status = dialog.querySelector('[data-setup-status]'), alertText = status?.querySelector('[role="alert"]')?.textContent ?? "";
-    const input = dialog.querySelector('[data-setup-field]');
-    const seen = JSON.stringify(calls.filter(call => !["connectors.connect", "integrations.card_connect"].includes(call.method)));
-    require(!document.body.textContent.includes(key) && !seen.includes(key), "the key is on no page text and in no call but the one that adds the app");
-    if (["setup-key", "card-setup-form"].includes(name)) {
-      require(dialog.querySelector('.mb-dlg-head h2').textContent.includes("Acme Ledger"), "the form is named for the app");
-      require(dialog.querySelector('.cn-lead').textContent.includes("API 金鑰") && dialog.querySelector('.cn-keep').textContent.includes("Composio"), "it says what is needed and that Composio keeps it");
-      const fields = [...dialog.querySelectorAll('[data-setup-field]')];
-      require(fields.length === 1 && fields[0].type === "password" && fields[0].dataset.setupField === "generic_api_key" && fields[0].value === key, "exactly the key the app asks for, in a masked field");
-      require(visible(dialog.querySelector('[data-dlg="guide"]')) && dialog.querySelectorAll('.cn-steps li').length === 3, "it says where to get it, in plain steps");
-      require(!add.disabled && dialog.querySelectorAll('button:disabled').length === 0, "no control in the form is dead");
-      require(!calls.some(call => ["connectors.connect", "integrations.card_connect"].includes(call.method)), "nothing was sent before 加入");
-      if (name === "card-setup-form") require(!(document.querySelector('.composer textarea')?.value ?? "").includes(key), "nothing was typed into the chat");
-    }
-    if (name === "setup-noguide") {
-      const where = dialog.querySelector('.cn-where');
-      require(where.textContent.includes("目錄沒有附上取得方式") && visible(where.querySelector('[data-dlg="home"]')) && !where.querySelector('[data-dlg="guide"]'), "no guide: it says so and offers the service's own page");
-    }
-    if (name === "setup-own-app") {
-      require(dialog.querySelector('.cn-lead').textContent.includes("開發者應用程式") && dialog.querySelector('.cn-keep').textContent.includes("Client ID"), "it says the service needs the owner's own developer app");
-      require(dialog.querySelector('.cn-redirect input').value === "https://backend.composio.dev/api/v1/auth-apps/add" && visible(dialog.querySelector('[data-dlg="copy"]')), "it shows the address to register and a button to copy it");
-      const id = dialog.querySelector('[data-setup-field="client_id"]'), secret = dialog.querySelector('[data-setup-field="client_secret"]');
-      require(id.type === "text" && id.value === "look-client-id" && secret.type === "password" && secret.value === key, "the id is plain and the secret is masked");
-      require(visible(dialog.querySelector('[data-dlg="guide"]')), "it links to the provider's developer portal");
-    }
-    if (name === "setup-rejected") {
-      require(alertText.includes("沒有接受這把金鑰"), `the form says the key was not accepted (${alertText})`);
-      require(input.value === "" && !input.disabled && !add.disabled && add.textContent.trim() === "加入", "the masked field is empty and the form can try again");
-      require(calls.filter(call => call.method === "connectors.connect").length === 1, "one try reached the core");
-    }
-    if (name === "setup-composio-key") {
-      require(alertText.includes("Composio 金鑰"), `the form says the Composio key is the problem (${alertText})`);
-      require(visible(dialog.querySelector('[data-dlg="composio"]')) && dialog.querySelector('[data-dlg="composio"]').textContent.includes("加入 Composio 金鑰"), "it offers the place to add it");
-    }
-    if (name === "setup-plan-failed") {
-      require(dialog.querySelector('.cn-setup').textContent.includes("讀不到 Acme Ledger 需要什麼") && visible(dialog.querySelector('[data-dlg="retry"]')), "it says it could not read what the app needs and offers to try again");
-    }
-    return { check: name, alert: alertText };
   }
   if (name === "card-setup-sent" || name === "card-key-rejected" || name === "card-composio-missing") {
     const key = "zk-look-0123456789", calls = window.__look.calls;

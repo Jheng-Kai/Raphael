@@ -110,7 +110,7 @@ Scene changes of the same round: the scenes of the connected list start with `[d
 `plugins-detail`, `connections-hover`, `connected-apps-only`, `connections-app-switch`, `connector-*`); the scenes of the apps start
 on the view (`plugins-store*`, `store-n8n`, `plugins-setup-*`); `plugins-store-wheel` and `missing-store-repair` are gone (nothing scrolls
 sideways, and the notice that sent the owner to a store tab is gone with the tab). `plugins-store-needs` now proves a row says
-nothing of what an app asks for; `plugins-store-needs-page` proves the page says it once.
+nothing of what an app asks for; `plugins-store-needs-page` proves its page asks nothing either, its info row saying how it signs in, and `plugins-setup-key` that 連結 hands it to Raphael.
 
 Settings > Connections is the only connected-app entry.
 The sidebar has no app entry or badge. The installed tab retains the shared inventory
@@ -785,7 +785,7 @@ among them) and need a developer app of the owner's own. Nothing in the store is
   stored, so a wrong key shows only when a tool runs.
 
 ```powershell
-npm run look -- plugins-store-needs plugins-store-needs-page plugins-setup-key plugins-setup-noguide plugins-setup-own-app plugins-setup-added plugins-setup-rejected plugins-setup-composio-key plugins-setup-plan-failed connector-key connector-app connector-key-form connector-key-sent connector-key-rejected connector-failed-continued --theme both --width 1120,720,1920x1080
+npm run look -- plugins-store-needs plugins-store-needs-page plugins-setup-key plugins-setup-own-app connector-key connector-app connector-key-form connector-key-sent connector-key-rejected connector-failed-continued --theme both --width 1120,720,1920x1080
 ```
 
 `plugins-store-needs` requires the words on each row and no disabled 加入; the `setup-*` checks require masked

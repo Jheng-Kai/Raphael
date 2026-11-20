@@ -1812,6 +1812,9 @@ describe("what the dialog does", () => {
 
   test("連結 on an app that asks for a key hands it to Raphael with its slug, and signing it in again does too, a sign-in stays one click", async () => {
     api.integrationsCatalog.mockResolvedValue({ services: [...CATALOG, service("acme", "Acme", { needs: "key" }), service("linear", "Linear", { needs: "sign_in" })] });
+    // Acme is connected, but its sign-in ran out.
+    api.toolsetsList.mockResolvedValue({ groups: [{ ...notes, id: "ac01", name: "Acme", catalog_id: "acme", status: "error", error: "auth" }] });
+    api.integrationsConnect.mockResolvedValue({ connected: true, server: { id: "li01" } });
     const askConnect = vi.fn();
     const c = createConnections({ ...host, askConnect });
     await c.load();
@@ -1819,12 +1822,18 @@ describe("what the dialog does", () => {
     expect(askConnect).toHaveBeenLastCalledWith("acme", "Acme");
     c.click(button("join", { id: "google" }));
     expect(askConnect).toHaveBeenLastCalledWith("google", "Google（私人連接）");
+    c.click(button("relogin", { id: "ac01" }));
+    expect(askConnect).toHaveBeenLastCalledWith("acme", "Acme");
+    expect(askConnect).toHaveBeenCalledTimes(3);
     expect(api.connectorsConnect).not.toHaveBeenCalled();
+    expect(api.integrationsConnect).not.toHaveBeenCalled();
     expect(host.tryPrompt).not.toHaveBeenCalled();
     expect(c.view().form).toBeNull();
     // A direct sign-in keeps its one click.
     c.click(button("join", { id: "linear" }));
-    expect(askConnect).toHaveBeenCalledTimes(2);
+    await settle();
+    expect(api.integrationsConnect).toHaveBeenCalledWith({ catalog_id: "linear" });
+    expect(askConnect).toHaveBeenCalledTimes(3);
   });
 
   // The owner's own Google is reachable where the Google row is.
