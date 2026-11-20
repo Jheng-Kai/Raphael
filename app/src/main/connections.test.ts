@@ -48,7 +48,7 @@ import {
 import { STORE_GROUPS } from "./store-finder";
 import { ico, toaster } from "./ui";
 import { genericGlyph, genericMark } from "./service-mark";
-import { confirmDelete } from "./member-dialogs";
+import { confirmDelete, openDialog } from "./member-dialogs";
 
 const browsers: Window[] = [];
 afterEach(async () => {
@@ -2023,23 +2023,28 @@ describe("what the dialog does", () => {
         api.connectorsConnect.mockResolvedValueOnce({ connected: true, connector: gmail([{ id: "a1", status: "ACTIVE", label: "Work" }, { id: "a10", status: "ACTIVE", label: "公司信箱" }]) });
         c.click(items[0]!);
         await settle();
-        expect(api.connectorsConnect).toHaveBeenCalledWith("gmail", undefined, ["a9"]);
-        expect(document.querySelector('[data-account-name]')).toBeNull();  // it keeps the name it had
+        expect(api.connectorsConnect).toHaveBeenCalledWith("gmail", undefined, ["a9"], true);
+        expect(openDialog).not.toHaveBeenCalled();  // it keeps the name it had
       } finally { await done(); c.reset(); }
     });
 
-    test("重新登入 on the app takes the place of every account that stopped, and 加入另一個帳號 replaces nothing", async () => {
-      const c = await openGmail([{ id: "a1", status: "ACTIVE" }, { id: "a8", status: "FAILED" }, { id: "a9", status: "REVOKED" }, { id: "a3", status: "INITIATED" }]);
-      api.connectorsConnect.mockReturnValue(new Promise(() => undefined));
+    test("重新登入 on the app lets the core choose what it replaces and asks no new name, while 加入另一個帳號 replaces nothing and asks one", async () => {
+      // The list here may be older than the core's last read (it still says connected): the core decides, not this list.
+      vi.mocked(openDialog).mockClear();
+      const c = await openGmail([{ id: "a1", status: "ACTIVE", label: "Jack" }]);
+      api.connectorsConnect.mockResolvedValueOnce({ connected: true, connector: gmail([{ id: "a2", status: "ACTIVE", label: "Jack" }]) });
       c.click(button("relogin", { id: "composio:gmail" }));
       await settle();
-      expect(api.connectorsConnect).toHaveBeenLastCalledWith("gmail", undefined, ["a8", "a9"]);
-      await c.click(button("cancel-login"));
+      expect(api.connectorsConnect).toHaveBeenLastCalledWith("gmail", undefined, [], true);
+      expect(openDialog).not.toHaveBeenCalled();
       c.reset();
       const d = await openGmail([{ id: "a1", status: "ACTIVE" }, { id: "a9", status: "EXPIRED" }]);
+      vi.mocked(openDialog).mockReturnValueOnce({ el: { querySelector: () => null } } as unknown as ReturnType<typeof openDialog>);
+      api.connectorsConnect.mockResolvedValueOnce({ connected: true, connector: gmail([{ id: "a1", status: "ACTIVE" }, { id: "a9", status: "EXPIRED" }, { id: "a3", status: "ACTIVE" }]) });
       d.click(button("add-account", { id: "composio:gmail" }));
       await settle();
-      expect(api.connectorsConnect).toHaveBeenLastCalledWith("gmail", undefined, []);
+      expect(api.connectorsConnect).toHaveBeenLastCalledWith("gmail", undefined, [], false);
+      expect(openDialog).toHaveBeenCalledWith(expect.objectContaining({ title: "帳號名稱" }));
       d.reset();
     });
 
@@ -2049,7 +2054,7 @@ describe("what the dialog does", () => {
       c.relogin("composio:gmail");
       await settle();
       expect(c.view().open).toEqual({ kind: "group", id: "composio:gmail" });
-      expect(api.connectorsConnect).toHaveBeenLastCalledWith("gmail", undefined, ["a9"]);
+      expect(api.connectorsConnect).toHaveBeenLastCalledWith("gmail", undefined, [], true);
       c.relogin("composio:nothing");
       c.reset();
     });

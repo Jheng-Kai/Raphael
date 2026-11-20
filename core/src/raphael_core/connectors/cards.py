@@ -739,11 +739,10 @@ class ConnectorCards:
                         if method == "connectors.connect" and fields:
                             params = {**params, "fields": fields}
                         if method == "connectors.connect":
-                            # Signing in again takes the place of the accounts that stopped working (connectors `_replace`).
-                            dead = [a["id"] for a in getattr(self._connectors.store.connectors.get("composio:" + params["toolkit"]), "accounts", [])
-                                    if a["status"] != "ACTIVE"]
-                            if dead:
-                                params = {**params, "replace": dead}
+                            # A card for an app that has accounts signs in again: the core takes the place of the ones that
+                            # stopped, and of the app's only one even if Composio still reads it as connected (connectors `_replace`).
+                            if getattr(self._connectors.store.connectors.get("composio:" + params["toolkit"]), "accounts", None):
+                                params = {**params, "again": True}
                         fields = None
                         result = await self._router.call(method, params)
                         params = None
