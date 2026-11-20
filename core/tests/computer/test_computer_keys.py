@@ -16,7 +16,7 @@ from raphael_core.computer.vault_entries import VaultEntries, key_name_ok
 from raphael_core.computer.vm import Docker, Result, VmError, exec_args
 from raphael_core.computer.vm_tools import EXEC, VmTools, vm_scope
 from raphael_core.connectors.secret_cards import SecretCards
-from raphael_core.integrations.vault import SecretTooLong
+from raphael_core.integrations.vault import CredentialVault, SecretTooLong
 from raphael_core.router import Router
 from raphael_core.services.attachment_store import AttachmentStore
 
@@ -30,6 +30,9 @@ class Vault:
     def get(self, key):
         return self.values.get(key)
 
+    def has(self, key):
+        return key in self.values
+
     def set(self, key, value):
         self.values[key] = value
 
@@ -39,6 +42,16 @@ class Vault:
 
 def make_key():
     return "sk-or-v1-" + secrets.token_hex(16)
+
+
+def legacy_key(entries, name, scope, value):
+    identifier = secrets.token_hex(8)
+    credential = "computer-entry:" + identifier
+    entries.vault.set(credential, json.dumps({"value": value}))
+    with entries.conn:
+        entries.conn.execute("INSERT INTO vault_entries VALUES (?,?,?,?,?,?,?)",
+                             (identifier, "key", name, "program", "", json.dumps(scope), credential))
+    return identifier, credential
 
 
 def everything(conn, *extra):
@@ -79,6 +92,77 @@ def test_a_key_belongs_to_its_member_unless_the_owner_shares_it(conn):
     with conn:
         conn.execute("UPDATE vault_entries SET members='\"all\"' WHERE id=?", (identifier,))
     assert entries.key_values(4, ["OPENROUTER_API_KEY"])[0] == {"OPENROUTER_API_KEY": value}
+
+
+@pytest.mark.parametrize("scope", ["all", [3, 4]])
+def test_replacing_a_shared_key_keeps_its_scope_and_leaves_other_scopes_alone(conn, scope):
+    vault = Vault()
+    entries = VaultEntries(vault, conn=conn)
+    name = "PROGRAM_KEY"
+    _, stale = legacy_key(entries, name, scope, make_key())
+    other, other_credential = legacy_key(entries, name, [5], make_key())
+    replacement = make_key()
+    current = entries.put_key(3, name, "program", replacement)
+    assert {row["id"]: row["members"] for row in entries.entries()} == {current: scope, other: [5]}
+    assert not vault.has(stale) and vault.has(other_credential)
+    found, missing = entries.key_values(4, [name])
+    assert found.get(name) == replacement and not missing
+
+
+def test_startup_keeps_the_newest_per_name_and_scope_and_removes_the_old_credentials(conn, caplog):
+    vault = Vault()
+    entries = VaultEntries(vault, conn=conn)
+    older = make_key()
+    _, private_old = legacy_key(entries, "PROGRAM_KEY", [3], older)
+    _, shared_old = legacy_key(entries, "PROGRAM_KEY", [3, 4], older)
+    private = legacy_key(entries, "PROGRAM_KEY", [3], make_key())
+    shared = legacy_key(entries, "PROGRAM_KEY", [4, 3], make_key())
+    everyone = legacy_key(entries, "PROGRAM_KEY", "all", make_key())
+    other = legacy_key(entries, "OTHER_KEY", [3], make_key())
+    with caplog.at_level("INFO"):
+        restarted = VaultEntries(vault, conn=conn)
+        VaultEntries(vault, conn=conn)
+    survivors = (private, shared, everyone, other)
+    assert {row["id"] for row in restarted.entries()} == {identifier for identifier, _ in survivors}
+    assert not vault.has(private_old) and not vault.has(shared_old)
+    assert all(vault.has(credential) for _, credential in survivors)
+    assert caplog.text.count("Duplicate vault keys removed: 2") == 1 and older not in caplog.text
+
+
+def test_startup_can_retry_removing_a_duplicate_after_the_vault_refuses(conn, caplog, monkeypatch):
+    vault = Vault()
+    entries = VaultEntries(vault, conn=conn)
+    old_id, old = legacy_key(entries, "PROGRAM_KEY", [3], make_key())
+    newest, _ = legacy_key(entries, "PROGRAM_KEY", [3], make_key())
+
+    def refuse(_):
+        raise RuntimeError("Deletion refused")
+
+    with caplog.at_level("INFO"), monkeypatch.context() as patch:
+        patch.setattr(vault, "delete", refuse)
+        restarted = VaultEntries(vault, conn=conn)
+        assert vault.has(old) and {row["id"] for row in restarted.entries()} == {old_id, newest}
+        assert restarted.key_entry(3, "PROGRAM_KEY")["id"] == newest
+    assert "Duplicate vault keys removed: 0; pending retry: 1" in caplog.text
+    assert [row["id"] for row in VaultEntries(vault, conn=conn).entries()] == [newest] and not vault.has(old)
+
+
+def test_member_key_removal_leaves_other_scopes_and_names(conn):
+    vault = Vault()
+    entries = VaultEntries(vault, conn=conn)
+    _, old = legacy_key(entries, "PROGRAM_KEY", [3], make_key())
+    peer = legacy_key(entries, "PROGRAM_KEY", [4], make_key())
+    other = legacy_key(entries, "OTHER_KEY", [3], make_key())
+    shared = legacy_key(entries, "SHARED_KEY", [3, 4], make_key())
+    current_id, current = legacy_key(entries, "PROGRAM_KEY", [3], make_key())
+    assert not entries.remove_member_key(5, "PROGRAM_KEY", expected=current_id)
+    assert not entries.remove_member_key(3, "SHARED_KEY", expected=shared[0])
+    assert not entries.remove_member_key(3, "PROGRAM_KEY", expected=peer[0])
+    assert entries.remove_member_key(3, "PROGRAM_KEY", expected=current_id)
+    assert not entries.remove_member_key(3, "PROGRAM_KEY", expected=current_id)
+    assert not vault.has(old) and not vault.has(current)
+    assert {row["id"] for row in entries.entries()} == {peer[0], other[0], shared[0]}
+    assert all(vault.has(credential) for _, credential in (peer, other, shared))
 
 
 @pytest.mark.parametrize("name", ["PATH", "home", "LD_PRELOAD", "BASH_ENV", "RAPHAEL_X", "VNC_PW", "bad name", "A=B", "1KEY", "", "x" * 65, None, 5])
@@ -277,6 +361,24 @@ async def test_vm_exec_gives_a_saved_key_to_that_one_command_only(desktop, tmp_p
     assert value not in result.text and value not in everything(conn, result.text)
 
 
+async def test_vm_exec_injects_only_the_newest_accessible_key(desktop, tmp_path, conn):
+    _, runtime, entries, hub, tool = await hub_with(desktop, tmp_path, conn)
+    name = "PROGRAM_KEY"
+    value = make_key()
+    legacy_key(entries, name, [0], make_key())
+    legacy_key(entries, name, [0], make_key())
+    _, credential = legacy_key(entries, name, "all", value)
+    legacy_key(entries, name, [4], make_key())
+    with vm_scope(("turn", 0, 7), turn_id=7):
+        result = await hub.call(tool.key, {"command": "run program", "keys": [name]}, approver="auto")
+        entries.vault.delete(credential)
+        missing = await hub.call(tool.key, {"command": "run again", "keys": [name]}, approver="auto")
+    assert result.ok and missing.kind == "key_not_saved"
+    (_, kwargs), = runs_of(runtime, "run program")
+    assert kwargs["env"].get(name) == value
+    assert not runs_of(runtime, "run again")
+
+
 async def test_what_a_command_or_a_later_read_returns_has_the_value_replaced(desktop, tmp_path, conn):
     vm, runtime, entries, hub, tool = await hub_with(desktop, tmp_path, conn)
     value = make_key()
@@ -339,9 +441,9 @@ def test_the_keys_parameter_is_short_and_bounded():
 
 
 class CardRig:
-    def __init__(self, conn):
+    def __init__(self, conn, vault=None):
         self.conn = conn
-        self.vault = Vault()
+        self.vault = Vault() if vault is None else vault
         self.entries = VaultEntries(self.vault, conn=conn)
         self.router = Router()
         self.events, self.resumed = [], []
@@ -353,11 +455,15 @@ class CardRig:
             return type("Outcome", (), {"ok": True, "made": ()})()
         self.cards.resume = resume
         self.cards.register(self.router)
-        self.turn = AgentHistory(conn).add(session_id="s", question="q", route="answer", prefix="", text="", status="running",
-                                           source="app", member_id=0)
+        self.new_turn()
 
-    def show(self, name="OPENROUTER_API_KEY", purpose="the price script", member=0):
-        return self.cards.show_key(turn_id=self.turn, member_id=member, conversation_id=None, name=name, purpose=purpose, language="zh-TW")
+    def new_turn(self):
+        self.turn = AgentHistory(self.conn).add(session_id="s", question="q", route="answer", prefix="", text="", status="running",
+                                               source="app", member_id=0)
+
+    def show(self, name="OPENROUTER_API_KEY", purpose="the price script", member=0, *, replace=False):
+        return self.cards.show_key(turn_id=self.turn, member_id=member, conversation_id=None, name=name, purpose=purpose,
+                                   language="zh-TW", replace=replace)
 
     async def save(self, card, value):
         result = await self.router.call("integrations.card_save", {"id": card.id, "value": value})
@@ -376,6 +482,23 @@ async def test_the_owner_pastes_a_key_on_the_card_and_only_the_vault_gets_it(con
     assert value not in everything(rig.conn, rig.events, rig.cards.views([rig.turn]), result)
     # Asked again, it is already saved: no second card.
     assert rig.show() is None
+
+
+async def test_saving_a_replacement_card_keeps_one_new_value_and_deletes_the_old_keyring_item(conn, memory_keyring):
+    rig = CardRig(conn, CredentialVault())
+    name = "PROGRAM_KEY"
+    original, replacement = make_key(), make_key()
+    result, _ = await rig.save(rig.show(name), original)
+    assert result["saved"]
+    credential = rig.entries.key_entry(0, name)["credential"]
+    rig.new_turn()
+    result, _ = await rig.save(rig.show(name, replace=True), replacement)
+    assert result["saved"] and len(rig.entries.entries()) == 1
+    assert not rig.vault.has(credential)
+    found, missing = rig.entries.key_values(0, [name])
+    assert found.get(name) == replacement and not missing
+    output = everything(conn, rig.events, result)
+    assert original not in output and replacement not in output
 
 
 @pytest.mark.parametrize("value,error", [("short", "invalid"), ("with space inside-but-ok-" + "k" * 4, None), ("k" * 900, "too_long"), ("ctrl\x07-key-value", "invalid")])

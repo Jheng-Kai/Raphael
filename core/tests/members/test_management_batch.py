@@ -124,6 +124,34 @@ async def test_one_change_keeps_its_own_card_of_one_line(setup, client):
     assert not team.members.member_exists(only.id)
 
 
+@pytest.mark.parametrize("decision", ["deny", "approve", "replaced_before_approval"])
+async def test_a_non_primary_members_key_removal_requires_owner_yes_for_that_revision_even_in_bypass(setup, client, decision):
+    from raphael_core.brain.settings import SettingsStore
+    from raphael_core.computer.vault_entries import VaultEntries
+    from raphael_core.connectors.secret_cards import SecretCards
+    from raphael_core.integrations.vault import MemoryVault
+
+    rig, team = setup
+    speaker = member(team, name="Program operator")
+    SettingsStore(rig.conn).set("action_mode", "bypass")
+    vault = VaultEntries(MemoryVault(), conn=rig.conn)
+    rig.service._secret_cards = SecretCards(rig.conn, None)
+    rig.service._secret_cards.logins = vault
+    name = "PROGRAM_KEY"
+    vault.put_key(speaker.id, name, "program", "synthetic-fixture")
+    credential = vault.key_entry(speaker.id, name)["credential"]
+    client.chats = [chat("", use("remove_key", {"key": name})), live_said("Waiting."), live_said("Done.")]
+    asked = await typed(rig, "Delete my expired program key.", speaker.id)
+    assert asked["status"] == "confirm" and asked["confirm"]["tier"] == "T3"
+    assert name in asked["confirm"]["text"] and vault.vault.has(credential)
+    if decision == "replaced_before_approval":
+        vault.put_key(speaker.id, name, "program", "synthetic-replacement")
+        credential = vault.key_entry(speaker.id, name)["credential"]
+    await rig.confirm(asked["confirm"]["id"], approved=decision != "deny")
+    assert vault.vault.has(credential) is (decision != "approve")
+    assert (vault.key_entry(speaker.id, name) is None) is (decision == "approve")
+
+
 def test_the_same_change_proposed_twice_is_one_line(setup):
     operations = [{"name": "member_delete", "arguments": {"id": 7}}] * 2
     seen = {action_digest(op["name"], op["arguments"]) for op in operations}

@@ -86,6 +86,12 @@ _ROWS = {
         "Excluir a rotina e seu agendamento", "Eliminare la routine e la sua pianificazione",
         "Удалить регулярную задачу и её расписание", "Xóa tác vụ định kỳ và lịch của nó", "ลบงานประจำและกำหนดเวลา",
         "Hapus rutinitas beserta jadwalnya", "Rutini ve zamanlamasını sil"),
+    "Delete this member's private program key": (
+        "删除此成员的私有程序密钥", "이 멤버의 개인 프로그램 키 삭제", "Eliminar la clave privada de programa de este miembro",
+        "Supprimer la clé de programme privée de ce membre", "Den privaten Programmschlüssel dieses Mitglieds löschen",
+        "Excluir a chave privada de programa deste membro", "Eliminare la chiave privata del programma di questo membro",
+        "Удалить личный ключ программы этого участника", "Xóa khóa chương trình riêng của thành viên này",
+        "ลบคีย์โปรแกรมส่วนตัวของสมาชิกนี้", "Hapus kunci program pribadi anggota ini", "Bu üyenin özel program anahtarını sil"),
     "Disconnect and revoke its authorization": (
         "断开连接并撤销授权", "연결을 끊고 인증 취소", "Desconectar y revocar su autorización",
         "Déconnecter et révoquer son autorisation", "Trennen und die Autorisierung widerrufen",

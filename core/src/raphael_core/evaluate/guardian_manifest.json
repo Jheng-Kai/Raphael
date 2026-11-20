@@ -81,6 +81,10 @@
         "secure_save"
       ]
     },
+    "raphael/core/remove_key": {
+      "scenario_ids": ["S15.key-removal"],
+      "expected_assertions": ["approved_key_removal"]
+    },
     "raphael/core/email_draft": {
       "scenario_ids": [
         "S05.draft-handoff"

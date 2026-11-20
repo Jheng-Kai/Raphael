@@ -46,7 +46,7 @@ from ..computer.tools import GATE_TIERS as COMPUTER_TIERS
 from ..integrations.audit import AuditLog
 from ..protocol import RpcError
 from .commands import COMMANDS
-from .harness_tools import TIERS as HARNESS_TIERS
+from .harness_tools import REMOVE_KEY, TIERS as HARNESS_TIERS
 from .plugins import PluginHub, PluginResult
 from .ledger import Ledger
 from .policy import Action, Approval, NotApproved, Tier, ToolRegistry, UnknownTool, action_digest
@@ -127,7 +127,7 @@ class ToolGate:
         from ..management import destructive, background_requires_approval
         retention = self._settings.get("history_retention_days") if self._settings else None
         return (self.data_floor.access(name, arguments) == "read" or background_requires_approval(name, arguments)
-                or name.endswith("/fill_card") or name == "routine_delete" or name == "management_batch"
+                or name.endswith("/fill_card") or name in ("routine_delete", REMOVE_KEY, "management_batch")
                 or destructive(name, arguments, retention))
 
     @property

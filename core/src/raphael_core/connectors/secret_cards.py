@@ -271,9 +271,9 @@ class SecretCards:
         return reference, [self.store.open(turn_id=turn_id, member_id=member_id, conversation_id=conversation_id,
             server_id=reference, kind="login", secret="login", name=site, language=language, done=done)]
 
-    def show_key(self, *, turn_id, member_id, conversation_id, name, purpose, language, done=()):
+    def show_key(self, *, turn_id, member_id, conversation_id, name, purpose, language, replace=False, done=()):
         """The card of a key a program in the member's computer needs, as the environment variable `name`; its
-        `purpose` is the short line the owner reads. None when this member's key of that name is already saved."""
+        `purpose` is the short line the owner reads. An already saved key needs an explicit replacement request."""
         from ..computer.vault_entries import key_name_ok
         if self.logins is None or not hasattr(self.logins, "put_key"):
             raise LookupError("key")
@@ -281,7 +281,7 @@ class SecretCards:
             raise ValueError("bad key name")
         if not isinstance(purpose, str) or not purpose.strip() or len(purpose) > 120 or _CONTROL.search(purpose):
             raise ValueError("bad key purpose")
-        if self.logins.key_values(member_id, [name])[0]:
+        if not replace and self.logins.has_key(member_id, name):
             return None
         return self.store.open(turn_id=turn_id, member_id=member_id, conversation_id=conversation_id, server_id=name, kind="key",
                                secret="key", name=purpose.strip(), language=language, done=done)

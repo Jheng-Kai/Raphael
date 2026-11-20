@@ -1483,6 +1483,9 @@ class MembersService:
         from ..ui_languages import fixed_language
 
         language = fixed_language(language)
+        if name == "remove_key":
+            text = self.admin_line(name, arguments, language)
+            return text + ("\n" + asked(language, several=False) if question else "")
         action, values = resolve(name, arguments)
         if action is not None and name not in self.TRADITIONAL:
             detail, notes = self.management_target(name, arguments, language)
@@ -1553,6 +1556,9 @@ class MembersService:
         from ..ui_languages import fixed_language
 
         language = fixed_language(language)
+        if name == "remove_key":
+            from ..management_words import quoted
+            return joined(effect(name, language), quoted(arguments["key"], language), language)
         action, values = resolve(name, arguments)
         if action is None or name in self.TRADITIONAL:
             identifier = arguments.get("member_id", arguments.get("id"))

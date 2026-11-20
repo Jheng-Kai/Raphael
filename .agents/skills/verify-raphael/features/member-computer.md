@@ -2192,7 +2192,7 @@ grant/target before and after the final observation; revoked reads return no tre
 A member that needs the owner's key for a script in its computer calls `request_secret` with `key` (an environment
 variable name) and `purpose`; the secure card (`secret-card.ts`, `keyCardHTML`) is titled 「儲存金鑰」, with the variable in monospace, its purpose below and a quiet waiting dot. It takes the value in one masked field beside Save, with a vault hint and Cancel in the footer
 (Credential Manager, a `vault_entries` row of kind `key`, never the conversation, a row or a log). The member then
-runs `vm_exec` with `keys: [NAME]`: the core hands the values to that one process's environment (`docker exec -e NAME`,
+renews an expired key under the same name with `request_secret` `replace: true` (one entry per name and scope is kept, the newest, R-KEY-04) and may propose deleting its own private key with `remove_key`, which the owner approves on a card. It runs `vm_exec` with `keys: [NAME]`: the core hands the values to that one process's environment (`docker exec -e NAME`,
 the value in the docker process's own environment, never an argument) and replaces them in everything returned,
 including a background job's log read later. The Keys tab of the safety pane's saved-entries list (`vault.ts`) shows
 and removes them; it offers no way to add one. In the live view (`BOOTSTRAP` in `computer/viewer.py` and

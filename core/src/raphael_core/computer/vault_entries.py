@@ -5,6 +5,7 @@ import asyncio
 import csv
 import io
 import json
+import logging
 import re
 import time
 import uuid
@@ -16,6 +17,7 @@ from ..protocol import invalid_params
 
 FIELDS = {"login": ("username", "password"), "contact": ("name", "address", "phone", "email"),
           "card": ("name", "number", "expiry", "cvc")}
+logger = logging.getLogger(__name__)
 
 # A key the owner pasted on a card for a program in a member's computer: the entry's label is the environment
 # variable's name, its hint what the key is for, and the value is its one private field. It is made only by
@@ -35,6 +37,11 @@ def key_name_ok(name):
     return upper not in KEY_REFUSED and not upper.startswith(KEY_REFUSED_PREFIXES)
 
 
+def _scope(row):
+    members = json.loads(row["members"])
+    return "all" if members == "all" else frozenset(members)
+
+
 def payment_question(arguments, language):
     label, site, amount = (str(arguments.get(key, "")) for key in ("label", "site", "amount"))
     return with_ui_words({"zh-TW": f"允許使用「{label}」在 {site} 填入付款資料？金額：{amount or '頁面未顯示'}。最後付款由你完成。",
@@ -47,6 +54,7 @@ class VaultEntries(LoginVault):
         super().__init__(vault, conn=conn)
         self.previews = {}
         self.preview_timer = None
+        self._clean_duplicate_keys()
 
     def entries(self, member=None):
         rows = []
@@ -56,11 +64,54 @@ class VaultEntries(LoginVault):
                 rows.append({key: row[key] for key in ("id", "kind", "label", "hint", "origin")} | {"members": members})
         return rows
 
+    def _keys(self, name=None):
+        # Key saves append rows. The id is random, so insertion order is the order of rotation.
+        query = "SELECT * FROM vault_entries WHERE kind='key'"
+        if name is None:
+            return self.conn.execute(query + " ORDER BY rowid DESC").fetchall()
+        return self.conn.execute(query + " AND label=? ORDER BY rowid DESC", (name,)).fetchall()
+
     def key_entry(self, member, name):
-        """The saved key `name` this member may use (the one of its own before one for everyone), or None."""
-        rows = [row for row in self.conn.execute("SELECT * FROM vault_entries WHERE kind='key' AND label=?", (name,))
-                if (members := json.loads(row["members"])) == "all" or member in members]
-        return min(rows, key=lambda row: json.loads(row["members"]) == "all", default=None)
+        """The newest saved key of this name the member is allowed to use."""
+        return next((row for row in self._keys(name) if (scope := _scope(row)) == "all" or member in scope), None)
+
+    def has_key(self, member, name):
+        row = self.key_entry(member, name)
+        return row is not None and self.vault.has(row["credential"])
+
+    def _clean_duplicate_keys(self):
+        seen = set()
+        removed = failed = 0
+        for row in self._keys():
+            group = row["label"], _scope(row)
+            if group not in seen:
+                seen.add(group)
+                continue
+            try:
+                self.remove(row["id"])
+                removed += 1
+            except Exception:
+                # Keep the metadata so the next startup can retry deleting the credential.
+                failed += 1
+        if removed or failed:
+            logger.info("Duplicate vault keys removed: %d; pending retry: %d", removed, failed)
+
+    def private_key_entry(self, member, name):
+        if not key_name_ok(name):
+            raise ValueError("invalid_key")
+        current = self.key_entry(member, name)
+        return current if current is not None and _scope(current) == {member} else None
+
+    def remove_member_key(self, member, name, *, expected):
+        """Delete the approved private key and older copies of its scope."""
+        current = self.private_key_entry(member, name)
+        if current is None or current["id"] != expected:
+            return False
+        # Keep the newest until last so an interrupted deletion cannot expose an older copy.
+        for row in reversed(self._keys(name)):
+            if _scope(row) == {member}:
+                self.remove(row["id"])
+        return True
 
     def put_key(self, member, name, purpose, value):
         """Keep the key `name` of this member (a new value replaces the old one) in the OS vault; `purpose` is the
@@ -77,21 +128,23 @@ class VaultEntries(LoginVault):
         encoded = json.dumps(values, ensure_ascii=False)
         if len(encoded.encode("utf-16-le")) > 2000:
             raise SecretTooLong("The key is longer than the Credential Manager can hold")
+        current = self.key_entry(member, name)
+        members = current["members"] if current is not None else json.dumps([member])
+        scope = _scope(current) if current is not None else {member}
+        old = [row["id"] for row in self._keys(name) if _scope(row) == scope]
         self.vault.set(credential, encoded)
-        old = [row["id"] for row in self.conn.execute("SELECT id, members FROM vault_entries WHERE kind='key' AND label=?", (name,))
-               if json.loads(row["members"]) == [member]]
         try:
             with self.conn:
                 self.conn.execute("INSERT INTO vault_entries VALUES (?,?,?,?,?,?,?)",
-                                  (identifier, "key", name, purpose.strip(), "", json.dumps([member]), credential))
+                                  (identifier, "key", name, purpose.strip(), "", members, credential))
         except Exception:
             self.vault.delete(credential)
             raise
-        for stale in old:
-            self.remove(stale)
         # Everything a command prints or a file shows from now on is checked for it, for any member of a shared computer.
         for holder in {member, *self.values}:
             self.remember(holder, values)
+        for stale in reversed(old):
+            self.remove(stale)
         return identifier
 
     def key_values(self, member, names):

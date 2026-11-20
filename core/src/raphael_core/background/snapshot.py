@@ -65,7 +65,7 @@ from ..agent.plugins import Offer, PluginHub, PluginTool, make_offer
 from ..agent.policy import Tier
 from ..agent.speaker import RAPHAEL, Speaker
 from ..agent.team import STOP_WORK, TEAM_TIER, TEAM_TOOLS, team_tool, worker_definition
-from ..agent.harness_tools import CALENDAR_TOOLS, DEFINITIONS as HARNESS_DEFINITIONS, definitions_for, tool as harness_tool
+from ..agent.harness_tools import CALENDAR_TOOLS, REMOVE_KEY, DEFINITIONS as HARNESS_DEFINITIONS, definitions_for, tool as harness_tool
 from ..memory.growth import DEFINITIONS as MEMORY_DEFINITIONS
 from ..agent.owner_questions import BACKGROUND_TOOLS
 from ..agent.harness_tools import ROUTINE_TOOLS
@@ -513,7 +513,7 @@ def take_snapshot(
         for name, item in definitions_for(speaker):
             if name in everywhere:
                 continue
-            if name in MANAGEMENT_TOOLS:
+            if name in MANAGEMENT_TOOLS or name == REMOVE_KEY:
                 if owner_management:
                     snapshot.management[name] = item
                 continue

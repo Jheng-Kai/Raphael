@@ -68,6 +68,20 @@ def test_whether_a_secret_is_kept_is_answered_without_reading_it(asking, memory_
     assert asking.reads == []
 
 
+def test_vault_does_not_report_a_still_present_credential_as_deleted(asking, monkeypatch):
+    vault = CredentialVault()
+    vault.set("fixture", "synthetic-fixture")
+
+    def failed_delete(service, username):
+        raise keyring.errors.PasswordDeleteError("Deletion failed")
+
+    monkeypatch.setattr(asking.backend, "delete_password", failed_delete)
+    with pytest.raises(keyring.errors.PasswordDeleteError):
+        vault.delete("fixture")
+    assert vault.has("fixture") and not asking.reads
+    vault.delete("missing")
+
+
 def test_a_secret_is_read_once_in_a_run(asking, memory_keyring):
     memory_keyring.set_password("Raphael", "openrouter", "sk-or-v1-abc")
     store = CredentialKeyStore()

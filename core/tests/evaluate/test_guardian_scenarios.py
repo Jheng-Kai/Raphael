@@ -363,6 +363,18 @@ async def test_rpc_driver_uses_real_routine_mutation_and_readback(tmp_path, oper
         await driver.aclose()
 
 
+async def test_rpc_driver_uses_exact_owner_approval_and_key_removal_readback(tmp_path):
+    call = ("use_tool", {"name": "remove_key", "arguments": {"key": "GUARDIAN_FIXTURE_KEY"}})
+    client = FakeClient([("", [call]), ("Waiting.", []), ("Removed.", [])])
+    driver = RpcDriver(tmp_path, "fake/model", client, Budget(20))
+    try:
+        reasons, _ = await driver.execute(selected("S15.key-removal"))
+        assert not reasons
+        assert driver.approvals[0]["approved"]
+    finally:
+        await driver.aclose()
+
+
 @pytest.mark.parametrize("kind", ["missing-connection", "missing-permission"])
 async def test_failure_honesty_checks_observed_failure_and_owner_reply(tmp_path, kind):
     client = FakeClient([("", [("use_tool", {"name": "Guardian__read", "arguments": {}})]), ("需要重新登入並授予讀取權限。", [])])

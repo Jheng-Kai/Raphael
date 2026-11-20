@@ -12,6 +12,7 @@ from agent.test_narration import chat
 from raphael_core.agent.cli.loop import CliLoop
 from raphael_core.agent.cli.discovery import CliBrains
 from raphael_core.agent.cli.drivers import Driver, Event
+from raphael_core.agent.harness_tools import REMOVE_KEY
 from raphael_core.agent.policy import Tier
 from raphael_core.agent.speaker import Speaker
 from raphael_core.agent.team import TEAM_TOOLS
@@ -35,7 +36,7 @@ def test_default_primary_offer_fits_the_measured_pre_unit_budget():
     offered = snapshot()
     assert len(offered.definitions) == 43  # 44 before `open` became a quick question's alone (R-PC-01)
     assert not set(offered.refs) & MANAGEMENT_TOOLS
-    assert set(offered.management) == set(DEFINITIONS)
+    assert set(offered.management) == set(DEFINITIONS) | {REMOVE_KEY}
     assert {"find_tools", "use_tool"} <= set(offered.refs)
 
 
@@ -83,7 +84,7 @@ async def test_production_turn_discovers_shared_work_without_management(setup, c
     assert (await typed(rig, "Explain your abilities.", member_id, language="en"))["status"] == "done"
 
 
-@pytest.mark.parametrize("name", DEFINITIONS)
+@pytest.mark.parametrize("name", [*DEFINITIONS, REMOVE_KEY])
 def test_every_management_tool_can_be_discovered_by_name_without_plugins(name):
     offered = snapshot()
     before = json.dumps(offered.definitions)
@@ -116,6 +117,8 @@ def test_management_cannot_be_discovered_outside_the_owner_private_chat():
         assert not set(offered.refs) & MANAGEMENT_TOOLS
         assert not offered.find("group_delete")[0]
         assert offered.reveal("group_delete") is None
+        assert not offered.find(REMOVE_KEY)[0]
+        assert offered.reveal(REMOVE_KEY) is None
 
 
 @pytest.mark.parametrize("brain,budget", [("api", 16048), ("cli", 15212)])
