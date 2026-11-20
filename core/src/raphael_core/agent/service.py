@@ -2978,9 +2978,14 @@ class AgentService:
         if ask.source in _NO_OWNER_WORDS:
             if not reply.text.strip():
                 raise AgentFailure("error")
-            if ask.source == "reaction" and is_pass(reply.text):
-                return self._reaction_needs_no_words(ask)
-            text = authored_chinese(reply.text, chinese_variant(self._settings.get("languages")))
+            said = reply.text
+            if ask.source == "reaction":
+                # Only the words in its envelope reach the owner; with none, it said nothing (R-REACT-WORDS-01).
+                from .persona import reaction_words
+                said = reaction_words(reply.text)
+                if said is None or is_pass(said):
+                    return self._reaction_needs_no_words(ask)
+            text = authored_chinese(said, chinese_variant(self._settings.get("languages")))
             return self._finish(ask, "greeting" if ask.source == "greeting" else "answer", "", text, ledger)
         if ask.admin_pending:
             asked = await self._propose_admin(ask, ledger, loop.seen)

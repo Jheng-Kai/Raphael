@@ -57,7 +57,7 @@ export function mountCardFloat(o: { stage: HTMLElement; scroller: HTMLElement; t
     openButton.setAttribute("aria-expanded", "false");
   }
 
-  /** The card stands over the thread under the pill, where it was across and as wide as it was. */
+  /** The card stands over the thread centred under the pill, as wide as it was, kept inside the conversation. */
   function lift(): void {
     if (!card || place) return;
     const box = card.getBoundingClientRect();
@@ -69,7 +69,10 @@ export function mountCardFloat(o: { stage: HTMLElement; scroller: HTMLElement; t
     watch?.unobserve(card);
     watch?.observe(place);
     card.style.setProperty("--float-top", `${Math.round(under.bottom + 8)}px`);
-    card.style.setProperty("--float-left", `${Math.round(box.left)}px`);
+    const pane = (pill.offsetParent ?? document.documentElement).getBoundingClientRect();
+    const edge = 8, centred = (under.left + under.right) / 2 - box.width / 2;
+    const left = Math.max(pane.left + edge, Math.min(centred, pane.right - edge - box.width));
+    card.style.setProperty("--float-left", `${Math.round(left)}px`);
     card.style.setProperty("--float-width", `${Math.round(box.width)}px`);
     card.classList.add("is-floating");
     openButton.setAttribute("aria-expanded", "true");

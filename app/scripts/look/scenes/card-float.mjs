@@ -7,6 +7,6 @@ const fixture = { keyCard: true, keyCardLater: true };
 
 export default [
   scene("card-float-pill", "A waiting key card read out of sight leaves one pill at the top of the conversation", [...away, check("card-float-pill")], fixture),
-  scene("card-float-open", "The pill's press stands the card itself over the thread under it, where it was across and as wide as it was", [...away, click(".card-float-open"), wait(".conversation-card.is-floating"), check("card-float-open")], fixture),
+  scene("card-float-open", "The pill's press stands the card itself over the thread, centred under it and as wide as it was", [...away, click(".card-float-open"), wait(".conversation-card.is-floating"), check("card-float-open")], fixture),
   scene("card-float-back", "回到原位 scrolls back to the card where it was born, and the pill goes", [...away, click(".card-float-open"), wait(".conversation-card.is-floating"), click(".card-float-back"), waitGone(".card-float:not([hidden])"), check("card-float-back")], fixture),
 ];

@@ -20,6 +20,11 @@ def held(gate, answer):
     return reply
 
 
+def words(text):
+    """What a member says on a reaction, in the envelope the reaction prompt asks for."""
+    return f'<reply>{text}</reply>'
+
+
 async def say(rig, text, who, session):
     return await rig.call('agent.ask', {'session_id': session, 'text': text, 'ui_language': 'zh-TW', 'source': 'app', 'member_id': who})
 
@@ -107,7 +112,7 @@ async def test_a_negative_reaction_gets_words_in_the_members_own_voice_and_model
     rig, team_ = setup
     one = member(team_, model='test/member-model')
     turn_id = await reply_of(rig, client, one.id)
-    client.chats.append(live_said('這個回覆哪裡不對？告訴我，我下次會改。'))
+    client.chats.append(live_said(words('這個回覆哪裡不對？告訴我，我下次會改。')))
     await react(rig, turn_id, '👎', who=one.id)
     await until(lambda: asks(rig) and asks(rig)[0].status == 'done')
     [ask] = asks(rig)
@@ -122,6 +127,27 @@ async def test_a_negative_reaction_gets_words_in_the_members_own_voice_and_model
     assert 'never approval' in note and 'never the owner' in note
     assert not rig.conn.execute('SELECT 1 FROM agent_steps WHERE turn_id=?', (ask.id,)).fetchone()
     assert records(rig) == [('turn', f'{turn_id}:reply', '👎')]
+
+
+async def test_only_the_words_in_the_envelope_reach_the_owner_and_a_reply_with_none_says_nothing(setup, client):
+    # A model read the instruction back and wrote a note to itself before its question (#292).
+    rig, team_ = setup
+    one = member(team_)
+    turn_id = await reply_of(rig, client, one.id)
+    leaked = ('錯 / 👎 → ask what was wrong, one or two short sentences, no apology.\n\nNote: the reply included old '
+              'work despite the rule... but do not guess. Just ask.')
+    client.chats.append(live_said(leaked + words('這份回報哪裡不對？告訴我是哪一段，我照你說的修正。')))
+    await react(rig, turn_id, '👎', who=one.id)
+    await until(lambda: asks(rig) and asks(rig)[0].status == 'done')
+    [ask] = asks(rig)
+    assert ask.text == '這份回報哪裡不對？告訴我是哪一段，我照你說的修正。'
+    assert 'ask what was wrong' not in json.dumps(rig.history.messages([ask.id]), ensure_ascii=False)
+    # Words with no envelope are never shown: the reaction ends as a pass would.
+    client.chats.append(live_said(leaked + '這份回報哪裡不對？'))
+    await react(rig, turn_id, '😕', who=one.id)
+    await until(lambda: len(client.chat_calls) == 3)
+    await settle()
+    assert len(asks(rig)) == 1
 
 
 @pytest.mark.parametrize('window,named', [('zh-TW', 'Traditional Chinese as written in Taiwan'), ('en', 'English'), ('ja', 'Japanese')])
@@ -161,7 +187,7 @@ async def test_a_positive_reaction_may_get_a_few_words_when_the_member_finds_the
     rig, team_ = setup
     one = member(team_)
     turn_id = await reply_of(rig, client, one.id)
-    client.chats.append(live_said('太好了。要我把會議加進行事曆嗎？'))
+    client.chats.append(live_said(words('太好了。要我把會議加進行事曆嗎？')))
     await react(rig, turn_id, '🎉', who=one.id)
     await until(lambda: asks(rig) and asks(rig)[0].status == 'done')
     assert asks(rig)[0].text == '太好了。要我把會議加進行事曆嗎？' and asks(rig)[0].question == ''
@@ -170,7 +196,7 @@ async def test_a_positive_reaction_may_get_a_few_words_when_the_member_finds_the
 async def test_raphael_analyses_the_same_way(setup, client):
     rig, _ = setup
     turn_id = await reply_of(rig, client, 0, 'Done.')
-    client.chats.append(live_said('What was wrong with that reply?'))
+    client.chats.append(live_said(words('What was wrong with that reply?')))
     await react(rig, turn_id, '👎', who=0)
     await until(lambda: asks(rig) and asks(rig)[0].status == 'done')
     assert asks(rig)[0].member_id == 0 and asks(rig)[0].text == 'What was wrong with that reply?'
@@ -198,7 +224,7 @@ async def test_a_reaction_taken_back_while_it_is_analysed_ends_the_turn_and_leav
     one = member(team_)
     turn_id = await reply_of(rig, client, one.id)
     gate = asyncio.Event()
-    client.chats.append(held(gate, live_said('哪裡不對？')))
+    client.chats.append(held(gate, live_said(words('哪裡不對？'))))
     await react(rig, turn_id, '👎', who=one.id)
     assert len(asks(rig)) == 1
     await until(lambda: len(client.chat_calls) == 2)
@@ -208,7 +234,7 @@ async def test_a_reaction_taken_back_while_it_is_analysed_ends_the_turn_and_leav
     await settle()
     assert not asks(rig) and said_nothing(rig, one.id) == ['app'] and records(rig) == []
     # It was never analysed: the same emoji given again is.
-    client.chats.append(live_said('哪裡不對？'))
+    client.chats.append(live_said(words('哪裡不對？')))
     await react(rig, turn_id, '👎', who=one.id)
     await until(lambda: asks(rig) and asks(rig)[0].status == 'done')
     assert len(client.chat_calls) == 3
@@ -223,7 +249,7 @@ async def test_a_reaction_changed_while_it_is_analysed_ends_that_turn_and_starts
     await react(rig, turn_id, '👍', who=one.id)
     await until(lambda: len(client.chat_calls) == 2)
     [first] = asks(rig)
-    client.chats.append(live_said('哪裡不對？'))
+    client.chats.append(live_said(words('哪裡不對？')))
     await react(rig, turn_id, '👎', who=one.id)
     # The first is gone at once, and one for the new emoji is under way in its place.
     [ask] = asks(rig)
@@ -242,7 +268,7 @@ async def test_the_owner_writing_ends_an_analysis_that_is_under_way_and_is_answe
     one = member(team_)
     turn_id = await reply_of(rig, client, one.id)
     gate = asyncio.Event()
-    client.chats.append(held(gate, live_said('哪裡不對？')))
+    client.chats.append(held(gate, live_said(words('哪裡不對？'))))
     await react(rig, turn_id, '👎', who=one.id)
     await until(lambda: len(client.chat_calls) == 2)
     client.chats.append(live_said('好的，我改短。'))
@@ -261,7 +287,7 @@ async def test_a_reaction_is_analysed_once_per_message_and_emoji(setup, client):
     rig, team_ = setup
     one = member(team_)
     turn_id = await reply_of(rig, client, one.id)
-    client.chats.extend([live_said('(pass)'), live_said('哪裡不對？')])
+    client.chats.extend([live_said('(pass)'), live_said(words('哪裡不對？'))])
     await react(rig, turn_id, '👍', who=one.id)
     await until(lambda: len(client.chat_calls) == 2 and not asks(rig))
     calls = len(client.chat_calls)
@@ -301,7 +327,7 @@ async def test_a_reaction_to_a_picture_the_member_sent_is_read_as_that_picture(s
     turn_id = await reply_of(rig, client, one.id, '兩張辦公室的圖。')
     rig.history.add_message(turn_id, 'media', json.dumps({'attachment': {'id': 'b' * 32 + '.png', 'name': 'office.png', 'mime': 'image/png'}}))
     seq = max(item['seq'] for item in rig.history.messages([turn_id])[turn_id])
-    client.chats.append(live_said('喜歡這張嗎？要我再畫一張不同角度的？'))
+    client.chats.append(live_said(words('喜歡這張嗎？要我再畫一張不同角度的？')))
     await react(rig, turn_id, '❤️', who=one.id, key=str(seq))
     await until(lambda: asks(rig) and asks(rig)[0].status == 'done')
     note = client.chat_calls[-1]['messages'][-1]['content']
@@ -321,7 +347,7 @@ async def test_only_a_members_own_reply_is_analysed_never_the_owners_message_or_
     await react(rig, turn_id, '👎', who=one.id, key='owner')
     await settle()
     assert not asks(rig) and len(client.chat_calls) == before and records(rig) == []
-    client.chats.append(live_said('太好了。要我再整理一份嗎？'))
+    client.chats.append(live_said(words('太好了。要我再整理一份嗎？')))
     await react(rig, turn_id, '👍', who=one.id)
     await until(lambda: asks(rig) and asks(rig)[0].status == 'done')
     calls = len(client.chat_calls)
@@ -409,7 +435,7 @@ async def test_the_analysis_is_no_message_of_the_owner_and_changes_no_memory(set
     rig, team_ = setup
     one = member(team_)
     turn_id = await reply_of(rig, client, one.id)
-    client.chats.append(live_said('哪裡不對？', memory=[{'op': 'add', 'file': 'USER.md', 'text': 'Owner dislikes everything'}]))
+    client.chats.append(live_said(words('哪裡不對？'), memory=[{'op': 'add', 'file': 'USER.md', 'text': 'Owner dislikes everything'}]))
     await react(rig, turn_id, '👎', who=one.id)
     await until(lambda: asks(rig) and asks(rig)[0].status == 'done')
     [ask] = asks(rig)
