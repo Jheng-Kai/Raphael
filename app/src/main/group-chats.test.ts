@@ -3,7 +3,7 @@ import { beforeEach, expect, test, vi } from "vitest";
 import type { AppContext, HandoffView, Member } from "./types";
 import * as chatComposer from "./chat-composer";
 import * as richScroll from "./message-rich";
-const api=vi.hoisted(()=>({membersList:vi.fn(),roomsCreate:vi.fn(),roomsList:vi.fn(),roomMessages:vi.fn(),roomSend:vi.fn(),roomsDelete:vi.fn(),roomsUpdate:vi.fn(),roomStop:vi.fn(),core:vi.fn(),pagesOpen:vi.fn(),ownerQuestionBring:vi.fn(),openTeamFile:vi.fn().mockResolvedValue(undefined)}));
+const api=vi.hoisted(()=>({membersList:vi.fn(),roomsCreate:vi.fn(),roomsList:vi.fn(),roomMessages:vi.fn(),roomSend:vi.fn(),roomsDelete:vi.fn(),roomsUpdate:vi.fn(),roomStop:vi.fn(),core:vi.fn(),pagesOpen:vi.fn(),pagesViewing:vi.fn(async()=>({viewing:null})),ownerQuestionBring:vi.fn(),openTeamFile:vi.fn().mockResolvedValue(undefined)}));
 vi.mock("./api",()=>api);
 import { configureRooms, openNewGroupChat, openGroupChat, openRoomsMenu, createRoomsSection, createRoomPane, clearRoomSelection } from "./group-chats";
 import { getLocale, setLocale, t } from "./i18n";
@@ -31,6 +31,9 @@ test("a room page appends to its composer and waits for the owner's send", async
   const view = await pane(); await flush();
   const input = draft("My room draft");
   const frame = view.el.querySelector<HTMLIFrameElement>(".pg-frame")!;
+  // The owner opens the page first: one still in its card places nothing (R-CARD-11).
+  frame.dispatchEvent(new Event("load"));
+  view.el.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
   Object.defineProperty(navigator, "userActivation", { value: { isActive: true }, configurable: true });
   Object.defineProperty(frame, "contentWindow", { value: { postMessage: vi.fn() }, configurable: true });
   const focus = vi.spyOn(document, "activeElement", "get").mockReturnValue(frame);
