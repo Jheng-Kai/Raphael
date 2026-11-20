@@ -92,7 +92,6 @@
   --close: #c9301f; --on-close: #ffffff;
   /* What is drawn on a slime's colour: white, as its eyes are, in both themes. */
   --on-slime: #ffffff;
-  --toast-action: #e5e5e5; --toast-hover: #404040;
   /* Activity levels are one hue, the accent, from the empty day up: more reads as stronger. */
   --heat-0: #efefef; --hatch: #d4d4d4;
   --heat-1: color-mix(in srgb, var(--accent) 30%, var(--heat-0)); --heat-2: color-mix(in srgb, var(--accent) 55%, var(--heat-0));
@@ -146,7 +145,6 @@
   --tab-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
   /* Black in the dark theme too: a shadow in the text colour would be a light halo (R-UI-118). */
   --composer-shadow: 0 6px 20px rgba(0, 0, 0, 0.06);
-  --toast-action: #333333; --toast-hover: #dddddd;
   --heat-0: #202020; --hatch: #555555;
   --scroll-thumb: #555555; --scroll-hover: #929292;
   --rg-bg: #1f1f1f; --rg-edge: #777777; --rg-ink: #eeeeee; --rg-btn: #f5f5f5; --rg-on: #0a0a0a; --rg-glow: rgba(255, 255, 255, 0.16);
@@ -617,8 +615,9 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
    What is on a surface (a chip, a button, a field) is filled --float-ctl, and a hovered row takes --float-hover. So `--panel`, which cards stand on, is --float
    there, `--field`, which fields stand on, is the control fill, and `--content`, which a sticky bar stands on, is the dialog's own colour.
    The surfaces below say it once: inside any of them the ordinary tokens point at the floating ones, so a card or a control needs no rule of its own.
-   The window, the sidebar, the pages, the thread and the composer keep their own colours; a toast is the inverse of the page and is not one of these. */
-:where(.menu, .modal, .mb-dialog, .cs-dialog, .av-crop, .au-pop, .cb-card, .link-hover, .message-tooltip) {
+   The window, the sidebar, the pages, the thread and the composer keep their own colours. A toast floats too: the soft pill at the window's foot, on
+   --float with its edge, never the inverse of the page (a white box on the dark theme). */
+:where(.menu, .modal, .mb-dialog, .cs-dialog, .av-crop, .au-pop, .cb-card, .link-hover, .message-tooltip, .toast) {
   --btn: var(--float-ctl); --btn-edge: var(--float-ctl-edge); --btn-hover: var(--float-ctl-hover); --btn-pressed: var(--float-pressed);
   --key: var(--float-ctl); --key-edge: var(--float-ctl-edge);
   --hover: var(--float-hover); --pressed: var(--float-pressed); --edge: var(--float-edge); --line: var(--float-edge);
@@ -723,14 +722,14 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 body:has(.page-agent:not([hidden])) .toasts { bottom: max(152px, var(--toast-lift, 0px)); }
 body:has(.page-agent:not([hidden])[data-det="open"]:not(.is-room)) .toasts { right: calc(var(--pa-det) + 20px); }
 body:has(.page-agent:not([hidden])[data-det="open"]:not(.is-room)) .toast { max-width: min(480px, calc(100vw - var(--pa-det) - 40px)); }
-.toast { position: relative; overflow: hidden; pointer-events: auto; display: flex; align-items: center; gap: var(--sp-3); min-height: 36px; padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-4); border-radius: var(--r-sm); background: var(--text); color: var(--content); font-size: var(--fs-sm); box-shadow: var(--pop); max-width: min(480px, calc(100vw - 40px)); animation: toast-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1); }
-/* The time a toast has left, along its foot. */
-.toast-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--toast-action); transform-origin: left; animation: toast-count linear forwards; }
-.toast .btn { border-color: var(--toast-action); background: transparent; color: var(--toast-action); }
-.toast .btn:hover:not(:disabled), .toast .btn:active:not(:disabled) { background: var(--toast-hover); border-color: var(--toast-action); }
-.toast .btn:active:not(:disabled) { background: color-mix(in srgb, var(--toast-hover) 85%, var(--toast-action)); }
-.toast .btn:focus-visible { outline-color: var(--toast-action); }
-.toast.question-reminder-toast { overflow: visible; min-height: 0; padding: 0; border-radius: var(--r-pill); background: transparent; box-shadow: none; }
+/* A toast is a soft pill on the floating surface, like the question reminder beside it (R-FLOAT-01): its words, and a button framed by the
+   control fill when it has one, never a box in the inverse of the page. */
+.toast { position: relative; overflow: hidden; pointer-events: auto; display: flex; align-items: center; gap: var(--sp-3); min-height: var(--h-field); padding: var(--sp-1) var(--sp-1) var(--sp-1) var(--sp-4); border: 1px solid var(--float-edge); border-radius: var(--r-pill); background: var(--float); color: var(--text); font-size: var(--fs-sm); box-shadow: var(--pop); max-width: min(480px, calc(100vw - 40px)); animation: toast-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.toast:not(:has(.btn)) { padding-right: var(--sp-4); }
+/* The time a toast has left, a hairline along its foot. */
+.toast-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--float-ctl-raised); transform-origin: left; animation: toast-count linear forwards; }
+.toast .btn { border-radius: var(--r-pill); }
+.toast.question-reminder-toast { overflow: visible; min-height: 0; padding: 0; border: 0; border-radius: var(--r-pill); background: transparent; box-shadow: none; }
 .toast .btn.question-reminder { min-height: var(--h-field); min-width: 0; max-width: 100%; gap: var(--sp-2); padding: 0 var(--sp-2); border: 1px solid var(--edge-rim); border-radius: var(--r-pill); background: var(--float); color: var(--text); box-shadow: var(--pop); }
 .toast .btn.question-reminder:hover:not(:disabled) { background: var(--float-hover); border-color: var(--edge-rim); }
 .toast .btn.question-reminder:active:not(:disabled) { background: var(--float-pressed); border-color: var(--edge-rim); }

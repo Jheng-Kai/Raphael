@@ -30,6 +30,7 @@ const SURFACES: [file: string, selector: string, scope: string, layer: "dialog" 
   ["composer-brain.css", ".cb-card", ".cb-card", "float"],
   ["agent.css", ".link-hover", ".link-hover", "float"],
   ["agent.css", ".message-tooltip", ".message-tooltip", "float"],
+  ["styles.css", ".toast", ".toast", "float"],
 ];
 
 const ruleOf = (file: string, selector: string): string => {
