@@ -616,7 +616,7 @@ export const de = {
   "card.keyResuming": "Gespeichert · Aufgabe wird fortgesetzt…",
   "card.keyResumed": "Gespeichert · Aufgabe fortgesetzt",
   "card.keyNotResumed": "Schlüssel gespeichert; Aufgabe nicht fortgesetzt",
-  "card.keyInvalid": "Schlüssel ist leer oder enthält einen Zeilenumbruch",
+  "card.keyInvalid": "Schlüssel ist leer oder enthält einen Zeilenumbruch", "card.keyTooShort": "Ein Schlüssel braucht mindestens 6 Zeichen; für einen Wert, der kein Geheimnis ist, etwa einen Benutzernamen, „Kein Geheimnis“ ankreuzen", "card.keyPlain": "Kein Geheimnis (etwa ein Benutzername)", "card.keyMin": "Mindestens 6 Zeichen",
   "card.keyTooLong": "Schlüssel zu lang zum Speichern",
   "card.keyVault": "Speichern fehlgeschlagen; erneut versuchen",
   "card.keyGone": "Verbindung nicht mehr vorhanden; nichts gespeichert",

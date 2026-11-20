@@ -969,13 +969,16 @@ class MembersService:
             copy = self.store.create_member(name=name, **fields)
             for command in self.capabilities.commands(member_id):
                 self.capabilities.save_command(copy.id, None, command["name"], command["description"], command["template"])
-            for skill in self.capabilities.skills(member_id):
+            # Its own skills only: the shared library's skills stay shared (#278), and the copy has them as the original
+            # does, switched on or off for it the same way.
+            for skill in self.capabilities.owned_skills(member_id):
                 text = self.capabilities._path(member_id, skill["id"]).read_text(encoding="utf-8")
                 saved = self.capabilities.keep_skill(copy.id, skill["source"], text)
                 self.capabilities.update_skill(copy.id, saved["id"], skill["enabled"])
+            self.capabilities.copy_grants(member_id, copy.id)
         except (MemberError, OSError) as error:
             if copy is not None:
-                for skill in self.capabilities.skills(copy.id):
+                for skill in self.capabilities.owned_skills(copy.id):
                     self.capabilities.delete_skill(copy.id, skill["id"])
                 self.store.delete_member(copy.id)
             raise _rpc_error(error if isinstance(error, MemberError) else MemberError("io", "could not copy skills")) from None
@@ -1188,6 +1191,10 @@ class MembersService:
         try:
             if self.remove_messaging is not None:
                 await self.remove_messaging(member_id)
+            # Its own skills, and only those: a shared skill is the library's, and its grant to this member goes with the
+            # member's row (#278). They go before what cannot be undone, so a failure here leaves the conversation and memory.
+            for skill in self.capabilities.owned_skills(member_id):
+                self.capabilities.delete_skill(member_id, skill["id"])
             self._background.forget_member(member_id)
             try:
                 self._history.clear_member(member_id)
@@ -1195,8 +1202,6 @@ class MembersService:
                 logger.warning("Could not delete a member's conversation: %s", type(exc).__name__)
             if self._memory is not None:
                 await self._memory.forget_member(member_id)
-            for skill in self.capabilities.skills(member_id):
-                self.capabilities.delete_skill(member_id, skill["id"])
             # Uploaded avatars can be shared by a duplicated profile.
             if not any(other.id != member_id and other.avatar == member.avatar for other in self.store.members()):
                 self._remove_picture(member.avatar)

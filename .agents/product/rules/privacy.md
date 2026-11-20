@@ -2,6 +2,14 @@
 
 Secrets, the vault, the Keychain, keys and what stays private. Part of [the product rules](../RULES.md); a rule's ID is unique across every file.
 
+## A key card says why a key was refused, and a value may be no secret
+
+A Jira user name `jon` could not be saved, and the card said only that the key was empty or had a line break (#281).
+
+| ID | Date | Rule | Check | Severity | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-KEY-05 | | A secret program key needs at least six characters, so that withholding it never blanks ordinary words; a shorter one is refused as `too_short` and the card says so (「金鑰至少需要 6 個字元…」), and while it is typed Save waits and the least length shows under the field. A program key card has one choice under its field, 「不是機密（例如帳號名稱）」: a value marked so (a user name, an address, a site ID) is shown as typed, may be short, is kept in the vault and given to programs the same way, and is not withheld from output (`put_key(secret=False)`, the entry's origin `plain`). A connection's secret, a bot's token and a sign-in have no such choice, and `plain` on any other card is refused. | pytest, vitest, look | hard | core/tests/computer/test_computer_keys.py::test_a_value_marked_as_no_secret_may_be_short_and_is_not_withheld_from_output; core/tests/computer/test_computer_keys.py::test_a_short_key_card_says_why_and_a_value_marked_as_no_secret_is_kept; app/src/main/secret-card.test.ts::a key that may be no secret has one quiet choice under its field, and the least length waits hidden (#281); app/src/main/conversation-card-actions.test.ts::a secret program key waits for six characters and says so, and one marked as no secret is shown, kept short and sent as plain (#281); computer-key-card |
+
 ## The Keychain is asked once, at need, and a Deny stands
 
 On a Mac the owner was asked for the Keychain at every message, could not send anything while the question stood, and Deny

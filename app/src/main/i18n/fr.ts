@@ -616,7 +616,7 @@ export const fr = {
   "card.keyResuming": "Enregistré · reprise de la tâche…",
   "card.keyResumed": "Enregistré · tâche poursuivie",
   "card.keyNotResumed": "Clé enregistrée ; tâche non poursuivie",
-  "card.keyInvalid": "La clé est vide ou contient un saut de ligne",
+  "card.keyInvalid": "La clé est vide ou contient un saut de ligne", "card.keyTooShort": "Une clé doit compter au moins 6 caractères ; pour une valeur qui n’est pas secrète, comme un nom d’utilisateur, cochez « Pas un secret »", "card.keyPlain": "Pas un secret (comme un nom d’utilisateur)", "card.keyMin": "Au moins 6 caractères",
   "card.keyTooLong": "La clé est trop longue pour être enregistrée",
   "card.keyVault": "Enregistrement impossible ; réessayez",
   "card.keyGone": "Cette connexion n’existe plus ; rien n’a été enregistré",

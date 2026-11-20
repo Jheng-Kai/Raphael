@@ -222,6 +222,18 @@ describe("a key for a program in a member's computer", () => {
     expect(html).not.toContain("連結");
   });
 
+  test("a key that may be no secret has one quiet choice under its field, and the least length waits hidden (#281)", () => {
+    document.body.innerHTML = secretCardHTML(key());
+    const choice = document.querySelector<HTMLInputElement>('.key-card .sc-plain input[type="checkbox"][data-secret-plain="k1"]');
+    expect(choice?.checked).toBe(false);
+    expect(document.querySelector(".sc-plain")?.textContent).toBe(t("card.keyPlain"));
+    expect(document.querySelector<HTMLElement>("[data-secret-hint]")?.hidden).toBe(true);
+    expect(document.querySelector(".sc-form .sc-plain")).toBeNull();  // under the row of the field and Save, not in it
+    expect(visible(secretCardHTML(key({ state: "failed", error: "too_short" })))).toContain(t("card.keyTooShort"));
+    // A connection's secret, a bot's token and a sign-in have no such choice.
+    expect(secretCardHTML(card())).not.toContain("data-secret-plain");
+  });
+
   test("each state has the one action it can take, as the other secret cards", () => {
     expect(actions(secretCardHTML(key()))).toEqual(["card-save"]);
     expect(actions(secretCardHTML(key({ state: "failed", error: "invalid" })))).toEqual(["card-save"]);

@@ -234,3 +234,27 @@ def test_discovery_walk_is_bounded(rig, tmp_path, monkeypatch):
         installed(tmp_path, f".claude/plugins/cache/market/plugin-{number}/1.0.0/skills/writing")
     monkeypatch.setattr("raphael_core.members.skill_library.MAX_DISCOVERY_ENTRIES", 12)
     assert len(cap.local_sources()) < 12
+
+
+async def test_a_member_is_deleted_and_copied_with_the_shared_library_full(rig, tmp_path):
+    """#278: with skills in the shared library, deleting a member failed (each shared skill was deleted as its own and
+    refused) after its conversation and memory had gone; copying one copied every shared skill as the copy's own."""
+    cap = rig.service.capabilities
+    cap.skill_home = tmp_path / "synthetic-home"
+    installed(cap.skill_home)
+    [source] = (await rig.call("members.skills.list", {"member_id": 0, "discover": True}))["sources"]
+    shared = (await rig.call("members.skills.import", {"member_id": 0, "shared": True, "source": source["source"]}))["skill"]
+    member = (await rig.call("members.create", {"name": "Ada"}))["member"]["id"]
+    own = cap.keep_skill(member, "own", "---\nname: notes\ndescription: Use for notes\n---\nKeep notes.")
+    other = (await rig.call("members.create", {"name": "Lin"}))["member"]["id"]
+    await rig.call("members.skills.update", {"member_id": member, "id": shared["id"], "enabled": False})
+
+    copy = (await rig.call("members.duplicate", {"id": member}))["member"]["id"]
+    assert [skill["name"] for skill in cap.owned_skills(copy)] == ["notes"]  # its own skill, not a copy of the shared one
+    shared_view = next(skill for skill in cap.skills(copy) if skill.get("shared"))
+    assert shared_view["id"] == shared["id"] and shared_view["enabled"] is False  # switched off for it as for the original
+
+    assert await rig.call("members.delete", {"id": member}) == {"deleted": True}
+    assert not rig.service.member_exists(member)
+    assert shared["id"] in [skill["id"] for skill in cap.skills(other) if skill.get("shared")]  # the library keeps it
+    assert own["id"] not in [skill["id"] for skill in cap.owned_skills(copy)]

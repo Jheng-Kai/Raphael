@@ -616,7 +616,7 @@ export const es = {
   "card.keyResuming": "Guardado · continuando la tarea…",
   "card.keyResumed": "Guardado · la tarea continuó",
   "card.keyNotResumed": "La clave se guardó; la tarea no continuó",
-  "card.keyInvalid": "La clave está vacía o contiene un salto de línea",
+  "card.keyInvalid": "La clave está vacía o contiene un salto de línea", "card.keyTooShort": "Una clave necesita al menos 6 caracteres; para un valor que no es secreto, como un nombre de usuario, marca «No es secreto»", "card.keyPlain": "No es secreto (como un nombre de usuario)", "card.keyMin": "Al menos 6 caracteres",
   "card.keyTooLong": "La clave es demasiado larga para guardarla",
   "card.keyVault": "No se pudo guardar; reintenta",
   "card.keyGone": "La conexión ya no existe; no se guardó nada",

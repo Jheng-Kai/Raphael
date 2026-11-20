@@ -2,6 +2,22 @@
 
 How a member answers: the core loop, replies, memory, models, CLI brains, the queue and handoffs. Part of [the product rules](../RULES.md); a rule's ID is unique across every file.
 
+## Antigravity's sign-in on Windows is in Credential Manager
+
+A signed-in Antigravity CLI showed 未登入 on Windows, because version 1.5 moved its sign-in out of `~/.gemini` (#283).
+
+| ID | Date | Rule | Check | Severity | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-CLI-SIGNIN-05 | | On Windows Antigravity CLI (`agy` 1.5 and later) keeps its Google sign-in in Credential Manager (a generic credential whose target starts `gemini:antigravity`), not in `~/.gemini`, so a signed-in Antigravity read as 未登入 and could not be a member's brain. The item being there is the sign-in (`CliBrains.logged_in`): `CredEnumerateW` lists the items' attributes and only their LastWritten time is read, never the secret, and that time is part of the credential stamp of R-CLI-SIGNIN-03, so a sign-in done anywhere ends a remembered refusal. Only the owner's own home on Windows asks Credential Manager; tests and other homes never do. | pytest | hard | core/tests/agent/test_cli_signin_cause.py::test_antigravitys_sign_in_in_windows_credential_manager_is_a_sign_in; core/tests/agent/test_cli_signin_cause.py::test_only_the_owners_own_home_on_windows_asks_credential_manager; core/tests/agent/test_cli_signin_cause.py::test_credential_manager_without_the_item_says_none |
+
+## A failed handler is not the member's bad arguments
+
+A member asked three times with the right arguments, was told bad_arguments each time, and never learned why (#279).
+
+| ID | Date | Rule | Check | Severity | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-TOOL-07 | | Only a call the handler refuses for its arguments (INVALID_PARAMS) reaches the member as `bad_arguments`; a handler that failed (INTERNAL_ERROR or any other code) reaches it as its classified failure with the handler's own words as the instruction, so the member stops changing its arguments and can tell the owner the real cause. | pytest | hard | core/tests/agent/test_self_diagnosis.py::test_a_failed_handler_is_not_called_the_members_bad_arguments |
+
 ## A member's own background work is never queued for ever
 
 Two members showed as working for hours: each conversation turn that handed work to its own member waited (`waiting`) for a child that stayed `queued`, with no model call, through two restarts. Cause: the core builds the background service before its event loop runs (`__main__.main` builds the app, then `run_stdio` starts the loop), and `use_team` puts back what the last run left queued (a waiting parent whose child ended while the app was down). That start-up pump carried the task out with `asyncio.ensure_future` while no loop was running, so the task was parked on a loop that never runs: it never started or ended, yet it stayed in `_active` and held its member's place and one of the three `MAX_PARALLEL` places for ever, so every later task of that member (and a cancelled parent's place too) queued behind it. A waiting turn never held a place (the three-waiting-turns candidate was tested and is not a cause).

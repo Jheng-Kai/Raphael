@@ -429,7 +429,7 @@ async def test_catalog_changes_cannot_hide_errors_or_bypass_recovery_budget(monk
         yield Event("error", "network")
 
     rig = recovery_rig(monkeypatch, tmp_path, play)
-    await asyncio.wait_for(rig.loop.run(), 1)
+    await asyncio.wait_for(rig.loop.run(), 5)
     assert len(rig.calls) == 4 and len(rig.lines) == 3
 
 

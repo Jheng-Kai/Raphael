@@ -3940,7 +3940,12 @@ class AgentService:
         except HarnessToolError as error:
             result = ToolResult(name, False, None, str(error), instruction=_HARNESS_NOTES.get(str(error)))
         except RpcError as error:
-            result = ToolResult(name, False, {"field": (error.data or {}).get("kind", "")}, "bad_arguments", instruction=error.message)
+            if error.code == INVALID_PARAMS:
+                result = ToolResult(name, False, {"field": (error.data or {}).get("kind", "")}, "bad_arguments", instruction=error.message)
+            else:
+                # Not the member's arguments (#279): the handler failed, and its own words say why.
+                failure = classify(error, record=False)
+                result = ToolResult(name, False, failure.wire(), failure.kind, instruction=error.message)
         except (ValueError, NotApproved, UnknownTool):
             result = ToolResult(name, False, None, "bad_arguments")
         except Exception as exc:

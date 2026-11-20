@@ -2,6 +2,14 @@
 
 Connected apps and accounts, the store, skills, shared templates and the cards that set them up. Part of [the product rules](../RULES.md); a rule's ID is unique across every file.
 
+## Deleting or copying a member leaves the shared skill library alone
+
+With skills in the shared library, every member delete failed half way and every copy took the library's skills as its own (#278).
+
+| ID | Date | Rule | Check | Severity | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-SKILL-14 | | Deleting a member deletes its own skills only and copying one copies its own skills only: a skill of the shared library stays the library's, and its grant to a member goes with that member's row. A delete once took every skill the member could see, the shared ones too, was refused at the first shared skill (`edit shared skills in the shared library`) and stopped after the member's conversation and memory were already gone; now its own skills go before anything that cannot be undone. A copy has the shared skills switched on or off for it as the original has them. | pytest | hard | core/tests/members/test_skill_library.py::test_a_member_is_deleted_and_copied_with_the_shared_library_full |
+
 ## A member is shared by one link
 
 A member template can be saved as a file or shared by a link that opens a preview. Link sharing uses the owner's share service

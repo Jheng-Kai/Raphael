@@ -616,7 +616,7 @@ export const ko = {
   "card.keyResuming": "저장됨 · 작업 계속 중…",
   "card.keyResumed": "저장됨 · 작업을 계속했습니다",
   "card.keyNotResumed": "키를 저장했지만 작업을 계속하지 않았습니다",
-  "card.keyInvalid": "키가 비어 있거나 줄바꿈이 포함되어 있습니다",
+  "card.keyInvalid": "키가 비어 있거나 줄바꿈이 포함되어 있습니다", "card.keyTooShort": "키는 6자 이상이어야 합니다. 사용자 이름처럼 비밀이 아닌 값은 ‘비밀 아님’을 선택하세요", "card.keyPlain": "비밀 아님(예: 사용자 이름)", "card.keyMin": "6자 이상 필요합니다",
   "card.keyTooLong": "키가 너무 길어 저장할 수 없습니다",
   "card.keyVault": "저장하지 못했습니다. 다시 시도하세요",
   "card.keyGone": "연결이 없어져 저장하지 않았습니다",

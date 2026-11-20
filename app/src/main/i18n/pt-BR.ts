@@ -616,7 +616,7 @@ export const ptBR = {
   "card.keyResuming": "Salvo · continuando a tarefa…",
   "card.keyResumed": "Salvo · a tarefa continuou",
   "card.keyNotResumed": "A chave foi salva; a tarefa não continuou",
-  "card.keyInvalid": "A chave está vazia ou contém uma quebra de linha",
+  "card.keyInvalid": "A chave está vazia ou contém uma quebra de linha", "card.keyTooShort": "Uma chave precisa de pelo menos 6 caracteres; para um valor que não é segredo, como um nome de usuário, marque “Não é segredo”", "card.keyPlain": "Não é segredo (como um nome de usuário)", "card.keyMin": "Pelo menos 6 caracteres",
   "card.keyTooLong": "A chave é longa demais para salvar",
   "card.keyVault": "Não foi possível salvar; tente novamente",
   "card.keyGone": "A conexão não existe mais; nada foi salvo",

@@ -456,7 +456,7 @@ export const en = {
   "card.error": "Could not connect", "card.busy": "Another sign-in is under way", "card.resumed": "{p0} connected; continuing the earlier task",
   "card.keyField": "Paste the key", "card.keySave": "Save securely", "card.keySaved": "Saved securely",
   "card.keyResuming": "Saved · continuing the task…", "card.keyResumed": "Saved · the task continued",
-  "card.keyNotResumed": "The key is saved; the task did not continue", "card.keyInvalid": "The key is empty or has a line break",
+  "card.keyNotResumed": "The key is saved; the task did not continue", "card.keyInvalid": "The key is empty or has a line break", "card.keyTooShort": "A key needs at least 6 characters; for a value that is no secret, such as a user name, tick “Not a secret”", "card.keyPlain": "Not a secret (such as a user name)", "card.keyMin": "At least 6 characters",
   "card.keyTooLong": "The key is too long to keep", "card.keyVault": "It could not be saved; try again", "card.keyGone": "That connection is gone; nothing was saved",
   "card.stopped": "Stopped; the task did not continue", "card.keyResumedLine": "{p0} key saved; continuing the earlier task",
   "card.pcTitle": "Computer", "card.pcDone": "I'm done", "card.pcStop": "Stop",

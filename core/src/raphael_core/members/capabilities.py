@@ -286,6 +286,14 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
         self._mirror(member_id)
         return next(skill for skill in self.skills(member_id) if skill["id"] == skill_id)
 
+    def copy_grants(self, from_member: int, to_member: int) -> None:
+        """A copied member has the shared library's skills switched on or off as the original has them (#278)."""
+        self.check(from_member)
+        self.check(to_member)
+        with self.conn:
+            self.conn.execute("INSERT OR REPLACE INTO member_skill_grants(member_id,skill_id,enabled) "
+                              "SELECT ?, skill_id, enabled FROM member_skill_grants WHERE member_id=?", (to_member, from_member))
+
     def _skill(self, member_id: int, skill_id: int) -> dict:
         self.check(member_id)
         skill = next((skill for skill in self.skills(member_id) if skill["id"] == skill_id), None)

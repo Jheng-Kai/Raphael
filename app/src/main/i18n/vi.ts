@@ -616,7 +616,7 @@ export const vi = {
   "card.keyResuming": "Đã lưu · đang tiếp tục công việc…",
   "card.keyResumed": "Đã lưu · công việc đã tiếp tục",
   "card.keyNotResumed": "Đã lưu khóa; công việc chưa tiếp tục",
-  "card.keyInvalid": "Khóa trống hoặc có dấu xuống dòng",
+  "card.keyInvalid": "Khóa trống hoặc có dấu xuống dòng", "card.keyTooShort": "Khóa cần ít nhất 6 ký tự; với giá trị không bí mật, như tên người dùng, hãy đánh dấu “Không phải bí mật”", "card.keyPlain": "Không phải bí mật (như tên người dùng)", "card.keyMin": "Ít nhất 6 ký tự",
   "card.keyTooLong": "Khóa quá dài để lưu",
   "card.keyVault": "Không lưu được; thử lại",
   "card.keyGone": "Kết nối không còn; chưa lưu gì",

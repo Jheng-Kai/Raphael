@@ -616,7 +616,7 @@ export const tr = {
   "card.keyResuming": "Kaydedildi · göreve devam ediliyor…",
   "card.keyResumed": "Kaydedildi · göreve devam edildi",
   "card.keyNotResumed": "Anahtar kaydedildi; göreve devam edilmedi",
-  "card.keyInvalid": "Anahtar boş veya satır sonu içeriyor",
+  "card.keyInvalid": "Anahtar boş veya satır sonu içeriyor", "card.keyTooShort": "Bir anahtar en az 6 karakter olmalı; kullanıcı adı gibi gizli olmayan bir değer için “Gizli değil” seçeneğini işaretleyin", "card.keyPlain": "Gizli değil (örneğin kullanıcı adı)", "card.keyMin": "En az 6 karakter",
   "card.keyTooLong": "Anahtar kaydetmek için çok uzun",
   "card.keyVault": "Kaydedilemedi; yeniden deneyin",
   "card.keyGone": "Bağlantı artık yok; hiçbir şey kaydedilmedi",

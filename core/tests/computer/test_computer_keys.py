@@ -17,6 +17,7 @@ from raphael_core.computer.vm import Docker, Result, VmError, exec_args
 from raphael_core.computer.vm_tools import EXEC, VmTools, vm_scope
 from raphael_core.connectors.secret_cards import SecretCards
 from raphael_core.integrations.vault import CredentialVault, SecretTooLong
+from raphael_core.protocol import RpcError
 from raphael_core.router import Router
 from raphael_core.services.attachment_store import AttachmentStore
 
@@ -178,6 +179,26 @@ def test_a_value_that_is_not_a_key_is_refused_and_nothing_is_kept(conn, value):
     with pytest.raises(ValueError):
         VaultEntries(vault, conn=conn).put_key(0, "SOME_KEY", "p", value)
     assert vault.values == {} and conn.execute("SELECT COUNT(*) FROM vault_entries").fetchone()[0] == 0
+
+
+def test_a_value_marked_as_no_secret_may_be_short_and_is_not_withheld_from_output(conn):
+    """#281: a Jira user name `jon` could not be kept (a key needs six characters, so that withholding it never blanks
+    ordinary words) and the card said only that it was empty. Marked as no secret, a short value is kept, given to programs
+    the same way, and not withheld; a secret one still needs six characters and is withheld."""
+    vault = Vault()
+    entries = VaultEntries(vault, conn=conn)
+    with pytest.raises(ValueError, match="key_too_short"):
+        entries.put_key(0, "JIRA_USERNAME", "the Jira user", "jon")
+    entries.put_key(0, "JIRA_USERNAME", "the Jira user", "jon", secret=False)
+    assert entries.key_values(0, ["JIRA_USERNAME"]) == ({"JIRA_USERNAME": "jon"}, [])
+    entries.preload(1)
+    assert all("jon" not in values for values in entries.values.values())
+    secret = make_key()
+    entries.put_key(0, "API_KEY", "the API", secret)
+    entries.preload(2)
+    assert secret in entries.values[0] and secret in entries.values[2]
+    with pytest.raises(ValueError):
+        entries.put_key(0, "OTHER", "p", "a\nb", secret=False)
 
 
 def test_a_key_longer_than_the_vault_can_hold_is_refused(conn):
@@ -501,7 +522,7 @@ async def test_saving_a_replacement_card_keeps_one_new_value_and_deletes_the_old
     assert original not in output and replacement not in output
 
 
-@pytest.mark.parametrize("value,error", [("short", "invalid"), ("with space inside-but-ok-" + "k" * 4, None), ("k" * 900, "too_long"), ("ctrl\x07-key-value", "invalid")])
+@pytest.mark.parametrize("value,error", [("short", "too_short"), ("with space inside-but-ok-" + "k" * 4, None), ("k" * 900, "too_long"), ("ctrl\x07-key-value", "invalid")])
 async def test_a_bad_value_leaves_the_card_waiting_and_the_vault_alone(conn, value, error):
     rig = CardRig(conn)
     card = rig.show()
@@ -511,6 +532,19 @@ async def test_a_bad_value_leaves_the_card_waiting_and_the_vault_alone(conn, val
         return
     assert (result["saved"], card.state, card.error) == (False, "failed", error)
     assert rig.vault.values == {} and rig.resumed == []
+
+
+async def test_a_short_key_card_says_why_and_a_value_marked_as_no_secret_is_kept(conn):
+    """#281: the card names the rule a short key broke, and the owner's "not a secret" keeps a short value."""
+    rig = CardRig(conn)
+    result, card = await rig.save(rig.show("JIRA_USERNAME", "the Jira user"), "jon")
+    assert (result["saved"], card.state, card.error) == (False, "failed", "too_short")
+    with pytest.raises(RpcError):
+        await rig.router.call("integrations.card_save", {"id": card.id, "value": "jon", "plain": "yes"})
+    result = await rig.router.call("integrations.card_save", {"id": card.id, "value": "jon", "plain": True})
+    await rig.cards.idle()
+    assert result["saved"] is True and rig.entries.key_values(0, ["JIRA_USERNAME"])[0] == {"JIRA_USERNAME": "jon"}
+    assert all("jon" not in values for values in rig.entries.values.values())
 
 
 async def test_a_key_card_refuses_names_and_purposes_it_cannot_show(conn):

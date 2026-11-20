@@ -616,7 +616,7 @@ export const id = {
   "card.keyResuming": "Disimpan · melanjutkan tugas…",
   "card.keyResumed": "Disimpan · tugas dilanjutkan",
   "card.keyNotResumed": "Kunci disimpan; tugas tidak dilanjutkan",
-  "card.keyInvalid": "Kunci kosong atau mengandung baris baru",
+  "card.keyInvalid": "Kunci kosong atau mengandung baris baru", "card.keyTooShort": "Kunci perlu minimal 6 karakter; untuk nilai yang bukan rahasia, seperti nama pengguna, centang “Bukan rahasia”", "card.keyPlain": "Bukan rahasia (seperti nama pengguna)", "card.keyMin": "Minimal 6 karakter",
   "card.keyTooLong": "Kunci terlalu panjang untuk disimpan",
   "card.keyVault": "Tidak dapat disimpan; coba lagi",
   "card.keyGone": "Koneksi sudah tidak ada; tidak ada yang disimpan",

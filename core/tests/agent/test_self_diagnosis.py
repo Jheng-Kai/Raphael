@@ -434,3 +434,24 @@ def test_self_check_preserves_provider_display_name_and_connection_source(make_r
                                  "enabled": False, "has_key": False, "status": "auth"}
     assert data["connections"][0]["name"] == "Gmail"
     assert data["connections"][0]["source"] == "composio"
+
+
+async def test_a_failed_handler_is_not_called_the_members_bad_arguments(make_rig, client, monkeypatch):
+    """#279: a handler that failed (INTERNAL_ERROR) reached the member as bad_arguments, so it retried its arguments and
+    never learned why; only INVALID_PARAMS is bad_arguments, and the handler's own words travel with the failure."""
+    from raphael_core.agent import self_check
+    from raphael_core.protocol import INTERNAL_ERROR, INVALID_PARAMS, RpcError
+    rig = make_rig()
+    told = []
+    for code, words in ((INTERNAL_ERROR, "edit shared skills in the shared library"), (INVALID_PARAMS, "Invalid params: id")):
+        def failing(service, ask, code=code, words=words):
+            raise RpcError(code, words)
+        monkeypatch.setattr(self_check, "snapshot", failing)
+        client.chats = [chat("Checking.", ("self_check", {})), chat('{"text":"Checked."}')]
+        await typed(rig)
+        turn = (await rig.turns())[0]
+        reason = next(step["reason"] for step in turn["steps"] if step["tool"] == "self_check")
+        told.append((reason, [m["content"] for m in client.chat_calls[-1]["messages"] if m["role"] == "tool"][-1]))
+    (internal_kind, internal), (invalid_kind, _) = told
+    assert internal_kind != "bad_arguments" and "edit shared skills in the shared library" in internal
+    assert invalid_kind == "bad_arguments"

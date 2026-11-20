@@ -458,8 +458,8 @@ export const cardConnect = (id: string, fields?: Record<string, string>): Promis
 /** Ends a card's sign-in that is under way. */
 export const cardCancel = (id: string): Promise<{ cancelled: boolean }> => core("integrations.card_cancel", { id });
 /** The key typed into a secret card goes to the core's vault and nowhere else: not to `agent.ask`, a history or a log. */
-export const cardSave = (id: string, value: string): Promise<{ card: import("./types").SecretCard; saved: boolean }> =>
-  core("integrations.card_save", { id, value });
+export const cardSave = (id: string, value: string, plain = false): Promise<{ card: import("./types").SecretCard; saved: boolean }> =>
+  core("integrations.card_save", { id, value, ...(plain ? { plain: true } : {}) });
 /** Carries a saved card's task on again after a resume that failed, without asking for the key again. */
 export const cardResume = (id: string): Promise<{ card: import("./types").SecretCard; resumed: boolean }> =>
   core("integrations.card_resume", { id });

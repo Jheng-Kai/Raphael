@@ -456,7 +456,7 @@ export const ja = {
   "card.error": "接続できませんでした", "card.busy": "別のサインインが進行中です", "card.resumed": "{p0} に接続しました。前の作業を続けます",
   "card.keyField": "キーを貼り付け", "card.keySave": "安全に保存", "card.keySaved": "安全に保存しました",
   "card.keyResuming": "保存済み · 作業を続けています…", "card.keyResumed": "保存済み · 作業を続けました",
-  "card.keyNotResumed": "キーは保存済みですが、作業は続行されませんでした", "card.keyInvalid": "キーが空か、改行が含まれています",
+  "card.keyNotResumed": "キーは保存済みですが、作業は続行されませんでした", "card.keyInvalid": "キーが空か、改行が含まれています", "card.keyTooShort": "キーは6文字以上必要です。ユーザー名など秘密でない値は「秘密ではない」にチェックしてください", "card.keyPlain": "秘密ではない（ユーザー名など）", "card.keyMin": "6文字以上必要です",
   "card.keyTooLong": "キーが長すぎて保存できません", "card.keyVault": "保存できませんでした。もう一度お試しください", "card.keyGone": "この接続はもうありません。保存されていません",
   "card.stopped": "停止しました。作業は続行されません", "card.keyResumedLine": "{p0} のキーを保存しました。前の作業を続けます",
   "card.pcTitle": "コンピューター", "card.pcDone": "完了しました", "card.pcStop": "停止",
