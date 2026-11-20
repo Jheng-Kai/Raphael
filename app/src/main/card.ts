@@ -2,6 +2,7 @@ import "./card.css";
 import { t } from "./i18n";
 import { btn, esc, ico, iconBtn } from "./ui";
 import { linkedText } from "./message-content";
+import type { AgentTurn, OwnerQuestion } from "./types";
 
 export type CardStatus = "waiting" | "ready" | "done" | "failed";
 const CARD_PROMPTS = { key: "cards.inputWaiting", question: null, handover: "cards.answerWaiting", computer: "cards.needsYou", permission: "cards.waiting", draft: "cards.mailReady", connect: "cards.needsYou" } as const;
@@ -19,6 +20,8 @@ export interface CardOptions {
   content?: string;
   actions?: string;
   close?: string;
+  /** The status stands beside the title, so the top right is the ×'s alone (give it only with a `close`). */
+  statusInHeading?: boolean;
   cls?: string;
   attrs?: string;
 }
@@ -30,12 +33,24 @@ export function cardStatusHTML(status: CardStatus, text?: string): string {
 /** The × at a card's top right that puts a failed card away. */
 export const failedClose = (): string => iconBtn("x", t("common.close"), " data-card-failed-close", "card-close");
 
+/**
+ * The question a member's background work waits on while the owner deals with this card (`card_id`): the card a connect, key or
+ * draft tool showed. Its way out is the card's own × (`ownerCloseHTML`), never a 取消 of its own under the card.
+ */
+export const waitingOwnerQuestion = (turn: AgentTurn, cardId: string): OwnerQuestion | undefined =>
+  turn.owner_questions?.find(question => question.state === "asked" && question.card_id === cardId && question.kind !== "ask_owner" && question.kind !== "show_page");
+
+/** The × at a card's top right that tells the waiting work the owner will not do it (owner-questions.ts answers the question with nothing). */
+export const ownerCloseHTML = (question: OwnerQuestion): string =>
+  iconBtn("x", t("common.cancel"), ` data-owner-answer="cancel" data-owner-question="${esc(question.id)}"`, "card-close");
+
 export function cardHTML(card: CardOptions): string {
   const actions = card.actions ?? "";
   const close = card.close ?? (card.status === "failed" ? failedClose() : "");
+  const status = card.hideStatus ? "" : cardStatusHTML(card.status, card.statusText);
   return `<section class="conversation-card connector-card ${card.cls ?? ""}"${card.attrs ?? ""} role="group" aria-label="${esc(card.title)}">` +
-    `<header class="card-head"><div class="card-heading">${card.mark ?? ""}<b class="card-title cc-name">${card.linkTitle ? linkedText(card.title) : esc(card.title)}</b></div>` +
-    (card.hideStatus ? "" : cardStatusHTML(card.status, card.statusText)) + close + `</header>` +
+    `<header class="card-head"><div class="card-heading">${card.mark ?? ""}<b class="card-title cc-name">${card.linkTitle ? linkedText(card.title) : esc(card.title)}</b>${card.statusInHeading ? status : ""}</div>` +
+    (card.statusInHeading ? "" : status) + close + `</header>` +
     (card.body ? `<p class="card-body cc-state">${linkedText(card.body)}</p>` : "") +
     (card.content ?? "") + (actions ? `<footer class="card-actions cc-actions">${actions}</footer>` : "") + `</section>`;
 }

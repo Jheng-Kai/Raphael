@@ -176,13 +176,19 @@ export function ownerQuestionHTML(question: OwnerQuestion): string {
   });
 }
 
+/** Whether the turn draws the card a background question waits on: that card then holds the question's way out (its own × or 捨棄). */
+const drawsCard = (turn: AgentTurn, id: string): boolean =>
+  [...turn.secrets ?? [], ...turn.connectors ?? [], ...turn.drafts ?? [], ...turn.connection_proposals ?? []].some(card => card.id === id);
+
 /**
  * A question card stands at the end of the thread only while it waits for the owner. Once answered,
  * cancelled or expired it is part of the conversation and stands where it was asked (settledQuestions).
  * `settled` picks the cards that no longer wait (true), the ones that wait (false) or all of them (undefined).
+ * A background question on another card (a key, an app, a draft) is answered from that card; only one whose card is not
+ * drawn keeps a 取消 of its own.
  */
 export const ownerQuestionsHTML = (turn: AgentTurn, settled?: boolean): string => (turn.owner_questions ?? [])
   .filter(question => settled === undefined || (question.state !== "asked") === settled).map(question =>
   question.kind === "ask_owner" || question.kind === "show_page" ? ownerQuestionHTML(question) :
-    question.state === "asked" ? `<div class="cc-actions" data-owner-question="${esc(question.id)}">` +
+    question.state === "asked" && !drawsCard(turn, question.card_id) ? `<div class="cc-actions" data-owner-question="${esc(question.id)}">` +
       btn(esc(t("common.cancel")), "sm", ' data-owner-answer="cancel"') + `<div role="alert" hidden></div></div>` : "").join("");

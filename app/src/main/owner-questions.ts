@@ -59,8 +59,9 @@ export function mountOwnerQuestions(thread: HTMLElement, changed: () => void): v
       return;
     }
     const button = target.closest<HTMLButtonElement>("[data-owner-option],[data-owner-skip],[data-owner-answer]");
-    const card = button?.closest<HTMLElement>("[data-owner-question]");
-    const id = card?.dataset.ownerQuestion;
+    // The × of another card (a key, an app) carries its question itself: that card is what waits, and what says a failure.
+    const id = button?.closest<HTMLElement>("[data-owner-question]")?.dataset.ownerQuestion;
+    const card = button?.parentElement?.closest<HTMLElement>(".conversation-card, [data-owner-question]");
     if (!button || !card || !id || busy.has(id)) return;
     // On a several-choice card a row is marked or unmarked; nothing is sent until its submit.
     if (button.dataset.ownerOption !== undefined && card.dataset.ownerMultiple === "true" && button.getAttribute("role") === "checkbox") {
@@ -76,12 +77,15 @@ export function mountOwnerQuestions(thread: HTMLElement, changed: () => void): v
       : button.dataset.ownerOption ?? typed;
     if (answer === "" || (Array.isArray(answer) && !answer.length)) return;
     busy.add(id);
-    card.querySelectorAll<HTMLButtonElement>("button").forEach(control => { control.disabled = true; });
+    // Only what was pressable is held while the answer goes, and only that is given back (a key card's Save stays off while its field is empty).
+    const held = [...card.querySelectorAll<HTMLButtonElement>("button")].filter(control => !control.disabled);
+    held.forEach(control => { control.disabled = true; });
     if (field) field.disabled = true;
     void ownerQuestionAnswer(id, answer).then(changed).catch(error => {
-      const notice = card.querySelector<HTMLElement>('[role="alert"]')!;
+      let notice = card.querySelector<HTMLElement>('[role="alert"]');
+      if (!notice) { notice = document.createElement("p"); notice.setAttribute("role", "alert"); notice.className = "card-body cc-state"; card.append(notice); }
       notice.textContent = describeError(error); notice.hidden = false;
-      card.querySelectorAll<HTMLButtonElement>("button").forEach(control => { control.disabled = false; });
+      held.forEach(control => { control.disabled = false; });
       if (field) field.disabled = false;
       syncQuestionCard(card);
       cardFailure(card, () => button.click());
