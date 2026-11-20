@@ -141,7 +141,7 @@ def proposal_operations(calls: list[dict]) -> list[dict]:
 _ACTION_NAMES = ("member_create", "member_update", "member_delete", "group_create", "group_rename", "member_skill_import", "member_command_save", "routine_create", "routine_update", "routine_delete")
 _ACTION_TITLES = {
     "en": ("Create member", "Update member", "Permanently delete member and all its data", "Create group", "Rename group", "Import member skills", "Save member command", "Create routine", "Update routine", "Delete routine"),
-    "zh-TW": ("建立成員", "更新成員", "永久刪除成員及其所有資料", "建立群組", "重新命名群組", "匯入成員技能", "儲存成員指令", "建立例行任務", "更新例行任務", "刪除例行任務"),
+    "zh-TW": ("建立角色", "更新設定", "永久刪除這個角色和它的所有資料", "建立群組", "重新命名群組", "匯入技能", "儲存指令", "建立例行任務", "更新例行任務", "刪除例行任務"),
     "ja": ("メンバーを作成", "メンバーを更新", "メンバーと全データを完全に削除", "グループを作成", "グループ名を変更", "スキルをインポート", "コマンドを保存", "定期タスクを作成", "定期タスクを更新", "定期タスクを削除"),
 }
 

@@ -483,7 +483,7 @@ class ConnectorsService:
     async def categories(self, params):
         return await self.composio.page("/toolkits/categories", cache=True)
 
-    async def set_key(self, params):
+    async def set_key(self, params, *, card_active=None):
         key = _text(params, "key", optional=True)
         if key.startswith("sk-or-"):
             raise ConnectorFailure("openrouter_key")
@@ -498,6 +498,12 @@ class ConnectorsService:
                 if error.status in (401, 403):
                     raise ConnectorFailure("auth", error.status) from None
                 raise
+        if card_active is not None:
+            # The card can be cancelled while the provider checks the key. It can only fill an empty vault slot.
+            if not card_active():
+                raise ConnectorFailure("cancelled")
+            if self.vault.filled(KEY):
+                return {"configured": True}
         if key != before:
             self._remove_managed(COMPOSIO_SERVER)
             self.store.session_id, self.store.config_version = "", None

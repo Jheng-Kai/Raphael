@@ -189,9 +189,9 @@ export function openActions(anchor: HTMLElement, items: readonly (ActionItem | t
 /**
  * A row's menu, grouped into sections: 釘選, 移到分組, 標為未讀 | 編輯 | 分享為範本 | 隱藏, 刪除.
  * A pinned tile's menu reads the same way: 取消釘選, 標為未讀 | 編輯 | 分享為範本
- * | 隱藏, 刪除, then after a line 換成其他成員, which puts a member that is not pinned in this tile's place. The tile has no
+ * | 隱藏, 刪除, then after a line 換成其他角色, which puts a member that is not pinned in this tile's place. The tile has no
  * 移到分組: its folder is where it goes back to. The primary sits in the top slot instead of a group and is not deleted from here:
- * its 換成其他成員 hands the primary on.
+ * its 換成其他角色 hands the primary on.
  */
 export function memberMenu(id: number, anchor: HTMLElement, host: Pick<ColumnHost, "view" | "moveMember" | "deleteMember" | "memberAction">): void {
   const list = host.view().list;
@@ -426,7 +426,7 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
 
   /**
    * The member search: a card in the middle of the window with the field, every member as a two-line
-   * row, what the words find in the messages, and 新增成員 at its foot. Enter takes the first row; the arrows walk them.
+   * row, what the words find in the messages, and 新增角色 at its foot. Enter takes the first row; the arrows walk them.
    */
   function openSearch(anchor: HTMLElement): void {
     if (document.querySelector(".side-search")) { closeMenu(); return; }

@@ -44,6 +44,9 @@ import { eventRead } from '../event-read';
 import { cancelGesture } from "../../shared/cancel-gesture";
 import { openActions } from "../member-column";
 import { mountConversationFind } from "../conversation-find";
+import { mountStatusLight } from "../status-light";
+import { liveStates } from "../slime";
+import { mountCardFloat } from "../card-float";
 import { openRoutineView } from "../routine-view";
 import { createAttachmentMedia } from "../attachment-media";
 import { adoptPicture } from "../media-cache";
@@ -269,8 +272,8 @@ export function createAgent(app: AppContext, places?: {
   el.innerHTML =
     `<section class="mb-chat">` +
     `<div class="page-head mb-head" data-window-drag><h1 class="mb-h1">${esc(t("agent.title"))}</h1><span class="mb-head-l">` +
-    iconButton("search", t("agent.search"), ' data-act="search" aria-expanded="false" hidden', "ra-tool") +
-    // Search at the left and share at the right, symmetric.
+    // The status list at the left and share at the right, symmetric (status-light.ts): an icon; the dots are in its list.
+    iconButton("steps", t("status.idle"), ' data-act="status" aria-haspopup="menu" aria-expanded="false" data-level="idle"', "ra-tool status-light") +
     `</span><span class="mb-head-c"></span><div class="ra-tools">${iconButton("share", t("template.export"), ' data-act="share-member" aria-haspopup="menu" aria-expanded="false" hidden', "ra-tool")}</div></div>` +
     `<div class="ra-find" hidden></div>` +
     `<div class="ra-stage">` +
@@ -281,10 +284,8 @@ export function createAgent(app: AppContext, places?: {
     `</div>` +
     `</section>`;
   const heading = el.querySelector<HTMLElement>("h1")!;
-  const searchButton = el.querySelector<HTMLElement>('[data-act="search"]')!;
+  const statusButton = el.querySelector<HTMLElement>('[data-act="status"]')!;
   const shareButton = el.querySelector<HTMLElement>('[data-act="share-member"]')!;
-  /** Whether the open member's computer is working now: a dot beside its name in the header says so. */
-  let computerActive = false;
   const find = el.querySelector<HTMLElement>(".ra-find")!;
 
   const stage = el.querySelector<HTMLElement>(".ra-stage")!;
@@ -294,6 +295,8 @@ export function createAgent(app: AppContext, places?: {
   // A panel dragged wider or narrower leaves the reading place where it was (reading-place.ts); a dock that grows or shrinks
   // under a thread that follows its bottom is followed by the thread's one stick to the bottom (message-rich.ts).
   keepReadingPlace(scroller, ".thread > li");
+  // A card waiting for the owner, scrolled out of sight, floats at the top of the conversation (card-float.ts).
+  mountCardFloat({ stage, scroller, thread });
   const none = el.querySelector<HTMLElement>(".ra-none")!;
   const wait = el.querySelector<HTMLElement>(".ra-wait")!;
   const empty = el.querySelector<HTMLElement>(".ra-empty")!;
@@ -365,11 +368,6 @@ export function createAgent(app: AppContext, places?: {
     face: () => members.faceOf(members.current(), 22),
     closePanel: () => members.setDetails(false),
     openPanel: () => members.computer(), panelVisible: () => members.detailsOpen() && members.details.dataset.detailsTab === 'computer',
-    status: active => {
-      computerActive = active;
-      const trigger = el.querySelector<HTMLElement>(".mb-chat .conversation-trigger");
-      if (trigger) { trigger.classList.toggle("is-computer-active", active); drawConversation(); }
-    },
     changed: () => { if (visible && !scroller.hidden) drawThread(); },
     trySkill: text => sendFromPage(text),
     stop: turnId => { const turn = turns.find(turn => turn.id === turnId); return turn?.task ? api.workerCancel(turn.task.id) : turn?.session_id ? api.agentStop(turn.session_id, memberId()) : Promise.resolve(); },
@@ -395,6 +393,7 @@ export function createAgent(app: AppContext, places?: {
   conversationButton.append(members.pill, caption);
   head.append(conversationButton);
   el.querySelector(".mb-head-c")!.append(head);
+  mountStatusLight(statusButton, { roster: () => members.roster(), face: member => faceHTML(member, 22, { moving: true }), open: id => members.select(id) });
   const conversationCache = new Map<number, ConversationInfo[]>();
   let targetTurn: number | undefined;
   /** The turn opened for a page of the Library is not marked in the thread: the page is what the owner came for. */
@@ -418,11 +417,19 @@ export function createAgent(app: AppContext, places?: {
     composerFolder?.draw();
     caption.textContent = title;
     caption.hidden = !title;
-    const name = members.member().name;
-    const working = computerActive ? ` · ${t("desktop.working")}` : "";
-    conversationButton.setAttribute("aria-label", (title ? `${name}: ${title}` : name) + working); conversationButton.title = (title || name) + working;
-    conversationButton.classList.toggle("is-computer-active", computerActive);
+    drawTitleLabel(title);
   }
+
+  /** The name's label and tooltip; " · 正在使用電腦" only while this member's own slime is at the computer, never because the
+   *  one shared computer is running (every member has its screen on it). */
+  function drawTitleLabel(title = caption.hidden ? "" : caption.textContent ?? ""): void {
+    const name = members.member().name;
+    const working = liveStates().get(memberId()) === "computer" ? ` · ${t("desktop.working")}` : "";
+    const label = (title ? `${name}: ${title}` : name) + working, tip = (title || name) + working;
+    if (conversationButton.getAttribute("aria-label") !== label) conversationButton.setAttribute("aria-label", label);
+    if (conversationButton.title !== tip) conversationButton.title = tip;
+  }
+  window.addEventListener("slime-activity", () => drawTitleLabel());
 
   const conversationsDirty = new Set<number>();
   /** The member changed while the page was not on screen: its commands and skills are read when it shows. */
@@ -866,7 +873,6 @@ export function createAgent(app: AppContext, places?: {
     // The voice slot's tooltip is the custom one drawTaskSlot keeps (voice or Stop); a native title would double it.
     voiceButton.setAttribute("aria-label", t("agent.voice"));
     for (const [button, label] of [
-      [searchButton, t("agent.search")],
       [attachButton, t("composerPlus.label")],
     ] as const) {
       button.setAttribute("aria-label", label);
@@ -1209,13 +1215,11 @@ export function createAgent(app: AppContext, places?: {
       wait.innerHTML = loadingHTML();
       wait.hidden = false;
       scroller.hidden = empty.hidden = dock.hidden = true;
-      searchButton.hidden = true;
       shareButton.hidden = true;
       return;
     }
     wait.hidden = true;
     const shown = turns;
-    searchButton.hidden = shown.length === 0;
     // Raphael is the app's own: it is not shared as a template.
     shareButton.hidden = inRaphael();
     if (shown.length === 0 && searching) closeSearch(false);
@@ -1918,7 +1922,7 @@ export function createAgent(app: AppContext, places?: {
     if (visible && turns.some((turn) => turn.permissions?.length)) drawThread();
   }
 
-  const finder = mountConversationFind({ button: searchButton, bar: find, thread, scroll: scroller,
+  const finder = mountConversationFind({ bar: find, thread, scroll: scroller,
     records: () => turnWindow.before || turnWindow.after ? [...turns].sort((a,b) => a.created_at_ms-b.created_at_ms || a.id-b.id).map(turn => ({ key: `turn:${turn.id}`,
       texts: [turn.question, ...(turn.messages?.length ? turn.messages.filter(message => ["reply", "event"].includes(message.kind)).map(message => messagePlainText(message.text, true, composioAction(turn))) : [messagePlainText(turn.text, true, composioAction(turn))])] })) : undefined,
     reveal: key => { if (turnWindow.focus(key.replace(/^turn:/, ""))) render(); },
@@ -1957,7 +1961,7 @@ export function createAgent(app: AppContext, places?: {
       if (roomPane.active) {
         const input = roomPane.el.querySelector<HTMLInputElement>('.ra-find:not([hidden]) input');
         if (input) input.focus();
-        else roomPane.el.querySelector<HTMLElement>('[data-room-search]')?.click();
+        else roomPane.find();
       }
       else finder.open();
       return;
@@ -3420,6 +3424,8 @@ export function createAgent(app: AppContext, places?: {
       if (!wasVisible) beginOpening();
       visible = true;
       if (arg === "computer") { if (roomPane.active) roomPane.close(); members.computer(); }
+      // Raphael's own conversation, where an app handed over from the connections is set up (connections.ts askConnect).
+      if (arg === "raphael") { if (roomPane.active) roomPane.close(); if (members.current() !== RAPHAEL_ID) members.select(RAPHAEL_ID); }
       // The thread is asked for before anything else on the page: the core answers in order.
       const draft = draftText(arg);
       const refocus = (): void => {

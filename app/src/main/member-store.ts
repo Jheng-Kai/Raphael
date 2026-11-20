@@ -16,7 +16,7 @@ const categories = ["engineering", "sales", "marketing", "design", "personal", "
 const categoryKeys = {engineering:"store.engineering",sales:"store.sales",marketing:"store.marketing",design:"store.design",personal:"store.personal",hr:"store.hr",product:"store.product",operations:"store.operations"} as const;
 
 /**
- * The store, on a page of its own where the conversation stands (the sidebar's + › 商店). It is no part of 新增成員, which asks only a
+ * The store, on a page of its own where the conversation stands (the sidebar's + › 商店). It is no part of 新增角色, which asks only a
  * name (member-creator.ts); the starter templates and 開啟檔案 are one button beside the search, for they too are ready-made members.
  */
 export function openMemberStore(o: { groupId: number | null; create(member: NewMember): Promise<Member | null> }): Dialog {

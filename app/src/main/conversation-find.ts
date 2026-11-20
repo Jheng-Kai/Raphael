@@ -3,7 +3,7 @@ import { onLocaleChange, t } from "./i18n";
 import { describeError } from "./format";
 import { esc, ico, iconButton } from "./ui";
 
-export function mountConversationFind(o: { button: HTMLElement; bar: HTMLElement; thread: HTMLElement; scroll: HTMLElement; load(current: () => boolean): Promise<void>; changed?(open: boolean): void;
+export function mountConversationFind(o: { button?: HTMLElement; bar: HTMLElement; thread: HTMLElement; scroll: HTMLElement; load(current: () => boolean): Promise<void>; changed?(open: boolean): void;
   records?(): { key: string; texts: string[] }[] | undefined; reveal?(key: string): void; revealWork?(id: number): void;
 }) {
   let opened = false, query = "", index = -1, epoch = 0, complete = false, positioned = false;
@@ -19,7 +19,7 @@ export function mountConversationFind(o: { button: HTMLElement; bar: HTMLElement
     iconButton("x", t("agent.searchClose"), ' data-find="close"', "ra-tool");
   const input = o.bar.querySelector<HTMLInputElement>("input")!, count = o.bar.querySelector<HTMLElement>(".ra-find-count")!;
   onLocaleChange(() => {
-    o.button.title = t("agent.search"); o.button.setAttribute("aria-label", t("agent.search"));
+    if (o.button) { o.button.title = t("agent.search"); o.button.setAttribute("aria-label", t("agent.search")); }
     input.placeholder = t("agent.search"); input.setAttribute("aria-label", t("agent.search"));
     for (const [action, label] of [["previous", t("chat.findPrevious")], ["next", t("chat.findNext")], ["close", t("agent.searchClose")]]) {
       const button = o.bar.querySelector<HTMLElement>(`[data-find="${action}"]`)!;
@@ -117,7 +117,7 @@ export function mountConversationFind(o: { button: HTMLElement; bar: HTMLElement
       count.textContent = describeError(error);
     }
   }
-  function open(): void { bindNavLayer(o.bar, close); opened = true; o.changed?.(true); o.bar.hidden = false; o.button.setAttribute('aria-expanded', 'true'); input.focus({preventScroll:true}); }
+  function open(): void { bindNavLayer(o.bar, close); opened = true; o.changed?.(true); o.bar.hidden = false; o.button?.setAttribute('aria-expanded', 'true'); input.focus({preventScroll:true}); }
   function close(focus = true): void {
     const viewport = o.scroll.getBoundingClientRect();
     const anchor = marks[index]?.closest<HTMLElement>('.chat-message, .timeline-event, .event-group') ?? [...o.thread.querySelectorAll<HTMLElement>('.chat-message, .message-text')].find(el => {
@@ -126,9 +126,9 @@ export function mountConversationFind(o: { button: HTMLElement; bar: HTMLElement
     const top = anchor?.getBoundingClientRect().top;
     epoch++; clearTimeout(timer); opened = false; positioned = false; query = ""; input.value = ""; results = undefined; clear();
     o.changed?.(false);
-    o.bar.hidden = true; o.button.setAttribute('aria-expanded', 'false');
+    o.bar.hidden = true; o.button?.setAttribute('aria-expanded', 'false');
     if (anchor?.isConnected && top !== undefined) o.scroll.scrollTop += anchor.getBoundingClientRect().top - top;
-    if (focus) o.button.focus({preventScroll:true});
+    if (focus) o.button?.focus({preventScroll:true});
   }
   function revealResult(): void {
     const target = results?.[resultIndex];
@@ -143,7 +143,7 @@ export function mountConversationFind(o: { button: HTMLElement; bar: HTMLElement
       revealResult(); refresh(); position(true);
     } else if (marks.length) { index = (index + delta + marks.length) % marks.length; position(true); }
   }
-  o.button.addEventListener('click', () => opened ? close() : open());
+  o.button?.addEventListener('click', () => opened ? close() : open());
   o.bar.addEventListener('click', event => {
     const action = (event.target as Element).closest<HTMLElement>('[data-find]')?.dataset.find;
     if (action === 'close') close(); else if (action) move(action === 'previous' ? -1 : 1);

@@ -100,6 +100,8 @@ export interface MembersShell {
   current(): number;
   /** The name of member `id`, as the list has it (Raphael's for 0). */
   nameOf(id: number): string;
+  /** Every member as the list has it, with whether it waits for the owner (none before the list is read). */
+  roster(): readonly Member[];
   /** The face of member `id` at `size` px (Raphael's bare emblem for 0); none for a member the list does not have. */
   faceOf(id: number, size: number): string;
   /** The colour member `id`'s name takes where members talk (owner-bubble.ts `nameAccent`). */
@@ -690,6 +692,7 @@ export function createMembers(host: MembersHost): MembersShell {
     pill,
     current: () => current,
     nameOf: (id) => memberOf(list, id)?.name ?? "",
+    roster: () => list?.members ?? [],
     groups: () => [...(list?.groups ?? [])].sort((a, b) => a.position - b.position),
     bindMentions: input => { fields.add(bindComposerMentions(input, () => ({ list, self: current, connect: () => host.app.go("settings", "connections") }))); },
     mentionTargets: () => (list ? mentionTargets(list) : []),

@@ -53,7 +53,7 @@ export function createMemberActions(host: MemberActionHost) {
     } catch (err) { toaster.info(describeError(err)); }
   }
 
-  /** 換成其他成員 on the primary's menu: choose who takes over, without changing the chief or existing conversations. */
+  /** 換成其他角色 on the primary's menu: choose who takes over, without changing the chief or existing conversations. */
   async function choosePrimary(): Promise<void> {
     const list = host.list();
     if (!list) return;
@@ -70,7 +70,7 @@ export function createMemberActions(host: MemberActionHost) {
   }
 
   /**
-   * 換成其他成員 on a pinned tile: the member chosen takes
+   * 換成其他角色 on a pinned tile: the member chosen takes
    * exactly this tile's place and this member goes back to its folder or list, where it stood before it was pinned. One press
    * on a member, no question; doing it the other way round puts everything back. The tile's place is a place in the roster's
    * order, so the member chosen is set at the old one's position before the old one is unpinned: the old member keeps its own

@@ -222,9 +222,12 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
     def skills(self, member_id: int) -> list[dict]:
         skills = self.owned_skills(member_id)
         if member_id != SHARED:
-            grants = dict(self.conn.execute("SELECT skill_id, enabled FROM member_skill_grants WHERE member_id=?", (member_id,)))
-            skills += [{**s, "shared": True, "enabled": bool(s["enabled"] and grants.get(s["id"], True))}
-                       for s in self.owned_skills(SHARED)]
+            rows = self.conn.execute(
+                "SELECT s.id,s.name,s.description,s.source,s.enabled FROM member_skills s "
+                "JOIN skill_packages p ON p.key=s.package_key WHERE s.member_id=-1 AND s.enabled AND p.enabled "
+                "AND (p.access=? OR ? IN (SELECT value FROM json_each(p.access))) ORDER BY s.id",
+                ('"all"', member_id))
+            skills += [self.skill_details(SHARED, {**dict(row), "enabled": True, "shared": True}) for row in rows]
         return slash_skills(skills, self.commands(member_id))
 
     def _path(self, member_id: int, skill_id: int) -> Path:
@@ -278,21 +281,20 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
         if not any(skill["id"] == skill_id for skill in self.skills(member_id)):
             raise MemberError("not_found", "no such member skill")
         if self.skill_owner(member_id, skill_id) == SHARED and member_id != SHARED:
-            with self.conn:
-                self.conn.execute("INSERT INTO member_skill_grants(member_id,skill_id,enabled) VALUES (?,?,?) ON CONFLICT(member_id,skill_id) DO UPDATE SET enabled=excluded.enabled", (member_id, skill_id, enabled))
-            return self._skill(member_id, skill_id)
+            raise MemberError("scope", "edit shared skills in the shared library")
         with self.conn:
             self.conn.execute("UPDATE member_skills SET enabled = ? WHERE member_id = ? AND id = ?", (enabled, member_id, skill_id))
         self._mirror(member_id)
         return next(skill for skill in self.skills(member_id) if skill["id"] == skill_id)
 
-    def copy_grants(self, from_member: int, to_member: int) -> None:
+    def copy_package_access(self, from_member: int, to_member: int) -> None:
         """A copied member has the shared library's skills switched on or off as the original has them (#278)."""
         self.check(from_member)
         self.check(to_member)
         with self.conn:
-            self.conn.execute("INSERT OR REPLACE INTO member_skill_grants(member_id,skill_id,enabled) "
-                              "SELECT ?, skill_id, enabled FROM member_skill_grants WHERE member_id=?", (to_member, from_member))
+            self.conn.execute("UPDATE skill_packages SET access=json_insert(access,'$[#]',?) "
+                              "WHERE json_type(access)='array' AND ? IN (SELECT value FROM json_each(access)) "
+                              "AND ? NOT IN (SELECT value FROM json_each(access))", (to_member, from_member, to_member))
 
     def _skill(self, member_id: int, skill_id: int) -> dict:
         self.check(member_id)
@@ -437,7 +439,7 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
                         except UnicodeError:
                             continue
                         text += "\n\n<reference name=" + json.dumps(relative) + ">\n" + content + "\n</reference>"
-                if skill["source"].startswith("local:") or skill.get("set_id"):
+                if skill["source"].startswith("local:") or skill["source"] == "upload" or skill.get("set_id"):
                     text += "\n\nSkill folder: " + str(path.parent) + "\nRead the other files of this folder (a page template, data) with skill_read and reference, not with a command. Run scripts only through the local command tool and its ordinary approval rules. Import and guidance grant no execution permission."
                 return text
         return None

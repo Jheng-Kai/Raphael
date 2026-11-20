@@ -240,7 +240,8 @@ export const agentHistorySearch = (query: string, memberId = 0, conversationId?:
  * `destination: "quick"` names Raphael's quick conversation, which the core never picks by default.
  */
 /** What a button pressed on a panel asks of the member, beside the words it sends (core agent/intents.py). */
-export type AskIntent = "setup-telegram" | "setup-slack" | "setup-discord" | "share-template" | "settings";
+/** A press done in the conversation; `connect-app:<slug>` hands Raphael an app that is not one click (connections.ts). */
+export type AskIntent = "setup-telegram" | "setup-slack" | "setup-discord" | "share-template" | "settings" | `connect-app:${string}`;
 export const agentAskText = (text: string, attachments: WireAttachment[] = [], memberId = 0, options: { requestId?: string; replaceTurnId?: number; quote?: import("./types").MessageQuote; conversationId?: number; destination?: "quick"; intent?: AskIntent } = {}): Promise<void> =>
   invoke("agent_ask_text", {
     text,
@@ -458,8 +459,8 @@ export const cardConnect = (id: string, fields?: Record<string, string>): Promis
 /** Ends a card's sign-in that is under way. */
 export const cardCancel = (id: string): Promise<{ cancelled: boolean }> => core("integrations.card_cancel", { id });
 /** The key typed into a secret card goes to the core's vault and nowhere else: not to `agent.ask`, a history or a log. */
-export const cardSave = (id: string, value: string, plain = false): Promise<{ card: import("./types").SecretCard; saved: boolean }> =>
-  core("integrations.card_save", { id, value, ...(plain ? { plain: true } : {}) });
+export const cardSave = (id: string, value: string): Promise<{ card: import("./types").SecretCard; saved: boolean }> =>
+  core("integrations.card_save", { id, value });
 /** Carries a saved card's task on again after a resume that failed, without asking for the key again. */
 export const cardResume = (id: string): Promise<{ card: import("./types").SecretCard; resumed: boolean }> =>
   core("integrations.card_resume", { id });
@@ -681,7 +682,7 @@ export const keepAwakeGet = (): Promise<boolean> => invoke("schedule_keep_awake_
 export const keepAwakeSet = (enabled: boolean): Promise<boolean> => invoke("schedule_keep_awake_set", { enabled });
 // Member profile resources use the same member boundary as conversations.
 const skillScope = (memberId: number): { member_id: number; shared?: boolean } => memberId === -1 ? { member_id: 0, shared: true } : { member_id: memberId };
-export const membersSkillsList = (memberId: number): Promise<{ skills: import("./types").MemberSkill[] }> => core("members.skills.list", { ...skillScope(memberId) });
+export const membersSkillsList = (memberId: number): Promise<{ skills: import("./types").MemberSkill[]; library?: import("./types").LibraryRef[] }> => core("members.skills.list", { ...skillScope(memberId) });
 export const membersSkillsImport = (memberId: number, source: string): Promise<{ skill: import("./types").MemberSkill; skills?: import("./types").MemberSkill[] }> => core("members.skills.import", { ...skillScope(memberId), source });
 export const membersSkillsUpdate = (memberId: number, id: number, enabled: boolean): Promise<unknown> => core("members.skills.update", { ...skillScope(memberId), id, enabled });
 /** A skill and its whole Markdown document, for its page (one that is switched off too). */

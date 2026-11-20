@@ -576,6 +576,8 @@ export interface SecretCard {
   key?: boolean;
   /** What that key is for, in a few words the member wrote. */
   purpose?: string;
+  /** The Composio API key Raphael asked for in the conversation (`request_secret` with `connection: "composio"`). */
+  composio?: boolean;
   id: string;
   /** The connection's name. */
   name: string;
@@ -1253,7 +1255,7 @@ export type MainPageId = Exclude<PageId, "settings" | "history" | "dictionary">;
 export type DictationTab = "overview" | "history" | "dictionary";
 
 /** The tabs of the settings panel. "memory" is no tab (R-MEM-10): it stays a name only so an old saved or linked pane opens 一般. */
-export type SettingsPane = "general" | "memory" | "appearance" | "dictation" | "agent" | "tools" | "safety" | "connections" | "messaging" | "models" | "usage" | "data" | "about";
+export type SettingsPane = "general" | "memory" | "appearance" | "dictation" | "agent" | "tools" | "skills" | "safety" | "connections" | "messaging" | "models" | "usage" | "data" | "about";
 
 /**
  * What the 拉斐爾 page is to put in its composer when it opens, ready to be sent or changed: the
@@ -1266,7 +1268,7 @@ export type CalendarEventFocus = `calendar:${CalendarDate}:${string}`;
 export type CalendarCreate = `calendar-new:${CalendarDate}`;
 /** Calendar on the week of that day, its usual view. */
 export type CalendarWeek = `calendar-week:${CalendarDate}`;
-export type PageArgument = "computer" | SettingsPane | AgentDraft | CalendarDate | CalendarEventFocus | CalendarCreate | CalendarWeek | `repair:${string}:${string}` | `member-settings:${number}`;
+export type PageArgument = "computer" | "raphael" | SettingsPane | AgentDraft | CalendarDate | CalendarEventFocus | CalendarCreate | CalendarWeek | `repair:${string}:${string}` | `member-settings:${number}`;
 
 /** One of the five pages of the main window. */
 export interface Page {
@@ -1419,4 +1421,6 @@ export interface McpPreview { candidates: McpCandidate[]; rejected: number }
 export interface McpTest { ok: boolean; tools: string[]; error?: string }
 /** Member-owned resources; command templates expand only in the core. */
 export interface MemberSkill { set_id?: number; set_kind?: "skill" | "command"; plugin_version?: string; shared?: boolean; source_changed?: boolean | null; id: number; name: string; description: string; enabled: boolean; source: string; plugin?: string; slash_name?: string; provenance?: "learned" | "imported" | "owner"; revision?: string; learned_at?: string | null; updated_at?: string | null }
+/** A package of the team skill library given to a member (members.skills.list `library`): its key, name and how many skills it holds. */
+export interface LibraryRef { key: string; name: string; skills: number }
 export interface MemberCommand { id: number; name: string; description: string; template: string }

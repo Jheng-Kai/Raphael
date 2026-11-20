@@ -1026,18 +1026,16 @@ describe("the page of an app that is not connected", () => {
     });
   });
 
-  test("says what signing in asks once, in a line, and how it signs in", () => {
+  test("an app that is not one click asks nothing on its page: Raphael explains it, and its info says how it signs in", () => {
     const catalog = [...CATALOG, service("acme", "Acme", { needs: "key" }), service("devapp", "Devapp", { needs: "own_app" }), service("slack", "Slack", { source: "composio", url: "" }), service("open", "Open", { auth: "none" })];
     const acme = dom(appPage("acme", { catalog }));
-    expect(acme.querySelector(".cs-needs")!.textContent).toBe("Acme 要用你自己的 API 金鑰登入。");
+    expect(acme.querySelector(".cs-needs")).toBeNull();
     expect(infoOf(appPage("acme", { catalog }))[t("conn.info.signIn")]).toBe("API 金鑰");
     expect(dom(appPage("devapp", { catalog })).querySelector(".cs-needs")).toBeNull();
     expect(infoOf(appPage("devapp", { catalog }))[t("conn.info.signIn")]).toBe(t("conn.info.ownApp"));
     expect(infoOf(appPage("slack", { catalog }))[t("conn.info.provider")]).toBe("Composio");
     expect(Object.keys(infoOf(appPage("slack", { catalog }))).includes(t("conn.server"))).toBe(false);
     expect(infoOf(appPage("open", { catalog }))[t("conn.info.signIn")]).toBe(t("conn.info.none"));
-    setLocale("en");
-    expect(dom(appPage("acme", { catalog })).querySelector(".cs-needs")!.textContent).toBe("Acme signs in with your own API key.");
   });
 
   test("n8n and the owner's own Google are set up in the conversation: their pages ask nothing", () => {
@@ -1812,6 +1810,32 @@ describe("what the dialog does", () => {
     expect(api.connectorsConnect).not.toHaveBeenCalled();
   });
 
+  test("連結 on an app that asks for a key hands it to Raphael with its slug, and signing it in again does too, a sign-in stays one click", async () => {
+    api.integrationsCatalog.mockResolvedValue({ services: [...CATALOG, service("acme", "Acme", { needs: "key" }), service("linear", "Linear", { needs: "sign_in" })] });
+    // Acme is connected, but its sign-in ran out.
+    api.toolsetsList.mockResolvedValue({ groups: [{ ...notes, id: "ac01", name: "Acme", catalog_id: "acme", status: "error", error: "auth" }] });
+    api.integrationsConnect.mockResolvedValue({ connected: true, server: { id: "li01" } });
+    const askConnect = vi.fn();
+    const c = createConnections({ ...host, askConnect });
+    await c.load();
+    c.click(button("join", { id: "acme" }));
+    expect(askConnect).toHaveBeenLastCalledWith("acme", "Acme");
+    c.click(button("join", { id: "google" }));
+    expect(askConnect).toHaveBeenLastCalledWith("google", "Google（私人連接）");
+    c.click(button("relogin", { id: "ac01" }));
+    expect(askConnect).toHaveBeenLastCalledWith("acme", "Acme");
+    expect(askConnect).toHaveBeenCalledTimes(3);
+    expect(api.connectorsConnect).not.toHaveBeenCalled();
+    expect(api.integrationsConnect).not.toHaveBeenCalled();
+    expect(host.tryPrompt).not.toHaveBeenCalled();
+    expect(c.view().form).toBeNull();
+    // A direct sign-in keeps its one click.
+    c.click(button("join", { id: "linear" }));
+    await settle();
+    expect(api.integrationsConnect).toHaveBeenCalledWith({ catalog_id: "linear" });
+    expect(askConnect).toHaveBeenCalledTimes(3);
+  });
+
   // The owner's own Google is reachable where the Google row is.
   test("the view offers the owner's own Google, and its 連結 leaves for the conversation where the card walks the steps", async () => {
     const c = createConnections(host);
@@ -2073,7 +2097,7 @@ describe("what the dialog does", () => {
       vi.mocked(confirmDelete).mockResolvedValueOnce(false);
       c.click(button("account-remove", { id: "composio:gmail", account: "a2" }));
       await settle();
-      expect(confirmDelete).toHaveBeenCalledWith("Me", { words: { title: "移除「Me」？", hint: "成員將無法再使用這個帳號。", action: "移除" } });
+      expect(confirmDelete).toHaveBeenCalledWith("Me", { words: { title: "移除「Me」？", hint: "移除後就不能再用這個帳號。", action: "移除" } });
       expect(api.connectorsRemoveAccount).not.toHaveBeenCalled();
       c.click(button("account-remove", { id: "composio:gmail", account: "a1" }));
       await settle();

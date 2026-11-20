@@ -26,6 +26,7 @@ import { type LanguageGroup, languageSelectHTML, normalizeLanguages } from "../l
 import { bindingLabels } from "../keys";
 import { type RulesView, rulesHTML } from "../safety-rules";
 import { type VaultView, emptyVaultView, vaultHTML } from "../vault";
+import { type SkillLibraryView, emptySkillLibraryView, skillLibraryHTML } from "../skill-library";
 import { AUTO_MICROPHONE, microphoneChoices } from "../microphone";
 import { missingHTML } from "../missing";
 import type { LocalView } from "../local-models";
@@ -76,6 +77,7 @@ const PRICES_LOADING = () => t("settings.026");
 export const PANES: { id: SettingsPane; icon: IconName; title: () => string }[] = [
   { id: "general", icon: "gear", title: () => t("settings.paneGeneral") },
   { id: "tools", icon: "steps", title: () => t("settings.paneTools") },
+  { id: "skills", icon: "sparkle", title: () => t("settings.paneSkills") },
   { id: "safety", icon: "lock", title: () => t("settings.paneSafety") },
   { id: "models", icon: "bot", title: () => t("settings.paneUsage") },
   // Dictation and its keys are not what most people come here for: under the models.
@@ -136,6 +138,8 @@ export interface SettingsView {
   /** The shared safety rules, in Safety (none: not drawn). */
   rules?: RulesView;
   vault?: VaultView;
+  /** 團隊技能庫: the shared skills in packages, and who may use each (none: not drawn yet). */
+  skillLibrary?: SkillLibraryView;
   /** Shared services, in Tools: who searches, reads pages and PDFs, and looks at images (none: not drawn). */
   services?: ServicesView;
   providers?: ProvidersView;
@@ -475,6 +479,11 @@ function toolsHTML(v: SettingsView): string {
   return headingHTML(v) + coreNote(v) + (v.services ? servicesHTML(v.services, modelPickerHTML(visionPickerLook(v)), v.brain, (id) => modelDisplayName(catalogOf(v), id)) : "");
 }
 
+/** 團隊技能庫: every shared skill in its package, and who may use each (skill-library.ts). */
+function skillsHTML(v: SettingsView): string {
+  return headingHTML(v) + coreNote(v) + skillLibraryHTML(v.skillLibrary ?? emptySkillLibraryView());
+}
+
 /** Shared safety rules and local command permissions. */
 function safetyHTML(v: SettingsView): string {
   return headingHTML(v) + coreNote(v) + vaultHTML(v.vault ?? emptyVaultView()) + (v.rules ? rulesHTML(v.rules) : "");
@@ -548,6 +557,8 @@ export function paneHTML(v: SettingsView): string {
       return toolsHTML(v);
     case "safety":
       return safetyHTML(v);
+    case "skills":
+      return skillsHTML(v);
     case "connections":
       return connectionsTabHTML(v);
     case "usage":

@@ -1,6 +1,6 @@
 import {scene,click,type,wait,waitGone,member,settings,check,scroll} from "./steps.mjs";
 
-// The gallery is reached from the store page (the sidebar's + › 商店), no longer from 新增成員.
+// The gallery is reached from the store page (the sidebar's + › 商店), no longer from 新增角色.
 const maker = [{action:"member-column",collapsed:false},click('[data-col="add"]'),click('#app-popover [data-pick="member-store"]'),wait(".member-store"),click('.member-store [data-dlg="templates"]'),wait(".template-gallery")];
 const preview = [...maker,click('[data-dlg="open"]'),wait(".template-preview"),check("template-content")];
 const accountFixture = {managedConnectors:[{id:"composio:gmail",kind:"composio",name:"Gmail",description:"整理重要來信與準備回覆",status:"ACTIVE",enabled:true,enabled_tools:["GMAIL_FETCH_EMAILS"],disabled_tools:[],accounts:[{id:"work",status:"ACTIVE",label:"工作信箱 · work@example.test"},{id:"personal",status:"ACTIVE",label:"私人信箱 · personal@example.test"}]}]};

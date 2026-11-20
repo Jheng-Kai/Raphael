@@ -406,53 +406,19 @@ const keyApp: Toolkit = { ...toolkit, slug: "acme", name: "Acme", logo: "", need
 const keyPlan = { slug: "acme", name: "Acme", needs: "key", scheme: "API_KEY", redirect_url: null, guide_url: "https://docs.acme.example/keys", app_url: "https://acme.example",
   fields: [{ name: "generic_api_key", label: "API Key", description: "Your Acme key", required: true, secret: true, default: null }] };
 
-test("加入 on an app that needs a key asks in its form first: the key crosses one call and the field is emptied", async () => {
+test("加入 on an app that needs a key hands it to Raphael: no form opens here and nothing is asked of Composio", async () => {
   api.connectorsCatalog.mockResolvedValue({ items: [keyApp], categories: [] });
   api.connectorsToolkit.mockResolvedValue(keyPlan);
-  api.connectorsConnect.mockResolvedValue({ connected: true });
   const { c, root, click } = setup(); await c.load(); await settle();
-  expect(root.querySelector(".need")).toBeNull(); // the row says nothing of it; the page does
+  expect(root.querySelector(".need")).toBeNull(); // the row says nothing of it
   click("open-store", "acme");
-  expect(root.querySelector(".cs-needs")?.textContent).toBe("Acme signs in with your own API key.");
+  expect(root.querySelector(".cs-needs")).toBeNull(); // nor its page: Raphael explains it in the conversation
   expect(root.querySelector(".cs-info")?.textContent).toContain("API key");
   click("join", "acme"); await settle();
-  expect(api.connectorsConnect).not.toHaveBeenCalled(); // nothing is asked of Composio before the form is filled in
+  expect(api.connectorsConnect).not.toHaveBeenCalled();
   expect(api.integrationsConnect).not.toHaveBeenCalled();
-  const dialog = document.querySelector(".cn-setup-dialog")!;
-  const field = dialog.querySelector<HTMLInputElement>('[data-setup-field="generic_api_key"]')!;
-  expect(field.type).toBe("password");
-  field.value = "zk-test-0123";
-  dialog.querySelector<HTMLButtonElement>('[data-dlg="add"]')!.click(); await settle();
-  expect(api.connectorsConnect).toHaveBeenCalledTimes(1);
-  expect(api.connectorsConnect).toHaveBeenCalledWith("acme", { generic_api_key: "zk-test-0123" });
   expect(document.querySelector(".cn-setup-dialog")).toBeNull();
-  expect(field.value).toBe("");
-  expect(document.body.innerHTML + JSON.stringify(c.view())).not.toContain("zk-test-0123");
   expect(c.view().login).toBeNull(); c.reset();
-});
-
-test("a key Composio refuses is told in the form; the missing Composio key offers the place to add it", async () => {
-  api.connectorsCatalog.mockResolvedValue({ items: [keyApp], categories: [] });
-  api.connectorsToolkit.mockResolvedValue(keyPlan);
-  const { c, root, click } = setup(); await c.load(); await settle();
-  for (const [error, words] of [["key_rejected", "Acme did not accept this key"], ["missing_key", "no working Composio key"]] as const) {
-    api.connectorsConnect.mockRejectedValueOnce(new Error(error));
-    click("join", "acme"); await settle();
-    const dialog = document.querySelector(".cn-setup-dialog")!;
-    dialog.querySelector<HTMLInputElement>("[data-setup-field]")!.value = "zk-test-0123";
-    dialog.querySelector<HTMLButtonElement>('[data-dlg="add"]')!.click(); await settle();
-    expect(dialog.querySelector('[role="alert"]')?.textContent).toContain(words);
-    expect(dialog.querySelector<HTMLInputElement>("[data-setup-field]")!.value).toBe("");
-    expect(dialog.querySelector<HTMLButtonElement>('[data-dlg="add"]')!.disabled).toBe(false);
-    expect(document.body.innerHTML).not.toContain("zk-test-0123");
-    if (error === "missing_key") {
-      dialog.querySelector<HTMLButtonElement>('[data-dlg="composio"]')!.click(); await settle();
-      expect(document.querySelector(".cn-setup-dialog")).toBeNull();
-      expect(c.view().keyOpen).toBe(true);
-      c.reset();
-    } else dialog.querySelector<HTMLButtonElement>('[data-dlg="cancel"]')!.click();
-  }
-  expect(root).toBeTruthy();
 });
 
 test("managed rows open the shared page and connect through their own provider", async () => {

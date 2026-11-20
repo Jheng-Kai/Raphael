@@ -100,7 +100,22 @@ async def test_panel_intent_is_beside_owner_words_and_not_in_visible_history(rig
     assert result["turn_id"] == turn["id"]
 
 
-@pytest.mark.parametrize("intent,member", [("bad", 1), (True, 1), ([], 1), ("share-template", 0)])
+@pytest.mark.parametrize("slug", ["notion", "n8n", "google"])
+async def test_raphael_gets_the_app_connection_instruction_beside_the_owner_words(rig, slug):
+    rig.brain.chats = [live_said("I can help you connect it.")]
+    await rig.ask(f"connect-app:{slug}", member_id=0, text="Owner words exactly")
+    prompt = rig.brain.chat_calls[0]["messages"][-1]["content"]
+    assert "<question>\nOwner words exactly\n</question>" in prompt
+    assert f'<panel_intent_step>Call connect_app with app "{slug}" now.' in prompt
+    assert 'request_secret with connection: "composio"' in prompt
+    [turn] = await rig.agent.turns(member_id=0)
+    assert turn["question"] == "Owner words exactly"
+
+
+@pytest.mark.parametrize("intent,member", [
+    ("bad", 1), (True, 1), ([], 1), ("share-template", 0),
+    ("connect-app:../x", 0), ("connect-app:", 0), ("connect-app:Notion", 0), ("connect-app:notion\n", 0),
+])
 async def test_unknown_intents_and_raphael_sharing_are_invalid_before_a_turn(rig, intent, member):
     with pytest.raises(RpcError) as error:
         await rig.ask(intent, member_id=member)

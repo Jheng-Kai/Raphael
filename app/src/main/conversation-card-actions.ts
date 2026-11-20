@@ -16,23 +16,20 @@ export function mountConversationCardActions(thread: HTMLElement, _manageConnect
     return { connected: result.started || !["pending", "failed", "cancelled"].includes(result.card.state) };
   });
   mountMailActions(thread, error => toaster.info(describeError(error)), text => toaster.info(text));
-  // Save waits for every field; a secret program key also for its six characters, said under it while it is shorter (#281).
-  // A key marked as no secret is shown as typed and may be short.
+  // Save waits for every field; a program key also for its six characters, said under it while it is shorter (#281).
   const fieldsChanged = (event: Event): void => {
-    const input = (event.target as Element).closest<HTMLInputElement>("input[data-secret-input], input[data-login-user], input[data-secret-plain]");
+    const input = (event.target as Element).closest<HTMLInputElement>("input[data-secret-input], input[data-login-user]");
     const card = input?.closest(".secret-card");
     const save = card?.querySelector<HTMLButtonElement>('[data-act="card-save"]');
     if (!card || !save) return;
     const secret = card.querySelector<HTMLInputElement>("input[data-secret-input]");
-    const plain = card.querySelector<HTMLInputElement>("input[data-secret-plain]");
-    if (secret && plain) secret.type = plain.checked ? "text" : "password";
-    const short = !!plain && !plain.checked && !!secret && secret.value.trim().length > 0 && secret.value.trim().length < KEY_MIN;
+    const short = !!card.querySelector("[data-key-card]") || card.matches("[data-key-card]")
+      ? !!secret && secret.value.trim().length > 0 && secret.value.trim().length < KEY_MIN : false;
     const hint = card.querySelector<HTMLElement>("[data-secret-hint]");
     if (hint) hint.hidden = !short;
-    save.disabled = short || [...card.querySelectorAll<HTMLInputElement>("input:not([type=checkbox])")].some(field => !field.value.trim());
+    save.disabled = short || [...card.querySelectorAll<HTMLInputElement>("input")].some(field => !field.value.trim());
   };
   thread.addEventListener("input", fieldsChanged);
-  thread.addEventListener("change", fieldsChanged);
   thread.addEventListener("click", event => {
     const button = (event.target as Element).closest<HTMLButtonElement>('[data-act^="card-"]');
     if (!button || button.disabled) return;
@@ -52,9 +49,8 @@ export function mountConversationCardActions(thread: HTMLElement, _manageConnect
       const user = button.closest(".secret-card")?.querySelector<HTMLInputElement>("[data-login-user]");
       if (user && !user.value.trim()) { user.focus(); return; }
       const value = user ? JSON.stringify({ username: user.value, password: input.value }) : input.value;
-      const plain = !!button.closest(".secret-card")?.querySelector<HTMLInputElement>("input[data-secret-plain]")?.checked;
       input.value = ""; if (user) user.value = "";
-      call = api.cardSave(id, value, plain);
+      call = api.cardSave(id, value);
     } else return;
     button.disabled = true;
     void call.catch(error => { if (!cardFailure(button.closest(".conversation-card"), () => button.click())) toaster.info(describeError(error)); }).finally(() => { button.disabled = false; });

@@ -4,8 +4,8 @@ import { missingHTML, bindMissing, type Missing } from "./missing";
 import { setLocale, t } from "./i18n";
 
 const missing: Missing = { resource: "searxng", requirement: "url", state: "missing", repair: "search" };
-test("moved recovery copy names Tools, Safety and the member computer panel in every language", () => {
-  for (const [locale, panel] of [["zh-TW", "成員電腦面板"], ["en", "member computer panel"], ["ja", "メンバーの PC パネル"]] as const) {
+test("moved recovery copy names Tools, Safety and the Computer tab in every language", () => {
+  for (const [locale, panel] of [["zh-TW", "電腦分頁"], ["en", "Computer tab"], ["ja", "「コンピューター」タブ"]] as const) {
     setLocale(locale);
     for (const key of ["missing.url", "missing.search", "missing.read", "missing.vision", "missing.pdf", "missing.no_text", "services.loadFailed"] as const) {
       expect(t(key)).toContain(t("settings.paneTools"));
@@ -32,7 +32,7 @@ test("teaching names the independent member computer and opens its shared repair
   setLocale("zh-TW");
   const root = document.createElement("div");
   root.innerHTML = missingHTML({resource:"computer",requirement:"member_computer",state:"missing",repair:"computer"});
-  expect(root.textContent).toContain("示範需要成員自己的電腦");
+  expect(root.textContent).toContain("示範需要各自的電腦");
   const go = vi.fn(); bindMissing(root, go);
   root.querySelector("button")!.click();
   expect(go).toHaveBeenCalledWith("settings", "repair:computer:computer");

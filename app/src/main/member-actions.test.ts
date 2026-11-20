@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// 換成其他成員 on a pinned tile (member-actions.ts): the member chosen takes the tile's place, the old one goes back
+// 換成其他角色 on a pinned tile (member-actions.ts): the member chosen takes the tile's place, the old one goes back
 // to its folder, in one press and with no question.
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -41,10 +41,10 @@ describe("who a pinned tile can be replaced with", () => {
   });
 });
 
-describe("換成其他成員 on a pinned tile", () => {
+describe("換成其他角色 on a pinned tile", () => {
   test("lists the members that are not pinned in the existing picker, under the action's own title", async () => {
     const done = actions().memberAction(3, "replace-pinned");
-    expect(document.querySelector(".mb-primary-picker h2")!.textContent).toBe("換成其他成員");
+    expect(document.querySelector(".mb-primary-picker h2")!.textContent).toBe("換成其他角色");
     expect(shown()).toEqual(["2", "4", "5"]);
     document.querySelector<HTMLElement>('.mb-primary-picker [data-dlg="close"]')!.click();
     await done;

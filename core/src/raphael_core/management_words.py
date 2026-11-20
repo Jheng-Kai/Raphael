@@ -11,16 +11,16 @@ from .ui_words import ui_word
 # languages come from ui_words by the English text (_card_words_data.py).
 EFFECTS = {
     "member_primary": ("Make this member the primary contact and give it management", "移轉主要聯絡人與管理權", "主担当と管理権限を移動"),
-    "member_history_clear": ("Clear all of this member's conversation records", "清除此成員的全部對話紀錄", "メンバーの全会話履歴を消去"),
+    "member_history_clear": ("Clear all of this member's conversation records", "清除全部對話紀錄", "メンバーの全会話履歴を消去"),
     "member_history_delete": ("Delete one conversation record", "刪除此則對話紀錄", "会話記録を削除"),
-    "group_delete": ("Delete the folder (its members stay, ungrouped)", "刪除資料夾；成員保留並移至未分類", "フォルダーを削除しメンバーは保持"),
-    "room_members": ("Replace the group chat's members", "替換群聊成員", "グループのメンバーを置換"),
+    "group_delete": ("Delete the folder (its members stay, ungrouped)", "刪除資料夾；裡面的角色保留並移到未分類", "フォルダーを削除しメンバーは保持"),
+    "room_members": ("Replace the group chat's members", "替換群聊參與者", "グループのメンバーを置換"),
     "room_delete": ("Delete the group chat and all its messages", "刪除群聊及全部訊息", "グループと全メッセージを削除"),
     "conversation_clear": ("Clear all records of this conversation", "清除此對話的全部紀錄", "会話の全記録を消去"),
     "member_skill_delete": ("Delete the skill and its permissions", "刪除技能套件與授權", "スキルと権限を削除"),
-    "member_command_delete": ("Delete the member's command", "刪除成員指令", "コマンドを削除"),
+    "member_command_delete": ("Delete the member's command", "刪除指令", "コマンドを削除"),
     "member_routine_delete": ("Delete the routine and its schedule", "刪除例行任務及排程", "定期タスクと予定を削除"),
-    "remove_key": ("Delete this member's private program key", "刪除此成員的私人程式金鑰", "このメンバー専用のプログラムキーを削除"),
+    "remove_key": ("Delete this member's private program key", "刪除私人程式金鑰", "このメンバー専用のプログラムキーを削除"),
     "connection_disconnect": ("Disconnect and revoke its authorization", "中斷連線並撤銷認證", "接続と認証を解除"),
     "connector_disconnect": ("Disconnect the app and revoke its authorization", "中斷應用程式連線並撤銷認證", "アプリ接続と認証を解除"),
     "manage_connection": ("Change the connection (disconnecting revokes its authorization)", "變更連線；中斷連線會撤銷認證", "接続を変更・認証を解除"),
@@ -31,14 +31,15 @@ EFFECTS = {
     "memory_summary_clear": ("Clear the conversation summaries", "清除對話摘要", "会話の要約を消去"),
     "settings_history_retention_days": ("Change how long records are kept (older records are deleted for good)", "變更保留天數；較舊紀錄會被永久刪除", "保持期間を変更・古い記録を完全削除"),
 }
+EFFECTS["member_library_delete"] = EFFECTS["member_skill_delete"]
 GENERIC = ("Apply this management change", "套用下列管理變更", "次の管理変更を適用")
 
 # What a change does that can be undone, or a reading (these are asked in the mode that asks first and held with the
 # rest on one card), by kind of change; `FAMILY` says which kind each action is, and `settings_*` are all "setting".
 FAMILIES = {
     "read": ("Read information (nothing is changed)", "讀取資料（不會變更任何內容）", "情報を読み取ります（変更はありません）"),
-    "member_duplicate": ("Duplicate this member", "複製此成員", "このメンバーを複製"),
-    "member_picture": ("Change this member's picture or cover", "變更此成員的圖片或封面", "メンバーの画像またはカバーを変更"),
+    "member_duplicate": ("Duplicate this member", "建立副本", "このメンバーを複製"),
+    "member_picture": ("Change this member's picture or cover", "變更圖片或封面", "メンバーの画像またはカバーを変更"),
     "room_create": ("Create a group chat", "建立群聊", "グループチャットを作成"),
     "room_update": ("Change the group chat", "變更群聊設定", "グループチャットを変更"),
     "room_stop": ("Stop all work in the group chat", "停止群聊中的所有工作", "グループチャットの全作業を停止"),
@@ -55,6 +56,7 @@ FAMILIES = {
     "add_mcp_server": ("Add a custom connection", "新增自訂連線", "カスタム接続を追加"),
 }
 FAMILY = {
+    "member_library_import": "skill_update", "member_library_update": "skill_update",
     "member_duplicate": "member_duplicate", "member_avatar": "member_picture", "member_cover": "member_picture",
     "room_create": "room_create", "room_update": "room_update", "room_stop": "room_stop", "group_update": "group_update",
     "member_routine_create": "routine_create", "member_routine_update": "routine_update", "member_skill_update": "skill_update",

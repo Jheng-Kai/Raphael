@@ -534,17 +534,12 @@ async def test_a_bad_value_leaves_the_card_waiting_and_the_vault_alone(conn, val
     assert rig.vault.values == {} and rig.resumed == []
 
 
-async def test_a_short_key_card_says_why_and_a_value_marked_as_no_secret_is_kept(conn):
-    """#281: the card names the rule a short key broke, and the owner's "not a secret" keeps a short value."""
+async def test_a_short_key_card_says_why(conn):
+    """#281: the card names the rule a short key broke; a card keeps no value that is no secret."""
     rig = CardRig(conn)
-    result, card = await rig.save(rig.show("JIRA_USERNAME", "the Jira user"), "jon")
+    result, card = await rig.save(rig.show("JIRA_API_TOKEN", "the Jira API"), "abc")
     assert (result["saved"], card.state, card.error) == (False, "failed", "too_short")
-    with pytest.raises(RpcError):
-        await rig.router.call("integrations.card_save", {"id": card.id, "value": "jon", "plain": "yes"})
-    result = await rig.router.call("integrations.card_save", {"id": card.id, "value": "jon", "plain": True})
-    await rig.cards.idle()
-    assert result["saved"] is True and rig.entries.key_values(0, ["JIRA_USERNAME"])[0] == {"JIRA_USERNAME": "jon"}
-    assert all("jon" not in values for values in rig.entries.values.values())
+    assert rig.entries.key_values(0, ["JIRA_API_TOKEN"])[0] == {}
 
 
 async def test_a_key_card_refuses_names_and_purposes_it_cannot_show(conn):

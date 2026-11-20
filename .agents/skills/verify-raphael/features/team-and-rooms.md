@@ -123,7 +123,7 @@ is gone says so without a name. The side thread lays its replies out the same wa
 That hidden name is placed absolutely, so the thread (`.ra-scroll`) is its box: were it not the box, it would take the
 stage instead, escape the clip at its depth in a long room and stretch the main area, and the wheel past
 the last message would scroll the whole room away. Scene: `room-long-reply-wheel`; R-UI-62.
-The room's right-click dialogs 參與成員 and 房內角色 (and the new room dialog) are one list of rows
+The room's right-click dialogs 參與者 and 房內角色 (and the new room dialog) are one list of rows
 (`.room-list`): each member's face and name, a check on the right of a chosen member,
 a pressed state for a reader; in 房內角色 each row carries its role as a bare dropdown on the right.
 No separate list of picked names. Scenes: `primary-room-members`, `room-role-assignment`, `new-room`,

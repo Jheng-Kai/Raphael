@@ -3,7 +3,7 @@ import { scene, click, hover, type, wait, waitGone, member, room, search, check,
 const LONG_LINK = "https://x.com/someone/status/2000000000000000001?ref_src=twsrc%5Etfw%7Ctwcamp%5Etweetembed%7Ctwterm%5E2000000000000000001&ref_url=https%3A%2F%2Fexample.com%2Fsample-project-status-notes";
 const linked = selector => paste(selector, { text: `${LONG_LINK}\n這是用來測試的範例` });
 const twoPictures = [room(1), paste("#room-message", { image: "clipboard.png" }), wait(".au-room-pane .composer .cmp-chip img.cmp-thumb"), dropFile(".au-room-pane .ra-stage", "dropped.png"), wait('.au-room-pane .composer .cmp-chip + .cmp-chip')];
-// 新增成員, opened from the sidebar's + menu; 小綠 lives in the 角色 tab, the colours' tab being where a new dialog opens.
+// 新增角色, opened from the sidebar's + menu; 小綠 lives in the 角色 tab, the colours' tab being where a new dialog opens.
 const makerOpen = [{ action: "member-column", collapsed: false }, click('[data-col="add"]'), click('#app-popover [data-pick="member"]'), wait(".cr-dialog")];
 const makerGoggles = [click('.cr-dialog [data-slime-tab="characters"]'), click('.cr-dialog [data-slime-character="goggles-green"]'), type("#mb-new-name", "小綠")];
 
@@ -19,7 +19,9 @@ const msFolders = [member(1), { action: "open-details" }, click('.mb-det [data-d
 const composer = [click(".cmp-mode"), wait("#app-popover")];
 // The + menu of the member's conversation: the member's folder, apps with their marks and skills are all there to be listed.
 const plusOpen = [member(1), wait('.page-agent .composer .cmp-folder:not([hidden])'), click('.page-agent .composer .cmp-attach'), wait('#app-popover.composer-plus')];
-const plusFixture = { ownerOutputFolder: true, memberWriteFolders: true, appMarks: true, memberSettings: true, skills: [learnedSkill(1), sharedSourceSkill] };
+// Two skills of the member's own, and one the team library gives it, which the + menu leaves to the library (R-SKILL-17).
+const ownSkill = { ...learnedSkill(1), id: 33, name: "meeting-notes", description: "把會議逐字稿整理成決議與待辦" };
+const plusFixture = { ownerOutputFolder: true, memberWriteFolders: true, appMarks: true, memberSettings: true, skills: [learnedSkill(1), ownSkill, sharedSourceSkill] };
 // What the / menu lists after the words: one command and one skill, grouped as at the start.
 const slashAfterWords = { commands: [{ id: 1, member_id: 0, name: "review", description: "整理研究重點", template: "整理研究重點" }],
   skills: [{ id: 71, member_id: 0, name: "outline", slash_name: "outline", description: "整理文章架構", enabled: true, source: "https://github.com/example/notes/blob/main/SKILL.md" }] };
@@ -34,7 +36,7 @@ const pcCard = '[data-computer-card="card-pc"]';
 const permCard = id => `[data-permission-card="${id}"]`;
 const mailCard = '[data-mail-card="mail-1"]';
 const mailField = field => `${mailCard} [data-mail-field="${field}"]`;
-// The owner's primary contact (P15b): the primary's own menu (Raphael's until another is chosen), 換成其他成員, and 選擇主要成員.
+// The owner's primary contact (P15b): the primary's own menu (Raphael's until another is chosen), 換成其他角色, and 選擇主要聯絡對象.
 const primaryMenu = (id = 0) => [{ action: "member-column", collapsed: false }, click(`.mb-col [data-member-more="${id}"]`), click('#app-popover [data-pick="primary"]'), wait(".mb-dialog.mb-primary-picker")];
 const adminDraftEdits = [wait('.draft-panel:not([hidden])'), type('[data-draft-group="group-1"]', "工作室"), click('[data-draft-id="draft-1"] [data-draft-act="more"]'), type('[data-draft-id="draft-1"] [data-draft-field="role"]', "首席營運長"), click('[data-draft-id="draft-3"] [data-draft-act="remove"]'), check("member-draft-edit")];
 // Pick the quick conversation, then close the details panel, which covers the composer at compact width.
@@ -242,9 +244,9 @@ export default [
   ], { dictationText }),
   scene("members-expanded", "Original Raphael emblem and expanded member column", [{ action: "member-column", collapsed: false }, check("member-column")]),
   scene("primary-contact-column", "The primary takes the first conversation row and Raphael takes its group slot", [{ action: "member-column", collapsed: false }, check("member-column"), check("primary-column")], { primaryMember: 1 }),
-  scene("primary-contact-menu", "The primary's own menu (Raphael's) ends with 換成其他成員 after a hairline, without a star", [{ action: "member-column", collapsed: false }, click('.mb-col [data-member-more="0"]'), wait('#app-popover [data-pick="primary"]'), check("primary-menu")]),
+  scene("primary-contact-menu", "The primary's own menu (Raphael's) ends with 換成其他角色 after a hairline, without a star", [{ action: "member-column", collapsed: false }, click('.mb-col [data-member-more="0"]'), wait('#app-popover [data-pick="primary"]'), check("primary-menu")]),
   scene("member-row-menu", "A member's row menu is grouped: 釘選, 移到分組, 標為未讀 | 編輯 | 分享為範本 | 隱藏, 刪除 in red", [{ action: "member-column", collapsed: false }, click('.mb-col [data-member-more="2"]'), wait('#app-popover [data-pick="delete"]'), check("member-menu")]),
-  scene("primary-contact-picker", "換成其他成員 in 小晴's menu opens 選擇主要成員: Raphael and the other members as buttons, and choosing 小森 readies the primary action", [...primaryMenu(1), click('.mb-primary-picker [data-id="2"]'), check("primary-picker")], { primaryMember: 1 }),
+  scene("primary-contact-picker", "換成其他角色 in 小晴's menu opens 選擇主要聯絡對象: Raphael and the other members as buttons, and choosing 小森 readies the primary action", [...primaryMenu(1), click('.mb-primary-picker [data-id="2"]'), check("primary-picker")], { primaryMember: 1 }),
   scene("member-write-folders", "A member's folders in its settings: the output folder first as the default, the ones added with the picker after it, each removed one by one, each a row with its whole path", [...msFolders, wait('[data-k="ms-folder:2"]'), click('[data-ms="folder-add"]'), wait('[data-k="ms-folder:3"]'), click('[data-ms="folder-menu"][data-index="1"]'), click('#app-popover [data-confirm-item]'), click('#app-popover [data-confirm-item]'), waitGone('[data-k="ms-folder:3"]'), check("member-write-folders")], { ownerOutputFolder: true, memberWriteFolders: true }),
   scene("member-write-folders-default", "A member with no folder of its own lists the output folder alone, marked as the default", [...msFolders, check("member-write-folders-default")], { ownerOutputFolder: true }),
   scene("composer-folder", "The composer names the member's folder beside the permission, in its quiet type, and the row still fits", [member(1), wait('.page-agent .composer .cmp-folder:not([hidden])'), check("composer-folder"), check("composer-row-fits")], { ownerOutputFolder: true, memberWriteFolders: true }),
@@ -261,11 +263,11 @@ export default [
   scene("composer-plus-skills", "技能 opens beside its row: the member's skills each with a switch, a line, then 管理技能", [...plusOpen, click('#app-popover [data-plus="skills"]'), wait('#app-submenu [data-skill]'), check("composer-plus-skills")], plusFixture),
   scene("composer-plus-apps-saved", "An app switched off in the + menu is off in the member's 工具 tab, which 管理應用程式 opens", [...plusOpen, click('#app-popover [data-plus="apps"]'), wait('#app-submenu [data-app]'), click('#app-submenu [data-app]'), wait('#app-submenu [data-app][aria-checked="false"]'), click('#app-submenu [data-plus="manage-apps"]'), wait('.ms-pane:not([hidden]) [data-k="ms-tools"]'), wait('.ms-pane [data-ms="tool"][aria-checked="false"]'), check("composer-plus-apps-saved")], plusFixture),
   scene("composer-plus-skills-saved", "A skill switched off in the + menu is off in the member's 技能與指令 tab, which 管理技能 opens", [...plusOpen, click('#app-popover [data-plus="skills"]'), wait('#app-submenu [data-skill]'), click('#app-submenu [data-skill]'), wait('#app-submenu [data-skill][aria-checked="false"]'), click('#app-submenu [data-plus="manage-skills"]'), wait('.ms-pane:not([hidden]) [data-k="ms-skills"]'), wait('.ms-pane [data-ms="skill-toggle"][aria-checked="false"]'), check("composer-plus-skills-saved")], plusFixture),
-  scene("primary-contact-set", "換成其他成員, then 小晴, exchanges display positions without changing rooms, tasks or conversations", [...primaryMenu(), click('.mb-primary-picker [data-id="1"]'), click('.mb-primary-picker [data-dlg="set"]'), wait('.mb-col .mb-chief[data-member="1"]'), member(1), { action: "open-details" }, ...gear, wait(".ms-pane .ms-face"), check("primary-set")]),
+  scene("primary-contact-set", "換成其他角色, then 小晴, exchanges display positions without changing rooms, tasks or conversations", [...primaryMenu(), click('.mb-primary-picker [data-id="1"]'), click('.mb-primary-picker [data-dlg="set"]'), wait('.mb-col .mb-chief[data-member="1"]'), member(1), { action: "open-details" }, ...gear, wait(".ms-pane .ms-face"), check("primary-set")]),
   scene("primary-room-chief", "The current chief wears the room crown and writes its one wrap-up", [{ action: "member-column", collapsed: false }, room(1), wait(".au-room-wrapup"), check("primary-room-chief")], { primaryMember: 1, roomWrapup: true }),
   scene("chat", "Conversation with public progress, replies and an attachment", [wait(".ra .chat-message[data-reply]"), check("conversation-design")]),
   scene("message-text-colour", "A message's text is the normal text colour whatever its kind (reply, timed progress) or its turn's state (done, running, failed, denied, expired, stopped)", [wait(".ra .chat-message[data-reply]"), check("message-text-colour")]),
-  scene("conversation-share", "Share sits at the header's right, opposite search, in a member's conversation", [
+  scene("conversation-share", "Share sits at the header's right, opposite the status light, in a member's conversation", [
     member(1), wait('.mb-head [data-act="share-member"]:not([hidden])'), check("conversation-share"),
     click('.mb-head [data-act="share-member"]'), wait('#app-popover .menu-action'), check("conversation-share-menu"),
   ]),
@@ -313,8 +315,8 @@ export default [
   scene("member-draft-edit", "Owner edits a member draft and removes another before confirming", [wait('.draft-panel:not([hidden])'), click('[data-draft-id="draft-1"] [data-draft-act="more"]'), type('[data-draft-id="draft-1"] [data-draft-field="role"]', "首席營運長"), click('[data-draft-id="draft-3"] [data-draft-act="remove"]'), check("member-draft-edit")], { adminApproval: "draft" }),
   scene("member-draft-done", "Confirmed drafts settle into a summary and add members to the column", [wait('.draft-panel:not([hidden])'), click('[data-draft-act="confirm"]'), check('member-draft-submitted'), wait('.draft-done'), click('[data-act="draft-done"]'), wait('.draft-done.is-open'), check("member-draft-done")], { adminApproval: "draft" }),
   scene("empty", "Conversation without turns", [], { turns: [] }),
-  // 新增成員 is one small dialog over the dimmed window: the slime, the name, the shared picker, 取消 and 建立.
-  scene("member-maker", "新增成員 is a small centred dialog: the large slime, the name under it, the tabbed picker, 取消 and a 建立 that waits for a name", [...makerOpen, check("member-maker")]),
+  // 新增角色 is one small dialog over the dimmed window: the slime, the name, the shared picker, 取消 and 建立.
+  scene("member-maker", "新增角色 is a small centred dialog: the large slime, the name under it, the tabbed picker, 取消 and a 建立 that waits for a name", [...makerOpen, check("member-maker")]),
   scene("nav-layer-maker", "Mouse Back dismisses the member maker and keeps its name for the next opening", [
     ...makerOpen, type("#mb-new-name", "Robin"), click('.cr-dialog [data-slime-tab="characters"]'),
     wait('.cr-dialog [data-slime-tab="characters"][aria-selected="true"]'), sideButton("back"), waitGone(".cr-dialog"),
@@ -325,9 +327,9 @@ export default [
   scene("member-maker-enter", "Enter in the name makes the member as 建立 does", [...makerOpen, ...makerGoggles, key("Enter"), waitGone(".cr-dialog"), { action: "wait-text", selector: ".page-agent .ra-body", text: "小綠" }, check("member-maker-made")]),
   scene("member-maker-greeting", "While its own model writes the greeting, the new member is typing and nothing is put in the owner's mouth", [...makerOpen, ...makerGoggles, click('.cr-dialog [data-dlg="create"]'), waitGone(".cr-dialog"), check("member-maker-greeting")], { greetingPending: true }),
   scene("member-maker-taken", "A name another member has is refused in the dialog: it stays open with the name kept and nothing is made", [...makerOpen, type("#mb-new-name", "小森"), click('.cr-dialog [data-dlg="create"]'), wait('.cr-dialog #mb-new-name[aria-invalid="true"]'), check("member-maker-taken")]),
-  scene("member-maker-escape", "Escape closes 新增成員 and nothing is made", [...makerOpen, type("#mb-new-name", "小綠"), key("Escape"), waitGone(".cr-dialog"), check("member-maker-closed")]),
-  scene("member-maker-x", "The × closes 新增成員 and nothing is made", [...makerOpen, type("#mb-new-name", "小綠"), click('.cr-dialog .mb-dlg-head [data-dlg="close"]'), waitGone(".cr-dialog"), check("member-maker-closed")]),
-  scene("member-maker-cancel", "取消 closes 新增成員 and nothing is made", [...makerOpen, type("#mb-new-name", "小綠"), click('.cr-dialog [data-dlg="cancel"]'), waitGone(".cr-dialog"), check("member-maker-closed")]),
+  scene("member-maker-escape", "Escape closes 新增角色 and nothing is made", [...makerOpen, type("#mb-new-name", "小綠"), key("Escape"), waitGone(".cr-dialog"), check("member-maker-closed")]),
+  scene("member-maker-x", "The × closes 新增角色 and nothing is made", [...makerOpen, type("#mb-new-name", "小綠"), click('.cr-dialog .mb-dlg-head [data-dlg="close"]'), waitGone(".cr-dialog"), check("member-maker-closed")]),
+  scene("member-maker-cancel", "取消 closes 新增角色 and nothing is made", [...makerOpen, type("#mb-new-name", "小綠"), click('.cr-dialog [data-dlg="cancel"]'), waitGone(".cr-dialog"), check("member-maker-closed")]),
   // Complete workflows exercised through the real page.
   scene("member-delete-ask", "A member without a computer is asked about the same way: its name, one sentence, Cancel and Delete", [
     member(2), { action: "member-column", collapsed: false }, click('.mb-col [data-member-more="2"]'), click('#app-popover [data-pick="delete"]'), wait(".mb-dialog.mb-confirm"),

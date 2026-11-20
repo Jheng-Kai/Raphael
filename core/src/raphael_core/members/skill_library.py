@@ -36,24 +36,9 @@ def linked(path):
 
 def package(folder):
     """Take one bounded snapshot, rejecting links, devices and ambiguous paths."""
-    files = {}
-    size = 0
-    if any(linked(p) for p in (folder, *folder.parents)):
-        raise MemberError("source", "linked skill packages are not supported")
-    for directory, dirs, names in os.walk(folder, followlinks=False):
-        for name in [*dirs, *names]:
-            if linked(Path(directory) / name):
-                raise MemberError("source", "linked skill packages are not supported")
-        for name in sorted(names):
-            path = Path(directory) / name
-            if not path.is_file() or path.stat().st_size > MAX_PACKAGE_BYTES:
-                raise MemberError("size", "skill package is too large")
-            with path.open("rb") as stream:
-                data = stream.read(MAX_PACKAGE_BYTES - size + 1)
-            size += len(data)
-            if size > MAX_PACKAGE_BYTES or len(files) >= MAX_PACKAGE_FILES:
-                raise MemberError("size", "skill package is too large")
-            files[path.relative_to(folder).as_posix()] = data
+    from .skill_sources import folder_snapshot
+
+    files = folder_snapshot(folder, byte_limit=MAX_PACKAGE_BYTES, entry_limit=MAX_PACKAGE_FILES).files
     if "SKILL.md" not in files:
         raise MemberError("source", "no SKILL.md in that folder")
     return files
@@ -260,6 +245,8 @@ class SkillLibrary:
         if not path.exists():
             return {}
         info = json.loads(self.homes.safe(path).read_text(encoding="utf-8"))
+        if "fingerprint" not in info:
+            return {}
         try:
             folder, root = location(self.skill_home, info["source"])
             changed = fingerprint(newest(folder, root)) != info["fingerprint"]

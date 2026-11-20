@@ -212,7 +212,10 @@ class GoogleClient:
         token = self.vault.get(PREFIX + "refresh_token")
         if token:
             response = await self.http.response("POST", REVOKE, data={"token": token})
-            if response.status_code != 200:
+            # 400 is Google no longer knowing the token (its seven days in Testing ran out, the owner removed the access in
+            # their account, or the client is gone): nothing is left to revoke, so the disconnect goes on. Only a failure
+            # that may pass (a 5xx, the network) keeps everything for a retry.
+            if response.status_code not in (200, 400):
                 raise ConnectorFailure("revocation_failed", response.status_code)
         self.forget_access()
         for name in ("client_id", "client_secret", "refresh_token"):

@@ -105,7 +105,7 @@ async def test_plugin_skill_keeps_its_namespace_and_rejects_an_invalid_update_at
     from .test_skill_plugins import local, package
     cap = rig.service.capabilities
     folder = local(cap, tmp_path)
-    installed = await cap.import_plugin("local:" + str(folder))
+    installed = await cap.import_plugin("local:" + str(folder), access="all")
     cap.keep_skill(0, "owner", DOCUMENT.replace("research-summary", "write"))
     plugin = next(s for s in cap.skills(0) if s.get("plugin") == "desk" and s["name"] == "write")
     assert plugin["slash_name"] == "desk:write"
@@ -123,7 +123,7 @@ async def test_existing_plugin_non_slug_can_refresh_without_renaming(rig, tmp_pa
     from .test_skill_plugins import local, package
     cap = rig.service.capabilities
     folder = local(cap, tmp_path)
-    installed = await cap.import_plugin("local:" + str(folder))
+    installed = await cap.import_plugin("local:" + str(folder), access="all")
     skill = next(s for s in cap.skills(0) if s["name"] == "write")
     old_text = DOCUMENT.replace("research-summary", "Old Weather")
     with rig.conn:

@@ -32,6 +32,17 @@ KEY_MIN, KEY_MAX = 6, 800
 PLAIN = "plain"
 
 
+# The last word of a variable that names no secret: a user name, an e-mail, a site. A member asks the owner for such a
+# value in the conversation and passes it to its program itself; the vault and its cards are for secrets only (#281).
+NOT_SECRET_WORDS = frozenset(("USER", "USERNAME", "LOGIN", "EMAIL", "MAIL", "ACCOUNT", "ORG", "ORGANIZATION",
+                              "WORKSPACE", "TENANT", "REGION", "PROJECT", "SITE", "DOMAIN"))
+
+
+def no_secret_name(name):
+    """Whether `name` is a variable for a value that is no secret (JIRA_USERNAME, SMTP_USER, JIRA_EMAIL, ATLASSIAN_SITE)."""
+    return isinstance(name, str) and name.upper().rsplit("_", 1)[-1] in NOT_SECRET_WORDS
+
+
 def key_name_ok(name):
     if not isinstance(name, str) or KEY_NAME.fullmatch(name) is None:
         return False

@@ -53,7 +53,7 @@ const sampleQuestion = (): AgentQuestion => ({
   id: "q-draft-1",
   member_id: 0,
   prefix: "問",
-  text: "建立 3 位成員",
+  text: "建立 3 位",
   tier: "T2",
   timeout_ms: 30000,
   drafts: sampleDrafts(),
@@ -80,7 +80,7 @@ describe("member draft helpers", () => {
 
 describe("DraftPanelController", () => {
   test("explains why member settings need review in every language", () => {
-    for (const [locale, words] of [["zh-TW", "建立後就能一起工作"], ["en", "work together after they are created"], ["ja", "作成後に一緒に作業できます"]] as const) {
+    for (const [locale, words] of [["zh-TW", "建立後就能一起工作"], ["en", "once created, they work together"], ["ja", "作成後、一緒に作業できます"]] as const) {
       setLocale(locale);
       const panel=createDraftPanel({groups:()=>[],onConfirm:vi.fn(),onCancel:vi.fn()});
       panel.sync(sampleQuestion());
@@ -113,7 +113,7 @@ describe("DraftPanelController", () => {
     panel.sync(sampleQuestion());
     expect(panel.el.hidden).toBe(false);
     expect(panel.el.querySelectorAll(".draft-card")).toHaveLength(3);
-    expect(panel.el.querySelector('[data-draft-act="confirm"]')?.textContent).toBe("建立 3 位成員");
+    expect(panel.el.querySelector('[data-draft-act="confirm"]')?.textContent).toBe("建立 3 位");
 
     // Edit the first draft's role and blurb
     const firstCard = panel.el.querySelector<HTMLElement>('[data-draft-id="draft-1"]')!;
@@ -126,7 +126,7 @@ describe("DraftPanelController", () => {
     thirdRemove.click();
 
     expect(panel.el.querySelectorAll(".draft-card")).toHaveLength(2);
-    expect(panel.el.querySelector('[data-draft-act="confirm"]')?.textContent).toBe("建立 2 位成員");
+    expect(panel.el.querySelector('[data-draft-act="confirm"]')?.textContent).toBe("建立 2 位");
 
     // Confirm
     panel.el.querySelector<HTMLButtonElement>('[data-draft-act="confirm"]')!.click();

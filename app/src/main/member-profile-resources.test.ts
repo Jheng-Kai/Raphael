@@ -38,7 +38,7 @@ beforeEach(() => {
   vi.mocked(api.routinesList).mockResolvedValue({ routines: [] });
 });
 
-test("Raphael saves command templates and toggles shared skills through the ordinary resource editor", async () => {
+test("Raphael saves command templates through the ordinary resource editor, which leaves shared skills to the team library", async () => {
   const root = document.createElement("div");
   document.body.append(root);
   vi.mocked(api.membersCommandsSave).mockResolvedValue({ command: { id: 1, name: "review", description: "", template: "Review {input}" } });
@@ -52,24 +52,25 @@ test("Raphael saves command templates and toggles shared skills through the ordi
   vi.mocked(api.membersSkillsList).mockResolvedValue({ skills: [{ id: 9, name: "writer", description: "Write", source: "local:C:/Synthetic/.claude/skills/writer", enabled: true, shared: true }] });
   const skills = mountMemberResources(root, { memberId: 0, tab: "skills", standalone: true });
   await flush();
-  expect(root.querySelector('[data-res="skill-menu"]')).toBeNull();
-  expect(root.textContent).toContain(t("skills.shared"));
-  expect(root.textContent).toContain(`${t("skills.shared")} · ~/.claude/skills/writer`);
-  expect(root.textContent).not.toContain("local:");
-  click(root, '[data-res="skill-toggle"]'); await flush();
-  expect(api.membersSkillsUpdate).toHaveBeenCalledWith(0, 9, false);
+  // A skill the team library gives is switched in the library (R-SKILL-17): no row, no switch here.
+  expect(root.querySelector('.mp-resource, [data-res="skill-toggle"], [data-res="skill-menu"]')).toBeNull();
+  expect(root.textContent).not.toContain("writer");
+  expect(root.textContent).toContain(t("members.profile.noSkills"));
+  expect(api.membersSkillsUpdate).not.toHaveBeenCalled();
   skills.destroy();
 });
 
-test("inherited plugin components show their set name and version with the ordinary grant switch", async () => {
+test("inherited plugin components are left to the team library: a character's own skills stay with their switches", async () => {
   const root = document.createElement("div"); document.body.append(root);
-  vi.mocked(api.membersSkillsList).mockResolvedValue({ skills: [{ id: 12, name: "review", description: "Review", source: "plugin:desk", plugin: "desk", plugin_version: "2.0.0", set_id: 1, set_kind: "command", enabled: true, shared: true }] });
+  vi.mocked(api.membersSkillsList).mockResolvedValue({ skills: [
+    { id: 12, name: "review", description: "Review", source: "plugin:desk", plugin: "desk", plugin_version: "2.0.0", set_id: 1, set_kind: "command", enabled: true, shared: true },
+    { id: 13, name: "notes", description: "Notes", source: "owner/notes", enabled: true },
+  ] });
   const resources = mountMemberResources(root, { memberId: 0, tab: "skills", standalone: true }); await flush();
-  expect(root.textContent).toContain(`${t("skills.shared")} · desk · 2.0.0`);
-  expect(root.textContent).not.toContain("plugin:");
-  expect(root.querySelector('[data-res="skill-menu"]')).toBeNull();
+  expect([...root.querySelectorAll(".mp-resource b")].map(name => name.textContent)).toEqual(["notes"]);
+  expect(root.textContent).not.toContain("desk");
   click(root, '[data-res="skill-toggle"]'); await flush();
-  expect(api.membersSkillsUpdate).toHaveBeenCalledWith(0, 12, false);
+  expect(api.membersSkillsUpdate).toHaveBeenCalledWith(0, 13, false);
   resources.destroy();
 });
 

@@ -104,7 +104,8 @@ def _fact(table, row, now_ms):
         app = APPS.get(row["app"])
         return f"Sign-in card for {_label(row['app_name'] or (app.name if app else row['app']))}: {state}."
     if table == "secret_cards":
-        kind = {"messaging": "Bot-token", "login": "Login", "env": "Secret", "header": "Secret", "key": "Computer key"}[row["kind"]]
+        kind = {"messaging": "Bot-token", "login": "Login", "env": "Secret", "header": "Secret",
+                "key": "Computer key", "composio": "API key"}[row["kind"]]
         saved = " (credential saved; value withheld)" if state in ("saved", "resuming", "resumed") else ""
         return f"{kind} card for {_label(row['name'])}: {state}{saved}."
     if table == "messaging_pairing_cards":

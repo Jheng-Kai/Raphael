@@ -105,6 +105,8 @@ from ..router import Router
 from ..slime_ids import current_avatar
 from ..services.attachments import IMAGE_TYPES, MAX_IMAGE_BYTES, AttachmentError, checked, sniff_ok
 from .capabilities import MemberCapabilities, download_skills
+from .skill_packages import SkillPackages
+from . import skill_sources
 from .schedule import Schedule, first_eligible_slot, next_run
 from .covers import Covers, selection as cover_selection
 from .store import (
@@ -166,6 +168,12 @@ def unread_kind(turns: Sequence[tuple]) -> str:
 def _rpc_error(error: MemberError) -> RpcError:
     """A refusal of the store as a bad request whose data names the field."""
     return RpcError(INVALID_PARAMS, f"Invalid params: {error}", {"kind": error.kind})
+
+
+def _library_error(error: MemberError) -> RpcError:
+    """A refusal of the team skill library: its kind leads the message too, since the shell passes the window the message
+    and not the data, and the window says each kind in words (skill-library.ts `failureText`)."""
+    return RpcError(INVALID_PARAMS, f"Invalid params: {error.kind}: {error}", {"kind": error.kind})
 
 
 def _uploaded_picture(params, kind):
@@ -302,6 +310,7 @@ class MembersService:
     ) -> None:
         self.store = MemberStore(conn, now_ms)
         self.capabilities = MemberCapabilities(conn, local_dir / "member-skills", self.store)
+        self.packages = SkillPackages(self.capabilities)
         self.greeting = None  # Bound by the interactive AgentService, never the routine worker.
         self._delivered: set[tuple[int, int, str]] = set()
         self._conn = conn
@@ -370,6 +379,10 @@ class MembersService:
         router.register("members.library", self._library)
         router.register("members.library_file", self._library_file)
         methods = {
+            "skills.library.list": self._packages_list,
+            "skills.library.import": self._packages_import,
+            "skills.library.update": self._packages_update,
+            "skills.library.delete": self._packages_delete,
             "members.skills.list": self._skills_list,
             "members.skills.read": self._skills_read,
             "members.skills.import": self._skills_import,
@@ -845,6 +858,9 @@ class MembersService:
 
     async def _skills_list(self, params: dict) -> dict:
         member_id = self._skill_scope(params)
+        self._package_fields(params, ("member_id", "shared", "discover", "marketplace"))
+        if "discover" in params and type(params["discover"]) is not bool:
+            raise invalid_params("discover must be true or false")
         result = {"skills": self._cap(self.capabilities.skills, member_id)}
         result["sets"] = self._cap(self.capabilities.plugin_sets) if member_id == -1 or params.get("discover") is True else []
         if params.get("discover") is True:
@@ -856,36 +872,157 @@ class MembersService:
                 result["sets"] = self.capabilities.plugin_sets()
             except MemberError as error:
                 raise _rpc_error(error) from None
+        if member_id != -1:
+            result["library"] = self.packages.for_member(member_id)
+            allowed = {p["key"] for p in result["library"]}
+            result["sets"] = [s for s in result["sets"] if f"set:{s['id']}" in allowed]
         return result
 
     async def _skills_import(self, params: dict) -> dict:
         member_id = self._skill_scope(params)
-        added = []
-        try:
-            source = params.get("source")
-            if params.get("plugin") is True or "set_id" in params or "marketplace" in params:
-                if member_id != -1:
-                    raise MemberError("scope", "plugin sets belong to the shared library")
-                identifier = _whole(params, "set_id", least=1) if "set_id" in params else None
-                installed = await self.capabilities.import_plugin(source, set_id=identifier, marketplace=params.get("marketplace"), name=params.get("name"))
-                self._changed("members.skills.changed", 0)
-                self._changed()
-                return {"set": installed, "skills": self.capabilities.skills(-1)}
-            if isinstance(source, str) and source.startswith("local:"):
-                skill = self.capabilities.import_local(member_id, source)
-                self._changed("members.skills.changed", 0 if member_id == -1 else member_id)
+        args = {k: v for k, v in params.items() if k not in ("shared", "member_id")}
+        if member_id != -1 and set(args) == {"source"} and isinstance(args["source"], str) and args["source"].startswith("local:"):
+            # Keep version discovery and reimport semantics of an installed private skill.
+            from .skill_library import location
+            self._cap(skill_sources.local_path, args["source"])
+            try:
+                folder, _ = location(self.capabilities.skill_home, args["source"])
+            except MemberError:
+                folder = None
+            if folder and (folder / "SKILL.md").is_file():
+                skill = self._cap(self.capabilities.import_local, member_id, args["source"])
+                self._changed("members.skills.changed", member_id)
                 self._changed()
                 return {"skill": skill, "skills": [skill]}
-            documents = await download_skills(source)
-            for source, text in documents:
-                added.append(self.capabilities.keep_skill(member_id, source, text))
+        _, ids, plugin = await self._import_package(member_id, args)
+        if plugin:
+            return {"set": plugin, "skills": self.capabilities.skills(-1)}
+        installed = {s["id"]: s for s in self.capabilities.skills(member_id)}
+        skills = [installed[i] for i in ids]
+        return {"skill": skills[0], "skills": skills}
+
+    @staticmethod
+    def _package_fields(params, allowed):
+        if not isinstance(params, dict) or set(params) - set(allowed):
+            raise invalid_params("unknown skill library fields")
+
+    async def _packages_list(self, params):
+        self._package_fields(params, ())
+        return {"packages": self.packages.list(), "members": [{"id": m.id, "name": m.name} for m in self.store.members()]}
+
+    async def _packages_import(self, params):
+        key, _, _ = await self._import_package(-1, params, new_package=True)
+        return {"package": self.packages.view(key)}
+
+    async def _package_documents(self, params):
+        if "text" in params:
+            text = params["text"]
+            if not isinstance(text, str):
+                raise invalid_params("text must be Markdown")
+            return [("paste", {"SKILL.md": text.encode()})], "pasted text", "paste", ""
+        if "file" in params:
+            files, name = skill_sources.uploaded(params["file"])
+            return [("upload", f) for f in files], name, "upload", name
+        source = params["source"]
+        if not isinstance(source, str) or not source.strip():
+            raise invalid_params("source must be a nonempty string")
+        if source.startswith("local:"):
+            files, name = skill_sources.local(source)
+            return [(source, f) for f in files], source, "source", name
+        documents = await download_skills(source)
+        return [(url, {"SKILL.md": text.encode()}) for url, text in documents], source, "source", source.split("/")[-1]
+
+    async def _import_package(self, member, params, *, new_package=False):
+        self._package_fields(params, ("source", "text", "file", "access", "name", "plugin", "set_id", "marketplace"))
+        if "access" in params:
+            if member != -1:
+                raise invalid_params("access is for shared packages")
+            self._cap(self.packages.validate_access, params["access"])
+        for field in ("name", "marketplace", "source"):
+            if field in params and (not isinstance(params[field], str) or not params[field].strip()):
+                raise invalid_params(f"{field} must be a nonempty string")
+        if "plugin" in params and type(params["plugin"]) is not bool:
+            raise invalid_params("plugin must be true or false")
+        plugin = None
+        try:
+            if params.get("plugin") or "marketplace" in params or "set_id" in params:
+                if member != -1 or "text" in params or "file" in params:
+                    raise invalid_params("a plugin needs a shared plugin source")
+                if (not any(k in params for k in ("set_id", "marketplace", "source"))
+                        or "set_id" in params and "marketplace" in params
+                        or "marketplace" in params and "name" not in params):
+                    raise invalid_params("choose one installed plugin, marketplace entry or local source")
+                identifier = _whole(params, "set_id", least=1) if "set_id" in params else None
+                plugin = await self.capabilities.import_plugin(params.get("source"), set_id=identifier,
+                    marketplace=params.get("marketplace"), name=params.get("name"), access=params.get("access"),
+                    require_new=new_package and identifier is None)
+                key = f"set:{plugin['id']}"
+                ids = [s["id"] for s in self.packages.view(key)["skills"]]
+            else:
+                if sum(k in params for k in ("source", "text", "file")) != 1:
+                    raise invalid_params("choose exactly one source, text or file")
+                data = await self._package_documents(params)
+                key, ids = self.packages.install(member, *data, access=params.get("access"), name=params.get("name"))
         except MemberError as error:
-            for skill in added:
-                self.capabilities.delete_skill(member_id, skill["id"])
-            raise _rpc_error(error) from None
-        self._changed("members.skills.changed", member_id)
+            raise (_library_error if member == -1 else _rpc_error)(error) from None
+        except (OSError, UnicodeError) as error:
+            raise (_library_error if member == -1 else _rpc_error)(MemberError("io", "could not read or keep skill files")) from error
+        self._changed("members.skills.changed", max(member, 0))
         self._changed()
-        return {"skill": added[0], "skills": added}
+        return key, ids, plugin
+
+    async def _packages_update(self, params):
+        self._package_fields(params, ("key", "enabled", "access", "skill", "refresh"))
+        key = params.get("key")
+        package = self._cap(self.packages.view, key)
+        if len(params) < 2:
+            raise invalid_params("give a package change")
+        if "enabled" in params and type(params["enabled"]) is not bool:
+            raise invalid_params("enabled must be true or false")
+        if "refresh" in params and params["refresh"] is not True:
+            raise invalid_params("refresh must be true")
+        if "access" in params:
+            self._cap(self.packages.validate_access, params["access"])
+        skill = params.get("skill")
+        if "skill" in params:
+            if (not isinstance(skill, dict) or set(skill) != {"id", "enabled"} or type(skill["id"]) is not int
+                    or type(skill["enabled"]) is not bool or skill["id"] not in {s["id"] for s in package["skills"]}):
+                raise invalid_params("give a skill in this package and its switch")
+        try:
+            if params.get("refresh"):
+                if not package["updatable"]:
+                    raise MemberError("source", "this package has no available update source")
+                required = skill["id"] if skill else None
+                if package["kind"] == "plugin":
+                    await self.capabilities.import_plugin(set_id=int(key[4:]), access=params.get("access"), required_skill=required)
+                else:
+                    data = await self._package_documents({"source": package["source"]})
+                    self.packages.install(-1, *data, key=key, access=params.get("access"), required_skill=required)
+            with self._conn:
+                if "access" in params:
+                    self._conn.execute("UPDATE skill_packages SET access=? WHERE key=?", (json.dumps(params["access"]), key))
+                if "enabled" in params:
+                    self._conn.execute("UPDATE skill_packages SET enabled=? WHERE key=?", (params["enabled"], key))
+                if skill:
+                    self._conn.execute("UPDATE member_skills SET enabled=? WHERE id=? AND package_key=?",
+                                       (skill["enabled"], skill["id"], key))
+        except MemberError as error:
+            raise _library_error(error) from None
+        except (OSError, UnicodeError) as error:
+            raise _library_error(MemberError("io", "could not refresh skill files")) from error
+        self._changed("members.skills.changed", 0)
+        self._changed()
+        return {"package": self.packages.view(key)}
+
+    async def _packages_delete(self, params):
+        self._package_fields(params, ("key",))
+        try:
+            self._cap(self.packages.delete, params.get("key"))
+        except OSError as error:
+            raise _rpc_error(MemberError("io", "could not remove the skill files")) from error
+        self._changed("members.skills.changed", 0)
+        self._changed()
+        return {"deleted": True}
 
     async def _skills_read(self, params: dict) -> dict:
         """A skill and its whole document, for the owner's page of it (the model reads one by `skill_read`)."""
@@ -923,7 +1060,15 @@ class MembersService:
             self._changed("members.skills.changed", 0)
             self._changed()
             return {"deleted": deleted}
-        deleted = self._cap(self.capabilities.delete_skill, member_id, _whole(params, "id", least=1))
+        identifier = _whole(params, "id", least=1)
+        if member_id == -1:
+            row = self._conn.execute("SELECT package_key FROM member_skills WHERE id=? AND member_id=-1", (identifier,)).fetchone()
+            if row:
+                package = self.packages.view(row[0])
+                if package["kind"] != "single":
+                    raise invalid_params("remove the package through the team skill library")
+                return await self._packages_delete({"key": row[0]})
+        deleted = self._cap(self.capabilities.delete_skill, member_id, identifier)
         self._changed("members.skills.changed", member_id)
         self._changed()
         return {"deleted": deleted}
@@ -975,7 +1120,7 @@ class MembersService:
                 text = self.capabilities._path(member_id, skill["id"]).read_text(encoding="utf-8")
                 saved = self.capabilities.keep_skill(copy.id, skill["source"], text)
                 self.capabilities.update_skill(copy.id, saved["id"], skill["enabled"])
-            self.capabilities.copy_grants(member_id, copy.id)
+            self.capabilities.copy_package_access(member_id, copy.id)
         except (MemberError, OSError) as error:
             if copy is not None:
                 for skill in self.capabilities.owned_skills(copy.id):
@@ -1545,6 +1690,9 @@ class MembersService:
         shown = {key: value for key, value in values.items() if isinstance(value, str) and value and key in (
             "name", "role", "blurb", "personality", "instructions", "group", "avatar_preset", "source", "description", "template", "title", "prompt")}
         lines = confirmation("-", shown, language, question=False).split("\n")[1:] if shown else []
+        if type(values.get("enabled")) is bool:
+            switch = say(language, "On", "開啟", "オン") if values["enabled"] else say(language, "Off", "關閉", "オフ")
+            lines.extend(confirmation("-", {"enabled": switch}, language, question=False).split("\n")[1:])
         extra = {"model": ("Model", "模型", "モデル"), "effort": ("Effort", "思考強度", "思考の強さ")}
         for key, words in extra.items():
             if isinstance(values.get(key), str) and values[key]:
@@ -1575,6 +1723,8 @@ class MembersService:
                 routine = self.store.routine(arguments["id"]) if type(arguments.get("id")) is int else None
                 target = routine.title if routine else str(arguments.get("title", "")) if isinstance(arguments.get("title", ""), str) else ""
             from ..management_words import quoted
+            if name == "member_skill_import" and isinstance(arguments.get("source"), str):
+                target = " ".join(filter(None, [target, arguments["source"]]))
             return joined(title_of(name, language), quoted(target, language) if target else "", language)
         detail, notes = self.management_target(name, arguments, language)
         return joined(effect(self.management_effect(action, values), language), " ".join([detail, *notes]).strip(), language)
@@ -1622,6 +1772,47 @@ class MembersService:
                 label = str(data.get("name", data.get("title", "")))
                 if label:
                     names.append(label)
+        if item.rpc.startswith("skills.library."):
+            if isinstance(arguments.get("key"), str):
+                try:
+                    package = self.packages.view(arguments["key"])
+                    names.append(package["name"])
+                    if arguments.get("refresh"):
+                        notes.append(package["source"])
+                except MemberError:
+                    pass
+            if "set_id" in arguments and type(arguments["set_id"]) is int:
+                existing = self._conn.execute("SELECT name FROM skill_sets WHERE id=?", (arguments["set_id"],)).fetchone()
+                if existing:
+                    names.append(existing[0])
+            if "text" in arguments and isinstance(arguments["text"], str):
+                from .capabilities import skill_metadata
+                try:
+                    names.append(skill_metadata(arguments["text"], writing=True)[0])
+                except MemberError:
+                    pass
+            if isinstance(arguments.get("skill"), dict):
+                change = arguments["skill"]
+                row = self._conn.execute("SELECT name FROM member_skills WHERE package_key=? AND id=?",
+                    (arguments.get("key"), change.get("id"))).fetchone() if type(change.get("id")) is int else None
+                if row:
+                    names.append(row[0])
+                if type(change.get("enabled")) is bool:
+                    notes.extend(self.readable_values({"enabled": change["enabled"]}, language))
+            if type(arguments.get("enabled")) is bool:
+                notes.extend(self.readable_values({"enabled": arguments["enabled"]}, language))
+            for field in ("source", "marketplace", "name"):
+                if isinstance(arguments.get(field), str):
+                    names.append(arguments[field])
+            if isinstance(arguments.get("file"), dict):
+                names.append(str(arguments["file"].get("name", "")))
+            if "access" in arguments:
+                access = arguments["access"]
+                if access == "all":
+                    notes.append(say(language, "All members", "全部成員", "全メンバー"))
+                elif isinstance(access, list):
+                    notes.append(listed([self.name_of(i) for i in access if type(i) is int and self.name_of(i)], language)
+                                 or say(language, "No members", "沒有成員", "メンバーなし"))
         if name in ("member_skill_delete", "member_command_delete"):
             member = arguments.get("member_id", 0)
             try:
@@ -1638,7 +1829,7 @@ class MembersService:
             previous = [row[0] for row in self._conn.execute("SELECT member_id FROM room_members WHERE room_id=?", (identifier,))]
             removed = sorted(set(previous) - set(arguments.get("member_ids", [])))
             if removed:
-                notes.append(joined(say(language, "Removed members", "移除的成員", "外すメンバー"),
+                notes.append(joined(say(language, "Removed members", "移除的參與者", "外すメンバー"),
                                     listed([self.name_of(member) or "" for member in removed if self.name_of(member)], language), language))
         if name == "dictionary_delete":
             record = self._conn.execute("SELECT word FROM dictionary WHERE id=?", (identifier,)).fetchone()
@@ -2313,7 +2504,7 @@ class MembersService:
 
     def _guard_reason(self, kind: str) -> str:
         messages = with_ui_words({
-            "zh-TW": {"absence": "已暫停：擁有者超過 30 天未使用。請確認後重新開啟。", "member": "此成員最近一小時已執行 200 次，稍後自動重試。", "total": "團隊最近一小時已執行 300 次，稍後自動重試。"},
+            "zh-TW": {"absence": "已暫停：擁有者超過 30 天未使用。請確認後重新開啟。", "member": "最近一小時已執行 200 次，稍後自動重試。", "total": "團隊最近一小時已執行 300 次，稍後自動重試。"},
             "ja": {"absence": "30 日間利用がないため停止しました。確認して再開してください。", "member": "このメンバーは過去 1 時間に 200 回実行しました。後で再試行します。", "total": "チームは過去 1 時間に 300 回実行しました。後で再試行します。"},
             "en": {"absence": "Paused after 30 days without owner activity. Review and enable to resume.", "member": "This member reached 200 runs in the last hour. Retrying later.", "total": "The team reached 300 runs in the last hour. Retrying later."},
         })

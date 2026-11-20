@@ -470,6 +470,9 @@ async def test_connect_app_still_connects_google_when_the_owner_names_it(setup, 
             from raphael_core.connectors.apps import APPS
             return APPS[ident]
 
+        def needs_composio_key(self, app):
+            return False
+
         def show(self, **kwargs):
             self.shown.append(kwargs)
 

@@ -1570,10 +1570,10 @@ polish-caption-member.
 Selected scene matrix, both themes at 1120,720,1920x1080:
 
 ```powershell
-npm run look -- computer-status-active computer-status-idle panel-screen-routines panel-off desktop-start desktop-return-stopped panel-no-computer panel-gear panel-routine-row panel-raphael takeover-bar takeover-menu takeover-handback --theme both --width 1120,720,1920x1080
+npm run look -- computer-status-active computer-status-member computer-status-idle panel-screen-routines panel-off desktop-start desktop-return-stopped panel-no-computer panel-gear panel-routine-row panel-raphael takeover-bar takeover-menu takeover-handback --theme both --width 1120,720,1920x1080
 ```
 
-- computer-status-active, computer-status-idle, panel-screen-routines, panel-off,
+- computer-status-active, computer-status-member, computer-status-idle, panel-screen-routines, panel-off,
   panel-no-computer, panel-gear, panel-routine-row, panel-raphael, takeover-bar,
   takeover-menu, takeover-handback.
 - Every desktop-*, computer-*, details*, member-edit* and member-avatar scene;
@@ -2192,7 +2192,7 @@ grant/target before and after the final observation; revoked reads return no tre
 A member that needs the owner's key for a script in its computer calls `request_secret` with `key` (an environment
 variable name) and `purpose`; the secure card (`secret-card.ts`, `keyCardHTML`) is titled 「儲存金鑰」, with the quiet waiting dot and its words beside the title, the variable in monospace and its purpose below. It takes the value in one masked field beside Save, with a vault hint; its way out is the × at its top right and nothing of it stands under the card (R-CARD-21): on the owner's own message the × takes the message back, on work the member handed itself it answers that work's waiting question
 (Credential Manager, a `vault_entries` row of kind `key`, never the conversation, a row or a log). The member then
-saves on the key card a value marked 「不是機密」 (a user name: short, shown as typed, not withheld; a secret one needs six characters and says so, R-KEY-05), renews an expired key under the same name with `request_secret` `replace: true` (one entry per name and scope is kept, the newest, R-KEY-04) and may propose deleting its own private key with `remove_key`, which the owner approves on a card. It runs `vm_exec` with `keys: [NAME]`: the core hands the values to that one process's environment (`docker exec -e NAME`,
+is told by `request_secret` to ask in the conversation for a value that is no secret (a user name, an e-mail, a site: no key card; a key needs six characters and its card says so, R-KEY-05), renews an expired key under the same name with `request_secret` `replace: true` (one entry per name and scope is kept, the newest, R-KEY-04) and may propose deleting its own private key with `remove_key`, which the owner approves on a card. It runs `vm_exec` with `keys: [NAME]`: the core hands the values to that one process's environment (`docker exec -e NAME`,
 the value in the docker process's own environment, never an argument) and replaces them in everything returned,
 including a background job's log read later. The Keys tab of the safety pane's saved-entries list (`vault.ts`) shows
 and removes them; it offers no way to add one. In the live view (`BOOTSTRAP` in `computer/viewer.py` and

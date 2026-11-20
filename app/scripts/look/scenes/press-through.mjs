@@ -25,7 +25,7 @@ export default [
     column, ...settings("general"), wide(click('[data-col="search"]')), check("press-through-scrim-settings")]),
   scene("press-through-scrim-connect-apps", "With 連結應用程式 open, one press on the sidebar's search behind its scrim closes it and opens no search card", [
     column, ...settings("connections"), wide(click('[data-col="search"]')), check("press-through-scrim-connect-apps")]),
-  scene("press-through-scrim-member-maker", "With 新增成員 open, one press on a member behind its scrim closes it, makes nobody and opens nobody", [
+  scene("press-through-scrim-member-maker", "With 新增角色 open, one press on a member behind its scrim closes it, makes nobody and opens nobody", [
     column, click('[data-col="add"]'), click('#app-popover [data-pick="member"]'), wait(".cr-dialog"), click('.mb-col [data-member="1"]'), check("press-through-scrim-member-maker")]),
   scene("press-through-scrim-model-chooser", "With the model chooser open over Settings, one press on a tab of Settings behind its scrim closes only the chooser and presses no tab", [
     ...settings("models"), click('.modal-scrim [data-model-picker="answer"] .mp-trigger'), wait(".model-chooser .mc-row"), click('.modal-scrim [data-pane="general"]'), check("press-through-scrim-model-chooser")]),

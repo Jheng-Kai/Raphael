@@ -2,12 +2,17 @@
 computer, and nowhere else. A room, an exchange between members, a quick question, a spoken request and a
 message from a phone never get a card, and a connection the owner does not have has none to fill."""
 
+import asyncio
+import json
+
+import httpx
 import pytest
 
 from raphael_core.agent import service as agent_service
 from raphael_core.agent.harness_tools import HarnessToolError
 from raphael_core.agent.ledger import Ledger
 from raphael_core.agent.service import RESUMED, TYPED, _Ask
+from raphael_core.connectors.composio import KEY
 from raphael_core.evaluate.guardian import Budget
 from raphael_core.evaluate.guardian_driver import RpcDriver
 from raphael_core.evaluate.secret_fixture import SERVER_NAME, SecretServer
@@ -94,11 +99,113 @@ async def test_a_secret_card_names_only_a_connection_the_owner_has_and_a_secret_
     assert rows(driver, "secret_cards") == 0 and ask.waiting_secrets == []
 
 
+async def test_a_value_that_is_no_secret_gets_no_key_card_and_the_member_is_told_to_ask_in_chat(driver):
+    """#281: a user name, an e-mail or a site is no secret. No card is shown, and the member asks the owner in the conversation."""
+    for name in ("JIRA_USERNAME", "SMTP_USER", "JIRA_EMAIL", "ATLASSIAN_SITE"):
+        ask = ask_of(driver)
+        shown = driver.app.agent._show_secret(ask, {"key": name, "purpose": "the Jira user"})
+        assert shown["card"] == "not_shown" and "ask the owner" in shown["note"] and ask.waiting_secrets == []
+    assert rows(driver, "secret_cards") == 0
+    shown = driver.app.agent._show_secret(ask_of(driver), {"key": "JIRA_API_TOKEN", "purpose": "the Jira API"})
+    assert shown["card"] == "shown" and rows(driver, "secret_cards") == 1
+
+
 async def test_a_managed_connection_gets_no_secret_card(driver):
     driver.app.integrations._config.add(ServerConfig("google", "Google (private)", "http", url="https://example.invalid/mcp",
                                                     managed_by="google", headers=["x-api-key"]))
     with pytest.raises(HarnessToolError, match="unknown_connection"):
         driver.app.agent._show_secret(ask_of(driver), {"connection": "Google (private)"})
+
+
+async def test_a_local_calendar_request_does_not_ask_for_a_composio_key(driver):
+    ask = ask_of(driver)
+    ask.text = "Show my calendar"
+    with pytest.raises(HarnessToolError, match="^own_calendar$"):
+        await driver.app.agent._show_card(ask, {"app": "googlecalendar"})
+    assert rows(driver, "connect_cards") == rows(driver, "secret_cards") == 0
+
+
+async def test_the_composio_key_card_keeps_the_key_private_and_continues_connecting_the_requested_app(driver, monkeypatch):
+    app, value = driver.app, "ak-private-card-test"
+    slug = "example-service"
+
+    def composio(request):
+        assert request.headers["x-api-key"] == value
+        if request.url.path.endswith("/toolkits"):
+            return httpx.Response(200, json={"items": [{"slug": slug, "name": "Example Service"}]})
+        assert request.url.path.endswith("/toolkits/categories")
+        return httpx.Response(200, json={"items": []})
+
+    transport = httpx.MockTransport(composio)
+    monkeypatch.setattr(app.connectors, "_transport", transport)
+    monkeypatch.setattr(app.connectors.composio.http, "transport", transport)
+    driver.transport.client.turns = iter([
+        ("", [("connect_app", {"app": slug})]),
+        ("", [("request_secret", {"connection": "composio"})]),
+        ("請把金鑰貼到卡片。", []),
+        ("", [("connect_app", {"app": slug})]),
+        ("請用卡片連接應用程式。", []),
+    ])
+    first = await driver.ask("幫我連接 Example Service", intent=f"connect-app:{slug}")
+    failed_call = driver.transport.client.requests[1]["messages"][-1]
+    assert failed_call["role"] == "tool" and 'request_secret with connection: "composio"' in failed_call["content"]
+    (card,) = app.secret_cards.cards_of(first["turn_id"])
+    assert card.kind == "composio"
+    assert card.view() == {"id": card.id, "name": "Composio", "secret": "API key", "state": "pending",
+                           "error": None, "expires_at_ms": card.expires_at_ms, "resumed": False, "composio": True}
+    assert rows(driver, "secret_cards") == 1 and rows(driver, "connect_cards") == 0
+    assert (await app.call("connectors.status", {"refresh": False}))["composio_configured"] is False
+    saved = await app.call("integrations.card_save", {"id": card.id, "value": value})
+    assert saved["saved"] is True and app.vault.get(KEY) == value
+    await app.secret_cards.idle()
+    assert app.secret_cards.store.get(card.id).state == "resumed"
+    assert rows(driver, "connect_cards") == 1
+    assert any(f'Call connect_app again with app "{slug}"' in (message.get("content") or "")
+               for request in driver.transport.client.requests for message in request["messages"])
+    assert (await app.call("connectors.status", {"refresh": False}))["composio_configured"] is True
+    again = app.agent._show_secret(ask_of(driver), {"connection": "composio"})
+    assert set(again) == {"connection", "saved", "note"} and again["connection"] == "composio" and again["saved"] is True
+    assert rows(driver, "secret_cards") == 1
+    assert (await app.call("integrations.card_save", {"id": card.id, "value": value}))["saved"] is False
+    stored = "\n".join(app._conn.iterdump())
+    assert value not in stored + json.dumps([saved, again, driver.events]) + "".join(driver.transport.sent) + driver.log.text
+
+
+async def test_a_composio_key_refused_by_the_provider_fails_the_card_without_echoing_the_key(driver, monkeypatch):
+    app, value = driver.app, "ak-refused-card-test"
+    monkeypatch.setattr(app.connectors, "_transport", httpx.MockTransport(
+        lambda request: httpx.Response(401, json={"message": f"Refused {value}"})))
+    ask = ask_of(driver)
+    app.agent._show_secret(ask, {"connection": "composio"})
+    (card,) = app.secret_cards.cards_of(ask.turn_id)
+    driver.transport.client.turns = iter([("請檢查金鑰，再試一次。", [])])
+    result = await app.call("integrations.card_save", {"id": card.id, "value": value})
+    await app.secret_cards.idle()
+    assert result["saved"] is False and result["card"]["state"] == "failed" and result["card"]["error"] == "key_refused"
+    assert (await app.call("connectors.status", {"refresh": False}))["composio_configured"] is False
+    assert value not in str(result) + "".join(driver.transport.sent) + driver.log.text
+
+
+async def test_stopping_the_composio_card_during_validation_leaves_the_vault_empty(driver, monkeypatch):
+    started, release = asyncio.Event(), asyncio.Event()
+
+    async def composio(request):
+        started.set()
+        await release.wait()
+        return httpx.Response(200, json={"items": []})
+
+    app = driver.app
+    monkeypatch.setattr(app.connectors, "_transport", httpx.MockTransport(composio))
+    ask = ask_of(driver)
+    app.agent._show_secret(ask, {"connection": "composio"})
+    (card,) = app.secret_cards.cards_of(ask.turn_id)
+    async with asyncio.TaskGroup() as tasks:
+        save = tasks.create_task(app.call("integrations.card_save", {"id": card.id, "value": "ak-stopped-card-test"}))
+        await asyncio.wait_for(started.wait(), 2)
+        app.secret_cards.cancel_session(ask.session_id)
+        release.set()
+    assert save.result()["saved"] is False and save.result()["card"]["state"] == "cancelled"
+    assert app.vault.get(KEY) is None
 
 
 @pytest.mark.parametrize("fields,expected", [

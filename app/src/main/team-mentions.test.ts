@@ -138,7 +138,7 @@ test("the menu lists the other members, then the apps, each with what it is at t
   input.value = '@'; input.setSelectionRange(1, 1); input.dispatchEvent(new Event('input'));
   expect(rows()).toEqual(['拉斐爾', '小晴', 'Gmail', 'Notion']);
   expect(menu()!.querySelector('.menu-head')).toBeNull();
-  expect([...menu()!.querySelectorAll('.mtrail')].map(word => word.textContent)).toEqual(['成員', '成員', '應用程式', '應用程式']);
+  expect([...menu()!.querySelectorAll('.mtrail')].map(word => word.textContent)).toEqual(['角色', '角色', '應用程式', '應用程式']);
   expect([...menu()!.querySelectorAll('.mt')].map(name => name.textContent)).toEqual(['拉斐爾', '小晴', 'Gmail', 'Notion']);
   expect(menu()!.querySelector('[data-value="Notion"]')!.textContent).toBe('Notion需要登入應用程式');
   expect(menu()!.querySelector('[data-value="小森"]')).toBeNull();

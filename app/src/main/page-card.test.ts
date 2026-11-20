@@ -376,7 +376,7 @@ test("the page runs to the window's foot under a floating composer: the dock is 
   expect(css).toMatch(/\.pgv-status > :is\(\.live-presence, \.pgv-reply\) \{[^}]*border: 1px solid var\(--edge\);[^}]*background: var\(--panel\);[^}]*box-shadow: var\(--composer-shadow\);/);
 });
 
-test("the way back is the round arrow at the header's top left, named 返回, where the search stood", async () => {
+test("the way back is the round arrow at the header's top left, named 返回, where the status light stood", async () => {
   const { thread, frame } = mount();
   await flush();
   loaded(frame);
@@ -389,7 +389,7 @@ test("the way back is the round arrow at the header's top left, named 返回, wh
   expect(arrow.querySelector("svg")).not.toBeNull();
   // The search is the thread's, and the thread is not in sight: the css puts it away, and the page's title is in sight in the header's pill.
   const css = readFileSync(join(__dirname, "page-view.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
-  expect(css).toContain('.mb-chat:has(> .ra-stage.is-page) .mb-head [data-act="search"] { display: none; }');
+  expect(css).toContain('.mb-chat:has(> .ra-stage.is-page) .mb-head [data-act="status"] { display: none; }');
   const pill = document.querySelector<HTMLElement>(".mb-head-c > .pgv-pill")!;
   expect(pill.hidden).toBe(false);
   expect(pill.textContent).toBe("藍色背包 <b>");

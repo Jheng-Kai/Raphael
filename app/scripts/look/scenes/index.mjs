@@ -3,6 +3,7 @@ import memberStore from "./member-store.mjs";
 import cards from "./cards.mjs";
 import chatMetadata from "./chat-metadata.mjs";
 import vault from "./vault.mjs";
+import skillLibrary from "./skill-library.mjs";
 import calmThread from "./calm-thread.mjs";
 import appUpdates from "./app-updates.mjs";
 import polish from "./polish.mjs";
@@ -32,6 +33,8 @@ import threadWindow from "./thread-window.mjs";
 import follow from "./follow.mjs";
 import chat from "./chat.mjs";
 import topRow, { TOP_ROW_SCENES } from "./top-row.mjs";
+import statusLight from "./status-light.mjs";
+import cardFloat from "./card-float.mjs";
 import desktop from "./desktop.mjs";
 import memberPanel from './member-panel.mjs';
 import memberSettings from './member-settings.mjs';
@@ -59,7 +62,7 @@ scenes.push(...handoffGroup);
 scenes.push(...daily);
 scenes.push(...menus);
 scenes.push(...cards);
-scenes.push(...calmThread, ...chatMetadata, ...vault);
+scenes.push(...calmThread, ...chatMetadata, ...vault, ...skillLibrary);
 scenes.push(...appUpdates);
 scenes.push(...presence);
 scenes.push(...answerForms);
@@ -92,7 +95,7 @@ const FLOAT_SCENES = new Set(['member-delete-ask', 'member-maker', 'context-menu
 export const FLOAT_CARD_SCENES = new Set(['profile', 'appearance', 'models', 'dictation', 'tools', 'safety', 'about', 'usage', 'usage-allowances-chatgpt', 'model-choices-answer', 'model-choices-local', 'chooser-chatgpt-signed-out',
   'quick-model-menu', 'quick-effort-menu', 'cli-account-menu', 'member-maker', 'member-maker-chosen', 'slime-picker', 'member-avatar', 'member-delete-ask', 'context-menu-member', 'foot-account-menu', 'foot-usage-submenu', 'foot-usage-two',
   'composer-model-small', 'composer-model-sources', 'composer-model-favorites', 'automations-detail-own', 'automations-create-slot', 'automations-create-time-menu', 'emoji-picker', 'connections', 'connections-add-menu',
-  'plugins-detail', 'connect-apps', 'connect-apps-more', 'connect-app-oauth', 'connect-app-connected', 'vault-new-login', 'missing-vision', 'primary-contact-picker', 'settings-chatgpt-row',
+  'plugins-detail', 'connect-apps', 'connect-apps-more', 'connect-app-oauth', 'connect-app-connected', 'vault-new-login', 'skill-library', 'missing-vision', 'primary-contact-picker', 'settings-chatgpt-row',
   'template-preview', 'template-review-pages', 'template-export-review', 'details-routine-view', 'room-rename', 'sidebar-owner-crop', 'connections-command', 'connections-edit', 'automations-detail-routine', 'automations-create-button', 'member-template-gallery', 'missing-provider-repair', 'missing-search-repair']);
 for (const scene of scenes) if (FLOAT_CARD_SCENES.has(scene.name)) scene.steps.push({ action: "check", name: "float-cards" });
 for (const scene of scenes) if (FLOAT_SCENES.has(scene.name)) scene.steps.push({ action: "check", name: "float-surface" });
@@ -101,5 +104,7 @@ for (const scene of scenes) if (FLOAT_SCENES.has(scene.name)) scene.steps.push({
 export const DIALOG_LAYER_SCENES = new Set(['profile', 'appearance', 'models', 'usage', 'safety', 'connect-apps', 'connect-apps-connected', 'connect-app-oauth', 'connect-app-connected']);
 for (const scene of scenes) if (DIALOG_LAYER_SCENES.has(scene.name)) scene.steps.push({ action: "check", name: "dialog-layers" });
 scenes.push(...topRow);
+scenes.push(...statusLight);
+scenes.push(...cardFloat);
 for (const scene of scenes) if (TOP_ROW_SCENES.has(scene.name)) scene.steps.push({ action: "check", name: "conversation-top-row" });
 if (new Set(scenes.map(scene => scene.name)).size !== scenes.length) throw new Error("Duplicate look scene name");

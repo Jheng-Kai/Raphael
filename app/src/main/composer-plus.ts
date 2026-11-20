@@ -79,7 +79,8 @@ export function mountComposerPlus(button: HTMLElement, host: ComposerPlusHost): 
     const member = host.member();
     return pending && pending.id === member.id ? pending.tools : member.tools;
   };
-  const mySkills = (): MemberSkill[] | null => (skillsOf === host.member().id ? skills : null);
+  // Its own skills: what the team library gives it is switched in the library (R-SKILL-17), and stays usable by its slash name.
+  const mySkills = (): MemberSkill[] | null => (skillsOf === host.member().id ? skills?.filter(skill => !skill.shared) ?? null : null);
 
   // The member's own colour on a switch that is on, as in its panel and settings (R-UI-147): the panel is a menu on the body, so it carries the colour itself.
   function wear(panel: HTMLElement): void {
