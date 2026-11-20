@@ -58,6 +58,9 @@
    2 px off 1280:900, the seat's picture fitted one side and the other showed a dark sliver. The running screen covers it. */
 .desktop-screen { position: relative; width: 100%; aspect-ratio: 1280 / 900; overflow: clip; background: var(--content); box-shadow: inset 0 0 0 1px var(--line); border-radius: var(--r-lg); }
 .desktop-screen iframe, [data-card-desktop-screen] iframe, [data-card-screen] iframe { position: relative; z-index: 1; display: block; width: 100%; height: 100%; border: 0; }
+/* noVNC measures the viewport during connection. Give the waiting frame the
+   screen's dimensions without displacing the placeholder. */
+iframe[data-desktop-stream][hidden] { display: block !important; position: absolute; inset: 0; visibility: hidden; }
 .desktop-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-2); }
 .desktop-recording { margin: 0; color: var(--text-2); font-size: var(--fs-sm); overflow-wrap: anywhere; }
 .desktop-try { display: flex; gap: var(--sp-2); }
