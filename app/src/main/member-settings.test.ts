@@ -442,10 +442,10 @@ describe("skills and commands", () => {
     api.membersSkillsList.mockResolvedValue({ skills: SKILLS, library: [{ key: "pack:2", name: "研究工具", skills: 2 }, { key: "skill:3", name: "會議紀錄", skills: 1 }] });
     await open();
     await cat("skills");
-    const library = $(".ms-lib");
+    const library = $('[data-k="ms-library"]');
     expect([...library.querySelectorAll(".ms-lib-row .ms-label")].map((row) => row.textContent)).toEqual(["研究工具", "會議紀錄"]);
     expect([...library.querySelectorAll(".ms-lib-count")].map((row) => row.textContent)).toEqual(["2 個技能"]);
-    expect(library.querySelector('[role="switch"], [data-ms="skill-open"]')).toBeNull();
+    expect(library.querySelector('.ms-list [role="switch"], [data-ms="skill-open"]')).toBeNull();
     expect(page.el.querySelector('[data-ms="skill-open"][data-id="2"]')).toBeNull();
     await press('[data-ms="open-library"]');
     expect(appGo).toHaveBeenCalledWith("settings", "skills");

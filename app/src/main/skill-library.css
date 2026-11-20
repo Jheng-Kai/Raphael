@@ -4,7 +4,9 @@
 .skl-link { display: flex; align-items: center; gap: var(--sp-2); }
 .skl-link > .field { flex: 1 1 auto; min-width: 0; }
 .skl-go-row { display: flex; justify-content: flex-end; }
-.skl-text { width: 100%; min-height: 160px; resize: vertical; font-family: var(--mono); font-size: var(--fs-sm); }
+/* 匯入 stands as tall as the link field beside it. */
+.skl .btn.skl-go { flex: none; min-height: var(--h-field); }
+.skl-text { width: 100%; min-height: 112px; resize: vertical; font-family: var(--mono); font-size: var(--fs-sm); }
 .skl-error { margin: 0 0 var(--sp-3); }
 .skl-empty { margin: 0; padding-block: var(--sp-4); color: var(--text-3); font-size: var(--fs-sm); }
 
@@ -20,7 +22,8 @@
 .skl-access > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .skl-skills { display: grid; grid-template-columns: minmax(0, 1fr); padding: 0 0 var(--sp-3) calc(16px + var(--sp-2)); }
-.skl-skills > .row { min-height: 48px; padding: var(--sp-2) 0; border-top: 1px solid var(--line); }
+/* Settings' rows have no lines between them (R-UI-115): spacing alone parts a package's skills. */
+.skl-skills > .row { min-height: 48px; padding: var(--sp-2) 0; }
 .skl-skills > .row > .lbl { min-width: 0; }
 .skl-skills > .row .d { overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .skl-about, .skl-source { margin: 0 0 var(--sp-2); color: var(--text-2); font-size: var(--fs-sm); overflow-wrap: anywhere; }

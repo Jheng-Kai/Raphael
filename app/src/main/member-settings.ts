@@ -214,18 +214,17 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
         skills.filter(skill => !skill.shared).map(skill =>
           `<div class="ms-row" data-k="ms-skill:${skill.id}"><button type="button" class="btn ms-open" data-ms="skill-open" data-id="${skill.id}" data-k="ms-skill-open:${skill.id}"><span class="ms-label">${esc(skill.name)}</span></button>` +
           `${tg(skill.enabled, `${t("members.profile.enable")} ${skill.name}`, ` data-ms="skill-toggle" data-id="${skill.id}" data-k="ms-skill-toggle:${skill.id}"`)}</div>`).join("") +
-        (skills.some(skill => !skill.shared) || adding || library.length ? "" : muted(t("members.profile.noSkills"))) + libraryHTML();
+        (skills.some(skill => !skill.shared) || adding ? "" : muted(t("members.profile.noSkills")));
     }
-    return section(title, rows, tool, "ms-skills");
+    return section(title, rows, tool, "ms-skills") + libraryHTML();
   }
 
-  /** What the team skill library gives this member, read-only: the packages' names, and the way to the library. */
+  /** What the team skill library gives this member, read-only, in a section of its own with the way to the library. */
   function libraryHTML(): string {
     if (!library.length) return "";
-    return `<div class="ms-lib"><div class="ms-lib-head"><span>${esc(t("skillLib.fromLibrary"))}</span>` +
-      btn(esc(t("skillLib.openLibrary")), "sm", ' data-ms="open-library" data-k="ms-open-library"') + `</div>` +
-      library.map(item => `<div class="ms-row ms-lib-row" data-k="ms-lib:${esc(item.key)}"><span class="ms-label">${esc(item.name)}</span>` +
-        (item.skills > 1 ? `<span class="ms-lib-count">${esc(t("skillLib.count", { count: item.skills }))}</span>` : "") + `</div>`).join("") + `</div>`;
+    const open = btn(esc(t("skillLib.openLibrary")), "sm", ' data-ms="open-library" data-k="ms-open-library"');
+    return section(t("skillLib.fromLibrary"), library.map(item => `<div class="ms-row ms-lib-row" data-k="ms-lib:${esc(item.key)}"><span class="ms-label">${esc(item.name)}</span>` +
+      (item.skills > 1 ? `<small class="ms-lib-count">${esc(t("skillLib.count", { count: item.skills }))}</small>` : "") + `</div>`).join(""), open, "ms-library");
   }
 
   function commandsHTML(): string {

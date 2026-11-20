@@ -72,9 +72,9 @@ function importHTML(v: SkillLibraryView): string {
   const busy = v.busy ? " disabled" : "";
   // The ways in stand first, so that 貼上文字 stays put when the text takes the link's place under them; one 匯入 sends
   // whichever is on the card, beside the link or under the text.
-  const go = btn(esc(t("skillLib.import")), "sm pri skl-go", ` data-skl="import-go"${busy}`);
+  const go = btn(esc(t("skillLib.import")), "pri skl-go", ` data-skl="import-go"${busy}`);
   const input = v.pasting
-    ? `<textarea id="skl-text" class="mb-fin mb-ta skl-text" rows="8" spellcheck="false" placeholder="${esc(t("skillLib.pasteHint"))}" aria-label="${esc(t("skillLib.pasteHint"))}"${busy}></textarea><div class="skl-go-row">${go}</div>`
+    ? `<textarea id="skl-text" class="mb-fin mb-ta skl-text" rows="5" spellcheck="false" placeholder="${esc(t("skillLib.pasteHint"))}" aria-label="${esc(t("skillLib.pasteHint"))}"${busy}></textarea><div class="skl-go-row">${go}</div>`
     : `<div class="skl-link">${fieldHTML(t("members.profile.source"), "", { id: "skl-source", disabled: v.busy })}${go}</div>`;
   return `<div class="skl-import" data-skl-drop><div class="skl-import-alt">` +
     btn(ico("file") + esc(t("skillLib.file")), "sm", ` data-skl="pick-file"${busy}`) +

@@ -541,10 +541,12 @@ export function checkRendered(name, context = {}) {
       require(visible(document.querySelector('.skl-import')) && document.querySelector('.skl-error').textContent.trim() === '裡面找不到 SKILL.md。', 'the cause is said in the importer, which stays open');
     }
     if (name === 'member-skills-library') {
-      const lib = document.querySelector('.ms-pane .ms-lib');
+      const lib = document.querySelector('.ms-pane [data-k="ms-library"]');
       const names = [...lib.querySelectorAll('.ms-lib-row .ms-label')].map(el => el.textContent.trim());
       require(names.join('、') === '研究工具、會議紀錄', `the packages given to 小晴 are listed, and pstack, given to nobody, is not (${names.join('、')})`);
-      require(!lib.querySelector('.tg, [data-ms="skill-toggle"]') && visible(lib.querySelector('[data-ms="open-library"]')), 'read-only here, with the way to the library');
+      require(!lib.querySelector('.tg, [data-ms="skill-toggle"]') && visible(lib.querySelector('.ms-head [data-ms="open-library"]')), 'read-only here, in a section of its own whose head has the way to the library');
+      const rows = [...lib.querySelectorAll('.ms-lib-row')].map(row => row.getBoundingClientRect());
+      require(rows.every(row => Math.abs(row.height - rows[0].height) <= 0.5), 'its rows are one height');
       require(!document.querySelector('.ms-pane [data-ms="skill-open"][data-id="101"]'), 'no shared skill is a row of its own here');
     }
     return { check: name };

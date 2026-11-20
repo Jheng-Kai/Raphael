@@ -18,5 +18,5 @@ export default [
   scene("skill-library-import-failed", "A source with no SKILL.md says so in the importer and keeps it open", [
     ...importing, type("#skl-source", "nothing/here"), click('[data-skl="import-go"]'), wait(".skl-error"), check("skill-library-import-failed")]),
   scene("member-skills-library", "A character's skills list what the team library gives it, read-only, with the way to the library", [
-    ...memberSettingsPage, click('.ms-pane .ms-nav [data-cat="skills"]'), wait('.ms-pane .ms-lib'), check("member-skills-library")], { memberSettings: true }),
+    ...memberSettingsPage, click('.ms-pane .ms-nav [data-cat="skills"]'), wait('.ms-pane [data-k="ms-library"]'), check("member-skills-library")], { memberSettings: true }),
 ];
