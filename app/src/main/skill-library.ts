@@ -79,7 +79,7 @@ function importHTML(v: SkillLibraryView): string {
   return `<div class="skl-import" data-skl-drop><div class="skl-import-alt">` +
     btn(ico("file") + esc(t("skillLib.file")), "sm", ` data-skl="pick-file"${busy}`) +
     btn(ico("folder") + esc(t("skillLib.folder")), "sm", ` data-skl="pick-folder"${busy}`) +
-    btn(ico("pencil") + esc(t("skillLib.paste")), "sm", ` data-skl="paste" aria-pressed="${v.pasting}"${busy}`) +
+    btn(ico("pencil") + esc(t("skillLib.paste")), "sm", ` data-skl="paste" aria-expanded="${v.pasting}" aria-controls="skl-text"${busy}`) +
     `</div>${input}${v.error ? `<p class="skl-error" role="alert">${esc(v.error)}</p>` : ""}<input type="file" id="skl-file" accept="${ACCEPT}" hidden></div>`;
 }
 
