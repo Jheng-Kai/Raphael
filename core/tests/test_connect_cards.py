@@ -337,3 +337,28 @@ async def test_a_composio_card_signing_in_again_replaces_the_account_that_stoppe
     _, card = await rig.connect(card)
     assert card.state == "connected" and deleted == ["/connected_accounts/ca_dead"]
     assert [(a["id"], a["label"]) for a in rig.connectors.store.connectors["composio:gmail"].accounts] == [("ca_test", "公司信箱")]
+
+
+async def test_a_composio_card_that_reconnects_an_app_still_read_as_connected_takes_its_one_accounts_place(tmp_path, conn):
+    """R-ACCT-04: a member's tools were refused while Composio still lists the account as connected; the card that asks the
+    owner to sign in again leaves one account, the new one, with the old one's name."""
+    deleted = []
+    platform = Platform()
+
+    def transport(request):
+        path = request.url.path.removeprefix("/api/v3.1")
+        if request.method == "DELETE" and path == "/connected_accounts/ca_main":
+            deleted.append((path, request.url.params.get("revoke_on_delete")))
+            return httpx.Response(200, json={"success": True})
+        return platform(request)
+
+    async def browser(url):
+        pass
+    rig = Rig(tmp_path, conn, GoogleFixture("n0nce"), transport=httpx.MockTransport(transport), browser=browser)
+    rig.vault.set("connectors:composio:key", "ak_test")
+    rig.connectors.store.connectors["composio:gmail"] = Connector("composio:gmail", "composio", status="ACTIVE", name="Gmail",
+        accounts=[{"id": "ca_main", "status": "ACTIVE", "label": "Jack"}])
+    card = rig.cards.show(turn_id=rig.turn, member_id=0, conversation_id=None, app=APPS["gmail"], language="zh-TW", reconnect=True)
+    _, card = await rig.connect(card)
+    assert card.state == "connected" and deleted == [("/connected_accounts/ca_main", None)]  # given back, never revoked
+    assert [(a["id"], a["label"]) for a in rig.connectors.store.connectors["composio:gmail"].accounts] == [("ca_test", "Jack")]

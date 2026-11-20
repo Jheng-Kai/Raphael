@@ -285,7 +285,7 @@ function entryOf(g: ConnectionGroup, v: ConnectionsView): StoreService | undefin
 export const needsLogin = (g: ConnectionGroup): boolean => g.auth !== "none" && g.status === "error" && g.error === "auth";
 /** A sign-in still under way at Composio: an account that is neither working nor dead. */
 const WAITING_ACCOUNT: readonly string[] = ["INITIALIZING", "INITIATED"];
-/** The accounts of a Composio app that stopped working (expired, failed, revoked): what signing in again takes the place of. */
+/** The accounts of a Composio app that stopped working (expired, failed, revoked): each row of one offers 重新登入. */
 export const deadAccounts = (g: ConnectionGroup): string[] =>
   g.source === "composio" ? (g.accounts ?? []).filter((a) => a.status !== "ACTIVE" && !WAITING_ACCOUNT.includes(a.status)).flatMap((a) => a.id ? [a.id] : []) : [];
 
@@ -1295,7 +1295,8 @@ export function createConnections(host: ConnectionsHost): Connections {
   }
 
   /** Opens the browser login for a store entry (`catalog_id`) or for a service that must sign in again (`id`). A Composio
-   *  app signed in to again takes the place of its accounts in `replace` (ones that stopped working, R-ACCT-04). */
+   *  app signed in to `again` takes the place of the row in `replace`, or with none of what the core holds as stopped and
+   *  of the app's only other account: the core chooses, since this window's list may be older than its last read (R-ACCT-04). */
   async function signIn(target: { catalog_id: string } | { id: string }, name: string, again: boolean, replace: string[] = []): Promise<void> {
     const key = "catalog_id" in target ? target.catalog_id : target.id;
     // One sign-in waits at a time, and it holds no other app back: the next one ends it (the core gives back the account it made).
@@ -1315,7 +1316,7 @@ export function createConnections(host: ConnectionsHost): Connections {
       result = ("catalog_id" in target ? !entryById(target.catalog_id)?.source : !groupById(target.id)?.source) ? await api.integrationsConnect(target)
         : "id" in target && groupById(target.id)?.source === "google"
         ? await api.connectorsGoogleConnect()
-        : await api.connectorsConnect(key.replace(/^composio:/, ""), undefined, replace);
+        : await api.connectorsConnect(key.replace(/^composio:/, ""), undefined, replace, again);
     } catch (error) {
       result = { connected: false, error: error instanceof Error && error.message === "toolkit_not_allowed" ? "toolkit_not_allowed" : "error" };
     }
@@ -1333,8 +1334,8 @@ export function createConnections(host: ConnectionsHost): Connections {
     if (result.connected) {
       const group = groupById(result.connector?.id || (key.startsWith("composio:") || key === "google" ? key : "composio:" + key));
       const account = result.connector?.accounts?.find(account => !previousAccounts.has(account.id)) || group?.accounts?.find(account => !previousAccounts.has(account.id));
-      // An account that took the place of one keeps its name: only a new one is asked for a name.
-      if (group && account && !replace.length) nameAccount(group.id, account);
+      // Signing in again is the same login, which keeps its name: only an app or an account added is asked for a name.
+      if (group && account && !again) nameAccount(group.id, account);
     }
   }
 
@@ -1557,7 +1558,7 @@ export function createConnections(host: ConnectionsHost): Connections {
       }
       case "relogin": {
         const group = groupById(id);
-        if (group) void signIn({ id }, group.name, true, deadAccounts(group));
+        if (group) void signIn({ id }, group.name, true);
         break;
       }
       case "open-grants": {
@@ -1805,7 +1806,7 @@ export function createConnections(host: ConnectionsHost): Connections {
     const group = groupById(id);
     if (!group) return;
     openPage({ kind: "group", id });
-    void signIn({ id }, group.name, true, deadAccounts(group));
+    void signIn({ id }, group.name, true);
   }
 
   return { view, load, click, input, key, menuFor, painted, scrolled, followEvent, reset, navView, showNavView, relogin };
