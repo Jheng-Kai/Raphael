@@ -205,7 +205,7 @@ from .pages import Pages, PageError, checked_text, is_report
 from .report_page import checked_report, report_fallback, report_html
 from .public_events import event_record
 from .harness_tools import (
-    CALENDAR_LIST, CALENDAR_TOOLS, CONNECTION_TOOLS, CONNECT_APP, CONNECT_MESSAGING, SHARE_TEMPLATE, FIND_APP, DEFINITIONS as HARNESS_TOOLS, EMAIL_DRAFT, SLACK_DRAFT, REQUEST_SECRET, ROUTINE_TOOLS, SET_MY_JOB, HarnessToolError,
+    CALENDAR_LIST, CALENDAR_TOOLS, CONNECTION_TOOLS, CONNECT_APP, CONNECT_MESSAGING, SHARE_TEMPLATE, FIND_APP, DEFINITIONS as HARNESS_TOOLS, EMAIL_DRAFT, SLACK_DRAFT, REMOVE_KEY, REQUEST_SECRET, ROUTINE_TOOLS, SET_MY_JOB, HarnessToolError,
     tool as harness_tool,
 )
 from ..own_calendar import CalendarError, OwnCalendar, means_own_calendar
@@ -3084,6 +3084,10 @@ class AgentService:
         nothing would run on a yes, and a card cannot word what it cannot read."""
         from ..management import MANAGEMENT_TOOLS, resolve, validate
 
+        if call.tool.key == REMOVE_KEY:
+            from ..computer.vault_entries import key_name_ok
+            if call.arguments.keys() != {"key"} or not key_name_ok(call.arguments["key"]):
+                return "Give the variable name of the private key to delete."
         if call.tool.key not in MANAGEMENT_TOOLS or call.tool.key in BATCH_TOOLS:
             return None
         try:
@@ -3121,6 +3125,15 @@ class AgentService:
         return "" if ask.speaker.is_raphael else ask.speaker.name
 
     def _stage(self, ask: _Ask, call: PlannedCall, screening: Screening) -> ToolOutcome:
+        if call.tool.key == REMOVE_KEY:
+            vault = self._secret_cards.logins if self._secret_cards else None
+            if vault is None:
+                return ToolOutcome(False, "unavailable")
+            entry = vault.private_key_entry(ask.speaker.id, call.arguments["key"])
+            if entry is None:
+                return ToolOutcome(False, "key_not_private_or_missing")
+            # Bind approval to this revision so a newer card saved while it waits is safe.
+            call = PlannedCall(call.tool, {**call.arguments, "entry": entry["id"]})
         digest = action_digest(call.tool.key, call.arguments)
         if all(action_digest(held.tool.key, held.arguments) != digest for held in ask.management_pending):
             ask.management_pending.append(call)
@@ -3858,6 +3871,18 @@ class AgentService:
                 if ask.resumption and ask.resumption.failure:
                     raise HarnessToolError("owner_action_required")
                 data = self._show_secret(ask, args)
+            elif name == REMOVE_KEY:
+                if not self._management_chat(ask):
+                    raise HarnessToolError("owner_private_chat_only")
+                if self._secret_cards is None or self._secret_cards.logins is None:
+                    raise HarnessToolError("unavailable")
+                try:
+                    removed = self._secret_cards.logins.remove_member_key(ask.speaker.id, args.get("key"), expected=args.get("entry"))
+                except Exception:
+                    raise HarnessToolError("unavailable") from None
+                if not removed:
+                    raise HarnessToolError("key_not_private_or_missing")
+                data = {"removed": True}
             elif name in (EMAIL_DRAFT, SLACK_DRAFT):
                 data = self._show_draft(ask, args, kind="slack" if name == SLACK_DRAFT else "email")
             elif name in ("show_page", "update_page"):
@@ -4188,6 +4213,9 @@ class AgentService:
         and learns only that a card is shown; the key itself goes from the window to the vault."""
         connection, secret = args.get("connection"), args.get("secret")
         site, key = args.get("site"), args.get("key")
+        replace = args.get("replace", False)
+        if "replace" in args and (key is None or type(replace) is not bool):
+            raise ValueError("replace applies only to program keys")
         if key is not None and (not isinstance(key, str) or any(item is not None for item in (connection, secret, site))):
             raise ValueError("choose connection, site or key")
         if key is None and site is None and (not isinstance(connection, str) or not connection.strip() or not (secret is None or isinstance(secret, str))):
@@ -4201,9 +4229,11 @@ class AgentService:
         try:
             if key is not None:
                 card = self._secret_cards.show_key(turn_id=ask.turn_id, member_id=ask.speaker.id, conversation_id=ask.conversation_id,
-                    name=key, purpose=args.get("purpose"), language=ask.language, done=ask.made)
+                    name=key, purpose=args.get("purpose"), language=ask.language, replace=replace, done=ask.made)
                 if card is None:
-                    return {"key": key, "saved": True, "note": f"{key} is already saved. Pass keys: [\"{key}\"] to vm_exec; you never see the value."}
+                    return {"key": key, "saved": True, "note": (
+                        f"{key} is already saved. Pass keys: [\"{key}\"] to vm_exec; you never see the value. "
+                        "If it is stale, call request_secret with replace: true to replace it.")}
                 cards = [card]
             elif site is not None:
                 reference, cards = self._secret_cards.show_login(turn_id=ask.turn_id, member_id=ask.speaker.id,
@@ -4224,10 +4254,11 @@ class AgentService:
         ask.owner_card_ids = [card.id for card in cards]
         self._turn_changed(ask.turn_id, ask.speaker.id)
         if key is not None:
+            replacement = " Saving replaces the current key if present and keeps its sharing scope." if replace else ""
             return {"key": key, "card": "shown", "note": (
                 f"A card to paste {key} is shown to the owner in this chat. End this turn now with one short sentence. The key goes "
                 "straight to the secure vault and you never see it; this request resumes by itself, once, after the owner saves it. "
-                f"Then run the program with vm_exec keys: [\"{key}\"], and use ${key} in the command.")}
+                f"Then run the program with vm_exec keys: [\"{key}\"], and use ${key} in the command.{replacement}")}
         names = ", ".join(sorted({card.secret for card in cards}))
         return {"connection": cards[0].name, "card": "shown", "secrets": names, **({"reference": reference} if site is not None else {}), "note": (
             f"A card to save {names} for {cards[0].name} is shown to the owner in this chat. End this turn now with one short "

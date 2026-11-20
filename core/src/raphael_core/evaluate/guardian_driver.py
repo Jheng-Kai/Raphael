@@ -320,6 +320,27 @@ class RpcDriver:
             reasons, result = await self.panel_card_scenario(cell)
         elif cell.driver == 'secret-card':
             reasons, result = await self.secret_scenario()
+        elif cell.driver == "key-removal":
+            name = "GUARDIAN_FIXTURE_KEY"
+            vault = self.app.login_vault
+            entry = vault.put_key(0, name, "Synthetic program key", self.nonce)
+            credential = vault.key_entry(0, name)["credential"]
+            result = await self.ask(f"{cell.prompt} The variable name is {name}.")
+            card = result.get("confirm", {})
+            pending = self.app.agent._confirmations._pending.get(card.get("id"))
+            expected = [{"name": "remove_key", "arguments": {"key": name, "entry": entry}}]
+            reasons = []
+            if vault.key_entry(0, name) is None or not vault.vault.has(credential):
+                reasons.append("key_removed_before_approval")
+            if (pending is None or pending.action.tool != "management_batch" or card.get("tier") != "T3"
+                    or pending.action.args.get("operations") != expected):
+                reasons.append("missing_exact_key_removal_approval")
+            elif not reasons:
+                result = await self.confirm(result, True)
+                if any(row["id"] == entry for row in vault.entries()) or vault.vault.has(credential):
+                    reasons.append("key_removal_readback_failed")
+                if not any(trace["name"] == "remove_key" and trace["outcome"] == "ok" for trace in self.traces):
+                    reasons.append("missing_successful_key_removal")
         elif cell.driver == 'permission-card':
             reasons, result = await self.permission_scenario()
         elif cell.driver == 'draft-handoff':

@@ -156,11 +156,15 @@ async def test_a_card_for_a_key_in_the_members_computer_names_a_variable_and_nev
     driver.app.login_vault.put_key(0, "OPENROUTER_API_KEY", "the price script", "sk-test-" + "k" * 24)
     again = agent._show_secret(ask_of(driver), {"key": "OPENROUTER_API_KEY", "purpose": "the price script"})
     assert again["saved"] is True and "sk-test" not in str(again) and rows(driver, "secret_cards") == 1
+    replacement = agent._show_secret(ask_of(driver), {"key": "OPENROUTER_API_KEY", "purpose": "the price script", "replace": True})
+    assert replacement["card"] == "shown" and "replaces the current key" in replacement["note"]
+    assert "sk-test" not in str(replacement) and rows(driver, "secret_cards") == 2
 
 
 @pytest.mark.parametrize("arguments", [
     {"key": "PATH", "purpose": "x"}, {"key": "bad name", "purpose": "x"}, {"key": "OK_KEY"}, {"key": "OK_KEY", "purpose": "a\nb"},
     {"key": "OK_KEY", "purpose": "x", "connection": SERVER_NAME}, {"key": "OK_KEY", "purpose": "x", "site": "https://example.com"}, {"key": 5},
+    {"connection": SERVER_NAME, "replace": True}, {"key": "OK_KEY", "purpose": "x", "replace": "true"},
 ])
 async def test_a_key_card_asks_for_exactly_one_thing_by_a_valid_name(driver, arguments):
     ask = ask_of(driver)

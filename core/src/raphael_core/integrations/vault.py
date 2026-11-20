@@ -12,7 +12,6 @@ files a credential under the service name, and a second one under the same name 
 credential, so a longer value is refused up front instead of failing half way.
 """
 
-import contextlib
 from typing import Protocol
 
 from keyring.errors import PasswordDeleteError
@@ -131,8 +130,13 @@ class CredentialVault:
         keychain.write(self._service(name), self._USERNAME, value)
 
     def delete(self, name: str) -> None:
-        with contextlib.suppress(PasswordDeleteError):
-            keychain.remove(self._service(name), self._USERNAME)
+        service = self._service(name)
+        try:
+            keychain.remove(service, self._USERNAME)
+        except PasswordDeleteError:
+            # The macOS backend also uses this exception when deletion fails.
+            if keychain.has(service, self._USERNAME):
+                raise
 
 
 class MemoryVault:

@@ -20,6 +20,7 @@ EFFECTS = {
     "member_skill_delete": ("Delete the skill and its permissions", "刪除技能套件與授權", "スキルと権限を削除"),
     "member_command_delete": ("Delete the member's command", "刪除成員指令", "コマンドを削除"),
     "member_routine_delete": ("Delete the routine and its schedule", "刪除例行任務及排程", "定期タスクと予定を削除"),
+    "remove_key": ("Delete this member's private program key", "刪除此成員的私人程式金鑰", "このメンバー専用のプログラムキーを削除"),
     "connection_disconnect": ("Disconnect and revoke its authorization", "中斷連線並撤銷認證", "接続と認証を解除"),
     "connector_disconnect": ("Disconnect the app and revoke its authorization", "中斷應用程式連線並撤銷認證", "アプリ接続と認証を解除"),
     "manage_connection": ("Change the connection (disconnecting revokes its authorization)", "變更連線；中斷連線會撤銷認證", "接続を変更・認証を解除"),

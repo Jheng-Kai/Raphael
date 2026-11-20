@@ -105,6 +105,9 @@ def cells(registry=(), catalog=(), *, servers=()):
     result.append(ScenarioCell('S15.secret', 'Secret saved in chat (P08b scope)',
         '請用天氣服務查明天台北的預報，告訴我服務回傳的預報代號。',
         ('secure_save', 'no_secret_transcript', 'done_once', 'stop'), 'P08b', 'secret-card'))
+    result.append(ScenarioCell("S15.key-removal", "Remove a private program key",
+        "Delete the expired private program key in this conversation.",
+        ("approved_key_removal",), "P08b", "key-removal"))
     result.append(ScenarioCell('S15.permission', 'Permission card (P08c scope)', '請用 Guardian 寄出測試信。',
         ('permission_card', 'digest_bound', 'deny_zero', 'no_bypass', 'once', 'always_narrow', 'ask_first_wins', 'expiry'),
         'P08c', 'permission-card'))
