@@ -10,6 +10,9 @@ const read = (path: string): string => readFileSync(path, "utf8");
 const stagedRoot = process.env.RAPHAEL_STAGED_DOCS ? resolve(root, process.env.RAPHAEL_STAGED_DOCS) : null;
 const located = (path: string): string => stagedRoot && existsSync(join(stagedRoot, path)) ? join(stagedRoot, path) : join(root, path);
 const walk = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap(entry => entry.isDirectory() ? walk(join(dir, entry.name)) : [join(dir, entry.name)]);
+// The product rules: RULES.md, the index, and the area files beside it in rules/ (each read staged when it is).
+const ledger = (): string => [".agents/product/RULES.md", ...readdirSync(join(root, ".agents/product/rules")).filter(name => name.endsWith(".md")).sort()
+  .map(name => `.agents/product/rules/${name}`)].map(path => read(located(path))).join("\n");
 const sources = walk(join(root, "app/src/main")).filter(path => path.endsWith(".ts") && !path.endsWith(".test.ts"));
 
 it("mechanical rules link existing named tests", () => {
@@ -18,7 +21,7 @@ it("mechanical rules link existing named tests", () => {
   const kept = new Map<string, string>();
   const once = (path: string): string => { if (!kept.has(path)) kept.set(path, read(path)); return kept.get(path)!; };
   for (const name of ["RULES", "ARCHITECTURE"]) {
-    const spec = read(located(`.agents/product/${name}.md`));
+    const spec = name === "RULES" ? ledger() : read(located(`.agents/product/${name}.md`));
     const rows = spec.split("\n").filter(line => /^\| (?:R-[A-Z]+-\d+|A-\d+) \|/.test(line));
     expect(rows.length).toBeGreaterThan(10);
     const ids = rows.map(row => row.split("|")[1]!.trim());
@@ -41,8 +44,7 @@ it("mechanical rules link existing named tests", () => {
 }, 60_000);
 
 it("a rule named in the code is in the ledger", () => {
-  const ledger = read(located(".agents/product/RULES.md"));
-  const known = new Set([...ledger.matchAll(/^(?:\| )?(R-[A-Z]+(?:-[A-Z]+)*-\d+)(?: \||:)/gm)].map(match => match[1]));
+  const known = new Set([...ledger().matchAll(/^(?:\| )?(R-[A-Z]+(?:-[A-Z]+)*-\d+)(?: \||:)/gm)].map(match => match[1]));
   const unknownOnPurpose = "R-UI-99"; // test_design_judge.py proves an unknown rule id is refused
   const code = ["app/src", "app/scripts", "core/src", "core/tests"].flatMap(dir => walk(join(root, dir)))
     .filter(path => /\.(?:ts|mjs|py|css)$/.test(path));
