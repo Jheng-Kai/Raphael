@@ -304,6 +304,11 @@ binary offline with CARGO_BUILD_JOBS=2, then run:
 npm run native -- locale-sweep voice-conversation delete-conversation
 ```
 
+Before a release, run the offline pre-release smoke on the release's own debug build (about five minutes, fake brain,
+an isolated data folder): `npm run native -- delete-conversation self-diagnosis calendar pages`. It deletes a member,
+clears quick questions, fails a connection card, edits the calendar and drives a page, and it found journeys that had
+fallen behind the design and a page that typed into the composer from its preview.
+
 See the native section of [look README](../../../app/scripts/look/README.md) for
 CARGO_TARGET_DIR, installed Python/models, debug-only RAPHAEL_TEST_NATIVE isolation,
 WebView2 CDP, cost guards and PID cleanup. Every run uses RAPHAEL_FAKE_LLM=1. Never

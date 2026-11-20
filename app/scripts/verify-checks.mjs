@@ -35,9 +35,12 @@ export function coreTargets(changed, exists = path => existsSync(join(root, "cor
 export function verifyChecks({ args, directory, judge, environment = process.env, changed = [] }) {
   const vitest = [join(app, "node_modules/vitest/vitest.mjs")], vitestOptions = ["--configLoader", "runner", `--maxWorkers=${environment.CI ? CI_WORKERS : 2}`, "--no-cache", "--fsModuleCachePath", join(directory, "vitest-cache")];
   const core = join(root, "core"), python = environment.RAPHAEL_CORE_PYTHON || join(core, ".venv", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
+  // The core tests run in shares at once, as CI deals them over its machines (pytest-shards.mjs); CI itself runs one share
+  // per machine and never comes here with --changed or --contract.
   const pytestCheck = (name, targets) => {
-    const pytest = ["-m", "pytest", "-p", "no:cacheprovider", "-W", "error", ...targets];
-    return existsSync(python) ? { name, command: python, args: pytest, cwd: core } : { name, command: "uv", args: ["run", "--offline", "--frozen", "--no-sync", "python", ...pytest], cwd: core };
+    const options = ["-p", "no:cacheprovider", "-W", "error", ...targets];
+    return existsSync(python) ? { name, command: process.execPath, args: [join(app, "scripts/pytest-shards.mjs"), python, ...options], cwd: core }
+      : { name, command: "uv", args: ["run", "--offline", "--frozen", "--no-sync", "python", "-m", "pytest", ...options], cwd: core };
   };
   const tauri = join(app, "src-tauri"), rust = args.includes("--rust"), only = args.includes("--changed");
   const checks = [{ name: "tsc", command: process.execPath, args: [join(app, "node_modules/typescript/bin/tsc"), "--noEmit"], cwd: app }];
@@ -54,8 +57,8 @@ export function verifyChecks({ args, directory, judge, environment = process.env
     checks.push({ name: "vitest", command: process.execPath, args: [...vitest, "run", ...vitestOptions], cwd: app });
     if (!args.includes("--quick")) checks.push({ name: "contrast", command: process.execPath, args: [join(app, "scripts/check-palette.mjs")], cwd: app });
   }
-  // --core is the whole suite, which CI runs on every push in a quarter of an hour over eight machines; here it takes
-  // far longer. --contract is the part a change to the core loop or its prompt runs before it is handed back: the scenario
+  // --core is the whole suite, which CI runs on every push over twelve machines; here it runs in shares at once
+  // (pytest-shards.mjs) and still takes longer. --contract is the part a change to the core loop or its prompt runs before it is handed back: the scenario
   // drivers and the default prompt's size budget, where the work of two units that each passed alone has broken together.
   const whole = args.includes("--core"), contract = args.includes("--contract") && !whole;
   if (whole || contract) checks.push(pytestCheck(contract ? "contract" : "pytest", contract ? CORE_CONTRACT : []));

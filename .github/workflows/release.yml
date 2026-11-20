@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   # The frontend, Python and Rust suites took 38 of the 51 minutes of the v1.1.0 release and now take about 53
-  # on one machine, which leaves a 60-minute release job no room for the build. CI runs them (the Python suite on eight machines), so a release asks for a green CI
+  # on one machine, which leaves a 60-minute release job no room for the build. CI runs them (the Python suite on twelve machines), so a release asks for a green CI
   # run on this exact commit instead of repeating them. Only the release-only work stays below: the
   # frozen core and its smoke test, the installer, signing, checksums and the install check.
   ci-gate:
@@ -42,17 +42,25 @@ jobs:
           # A push run on main only checks the Rust dependencies, so it never counts. Pull request,
           # manual and merge queue runs check all three layers, and then "Guardian required gates" passes.
           # The API's status filter leaves out a run whose failed jobs were re-run and passed, so the run's own status is read.
-          runs=$(gh api "repos/$GH_REPO/actions/workflows/ci.yml/runs?head_sha=$COMMIT&per_page=100" \
-            --jq '.workflow_runs[] | select(.status == "completed" and .conclusion == "success" and .event != "push") | .id')
-          for id in $runs; do
-            gate=$(gh api "repos/$GH_REPO/actions/runs/$id/jobs?per_page=100" \
-              --jq '[.jobs[] | select(.name == "Guardian required gates" and .conclusion == "success")] | length')
-            if [ "$gate" = "1" ]; then
-              echo "CI run $id passed every gate on $COMMIT."
+          gated() {
+            [ "$(gh api "repos/$GH_REPO/actions/runs/$1/jobs?per_page=100" \
+              --jq '[.jobs[] | select(.name == "Guardian required gates" and .conclusion == "success")] | length')" = "1" ]
+          }
+          green='.workflow_runs[] | select(.status == "completed" and .conclusion == "success" and .event != "push")'
+          for id in $(gh api "repos/$GH_REPO/actions/workflows/ci.yml/runs?head_sha=$COMMIT&per_page=100" --jq "$green | .id"); do
+            if gated "$id"; then echo "CI run $id passed every gate on $COMMIT."; exit 0; fi
+          done
+          # A merge commit of an up-to-date pull request holds exactly the files its pull request's last commit held, which
+          # CI ran on: the same tree is the same code, so main can be released right after that merge, with no CI run of its own.
+          tree=$(gh api "repos/$GH_REPO/git/commits/$COMMIT" --jq .tree.sha)
+          for run in $(gh api "repos/$GH_REPO/actions/workflows/ci.yml/runs?status=success&per_page=50" --jq "$green | \"\(.id):\(.head_sha)\""); do
+            id=${run%%:*} sha=${run#*:}
+            if [ "$(gh api "repos/$GH_REPO/git/commits/$sha" --jq .tree.sha)" = "$tree" ] && gated "$id"; then
+              echo "CI run $id passed every gate on $sha, whose files are exactly those of $COMMIT (tree $tree)."
               exit 0
             fi
           done
-          echo "::error::No green CI run exists for commit $COMMIT. Run the CI workflow on this commit first (Actions > CI > Run workflow, on this branch or tag), wait for it to pass, then start the release again."
+          echo "::error::No green CI run exists for commit $COMMIT or for any commit with the same files. Run the CI workflow on this commit first (Actions > CI > Run workflow, on this branch or tag), wait for it to pass, then start the release again."
           exit 1
 
   windows-release:

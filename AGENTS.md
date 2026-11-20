@@ -69,5 +69,8 @@ builds and verifies both installers. No whole look matrix and no local
 `--rust` unless the change calls for them.
 CI enforces repository contracts and the offline suites on every PR; the rendered matrix,
 judge and live checks run locally and never in CI. A Windows release starts only after CI has
-passed on its exact commit (run CI by hand on it when no pull request did). Use the [PR contract](.github/pull_request_template.md)
+passed on its exact commit or on one with the same files (the merge of an up-to-date pull request; run CI by hand
+when neither did). The version is set in the release's last pull request with `npm run set-version -- x.y.z` (app/),
+never in a pull request of its own, and the release runs from main once that merged. Batch the fixes of a day into
+few pull requests: each one waits for a whole CI run. Use the [PR contract](.github/pull_request_template.md)
 for commands, exits, rule IDs, evidence and anything unverified. Details stay in the skill.
