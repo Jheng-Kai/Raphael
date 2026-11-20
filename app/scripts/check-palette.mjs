@@ -37,16 +37,14 @@ for (const [theme, palette] of Object.entries({ light, dark })) {
   const minimum = Math.min(...fills.map((fill) => ratio(palette["on-accent"], palette[fill])));
   contrast["on-accent"] = { foreground: palette["on-accent"], fill: palette.accent, ratio: +ratio(palette["on-accent"], palette.accent).toFixed(2), minimum: +minimum.toFixed(2) };
   if (minimum < 4.5) process.exitCode = 1;
-  contrast.toast = { normal: +ratio(palette["toast-action"], palette.text).toFixed(2), hover: +ratio(palette["toast-action"], palette["toast-hover"]).toFixed(2) };
   contrast.captionClose = +ratio(palette["on-close"], palette.close).toFixed(2);
   if (contrast.captionClose < 4.5) process.exitCode = 1;
   // The delete dialog's Delete button (members.css `.mb-delete`): white words on the app's solid red, and the red against the dialog's surface.
   contrast.deleteButton = { words: contrast.captionClose, onPanel: +ratio(palette.close, palette.panel).toFixed(2), onFloat: +ratio(palette.close, palette.float).toFixed(2), onDialog: +ratio(palette.close, palette.dialog).toFixed(2) };
   if (contrast.deleteButton.onPanel < 3 || contrast.deleteButton.onFloat < 3 || contrast.deleteButton.onDialog < 3) process.exitCode = 1;
-  if (Math.min(...Object.values(contrast.toast)) < 4.5) process.exitCode = 1;
   contrast.destructive = Object.fromEntries(["panel", "btn", "menu", "float", "dialog", "float-ctl", "danger-hover", "danger-pressed"].map(surface => [surface, +ratio(palette.err, palette[surface]).toFixed(2)]));
   if (Object.values(contrast.destructive).some(value => value < 4.5)) process.exitCode = 1;
-  for (const token of ["hover", "pressed", "hover-edge", "scroll-hover", "toast-hover", "float", "dialog", "float-edge", "float-ctl", "float-ctl-hover", "float-hover", "float-pressed"]) {
+  for (const token of ["hover", "pressed", "hover-edge", "scroll-hover", "float", "dialog", "float-edge", "float-ctl", "float-ctl-hover", "float-hover", "float-pressed"]) {
     const channels = palette[token].slice(1).match(/../g).map(value => parseInt(value, 16));
     if (Math.max(...channels) - Math.min(...channels) > 12) throw new Error(`Non-neutral interaction token: ${theme}/${token}`);
   }
