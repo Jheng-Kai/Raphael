@@ -82,6 +82,45 @@ def test_vault_does_not_report_a_still_present_credential_as_deleted(asking, mon
     vault.delete("missing")
 
 
+def test_a_lookup_the_keychain_cannot_answer_never_breaks_a_status_and_never_proves_a_secret_gone(asking, memory_keyring):
+    """A locked login keychain, or a lookup the Keychain refuses: a status counts the secret as kept but unread (the read
+    when it is used says what is there), and nothing takes "unknown" for "gone"."""
+    def cannot_say(service, username):
+        raise keyring.errors.KeyringError("Can't look in the keychain: -25308")
+
+    asking._look = cannot_say
+    vault = CredentialVault()
+    assert vault.filled("connectors:composio:key") is True
+    assert keychain.peek("Raphael plugin connectors:composio:key", "secret") is keychain.UNREAD
+    with pytest.raises(keyring.errors.KeyringError):
+        vault.has("connectors:composio:key")
+    assert asking.reads == []
+
+
+def test_deleting_what_the_keychain_does_not_hold_needs_no_lookup(asking, memory_keyring, monkeypatch):
+    """The macOS backend says "no such item" (errSecItemNotFound) through PasswordDeleteError's cause: that is gone, with no
+    lookup that might fail; any other failure is still checked, and one that left the secret raises."""
+    def cannot_say(service, username):
+        raise keyring.errors.KeyringError("Can't look in the keychain: -25308")
+
+    def not_found(service, username):
+        raise keyring.errors.PasswordDeleteError("Can't delete password in keychain") from Exception(-25300, "Item not found")
+
+    asking._look = cannot_say
+    monkeypatch.setattr(asking.backend, "delete_password", not_found)
+    CredentialVault().delete("messaging:member:5:telegram:bot_token")
+
+    def refused(service, username):
+        raise keyring.errors.PasswordDeleteError("Can't delete password in keychain") from Exception(-25293, "Security Auth Failure")
+
+    asking._look = lambda service, username: True
+    asking._present.clear()
+    monkeypatch.setattr(asking.backend, "delete_password", refused)
+    with pytest.raises(keyring.errors.PasswordDeleteError):
+        CredentialVault().delete("messaging:member:5:telegram:bot_token")
+    assert asking.reads == []
+
+
 def test_a_secret_is_read_once_in_a_run(asking, memory_keyring):
     memory_keyring.set_password("Raphael", "openrouter", "sk-or-v1-abc")
     store = CredentialKeyStore()

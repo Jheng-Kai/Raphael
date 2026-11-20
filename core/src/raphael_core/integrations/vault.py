@@ -49,6 +49,10 @@ class SecretVault(Protocol):
         """Whether a non-blank secret called `name` is kept, without asking the owner (`keychain.filled`)."""
         ...
 
+    def read_in_run(self, name: str) -> bool:
+        """Whether the secret was read in this run already, so reading it again asks the owner nothing."""
+        ...
+
 
 def secret_name(server_id: str, kind: str, key: str) -> str:
     """The name of one secret of one server: `kind` is "env" or "header"."""
@@ -124,6 +128,9 @@ class CredentialVault:
     def filled(self, name: str) -> bool:
         return keychain.filled(keychain.peek(self._service(name), self._USERNAME))
 
+    def read_in_run(self, name: str) -> bool:
+        return isinstance(keychain.peek(self._service(name), self._USERNAME), str)
+
     def set(self, name: str, value: str) -> None:
         _checked(value)
         self.delete(name)
@@ -133,8 +140,13 @@ class CredentialVault:
         service = self._service(name)
         try:
             keychain.remove(service, self._USERNAME)
-        except PasswordDeleteError:
-            # The macOS backend also uses this exception when deletion fails.
+        except PasswordDeleteError as error:
+            # The macOS backend uses this exception for every failure; its cause carries the Keychain's status, and "no
+            # such item" is the one that means nothing is left. Anything else is asked about, and an answer that cannot
+            # be had is a failure too.
+            cause = error.__cause__
+            if cause is not None and cause.args and cause.args[0] == keychain.NOT_FOUND:
+                return
             if keychain.has(service, self._USERNAME):
                 raise
 
@@ -159,6 +171,9 @@ class MemoryVault:
 
     def filled(self, name: str) -> bool:
         return keychain.filled(self._secrets.get(name))
+
+    def read_in_run(self, name: str) -> bool:
+        return name in self._secrets
 
     def names(self) -> list[str]:
         """What is stored (for a test to see that nothing is left behind)."""

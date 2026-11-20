@@ -735,15 +735,48 @@ async def test_the_watch_reads_only_when_it_may(tmp_path, conn, monkeypatch):
     fake = Accounts([listed("ca_main", "ACTIVE")])
     router, service, hub, entry = make(tmp_path, conn, fake, [account("ca_main", "ACTIVE")])
     monkeypatch.setattr(keychain, "asks", lambda: True)
+    read = {"key": False}
+    monkeypatch.setattr(service.vault, "read_in_run", lambda name: read["key"])
     assert await service.watch_once() == "skipped"  # a Mac: the key was not read in this run, so the watch asks nothing
-    service.composio.key_read = True
+    read["key"] = True  # the members' tools read it (not Composio's own calls): that is a read in this run too
+    assert await service.watch_once() == "read"
+    read["key"], service.composio.key_read = False, True
     assert await service.watch_once() == "read"
     async with service._lock:
         assert await service.watch_once() == "skipped"
     service.vault.delete("connectors:composio:key")
     assert await service.watch_once() == "skipped"
     reads = [r for r in fake.requests if r.method == "GET" and r.url.path.endswith("/connected_accounts")]
-    assert len(reads) == 1 and not [r for r in fake.requests if "/tool_router/" in r.url.path]
+    assert len(reads) == 2 and not [r for r in fake.requests if "/tool_router/" in r.url.path]  # nothing changed: no patch
+
+
+async def test_an_app_the_watch_finds_working_again_gives_the_members_its_tools_back(tmp_path, conn):
+    """A refused call marked every app expired while Composio still lists the account as connected: the watch's read puts
+    the app back, and the session's toolkits and the managed server follow (the members are offered its tools again)."""
+    from raphael_core.connectors.service import COMPOSIO_SERVER
+    fake = Accounts([listed("ca_main", "ACTIVE")])
+    router, service, hub, entry = make(tmp_path, conn, fake, [account("ca_main", "ACTIVE")])
+    entry.status = "EXPIRED"
+    await service._session()
+    assert hub._config.get(COMPOSIO_SERVER).enabled is False
+    assert await service.watch_once() == "read"
+    assert entry.status == "ACTIVE" and hub._config.get(COMPOSIO_SERVER).enabled is True
+    assert [r for r in fake.requests if r.method == "PATCH" and "/tool_router/session/" in r.url.path]
+
+
+async def test_the_list_still_answers_when_a_stale_sign_in_cannot_be_given_back_for_want_of_the_key(tmp_path, conn, monkeypatch):
+    """On a Mac the key may be refused: the sweep that a plain read of the list runs leaves the stale row for the next read,
+    and the list answers instead of failing whole."""
+    from raphael_core import keychain
+    fake = Accounts()
+    router, service, hub, entry = make(tmp_path, conn, fake, [account("ca_main", "ACTIVE"), account("ca_old", "INITIATED", since=SIGN_IN_LIMIT_S + 60)])
+
+    def refused():
+        raise keychain.Refused("The owner refused Raphael the Keychain")
+
+    monkeypatch.setattr(service.composio, "_key", refused)
+    result = await router.call("connectors.status", {"refresh": False})
+    assert [a["id"] for a in result["connectors"][0]["accounts"]] == ["ca_main", "ca_old"] and fake.deleted == []
 
 
 async def test_the_loss_is_told_to_the_window_with_the_apps_name(tmp_path, conn):

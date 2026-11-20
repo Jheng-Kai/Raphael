@@ -683,3 +683,6 @@ class GmailJourneyVault(MemoryVault):
 
     def filled(self, name: str) -> bool:
         return CredentialVault().filled(name) if name == KEY else super().filled(name)
+
+    def read_in_run(self, name: str) -> bool:
+        return CredentialVault().read_in_run(name) if name == KEY else super().read_in_run(name)

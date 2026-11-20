@@ -10,6 +10,8 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from contextvars import ContextVar
 
+from keyring.errors import KeyringError
+
 from .. import keychain
 from ..agent.policy import Tier
 from ..integrations.config import ServerConfig, tool_record
@@ -278,11 +280,11 @@ class ConnectorsService:
                 raise
 
     async def _delete_quietly(self, account) -> bool:
-        """The same for an account nobody asked about (a sign-in given up): Composio unreachable leaves it for the next
-        read, which tries again."""
+        """The same for an account nobody asked about (a sign-in given up): Composio unreachable, or a key the Keychain
+        would not give (on a Mac), leaves it for the next read, which tries again; the list it was swept for still answers."""
         try:
             await self._delete_account(account)
-        except ConnectorFailure:
+        except (ConnectorFailure, KeyringError):
             return False
         return True
 
@@ -912,6 +914,10 @@ class ConnectorsService:
                 self._settle(entry)
                 self._tell_losses(entry, before.get(entry.id, {}))
 
+    def _working(self) -> set[str]:
+        """The Composio apps that work now."""
+        return {c.id for c in self.store.connectors.values() if c.kind == "composio" and c.status == "ACTIVE"}
+
     def _tell_losses(self, entry: Connector, before: dict[str, str]) -> None:
         """Tell the window once that an account of `entry` which was connected has stopped working or is gone. One that
         works again may be told again later; an app the owner turned off is not told."""
@@ -939,13 +945,19 @@ class ConnectorsService:
         """One read for the watch: only while some app is connected, the key is there, nothing holds the lock or waits for a
         sign-in, and (on a Mac, where reading the key asks the owner) the key was already read in this run."""
         connected = any(a["status"] == "ACTIVE" for c in self.store.connectors.values() if c.kind == "composio" for a in c.accounts)
+        # On a Mac the key counts as read once any part of this run read it: Composio's own calls, or the members' tools.
         if (not connected or not self.vault.filled(KEY) or self._lock.locked() or self.login_pending
-                or (keychain.asks() and not self.composio.key_read)):
+                or (keychain.asks() and not (self.composio.key_read or self.vault.read_in_run(KEY)))):
             return "skipped"
         try:
             async with self._lock:
+                working = self._working()
                 await self._read_accounts()
                 self._save()
+                if self._working() != working:
+                    # An app that works again, or stopped, changes what the members are offered: the session's toolkits
+                    # and the managed server follow, as a refresh of the list does.
+                    await self._patch()
         except ConnectorFailure as error:
             logger.info("The accounts were not read: %s", error.kind)
             return error.kind

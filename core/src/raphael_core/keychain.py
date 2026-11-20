@@ -8,7 +8,9 @@ build with another signature wrote, and its "Allow" answers that one read only. 
 with the Keychain (R-PRIV-KEYCHAIN-01):
 
 - whether a secret is kept is answered from the item's attributes, which the Keychain gives without asking (`has`,
-  `peek`). A status, a list or a check never puts a question to the owner;
+  `peek`). A status, a list or a check never puts a question to the owner. A lookup the Keychain cannot answer never
+  breaks a status or a list either: `peek` then counts the secret as kept but unread, and the read when it is used says
+  what is there; `has`, asked to prove something is gone, raises instead;
 - a secret is read only when it is used, and at most once in a run: what was read stays in this process (`read`), and
   reads wait for one another, so one item is never asked about twice at once;
 - the owner's "Deny" stands. Nothing more is asked and every read is refused at once (`Refused`) until the owner chooses
@@ -21,6 +23,7 @@ Windows Credential Manager never asks, so there every call goes straight to the 
 Never log or print a secret from this module.
 """
 
+import logging
 import threading
 import time
 from collections.abc import Callable
@@ -28,6 +31,7 @@ from collections.abc import Callable
 import keyring
 from keyring.errors import KeyringError, KeyringLocked
 
+logger = logging.getLogger(__name__)
 
 class _Unread:
     def __repr__(self) -> str:
@@ -40,6 +44,8 @@ UNREAD = _Unread()
 TELL_EVERY_S = 60.0
 # What the Keychain answers when the owner chose Deny: errSecUserCanceled, or errSecAuthFailed.
 _DENIED = {-128, -25293}
+# What the Keychain answers when there is no such item: errSecItemNotFound.
+NOT_FOUND = -25300
 
 
 class Refused(KeyringLocked):
@@ -109,6 +115,7 @@ class Keychain:
         self._present: dict[tuple[str, str], bool] = {}
         self._refused = False
         self._told_at: float | None = None
+        self._lookup_failed = False
         self.on_refused: Callable[[], None] = lambda: None
 
     def _asks_now(self) -> bool:
@@ -174,25 +181,45 @@ class Keychain:
                     self._kept[key] = value
             return value
 
+    def _kept_now(self, service: str, account: str) -> bool:
+        """Whether the Keychain keeps the item, from its attributes (never its secret); raises when it cannot say."""
+        key = (service, account)
+        with self._state:
+            if key in self._kept:
+                return True
+            present = self._present.get(key)
+        if present is None:
+            present = (self._look or _attributes_kept)(service, account)
+            with self._state:
+                self._present[key] = present
+        return present
+
     def peek(self, service: str, account: str) -> "str | None | _Unread":
         """The secret when it can be had without asking anyone, None when none is kept, or UNREAD when one is kept that
-        has not been read in this run. Never asks the owner."""
+        has not been read in this run. Never asks the owner. A lookup the Keychain cannot answer counts as UNREAD (kept,
+        not read): a status or a list never fails on it, and the read when the secret is used says what is there."""
         if not self._asks_now():
             return keyring.get_password(service, account)
         key = (service, account)
         with self._state:
             if key in self._kept:
                 return self._kept[key]
-            present = self._present.get(key)
-        if present is None:
-            present = (self._look or _attributes_kept)(service, account)
+        try:
+            present = self._kept_now(service, account)
+        except Exception as error:  # the Keychain's own answer, or the lookup itself; never a secret
             with self._state:
-                self._present[key] = present
+                first, self._lookup_failed = not self._lookup_failed, True
+            if first:
+                logger.warning("The Keychain could not say whether an item is kept: %s", type(error).__name__)
+            return UNREAD
         return UNREAD if present else None
 
     def has(self, service: str, account: str) -> bool:
-        """Whether a secret is kept. Never asks the owner."""
-        return self.peek(service, account) is not None
+        """Whether a secret is kept. Never asks the owner; raises when the Keychain cannot say, since a caller proving a
+        secret gone must not take "unknown" for either answer."""
+        if not self._asks_now():
+            return keyring.get_password(service, account) is not None
+        return self._kept_now(service, account)
 
     def write(self, service: str, account: str, value: str) -> None:
         asks = self._asks_now()
