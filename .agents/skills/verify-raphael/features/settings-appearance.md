@@ -478,6 +478,7 @@ a secret is read when it is used, once in a run; a Deny stands until 再問一�
 `keychain.refused`; the shell passes `MainEvent::KeychainRefused` and lets the window call
 `keychain.ask_again`; `keychain-refused.ts` shows one toast with 再問一次 above the composer. On Windows every
 call goes straight to Credential Manager, which never asks.
+On macOS the secrets live in `secrets.bin`, sealed with one master key item, and old items move on first use (R-PRIV-KEYCHAIN-02).
 
 ```powershell
 npm run look -- keychain-refused keychain-asked --theme both --width 1120,720,1920x1080

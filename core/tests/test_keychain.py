@@ -4,12 +4,18 @@ The Keychain is played by the in-memory keyring of tests/conftest.py, counting i
 it without reading: nothing here reaches the real Keychain or Credential Manager.
 """
 
+import base64
+import json
+import multiprocessing
+import os
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import keyring
 import keyring.errors
 import pytest
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from raphael_core import keychain
 from raphael_core.brain.providers.registry import ProviderRegistry
@@ -258,3 +264,270 @@ def test_another_store_starts_from_nothing(asking, memory_keyring):
         assert CredentialKeyStore().peek() is None
     finally:
         keyring.set_keyring(memory_keyring)
+
+
+@pytest.fixture
+def sealed(asking, tmp_path):
+    path = tmp_path / "secrets.bin"
+    asking.seal(path)
+    return path
+
+
+def fresh_door(asking, path):
+    door = keychain.Keychain(asks=True, look=asking._look)
+    door.seal(path)
+    return door
+
+
+def test_secrets_are_sealed_with_one_master_key(asking, sealed, memory_keyring):
+    asking.write("app", "account", "synthetic-private-token")
+    raw = sealed.read_bytes()
+    assert b"synthetic-private-token" not in raw
+    header = json.loads(raw)
+    box = base64.b64decode(header.pop("box"), validate=True)
+    assert header == {"v": 1, "names": {"app": ["account"]}, "moved": {"app": ["account"]}}
+    assert list(memory_keyring.credentials) == ["Raphael Safe Storage"]
+    account, encoded = memory_keyring.credentials["Raphael Safe Storage"]
+    assert account == str(sealed.parent)
+    master = base64.b64decode(encoded, validate=True)
+    assert len(master) == 32
+    associated = json.dumps(header, sort_keys=True, separators=(",", ":")).encode()
+    assert json.loads(AESGCM(master).decrypt(box[:12], box[12:], associated)) == {"app": {"account": "synthetic-private-token"}}
+    assert fresh_door(asking, sealed).read("app", "account") == "synthetic-private-token"
+
+
+def test_a_fresh_door_answers_from_names_without_a_keychain_read(asking, sealed):
+    asking.write("app", "key", "synthetic")
+    door = fresh_door(asking, sealed)
+    door._look = lambda *_: pytest.fail("Unexpected attributes lookup")
+    asking.reads.clear()
+    assert door.peek("app", "key") is keychain.UNREAD
+    assert door.has("app", "key") and keychain.filled(door.peek("app", "key"))
+    assert not asking.reads
+
+
+def test_five_secrets_ask_only_for_the_master_key(asking, sealed):
+    for i in range(5):
+        asking.write("app", str(i), str(i))
+    door = fresh_door(asking, sealed)
+    asking.reads.clear()
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        assert list(pool.map(lambda i: door.read("app", str(i)), range(5))) == list("01234")
+    assert asking.reads == [("Raphael Safe Storage", str(sealed.parent))]
+
+
+def test_an_old_item_moves_on_first_use_and_stays_for_the_other_edition(asking, sealed, memory_keyring):
+    memory_keyring.set_password("app", "key", "old")
+    assert asking.peek("app", "key") is keychain.UNREAD and asking.has("app", "key")
+    assert not sealed.exists() and not asking.reads
+    assert asking.read("app", "key") == asking.read("app", "key") == "old"
+    assert asking.reads.count(("app", "key")) == 1
+    assert memory_keyring.credentials["app"] == ("key", "old")
+    assert json.loads(sealed.read_bytes())["moved"] == {"app": ["key"]}
+    memory_keyring.set_password("app", "key", "other edition")
+    asking.reads.clear()
+    assert fresh_door(asking, sealed).read("app", "key") == "old"
+    assert asking.reads == [("Raphael Safe Storage", str(sealed.parent))]
+
+
+def test_a_removed_old_item_cannot_return_to_the_sealed_file(asking, sealed, memory_keyring):
+    memory_keyring.set_password("app", "key", "old")
+    asking.write("app", "key", "new")
+    assert memory_keyring.credentials["app"] == ("key", "old")
+    asking.remove("app", "key")
+    assert "app" not in memory_keyring.credentials
+    assert json.loads(sealed.read_bytes())["names"] == {}
+    with pytest.raises(keyring.errors.PasswordDeleteError):
+        asking.remove("app", "key")
+    memory_keyring.set_password("app", "key", "recreated elsewhere")
+    door = fresh_door(asking, sealed)
+    door._look = lambda *_: pytest.fail("Unexpected attributes lookup")
+    assert door.peek("app", "key") is None and not door.has("app", "key")
+    assert door.read("app", "key") is None
+
+
+def test_a_refusal_of_the_master_key_stands_until_asked_again(asking, sealed, monkeypatch):
+    asking.write("app", "key", "synthetic")
+    asking.seal(sealed)
+    asking.reads.clear()
+    told = []
+    asking.on_refused = lambda: told.append(True)
+    with monkeypatch.context() as patch:
+        refuse(asking, patch)
+        with pytest.raises(keychain.Refused):
+            asking.read("app", "key")
+        with pytest.raises(keychain.Refused):
+            asking.write("app", "another", "synthetic")
+        assert asking.refused and told == [True]
+        assert asking.reads == [("Raphael Safe Storage", str(sealed.parent))]
+    asking.ask_again()
+    assert asking.read("app", "key") == "synthetic"
+
+
+@pytest.mark.parametrize("damage", ["wrong key", "missing key", "box", "names", "moved"])
+def test_an_unreadable_file_and_its_key_are_never_replaced(asking, sealed, memory_keyring, damage):
+    asking.write("app", "key", "synthetic")
+    if damage == "wrong key":
+        memory_keyring.set_password("Raphael Safe Storage", str(sealed.parent), base64.b64encode(bytes(32)).decode())
+    elif damage == "missing key":
+        memory_keyring.delete_password("Raphael Safe Storage", str(sealed.parent))
+    else:
+        data = json.loads(sealed.read_bytes())
+        if damage == "box":
+            box = bytearray(base64.b64decode(data["box"]))
+            box[-1] ^= 1
+            data["box"] = base64.b64encode(box).decode()
+        else:
+            data[damage] = {}
+        sealed.write_text(json.dumps(data), encoding="utf-8")
+    before = sealed.read_bytes()
+    keys = memory_keyring.credentials.copy()
+    door = fresh_door(asking, sealed)
+    if damage == "names":
+        # A name the file no longer lists is not kept, and reading it never asks for the master key.
+        asking.reads.clear()
+        assert door.read("app", "key") is None and asking.reads == []
+    else:
+        with pytest.raises(keyring.errors.KeyringError):
+            door.read("app", "key")
+    with pytest.raises(keyring.errors.KeyringError):
+        door.write("app", "another", "synthetic")
+    with pytest.raises(keyring.errors.KeyringError):
+        door.remove("app", "key")
+    assert sealed.read_bytes() == before and memory_keyring.credentials == keys
+
+
+def test_two_doors_keep_each_others_writes_and_reload_on_read(asking, sealed):
+    other = fresh_door(asking, sealed)
+    start = threading.Barrier(2)
+
+    def write(door, account):
+        start.wait(5)
+        door.write("app", account, account)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        list(pool.map(write, [asking, other], ["one", "two"]))
+    assert asking.read("app", "two") == "two"
+    assert other.read("app", "one") == "one"
+    other.remove("app", "one")
+    assert asking.peek("app", "one") is None
+
+
+def test_a_failed_replacement_keeps_the_last_document_and_discards_the_temporary_file(asking, sealed, monkeypatch):
+    asking.write("app", "key", "first")
+    before = sealed.read_bytes()
+    files = set(sealed.parent.iterdir())
+
+    def failed_replace(source, target):
+        raise PermissionError
+
+    monkeypatch.setattr(os, "replace", failed_replace)
+    with pytest.raises(PermissionError):
+        asking.write("app", "key", "second")
+    assert sealed.read_bytes() == before and set(sealed.parent.iterdir()) == files
+    assert asking.peek("app", "key") == "first"
+
+
+def test_a_writer_authenticates_the_current_file_even_with_an_unchanged_timestamp_and_size(asking, sealed):
+    asking.write("app", "key", "synthetic")
+    stat = sealed.stat()
+    before = sealed.read_bytes()
+    damaged = before.replace(b'"key"', b'"old"')
+    assert damaged != before and len(damaged) == len(before)
+    sealed.write_bytes(damaged)
+    os.utime(sealed, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+    with pytest.raises(keyring.errors.KeyringError):
+        asking.write("app", "another", "synthetic")
+    assert sealed.read_bytes() == damaged
+
+
+def test_a_legacy_item_gone_during_removal_needs_no_second_lookup(asking, sealed, monkeypatch):
+    asking.write("app", "key", "synthetic")
+    lookups = []
+
+    def present(service, account):
+        lookups.append((service, account))
+        return True
+
+    def disappeared(service, account):
+        raise keyring.errors.PasswordDeleteError() from Exception(keychain.NOT_FOUND)
+
+    asking._look = present
+    monkeypatch.setattr(asking.backend, "delete_password", disappeared)
+    asking.remove("app", "key")
+    assert asking.peek("app", "key") is None
+    assert lookups == [("app", "key")]
+
+
+def test_each_data_directory_has_its_own_key_and_unlocked_values(asking, sealed, memory_keyring):
+    asking.write("app", "key", "first")
+    other = sealed.parent / "development" / "secrets.bin"
+    asking.seal(other)
+    assert asking.peek("app", "key") is None
+    asking.write("app", "key", "second")
+    assert memory_keyring.get_password("Raphael Safe Storage", str(sealed.parent)) != memory_keyring.get_password(
+        "Raphael Safe Storage", str(other.parent)
+    )
+    asking.seal(sealed)
+    assert asking.peek("app", "key") is keychain.UNREAD and asking.read("app", "key") == "first"
+
+
+async def test_app_startup_can_see_a_sealed_model_key_before_the_first_model_migration(asking, tmp_path):
+    from raphael_core.app import App
+    from raphael_core.brain.first_models import LEGACY
+
+    writer = fresh_door(asking, tmp_path / "secrets.bin")
+    writer.write("Raphael", "openrouter", "synthetic")
+    asking.reads.clear()
+    app = App(data_dir=tmp_path, models_dir=tmp_path / "models", memory_dir=tmp_path / "memory")
+    try:
+        assert app.brain._settings.get("agent_model") == LEGACY["agent_model"]
+        assert asking.peek("Raphael", "openrouter") is keychain.UNREAD
+        assert not asking.reads
+    finally:
+        await app.aclose()
+    assert asking.peek("Raphael", "openrouter") is None
+
+
+def _write_in_process(path, master, account, start):
+    # Each child sees the same master key through its own in-memory backend.
+    from conftest import MemoryKeyring
+
+    backend = MemoryKeyring()
+    keyring.set_keyring(backend)
+    backend.set_password("Raphael Safe Storage", str(path.parent), master)
+    door = keychain.Keychain(asks=True)
+    door.seal(path)
+    start.wait(15)
+    door.write("app", account, account)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="Inter-process locking uses flock")
+def test_two_processes_keep_each_others_secrets(asking, sealed, memory_keyring):
+    asking.write("app", "seed", "seed")
+    _, master = memory_keyring.credentials["Raphael Safe Storage"]
+    ctx = multiprocessing.get_context("spawn")
+    start = ctx.Barrier(2)
+    children = [ctx.Process(target=_write_in_process, args=(sealed, master, account, start)) for account in ("a", "b")]
+    for child in children:
+        child.start()
+    for child in children:
+        child.join(30)
+        assert child.exitcode == 0
+    assert [asking.read("app", a) for a in "ab"] == ["a", "b"]
+
+
+def test_a_door_that_never_asks_still_uses_the_keyring_per_item(memory_keyring, tmp_path):
+    door = keychain.Keychain(asks=False)
+    door.seal(tmp_path / "secrets.bin")
+    door.write("app", "key", "synthetic")
+    assert memory_keyring.credentials == {"app": ("key", "synthetic")}
+    assert door.peek("app", "key") == door.read("app", "key") == "synthetic"
+    door.remove("app", "key")
+    assert not door.has("app", "key") and not list(tmp_path.iterdir())
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX permission bits")
+def test_only_the_owner_can_read_or_write_the_sealed_file(asking, sealed):
+    asking.write("app", "key", "synthetic")
+    assert sealed.stat().st_mode & 0o777 == 0o600

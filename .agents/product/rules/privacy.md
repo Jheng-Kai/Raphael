@@ -2,6 +2,14 @@
 
 Secrets, the vault, the Keychain, keys and what stays private. Part of [the product rules](../RULES.md); a rule's ID is unique across every file.
 
+## One master key in the Keychain, every secret in one sealed file
+
+A new macOS build can ask the owner again for each Keychain item it reads.
+
+| ID | Date | Rule | Check | Severity | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-PRIV-KEYCHAIN-02 | | On macOS one Keychain item per data directory seals every secret in `secrets.bin` with AES-GCM. Its names answer status checks without a Keychain read. First use moves an old item and leaves it for other editions. Explicit removal deletes the old item and records its removal. Writes preserve other writers' changes and an unreadable file stays intact. | pytest | hard | core/tests/test_keychain.py::test_secrets_are_sealed_with_one_master_key; core/tests/test_keychain.py::test_a_fresh_door_answers_from_names_without_a_keychain_read; core/tests/test_keychain.py::test_five_secrets_ask_only_for_the_master_key; core/tests/test_keychain.py::test_an_old_item_moves_on_first_use_and_stays_for_the_other_edition; core/tests/test_keychain.py::test_a_removed_old_item_cannot_return_to_the_sealed_file; core/tests/test_keychain.py::test_a_refusal_of_the_master_key_stands_until_asked_again; core/tests/test_keychain.py::test_an_unreadable_file_and_its_key_are_never_replaced; core/tests/test_keychain.py::test_two_processes_keep_each_others_secrets; core/tests/test_keychain.py::test_a_door_that_never_asks_still_uses_the_keyring_per_item; core/tests/test_keychain.py::test_only_the_owner_can_read_or_write_the_sealed_file |
+
 ## A key card says why a key was refused, and a value may be no secret
 
 A Jira user name `jon` could not be saved, and the card said only that the key was empty or had a line break (#281).
