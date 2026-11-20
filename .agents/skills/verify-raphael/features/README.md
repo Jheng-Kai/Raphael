@@ -63,6 +63,7 @@ See [Settings and appearance](settings-appearance.md#the-keychain-is-asked-once-
 R-PRIV-KEYCHAIN-01: secrets go through `core/src/raphael_core/keychain.py`, a "has key" never asks the macOS
 Keychain, a secret is read once in a run, and the owner's Deny stands until 再問一次. Selected scenes:
 keychain-refused and keychain-asked, both themes at 1120,720,1920x1080.
+On macOS the secrets live in `secrets.bin`, sealed with one master key item, and old items move on first use (R-PRIV-KEYCHAIN-02).
 
 ## External-input security boundaries
 

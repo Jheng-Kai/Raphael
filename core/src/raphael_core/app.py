@@ -851,6 +851,8 @@ class App(Router):
         logger.info("Startup phase=database elapsed_ms=%.1f", (time.perf_counter() - began) * 1000)
         began = time.perf_counter()
         try:
+            # ProviderRegistry's first-run migration already asks whether a credential is filled.
+            keychain.DOOR.seal(Path(data_dir) / "secrets.bin")
             self.keys: KeyStore
             self.client: Any
             self.vault: SecretVault
@@ -877,6 +879,7 @@ class App(Router):
             self.brain = Brain(self._conn, self.client, self.keys, providers=self.providers,
                                ui_language=lambda: configured_language(data_dir))
         except BaseException:
+            keychain.DOOR.seal(None)
             self._conn.close()
             raise
         self.brain.register(self)
@@ -1301,6 +1304,7 @@ class App(Router):
             return
         self._closed = True
         keychain.DOOR.on_refused = lambda: None
+        keychain.DOOR.seal(None)
         if self._startup_handle is not None:
             self._startup_handle.cancel()
             self._startup_handle = None
