@@ -1,6 +1,6 @@
 [package]
 name = "app"
-version = "2.0.4"
+version = "2.0.5"
 description = "Raphael: a tray app for dictation and voice assistance"
 license = "MIT"
 edition = "2024"
