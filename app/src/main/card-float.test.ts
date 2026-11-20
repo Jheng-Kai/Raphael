@@ -81,3 +81,24 @@ test("an answered card takes its pill away, and a card that waits for nothing ne
   sight(false);
   expect(done.pill.hidden).toBe(true);
 });
+
+test("the floating card stands centred under the pill, as wide as it was, and never past the conversation's edge", () => {
+  const { pill, stage, thread } = mount(`<li>reply</li>${card("waiting")}<li>later</li>`);
+  sight(false);
+  const shown = thread.querySelector<HTMLElement>(".conversation-card")!;
+  const rect = (left: number, width: number, top = 0, height = 40) => ({ left, width, right: left + width, top, height, bottom: top + height, x: left, y: top, toJSON: () => ({}) }) as DOMRect;
+  Object.defineProperty(pill, "offsetParent", { configurable: true, get: () => stage });
+  vi.spyOn(stage, "getBoundingClientRect").mockReturnValue(rect(300, 900, 0, 800));
+  vi.spyOn(shown, "getBoundingClientRect").mockReturnValue(rect(340, 420, 500, 200));
+  const at = (pillLeft: number) => {
+    vi.spyOn(pill, "getBoundingClientRect").mockReturnValue(rect(pillLeft, 160, 20, 36));
+    pill.querySelector<HTMLElement>(".card-float-open")!.click();
+    const left = shown.style.getPropertyValue("--float-left"), width = shown.style.getPropertyValue("--float-width");
+    pill.querySelector<HTMLElement>(".card-float-open")!.click();
+    return [left, width];
+  };
+  // The pill's middle is at 750: the card's middle too.
+  expect(at(670)).toEqual(["540px", "420px"]);
+  // A pill near the pane's right edge: the card stops 8 px inside it.
+  expect(at(1020)).toEqual(["772px", "420px"]);
+});

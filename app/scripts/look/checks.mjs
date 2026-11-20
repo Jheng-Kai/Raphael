@@ -9566,7 +9566,8 @@ export function checkRendered(name, context = {}) {
       const box = card.getBoundingClientRect(), place = card.previousElementSibling, column = card.closest(".ra-col").getBoundingClientRect();
       require(card.classList.contains("is-floating") && place?.classList.contains("card-float-place") && Math.abs(place.getBoundingClientRect().height - box.height) <= 2, "the card floats, and a spacer of its height keeps its place");
       require(box.top >= pill.getBoundingClientRect().bottom && box.bottom <= innerHeight, `it stands under the pill, inside the window (${Math.round(box.top)}-${Math.round(box.bottom)})`);
-      require(Math.abs(box.left - place.getBoundingClientRect().left) <= 2 && box.width <= column.width + 1, "where it was across, no wider than the thread's column");
+      const under = pill.getBoundingClientRect(), centre = (under.left + under.right) / 2;
+      require(Math.abs((box.left + box.right) / 2 - centre) <= 2 && box.width <= column.width + 1, `centred under the pill, no wider than the thread's column (${Math.round((box.left + box.right) / 2)} against ${Math.round(centre)})`);
       require(document.elementFromPoint(box.left + box.width / 2, box.top + 12)?.closest('[data-secret-card="card-key"]') === card, "nothing covers it");
       require(card.querySelector("[data-secret-input]") && document.querySelector(".mb-chat .thread").contains(card), "it is the card itself, still in the thread, with its field");
     }

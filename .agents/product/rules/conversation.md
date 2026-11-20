@@ -2,6 +2,14 @@
 
 How a member answers: the core loop, replies, memory, models, CLI brains, the queue and handoffs. Part of [the product rules](../RULES.md); a rule's ID is unique across every file.
 
+## What a member says on a reaction is only the words in its envelope
+
+After a thumbs-down a member's reply showed the instruction it was given and a note to itself before its question (#292).
+
+| ID | Date | Rule | Check | Severity | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-REACT-WORDS-01 | | A member answering a reaction in a conversation writes its words for the owner between `<reply>` and `</reply>` (`persona.REACTION`); only the words of the last envelope reach the thread, and whatever it wrote around them (a plan, a note, the instruction read back) is never shown. A reply with no envelope, or an envelope holding only a pass, ends the reaction as a pass: nothing is shown. The same in every language: no text is judged by its script. | pytest | hard | core/tests/members/test_reaction_ask.py::test_only_the_words_in_the_envelope_reach_the_owner_and_a_reply_with_none_says_nothing; core/tests/members/test_reaction_ask.py::test_a_negative_reaction_gets_words_in_the_members_own_voice_and_model |
+
 ## Antigravity's sign-in on Windows is in Credential Manager
 
 A signed-in Antigravity CLI showed 未登入 on Windows, because version 1.5 moved its sign-in out of `~/.gemini` (#283).
