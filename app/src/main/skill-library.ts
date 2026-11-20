@@ -47,23 +47,23 @@ export function accessText(access: Access, members: LibraryMember[]): string {
 }
 
 function packageHTML(p: LibraryPackage, v: SkillLibraryView): string {
-  const open = v.open.has(p.key), count = p.skills.length;
-  const head = `<div class="row skl-pack" data-skl-pack="${esc(p.key)}">` +
-    `<button type="button" class="btn skl-open" data-skl="open" data-key="${esc(p.key)}" aria-expanded="${open}">` +
-    `${ico(open ? "down" : "right")}<span class="skl-name">${esc(p.name)}</span>` +
-    (count > 1 ? `<span class="skl-count">${esc(t("skillLib.count", { count }))}</span>` : "") + `</button>` +
-    `<div class="ctl">` +
+  const count = p.skills.length, open = count > 1 && v.open.has(p.key);
+  // A package of several opens its skills; a skill alone is one row, its words under its name and its switch its own.
+  const about = p.skills[0]?.description || p.description;
+  const name = count > 1
+    ? `<button type="button" class="btn skl-open" data-skl="open" data-key="${esc(p.key)}" aria-expanded="${open}">` +
+      `${ico(open ? "down" : "right")}<span class="skl-name">${esc(p.name)}</span><span class="skl-count">${esc(t("skillLib.count", { count }))}</span></button>`
+    : `<div class="lbl skl-single"><div class="t">${esc(p.name)}</div>${about ? `<div class="d">${esc(about)}</div>` : ""}</div>`;
+  const head = `<div class="row skl-pack" data-skl-pack="${esc(p.key)}">${name}<div class="ctl">` +
     `<button type="button" class="sel skl-access" data-skl="access" data-key="${esc(p.key)}" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(t("vault.access"))}">` +
     `<span>${esc(accessText(p.access, v.members))}</span>${ico("down")}</button>` +
     tg(p.enabled, `${t("members.profile.enable")} ${p.name}`, ` data-skl="toggle" data-key="${esc(p.key)}"`) +
     iconBtn("more", t("members.more", { p0: p.name }), ` data-skl="more" data-key="${esc(p.key)}" aria-haspopup="menu" aria-expanded="false"`) +
     `</div></div>`;
   if (!open) return head;
-  // A package of one: its description is the skill's, and its switch is the package's.
-  const skills = count > 1 ? p.skills.map(skill => `<div class="row skl-skill">` +
+  const skills = p.skills.map(skill => `<div class="row skl-skill">` +
     `<div class="lbl"><div class="t">${esc(skill.name)}</div>${skill.description ? `<div class="d">${esc(skill.description)}</div>` : ""}</div>` +
-    `<div class="ctl">${tg(skill.enabled, `${t("members.profile.enable")} ${skill.name}`, ` data-skl="skill" data-key="${esc(p.key)}" data-id="${skill.id}"${p.enabled ? "" : " disabled"}`)}</div></div>`).join("")
-    : (p.skills[0]?.description || p.description ? `<p class="d skl-about">${esc(p.skills[0]?.description || p.description)}</p>` : "");
+    `<div class="ctl">${tg(skill.enabled, `${t("members.profile.enable")} ${skill.name}`, ` data-skl="skill" data-key="${esc(p.key)}" data-id="${skill.id}"${p.enabled ? "" : " disabled"}`)}</div></div>`).join("");
   const source = p.source ? `<p class="d skl-source">${esc(p.source)}${p.version ? ` · ${esc(p.version)}` : ""}</p>` : "";
   return head + `<div class="skl-skills">${source}${skills}</div>`;
 }
@@ -80,7 +80,7 @@ function importHTML(v: SkillLibraryView): string {
     btn(ico("file") + esc(t("skillLib.file")), "sm", ` data-skl="pick-file"${busy}`) +
     btn(ico("folder") + esc(t("skillLib.folder")), "sm", ` data-skl="pick-folder"${busy}`) +
     btn(ico("pencil") + esc(t("skillLib.paste")), "sm", ` data-skl="paste" aria-pressed="${v.pasting}"${busy}`) +
-    `</div>${input}<input type="file" id="skl-file" accept="${ACCEPT}" hidden></div>`;
+    `</div>${input}${v.error ? `<p class="skl-error" role="alert">${esc(v.error)}</p>` : ""}<input type="file" id="skl-file" accept="${ACCEPT}" hidden></div>`;
 }
 
 export function skillLibraryHTML(v: SkillLibraryView): string {
@@ -89,7 +89,7 @@ export function skillLibraryHTML(v: SkillLibraryView): string {
     : v.packages.length ? `<div class="slist skl-list">${v.packages.map(p => packageHTML(p, v)).join("")}</div>`
     : `<p class="d skl-empty">${esc(t("skillLib.empty"))}</p>`;
   return `<section class="sgroup skl" aria-label="${esc(t("settings.paneSkills"))}">` +
-    importHTML(v) + (v.error ? `<p class="notice skl-error" role="alert">${esc(v.error)}</p>` : "") + list + `</section>`;
+    importHTML(v) + list + `</section>`;
 }
 
 const base64 = (bytes: ArrayBuffer): string => {

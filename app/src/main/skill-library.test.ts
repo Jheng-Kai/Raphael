@@ -38,7 +38,8 @@ test("one row per package says who may use it, and its name opens its skills", a
   const { root } = await setup();
   expect(root.querySelectorAll(".skl-pack")).toHaveLength(3);
   expect(root.querySelector('.skl-pack[data-skl-pack="set:1"] .skl-count')?.textContent).toBe("3 個技能");
-  expect(root.querySelector('.skl-pack[data-skl-pack="skill:3"] .skl-count')).toBeNull();
+  expect(root.querySelector('.skl-pack[data-skl-pack="skill:3"] .skl-count, .skl-pack[data-skl-pack="skill:3"] [data-skl="open"]')).toBeNull();
+  expect(root.querySelector('.skl-pack[data-skl-pack="skill:3"] .skl-single .d')?.textContent).toBe("會議紀錄 的說明");
   expect([accessOf(root, "set:1"), accessOf(root, "pack:2"), accessOf(root, "skill:3")]).toEqual(["還沒給任何人", "小晴、小森", "整個團隊"]);
   expect(root.querySelector(".skl-skill")).toBeNull();
   press(root, '[data-skl="open"][data-key="pack:2"]');
@@ -84,7 +85,7 @@ test("the importer sends a link, pasted text or a file to the core and opens the
   await settle(); await settle();
   expect(api.core).toHaveBeenCalledWith("skills.library.import", { source: "owner/slides" });
   expect(root.querySelector<HTMLInputElement>("#skl-source")!.value).toBe("");
-  expect(root.querySelector('[data-skl="open"][data-key="pack:9"]')?.getAttribute("aria-expanded")).toBe("true");
+  expect(root.querySelector('[data-skl="open"][data-key="pack:9"]')?.getAttribute("aria-expanded")).toBe("true"); // opened, so whom it is for can be chosen
   expect(info).toHaveBeenCalledWith("已匯入「簡報工具」");
   // Pasted text takes the link's place, and the same 匯入 sends it.
   press(root, '[data-skl="paste"]');
@@ -116,6 +117,6 @@ test("a cause the core names leads its message and is said in words", async () =
   root.querySelector<HTMLInputElement>("#skl-source")!.value = "nothing/here";
   press(root, '[data-skl="import-go"]');
   await settle(); await settle();
-  expect(root.querySelector(".skl-error")?.textContent).toBe("裡面找不到 SKILL.md。");
+  expect(root.querySelector(".skl-import .skl-error")?.textContent).toBe("裡面找不到 SKILL.md。");
   expect(root.querySelector(".skl-import")).not.toBeNull();
 });

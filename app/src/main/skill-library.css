@@ -7,7 +7,7 @@
 /* 匯入 stands as tall as the link field beside it. */
 .skl .btn.skl-go { flex: none; min-height: var(--h-field); }
 .skl-text { width: 100%; min-height: 112px; resize: vertical; font-family: var(--mono); font-size: var(--fs-sm); }
-.skl-error { margin: 0 0 var(--sp-3); }
+.skl-error { margin: 0; color: var(--err); font-size: var(--fs-sm); }
 .skl-empty { margin: 0; padding-block: var(--sp-4); color: var(--text-3); font-size: var(--fs-sm); }
 
 .slist > .row.skl-pack { flex-wrap: nowrap; }
@@ -16,6 +16,9 @@
 .skl .btn.skl-open:hover:not(:disabled), .skl .btn.skl-open:active:not(:disabled) { background: transparent; }
 .skl-open > .i { flex: none; color: var(--text-3); }
 .skl-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A skill alone starts where a package's name does, past the chevron. */
+.skl-single { flex: 1 1 auto; min-width: 0; padding-left: calc(16px + var(--sp-2)); }
+.skl-single > .d { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .skl-count { flex: none; color: var(--text-3); font-size: var(--fs-sm); }
 .skl-pack > .ctl { flex: none; flex-wrap: nowrap; }
 .skl-access { max-width: 200px; }
@@ -26,8 +29,7 @@
 .skl-skills > .row { min-height: 48px; padding: var(--sp-2) 0; }
 .skl-skills > .row > .lbl { min-width: 0; }
 .skl-skills > .row .d { overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-.skl-about, .skl-source { margin: 0 0 var(--sp-2); color: var(--text-2); font-size: var(--fs-sm); overflow-wrap: anywhere; }
-.skl-source { color: var(--text-3); }
+.skl-source { margin: 0 0 var(--sp-2); color: var(--text-3); font-size: var(--fs-sm); overflow-wrap: anywhere; }
 
 .skl-access-menu { max-height: min(360px, calc(100vh - 16px)); }
 

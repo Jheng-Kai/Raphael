@@ -506,7 +506,7 @@ export function checkRendered(name, context = {}) {
       require(document.querySelectorAll('.skl-pack').length === 3, 'one row per package, not per skill');
       require(rowOf('set:1').querySelector('.skl-count')?.textContent.trim() === '7 個技能' && !document.querySelector('.skl-skill'), 'pstack is one folded row that says how many skills it holds');
       require(accessOf('set:1') === '還沒給任何人' && accessOf('pack:2') === '小晴、小森' && accessOf('skill:3') === '整個團隊', `who may use each is said on its row (${accessOf('set:1')} / ${accessOf('pack:2')} / ${accessOf('skill:3')})`);
-      require(!rowOf('skill:3').querySelector('.skl-count'), 'a package of one says no count');
+      require(!rowOf('skill:3').querySelector('.skl-count, [data-skl="open"]') && rowOf('skill:3').querySelector('.skl-single .d')?.textContent === '把會議逐字稿整理成決議與待辦', 'a skill alone is one row: its words under its name, nothing to open');
     }
     if (name === 'skill-library-open') {
       const skills = [...document.querySelectorAll('.skl-skills .skl-skill')];
@@ -532,13 +532,16 @@ export function checkRendered(name, context = {}) {
     }
     if (name === 'skill-library-imported') {
       require(visible(document.querySelector('.skl-import #skl-source')) && !document.querySelector('#skl-text'), 'the card is back to the link');
-      require(rowOf('pack:13')?.querySelector('[data-skl="open"]').getAttribute('aria-expanded') === 'true' && accessOf('pack:13') === '整個團隊', 'the new package of one is open, for the whole team');
+      require(rowOf('pack:13')?.querySelector('.skl-single .d')?.textContent === '依日期整理行程與訂位' && accessOf('pack:13') === '整個團隊', 'the new skill is a row of its own, its words under its name, for the whole team');
       require(document.querySelector('.toast')?.textContent.includes('已匯入「旅行行程」'), 'the owner is told it was imported');
       const call = window.__look.calls.find(c => c.method === 'skills.library.import');
       require(call && call.params.text.includes('name: travel') && !('source' in call.params), 'the text went to the core as text');
     }
     if (name === 'skill-library-import-failed') {
-      require(visible(document.querySelector('.skl-import')) && document.querySelector('.skl-error').textContent.trim() === '裡面找不到 SKILL.md。', 'the cause is said in the importer, which stays open');
+      const said = document.querySelector('.skl-import .skl-error');
+      const probe = document.createElement('i'); probe.style.color = 'var(--err)'; said?.parentElement?.append(probe);
+      const err = getComputedStyle(probe).color; probe.remove();
+      require(said?.textContent.trim() === '裡面找不到 SKILL.md。' && getComputedStyle(said).color === err, `the cause is said inside the importer, in the error colour (${said && getComputedStyle(said).color} against ${err})`);
     }
     if (name === 'member-skills-library') {
       const lib = document.querySelector('.ms-pane [data-k="ms-library"]');
