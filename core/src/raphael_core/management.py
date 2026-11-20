@@ -124,7 +124,16 @@ ACTIONS = (
     row("room_stop", "rooms.stop", "Stop all work belonging to a group chat.", {"room_id": ID}, ("room_id",)),
     row("room_delete", "rooms.delete", "Delete a group chat, messages and associated room state.", {"room_id": ID}, ("room_id",), destructive=True),
     row("conversation_clear", "conversations.clear", "Clear the selected conversation. Read conversations.list for the permanent quick conversation ID.", {"id": ID}, ("id",), destructive=True),
-    row("member_skill_import", "members.skills.import", "Import a member's skill package through the UI importer. " + SKILL_NAME_RULE + ".", {"member_id": MEMBER_ID, "shared": BOOL, "source": TEXT}, ("member_id", "source")),
+    row("member_library_list", "skills.library.list", "List team skill packages and access.", {}),
+    row("member_library_import", "skills.library.import", "Import a team skill package.", {
+        "source": TEXT, "text": TEXT, "file": obj({"name": TEXT, "data": TEXT}, ("name", "data")),
+        "name": TEXT, "marketplace": TEXT, "plugin": BOOL, "set_id": ID,
+        "access": {"type": ["string", "array"], "items": ID}}, destructive=True),
+    row("member_library_update", "skills.library.update", "Change or refresh a team skill package.", {
+        "key": TEXT, "access": {"type": ["string", "array"], "items": ID}, "enabled": BOOL, "refresh": BOOL,
+        "skill": obj({"id": ID, "enabled": BOOL}, ("id", "enabled"))}, ("key",), destructive=True),
+    row("member_library_delete", "skills.library.delete", "Delete a team skill package.", {"key": TEXT}, ("key",), destructive=True),
+    row("member_skill_import", "members.skills.import", "Import a member's skill package through the UI importer. " + SKILL_NAME_RULE + ".", {"member_id": MEMBER_ID, "shared": BOOL, "source": TEXT, "text": TEXT, "file": obj({"name": TEXT, "data": TEXT}, ("name", "data"))}, ("member_id",)),
     row("member_skill_update", "members.skills.update", "Edit a member skill document or turn it on/off. " + SKILL_NAME_RULE + ". Keep an existing name unchanged when editing.", {"member_id": MEMBER_ID, "shared": BOOL, "id": ID, "enabled": BOOL, "text": TEXT, "expected_hash": TEXT}, ("member_id", "id")),
     row("member_skill_delete", "members.skills.delete", "Delete a member or shared skill package and grants.", {"member_id": MEMBER_ID, "shared": BOOL, "id": ID}, ("member_id", "id"), destructive=True),
     row("member_command_save", "members.commands.save", "Save a member's slash command template containing {input}.", {"member_id": MEMBER_ID, "id": ID, **{key: TEXT for key in ("name", "description", "template")}}, ("member_id", "name", "template")),
@@ -214,7 +223,7 @@ DEFINITIONS.update({name: item.definition for name, item in GROUPED_TOOLS.items(
 MANAGEMENT_TOOLS = frozenset(REGISTRY) | {"create_member"}
 # What these actions give back is the owner's own data and nothing changes; in the mode that asks first they still
 # ask, and the owner's yes then covers the reading (`ManagementAction.tier` is T1 for every action that is not destructive).
-READS = frozenset({"conversation_list", "dictionary_list", "settings_read", "member_skills_list", "member_skill_read",
+READS = frozenset({"member_library_list", "conversation_list", "dictionary_list", "settings_read", "member_skills_list", "member_skill_read",
                    "member_commands_list", "member_routines_list", "memory_document_read"})
 BACKGROUND_MEMBER_TOOLS = frozenset(name for name in DEFINITIONS if name.startswith("member_")) | {"create_member"}
 # The reads of the owner's own data that a routine's run has as its member does in the conversation (the rest of READS are
@@ -243,7 +252,7 @@ def tool_areas(name):
     areas = set()
     for item in GROUPS.get(name, (REGISTRY[name],)):
         prefix = item.rpc.partition(".")[0]
-        area = {"members": "members", "routines": "members", "groups": "folders", "rooms": "rooms",
+        area = {"skills": "members", "members": "members", "routines": "members", "groups": "folders", "rooms": "rooms",
                 "conversations": "conversations", "agent": "conversations", "integrations": "connections",
                 "connectors": "connections", "dictionary": "settings", "history": "settings",
                 "memory": "settings", "settings": "settings"}.get(prefix)
@@ -331,6 +340,8 @@ def destructive(name, arguments, retention=None):
             return False
     if item is None:
         return False
+    if item.name == "member_skill_import" and str(arguments.get("source", "")).startswith("local:"):
+        return True
     if item.destructive or name == "manage_connection" and arguments.get("operation") == "disconnect":
         return True
     if item.setting == "history_retention_days":

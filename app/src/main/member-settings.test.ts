@@ -45,12 +45,13 @@ let current = 3;
 let list = LIST;
 let host: { update: Mock<(id: number, patch: MemberPatch) => Promise<boolean>>; back: Mock<() => void>; refreshList: Mock<() => void> };
 let page: MemberSettings;
+const appGo = vi.fn();
 
 async function open(id = 3): Promise<HTMLElement> {
   current = id;
   host = { update: vi.fn(async (_id: number, _patch: MemberPatch) => true), back: vi.fn<() => void>(), refreshList: vi.fn<() => void>() };
   page = createMemberSettings({
-    app: { onEvent: vi.fn() } as unknown as AppContext,
+    app: { onEvent: vi.fn(), go: appGo } as unknown as AppContext,
     member: () => list.members.find((m) => m.id === current)!,
     list: () => list,
     update: host.update,
@@ -417,12 +418,13 @@ describe("skills and commands", () => {
   test("skills are names with switches; the switch calls the core and a press opens the skill's own view", async () => {
     await open();
     await cat("skills");
+    // Its own skills only: what the team library gives it is shown read-only under the library's name (R-SKILL-17).
     const rows = [...page.el.querySelectorAll<HTMLElement>('[data-k^="ms-skill:"]')];
-    expect(rows.map((row) => row.querySelector(".ms-label")!.textContent)).toEqual(["research-summary", "shared-skill"]);
-    expect(rows.map((row) => row.querySelector('[role="switch"]')!.getAttribute("aria-checked"))).toEqual(["true", "false"]);
+    expect(rows.map((row) => row.querySelector(".ms-label")!.textContent)).toEqual(["research-summary"]);
+    expect(rows.map((row) => row.querySelector('[role="switch"]')!.getAttribute("aria-checked"))).toEqual(["true"]);
     expect(rows[0]!.textContent).not.toContain("整理來源");
-    await press('[data-ms="skill-toggle"][data-id="2"]');
-    expect(api.membersSkillsUpdate).toHaveBeenCalledWith(3, 2, true);
+    await press('[data-ms="skill-toggle"][data-id="1"]');
+    expect(api.membersSkillsUpdate).toHaveBeenCalledWith(3, 1, false);
     await press('[data-ms="skill-open"][data-id="1"]');
     expect(api.membersSkillsRead).toHaveBeenCalledWith(3, 1);
     expect(page.el.dataset.view).toBe("skill");
@@ -436,14 +438,17 @@ describe("skills and commands", () => {
     expect(page.el.dataset.view).toBe("main");
   });
 
-  test("a shared skill is read only; deleting one of its own waits for a second press", async () => {
+  test("the packages the team library gives are read-only here with the way to the library; deleting one of its own waits for a second press", async () => {
+    api.membersSkillsList.mockResolvedValue({ skills: SKILLS, library: [{ key: "pack:2", name: "研究工具", skills: 2 }, { key: "skill:3", name: "會議紀錄", skills: 1 }] });
     await open();
     await cat("skills");
-    api.membersSkillsRead.mockResolvedValueOnce({ skill: { ...SKILLS[1] }, text: "shared text" });
-    await press('[data-ms="skill-open"][data-id="2"]');
-    expect($<HTMLTextAreaElement>("#ms-skill-text").disabled).toBe(true);
-    expect(page.el.querySelector('[data-ms="skill-save"], [data-ms="skill-more"]')).toBeNull();
-    await press('[data-ms="back"]');
+    const library = $(".ms-lib");
+    expect([...library.querySelectorAll(".ms-lib-row .ms-label")].map((row) => row.textContent)).toEqual(["研究工具", "會議紀錄"]);
+    expect([...library.querySelectorAll(".ms-lib-count")].map((row) => row.textContent)).toEqual(["2 個技能"]);
+    expect(library.querySelector('[role="switch"], [data-ms="skill-open"]')).toBeNull();
+    expect(page.el.querySelector('[data-ms="skill-open"][data-id="2"]')).toBeNull();
+    await press('[data-ms="open-library"]');
+    expect(appGo).toHaveBeenCalledWith("settings", "skills");
     await press('[data-ms="skill-open"][data-id="1"]');
     await press('[data-ms="skill-more"]');
     const item = document.querySelector<HTMLElement>("#app-popover [data-confirm-item]")!;

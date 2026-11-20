@@ -167,3 +167,18 @@ async def test_only_the_first_call_in_a_message_loads_and_the_others_stay_words(
         assert cap.resolve_slash(0, "/weekly then /outline") == ("WEEKLY: then /outline", False)
     finally:
         await owner.aclose()
+
+
+async def test_a_team_skill_reaches_only_the_granted_members_prompt(tmp_path, monkeypatch):
+    owner = Stage(tmp_path, monkeypatch, "A", lambda user, tools, results: ("Finished", []))
+    try:
+        member = (await owner.app.call("members.create", {"name": "Reader"}))["member"]["id"]
+        package = (await owner.app.call("skills.library.import", {"text": DOCUMENT, "access": [member]}))["package"]
+        for actor, session in [(member, "allowed"), (0, "private")]:
+            await owner.driver.ask("/review quarter two", member=actor, session=session)
+            assert ("FIELD-6732" in owner.prompts[-1]) == (actor == member)
+        await owner.app.call("skills.library.update", {"key": package["key"], "enabled": False})
+        await owner.driver.ask("/review quarter three", member=member, session="off")
+        assert "FIELD-6732" not in owner.prompts[-1]
+    finally:
+        await owner.aclose()

@@ -36,6 +36,7 @@ export function settingsTree(locale: Locale): Branch {
     [m["settings.paneTools"], under([m["services.title"], under(
       [m["services.search"], branch("SearXNG")], [m["services.read"], branch()], [m["services.vision"], branch()], [m["services.pdf"], branch()],
     )])],
+    [m["settings.paneSkills"], branch()],
     [m["settings.paneSafety"], branch(m["vault.title"], m["rules.title"])],
     [m["settings.paneUsage"], under(
       [m["providers.title"], under(
@@ -142,7 +143,7 @@ describe("a path into Settings names a place Settings has", () => {
       for (const { id } of LOCALES) {
         setLocale(id);
         const tabs = PANES.filter((pane) => pane.id !== STANDALONE_PANE).map((pane) => pane.title());
-        expect(tabs).toHaveLength(6);
+        expect(tabs).toHaveLength(7);
         expect([...settingsTree(id).keys()]).toEqual(tabs);
       }
     } finally { setLocale("zh-TW"); }

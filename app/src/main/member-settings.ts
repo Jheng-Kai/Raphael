@@ -27,7 +27,7 @@ import { rememberAppLogos } from "./app-logos";
 import { connectedApps, toolOn, toolsAfterToggle, type ToolChoices } from "./member-tools";
 import { skillOriginLabel } from "./skill-source";
 import { slimeColorOf } from "./slime";
-import type { AppContext, BrainSettings, Member, MemberCommand, MemberPatch, MemberSkill, MembersList } from "./types";
+import type { AppContext, BrainSettings, LibraryRef, Member, MemberCommand, MemberPatch, MemberSkill, MembersList } from "./types";
 import { type IconName, actionRow, btn, closeMenu, esc, ico, iconBtn, iconButton, openConfirmMenu, openPopover, patchHTML, tg, toaster } from "./ui";
 
 export interface MemberSettingsHost {
@@ -113,6 +113,8 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
   const saving = new Map<string, string>();
   let adding = false;
   let skills: Loaded<MemberSkill[]> = "loading";
+  /** The packages of the team skill library given to this member: shown here, changed only in the library (#280). */
+  let library: LibraryRef[] = [];
   let commands: Loaded<MemberCommand[]> = "loading";
   let toolChoices: Loaded<ToolChoices> = "loading";
   /** The owner's folders for members (R-PC-05): each member's own, and the output folder a member with none writes to. */
@@ -139,7 +141,8 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
       read(() => api.settingsGet()),
     ]);
     if (mine !== epoch || id !== host.member().id || el.hidden) return;
-    if (skillList.status === "fulfilled") skills = skillList.value?.skills ?? []; else if (!Array.isArray(skills)) skills = "failed";
+    if (skillList.status === "fulfilled") { skills = skillList.value?.skills ?? []; library = skillList.value?.library ?? []; }
+    else if (!Array.isArray(skills)) skills = "failed";
     if (commandList.status === "fulfilled") commands = commandList.value?.commands ?? []; else if (!Array.isArray(commands)) commands = "failed";
     if (tools.status === "fulfilled" && tools.value) { toolChoices = tools.value; rememberAppLogos(tools.value.connections); } else if (typeof toolChoices !== "object") toolChoices = "failed";
     if (settings.status === "fulfilled" && settings.value) folders = foldersOf(settings.value.settings); else if (typeof folders !== "object") folders = "failed";
@@ -208,12 +211,21 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     else {
       rows = (adding
         ? `<div class="ms-add"><input id="ms-skill-source" class="mb-fin" maxlength="2048" value="${esc(source)}" placeholder="${esc(t("members.profile.source"))}" aria-label="${esc(t("members.profile.source"))}" autocomplete="off">${btn(esc(t("members.profile.import")), "sm", ' data-ms="skill-import" data-k="ms-skill-import"')}</div>` : "") +
-        skills.map(skill =>
+        skills.filter(skill => !skill.shared).map(skill =>
           `<div class="ms-row" data-k="ms-skill:${skill.id}"><button type="button" class="btn ms-open" data-ms="skill-open" data-id="${skill.id}" data-k="ms-skill-open:${skill.id}"><span class="ms-label">${esc(skill.name)}</span></button>` +
           `${tg(skill.enabled, `${t("members.profile.enable")} ${skill.name}`, ` data-ms="skill-toggle" data-id="${skill.id}" data-k="ms-skill-toggle:${skill.id}"`)}</div>`).join("") +
-        (skills.length || adding ? "" : muted(t("members.profile.noSkills")));
+        (skills.some(skill => !skill.shared) || adding || library.length ? "" : muted(t("members.profile.noSkills"))) + libraryHTML();
     }
     return section(title, rows, tool, "ms-skills");
+  }
+
+  /** What the team skill library gives this member, read-only: the packages' names, and the way to the library. */
+  function libraryHTML(): string {
+    if (!library.length) return "";
+    return `<div class="ms-lib"><div class="ms-lib-head"><span>${esc(t("skillLib.fromLibrary"))}</span>` +
+      btn(esc(t("skillLib.openLibrary")), "sm", ' data-ms="open-library" data-k="ms-open-library"') + `</div>` +
+      library.map(item => `<div class="ms-row ms-lib-row" data-k="ms-lib:${esc(item.key)}"><span class="ms-label">${esc(item.name)}</span>` +
+        (item.skills > 1 ? `<span class="ms-lib-count">${esc(t("skillLib.count", { count: item.skills }))}</span>` : "") + `</div>`).join("") + `</div>`;
   }
 
   function commandsHTML(): string {
@@ -425,7 +437,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     // Another member, or the picture taken off, ends a move of the cover that was under way.
     if (reposition && (!sameMember || member.cover?.kind !== "image")) { reposition = null; delete cover.dataset.repositioning; }
     const face = faceHTML(member, 96).replace(/--slime-(?:delay|since):[^;"\s]+;?| data-slime-mounted="[\d.]+"/g, "");
-    const signature = JSON.stringify([stableMember(member), face, view, category, [...editing], [...saving], adding, skills, commands, toolChoices, folders, skillText, skillBusy, command, getLocale(),
+    const signature = JSON.stringify([stableMember(member), face, view, category, [...editing], [...saving], adding, skills, library, commands, toolChoices, folders, skillText, skillBusy, command, getLocale(),
       reposition ? reposition.from : null]);
     if (drawn === signature) return;
     drawn = signature;
@@ -596,6 +608,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
       case "skill-import": void importSkills(); break;
       case "skill-open": void openSkill(Number(act.dataset.id)); break;
       case "skill-toggle": void toggleSkill(Number(act.dataset.id)); break;
+      case "open-library": host.app.go("settings", "skills"); break;
       case "skill-save": void saveSkill(); break;
       case "skill-more": {
         const id = view.kind === "skill" ? view.id : -1;

@@ -24,6 +24,7 @@ import "../providers.css";
 import "../safety-rules.css";
 import { createRules } from "../safety-rules";
 import { createVault } from "../vault";
+import { createSkillLibrary } from "../skill-library";
 import { createConnections } from "../connections";
 import { askInChat } from "../chat-ask";
 import { RAPHAEL_ID } from "../members";
@@ -247,6 +248,7 @@ export function createSettings(app: AppContext): SettingsPage {
   app.onEvent((event) => connections.followEvent(event));
   const rules = createRules({ visible: () => visible && pane === "safety", redraw: () => render(), undo: app.undo });
   const vault = createVault(el, () => { if (visible && pane === "safety") render(); });
+  const skillLibrary = createSkillLibrary(el, () => { if (visible && pane === "skills") render(); });
   const services = createServices({ root: el, visible: () => visible && pane === "tools", redraw: () => render(), brain: () => brain, changeSetting: (key, value) => changeBrain(key, value) });
   const cliBrains = createCliBrains({ visible: () => visible, redraw: () => render() });
   const providers = createProviders({ root: el, visible: () => visible && pane === "models" && modelsTab === "models", redraw: () => render() });
@@ -269,7 +271,7 @@ export function createSettings(app: AppContext): SettingsPage {
     update,
     pane, modelsTab, device: app.device(), brain, hasKey, openrouter, spend, catalog: typeof catalog === "object" ? catalog : knownCatalog() ?? catalog, devices, altgr, microphone, accessibility, version,
     limitDraft, limitError, languageGroups, now: Date.now(),
-    connections: connections.view(), rules: rules.view(), vault: vault.view(), services: services.view(), providers: providers.view(), cliBrains: cliBrains.view(), localModels, localDownload,
+    connections: connections.view(), rules: rules.view(), vault: vault.view(), skillLibrary: skillLibrary.view(), services: services.view(), providers: providers.view(), cliBrains: cliBrains.view(), localModels, localDownload,
   });
 
   /** The item at the foot of the microphones' menu that looks for them again. */
@@ -509,6 +511,8 @@ export function createSettings(app: AppContext): SettingsPage {
     else connections.reset();
     if (pane === "safety") { void rules.load(); void vault.load(); }
     else { rules.reset(); vault.reset(); }
+    if (pane === "skills") void skillLibrary.load();
+    else skillLibrary.reset();
     services.reset();
     providers.reset();
     if (pane === "tools") void services.load();
@@ -1020,10 +1024,10 @@ export function createSettings(app: AppContext): SettingsPage {
 
     if (target.closest("[data-cli], [data-cli-menu], [data-chatgpt], [data-chatgpt-menu]")) { void cliBrains.click(target); return; }
     if (providers.click(target)) return;
-    // the vault opens its own dropdowns' menus (vault.ts)
+    // the vault and the skill library open their own dropdowns' menus (vault.ts, skill-library.ts)
     const choose = target.closest<HTMLElement>(".sel");
     if (choose?.dataset.k === "routine-timezone") { openTimezoneMenu(choose, brain?.routine_timezone ?? "", value => void changeBrain("routine_timezone", value)); return; }
-    if (choose && !choose.closest(".vault")) {
+    if (choose && !choose.closest(".vault, .skl")) {
       if (menuIsOpenFor(choose)) {
         closeMenu();
         return;
@@ -1269,11 +1273,13 @@ export function createSettings(app: AppContext): SettingsPage {
       connections.reset();
       rules.reset();
       vault.reset();
+      skillLibrary.reset();
       services.reset();
       providers.reset();
       if (pane === "about") void checkUpdate();
       if (pane === "connections") void connections.load();
       if (pane === "safety") { void rules.load(); void vault.load(); }
+      if (pane === "skills") void skillLibrary.load();
       if (pane === "tools") void services.load();
       if (pane === "models" && modelsTab === "models") void loadProviders();
       // At once, whatever the tab: the allowances are current by the time they are reached.
@@ -1351,6 +1357,7 @@ export function createSettings(app: AppContext): SettingsPage {
       connections.reset();
       rules.reset();
       vault.reset();
+      skillLibrary.reset();
       services.reset();
       providers.reset();
       document.removeEventListener("keydown", settingsKey);

@@ -401,7 +401,7 @@ SCHEMA_V27 = {
         "stop_requested INTEGER NOT NULL DEFAULT 0", "wrapup_sent INTEGER NOT NULL DEFAULT 0", "reason TEXT NOT NULL DEFAULT ''",
     ],
 }
-LATEST = 91
+LATEST = 92
 
 
 def test_v59_existing_tasks_default_to_no_artifact_and_keep_their_reports(monkeypatch, tmp_path):
@@ -721,7 +721,13 @@ SCHEMA_V88 = SCHEMA_V87  # the members' folders moved within settings; no column
 SCHEMA_V89 = {**SCHEMA_V88, "member_template_cards": [*SCHEMA_V88["member_template_cards"], "link TEXT", "link_token TEXT"]}
 SCHEMA_V90 = {**SCHEMA_V89, "page_state": ["page_id TEXT PK", "state TEXT NOT NULL", "updated_at_ms INTEGER NOT NULL"]}  # what the owner left on a page
 
-@pytest.mark.parametrize("start_version, expected_steps", [(version, [step for step in (63, 64, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91) if step > version]) for version in (62, 63, 64, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90)])
+SCHEMA_V92 = {k: v for k, v in SCHEMA_V90.items() if k != "member_skill_grants"}
+SCHEMA_V92["member_skills"] = [*SCHEMA_V90["member_skills"], "package_key TEXT"]
+SCHEMA_V92["skill_packages"] = ["key TEXT PK", "name TEXT NOT NULL", "source TEXT NOT NULL",
+    "enabled INTEGER NOT NULL DEFAULT 1", """access TEXT NOT NULL DEFAULT '"all"'""", "origin TEXT NOT NULL DEFAULT 'source'"]
+
+
+@pytest.mark.parametrize("start_version, expected_steps", [(version, [step for step in (63, 64, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92) if step > version]) for version in (62, 63, 64, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91)])
 def test_latest_upgrade_runs_only_pending_migrations_and_preserves_vault_entries(monkeypatch, tmp_path, start_version, expected_steps):
     path = tmp_path / f"v{start_version}-to-latest.db"
     with monkeypatch.context() as old:
@@ -743,7 +749,7 @@ def test_latest_upgrade_runs_only_pending_migrations_and_preserves_vault_entries
     db.migrate(conn)
     assert steps == expected_steps
     assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
-    for table, columns in SCHEMA_V90.items():
+    for table, columns in SCHEMA_V92.items():
         if table != "agent_turns_fts":
             assert describe_columns(conn, table) == columns
     entry = conn.execute("SELECT kind,label,hint,origin,members,credential FROM vault_entries WHERE id='legacy-login'").fetchone()
@@ -913,7 +919,7 @@ def describe_columns(conn, table):
 
 
 def test_connect_creates_the_latest_schema(conn):
-    assert schema_names(conn, "table") == set(SCHEMA_V90) | FTS_SHADOWS | SEQUENCE
+    assert schema_names(conn, "table") == set(SCHEMA_V92) | FTS_SHADOWS | SEQUENCE
     assert {
         "history_created",
         "agent_turns_created",
@@ -934,7 +940,7 @@ def test_connect_creates_the_latest_schema(conn):
         "one_standard_conversation",
     } <= schema_names(conn, "index")
     assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
-    for table, columns in SCHEMA_V90.items():
+    for table, columns in SCHEMA_V92.items():
         if table != "agent_turns_fts":
             assert describe_columns(conn, table) == columns
     assert [c["name"] for c in conn.execute("PRAGMA table_info(agent_turns_fts)")] == [
@@ -1871,4 +1877,25 @@ def test_v71_preserves_pairing_states_and_separates_them_from_secret_cards(tmp_p
     history.delete(turn_id)
     assert not conn.execute("SELECT * FROM messaging_pairing_cards").fetchall()
     assert not conn.execute("SELECT * FROM messaging_card_accounts").fetchall()
+    conn.close()
+
+
+def test_shared_packages_migrate_with_access_to_every_skill_the_member_kept(tmp_path, monkeypatch):
+    with monkeypatch.context() as old:
+        old.setattr(db, "LATEST_VERSION", 91)
+        conn = db.connect(tmp_path / "library.db")
+    with conn:
+        for member in (3, 8, 12):
+            conn.execute("INSERT INTO members(id,name,position,created_at_ms) VALUES (?,?,0,1)", (member, str(member)))
+        plugin = conn.execute("INSERT INTO skill_sets(identity,name,version,source,description,folder,metadata) "
+                              "VALUES ('plugin','Desk','1','owner/desk','','desk','{}')").lastrowid
+        for identifier, name, parent in [(1, "notes", plugin), (2, "weekly", plugin), (3, "report", None), (4, "read", None)]:
+            conn.execute("INSERT INTO member_skills(id,member_id,name,description,source,set_id) VALUES (?,-1,?,'','owner',?)",
+                         (identifier, name, parent))
+        conn.executemany("INSERT INTO member_skill_grants VALUES (?,?,0)", [(3, 1), (8, 2), (0, 3)])
+    db.migrate(conn)
+    access = {r[0]: json.loads(r[1]) for r in conn.execute("SELECT key,access FROM skill_packages")}
+    assert access == {f"set:{plugin}": [12], "skill:3": [3, 8, 12], "skill:4": "all"}
+    assert list(map(tuple, conn.execute("SELECT id,package_key FROM member_skills ORDER BY id"))) == [
+        (1, f"set:{plugin}"), (2, f"set:{plugin}"), (3, "skill:3"), (4, "skill:4")]
     conn.close()

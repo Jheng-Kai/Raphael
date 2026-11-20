@@ -920,17 +920,19 @@ npm run look -- send-prompt send-prompt-slow --theme both --width 1120,720,1920x
 ```
 
 
-## Shared installed skills
+## Team skill library
 
-Settings > Connections lists each shared library package once and every member's
-private skills. Member details retain shared skills, including Raphael (id 0).
-Find installed skills reads only skill folders
-under ~/.claude/skills, ~/.codex/skills, ~/.agents/skills and Claude/Codex plugin
-caches. Import to shared library copies SKILL.md, scripts, references and assets;
-no import runs a command, dependency installer, hook or plugin configuration.
-Each package is bounded to 32 MiB/2000 files; linked packages are refused.
-Source paths and plugin attribution remain visible. A changed source offers
-Re-import, retaining skill identity and individual member choices.
+Settings > Team Skill Library manages shared packages. The owner can import a plugin,
+a repository, a selected folder or file, an uploaded archive or Markdown, or pasted
+Markdown. A single skill defaults to every member. A multi-skill import defaults to
+an empty audience. Each member's details summarize assigned, switched-on packages
+under `members.skills.list.library`. Private skills keep their own edit controls.
+
+The owner RPCs are `skills.library.list`, `import`, `update` and `delete` under the
+same prefix. Refresh replaces the source snapshot, preserves retained switches
+and removes obsolete files. Local import and refresh copy files without execution.
+Member prompts, slash expansion, native skills and document/reference reads share
+the same package and skill visibility check. See R-SKILL-15 and R-SKILL-16.
 
 Single-skill discovery opens only bounded SKILL.md documents; plugin-set discovery
 also opens bounded plugin manifests. Package fingerprints use relative
@@ -951,13 +953,11 @@ test_semver_prerelease_and_build_ties_use_version_then_mtime,
 test_source_change_checks_read_no_installed_file_bodies and
 test_discovery_walk_is_bounded in core/tests/members/test_skill_library.py.
 
-The existing member_skills table stores library entries with internal member -1;
-SkillHomes maps them to shared/skills. The existing owner RPCs select that scope
-with shared:true and a real member_id, never a negative public ID. Migration 61
-adds individual member_skill_grants; absence means enabled, subject to the
-library's global switch. A member can toggle shared access; shared documents are
-edited/deleted in the library only. Own skill edits never include inherited
-skills. Name collisions share the existing slash namespace.
+Migration 92 groups existing plugin components and gives each other shared skill
+a package of its own. A previously restricted package includes only member rows
+with no disabled component. Copying a member copies its explicit package access
+and deleting it removes that access. Raphael (0) receives packages open to all.
+The shared owner stays internal (`member_id = -1`).
 
 Raphael gets the same import, command-template, slash discovery and expansion
 paths as any member; the chief role adds no skill privilege. Local skill_read

@@ -19,7 +19,9 @@ const msFolders = [member(1), { action: "open-details" }, click('.mb-det [data-d
 const composer = [click(".cmp-mode"), wait("#app-popover")];
 // The + menu of the member's conversation: the member's folder, apps with their marks and skills are all there to be listed.
 const plusOpen = [member(1), wait('.page-agent .composer .cmp-folder:not([hidden])'), click('.page-agent .composer .cmp-attach'), wait('#app-popover.composer-plus')];
-const plusFixture = { ownerOutputFolder: true, memberWriteFolders: true, appMarks: true, memberSettings: true, skills: [learnedSkill(1), sharedSourceSkill] };
+// Two skills of the member's own, and one the team library gives it, which the + menu leaves to the library (R-SKILL-17).
+const ownSkill = { ...learnedSkill(1), id: 33, name: "meeting-notes", description: "把會議逐字稿整理成決議與待辦" };
+const plusFixture = { ownerOutputFolder: true, memberWriteFolders: true, appMarks: true, memberSettings: true, skills: [learnedSkill(1), ownSkill, sharedSourceSkill] };
 // What the / menu lists after the words: one command and one skill, grouped as at the start.
 const slashAfterWords = { commands: [{ id: 1, member_id: 0, name: "review", description: "整理研究重點", template: "整理研究重點" }],
   skills: [{ id: 71, member_id: 0, name: "outline", slash_name: "outline", description: "整理文章架構", enabled: true, source: "https://github.com/example/notes/blob/main/SKILL.md" }] };
