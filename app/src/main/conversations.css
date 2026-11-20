@@ -45,6 +45,9 @@
 .mb-pill-go { position: absolute; top: 50%; right: var(--sp-3); display: grid; place-items: center; width: 16px; height: 16px; color: var(--text-3); opacity: 0; transform: translateY(-50%); transition: opacity 140ms ease; }
 .mb-pill-go .i { width: 16px; height: 16px; }
 .page-agent .btn.conversation-trigger:is(:hover, :focus-visible) .mb-pill-go { opacity: 1; }
+/* With the panel open the title closes it: no arrow, and the pill keeps its own size on hover. */
+.page-agent[data-det="open"] .btn.conversation-trigger:is(:hover, :focus-visible) .mb-pill-go { opacity: 0; }
+.page-agent[data-det="open"] .btn.conversation-trigger:is(:hover, :focus-visible) .mb-pill::before { inset: 0 calc(16px + var(--sp-2)) 0 0; }
 @media (prefers-reduced-motion: reduce) { .mb-pill-go, .conversation-trigger .mb-pill::before { transition: none; } }
 .conversation-trigger .mb-pill .av { --av: var(--pa-pill-av) !important; flex-shrink: 0; }
 .conversation-trigger .conversation-caption:empty { display: none; }

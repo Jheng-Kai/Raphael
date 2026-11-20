@@ -23,6 +23,8 @@ export const sideButton = button => ({ action: "side-button", button });
 export const navKey = direction => ({ action: "nav-key", direction });
 export const focus = selector => ({ action: "focus", selector });
 export const key = value => ({ action: "key", key: value });
+/** Ctrl+F (⌘F): a conversation's search bar, which has no button in the top row. */
+export const findKey = () => ({ action: "key", key: "f", ctrl: true });
 // What an input method hands the page, in order: `{ compose }` is a composition in progress, `{ commit }` the text it finishes with.
 export const ime = (selector, sequence) => ({ action: "ime", selector, sequence });
 // What the mock's core does while the scene waits (`window.__look[name](...args)`): `lookCall("updatePage", "page-news")`.

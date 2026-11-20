@@ -247,7 +247,7 @@ function roomActions(anchor: HTMLElement, room: Room, saved: () => void = () => 
 /** A room occupies the member conversation pane; creation and management alone use dialogs. */
 export function createRoomPane(_app: AppContext, onClose: () => void, onRender: () => void = () => {}) {
   const el=document.createElement("section");el.className="mb-chat au-room-pane";el.hidden=true;
-  el.innerHTML=`<header class="page-head mb-head" data-window-drag><span class="room-picker"></span><div class="au-room-heading"></div><div class="ra-tools">${iconButton("search",t("agent.search"), ' data-room-search')}${iconButton("more",t("members.more",{p0:t("rooms.title")}), ' data-room-menu')}</div></header><div class="ra-find" hidden></div><div class="ra-stage"><div class="ra-scroll"><div class="ra-col"><div class="ra-older"></div><ol class="thread au-room-thread"></ol></div></div><div class="ra-dock"></div></div>`;
+  el.innerHTML=`<header class="page-head mb-head" data-window-drag><span class="room-picker"></span><div class="au-room-heading"></div><div class="ra-tools">${iconButton("more",t("members.more",{p0:t("rooms.title")}), ' data-room-menu')}</div></header><div class="ra-find" hidden></div><div class="ra-stage"><div class="ra-scroll"><div class="ra-col"><div class="ra-older"></div><ol class="thread au-room-thread"></ol></div></div><div class="ra-dock"></div></div>`;
   const thread=el.querySelector<HTMLElement>(".thread")!,scroll=el.querySelector<HTMLElement>(".ra-scroll")!,older=el.querySelector<HTMLElement>(".ra-older")!;
   keepReadingPlace(scroll, ".thread > *");
   let room:Room|undefined,list:MembersList={members:[],groups:[]},messages:RoomMessage[]=[],generation=0,opened=false,canOlder=false,loadingOlder=false;
@@ -333,7 +333,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   const measureAllMessages = messagePreviewMeasure(thread);
   const messageResize = typeof ResizeObserver === "function" ? new ResizeObserver(measureAllMessages) : null;
   messageResize?.observe(thread);
-  const finder = mountConversationFind({button:el.querySelector('[data-room-search]')!,bar:el.querySelector('.ra-find')!,thread,scroll,
+  const finder = mountConversationFind({bar:el.querySelector('.ra-find')!,thread,scroll,
     records: () => roomWindow.before || roomWindow.after ? messages.map(message => ({ key: `message:${message.id}`, texts: message.member_id === null ? [messagePlainText(message.text)] : plainReplies(replyMessages(message.text)).map(text => messagePlainText(text, true, composioAction(message.turn))) })) : undefined,
     reveal: key => { releaseRichScroll(scroll); if (roomWindow.focus(key)) draw(); }, load:async current=>{
     const id=roomId;if(!id)return;
@@ -612,6 +612,8 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   };listeners.add(listener);onLocaleChange(()=>{if(opened)draw();});
   onAvatarChange(()=>{if(opened && el.isConnected)draw();});
   return {el,close,refresh,
+    /** Ctrl+F opens the room's search bar: no button in its top row any more. */
+    find:()=>finder.open(),
     /** The page open in the room's thread place, for the way back (nav-history.ts), and how a step opens or puts one away. */
     page:()=>pagesHost.shown(),showPage:(id:string,title:string)=>void pagesHost.show(id,title,()=>{}),closePage:()=>pagesHost.close(),
     async open(id:number){

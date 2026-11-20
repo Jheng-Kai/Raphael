@@ -619,13 +619,26 @@ npm run look -- typo-mention completion-filtered completion-mentions plugins-sto
 
 ## Share in the conversation header
 
-Share left the member panel for the conversation header: search at the left, share at the right, symmetric. It
+Share left the member panel for the conversation header: the status light at the left, share at the right, symmetric. It
 shows in every member's conversation once it is read, never in Raphael's (it is the app's own), and opens one
 choice that asks the member, in its own conversation, to write its template (`askInChat(..., "share-template")`).
 The panel's left tool is the settings gear.
 
 ```powershell
 npm run look -- conversation-share chat search --theme both --width 1120,720,1920x1080
+```
+
+## The status light
+
+The left of a member conversation's top row is the status light (status-light.ts, R-HEAD-01): one wordless dot, dim
+while no member works, the text's colour while one works, the warning colour while one waits for the owner. A press
+lists the members at work in the shared menu, the waiting ones first under 等你, and picking one opens its
+conversation. It follows `slime-activity`, told by slime.ts whenever a member's live state changes, and the roster's
+`waiting`. Neither a member's nor a group's top row has a search button; Ctrl+F (⌘F) opens the search bar. The title
+pill draws no dot, and its arrow shows on a hover only while the details panel is closed (R-HEAD-02).
+
+```powershell
+npm run look -- status-light-idle status-light-list status-light-pill-open top-row-find top-row-room-find conversation-share --theme both --width 1120,720,1920x1080
 ```
 
 ## No voice
@@ -705,7 +718,7 @@ persistence/playback, live Slack/provider behavior and design judge remain separ
 
 ## Member panel destinations
 
-R-PANEL-01/02/03/04 set out the member panel. The conversation title opens Details first; its Computer tab shows the computer (the header has no computer button; a dot beside the name says it is working), and new active computer work selects Computer. One member identity line precedes the shared Details / Library / Computer tabs, with arrow-key navigation. Work results and pages navigate through the existing conversation result path; identity/resources remain behind the gear. Routines and conversation creation/search remain in Details. This supersedes the older screen/routines/conversations landing arrangement. See [Member computer](member-computer.md#three-tab-member-panel-and-local-engine-recovery) for the selected matrix, state-layout assertions, external references and deferred native acceptance.
+R-PANEL-01/02/03/04 set out the member panel. The conversation title opens Details first; its Computer tab shows the computer (the header has no computer button and draws no dot; the name's label says it is working), and new active computer work selects Computer. One member identity line precedes the shared Details / Library / Computer tabs, with arrow-key navigation. Work results and pages navigate through the existing conversation result path; identity/resources remain behind the gear. Routines and conversation creation/search remain in Details. This supersedes the older screen/routines/conversations landing arrangement. See [Member computer](member-computer.md#three-tab-member-panel-and-local-engine-recovery) for the selected matrix, state-layout assertions, external references and deferred native acceptance.
 
 ## Calm conversations
 
@@ -2732,8 +2745,8 @@ had until then ("a page made larger"; the judge's earlier notes on that dialog, 
 thread was (`.ra-stage.is-page`, `page-view.ts`, `page-view.css`). The thread stays laid out under it, `visibility: hidden`, so its place is kept; the composer
 stays below. In R-PAGE-08 the page is the whole area beside the sidebar (the details panel folds while it stands and comes back with it): the header's centre
 is the page's own pill (its mark and title; a room keeps its heading) in place of the member's pill, and its tools hold the one Share button on a report and on an HTML page (the member's share waits). The way back is the round arrow at the
-header's top left (`.mb-head-l`, or a room's `.room-picker`): the window edge's soft round 36 px button named 返回, no word, standing where the search stood
-(the search, a room's search keeping its place unseen, and the search bar wait while a page is open). Escape goes back too unless a menu, a dialog, a task's Stop (R-UI-46) or a recording
+header's top left (`.mb-head-l`, or a room's `.room-picker`): the window edge's soft round 36 px button named 返回, no word, standing where the status light stood
+(the status light and the search bar wait while a page is open). Escape goes back too unless a menu, a dialog, a task's Stop (R-UI-46) or a recording
 has it; the composer's draft is never touched. An HTML page has no title row and no frame: the whole area under the header scrolls as one (`.pgv-page`), the page edge to edge (R-PAGE-10: the whole view's width, no margin, frame or width cap; R-PAGE-11: the area runs to the window's foot under the floating composer), its frame as tall as the page says (the helper's `height` messages, up to 20000 px) and at least as tall as the area; there is no dialog, scrim or ×. A report is the same place with
 its own heading, its column and its contents. The same frame is moved there and back (no reload with `moveBefore`; the scene
 `page-inplace-back` counts `load` events); going back its preview is at the top again and where the owner was reading (how far the area was scrolled) is kept for the next opening. A page the member

@@ -1,4 +1,4 @@
-import { scene, click, wait, check, settings, scroll, key, type, member, room } from "./steps.mjs";
+import { scene, click, wait, check, settings, scroll, key, type, member, room, findKey } from "./steps.mjs";
 
 const chooser = [...settings("models"), click('[data-k="quick-model"]'), click('.model-chooser [data-source="cli:codex"]'), click('.model-chooser [data-model="cli:codex:gpt-6.1"]')];
 const conversationRuler = [click('.composer .cmp-model .mp-trigger'), click('.cb-pick'), click('.cb-menu [data-cb-source="cli:codex"]'), click('.cb-menu [data-model="cli:codex:gpt-6.1"]'), wait('.cb-now:not([hidden]) .mc-range'), { action:'slider-stop', selector:'.cb-now .mc-range', level:'medium' }, check('polish-effort-reference')];
@@ -12,7 +12,7 @@ export default [
   ], { polishData: true })),
   ...['chief', 'member', 'room'].map(kind => scene(`polish-search-${kind}`, "Search navigates exact words across unloaded history without losing the conversation", [
     ...(kind === 'member' ? [member(1)] : kind === 'room' ? [room(1)] : []),
-    click(kind === 'room' ? '[data-room-search]' : '[data-act="search"]'),
+    findKey(),
     type(kind === 'room' ? '.au-room-pane .ra-find-input' : '.page-agent .ra-find-input', 'needle'),
     { action: 'polish-search', total: kind === 'room' ? 210 : 615 }, check('polish-search'),
   ], { polishSearch: true })),

@@ -424,14 +424,16 @@ export async function perform(page, step, evidenceDirectory) {
       if (JSON.stringify(before)!==JSON.stringify(after)) throw new Error('search controls moved as the count changed');
       await page.keyboard.press('Escape');
       if (await page.evaluate(() => !!document.querySelector('.ra-find:not([hidden])') || !!document.querySelector('mark[data-find-match]'))) throw new Error('Escape left search highlights');
-      const reopen = await visible(step.total===210 ? '[data-room-search]' : '.page-agent [data-act="search"]'); await reopen.click(); await reopen.dispose();
+      // The bar has no button in the top row: Ctrl+F (⌘F) opens it.
+      const findKey = async () => { const primary = await primaryKey(page); await page.keyboard.down(primary); try { await page.keyboard.press('f'); } finally { await page.keyboard.up(primary); } };
+      await findKey();
       await field.focus(); await page.keyboard.type('needle'); await expectCount(`${step.total}/${step.total}`);
       const anchor = await page.evaluateHandle(() => document.querySelector('mark.is-current').closest('.chat-message'));
       const closeTop = await anchor.evaluate(el=>el.getBoundingClientRect().top);
       await click(`${bar} [data-find="close"]`);
       const closedTop = await anchor.evaluate(el=>el.getBoundingClientRect().top); await anchor.dispose();
       if (Math.abs(closeTop-closedTop)>1 || await page.$('mark[data-find-match]')) throw new Error('closing changed the location or left highlights');
-      await click(step.total===210 ? '[data-room-search]' : '.page-agent [data-act="search"]');
+      await findKey();
       await field.focus(); await page.keyboard.type('needle'); await expectCount(`${step.total}/${step.total}`);
       await field.dispose();
       await page.evaluate(total=>{window.__polishSearch={total,wrap:true,stable:true,noMatch:true,closedInPlace:true};},step.total);
