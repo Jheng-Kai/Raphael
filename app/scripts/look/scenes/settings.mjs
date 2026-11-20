@@ -109,9 +109,9 @@ export default [
   scene("appearance-keyboard", "Theme choices retain visible keyboard focus in every palette", [...settings("appearance"), click('[data-k="appearance"]'), key('Tab'), {...key('Tab'),shift:true}, key('ArrowDown'), check('appearance-settings'), check('appearance-focus')]),
   scene("plugins-installed", "Unified managed, private Google and custom MCP plugins", [...linked, wait('[data-conn="open"][data-id="composio:notion"]')]),
   scene("plugins-detail", "Managed tools grouped by write and read", [...linked, click('[data-conn="open"][data-id="composio:notion"]'), click('[data-conn="tool-list"]'), wait('[data-conn="tool"][data-tool="NOTION_SEARCH"]')]),
-  scene("store-n8n", "n8n is in the store, and 加入 leaves for the conversation with the owner's words, where the member sets it up", [
+  scene("store-n8n", "n8n is in the store, and 連結 hands it to Raphael in the conversation, where he sets it up", [
     ...store, type('#conn-search', 'n8n'), wait('[data-conn="open-store"][data-id="n8n"]'), check("store-n8n"),
-    click('[data-conn="join"][data-id="n8n"]'), wait('.page-agent:not([hidden]) .composer textarea'), check("store-in-chat"),
+    click('[data-conn="join"][data-id="n8n"]'), wait('.page-agent:not([hidden]) .composer'), check("store-in-chat"),
   ]),
   // R-CONNECT-02: the owner's own Google is reachable where the Google row is; 加入 leaves for the conversation.
   scene("store-google", "The owner's own Google is in the store as one row, like n8n", [
@@ -158,33 +158,15 @@ export default [
   scene("plugins-store-needs", "A row stays plain (the mark, the name, 連結) and says nothing of what the app asks for: its page does", [
     ...store, click('[data-conn="store-group"][data-id="productivity"]'), wait('[data-conn="join"][data-id="acme-ledger"]'), check("plugins-store-needs"), check("plugins-store-rows"),
   ]),
-  scene("plugins-store-needs-page", "The page of an app that asks for a key says so beside its 加入, which is never dead", [
-    ...store, click('[data-conn="open-store"][data-id="acme-ledger"]'), wait('.cs-page .cs-needs'), check("plugins-store-needs-page"),
+  scene("plugins-store-needs-page", "The page of an app that asks for a key asks nothing of the owner: its 連結 is live and its info says how it signs in", [
+    ...store, click('[data-conn="open-store"][data-id="acme-ledger"]'), wait('.cs-page [data-conn="join"]'), check("plugins-store-needs-page"),
   ]),
-  scene("plugins-setup-key", "加入 on an app that needs a key asks for exactly that key in a masked field, says where to get it and that Composio keeps it", [
-    ...store, click('[data-conn="join"][data-id="acme-ledger"]'), wait('.cn-setup-dialog [data-setup-field]'), type('.cn-setup-dialog [data-setup-field]', setupKey), check("setup-key"),
+  scene("plugins-setup-key", "連結 on an app that asks for a key hands it to Raphael: his conversation opens and 幫我連接 is sent with the intent connect-app", [
+    ...store, click('[data-conn="join"][data-id="acme-ledger"]'), wait('.page-agent:not([hidden]) .composer'), check("store-in-chat"),
   ]),
-  scene("plugins-setup-noguide", "When the catalog has no guide the form says so and offers the service's own page", [
-    ...store, click('[data-conn="join"][data-id="parcel-desk"]'), wait('.cn-setup-dialog [data-setup-field]'), check("setup-noguide"),
+  scene("plugins-setup-own-app", "An app that needs a developer app of the owner's own is handed to Raphael the same way", [
+    ...store, click('[data-conn="join"][data-id="orbit-ads"]'), wait('.page-agent:not([hidden]) .composer'), check("store-in-chat"),
   ]),
-  scene("plugins-setup-own-app", "An app that needs a developer app of the owner's own is set up in the conversation: 加入 leaves with the owner's words", [
-    ...store, click('[data-conn="join"][data-id="orbit-ads"]'), wait('.page-agent:not([hidden]) .composer textarea'), check("store-in-chat"),
-  ]),
-  scene("plugins-setup-added", "The key goes to the core in one call; the dialog closes and the app is among the connected ones", [
-    ...store, click('[data-conn="join"][data-id="acme-ledger"]'), wait('.cn-setup-dialog [data-setup-field]'), type('.cn-setup-dialog [data-setup-field]', setupKey),
-    click('.cn-setup-dialog [data-dlg="add"]'), waitGone('.cn-setup-dialog'), wait('.cs-card:has([data-conn="open-store"][data-id="acme-ledger"]) .cs-state'), check("setup-added"),
-  ]),
-  scene("plugins-setup-rejected", "A key Composio does not accept says so in the dialog, empties the masked field and keeps the form to try again", [
-    ...store, click('[data-conn="join"][data-id="acme-ledger"]'), wait('.cn-setup-dialog [data-setup-field]'), type('.cn-setup-dialog [data-setup-field]', setupKey),
-    click('.cn-setup-dialog [data-dlg="add"]'), wait('.cn-setup-dialog [data-setup-status] [role="alert"]'), check("setup-rejected"),
-  ], { connectFails: "key_rejected" }),
-  scene("plugins-setup-composio-key", "With no working Composio key the form says that and offers the place to add it", [
-    ...store, click('[data-conn="join"][data-id="acme-ledger"]'), wait('.cn-setup-dialog [data-setup-field]'), type('.cn-setup-dialog [data-setup-field]', setupKey),
-    click('.cn-setup-dialog [data-dlg="add"]'), wait('.cn-setup-dialog [data-dlg="composio"]'), check("setup-composio-key"),
-  ], { connectFails: "missing_key" }),
-  scene("plugins-setup-plan-failed", "When what the app needs cannot be read the dialog says so and offers to try again", [
-    ...store, click('[data-conn="join"][data-id="acme-ledger"]'), wait('.cn-setup-dialog [data-dlg="retry"]'), check("setup-plan-failed"),
-  ], { toolkitPlanFails: true }),
   scene("plugins-connecting", "Built-in sign-in works without Composio", [...store, click('[data-conn="join"][data-id="github"]'), wait('.cs-card .sub.wait'), check("plugins-builtin-join"), check("plugins-store-rows"), check("composio-foot")], { composioConfigured: false, pluginsConnecting: true }),
   scene("connections-hover", "MCP server hover", [...linked, hover('[data-k="cs-open:notes"]')]),
   scene("server-menu", "MCP server detail actions", [...serverDetail, click('[data-conn="server-menu"][data-id="notes"]')]),

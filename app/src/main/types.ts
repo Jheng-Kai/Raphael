@@ -576,6 +576,8 @@ export interface SecretCard {
   key?: boolean;
   /** What that key is for, in a few words the member wrote. */
   purpose?: string;
+  /** The Composio API key Raphael asked for in the conversation (`request_secret` with `connection: "composio"`). */
+  composio?: boolean;
   id: string;
   /** The connection's name. */
   name: string;
@@ -1266,7 +1268,7 @@ export type CalendarEventFocus = `calendar:${CalendarDate}:${string}`;
 export type CalendarCreate = `calendar-new:${CalendarDate}`;
 /** Calendar on the week of that day, its usual view. */
 export type CalendarWeek = `calendar-week:${CalendarDate}`;
-export type PageArgument = "computer" | SettingsPane | AgentDraft | CalendarDate | CalendarEventFocus | CalendarCreate | CalendarWeek | `repair:${string}:${string}` | `member-settings:${number}`;
+export type PageArgument = "computer" | "raphael" | SettingsPane | AgentDraft | CalendarDate | CalendarEventFocus | CalendarCreate | CalendarWeek | `repair:${string}:${string}` | `member-settings:${number}`;
 
 /** One of the five pages of the main window. */
 export interface Page {

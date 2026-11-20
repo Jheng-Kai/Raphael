@@ -401,7 +401,7 @@ SCHEMA_V27 = {
         "stop_requested INTEGER NOT NULL DEFAULT 0", "wrapup_sent INTEGER NOT NULL DEFAULT 0", "reason TEXT NOT NULL DEFAULT ''",
     ],
 }
-LATEST = 90
+LATEST = 91
 
 
 def test_v59_existing_tasks_default_to_no_artifact_and_keep_their_reports(monkeypatch, tmp_path):
@@ -721,7 +721,7 @@ SCHEMA_V88 = SCHEMA_V87  # the members' folders moved within settings; no column
 SCHEMA_V89 = {**SCHEMA_V88, "member_template_cards": [*SCHEMA_V88["member_template_cards"], "link TEXT", "link_token TEXT"]}
 SCHEMA_V90 = {**SCHEMA_V89, "page_state": ["page_id TEXT PK", "state TEXT NOT NULL", "updated_at_ms INTEGER NOT NULL"]}  # what the owner left on a page
 
-@pytest.mark.parametrize("start_version, expected_steps", [(version, [step for step in (63, 64, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90) if step > version]) for version in (62, 63, 64, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89)])
+@pytest.mark.parametrize("start_version, expected_steps", [(version, [step for step in (63, 64, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91) if step > version]) for version in (62, 63, 64, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90)])
 def test_latest_upgrade_runs_only_pending_migrations_and_preserves_vault_entries(monkeypatch, tmp_path, start_version, expected_steps):
     path = tmp_path / f"v{start_version}-to-latest.db"
     with monkeypatch.context() as old:
@@ -1744,6 +1744,32 @@ def test_v24_assigns_each_legacy_member_a_stable_default_conversation(tmp_path, 
     assert Conversations(reopened).main(0) == main
     assert len(Conversations(reopened).list(7)) == 1
     reopened.close()
+
+
+def test_composio_cards_upgrade_without_losing_existing_cards_or_the_turn_delete_trigger(tmp_path, monkeypatch):
+    from raphael_core.connectors.secret_cards import SecretCardStore
+    path = tmp_path / "v90.db"
+    with monkeypatch.context() as old:
+        old.setattr(db, "LATEST_VERSION", 90)
+        conn = db.connect(path)
+    with conn:
+        turn = conn.execute(
+            "INSERT INTO agent_turns (created_at_ms,session_id,question,route,prefix,text,status,source)"
+            " VALUES (1,'test','Test','answer','','','running','app')"
+        ).lastrowid
+    original = SecretCardStore(conn).open(turn_id=turn, member_id=0, conversation_id=None, server_id="EXAMPLE_KEY",
+        kind="key", secret="key", name="Example", language="en", done=[("tool", "digest")])
+    conn.close()
+    conn = db.connect(path)
+    cards = SecretCardStore(conn)
+    assert cards.get(original.id) == original
+    card = cards.open(turn_id=turn, member_id=0, conversation_id=None, server_id="composio",
+        kind="composio", secret="API key", name="Composio", language="en")
+    assert card.view()["composio"] is True
+    with conn:
+        conn.execute("DELETE FROM agent_turns WHERE id=?", (turn,))
+    assert cards.for_turns([turn]) == {}
+    conn.close()
 
 
 def test_v52_login_cards_preserve_pending_cards_and_the_turn_delete_trigger(tmp_path):

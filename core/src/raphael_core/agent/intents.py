@@ -3,10 +3,19 @@
 from ..protocol import invalid_params
 
 INTENTS = ("setup-telegram", "setup-slack", "setup-discord", "share-template", "settings")
+_CONNECT_APP = "connect-app:"
+
+
+def app_slug(intent):
+    if not isinstance(intent, str) or not intent.startswith(_CONNECT_APP):
+        return None
+    from ..connectors.service import _SLUG
+    slug = intent.removeprefix(_CONNECT_APP)
+    return slug if _SLUG.fullmatch(slug) else None
 
 
 def checked(value, member_id):
-    if value is not None and (not isinstance(value, str) or value not in INTENTS):
+    if value is not None and (not isinstance(value, str) or (value not in INTENTS and app_slug(value) is None)):
         raise invalid_params("intent must name a supported panel action")
     if value == "share-template" and member_id == 0:
         raise invalid_params("Raphael cannot share a member template")
@@ -16,6 +25,11 @@ def checked(value, member_id):
 def instruction(intent):
     if intent is None:
         return ""
+    if slug := app_slug(intent):
+        return (f'\n\n<panel_intent_step>Call connect_app with app "{slug}" now. Use its setup guide and links to '
+                "explain what the card asks for and where to get it, step by step in plain words in the owner's language. "
+                'Never ask for secret values in chat. If the Composio key is missing, call request_secret with connection: '
+                '"composio" first, then call connect_app again after the owner saves it.</panel_intent_step>')
     if intent == "settings":
         return ("\n\n<panel_intent_step>The owner pressed Settings on your panel. In one short message in the owner's language, "
                 "ask what to change and name what you can change for yourself here: your skills (import from a "

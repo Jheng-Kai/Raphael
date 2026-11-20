@@ -13,7 +13,8 @@ import { t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
 import { toaster } from "./ui";
 
-const WORDS: Record<api.AskIntent, MessageKey> = {
+type FixedIntent = Exclude<api.AskIntent, `connect-app:${string}`>;
+const WORDS: Record<FixedIntent, MessageKey> = {
   "setup-telegram": "chat.ask.setupTelegram",
   "setup-slack": "chat.ask.setupSlack",
   "setup-discord": "chat.ask.setupDiscord",
@@ -38,8 +39,11 @@ function clear(key: string): void {
   changed();
 }
 
-/** The owner's words for `intent`, in the window's language. */
-export const askWords = (intent: api.AskIntent): string => (t as unknown as (key: MessageKey) => string)(WORDS[intent]);
+/** The owner's words for `intent`, in the window's language: an app handed to Raphael is named (`name`). */
+export function askWords(intent: api.AskIntent, name = ""): string {
+  if (intent.startsWith("connect-app:")) return intent === "connect-app:google" ? t("store.googleSetUp") : t("store.setUpInChat", { p0: name });
+  return (t as unknown as (key: MessageKey) => string)(WORDS[intent as FixedIntent]);
+}
 
 /** Whether `memberId` is still working on a press of `intent`. */
 export const askPending = (memberId: number, intent: api.AskIntent): boolean => pending.has(keyOf(memberId, intent));
@@ -57,13 +61,13 @@ export function settleAsks(memberId: number, state: string): void {
 }
 
 /** Sends the words and the intent to `memberId`'s conversation, once; a refusal (a turn already running) is told. */
-export function askInChat(memberId: number, intent: api.AskIntent): void {
+export function askInChat(memberId: number, intent: api.AskIntent, name = ""): void {
   const key = keyOf(memberId, intent);
   if (pending.has(key)) return;
   pending.set(key, setTimeout(() => clear(key), PENDING_MAX_MS));
   changed();
   void Promise.resolve()
-    .then(() => api.agentAskText(askWords(intent), [], memberId, { intent }))
+    .then(() => api.agentAskText(askWords(intent, name), [], memberId, { intent }))
     .catch((error) => { clear(key); toaster.info(describeError(error)); });
 }
 

@@ -25,6 +25,8 @@ import "../safety-rules.css";
 import { createRules } from "../safety-rules";
 import { createVault } from "../vault";
 import { createConnections } from "../connections";
+import { askInChat } from "../chat-ask";
+import { RAPHAEL_ID } from "../members";
 import { DICTATION_MODES, isDictationMode } from "../dictation";
 import { describeError, parseLimit } from "../format";
 import {
@@ -240,6 +242,7 @@ export function createSettings(app: AppContext): SettingsPage {
     visible: () => visible && pane === "connections",
     redraw: () => render(),
     tryPrompt: (text) => app.go("agent", `draft:${text}`),
+    askConnect: (slug, name) => { app.go("agent", "raphael"); askInChat(RAPHAEL_ID, `connect-app:${slug}`, name); },
   });
   app.onEvent((event) => connections.followEvent(event));
   const rules = createRules({ visible: () => visible && pane === "safety", redraw: () => render(), undo: app.undo });

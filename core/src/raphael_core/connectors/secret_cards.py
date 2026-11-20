@@ -14,7 +14,7 @@ gave a connection. Its state moves only along `MOVES`:
     pending, failed or saved ── Stop ──> cancelled;  pending, failed or saved ── CARD_WAIT_MS ──> expired
 
 `integrations.card_save {id, value}` is the one way a value leaves the window: straight to the
-connection's secret in the vault (`IntegrationsService.fill_secret`), and nowhere else. The value is
+connection's secure save path, including `ConnectorsService.set_key` for Composio. The value is
 never put in a row, a notification, a reply, an exception or a log, and the model learns only that
 the key is saved. "Saved" and "resumed" are different things: when every card of the turn is saved,
 that turn's task resumes once (`resume`, which the agent supplies) with a conditional update, so a
@@ -39,6 +39,8 @@ from ..integrations.service import NoSuchSecret
 from ..integrations.vault import SecretTooLong
 from ..protocol import invalid_params
 from .cards import CARD_WAIT_MS
+from .composio import KEY as COMPOSIO_KEY
+from .http import ConnectorFailure
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +87,7 @@ class SecretCard:
         return {"id": self.id, "name": self.name, "secret": self.secret, "state": self.state,
                 "error": self.error or None, "expires_at_ms": self.expires_at_ms, "resumed": self.resumed,
                 **({"login": True} if self.kind == "login" else {}),
+                **({"composio": True} if self.kind == "composio" else {}),
                 **self.messaging_view()}
 
 
@@ -235,6 +238,16 @@ class SecretCards:
 
     # --- what the agent asks ----------------------------------------------------------------------
 
+    def show_composio(self, *, turn_id, member_id, conversation_id, language, app=None, done=()):
+        connectors = self._integrations.managed
+        if connectors is None:
+            raise LookupError("connection")
+        if connectors.vault.filled(COMPOSIO_KEY):
+            return []
+        return [self.store.open(turn_id=turn_id, member_id=member_id, conversation_id=conversation_id,
+            server_id=f"composio:{app}" if app else "composio", kind="composio", secret="API key", name="Composio",
+            language=language, done=done)]
+
     def show_messaging(self, *, turn_id, member_id, conversation_id, platform, language, done=()):
         from ..messaging.cards import LINKS, NAMES
         if not isinstance(platform, str) or platform not in LINKS:
@@ -332,7 +345,7 @@ class SecretCards:
             return await self._save_locked(params)
 
     async def _save_locked(self, params: dict) -> dict:
-        """Serialize saves, and recheck asynchronous messaging validation before writing the vault."""
+        """Serialize saves and keep async validation from writing after a card stops waiting."""
         card = self._card(params)
         value = params.get("value")
         if not isinstance(value, str):
@@ -340,6 +353,12 @@ class SecretCards:
         # A program key the owner marked as no secret (a user name, an address): short, and shown where it appears (#281).
         if card.state not in ("pending", "failed"):
             return {"card": card.view(), "saved": False}
+
+        def active():
+            current = self.store.get(card.id)
+            return current is not None and current.state in ("pending", "failed") and self._conn.execute(
+                "SELECT 1 FROM agent_turns WHERE id=?", (card.turn_id,)).fetchone() is not None
+
         error = ""
         value = value.strip()
         if not value or _CONTROL.search(value):
@@ -349,15 +368,18 @@ class SecretCards:
                 if card.kind == "messaging":
                     if self.messaging is None:
                         raise ValueError("messaging unavailable")
-                    def active():
-                        current = self.store.get(card.id)
-                        return current is not None and current.state in ("pending", "failed") and self._conn.execute("SELECT 1 FROM agent_turns WHERE id=?", (card.turn_id,)).fetchone() is not None
                     kind = self.messaging._member_type(card.member_id, card.server_id)
                     result = await self.messaging._connect(kind, {"token": value}, guard=active, card_id=card.id)
                     if not result["ok"]:
                         if result["reason"] == "cancelled":
                             return {"card": (self.store.get(card.id) or card).view(), "saved": False}
                         error = "offline" if result["reason"] == "network" else "invalid"
+                elif card.kind == "composio":
+                    connectors = self._integrations.managed
+                    if connectors is None:
+                        raise NoSuchSecret()
+                    if not connectors.vault.filled(COMPOSIO_KEY):
+                        await connectors.set_key({"key": value}, card_active=active)
                 elif card.kind == "login" and self.logins is not None:
                     self.logins.save(card.server_id, value, member=card.member_id, site=card.name)
                     self.logins.load(card.member_id, card.name, card.server_id)
@@ -367,6 +389,11 @@ class SecretCards:
                     self.logins.put_key(card.member_id, card.server_id, card.name, value)
                 else:
                     self._integrations.fill_secret(card.server_id, card.kind, card.secret, value)
+            except ConnectorFailure as failure:
+                if failure.kind == "cancelled" or not active():
+                    return {"card": (self.store.get(card.id) or card).view(), "saved": False}
+                error = {"auth": "key_refused", "network": "offline", "timeout": "offline",
+                         "openrouter_key": "invalid", "consumer_key": "invalid"}.get(failure.kind, "invalid")
             except SecretTooLong:
                 error = "too_long"
             except NoSuchSecret:

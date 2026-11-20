@@ -325,13 +325,15 @@ async def test_a_card_whose_key_was_refused_says_so(tmp_path, conn):
     assert "did not accept the key" in rig.failures[-1].reason and KEY not in rig.failures[-1].reason
 
 
-async def test_with_no_composio_key_the_card_says_to_add_it_and_not_that_it_is_not_configured(tmp_path, conn):
+async def test_a_connection_card_missing_the_composio_key_tells_the_member_to_request_it_in_chat(tmp_path, conn):
     rig = Rig(tmp_path, conn, with_key=False)
     app = await rig.cards.resolve("gmail")
     card = rig.cards.show(turn_id=rig.turn, member_id=0, conversation_id=None, app=app, language="zh-TW")
     _, card = await rig.press(card)
     assert (card.state, card.error) == ("failed", "needs_composio_key")
-    assert "Composio's API key is missing" in rig.failures[-1].reason and "Connect apps (sidebar)" in rig.failures[-1].reason
+    assert 'Call request_secret with connection: "composio"' in rig.failures[-1].reason
+    assert "call connect_app again" in rig.failures[-1].reason and "Connect apps (sidebar)" not in rig.failures[-1].reason
+    assert card.view()["fix"] is None
 
 
 async def test_the_member_is_told_what_each_app_needs_before_the_card(tmp_path, conn):
