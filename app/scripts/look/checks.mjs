@@ -493,7 +493,8 @@ export function checkRendered(name, context = {}) {
     const accessOf = key => rowOf(key)?.querySelector('.skl-access span')?.textContent.trim();
     if (name !== 'member-skills-library') {
       const pane = document.querySelector('.modal-scrim .skl');
-      require(visible(pane) && pane.querySelector('.skl-head [data-skl="import"]'), 'the library is a tab of Settings with its 匯入');
+      require(visible(pane) && pane.querySelectorAll('[data-skl="import-go"]').length === 1 && pane.firstElementChild?.matches('.skl-import'), 'the importer is the first card of the tab, with one 匯入');
+      require(!pane.querySelector('.skl-head, .skl-drop-hint') && !pane.previousElementSibling?.matches?.('p'), 'nothing is written between the tab name and its first card');
       const box = pane.getBoundingClientRect();
       for (const row of pane.querySelectorAll('.skl-pack')) {
         const r = row.getBoundingClientRect();
@@ -524,13 +525,13 @@ export function checkRendered(name, context = {}) {
     }
     if (name === 'skill-library-import') {
       const panel = document.querySelector('.skl-import');
-      require(visible(panel) && visible(panel.querySelector('#skl-source')) && visible(panel.querySelector('#skl-text')), 'a link field and the pasted text');
+      require(visible(panel) && !panel.querySelector('#skl-source') && visible(panel.querySelector('#skl-text')), 'the pasted text stands in the link\'s place');
       require(['pick-file', 'pick-folder', 'paste'].every(act => visible(panel.querySelector(`[data-skl="${act}"]`))), 'a file, a folder, or pasted text');
       require(panel.querySelector('#skl-file').accept === '.zip,.tar.gz,.tgz,.md', 'the file picker takes archives and Markdown');
       require(panel.getBoundingClientRect().right <= document.querySelector('.modal-scrim .skl').getBoundingClientRect().right + 1, 'the importer fits the tab');
     }
     if (name === 'skill-library-imported') {
-      require(!document.querySelector('.skl-import'), 'the importer closed');
+      require(visible(document.querySelector('.skl-import #skl-source')) && !document.querySelector('#skl-text'), 'the card is back to the link');
       require(rowOf('pack:13')?.querySelector('[data-skl="open"]').getAttribute('aria-expanded') === 'true' && accessOf('pack:13') === '整個團隊', 'the new package of one is open, for the whole team');
       require(document.querySelector('.toast')?.textContent.includes('已匯入「旅行行程」'), 'the owner is told it was imported');
       const call = window.__look.calls.find(c => c.method === 'skills.library.import');

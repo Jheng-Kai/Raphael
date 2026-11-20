@@ -77,21 +77,22 @@ test("the importer sends a link, pasted text or a file to the core and opens the
     state.packages = [...state.packages, made];
     return { package: { ...made, source: String(params.source ?? "") } };
   });
-  press(root, '[data-skl="import"]');
+  // The importer is the tab's first card, with one 匯入.
+  expect(root.querySelectorAll('[data-skl="import-go"]')).toHaveLength(1);
   root.querySelector<HTMLInputElement>("#skl-source")!.value = "owner/slides";
-  press(root, '[data-skl="import-link"]');
+  press(root, '[data-skl="import-go"]');
   await settle(); await settle();
   expect(api.core).toHaveBeenCalledWith("skills.library.import", { source: "owner/slides" });
-  expect(root.querySelector(".skl-import")).toBeNull();
+  expect(root.querySelector<HTMLInputElement>("#skl-source")!.value).toBe("");
   expect(root.querySelector('[data-skl="open"][data-key="pack:9"]')?.getAttribute("aria-expanded")).toBe("true");
   expect(info).toHaveBeenCalledWith("已匯入「簡報工具」");
-  press(root, '[data-skl="import"]');
+  // Pasted text takes the link's place, and the same 匯入 sends it.
   press(root, '[data-skl="paste"]');
+  expect(root.querySelector("#skl-source")).toBeNull();
   root.querySelector<HTMLTextAreaElement>("#skl-text")!.value = "---\nname: travel\n---\n";
-  press(root, '[data-skl="import-text"]');
+  press(root, '[data-skl="import-go"]');
   await settle();
   expect(api.core).toHaveBeenCalledWith("skills.library.import", { text: "---\nname: travel\n---\n" });
-  press(root, '[data-skl="import"]');
   const input = root.querySelector<HTMLInputElement>("#skl-file")!;
   expect(input.accept).toBe(".zip,.tar.gz,.tgz,.md");
   Object.defineProperty(input, "files", { configurable: true, value: [new File(["# hi"], "skill.md")] });
@@ -100,7 +101,6 @@ test("the importer sends a link, pasted text or a file to the core and opens the
   expect(api.core).toHaveBeenCalledWith("skills.library.import", { file: { name: "skill.md", data: btoa("# hi") } });
   // A folder comes from the system's own dialog, as a local path.
   api.pickOutputFolder.mockResolvedValue("D:\\skills\\travel");
-  press(root, '[data-skl="import"]');
   press(root, '[data-skl="pick-folder"]');
   await settle(); await settle();
   expect(api.core).toHaveBeenCalledWith("skills.library.import", { source: "local:D:\\skills\\travel" });
@@ -113,9 +113,8 @@ test("a cause the core names leads its message and is said in words", async () =
   expect(failureText(new Error("[-32602] Invalid params: taken: a skill named travel already exists"))).toBe("技能庫已經有「travel」了。");
   expect(failureText(new Error("the core is not running"))).toBe("沒有成功，請再試一次。");
   const { root } = await setup(method => { if (method === "skills.library.import") throw new Error("[-32602] Invalid params: not_found: no SKILL.md found"); return {}; });
-  press(root, '[data-skl="import"]');
   root.querySelector<HTMLInputElement>("#skl-source")!.value = "nothing/here";
-  press(root, '[data-skl="import-link"]');
+  press(root, '[data-skl="import-go"]');
   await settle(); await settle();
   expect(root.querySelector(".skl-error")?.textContent).toBe("裡面找不到 SKILL.md。");
   expect(root.querySelector(".skl-import")).not.toBeNull();

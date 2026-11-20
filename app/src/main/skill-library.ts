@@ -2,8 +2,9 @@
 // repository, an archive, a folder) are one package; a skill imported alone is a package of one. Each package is for the
 // whole team or for the characters chosen, as a private key is (vault.ts); a large one reaches nobody until the owner
 // chooses. Its row opens its skills, each with its own switch; its ⋯ updates it from its source or deletes it.
-// 匯入 takes a skills.sh or GitHub link, owner/repo, a .zip, .tar.gz or .md file (picked or dropped), a folder picked
-// in the system's dialog, or pasted SKILL.md text (#249). The core does the work: skills.library.* (members/service.py).
+// The importer is the tab's first card (a tab is its name, then its sections: R-UI-115): a skills.sh or GitHub link or
+// owner/repo, or pasted SKILL.md text in its place, a .zip, .tar.gz or .md file picked or dropped on the card, or a folder
+// picked in the system's dialog, and one 匯入 (#249). The core does the work: skills.library.* (members/service.py).
 
 import { core, pickOutputFolder } from "./api";
 import { t } from "./i18n";
@@ -21,10 +22,10 @@ export interface LibraryPackage {
 export interface LibraryMember { id: number; name: string }
 export interface SkillLibraryView {
   packages: LibraryPackage[]; members: LibraryMember[]; loaded: boolean; failed: boolean;
-  open: Set<string>; importing: boolean; pasting: boolean; busy: boolean; error: string;
+  open: Set<string>; pasting: boolean; busy: boolean; error: string;
 }
 export const emptySkillLibraryView = (): SkillLibraryView => ({
-  packages: [], members: [], loaded: false, failed: false, open: new Set(), importing: false, pasting: false, busy: false, error: "",
+  packages: [], members: [], loaded: false, failed: false, open: new Set(), pasting: false, busy: false, error: "",
 });
 
 /** The causes the core names (the `MemberError` kind that leads its message, members/service.py `_library_error`), in
@@ -68,19 +69,18 @@ function packageHTML(p: LibraryPackage, v: SkillLibraryView): string {
 }
 
 function importHTML(v: SkillLibraryView): string {
-  if (!v.importing) return "";
   const busy = v.busy ? " disabled" : "";
-  return `<div class="skl-import" data-skl-drop>` +
-    `<div class="skl-import-row">${fieldHTML(t("members.profile.source"), "", { id: "skl-source", disabled: v.busy })}` +
-    btn(esc(t("skillLib.import")), "sm pri", ` data-skl="import-link"${busy}`) + `</div>` +
-    `<div class="skl-import-alt">` +
+  // The ways in stand first, so that 貼上文字 stays put when the text takes the link's place under them; one 匯入 sends
+  // whichever is on the card, beside the link or under the text.
+  const go = btn(esc(t("skillLib.import")), "sm pri skl-go", ` data-skl="import-go"${busy}`);
+  const input = v.pasting
+    ? `<textarea id="skl-text" class="mb-fin mb-ta skl-text" rows="8" spellcheck="false" placeholder="${esc(t("skillLib.pasteHint"))}" aria-label="${esc(t("skillLib.pasteHint"))}"${busy}></textarea><div class="skl-go-row">${go}</div>`
+    : `<div class="skl-link">${fieldHTML(t("members.profile.source"), "", { id: "skl-source", disabled: v.busy })}${go}</div>`;
+  return `<div class="skl-import" data-skl-drop><div class="skl-import-alt">` +
     btn(ico("file") + esc(t("skillLib.file")), "sm", ` data-skl="pick-file"${busy}`) +
     btn(ico("folder") + esc(t("skillLib.folder")), "sm", ` data-skl="pick-folder"${busy}`) +
     btn(ico("pencil") + esc(t("skillLib.paste")), "sm", ` data-skl="paste" aria-pressed="${v.pasting}"${busy}`) +
-    `<span class="d skl-drop-hint">${esc(t("skillLib.dropHint"))}</span></div>` +
-    (v.pasting ? `<textarea id="skl-text" class="mb-fin mb-ta skl-text" rows="8" spellcheck="false" placeholder="${esc(t("skillLib.pasteHint"))}" aria-label="${esc(t("skillLib.pasteHint"))}"${busy}></textarea>` +
-      `<div class="skl-import-row skl-text-actions">${btn(esc(t("skillLib.import")), "sm pri", ` data-skl="import-text"${busy}`)}</div>` : "") +
-    `<input type="file" id="skl-file" accept="${ACCEPT}" hidden></div>`;
+    `</div>${input}<input type="file" id="skl-file" accept="${ACCEPT}" hidden></div>`;
 }
 
 export function skillLibraryHTML(v: SkillLibraryView): string {
@@ -89,8 +89,6 @@ export function skillLibraryHTML(v: SkillLibraryView): string {
     : v.packages.length ? `<div class="slist skl-list">${v.packages.map(p => packageHTML(p, v)).join("")}</div>`
     : `<p class="d skl-empty">${esc(t("skillLib.empty"))}</p>`;
   return `<section class="sgroup skl" aria-label="${esc(t("settings.paneSkills"))}">` +
-    `<div class="skl-head"><p class="d">${esc(t("skillLib.about"))}</p>` +
-    btn(ico("plus") + esc(t("skillLib.import")), "sm", ` data-skl="import" aria-expanded="${v.importing}"`) + `</div>` +
     importHTML(v) + (v.error ? `<p class="notice skl-error" role="alert">${esc(v.error)}</p>` : "") + list + `</section>`;
 }
 
@@ -136,7 +134,7 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void) {
     state.busy = true; state.error = ""; redraw();
     try {
       const { package: made } = await core<{ package: LibraryPackage }>("skills.library.import", params);
-      state.importing = false; state.pasting = false;
+      state.pasting = false;
       // It opens, so whom it is for can be chosen at once: a large set reaches nobody until then.
       state.open.add(made.key);
       toaster.info(t("skillLib.imported", { p0: made.name }));
@@ -214,21 +212,16 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void) {
       }
       case "access": chooseAccess(target, key); break;
       case "more": more(target, key); break;
-      case "import":
-        state.importing = !state.importing; state.pasting = false; state.error = ""; redraw();
-        if (state.importing) root.querySelector<HTMLInputElement>("#skl-source")?.focus();
-        break;
-      case "import-link": {
-        const source = root.querySelector<HTMLInputElement>("#skl-source")?.value.trim() ?? "";
-        if (source) void bring({ source });
-        break;
-      }
-      case "paste": state.pasting = !state.pasting; redraw(); root.querySelector<HTMLTextAreaElement>("#skl-text")?.focus(); break;
-      case "import-text": {
+      case "import-go": {
         const text = root.querySelector<HTMLTextAreaElement>("#skl-text")?.value ?? "";
-        if (text.trim()) void bring({ text });
+        const source = root.querySelector<HTMLInputElement>("#skl-source")?.value.trim() ?? "";
+        if (state.pasting ? text.trim() : source) void bring(state.pasting ? { text } : { source });
         break;
       }
+      case "paste":
+        state.pasting = !state.pasting; state.error = ""; redraw();
+        root.querySelector<HTMLElement>(state.pasting ? "#skl-text" : "#skl-source")?.focus();
+        break;
       case "pick-file": root.querySelector<HTMLInputElement>("#skl-file")?.click(); break;
       case "pick-folder":
         void pickOutputFolder().then(path => { if (path) void bring({ source: `local:${path}` }); }).catch(error => toaster.info(failureText(error)));
@@ -239,7 +232,7 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void) {
     const input = event.target as HTMLElement;
     if (input.id === "skl-source" && event.key === "Enter" && !event.isComposing) {
       event.preventDefault();
-      root.querySelector<HTMLElement>('[data-skl="import-link"]')?.click();
+      root.querySelector<HTMLElement>('[data-skl="import-go"]')?.click();
     }
   });
   root.addEventListener("change", event => {
@@ -259,5 +252,5 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void) {
     event.preventDefault();
     void bringFile(file);
   });
-  return { view: (): SkillLibraryView => state, load, reset: (): void => { epoch++; state.importing = false; state.pasting = false; state.error = ""; } };
+  return { view: (): SkillLibraryView => state, load, reset: (): void => { epoch++; state.pasting = false; state.error = ""; } };
 }

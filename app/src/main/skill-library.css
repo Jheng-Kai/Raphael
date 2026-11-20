@@ -1,15 +1,10 @@
 /* 團隊技能庫 (skill-library.ts): one row per package in Settings' list, its skills folded under it. */
-.skl-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); margin-bottom: var(--sp-3); }
-.skl-head > .d { margin: 0; min-width: 0; color: var(--text-2); font-size: var(--fs-sm); }
-.skl-head > .btn { flex: none; }
-
 .skl-import { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); margin-bottom: var(--sp-4); padding: var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--panel); }
-.skl-import-row { display: flex; align-items: center; gap: var(--sp-2); }
-.skl-import-row > .field { flex: 1 1 auto; min-width: 0; }
 .skl-import-alt { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); }
-.skl-drop-hint { margin-left: auto; color: var(--text-3); font-size: var(--fs-sm); }
+.skl-link { display: flex; align-items: center; gap: var(--sp-2); }
+.skl-link > .field { flex: 1 1 auto; min-width: 0; }
+.skl-go-row { display: flex; justify-content: flex-end; }
 .skl-text { width: 100%; min-height: 160px; resize: vertical; font-family: var(--mono); font-size: var(--fs-sm); }
-.skl-text-actions { justify-content: flex-end; }
 .skl-error { margin: 0 0 var(--sp-3); }
 .skl-empty { margin: 0; padding-block: var(--sp-4); color: var(--text-3); font-size: var(--fs-sm); }
 
@@ -34,7 +29,5 @@
 .skl-access-menu { max-height: min(360px, calc(100vh - 16px)); }
 
 @media (max-width: 800px) {
-  .skl-head { flex-wrap: wrap; }
   .skl-access { max-width: 140px; }
-  .skl-drop-hint { margin-left: 0; flex-basis: 100%; }
 }
