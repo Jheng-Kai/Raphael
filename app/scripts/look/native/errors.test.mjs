@@ -16,6 +16,8 @@ describe("native document error capture", () => {
   it("accepts explicit successful history-clearing notices and rejects clearing errors", () => {
     for (const text of ['Cleared the history of “Quick questions”', '已清除「快速提問」的紀錄', '「クイック質問」の履歴を消去しました']) expect(toastError(text)).toBe(false);
     for (const text of ['Could not clear history', '已清除「快速提問」的紀錄失敗', 'Cleared the history of “Quick questions” failed']) expect(toastError(text)).toBe(true);
+    for (const text of ['Connected Claude Code. Empty features now use its recommended models.', '已連上 Claude Code，空著的功能用它的推薦模型填好了', 'Claude Code を接続しました。空いていた機能におすすめのモデルを設定しました。']) expect(toastError(text)).toBe(false);
+    expect(toastError('已連上 Claude Code，但模型無法使用')).toBe(true);
   });
 
   it("accepts Raphael and actual OS microphone names but still rejects stale application labels", () => {

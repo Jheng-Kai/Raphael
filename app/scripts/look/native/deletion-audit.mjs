@@ -84,7 +84,8 @@ export async function deletionAudit(context, helpers) {
 
   const inspect = async (member, conversation, stage) => {
     await select(member); await details(page);
-    await click(page, `[data-conversation-open="${conversation}"]`);
+    // A member with one conversation opens it when it is chosen, and its panel lists no conversations to press.
+    if (await page.$(`[data-conversation-open="${conversation}"]`)) await click(page, `[data-conversation-open="${conversation}"]`);
     // Let the real history IPC and its paint finish; never inject a timeline or model response.
     await pause(800);
     const query = await threadQuery(member, conversation);
@@ -93,11 +94,17 @@ export async function deletionAudit(context, helpers) {
     const dbIds = query.rows.map(row => row.id).sort((a, b) => a - b);
     const apiIds = api.turns.map(row => row.id).sort((a, b) => a - b);
     if (JSON.stringify(dbIds) !== JSON.stringify(apiIds)) throw new Error("Read-only SQL did not match the actual history IPC result");
-    const old = new Set(audit.oldTurnIds);
-    const checkpoint = { stage, member, conversation, query, api, dom, staleQueryIds: query.rows.filter(row => old.has(row.id)).map(row => row.id), staleApiIds: api.turns.filter(row => old.has(row.id)).map(row => row.id) };
+    // A member has one conversation, which is never deleted: after the source member goes, what it said to this member
+    // (its exchange rows and their "與 NativeSource" lines) must be gone, and the member's own talk with the owner stays.
+    const fromSource = row => row.peer_id === source;
+    const checkpoint = { stage, member, conversation, query, api, dom, staleQueryIds: query.rows.filter(fromSource).map(row => row.id), staleApiIds: api.turns.filter(fromSource).map(row => row.id) };
     audit.checkpoints.push(checkpoint);
-    if (stage !== "before-delete" && (query.rows.length || api.turns.length || dom.rows.length || dom.separators.length || dom.exchanges.length)) {
-      fail(`Stale private timeline ${stage}: member=${member}, conversation=${conversation}, DB=${checkpoint.staleQueryIds}, API=${checkpoint.staleApiIds}, rows=${dom.rows.length}, separators=${dom.separators.length}, exchangeLines=${JSON.stringify(dom.exchanges)}`);
+    const staleLines = dom.exchanges.filter(text => text.includes("NativeSource"));
+    if (stage !== "before-delete" && (checkpoint.staleQueryIds.length || checkpoint.staleApiIds.length || staleLines.length)) {
+      fail(`Stale rows of the deleted member ${stage}: member=${member}, conversation=${conversation}, DB=${checkpoint.staleQueryIds}, API=${checkpoint.staleApiIds}, exchangeLines=${JSON.stringify(staleLines)}`);
+    }
+    if (stage !== "before-delete" && !api.turns.some(row => String(row.question ?? "").includes(`NATIVE-AUDIT-PRIVATE member ${member} turn`))) {
+      fail(`The member's own conversation lost its rows ${stage}: member=${member}, conversation=${conversation}`);
     }
     const roomIds = new Set(audit.roomRows.map(row => row.id));
     checkpoint.leakedRoomIds = api.turns.filter(row => roomIds.has(row.id)).map(row => row.id);
@@ -108,24 +115,9 @@ export async function deletionAudit(context, helpers) {
   };
 
   for (const member of [0, target]) {
-    const conversations = (await snapshot()).conversations.filter(row => row.member_id === member && row.kind !== "quick");
-    const original = conversations.find(row => row.is_default);
+    const original = (await snapshot()).conversations.find(row => row.member_id === member && row.kind !== "quick" && row.is_default);
     if (!original) throw new Error(`Missing recipient default conversation: ${member}`);
     await inspect(member, original.id, "before-delete");
-    for (const conversation of conversations) {
-      await details(page); await click(page, `[data-conversation-more="${conversation.id}"]`);
-      await click(page, '#app-popover [data-pick="delete"]');
-      await click(page, '.mb-confirm [data-dlg="delete"]');
-      await until(async () => !(await snapshot()).conversations.some(row => row.id === conversation.id), "conversation deletion");
-      const db = await snapshot();
-      const kept = remaining(db, conversation.id);
-      audit.deletedConversations.push({ member, id: conversation.id, remaining: kept });
-      if (Object.values(kept).some(rows => rows.length)) fail(`Deleted conversation ${conversation.id} retained associated rows`);
-      await pause(400);
-    }
-    const replacement = (await snapshot()).conversations.find(row => row.member_id === member && row.is_default);
-    if (!replacement || audit.beforeDelete.conversations.some(row => row.id === replacement.id)) throw new Error("Delete did not create a fresh default conversation");
-    await inspect(member, replacement.id, "replacement-default");
   }
 
   await click(page, `.mb-col [data-member-more="${source}"]`);
@@ -139,9 +131,6 @@ export async function deletionAudit(context, helpers) {
   for (const member of [0, target]) {
     const main = (await snapshot()).conversations.find(row => row.member_id === member && row.is_default);
     await inspect(member, main.id, "deleted-source-default");
-    await select(member);
-    const named = await newConversation(context, member);
-    await inspect(member, named, "new-named-control");
   }
   audit.after = await snapshot();
   const conversations = new Set(audit.after.conversations.map(row => row.id));

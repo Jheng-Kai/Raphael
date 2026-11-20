@@ -191,7 +191,7 @@ export async function perform(page, step, evidenceDirectory) {
     }, selector);
     if (row) {
       await page.mouse.click(row.x, row.y, { button: "right" });
-      await page.evaluate(at => { window.__look.pointer = at; }, row);
+      await page.evaluate(at => { if (window.__look) window.__look.pointer = at; }, row);
       return;
     }
     // A message's work opens from its ⋯ menu; only react, reply and ⋯ beside the bubble.
@@ -1161,7 +1161,7 @@ export async function perform(page, step, evidenceDirectory) {
         const box = await element.boundingBox();
         const point = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
         await page.mouse.click(point.x, point.y, { button: "right" });
-        await page.evaluate(at => { window.__look.pointer = at; }, point);
+        await page.evaluate(at => { if (window.__look) window.__look.pointer = at; }, point);
       } finally { await element.dispose(); }
       break;
     }
