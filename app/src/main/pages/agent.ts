@@ -272,8 +272,8 @@ export function createAgent(app: AppContext, places?: {
   el.innerHTML =
     `<section class="mb-chat">` +
     `<div class="page-head mb-head" data-window-drag><h1 class="mb-h1">${esc(t("agent.title"))}</h1><span class="mb-head-l">` +
-    // The status light at the left and share at the right, symmetric (status-light.ts).
-    `<button type="button" class="btn ra-tool status-light" data-act="status" aria-haspopup="menu" aria-expanded="false" data-level="idle"><span class="status-dot" aria-hidden="true"></span></button>` +
+    // The status list at the left and share at the right, symmetric (status-light.ts): an icon; the dots are in its list.
+    iconButton("steps", t("status.idle"), ' data-act="status" aria-haspopup="menu" aria-expanded="false" data-level="idle"', "ra-tool status-light") +
     `</span><span class="mb-head-c"></span><div class="ra-tools">${iconButton("share", t("template.export"), ' data-act="share-member" aria-haspopup="menu" aria-expanded="false" hidden', "ra-tool")}</div></div>` +
     `<div class="ra-find" hidden></div>` +
     `<div class="ra-stage">` +

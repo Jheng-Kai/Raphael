@@ -9528,9 +9528,9 @@ export function checkRendered(name, context = {}) {
     require(!document.querySelector('.mb-head [data-act="search"], [data-room-search]'), "no search button is left in a top row");
     const pill = document.querySelector(".conversation-trigger .mb-pill");
     require(getComputedStyle(pill, "::after").content === "none" || getComputedStyle(pill, "::after").content === "normal", "the title pill draws no dot of its own");
-    const dot = light.querySelector(".status-dot"), colour = getComputedStyle(dot).backgroundColor;
+    require(light.querySelector("svg") && !light.querySelector(".status-dot"), "the header shows the list's icon, no dot");
     if (name === "status-light-idle") {
-      require(light.dataset.level === "idle" && light.getAttribute("aria-label") && !light.textContent.trim(), "with no member at work the light is idle, named, and wordless");
+      require(["idle", "done"].includes(light.dataset.level) && light.getAttribute("aria-label") && !light.textContent.trim(), `with nothing waiting or working the list says so (or who finished), named and wordless (${light.dataset.level})`);
     }
     if (name === "status-light-list") {
       require(light.dataset.level === "needs", `a member waiting for the owner turns the light to its warning colour (${light.dataset.level})`);
@@ -9538,7 +9538,8 @@ export function checkRendered(name, context = {}) {
       require(rows.length === 2 && rows[0].dataset.value === "2" && rows[1].dataset.value === "1", `the waiting member comes first, then the working one (${rows.map(row => row.dataset.value)})`);
       require(rows.every(row => row.querySelector(".mlead .av, .mlead svg")), "each row has the member's face");
       require(!document.querySelector(".menu .ck svg"), "nothing in the list is checked");
-      require(colour !== getComputedStyle(document.querySelector(".mb-chat")).color, "the warning dot is not the text's colour");
+      const dots = rows.map(row => row.querySelector(".status-row-dot"));
+      require(dots[0]?.dataset.kind === "needs" && dots[1]?.dataset.kind === "busy" && getComputedStyle(dots[0]).backgroundColor !== getComputedStyle(dots[1]).backgroundColor, "each row has its own coloured dot, waiting unlike working");
     }
     if (name === "status-light-pill-open") {
       require(document.querySelector(".page-agent")?.dataset.det === "open", "the details panel is open");
