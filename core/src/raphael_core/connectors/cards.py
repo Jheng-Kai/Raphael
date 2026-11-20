@@ -657,11 +657,12 @@ class ConnectorCards:
         if kind == "client_rejected":
             return Failure("auth_expired", "Google did not accept the Client ID or Client secret entered on the card. The owner opens Google Cloud > Google Auth "
                                            "Platform > Clients, checks the Desktop client and enters both again on the card. Never ask for them in chat.")
+        # A Google app can also be served by the owner's own Google, which needs no Composio key.
+        own = (" Or the owner can connect their own Google account instead: connect_app with the id google, which walks them through a Google Cloud client."
+               if app.provider == "google" else "")
         if kind == "needs_composio_key":
-            return Failure("auth_expired", COMPOSIO_KEY_STEP, missing=_card_missing(kind))
+            return Failure("auth_expired", COMPOSIO_KEY_STEP + own, missing=_card_missing(kind))
         if kind == "key_refused":
-            own = (" Or the owner can connect their own Google account instead: connect_app with the id google, which walks them through a Google Cloud client."
-                   if app.provider == "google" else "")
             return Failure("auth_expired", f"No app can be added yet: Composio refused its API key. The owner checks or replaces it in {WHERE}, "
                                            f"in the Composio key form (made at composio.dev); then {name} can be added from the card or from {WHERE}.{own}")
         if kind == "key_rejected":
