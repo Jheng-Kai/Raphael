@@ -354,7 +354,9 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
   function placeText(live: Live, text: unknown): boolean {
     if (typeof text !== "string" || !text.trim() || text.length > SEND_LIMIT) return false;
     const now = Date.now();
-    if (now - lastSend < SEND_GAP_MS || pressOf(live.frame) === "none" || !cardOf(live)) return false;
+    // Only a page the owner opened places words (R-CARD-11): one still in its card is a preview, and a preview that takes the
+    // focus right after a press elsewhere in the app, or loads again (a theme, a reload), says nothing into the composer.
+    if (!live.expanded || now - lastSend < SEND_GAP_MS || pressOf(live.frame) === "none" || !cardOf(live)) return false;
     // The page stays open and the composer, in sight under it, holds the words (R-CARD-11): the owner alone sends them.
     if (!o.place(live.id, text.trim())) return false;
     lastSend = now;

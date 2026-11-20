@@ -52,6 +52,11 @@ function fromFrame(frame: HTMLIFrameElement, data: unknown): void {
 
 /** The page's own load: only then the card is a control, as in the app. */
 const loaded = (frame: HTMLIFrameElement): void => { frame.dispatchEvent(new Event("load")); };
+/** The owner opens the page in the conversation's place: only there does it take a press and place words (R-CARD-11). */
+const openPage = (thread: HTMLElement, frame: HTMLIFrameElement): void => {
+  loaded(frame);
+  thread.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
+};
 
 const setActivation = (isActive: boolean): void => {
   Object.defineProperty(navigator, "userActivation", { value: { isActive }, configurable: true });
@@ -164,9 +169,24 @@ test("a failed page can be closed without retrying its service", async () => {
   expect(api.pagesOpen).toHaveBeenCalledTimes(1);
 });
 
-test("a sure page gesture only places a draft and acknowledges placed, with a pause between placements", async () => {
-  const { frame, place } = mount();
+test("a page still in its card places nothing, even with the app's activation and the focus", async () => {
+  const { thread, frame, place } = mount();
   await flush();
+  loaded(frame);
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab" }));
+  fromFrame(frame, { raphaelPage: 1, type: "send", text: "Sent by the page alone" });
+  expect(place).not.toHaveBeenCalled();
+  expect(frame.contentWindow!.postMessage).not.toHaveBeenCalledWith(expect.objectContaining({ status: "placed" }), "*");
+  thread.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
+  fromFrame(frame, { raphaelPage: 1, type: "send", text: "Pressed in the page" });
+  expect(place).toHaveBeenCalledExactlyOnceWith("p1", "Pressed in the page");
+});
+
+test("a sure page gesture only places a draft and acknowledges placed, with a pause between placements", async () => {
+  const { thread, frame, place } = mount();
+  await flush();
+  openPage(thread, frame);
+  vi.mocked(frame.contentWindow!.postMessage).mockClear();
   setActivation(false);
   fromFrame(frame, { raphaelPage: 1, type: "send", text: "買兩個" });
   expect(place).not.toHaveBeenCalled();
@@ -191,8 +211,9 @@ test("a press elsewhere in the app is not a press in the page", async () => {
 });
 
 test("an uncertain page gesture can place a draft but cannot authorize an owner message", async () => {
-  const { frame, place } = mount();
+  const { thread, frame, place } = mount();
   await flush();
+  openPage(thread, frame);
   pointerAt(2000, 2000);
   fromFrame(frame, { raphaelPage: 1, type: "send", text: "買兩個" });
   fromFrame(frame, { raphaelPage: 1, type: "send", text: "再買" });
@@ -732,8 +753,9 @@ test("a plugin's page gets the MCP Apps handshake and its tools go through the c
 
 test("MCP page text returns placed only after composer placement, never sent or a false success", async () => {
   vi.mocked(api.pagesOpen).mockResolvedValue({ ...opened, source: "mcp", server: "Shop" });
-  const { frame, place } = mount([{ ...card, source: "mcp", server: "Shop" }]);
+  const { thread, frame, place } = mount([{ ...card, source: "mcp", server: "Shop" }]);
   await flush();
+  openPage(thread, frame);
   const posted = vi.mocked(frame.contentWindow!.postMessage);
   setActivation(false);
   fromFrame(frame, { jsonrpc: "2.0", id: 1, method: "ui/message", params: { content: [{ type: "text", text: "Page text" }] } });

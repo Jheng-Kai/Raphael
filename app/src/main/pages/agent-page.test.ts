@@ -18,6 +18,7 @@ const api = vi.hoisted(() => ({
   openLink: vi.fn(),
   openExternalUrl: vi.fn(),
   pagesOpen: vi.fn(),
+  pagesViewing: vi.fn(async () => ({ viewing: null })),
   core: vi.fn(),
 }));
 vi.mock("../api", () => api);
@@ -99,6 +100,9 @@ test("a sure page gesture appends a draft and sends nothing until the owner subm
   const input = agent.el.querySelector<HTMLTextAreaElement>(".cmp-input")!;
   input.value = "My existing draft"; input.dispatchEvent(new Event("input", { bubbles: true }));
   const frame = agent.el.querySelector<HTMLIFrameElement>(".pg-frame")!;
+  // The owner opens the page first: one still in its card places nothing (R-CARD-11).
+  frame.dispatchEvent(new Event("load"));
+  agent.el.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
   Object.defineProperty(navigator, "userActivation", { value: { isActive: true }, configurable: true });
   Object.defineProperty(frame, "contentWindow", { value: { postMessage: vi.fn() }, configurable: true });
   const focus = vi.spyOn(document, "activeElement", "get").mockReturnValue(frame);
