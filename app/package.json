@@ -12,6 +12,7 @@
     "check:contrast": "node scripts/check-palette.mjs",
     "look": "node scripts/look/index.mjs",
     "native": "node scripts/look/native/index.mjs",
+    "set-version": "node scripts/set-version.mjs",
     "verify": "node scripts/verify.mjs",
     "judge": "node scripts/guardian.mjs"
   },
