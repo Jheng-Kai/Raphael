@@ -622,6 +622,18 @@ export function installMock(fixture, config = {}, target = window) {
     turn.secrets = [{...turn.secrets[0], id: "card-key", name: "OPENROUTER_API_KEY", secret: "OPENROUTER_API_KEY", key: true, purpose: "價格腳本要呼叫模型"}];
     data.turns.push(turn);
   }
+  // The same key asked for by work the member handed to itself: a turn with no words of the owner's, still running.
+  if (variant.keyCardWork) {
+    const asked = structuredClone(data.secretTurns.notion);
+    Object.assign(asked, {id: 134, session_id: "look-key-asked", member_id: 1, conversation_id: 11, question: "用真模型評測新舊兩版提示詞。", text: "我在背景跑評測，需要金鑰時會請你貼上。", steps: [], messages: [], secrets: []});
+    const work = structuredClone(data.secretTurns.notion);
+    Object.assign(work, {id: 135, session_id: "work:look", route: "worker", source: "worker", peer_id: 1, source_turn_id: 134, member_id: 1, conversation_id: 11,
+      question: "", text: "", status: "running", steps: [], messages: [], created_at_ms: asked.created_at_ms + 1000});
+    work.secrets = [{...work.secrets[0], id: "card-key", name: "OPENROUTER_API_KEY", secret: "OPENROUTER_API_KEY", key: true, purpose: "評測要呼叫模型（舊金鑰已失效）"}];
+    // The work waits on the card through its background question (the core's request_secret owner card).
+    work.owner_questions = [{ id: "q-key", task_id: 9, turn_id: 135, member_id: 1, kind: "request_secret", card_id: "card-key", question: "", options: [], free_text: true, state: "asked", result: null }];
+    data.turns.push(asked, work);
+  }
   // The panel's 設定 and share answered in the member's conversation: a bot token card, a pairing
   // request to that bot, and the template the member made of itself.
   if (variant.chatCards) {

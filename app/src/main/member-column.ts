@@ -15,7 +15,7 @@ import { createMessageSearch } from "./message-search";
 import { lightHTML, lightOf } from "./sidebar-light";
 import { type MemberSection, faceHTML, memberMatches, memberSections, memberDisplayList, memberRole, pinReplacements, plainLine, previewOf, primaryIdOf, raphaelOf } from "./members";
 import type { Member, MembersList } from "./types";
-import { closeMenu, esc, ico, iconButton, openPopover } from "./ui";
+import { DISCONNECT_CONFIRM_MS, closeMenu, esc, ico, iconButton, openPopover, placeMenu } from "./ui";
 import { shortcutText } from "./keys";
 
 /** What the column is drawn from. */
@@ -144,7 +144,8 @@ export interface MemberColumn {
   menu(id: number, anchor: HTMLElement): void;
 }
 
-export interface ActionItem { id: string; label: string; icon?: Parameters<typeof ico>[0]; submenu?: boolean }
+/** `ask`: the item destroys something; its first press asks this in its own place and only the second picks it (R-UI-56). */
+export interface ActionItem { id: string; label: string; icon?: Parameters<typeof ico>[0]; submenu?: boolean; ask?: string }
 /** A hairline between groups of row-menu items. */
 export const SEP = "-";
 
@@ -157,7 +158,7 @@ export function openActions(anchor: HTMLElement, items: readonly (ActionItem | t
     (lead?.html ?? "") + items
       .map(
         (item) => item === SEP ? `<div class="menu-sep" role="separator"></div>` :
-          `<button type="button" role="menuitem"${item.icon === "trash" ? ' class="danger"' : ""} tabindex="-1" data-pick="${esc(item.id)}"${item.submenu ? ' aria-haspopup="menu" aria-expanded="false"' : ""}>` +
+          `<button type="button" role="menuitem"${item.icon === "trash" ? ' class="danger"' : ""} tabindex="-1" data-pick="${esc(item.id)}"${item.ask ? ` data-ask="${esc(item.ask)}"` : ""}${item.submenu ? ' aria-haspopup="menu" aria-expanded="false"' : ""}>` +
           `<span class="ck">${item.icon ? ico(item.icon) : ""}</span><span class="mt">${esc(item.label)}</span>${item.submenu ? ico("right") : ""}</button>`,
       )
       .join(""),
@@ -169,6 +170,13 @@ export function openActions(anchor: HTMLElement, items: readonly (ActionItem | t
     const pick = (e.target as Element).closest<HTMLElement>("[data-pick]");
     if (!pick) return;
     const id = pick.dataset.pick ?? "";
+    // A destroying item asks in its own place first; the menu stays open for the second press, and forgets the first after a while.
+    if (pick.dataset.ask && pick.dataset.asking !== "true") {
+      const label = pick.querySelector<HTMLElement>(".mt")!, before = label.textContent ?? "";
+      pick.dataset.asking = "true"; label.textContent = pick.dataset.ask; placeMenu();
+      setTimeout(() => { if (pick.isConnected) { delete pick.dataset.asking; label.textContent = before; placeMenu(); } }, DISCONNECT_CONFIRM_MS);
+      return;
+    }
     if (!pick.hasAttribute("aria-haspopup")) {
       closeMenu();
       anchor.focus({ preventScroll: true });

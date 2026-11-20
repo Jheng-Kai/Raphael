@@ -137,7 +137,7 @@ async function finish(ending: Ending, target: number, extra: { words: string }):
   }
 }
 
-test("Cancel in the key card retracts its own turn and restores the draft", async () => {
+test("the key card's × retracts its own turn and restores the draft", async () => {
   const agent = mount([turn(8, { status: "confirm", question: "Run the script", secrets: [{
     id: "key-8", name: "SAMPLE_API_KEY", secret: "SAMPLE_API_KEY", key: true, state: "pending", error: null, expires_at_ms: 0, resumed: false,
   }] })]);
@@ -146,8 +146,8 @@ test("Cancel in the key card retracts its own turn and restores the draft", asyn
   const card = $('.tn[data-id="8"] .key-card');
   expect(card).not.toBeNull();
   expect(document.querySelector('.tn[data-id="8"] [data-owner-act="cancel"]')).toBeNull();
-  const cancel = card.querySelector<HTMLButtonElement>('.card-actions [data-act="cancel-secret-turn"]')!;
-  expect(cancel.textContent).toBe("取消");
+  const cancel = card.querySelector<HTMLButtonElement>('.card-head > [data-act="cancel-secret-turn"]')!;
+  expect(cancel.getAttribute("aria-label")).toBe("取消");
   cancel.click(); await flush();
   expect(api.agentRetract).toHaveBeenCalledExactlyOnceWith("s8", 3, 8);
   expect(document.querySelector('[data-secret-card="key-8"]')).toBeNull();

@@ -2190,7 +2190,7 @@ grant/target before and after the final observation; revoked reads return no tre
 ## A key for a program in a member's computer, and paste into the computer (R-KEY-01, R-KEY-02, R-KEY-03, R-PASTE-01)
 
 A member that needs the owner's key for a script in its computer calls `request_secret` with `key` (an environment
-variable name) and `purpose`; the secure card (`secret-card.ts`, `keyCardHTML`) is titled 「儲存金鑰」, with the variable in monospace, its purpose below and a quiet waiting dot. It takes the value in one masked field beside Save, with a vault hint and Cancel in the footer
+variable name) and `purpose`; the secure card (`secret-card.ts`, `keyCardHTML`) is titled 「儲存金鑰」, with the quiet waiting dot and its words beside the title, the variable in monospace and its purpose below. It takes the value in one masked field beside Save, with a vault hint; its way out is the × at its top right and nothing of it stands under the card (R-CARD-21): on the owner's own message the × takes the message back, on work the member handed itself it answers that work's waiting question
 (Credential Manager, a `vault_entries` row of kind `key`, never the conversation, a row or a log). The member then
 renews an expired key under the same name with `request_secret` `replace: true` (one entry per name and scope is kept, the newest, R-KEY-04) and may propose deleting its own private key with `remove_key`, which the owner approves on a card. It runs `vm_exec` with `keys: [NAME]`: the core hands the values to that one process's environment (`docker exec -e NAME`,
 the value in the docker process's own environment, never an argument) and replaces them in everything returned,
@@ -2202,11 +2202,11 @@ and removes them; it offers no way to add one. In the live view (`BOOTSTRAP` in 
 Selected matrix, from app/:
 
 ```powershell
-npm run look -- computer-key-card computer-key-saved computer-login-card chat-secret-masked desktop-owner --theme both --width 1120,720,1920x1080
+npm run look -- computer-key-card computer-key-card-work computer-key-saved computer-login-card chat-secret-masked desktop-owner --theme both --width 1120,720,1920x1080
 ```
 
 Compare the key card with the login card and chat-secret-masked at the same theme/width: the same shell, one masked
-field, and no value in the markup, text or recorded calls. The variable key uses a horizontal field and Save row and a quiet status dot. Cancel withdraws its own request and restores the original message to the composer. Core: `tests/computer/test_computer_keys.py`,
+field, and no value in the markup, text or recorded calls. The variable key uses a horizontal field and Save row and a quiet status dot beside the title. The × withdraws its own request and restores the original message to the composer; computer-key-card-work shows the same card on work the member handed itself, whose × answers the waiting question and where no 取消 stands outside the card. Core: `tests/computer/test_computer_keys.py`,
 `tests/evaluate/test_card_tools.py`, `tests/brain/test_db.py`. App: `secret-card.test.ts`, `vault.test.ts`,
 `desktop-viewer.test.ts`, `desktop-paste-page.test.ts`; Rust: `cargo test paste::clipboard`. Not proved offline: a paste
 into a real container and a real Credential Manager write.

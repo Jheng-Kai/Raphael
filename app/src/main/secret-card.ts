@@ -7,7 +7,7 @@
 // read when Save is pressed and emptied at once, and a card drawn again takes the characters from the old
 // field to the new one (`carryTyped`) so that a redraw does not cost what the owner was typing.
 
-import { cardDisclosureHTML, cardHTML, cardPromptText } from "./card";
+import { cardDisclosureHTML, cardHTML, cardPromptText, ownerCloseHTML, waitingOwnerQuestion } from "./card";
 import { NAME, eventLineHTML } from "./event-line";
 import { t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
@@ -15,8 +15,8 @@ import { syncQuestionCard } from "./owner-question-sync";
 import { SERVICE_ICONS, type MonoIconId, brandStyle, hasLogo, serviceIconOf, serviceIconSVG, serviceLogoHTML } from "./service-icons";
 import { appLogo } from "./app-logos";
 import { entryMark, genericMark } from "./service-mark";
-import type { AgentTurn, SecretCard } from "./types";
-import { btn, esc, ico } from "./ui";
+import type { AgentTurn, OwnerQuestion, SecretCard } from "./types";
+import { btn, esc, ico, iconBtn } from "./ui";
 
 const FAILURES: Record<string, MessageKey> = {
   invalid: "card.keyInvalid",
@@ -80,7 +80,7 @@ function actionHTML(card: SecretCard): string {
  * field; the core checks the token and connects the member's own bot (`connect_messaging`).
  */
 const SLACK_SCOPES = ["im:read", "im:history", "chat:write", "files:read", "files:write"] as const;
-function botCardHTML(card: SecretCard & { platform: "telegram" | "slack" | "discord" }, cancel: string): string {
+function botCardHTML(card: SecretCard & { platform: "telegram" | "slack" | "discord" }, close: string | undefined): string {
   const active = secretNeedsInput(card);
   const failed = card.state === "failed" ? plain(card.error === "offline" ? "cards.botOffline" : card.error === "invalid" ? "cards.botInvalid" : (FAILURES[card.error ?? ""] ?? "card.keyVault")) : "";
   const make = btn(`<span>${esc(t(card.platform === "telegram" ? "cards.botFather" : "msg.createBot"))}</span>${ico("link")}`, "sm", ` data-act="bot-link" data-platform="${card.platform}"`);
@@ -90,13 +90,13 @@ function botCardHTML(card: SecretCard & { platform: "telegram" | "slack" | "disc
     body: active ? failed || plain(card.platform === "telegram" ? "cards.botHowTelegram" : card.platform === "slack" ? "cards.botHowSlack" : "cards.botHowDiscord") : undefined,
     // Slack's scopes are names to copy, set apart as code beside the words.
     content: active ? (card.platform === "slack" ? `<p class="card-body bot-scopes">${SLACK_SCOPES.map((scope) => `<code>${scope}</code>`).join(" ")}</p>` : "") + `<div class="card-actions-inline">${make}</div>` + actionHTML(card) + `<p class="card-shield">${ico("lock")}<span>${esc(t("cards.vault"))}</span></p>` : "",
-    actions: cancel,
+    close, statusInHeading: !!close,
     cls: "secret-card bot-card", attrs: ` data-secret-card="${esc(card.id)}" data-card-state="${esc(card.state)}" data-platform="${card.platform}"${card.error ? ` data-card-error="${esc(card.error)}"` : ""}`,
   });
 }
 
 /** A key for a program in a member's computer: its variable's name, what it is for and where it goes, then the same masked field. */
-function keyCardHTML(card: SecretCard, cancel: string): string {
+function keyCardHTML(card: SecretCard, close: string | undefined): string {
   const active = secretNeedsInput(card), action = actionHTML(card);
   return cardHTML({ title: active ? t("cards.keyTitle") : card.name,
     status: card.state === "failed" || card.error ? "failed" : active || card.state === "resuming" ? "waiting" : "done",
@@ -105,29 +105,35 @@ function keyCardHTML(card: SecretCard, cancel: string): string {
     content: active ? `<div class="key-context"><code class="key-name" translate="no">${esc(card.name)}</code><p class="card-body cc-state">${esc(card.purpose || t("cards.keyWhy"))}</p></div>` +
       (card.state === "failed" ? `<p class="card-body cc-state">${esc(secretStateText(card))}</p>` : "") +
       action + `<p class="card-shield"><span>${esc(t("cards.vault"))}</span></p>` : card.error ? "" : cardDisclosureHTML(`key-${card.id}`, `<p class="card-body">${esc(secretStateText(card))}</p>`),
-    actions: active ? cancel : action,
+    actions: active ? "" : action, close, statusInHeading: !!close,
     cls: "secret-card key-card", attrs: ` data-secret-card="${esc(card.id)}" data-card-state="${esc(card.state)}" data-key-card=""${card.error ? ` data-card-error="${esc(card.error)}"` : ""}`,
   });
 }
 
-export function secretCardHTML(card: SecretCard, canCancelTurn = false): string {
-  const cancel = canCancelTurn && secretNeedsInput(card) ? btn(esc(t("common.cancel")), "sm card-quiet", ' data-act="cancel-secret-turn"') : "";
-  if (card.platform) return botCardHTML(card as SecretCard & { platform: "telegram" | "slack" | "discord" }, cancel);
-  if (card.key) return keyCardHTML(card, cancel);
+/**
+ * A card that waits for the key has its way out as the × at its top right: on the owner's own message it takes the message
+ * back (`cancel-secret-turn`), on work the member handed itself it tells that work the owner will not give the key
+ * (`waiting`, the background question the card belongs to). Nothing of the card stands under it.
+ */
+export function secretCardHTML(card: SecretCard, canCancelTurn = false, waiting?: OwnerQuestion): string {
+  const close = canCancelTurn && secretNeedsInput(card) ? iconBtn("x", t("common.cancel"), ' data-act="cancel-secret-turn"', "card-close")
+    : waiting ? ownerCloseHTML(waiting) : undefined;
+  if (card.platform) return botCardHTML(card as SecretCard & { platform: "telegram" | "slack" | "discord" }, close);
+  if (card.key) return keyCardHTML(card, close);
   const active = secretNeedsInput(card), action = actionHTML(card);
   return cardHTML({ title: active ? t("cards.connect", { p0: card.name }) : card.name, mark: connectionMarkHTML(card.name),
     status: card.state === "failed" || card.error ? "failed" : active || card.state === "resuming" ? "waiting" : "done",
     statusText: active ? cardPromptText("key") : card.error ? t("cards.failed") : card.state === "resuming" ? t("cards.needsYou") : t("cards.done"),
     body: active ? card.state === "failed" ? secretStateText(card) : t("cards.keyWhy") : card.error ? secretStateText(card) : undefined,
     content: active ? action + `<p class="card-shield">${ico("lock")}<span>${esc(t("cards.vault"))}</span></p>` + cardDisclosureHTML(`key-${card.id}`, `<div class="card-well card-body" data-secret-guide="${esc(card.name)}">${esc(card.login ? t("card.loginHint") : card.secret)}</div>`, t("setup.where")) : card.error ? "" : cardDisclosureHTML(`key-${card.id}`, `<p class="card-body">${esc(secretStateText(card))}</p>`),
-    actions: active ? cancel : action,
+    actions: active ? "" : action, close, statusInHeading: !!close,
     cls: "secret-card", attrs: ` data-secret-card="${esc(card.id)}" data-card-state="${esc(card.state)}"${card.error ? ` data-card-error="${esc(card.error)}"` : ""}`,
   });
 }
 
 /** The cards of the keys a turn waits for, below what it said. */
 export function secretCardsHTML(turn: AgentTurn, canCancelTurn = false): string {
-  return (turn.secrets ?? []).map(card => secretCardHTML(card, canCancelTurn)).join("");
+  return (turn.secrets ?? []).map(card => secretCardHTML(card, canCancelTurn, waitingOwnerQuestion(turn, card.id))).join("");
 }
 
 /** The centred line a task resumed after its key was saved opens with, in place of the owner's words it carries on. */
