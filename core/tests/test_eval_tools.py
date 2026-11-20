@@ -838,7 +838,8 @@ def test_the_prompt_still_has_its_general_rules():
     # Keep the general rules concise.
     for kept in (
         "Never drop a sentence, point, name, number, condition or negation the speaker meant",
-        "Never rephrase, reorder, merge or summarize their sentences, never translate",
+        "Never summarize, shorten a point away, reorder the speaker's sentences or points",
+        "or translate, and never swap a word for a synonym",
         "Never add anything the speaker did not say: no word, particle, question or question mark of your own.",
         "Fix a word speech recognition got wrong only when the context or the dictionary makes the intended word clear",
         "otherwise keep it as heard, never drop it",
@@ -847,7 +848,7 @@ def test_the_prompt_still_has_its_general_rules():
     ):
         assert kept in prompt, kept
     # The bound of every selection of languages (tests/brain/test_cleanup.py) holds for the default.
-    assert len(prompt) < brain_cleanup.PROMPT_MAX_BASE_CHARS == 5_000, "general rules must stay within the short cleanup prompt"
+    assert len(prompt) < brain_cleanup.PROMPT_MAX_BASE_CHARS == 9_000, "general rules must stay within the short cleanup prompt"
 
 
 @pytest.mark.parametrize("name", ["Helion agent", "Helion Agent", "Helion agents"])

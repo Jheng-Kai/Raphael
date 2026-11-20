@@ -421,7 +421,9 @@ _SETTINGS_SUBTAGS = frozenset(code.split("-", 1)[0].lower() for code in LANGUAGE
 # With this, the prompt before the dictionary stays under PROMPT_MAX_BASE_CHARS for every choice the
 # settings allow (up to five languages).
 EXAMPLE_LANGUAGES = 3
-PROMPT_MAX_BASE_CHARS = 5_000
+# The template grew for long dictation (paragraphs, sentences cut at pauses, typed phrasing): the
+# worst choice is about 8,500 characters, so the bound is 9,000.
+PROMPT_MAX_BASE_CHARS = 9_000
 
 
 @functools.cache
