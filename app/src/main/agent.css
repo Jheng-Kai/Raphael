@@ -125,12 +125,14 @@
 .page-agent .btn.ra-tool { width: var(--pa-ctl); min-height: var(--pa-ctl); padding: 0; border-radius: var(--r-sm); border-color: transparent; background: transparent; color: var(--text-2); }
 .page-agent .btn.ra-tool[aria-expanded="true"] { background: transparent; color: var(--text); }
 .page-agent .btn.ra-tool:active:not(:disabled) { color: color-mix(in srgb, var(--text) 85%, transparent); }
-/* The status light (status-light.ts): one still dot, dim with no member at work, the text's colour while one works,
-   the warning colour while one waits for the owner. */
-.page-agent .btn.status-light { display: inline-flex; align-items: center; justify-content: center; }
-.status-light .status-dot { width: 10px; height: 10px; border-radius: var(--r-pill); background: var(--text-3); }
-.status-light[data-level="busy"] .status-dot { background: var(--text); }
-.status-light[data-level="needs"] .status-dot { background: var(--warn); }
+/* The status list (status-light.ts): the header shows its icon only; each row of its list has a still dot, the warning
+   colour for one waiting for the owner, the error colour for work that went wrong, the text's colour for work under way
+   and the success colour for finished work the owner has not opened. */
+.menu .status-row-dot { flex: none; width: 8px; height: 8px; margin-right: var(--sp-2); border-radius: var(--r-pill); background: var(--text); }
+.menu .status-row-dot[data-kind="needs"] { background: var(--warn); }
+.menu .status-row-dot[data-kind="failed"] { background: var(--err); }
+.menu .status-row-dot[data-kind="done"] { background: var(--ok); }
+.menu .mlead:has(> .status-row-dot) { display: inline-flex; align-items: center; width: auto; min-width: max-content; }
 
 /* The search field is as wide as the thread under it: the composer's sides, up to the same column. */
 .ra-find { display: flex; align-items: center; gap: var(--sp-2); max-width: var(--pa-colw); width: calc(100% - 2 * var(--pa-dock-x)); margin: var(--sp-2) auto 0; padding: 0 6px 0 calc(12px + 4 * var(--pa-u)); min-height: calc(40px + 12 * var(--pa-u)); border: 1px solid var(--edge); border-radius: var(--r-pill); background: var(--panel); }
