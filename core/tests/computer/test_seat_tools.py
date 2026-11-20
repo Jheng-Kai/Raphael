@@ -538,7 +538,9 @@ wmctrl() {{
 }}
 ''' + loop + '\necho "found $new"\n'
     began = time.monotonic()
-    result = subprocess.run([shell], input=script, text=True, capture_output=True, timeout=30)
+    # The first sh a Windows runner starts can take most of half a minute (it timed out at 30 s twice on CI, on the first
+    # case of its share): the bound only stops a hang, and what is timed is asserted below.
+    result = subprocess.run([shell], input=script, text=True, capture_output=True, timeout=120)
     took = time.monotonic() - began
     if appears_after is None:
         assert result.returncode == 1 and "no browser window appeared within 60 seconds" in result.stderr

@@ -1189,6 +1189,21 @@ async def test_google_revocation_failure_can_be_retried(tmp_path, conn):
     assert not vault.names()
 
 
+async def test_google_disconnect_with_a_token_google_no_longer_knows_still_removes_everything(tmp_path, conn):
+    """A private Google connection whose refresh token is dead (its Testing week ran out, the access was removed in the
+    owner's account) answered every disconnect with revocation_failed and could never be removed: Google answers 400."""
+    def response(request):
+        return httpx.Response(400, json={"error": "invalid_token"})
+
+    router, service, hub, vault = setup_service(tmp_path, conn, response)
+    await router.call("connectors.google.configure", {"client_id": "desktop", "client_secret": "secret"})
+    vault.set("connectors:google:refresh_token", "refresh-dead")
+    result = await router.call("connectors.disconnect", {"id": "google"})
+    assert result.get("disconnected") and "error" not in result
+    assert not vault.names() and not hub.offered()
+    assert "google" not in service.store.connectors
+
+
 async def test_rpc_exception_messages_are_value_free(tmp_path, conn, caplog):
     async def browser(url):
         raise RuntimeError("ak_private lt_private Bearer secret refresh_token")

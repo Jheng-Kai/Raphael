@@ -2108,11 +2108,12 @@ export function checkRendered(name, context = {}) {
     require(!document.body.innerText.includes(sample) && !document.documentElement.outerHTML.includes(sample) && !JSON.stringify(window.__look.calls).includes(sample), 'the key value stays out of the markup, the text and the recorded calls');
     const title = card.querySelector('.card-title')?.textContent.trim();
     if (name === 'key-private') {
-      require(title === '儲存金鑰' && card.querySelector('.key-context code')?.textContent === 'OPENROUTER_API_KEY', 'the variable is separate from the localized title');
+      require(title === '儲存金鑰：價格腳本要呼叫模型' && card.querySelector('.key-context code')?.textContent === 'OPENROUTER_API_KEY', 'the title says what the key is for, and the variable stands apart under it');
       const field = card.querySelector('[data-secret-input]'), save = card.querySelector('[data-act=card-save]');
       const status = card.querySelector('.card-status'), cancel = card.querySelector('.card-head > [data-act=cancel-secret-turn]');
       require(field.type === 'password' && !save.disabled && !field.closest('.sc-field').querySelector('svg'), 'a masked field without an icon and an enabled Save');
-      require(card.querySelector('.key-context .cc-state')?.textContent === '價格腳本要呼叫模型' && card.querySelector('.card-shield')?.textContent.includes('作業系統憑證庫'), 'the purpose and vault hint each appear once');
+      require(!card.querySelector('.key-context .cc-state') && card.textContent.split('價格腳本要呼叫模型').length === 2 && card.querySelector('.card-shield')?.textContent.includes('這台電腦'), 'the purpose appears once, in the title, and the vault hint once');
+      require(!card.querySelector('input[type=checkbox], [data-secret-plain]'), 'a key card has no choice under its field (#281)');
       require(status.textContent === '等你填入' && getComputedStyle(status).backgroundColor === 'rgba(0, 0, 0, 0)' && getComputedStyle(status.querySelector('i')).animationName === 'none', 'waiting is shown as words and a static dot');
       const box = card.getBoundingClientRect(), input = field.closest('.sc-field').getBoundingClientRect(), primary = save.getBoundingClientRect();
       require(Math.abs(primary.top - input.top) <= 1 && input.right <= primary.left && primary.right <= box.right && input.width > 120, 'the field and Save share one usable row');
