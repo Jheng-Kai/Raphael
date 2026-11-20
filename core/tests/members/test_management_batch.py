@@ -52,7 +52,7 @@ async def test_three_changes_are_one_card_with_a_line_each_and_one_yes_carries_o
     assert team.members.member_exists(engineer.id) and team.members.member_exists(architect.id)
     lines = asked["confirm"]["text"].split("\n")
     assert lines[0] == "有 3 項變更需要你同意" and lines[-1] == "允許以上所有變更嗎？"
-    assert lines[1:-1] == ["永久刪除成員及其所有資料：「工程師」", "永久刪除成員及其所有資料：「架構師」", "刪除群聊及全部訊息：「Raphael macOS 版規劃」"]
+    assert lines[1:-1] == ["永久刪除這個角色和它的所有資料：「工程師」", "永久刪除這個角色和它的所有資料：「架構師」", "刪除群聊及全部訊息：「Raphael macOS 版規劃」"]
     text = asked["confirm"]["text"]
     assert "{" not in text and "ID" not in text and not re.search(r"[A-Za-z]{4,} [A-Za-z]{4,}", text.replace("Raphael macOS", ""))
 
@@ -63,7 +63,7 @@ async def test_three_changes_are_one_card_with_a_line_each_and_one_yes_carries_o
     assert rig.conn.execute("SELECT COUNT(*) FROM rooms WHERE id=?", (room["id"],)).fetchone()[0] == 0
     # The owner reads what came of each, in order.
     said = [message["text"] for message in rig.service._history.messages([asked["turn_id"]])[asked["turn_id"]] if message["kind"] == "event"]
-    assert said[-1].split("\n") == ["已完成：永久刪除成員及其所有資料：「工程師」", "已完成：永久刪除成員及其所有資料：「架構師」", "已完成：刪除群聊及全部訊息：「Raphael macOS 版規劃」"]
+    assert said[-1].split("\n") == ["已完成：永久刪除這個角色和它的所有資料：「工程師」", "已完成：永久刪除這個角色和它的所有資料：「架構師」", "已完成：刪除群聊及全部訊息：「Raphael macOS 版規劃」"]
 
 
 async def test_one_failing_change_is_said_plainly_and_the_others_still_run(setup, client):
@@ -77,7 +77,7 @@ async def test_one_failing_change_is_said_plainly_and_the_others_still_run(setup
     assert rig.conn.execute("SELECT COUNT(*) FROM rooms WHERE id=?", (room["id"],)).fetchone()[0] == 0
     said = [message["text"] for message in rig.service._history.messages([asked["turn_id"]])[asked["turn_id"]] if message["kind"] == "event"][-1].split("\n")
     assert said[0].startswith("已完成：") and said[2].startswith("已完成：")
-    assert said[1].startswith("未完成：永久刪除成員及其所有資料：「架構師」")
+    assert said[1].startswith("未完成：永久刪除這個角色和它的所有資料：「架構師」")
     # The member is told too: the note it goes on from carries each outcome, the failed one with its reason.
     went_on = repr(client.chat_calls[-1])
     assert "management_changes" in went_on and "not_found" in went_on and "do not try it again" in went_on
@@ -119,7 +119,7 @@ async def test_one_change_keeps_its_own_card_of_one_line(setup, client):
     only = member(team, name="工程師")
     client.chats = [chat("Deleting.", use("member_delete", {"id": only.id})), live_said("Waiting."), live_said("Done.")]
     asked = await typed(rig, "刪除工程師", 0, language="zh-TW")
-    assert asked["confirm"]["text"] == "永久刪除成員及其所有資料：工程師\n允許這項變更嗎？"
+    assert asked["confirm"]["text"] == "永久刪除這個角色和它的所有資料：工程師\n允許這項變更嗎？"
     assert (await rig.confirm(asked["confirm"]["id"]))["status"] == "done"
     assert not team.members.member_exists(only.id)
 

@@ -262,7 +262,7 @@ def test_pairing_notice_names_current_conversation_in_each_locale(ui):
     from raphael_core.messaging.words import words
     notice = words(ui, "pair", code="ABC123")
     assert "ABC123" in notice
-    assert {"en": "member conversation", "ja": "メンバーとの会話", "zh-TW": "成員的對話"}[ui] in notice
+    assert {"en": "member conversation", "ja": "メンバーとの会話", "zh-TW": "電腦上的對話"}[ui] in notice
     for stale in ("Settings", "設定", "settings", "訊息"):
         assert stale not in notice
 

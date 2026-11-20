@@ -23,7 +23,7 @@ from .test_service import make_rig  # noqa: F401
 from background.conftest import plugins  # noqa: F401
 
 COMMAND = 'Set-Content "C:/data/raphael.db" hacked'  # a command aimed at the app's own database
-OWNER_ZH = "成員想用指令或檔案工具改 Raphael 的資料，不被允許，未執行。"
+OWNER_ZH = "想用指令或檔案工具修改 Raphael 的資料，這不被允許，所以沒有執行。"
 
 
 def ask(rig, language="en", text="Please write the skill file for me"):

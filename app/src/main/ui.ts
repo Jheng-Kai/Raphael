@@ -159,7 +159,7 @@ export interface Choice {
   desc?: string;
   /** A small tag after the label in a menu: 「建議」, say. */
   tag?: string;
-  /** A quiet word at the right end of the row: what the choice is (「成員」, 「應用程式」). */
+  /** A quiet word at the right end of the row: what the choice is (「角色」, 「應用程式」). */
   trail?: string;
   /** A face or an icon before the label in a menu, as markup from the app's own helpers (faceHTML, ico). */
   lead?: string;

@@ -85,7 +85,7 @@ _UNFINISHED_WORDS = with_ui_words({
 # The line a room thread posts when it stops asking its members (`RoomsService._breaker_notice`): what stopped it, and what
 # the owner can do. {n} replies in a row (or hand-offs) failed for the same cause.
 _BREAKER_WORDS = with_ui_words({
-    'zh-TW': {'frame': '{cause}我先不再請成員回覆。請到「設定」檢查模型與登入狀態，或縮短討論內容，再在這裡寫一則訊息，大家就會繼續。',
+    'zh-TW': {'frame': '{cause}我先不再請大家回覆。請到「設定」檢查模型與登入狀態，或縮短討論內容，再在這裡寫一則訊息，大家就會繼續。',
               'overflow': '連續 {n} 次回覆因內容超出模型一次能讀的長度而失敗。',
               'provider': '連續 {n} 次回覆因模型或服務出問題而沒有完成。',
               'handoff': '連續 {n} 次交辦都被拒絕，因為那項工作已經有人負責。'},

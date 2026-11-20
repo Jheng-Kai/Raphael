@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// 「選擇主要成員」 (primary-picker.ts): real buttons in a radio group, one chosen at a time, the primary action waiting
+// 「選擇主要聯絡對象」 (primary-picker.ts): real buttons in a radio group, one chosen at a time, the primary action waiting
 // for a choice, Raphael among the choices, and an answer only for a choice that is shown.
 import { afterEach, describe, expect, test } from "vitest";
 import { openPrimaryPicker } from "./primary-picker";
@@ -20,9 +20,9 @@ afterEach(() => { document.body.innerHTML = ""; });
 describe("the primary contact's window", () => {
   test("lists the members as real buttons of one radio group, none chosen and 設為主要 waiting for one", async () => {
     const answer = openPrimaryPicker({ members: MEMBERS });
-    expect(dialog().querySelector("h2")!.textContent).toBe("選擇主要成員");
+    expect(dialog().querySelector("h2")!.textContent).toBe("選擇主要聯絡對象");
     const group = dialog().querySelector('[role="radiogroup"]')!;
-    expect(group.getAttribute("aria-label")).toBe("選擇主要成員");
+    expect(group.getAttribute("aria-label")).toBe("選擇主要聯絡對象");
     const radios = [...group.querySelectorAll<HTMLElement>('[role="radio"]')];
     expect(radios.map((el) => el.dataset.id)).toEqual(["0", "2", "3"]);
     expect(radios.every((el) => el.tagName === "BUTTON" && el.getAttribute("type") === "button")).toBe(true);
@@ -99,7 +99,7 @@ describe("the primary contact's window", () => {
     expect(setButton().disabled).toBe(true);
     input.value = "沒有這個人";
     input.dispatchEvent(new Event("input"));
-    expect(dialog().querySelector(".mb-none")!.textContent).toBe("沒有相符的成員");
+    expect(dialog().querySelector(".mb-none")!.textContent).toBe("沒有相符的名字");
     input.value = "";
     input.dispatchEvent(new Event("input"));
     expect(dialog().querySelectorAll('[role="radio"]')).toHaveLength(3);
@@ -119,8 +119,8 @@ describe("the primary contact's window", () => {
   });
 
   test("immediate: a press on a member answers at once, with no 設為主要, no check and its own title", async () => {
-    const answer = openPrimaryPicker({ members: MEMBERS, immediate: true, title: "換成其他成員" });
-    expect(dialog().querySelector("h2")!.textContent).toBe("換成其他成員");
+    const answer = openPrimaryPicker({ members: MEMBERS, immediate: true, title: "換成其他角色" });
+    expect(dialog().querySelector("h2")!.textContent).toBe("換成其他角色");
     expect(dialog().querySelector('[role="radiogroup"], [role="radio"]')).toBeNull();
     expect(dialog().querySelector('[data-dlg="set"], [data-dlg="cancel"], .mb-dlg-act')).toBeNull();
     expect([...dialog().querySelectorAll<HTMLElement>(".mb-chat-choice")].map((el) => el.tagName)).toEqual(["BUTTON", "BUTTON", "BUTTON"]);

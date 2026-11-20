@@ -135,7 +135,7 @@ export function orderedMembers(list: MembersList | null): Member[] {
 }
 
 /**
- * Who 換成其他成員 on a pinned tile offers: the members
+ * Who 換成其他角色 on a pinned tile offers: the members
  * that are not pinned, in the column's order. Not Raphael (it is pinned by its own setting and holds the top slot), nobody
  * hidden from the sidebar, and not the primary, who already has the top slot and would stand there twice.
  */

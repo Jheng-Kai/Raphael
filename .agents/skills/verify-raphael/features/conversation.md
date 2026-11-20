@@ -521,7 +521,7 @@ clearing (`confirmDelete` in member-dialogs.ts: a member, a group, a room, a con
 red, no ×, no rule line, the focus on 取消, a sentence of two lines whose longest line takes at least three quarters of
 the box) and returns these numbers. The sentence wraps as ordinary text (`text-wrap: pretty`): `balance` cut it into two
 half-width lines with the right of the box empty. The restore and reset confirmations and
-新增成員 keep the 440 px shell with hairlines (`member-maker`, `member-maker-taken`).
+新增角色 keep the 440 px shell with hairlines (`member-maker`, `member-maker-taken`).
 
 ```powershell
 npm run look -- member-delete-ask member-delete-ask-computer member-delete press-through-delete-dialog room-delete polish-caption-confirm quick-clear-confirm quick-cleared member-maker member-maker-taken --theme both --width 1120,720,1920x1080
@@ -3229,7 +3229,7 @@ The look check `message-text-colour` measures the real messages on screen and a 
 the same thread, in both themes.
 
 A computer handoff the owner has settled folds to its title and one word naming what was done with the computer, 「已交回」 (or 「已略過」 when the owner skipped it
-and the work stopped), with no status pill, and its fold says 「電腦已交回給成員。」 (or that the computer work stopped); never 「完成」
+and the work stopped), with no status pill, and its fold says 「電腦已交還。」 (or that the computer work stopped); never 「完成」
 and never the work's live state (R-COMP-HANDOFF-01, R-CARD-15). `computer-takeover-done` checks it after `card-computer-handback`.
 
 ```powershell

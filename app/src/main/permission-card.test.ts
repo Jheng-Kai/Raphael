@@ -76,7 +76,7 @@ test("local command consent names the member, preserves exact code and offers fo
   const local = card({ kind: "local_access" as PermissionCard["kind"], service: "Alex", tool: "local_exec", summary: 'Get-Process | Where-Object CPU -gt 1\nWrite-Output "<cpu>"' });
   const html = permissionCardHTML(local);
   expect(html).toContain("Alex");
-  expect(html).toContain("允許所有成員在你的電腦執行指令？");
+  expect(html).toContain("允許大家在你的電腦執行指令？");
   expect(html).toContain("&lt;cpu&gt;");
   expect(html).toContain("<pre");
   expect(actions(html)).toEqual(["perm-once", "perm-always", "perm-deny", "perm-never"]);

@@ -43,7 +43,7 @@ test('a settled handoff says what the owner did, with no status pill and no word
   expect(card.dataset.desktopSettled).toBe('handed_back');
   expect(card.querySelector('.card-status')).toBeNull();expect(card.querySelector('.is-done')).toBeNull();
   expect(card.querySelector('.card-body')!.textContent).toBe('已交回');
-  expect(card.querySelector('.card-detail')!.textContent).toBe('電腦已交回給成員。');
+  expect(card.querySelector('.card-detail')!.textContent).toBe('電腦已交還。');
   for(const word of ['完成','正在使用電腦','點擊','輸入'])expect(card.textContent).not.toContain(word);
  }
  // The work ended meanwhile: the handoff was still handed back, and it is not called finished work.

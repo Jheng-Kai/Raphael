@@ -1,4 +1,4 @@
-/* 新增成員: the shared confirm shell (members.css `.mb-confirm`: a head and a footer over
+/* 新增角色: the shared confirm shell (members.css `.mb-confirm`: a head and a footer over
    hairlines) as wide as the slime picker inside it needs and no wider, with the large slime, the name and the picker stacked in its
    body. It is about 330 x 556, since the picker is six across (slime.css) and keeps its own size. */
 .mb-dialog.mb-confirm.cr-dialog { width: max-content; min-width: min(320px, 100%); max-width: min(440px, 100%); }

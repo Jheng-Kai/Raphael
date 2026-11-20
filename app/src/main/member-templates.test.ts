@@ -112,7 +112,7 @@ test("store filtering stays local and install carries catalogue identity", async
   input.value = "Writer"; input.dispatchEvent(new Event("input"));
   expect(document.querySelectorAll(".store-entry")).toHaveLength(1);
   expect(api.core).toHaveBeenCalledTimes(1);
-  // The store is a page of its own: one title, no tabs, and 新增成員 is nowhere in it.
+  // The store is a page of its own: one title, no tabs, and 新增角色 is nowhere in it.
   expect(store.el.querySelector(".mb-dlg-head h2")!.textContent).toBe(t("store.title"));
   expect(store.el.querySelector('.tabs, [role="tab"], #mb-new-name')).toBeNull();
   expect(store.el.closest(".mb-scrim")!.classList.contains("store-scrim")).toBe(true);

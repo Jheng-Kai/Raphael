@@ -2073,7 +2073,7 @@ describe("what the dialog does", () => {
       vi.mocked(confirmDelete).mockResolvedValueOnce(false);
       c.click(button("account-remove", { id: "composio:gmail", account: "a2" }));
       await settle();
-      expect(confirmDelete).toHaveBeenCalledWith("Me", { words: { title: "移除「Me」？", hint: "成員將無法再使用這個帳號。", action: "移除" } });
+      expect(confirmDelete).toHaveBeenCalledWith("Me", { words: { title: "移除「Me」？", hint: "移除後就不能再用這個帳號。", action: "移除" } });
       expect(api.connectorsRemoveAccount).not.toHaveBeenCalled();
       c.click(button("account-remove", { id: "composio:gmail", account: "a1" }));
       await settle();
