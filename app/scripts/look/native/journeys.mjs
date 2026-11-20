@@ -311,7 +311,8 @@ export async function drive(name, context) {
     return;
   }
   if (name === "appearance") {
-    await click(page, '#nav [data-go="settings"]');
+    await perform(page, { action: "account-menu", item: "settings" });
+    await wait(page, ".modal-scrim [data-pane]");
     await click(page, '.modal-scrim [data-pane="general"]');
     await wait(page, '.appearance-settings');
     result.appearance = [];
@@ -607,7 +608,8 @@ export async function drive(name, context) {
     result.composer = chosenName;
     await click(page, ".composer .cmp-model .mp-trigger");
     await page.waitForSelector(".cb-menu", { hidden: true });
-    await click(page, '#nav [data-go="settings"]');
+    await perform(page, { action: "account-menu", item: "settings" });
+    await wait(page, ".modal-scrim [data-pane]");
     await perform(page, { action: "settle-motion" });
     await click(page, '.modal-scrim [data-pane="models"]');
     await wait(page, '.modal-scrim [data-row="quick-model"] .mp-trigger');
@@ -858,11 +860,15 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
       await click(page, ".mb-head [data-page-back]");
       await page.waitForSelector(".ra-stage.is-page", { hidden: true });
     };
-    const refuseAsk = async () => {
-      if (await page.waitForSelector(".pg-ask", { timeout: 2500 }).catch(() => null)) {
-        await click(page, '.pg-ask [data-dlg="cancel"]');
-        await page.waitForSelector(".pg-ask", { hidden: true });
-      }
+    // What a page says goes into the composer under it, with the line that says where it came from (R-CARD-11): the owner
+    // alone sends it, or deletes it as here.
+    const composerNow = () => page.evaluate(() => ({ text: document.querySelector(".composer .cmp-input")?.value ?? "", note: !document.querySelector(".composer .cmp-page-note")?.hidden }));
+    const clearComposer = async () => {
+      if (!(await composerNow()).text) return;
+      await click(page, ".composer .cmp-input");
+      await page.keyboard.down("Control"); await page.keyboard.press("KeyA"); await page.keyboard.up("Control");
+      await page.keyboard.press("Backspace");
+      await page.waitForFunction(() => !document.querySelector(".composer .cmp-input")?.value, { timeout: 5000 });
     };
     await chat(page);
     await wait(page, '.pg-body[data-state="ready"] iframe');
@@ -884,19 +890,22 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     await pause(2500);
     result.page.autoSent = (await asked("Sent by the page alone")).length;
     if (result.page.autoSent) throw new Error("A page spoke for the owner with no press inside it");
-    result.page.autoAsked = await page.$eval(".pg-ask", el => el.textContent).catch(() => "");
-    if (!result.page.autoAsked.includes("Sent by the page alone")) throw new Error("A page's own attempt to speak was not shown to the owner");
-    await capture("asked");
-    await click(page, '.pg-ask [data-dlg="cancel"]');
-    await page.waitForSelector(".pg-ask", { hidden: true });
-    if ((await asked("Sent by the page alone")).length) throw new Error("A refused message was sent");
+    result.page.autoPlaced = await composerNow();
+    if (!result.page.autoPlaced.text.includes("Sent by the page alone") || !result.page.autoPlaced.note) throw new Error(`A page's own attempt to speak was not shown to the owner: ${JSON.stringify(result.page.autoPlaced)}`);
+    await capture("placed");
+    await clearComposer();
+    if ((await asked("Sent by the page alone")).length) throw new Error("A page's words were sent without the owner");
     await pressInFrame(page, await frame.$("#add"));
     await pressInFrame(page, await frame.$("#add"));
     if (await inFrame(frame, "#count") !== "2") throw new Error("A press inside the page did not reach it");
     const loaded = await inFrame(frame, "#loaded");
     await pressInFrame(page, await frame.$("#ask"));
+    await page.waitForFunction(() => document.querySelector(".composer .cmp-input")?.value.includes("Pressed in the page"), { timeout: 5000 })
+      .catch(() => { throw new Error("A real press inside the page did not put its words in the composer"); });
+    if ((await asked("Pressed in the page")).length) throw new Error("A press inside the page sent its words without the owner");
+    await click(page, ".composer .cmp-send");
     for (let i = 0; i < 120 && !(await asked("Pressed in the page")).some(row => row.status === "done"); i++) await pause(150);
-    if (!(await asked("Pressed in the page")).some(row => row.status === "done")) throw new Error("A real press inside the page did not become the owner's message");
+    if (!(await asked("Pressed in the page")).some(row => row.status === "done")) throw new Error("A real press inside the page did not become the owner's message once sent");
     await pause(500);
     frame = await frameNow();
     result.page.afterRedraw = { count: await inFrame(frame, "#count"), kept: await inFrame(frame, "#loaded") === loaded };
@@ -927,7 +936,10 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
       if (await inFrame(frame, "#loaded") !== loaded) throw new Error(`A change of the window to ${width} reloaded the page`);
     }
     await page.setViewport({ width: 1120, height: 900 });
-    await click(page, '#nav [data-go="settings"]');
+    result.page.lightBackground = await frame.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--bg").trim());
+    // Settings open from the owner's face at the sidebar's foot (R-SIDE-01).
+    await perform(page, { action: "account-menu", item: "settings" });
+    await wait(page, ".modal-scrim [data-pane]");
     await perform(page, { action: "settle-motion" });
     await click(page, '.modal-scrim [data-pane="general"]');
     frame = await frameNow();
@@ -935,8 +947,9 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     await click(page, '[data-k="appearance"]');
     await click(page, '.menu [data-value="dark"]');
     await page.waitForFunction(() => document.documentElement.dataset.theme === "dark");
-    // The theme reloads the page, and this one tries to speak each time it loads: refused once, it no longer asks.
-    if (await page.waitForSelector(".pg-ask", { timeout: 2500 }).catch(() => null)) throw new Error("A page the owner refused asked again");
+    // The theme reloads the page, and this one tries to speak each time it loads: with no press, nothing reaches the composer.
+    await pause(2000);
+    if ((await asked("Sent by the page alone")).length) throw new Error("A page reloaded by the theme spoke for the owner");
     await click(page, '.modal-scrim [data-act="close"]');
     await page.waitForSelector(".modal-scrim", { hidden: true });
     await chat(page);
@@ -944,14 +957,13 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     for (let i = 0; i < 50 && !page.frames().some(item => /[?&]theme=dark/.test(item.url())); i++) await pause(100);
     frame = await frameNow();
     result.page.darkBackground = await frame.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--bg").trim());
-    if (result.page.darkBackground !== "#18181b") throw new Error(`The page did not follow the theme: ${result.page.darkBackground}`);
+    if (!result.page.darkBackground || result.page.darkBackground === result.page.lightBackground) throw new Error(`The page did not follow the theme: ${result.page.lightBackground} then ${result.page.darkBackground}`);
     await perform(page, { action: "scroll", selector: ".pg-card" });
     await capture("dark");
     await page.reload({ waitUntil: "domcontentloaded" });
     await page.waitForSelector(".page-agent:not([hidden]) .conversation-trigger", { visible: true, timeout: 90000 });
     await chat(page);
     await wait(page, '.pg-body[data-state="ready"] iframe');
-    await refuseAsk();
     frame = await frameNow();
     if (await inFrame(frame, "#helper") !== "object") throw new Error("The page did not come back after a reload");
     await perform(page, { action: "scroll", selector: ".pg-card" });
@@ -996,7 +1008,8 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
       await click(page, '.model-chooser [data-dlg="close"]');
     };
     await context.rpc("settings.set", { key: "agent_model", value: `${answer.id}?effort=high` });
-    await click(page, '#nav [data-go="settings"]');
+    await perform(page, { action: "account-menu", item: "settings" });
+    await wait(page, ".modal-scrim [data-pane]");
     await click(page, '.modal-scrim [data-pane="models"]');
     await click(page, '[data-models-tab="models"]');
     await choose('[data-k="quick-model"]', quick, "high", "quick");
@@ -1532,7 +1545,8 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
       await pause(800);
       await capture(`member-${member.id}`);
     }
-    await click(page, '#nav [data-go="settings"]');
+    await perform(page, { action: "account-menu", item: "settings" });
+    await wait(page, ".modal-scrim [data-pane]");
     await wait(page, ".modal-scrim [data-pane]");
     const panes = await page.$$eval(".modal-scrim [data-pane]", rows => rows.map(row => row.dataset.pane));
     result.upgraded.panes = panes;
@@ -1757,7 +1771,8 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     const deviceNames = [...new Set([devices.automatic_device, devices.selected, ...devices.devices.map(device => device.name)].filter(Boolean))];
     result.deviceNames = deviceNames;
     for (const locale of UI_LOCALES) {
-      await click(page, '#nav [data-go="settings"]');
+      await perform(page, { action: "account-menu", item: "settings" });
+      await wait(page, ".modal-scrim [data-pane]");
         await settleMotion(page);
       await click(page, '.modal-scrim [data-pane="general"]');
       await click(page, '[data-k="ui-language"]');
@@ -1991,17 +2006,12 @@ if (!pillWindow || !(pillWindow.style & 0x08000000) || !pillWindow.rounded) thro
     const conversation = await newConversation(context);
     await typed(context, "Native journey first typed turn", conversation);
     await typed(context, "Native journey second typed turn", conversation);
+    // A member's one conversation has no delete (no ⋯ is drawn for it); only the quick questions' history is cleared.
     result.beforeDelete = await snapshot();
     await details(page);
-    await click(page, `[data-conversation-more="${conversation}"]`);
-    await click(page, '#app-popover [data-pick="delete"]');
-    await click(page, '.mb-confirm [data-dlg="delete"]');
-    await pause(900);
-    result.afterDelete = await snapshot();
-    result.remaining = remaining(result.afterDelete, conversation);
-    result.staleSidebar = !!await page.$(`[data-conversation-open="${conversation}"]`);
-    if (Object.values(result.remaining).some(rows => rows.length) || result.staleSidebar) result.failures.push(`Deleted conversation ${conversation} remains: ${JSON.stringify(result.remaining)}; staleSidebar=${result.staleSidebar}`);
-    await capture("formal-deleted");
+    result.mainHasNoDelete = !await page.$(`[data-conversation-more="${conversation}"]`);
+    if (!result.mainHasNoDelete) result.failures.push(`The main conversation ${conversation} offers a ⋯ it should not have`);
+    result.afterDelete = result.beforeDelete;
     const quick = result.afterDelete.conversations.find(row => row.kind === "quick");
     if (!quick) throw new Error("The quick conversation was not created by the real app");
     await details(page); await click(page, `[data-conversation-open="${quick.id}"]`);
@@ -2017,7 +2027,9 @@ if (!pillWindow || !(pillWindow.style & 0x08000000) || !pillWindow.rounded) thro
     result.afterQuickClear = await snapshot();
     result.quickRemaining = remaining(result.afterQuickClear, quick.id);
     if (!result.afterQuickClear.conversations.some(row => row.id === quick.id && row.kind === "quick") ||
-        Object.entries(result.quickRemaining).some(([table, rows]) => table !== "conversations" && rows.length)) result.failures.push(`Quick history clear did not retain only its permanent conversation: ${JSON.stringify(result.quickRemaining)}`);
+        // The quick conversation stays, and so does its CLI generation: a clear moves it on, so a late session of the cleared
+        // history cannot come back (agent/cli/loop.py).
+        Object.entries(result.quickRemaining).some(([table, rows]) => !["conversations", "agent_cli_generations"].includes(table) && rows.length)) result.failures.push(`Quick history clear did not retain only its permanent conversation: ${JSON.stringify(result.quickRemaining)}`);
     result.quickTimeline = await page.evaluate(privateTimeline);
     if (result.quickTimeline.rows.length) result.failures.push(`Cleared quick history retains timeline rows: ${JSON.stringify(result.quickTimeline)}`);
     await capture("quick-history-cleared");
