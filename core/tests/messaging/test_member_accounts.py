@@ -320,6 +320,23 @@ async def test_vault_deletion_failure_prevents_false_disconnect_and_member_delet
     assert rig.app.vault.get(secret_name(member_account(member), "bot_token")) == TOKENS[0]
 
 
+async def test_a_member_is_deleted_when_the_vault_cannot_say_whether_anything_is_left(rig, monkeypatch):
+    """On a Mac the Keychain's lookup can fail (a locked keychain, another build's item): every delete returned without an
+    error, so the member goes, its token with it, and the lookup's failure is no reason to keep it."""
+    import keyring.errors
+    member, other = rig.members[0], rig.members[1]
+    await rig.pair(member, TOKENS[0])
+
+    def cannot_say(name):
+        raise keyring.errors.KeyringError("Can't look in the keychain: -25308")
+
+    monkeypatch.setattr(rig.app.vault, "has", cannot_say)
+    assert await rig.app.call("members.delete", {"id": member}) == {"deleted": True}
+    assert not rig.app.members.member_exists(member)
+    assert rig.app.vault.get(secret_name(member_account(member), "bot_token")) is None
+    assert await rig.app.call("members.delete", {"id": other}) == {"deleted": True}  # one that never connected anything
+
+
 async def test_member_attachments_and_confirmation_refusal_use_the_same_owner_boundary(rig, monkeypatch):
     member = rig.members[0]
     await rig.pair(member, TOKENS[0])

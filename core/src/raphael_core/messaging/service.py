@@ -8,7 +8,6 @@ change a setting.
 """
 
 import asyncio
-import contextlib
 import logging
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -416,20 +415,26 @@ class MessagingService:
             await self._stop_receiving(kind)
             if self.cards:
                 self.cards.detached(kind)
+            refused = False
             for name in self._types[kind].secrets:
-                with contextlib.suppress(Exception):
+                try:
                     self._vault.delete(secret_name(kind, name))
-            if self._any_left(kind):
+                except Exception as error:  # the class only: what a vault says may hold a name
+                    logger.warning("A messaging secret could not be deleted: %s", type(error).__name__)
+                    refused = True
+            if refused or self._any_left(kind):
                 raise RpcError(INTERNAL_ERROR, "The secrets could not be removed from the vault")
             self._config.channels[kind] = ChannelConfig()
             self._store.save(self._config)
         return self._view(kind)
 
     def _any_left(self, kind: str) -> bool:
+        """Whether a secret the vault said it deleted is still there. A vault that cannot say (the macOS Keychain's lookup
+        failing) leaves the deletion's own answer standing: every delete above returned without an error."""
         for name in self._types[kind].secrets:
             try:
                 if self._vault.has(secret_name(kind, name)):
                     return True
-            except Exception:
-                return True
+            except Exception as error:
+                logger.warning("The vault could not say whether a messaging secret is left: %s", type(error).__name__)
         return False
