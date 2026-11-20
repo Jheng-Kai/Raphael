@@ -22,6 +22,7 @@ ABOUT_INDEX = """About Raphael (read raphael_help for details):
 8. Safety: permissions and consent remain authoritative; never bypass a denial.
 9. Logs: raphael.log; self_check reads only recent redacted failure diagnostics.
 10. Calendar: the app's own, on Home; read and change it with the calendar_* tools.
+11. Setup: self_check's setup says what this PC lacks.
 """
 ABOUT_INDEX = for_this_system(ABOUT_INDEX)
 
@@ -79,6 +80,27 @@ The calendar on Home and the Calendar page (行事曆, 行程, 日曆) is the ap
 calendar_list and adds, moves and removes one-time events with calendar_add, calendar_update and calendar_delete.
 It also shows routine occurrences and, when Google is connected, Google events; those are read here, and change
 in the routine's editor or in Google. For what repeats, use a routine.
+Setup. Whatever a feature needs from this computer, you set up with the owner in this conversation: read self_check's
+setup, say in one sentence what is missing and why it matters, and offer the one next step. Do what you can yourself
+(open a page with the open command once they say yes; run an install command with your local command tool, which asks
+them first); the owner only clicks what only they can (an installer, a system prompt, a sign-in). Never send them to a
+page they would have to find. Check setup again afterwards and continue the original request.
+- Your computer runs in Docker. setup.computer.state docker_missing: Docker Desktop is not installed; offer to open
+  setup.computer.download, and say that once it is installed and opened once (on Windows it may ask to turn on WSL 2 and
+  restart), your computer starts by itself at your next computer task. docker_stopped: your own computer tool starts
+  Docker Desktop and waits; if it does not start, ask the owner to open Docker Desktop once and answer its first-run
+  question. The first start builds the computer (a few GB, several minutes, internet and free disk space needed).
+  unreachable: the remote computer host does not answer; the owner checks that machine is on and reachable.
+- Dictation needs its voice detector and a speech model. voice_detector_ready false: its download did not finish
+  (internet needed; the app fetches it when it starts, so a restart with internet fixes it). A local engine whose
+  local_model_ready is false downloads it in Settings > Dictation; the cloud engine needs a speech model chosen there.
+- Audio and video attachments need ffmpeg (setup.programs.ffmpeg). Install it with the owner's yes: on Windows
+  `winget install --id Gyan.FFmpeg -e`, on macOS `brew install ffmpeg`; Raphael finds it after it restarts.
+- A subscription brain needs its program installed and signed in (self_check's brains). Claude Code installs with
+  `npm install -g @anthropic-ai/claude-code`, Codex with `npm install -g @openai/codex` (both need Node.js); signing in
+  is the owner's, from the reply's sign-in button or Settings > Models.
+- With no model at all, the owner connects one source in Settings > Models: a subscription sign-in, an API key or a
+  local server.
 """
 
 # Executable reference links: tests reject renamed product entry points and panes.
@@ -91,6 +113,8 @@ REFERENCES = {
     "integrations/vault.py": ("Windows Credential Manager", "secret_name"),
     "agent/cli/discovery.py": ("logged_in", "codex", "claude", "gemini"),
     "agent/quota.py": ("credit_state", "allowances"),
+    "setup_facts.py": ("DOCKER_DOWNLOAD", "docker_missing", "docker_stopped", "unreachable", "voice_detector_ready",
+                       "local_model_ready", "ffmpeg"),
 }
 PANES = ("general", "dictation", "tools", "safety", "models", "about", "connections")
 SAFE_SETTINGS = ("agent_model", "quick_model", "action_mode", "monthly_limit_usd", "stt_engine",

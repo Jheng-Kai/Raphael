@@ -1116,6 +1116,7 @@ class App(Router):
                 member.id: member.name for member in self.members.store.members() if member.id not in self.members.deleting}},
         )
         self.agent.report_platform_reply = self._report_platform_reply
+        self.agent.setup_facts = self._setup_facts
         from .messaging.cards import MessagingCards
         self.messaging.cards = MessagingCards(self._conn, self.messaging, self._agent_notice)
         self.secret_cards.messaging = self.messaging
@@ -1675,6 +1676,14 @@ class App(Router):
         await self._shutdown_requested.wait()
 
     # --- models ---------------------------------------------------------------------------------
+
+    async def _setup_facts(self) -> dict:
+        """What a member reads in self_check about this computer's setup (setup_facts.py, R-SETUP-01)."""
+        from . import setup_facts
+        return {"computer": await setup_facts.computer(self.vm),
+                "dictation": setup_facts.dictation(self.agent._settings.get("stt_engine"), self._speech.engine_name,
+                                                   self.manager.is_ready, VAD_MODEL),
+                "programs": setup_facts.programs()}
 
     async def _models_status(self, params: dict) -> dict:
         engine = self._speech.engine_name

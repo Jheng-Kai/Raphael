@@ -66,7 +66,7 @@ def test_every_member_prompt_says_to_use_its_own_computer_before_giving_up_on_a_
     prompt = prompts()[path]
     assert ("open the page in its browser and read it there before giving up; a consent step they told you to take is already "
             "their yes") in prompt
-    assert "With no computer tool, say once that you have none and that they can turn it on in your Computer tab" in prompt
+    assert "With no computer tool, say once why (self_check's setup) and offer the fix" in prompt
     assert "Never claim an ability you lack" in prompt
     assert "What you can do now, do in this turn; a promise to do it later is not an answer" in prompt
 

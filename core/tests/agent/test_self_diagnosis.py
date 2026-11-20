@@ -297,6 +297,30 @@ async def test_self_check_and_help_are_t0_and_never_return_key_values(make_rig, 
     assert TIERS["self_check"] == TIERS["raphael_help"] == Tier.T0
 
 
+async def test_self_check_reports_what_this_computer_lacks_for_a_feature(make_rig, client):
+    """R-SETUP-01: the computer's Docker, dictation's models and ffmpeg are in self_check's setup, and a reader that fails
+    says unknown rather than a guess."""
+    rig = make_rig()
+
+    async def facts():
+        return {"computer": {"host": "this_pc", "state": "docker_missing", "download": "https://www.docker.com/products/docker-desktop/"},
+                "dictation": {"engine": "cloud", "voice_detector_ready": True}, "programs": {"ffmpeg": False}}
+
+    rig.service.setup_facts = facts
+    client.chats = [chat("Checking.", ("self_check", {})), chat('{"text":"Checked."}')]
+    await typed(rig)
+    sent = json.dumps(client.chat_calls[-1]["messages"], ensure_ascii=False)
+    assert "docker_missing" in sent and "docker-desktop" in sent and '\\"ffmpeg\\": false' in sent
+
+    async def broken():
+        raise OSError("no engine")
+
+    rig.service.setup_facts = broken
+    client.chats = [chat("Checking.", ("self_check", {})), chat('{"text":"Checked."}')]
+    await typed(rig)
+    assert '\\"setup\\": {\\"state\\": \\"unknown\\"}' in json.dumps(client.chat_calls[-1]["messages"], ensure_ascii=False)
+
+
 def test_reference_names_and_prompt_doctrine_follow_real_code():
     from raphael_core.agent.self_check import REFERENCES, PANES, SAFE_SETTINGS, ABOUT_INDEX, DOCTRINE
     from raphael_core.agent.persona import system_prompt, member_system_prompt, cli_system_prompt

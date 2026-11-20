@@ -152,7 +152,24 @@ ENGINE_FAILURES = {
     "docker_start_failed": "Raphael tried to start Docker Desktop and it could not be launched. Tell the owner plainly that "
                            "Docker Desktop did not start and ask them to open it themselves. Do not retry in a loop.",
     "docker_start_timeout": "Docker Desktop is still starting. Try this tool again once after about 30 seconds. If it fails "
-                            "again, tell the owner plainly that Docker Desktop did not start.",
+                            "again, tell the owner plainly that Docker Desktop did not start: it may be waiting for its own "
+                            "first-run question, or on Windows for WSL 2 or virtualization to be turned on. Ask them to open "
+                            "Docker Desktop once and answer what it asks.",
+    "absent": "This PC has no Docker Desktop, so there is no computer. Tell the owner your computer needs Docker Desktop, offer "
+              "to open its download page (self_check's setup.computer.download) and say it starts by itself once Docker "
+              "Desktop is installed and opened once.",
+    "image_missing": "The computer's image is not built yet. It is built on first use (a few GB, several minutes, internet "
+                     "needed): say so and try again once in a few minutes.",
+    "pull_failed": "Downloading the computer's base image failed: usually no internet, Docker Hub out of reach or a full disk. "
+                   "Tell the owner which is likely and try once more after it is fixed.",
+    "build_failed": "Building the computer's image failed: usually the internet dropped or the disk has less than a few GB free. "
+                    "Tell the owner and try once more after that is fixed.",
+    "local_capacity": "Every computer this PC runs at once is busy with other members' work. Nothing is wrong with the setup: "
+                      "wait for one to finish, or tell the owner which work is in the way.",
+    "incompatible": "This computer was made by an earlier version and must be repaired before it starts. Ask the owner to "
+                    "choose 修復 in your computer's ⋯ menu; its files are kept.",
+    "start_failed": "The computer did not start. Try once more; if it fails again, tell the owner Docker Desktop may need a "
+                    "restart (quit it from its tray or menu bar icon and open it again).",
 }
 
 

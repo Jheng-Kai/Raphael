@@ -984,6 +984,8 @@ class AgentService:
         self._handing = set()
         self._drains = {}
         self.report_platform_reply = None
+        # What the app needs from this computer (setup_facts.py), read by self_check; None where the app has no such reader.
+        self.setup_facts = None
         self._admissions = {}
         self._admitting: list[_Ask] = []
         self._running_requests: dict[str, _Ask] = {}
@@ -3898,6 +3900,12 @@ class AgentService:
             elif name in ("self_check", "raphael_help"):
                 from .self_check import ABOUT, snapshot
                 data = snapshot(self, ask) if name == "self_check" else {"reference": ABOUT}
+                if name == "self_check" and self.setup_facts is not None:
+                    try:
+                        data["setup"] = await self.setup_facts()
+                    except Exception as error:  # the class only: a fact that cannot be read is unknown, never a guess
+                        logger.warning("The setup facts could not be read: %s", type(error).__name__)
+                        data["setup"] = {"state": "unknown"}
             elif name in COMMANDS:
                 if not self._owner_screen(ask):
                     raise HarnessToolError("presence_required")

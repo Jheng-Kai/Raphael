@@ -2242,3 +2242,5 @@ Core: `tests/computer/test_owner_transfer.py`, `tests/computer/test_viewer.py`. 
 answers, and that a paste lands); `npm run verify -- --computer` with Docker running proves it ("shared owner paste",
 "shared owner copy", "shared owner files", "shared member copy" in `evaluate/computer_acceptance.py`; the offline world fakes the driver and
 the guest's programs, so only a real run shows what the driver's clipboard does).
+
+A computer that cannot start for its setup (R-SETUP-01): self_check's `setup.computer` says `docker_missing` (with Docker Desktop's download page), `docker_stopped`, `running` or a remote host `unreachable`, read without starting anything; raphael_help says how a member helps the owner install or open Docker Desktop in the conversation, and each engine failure (`absent`, `image_missing`, `pull_failed`, `build_failed`, `local_capacity`, `incompatible`, `start_failed`) tells the member what to do. Nothing is drawn over the screen. Core-only: `core/tests/test_setup_facts.py`.
