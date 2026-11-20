@@ -1263,6 +1263,7 @@ export const th = {
   "status.needs": "มีสมาชิกรอคุณอยู่",
   "status.groupNeeds": "รอคุณ",
   "status.groupBusy": "กำลังทำงาน",
+  "cardFloat.back": "กลับไปที่การ์ด",
   "agent.searchClose": "ปิดการค้นหา",
   "agent.attach": "แนบไฟล์",
   "agent.dropFiles": "วางเพื่อเพิ่มไฟล์",

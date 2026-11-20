@@ -1263,6 +1263,7 @@ export const ru = {
   "status.needs": "Участник ждёт вас",
   "status.groupNeeds": "Ждут вас",
   "status.groupBusy": "Работают",
+  "cardFloat.back": "Вернуться к карточке",
   "agent.searchClose": "Закрыть поиск",
   "agent.attach": "Прикрепить файл",
   "agent.dropFiles": "Перетащите для добавления файлов",

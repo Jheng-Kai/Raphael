@@ -1263,6 +1263,7 @@ export const tr = {
   "status.needs": "Bir üye seni bekliyor",
   "status.groupNeeds": "Seni bekliyor",
   "status.groupBusy": "Çalışıyor",
+  "cardFloat.back": "Karta dön",
   "agent.searchClose": "Aramayı kapat",
   "agent.attach": "Dosya ekle",
   "agent.dropFiles": "Dosya eklemek için bırakın",

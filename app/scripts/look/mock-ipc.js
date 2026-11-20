@@ -622,6 +622,13 @@ export function installMock(fixture, config = {}, target = window) {
     turn.secrets = [{...turn.secrets[0], id: "card-key", name: "OPENROUTER_API_KEY", secret: "OPENROUTER_API_KEY", key: true, purpose: "價格腳本要呼叫模型"}];
     data.turns.push(turn);
   }
+  // Talk after the key request, so that the waiting card can be read out of sight (card-float.ts).
+  if (variant.keyCard && variant.keyCardLater) {
+    const base = structuredClone(data.turns.find(turn => turn.id === 133));
+    for (let index = 0; index < 12; index++) data.turns.push({ ...base, id: 140 + index, session_id: `look-later-${index}`,
+      created_at_ms: (base.created_at_ms ?? data.now) + (index + 1) * 1000, question: `另一個問題 ${index + 1}`,
+      text: "這是之後的回答。卡片還在上面等你，捲出畫面後會在頂端留下一個小卡。", secrets: [], steps: [], messages: [] });
+  }
   // The same key asked for by work the member handed to itself: a turn with no words of the owner's, still running.
   if (variant.keyCardWork) {
     const asked = structuredClone(data.secretTurns.notion);

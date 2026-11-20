@@ -639,6 +639,16 @@ pill draws no dot, and its arrow shows on a hover only while the details panel i
 
 ```powershell
 npm run look -- status-light-idle status-light-list status-light-pill-open top-row-find top-row-room-find conversation-share --theme both --width 1120,720,1920x1080
+## A waiting card read out of sight
+
+A card that waits for the owner stays where it was born (card-float.ts, R-CARD-FLOAT-01). When the newest one is read
+out of sight, one pill at the top of the conversation names it (a warning dot, the card's title, an arrow named 回到原位).
+Its press stands the card itself over the thread, fixed under the pill and as wide as the column, with a spacer in its
+place, so the card's fields and buttons keep working; 回到原位 scrolls back to it. The look fixture `keyCardLater` adds
+twelve turns after the key card so that it can be read out of sight.
+
+```powershell
+npm run look -- card-float-pill card-float-open card-float-back computer-key-card --theme both --width 1120,720,1920x1080
 ```
 
 ## No voice

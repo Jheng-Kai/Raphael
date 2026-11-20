@@ -1263,6 +1263,7 @@ export const id = {
   "status.needs": "Ada anggota yang menunggumu",
   "status.groupNeeds": "Menunggumu",
   "status.groupBusy": "Bekerja",
+  "cardFloat.back": "Kembali ke kartu",
   "agent.searchClose": "Tutup pencarian",
   "agent.attach": "Lampirkan berkas",
   "agent.dropFiles": "Lepaskan untuk menambah berkas",

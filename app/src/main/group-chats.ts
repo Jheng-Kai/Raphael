@@ -10,6 +10,7 @@ import { sameWire, ThreadRenderCache } from "./thread-render";
 import { mountTranscriptWindow, TranscriptWindow } from "./transcript-window";
 // Group chat entry points share the global sidebar and the conversation header.
 import { mountConversationFind } from "./conversation-find";
+import { mountCardFloat } from "./card-float";
 import * as api from "./api";
 import { eventRead } from './event-read';
 import { visibilityGate } from "./window-visibility";
@@ -250,6 +251,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   el.innerHTML=`<header class="page-head mb-head" data-window-drag><span class="room-picker"></span><div class="au-room-heading"></div><div class="ra-tools">${iconButton("more",t("members.more",{p0:t("rooms.title")}), ' data-room-menu')}</div></header><div class="ra-find" hidden></div><div class="ra-stage"><div class="ra-scroll"><div class="ra-col"><div class="ra-older"></div><ol class="thread au-room-thread"></ol></div></div><div class="ra-dock"></div></div>`;
   const thread=el.querySelector<HTMLElement>(".thread")!,scroll=el.querySelector<HTMLElement>(".ra-scroll")!,older=el.querySelector<HTMLElement>(".ra-older")!;
   keepReadingPlace(scroll, ".thread > *");
+  mountCardFloat({ stage: el.querySelector<HTMLElement>(".ra-stage")!, scroller: scroll, thread });
   let room:Room|undefined,list:MembersList={members:[],groups:[]},messages:RoomMessage[]=[],generation=0,opened=false,canOlder=false,loadingOlder=false;
   // Navigation identity remains available while the complete room is loading.
   let roomId: number | undefined;

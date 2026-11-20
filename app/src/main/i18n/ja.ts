@@ -974,6 +974,7 @@ export const ja = {
   "status.needs": "あなたを待っているメンバーがいます",
   "status.groupNeeds": "あなたを待っています",
   "status.groupBusy": "作業中",
+  "cardFloat.back": "元の位置に戻る",
   "agent.searchClose": "検索を閉じる",
   "agent.attach": "ファイルを添付",
   "agent.dropFiles": "ドロップしてファイルを追加",
