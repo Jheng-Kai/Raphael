@@ -386,6 +386,11 @@ const FLEETING_MS: Partial<Record<SlimeState, number>> = { done: 2000, arriving:
 /** The states the core tells (`member.activity`). */
 const LIVE_STATES: readonly string[] = ["thinking", "working", "searching", "computer", "waiting", "blocked", "done", "error"];
 
+/** The header's status light follows what members are doing (status-light.ts): a change is told once, after it is made. */
+const tellActivity = (): void => { if (typeof window !== "undefined") window.dispatchEvent(new Event("slime-activity")); };
+/** What each member is doing now, as the core last said: live states only, none for a member at rest. */
+export const liveStates = (): ReadonlyMap<number, SlimeState> => activity;
+
 interface SlimeFacts { id: number; waiting?: boolean; last_at?: number | null }
 
 /** What a member's own row says, for when it is doing nothing: an answer it waits for, or sleep after a long silence. */
@@ -676,6 +681,7 @@ export function followSlimeRoster(members: readonly { id: number; activity?: str
     } else activity.delete(id);
     paint(id, waiting ? "blocked" : activity.get(id) ?? resting.get(id) ?? "idle");
   }
+  tellActivity();
 }
 
 /** The words for what a member is doing, on every face of it already drawn: a face is not drawn again for them. */
@@ -698,12 +704,14 @@ export function setSlimeState(id: number, state: SlimeState, label?: string): vo
   began.set(id, performance.now());
   if (state === "idle") activity.delete(id); else activity.set(id, state);
   paint(id, state === "idle" ? resting.get(id) ?? "idle" : state);
+  tellActivity();
   const lasts = FLEETING_MS[state];
   if (lasts === undefined) return;
   fleeting.set(id, setTimeout(() => {
     fleeting.delete(id);
     activity.delete(id);
     paint(id, resting.get(id) ?? "idle");
+    tellActivity();
   }, lasts));
 }
 

@@ -1,4 +1,4 @@
-import { scene, member, room, wait, hover, click, stableClick, check, type, drag } from "./steps.mjs";
+import { scene, member, room, wait, hover, click, stableClick, check, type, drag, findKey } from "./steps.mjs";
 
 const conversation = (name, description, variant = "clean", extra = []) => ({ ...scene(name, description, [member(1), wait('.tn[data-id="651"]'),
   ...extra, check(name)], { presence: variant }), motion: extra.some(step => step.action === "event-storm" && step.roster) });
@@ -17,8 +17,8 @@ export default [
   scene("group-live-line", "A group action sits below its working member", [room(1),wait('.au-room-thinking .live-action'),hover('.au-room-thinking .live-presence'),check("group-live-line")], {presence:"action-group"}),
   conversation("transcript-time-gap", "Hour gaps within one day add no separator", "gap"),
   conversation("event-routine-line", "A routine receipt stays in collapsed reply detail", "events"),
-  conversation("event-routine-find", "Conversation find visits the receipt title without exposing transport metadata", "events", [click('.mb-chat:not([hidden]) [data-act="search"]'), type('.mb-chat:not([hidden]) .ra-find-input', 'Sample briefing'), wait('[data-id="651"] .event-line mark')]),
-  conversation("event-routine-find-group", "Find reveals a selected receipt inside its collapsed group and keeps it through refresh", "collapse", [click('.mb-chat:not([hidden]) [data-act="search"]'), type('.mb-chat:not([hidden]) .ra-find-input', 'Sample briefing'), wait('[data-event-group][open] .handoff-detail mark.is-current'), {action: "event-storm", selector: ".mb-chat:not([hidden]) .ra-scroll", roster: true, wheelBy: 0, measure: {name: "event-find-presence", enforce: false}, limits: {replacedFaces: 0, longTaskMs: 600}}]),
+  conversation("event-routine-find", "Conversation find visits the receipt title without exposing transport metadata", "events", [findKey(), type('.mb-chat:not([hidden]) .ra-find-input', 'Sample briefing'), wait('[data-id="651"] .event-line mark')]),
+  conversation("event-routine-find-group", "Find reveals a selected receipt inside its collapsed group and keeps it through refresh", "collapse", [findKey(), type('.mb-chat:not([hidden]) .ra-find-input', 'Sample briefing'), wait('[data-event-group][open] .handoff-detail mark.is-current'), {action: "event-storm", selector: ".mb-chat:not([hidden]) .ra-scroll", roster: true, wheelBy: 0, measure: {name: "event-find-presence", enforce: false}, limits: {replacedFaces: 0, longTaskMs: 600}}]),
   conversation("event-routine-spacing", "Receipts add no vertical gaps between replies or media cards", "spacing"),
   conversation("event-calendar-line", "A calendar receipt keeps the event name and date", "calendar"),
   scene("sidebar-row-time", "A row shows the name and one line with no time, and its overflow appears under the pointer", [{action: "member-column", collapsed: false}, hover('[data-member="1"]'), check("sidebar-row-time")], {presence: "clean"}),

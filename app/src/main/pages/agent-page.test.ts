@@ -161,7 +161,7 @@ test("the header has no computer button, and an idle computer adds nothing to th
   const agent = mount();
   try {
     await flush();
-    expect(agent.el.querySelector('.mb-head [data-act="computer"], .mb-head .btn.ra-tool:not([hidden])')).toBeNull();
+    expect(agent.el.querySelector('.mb-head [data-act="computer"], .mb-head .btn.ra-tool:not([hidden]):not([data-act="status"])')).toBeNull();
     const title = agent.el.querySelector<HTMLElement>(".conversation-trigger")!;
     expect(title.classList.contains("is-computer-active")).toBe(false);
     expect(title.getAttribute("aria-label")).not.toContain("正在使用電腦");
@@ -351,7 +351,7 @@ describe("the search", () => {
     vi.useFakeTimers();
     api.agentHistoryList.mockResolvedValue({ turns: [turn(1, { question: "needle and needle", text: "needle" })] });
     mount(); await flush();
-    document.querySelector<HTMLElement>('[data-act="search"]')!.click();
+    window.dispatchEvent(new CustomEvent("raphael:conversation-shortcut", { detail: "find" }));
     const field = document.querySelector<HTMLInputElement>(".ra-find-input")!;
     field.value = "needle"; field.dispatchEvent(new Event("input"));
     await vi.advanceTimersByTimeAsync(250);
@@ -364,7 +364,7 @@ describe("the search", () => {
     const newest = (count: number) => [turn(250, { question: "needle" }), ...page(249, count - 1)];
     api.agentHistoryList.mockImplementation(async (params: {limit:number;before_id?:number}) => params.limit===200 ? {turns:params.before_id ? [turn(3,{question:"needle"})] : newest(200)} : {turns:params.before_id ? [] : newest(50)});
     mount(); await flush();
-    document.querySelector<HTMLElement>('[data-act="search"]')!.click();
+    window.dispatchEvent(new CustomEvent("raphael:conversation-shortcut", { detail: "find" }));
     const field=document.querySelector<HTMLInputElement>('.ra-find-input')!;
     field.value='needle';field.dispatchEvent(new Event('input'));
     await vi.advanceTimersByTimeAsync(250);

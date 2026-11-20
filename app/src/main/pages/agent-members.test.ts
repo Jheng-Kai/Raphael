@@ -168,14 +168,15 @@ test.each(["member", "page", "room"])("the first unseen turn has its own stable 
   agent.hide();
 });
 
-test("share sits in a member's conversation header, opposite search, and asks the member to write its template there", async () => {
+test("share sits in a member's conversation header, opposite the status light, and asks the member to write its template there", async () => {
   resetAsks(); api.agentAskText.mockResolvedValue({});
   const agent = mount(); await flush();
   expect($('[data-act="share-member"]').hidden).toBe(true); // Raphael is the app's own
   await pick(3);
   const share = $('.mb-head .ra-tools [data-act="share-member"]');
   expect(share.hidden).toBe(false);
-  expect($('.mb-head .mb-head-l [data-act="search"]')).not.toBeNull();
+  expect($('.mb-head .mb-head-l [data-act="status"]')).not.toBeNull();
+  expect($('.mb-head [data-act="search"]')).toBeNull();
   share.click();
   $('#app-popover [data-action="0"]').click(); await flush();
   expect(api.agentAskText).toHaveBeenCalledWith(expect.any(String), [], 3, { intent: "share-template" });
@@ -1052,7 +1053,7 @@ test.each(["finish", "switch", "search", "reduced"])("a finished member burst re
   expect($('[data-id="50"] .work-toggle')).toBeNull();
   if (mode === "finish") await vi.advanceTimersByTimeAsync(2000);
   if (mode === "switch") { await pick(4); await pick(3); }
-  if (mode === "search") $('[data-act="search"]').click();
+  if (mode === "search") window.dispatchEvent(new CustomEvent("raphael:conversation-shortcut", { detail: "find" }));
   if (mode === "reduced") {
     reduce = true;
     preferenceChanged();
@@ -1391,7 +1392,7 @@ describe("a member's thread", () => {
     await vi.runOnlyPendingTimersAsync();
     $(".mb-col [data-member=\"3\"]").click();
     await vi.runOnlyPendingTimersAsync();
-    $('[data-act="search"]').click();
+    window.dispatchEvent(new CustomEvent("raphael:conversation-shortcut", { detail: "find" }));
     const input = $<HTMLInputElement>(".ra-find-input");
     input.value = "單字";
     input.dispatchEvent(new Event("input"));
@@ -1868,7 +1869,7 @@ test("finding a folded work receipt preserves the reply and its match through a 
   history[0]!.messages = [{ seq: 1, kind: "event", text: "Sample briefing ready", at_ms: history[0]!.created_at_ms }, { seq: 2, kind: "reply", text: history[0]!.text, at_ms: history[0]!.created_at_ms }];
   api.agentHistoryList.mockImplementation(async (q: {member_id?: number}) => ({ turns: q.member_id === 3 ? structuredClone(history) : THREADS[0] }));
   const agent = mount(); await flush(); await pick(3);
-  $('[data-act="search"]').click();
+  window.dispatchEvent(new CustomEvent("raphael:conversation-shortcut", { detail: "find" }));
   const input = $<HTMLInputElement>('.ra-find-input');
   input.value = "Sample briefing"; input.dispatchEvent(new Event("input"));
   await vi.advanceTimersByTimeAsync(250); await flush();

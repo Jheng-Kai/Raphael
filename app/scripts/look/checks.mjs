@@ -1623,15 +1623,13 @@ export function checkRendered(name, context = {}) {
       if (name === 'level-start-before') window.__look.desktopWidths = widths;
       else require(widths.every((width, index) => Math.abs(width - window.__look.desktopWidths[index]) < 1), 'starting the computer preserves panel and screen widths');
     } else if (name.startsWith('level-status-')) {
-      // No computer button in the header: a still dot beside the name says the computer works.
+      // No computer button in the header and no dot beside the name (R-HEAD-02): the name's label says the computer works.
       const trigger = document.querySelector('.mb-chat .conversation-trigger'), active = name.endsWith('active');
       require(!document.querySelector('.mb-head [data-act="computer"]'), 'the header has no computer button');
-      require(visible(trigger) && trigger.classList.contains('is-computer-active') === active, 'the name reflects running status');
       const dot = getComputedStyle(trigger.querySelector('.mb-pill'), '::after');
-      if (active) {
-        require(dot.content !== 'none' && parseFloat(dot.width) === 8 && dot.backgroundColor !== 'rgba(0, 0, 0, 0)' && dot.animationName === 'none', 'one still purple dot follows the name');
-        require(trigger.getAttribute('aria-label').includes(' · ') && trigger.title.includes(' · '), 'the name says the computer is working, to a screen reader and on hover');
-      } else require(dot.content === 'none' || dot.content === 'normal', 'an idle computer adds nothing to the name');
+      require(visible(trigger) && (dot.content === 'none' || dot.content === 'normal'), 'the name draws no dot, whatever the computer does');
+      if (active) require(trigger.getAttribute('aria-label').includes(' · ') && trigger.title.includes(' · '), 'the name says the computer is working, to a screen reader and on hover');
+      else require(!trigger.getAttribute('aria-label').includes(' · '), 'an idle computer adds nothing to the name');
     } else if (name === 'level-panel' || name === 'level-off' || name === 'level-no-computer') {
       // Since the panel tabs the computer has its own tab, headed by its state and shared location control.
       require(panel.dataset.detailsTab === 'computer' && visible(panel.querySelector('[data-computer-location]')), 'the computer tab keeps its state header and shared location control');
@@ -2015,20 +2013,12 @@ export function checkRendered(name, context = {}) {
       const pane = [...document.querySelectorAll('.ra-find')].find(el => visible(el));
       const proof = window.__polishSearch;
       if (proof?.total === 210) {
-        // The group's ⋯ is not drawn (a right click on the row opens its menu), so its header tool row is the search button alone.
-        // R-TOP-01: the head keeps the pane's side inset on both sides, and where the pane reaches the window's edge its tool
-        // ends 14 px short of the window's buttons; where a side thread stands at the right the tool ends the head at the pane's own edge.
+        // The group's header has no search button (Ctrl+F opens the bar) and its ⋯ is not drawn (a right click on the row opens
+        // its menu). R-TOP-01: the head keeps the pane's side inset on both sides.
         const room = document.querySelector('.au-room-pane'), head = room.querySelector(':scope > .page-head').getBoundingClientRect(), pane = room.getBoundingClientRect();
-        const search = document.querySelector('[data-room-search]'), menu = document.querySelector('[data-room-menu]');
-        const box = search.getBoundingClientRect(), heading = room.querySelector('.au-room-heading').getBoundingClientRect();
-        const controls = document.querySelector('.window-controls').getBoundingClientRect(), tools = room.querySelector('.page-head .ra-tools'), reserve = parseFloat(getComputedStyle(tools).marginRight);
-        // On a Mac there are no buttons at the right (macOS draws its lights at the top left): the tool keeps the pane's own inset from the window's edge.
-        const mac = document.documentElement.dataset.platform === 'macos', end = mac ? innerWidth : controls.left, gap = mac ? Math.max(16, parseFloat(getComputedStyle(room).paddingRight)) : 14, what = mac ? 'edge' : 'buttons';
-        require(visible(search) && search.closest('.page-head .ra-tools') && getComputedStyle(menu).display === 'none', 'group search stands alone in the shared header tool row; the menu is the row\'s right click');
+        const menu = document.querySelector('[data-room-menu]');
+        require(!room.querySelector('[data-room-search]') && getComputedStyle(menu).display === 'none', 'the group header has no search button, and the menu is the row\'s right click');
         require(Math.abs((head.left - pane.left) - (pane.right - head.right)) <= 1, `the head keeps one inset on both sides (${head.left - pane.left} / ${pane.right - head.right})`);
-        if (reserve > 0) require(Math.abs(end - box.right - gap) <= 2, `group search ends ${gap} px short of the window's ${what} (${end - box.right})`);
-        else require(Math.abs(box.right - head.right) <= 1, `group search ends the head where a side thread stands at the right (${head.right - box.right} short)`);
-        require(Math.abs(box.top + box.height / 2 - (heading.top + heading.height / 2)) <= 2, 'group search shares the heading\'s line');
       }
       require(proof?.wrap && proof.stable && proof.noMatch && proof.closedInPlace, 'keyboard and icon navigation wrap, typing stays put, no-match and both close paths work');
       require(pane.querySelector('.ra-find-count').textContent === `${proof.total}/${proof.total}`, 'the full paginated history starts at its newest exact word');
@@ -7108,8 +7098,8 @@ export function checkRendered(name, context = {}) {
     // Under 860 px the list is the rail beside the pane: the row starts at the pane's own edge, with nothing reserved for a menu button.
     const lead = parseFloat(getComputedStyle(back.parentElement).marginLeft) || 0;
     require(arrow.left - head.left <= 12 + lead && arrow.top >= head.top - 1 && arrow.bottom <= head.bottom + 1, `at the header's top left (${Math.round(arrow.left - head.left)} px in)`);
-    const search = pane.querySelector('.mb-head [data-act="search"]');
-    require(!search || !visible(search), "the thread's search waits where the arrow stands");
+    const status = pane.querySelector('.mb-head [data-act="status"]');
+    require(!status || !visible(status), "the status light waits where the arrow stands");
     require(!pane.querySelector(":scope > .ra-find") || !visible(pane.querySelector(":scope > .ra-find")), "and so does its bar");
     // The details panel is folded: the page has the whole area right of the sidebar (R-PAGE-08).
     const panel = document.querySelector(".page-agent .mb-det");
@@ -7186,9 +7176,9 @@ export function checkRendered(name, context = {}) {
       require(panel.querySelector('[data-panel-file="page:page-news"]'), "with the page's row in it");
       require(document.querySelector('.conversation-trigger')?.getAttribute("aria-expanded") === "true", "and the header says it is open");
     }
-    const arrow = pane.querySelector(".mb-head [data-page-back]"), search = pane.querySelector('.mb-head [data-act="search"]');
+    const arrow = pane.querySelector(".mb-head [data-page-back]"), status = pane.querySelector('.mb-head [data-act="status"]');
     require(!arrow || arrow.hidden || !visible(arrow), "the arrow is gone");
-    require(!search || getComputedStyle(search).display !== "none", "the search is back");
+    require(status && getComputedStyle(status).display !== "none", "the status light is back");
     require(![...document.querySelectorAll(".mb-scrim, .mb-dialog")].some(layer => !layer.closest("[hidden]")), "no dialog was ever opened");
     return { check: name, moved: was ? Math.round(offset - was.offset) : null, moveBefore: typeof Element.prototype.moveBefore === "function" };
   }
@@ -9529,12 +9519,37 @@ export function checkRendered(name, context = {}) {
     require(scroller.scrollTop < window.__rowWheel - 100, `a wheel over the header moved the thread up: ${Math.round(window.__rowWheel)} -> ${Math.round(scroller.scrollTop)}`);
     return { check: name, moved: Math.round(window.__rowWheel - scroller.scrollTop) };
   }
+  // The status light (status-light.ts) and the title pill beside it.
+  if (name === "status-light-idle" || name === "status-light-list" || name === "status-light-pill-open") {
+    const light = document.querySelector('.mb-chat .mb-head [data-act="status"]'), head = document.querySelector(".mb-chat .mb-head");
+    require(visible(light) && light.getBoundingClientRect().left - head.getBoundingClientRect().left < head.getBoundingClientRect().width / 4, "the status light stands at the header's left");
+    require(!document.querySelector('.mb-head [data-act="search"], [data-room-search]'), "no search button is left in a top row");
+    const pill = document.querySelector(".conversation-trigger .mb-pill");
+    require(getComputedStyle(pill, "::after").content === "none" || getComputedStyle(pill, "::after").content === "normal", "the title pill draws no dot of its own");
+    const dot = light.querySelector(".status-dot"), colour = getComputedStyle(dot).backgroundColor;
+    if (name === "status-light-idle") {
+      require(light.dataset.level === "idle" && light.getAttribute("aria-label") && !light.textContent.trim(), "with no member at work the light is idle, named, and wordless");
+    }
+    if (name === "status-light-list") {
+      require(light.dataset.level === "needs", `a member waiting for the owner turns the light to its warning colour (${light.dataset.level})`);
+      const rows = [...document.querySelectorAll(".menu .menu-choice")];
+      require(rows.length === 2 && rows[0].dataset.value === "2" && rows[1].dataset.value === "1", `the waiting member comes first, then the working one (${rows.map(row => row.dataset.value)})`);
+      require(rows.every(row => row.querySelector(".mlead .av, .mlead svg")), "each row has the member's face");
+      require(!document.querySelector(".menu .ck svg"), "nothing in the list is checked");
+      require(colour !== getComputedStyle(document.querySelector(".mb-chat")).color, "the warning dot is not the text's colour");
+    }
+    if (name === "status-light-pill-open") {
+      require(document.querySelector(".page-agent")?.dataset.det === "open", "the details panel is open");
+      require(getComputedStyle(document.querySelector(".conversation-trigger .mb-pill-go")).opacity === "0", "a hover on the title shows no arrow while the panel is open");
+    }
+    return { check: name, level: light.dataset.level };
+  }
   if (name === "conversation-share") {
-    const head = document.querySelector('.mb-chat .mb-head'), share = head?.querySelector('[data-act="share-member"]'), search = head?.querySelector('[data-act="search"]');
+    const head = document.querySelector('.mb-chat .mb-head'), share = head?.querySelector('[data-act="share-member"]'), status = head?.querySelector('[data-act="status"]');
     require(visible(share) && share.closest('.ra-tools'), "share is a visible tool of the conversation header");
     const h = head.getBoundingClientRect(), s = share.getBoundingClientRect();
     require(h.right - s.right < h.width / 4, "share sits at the header's right");
-    if (visible(search)) require(search.getBoundingClientRect().left - h.left < h.width / 4, "search sits opposite, at the left");
+    require(visible(status) && status.getBoundingClientRect().left - h.left < h.width / 4, "the status light sits opposite, at the left");
     require(!document.querySelector('.mb-det [data-act="share-member"], .mb-det [data-det="share"]'), "share left the panel");
     return { check: name };
   }
