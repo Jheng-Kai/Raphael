@@ -167,10 +167,11 @@ npm run look -- device-code device-code-done device-code-cancelled device-code-c
 
 ## Setup in the conversation
 
-Every such setup, Composio or otherwise, is done in the conversation, unless it ends with a sign-in or with entering a key. In the
-store, a sign-in or one key is still done at once; 加入 on anything more (a server of the owner's own such as n8n, a
-developer app of theirs) puts the owner's words 「幫我連接 <name>」 in the conversation's composer (`store.setUpInChat`)
-and its row says nothing it would have to explain. The member answers with a connect card (`connect_app`): a server
+Every setup that is not one click, Composio or otherwise, is done with Raphael in the conversation (R-CONNECT-CHAT-02). In
+the store a direct sign-in is still one click; 連結 on anything else (an app that asks for a key, a developer app of the
+owner's own, a server of theirs such as n8n, the private Google), and its 重新登入 or 新增帳號 once connected, close
+Settings, open Raphael's conversation and send 「幫我連接 <name>」 (`store.setUpInChat`) with the intent
+`connect-app:<slug>` (`chat-ask.ts`, `connections.ts` `askConnect`); its page asks nothing it would have to explain. The member answers with a connect card (`connect_app`): a server
 card has `needs: "own_server"` and carries its own `fields` (n8n: `url`, `token`), which the card's inline form shows
 with no catalog read; `integrations.card_connect {id, fields}` takes them, the token field is emptied on submit, and
 the member explains each field in its reply. Scenes: store-n8n and plugins-setup-own-app (`store-in-chat`).
@@ -773,9 +774,10 @@ among them) and need a developer app of the owner's own. Nothing in the store is
   steps, the redirect address with a copy button for a developer app, and one line that Composio keeps it. A row of the
   store says 需要 API key / 需要自己的開發者 app in words; no 加入 is disabled for want of anything. Without a Composio key
   the store row says so and its button adds the key.
-- Chat: `find_app` results and the card carry `needs`; a failed card is `needs_composio_key`, `needs_key`,
-  `needs_own_app` or `key_rejected`, with a button to the form or to Settings, and the member is told exactly what is
-  missing and where to add it (not a bare "not configured").
+- Chat (R-CONNECT-CHAT-01): `connect-app:<slug>` tells Raphael to call `connect_app` and explain the returned setup
+  guide in the owner's language. When Composio needs a key, `request_secret` with `connection: "composio"` opens a
+  secure card in the conversation. Saving uses the same connector vault as Settings and resumes setup for the app.
+  If the key is already saved, no card opens. For app-specific credentials, `find_app` and the app card carry `needs`.
 - Evidence: `core/tests/test_connector_setup.py`, `core/tests/test_toolkits.py`, `app/src/main/connection-setup.test.ts`;
   real request shapes were proved against Composio with a made-up key on `0codekit` (account ACTIVE, the session read
   back with its `auth_configs`, eight tools, then account and auth config deleted) and the own-app auth config shape
@@ -810,7 +812,7 @@ Connecting Composio and the owner's own Google authorization. Two behaviours, on
   reason for `unknown`). The member gets `cause <name>: ...` as the failure's reason. The attempt that used to be bare is `busy`:
   `connectors.connect` answers `busy` before it sends anything while another sign-in or `connectors.*` work holds its lock.
 - The owner's own Google is the app `google` (`apps.OWN_GOOGLE`): `connect_app google`, or 加入 on 「Google（私人連接）」 in the store,
-  which leaves for the composer with 「幫我連接我自己的 Google 帳號」. Its card (`needs: "own_google"`) walks five steps (open), gives
+  which hands it to Raphael with 「幫我連接我自己的 Google 帳號」 and the intent `connect-app:google`. Its card (`needs: "own_google"`) walks five steps (open), gives
   the scopes and the return address as text to copy, asks for the Client ID (plain) and the Client secret (masked) and signs in with
   one 連接 Google. The two values leave in `integrations.card_connect` and reach the vault through `connectors.google.configure`.
   With a Client ID kept the card has no fields: one button signs in. Connected, it says the account (Gmail's profile) and the tool count.

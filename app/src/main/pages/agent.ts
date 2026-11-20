@@ -3424,6 +3424,8 @@ export function createAgent(app: AppContext, places?: {
       if (!wasVisible) beginOpening();
       visible = true;
       if (arg === "computer") { if (roomPane.active) roomPane.close(); members.computer(); }
+      // Raphael's own conversation, where an app handed over from the connections is set up (connections.ts askConnect).
+      if (arg === "raphael") { if (roomPane.active) roomPane.close(); if (members.current() !== RAPHAEL_ID) members.select(RAPHAEL_ID); }
       // The thread is asked for before anything else on the page: the core answers in order.
       const draft = draftText(arg);
       const refocus = (): void => {

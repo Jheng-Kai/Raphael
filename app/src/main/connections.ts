@@ -10,7 +10,6 @@ import { bindLayerSteps, bindNavLayer, LayerViews } from "./nav-layers";
 import { noticeHTML } from "./missing";
 import * as api from "./api";
 import { type InventoryView, appOf, connectedCount, isConnected, whyNot } from "./apps-inventory";
-import { openConnectionSetup } from "./connection-setup";
 import { confirmDelete, openDialog as openMemberDialog } from "./member-dialogs";
 import { managedGroup, pluginTool, storePlugin, type ManagedConnector } from "./plugins-data";
 import { openMcpImport } from "./mcp-import";
@@ -392,8 +391,12 @@ function joinControl(s: StoreService, v: ConnectionsView): string {
   return btn(esc(t("conn.connect")), "cs-connect", ` data-conn="join" data-id="${esc(s.id)}" aria-label="${esc(t("conn.connectAria", { p0: s.name }))}"`);
 }
 
-/** An app that is set up in the conversation rather than here: a server of the owner's own, or a developer app of theirs. */
-const inChat = (s: StoreService): boolean => !!PRESET_FORMS[s.id] || s.id === OWN_GOOGLE || s.needs === "own_app";
+/** An app that is not one click is set up with Raphael in the conversation rather than here: a server of the owner's own,
+ *  the private Google setup, a developer app of theirs, or one that asks for a key (R-CONNECT-CHAT-02). A direct sign-in
+ *  stays one click on its row. */
+const inChat = (s: StoreService): boolean => !!PRESET_FORMS[s.id] || s.id === OWN_GOOGLE || s.needs === "own_app" || s.needs === "key";
+/** The slug Raphael's `connect_app` knows an app by. */
+const appSlug = (id: string): string => id.replace(/^composio:/, "");
 
 const storeMark = (s: StoreService): string => entryIcon(s, "md").replace(/<img /g, '<img decoding="async" ');
 
@@ -925,6 +928,9 @@ export interface ConnectionsHost {
   redraw(): void;
   /** 「試試看」: closes the settings and puts `text` in the composer of the 拉斐爾 page. */
   tryPrompt(text: string): void;
+  /** Hands an app that is not one click to Raphael: closes the settings, opens Raphael's conversation and sends 「幫我連接…」
+   *  with the intent `connect-app:<slug>`, so Raphael walks the owner through it. */
+  askConnect?(slug: string, name: string): void;
 }
 
 export interface Connections {
@@ -1297,6 +1303,21 @@ export function createConnections(host: ConnectionsHost): Connections {
   /** Opens the browser login for a store entry (`catalog_id`) or for a service that must sign in again (`id`). A Composio
    *  app signed in to `again` takes the place of the row in `replace`, or with none of what the core holds as stopped and
    *  of the app's only other account: the core chooses, since this window's list may be older than its last read (R-ACCT-04). */
+  /** A connected app whose store entry is not one click (a key, a developer app, the private Google): signing it in again or
+   *  adding an account is done with Raphael as connecting it was. */
+  /** Hands an app to Raphael (the host's way), or drafts the same words where the host has none. */
+  function askConnect(slug: string, name: string): void {
+    if (host.askConnect) host.askConnect(slug, name);
+    else host.tryPrompt(slug === OWN_GOOGLE ? t("store.googleSetUp") : t("store.setUpInChat", { p0: name }));
+  }
+
+  function chatGroup(group: { id: string; catalog_id?: string | null; source?: string | null }): boolean {
+    // The private Google, once connected, keeps its client: signing it in again is one click.
+    if (group.source === "google" || group.id === OWN_GOOGLE) return false;
+    const entry = entryById(group.catalog_id ?? group.id) ?? entryById("composio:" + appSlug(group.catalog_id ?? group.id));
+    return !!entry && inChat(entry);
+  }
+
   async function signIn(target: { catalog_id: string } | { id: string }, name: string, again: boolean, replace: string[] = []): Promise<void> {
     const key = "catalog_id" in target ? target.catalog_id : target.id;
     // One sign-in waits at a time, and it holds no other app back: the next one ends it (the core gives back the account it made).
@@ -1339,34 +1360,6 @@ export function createConnections(host: ConnectionsHost): Connections {
     }
   }
 
-  /**
-   * Adds an app that asks for the owner's own key, or a developer app of their own: its form asks first (the values go to
-   * the core in one call and to nothing else), then the core adds it, and for a developer app the browser signs in.
-   */
-  async function addWithForm(entry: StoreService, needs: "key" | "own_app"): Promise<void> {
-    if (login) {
-      await stopLogin();
-      if (login) return;
-    }
-    const added = await openConnectionSetup({ slug: entry.id, name: entry.name, needs }, {
-      connect: async (fields) => {
-        login = { target: entry.id, name: entry.name };
-        loginError = null;
-        redraw();
-        try {
-          return await api.connectorsConnect(entry.id, fields);
-        } catch (error) {
-          return { connected: false, error: error instanceof Error ? error.message : "error" };
-        } finally {
-          login = null;
-          redraw();
-        }
-      },
-      composioKey: () => { keyOpen = true; keyError = ""; redraw(); focusOn("#conn-key"); },
-    });
-    if (added) notify(t("conn.connected", { p0: entry.name }));
-    await load();
-  }
 
   function followEvent(event: MainEvent): void {
     if (event.type === "ConnectionsChanged" && host.visible()) void load();
@@ -1551,14 +1544,14 @@ export function createConnections(host: ConnectionsHost): Connections {
         if (!entry || entry.server_id) break;
         // A sign-in, or one key, is done here at once. Anything more (a server of the owner's own, a developer app) is set
         // up in the conversation, where the member says what it needs and explains it.
-        if (inChat(entry)) { host.tryPrompt(entry.id === OWN_GOOGLE ? t("store.googleSetUp") : t("store.setUpInChat", { p0: entry.name })); break; }
-        if (entry.needs === "key") void addWithForm(entry, entry.needs);
-        else void signIn({ catalog_id: entry.id }, entry.name, false);
+        if (inChat(entry)) { askConnect(appSlug(entry.id), entry.name); break; }
+        void signIn({ catalog_id: entry.id }, entry.name, false);
         break;
       }
       case "relogin": {
         const group = groupById(id);
-        if (group) void signIn({ id }, group.name, true);
+        if (group && chatGroup(group)) askConnect(appSlug(group.catalog_id ?? group.id), group.name);
+        else if (group) void signIn({ id }, group.name, true);
         break;
       }
       case "open-grants": {
@@ -1606,10 +1599,16 @@ export function createConnections(host: ConnectionsHost): Connections {
       }
       case "account-relogin": {
         const group = groupById(id);
-        if (group) void signIn({ id }, group.name, true, [button.dataset.account ?? ""].filter(Boolean));
+        if (group && chatGroup(group)) askConnect(appSlug(group.catalog_id ?? group.id), group.name);
+        else if (group) void signIn({ id }, group.name, true, [button.dataset.account ?? ""].filter(Boolean));
         break;
       }
-      case "add-account": { const group = groupById(id); if (group) void signIn({id}, group.name, false); break; }
+      case "add-account": {
+        const group = groupById(id);
+        if (group && chatGroup(group)) askConnect(appSlug(group.catalog_id ?? group.id), group.name);
+        else if (group) void signIn({id}, group.name, false);
+        break;
+      }
       case "retry-connections": void load(); break;
       case "retry-builtin-store": void load(); break;
       case "store-group":

@@ -363,6 +363,7 @@ _MODEL_MISMATCH = {
 
 
 _ALIASES = {"auth": "auth_expired", "login": "auth_expired", "not_configured": "auth_expired", "missing_key": "auth_expired",
+            "needs_composio_key": "auth_expired",
             "missing_secret": "auth_expired", "reconnect": "auth_expired", "scope": "permission_denied", "denied": "permission_denied",
             "toolkit_not_allowed": "permission_denied", "gone": "not_found", "protocol": "tool_broken", "http_error": "server",
             "quota": "usage_limit", "usage_limit_reached": "usage_limit", "rate_limited": "rate_limit", "offline": "network", "serverOverloaded": "overloaded",

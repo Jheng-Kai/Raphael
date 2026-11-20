@@ -64,6 +64,6 @@ def test_repair_metadata_survives_a_stored_step(reason, detail, requirement, rep
 
 def test_connection_cards_use_the_same_prerequisite_shape():
     from raphael_core.connectors.cards import _card_missing
-    assert _card_missing('needs_composio_key') == Missing('composio', 'composio_key', 'missing', 'store')
+    assert _card_missing('needs_composio_key') == Missing('composio', 'composio_key', 'missing', None)
     assert _card_missing('mcp_unavailable').repair is None
     assert _card_missing('timeout') is None

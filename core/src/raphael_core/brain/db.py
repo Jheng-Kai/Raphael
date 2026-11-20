@@ -2241,6 +2241,40 @@ PRAGMA user_version = 90;
 COMMIT;
 """
 
+# A conversation can ask for the Composio key through the same secret card flow.
+_MIGRATIONS[91] = """
+BEGIN;
+DROP TRIGGER clear_secret_cards;
+ALTER TABLE secret_cards RENAME TO secret_cards_previous;
+CREATE TABLE secret_cards (
+    id TEXT PRIMARY KEY,
+    turn_id INTEGER NOT NULL,
+    member_id INTEGER NOT NULL,
+    conversation_id INTEGER,
+    server_id TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK(kind IN ('env','header','login','messaging','key','composio')),
+    secret TEXT NOT NULL,
+    name TEXT NOT NULL,
+    language TEXT NOT NULL,
+    state TEXT NOT NULL CHECK(state IN ('pending','failed','saved','resuming','resumed','cancelled','expired')),
+    error TEXT NOT NULL DEFAULT '',
+    attempts INTEGER NOT NULL DEFAULT 0,
+    done TEXT NOT NULL DEFAULT '[]',
+    created_at_ms INTEGER NOT NULL,
+    updated_at_ms INTEGER NOT NULL,
+    expires_at_ms INTEGER NOT NULL,
+    resumed_at_ms INTEGER,
+    UNIQUE(turn_id, server_id, kind, secret)
+);
+INSERT INTO secret_cards SELECT * FROM secret_cards_previous;
+DROP TABLE secret_cards_previous;
+CREATE TRIGGER clear_secret_cards AFTER DELETE ON agent_turns BEGIN
+  DELETE FROM secret_cards WHERE turn_id=OLD.id;
+END;
+PRAGMA user_version = 91;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 

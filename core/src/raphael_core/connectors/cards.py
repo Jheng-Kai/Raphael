@@ -83,6 +83,11 @@ class Cause:
     fix: str = ""  # "settings": the Composio key in Connect apps (sidebar); "form": what the card asks for
 
 
+COMPOSIO_KEY_STEP = ('Composio\'s API key is missing. Call request_secret with connection: "composio" to show a secure card. '
+                     "Explain where to get the key at https://composio.dev and ask the owner to enter it only on the card. "
+                     "After it is saved, call connect_app again.")
+
+
 CAUSES: dict[str, Cause] = {cause.name: cause for cause in (
     # Nothing was sent: the attempt never left this PC.
     Cause("busy", True, "network", "Another sign-in, or the list of connections, was still working on this PC, so nothing was sent. Wait a moment, then press Connect again."),
@@ -100,7 +105,7 @@ CAUSES: dict[str, Cause] = {cause.name: cause for cause in (
     Cause("address", True, "tool_broken", "The service sent a sign-in address that does not belong to it, so Raphael did not open it. Try again."),
     Cause("not_allowed", False, "permission_denied", "Composio does not allow this app for the owner's project. The owner can allow it in the Composio dashboard."),
     # The keys and the owner's own setup.
-    Cause("needs_composio_key", False, "auth_expired", "Composio's API key is missing. The owner adds it in Connect apps (sidebar).", "settings"),
+    Cause("needs_composio_key", False, "auth_expired", COMPOSIO_KEY_STEP),
     Cause("key_refused", False, "auth_expired", "Composio refused its API key. The owner checks or replaces it in Connect apps (sidebar).", "settings"),
     Cause("not_configured", False, "auth_expired", "Raphael's own Google sign-in is not set up.", "settings"),
     Cause("needs_key", False, "auth_expired", "This app signs in with the owner's own key, which the card asks for.", "form"),
@@ -254,7 +259,7 @@ def _shown_error(error, app):
 
 def _card_missing(error):
     if error == "needs_composio_key":
-        return Missing("composio", "composio_key", "missing", "store")
+        return Missing("composio", "composio_key", "missing", None)
     if error == "not_configured":
         return Missing("google", "google_client", "missing", "store")
     if error == "mcp_unavailable":
@@ -377,6 +382,11 @@ class ConnectorCards:
         if ident in SERVER_APPS:
             return SERVER_APPS[ident]
         return next((app for app, _ in await catalog_apps(self._connectors) if app.id == ident), None)
+
+    def needs_composio_key(self, app: App | None) -> bool:
+        if app is None:  # A store slug whose catalog cannot be read until the key is saved.
+            return not self._connectors.vault.filled(KEY)
+        return app.provider in ("composio", "google") and self._provider(app) is None
 
     async def find(self, query):
         from .finder import normalize
@@ -647,13 +657,13 @@ class ConnectorCards:
         if kind == "client_rejected":
             return Failure("auth_expired", "Google did not accept the Client ID or Client secret entered on the card. The owner opens Google Cloud > Google Auth "
                                            "Platform > Clients, checks the Desktop client and enters both again on the card. Never ask for them in chat.")
-        if kind in ("needs_composio_key", "key_refused"):
+        if kind == "needs_composio_key":
+            return Failure("auth_expired", COMPOSIO_KEY_STEP, missing=_card_missing(kind))
+        if kind == "key_refused":
             own = (" Or the owner can connect their own Google account instead: connect_app with the id google, which walks them through a Google Cloud client."
                    if app.provider == "google" else "")
-            return Failure("auth_expired", f"No app can be added yet: Composio's API key is {'missing' if kind == 'needs_composio_key' else 'refused'}. The owner "
-                                           f"{'adds' if kind == 'needs_composio_key' else 'checks or replaces'} it in {WHERE}, "
-                                           f"in the Composio key form (made at composio.dev); then {name} can be added from the card or from {WHERE}.{own}",
-                           missing=_card_missing("needs_composio_key") if kind == "needs_composio_key" else None)
+            return Failure("auth_expired", f"No app can be added yet: Composio refused its API key. The owner checks or replaces it in {WHERE}, "
+                                           f"in the Composio key form (made at composio.dev); then {name} can be added from the card or from {WHERE}.{own}")
         if kind == "key_rejected":
             return Failure("auth_expired", f"{name} did not accept the key the owner entered. The owner checks it and enters it again "
                                            f"from the card or with Add on {name} in {WHERE}.")
