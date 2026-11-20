@@ -420,13 +420,15 @@ scenes plus desktop-panel, both themes at 1120,720,1920x1080.
 R-VAULT-01..05: Settings > Safety contains Vault. Entries have login, contact or
 card kinds, counted list filters, a label, one-line owner hint and all/chosen-member
 access. The counted filters browse records; they are not setting-value controls.
-Use the shared fieldHTML, sel/openMenu, row action menu and confirm menu.
+Use the shared fieldHTML, sel/openMenu and row action menu. Removing an entry is three
+presses: ⋯ (or a right click), 移除, which asks 「確定移除這筆資料？」 in its own place in the
+same menu (`ActionItem.ask`), and that item again; no second menu opens.
 
 ```powershell
-npm run look -- vault-list vault-filter vault-entry-menu vault-new-login vault-new-contact vault-new-card vault-sharing vault-import-preview vault-card-permission calm-thread --theme both --width 1120,720,1920x1080
+npm run look -- vault-list vault-filter vault-entry-menu vault-entry-remove-ask vault-new-login vault-new-contact vault-new-card vault-sharing vault-import-preview vault-card-permission calm-thread --theme both --width 1120,720,1920x1080
 ```
 
-Selected scenes: vault-list, vault-filter, vault-entry-menu, vault-new-login, vault-new-contact,
+Selected scenes: vault-list, vault-filter, vault-entry-menu, vault-entry-remove-ask, vault-new-login, vault-new-contact,
 vault-new-card, vault-sharing, vault-import-preview, vault-card-permission,
 calm-thread on the merged thread layout. Run both themes at
 1120,720,1920x1080. Inspect all contact sheets and each new scene at light 720

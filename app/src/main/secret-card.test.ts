@@ -231,6 +231,31 @@ describe("a key for a program in a member's computer", () => {
     expect(secretCardHTML(key({ state: "saved" }))).not.toContain("<input");
   });
 
+  test("a waiting key card's way out is the × at its top right, its status beside the title, nothing under it", () => {
+    document.body.innerHTML = secretCardHTML(key(), true);
+    const head = document.querySelector(".card-head")!;
+    expect(head.lastElementChild?.matches('.btn.icon[data-act="cancel-secret-turn"]')).toBe(true);
+    expect(head.lastElementChild?.textContent?.trim()).toBe("");
+    expect(document.querySelector(".card-heading .card-status")?.textContent).toBe(t("cards.inputWaiting"));
+    expect(document.querySelector(".card-actions")).toBeNull();
+    // A saved key has nothing to take back.
+    document.body.innerHTML = secretCardHTML(key({ state: "saved" }), true);
+    expect(document.querySelector('[data-act="cancel-secret-turn"]')).toBeNull();
+  });
+
+  test("work the member handed itself answers its waiting question from the card's ×, and no 取消 stands outside the card", () => {
+    const waiting = { id: "q-key", task_id: 3, turn_id: 9, member_id: 1, kind: "request_secret", card_id: "k1", question: "", options: [], free_text: true, state: "asked" as const, result: null };
+    const work = turn({ question: "", route: "worker", source: "worker", status: "running", peer_id: 1, member_id: 1, secrets: [key()], owner_questions: [waiting] });
+    document.body.innerHTML = turnHTML(work, emptyTimelineState(), false, LOOK);
+    const card = document.querySelector('[data-secret-card="k1"]')!;
+    expect(card.querySelector('.card-head > .btn.icon[data-owner-answer="cancel"]')?.getAttribute("data-owner-question")).toBe("q-key");
+    expect(document.querySelector(".cc-actions")).toBeNull();
+    expect([...document.querySelectorAll("button")].filter(button => !button.closest(".conversation-card, .message-actions") && button.textContent?.trim())).toEqual([]);
+    // A question whose card this turn does not draw still keeps its own way out.
+    document.body.innerHTML = turnHTML({ ...work, secrets: [] }, emptyTimelineState(), false, LOOK);
+    expect(document.querySelector('.cc-actions [data-owner-answer="cancel"]')).not.toBeNull();
+  });
+
   test("a card with no purpose still says why, in the words every secret card uses", () => {
     expect(visible(secretCardHTML(key({ purpose: undefined })))).toContain(t("cards.keyWhy"));
   });

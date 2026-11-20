@@ -3,14 +3,14 @@
 // as a turn of its own that opens with one centred line naming the apps it waited for.
 // Every state and public catalog logo comes from the core; no authorization URL or token is kept here.
 
-import { cardDisclosureHTML, cardHTML, cardPromptText } from "./card";
+import { cardDisclosureHTML, cardHTML, cardPromptText, ownerCloseHTML, waitingOwnerQuestion } from "./card";
 import { NAME, eventLineHTML } from "./event-line";
 import { asksGoogleClient, googleSetupHTML } from "./google-card";
 import { getLocale, t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
 import { linkedText } from "./message-content";
 import { entryIcon } from "./service-mark";
-import type { AgentTurn, ConnectorCard } from "./types";
+import type { AgentTurn, ConnectorCard, OwnerQuestion } from "./types";
 import { btn, esc, ico } from "./ui";
 import { missingHTML, missingRepairHTML, missingText } from "./missing";
 
@@ -132,7 +132,8 @@ function actionHTML(card: ConnectorCard): string {
   }
 }
 
-export function connectorCardHTML(card: ConnectorCard): string {
+/** `waiting`: the background question this card belongs to, whose way out is the card's × (`ownerCloseHTML`). */
+export function connectorCardHTML(card: ConnectorCard, waiting?: OwnerQuestion): string {
   const state = cardStateText(card);
   const connected = card.state === "connected";
   // The card's words already say what is missing: its note is then only the repair, not the sentence again (R-UI-02).
@@ -149,13 +150,14 @@ export function connectorCardHTML(card: ConnectorCard): string {
     body: state || t("cards.connectWhy"),
     content: note + reason + (asksGoogleClient(card) ? googleSetupHTML(card) : asksMore(card) && ["pending", "failed", "cancelled"].includes(card.state) ? setupSlotHTML(card) : ""),
     actions: connected ? btn(`${ico("check")}${esc(t("cards.connected"))}`, "sm", " disabled") : actionHTML(card),
+    ...(waiting ? { close: ownerCloseHTML(waiting), statusInHeading: true } : {}),
     attrs: ` data-connector="${esc(card.id)}" data-card-state="${esc(card.state)}"`,
   });
 }
 
 /** The cards a turn showed, below what it said. */
 export function connectorCardsHTML(turn: AgentTurn): string {
-  const cards = (turn.connectors ?? []).map(connectorCardHTML).join("");
+  const cards = (turn.connectors ?? []).map(card => connectorCardHTML(card, waitingOwnerQuestion(turn, card.id))).join("");
   // The one app a new member asks for in its set-up comes with one quiet line under the card.
   return cards + (cards && turn.setup ? `<p class="setup-note" data-setup-note>${esc(t("cards.connectYes"))}</p>` : "");
 }

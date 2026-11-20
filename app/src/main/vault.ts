@@ -1,7 +1,7 @@
 import { core, membersList } from "./api";
 import { t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
-import { btn, esc, fieldHTML, iconBtn, openConfirmMenu, openMenu, sel, tabs } from "./ui";
+import { btn, esc, fieldHTML, iconBtn, openMenu, sel, tabs } from "./ui";
 import { openActions } from "./member-column";
 import "./vault.css";
 
@@ -81,11 +81,12 @@ export function createVault(root: HTMLElement, redraw: () => void) {
     finally { state.busy = false; redraw(); }
   };
   const menu = (anchor: HTMLElement, id: string): void => {
-    openActions(anchor, [{ id: "edit", label: word("edit"), icon: "pencil" }, { id: "remove", label: word("remove"), icon: "trash" }], picked => {
+    // 移除 asks 「確定移除這筆資料？」 in its own place and removes on the second press: no second menu.
+    openActions(anchor, [{ id: "edit", label: word("edit"), icon: "pencil" }, { id: "remove", label: word("remove"), icon: "trash", ask: word("removeConfirm") }], picked => {
       if (picked === "edit") {
         cancel(); state.editing = state.entries.find(e => e.id === id) ?? null;
         state.kind = state.editing?.kind ?? null; state.access = state.editing?.members === "all" ? "all" : "chosen"; redraw();
-      } else openConfirmMenu(anchor, { label: word("remove"), ask: word("removeConfirm"), run: () => { void run(async () => { await core("vault.remove", { id }); await load(); }); } });
+      } else void run(async () => { await core("vault.remove", { id }); await load(); });
     });
   };
   root.addEventListener("click", event => {

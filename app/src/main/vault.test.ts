@@ -87,6 +87,20 @@ it("lists a key a member asked for, filters it like the other entries, and offer
   closeMenu();
 });
 
+it("removes an entry in three presses: ⋯, 移除 that asks in its own place, then the same item again", async () => {
+  const { root } = await setup();
+  click(root, '[data-vault="menu"][data-id="contact"]');
+  const remove = document.querySelector<HTMLElement>('.menu [data-pick="remove"]')!;
+  remove.click();
+  // The first press asks in the item's place and keeps the same menu open; nothing is removed yet.
+  expect(document.querySelector('.menu [data-pick="remove"]')).toBe(remove);
+  expect(remove.textContent).toBe("確定移除這筆資料？");
+  expect(api.core).not.toHaveBeenCalledWith("vault.remove", expect.anything());
+  remove.click();
+  await vi.waitFor(() => expect(api.core).toHaveBeenCalledWith("vault.remove", { id: "contact" }));
+  expect(document.querySelector('.menu [data-pick="remove"]')).toBeNull();
+});
+
 it("shows no Keys tab until a member has asked for a key", async () => {
   const { root } = await setup();
   expect(root.querySelector('[data-vault="filter"][data-kind="key"]')).toBeNull();

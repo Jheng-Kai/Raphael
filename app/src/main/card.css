@@ -23,6 +23,8 @@
 .conversation-card .card-actions { display: flex; flex-direction: row-reverse; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 8px; margin: 0; grid-column: auto; }
 .conversation-card .btn { transform: none; }
 .conversation-card .card-actions .pri, .conversation-card .sc-form .pri, .conversation-card .question-submit .pri { background: var(--card-primary); color: var(--card-primary-ink); border: 1px solid var(--card-primary-edge); }
+/* A primary that cannot be pressed yet (Save before a key is typed) is faded whole: no edge lighter than its fill in dark. */
+.conversation-card :is(.card-actions, .sc-form, .question-submit) .pri:disabled { border-color: transparent; }
 /* A card's text buttons are a little taller than the compact ones, not hugging their words to the limit: the field height. */
 .conversation-card :is(.card-actions, .question-submit) .btn:not(.icon) { min-height: var(--h-field); padding-block: 0; line-height: calc(var(--h-field) - 2px); }
 /* The quiet way out stands left of the others, as Cancel does beside a dialog's action. */

@@ -7,6 +7,7 @@ export default [
   scene('vault-list', 'Shared vault entries, owner hints and member access in Safety', [...list, check('vault-list')]),
   scene('vault-filter', 'Kind filters retain counts and show only the selected rows', [...list, click('[data-vault="filter"][data-kind="card"]'), check('vault-filter')]),
   scene('vault-entry-menu', 'Entry editing and removal share the existing row action menu', [...list, rightClick('[data-vault-row="sample-login"]'), wait('#app-popover [data-pick="remove"]'), check('vault-menu')]),
+  scene('vault-entry-remove-ask', '移除 asks in its own place in the same menu, and the second press removes', [...list, rightClick('[data-vault-row="sample-login"]'), wait('#app-popover [data-pick="remove"]'), click('#app-popover [data-pick="remove"]'), wait('#app-popover [data-pick="remove"][data-asking="true"]'), check('vault-remove-ask')]),
   ...['login','contact','card'].map(kind => scene(`vault-new-${kind}`, `Private ${kind} fields use the shared settings inputs`, [...editor(kind), check(`vault-new-${kind}`)])),
   scene('vault-sharing', 'Chosen-member access uses the shared dropdown without clearing private form inputs', [...editor('contact'), type('#vault-label', '出差聯絡資料'), click('[data-k="vault-access"]'), click('.menu [data-value="chosen"]'), wait('[data-vault-member]'), check('vault-sharing')]),
   scene('vault-import-preview', 'The owner file opens a selective preview without writing credentials', [...preview, click('[data-vault-import="1"]'), check('vault-preview')]),

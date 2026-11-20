@@ -502,6 +502,12 @@ export function checkRendered(name, context = {}) {
       require(vault.querySelectorAll('[id^="vault-value-"][type="password"]').length === fields, 'all private fields are masked');
       if (name === 'vault-new-card') require(vault.textContent.includes('最後的付款或送出由你完成'), 'card entry explains the final owner step');
     } else if (name === 'vault-menu') require(visible(document.querySelector('#app-popover [data-pick="edit"]')) && visible(document.querySelector('#app-popover [data-pick="remove"]')), 'entry actions use the shared row menu');
+    else if (name === 'vault-remove-ask') {
+      const remove = document.querySelector('#app-popover [data-pick="remove"]');
+      require(visible(remove) && remove.textContent.trim() === '確定移除這筆資料？' && visible(document.querySelector('#app-popover [data-pick="edit"]')), 'the first press asks in the item\'s place, in the same open menu');
+      require(remove.scrollWidth <= remove.clientWidth + 1, 'the question fits its row');
+      require(!window.__look.calls.some(call => call.method === 'vault.remove'), 'nothing is removed before the second press');
+    }
     else if (name === 'vault-filter') require(vault.querySelectorAll('.vault-row').length === 1 && vault.textContent.includes('公司差旅卡'), 'card filter selects only cards');
     else if (name === 'vault-sharing') require(vault.querySelectorAll('[data-vault-member]').length >= 2 && vault.querySelector('#vault-label').value === '出差聯絡資料', 'sharing preserves form input');
     else {
@@ -2104,16 +2110,30 @@ export function checkRendered(name, context = {}) {
     if (name === 'key-private') {
       require(title === '儲存金鑰' && card.querySelector('.key-context code')?.textContent === 'OPENROUTER_API_KEY', 'the variable is separate from the localized title');
       const field = card.querySelector('[data-secret-input]'), save = card.querySelector('[data-act=card-save]');
-      const status = card.querySelector('.card-status'), cancel = card.querySelector('.card-actions [data-act=cancel-secret-turn]');
+      const status = card.querySelector('.card-status'), cancel = card.querySelector('.card-head > [data-act=cancel-secret-turn]');
       require(field.type === 'password' && !save.disabled && !field.closest('.sc-field').querySelector('svg'), 'a masked field without an icon and an enabled Save');
       require(card.querySelector('.key-context .cc-state')?.textContent === '價格腳本要呼叫模型' && card.querySelector('.card-shield')?.textContent.includes('作業系統憑證庫'), 'the purpose and vault hint each appear once');
       require(status.textContent === '等你填入' && getComputedStyle(status).backgroundColor === 'rgba(0, 0, 0, 0)' && getComputedStyle(status.querySelector('i')).animationName === 'none', 'waiting is shown as words and a static dot');
       const box = card.getBoundingClientRect(), input = field.closest('.sc-field').getBoundingClientRect(), primary = save.getBoundingClientRect();
       require(Math.abs(primary.top - input.top) <= 1 && input.right <= primary.left && primary.right <= box.right && input.width > 120, 'the field and Save share one usable row');
-      require(visible(cancel) && cancel.getBoundingClientRect().bottom <= box.bottom && !card.closest('.tn').querySelector('[data-owner-act="cancel"]'), 'Cancel belongs to the card footer');
+      const heading = card.querySelector('.card-heading'), x = cancel?.getBoundingClientRect();
+      require(visible(cancel) && cancel.classList.contains('icon') && !cancel.textContent.trim() && x.right <= box.right && box.right - x.right <= 24 && x.top - box.top <= 24, 'the way out is the × at the card\'s top right');
+      require(heading.contains(status) && status.getBoundingClientRect().left - card.querySelector('.card-title').getBoundingClientRect().right <= 16, 'the status stands beside the title');
+      require(!card.querySelector('.card-actions') && !card.closest('.tn').querySelector('[data-owner-act="cancel"]'), 'nothing of the card stands under it');
     } else {
       require(title === 'OPENROUTER_API_KEY' && !card.querySelector('input, [data-act=cancel-secret-turn]') && window.__look.calls.filter(call => call.method === 'integrations.card_save').length === 1, 'save clears the field and Cancel and crosses one call');
     }
+    return {check:name};
+  }
+  if (name === "key-card-work") {
+    // Work the member handed itself waits on the key: its way out is the card's ×, and no 取消 of the question stands outside it.
+    const card = document.querySelector('[data-secret-card=card-key]'), box = card?.getBoundingClientRect();
+    require(visible(card) && card.closest('.tn')?.dataset.id === '135', 'the key card stands in the work\'s own line');
+    const x = card.querySelector('.card-head > [data-owner-answer=cancel][data-owner-question]');
+    require(visible(x) && x.classList.contains('icon') && box.right - x.getBoundingClientRect().right <= 24, 'the × at the top right answers the waiting question');
+    require(card.querySelector('.card-heading .card-status')?.textContent === '等你填入', 'the status stands beside the title');
+    const outside = [...document.querySelectorAll('.cc-actions [data-owner-answer], .tn .btn')].filter(button => visible(button) && !button.closest('.conversation-card, .message-actions, .composer') && button.textContent.trim());
+    require(!outside.length, `no button of the card stands outside it: ${outside.map(button => button.textContent.trim()).join(', ')}`);
     return {check:name};
   }
   if (["login-private", "login-saved"].includes(name)) {
