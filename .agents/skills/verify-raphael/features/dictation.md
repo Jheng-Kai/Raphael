@@ -70,7 +70,7 @@ length or mark test can tell, in every language, that "Um I think so." holds a f
 first three chosen languages add their worked examples (`prompts/cleanup_examples.<subtag>.md`, one for every language of the
 settings; mainland Chinese gets the Chinese ones in Simplified, character by character, so they use words both regions write
 alike). A missing file of examples fails the tests and the bundle's audit (`core/packaging/build.py prompt_files`); the
-prompt before the dictionary stays under 5,000 characters for every choice of languages. After the model only the whole
+prompt before the dictionary stays under 9,000 characters for every choice of languages. After the model only the whole
 text's last full stop goes, and only one that ends nothing but a sentence (。 and the like, R-DICT-STOP-01,
 `drop_final_full_stop`); a Latin dot may close "3 p.m." or "etc.", so it is the model's to leave out. Nothing checks after
 the model that it invented no question: the prompt says so, and how well models follow the new prompt on real dictation is

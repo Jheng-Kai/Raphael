@@ -676,9 +676,11 @@ async def test_the_dictated_text_and_the_reply_are_never_logged(make_svc, fake_c
 def test_the_prompt_is_package_data_with_one_placeholder_at_its_end():
     file = resources.files("raphael_core.brain.prompts").joinpath("cleanup_system.md")
     text = file.read_text(encoding="utf-8")
-    # Keep the general cleanup rules within the short prompt budget.
-    assert text.startswith("You edit dictated text.")
-    assert len(text) < 3700
+    # The goal comes first: what the speaker would have typed, not a transcript with marks added.
+    # The general rules stay within a budget (they grew for long dictation: paragraphs, sentences
+    # cut at pauses, spoken phrasing reworked into typed sentences).
+    assert text.startswith("You edit dictated text into what the speaker would have typed")
+    assert len(text) < 5600
     assert text.count("{dictionary}") == 1 and text.rstrip().endswith("\n{dictionary}")
     assert text.count("{target_app}") == 1
     assert text.count("{languages}") == 1 and text.count("{script_rules}") == 1
@@ -687,9 +689,11 @@ def test_the_prompt_is_package_data_with_one_placeholder_at_its_end():
 def test_the_prompt_keeps_all_spoken_particles_without_inventing_questions():
     text = build_system_prompt([], [])
     rule = next(line for line in text.splitlines() if "particles and question tags" in line)
-    assert "Keep the speaker's tone, including particles and question tags that carry it" in rule
-    # Whether a particle still fits is the model's judgment, not a rule of its own.
-    assert "leave one out only where it no longer fits" in rule
+    # A particle or question tag that carries meaning stays; one that only colors speech is a
+    # filler. Which is which is the model's judgment, named by kind, not a rule of its own.
+    assert "Keep the speaker's tone, including particles and question tags that carry meaning" in rule
+    assert "(a question, a suggestion, a softened request)" in rule
+    assert "leave out ones that only color speech, and one that no longer fits" in rule
     assert "Use a question mark only for a spoken question." in text
     # The rule names the kind of word, in no one language: no list of Chinese particles.
     assert not any(particle in rule for particle in ("嗎", "呢", "吧", "嘛", "啊", "不是嗎", "對吧"))
@@ -712,19 +716,31 @@ def test_the_prompt_forbids_an_invented_particle_question_or_question_mark():
 def test_the_prompt_keeps_the_language_neutral_rules_of_the_earlier_prompt():
     text = build_system_prompt([], [])
     for kept in (
-        # The speaker's order, and no sentence dropped.
-        "Never rephrase, reorder, merge or summarize their sentences",
+        # The speaker's order and words, no summary, and no sentence dropped. Spoken phrasing may be
+        # reworked into typed sentences, but no point is moved to sit with others on its topic.
+        "Never summarize, shorten a point away, reorder the speaker's sentences or points",
+        "never move one to sit with others on its topic",
+        "never swap a word for a synonym or another region's term",
+        "keeping the speaker's words for every point, reason, example, name, number, condition and negation",
         "Never drop a sentence, point, name, number, condition or negation the speaker meant for the reader.",
+        "A lone yes or no, a hedge that says how sure the speaker is",
         # A word becomes a product's name only from its context.
         "make a word a name only when the context clearly means that product",
-        # The sentence ends speech-to-text heard stay; only the text's last full stop goes.
-        "Keep the sentence ends the transcript has",
+        # Speech-to-text ends a sentence at every pause: sentences end where thoughts end, and the
+        # text's last full stop goes.
+        "join what it cut apart and end each sentence where its thought ends",
         "Leave out the full stop at the very end of the text, never a dot that belongs to a word or a number.",
-        # Several requests are numbered, none made the lead-in of the others; one topic, one paragraph.
+        # Several requests are numbered, none made the lead-in of the others; a long passage is laid
+        # out in paragraphs of one idea, never one block.
         "never make one request the lead-in of others",
-        "A single topic stays one paragraph, however long",
+        "never as one block",
+        "A paragraph holds one idea",
     ):
         assert kept in text, kept
+    # The rules that made a long dictation one block are gone (R-DICT-CLEAN-01).
+    for gone in ("A single topic stays one paragraph", "Keep the sentence ends the transcript has",
+                 "You only remove, punctuate and lay out"):
+        assert gone not in text, gone
     # No licence to rewrite what was said: numbers, dates and times stay as they were said.
     assert "usual written form" not in text
     tagged = [json.loads(line.split("→ ", 1)[1])["text"] for line in text.splitlines() if line.startswith("  → {\"text\": \"<")
@@ -1085,9 +1101,11 @@ def test_the_rest_of_the_prompt_is_the_same_for_every_selection():
 def test_structure_rules_cover_implicit_requests_single_topics_and_existing_sentences():
     prompt = build_system_prompt([], [], languages=["zh-TW"])
     assert 'Use a numbered list ("1. ") when the speaker enumerates, announces a number of things and names them, or names three or more parallel items, steps or requests, in any app, even in one sentence.' in prompt
-    assert "start a new one when the speaker moves to another point." in prompt
+    assert "Start a new one when the speaker moves to another point." in prompt
+    assert "Lay out anything longer than a few sentences so it reads at a glance, never as one block." in prompt
     assert "Only a lead-in the speaker said goes before the list, ending with a colon and a blank line: never invent one, a count or a heading" in prompt
-    assert "Keep the sentence ends the transcript has and split long speech into sentences." in prompt
+    assert "Speech recognition often ends a sentence at every pause, even in the middle of one: join what it cut apart and end each sentence where its thought ends." in prompt
+    assert "split long speech into short sentences; never chain a passage with commas." in prompt
     assert "When the speaker changes their mind anywhere, even deep in a long passage, write only the final version" in prompt
     assert "otherwise keep it as heard, never drop it" in prompt
     replies = [json.loads(line.split("→ ", 1)[1])["text"] for line in prompt.splitlines() if line.startswith("  → ")]
@@ -1331,7 +1349,7 @@ def test_every_selection_of_languages_keeps_the_prompt_within_its_bound():
     worst_three = max(size(selection) for selection in _selections(3))
     assert worst[0] < cleanup.PROMPT_MAX_BASE_CHARS, worst
     assert worst_three[0] < cleanup.PROMPT_MAX_BASE_CHARS, worst_three
-    assert cleanup.PROMPT_MAX_BASE_CHARS == 5_000
+    assert cleanup.PROMPT_MAX_BASE_CHARS == 9_000
 
 
 def test_the_language_examples_follow_the_rules_of_the_prompt():
