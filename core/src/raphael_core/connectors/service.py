@@ -696,6 +696,9 @@ class ConnectorsService:
         replace = params.get("replace", [])
         if not isinstance(replace, list) or len(replace) > 20 or any(not isinstance(i, str) or not i for i in replace):
             raise invalid_params("replace must be a list of account ids")
+        again = params.get("again", False)
+        if type(again) is not bool:
+            raise invalid_params("again must be boolean")
         connected = permitted = False
         try:
             # The lock is taken to set the sign-in up and to finish it, never for the wait between: the owner goes on working
@@ -744,7 +747,7 @@ class ConnectorsService:
                         async with self._lock:
                             if auth_id:
                                 entry.auth_config_id = auth_id
-                            await self._replace(entry, account_id, replace)
+                            await self._replace(entry, account_id, replace, again=again)
                             self._save()
                             await self._load_tools(entry)
                             await self._patch()
@@ -775,20 +778,34 @@ class ConnectorsService:
                 async with self._lock:
                     await self._patch(self._config(), refresh=False)
 
-    async def _replace(self, entry: Connector, new_id: str, replace: list[str]) -> None:
-        """A sign-in again takes the place of the accounts it was for (`replace`, ones that stopped working): the new account
-        keeps the name the owner gave the old one, and each old one goes back to Composio and off the list, so that
-        signing in again never leaves a second account beside a dead one. One Composio cannot take back stays as it was."""
+    async def _replace(self, entry: Connector, new_id: str, replace: list[str], *, again: bool = False) -> None:
+        """A sign-in again takes the place of the accounts it was for: the new account keeps the name the owner gave the old
+        one, and each old one goes back to Composio and off the list, so that signing in again never leaves a second account
+        beside a dead one. Composio makes a new account for every sign-in, so this is the only way the old one goes.
+
+        `replace` names the accounts (a row's own 重新登入). `again` (重新登入 on the app, a card that reconnects) lets the
+        core choose from what it holds now rather than from a list the window drew earlier, which may be older than the last
+        read: every account that stopped working. A connected account is never taken, except the app's only other one when
+        the sign-in is `again`: signing in again to an app with one login is that login again (its tools may have been
+        refused while Composio still reads it as connected). One Composio cannot take back stays as it was."""
         new = next((a for a in entry.accounts if a["id"] == new_id), None)
-        for old in [a for a in entry.accounts if a["id"] in replace and a["id"] != new_id and a["status"] != "ACTIVE"]:
+        others = [a for a in entry.accounts if a["id"] != new_id and a["status"] not in WAITING]
+        only = others[0]["id"] if again and len(others) == 1 else None
+        wanted = [a for a in others if (a["id"] in replace if replace else again) and (a["status"] != "ACTIVE" or a["id"] == only)]
+        kept = 0
+        for old in wanted:
             try:
                 await self._delete_account(old)
             except ConnectorFailure:
+                kept += 1
                 continue
             if new is not None and old.get("label"):
                 new["label"] = old["label"]
             entry.accounts.remove(old)
             self._told_lost.discard(old["id"])
+        if wanted:
+            logger.info("A sign-in again to %s took the place of %d account(s); %d could not be given back",
+                        entry.id, len(wanted) - kept, kept)
         self._settle(entry)
 
     async def ensure_tools(self, entry):

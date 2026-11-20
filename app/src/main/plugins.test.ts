@@ -249,7 +249,7 @@ test("one login at a time, connecting state, notification refresh and installed 
   const { c, root, click } = setup(); await c.load(); await settle();
   click("join", "github"); click("join", "github");
   expect(api.connectorsConnect).toHaveBeenCalledTimes(1);
-  expect(api.connectorsConnect).toHaveBeenCalledWith("github", undefined, []);
+  expect(api.connectorsConnect).toHaveBeenCalledWith("github", undefined, [], false);
   expect(root.querySelector(".cs-card .sub.wait")).not.toBeNull();
   // a managed sign-in is cancelled like any other: 取消 is live and tells the core
   expect(root.querySelector<HTMLButtonElement>('[data-conn="cancel-login"]')?.disabled).toBe(false);
@@ -463,7 +463,7 @@ test("managed rows open the shared page and connect through their own provider",
   expect(root.querySelector(".cs-meta, .cs-say")).toBeNull();
   expect(root.querySelector(".cs-info")?.textContent).toContain("Composio");
   click("join", "github"); await settle();
-  expect(api.connectorsConnect).toHaveBeenCalledWith("github", undefined, []);
+  expect(api.connectorsConnect).toHaveBeenCalledWith("github", undefined, [], false);
   expect(api.integrationsConnect).not.toHaveBeenCalled();
   // a sign-in that was cancelled leaves the page as it was, with the button back and no failure told
   expect(root.querySelector(".cs-page")).not.toBeNull();

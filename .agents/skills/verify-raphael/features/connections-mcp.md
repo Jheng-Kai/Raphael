@@ -141,8 +141,10 @@ npm run look -- accounts-card accounts-menu accounts-relogin-menu connection-los
 
 A connection that drops (R-ACCT-04): the core reads the accounts a minute after start and every twenty minutes (`watch_once`; on a Mac only once the key
 was read in that run) and tells `connectors.lost` once; the window's toast (`connection-lost.ts`) has 重新登入, which goes to `repair:relogin:composio:<slug>`
-and signs in again in place of the dead accounts. A dead row's menu has 重新登入 first (`accounts-relogin-menu`); `connection-lost` sends the event twice
-and sees one toast. The replacement itself is the core's (`test_connector_accounts.py`), not the mock's.
+and signs in again (`again: true`). Which accounts the new one replaces is the core's choice from what it holds, never the window's list, which may be older
+than the last read: every account that stopped, and the app's only other account even while Composio still reads it connected; no name is asked. A dead
+row's menu has 重新登入 first (`accounts-relogin-menu`) and names that row; 加入另一個帳號 replaces nothing and asks a name. `connection-lost` sends the
+event twice and sees one toast. The replacement itself is the core's (`test_connector_accounts.py`), not the mock's.
 
 ## The code of a device sign-in (GitHub): R-APPS-DEVICE-01
 

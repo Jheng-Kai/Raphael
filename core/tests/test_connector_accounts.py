@@ -674,6 +674,47 @@ async def test_replace_never_removes_a_connected_account_or_one_composio_will_no
         await router.call("connectors.connect", {"toolkit": "gmail", "replace": "ca_dead"})
 
 
+async def test_signing_in_again_lets_the_core_choose_from_what_it_holds_not_from_the_windows_list(tmp_path, conn):
+    """`again` with no account named: the core takes every account it holds as stopped, never a connected one beside it."""
+    fake = Accounts(statuses=("ACTIVE",))
+    router, service, hub, vault = setup_service(tmp_path, conn, fake, sleep=no_wait, wall=lambda: NOW)
+    await router.call("connectors.set_key", {"key": "ak_private"})
+    service.store.connectors["composio:gmail"] = Connector("composio:gmail", "composio", status="EXPIRED", name="Gmail",
+        accounts=[account("ca_work", "EXPIRED", label="公司信箱"), account("ca_home", "ACTIVE", label="家裡"),
+                  account("ca_wait", "INITIATED", since=NOW)])
+    result = await router.call("connectors.connect", {"toolkit": "gmail", "again": True})
+    assert result["connected"] is True and fake.deleted == [("ca_work", False)]
+    assert [(a["id"], a["label"]) for a in result["connector"]["accounts"]] == [("ca_home", "家裡"), ("ca_wait", ""), ("ca_test", "公司信箱")]
+    with pytest.raises(RpcError):
+        await router.call("connectors.connect", {"toolkit": "gmail", "again": "yes"})
+
+
+async def test_signing_in_again_to_an_app_with_one_login_takes_its_place_even_while_composio_reads_it_connected(tmp_path, conn):
+    """Its tools were refused (the app reads expired) while Composio still lists the account as connected: 重新登入 is that
+    login again, so the one account goes back (not revoked: it may be the same grant) and the new one keeps its name."""
+    fake = Accounts(statuses=("ACTIVE",))
+    router, service, hub, vault = setup_service(tmp_path, conn, fake, sleep=no_wait, wall=lambda: NOW)
+    await router.call("connectors.set_key", {"key": "ak_private"})
+    service.store.connectors["composio:gmail"] = Connector("composio:gmail", "composio", status="EXPIRED", name="Gmail",
+        accounts=[account("ca_main", "ACTIVE", label="Jack")])
+    result = await router.call("connectors.connect", {"toolkit": "gmail", "again": True})
+    assert result["connected"] is True and fake.deleted == [("ca_main", False)]
+    assert [(a["id"], a["status"], a["label"]) for a in result["connector"]["accounts"]] == [("ca_test", "ACTIVE", "Jack")]
+    assert [a["id"] for a in ConnectorStore(tmp_path).connectors["composio:gmail"].accounts] == ["ca_test"]
+
+
+async def test_adding_another_account_takes_no_ones_place(tmp_path, conn):
+    """加入另一個帳號 (no `again`, nothing named) leaves the app's one connected account and its dead one as they are."""
+    fake = Accounts(statuses=("ACTIVE",))
+    router, service, hub, vault = setup_service(tmp_path, conn, fake, sleep=no_wait, wall=lambda: NOW)
+    await router.call("connectors.set_key", {"key": "ak_private"})
+    service.store.connectors["composio:gmail"] = Connector("composio:gmail", "composio", status="ACTIVE", name="Gmail",
+        accounts=[account("ca_main", "ACTIVE", label="Jack")])
+    result = await router.call("connectors.connect", {"toolkit": "gmail"})
+    assert result["connected"] is True and fake.deleted == []
+    assert [a["id"] for a in result["connector"]["accounts"]] == ["ca_main", "ca_test"]
+
+
 async def test_a_sign_in_that_fails_replaces_nothing(tmp_path, conn):
     fake = Accounts(statuses=("FAILED",))
     router, service, hub, vault = setup_service(tmp_path, conn, fake, sleep=no_wait, wall=lambda: NOW)
