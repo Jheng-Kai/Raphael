@@ -974,6 +974,7 @@ export const en = {
   "status.needs": "A member is waiting for you",
   "status.groupNeeds": "Waiting for you",
   "status.groupBusy": "Working",
+  "cardFloat.back": "Back to the card",
   "agent.searchClose": "Close search",
   "agent.attach": "Attach a file",
   "agent.dropFiles": "Drop to add files",

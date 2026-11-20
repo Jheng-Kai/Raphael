@@ -1624,12 +1624,13 @@ export function checkRendered(name, context = {}) {
       else require(widths.every((width, index) => Math.abs(width - window.__look.desktopWidths[index]) < 1), 'starting the computer preserves panel and screen widths');
     } else if (name.startsWith('level-status-')) {
       // No computer button in the header and no dot beside the name (R-HEAD-02): the name's label says the computer works.
-      const trigger = document.querySelector('.mb-chat .conversation-trigger'), active = name.endsWith('active');
+      // Only the member's own slime at the computer counts: the one shared computer running says nothing of a member (R-HEAD-02).
+      const trigger = document.querySelector('.mb-chat .conversation-trigger'), active = name === 'level-status-member';
       require(!document.querySelector('.mb-head [data-act="computer"]'), 'the header has no computer button');
       const dot = getComputedStyle(trigger.querySelector('.mb-pill'), '::after');
       require(visible(trigger) && (dot.content === 'none' || dot.content === 'normal'), 'the name draws no dot, whatever the computer does');
       if (active) require(trigger.getAttribute('aria-label').includes(' · ') && trigger.title.includes(' · '), 'the name says the computer is working, to a screen reader and on hover');
-      else require(!trigger.getAttribute('aria-label').includes(' · '), 'an idle computer adds nothing to the name');
+      else require(!trigger.getAttribute('aria-label').includes(' · ') && !trigger.title.includes(' · '), 'a member not at the computer has nothing added to its name, the shared computer running or not');
     } else if (name === 'level-panel' || name === 'level-off' || name === 'level-no-computer') {
       // Since the panel tabs the computer has its own tab, headed by its state and shared location control.
       require(panel.dataset.detailsTab === 'computer' && visible(panel.querySelector('[data-computer-location]')), 'the computer tab keeps its state header and shared location control');
@@ -9543,6 +9544,33 @@ export function checkRendered(name, context = {}) {
       require(getComputedStyle(document.querySelector(".conversation-trigger .mb-pill-go")).opacity === "0", "a hover on the title shows no arrow while the panel is open");
     }
     return { check: name, level: light.dataset.level };
+  }
+  // A waiting card read out of sight (card-float.ts).
+  if (name === "card-float-pill" || name === "card-float-open" || name === "card-float-back") {
+    const scroller = document.querySelector(".mb-chat .ra-scroll").getBoundingClientRect(), head = document.querySelector(".mb-chat .mb-head").getBoundingClientRect();
+    const pill = document.querySelector(".mb-chat .card-float"), card = document.querySelector('[data-secret-card="card-key"]');
+    const inSight = box => box.bottom > scroller.top + head.height && box.top < scroller.bottom;
+    if (name === "card-float-pill") {
+      require(visible(pill) && pill.querySelector(".card-float-title").textContent.trim() === card.querySelector(".card-title").textContent.trim(), "the pill names the waiting card by its own title");
+      const box = pill.getBoundingClientRect();
+      require(box.top >= head.bottom - 2 && Math.abs((box.left + box.right) / 2 - (scroller.left + scroller.right) / 2) <= 2, "the pill stands under the top row, in the middle of the conversation");
+      require(!inSight(card.getBoundingClientRect()), "the card itself is out of sight");
+      require(pill.querySelector(".card-float-back").getAttribute("aria-label") === "回到原位", "its arrow is named 回到原位");
+    }
+    if (name === "card-float-open") {
+      const box = card.getBoundingClientRect(), place = card.previousElementSibling, column = card.closest(".ra-col").getBoundingClientRect();
+      require(card.classList.contains("is-floating") && place?.classList.contains("card-float-place") && Math.abs(place.getBoundingClientRect().height - box.height) <= 2, "the card floats, and a spacer of its height keeps its place");
+      require(box.top >= pill.getBoundingClientRect().bottom && box.bottom <= innerHeight, `it stands under the pill, inside the window (${Math.round(box.top)}-${Math.round(box.bottom)})`);
+      require(Math.abs(box.left - place.getBoundingClientRect().left) <= 2 && box.width <= column.width + 1, "where it was across, no wider than the thread's column");
+      require(document.elementFromPoint(box.left + box.width / 2, box.top + 12)?.closest('[data-secret-card="card-key"]') === card, "nothing covers it");
+      require(card.querySelector("[data-secret-input]") && document.querySelector(".mb-chat .thread").contains(card), "it is the card itself, still in the thread, with its field");
+    }
+    if (name === "card-float-back") {
+      require(!card.classList.contains("is-floating") && !document.querySelector(".card-float-place"), "the card is back in its place");
+      require(inSight(card.getBoundingClientRect()), "and in sight");
+      require(!visible(pill), "the pill is gone");
+    }
+    return { check: name };
   }
   if (name === "conversation-share") {
     const head = document.querySelector('.mb-chat .mb-head'), share = head?.querySelector('[data-act="share-member"]'), status = head?.querySelector('[data-act="status"]');

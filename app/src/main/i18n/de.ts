@@ -1263,6 +1263,7 @@ export const de = {
   "status.needs": "Ein Mitglied wartet auf dich",
   "status.groupNeeds": "Wartet auf dich",
   "status.groupBusy": "Arbeitet",
+  "cardFloat.back": "Zurück zur Karte",
   "agent.searchClose": "Suche schließen",
   "agent.attach": "Datei anhängen",
   "agent.dropFiles": "Dateien zum Hinzufügen ablegen",

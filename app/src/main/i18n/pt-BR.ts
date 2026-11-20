@@ -1263,6 +1263,7 @@ export const ptBR = {
   "status.needs": "Um membro está esperando por você",
   "status.groupNeeds": "Esperando você",
   "status.groupBusy": "Trabalhando",
+  "cardFloat.back": "Voltar ao cartão",
   "agent.searchClose": "Fechar busca",
   "agent.attach": "Anexar arquivo",
   "agent.dropFiles": "Solte para adicionar arquivos",

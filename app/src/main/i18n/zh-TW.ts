@@ -973,6 +973,7 @@ export const zhTW = {
   "status.needs": "有成員在等你",
   "status.groupNeeds": "等你",
   "status.groupBusy": "工作中",
+  "cardFloat.back": "回到原位",
   "agent.searchClose": "關閉搜尋",
   "agent.attach": "附加檔案",
   "agent.dropFiles": "放開以加入檔案",

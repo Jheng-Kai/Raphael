@@ -28,6 +28,7 @@ import { installLinkOpener } from "../link-opener";
 import { createAgent } from "./agent";
 import { emblemTextureArrived, setAvatar } from "../avatar";
 import { getLocale, setLocale } from "../i18n";
+import { setSlimeState } from "../slime";
 import * as ui from "../ui";
 
 function turn(id: number, more: Partial<AgentTurn> = {}): AgentTurn {
@@ -166,6 +167,27 @@ test("the header has no computer button, and an idle computer adds nothing to th
     expect(title.classList.contains("is-computer-active")).toBe(false);
     expect(title.getAttribute("aria-label")).not.toContain("正在使用電腦");
   } finally {
+    agent.hide();
+    setLocale(previous);
+  }
+});
+
+test("the name says the computer is in use only while this member's own slime is at it, not while the shared computer runs", async () => {
+  const previous = getLocale();
+  setLocale("zh-TW");
+  api.agentHistoryList.mockResolvedValue({ turns: [] });
+  const agent = mount();
+  try {
+    await flush();
+    const title = agent.el.querySelector<HTMLElement>(".conversation-trigger")!;
+    expect(title.getAttribute("aria-label")).not.toContain("正在使用電腦");
+    setSlimeState(0, "computer");
+    expect(title.getAttribute("aria-label")).toContain("正在使用電腦");
+    expect(title.title).toContain("正在使用電腦");
+    setSlimeState(0, "idle");
+    expect(title.getAttribute("aria-label")).not.toContain("正在使用電腦");
+  } finally {
+    setSlimeState(0, "idle");
     agent.hide();
     setLocale(previous);
   }

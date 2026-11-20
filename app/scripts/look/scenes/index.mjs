@@ -33,6 +33,7 @@ import follow from "./follow.mjs";
 import chat from "./chat.mjs";
 import topRow, { TOP_ROW_SCENES } from "./top-row.mjs";
 import statusLight from "./status-light.mjs";
+import cardFloat from "./card-float.mjs";
 import desktop from "./desktop.mjs";
 import memberPanel from './member-panel.mjs';
 import memberSettings from './member-settings.mjs';
@@ -103,5 +104,6 @@ export const DIALOG_LAYER_SCENES = new Set(['profile', 'appearance', 'models', '
 for (const scene of scenes) if (DIALOG_LAYER_SCENES.has(scene.name)) scene.steps.push({ action: "check", name: "dialog-layers" });
 scenes.push(...topRow);
 scenes.push(...statusLight);
+scenes.push(...cardFloat);
 for (const scene of scenes) if (TOP_ROW_SCENES.has(scene.name)) scene.steps.push({ action: "check", name: "conversation-top-row" });
 if (new Set(scenes.map(scene => scene.name)).size !== scenes.length) throw new Error("Duplicate look scene name");

@@ -45,6 +45,8 @@ import { cancelGesture } from "../../shared/cancel-gesture";
 import { openActions } from "../member-column";
 import { mountConversationFind } from "../conversation-find";
 import { mountStatusLight } from "../status-light";
+import { liveStates } from "../slime";
+import { mountCardFloat } from "../card-float";
 import { openRoutineView } from "../routine-view";
 import { createAttachmentMedia } from "../attachment-media";
 import { adoptPicture } from "../media-cache";
@@ -284,8 +286,6 @@ export function createAgent(app: AppContext, places?: {
   const heading = el.querySelector<HTMLElement>("h1")!;
   const statusButton = el.querySelector<HTMLElement>('[data-act="status"]')!;
   const shareButton = el.querySelector<HTMLElement>('[data-act="share-member"]')!;
-  /** Whether the open member's computer is working now: the name's label says so to a screen reader (no dot is drawn). */
-  let computerActive = false;
   const find = el.querySelector<HTMLElement>(".ra-find")!;
 
   const stage = el.querySelector<HTMLElement>(".ra-stage")!;
@@ -295,6 +295,8 @@ export function createAgent(app: AppContext, places?: {
   // A panel dragged wider or narrower leaves the reading place where it was (reading-place.ts); a dock that grows or shrinks
   // under a thread that follows its bottom is followed by the thread's one stick to the bottom (message-rich.ts).
   keepReadingPlace(scroller, ".thread > li");
+  // A card waiting for the owner, scrolled out of sight, floats at the top of the conversation (card-float.ts).
+  mountCardFloat({ stage, scroller, thread });
   const none = el.querySelector<HTMLElement>(".ra-none")!;
   const wait = el.querySelector<HTMLElement>(".ra-wait")!;
   const empty = el.querySelector<HTMLElement>(".ra-empty")!;
@@ -366,10 +368,6 @@ export function createAgent(app: AppContext, places?: {
     face: () => members.faceOf(members.current(), 22),
     closePanel: () => members.setDetails(false),
     openPanel: () => members.computer(), panelVisible: () => members.detailsOpen() && members.details.dataset.detailsTab === 'computer',
-    status: active => {
-      computerActive = active;
-      drawConversation();
-    },
     changed: () => { if (visible && !scroller.hidden) drawThread(); },
     trySkill: text => sendFromPage(text),
     stop: turnId => { const turn = turns.find(turn => turn.id === turnId); return turn?.task ? api.workerCancel(turn.task.id) : turn?.session_id ? api.agentStop(turn.session_id, memberId()) : Promise.resolve(); },
@@ -419,10 +417,19 @@ export function createAgent(app: AppContext, places?: {
     composerFolder?.draw();
     caption.textContent = title;
     caption.hidden = !title;
-    const name = members.member().name;
-    const working = computerActive ? ` · ${t("desktop.working")}` : "";
-    conversationButton.setAttribute("aria-label", (title ? `${name}: ${title}` : name) + working); conversationButton.title = (title || name) + working;
+    drawTitleLabel(title);
   }
+
+  /** The name's label and tooltip; " · 正在使用電腦" only while this member's own slime is at the computer, never because the
+   *  one shared computer is running (every member has its screen on it). */
+  function drawTitleLabel(title = caption.hidden ? "" : caption.textContent ?? ""): void {
+    const name = members.member().name;
+    const working = liveStates().get(memberId()) === "computer" ? ` · ${t("desktop.working")}` : "";
+    const label = (title ? `${name}: ${title}` : name) + working, tip = (title || name) + working;
+    if (conversationButton.getAttribute("aria-label") !== label) conversationButton.setAttribute("aria-label", label);
+    if (conversationButton.title !== tip) conversationButton.title = tip;
+  }
+  window.addEventListener("slime-activity", () => drawTitleLabel());
 
   const conversationsDirty = new Set<number>();
   /** The member changed while the page was not on screen: its commands and skills are read when it shows. */

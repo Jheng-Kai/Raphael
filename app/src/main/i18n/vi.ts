@@ -1263,6 +1263,7 @@ export const vi = {
   "status.needs": "Có thành viên đang chờ bạn",
   "status.groupNeeds": "Đang chờ bạn",
   "status.groupBusy": "Đang làm việc",
+  "cardFloat.back": "Quay lại thẻ",
   "agent.searchClose": "Đóng tìm kiếm",
   "agent.attach": "Đính kèm tệp",
   "agent.dropFiles": "Thả để thêm tệp",

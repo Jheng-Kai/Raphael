@@ -1263,6 +1263,7 @@ export const ko = {
   "status.needs": "당신을 기다리는 멤버가 있습니다",
   "status.groupNeeds": "당신을 기다림",
   "status.groupBusy": "작업 중",
+  "cardFloat.back": "원래 위치로",
   "agent.searchClose": "검색 닫기",
   "agent.attach": "파일 첨부",
   "agent.dropFiles": "파일을 놓아 추가하세요",

@@ -1263,6 +1263,7 @@ export const it = {
   "status.needs": "Un membro ti sta aspettando",
   "status.groupNeeds": "Ti aspettano",
   "status.groupBusy": "Al lavoro",
+  "cardFloat.back": "Torna alla scheda",
   "agent.searchClose": "Chiudi ricerca",
   "agent.attach": "Allega file",
   "agent.dropFiles": "Rilascia per aggiungere file",

@@ -1570,10 +1570,10 @@ polish-caption-member.
 Selected scene matrix, both themes at 1120,720,1920x1080:
 
 ```powershell
-npm run look -- computer-status-active computer-status-idle panel-screen-routines panel-off desktop-start desktop-return-stopped panel-no-computer panel-gear panel-routine-row panel-raphael takeover-bar takeover-menu takeover-handback --theme both --width 1120,720,1920x1080
+npm run look -- computer-status-active computer-status-member computer-status-idle panel-screen-routines panel-off desktop-start desktop-return-stopped panel-no-computer panel-gear panel-routine-row panel-raphael takeover-bar takeover-menu takeover-handback --theme both --width 1120,720,1920x1080
 ```
 
-- computer-status-active, computer-status-idle, panel-screen-routines, panel-off,
+- computer-status-active, computer-status-member, computer-status-idle, panel-screen-routines, panel-off,
   panel-no-computer, panel-gear, panel-routine-row, panel-raphael, takeover-bar,
   takeover-menu, takeover-handback.
 - Every desktop-*, computer-*, details*, member-edit* and member-avatar scene;
