@@ -1307,6 +1307,26 @@ export function installMock(fixture, config = {}, target = window) {
   async function core(method, p = {}) {
     // Settings reads the hidden list as it opens, before the list's section is drawn; the sidebar keeps the roster it already read.
     switch (method) {
+      // The team skill library (skill-library.ts, members/service.py skills.library.*).
+      case "skills.library.list": return { packages: data.skillLibrary, members: data.members.filter(m => m.id !== 0).map(m => ({ id: m.id, name: m.name })) };
+      case "skills.library.update": {
+        const pack = data.skillLibrary.find(item => item.key === p.key);
+        if (!pack) throw new Error("Invalid params: unknown package");
+        if ("enabled" in p) pack.enabled = p.enabled;
+        if ("access" in p) pack.access = p.access;
+        if (p.skill) pack.skills.find(skill => skill.id === p.skill.id).enabled = p.skill.enabled;
+        return { package: pack };
+      }
+      case "skills.library.import": {
+        if (p.source === "nothing/here") throw new Error("[-32602] Invalid params: not_found: no SKILL.md found");
+        const skills = p.text ? [{ id: 401, name: "旅行行程", description: "依日期整理行程與訂位", enabled: true }]
+          : [{ id: 402, name: "簡報大綱", description: "把資料整理成簡報大綱", enabled: true }, { id: 403, name: "講稿", description: "依大綱寫講稿", enabled: true }];
+        const pack = { key: `pack:${data.skillLibrary.length + 10}`, name: p.text ? "旅行行程" : "簡報工具", kind: skills.length > 1 ? "pack" : "single",
+          source: p.text ? "SKILL.md" : (p.source ?? p.file?.name ?? ""), description: "", version: "", enabled: true, access: skills.length > 1 ? [] : "all", updatable: !p.text, skills };
+        data.skillLibrary = [...data.skillLibrary, pack].sort((a, b) => a.name.localeCompare(b.name));
+        return { package: pack };
+      }
+      case "skills.library.delete": data.skillLibrary = data.skillLibrary.filter(item => item.key !== p.key); return { deleted: true };
       case "vault.list": return { entries: data.vaultEntries };
       case "vault.preview": return data.vaultImportPreview;
       case "vault.cancel": return { cancelled: true };
@@ -1619,7 +1639,9 @@ export function installMock(fixture, config = {}, target = window) {
           }
           return { marketplace, sets: data.skillSets, skills: visibleSkills(p) };
         }
-        return { skills: visibleSkills(p), sets: data.skillSets,
+        const library = p.shared ? [] : (data.skillLibrary ?? []).filter(pack => pack.enabled && (pack.access === "all" || pack.access.includes(p.member_id)))
+          .map(pack => ({ key: pack.key, name: pack.name, skills: pack.skills.length }));
+        return { skills: visibleSkills(p), sets: data.skillSets, library,
           ...(p.discover ? { sources: data.skillSources ?? [], marketplaces: data.skillMarketplaces } : {}) };
       }
       case "members.skills.import": {

@@ -487,6 +487,73 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, positions };
   }
+  if (name.startsWith('skill-library') || name === 'member-skills-library') {
+    // 團隊技能庫 (skill-library.ts, #280): packages with who may use each; the importer (#249); a character's read-only list.
+    const rowOf = key => document.querySelector(`.skl-pack[data-skl-pack="${key}"]`);
+    const accessOf = key => rowOf(key)?.querySelector('.skl-access span')?.textContent.trim();
+    if (name !== 'member-skills-library') {
+      const pane = document.querySelector('.modal-scrim .skl');
+      require(visible(pane) && pane.querySelectorAll('[data-skl="import-go"]').length === 1 && pane.firstElementChild?.matches('.skl-import'), 'the importer is the first card of the tab, with one 匯入');
+      require(!pane.querySelector('.skl-head, .skl-drop-hint') && !pane.previousElementSibling?.matches?.('p'), 'nothing is written between the tab name and its first card');
+      const box = pane.getBoundingClientRect();
+      for (const row of pane.querySelectorAll('.skl-pack')) {
+        const r = row.getBoundingClientRect();
+        require(r.left >= box.left - 1 && r.right <= box.right + 1, `a package row stays inside the tab (${Math.round(r.left)}-${Math.round(r.right)})`);
+        require(row.querySelector('.tg[role="switch"]') && row.querySelector('[data-skl="more"]'), 'each package has its switch and ⋯');
+      }
+    }
+    if (name === 'skill-library') {
+      require(document.querySelectorAll('.skl-pack').length === 3, 'one row per package, not per skill');
+      require(rowOf('set:1').querySelector('.skl-count')?.textContent.trim() === '7 個技能' && !document.querySelector('.skl-skill'), 'pstack is one folded row that says how many skills it holds');
+      require(accessOf('set:1') === '還沒給任何人' && accessOf('pack:2') === '小晴、小森' && accessOf('skill:3') === '整個團隊', `who may use each is said on its row (${accessOf('set:1')} / ${accessOf('pack:2')} / ${accessOf('skill:3')})`);
+      require(!rowOf('skill:3').querySelector('.skl-count, [data-skl="open"]') && rowOf('skill:3').querySelector('.skl-single .d')?.textContent === '把會議逐字稿整理成決議與待辦', 'a skill alone is one row: its words under its name, nothing to open');
+    }
+    if (name === 'skill-library-open') {
+      const skills = [...document.querySelectorAll('.skl-skills .skl-skill')];
+      require(skills.length === 7 && skills.every(row => visible(row.querySelector('.tg[role="switch"]'))), `the seven skills are listed under pstack, each with its own switch (${skills.length})`);
+      require(rowOf('set:1').querySelector('[data-skl="open"]').getAttribute('aria-expanded') === 'true', 'the row says it is open');
+      require(document.querySelector('.skl-source')?.textContent.includes('jheng-kai/pstack'), 'where it came from is said once');
+    }
+    if (name === 'skill-library-access') {
+      const menu = document.querySelector('.skl-access-menu');
+      const items = [...menu.querySelectorAll('[data-member]')];
+      require(visible(menu) && menu.querySelector('[data-access="all"]')?.getAttribute('aria-checked') === 'false', 'the menu offers the whole team, not chosen now');
+      const ticked = items.filter(item => item.getAttribute('aria-checked') === 'true').map(item => item.textContent.trim());
+      require(items.length === 3 && ticked.join('、') === '小晴、小森', `the three characters are listed, those the row names ticked (${items.length}: ${ticked.join('、')})`);
+      const anchor = rowOf('pack:2').querySelector('.skl-access').getBoundingClientRect(), frame = menu.getBoundingClientRect();
+      require(frame.top >= anchor.bottom - 1 && frame.bottom <= innerHeight + 1, 'the menu stands under its button, inside the window');
+    }
+    if (name === 'skill-library-import') {
+      const panel = document.querySelector('.skl-import');
+      require(visible(panel) && !panel.querySelector('#skl-source') && visible(panel.querySelector('#skl-text')), 'the pasted text stands in the link\'s place');
+      require(['pick-file', 'pick-folder', 'paste'].every(act => visible(panel.querySelector(`[data-skl="${act}"]`))), 'a file, a folder, or pasted text');
+      require(panel.querySelector('#skl-file').accept === '.zip,.tar.gz,.tgz,.md', 'the file picker takes archives and Markdown');
+      require(panel.getBoundingClientRect().right <= document.querySelector('.modal-scrim .skl').getBoundingClientRect().right + 1, 'the importer fits the tab');
+    }
+    if (name === 'skill-library-imported') {
+      require(visible(document.querySelector('.skl-import #skl-source')) && !document.querySelector('#skl-text'), 'the card is back to the link');
+      require(rowOf('pack:13')?.querySelector('.skl-single .d')?.textContent === '依日期整理行程與訂位' && accessOf('pack:13') === '整個團隊', 'the new skill is a row of its own, its words under its name, for the whole team');
+      require(document.querySelector('.toast')?.textContent.includes('已匯入「旅行行程」'), 'the owner is told it was imported');
+      const call = window.__look.calls.find(c => c.method === 'skills.library.import');
+      require(call && call.params.text.includes('name: travel') && !('source' in call.params), 'the text went to the core as text');
+    }
+    if (name === 'skill-library-import-failed') {
+      const said = document.querySelector('.skl-import .skl-error');
+      const probe = document.createElement('i'); probe.style.color = 'var(--err)'; said?.parentElement?.append(probe);
+      const err = getComputedStyle(probe).color; probe.remove();
+      require(said?.textContent.trim() === '裡面找不到 SKILL.md。' && getComputedStyle(said).color === err, `the cause is said inside the importer, in the error colour (${said && getComputedStyle(said).color} against ${err})`);
+    }
+    if (name === 'member-skills-library') {
+      const lib = document.querySelector('.ms-pane [data-k="ms-library"]');
+      const names = [...lib.querySelectorAll('.ms-lib-row .ms-label')].map(el => el.textContent.trim());
+      require(names.join('、') === '研究工具、會議紀錄', `the packages given to 小晴 are listed, and pstack, given to nobody, is not (${names.join('、')})`);
+      require(!lib.querySelector('.tg, [data-ms="skill-toggle"]') && visible(lib.querySelector('.ms-head [data-ms="open-library"]')), 'read-only here, in a section of its own whose head has the way to the library');
+      const rows = [...lib.querySelectorAll('.ms-lib-row')].map(row => row.getBoundingClientRect());
+      require(rows.every(row => Math.abs(row.height - rows[0].height) <= 0.5), 'its rows are one height');
+      require(!document.querySelector('.ms-pane [data-ms="skill-open"][data-id="101"]'), 'no shared skill is a row of its own here');
+    }
+    return { check: name };
+  }
   if (name.startsWith('vault-')) {
     const vault = document.querySelector('.vault');
     if (name === 'vault-payment') {
@@ -1245,6 +1312,7 @@ export function checkRendered(name, context = {}) {
     inWindow(sub, "the submenu");
     const switches = [...sub.querySelectorAll('.pm-switch')];
     require(switches.length >= 2, `there are switch rows to look at: ${switches.length}`);
+    if (name === "composer-plus-skills") require(!sub.querySelector('[data-skill="32"]'), "a skill the team library gives is switched in the library, not here");
     require(switches.every(item => item.getAttribute('role') === 'menuitemcheckbox' && ['true', 'false'].includes(item.getAttribute('aria-checked'))), "every switch row is a checkable menu item");
     require(switches.every(item => visible(item) && box(item).height >= 27.5 && box(item).height <= 30), "every switch row is a menu row (28 px)");
     const sw = switches.map(item => ({ row: box(item), tg: box(item.querySelector('.tg')), lead: box(item.querySelector('.mlead')), mt: item.querySelector('.mt') }));
@@ -1272,7 +1340,8 @@ export function checkRendered(name, context = {}) {
       const marks = switches.map(item => item.querySelector('.mlead .mono'));
       require(marks.every(Boolean) && marks.every(mark => Math.abs(box(mark).width - box(marks[0]).width) <= 0.5 && Math.abs(box(mark).height - box(marks[0]).height) <= 0.5), "every app wears its own mark, at one size");
     } else {
-      const skills = window.__look.data.skills.filter(skill => skill.member_id === 1 || skill.member_id === -1);
+      // Its own skills: what the team library gives it is switched in the library (R-SKILL-17).
+      const skills = window.__look.data.skills.filter(skill => skill.member_id === 1);
       require(switches.length === skills.length, `a row for each skill of the member: ${switches.length} of ${skills.length}`);
       const last = sub.querySelector(':scope > button[data-plus="manage-skills"]'), sep = sub.querySelector(':scope > .menu-sep');
       require(last && sep && sep.nextElementSibling === last && last.querySelector('.ck svg'), "a hairline, then 管理技能 with its icon");
@@ -8841,8 +8910,8 @@ export function checkRendered(name, context = {}) {
     // since 記憶 left 一般 for a tab of its own.
     const scrim = modal.closest('.modal-scrim');
     if (!scrim.hasAttribute('data-standalone')) {
-      // Six since the memory tab went: memory is not shown anywhere.
-      require(scrim.querySelectorAll('.modal-nav [data-pane]').length === 6 && !scrim.querySelector('.nav-group, #set-search, [data-pane="memory"]'), "six tabs sit flat, with no group names and no search");
+      // Seven since 團隊技能庫 came (#280); memory is not shown anywhere.
+      require(scrim.querySelectorAll('.modal-nav [data-pane]').length === 7 && !scrim.querySelector('.nav-group, #set-search, [data-pane="memory"]'), "seven tabs sit flat, with no group names and no search");
       require(!scrim.querySelector('.set-purpose'), "a tab is its name alone, with no line under it");
     }
     return { check: name, radius: getComputedStyle(modal).borderTopLeftRadius };

@@ -2275,6 +2275,67 @@ PRAGMA user_version = 91;
 COMMIT;
 """
 
+_SKILL_PACKAGES = """
+BEGIN;
+CREATE TABLE skill_packages (
+    key TEXT PRIMARY KEY, name TEXT NOT NULL, source TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1, access TEXT NOT NULL DEFAULT '"all"',
+    origin TEXT NOT NULL DEFAULT 'source'
+);
+ALTER TABLE member_skills ADD COLUMN package_key TEXT REFERENCES skill_packages(key);
+INSERT INTO skill_packages(key,name,source) SELECT 'set:'||id,name,source FROM skill_sets;
+INSERT INTO skill_packages(key,name,source)
+    SELECT 'skill:'||id,name,source FROM member_skills WHERE member_id=-1 AND set_id IS NULL;
+UPDATE member_skills SET package_key=CASE WHEN set_id IS NULL THEN 'skill:'||id ELSE 'set:'||set_id END
+    WHERE member_id=-1;
+CREATE INDEX member_skill_package ON member_skills(package_key);
+UPDATE skill_packages AS p SET access=(
+    SELECT json_group_array(id) FROM (SELECT m.id FROM members m WHERE NOT EXISTS (
+        SELECT 1 FROM member_skill_grants g JOIN member_skills s ON s.id=g.skill_id
+        WHERE s.package_key=p.key AND g.member_id=m.id AND g.enabled=0) ORDER BY m.id))
+    WHERE EXISTS (SELECT 1 FROM member_skill_grants g JOIN member_skills s ON s.id=g.skill_id
+                  WHERE s.package_key=p.key AND g.enabled=0);
+DROP TRIGGER delete_member_skill_grants;
+DROP TRIGGER delete_shared_skill_grants;
+DROP TABLE member_skill_grants;
+CREATE TRIGGER remove_skill_package_member AFTER DELETE ON members BEGIN
+    UPDATE skill_packages SET access=(SELECT json_group_array(value) FROM json_each(access) WHERE value<>OLD.id)
+    WHERE json_type(access)='array' AND OLD.id IN (SELECT value FROM json_each(access));
+END;
+CREATE TRIGGER register_skill_set AFTER INSERT ON skill_sets BEGIN
+    INSERT INTO skill_packages(key,name,source,access) VALUES ('set:'||NEW.id,NEW.name,NEW.source,'[]');
+END;
+CREATE TRIGGER register_shared_skill AFTER INSERT ON member_skills
+WHEN NEW.member_id=-1 AND NEW.package_key IS NULL BEGIN
+    INSERT INTO skill_packages(key,name,source) SELECT 'skill:'||NEW.id,NEW.name,NEW.source WHERE NEW.set_id IS NULL;
+    UPDATE member_skills SET package_key=CASE WHEN NEW.set_id IS NULL THEN 'skill:'||NEW.id ELSE 'set:'||NEW.set_id END
+        WHERE id=NEW.id;
+END;
+CREATE TRIGGER remove_empty_skill_package AFTER DELETE ON member_skills
+WHEN OLD.package_key IS NOT NULL AND OLD.set_id IS NULL BEGIN
+    DELETE FROM skill_packages WHERE key=OLD.package_key AND NOT EXISTS
+        (SELECT 1 FROM member_skills WHERE package_key=OLD.package_key);
+END;
+CREATE TRIGGER remove_skill_set_package AFTER DELETE ON skill_sets BEGIN
+    DELETE FROM skill_packages WHERE key='set:'||OLD.id;
+END;
+PRAGMA user_version = 92;
+COMMIT;
+"""
+
+
+def _skill_package_migration(conn):
+    """The team skill library's packages (#280). A database that already has them (a test rewinds user_version to replay an
+    earlier step) is only marked: the step's ALTER TABLE cannot run twice."""
+    if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='skill_packages'").fetchone():
+        conn.execute("PRAGMA user_version = 92")
+        conn.commit()
+        return
+    conn.executescript(_SKILL_PACKAGES)
+
+
+_MIGRATIONS[92] = _skill_package_migration
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 

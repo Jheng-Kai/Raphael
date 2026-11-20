@@ -1255,7 +1255,7 @@ export type MainPageId = Exclude<PageId, "settings" | "history" | "dictionary">;
 export type DictationTab = "overview" | "history" | "dictionary";
 
 /** The tabs of the settings panel. "memory" is no tab (R-MEM-10): it stays a name only so an old saved or linked pane opens 一般. */
-export type SettingsPane = "general" | "memory" | "appearance" | "dictation" | "agent" | "tools" | "safety" | "connections" | "messaging" | "models" | "usage" | "data" | "about";
+export type SettingsPane = "general" | "memory" | "appearance" | "dictation" | "agent" | "tools" | "skills" | "safety" | "connections" | "messaging" | "models" | "usage" | "data" | "about";
 
 /**
  * What the 拉斐爾 page is to put in its composer when it opens, ready to be sent or changed: the
@@ -1421,4 +1421,6 @@ export interface McpPreview { candidates: McpCandidate[]; rejected: number }
 export interface McpTest { ok: boolean; tools: string[]; error?: string }
 /** Member-owned resources; command templates expand only in the core. */
 export interface MemberSkill { set_id?: number; set_kind?: "skill" | "command"; plugin_version?: string; shared?: boolean; source_changed?: boolean | null; id: number; name: string; description: string; enabled: boolean; source: string; plugin?: string; slash_name?: string; provenance?: "learned" | "imported" | "owner"; revision?: string; learned_at?: string | null; updated_at?: string | null }
+/** A package of the team skill library given to a member (members.skills.list `library`): its key, name and how many skills it holds. */
+export interface LibraryRef { key: string; name: string; skills: number }
 export interface MemberCommand { id: number; name: string; description: string; template: string }

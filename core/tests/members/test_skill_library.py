@@ -39,12 +39,13 @@ async def test_shared_packages_reach_every_member_and_grants_are_individual(rig,
         target = cap._path(identifier, skill["id"]).parent
         for relative in ("scripts/check.py", "references/check.md", "assets/sample.bin"):
             assert (target / relative).read_bytes() == (folder / relative).read_bytes()
-    await rig.call("members.skills.update", {"member_id": 0, "id": skill["id"], "enabled": False})
+    [package] = (await rig.call("skills.library.list", {}))["packages"]
+    await rig.call("skills.library.update", {"key": package["key"], "access": [member]})
     assert cap.read_skill(0, "writing") is None
     assert cap.native_skills(0) == []
     assert cap.native_skills(member)
     assert cap.read_skill(member, "writing")
-    await rig.call("members.skills.update", {"member_id": 0, "id": skill["id"], "enabled": True})
+    await rig.call("skills.library.update", {"key": package["key"], "access": "all"})
     assert cap.read_skill(0, "writing")
     with pytest.raises(RpcError):
         await rig.call("members.skills.update", {"member_id": member, "id": skill["id"], "text": DOCUMENT})
@@ -60,13 +61,13 @@ async def test_local_reimport_reports_changes_preserves_identity_and_member_choi
     folder = installed(tmp_path, ".codex/skills/writing")
     source = "local:" + str(folder.resolve())
     first = cap.import_local(-1, source)
-    cap.update_skill(0, first["id"], False)
+    cap.update_skill(-1, first["id"], False)
     (folder / "scripts/check.py").write_text("print('updated')", encoding="utf-8")
     (folder / "assets/sample.bin").unlink()
-    assert cap.skills(0)[0]["source_changed"] is True
+    assert cap.skills(-1)[0]["source_changed"] is True
     second = cap.import_local(-1, source)
     assert second["id"] == first["id"] and second["source_changed"] is False
-    assert cap.skills(0)[0]["enabled"] is False
+    assert cap.skills(0) == [] and cap.skills(-1)[0]["enabled"] is False
     target = cap._path(-1, first["id"]).parent
     assert not (target / "assets/sample.bin").exists()
     assert (target / "scripts/check.py").read_text(encoding="utf-8") == "print('updated')"
@@ -96,7 +97,16 @@ async def test_raphael_uses_the_same_admin_import_and_command_contract(rig, tmp_
     folder = installed(tmp_path)
     for name in ("member_skill_import", "member_command_save"):
         assert DEFINITIONS[name]["parameters"]["properties"]["member_id"]["minimum"] == 0
-    imported = await rig.service.admin_tool(0, "member_skill_import", {"member_id": 0, "source": "local:" + str(folder.resolve())}, interactive=True)
+    from raphael_core.agent.policy import Action, Confirmations, Tier, ToolRegistry
+    args = {"member_id": 0, "source": "local:" + str(folder.resolve())}
+    with pytest.raises(RpcError):
+        await rig.service.admin_tool(0, "member_skill_import", args, interactive=True)
+    assert str(folder.resolve()) in rig.service.admin_confirmation("member_skill_import", args, "en")
+    questions = Confirmations()
+    pending = questions.open("skills", 1, Action("member_skill_import", args), Tier.T3, "en")
+    approved = questions.resolve(pending.id, True).approval
+    ToolRegistry({"member_skill_import": Tier.T3}).check(pending.action, approved)
+    imported = await rig.service.admin_tool(0, "member_skill_import", args, interactive=True, approval=approved)
     assert imported["skill"]["name"] == "writing"
     await rig.service.admin_tool(0, "member_command_save", {"member_id": 0, "name": "review", "template": "Review {input}"}, interactive=True)
     assert cap.expand(0, "/review notes") == "Review notes"
@@ -171,18 +181,18 @@ def test_plugin_versions_select_latest_and_reimport_keeps_grants(rig, tmp_path, 
     relative = f".{brain}/plugins/cache/market/desk"
     old = installed(tmp_path, relative + "/1.9.0/skills/writing")
     first = cap.import_local(-1, "local:" + str(old.resolve()))
-    cap.update_skill(0, first["id"], False)
+    cap.update_skill(-1, first["id"], False)
     newest = installed(tmp_path, relative + "/1.10.0/skills/writing")
     (newest / "references/check.md").write_text("LATEST-REFERENCE", encoding="utf-8")
     os.utime(old.parents[1], ns=(2_000_000_000_000_000_000, 2_000_000_000_000_000_000))
     [source] = cap.local_sources()
     assert source["source"] == "local:" + str(newest.resolve())
-    assert cap.skills(0)[0]["source_changed"] is True
+    assert cap.skills(-1)[0]["source_changed"] is True
     second = cap.import_local(-1, first["source"])
     assert second["id"] == first["id"]
     assert second["source"] == source["source"]
     assert second["source_changed"] is False
-    assert cap.skills(0)[0]["enabled"] is False
+    assert cap.skills(0) == [] and cap.skills(-1)[0]["enabled"] is False
     assert (cap._path(-1, first["id"]).parent / "references/check.md").read_text() == "LATEST-REFERENCE"
 
 
@@ -247,14 +257,13 @@ async def test_a_member_is_deleted_and_copied_with_the_shared_library_full(rig, 
     member = (await rig.call("members.create", {"name": "Ada"}))["member"]["id"]
     own = cap.keep_skill(member, "own", "---\nname: notes\ndescription: Use for notes\n---\nKeep notes.")
     other = (await rig.call("members.create", {"name": "Lin"}))["member"]["id"]
-    await rig.call("members.skills.update", {"member_id": member, "id": shared["id"], "enabled": False})
-
+    [package] = (await rig.call("skills.library.list", {}))["packages"]
+    await rig.call("skills.library.update", {"key": package["key"], "access": [member]})
     copy = (await rig.call("members.duplicate", {"id": member}))["member"]["id"]
-    assert [skill["name"] for skill in cap.owned_skills(copy)] == ["notes"]  # its own skill, not a copy of the shared one
-    shared_view = next(skill for skill in cap.skills(copy) if skill.get("shared"))
-    assert shared_view["id"] == shared["id"] and shared_view["enabled"] is False  # switched off for it as for the original
-
+    assert [skill["name"] for skill in cap.owned_skills(copy)] == ["notes"]
+    assert [s["id"] for s in cap.skills(copy) if s.get("shared")] == [shared["id"]]
+    assert cap.skills(other) == []
     assert await rig.call("members.delete", {"id": member}) == {"deleted": True}
-    assert not rig.service.member_exists(member)
-    assert shared["id"] in [skill["id"] for skill in cap.skills(other) if skill.get("shared")]  # the library keeps it
+    [after] = (await rig.call("skills.library.list", {}))["packages"]
+    assert after["access"] == [copy]
     assert own["id"] not in [skill["id"] for skill in cap.owned_skills(copy)]

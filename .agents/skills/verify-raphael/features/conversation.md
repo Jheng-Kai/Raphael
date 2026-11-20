@@ -643,7 +643,7 @@ npm run look -- status-light-idle status-light-list status-light-pill-open top-r
 
 A card that waits for the owner stays where it was born (card-float.ts, R-CARD-FLOAT-01). When the newest one is read
 out of sight, one pill at the top of the conversation names it (a warning dot, the card's title, an arrow named 回到原位).
-Its press stands the card itself over the thread, fixed under the pill and as wide as the column, with a spacer in its
+Its press stands the card itself over the thread, fixed and centred under the pill, as wide as it was in the thread, with a spacer in its
 place, so the card's fields and buttons keep working; 回到原位 scrolls back to it. The look fixture `keyCardLater` adds
 twelve turns after the key card so that it can be read out of sight.
 

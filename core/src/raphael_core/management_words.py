@@ -31,6 +31,7 @@ EFFECTS = {
     "memory_summary_clear": ("Clear the conversation summaries", "清除對話摘要", "会話の要約を消去"),
     "settings_history_retention_days": ("Change how long records are kept (older records are deleted for good)", "變更保留天數；較舊紀錄會被永久刪除", "保持期間を変更・古い記録を完全削除"),
 }
+EFFECTS["member_library_delete"] = EFFECTS["member_skill_delete"]
 GENERIC = ("Apply this management change", "套用下列管理變更", "次の管理変更を適用")
 
 # What a change does that can be undone, or a reading (these are asked in the mode that asks first and held with the
@@ -55,6 +56,7 @@ FAMILIES = {
     "add_mcp_server": ("Add a custom connection", "新增自訂連線", "カスタム接続を追加"),
 }
 FAMILY = {
+    "member_library_import": "skill_update", "member_library_update": "skill_update",
     "member_duplicate": "member_duplicate", "member_avatar": "member_picture", "member_cover": "member_picture",
     "room_create": "room_create", "room_update": "room_update", "room_stop": "room_stop", "group_update": "group_update",
     "member_routine_create": "routine_create", "member_routine_update": "routine_update", "member_skill_update": "skill_update",

@@ -3,6 +3,7 @@ import memberStore from "./member-store.mjs";
 import cards from "./cards.mjs";
 import chatMetadata from "./chat-metadata.mjs";
 import vault from "./vault.mjs";
+import skillLibrary from "./skill-library.mjs";
 import calmThread from "./calm-thread.mjs";
 import appUpdates from "./app-updates.mjs";
 import polish from "./polish.mjs";
@@ -61,7 +62,7 @@ scenes.push(...handoffGroup);
 scenes.push(...daily);
 scenes.push(...menus);
 scenes.push(...cards);
-scenes.push(...calmThread, ...chatMetadata, ...vault);
+scenes.push(...calmThread, ...chatMetadata, ...vault, ...skillLibrary);
 scenes.push(...appUpdates);
 scenes.push(...presence);
 scenes.push(...answerForms);
@@ -94,7 +95,7 @@ const FLOAT_SCENES = new Set(['member-delete-ask', 'member-maker', 'context-menu
 export const FLOAT_CARD_SCENES = new Set(['profile', 'appearance', 'models', 'dictation', 'tools', 'safety', 'about', 'usage', 'usage-allowances-chatgpt', 'model-choices-answer', 'model-choices-local', 'chooser-chatgpt-signed-out',
   'quick-model-menu', 'quick-effort-menu', 'cli-account-menu', 'member-maker', 'member-maker-chosen', 'slime-picker', 'member-avatar', 'member-delete-ask', 'context-menu-member', 'foot-account-menu', 'foot-usage-submenu', 'foot-usage-two',
   'composer-model-small', 'composer-model-sources', 'composer-model-favorites', 'automations-detail-own', 'automations-create-slot', 'automations-create-time-menu', 'emoji-picker', 'connections', 'connections-add-menu',
-  'plugins-detail', 'connect-apps', 'connect-apps-more', 'connect-app-oauth', 'connect-app-connected', 'vault-new-login', 'missing-vision', 'primary-contact-picker', 'settings-chatgpt-row',
+  'plugins-detail', 'connect-apps', 'connect-apps-more', 'connect-app-oauth', 'connect-app-connected', 'vault-new-login', 'skill-library', 'missing-vision', 'primary-contact-picker', 'settings-chatgpt-row',
   'template-preview', 'template-review-pages', 'template-export-review', 'details-routine-view', 'room-rename', 'sidebar-owner-crop', 'connections-command', 'connections-edit', 'automations-detail-routine', 'automations-create-button', 'member-template-gallery', 'missing-provider-repair', 'missing-search-repair']);
 for (const scene of scenes) if (FLOAT_CARD_SCENES.has(scene.name)) scene.steps.push({ action: "check", name: "float-cards" });
 for (const scene of scenes) if (FLOAT_SCENES.has(scene.name)) scene.steps.push({ action: "check", name: "float-surface" });

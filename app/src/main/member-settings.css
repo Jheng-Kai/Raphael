@@ -142,3 +142,8 @@
   .ms-pane:not([hidden]) { animation: ms-in 0.16s ease-out backwards; }
 }
 @keyframes ms-in { from { opacity: 0; transform: translateY(4px); } }
+
+/* What the team skill library gives this member (#280): read-only rows, their count where a command row has its words. */
+/* A command's words sit inside its row's button (its own padding beside the row's): the count ends where they do. */
+.ms-row.ms-lib-row { padding-right: calc(var(--sp-2) + var(--sp-3)); }
+.ms-lib-count { flex: none; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-xs); color: var(--text-3); }

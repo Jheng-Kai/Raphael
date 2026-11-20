@@ -216,12 +216,12 @@ const described = (html: string): string[] =>
   html.split(/(?=<div class="row[ "])/).filter((r) => r.includes('<div class="d">')).map((r) => /<div class="t">(.*?)<\/div>/.exec(r)![1]);
 
 describe("the tabs", () => {
-  test("are the six: General, Tools, Safety, Models & usage, Dictation and About, in each language", () => {
-    expect(IDS).toEqual(["general", "tools", "safety", "models", "dictation", "about", "connections"]);
+  test("are the seven: General, Tools, Team skill library, Safety, Models & usage, Dictation and About, in each language", () => {
+    expect(IDS).toEqual(["general", "tools", "skills", "safety", "models", "dictation", "about", "connections"]);
     const titles = {
-      "zh-TW": ["一般", "工具", "安全", "模型與用量", "聽寫與快捷鍵", "關於", "連結應用程式"],
-      en: ["General", "Tools", "Safety", "Models & usage", "Dictation & shortcuts", "About", "Connect apps"],
-      ja: ["一般", "ツール", "安全", "モデルと使用量", "音声入力とショートカット", "アプリ情報", "アプリを連携"],
+      "zh-TW": ["一般", "工具", "團隊技能庫", "安全", "模型與用量", "聽寫與快捷鍵", "關於", "連結應用程式"],
+      en: ["General", "Tools", "Team skill library", "Safety", "Models & usage", "Dictation & shortcuts", "About", "Connect apps"],
+      ja: ["一般", "ツール", "チームのスキルライブラリ", "安全", "モデルと使用量", "音声入力とショートカット", "アプリ情報", "アプリを連携"],
     };
     for (const locale of LOCALES) {
       setLocale(locale);
@@ -232,13 +232,13 @@ describe("the tabs", () => {
   test("sit flat: no group names and no search", () => {
     const list = paneListHTML();
     // 連結應用程式 is no tab: the sidebar opens it as a dialog of its own (R-UI-111).
-    expect([...list.matchAll(/data-pane="(\w+)"/g)].map((m) => m[1])).toEqual(["general", "tools", "safety", "models", "dictation", "about"]);
+    expect([...list.matchAll(/data-pane="(\w+)"/g)].map((m) => m[1])).toEqual(["general", "tools", "skills", "safety", "models", "dictation", "about"]);
     expect(list).not.toContain("nav-group");
     expect(list).not.toContain("set-search");
   });
 
   test("every tab is a real button and links of before land on their new tab", () => {
-    expect(paneListHTML().match(/<button type="button" class="nav" data-pane="\w+" aria-current="false">/g)).toHaveLength(6);
+    expect(paneListHTML().match(/<button type="button" class="nav" data-pane="\w+" aria-current="false">/g)).toHaveLength(7);
     expect(paneListHTML()).not.toContain('data-pane="agent"');
     expect(canonicalPane("agent")).toBe("tools");
     expect(canonicalPane("appearance")).toBe("general");

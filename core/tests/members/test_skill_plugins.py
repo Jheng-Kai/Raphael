@@ -52,7 +52,7 @@ async def test_local_plugin_is_one_set_with_individual_imports_and_all_member_ac
     assert len(source["skills"]) == 2
     standalone = cap.import_local(0, source["skills"][0]["source"])
     assert not standalone.get("set_id")
-    installed = await rig.call("members.skills.import", {"member_id": 0, "shared": True, "plugin": True, "source": source["source"]})
+    installed = await rig.call("members.skills.import", {"member_id": 0, "shared": True, "plugin": True, "access": "all", "source": source["source"]})
     assert installed["set"]["skill_count"] == 2 and installed["set"]["command_count"] == 1
     member = (await rig.call("members.create", {"name": "Ada"}))["member"]["id"]
     for identifier in (0, member):
@@ -74,40 +74,40 @@ async def test_local_plugin_is_one_set_with_individual_imports_and_all_member_ac
 async def test_set_reimport_preserves_skill_ids_and_grants_and_removal_cascades(rig, tmp_path):
     cap = rig.service.capabilities
     folder = local(cap, tmp_path)
-    first = await cap.import_plugin("local:" + str(folder))
+    first = await cap.import_plugin("local:" + str(folder), access="all")
     old = {s["name"]: s for s in cap.skills(0)}
-    cap.update_skill(0, old["write"]["id"], False)
-    cap.update_skill(0, old["check"]["id"], False)
+    cap.update_skill(-1, old["write"]["id"], False)
+    cap.update_skill(-1, old["check"]["id"], False)
     new_folder = local(cap, tmp_path, "2.0.0", removed=True)
     assert cap.plugin_sets()[0]["source_changed"] is True
     second = await cap.import_plugin(set_id=first["id"])
     assert second["id"] == first["id"] and second["version"] == "2.0.0" and second["source"] == "local:" + str(new_folder)
-    current = {s["name"]: s for s in cap.skills(0)}
+    current = {s["name"]: s for s in cap.skills(-1)}
     assert current["write"]["id"] == old["write"]["id"] and current["write"]["enabled"] is False
     assert "check" not in current
-    assert rig.conn.execute("SELECT COUNT(*) FROM member_skill_grants").fetchone()[0] == 1
+    assert all(s["name"] != "write" for s in cap.skills(0))
     with pytest.raises(MemberError, match="plugin set"):
         cap.delete_skill(-1, old["write"]["id"])
     with pytest.raises(RpcError):
         await rig.call("members.skills.delete", {"member_id": 0, "set_id": first["id"]})
     await rig.call("members.skills.delete", {"member_id": 0, "shared": True, "set_id": first["id"]})
     assert cap.skills(0) == [] and cap.plugin_sets() == []
-    assert rig.conn.execute("SELECT COUNT(*) FROM member_skill_grants").fetchone()[0] == 0
+    assert not rig.service.packages.list()
 
 
 async def test_invalid_set_update_leaves_existing_documents_and_grants(rig, tmp_path):
     cap = rig.service.capabilities
     folder = local(cap, tmp_path)
-    first = await cap.import_plugin("local:" + str(folder))
+    first = await cap.import_plugin("local:" + str(folder), access="all")
     before = cap.skills(0)
-    cap.update_skill(0, before[0]["id"], False)
+    cap.update_skill(-1, before[0]["id"], False)
     changed = package("2.0.0")
     changed["skills/check/SKILL.md"] = b"invalid"
     with pytest.raises(MemberError):
         cap.install_set("local:" + str(folder.parent / "2.0.0"), changed)
     assert cap.plugin_sets()[0]["version"] == first["version"]
-    assert cap.skills(0)[0]["enabled"] is False
-    assert len(cap.skills(0)) == len(before)
+    assert cap.skills(-1)[0]["enabled"] is False
+    assert len(cap.skills(0)) == len(before) - 1
 
 
 def fake_github(monkeypatch, manifest=None, files=None, *, mode=None, truncated=False):
@@ -140,17 +140,17 @@ async def test_marketplace_installs_pinned_folder_and_offers_newer_version(rig, 
     listed = (await rig.call("members.skills.list", {"member_id": 0, "marketplace": "owner/repo"}))["marketplace"]
     assert listed["plugins"][0]["version"] == "1.0.0"
     assert listed["plugins"][1]["installable"] is False and listed["plugins"][1]["reason"]
-    result = await rig.call("members.skills.import", {"member_id": 0, "shared": True, "marketplace": "owner/repo", "name": "desk"})
+    result = await rig.call("members.skills.import", {"member_id": 0, "shared": True, "access": "all", "marketplace": "owner/repo", "name": "desk"})
     assert result["set"]["version"] == "1.0.0"
     assert all(SHA in url for url in requests if "raw.githubusercontent.com" in url)
     before = cap.skills(0)[0]
-    cap.update_skill(0, before["id"], False)
+    cap.update_skill(-1, before["id"], False)
     files.update(package("2.0.0"))
     updated = await rig.call("members.skills.list", {"member_id": 0, "marketplace": "owner/repo"})
     assert updated["sets"][0]["source_changed"] is True
     again = await rig.call("members.skills.import", {"member_id": 0, "shared": True, "set_id": result["set"]["id"]})
     assert again["set"]["version"] == "2.0.0"
-    assert cap.skills(0)[0]["id"] == before["id"] and cap.skills(0)[0]["enabled"] is False
+    assert cap.skills(-1)[0]["id"] == before["id"] and cap.skills(-1)[0]["enabled"] is False
     assert cap.plugin_sets()[0]["source_changed"] is False
 
 
@@ -177,7 +177,7 @@ def test_non_github_and_executable_sources_have_an_explicit_refusal(source):
 async def test_copy_failure_and_same_version_file_changes_preserve_the_existing_set(rig, tmp_path, monkeypatch):
     cap = rig.service.capabilities
     folder = local(cap, tmp_path)
-    installed = await cap.import_plugin("local:" + str(folder))
+    installed = await cap.import_plugin("local:" + str(folder), access="all")
     before = cap.skills(0)
     path = cap._path(0, before[0]["id"])
     content = path.read_bytes()
@@ -231,7 +231,7 @@ def test_migration_62_keeps_rooms_and_existing_shared_grants(monkeypatch, tmp_pa
     db.migrate(reopened)
     assert steps == expected_steps
     assert reopened.execute("PRAGMA user_version").fetchone()[0] == db.LATEST_VERSION
-    assert tuple(reopened.execute("SELECT member_id,skill_id,enabled FROM member_skill_grants").fetchone()) == (0, identifier, 0)
+    assert reopened.execute("SELECT access FROM skill_packages WHERE key=?", (f"skill:{identifier}",)).fetchone()[0] == "[]"
     assert reopened.execute("SELECT name FROM sqlite_master WHERE name='room_exchange_turns'").fetchone()
     assert reopened.execute("SELECT name FROM sqlite_master WHERE name='vault_entries'").fetchone()
     assert reopened.execute("SELECT name FROM sqlite_master WHERE name='message_reactions'").fetchone()
@@ -246,9 +246,9 @@ async def test_plugin_skills_and_commands_use_native_delivery_without_plugin_hoo
     folder = local(cap, tmp_path)
     command = folder / "commands/review.md"
     command.write_bytes(command.read_bytes() + b"\n!`must-not-run`\nRead ${CLAUDE_PLUGIN_ROOT}/assets/check.txt")
-    installed = await cap.import_plugin("local:" + str(folder))
+    installed = await cap.import_plugin("local:" + str(folder), access="all")
     check = next(s for s in cap.skills(0) if s["name"] == "check")
-    cap.update_skill(0, check["id"], False)
+    cap.update_skill(-1, check["id"], False)
     script = tmp_path / "fake-cli.py"
     record = tmp_path / "native.json"
     script.write_text('''import json, sys, tomllib

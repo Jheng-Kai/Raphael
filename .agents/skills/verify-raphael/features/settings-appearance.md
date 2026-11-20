@@ -43,9 +43,9 @@ The core no longer registers an owner memory-import RPC or management boundary r
 MemoryFile.apply and the four memory document/summary RPCs remain intact. Verify with
 core/tests/memory, the members management suites and architecture/test_boundaries.py.
 
-## The six tabs (R-UI-115)
+## The seven tabs (R-UI-115)
 
-Settings has six flat tabs: 一般, 聽寫與快捷鍵, 工具, 安全, 模型與用量 and 關於. There are no
+Settings has seven flat tabs: 一般, 聽寫與快捷鍵, 工具, 團隊技能庫, 安全, 模型與用量 and 關於. There are no
 group names, no search box and no line under a tab's name. Each tab is its name, then sections: a small name
 over one rounded card (`--panel`) of rows with no lines between them, the name left and the control right.
 一般 holds, in order: 關於你 (the owner's picture, name and about me), 外觀 (theme and language), 拉斐爾 (the
@@ -53,6 +53,14 @@ routines' time zone and the output folder) and 啟動 (the guide). Telegram, Sla
 sets them up in its conversation. Older links land on 一般: `appearance` scrolls to its section, and
 `messaging` and `memory` open 一般 as it is. 連結應用程式 stays a dialog of its own from the sidebar (R-UI-111).
 This supersedes the About-you grouping and the search notes below.
+
+## 團隊技能庫 (R-SKILL-17)
+
+The tab lists the shared skills in packages (skill-library.ts): a row per package with its count, who may use it, its switch and ⋯ (also on a right click). The name opens its skills, each with a switch. The importer is the tab's first card, with no line above it: a link or owner/repo (or pasted SKILL.md in its place), a picked or dropped file, a folder from the system's dialog (the output folder's picker), and one 匯入. Who may use a package is the vault's choice (整個團隊 or the characters ticked). A character's skills page shows the packages given to it read-only under 來自團隊技能庫, with a button to this tab. The core is `skills.library.*` (R-SKILL-15, R-SKILL-16); the shell lets those four methods through `core_call`.
+
+```powershell
+npm run look -- skill-library skill-library-open skill-library-access skill-library-import skill-library-imported skill-library-import-failed member-skills-library --theme both --width 1120,720,1920x1080
+```
 
 ```powershell
 npm run look -- profile appearance dictation tools safety models about settings-owner appearance-menu work-messaging-setup --theme both --width 1120,720,1920x1080

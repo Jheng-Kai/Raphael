@@ -30,6 +30,7 @@ export const OVERFLOW_ROWS: readonly OverflowRow[] = [
   { more: '[data-act="local-menu"]', row: ".lm-row" },
   { more: '[data-rule="more"]', row: ".rules-row" },
   { more: '[data-vault="menu"]', row: ".vault-row" },
+  { more: '[data-skl="more"]', row: ".skl-pack" },
   { more: '[data-act="word-menu"]', row: ".wrow" },
   { more: '[data-act="history-menu"]', row: ".hrow" },
   { more: '[data-conn="server-menu"]', row: ".cs-page .cs-head" },
