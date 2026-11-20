@@ -35,6 +35,45 @@ def keychain_stamp(service=CLAUDE_KEYCHAIN_SERVICE):
     return next((line.strip() for line in found.stdout.splitlines() if '"mdat"' in line), "present")
 
 
+# Antigravity CLI (`agy`) on Windows keeps its Google sign-in in Credential Manager under this target, not in a file (#283).
+ANTIGRAVITY_CREDENTIAL = "gemini:antigravity*"
+
+
+def credential_stamp(target=ANTIGRAVITY_CREDENTIAL):
+    """When a Windows Credential Manager item matching `target` last changed, or None without one: CredEnumerateW lists
+    the items' attributes, and only their LastWritten time is read, never the secret they hold."""
+    if sys.platform != "win32":
+        return None
+    import ctypes
+    from ctypes import wintypes
+
+    class FileTime(ctypes.Structure):
+        _fields_ = [("low", wintypes.DWORD), ("high", wintypes.DWORD)]
+
+    class Credential(ctypes.Structure):
+        _fields_ = [("Flags", wintypes.DWORD), ("Type", wintypes.DWORD), ("TargetName", wintypes.LPWSTR),
+                    ("Comment", wintypes.LPWSTR), ("LastWritten", FileTime), ("CredentialBlobSize", wintypes.DWORD),
+                    ("CredentialBlob", ctypes.c_void_p), ("Persist", wintypes.DWORD), ("AttributeCount", wintypes.DWORD),
+                    ("Attributes", ctypes.c_void_p), ("TargetAlias", wintypes.LPWSTR), ("UserName", wintypes.LPWSTR)]
+
+    try:
+        advapi = ctypes.WinDLL("advapi32", use_last_error=True)
+        enumerate_ = advapi.CredEnumerateW
+        enumerate_.argtypes = (wintypes.LPCWSTR, wintypes.DWORD, ctypes.POINTER(wintypes.DWORD),
+                               ctypes.POINTER(ctypes.POINTER(ctypes.POINTER(Credential))))
+        enumerate_.restype = wintypes.BOOL
+        count, found = wintypes.DWORD(), ctypes.POINTER(ctypes.POINTER(Credential))()
+        if not enumerate_(target, 0, ctypes.byref(count), ctypes.byref(found)):
+            return None  # ERROR_NOT_FOUND, or none to say
+        try:
+            times = [(found[i].contents.LastWritten.high << 32) | found[i].contents.LastWritten.low for i in range(count.value)]
+        finally:
+            advapi.CredFree(found)
+        return max(times) if times else None
+    except (OSError, AttributeError, ValueError):
+        return None
+
+
 # "gemini" is Google's Antigravity CLI (`agy`), which replaced Gemini CLI.
 LOGIN = {"claude": "claude auth login", "codex": "codex login", "gemini": "agy"}
 EXECUTABLE = {"claude": "claude", "codex": "codex", "gemini": "agy"}
@@ -87,10 +126,17 @@ def owners_keychain(home):
     return keychain_stamp if home is None and sys.platform == "darwin" else None
 
 
+def owners_credentials(home):
+    """The Credential Manager look for Antigravity's sign-in: only for the owner's own home (none given) on Windows."""
+    return credential_stamp if home is None and sys.platform == "win32" else None
+
+
 class CliBrains:
-    def __init__(self, *, home=None, environ=None, commands=None, notify=None, settings=None, clock=time.monotonic, keychain=None):
+    def __init__(self, *, home=None, environ=None, commands=None, notify=None, settings=None, clock=time.monotonic, keychain=None,
+                 credentials=None):
         self._keychain = keychain if keychain is not None else owners_keychain(home)
         self._keychain_seen = None
+        self._credentials = credentials if credentials is not None else owners_credentials(home)
         self.home = Path.home() if home is None else Path(home)
         self.environ = dict(os.environ if environ is None else environ)
         self.commands = commands
@@ -184,6 +230,9 @@ class CliBrains:
         # Claude Code on a Mac keeps its sign-in in the Keychain (R-CLI-SIGNIN-04): the item being there is the sign-in.
         if name == "claude" and self._keychain_item(fresh=False) is not None:
             return True
+        # Antigravity on Windows keeps its sign-in in Credential Manager (#283): the item being there is the sign-in.
+        if name == "gemini" and self._credentials is not None and self._credentials() is not None:
+            return True
         # Claude also uses OS credential storage. Settings alone do not establish a Google login.
         return None if name == "claude" else False
 
@@ -205,9 +254,12 @@ class CliBrains:
                 stamp.append(path.stat().st_mtime_ns)
             except OSError:
                 stamp.append(None)
-        # On a Mac a sign-in rewrites Claude Code's Keychain item instead of a file.
+        # On a Mac a sign-in rewrites Claude Code's Keychain item instead of a file; on Windows Antigravity's Credential
+        # Manager item.
         if name == "claude" and self._keychain is not None:
             stamp.append(self._keychain_item(fresh=True))
+        if name == "gemini" and self._credentials is not None:
+            stamp.append(self._credentials())
         return tuple(stamp)
 
     def sign_in_lost(self, name, cause):

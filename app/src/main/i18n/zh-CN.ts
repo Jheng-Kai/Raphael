@@ -616,7 +616,7 @@ export const zhCN = {
   "card.keyResuming": "已保存 · 继续这项工作…",
   "card.keyResumed": "已保存 · 工作已继续",
   "card.keyNotResumed": "密钥已保存，这项工作没有继续",
-  "card.keyInvalid": "密钥是空的，或含有换行",
+  "card.keyInvalid": "密钥是空的，或含有换行", "card.keyTooShort": "密钥至少需要 6 个字符；账号名这类不是机密的值，请勾选“不是机密”", "card.keyPlain": "不是机密（例如账号名）", "card.keyMin": "至少需要 6 个字符",
   "card.keyTooLong": "密钥太长，存不下",
   "card.keyVault": "没有存成功，请再试一次",
   "card.keyGone": "这个连接已不在，没有保存",

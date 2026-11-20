@@ -616,7 +616,7 @@ export const it = {
   "card.keyResuming": "Salvato · ripresa dell’attività…",
   "card.keyResumed": "Salvato · attività ripresa",
   "card.keyNotResumed": "Chiave salvata; attività non ripresa",
-  "card.keyInvalid": "La chiave è vuota o contiene un’interruzione di riga",
+  "card.keyInvalid": "La chiave è vuota o contiene un’interruzione di riga", "card.keyTooShort": "Una chiave richiede almeno 6 caratteri; per un valore che non è segreto, come un nome utente, seleziona «Non è un segreto»", "card.keyPlain": "Non è un segreto (come un nome utente)", "card.keyMin": "Almeno 6 caratteri",
   "card.keyTooLong": "La chiave è troppo lunga da salvare",
   "card.keyVault": "Impossibile salvare; riprova",
   "card.keyGone": "La connessione non esiste più; nulla è stato salvato",

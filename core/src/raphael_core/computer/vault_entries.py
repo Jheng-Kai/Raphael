@@ -28,6 +28,8 @@ KEY_REFUSED = frozenset(("PATH", "HOME", "USER", "LOGNAME", "SHELL", "SH", "PWD"
                          "PS1", "PS4", "DISPLAY", "XAUTHORITY", "TMPDIR"))
 KEY_REFUSED_PREFIXES = ("LD_", "DYLD_", "BASH", "VNC_", "RAPHAEL_", "CUA_")
 KEY_MIN, KEY_MAX = 6, 800
+# A key the owner marked as no secret (#281), kept in the entry's origin column, which a key leaves empty otherwise.
+PLAIN = "plain"
 
 
 def key_name_ok(name):
@@ -113,13 +115,18 @@ class VaultEntries(LoginVault):
                 self.remove(row["id"])
         return True
 
-    def put_key(self, member, name, purpose, value):
+    def put_key(self, member, name, purpose, value, *, secret=True):
         """Keep the key `name` of this member (a new value replaces the old one) in the OS vault; `purpose` is the
-        short line the owner reads beside it. The value goes nowhere else, and is withheld from every output at once."""
+        short line the owner reads beside it. The value goes nowhere else, and a secret one is withheld from every output
+        at once. A value the owner marked as no secret (a user name, an address, a site ID: `secret=False`) is kept the
+        same way and given to programs the same way, but may be short and is not withheld from what is shown (#281): a
+        short value withheld would blank ordinary words."""
         if not key_name_ok(name) or not isinstance(purpose, str) or len(purpose) > 240 or "\n" in purpose or "\r" in purpose:
             raise ValueError("invalid_key")
-        if not isinstance(value, str) or len(value) < KEY_MIN or value != value.strip() or any(ord(ch) < 32 or ord(ch) == 127 for ch in value):
+        if not isinstance(value, str) or not value or value != value.strip() or any(ord(ch) < 32 or ord(ch) == 127 for ch in value):
             raise ValueError("invalid_key")
+        if secret and len(value) < KEY_MIN:
+            raise ValueError("key_too_short")
         if len(value) > KEY_MAX:
             raise SecretTooLong("The key is longer than the Credential Manager can hold")
         values = {"value": value}
@@ -136,13 +143,14 @@ class VaultEntries(LoginVault):
         try:
             with self.conn:
                 self.conn.execute("INSERT INTO vault_entries VALUES (?,?,?,?,?,?,?)",
-                                  (identifier, "key", name, purpose.strip(), "", members, credential))
+                                  (identifier, "key", name, purpose.strip(), "" if secret else PLAIN, members, credential))
         except Exception:
             self.vault.delete(credential)
             raise
-        # Everything a command prints or a file shows from now on is checked for it, for any member of a shared computer.
-        for holder in {member, *self.values}:
-            self.remember(holder, values)
+        # Everything a command prints or a file shows from now on is checked for a secret one, for any member of a shared computer.
+        if secret:
+            for holder in {member, *self.values}:
+                self.remember(holder, values)
         for stale in reversed(old):
             self.remove(stale)
         return identifier
@@ -160,7 +168,8 @@ class VaultEntries(LoginVault):
             if not isinstance(values, dict) or not isinstance(values.get("value"), str) or not values["value"]:
                 missing.append(name)
                 continue
-            self.remember(member, values)
+            if row["origin"] != PLAIN:
+                self.remember(member, values)
             found[name] = values["value"]
         return found, missing
 
@@ -220,7 +229,7 @@ class VaultEntries(LoginVault):
 
     def preload(self, member):
         # Shared desktop output can show any saved entry, including another member's data.
-        for row in self.conn.execute("SELECT credential FROM vault_entries"):
+        for row in self.conn.execute("SELECT credential FROM vault_entries WHERE origin IS NOT ?", (PLAIN,)):
             try:
                 raw = self.vault.get(row[0])
                 if raw:

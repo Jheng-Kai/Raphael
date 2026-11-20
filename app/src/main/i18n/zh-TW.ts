@@ -463,7 +463,7 @@ export const zhTW = {
   "card.error": "沒有連上", "card.busy": "另一個登入正在進行", "card.resumed": "{p0} 已連結，繼續原本的工作",
   "card.keyField": "貼上金鑰", "card.keySave": "安全儲存", "card.keySaved": "已安全儲存",
   "card.keyResuming": "已儲存 · 繼續這項工作…", "card.keyResumed": "已儲存 · 工作已繼續",
-  "card.keyNotResumed": "金鑰已儲存，這項工作沒有繼續", "card.keyInvalid": "金鑰是空的，或含有換行",
+  "card.keyNotResumed": "金鑰已儲存，這項工作沒有繼續", "card.keyInvalid": "金鑰是空的，或含有換行", "card.keyTooShort": "金鑰至少需要 6 個字元；帳號名稱這類不是機密的值，請勾選「不是機密」", "card.keyPlain": "不是機密（例如帳號名稱）", "card.keyMin": "至少需要 6 個字元",
   "card.keyTooLong": "金鑰太長，存不下", "card.keyVault": "沒有存成功，請再試一次", "card.keyGone": "這個連接已不在，沒有儲存",
   "card.stopped": "已停止，這項工作沒有繼續", "card.keyResumedLine": "{p0} 的金鑰已儲存，繼續原本的工作",
   "card.pcTitle": "電腦", "card.pcDone": "我完成了", "card.pcStop": "停止",

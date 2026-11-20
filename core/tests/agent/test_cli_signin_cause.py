@@ -294,3 +294,35 @@ def test_the_keychain_is_asked_for_attributes_alone(monkeypatch):
         stdout = ""
     monkeypatch.setattr(discovery_module.subprocess, "run", lambda args, **kwargs: Missing())
     assert discovery_module.keychain_stamp() is None
+
+
+def test_antigravitys_sign_in_in_windows_credential_manager_is_a_sign_in(tmp_path):
+    """R-CLI-SIGNIN-05 (#283): Antigravity CLI 1.5 on Windows keeps its Google sign-in in Credential Manager, not in
+    ~/.gemini; the item being there is the sign-in, and its LastWritten time moves the credential stamp."""
+    item = [133_000_000]
+    brains = CliBrains(home=tmp_path, environ={}, commands={"gemini": ["agy"]}, credentials=lambda: item[0])
+    assert brains.logged_in("gemini") is True and brains.available("gemini")
+    brains.sign_in_lost("gemini", "expired")
+    assert brains.sign_in_missing("gemini") == "expired"
+    item[0] = 133_000_001  # signed in again in a terminal
+    assert brains.sign_in_missing("gemini") is None
+    item[0] = None  # signed out
+    assert brains.logged_in("gemini") is False and not brains.available("gemini")
+    # Credential Manager is Antigravity's alone here: the other CLIs keep files.
+    item[0] = 133_000_002
+    assert brains.logged_in("codex") is False
+
+
+def test_only_the_owners_own_home_on_windows_asks_credential_manager(tmp_path, monkeypatch):
+    monkeypatch.setattr(discovery_module.sys, "platform", "win32")
+    assert discovery_module.owners_credentials(tmp_path) is None
+    assert discovery_module.owners_credentials(None) is discovery_module.credential_stamp
+    monkeypatch.setattr(discovery_module.sys, "platform", "darwin")
+    assert discovery_module.owners_credentials(None) is None
+    assert discovery_module.credential_stamp() is None
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Credential Manager is Windows'")
+def test_credential_manager_without_the_item_says_none():
+    """Asking for a target nobody wrote lists nothing; only attributes are ever listed, never a secret."""
+    assert discovery_module.credential_stamp("raphael-test-no-such-credential*") is None
