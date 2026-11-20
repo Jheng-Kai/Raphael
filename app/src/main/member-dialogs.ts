@@ -1,4 +1,4 @@
-// The small windows of the 拉斐爾 page's members: 新增成員 (the mockup's `new-member`: picture, name,
+// The small windows of the 拉斐爾 page's members: 新增角色 (the mockup's `new-member`: picture, name,
 // role, instructions and group, with 「取消」 and 「建立」), the routine the core offers with a
 // new member of a group with places to look (taken only with 「加入」), the question before a member
 // or a group is deleted, a group's name, a group's 看的地方, and the popover that changes a picture

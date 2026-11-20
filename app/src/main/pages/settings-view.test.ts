@@ -149,11 +149,10 @@ test("shared safety rules and the always-allowed apps live in Safety", () => {
   expect(tab("tools", { rules })).not.toContain("data-rules-section");
 });
 
-test.each(["zh-TW", "en", "ja"] as const)("shared safety and connection wording applies to all members in %s", locale => {
+test.each(["zh-TW", "en", "ja"] as const)("shared safety wording names no one and no word for them all in %s", locale => {
   setLocale(locale);
   for (const key of ["rules.placeholder", "rules.action", "rules.err.empty"] as const) {
-    expect(t(key)).not.toMatch(/Raphael|拉斐爾|ラファエル/);
-    expect(t(key)).toContain(locale === "zh-TW" ? "成員" : locale === "ja" ? "メンバー" : "member");
+    expect(t(key)).not.toMatch(/Raphael|拉斐爾|ラファエル|成員|メンバー|\bmembers?\b/i);
   }
 });
 

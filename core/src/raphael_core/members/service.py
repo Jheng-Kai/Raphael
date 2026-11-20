@@ -1638,7 +1638,7 @@ class MembersService:
             previous = [row[0] for row in self._conn.execute("SELECT member_id FROM room_members WHERE room_id=?", (identifier,))]
             removed = sorted(set(previous) - set(arguments.get("member_ids", [])))
             if removed:
-                notes.append(joined(say(language, "Removed members", "移除的成員", "外すメンバー"),
+                notes.append(joined(say(language, "Removed members", "移除的參與者", "外すメンバー"),
                                     listed([self.name_of(member) or "" for member in removed if self.name_of(member)], language), language))
         if name == "dictionary_delete":
             record = self._conn.execute("SELECT word FROM dictionary WHERE id=?", (identifier,)).fetchone()
@@ -2313,7 +2313,7 @@ class MembersService:
 
     def _guard_reason(self, kind: str) -> str:
         messages = with_ui_words({
-            "zh-TW": {"absence": "已暫停：擁有者超過 30 天未使用。請確認後重新開啟。", "member": "此成員最近一小時已執行 200 次，稍後自動重試。", "total": "團隊最近一小時已執行 300 次，稍後自動重試。"},
+            "zh-TW": {"absence": "已暫停：擁有者超過 30 天未使用。請確認後重新開啟。", "member": "最近一小時已執行 200 次，稍後自動重試。", "total": "團隊最近一小時已執行 300 次，稍後自動重試。"},
             "ja": {"absence": "30 日間利用がないため停止しました。確認して再開してください。", "member": "このメンバーは過去 1 時間に 200 回実行しました。後で再試行します。", "total": "チームは過去 1 時間に 300 回実行しました。後で再試行します。"},
             "en": {"absence": "Paused after 30 days without owner activity. Review and enable to resume.", "member": "This member reached 200 runs in the last hour. Retrying later.", "total": "The team reached 300 runs in the last hour. Retrying later."},
         })

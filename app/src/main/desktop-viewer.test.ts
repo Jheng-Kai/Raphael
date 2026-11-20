@@ -443,7 +443,7 @@ test('shared computers show why teaching is unavailable and offer the existing r
   api.desktopStatus.mockResolvedValue({...running,teach_available:false});
   panelOpen=true;mounted.show();await flush();message('connected');
   expect(host.querySelector<HTMLButtonElement>('[data-desktop="teach"]')!.disabled).toBe(true);
-  expect(host.querySelector('.desktop-teach-missing')!.textContent).toContain('成員自己的電腦');
+  expect(host.querySelector('.desktop-teach-missing')!.textContent).toContain('各自的電腦');
   expect(host.querySelector('.desktop-teach-missing [data-missing-repair="computer"]')).not.toBeNull();
 });
 test('an explicitly opened working-member preview opens one persistent stream',async()=>{

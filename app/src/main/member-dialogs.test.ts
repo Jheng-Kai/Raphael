@@ -22,7 +22,7 @@ test("a member's deletion asks one sentence, Cancel and Delete, and nothing abou
   const answer = confirmDelete("小晴", { member: true });
   const dialog = document.querySelector<HTMLElement>(".mb-dialog")!;
   expect(dialog.querySelector("h2")!.textContent).toBe("刪除「小晴」？");
-  expect([...dialog.querySelectorAll("p")].map(p => p.textContent)).toEqual(["永久刪除這位成員和對話紀錄，無法復原。"]);
+  expect([...dialog.querySelectorAll("p")].map(p => p.textContent)).toEqual(["對話紀錄也會一起永久刪除，無法復原。"]);
   expect([...dialog.querySelectorAll(".mb-dlg-act .btn")].map(b => b.textContent)).toEqual(["取消", "刪除"]);
   expect(dialog.querySelector(".row, .tg, [role=switch], input, [data-remove-computer]")).toBeNull();
   expect(dialog.textContent).not.toMatch(/電腦|computer/i);
@@ -39,7 +39,7 @@ test("the delete question is a small box: no ×, Cancel holds the focus, Escape 
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   expect(await escape).toBe(false);
   expect(document.querySelector(".mb-dialog")).toBeNull();
-  // The new look is the destructive question's own: the small 新增成員 style dialogs keep the shared shell and their ×.
+  // The new look is the destructive question's own: the small 新增角色 style dialogs keep the shared shell and their ×.
   const css = readFileSync(join(__dirname, "members.css"), "utf8");
   expect(css).toContain(".mb-dialog.mb-confirm.mb-delete { width: min(320px, 100%);");
   expect(css).toMatch(/\.mb-confirm\.mb-delete \.mb-dlg-act \.btn\.pri \{[^}]*background: var\(--close\)[^}]*color: var\(--on-close\)/);

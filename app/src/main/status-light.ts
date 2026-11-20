@@ -30,7 +30,12 @@ export function mountStatusLight(button: HTMLElement, o: {
   function draw(): void {
     const people = shown();
     const level: StatusLevel = people.some(entry => entry.needs) ? "needs" : people.length ? "busy" : "idle";
-    const label = level === "needs" ? t("status.needs") : level === "busy" ? t("status.busy", { p0: people.length }) : t("status.idle");
+    // The light says who: one name, or the first and how many more, never a word for them all.
+    const named = level === "needs" ? people.filter(entry => entry.needs) : people;
+    const first = named[0]?.member.name ?? "";
+    const label = level === "idle" ? t("status.idle")
+      : level === "needs" ? (named.length === 1 ? t("status.needsOne", { p0: first }) : t("status.needsMany", { p0: first, p1: named.length - 1 }))
+      : named.length === 1 ? t("status.busyOne", { p0: first }) : t("status.busyMany", { p0: first, p1: named.length - 1 });
     if (button.dataset.level !== level) button.dataset.level = level;
     if (button.getAttribute("aria-label") !== label) { button.setAttribute("aria-label", label); button.title = label; }
   }

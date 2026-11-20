@@ -46,7 +46,7 @@ describe("the column, drawn", () => {
     const folder = sections[sections.length - 1]!;
     expect(folder.classList.contains("mb-hidden")).toBe(true);
     expect(folder.hasAttribute("data-empty")).toBe(false);
-    expect(folder.querySelector(".mb-gname")?.textContent).toBe("隱藏的成員");
+    expect(folder.querySelector(".mb-gname")?.textContent).toBe("已隱藏");
     expect([...folder.querySelectorAll("[data-member]")].map(row => row.getAttribute("data-member"))).toEqual(["3"]);
     expect(el.querySelectorAll('[data-member="3"]')).toHaveLength(1);
     expect(folder.querySelector("[data-hidden-rooms]")).not.toBeNull();
@@ -230,7 +230,7 @@ describe("the column, used", () => {
     expect(host.select).toHaveBeenLastCalledWith(0);
   });
 
-  test("search and plus stand side by side at the top, and search opens a card of every member with 新增成員 at its foot", () => {
+  test("search and plus stand side by side at the top, and search opens a card of every member with 新增角色 at its foot", () => {
     const column = mount();
     expect([...column.el.querySelectorAll(".mb-top [data-col]")].map(button => button.getAttribute("data-col"))).toEqual(["search", "add"]);
     expect(column.el.querySelector("input")).toBeNull();
@@ -244,7 +244,7 @@ describe("the column, used", () => {
     input.value = "信箱"; input.dispatchEvent(new Event("input"));
     expect(rows()).toEqual(["4"]);
     input.value = "沒有這個人"; input.dispatchEvent(new Event("input"));
-    expect(card.querySelector(".mb-none")!.textContent).toBe("沒有相符的成員");
+    expect(card.querySelector(".mb-none")!.textContent).toBe("沒有相符的名字");
     input.value = "老師"; input.dispatchEvent(new Event("input"));
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     expect(host.select).toHaveBeenCalledWith(3);
@@ -278,7 +278,7 @@ describe("the column, used", () => {
     expect(document.getElementById("app-popover")).toBeNull();
   });
 
-  test("＋ offers 新增成員 and 新增分組", () => {
+  test("＋ offers 新增角色 and 新增分組", () => {
     const column = mount();
     column.el.querySelector<HTMLElement>('[data-col="add"]')!.click();
     const items = [...document.querySelectorAll<HTMLElement>("#app-popover [data-pick]")];
@@ -287,7 +287,7 @@ describe("the column, used", () => {
     expect(host.newMember).toHaveBeenCalled();
   });
 
-  test("every row of the plus menu has a mark of its own: the store is not drawn with the plus of 新增成員", () => {
+  test("every row of the plus menu has a mark of its own: the store is not drawn with the plus of 新增角色", () => {
     const column = mount();
     column.el.querySelector<HTMLElement>('[data-col="add"]')!.click();
     const drawings = [...document.querySelectorAll<HTMLElement>("#app-popover [data-pick]")].map(item => item.querySelector(".ck svg")?.innerHTML ?? "");
@@ -324,12 +324,12 @@ describe("the column, used", () => {
     expect(host.moveMember).toHaveBeenCalledWith(1, null, document.querySelector('#app-popover [data-pick="move"]'));
   });
 
-  test("only the primary's menu hands the primary on, with 換成其他成員 last, and the primary cannot be deleted or moved from it", () => {
+  test("only the primary's menu hands the primary on, with 換成其他角色 last, and the primary cannot be deleted or moved from it", () => {
     const shape = () => [...document.querySelector("#app-popover")!.children].map(node => node.matches('[role="separator"]') ? "|" : (node as HTMLElement).dataset.pick);
     let column = mount();
     column.el.querySelector<HTMLElement>('[data-member-more="0"]')!.click();
     expect(shape()).toEqual(["pin", "|", "primary"]);
-    expect(document.querySelector('#app-popover [data-pick="primary"]')!.textContent).toBe("換成其他成員");
+    expect(document.querySelector('#app-popover [data-pick="primary"]')!.textContent).toBe("換成其他角色");
     document.querySelector<HTMLElement>('#app-popover [data-pick="primary"]')!.click();
     expect(host.memberAction).toHaveBeenCalledWith(0, "primary");
     column.el.remove();
@@ -349,13 +349,13 @@ describe("the column, used", () => {
     const shape = () => [...document.querySelector("#app-popover")!.children].map(node => node.matches('[role="separator"]') ? "|" : (node as HTMLElement).dataset.pick);
     const pinned = (...ids: number[]) => { host.view = () => ({ list: { ...LIST, members: LIST.members.map(m => ids.includes(m.id) ? { ...m, pinned: true } : m) }, current: 0, previews, fresh: new Set() }); };
 
-    test("the pinned member's menu reads 取消釘選, 標為未讀, a line, then 換成其他成員 last, each with its own icon", () => {
+    test("the pinned member's menu reads 取消釘選, 標為未讀, a line, then 換成其他角色 last, each with its own icon", () => {
       pinned(3);
       const column = mount();
       column.el.querySelector<HTMLElement>('.mb-pinned [data-member-more="3"]')!.click();
       expect(shape()).toEqual(["pin", "unread", "|", "edit", "|", "export-template", "|", "hide", "delete", "|", "replace-pinned"]);
       const items = [...document.querySelectorAll<HTMLElement>("#app-popover [data-pick]")];
-      expect(items.map(item => item.textContent!.trim())).toEqual(["取消釘選", "標為未讀", "編輯成員", "分享為範本", "隱藏成員", "刪除成員", "換成其他成員"]);
+      expect(items.map(item => item.textContent!.trim())).toEqual(["取消釘選", "標為未讀", "編輯", "分享為範本", "隱藏", "刪除", "換成其他角色"]);
       expect(items.every(item => item.querySelector(".ck svg.i"))).toBe(true);
       // A tile has no 移到分組: its folder is where it goes back to. Nothing offers an id (owner: never shown ids).
       expect(shape()).not.toContain("move");
@@ -379,7 +379,7 @@ describe("the column, used", () => {
       expect(tile[0].querySelector(".ck")!.innerHTML).not.toBe(row[0].querySelector(".ck")!.innerHTML);
     });
 
-    test("without a member to put in its place the tile does not offer 換成其他成員, and the primary's own tile keeps handing the primary on", () => {
+    test("without a member to put in its place the tile does not offer 換成其他角色, and the primary's own tile keeps handing the primary on", () => {
       host.view = () => ({ list: { members: [member(0, { name: "拉斐爾" }), member(1, { pinned: true }), member(2, { pinned: true })], groups: [] }, current: 0, previews, fresh: new Set() });
       let column = mount();
       column.el.querySelector<HTMLElement>('.mb-pinned [data-member-more="2"]')!.click();

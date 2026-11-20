@@ -29,8 +29,8 @@ export default [
   // Menus and popovers beside their opener.
   toggle("add-menu", "The sidebar's + opens its menu and a second press on the + closes it", [column],
     '#nav [data-col="add"]', "#app-popover", "#app-popover"),
-  // 新增成員 is a dialog over the dimmed window: the press lands on the scrim over the + and closes it (the dialog registers with the shared dismissal).
-  scene("opener-toggle-member-maker", "With 新增成員 open, a press on the sidebar's + behind the scrim closes it and does not open the menu or the dialog again",
+  // 新增角色 is a dialog over the dimmed window: the press lands on the scrim over the + and closes it (the dialog registers with the shared dismissal).
+  scene("opener-toggle-member-maker", "With 新增角色 open, a press on the sidebar's + behind the scrim closes it and does not open the menu or the dialog again",
     [column, watchOpens(".cr-dialog", { gone: ".cr-dialog", over: "scrim" }), click('#nav [data-col="add"]'), click('#app-popover [data-pick="member"]'), wait(".cr-dialog"), pressOpener('#nav [data-col="add"]'), check("opener-toggle-member-maker")]),
   // The search button is in the list's top row only: the rail has none, so its steps run on the wide list.
   (scene => ({ ...scene, steps: scene.steps.map(step => ({ ...step, wide: true })) }))(toggle("search-card", "The sidebar's search button opens the search card and a second press closes it", [column],

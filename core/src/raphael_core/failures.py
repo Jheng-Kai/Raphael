@@ -231,7 +231,7 @@ class Missing:
     def sentence(self, language):
         language = _language(language)
         paths = with_ui_words({
-            "zh-TW": {"models": "設定 › 模型與用量 › 模型", "connections": "側欄的「連結應用程式」", "store": "側欄的「連結應用程式」", "search": "設定 › 工具 › 服務 › 搜尋網路", "read": "設定 › 工具 › 服務 › 讀網頁", "vision": "設定 › 工具 › 服務 › 看圖片", "pdf": "設定 › 工具 › 服務 › 讀 PDF", "computer": "成員的電腦分頁", "dictation": "設定 › 聽寫與快捷鍵"},
+            "zh-TW": {"models": "設定 › 模型與用量 › 模型", "connections": "側欄的「連結應用程式」", "store": "側欄的「連結應用程式」", "search": "設定 › 工具 › 服務 › 搜尋網路", "read": "設定 › 工具 › 服務 › 讀網頁", "vision": "設定 › 工具 › 服務 › 看圖片", "pdf": "設定 › 工具 › 服務 › 讀 PDF", "computer": "詳細資訊的「電腦」分頁", "dictation": "設定 › 聽寫與快捷鍵"},
             "en": {"models": "Settings > Models & usage > Models", "connections": "Connect apps (sidebar)", "store": "Connect apps (sidebar)", "search": "Settings > Tools > Services > Web search", "read": "Settings > Tools > Services > Read web pages", "vision": "Settings > Tools > Services > Images", "pdf": "Settings > Tools > Services > PDFs", "computer": "the member's Computer tab", "dictation": "Settings > Dictation & shortcuts"},
             "ja": {"models": "設定 › モデルと使用量 › モデル", "connections": "サイドバーの「アプリを連携」", "store": "サイドバーの「アプリを連携」", "search": "設定 › ツール › サービス › ウェブ検索", "read": "設定 › ツール › サービス › ウェブページを読む", "vision": "設定 › ツール › サービス › 画像", "pdf": "設定 › ツール › サービス › PDF を読む", "computer": "メンバーのコンピュータータブ", "dictation": "設定 › 音声入力とショートカット"},
         })

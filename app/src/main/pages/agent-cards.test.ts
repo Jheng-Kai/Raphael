@@ -88,7 +88,7 @@ beforeEach(() => {
 const asked = { type: "AgentQuestion", id: "q1", prefix: "問", text: "是否讓「Gmail」執行「send_email」？", tier: "T2", timeout_ms: 30_000, yes: "允許一次", no: "拒絕", always: "一律允許" } as const;
 
 test("approval titles name the known action and localized speaker, with an explanatory body", async () => {
-  for (const [locale, heading, title] of [["zh-TW","建立成員","拉斐爾想要建立成員"],["en","Create member","Raphael wants to create a member"],["ja","メンバーを作成","ラファエルがメンバーを作成します"]] as const) {
+  for (const [locale, heading, title] of [["zh-TW","建立角色","拉斐爾想要建立新角色"],["en","Create member","Raphael wants to create a new one"],["ja","メンバーを作成","ラファエルが新しいキャラクターを作成しようとしています"]] as const) {
     setLocale(locale); document.body.replaceChildren();
     api.agentHistoryList.mockResolvedValue({turns:[turn(1,{status:"confirm",text:""})]});
     const agent=mount(); await flush();

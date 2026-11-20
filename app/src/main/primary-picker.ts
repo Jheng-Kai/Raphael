@@ -1,11 +1,11 @@
-// 「選擇主要成員」: the window where the owner chooses their primary contact, the member that new work is
+// 「選擇主要聯絡對象」: the window where the owner chooses their primary contact, the member that new work is
 // brought to and that hands it to the colleague it belongs to. The members to choose from are real
 // buttons (a radio group made of them), one chosen at a time; 「取消」 and the primary 「設為主要」, which
 // waits for a choice, close it. The member whose menu opened it is chosen already. Raphael is one of the
 // choices (it is the primary until another is chosen, and the owner can give it back), and the member
 // that is the primary now is not offered. Resolves with the id chosen (0 is Raphael), or null when it is left.
 //
-// With `immediate` the same window serves 換成其他成員 on a pinned tile: it carries that action's own title, has no 設為主要 and no check, and one press on a member answers at once.
+// With `immediate` the same window serves 換成其他角色 on a pinned tile: it carries that action's own title, has no 設為主要 and no check, and one press on a member answers at once.
 
 import { t } from "./i18n";
 import { openDialog } from "./member-dialogs";

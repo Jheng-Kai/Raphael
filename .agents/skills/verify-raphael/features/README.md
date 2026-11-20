@@ -287,7 +287,7 @@ apply.
 
 One sidebar (348px, R-SIDE-01) has no brand. Search and plus stand side by side at the top as two
 36px soft round buttons; search opens a card in the middle of the dimmed window, across and down (R-MENU-04), with the
-field, every member as face, name and last line, message results once words are typed, and 新增成員
+field, every member as face, name and last line, message results once words are typed, and 新增角色
 at its foot (Enter opens the first row). The edge drags the list down to an 88px rail of faces (hover
 names a face; the plus moves above the owner, with no search on the rail), which is also what the list is under 860px. The chief, without a star, is the first ordinary row; any pinned member leaves the
 rows for a larger centered face above its name at the top, over one continuous list of member rows and unframed group face grids (up to four faces).
