@@ -1035,6 +1035,31 @@ test('the pill reads watching with Take control, then you are in control with St
   expect(api.desktopControl).toHaveBeenLastCalledWith('one', false);
 });
 
+test.each([1, 2])("the stream has a layout box before connecting at device pixel ratio %i", async ratio => {
+  vi.stubGlobal("devicePixelRatio", ratio);
+  const style = document.createElement("style");
+  style.textContent = ["styles.css", "desktop-viewer.css", "card.css"]
+    .map(name => readFileSync(resolve(__dirname, name), "utf8")).join("\n");
+  document.head.append(style);
+  try {
+    panelOpen = true;
+    mounted.show(); await flush();
+    const stream = frame();
+    expect(stream.hidden).toBe(true);
+    const waiting = getComputedStyle(stream);
+    expect(waiting.display).toBe("block");
+    expect(waiting.visibility).toBe("hidden");
+    expect(waiting.position).toBe("absolute");
+    expect([waiting.width, waiting.height]).toEqual(["100%", "100%"]);
+    message("connected");
+    expect(stream.hidden).toBe(false);
+    expect(getComputedStyle(stream).visibility).not.toBe("hidden");
+  } finally {
+    style.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
 test("a seat's frame draws its line inside and takes no room, so the 1280:900 picture fills it", () => {
   // R-COMP-FRAME-01: a 1 px border put the inside 2 px off the ratio and a dark sliver showed.
   const css = (name: string): string => readFileSync(resolve(__dirname, name), "utf8");
