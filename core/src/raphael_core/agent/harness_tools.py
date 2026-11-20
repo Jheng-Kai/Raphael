@@ -50,11 +50,20 @@ PRECHECK = {"type": "object", "description": "Schedule only: read call {app, too
 ROUTINE_FIELDS = {"title": {"type": "string"}, "prompt": {"type": "string", "description": "What to do when due, with the learning goal. The run has no owner at the keyboard: name only tools a routine's run has (find_tools finds them; self_check reads the app's own state and recent failures, skill_read with reference reads a skill's template), or none. A name it will not have is refused."}, "schedule": SCHEDULE, "when": {"oneOf": [WHEN, {"type":"object", "properties":{"webhook":{"type":"boolean", "const":True}}, "required":["webhook"], "additionalProperties":False}]}, "enabled": {"type": "boolean"}, "precheck": PRECHECK}
 # routine_update takes routine_create's fields; each rule is said once, in routine_create (the list is paid on every call).
 _AS_CREATE = "As in routine_create."
+
+
+def _bare(schema):
+    """`schema` without the descriptions inside it: routine_create says them once, and routine_update points there."""
+    if isinstance(schema, dict):
+        return {key: _bare(value) for key, value in schema.items() if key != "description"}
+    return [_bare(value) for value in schema] if isinstance(schema, list) else schema
+
+
 ROUTINE_UPDATE_FIELDS = {
     # The default prompt's budget: a precheck is set when a routine is made, and changed through the owner's management tools.
     **{key: value for key, value in ROUTINE_FIELDS.items() if key != "precheck"}, "prompt": {"type": "string", "description": _AS_CREATE},
-    "schedule": {**SCHEDULE, "description": _AS_CREATE},
-    "when": {"oneOf": [{**WHEN, "description": _AS_CREATE}, ROUTINE_FIELDS["when"]["oneOf"][1]]},
+    "schedule": {**_bare(SCHEDULE), "description": _AS_CREATE},
+    "when": {"oneOf": [{**_bare(WHEN), "description": _AS_CREATE}, ROUTINE_FIELDS["when"]["oneOf"][1]]},
 }
 
 

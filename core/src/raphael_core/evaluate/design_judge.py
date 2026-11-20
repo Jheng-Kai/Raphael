@@ -30,10 +30,18 @@ def _staged(root):
     return root / value if value else None
 
 
-def rules_path(root):
+def rules_text(root):
+    """The product rules: RULES.md and the area files beside it in rules/, each staged copy first."""
     staged = _staged(root)
-    candidate = staged / ".agents/product/RULES.md" if staged else None
-    return candidate if candidate and candidate.is_file() else root / ".agents/product/RULES.md"
+
+    def pick(relative):
+        candidate = staged / relative if staged else None
+        return candidate if candidate and candidate.is_file() else root / relative
+
+    folder = root / ".agents/product/rules"
+    names = sorted(path.name for path in folder.glob("*.md")) if folder.is_dir() else []
+    paths = [pick(".agents/product/RULES.md"), *(pick(f".agents/product/rules/{name}") for name in names)]
+    return "\n".join(path.read_text(encoding="utf-8") for path in paths if path.is_file())
 
 
 def judge_rules(text):
@@ -176,7 +184,7 @@ async def run_api_judge(run, *, root=ROOT, model=DEFAULT_MODEL, references=(), c
         refs = [Path(path).read_bytes() for path in references]
         if len(refs) > 6 or any(len(data) > 10 * 1024 * 1024 or not data.startswith((b"\x89PNG", b"\xff\xd8")) for data in refs):
             raise ValueError("invalid_reference_images")
-        rules = rules_path(root).read_text(encoding="utf-8")
+        rules = rules_text(root)
         spent, requests = 0.0, 0
         def admit():
             nonlocal spent, requests
@@ -270,7 +278,7 @@ async def run_judge(run, *, brain="claude", model=None, root=ROOT, references=()
         refs = [Path(path).read_bytes() for path in references]
         if len(refs) > 6 or any(len(data) > 10 * 1024 * 1024 or not data.startswith((b"\x89PNG", b"\xff\xd8")) for data in refs):
             raise ValueError("invalid_reference_images")
-        rules = rules_path(root).read_text(encoding="utf-8")
+        rules = rules_text(root)
         reviewer = reviewer or CliReviewer(brain, model)
         identity = await reviewer.identify()
         report.update(model=reviewer.model, cli_version=reviewer.version, executable=reviewer.command)

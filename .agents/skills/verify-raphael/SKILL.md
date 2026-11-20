@@ -186,7 +186,8 @@ panel or a remote SSH host.
 
 ## Guardian hand-off gates
 
-Read [RULES.md](../../product/RULES.md) and [ARCHITECTURE.md](../../product/ARCHITECTURE.md).
+Read [RULES.md](../../product/RULES.md) (the index: the rules are in the area files of `rules/` beside it) and
+[ARCHITECTURE.md](../../product/ARCHITECTURE.md). A new rule goes at the top of its area's file.
 Their named tests run in the ordinary Vitest/pytest suites on every PR, not local hooks.
 From app/, the complete integration offline check is `npm run verify -- --contract --rust` together with CI's result
 on the exact commit: CI runs the whole core suite on every push (about a quarter of an hour over eight machines),
