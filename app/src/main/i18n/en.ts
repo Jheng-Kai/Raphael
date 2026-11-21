@@ -441,7 +441,7 @@ export const en = {
   "common.cancelAgain": "Press again to cancel",
   "handoff.forwarded": "Forwarded to {p0}",
   "handoff.queued": "Queued", "handoff.running": "Running", "handoff.waiting": "Waiting for results",
-  "card.connect": "Connect", "card.reconnect": "Reconnect", "card.retry": "Try again", "card.cancel": "Cancel",
+  "card.connect": "Connect", "card.reconnect": "Reconnect", "card.retry": "Try again",
   "card.openConnections": "Open Connections",
   "card.expiredAuth": "Sign-in expired",
   "card.authorizing": "Waiting for you to sign in in the browser", "card.connected": "Connected · {p0} tools",

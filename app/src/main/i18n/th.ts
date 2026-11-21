@@ -583,7 +583,7 @@ export const th = {
   "handoff.withheld": "เพิกถอนสิทธิ์แล้ว",
   "card.connect": "เชื่อมต่อ",
   "card.reconnect": "เชื่อมต่อใหม่",
-  "card.cancel": "ยกเลิก",
+ 
   "common.cancel": "ยกเลิก",
   "local.cancel": "ยกเลิก",
   "conn.cancel": "ยกเลิก",
