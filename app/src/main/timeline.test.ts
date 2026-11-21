@@ -403,11 +403,12 @@ describe("an owner message with its own answer during earlier work", () => {
     expect(words(list)).toEqual(["Test every page", "I opened the site.", "Also test mobile", "I will test the whole page.", "The mobile checks passed."]);
     expect(list.querySelector('[data-id="2072"][data-after="2073"] .work-sentences li')?.textContent).toBeTruthy();
     expect(list.querySelector('[data-status="cancelled"], .is-latest-failure')).toBeNull();
-    expect(list.textContent).not.toContain("已取消");
     const card = list.querySelector(".permission-card");
     expect(card?.textContent).toContain("Send a review");
-    expect(card?.querySelector(".card-status, .card-close, .card-actions")).toBeNull();
-    expect(render({ ...work, status: "cancelled", permissions }, answer).querySelector(".permission-card .card-status")?.textContent).toContain("已取消");
+    expect(card?.querySelector(".card-status")?.textContent?.trim()).toBe("已取消");
+    expect(card?.querySelector(".card-body")?.textContent).toBe("已取消，沒有執行");
+    expect(card?.querySelector(".card-close, .card-actions")).toBeNull();
+    expect(render({ ...work, status: "cancelled", permissions }, answer).querySelector(".permission-card .card-status")?.textContent?.trim()).toBe("已取消");
   });
 
   test("an answer for a message sent after work ended stays with its own bubble", () => {

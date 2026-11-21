@@ -4022,11 +4022,14 @@ export function checkRendered(name, context = {}) {
     require(words.join("|") === "我已經打開網站。|也請測試手機版。|我會實測整頁。|手機版測試通過。", `the public words are kept: ${words}`);
     require(nodes.every((node, index) => visible(node) && (!index || node.getBoundingClientRect().top >= nodes[index - 1].getBoundingClientRect().bottom)),
       "the earlier start, owner's bubble, earlier later words and new answer are visible in that order");
-    require(!thread.textContent.includes("已取消") && !thread.querySelector('[data-status="cancelled"], [data-status="denied"], .is-latest-failure'),
+    require(![...thread.querySelectorAll('[data-reply] .message-text')].some(reply => reply.textContent.trim() === "已取消。") &&
+      !thread.querySelector('.tn[data-status="cancelled"], .tn[data-status="denied"], .tn.is-latest-failure'),
       "send now leaves no stopped reply or styling");
-    const permission = thread.querySelector('[data-permission-card="look-unapproved"]');
-    require(visible(permission) && !permission.querySelector(".card-status, .card-actions, .card-close"),
-      "the closed permission keeps its details without a stopped chip or active controls");
+    const permission = thread.querySelector('[data-permission-card="look-unapproved"][data-card-state="cancelled"]');
+    const status = permission?.querySelector(".card-status");
+    require(visible(permission) && visible(status) && status.textContent.trim() === "已取消" &&
+      !permission.querySelector(".card-actions, .card-close"),
+      "the closed permission shows its settled status without active controls");
     const sent = window.__look.calls.filter(call => call.method === "agent.history.send_now");
     require(sent.length === 1 && sent[0].params.turn_id === 2073, "the queued message takes over through Send Now");
     return {check: name, words};
