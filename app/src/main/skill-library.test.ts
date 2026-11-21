@@ -44,6 +44,9 @@ test("one row per package says who may use it, and its name opens its skills on 
   const { root } = await setup();
   expect(root.querySelector(".skl")?.getAttribute("aria-label")).toBe("團隊技能");
   expect(root.querySelectorAll(".skl-pack")).toHaveLength(3);
+  expect([...root.querySelectorAll(".skl-section > h2")].map(heading => heading.textContent)).toEqual(["外掛", "技能"]);
+  expect(root.querySelector('[data-skl-section="plugins"] [data-skl-pack="pack:2"]')).not.toBeNull();
+  expect(root.querySelector('[data-skl-section="skills"] [data-skl-pack="skill:3"]')).not.toBeNull();
   expect(root.querySelector('.skl-pack[data-skl-pack="set:1"] .skl-count')?.textContent).toBe("3 個技能");
   expect(root.querySelector('.skl-pack[data-skl-pack="skill:3"] .skl-count, .skl-pack[data-skl-pack="skill:3"] [data-skl="open"]')).toBeNull();
   expect(root.querySelector('.skl-pack[data-skl-pack="skill:3"] .skl-single .d')?.textContent).toBe("會議紀錄 的說明");
@@ -72,9 +75,12 @@ test("one row per package says who may use it, and its name opens its skills on 
   press(root, '[data-skl="toggle"][data-key="pack:2"]');
   expect(api.core).toHaveBeenCalledWith("skills.library.update", { key: "pack:2", enabled: false });
   expect(root.querySelector<HTMLButtonElement>('[data-skl="skill"][data-id="4"]')!.disabled).toBe(true);
-  // A skill alone has no page: its row is all of it.
+  // A standalone skill keeps its row, with its full description in the overflow menu.
   press(root, '[data-skl="back"]');
   expect(root.querySelector('[data-skl="open"][data-key="skill:3"]')).toBeNull();
+  press(root, '[data-skl="more"][data-key="skill:3"]');
+  press(document, '[data-pick="details"]');
+  expect(document.querySelector(".skl-details p")?.textContent).toBe("會議紀錄 的說明");
 });
 
 test.each(navInputs)("a step back with %s returns from a package's page to the list", async input => {

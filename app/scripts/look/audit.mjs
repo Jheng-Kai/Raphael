@@ -188,7 +188,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       if (new Set(light.match(/rgba?\([^)]*\)|color\([^)]*\)/g) ?? []).size < 2) violation('R-UI-55', 'A light passing over words in the colour of the words shows nothing');
     }
     if (element.matches('button.btn.icon')) {
-      if (!floatingLatest && !sidebarAction && !['transparent', 'rgba(0, 0, 0, 0)', ''].includes(style.backgroundColor)) violation('R-UI-16', 'Icon action has a background surface');
+      if (!floatingLatest && !sidebarAction && !element.matches('.btn.back-button[data-nav-back]') && !['transparent', 'rgba(0, 0, 0, 0)', ''].includes(style.backgroundColor)) violation('R-UI-16', 'Icon action has a background surface');
       const glyph = element.querySelector(':scope > svg.i');
       if (glyph) {
         const rect = glyph.getBoundingClientRect();
@@ -248,7 +248,8 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     if (element.matches('.ob-actions.ob-pair')) {
       const [back, primary] = [element.querySelector(':scope > .btn:not(.pri)'), element.querySelector(':scope > .btn.pri')].map(button => button?.getBoundingClientRect());
       const foot = element.parentElement.getBoundingClientRect();
-      if (!back || !primary || back.right > primary.left || primary.left - back.right > 24 || Math.abs(back.width - primary.width) > 1 || Math.abs(back.height - primary.height) > 1
+      if (!back || !primary || back.right > primary.left || primary.left - back.right > 24 || Math.abs(back.width - 36) > 1 || Math.abs(back.height - 36) > 1
+        || Math.abs(primary.width - 48) > 1 || Math.abs(primary.height - 48) > 1 || Math.abs((back.top + back.bottom) / 2 - (primary.top + primary.bottom) / 2) > 1
         || Math.abs((back.left + primary.right) / 2 - (foot.left + foot.right) / 2) > 2)
         violation('R-UI-37', 'Onboarding step needs its two round buttons together in the middle, the way back at the left of the primary');
     }
@@ -294,13 +295,13 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       // members (「2 則訊息」), the words that open their conversation, and a package's name in Team skills, which opens its page.
       // Pending question rows reveal their card.
       // Keep this inventory explicit: ordinary action buttons never opt out by an attribute.
-      const navigation = element.matches('.pending-questions > .pending-question, .conversation-trigger, .conversation-open, .mb-panel-row, .mb-panel-back, .ms-open, .mb-det .mb-rt, .mb-chat-choice, .mc-source, .room-row, .cs-open, .cs-main, .skl-open, .cs-back-title, .cs-have, .cs-viewall, .au-room-row > .btn:first-child, .event-open, .event-count, .menu-reactions .reaction, .reaction-bar .reaction, .ho-row, .ho-stat, .lib-row, .tpr-row, .au-edit, .cal-chip, .cal-more, .au-day-num, .au-date-nav > .au-today, .steps-sum, .task-sum, .desktop-panel .desktop-screen > .btn.desktop-open') || element.closest('.mb-col, .au-month-grid, .au-drag-members, .au-segment, .mc-segments') || element.hasAttribute('aria-expanded') || element.matches('.conversation-card > .card-actions > .card-quiet');
+      const navigation = element.matches('.pending-questions > .pending-question, .conversation-trigger, .conversation-open, .mb-panel-row, .mb-panel-back, .ms-open, .mb-det .mb-rt, .mb-chat-choice, .mc-source, .room-row, .cs-open, .cs-main, .skl-open, .cs-have, .cs-viewall, .au-room-row > .btn:first-child, .event-open, .event-count, .menu-reactions .reaction, .reaction-bar .reaction, .ho-row, .ho-stat, .lib-row, .tpr-row, .au-edit, .cal-chip, .cal-more, .au-day-num, .au-date-nav > .au-today, .steps-sum, .task-sum, .desktop-panel .desktop-screen > .btn.desktop-open') || element.closest('.mb-col, .au-month-grid, .au-drag-members, .au-segment, .mc-segments') || element.hasAttribute('aria-expanded') || element.matches('.conversation-card > .card-actions > .card-quiet');
       const hasBorder = ['Top', 'Right', 'Bottom', 'Left'].some(side => parseFloat(style[`border${side}Width`]) > 0 && !['transparent', 'rgba(0, 0, 0, 0)'].includes(style[`border${side}Color`]) && !['none', 'hidden'].includes(style[`border${side}Style`]));
       if (!floatingLatest && element.classList.contains('icon') && hasBorder) violation('R-UI-18', 'Icon button has a visible border');
       const routineNavigation = element.matches('.chat-message .routine-origin > button.routine-run-link[data-act="open-routine"]');
       // On a floating surface (R-FLOAT-01) a control is framed by its fill (`--float-ctl`), like the chips and 「Connect」 buttons.
       const filledOnFloat = !!element.closest('.modal, .mb-dialog, .cs-dialog, .au-pop, .cb-card, .menu') && !/rgba\(0, 0, 0, 0\)|transparent/.test(style.backgroundColor);
-      if (!navigation && !routineNavigation && !element.classList.contains('icon') && element.textContent.trim() && !hasBorder && !filledOnFloat) violation('R-UI-18', 'Text action button has no frame');
+      if (!navigation && !routineNavigation && !element.matches(".queued-actions > .btn:is([data-act=cancel-message], [data-act=send-now])") && !element.classList.contains('icon') && element.textContent.trim() && !hasBorder && !filledOnFloat) violation('R-UI-18', 'Text action button has no frame');
     }
     // The guide's row follows the rule like any other: its round arrow (or ×) is at the left of the black
     // primary, not stacked above it, so nothing in the guide is exempt.
@@ -325,12 +326,14 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     for (const value of strings) for (const match of value.matchAll(keyPattern)) {
       // Explicit JSON path examples are provider field names, not untranslated catalogue keys.
       if (element.matches('code[data-json-paths]') && /^(?:data|event)\./.test(match[1])) continue;
+      if (element.matches(".skl-import-hint") && match[1] === "skills.sh") continue;
       if (!namespaces.includes(match[1].split(".")[0]) || seenKeys.has(match[1])) continue;
       seenKeys.add(match[1]); missingI18nKeys.push({ ...description, key: match[1] });
     }
     // The literal command-template token is syntax in every locale, not English copy; so is a service's sign-in code.
     if (allowed && !element.closest('.message-link, .url-chip, .local-command, .message-code pre code, .msg .note code, .bot-scopes code, .mb-row-p, .rich-language, .message-diagram .diagram-view svg, .rich-view-dialog .diagram-view svg, .dl-code')) for (const value of strings) {
-      const copy = productPattern ? value.replace(productPattern, "") : value;
+      let copy = productPattern ? value.replace(productPattern, "") : value;
+      if (element.matches('[data-skl="pick-file"]')) copy = copy.replace(/\.(?:zip|tar\.gz|tgz|md)\b/g, "");
       for (const [word] of copy.replace(/\{input\}/g, "").replace(keyPattern, "").replace(IANA_ZONE_ID, "").replace(/https?:\/\/\S+|\S+\.(?:pdf|png|jpe?g|txt|md|csv|exe|com|dev|io)\b/gi, "").matchAll(/[A-Za-z]{2,}/g)) {
         if (allowed.has(word.toLowerCase()) || seenWords.has(word)) continue;
         seenWords.add(word); mixedLanguage.push({ ...description, word });

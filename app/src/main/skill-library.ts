@@ -1,7 +1,7 @@
 // Team skills is the Settings tab for shared skill packages. A plugin set, or the skills of one import (a
 // repository, an archive, a folder) are one package; a skill imported alone is a package of one. Each package is for the
 // whole team or for the characters chosen, as a private key is (vault.ts); a large one reaches nobody until the owner
-// chooses. A package of several opens on a page of its own in the tab (its name with a back arrow, who may use it, its
+// chooses. A plugin opens on a page of its own in the tab (its name with a back arrow, who may use it, its
 // switch and ⋯ as on its row, then its skills, each with its own switch), and the back arrow, Esc or a step back return to
 // the list where it was left; its ⋯ updates it from its source or deletes it.
 // The importer is the tab's first card (a tab is its name, then its sections: R-UI-115): a skills.sh or GitHub link or
@@ -15,7 +15,7 @@ import { isTopLayer } from "./dismissals";
 import { openActions } from "./member-column";
 import { faceHTML, groupFacesHTML, RAPHAEL_ID } from "./members";
 import { bindNavLayer } from "./nav-layers";
-import { btn, closeMenu, esc, fieldHTML, ico, iconBtn, iconButton, openPopover, tg, toaster } from "./ui";
+import { backButton, btn, closeMenu, esc, fieldHTML, ico, iconBtn, openPopover, tg, toaster } from "./ui";
 import "./skill-library.css";
 
 export type Access = "all" | number[];
@@ -64,19 +64,30 @@ function controlsHTML(p: LibraryPackage, v: SkillLibraryView): string {
     `</div>`;
 }
 
-/** Whether a package has a page of its own: one of several skills. A skill alone is all on its row. */
-const hasPage = (p: LibraryPackage | undefined): p is LibraryPackage => !!p && p.skills.length > 1;
+/** A manifest or several skills makes a plugin, including a manifest with only one skill. */
+const isPlugin = (p: LibraryPackage): boolean => p.kind === "plugin" || p.skills.length > 1;
+const hasPage = (p: LibraryPackage | undefined): p is LibraryPackage => !!p && isPlugin(p);
+
+const descriptionOf = (p: LibraryPackage): string =>
+  p.description || (isPlugin(p) ? "" : p.skills[0]?.description ?? "");
 
 function packageHTML(p: LibraryPackage, v: SkillLibraryView): string {
-  const count = p.skills.length;
-  // A package of several opens its page from its name, its count and its chevron; a skill alone is one row, its words
-  // under its name and its switch its own.
-  const about = p.skills[0]?.description || p.description;
-  const name = count > 1
-    ? `<button type="button" class="btn skl-open" data-skl="open" data-key="${esc(p.key)}">` +
-      `${ico("right")}<span class="skl-name">${esc(p.name)}</span><span class="skl-count">${esc(t("skillLib.count", { count }))}</span></button>`
-    : `<div class="lbl skl-single" tabindex="-1" data-library-skill="${p.skills[0]?.id ?? ""}"><div class="t">${esc(p.name)}</div>${about ? `<div class="d">${esc(about)}</div>` : ""}</div>`;
-  return `<div class="row skl-pack" data-skl-pack="${esc(p.key)}">${name}${controlsHTML(p, v)}</div>`;
+  const plugin = isPlugin(p);
+  const about = descriptionOf(p);
+  const count = plugin ? '<span class="skl-count">' + esc(t("skillLib.count", { count: p.skills.length })) + ico("right") + '</span>' : "";
+  const words = '<span class="lbl skl-label"><span class="t skl-title"><span class="skl-name">' + esc(p.name) + '</span>' + count + '</span>' +
+    (about ? '<span class="d skl-description">' + esc(about) + '</span>' : '') + '</span>';
+  const name = plugin
+    ? '<button type="button" class="btn skl-open" data-skl="open" data-key="' + esc(p.key) + '">' + words + '</button>'
+    : '<div class="skl-single" tabindex="-1" data-library-skill="' + (p.skills[0]?.id ?? "") + '">' + words + '</div>';
+  return '<div class="row skl-pack" data-skl-pack="' + esc(p.key) + '">' + name + controlsHTML(p, v) + '</div>';
+}
+
+function packageSectionHTML(kind: "plugins" | "skills", packages: LibraryPackage[], v: SkillLibraryView): string {
+  if (!packages.length) return "";
+  return '<section class="sgroup skl-section" data-skl-section="' + kind + '" aria-labelledby="skl-' + kind + '">' +
+    '<h2 id="skl-' + kind + '">' + esc(t(kind === "plugins" ? "skillLib.plugins" : "skillLib.skills")) + '</h2>' +
+    '<div class="slist skl-list">' + packages.map(p => packageHTML(p, v)).join("") + '</div></section>';
 }
 
 /**
@@ -90,10 +101,11 @@ function packagePageHTML(p: LibraryPackage, v: SkillLibraryView): string {
   const source = p.source ? `<p class="d skl-source">${esc(p.source)}${p.version ? ` · ${esc(p.version)}` : ""}</p>` : "";
   return `<section class="sgroup skl skl-page" data-skl-page="${esc(p.key)}" aria-labelledby="skl-page-name">` +
     `<div class="row skl-page-head skl-pack" data-skl-pack="${esc(p.key)}">` +
-    iconButton("left", t("chooser.back"), ' data-skl="back" data-k="skl-back" data-nav-back', "skl-back") +
+    backButton(t("chooser.back"), ' data-skl="back" data-k="skl-back"', "skl-back") +
     `<h2 class="skl-page-name" id="skl-page-name">${esc(p.name)}</h2>` +
     `<span class="skl-count">${esc(t("skillLib.count", { count: p.skills.length }))}</span>` +
     controlsHTML(p, v) + `</div>` + source +
+    (p.description ? `<p class="d skl-about">${esc(p.description)}</p>` : "") +
     `<div class="slist skl-skills">${skills}</div></section>`;
 }
 
@@ -109,7 +121,7 @@ function importHTML(v: SkillLibraryView): string {
     btn(ico("file") + esc(t("skillLib.file")), "sm", ` data-skl="pick-file"${busy}`) +
     btn(ico("folder") + esc(t("skillLib.folder")), "sm", ` data-skl="pick-folder"${busy}`) +
     btn(ico("pencil") + esc(t("skillLib.paste")), "sm", ` data-skl="paste" aria-expanded="${v.pasting}" aria-controls="skl-text"${busy}`) +
-    `</div>${input}${v.error ? `<p class="skl-error" role="alert">${esc(v.error)}</p>` : ""}<input type="file" id="skl-file" accept="${ACCEPT}" hidden></div>`;
+    `</div>${input}<p class="d skl-import-hint">${esc(t("skillLib.importHint"))}</p>${v.error ? `<p class="skl-error" role="alert">${esc(v.error)}</p>` : ""}<input type="file" id="skl-file" accept="${ACCEPT}" hidden></div>`;
 }
 
 export function skillLibraryHTML(v: SkillLibraryView): string {
@@ -117,7 +129,8 @@ export function skillLibraryHTML(v: SkillLibraryView): string {
   if (hasPage(page)) return packagePageHTML(page, v);
   const list = v.failed ? `<p class="d skl-empty" role="alert">${esc(t("skillLib.loadFailed"))}</p>`
     : !v.loaded ? `<p class="d skl-empty">${esc(t("vault.busy"))}</p>`
-    : v.packages.length ? `<div class="slist skl-list">${v.packages.map(p => packageHTML(p, v)).join("")}</div>`
+    : v.packages.length ? packageSectionHTML("plugins", v.packages.filter(isPlugin), v) +
+      packageSectionHTML("skills", v.packages.filter(p => !isPlugin(p)), v)
     : `<p class="d skl-empty">${esc(t("skillLib.empty"))}</p>`;
   return `<section class="sgroup skl" aria-label="${esc(t("settings.paneSkills"))}">` +
     importHTML(v) + list + `</section>`;
@@ -183,7 +196,7 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
       state.pasting = false;
       toaster.info(t("skillLib.imported", { p0: made.name }));
       await load();
-      // A package of several opens on its page, so whom it is for can be chosen at once: a large set reaches nobody until then.
+      // A plugin opens on its page, so whom it is for can be chosen at once: a large set reaches nobody until then.
       state.busy = false;
       if (hasPage(byKey(made.key))) open(made.key); else redraw();
     } catch (error) { state.error = failureText(error); state.busy = false; redraw(); }
@@ -256,10 +269,16 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
     const p = byKey(key);
     if (!p) return;
     openActions(anchor, [
+      ...(descriptionOf(p) ? [{ id: "details", label: t("card.details"), icon: "info" as const }] : []),
       ...(p.updatable ? [{ id: "refresh", label: t("skillLib.update"), icon: "refresh" as const }] : []),
       { id: "delete", label: t("skillLib.remove"), icon: "trash", ask: t("skillLib.removeAsk") },
     ], picked => {
-      if (picked === "refresh") void core<{ package: LibraryPackage }>("skills.library.update", { key, refresh: true })
+      if (picked === "details") {
+        const details = openPopover(anchor, `<div class="skl-details"><strong>${esc(p.name)}</strong><p>${esc(descriptionOf(p))}</p></div>`, {
+          className: "menu", role: "dialog", label: t("card.details"),
+        });
+        details.focus({ preventScroll: true });
+      } else if (picked === "refresh") void core<{ package: LibraryPackage }>("skills.library.update", { key, refresh: true })
         .then(result => { replace(result.package); toaster.info(t("skillLib.updated", { p0: result.package.name })); redraw(); })
         .catch(error => toaster.info(failureText(error)));
       else void core("skills.library.delete", { key })
@@ -273,7 +292,7 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
   };
   root.addEventListener("click", event => {
     const target = (event.target as Element).closest<HTMLElement>("[data-skl]");
-    if (!target || !root.querySelector(".skl")?.contains(target)) return;
+    if (!target?.closest(".skl") || !root.contains(target)) return;
     const key = target.dataset.key ?? "";
     switch (target.dataset.skl) {
       case "open": if (hasPage(byKey(key))) open(key); break;

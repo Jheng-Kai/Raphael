@@ -56,9 +56,11 @@ class SkillPackages:
                        "SELECT * FROM member_skills WHERE package_key=? ORDER BY id", (key,))]
         name, source = row["name"], row["source"]
         skipped_links = {}
+        plugin_manifest = False
         for skill in skills:
             if not key.startswith("set:"):
                 info = self.cap.package_info(SHARED, skill["id"])
+                plugin_manifest |= info.get("plugin_manifest") is True
                 if info.get("skipped_links"):
                     skipped_links[str(skill["id"])] = info["skipped_links"]
         version = description = ""
@@ -72,6 +74,8 @@ class SkillPackages:
             kind = "single" if len(skills) == 1 else "pack"
             if kind == "single":
                 description = skills[0]["description"]
+            if plugin_manifest:
+                kind = "plugin"
         return {"key": key, "name": name, "kind": kind, "source": source, "description": description,
                 "version": version, "enabled": bool(row["enabled"]), "access": json.loads(row["access"]),
                 "updatable": updatable, "skills": skills,
@@ -104,7 +108,9 @@ class SkillPackages:
         from .skill_names import unique_skill_name
 
         prepared = []
+        plugin_manifest = False
         for skill_source, files in documents:
+            plugin_manifest |= getattr(files, "plugin_manifest", False)
             skipped_links = getattr(files, "skipped_links", [])
             files = validate_files(files)
             raw = files["SKILL.md"]
@@ -164,6 +170,8 @@ class SkillPackages:
                 for path, data in files.items():
                     atomic(self.cap.homes.safe(target / path), data)
                 metadata = {"source": source, "origin": origin, "files": [p for p in files if p != "SKILL.md"]}
+                if plugin_manifest:
+                    metadata["plugin_manifest"] = True
                 if skipped_links:
                     metadata["skipped_links"] = skipped_links
                 atomic(target / ".raphael-source.json", json.dumps(metadata).encode())
@@ -194,7 +202,7 @@ class SkillPackages:
     def delete(self, key):
         package = self.view(key)
         home = self.cap.homes.home(SHARED)
-        plugin = package["kind"] == "plugin"
+        plugin = key.startswith("set:")
         if plugin:
             identifier = int(key[4:])
             folders = [self.cap.plugin_root(identifier)]

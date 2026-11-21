@@ -28,6 +28,20 @@ export function ownerBubble(color: string): { fill: string; words: "light" | "da
   return { fill: hexOf(rgb), words: "light" };
 }
 
+/** Blue ink for tinted bubbles, adjusted only as far as normal text contrast requires. */
+export function ownerBubbleLink(fill: string): string {
+  const bg = channels(fill);
+  const black = [0, 0, 0];
+  const dark = contrast(bg, black) >= contrast(bg, WHITE);
+  const blue = dark ? [8, 36, 79] : [205, 226, 255];
+  const endpoint = dark ? black : WHITE;
+  let ink = blue;
+  for (let step = 1; contrast(bg, ink) < 4.5 && step <= 32; step++) {
+    ink = blue.map((value, index) => Math.round(value + (endpoint[index]! - value) * step / 32));
+  }
+  return hexOf(ink);
+}
+
 /** A member's colour, Raphael's being the first blue slime's (it was gold). */
 export const memberColor = (member: { id: number; avatar?: string | null }): string => member.id === 0 ? RAPHAEL_COLOR : slimeColorOf(member);
 

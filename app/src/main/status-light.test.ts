@@ -65,15 +65,16 @@ test("a press lists the members at work, the ones waiting for the owner first, a
   expect(open).toHaveBeenCalledWith(1);
 });
 
-test("finished work the owner has not opened is listed last under 完成, work that went wrong waits with the others, each row with its dot", async () => {
-  const { button } = mount(() => people([], { 1: "done", 2: "failed", 3: "message" }));
+test("finished work the owner has not opened is listed before 工作中 under 完成, work that went wrong waits with the others, each row with its dot", async () => {
+  const { button } = mount(() => [...people([], { 1: "done", 2: "failed" }), ...people([], { 3: "message" }).filter(member => member.id === 3).map(member => ({ ...member, id: 4 }))]);
+  setSlimeState(3, "working");
   await flush();
   expect(button.dataset.level).toBe("needs");
   button.click();
   const rows = [...document.querySelectorAll<HTMLElement>(".menu-choice")];
-  expect(rows.map(row => row.dataset.value)).toEqual(["2", "1", "3"]);
-  expect(rows.map(row => row.querySelector<HTMLElement>(".status-row-dot")?.dataset.kind)).toEqual(["failed", "done", "done"]);
-  expect([...document.querySelectorAll(".menu-head")].map(head => head.textContent)).toEqual(["等你", "完成"]);
+  expect(rows.map(row => row.dataset.value)).toEqual(["2", "1", "4", "3"]);
+  expect(rows.map(row => row.querySelector<HTMLElement>(".status-row-dot")?.dataset.kind)).toEqual(["failed", "done", "done", "busy"]);
+  expect([...document.querySelectorAll(".menu-head")].map(head => head.textContent)).toEqual(["等你", "完成", "工作中"]);
 });
 
 test("with only finished work left the label names who finished", async () => {

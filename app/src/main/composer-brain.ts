@@ -21,7 +21,7 @@ import {
 import { knownCatalog, knownClis, rememberCatalog, rememberClis } from "./brain-lists";
 import { RAPHAEL_ID } from "./members";
 import type { BrainSettings, CatalogModel, ChatGptStatus, CliBrain, MainEvent, Member, ModelCatalog, ModelProvider } from "./types";
-import { btn, closeMenu, esc, ico, iconButton, openPopover, placeMenu, toaster } from "./ui";
+import { btn, closeMenu, esc, ico, backButton, openPopover, placeMenu, toaster } from "./ui";
 import { describeError } from "./format";
 import { optionalRead } from "./startup-reads";
 import { findsName } from "./find-match";
@@ -150,7 +150,7 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
   }
 
   const headHTML = (title: string): string =>
-    `<header class="cb-head">${iconButton("left", t("chooser.back"), ' data-cb-act="back"', "cb-back")}<h3>${title}</h3></header>`;
+    `<header class="cb-head">${backButton(t("chooser.back"), ' data-cb-act="back"', "cb-back")}<h3>${title}</h3></header>`;
 
   /** One provider's models: the list changed most, so it is one press from what is chosen. */
   function modelsHTML(sources: ChooserSource[]): string {

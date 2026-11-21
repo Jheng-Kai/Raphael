@@ -2,6 +2,36 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.checkVisibility() && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  const tokenColour = (element, token) => {
+    const probe = document.createElement("i");
+    probe.style.color = "var(" + token + ")";
+    element.append(probe);
+    const result = getComputedStyle(probe).color;
+    probe.remove();
+    return result;
+  };
+  const roundBack = back => {
+    require(visible(back) && back.matches("button.btn.icon.back-button[data-nav-back]") && back.getAttribute("aria-label"), "a named shared round back button leads the page");
+    const { width, height } = back.getBoundingClientRect(), glyph = back.querySelector("svg.i")?.getBoundingClientRect();
+    require(width === 36 && height === 36 && glyph?.width === 18 && glyph.height === 18 && parseFloat(getComputedStyle(back).borderTopLeftRadius) >= 18, "the back button is a 36 px circle with an 18 px chevron");
+  };
+  const quietQueue = turn => {
+    const bubble = turn.querySelector(".bubble"), row = turn.querySelector(".queued-actions");
+    const [cancel, send] = row?.querySelectorAll("button") ?? [];
+    require(visible(cancel) && visible(send) && cancel.textContent.trim() === "取消" && send.textContent.trim() === "立即送出", "both waiting actions are visible below the bubble");
+    const box = bubble.getBoundingClientRect(), actions = row.getBoundingClientRect();
+    require(actions.top >= box.bottom && Math.abs(actions.right - box.right) <= 1, "the waiting row sits below and aligns with the bubble's right edge");
+    const height = turn.querySelector(".message-actions").getBoundingClientRect().height;
+    require([cancel, send].every(button => {
+      const style = getComputedStyle(button);
+      return style.backgroundColor === "rgba(0, 0, 0, 0)" && style.borderTopWidth === "0px" && button.getBoundingClientRect().height === height;
+    }), "both actions have no fill or border at rest and match the message action icon height");
+    require(getComputedStyle(cancel).color === tokenColour(row, "--text-2") && getComputedStyle(send).color === tokenColour(row, "--text"), "send now uses stronger ink than cancel");
+  };
+  if (name === "plugins-detail") {
+    roundBack(document.querySelector('.cs-page [data-conn="back"]'));
+    return { check: name };
+  }
   if (name === "owner-skill-links") {
     const turn = document.querySelector('.tn[data-id="8201"]');
     const bubble = turn?.querySelector(".owner-message .bubble");
@@ -9,7 +39,17 @@ export function checkRendered(name, context = {}) {
     require(links.length === 2 && links.every(visible), "only the known slash name and URL are links");
     require(links[0].textContent === "/code-review" && links[1].textContent === "https://example.com/changes", "the links keep their written words");
     const blue = getComputedStyle(links[1]).color;
-    require(links.every(link => getComputedStyle(link).color === blue && blue !== getComputedStyle(bubble).color), "both links share the link colour");
+    const expected = tokenColour(bubble, bubble.closest(".mb-chat[data-member-bubble]") ? "--owner-bubble-link" : "--link");
+    const luminance = rgb => rgb.match(/[\d.]+/g).slice(0, 3).map(Number).reduce((sum, n, i) => {
+      const c = n / 255;
+      return sum + [0.2126, 0.7152, 0.0722][i] * (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+    }, 0);
+    const brightness = [blue, getComputedStyle(bubble).backgroundColor].map(luminance).sort((a, b) => b - a);
+    require((brightness[0] + 0.05) / (brightness[1] + 0.05) >= 4.5, "the link has at least 4.5:1 contrast against the bubble");
+    require(links.every(link => {
+      const style = getComputedStyle(link);
+      return style.color === expected && style.backgroundColor === "rgba(0, 0, 0, 0)" && style.paddingInlineStart === "0px" && style.borderTopWidth === "0px";
+    }), "both links are bare words in the link colour");
     const notice = turn.querySelector("[data-skill-notice]");
     require(visible(notice) && bubble.getBoundingClientRect().bottom <= notice.getBoundingClientRect().top,
       "the skipped skill is shown below the owner bubble");
@@ -528,23 +568,39 @@ export function checkRendered(name, context = {}) {
       require(visible(pane) && pane.querySelectorAll('[data-skl="import-go"]').length === 1 && pane.firstElementChild?.matches('.skl-import'), 'the importer is the first card of the tab, with one 匯入');
       require(!pane.querySelector('.skl-head, .skl-drop-hint') && !pane.previousElementSibling?.matches?.('p'), 'nothing is written between the tab name and its first card');
       const box = pane.getBoundingClientRect();
-      for (const row of pane.querySelectorAll('.skl-pack')) {
+      const rows = [...pane.querySelectorAll('.skl-list > .skl-pack')];
+      require(rows.length > 0 && Math.max(...rows.map(row => row.offsetHeight)) === Math.min(...rows.map(row => row.offsetHeight)), "plugin and skill rows all have the same height");
+      for (const row of rows) {
         const r = row.getBoundingClientRect();
         require(r.left >= box.left - 1 && r.right <= box.right + 1, `a package row stays inside the tab (${Math.round(r.left)}-${Math.round(r.right)})`);
         require(row.querySelector('.tg[role="switch"]') && row.querySelector('[data-skl="more"]'), 'each package has its switch and ⋯');
       }
     }
     if (name === 'skill-library') {
+      const sections = [...document.querySelectorAll('.skl-section')];
+      require(sections.map(section => section.querySelector('h2').textContent).join('、') === '外掛、技能', "plugins and skills have their own headings, plugins first");
+      require(sections.map(section => section.querySelectorAll('.skl-pack').length).join(',') === '2,1', "multi-skill packages and manifest plugins are separate from single skills");
+      for (const section of sections) {
+        const [heading, card] = section.children;
+        require(Math.abs(heading.getBoundingClientRect().left - card.getBoundingClientRect().left) <= 1, "the heading is flush with the card");
+      }
+      for (const open of document.querySelectorAll('.skl-list .skl-open')) {
+        const title = open.querySelector('.skl-title'), count = title.querySelector('.skl-count');
+        require(title.firstElementChild.matches('.skl-name') && open.querySelectorAll('svg').length === 1 && !!count.querySelector('svg'), "the only chevron follows the count, after the name");
+        require(open.getBoundingClientRect().width === open.closest('.skl-pack').getBoundingClientRect().width, "the opener spans the row");
+      }
+      const description = rowOf('skill:3').querySelector('.skl-description'), style = getComputedStyle(description);
+      require(style.whiteSpace === 'nowrap' && style.textOverflow === 'ellipsis' && description.scrollWidth > description.clientWidth, "the long skill description is one truncated line");
       require(document.querySelectorAll('.skl-pack').length === 3, 'one row per package, not per skill');
       require(rowOf('set:1').querySelector('.skl-count')?.textContent.trim() === '7 個技能' && !document.querySelector('.skl-skill'), 'pstack is one folded row that says how many skills it holds');
       require(accessOf('set:1') === '還沒給任何人' && accessOf('pack:2') === '小晴、小森' && accessOf('skill:3') === '整個團隊', `who may use each is said on its row (${accessOf('set:1')} / ${accessOf('pack:2')} / ${accessOf('skill:3')})`);
-      require(!rowOf('skill:3').querySelector('.skl-count, [data-skl="open"]') && rowOf('skill:3').querySelector('.skl-single .d')?.textContent === '把會議逐字稿整理成決議與待辦', 'a skill alone is one row: its words under its name, nothing to open');
+      require(!rowOf('skill:3').querySelector('.skl-count, [data-skl="open"]') && rowOf('skill:3').querySelector('.skl-single .d')?.textContent.startsWith('把會議逐字稿整理成決議與待辦'), 'a skill alone is one row: its words under its name, nothing to open');
     }
     if (onPage) {
       const page = document.querySelector('.modal-scrim .skl-page'), head = page?.querySelector('.skl-page-head');
       require(visible(page) && !document.querySelector('.modal-scrim .skl-import, .modal-scrim .skl-list'), "the package's page takes the list's place: no importer, no other package");
       const back = head.querySelector('[data-skl="back"]');
-      require(visible(back) && back.matches('.btn.icon') && back.hasAttribute('data-nav-back') && !!back.getAttribute('aria-label'), 'a back arrow leads the page');
+      roundBack(back);
       require(document.activeElement === back, 'the focus is on the back arrow');
       const title = head.querySelector('.skl-page-name');
       require(title?.textContent.trim().length > 0 && title.scrollWidth <= title.clientWidth + 1, "the package's name is whole");
@@ -556,6 +612,12 @@ export function checkRendered(name, context = {}) {
       }
       require(document.querySelector('.modal-scrim .modal-body').scrollTop === 0, 'the page opens at its top');
       require(document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, 'the window does not scroll sideways');
+    }
+    if (name === 'skill-library-details') {
+      const description = rowOf('skill:3')?.querySelector('.skl-description');
+      const details = document.querySelector('.skl-details'), text = details?.querySelector('p');
+      require(visible(details) && text?.textContent === description?.textContent && !document.querySelector('.skl-page'), 'the overflow reveals the full description on the list');
+      require(text.scrollWidth <= text.clientWidth + 1 && text.getBoundingClientRect().height > description.getBoundingClientRect().height, 'the description wraps within the popover');
     }
     if (name === 'skill-library-open') {
       const skills = [...document.querySelectorAll('.skl-page .skl-skills .skl-skill')];
@@ -598,6 +660,8 @@ export function checkRendered(name, context = {}) {
       const panel = document.querySelector('.skl-import');
       require(visible(panel) && !panel.querySelector('#skl-source') && visible(panel.querySelector('#skl-text')), 'the pasted text stands in the link\'s place');
       require(['pick-file', 'pick-folder', 'paste'].every(act => visible(panel.querySelector(`[data-skl="${act}"]`))), 'a file, a folder, or pasted text');
+      require(visible(panel.querySelector('.skl-import-hint')) && panel.querySelector('.skl-import-hint').textContent.includes('GitHub'), "the hint names accepted sources");
+      require(panel.querySelector('[data-skl="pick-file"]').textContent.includes('.zip') && panel.querySelector('[data-skl="paste"]').textContent.includes('SKILL.md'), "the choices name the formats");
       require(panel.querySelector('#skl-file').accept === '.zip,.tar.gz,.tgz,.md', 'the file picker takes archives and Markdown');
       require(panel.getBoundingClientRect().right <= document.querySelector('.modal-scrim .skl').getBoundingClientRect().right + 1, 'the importer fits the tab');
     }
@@ -615,6 +679,7 @@ export function checkRendered(name, context = {}) {
       require(said?.textContent.trim() === '裡面找不到 SKILL.md。' && getComputedStyle(said).color === err, `the cause is said inside the importer, in the error colour (${said && getComputedStyle(said).color} against ${err})`);
     }
     if (name === 'member-skills-library') {
+      roundBack(document.querySelector('[data-ms="back"]'));
       const lib = document.querySelector('.ms-pane [data-k="ms-library"]');
       require(lib.querySelector('.ms-head h2')?.textContent.trim() === '來自團隊技能', 'the member section names Team skills');
       require(lib.querySelector('[data-ms="open-library"]')?.textContent.trim() === '開啟團隊技能', 'the button names Team skills');
@@ -4006,12 +4071,9 @@ export function checkRendered(name, context = {}) {
   if (name === "composer-queued-sendnow-menu") {
     const labels = [...document.querySelectorAll('#app-popover [data-pick]')].map(node => node.dataset.pick);
     require(labels.includes("copy") && !labels.some(item => ["send-now", "cancel", "edit"].includes(item)), "the menu does not repeat the waiting actions or offer Edit");
-    const turn = document.querySelector('.tn[data-id="901"]'), bubble = turn.querySelector('.bubble');
-    const [cancel, send] = bubble.querySelectorAll('.queued-actions button');
-    require(visible(cancel) && visible(send) && cancel.textContent.trim() === "取消" && send.textContent.trim() === "立即送出", "both waiting actions are visible inside the bubble");
+    const turn = document.querySelector('.tn[data-id="901"]');
+    quietQueue(turn);
     require(!turn.textContent.includes("排隊中"), "no 排隊中 words beside the message");
-    const box = bubble.getBoundingClientRect(), exit = cancel.getBoundingClientRect(), submit = send.getBoundingClientRect();
-    require(exit.right <= submit.left && submit.right <= box.right && submit.bottom <= box.bottom && submit.top >= bubble.querySelector('.message-text').getBoundingClientRect().bottom, "the action row sits below the text inside the bubble");
     const icons = [...document.querySelectorAll('#app-popover [data-pick] svg')].map(node => node.innerHTML);
     require(new Set(icons).size === icons.length, "each menu action has its own icon");
     require(!document.querySelector('.tn[data-id="902"]'), "only the one queued bubble exists");
@@ -4034,12 +4096,13 @@ export function checkRendered(name, context = {}) {
       const queued = [...document.querySelectorAll('.tn[data-status="queued"]')];
       require(queued.length === 2, "both queued messages are visible");
       require(queued.map(node => node.querySelector('.message-text').textContent).join('|') === "第二個範例請求|第三個範例請求", "the bubbles retain send order");
-      require(queued.every(node => visible(node.querySelector('.bubble [data-act="cancel-message"]')) && !node.querySelector('[data-owner-act="cancel"]')), "each queued bubble owns its withdraw button");
-      require(queued.every(node => visible(node.querySelector('.bubble .queued-send-now')) && !node.textContent.includes("排隊中")), "each queued message shows 立即送出 and no 排隊中 words");
+      require(queued.every(node => visible(node.querySelector('.queued-actions [data-act="cancel-message"]')) && !node.querySelector('[data-owner-act="cancel"]')), "each queued bubble owns its withdraw button");
+      require(queued.every(node => visible(node.querySelector('.queued-actions .queued-send-now')) && !node.textContent.includes("排隊中")), "each queued message shows 立即送出 and no 排隊中 words");
+      queued.forEach(quietQueue);
       const presence = [...document.querySelectorAll('.thread .live-presence')];
       require(presence.length === 1 && presence[0].getBoundingClientRect().top >= queued[1].getBoundingClientRect().bottom, "one live presence follows the newest message");
       const bubbles = queued.map(node => node.querySelector('.bubble').getBoundingClientRect());
-      require(bubbles[1].top - bubbles[0].bottom <= 42, "consecutive owner bubbles keep a speaker-sized gap");
+      require(bubbles[1].top - queued[0].querySelector(".queued-actions").getBoundingClientRect().bottom <= 14, "consecutive owner bubbles keep a speaker-sized gap");
       require(!calls.some(call => call.method === "agent.history.stop" || call.method === "worker.cancel"), "admission stops no work");
       return {check:name,gap:bubbles[1].top-bubbles[0].bottom};
     }
@@ -4879,7 +4942,7 @@ export function checkRendered(name, context = {}) {
     return { check: name, inked };
   }
   // A step's foot: two round buttons together in the middle, the way back at the left and the way on at the
-  // right, each a filled triangle that points where it goes. The last step's way on is a check: it finishes.
+  // right. The last step's way on is a check: it finishes.
   const requireStepPair = (card, last) => {
     const rowEl = document.querySelector('.ob-foot .ob-actions');
     const buttons = [...rowEl.querySelectorAll(':scope > .btn')].filter(visible);
@@ -4893,23 +4956,12 @@ export function checkRendered(name, context = {}) {
       require(button.matches('.btn.icon') && !button.textContent.trim() && button.querySelectorAll(':scope > svg.i').length === 1, `${wanted[0]} is a drawing alone, with no words`);
       require(wanted.includes(button.getAttribute('aria-label')) && button.getAttribute('title') === button.getAttribute('aria-label'), `it is named ${wanted.join(" or ")} for assistive tech and in its tooltip (${button.getAttribute('aria-label')})`);
     }
-    // The drawing: one filled triangle on both, the way back's turned round, each pointing away from the other. The last
-    // step's way on is a check, a line and not a filled shape.
-    const drawing = button => button.querySelector(':scope > svg.i'), filled = button => !['none', 'rgba(0, 0, 0, 0)'].includes(getComputedStyle(drawing(button)).fill);
-    const flipped = button => new DOMMatrixReadOnly(getComputedStyle(drawing(button)).transform).a < 0;
-    require(back.matches('.ob-tri') && filled(back) && flipped(back), "the way back is a filled triangle that points left");
-    if (last) require(!primary.matches('.ob-tri') && !filled(primary) && drawing(primary).innerHTML !== drawing(back).innerHTML, "the last step's way on is a check, not a triangle");
-    else require(primary.matches('.ob-tri') && filled(primary) && !flipped(primary) && drawing(primary).innerHTML === drawing(back).innerHTML, "the way on is the same filled triangle, pointing right");
-    for (const button of buttons) {
-      const mark = drawing(button).getBoundingClientRect(), box = button.getBoundingClientRect();
-      require(Math.abs(mark.width - 20) <= .5 && Math.abs(mark.height - 20) <= .5, `the drawing is 20 px (${mark.width} x ${mark.height})`);
-      require(Math.abs((mark.left + mark.right) / 2 - (box.left + box.right) / 2) <= 1 && Math.abs((mark.top + mark.bottom) / 2 - (box.top + box.bottom) / 2) <= 1, "the drawing's box is in the middle of its circle");
-      // A circle: as wide as tall, a comfortable target, round all the way.
-      require(Math.abs(box.width - box.height) <= .5 && box.width >= 44 && box.width <= 56 && parseFloat(getComputedStyle(button).borderTopLeftRadius) >= box.width / 2 - 1, `it is a circle of a comfortable size (${Math.round(box.width)} x ${Math.round(box.height)})`);
-    }
-    // Together in the middle: one size, on one line, a small gap between them, and the pair centred in the card. It is
-    // the same on every step, so neither button moves from step to step.
-    require(Math.abs(left.width - ink.width) <= .5 && Math.abs((left.top + left.bottom) / 2 - (ink.top + ink.bottom) / 2) <= 1, `the two are one size on one line (${Math.round(left.width)} and ${Math.round(ink.width)})`);
+    const drawing = button => button.querySelector(':scope > svg.i'), filled = button => getComputedStyle(drawing(button)).fill !== 'none';
+    roundBack(back);
+    require(last ? !primary.matches('.ob-tri') && !filled(primary) : primary.matches('.ob-tri') && filled(primary), "the forward control keeps its own glyph");
+    const mark = drawing(primary).getBoundingClientRect();
+    require(mark.width === 20 && mark.height === 20 && ink.width === ink.height && ink.width >= 44 && ink.width <= 56, "the primary keeps its round shape and 20 px glyph");
+    require(Math.abs((left.top + left.bottom) / 2 - (ink.top + ink.bottom) / 2) <= 1, "the two controls share a centre line");
     const gap = ink.left - left.right;
     require(gap >= 8 && gap <= 16, `the two stand together, a small gap between them (${Math.round(gap)} px)`);
     require(Math.abs((left.left + ink.right) / 2 - (card.left + card.width / 2)) <= 1, `the pair is centred in the card (${Math.round((left.left + ink.right) / 2 - card.left - card.width / 2)} px off)`);
@@ -4940,14 +4992,14 @@ export function checkRendered(name, context = {}) {
     if (name === "onboarding-back-hover") {
       const style = getComputedStyle(back);
       require(back.matches(':hover'), "the pointer is on the way back");
-      require(style.backgroundColor === token('--pressed') && token('--pressed') !== token('--hover'), `the way back is one step lighter under the pointer (${style.backgroundColor})`);
+      require(style.backgroundColor === token('--hover') && token('--hover') !== token('--surface-2'), `the way back is one step lighter under the pointer (${style.backgroundColor})`);
       require(['rgba(0, 0, 0, 0)', 'transparent'].includes(style.borderTopColor) && style.color === token('--text'), `no edge appears under the pointer and its triangle keeps its ink (${style.borderTopColor}, ${style.color})`);
       require(!document.documentElement.hasAttribute('data-keys') && style.outlineStyle === 'none', "the pointer adds no keyboard ring");
     } else {
       const style = getComputedStyle(back);
       require(document.activeElement === back && document.documentElement.hasAttribute('data-keys'), "Shift+Tab from the primary lands on the way back, by the keyboard");
       require(style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) >= 2 && style.outlineColor !== 'rgba(0, 0, 0, 0)', `the way back shows the app's focus ring (${style.outlineWidth} ${style.outlineStyle} ${style.outlineColor})`);
-      require(style.backgroundColor === token('--hover'), "the way back rests on its quiet grey");
+      require(style.backgroundColor === token('--surface-2'), "the way back rests on its quiet surface");
       require(parseFloat(style.borderTopLeftRadius) >= back.getBoundingClientRect().height / 2 - 1, "the ring follows the circle");
     }
     return { check: name };
@@ -8848,8 +8900,8 @@ export function checkRendered(name, context = {}) {
   }
   if (name === "connect-apps-connected") {
     const view = connectModal().querySelector('.cs-connected'), back = view?.querySelector('[data-conn="back"]');
-    // Its title is the way back: one button of the chevron and 已連結 (R-APPS-02).
-    require(visible(view) && visible(back) && back.tagName === 'BUTTON' && back.matches('.cs-back-title') && back.textContent.trim() === '已連結' && back.querySelector('svg'), "the connected list's title, with its chevron, is the button back");
+    require(visible(view) && visible(view.querySelector(".cs-top-t")), "the connected list has its own title");
+    roundBack(back);
     const box = back.getBoundingClientRect(), x = connectModal().querySelector('.modal-x').getBoundingClientRect(), glyph = back.querySelector('svg').getBoundingClientRect();
     require(Math.abs((box.top + box.bottom) / 2 - (x.top + x.bottom) / 2) <= 1 && Math.abs(glyph.left - connectModal().querySelector('.cs').getBoundingClientRect().left) <= 3, "it stands on the ✕'s line, its chevron on the content's left edge");
     require(!view.querySelector('.cs-chips, #conn-search') && view.querySelector('.cs-top-t')?.textContent === '已連結', "it is the list alone, under its own title");
@@ -8918,12 +8970,10 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name === "connected-back-title") {
-    // The connected list's chevron and its title are one button.
-    const modal = connectModal(), back = modal.querySelector('.cs-connected .cs-back-title');
-    require(back && back.matches('button[data-conn="back"]') && back.querySelector('svg.i') && back.textContent.trim().length > 0, "the chevron and the title are one button");
-    require(modal.querySelector('.cs-top-t')?.contains(back) && !modal.querySelector('.cs-connected .btn.icon.cs-back'), "no separate chevron beside the title");
-    const style = getComputedStyle(back);
-    require(back.matches(':hover') && style.color === colourOf('color', '--text') && /rgba\(0, 0, 0, 0\)|transparent/.test(style.backgroundColor), `drawn as the connected chip: no fill, its words brighten under the pointer (${style.color}, ${style.backgroundColor})`);
+    const modal = connectModal(), back = modal.querySelector('.cs-connected .back-button');
+    roundBack(back);
+    require(modal.querySelector('.cs-top-t')?.textContent === '已連結', "the title stands beside the shared back button");
+    require(back.matches(':hover') && getComputedStyle(back).backgroundColor === tokenColour(back, "--hover"), "the back button has the shared hover fill");
     return { check: name };
   }
   if (name === "app-row-hover") {
@@ -9986,11 +10036,13 @@ export function checkRendered(name, context = {}) {
       require(light.dataset.level === "needs", `a member waiting for the owner is the list's level (${light.dataset.level})`);
       require(!drawn && light.dataset.dot === undefined, "the list is open, so what it shows is seen: the icon's dot is gone");
       const rows = [...document.querySelectorAll(".menu .menu-choice")];
-      require(rows.length === 2 && rows[0].dataset.value === "2" && rows[1].dataset.value === "1", `the waiting member comes first, then the working one (${rows.map(row => row.dataset.value)})`);
+      require(rows.map(row => row.dataset.value).join(",") === "2,3,1", "waiting comes first, finished next, working last");
+      require([...document.querySelectorAll(".menu .menu-head")].map(head => head.textContent).join(",") === "等你,完成,工作中", "section headings follow the owner's priority");
       require(rows.every(row => row.querySelector(".mlead .av, .mlead svg")), "each row has the member's face");
       require(!document.querySelector(".menu .ck svg"), "nothing in the list is checked");
       const dots = rows.map(row => row.querySelector(".status-row-dot"));
-      require(dots[0]?.dataset.kind === "needs" && dots[1]?.dataset.kind === "busy" && getComputedStyle(dots[0]).backgroundColor !== getComputedStyle(dots[1]).backgroundColor, "each row has its own coloured dot, waiting unlike working");
+      require(dots.map(dot => dot?.dataset.kind).join(",") === "needs,done,busy" &&
+        new Set(dots.map(dot => getComputedStyle(dot).backgroundColor)).size === 3, "each group keeps its own dot colour");
     }
     if (name === "status-light-seen") {
       require(!drawn && light.dataset.dot === undefined && light.dataset.level === "needs", "once the list was opened the dot is gone, though the member still waits");

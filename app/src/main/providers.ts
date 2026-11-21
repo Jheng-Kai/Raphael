@@ -5,7 +5,7 @@ import { isTopLayer, registerDismissal } from "./dismissals";
 import { t } from "./i18n";
 import { providerMark } from "./provider-marks";
 import type { MainEvent, ModelProvider, ProviderKind, ProviderField, ProviderPatch, ProviderModel, ProviderTest } from "./types";
-import { DISCONNECT_CONFIRM_MS, btn, esc, fieldHTML, ico, iconButton, openMenu, sel } from "./ui";
+import { DISCONNECT_CONFIRM_MS, btn, esc, fieldHTML, ico, backButton, iconButton, openMenu, sel } from "./ui";
 import { findsName } from "./find-match";
 
 export interface ProvidersView {
@@ -123,7 +123,7 @@ function dialogHTML(v: ProvidersView, lead = ""): string {
     `<div class="pv-feedback">${feedbackHTML(v)}</div>` +
     `<div class="pv-footer">` +
     (v.open.id ? btn(esc(t(v.confirming ? "providers.confirmRemove" : "providers.remove")), "danger", ` data-pv="remove" data-k="pv-remove"${disabled}`) :
-      btn(`${ico("left")}${esc(t("providers.back"))}`, "", ` data-pv="back" data-k="pv-back" data-nav-back${disabled}`)) +
+      backButton(t("providers.back"), ` data-pv="back" data-k="pv-back"${disabled}`)) +
     `<div class="pv-footer-actions">${btn(esc(t("providers.test")), "", ` data-pv="test" data-k="pv-test"${v.busy || !v.open.id || v.dirty ? " disabled" : ""}`)}` +
     btn(esc(t("providers.save")), "pri", ` data-pv="save" data-k="pv-save"${v.busy || !v.canSave ? " disabled" : ""}`) + `</div></div></div></div>`;
 }

@@ -37,6 +37,26 @@ def archive(entries, tar=False):
     return buffer.getvalue()
 
 
+@pytest.mark.parametrize("format", ["folder", "zip", "tgz"])
+async def test_a_single_skill_in_a_manifest_package_is_listed_as_a_plugin(rig, tmp_path, format):
+    manifest = ".claude-plugin/plugin.json"
+    entries = [(manifest, b'{"name":"notes","version":"1.0.0"}'),
+               ("skills/notes/SKILL.md", document("read-notes").encode())]
+    if format == "folder":
+        for relative, contents in entries:
+            path = tmp_path / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(contents)
+        args = {"source": f"local:{tmp_path}"}
+    else:
+        args = upload(f"notes.{format}", archive(entries, format == "tgz"))
+    package = (await rig.call("skills.library.import", args))["package"]
+    assert package["kind"] == "plugin"
+    assert len(package["skills"]) == 1
+    await rig.call("skills.library.delete", {"key": package["key"]})
+    assert not (await rig.call("skills.library.list", {}))["packages"]
+
+
 @pytest.mark.parametrize("layout", ["text", "md", "root", "wrapped", "multiple", "tgz"])
 async def test_the_library_accepts_documents_and_packaged_skills(rig, layout):
     text = document("read-notes")

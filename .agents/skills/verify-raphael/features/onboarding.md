@@ -17,15 +17,13 @@ state saved. There are no practice lessons, no microphone step and no completion
 the window, with no progress bar and no side: every
 step is one calm centred column, a title (three of the team's slimes float by it, aria-hidden,
 others on every step and in other places; gone below 640px wide), the choice, and under it two round buttons
-together in the middle of the card: the way back at the left and the way on at the right, each a 48 px circle
-holding one filled triangle that points where it goes (the same drawing, turned round for the way back), 12 px
-apart. Neither has words: each is named for assistive tech and in its tooltip, 上一步 and 下一步 (開始使用, or 完成
+together in the middle of the card: the way back at the left and the way on at the right, the shared 36 px round back button and a 48 px forward circle holding a filled right-pointing triangle, 12 px apart. Neither has words: each is named for assistive tech and in its tooltip, 上一步 and 下一步 (開始使用, or 完成
 on a rerun, on the last step, whose way on holds a check instead of a triangle). The way on is a circle of the
 solid accent; the way back is on a quiet grey, one step lighter under the pointer, takes the app's focus ring
-from the keyboard and comes before the primary in the tab order; neither has an edge. The guide's own sizes are
+from the keyboard and comes before the primary in the tab order; neither has an edge. The guide's primary action is
 the one exception to the shared button height. The pair is neither two stacked pills (the stack takes room the AI tools
 and services steps need), nor a round arrow beside one wide pill, nor a worded pill at each end of the row: it is two
-triangle buttons together in the middle, without words. The pair stands in the same place on
+round buttons together in the middle, without words. The pair stands in the same place on
 every step and never stacks, and the height a second pill used belongs to the step's content. The welcome keeps
 its one wide pill (360 px) in the middle and nothing else; a status in a tile
 wraps inside it in every language. There is no back arrow at the top: the welcome has the pill alone, with nothing but 開始 on the first page; a close mark shows only for someone who has been
@@ -103,7 +101,7 @@ Composio's apps join); `onboarding-services-n8n` searches n8n and opens its addr
 `onboarding-composio` for the card). Check that each tile is one row with its mark in its square,
 its name, one line and its control on the right inside it, that the tiles stand in three columns
 (two at 720), that the controls are real buttons and switches, that the foot is the pair (two round buttons
-together in the middle, the way back's triangle pointing left and the way on's pointing right, a check on the
+together in the middle, the shared back chevron and a forward triangle pointing right, a check on the
 last step, in the same place on every step, never stacked at 720) and the
 grid fades out over it, that the steps' content ends above the foot, that nothing is cut off at 720 wide
 and that the dark theme has no light edges. `onboarding-back-hover` hovers the way back (a lighter surface than at rest)

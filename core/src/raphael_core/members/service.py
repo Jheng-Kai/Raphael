@@ -989,7 +989,7 @@ class MembersService:
                 if not package["updatable"]:
                     raise MemberError("source", "this package has no available update source")
                 required = skill["id"] if skill else None
-                if package["kind"] == "plugin":
+                if key.startswith("set:"):
                     await self.capabilities.import_plugin(set_id=int(key[4:]), access=params.get("access"), required_skill=required)
                 else:
                     data = await self._package_documents({"source": package["source"]})

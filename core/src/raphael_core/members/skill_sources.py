@@ -31,6 +31,7 @@ class SkillFiles(dict):
         super().__init__()
         self.skipped_links = []
         self.folder = ""
+        self.plugin_manifest = False
 
 
 class Snapshot:
@@ -137,12 +138,22 @@ def skill_roots(names, wanted=None):
     return ordered
 
 
-def snapshot_entries(entries, read_entry, subpath, *, wanted=None):
+PLUGIN_MANIFEST = ".claude-plugin/plugin.json"
+
+
+def snapshot_entries(entries, read_entry, subpath, *, wanted=None, regular):
     roots = ([relative_path(subpath) + "/" if subpath else ""] if subpath is not None
              else skill_roots((name for name, _ in entries), wanted))
     snapshots = {root.casefold(): Snapshot() for root in roots}
     if len(snapshots) != len(roots):
         raise invalid()
+    manifests = set()
+    if subpath is None and wanted is None:
+        manifests = {
+            name.removeprefix("./").removesuffix(PLUGIN_MANIFEST)
+            for name, info in entries
+            if (name == PLUGIN_MANIFEST or name.endswith("/" + PLUGIN_MANIFEST)) and regular(info)
+        }
     allocated = count = 0
     for name, info in entries:
         normalized = name.removeprefix("./")
@@ -175,6 +186,13 @@ def snapshot_entries(entries, read_entry, subpath, *, wanted=None):
         previous = snapshot.size
         files = snapshot.finish()
         files.folder = root
+        # Classify a whole import without reading or enabling its plugin configuration.
+        prefix = ""
+        for part in root.split("/"):
+            if prefix in manifests:
+                files.plugin_manifest = True
+                break
+            prefix += part + "/"
         result.append(files)
         allocated += snapshot.size - previous
     return result
@@ -260,7 +278,8 @@ def read_archive(name, data, *, subpath=None, repository=False, wanted=None):
                             for name, info in entries):
                         subpath = ""
                 return snapshot_entries(entries, lambda snapshot, key, info: zip_entry(archive, snapshot, key, info),
-                                        subpath, wanted=wanted)
+                                        subpath, wanted=wanted, regular=lambda info: not info.is_dir() and
+                                        stat.S_IFMT(info.external_attr >> 16) in (0, stat.S_IFREG))
         if name.endswith((".tgz", ".tar.gz")):
             # Bound decompression even for content outside the selected folders.
             limit = MAX_PACKAGE_BYTES + MAX_DISCOVERY_ENTRIES * 1536 + tarfile.RECORDSIZE
@@ -275,7 +294,8 @@ def read_archive(name, data, *, subpath=None, repository=False, wanted=None):
                         raise oversized()
                     entries.append((info.name, info))
                 return snapshot_entries(entries,
-                    lambda snapshot, key, info: tar_entry(archive, snapshot, key, info), subpath)
+                    lambda snapshot, key, info: tar_entry(archive, snapshot, key, info), subpath,
+                    regular=tarfile.TarInfo.isfile)
     except (zipfile.BadZipFile, tarfile.TarError, OSError, EOFError, zlib.error, NotImplementedError, UnicodeError):
         raise invalid() from None
     raise MemberError("source", "choose a Markdown, ZIP or tar.gz file")
@@ -329,7 +349,15 @@ def local(source):
         for folder in sorted(folders):
             snapshot = folder_snapshot(folder, skill_links=True, byte_limit=MAX_PACKAGE_BYTES - size,
                                        entry_limit=MAX_PACKAGE_FILES - count)
-            result.append(snapshot.finish())
+            files = snapshot.finish()
+            for parent in (folder, *folder.parents):
+                manifest = parent / PLUGIN_MANIFEST
+                if not linked(manifest.parent) and not linked(manifest) and manifest.is_file():
+                    files.plugin_manifest = True
+                    break
+                if parent == path:
+                    break
+            result.append(files)
             size += snapshot.size
             count += len(snapshot.explicit)
         return result, path.name

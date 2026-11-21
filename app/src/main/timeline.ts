@@ -692,7 +692,7 @@ export function waitsAtCard(turn: AgentTurn): boolean {
 
 /** Media stands above the owner's bubble, whose quote precedes the words. */
 function bubbleHTML(words: string, files: readonly TurnAttachment[] | undefined, quote?: MessageQuote | null, expand = "", actions = ""): string {
-  const bubble = words || quote || actions ? `<div class="bubble">${quote ? quoteHTML(quote, true) : ""}${words || quote ? `<div class="message-text">${words}</div>` : ""}${expand}${actions}</div>` : "";
+  const bubble = words || quote || actions ? `<div class="bubble">${quote ? quoteHTML(quote, true) : ""}${words || quote ? `<div class="message-text">${words}</div>` : ""}${expand}</div>${actions}` : "";
   return files?.length ? `<div class="owner-content">${filesHTML(files)}${bubble}</div>` : bubble;
 }
 

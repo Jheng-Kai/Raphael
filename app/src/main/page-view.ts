@@ -14,7 +14,7 @@ import "./page-view.css";
 import { cancelGesture } from "../shared/cancel-gesture";
 import * as api from "./api";
 import { t } from "./i18n";
-import { type IconName, esc, ico, iconButton } from "./ui";
+import { type IconName, esc, ico, backButton, iconButton } from "./ui";
 
 export interface PageViewOpen {
   id: string;
@@ -150,7 +150,7 @@ export function mountPageView(stage: HTMLElement, shell?: PageShell): PageView {
     // The way back stands at the header's top left, where the search stood: the conversation header's round edge button.
     const slot = pane?.querySelector<HTMLElement>(":scope > .mb-head .mb-head-l, :scope > .mb-head .room-picker");
     if (slot) {
-      slot.insertAdjacentHTML("afterbegin", iconButton("left", t("chooser.back"), ' data-page-back data-nav-back hidden', "ra-tool pgv-back"));
+      slot.insertAdjacentHTML("afterbegin", backButton(t("chooser.back"), ' data-page-back hidden', "ra-tool pgv-back"));
       back = slot.querySelector<HTMLButtonElement>("[data-page-back]");
       back!.addEventListener("click", () => close());
     }

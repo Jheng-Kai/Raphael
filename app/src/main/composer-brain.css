@@ -19,7 +19,7 @@
 .cb-head { display: grid; flex: none; grid-template-columns: 32px minmax(0, 1fr) 32px; align-items: center; margin-bottom: var(--sp-2); }
 .cb-head h3 { display: flex; grid-column: 2; align-items: center; justify-content: center; gap: var(--sp-2); min-width: 0; margin: 0; color: var(--text); font-size: var(--fs-sm); font-weight: var(--weight-semibold); }
 .cb-head h3 span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.menu .cb-back { grid-column: 1; grid-row: 1; justify-content: center; width: 32px; min-height: 32px; padding: 0; }
+.cb-back { grid-column: 1; grid-row: 1; }
 .cb-search { flex: none; width: 100%; min-height: 32px; padding: 0 var(--sp-2); border: 1px solid var(--edge); border-radius: var(--r-sm); background: var(--content); color: var(--text); font-size: var(--fs-sm); }
 .cb-empty { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: start; gap: var(--sp-2); margin: 0; padding: var(--sp-3); color: var(--text-2); font-size: var(--fs-sm); }
 .cb-empty p { margin: 0; }

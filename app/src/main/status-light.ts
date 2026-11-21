@@ -1,5 +1,5 @@
 // The status list at the left of a conversation's top row: one icon, and a press lists who waits for the owner, who
-// works and who finished work the owner has not seen yet, each with a coloured dot. Picking one opens its conversation.
+// finished work the owner has not seen yet and who works, each with a coloured dot. Picking one opens its conversation.
 // News the owner has not opened the list for puts a small dot on the icon, the colour of its most urgent row (waiting,
 // then failed, then finished); work under way adds none, and opening the list clears it until something new comes.
 
@@ -11,11 +11,11 @@ import { esc, openMenu } from "./ui";
 /** The live states that are work under way; `blocked` is a member waiting for the owner. */
 const WORKING = new Set(["thinking", "working", "searching", "computer", "waiting"]);
 
-/** What a row says, in the order the list shows them: waiting for the owner (or failed), working, finished. */
+/** What a row says, in the order the list shows them: waiting for the owner (or failed), finished, working. */
 export type StatusKind = "needs" | "failed" | "busy" | "done";
 export type StatusLevel = "idle" | "busy" | "done" | "needs";
 
-const ORDER: Record<StatusKind, number> = { needs: 0, failed: 1, busy: 2, done: 3 };
+const ORDER: Record<StatusKind, number> = { needs: 0, failed: 1, done: 2, busy: 3 };
 
 interface Shown { member: Member; kind: StatusKind }
 

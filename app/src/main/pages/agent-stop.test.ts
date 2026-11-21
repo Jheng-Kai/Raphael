@@ -260,7 +260,7 @@ test("a queued message shows its own actions and sends immediately by turn", asy
  });
  mount();await flush();
  const menu=async (id:number)=>{ $(`.tn[data-id="${id}"] [data-act="more-message"]`).click(); await flush(); return [...document.querySelectorAll<HTMLElement>("#app-popover [data-pick]")].map(item=>item.dataset.pick); };
- const button=$('.tn[data-id="12"] .bubble .queued-actions [data-act="send-now"]');
+ const button=$('.tn[data-id="12"] .bubble + .queued-actions [data-act="send-now"]');
  expect(button.textContent).toContain("立即送出");
  expect(button.previousElementSibling?.getAttribute("data-act")).toBe("cancel-message");
  expect($('.tn[data-id="12"]').textContent).not.toContain("排隊中");

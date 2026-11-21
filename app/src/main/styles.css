@@ -808,22 +808,20 @@ body:has(.page-agent:not([hidden])[data-det="open"]:not(.is-room)) .toast { max-
 .ob-foot .btn { min-height: var(--ob-pill); border-radius: 999px; font-size: var(--fs-md); }
 /* The welcome's one pill fills its row. */
 .ob-foot .ob-actions:not(.ob-pair) .btn.pri { flex: 1 1 0; min-width: 0; }
-/* A step's pair: two circles of one size side by side, as wide together as they are, so the foot centres them. Each
+/* A step's pair: two circles side by side, as wide together as they are, so the foot centres them. Each
    takes its surface and its ink from its own variables, in every state, and has no edge. */
 .ob-foot .ob-pair { --ob-round: 48px; justify-content: center; align-items: center; gap: var(--sp-3); width: auto; }
-.ob-foot .ob-pair .btn.icon { flex: none; width: var(--ob-round); height: var(--ob-round); min-height: var(--ob-round); border-color: transparent; border-radius: 50%; background: var(--ob-fill); color: var(--ob-ink); }
-.ob-foot .ob-pair .btn.icon:hover:not(:disabled) { border-color: transparent; background: var(--ob-fill-over); color: var(--ob-ink); }
-.ob-foot .ob-pair .btn.icon:active:not(:disabled) { border-color: transparent; background: var(--ob-fill-down); color: var(--ob-ink); }
+.ob-foot .ob-pair .btn.icon.ob-go { flex: none; width: var(--ob-round); height: var(--ob-round); min-height: var(--ob-round); border-color: transparent; border-radius: 50%; background: var(--ob-fill); color: var(--ob-ink); }
+.ob-foot .ob-pair .btn.icon.ob-go:hover:not(:disabled) { border-color: transparent; background: var(--ob-fill-over); color: var(--ob-ink); }
+.ob-foot .ob-pair .btn.icon.ob-go:active:not(:disabled) { border-color: transparent; background: var(--ob-fill-down); color: var(--ob-ink); }
 /* The way back is on a quiet grey, one step lighter under the pointer; the way on is the solid accent, a circle of ink. */
-.ob-foot .ob-pair .ob-prev { --ob-fill: var(--hover); --ob-fill-over: var(--pressed); --ob-fill-down: var(--pressed); --ob-ink: var(--text); }
 .ob-foot .ob-pair .ob-go { --ob-fill: var(--accent); --ob-fill-over: var(--accent-hover); --ob-fill-down: var(--accent-pressed); --ob-ink: var(--on-accent); }
-.ob-foot .ob-pair .btn.icon svg.i { width: 20px; height: 20px; }
-/* The triangle is the app's own play drawing, filled, and turned round for the way back. The drawing's box stays in the
+.ob-foot .ob-pair .btn.icon.ob-go svg.i { width: 20px; height: 20px; }
+/* The triangle is the app's own play drawing, filled for the way forward. The drawing's box stays in the
    middle of its circle; the triangle is moved inside the box toward its point (1.5 of the box's 24 units), since a
    triangle's weight sits away from its point and it would look pushed back otherwise. */
 .ob-foot .ob-pair .ob-tri svg.i { fill: currentColor; }
 .ob-foot .ob-pair .ob-tri svg.i path { transform: translateX(1.5px); }
-.ob-foot .ob-pair .ob-prev.ob-tri svg.i { transform: scaleX(-1); }
 /* The team's characters float by a step's title, each where screens.ts puts it: they take no room, and a narrow card
    drops them. */
 .ob-floaters { position: relative; height: 0; pointer-events: none; }
@@ -1009,3 +1007,10 @@ button.ob-tile:hover:not(:disabled) .ob-get { background: var(--pressed); }
 
 :where(:root[data-keys]) .side .nav:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .window-controls .window-button:focus-visible { outline-offset: -3px; }
+
+/* The member page's round navigation control, shared by every back button. */
+.btn.icon.back-button { flex: none; width: 36px; min-width: 36px; height: 36px; min-height: 36px; padding: 0; border-color: transparent; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--edge-rim); color: var(--text-2); }
+.btn.icon.back-button:hover:not(:disabled) { background: var(--hover); color: var(--text); }
+.btn.icon.back-button:active:not(:disabled) { background: var(--pressed); color: var(--text); }
+.btn.icon.back-button .i { width: 18px; height: 18px; }
+:root[data-keys] .btn.icon.back-button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }

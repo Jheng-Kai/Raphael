@@ -52,7 +52,7 @@ categories (全部, 溝通, 生產力, 開發 and so on), with no count of what 
   headings as before), behind a back chevron. Esc steps back from an app's page, then from that list, then closes.
 - A connected row is pressable: the mark, the name, the line and the gap open the app's page (the page the main view's row opens),
   the switch only turns the app on or off; a row under the pointer has the pointer and `--float-hover` clear of its words, in the main view's rows too (scene `connect-apps-row-hover`). The back chevron (the
-  list's title row and every app's page) is the ✕'s own 36 px round control with an 18 px glyph, on the ✕'s line. Scenes
+  list's title row and every app's page) uses the shared 36 px back button with an 18 px glyph, on the ✕'s line and beside the separate title in the connected list. Scenes
   `connect-apps-connected-rows` (a real press on each part of a row, the keyboard, the switch, the hover) and `connect-app-from-row`; the check
   `connect-back` is on every scene that shows the chevron.
 - The owner's own list (Gmail, Google Calendar and Google Drive from Composio, an MCP server of their own, Notion, Hugging Face and GitHub built in,
@@ -62,7 +62,7 @@ categories (全部, 溝通, 生產力, 開發 and so on), with no count of what 
   (`pressThrough`). A page that draws itself again from under a press loses it, so `load()` draws only when the reading changes what the dialog drew (`drawn`).
 - 「✓ 已連結」 of a main-view row is pressable (the row opens the app's page from anywhere but 連結): `connected-owner-state-press`, check `app-state-press`.
   On an app's own page it stays words: its destination would be the page itself.
-- An app's page replaces the view (no title row; a bare back chevron and the dialog's ✕): the mark on a 56 px white tile with the name,
+- An app's page replaces the view (no title row; the shared round back button and the dialog's ✕): the mark on a 56 px white tile with the name,
   and at the right 「連結」 (white, round) or, when connected, 「✓ 已連結」 with its switch and ⋯; a paragraph; accounts; for a connected app
   a 工具 card (kind switches, the folded tool list); a 資訊 card (提供者, 類別, 登入方式, 伺服器, 工具) of 38 px rows; the latest actions and
   the 試用, sign-in and refresh buttons. After a sign-in from a page the page stays and shows the connected state.
