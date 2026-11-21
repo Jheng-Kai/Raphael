@@ -443,7 +443,7 @@ describe("拉斐爾", () => {
     const html = tab("agent");
     expect(html).not.toContain('data-k="worker-cap"');
     expect(tab("agent", { brain: { ...brain, worker_cost_cap_usd: 0.5 } })).not.toContain("US$0.50");
-    expect(WORKER_COST_CAPS.map((c) => c.value)).toEqual(["0.1", "0.2", "0.5", "1"]);
+    expect(WORKER_COST_CAPS.map((c) => c.value)).toEqual(["0.1", "0.2", "0.5", "1", "2", "5", "10", "20"]);
   });
 
   test("has no Telegram: it is in 一般's 訊息平台", () => {

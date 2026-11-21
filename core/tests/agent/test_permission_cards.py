@@ -292,11 +292,11 @@ async def test_inputs_changed_after_the_question_never_use_the_yes(owner, plugin
     assert plugins.audit()[-1][3:] == ("none", "blocked")
 
 
-async def test_no_answer_in_thirty_seconds_expires_the_card_and_a_late_yes_runs_nothing(owner, plugins, calls, client):
+async def test_no_answer_in_ten_minutes_expires_the_card_and_a_late_yes_runs_nothing(owner, plugins, calls, client):
     await plugins.connect(note="T2")
     script(client)
     asked = await typed(owner.rig)
-    owner.rig.clock.now += 31
+    owner.rig.clock.now += 601
     late = await owner.confirm(asked, True)
     assert late["text"] != "好了。" and calls == []
     assert owner.cards_of(asked["turn_id"])[0].state == "expired"

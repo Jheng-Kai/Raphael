@@ -43,6 +43,16 @@ def test_skill_receipts_without_text_keep_their_public_name_and_hide_the_action(
 
 
 @pytest.mark.parametrize("method", ["agent.history.search", "messages.search"])
+async def test_search_returns_all_hits_for_a_long_query(make_rig, method):
+    rig = make_rig()
+    query = " ".join([*(f"unused{n}" for n in range(30)), "orchard"])
+    for _ in range(60):
+        rig.history.add(session_id="sample", question="An orchard", route="answer", prefix="", text="", status="done")
+    result = await rig.call(method, {"query": query})
+    assert len(result["turns"]) == 60
+
+
+@pytest.mark.parametrize("method", ["agent.history.search", "messages.search"])
 async def test_both_search_rpcs_find_receipt_titles_but_not_transport_keys(make_rig, method):
     rig = make_rig()
     turn_id = rig.history.add(session_id="sample", question="", route="answer", prefix="", text="", status="done")

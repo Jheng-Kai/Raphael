@@ -64,7 +64,7 @@ use crate::macos::keys::{self as input, Modifier, code};
 use crate::macos::{ax, workspace};
 
 /// How long one job of the desktop's thread may take before its caller gives up on it.
-const JOB_TIMEOUT: Duration = Duration::from_secs(12);
+const JOB_TIMEOUT: Duration = Duration::from_secs(60);
 /// How long a look may walk the tree.
 const LOOK_BUDGET: Duration = Duration::from_secs(4);
 /// The most windows a listing gives.

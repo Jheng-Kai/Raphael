@@ -106,8 +106,8 @@ def engine_start_allowed():
 
 
 def _withheld(values, text):
-    from .logins import redact_values
-    return redact_values(values, text)
+    from .logins import redact_values, redactable_program_key
+    return redact_values((value for value in values if redactable_program_key(value)), text)
 
 
 class VmError(Exception):
@@ -1892,7 +1892,7 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
         in the background it is started detached and this returns at once with a job whose log and exit code the
         caller reads with later commands. A job is ended by its own timeout, at most `BACKGROUND_S`.
         `keys` (variable name -> value) are given to this one command's environment, never to its command line, and
-        what it prints has them replaced by a placeholder before anything is returned."""
+        what it prints has keys of at least six characters replaced by a placeholder before anything is returned."""
         if not isinstance(command, str) or not command.strip() or len(command) > 16_000:
             raise VmError("bad_arguments")
         if keys is not None and (not isinstance(keys, dict) or not keys or not all(

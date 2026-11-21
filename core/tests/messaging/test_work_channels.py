@@ -124,7 +124,7 @@ async def test_audited_switchboard_reports_capacity():
         await board.aclose()
 
 
-@pytest.mark.parametrize("kind,limit", [("slack", 3500), ("discord", 1900)])
+@pytest.mark.parametrize("kind,limit", [("slack", 40000), ("discord", 2000)])
 @pytest.mark.parametrize("exhausted", [False, True])
 async def test_audited_retry_only_the_failed_piece(kind, limit, exhausted):
     from raphael_core.messaging.channels.base import RATE_LIMIT_TRIES

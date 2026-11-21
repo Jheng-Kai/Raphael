@@ -29,7 +29,7 @@ async def test_failed_batch_rolls_back_members_and_never_starts_a_greeting(setup
     with pytest.raises(RpcError):
         await team.members.admin_batch(0, [
             {'name': 'member_create', 'arguments': {'name': 'FirstOk', 'role': 'Research', 'group': 'Company'}},
-            {'name': 'member_create', 'arguments': {'name': 'X' * 17, 'role': 'Research', 'group': 'Company'}},
+            {'name': 'member_create', 'arguments': {'name': '', 'role': 'Research', 'group': 'Company'}},
         ], interactive=True)
     assert await rig.call('members.list', {}) == before
     assert greetings == notes == []
@@ -353,7 +353,7 @@ async def test_skill_import_uses_the_shared_download_and_notifies_the_member(set
 
 @pytest.mark.parametrize("name,args", [
     ("member_create", {"name": "COO", "role": "RD", "group": "Unused"}),
-    ("member_create", {"name": "X" * 17, "role": "RD", "group": "Unused"}),
+    ("member_create", {"name": "", "role": "RD", "group": "Unused"}),
     ("member_create", {"name": "New", "role": "RD", "avatar_preset": "missing"}),
     ("member_create", {"name": "New", "role": "RD", "model": 7}),
     ("member_delete", {"id": 0}),
@@ -431,7 +431,7 @@ async def test_invalid_approved_batch_rolls_back_every_change_and_notification(s
     notes = []
     team.members._notify = lambda method, data: notes.append((method, data))
     rig.settings.set("action_mode", "ask")
-    changes = [{"name": "Valid", "role": "RD", "group": "Company"}, {"name": "X" * 17, "role": "PM", "group": "Company"}]
+    changes = [{"name": "Valid", "role": "RD", "group": "Company"}, {"name": "", "role": "PM", "group": "Company"}]
     if people:
         for change, person in zip(changes, people):
             change["id"] = person.id
@@ -590,11 +590,10 @@ async def test_removing_all_drafts_creates_nothing_and_finishes_cleanly(setup, c
         [{"name": "Existing", "role": "COO"}],
         [{"name": "", "role": "COO"}],
         [{"name": "拉斐爾", "role": "COO"}],
-        [{"name": "X" * 17, "role": "COO"}],
         [{"name": "Valid", "role": "X" * 25}],
         [{"name": "Valid", "role": "COO", "blurb": "X" * 281}],
         [{"name": "Valid", "role": "COO", "personality": "X" * 2001}],
-        [{"name": "Valid", "role": "COO", "instructions": "X" * 2001}],
+        [{"name": "Valid", "role": "COO", "instructions": 2001}],
         [{"name": "Valid", "role": "COO", "group": "X" * 25}],
         [{"name": "Valid", "role": "COO", "avatar_preset": "preset:missing"}],
         [{"name": f"M{i}", "role": "RD"} for i in range(11)],

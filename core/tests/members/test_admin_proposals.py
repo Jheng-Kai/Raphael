@@ -259,7 +259,7 @@ async def test_first_bot_cancel_and_invalid_batch_leave_profile_unset(setup, bra
     await rig.confirm(asked["confirm"]["id"], False)
     assert not team.members.first_bot_profile()
     brain(("member_update", {"id": 0, "name": "Morning"}),
-          ("member_create", {"name": "X" * 17, "role": "Invalid"}))
+          ("member_create", {"name": "", "role": "Invalid"}))
     asked = await typed(rig, "Set up both members", 0)
     await rig.confirm(asked["confirm"]["id"])
     assert not team.members.first_bot_profile()

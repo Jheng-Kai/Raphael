@@ -14,6 +14,12 @@ async def rooms(rig):
     yield service
     await service.aclose()
 
+async def test_a_room_can_include_more_than_six_members(rig, rooms):
+    ids = [(await rig.call("members.create", {"name": f"Person {number}"}))["member"]["id"] for number in range(8)]
+    room = await create(rig, [0, *ids])
+    assert set(room["member_ids"]) == {0, *ids}
+
+
 async def create(rig, ids, **kwargs):
     if ids == [0] and not kwargs.get("is_team"):
         member = (await rig.call("members.create", {"name":"Room peer"}))["member"]

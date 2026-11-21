@@ -10,7 +10,7 @@ from ..bots.homes import redact_secrets
 from ..memory.brain import MemoryBrain
 from .templates import checked, export, findings
 from .skill_names import SKILL_NAME_RULE
-from .store import NAME_MAX, ROLE_MAX
+from .store import ROLE_MAX
 
 
 def object_schema(properties):
@@ -26,19 +26,19 @@ SCHEDULE = {"anyOf": [
 ]}
 SCHEMA = object_schema({
     "format": {"enum": ["raphael-member"]}, "version": {"type": "integer", "enum": [1]},
-    "name": {"type": "string", "minLength": 1, "maxLength": NAME_MAX},
+    "name": {"type": "string", "minLength": 1},
     "role": {"type": "string", "maxLength": ROLE_MAX},
     "personality": {"type": "string", "maxLength": 2000},
-    "instructions": {"type": "string", "maxLength": 2000},
+    "instructions": STRING,
     "reply_style": {"enum": ["full", "conversational"]},
     "description": {"type": "string", "minLength": 1, "maxLength": 280},
-    "skills": {"type": "array", "maxItems": 40, "items": object_schema({"text": STRING})},
-    "routines": {"type": "array", "maxItems": 50, "items": object_schema({
+    "skills": {"type": "array", "items": object_schema({"text": STRING})},
+    "routines": {"type": "array", "items": object_schema({
         "title": {"type": "string", "minLength": 1, "maxLength": 40},
-        "prompt": {"type": "string", "minLength": 1, "maxLength": 1000},
+        "prompt": {"type": "string", "minLength": 1},
         "schedule": SCHEDULE, "when": {"type": "null"},
     })},
-    "connections": {"type": "array", "maxItems": 30, "items": {"type": "string", "minLength": 1, "maxLength": 100}},
+    "connections": {"type": "array", "items": {"type": "string", "minLength": 1, "maxLength": 100}},
 })
 
 SYSTEM = """Write your own public Raphael member template for anyone to use. No tools.

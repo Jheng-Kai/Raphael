@@ -108,7 +108,8 @@ def heard(language: str, transcript: str) -> str:
     """The line that says what was understood from a voice message."""
     text = " ".join(transcript.split())
     if len(text) > HEARD_CHARS:
-        text = text[:HEARD_CHARS].rstrip() + "…"
+        head = text[:HEARD_CHARS].rstrip()
+        text = f"{head}… [{len(text) - len(head):,} characters omitted]"
     return words(language, "heard", text=text)
 
 

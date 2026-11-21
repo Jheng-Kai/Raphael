@@ -734,10 +734,10 @@ class AgentHistory:
         self,
         query: str,
         *,
-        limit: int = 5,
+        limit: int | None = 5,
         since_ms: int | None = None,
         exclude: Sequence[int] = (),
-        most: int = SEARCH_MAX,
+        most: int | None = SEARCH_MAX,
         member_id: int | None = 0,
         conversation_id: int | None = None,
     ) -> list[Turn]:
@@ -749,8 +749,11 @@ class AgentHistory:
         ones the model already reads) are left out by the query itself, before the limit, so that
         the older turns behind them are found however many of them match. Only the thread of
         `member_id` is searched."""
-        words = query_words(query)
-        limit = max(1, min(limit, most))
+        words = query_words(query, limit=None) if limit is None or most is None else query_words(query)
+        if limit is None:
+            limit = -1
+        else:
+            limit = max(1, min(limit, most if most is not None else 2**63 - 1))
         if not words:
             return []
         self._repair_event_index()
@@ -789,6 +792,15 @@ class AgentHistory:
     ) -> list[Turn]:
         """The search where this SQLite has no FTS5: the same terms, read with LIKE, newest first.
         The table holds a few thousand turns a year, so a scan takes milliseconds."""
+        # Batch the predicates within SQLite's expression depth and bind parameter limits.
+        if len(words) > 400:
+            found = {
+                turn.id: turn
+                for start in range(0, len(words), 400)
+                for turn in self._search_like(words[start:start + 400], limit, where, params)
+            }
+            ordered = sorted(found, reverse=True)
+            return [found[turn_id] for turn_id in ordered[:limit if limit > 0 else None]]
         conditions: list[str] = []
         terms: list[object] = []
         for word in words:

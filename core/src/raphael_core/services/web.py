@@ -6,7 +6,7 @@ SearXNG. ("openrouter", the default, is not one of these: it is the answer model
 
     {results: [{title, url, snippet}], sources: [{title, url}], answer?: str}
 
-at most SEARCH_RESULTS results, each snippet at most SNIPPET_CHARS; `answer` is Tavily's own short
+all results returned by the service; `answer` is Tavily's own short
 answer, when it gives one. The answer model words Raphael's answer from them.
 
 Reading a page (`read`) is the `web_read_service` setting's: "builtin" fetches it from this
@@ -37,20 +37,19 @@ from .common import ServiceError, fit
 from .fetch import PageFetcher, checked_url, decoded
 from ..worker.html import html_to_text
 
-SEARCH_RESULTS = 5
 SNIPPET_CHARS = 400
 TITLE_CHARS = 200
 PAGE_BUDGET = 50_000
 # A service's answer may take this long, each stage of the request.
-SERVICE_TIMEOUT_S = 12.0
+SERVICE_TIMEOUT_S = 60.0
 # Include the queue and retries in the existing tool budget. Brave's one request per
 # second needs a little margin; use that conservative pace for each search service.
-SEARCH_TIMEOUT_S = 12.0
+SEARCH_TIMEOUT_S = 120.0
 SEARCH_INTERVAL_S = 1.1
 SEARCH_ATTEMPTS = 2
 SEARCH_RETRY_WAIT_S = 8.0
 # The services that read a page for Raphael may take longer: they fetch it first.
-READ_TIMEOUT_S = 25.0
+READ_TIMEOUT_S = 60.0
 
 BRAVE_URL = "https://api.search.brave.com/res/v1/web/search"
 TAVILY_SEARCH_URL = "https://api.tavily.com/search"
@@ -121,26 +120,31 @@ async def _search_call(service: str, http: httpx.AsyncClient, method: str, url: 
 
 
 def _plain(value: Any, limit: int) -> str:
-    """A text of a service's answer as one line of plain words, at most `limit` characters: the
+    """A text of a service's answer as one line, with any omitted characters counted: the
     tags some services put round the words searched for are taken out."""
     if not isinstance(value, str):
         return ""
     words = " ".join(_TAGS.sub("", value).split())
-    return words if len(words) <= limit else words[: limit - 1].rstrip() + "…"
+    if len(words) <= limit:
+        return words
+    head = words[:limit].rstrip()
+    return f"{head}… [{len(words) - len(head):,} characters omitted]"
 
 
 def _results(items: Any, title: str, url: str, snippet: Callable[[dict], Any]) -> list[dict]:
     """The results of a service's list `items`, read with its names for the title and the address
     and its way to the snippet: those with an http(s) address, each address once."""
     found: list[dict] = []
+    seen = set()
     for item in items if isinstance(items, list) else []:
         if not isinstance(item, dict):
             continue
         address = item.get(url)
         if not isinstance(address, str) or not address.lower().startswith(("http://", "https://")):
             continue
-        if any(result["url"] == address for result in found):
+        if address in seen:
             continue
+        seen.add(address)
         found.append(
             {
                 "title": _plain(item.get(title), TITLE_CHARS),
@@ -148,8 +152,6 @@ def _results(items: Any, title: str, url: str, snippet: Callable[[dict], Any]) -
                 "snippet": _plain(snippet(item), SNIPPET_CHARS),
             }
         )
-        if len(found) == SEARCH_RESULTS:
-            break
     return found
 
 
@@ -231,19 +233,28 @@ async def search(
 
 async def _search(service: str, query: str, *, http: httpx.AsyncClient, key: str | None, searxng_url: str, deadline: float, firecrawl_url: str = "") -> dict:
     if service == "brave":
-        body = await _search_call(
-            service, http, "GET", BRAVE_URL, deadline=deadline,
-            params={"q": query, "count": SEARCH_RESULTS},
-            headers={"X-Subscription-Token": _need(key), "Accept": "application/json"},
-        )  # fmt: skip
-        web = body.get("web") if isinstance(body, dict) else None
-        items = web.get("results") if isinstance(web, dict) else None
+        items = []
+        for offset in range(10):  # Brave accepts offsets 0 through 9.
+            body = await _search_call(
+                service, http, "GET", BRAVE_URL, deadline=deadline,
+                params={"q": query, "count": 20, "offset": offset},
+                headers={"X-Subscription-Token": _need(key), "Accept": "application/json"},
+            )
+            if not isinstance(body, dict):
+                raise ServiceError("bad_response")
+            web = body.get("web")
+            page = web.get("results") if isinstance(web, dict) else None
+            if not isinstance(page, list) or not page:
+                break
+            items.extend(page)
+            if not (body.get("query") or {}).get("more_results_available"):
+                break
         results = _results(items, "title", "url", lambda item: item.get("description"))
         answer = None
     elif service == "tavily":
         body = await _search_call(
             service, http, "POST", TAVILY_SEARCH_URL, deadline=deadline,
-            json={"query": query, "max_results": SEARCH_RESULTS, "include_answer": True},
+            json={"query": query, "include_answer": True},
             headers={"Authorization": f"Bearer {_need(key)}"},
         )  # fmt: skip
         items = body.get("results") if isinstance(body, dict) else None
@@ -254,7 +265,6 @@ async def _search(service: str, query: str, *, http: httpx.AsyncClient, key: str
             service, http, "POST", EXA_URL, deadline=deadline,
             json={
                 "query": query,
-                "numResults": SEARCH_RESULTS,
                 "contents": {"text": {"maxCharacters": SNIPPET_CHARS}},
             },
             headers={"x-api-key": _need(key)},

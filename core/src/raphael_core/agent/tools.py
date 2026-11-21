@@ -70,19 +70,16 @@ _GEOCODING_LANGUAGE = {
 }
 # The kind of failure of a tool whose capability the owner turned off.
 DISABLED = "disabled"
-# The weather, both requests together; and one try of one request, which is made a second time when it hangs or its
-# connection fails. A request that answers takes about a second and the whole lookup about two; a try that waited five
-# seconds for nothing left no time in the eight for a second one.
-WEATHER_TIMEOUT_S = 8.0
-WEATHER_TRY_S = 3.0
+# Geocoding and weather share a deadline. A stalled or disconnected request can be retried once.
+WEATHER_TIMEOUT_S = 120.0
+WEATHER_TRY_S = 30.0
 WEATHER_TRIES = 2
 # A search with its model's reading of the results.
-SEARCH_TIMEOUT_S = 12.0
+SEARCH_TIMEOUT_S = 125.0
 SEARCH_MAX_TOKENS = 500
-SEARCH_PLUGINS = [{"id": "web", "max_results": 3}]
-# Reading a page: the built-in reader has ten seconds of its own, a service that reads it longer, and a second reader
-# may try after the first failed (`ServiceHub.read`).
-READ_TIMEOUT_S = 45.0
+SEARCH_PLUGINS = [{"id": "web"}]
+# The built-in reader and selected service each allow 60 seconds inside this turn's budget.
+READ_TIMEOUT_S = 125.0
 # A read that failed in a way a real browser may get past (R-PERSIST-06): a site that turns readers away (a 401 or 403,
 # an error page), a page that did not come or came as nothing a page is made of. Not a wrong or forbidden address.
 BROWSER_MAY_READ = frozenset(("bad_response", "http_error", "auth", "timeout", "network", "redirects"))

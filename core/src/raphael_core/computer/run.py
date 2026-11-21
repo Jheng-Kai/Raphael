@@ -50,7 +50,7 @@ While a question is open the run waits on it (`Question` events, answered with `
 `AgentService` hands the question to the shell as the reply of `agent.ask` or `agent.confirm`, and
 the answer comes back with the next `agent.confirm`. The run ends with a `Final` event.
 
-Limits (`RunLimits`): 20 steps (an app opened is one, and a run opens three at most), 30 model
+Limits (`RunLimits`): 200 steps (an app opened is one, and a run opens three at most), 30 model
 calls, 40 looks and three minutes of work (questions and the owner's turn not counted). Spend is recorded without a cap.
 A run the shell cannot watch the owner's own input for (its hooks did not go in) ends at once. Nothing here logs what the screen showed, what was
 typed, a window's title or the request: only kinds, counts and timings.
@@ -113,15 +113,15 @@ from .snapshot import (
 logger = logging.getLogger(__name__)
 
 # One model reply may take this long, and may be this long.
-CHAT_TIMEOUT_S = 45.0
+CHAT_TIMEOUT_S = 120.0
 CHAT_MAX_TOKENS = 1200
 # How many of the latest rounds keep their results in full.
 KEEP_ROUNDS = 3
 # How long the shell is given for each operation.
-APPS_TIMEOUT_S = 6.0
-LOOK_TIMEOUT_S = 10.0
-ACT_TIMEOUT_S = 10.0
-ALLOW_TIMEOUT_S = 5.0
+APPS_TIMEOUT_S = 60.0
+LOOK_TIMEOUT_S = 60.0
+ACT_TIMEOUT_S = 60.0
+ALLOW_TIMEOUT_S = 60.0
 # A question waits as long as the overlay's (or, for a card nobody sits at, as long as an unattended
 # question), and a little more: the shell's NO, or its own expiry, comes first.
 QUESTION_GRACE_S = 10.0
@@ -167,14 +167,14 @@ FORBIDDEN_BY_RULE = (
 
 @dataclass(frozen=True)
 class RunLimits:
-    """What one run may use: 20 steps (an app opened is one), 3 apps opened, 30 model calls, 40
-    looks and 180 s of work. cost_usd is retained for compatibility and is not enforced."""
+    """What one run may use: 200 steps (an app opened is one), 3 apps opened, 30 model calls, 40
+    looks and 30 minutes of work. cost_usd is retained for compatibility and is not enforced."""
 
-    actions: int = 20
+    actions: int = 200
     opens: int = 3
     model_calls: int = 30
     looks: int = 40
-    seconds: float = 180.0
+    seconds: float = 1800.0
     cost_usd: float = 0.20
     # How long the owner may keep the computer after a hand-over before the run ends (not work time).
     handback_s: float = 30 * 60.0

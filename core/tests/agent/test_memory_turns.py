@@ -94,8 +94,8 @@ async def test_a_request_to_remember_is_written_at_once_and_said_so(rig, client,
     # Both files, the shared one first, each in its tags and with how full it is: with the message, so that
     # the system prompt is the same after the files change (tests/agent/test_cache_sessions.py).
     assert (
-        '<shared_memory file="USER.md" usage="0% — 0/1,375 chars">\n(empty)\n</shared_memory>\n'
-        '<own_memory file="MEMORY.md" usage="0% — 0/2,200 chars">\n(empty)\n</own_memory>'
+        '<shared_memory file="USER.md" usage="0% — 0/100,000 chars">\n(empty)\n</shared_memory>\n'
+        '<own_memory file="MEMORY.md" usage="0% — 0/100,000 chars">\n(empty)\n</own_memory>'
     ) in call["user"]
     assert "<own_memory file=" not in call["system"]
     assert {"memory", "need"} <= set(call["schema"]["properties"])

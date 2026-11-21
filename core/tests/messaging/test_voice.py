@@ -251,7 +251,7 @@ async def test_neither_the_audio_nor_the_words_reach_the_log(files, files_http, 
 def test_the_heard_line_is_cut_and_localised():
     long = "字" * 200
     line = heard("zh-TW", long)
-    assert line.startswith("聽到：「") and line.endswith("…」") and len(line) <= HEARD_CHARS + 6
+    assert line.startswith("聽到：「") and f"[{200 - HEARD_CHARS} characters omitted]" in line
     assert heard("en", "hi").startswith("Heard: ") and heard("ja", "hi").startswith("聞き取り")
     assert "\n" not in heard("en", "two\nlines")
 

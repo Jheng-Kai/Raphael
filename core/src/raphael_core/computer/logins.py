@@ -9,6 +9,12 @@ from urllib.parse import urlsplit
 PLACEHOLDER = "[private]"
 # A long value cut by a limit leaves its head at the end of a text, or its tail at the start of the next one.
 EDGE_VALUE, EDGE_PART = 12, 6
+PROGRAM_KEY_REDACT_MIN = 6
+
+
+def redactable_program_key(value):
+    """Short program keys are valid but would match ordinary text if scrubbed."""
+    return isinstance(value, str) and len(value) >= PROGRAM_KEY_REDACT_MIN
 
 
 def redact_values(values, text):

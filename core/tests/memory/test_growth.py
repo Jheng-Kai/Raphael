@@ -186,6 +186,7 @@ async def test_first_bots_cli_brain_handles_background_consolidation_without_api
     memory, _ = growing
     memory._settings.set("agent_model", "cli:codex")
     memory._keys.set("api-key-that-must-not-be-used")
+    memory.own(0).limit = 2200
     memory.own(0).edit_document("\n\n".join(f"Build {n} of the project uses the amber pipeline here" for n in range(40)), None)
     calls = []
 

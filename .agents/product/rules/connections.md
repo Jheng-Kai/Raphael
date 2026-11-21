@@ -2,6 +2,14 @@
 
 Connected apps and accounts, the store, skills, shared templates and the cards that set them up. Part of [the product rules](../RULES.md); a rule's ID is unique across every file.
 
+## A limit stops only what would harm the app
+
+A plugin with more than 40 skills was refused, and the shell cut its download after a few seconds.
+
+| ID | Date | Rule | Check | Severity | Evidence |
+|---|---|---|---|---|---|
+| R-LIMIT-01 | | There is no count cap on skills, plugins, commands, templates, servers or members of a room, and no minimum key length beyond a non-empty key. | pytest | hard | core/tests/members/test_skill_plugins.py::test_a_plugin_imports_one_hundred_twenty_skills; core/tests/computer/test_computer_keys.py::test_a_one_character_key_is_saved_through_the_secret_card; core/tests/integrations/test_config.py::test_more_than_twenty_servers_can_be_saved_and_reopened; core/tests/members/test_rooms.py::test_a_room_can_include_more_than_six_members |
+| R-LIMIT-02 | | The shell waits 10 minutes for a core call by default and one hour for imports and installs. A download has one hour overall and a request stalls only after 120 seconds without data. | pytest, cargo test | hard | core/tests/members/test_skill_plugins.py::test_downloads_allow_a_full_hour_and_wait_two_minutes_for_data; app/src-tauri/src/core_process.rs::timeouts_follow_the_method; app/src-tauri/src/core_process.rs::startup_and_skill_methods_have_dedicated_waits |
 ## A card the owner leaves behind can be closed, and closes itself when they move on
 
 The n8n form still asked for its address and token hours after the owner said they would connect it tomorrow.

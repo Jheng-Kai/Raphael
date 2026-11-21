@@ -102,7 +102,7 @@ DEFAULTS: dict[str, Any] = {
     "local_commands_mode": "ask",
     "local_commands_seen": False,
     "computer_vm_idle_minutes": 15,
-    # The most one background task may spend, in US$ (one of WORKER_COST_CAPS).
+    # The most one background task may spend, in US$.
     "worker_cost_cap_usd": 0.20,
     # The models the user starred in the pickers, per role (the page's names for them), in the order
     # they were added. The page shows the ones the catalog still has at the top of its list; the
@@ -155,12 +155,10 @@ ENABLED_SETTINGS = (
 # The longest address of a SearXNG taken.
 URL_MAX_CHARS = 300
 # What one background task may cost, as the settings page offers it.
-WORKER_COST_CAPS = (0.10, 0.20, 0.50, 1.00)
 _CHOICES: dict[str, tuple[Any, ...]] = {
     "computer_vm_mode": ("shared", "per-bot"),
     "local_commands_mode": ("ask", "always", "never"),
     "action_mode": ("ask", "direct", "plan", "bypass"),
-    "worker_cost_cap_usd": WORKER_COST_CAPS,
     "stt_engine": STT_ENGINES,
     "stt_local_model": tuple(entry.name for entry in LOCAL_STT_MODELS),
     "web_search_service": WEB_SEARCH_SERVICES,
@@ -195,6 +193,8 @@ _NULLABLE = ("stt_local_model",)
 
 def _allowed(key: str, value: Any) -> Any:
     """`value`, or ValueError if the key has a list of choices and `value` is not on it."""
+    if key == "worker_cost_cap_usd" and (not 0 < value < float("inf")):
+        raise ValueError("Task cost must be a positive finite number")
     if key == "routine_webhook_port" and not 0 <= value <= 65535:
         raise ValueError("Webhook port must be between 0 and 65535")
     choices = ("none", "minimal", "low", "medium", "high", "xhigh", "max") if key == "quick_effort" else _CHOICES.get(key)

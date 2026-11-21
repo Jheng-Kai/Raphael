@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 from ..bots.homes import atomic, redact_secrets
-from .capabilities import MAX_SKILLS, MAX_SKILL_BYTES, skill_metadata, skill_urls
+from .capabilities import MAX_SKILL_BYTES, skill_metadata, skill_urls
 from .skill_library import SHARED
 from .skills import skill_plugin, stored_skill_name
 from .store import MemberError
@@ -93,8 +93,8 @@ class SkillPackages:
                 "SELECT id,name FROM member_skills WHERE package_key=?", (key,))}
         taken = {r[0].casefold() for r in self.conn.execute(
             "SELECT name FROM member_skills WHERE member_id=? AND (? IS NULL OR package_key IS NOT ?)", (member, key, key))}
-        if len(taken) + len(documents) > MAX_SKILLS:
-            raise MemberError("full", "skill limit reached")
+        from .skill_names import unique_skill_name
+
         prepared = []
         for skill_source, files in documents:
             raw = files["SKILL.md"]
@@ -115,7 +115,12 @@ class SkillPackages:
             slug, desc = skill_metadata(text, writing=True, previous_name=previous_slug)
             stored = stored_skill_name(slug, skill_plugin(text, skill_source))
             if stored.casefold() in taken:
-                raise MemberError("taken", f"a skill named {slug} already exists")
+                if slug == skill_metadata(text)[0]:
+                    raise MemberError("taken", f"a skill named {slug} already exists")
+                plugin = skill_plugin(text, skill_source)
+                prefix = stored[:-len(slug)].casefold()
+                slug = unique_skill_name(slug, {name[len(prefix):] for name in taken if name.startswith(prefix)})
+                stored = stored_skill_name(slug, plugin)
             taken.add(stored.casefold())
             prepared.append((stored, desc, skill_source, {**files, "SKILL.md": text.encode()}))
         if required_skill is not None and not any(

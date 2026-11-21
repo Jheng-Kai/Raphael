@@ -20,7 +20,6 @@ import { btn, esc, ico, iconBtn } from "./ui";
 
 const FAILURES: Record<string, MessageKey> = {
   invalid: "card.keyInvalid",
-  too_short: "card.keyTooShort",
   too_long: "card.keyTooLong",
   vault: "card.keyVault",
   gone: "card.keyGone",
@@ -67,12 +66,10 @@ function actionHTML(card: SecretCard): string {
     if (card.login) return `<div class="sc-form sc-login"><label><span>${esc(t("card.loginUser"))}</span><span class="field sc-field"><input data-login-user="${esc(card.id)}" autocomplete="off" spellcheck="false"></span></label>` +
       `<label><span>${esc(t("card.loginPassword"))}</span><span class="field sc-field">${ico("lock")}<input type="password" data-secret-input="${esc(card.id)}" autocomplete="off" spellcheck="false" autocapitalize="off"></span></label>` +
       btn(esc(t("card.keySave")), "sm pri", `${on("card-save")} disabled`) + `</div>`;
-    // A program key needs six characters, said under its field while it is shorter (#281).
-    const hint = card.key ? `<p class="sc-hint" data-secret-hint hidden>${esc(t("card.keyMin"))}</p>` : "";
     return `<div class="sc-form"><label class="field sc-field">${card.key ? "" : ico("lock")}` +
       `<input type="password" data-secret-input="${esc(card.id)}" placeholder="${esc(card.login ? t("card.loginPassword") : card.platform ? t("msg.tg.tokenHint") : t("card.keyField"))}" aria-label="${esc(label)}" ` +
       `autocomplete="off" spellcheck="false" autocapitalize="off"></label>` +
-      btn(esc(t("card.keySave")), "sm pri", `${on("card-save")} disabled`) + `</div>` + hint;
+      btn(esc(t("card.keySave")), "sm pri", `${on("card-save")} disabled`) + `</div>`;
   }
   if (card.state === "saved" && card.error) return btn(esc(t("card.retry")), "sm pri", on("card-resume"));
   return "";

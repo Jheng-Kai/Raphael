@@ -36,8 +36,6 @@ export type Capability = (typeof CAPABILITIES)[number]["kind"];
 
 const capability = (kind: string): (typeof CAPABILITIES)[number] | undefined => CAPABILITIES.find((c) => c.kind === kind);
 
-/** The longest key the core takes (`services.set_key`). */
-export const SERVICE_KEY_MAX = 512;
 /** How long the dialog takes to go (connections.css: the way out of `.cs-scrim`). */
 const DIALOG_OUT_MS = 140;
 
@@ -559,7 +557,7 @@ export function createServices(host: ServicesHost): ServicesPanel {
     if (!input) return;
     const key = input.value.trim();
     input.value = "";
-    if (key === "" || key.length > SERVICE_KEY_MAX) return;
+    if (key === "") return;
     busy = service;
     redraw();
     try {

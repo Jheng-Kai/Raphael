@@ -35,7 +35,7 @@ import httpx
 from .common import ServiceError
 
 MAX_REDIRECTS = 5
-MAX_SECONDS = 10.0
+MAX_SECONDS = 60.0
 MAX_BYTES = 3 * 1024 * 1024
 PAGE_TYPES = ("text/html", "text/plain")
 PDF_TYPE = "application/pdf"

@@ -54,14 +54,14 @@ async def test_room_creation_retry_is_idempotent_and_owner_can_rename(rig, rooms
     assert rig.conn.execute("SELECT COUNT(*) FROM rooms").fetchone()[0] == 1
 
 
-async def test_all_room_paths_require_chief_distinct_members_and_two_to_six(rig, rooms):
+async def test_all_room_paths_require_the_chief_and_at_least_two_distinct_members(rig, rooms):
     ids = [(await rig.call("members.create", {"name":f"Peer {i}"}))["member"]["id"] for i in range(6)]
-    for members in ([0], ids, [0,*ids], [0,ids[0],ids[0]], [False,ids[0]]):
+    for members in ([0], ids, [0,ids[0],ids[0]], [False,ids[0]]):
         with pytest.raises(RpcError):
             await rig.call("rooms.create", {"member_ids":members})
     room = (await rig.call("rooms.create", {"member_ids":[0,ids[0]]}))["room"]
     assert room["name"] and room["member_ids"] == [0,ids[0]]
-    for members in ([0], ids, [0,*ids], [0,ids[0],ids[0]]):
+    for members in ([0], ids, [0,ids[0],ids[0]]):
         with pytest.raises(RpcError):
             await rig.call("rooms.update", {"room_id":room["id"], "member_ids":members})
     with pytest.raises(sqlite3.IntegrityError):

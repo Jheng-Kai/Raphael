@@ -72,14 +72,14 @@ async def test_a_task_searches_the_past_turns(rig, conn):
 
 async def test_a_task_edits_its_file_and_the_model_is_told_how_full_it_is(rig, memory):
     result = await rig.tool("memory_update", {"target": "memory", "operations": [{"action": "add", "content": "The review is ready."}]})
-    assert result["ok"] and "/2,200 chars" in json.loads(result["content"])["usage"]
+    assert result["ok"] and "/100,000 chars" in json.loads(result["content"])["usage"]
     assert "The review is ready." in memory.own(0).read()
 
 
-async def test_a_full_file_tells_the_task_what_to_free(rig, memory):
+async def test_a_task_keeps_writing_after_the_old_memory_limit(rig, memory):
     memory.own(0).edit_document("x" * 2190, None)
     result = await rig.tool("memory_update", {"target": "memory", "operations": [{"action": "add", "content": "One more fact about the review."}]})
-    assert not result["ok"] and result["kind"] == "full" and "would exceed the limit by" in result["instruction"]
+    assert result["ok"] and "One more fact about the review." in memory.own(0).read()
 
 
 async def test_retrieved_external_history_marks_what_a_task_writes(rig, memory, conn):
@@ -129,9 +129,9 @@ def test_the_task_is_shown_the_files_as_data():
     from raphael_core.memory.store import MemorySnapshot
 
     moment = {"date": "2026-10-23", "time": "09:00", "weekday": "Friday", "utc_offset": "UTC+08:00"}
-    files = MemorySnapshot(shared="主人叫 Sam", own="Amy 負責設計。", shared_usage="1% — 7/1,375 chars", own_usage="1% — 7/2,200 chars")
+    files = MemorySnapshot(shared="主人叫 Sam", own="Amy 負責設計。", shared_usage="1% — 7/100,000 chars", own_usage="1% — 7/100,000 chars")
     _, user = _prompts("整理 Amy 的設計稿", moment, [], RunLimits(), memory_snapshot=files)
-    assert '<own_memory file="MEMORY.md" usage="1% — 7/2,200 chars">\nAmy 負責設計。\n</own_memory>' in user
+    assert '<own_memory file="MEMORY.md" usage="1% — 7/100,000 chars">\nAmy 負責設計。\n</own_memory>' in user
     assert user.index("<shared_memory") < user.index("<own_memory") < user.index("<task>")
     _, without = _prompts("x", moment, [], RunLimits())
     assert "shared_memory" not in without

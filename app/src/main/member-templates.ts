@@ -7,7 +7,7 @@ import { openDialog } from "./member-dialogs";
 import { linkedText } from "./message-content";
 import { parseTemplateFile, templateErrorText } from "./template-file";
 import { slimeFaceHTML } from "./slime";
-import { NAME_MAX, cleanName, routineSentenceHTML } from "./members";
+import { cleanName, routineSentenceHTML } from "./members";
 import { SERVICE_ICONS } from "./service-icons";
 import type { Member, NewMember, Routine } from "./types";
 import { appMarkHTML } from "./connector-card";
@@ -162,7 +162,7 @@ export async function previewTemplate(raw: unknown, avatar: string, create: (mem
     // The name to give it, then what it holds, in the dialog itself rather than inside another card. The
     // name is at most what the core takes of any member (NAME_MAX), and what the owner typed stays when adding it is refused.
     const body = (): string => `<div class="tpl-import" data-member-template>` +
-      `<label class="mp-label">${esc(t("members.name"))}<input class="mb-fin" data-template-name maxlength="${NAME_MAX}" value="${esc(made?.name || typed)}"${made ? " disabled" : ""}${empty ? ' aria-invalid="true"' : ""}></label>` +
+      `<label class="mp-label">${esc(t("members.name"))}<input class="mb-fin" data-template-name value="${esc(made?.name || typed)}"${made ? " disabled" : ""}${empty ? ' aria-invalid="true"' : ""}></label>` +
       (empty ? `<p class="note field-error" role="alert">${esc(t("members.nameEmpty"))}</p>` : "") +
       templateContents({...template, connections: []}, findings, {thirdParty: true}) +
       (template.connections.length ? `<section class="tpl-sec"><h4>${esc(t("template.connections"))}</h4>${template.connections.map(app => cardHTML({title: connectionName(app), status: "done", statusText: t("conn.signedIn"), hideStatus: !connected.has(app), attrs: ` data-template-connection="${esc(app)}" data-connected="${connected.has(app)}"`, body: made ? t("template.connectHelp") : undefined, actions: btn(esc(t(connected.has(app) ? "conn.signedIn" : "template.connect")), "sm", ` data-dlg="connect" data-app="${esc(app)}"${!made || busy || connected.has(app) ? " disabled" : ""}`)})).join("")}</section>` : "") + `</div>`;

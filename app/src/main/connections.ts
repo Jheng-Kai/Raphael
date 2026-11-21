@@ -26,7 +26,7 @@ import type { AuditEntry, ConnectionGroup, ConnectionTool, MainEvent, NewConnect
 import { DISCONNECT_CONFIRM_MS, type Choice, actionRow, btn, closeMenu, esc, fieldHTML, ico, iconBtn, iconButton, openPopover, row, sel, st, tg, toaster } from "./ui";
 
 /** How long the next sign-in waits for the one it cancelled to give its account back before it gives up beginning. */
-const LOGIN_STOP_MS = 15_000;
+const LOGIN_STOP_MS = 600_000;
 
 /** `t` for a key that is chosen at run time (its placeholders, if any, are none). */
 const tr = t as unknown as (key: MessageKey) => string;

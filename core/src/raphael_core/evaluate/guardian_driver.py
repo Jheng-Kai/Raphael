@@ -18,6 +18,7 @@ from uuid import uuid4
 
 from ..agent.cli.discovery import brain_ref
 from ..agent.device import NullActions
+from ..agent.policy import CONFIRM_TIMEOUT_S
 from ..agent.service import RESUMED
 from ..brain.settings import SettingsStore
 from ..integrations.client import CallOutcome, McpConnector, McpFailure
@@ -1263,7 +1264,7 @@ class RpcDriver:
         # ... until the owner is away too long: a yes that comes late sends nothing.
         confirmations = self.app.agent._confirmations
         clock = confirmations._clock
-        confirmations._clock = lambda: clock() + 31
+        confirmations._clock = lambda: clock() + CONFIRM_TIMEOUT_S + 1
         try:
             late = await self.app.call("agent.confirm", {"id": card["id"], "approved": True, "digest": card["digest"]})
         finally:

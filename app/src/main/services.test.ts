@@ -692,14 +692,12 @@ describe("what the section does", () => {
     expect(titleOf(host)).toBe("Brave"); // it stays on the page of the service
   });
 
-  test("Enter in the field sends it too; nothing typed, or more than the core takes, sends nothing", async () => {
+  test("Enter in the field sends it too; nothing typed sends nothing, and a key of any length is sent", async () => {
     const { host } = await opened("search");
     press(host, '[data-k="svc-svc:brave"]');
     api.servicesSetKey.mockResolvedValue({ ok: true });
     const field = (): HTMLInputElement => host.querySelector<HTMLInputElement>(`#${keyInputId("brave")}`)!;
     field().value = "   ";
-    field().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-    field().value = "k".repeat(513);
     field().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     expect(api.servicesSetKey).not.toHaveBeenCalled();
     expect(field().value).toBe(""); // even a key that is not sent leaves the field

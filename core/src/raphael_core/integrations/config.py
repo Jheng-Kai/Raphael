@@ -33,8 +33,6 @@ TRANSPORTS = ("stdio", "http")
 # How a server is signed in to: none (headers, if any), or a login in the browser (OAuth).
 AUTH_KINDS = ("none", "oauth", "device")
 
-MAX_SERVERS = 20
-MAX_NAME_CHARS = 40
 MAX_COMMAND_CHARS = 260
 MAX_ARGS = 32
 MAX_ARG_CHARS = 500
@@ -69,7 +67,7 @@ _ONE_SCHEMA = frozenset(("items", "additionalProperties", "additionalItems", "un
                          "else", "contains", "propertyNames"))
 
 
-def _current_size(limit: int) -> int:
+def _current_size(limit: int | None) -> int:
     return DEFAULT_RESULT_SIZE if limit == _OLD_DEFAULT_RESULT_SIZE else limit
 
 
@@ -221,14 +219,14 @@ class NewServer:
     headers: dict[str, str]
 
 
-def _text(params: dict, name: str, *, limit: int) -> str:
+def _text(params: dict, name: str, *, limit: int | None) -> str:
     value = params.get(name)
     if not isinstance(value, str):
         raise ValueError(f"{name} must be text")
     value = value.strip()
     if not value:
         raise ValueError(f"{name} must not be empty")
-    if len(value) > limit:
+    if limit is not None and len(value) > limit:
         raise ValueError(f"{name} must be at most {limit} characters")
     if _CONTROL.search(value):
         raise ValueError(f"{name} must not contain control characters")
@@ -290,7 +288,7 @@ def parse_new_server(params: dict, taken_names: list[str]) -> NewServer:
     """The server the user asked to add. ValueError, saying what is wrong, when they gave
     something a server cannot be made from (it never names a value: a value may be a secret).
     `taken_names` are the names of the servers there are."""
-    name = _text(params, "name", limit=MAX_NAME_CHARS)
+    name = _text(params, "name", limit=None)
     if any(name.casefold() == other.casefold() for other in taken_names):
         raise ValueError("A plugin with this name exists already")
     transport = params.get("transport")
@@ -475,8 +473,6 @@ class ConfigStore:
 
     def add(self, server: ServerConfig) -> None:
         servers = self._load()
-        if len(servers) >= MAX_SERVERS:
-            raise ValueError(f"At most {MAX_SERVERS} plugins can be connected")
         servers.append(server)
         self.save()
 

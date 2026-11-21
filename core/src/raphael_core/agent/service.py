@@ -79,8 +79,7 @@ The services of the tools (`raphael_core.services`, chosen by the owner) come in
 search uses the search service chosen: "openrouter" as before, or a search engine whose results the
 answer words (its step says which, in `detail`, never what was searched). An http(s) address in the
 owner's own request (typed, spoken, or sent from a chat app) is read with the page reader chosen
-before an answer, a discussion or small talk is worded, at most MAX_REQUEST_URLS of them; an
-address that a tool returned is never read by the fast tier. And `agent.ask` takes `attachments`,
+before an answer, a discussion or small talk is worded, and addresses returned by tools stay out of the fast tier. And `agent.ask` takes `attachments`,
 the images and PDFs the owner handed over (`services.attachments`, `from_wire`; a list that cannot
 be taken fails the request as a bad request, with its kind in the error's data): the images go to
 the vision model together, with the question, and each PDF is read by the PDF service chosen; what
@@ -301,9 +300,6 @@ CANCELLED_MEMORY_S = 60.0
 HISTORY_MAX_LIMIT = 200
 # The search of the conversation page: how many turns it gives, by default and at most, and the
 # longest words it takes.
-HISTORY_SEARCH_DEFAULT_LIMIT = 50
-HISTORY_SEARCH_MAX_LIMIT = 100
-HISTORY_QUERY_MAX_CHARS = 200
 # The words the owner typed that the arrow keys of a composer walk back through: how many, by default and at most.
 HISTORY_SENT_DEFAULT_LIMIT = 50
 HISTORY_SENT_MAX_LIMIT = 200
@@ -357,7 +353,6 @@ _FULL_CONTEXT_ROUTES = ("discuss",)
 PLUGIN_IDLE_S = 120.0
 _DAY_MS = 86_400_000
 # The most addresses of the owner's request that are read before the answer.
-MAX_REQUEST_URLS = 2
 # How much of what a call is given a permission card says, in characters (the overlay's question keeps its short line).
 CARD_PREVIEW_CHARS = 240
 # What a request of only files asks, in the language of the conversation (`_chat_language`), never the interface's: it
@@ -3365,13 +3360,13 @@ class AgentService:
 
     async def _inputs(self, ask: _Ask, ledger: Ledger) -> list[ToolResult]:
         """What the request brings besides its words, read before the reply is worded: the pages
-        of the http(s) addresses in the owner's own words (at most MAX_REQUEST_URLS), and the files
+        of the http(s) addresses in the owner's own words, and the files
         handed over (the images together, in one call of the vision model, and each PDF), each a
         step of the request. Never an address a tool returned. Without the services, no page is
         read (and a file is answered as unreadable)."""
         jobs = []
         if self._tools.services is not None and ask.speaker.uses("web_read"):
-            for url in urls_in(ask.text, MAX_REQUEST_URLS):
+            for url in urls_in(ask.text):
                 jobs.append(self._tool(ask, self._tools.web_read(url), "web_read"))
         files = list(enumerate(ask.attachments, start=1))
         images = [(number, attachment) for number, attachment in files if attachment.is_image]
@@ -4549,7 +4544,7 @@ class AgentService:
             return Resumed(True)
         asking = self._inflight.get(origin.session_id)
         if asking is not None and not asking.done():  # the turn that asked ends first
-            await asyncio.wait({asking}, timeout=30.0)
+            await asyncio.wait({asking}, timeout=600.0)
         if failure is not None and (self._history.get(turn_id) is None or self._was_cancelled(origin.session_id)):
             return Resumed(True)
         saved_keys = [card for card in keys if card.state in ("saved", "resuming", "resumed")]
@@ -5483,7 +5478,7 @@ class AgentService:
         prefix = PREFIXES[language].question
         # An administrative change the owner is asked about in a conversation waits for them (R-AG-MGMT-04), as a local
         # command does: it is never held in a tool call of a CLI brain (the turn is in before it is asked), and the
-        # overlay's spoken yes or no keeps its thirty seconds.
+        # overlay's spoken yes or no keeps its ten-minute deadline.
         untimed = local or self._owner_decides_at_leisure(ask, action)
         turn_id = self._record(ask, route, prefix, "" if local else text, "confirm", None, ledger)
         pending = self._confirmations.open(ask.session_id, turn_id, action, tier, language,
@@ -6159,9 +6154,9 @@ class AgentService:
 
     async def _messages_search(self, params: dict) -> dict:
         query = _str(params, "query").strip()
-        if not query or len(query) > HISTORY_QUERY_MAX_CHARS:
-            raise invalid_params("query must be 1 to 200 characters")
-        turns = self._history.search(query, limit=50, most=50, member_id=None)
+        if not query:
+            raise invalid_params("query must not be empty")
+        turns = self._history.search(query, limit=None, member_id=None)
         views = self._turn_views(turns)
         for view in views:
             conversation = self.conversations.get(view["conversation_id"])
@@ -6175,8 +6170,8 @@ class AgentService:
     async def _conversations_list(self, params: dict) -> dict:
         member = self._member_param(params)
         query = params.get("query", "")
-        if not isinstance(query, str) or len(query) > 200:
-            raise invalid_params("query must be at most 200 characters")
+        if not isinstance(query, str):
+            raise invalid_params("query must be text")
         return {"conversations": self.conversations.list(member, query.strip())}
 
     async def _delete_turn(self, turn: Turn) -> bool:
@@ -6370,20 +6365,15 @@ class AgentService:
             conversation_id=conversation_id, member_id=member_id) if questions is not None else []}
 
     async def _history_search(self, params: dict) -> dict:
-        """The answered turns of the thread of `member_id` (Raphael's by default) that hold the
-        words of `query`, best first, in the shape of `agent.history.list`. `limit` is clamped into
-        1..100 (50 by default)."""
+        """Search the member's thread, best first, with an optional caller-selected result count."""
         member_id = self._member_param(params)
         query = _str(params, "query").strip()
-        if not query or len(query) > HISTORY_QUERY_MAX_CHARS:
-            raise invalid_params(f"query must be 1 to {HISTORY_QUERY_MAX_CHARS} characters")
+        if not query:
+            raise invalid_params("query must not be empty")
         limit = _opt_int(params, "limit")
-        if limit is None:
-            limit = HISTORY_SEARCH_DEFAULT_LIMIT
-        limit = min(max(limit, 1), HISTORY_SEARCH_MAX_LIMIT)
         self._expire(self._confirmations.sweep())
         turns = self._history.search(
-            query, limit=limit, most=HISTORY_SEARCH_MAX_LIMIT, member_id=member_id,
+            query, limit=limit, most=None, member_id=member_id,
             conversation_id=self.conversations.resolve(member_id, _opt_int(params, "conversation_id")),
         )
         return {"turns": self._turn_views(turns)}

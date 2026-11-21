@@ -3,7 +3,6 @@ import pytest
 
 from raphael_core.brain.settings import SettingsStore
 from raphael_core.members.service import OWNER_ABSENCE_MS
-from raphael_core.protocol import RpcError
 
 
 async def make(rig, member=0):
@@ -15,11 +14,10 @@ def history(conn, routine, now, count):
         conn.executemany("INSERT INTO routine_runs(routine_id,started,status) VALUES(?,?,'done')", [(routine, now)] * count)
 
 
-async def test_exact_fifty_routines_per_member_including_paused(rig):
-    for _ in range(50):
+async def test_a_member_can_keep_more_than_fifty_routines(rig):
+    for _ in range(51):
         await make(rig)
-    with pytest.raises(RpcError, match="50 routines"):
-        await make(rig)
+    assert len(rig.service.store.routines(0)) == 51
     other = (await rig.call("members.create", {"name": "Other"}))["member"]["id"]
     assert (await make(rig, other))["member_id"] == other
 

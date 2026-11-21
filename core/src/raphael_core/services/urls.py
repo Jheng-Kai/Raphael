@@ -18,8 +18,6 @@ import httpx
 
 _URL = re.compile(r"""https?://[^\s<>"'`「」『』【】《》〈〉（）［］｛｝，。、；：！？]+""", re.IGNORECASE)
 _TRAILING = ".,;:!?'\"*_~"
-# The most addresses taken from one text.
-MAX_URLS = 50
 _PAIRS = {")": "(", "]": "[", "}": "{"}
 
 
@@ -35,17 +33,17 @@ def _trimmed(url: str) -> str:
     return url
 
 
-def urls_in(text: str, limit: int = MAX_URLS) -> list[str]:
+def urls_in(text: str, limit: int | None = None) -> list[str]:
     """The http and https addresses written in `text`, each once, in order, at most `limit`."""
-    found: list[str] = []
+    found: dict[str, None] = {}
     for match in _URL.finditer(text):
         url = _trimmed(match.group(0))
         if "://" not in url or url.endswith("://") or url in found:
             continue
-        found.append(url)
-        if len(found) >= limit:
+        found[url] = None
+        if limit is not None and len(found) >= limit:
             break
-    return found
+    return list(found)
 
 
 def page_key(url: str) -> str | None:
@@ -81,7 +79,7 @@ class SeenUrls:
 
     def add_from(self, text: str) -> None:
         """Every address written in `text`."""
-        for url in urls_in(text, limit=10_000):
+        for url in urls_in(text):
             self.add(url)
 
     def seen(self, url: str) -> bool:
