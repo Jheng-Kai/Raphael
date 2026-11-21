@@ -27,7 +27,8 @@ from .owner_files import WRITES as OWNER_FILE_WRITES, place as owner_place
 
 LOCAL_PREFIX = "mcp:local/"
 BACKGROUND_WAIT_S = UNATTENDED_WAIT_S
-FOREGROUND_TIMEOUT_S = 120
+DEFAULT_TIMEOUT_S = 600
+MAX_TIMEOUT_S = 3600
 # Who runs the command, whether it read outside content, whether its chat can show a card, its session, and whether the
 # owner's screen is in reach (a quick question alone, `permissions.owner_screen`).
 # (owner of the call, external content seen, owner present, session, may show on the owner's screen, member id)
@@ -62,22 +63,22 @@ _DANGEROUS, _SECRET, _OPAQUE = safety_patterns(sys.platform)
 
 # Held to 400 characters: it is listed in every turn and task.
 EXEC_DESCRIPTION = (
-    "Run one hidden command on the owner's Windows PC for CPU, memory, disk, processes, network, files and logs; outside "
+    "Run a hidden command on the owner's Windows PC for CPU, memory, disk, processes, network, files and logs; outside "
     "a quick question one that opens a program, a page or a file on its screen is refused. For Raphael itself use "
-    "self_check first. Approval is enforced; foreground max 120 s. No interactive programs. Long claude -p or codex exec "
+    "self_check first. Approval is required; 600 s default, up to 3600 s. No interactive apps. Long claude -p or codex exec "
     "work uses background; it spends the owner's subscription."
 )
 if sys.platform == "darwin":
     EXEC_DESCRIPTION = (
         "Run one hidden zsh command on the owner's Mac for CPU, memory, disk, processes, network, files and logs; outside "
         "a quick question one that opens an app, a page or a file on its screen is refused. For Raphael itself use "
-        "self_check first. Approval is enforced; foreground max 120 s. No interactive programs. Long claude -p or codex "
+        "self_check first. Approval is required; 600 s default, up to 3600 s. No interactive apps. Long claude -p or codex "
         "exec work uses background; it spends the owner's subscription."
     )
 EXEC_SCHEMA = {"type": "object", "properties": {
     "command": {"type": "string", "minLength": 1, "maxLength": 16000},
     "cwd": {"type": "string", "minLength": 1, "description": "Working folder; defaults to the owner's home."},
-    "timeout_seconds": {"type": "number", "exclusiveMinimum": 0, "maximum": 86400},
+    "timeout_seconds": {"type": "number", "exclusiveMinimum": 0, "maximum": MAX_TIMEOUT_S},
     "background": {"type": "boolean", "description": "Return a job ID for a long command; local_job reads output or stops it."},
 }, "required": ["command"], "additionalProperties": False}
 JOB_SCHEMA = {"type": "object", "properties": {"job_id": {"type": "string"}, "stop": {"type": "boolean"}}, "required": ["job_id"], "additionalProperties": False}
@@ -292,9 +293,7 @@ class LocalTools:
                 return PluginResult(False, "disabled", "Local commands are disabled in this test environment.")
             if approver == "none" or self.requires_approval(arguments) and approver != "user":
                 return result
-            timeout = arguments.get("timeout_seconds", 60 if arguments.get("background") else FOREGROUND_TIMEOUT_S)
-            if not arguments.get("background"):
-                timeout = min(timeout, FOREGROUND_TIMEOUT_S)
+            timeout = min(arguments.get("timeout_seconds", DEFAULT_TIMEOUT_S), MAX_TIMEOUT_S)
             params = {"cwd": arguments.get("cwd") or command_folder(self.settings, member), "timeout_seconds": timeout}
             if arguments.get("background"):
                 if len(self.jobs) >= 64:

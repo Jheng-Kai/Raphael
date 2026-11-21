@@ -1,6 +1,8 @@
 import "./card.css";
+import { core } from "./api";
+import { describeError } from "./format";
 import { t } from "./i18n";
-import { btn, esc, ico, iconBtn } from "./ui";
+import { btn, esc, ico, iconBtn, toaster } from "./ui";
 import { linkedText } from "./message-content";
 import type { AgentTurn, OwnerQuestion } from "./types";
 
@@ -35,14 +37,20 @@ export const failedClose = (): string => iconBtn("x", t("common.close"), " data-
 
 /**
  * The question a member's background work waits on while the owner deals with this card (`card_id`): the card a connect, key or
- * draft tool showed. Its way out is the card's own × (`ownerCloseHTML`), never a 取消 of its own under the card.
+ * draft tool showed. Its way out is the card's own × (`cardCloseHTML`), never a 取消 of its own under the card.
  */
 export const waitingOwnerQuestion = (turn: AgentTurn, cardId: string): OwnerQuestion | undefined =>
   turn.owner_questions?.find(question => question.state === "asked" && question.card_id === cardId && question.kind !== "ask_owner" && question.kind !== "show_page");
 
-/** The × at a card's top right that tells the waiting work the owner will not do it (owner-questions.ts answers the question with nothing). */
-export const ownerCloseHTML = (question: OwnerQuestion): string =>
-  iconBtn("x", t("common.cancel"), ` data-owner-answer="cancel" data-owner-question="${esc(question.id)}"`, "card-close");
+/**
+ * The way out of a card that waits for the owner: the × at its top right, every kind of card alike (R-CARD-CLOSE-02). `attrs`
+ * carry what declining that card does (deny a permission, stop the computer hand-back, close a connect or key card in the
+ * core); the card's own decline button is gone from its footer, so the × is its only one.
+ */
+export const waitingCloseHTML = (attrs: string, label = t("common.cancel")): string => iconBtn("x", label, attrs, "card-close");
+
+/** The × that closes a connect or key card in the core (`integrations.card_close`), which also answers the work waiting on it. */
+export const cardCloseHTML = (id: string): string => waitingCloseHTML(` data-card-close="${esc(id)}"`);
 
 export function cardHTML(card: CardOptions): string {
   const actions = card.actions ?? "";
@@ -62,6 +70,14 @@ export function cardDisclosureHTML(id: string, content: string, label = t("cards
 }
 
 if (typeof document !== "undefined") document.addEventListener("click", event => {
+  // A connect or key card the owner closes: the core settles it (and the work waiting on it) and the turn is drawn again.
+  const closing = (event.target as Element).closest<HTMLButtonElement>("[data-card-close]");
+  if (closing) {
+    if (closing.disabled) return;
+    closing.disabled = true;
+    void core("integrations.card_close", { id: closing.dataset.cardClose }).catch(error => { closing.disabled = false; toaster.info(describeError(error)); });
+    return;
+  }
   const close = (event.target as Element).closest("[data-card-failed-close]");
   if (close) { const card = close.closest<HTMLElement>(".conversation-card"); if (card) card.hidden = true; return; }
   const button = (event.target as Element).closest<HTMLButtonElement>("[data-card-disclosure]");

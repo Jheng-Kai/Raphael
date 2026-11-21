@@ -102,7 +102,7 @@ use super::tree::{self, Caps, Entry, Props, UiNode};
 use super::{Action, Desktop, Direction, Failure, Step, Ticket, WindowInfo, breaks_lines};
 
 /// How long one job of the desktop's thread may take before its caller gives up on it.
-const JOB_TIMEOUT: Duration = Duration::from_secs(12);
+const JOB_TIMEOUT: Duration = Duration::from_secs(60);
 /// How long a look may walk the tree.
 const LOOK_BUDGET: Duration = Duration::from_secs(4);
 /// UI Automation's own bounds on one call into an app.

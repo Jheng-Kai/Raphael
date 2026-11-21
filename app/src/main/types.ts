@@ -632,7 +632,8 @@ export interface ComputerCard {
   reason: string;
   /** The app of the window to use (never a title); empty when there was none. */
   app: string;
-  state: "control" | "returning" | "done" | "stopped" | "expired" | "failed";
+  /** `cancelled`: closed by the owner's ×, or left behind when they wrote again (`error: "skipped"`). */
+  state: "control" | "returning" | "done" | "stopped" | "expired" | "failed" | "cancelled";
   error: string | null;
   /** "still" when the owner gave the computer back and what they took over was not done. */
   note: string | null;

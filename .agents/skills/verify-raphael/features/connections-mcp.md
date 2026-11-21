@@ -1,5 +1,16 @@
 # Connections and MCP
 
+## Closing cards by choice or by sending a message
+
+R-CARD-CLOSE-01, R-CARD-CLOSE-02 and R-CARD-SKIP-01. The owner's close RPC dismisses a waiting connect, credential or computer
+handback card and settles a linked background question with a null answer. A new message dismisses earlier waiting cards in the
+same private conversation as skipped. The receiving member is told once per closed card. The core checks use the production RPC
+and capture the actual next-turn prompt with a fake model. In the window every waiting card's way out is the × at its top right
+(card.ts `waitingCloseHTML`, `cardCloseHTML`), and no decline button stands in a footer. Scenes: `local-permission-card`,
+`card-permission-waiting`, `card-permission-deny`, `connector-authorizing`, `connector-server`, `chat-connect-gmail`,
+`connector-google-authorizing`, `chat-handback`, `member-draft`, `email-draft-handed-off`, `chat-setup-cards`,
+`chat-pairing-allowed`, `computer-key-card-work`, `room-question-card` and `card-message-deny`.
+
 ## A connector's argument shape, and a failure repeated
 
 Core behaviour only (R-TOOL-01, R-TOOL-02; `tests/background/test_argument_shape.py`). A call of a

@@ -50,7 +50,7 @@ export function createMessageSearch(host: HTMLElement, options: { face(member: n
       const mine = ++epoch;
       clearTimeout(timer); hits = []; error = "";
       if (query) timer = setTimeout(() => {
-        void api.core<{ turns: Hit[] }>("messages.search", { query, limit: 50 }).then(result => {
+        void api.core<{ turns: Hit[] }>("messages.search", { query }).then(result => {
           if (mine === epoch) { hits = result.turns; render(); }
         }).catch(reason => { if (mine === epoch) { error = describeError(reason); render(); } });
       }, 200);

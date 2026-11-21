@@ -87,6 +87,10 @@ describe("a secret card", () => {
     expect(visible(secretCardHTML(card({ state: "failed", error: "unheard-of" })))).toContain(t("card.keyVault"));
     expect(visible(secretCardHTML(card({ state: "expired" })))).toContain("已逾時，這項工作沒有繼續");
     expect(visible(secretCardHTML(card({ state: "cancelled" })))).toContain("已停止，這項工作沒有繼續");
+    // Left behind when the owner wrote again: its name and a quiet pill, no form.
+    const skipped = secretCardHTML(card({ state: "cancelled", error: "skipped" }));
+    expect(visible(skipped)).toBe("Notion 未回答");
+    expect(skipped).not.toContain("<input");
   });
 
   test("speaks only the window's language", () => {
@@ -222,12 +226,10 @@ describe("a key for a program in a member's computer", () => {
     expect(html).not.toContain("連結");
   });
 
-  test("a key card has no choice of its own under its field, only the least length waiting hidden (#281)", () => {
+  test("a key card has no choice of its own under its field and no least length (R-LIMIT-01)", () => {
     document.body.innerHTML = secretCardHTML(key());
     expect(document.querySelector("[data-secret-plain], .sc-plain, input[type=checkbox]")).toBeNull();
-    expect(document.querySelector<HTMLElement>("[data-secret-hint]")?.hidden).toBe(true);
-    expect(document.querySelector(".sc-form [data-secret-hint]")).toBeNull();  // under the row of the field and Save, not in it
-    expect(visible(secretCardHTML(key({ state: "failed", error: "too_short" })))).toContain(t("card.keyTooShort"));
+    expect(document.querySelector("[data-secret-hint]")).toBeNull();
     // The title says what the key is for, and the purpose is no second line under it.
     expect(visible(secretCardHTML(key())).split("價格腳本要呼叫模型").length).toBe(2);
   });
@@ -258,7 +260,8 @@ describe("a key for a program in a member's computer", () => {
     const work = turn({ question: "", route: "worker", source: "worker", status: "running", peer_id: 1, member_id: 1, secrets: [key()], owner_questions: [waiting] });
     document.body.innerHTML = turnHTML(work, emptyTimelineState(), false, LOOK);
     const card = document.querySelector('[data-secret-card="k1"]')!;
-    expect(card.querySelector('.card-head > .btn.icon[data-owner-answer="cancel"]')?.getAttribute("data-owner-question")).toBe("q-key");
+    // The × closes the card in the core, which answers the waiting question too: one press, both settled.
+    expect(card.querySelector('.card-head > .btn.icon[data-card-close]')?.getAttribute("data-card-close")).toBe("k1");
     expect(document.querySelector(".cc-actions")).toBeNull();
     expect([...document.querySelectorAll("button")].filter(button => !button.closest(".conversation-card, .message-actions") && button.textContent?.trim())).toEqual([]);
     // A question whose card this turn does not draw still keeps its own way out.

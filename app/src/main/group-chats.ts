@@ -121,7 +121,7 @@ export async function openNewGroupChat(opts: { onCreated?(room: Room): void } = 
       actions: { secondary: btn(esc(t("common.cancel")), "", ' data-dlg="cancel"'), primary: { label: esc(t("rooms.create")), attrs: ' data-dlg="create"' } }, canClose: () => !saving,
       onEnter: () => void save(), onAct(act, target) {
         if (act === "cancel") dialog.close();
-        else if (act === "member") { const id=Number(target.dataset.member);if(id===primaryIdOf(list))return;if(selected.has(id))selected.delete(id);else {if(selected.size>=6){toaster.info(t("rooms.memberCount"));return;}selected.add(id);}target.setAttribute("aria-pressed",String(selected.has(id)));target.querySelector("[data-check]")!.innerHTML=selected.has(id)?ico("check"):"";if(responder===`member:${id}`&&!selected.has(id))responder="auto";dialog.el.querySelector('[data-responder]')!.innerHTML=sel(responderChoices(list,selected),responder,t("rooms.responder"),' data-dlg="responder"');if(!nameEdited)nameInput.value=list.members.filter(m=>selected.has(m.id)).map(m=>m.name).join(" · ").slice(0,24); }
+        else if (act === "member") { const id=Number(target.dataset.member);if(id===primaryIdOf(list))return;if(selected.has(id))selected.delete(id);else selected.add(id);target.setAttribute("aria-pressed",String(selected.has(id)));target.querySelector("[data-check]")!.innerHTML=selected.has(id)?ico("check"):"";if(responder===`member:${id}`&&!selected.has(id))responder="auto";dialog.el.querySelector('[data-responder]')!.innerHTML=sel(responderChoices(list,selected),responder,t("rooms.responder"),' data-dlg="responder"');if(!nameEdited)nameInput.value=list.members.filter(m=>selected.has(m.id)).map(m=>m.name).join(" · ").slice(0,24); }
         else if (act === "create") void save();
         else if (act === "group") openMenu(target, choices, group, value => { group = value; target.querySelector("span")!.textContent = choices.find(c => c.value === value)!.label; });
         else if (act === "responder") { const choices=responderChoices(list,selected);openMenu(target,choices,responder,value=>{responder=value;target.querySelector('span')!.textContent=choices.find(c=>c.value===value)!.label;}); }
@@ -134,7 +134,7 @@ export async function openNewGroupChat(opts: { onCreated?(room: Room): void } = 
       if (saving) return;
       const name = dialog.el.querySelector<HTMLInputElement>("#room-name")!.value.trim();
       const member_ids = [...selected];
-      if (!name || member_ids.length<2 || member_ids.length>6) { toaster.info(t("rooms.memberCount")); return; }
+      if (!name || member_ids.length<2) { toaster.info(t("rooms.memberCount")); return; }
       saving = true; dialog.el.querySelector<HTMLButtonElement>('[data-dlg="create"]')!.disabled = true;
       try { const { room } = await api.roomsCreate({ name, member_ids, group_id: group === "none" ? null : Number(group), default_responder:responder, request_id:creationRequestId }); knownRooms?.add(room.id); dialog.close(); changed(); opts.onCreated?.(room); void openGroupChat(room.id); }
       catch (error) { toaster.info(describeError(error)); }
@@ -168,7 +168,7 @@ async function editRoomMembers(room: Room, saved: () => void): Promise<void> {
         else if (act === "member") {
           const id = Number(target.dataset.member);
           if(id===primaryIdOf(list))return;
-          if (selected.has(id)) selected.delete(id); else { if(selected.size>=6){toaster.info(t("rooms.memberCount"));return;}selected.add(id); }
+          if (selected.has(id)) selected.delete(id); else selected.add(id);
           target.setAttribute("aria-pressed", String(selected.has(id)));
           target.querySelector('[data-check]')!.innerHTML = selected.has(id) ? ico("check") : "";
           if(responder===`member:${id}`&&!selected.has(id))responder="auto";
@@ -176,7 +176,7 @@ async function editRoomMembers(room: Room, saved: () => void): Promise<void> {
         } else if (act === "responder") {
           const choices=responderChoices(list,selected);openMenu(target,choices,responder,value=>{responder=value;target.querySelector('span')!.textContent=choices.find(c=>c.value===value)!.label;});
         } else if (act === "save" && !saving) {
-          if (selected.size<2||selected.size>6) { toaster.info(t("rooms.memberCount")); return; }
+          if (selected.size<2) { toaster.info(t("rooms.memberCount")); return; }
           saving = true;
           void api.roomsUpdate(room.id, { member_ids: [...selected], default_responder:responder }).then(() => {
             dialog.close(); changed(); saved();

@@ -17,6 +17,7 @@ import os
 import re
 import secrets
 import sqlite3
+import stat
 import time
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -105,8 +106,8 @@ def engine_start_allowed():
 
 
 def _withheld(values, text):
-    from .logins import redact_values
-    return redact_values(values, text)
+    from .logins import redact_values, redactable_program_key
+    return redact_values((value for value in values if redactable_program_key(value)), text)
 
 
 class VmError(Exception):
@@ -470,6 +471,8 @@ class LocalVm:
         self.sizes = {}  # host -> (when, (memory GiB, CPUs)) the shared computer takes there (`machine_size`)
         self.fitted = {}  # (host, computer) -> the size its limits were last seen or made at
         self.scratch_cleaned = {}  # (host, computer) -> when its old scratch was last cleared
+        self.scratch_failed = set()
+        self.browser_locks = {}
         # Raised whenever this core starts or stops a computer, so a remembered state is never trusted across it.
         self.changes = 0
         self.status_engines = {}
@@ -689,17 +692,47 @@ class LocalVm:
     async def seat_browser(self, target):
         from .seat_view import rectangle
         from .carry import before_browser
-        from .seat_browser import LAUNCH
+        from .seat_browser import LAUNCH, RECOVER_STALE_LOCKS, STALE_LOCK_EXIT, stale_locks
         await before_browser(self, target)
-        result = await self.run_for(target, exec_args(target, ["/usr/bin/python3", "-", "raphael-seat-browser",
-            *map(str, rectangle(target.screen, target.screens))], interactive=True),
-            input=LAUNCH.encode("utf-8"), timeout=self.seat_browser_s)
+        command = ["raphael-seat-browser", *map(str, rectangle(target.screen, target.screens))]
+
+        async def launch(*options):
+            return await self.run_for(target, exec_args(target, ["/usr/bin/python3", "-", *options, *command], interactive=True),
+                                      input=LAUNCH.encode("utf-8"), timeout=self.seat_browser_s)
+
+        async with self.browser_locks.setdefault(target.physical, asyncio.Lock()):
+            result = await launch() if target.remote else await launch(RECOVER_STALE_LOCKS)
+            if not target.remote and result.code == STALE_LOCK_EXIT and not result.truncated:
+                if names := stale_locks(result.stderr):
+                    self._clear_browser_locks(target, names)
+                    result = await launch()
         match = re.fullmatch(r"pid=([1-9][0-9]*) window_id=([1-9][0-9]*)", result.stdout.strip())
         if result.code or result.truncated or not match:
             # Keep diagnostics in the core log; the member gets fixed recovery guidance.
             logger.info("raphael-seat-browser failed (exit %s): %s", result.code, (result.stderr or "").strip()[-2300:])
             raise VmError("browser_window_missing")
         return dict(zip(("pid", "window_id"), map(int, match.groups())))
+
+    def _clear_browser_locks(self, target, names):
+        from .seat_browser import PROFILE_PARTS
+        try:
+            self.validate_storage(target)
+            folder = Path(target.workspace)
+            for part in PROFILE_PARTS:
+                folder /= part
+                info = folder.lstat()
+                if (not stat.S_ISDIR(info.st_mode)
+                        or getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT):
+                    return
+        except (OSError, VmError):
+            return
+        for name in names:
+            try:
+                (folder / name).unlink()
+            except FileNotFoundError:
+                pass
+            except OSError as error:
+                logger.info("The host could not remove browser lock %s: %s", name, error.strerror)
 
     async def release_member_seats(self, member):
         async with self.seat_lock:
@@ -1615,10 +1648,14 @@ class LocalVm:
             result = await self.run_for(target, scratch_args(target), timeout=60)
             if result.code == 0:
                 self.scratch_cleaned[key] = self.clock()
+                self.scratch_failed.discard(key)
                 return
-        except (OSError, TimeoutError, VmError):
-            pass
-        logger.warning("A computer's old scratch could not be cleared")
+            detail = (result.stderr or "").strip()[-500:] or f"exit {result.code}"
+        except (OSError, TimeoutError, VmError) as error:
+            detail = str(error) or type(error).__name__
+        if key not in self.scratch_failed:
+            self.scratch_failed.add(key)
+            logger.warning("A computer's old scratch could not be cleared: %s", detail)
 
     async def _wallpaper(self, target):
         """Put the desktop's picture up: once for each run of a computer, and again when the owner's picture changed.
@@ -1855,7 +1892,7 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
         in the background it is started detached and this returns at once with a job whose log and exit code the
         caller reads with later commands. A job is ended by its own timeout, at most `BACKGROUND_S`.
         `keys` (variable name -> value) are given to this one command's environment, never to its command line, and
-        what it prints has them replaced by a placeholder before anything is returned."""
+        what it prints has keys of at least six characters replaced by a placeholder before anything is returned."""
         if not isinstance(command, str) or not command.strip() or len(command) > 16_000:
             raise VmError("bad_arguments")
         if keys is not None and (not isinstance(keys, dict) or not keys or not all(

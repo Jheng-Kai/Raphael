@@ -25,15 +25,13 @@ KEYED_SERVICES = (
     "deepinfra", "groq", "fal", "krea", "meta-ai", "firecrawl-selfhosted", "browserbase", "browserbase-project",
     "browser-use", "modal-token-id", "modal-token-secret", "daytona", "vercel",
 )
-# The longest key taken: far more than any service issues, and well within a credential.
-MAX_KEY_CHARS = 512
 # The target name of each key's credential is this, a space and the service.
 CREDENTIAL_PREFIX = "Raphael service"
 
 
 class KeyRefused(ValueError):
     """A key that cannot be stored. `kind` says why: "service" (no such keyed service), "blank",
-    "long" or "characters" (a control character, a space inside: no service issues such a key,
+    or "characters" (a control character, a space inside: no service issues such a key,
     and one would break the header it is sent in). Never what the key was."""
 
     def __init__(self, kind: str) -> None:
@@ -46,8 +44,6 @@ def checked_key(key: str) -> str:
     text = key.strip()
     if not text:
         raise KeyRefused("blank")
-    if len(text) > MAX_KEY_CHARS:
-        raise KeyRefused("long")
     if any(char.isspace() or not char.isprintable() for char in text):
         raise KeyRefused("characters")
     return text

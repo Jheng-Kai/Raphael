@@ -185,6 +185,7 @@ async def test_memory_work_keeps_the_selected_brain(memory, history, model, conn
         model.replies.append({"actions": []})
         await memory.reflect()
     else:
+        memory.own(0).limit = 2200
         memory.own(0).edit_document("\n\n".join(f"Fact number {n} about the owner and their projects" for n in range(45)), None)
         model.replies.append({"actions": []})
         await memory.consolidate()
@@ -312,6 +313,7 @@ async def test_repeated_memory_failures_back_off_and_success_resets_the_pause(me
 
 async def test_failed_reflection_does_not_launch_consolidation_in_the_same_pass(memory, history, model, clock):
     add_turn(history, "A synthetic question")
+    memory.own(0).limit = 2200
     memory.own(0).edit_document("\n\n".join(f"Durable environment fact {n} uses a separate amber pipeline" for n in range(40)), None)
     clock.advance(seconds=1)
     model.replies.append(OpenRouterError(503, "server", "private provider text"))
@@ -380,6 +382,7 @@ async def test_daily_journal_prune_runs_for_a_small_document_without_a_model(mem
 
 
 async def test_the_consolidation_of_a_full_file_runs_daily(memory, model, clock):
+    memory.own(0).limit = 2200
     memory.own(0).edit_document("\n\n".join(f"Fact number {n} about the owner and their projects" for n in range(45)), None)
     assert memory.consolidation_due() is True
     model.replies.append({"actions": []})

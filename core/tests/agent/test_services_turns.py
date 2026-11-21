@@ -159,7 +159,7 @@ async def test_the_openrouter_search_is_as_it_was_and_says_so_in_its_step(servic
     client.texts.append(found("明天有雨。"))
     client.replies.append(spoken("告", "明天有雨。"))
     await rig.ask("明天會下雨嗎")
-    assert client.text_calls[0]["plugins"] == [{"id": "web", "max_results": 3}]
+    assert client.text_calls[0]["plugins"] == [{"id": "web"}]
     (turn,) = await rig.turns()
     assert steps(turn, "web_search")[0]["detail"] == "openrouter"
 
@@ -167,7 +167,7 @@ async def test_the_openrouter_search_is_as_it_was_and_says_so_in_its_step(servic
 # --- the addresses in the owner's words ---------------------------------------------------------
 
 
-async def test_the_pages_of_the_owners_own_addresses_are_read_first_two_at_most(
+async def test_every_page_in_the_owners_request_is_read_first(
     services_rig, client, web
 ):
     rig = services_rig
@@ -176,12 +176,13 @@ async def test_the_pages_of_the_owners_own_addresses_are_read_first_two_at_most(
     await rig.ask(
         "幫我看 https://page.example/one 和 https://page.example/two 還有 https://page.example/three"
     )
-    assert web.hosts() == ["page.example", "page.example"]
+    assert web.hosts() == ["page.example"] * 3
     user = client.json_calls[0]["user"]
-    assert "The text of /one." in user and "The text of /two." in user and "/three." not in user
+    assert "The text of /one." in user and "The text of /two." in user and "The text of /three." in user
     assert "web_read [data from the web or from a file" in user
     (turn,) = await rig.turns()
     assert [(s["outcome"], s["detail"]) for s in steps(turn, "web_read")] == [
+        ("ok", "builtin"),
         ("ok", "builtin"),
         ("ok", "builtin"),
     ]

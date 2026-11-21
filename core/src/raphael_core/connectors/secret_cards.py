@@ -219,6 +219,8 @@ class SecretCards:
     (`missing_secrets`, `fill_secret`); `resume`, set by the agent, carries on the task of a turn once
     its cards are saved and answers whether it went on (`.ok`) and what it did (`.made`)."""
 
+    waiting_states = ("pending", "failed")
+
     def __init__(self, conn: sqlite3.Connection, integrations, *, notify: Callable[[str, dict], None] | None = None,
                  now_ms: Callable[[], int] = wall_clock_ms, wait_ms: int = CARD_WAIT_MS) -> None:
         self.store = SecretCardStore(conn, now_ms, wait_ms)
@@ -324,6 +326,14 @@ class SecretCards:
     def cards_of(self, turn_id: int) -> list[SecretCard]:
         return self.store.for_turns([turn_id]).get(turn_id, [])
 
+    def close(self, card: SecretCard, *, error: str = "") -> SecretCard | None:
+        if card.state not in self.waiting_states:
+            return None
+        moved = self.store.move(card.id, "cancelled", error=error)
+        if moved is not None:
+            self._changed(moved)
+        return moved
+
     def cancel_session(self, session_id: str, *, turn_id: int | None = None) -> None:
         """Stop for the session of a turn whose cards still wait: they never resume."""
         for card in self.store.cancel_session(session_id, turn_id=turn_id):
@@ -398,9 +408,9 @@ class SecretCards:
                 error = "too_long"
             except NoSuchSecret:
                 error = "gone"
-            except ValueError as failure:
+            except ValueError:
                 # Which rule a key broke, so the card says it (#281): a secret key has at least six characters.
-                error = "too_short" if str(failure) == "key_too_short" else "invalid"
+                error = "invalid"
             except Exception as exc:  # the vault: its message could hold anything
                 logger.warning("A card's secret could not be kept: %s", type(exc).__name__)
                 error = "vault"

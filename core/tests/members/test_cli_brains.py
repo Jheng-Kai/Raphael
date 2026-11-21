@@ -741,7 +741,7 @@ for line in sys.stdin:
     assert start["method"] == "thread/start" and resume["method"] == "thread/resume"
     assert "Japanese" in first["user"] and "Korean" not in first["user"]
     assert "Korean" in second["user"] and "The owner studies Japanese" not in second["user"] and "The owner is called Sam" in second["user"]
-    assert "/2,200 chars" in second["user"]
+    assert "/100,000 chars" in second["user"]
     # The rules are the instructions'; the files themselves are never there, where a resumed thread would keep them.
     assert "memory_update" in start["system"] and "The owner studies" not in start["system"]
 
@@ -766,7 +766,7 @@ async def test_paused_cli_cancels_on_stop_but_finishes_after_expiry_and_closes_m
     if stop == "cancel":
         await rig.call("agent.cancel", {"session_id": "s1"})
     else:
-        rig.clock.now += 31
+        rig.clock.now += 601
         if stop == "expired":
             await rig.confirm(pending["confirm"]["id"])
         async with asyncio.timeout(5):
@@ -808,7 +808,7 @@ print(json.dumps({"type":"result","subtype":"success","result":"Finished after t
     [active] = rig.service._cli_loops
     pid = active.driver.child.process.pid
     try:
-        rig.clock.now += 31
+        rig.clock.now += 601
         rig.service._expire(rig.service._confirmations.sweep())
         if stop:
             await rig.call("agent.cancel", {"session_id": "s1"})

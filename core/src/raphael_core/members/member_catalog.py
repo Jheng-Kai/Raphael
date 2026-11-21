@@ -19,6 +19,7 @@ from ..bots.homes import atomic
 from ..protocol import INVALID_PARAMS, RpcError, invalid_params
 from ..slime_ids import current_id
 from .templates import MAX_BYTES, checked, findings
+from .capabilities import DOWNLOAD_SECONDS, DOWNLOAD_STALL_SECONDS
 
 DEFAULT_URL = "https://raw.githubusercontent.com/Jheng-Kai/SlimesStore/main"
 # The catalogue's public keys, raw Ed25519 as 64 hex characters, one or two (a second while a key is rotated). The private half
@@ -41,7 +42,7 @@ def schema(value):
         raise ValueError("Unsupported catalogue")
     if type(value["sequence"]) is not int or value["sequence"] < 1:
         raise ValueError("Invalid catalogue sequence")
-    if not isinstance(value["entries"], list) or len(value["entries"]) > 1000 or not isinstance(value["revoked"], list) or len(value["revoked"]) > 2000:
+    if not isinstance(value["entries"], list) or not isinstance(value["revoked"], list) or len(value["revoked"]) > 2000:
         raise ValueError("Invalid catalogue lists")
     slug = lambda s: isinstance(s, str) and re.fullmatch(r"[a-z0-9][a-z0-9-]{0,79}", s)
     if any(not slug(s) for s in value["revoked"]) or len(set(value["revoked"])) != len(value["revoked"]):
@@ -61,10 +62,10 @@ def schema(value):
             raise ValueError("Invalid catalogue category or avatar")
         if entry["package"] != f"packages/{entry['id']}/member.raphael-member" or not isinstance(entry["sha256"], str) or not re.fullmatch(r"[a-f0-9]{64}", entry["sha256"]):
             raise ValueError("Invalid package path or digest")
-        for key, cap in (("skills", 40), ("routines", 50)):
-            if type(entry[key]) is not int or not 0 <= entry[key] <= cap:
+        for key in ("skills", "routines"):
+            if type(entry[key]) is not int or entry[key] < 0:
                 raise ValueError("Invalid package counts")
-        if not isinstance(entry["connections"], list) or len(entry["connections"]) > 30 or any(not isinstance(c, str) or not c.strip() or len(c) > 100 for c in entry["connections"]):
+        if not isinstance(entry["connections"], list) or any(not isinstance(c, str) or not c.strip() or len(c) > 100 for c in entry["connections"]):
             raise ValueError("Invalid connections")
         for key in ("created", "updated"):
             if not isinstance(entry[key], str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", entry[key]):
@@ -132,7 +133,7 @@ class Catalog:
             return self.view(False)
         async with self.lock:
             try:
-                async with asyncio.timeout(10), httpx.AsyncClient(transport=self.transport, timeout=10, follow_redirects=False) as http:
+                async with asyncio.timeout(DOWNLOAD_SECONDS), httpx.AsyncClient(transport=self.transport, timeout=DOWNLOAD_STALL_SECONDS, follow_redirects=False) as http:
                     headers = {"If-None-Match": self.cached["etag"]} if self.cached and self.cached.get("etag") else {}
                     raw, etag = await self.read(http, "index.json", INDEX_CAP, headers)
                     if raw is None:
@@ -184,7 +185,7 @@ class Catalog:
             raise invalid_params("Template unavailable or revoked")
         path = self.folder / f"{entry['sha256'][:32]}.json"
         try:
-            async with asyncio.timeout(10), httpx.AsyncClient(transport=self.transport, timeout=10, follow_redirects=False) as http:
+            async with asyncio.timeout(DOWNLOAD_SECONDS), httpx.AsyncClient(transport=self.transport, timeout=DOWNLOAD_STALL_SECONDS, follow_redirects=False) as http:
                 raw, _ = await self.read(http, entry["package"], MAX_BYTES)
         except (httpx.HTTPError, TimeoutError):
             try:

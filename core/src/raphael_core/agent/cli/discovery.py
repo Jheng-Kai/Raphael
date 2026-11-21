@@ -27,7 +27,7 @@ def keychain_stamp(service=CLAUDE_KEYCHAIN_SERVICE):
     alone (never its secret, `-g`/`-w` are not given) and asks the owner nothing."""
     try:
         found = subprocess.run(["/usr/bin/security", "find-generic-password", "-s", service],
-                               capture_output=True, text=True, errors="replace", timeout=3)
+                               capture_output=True, text=True, errors="replace", timeout=15)
     except (OSError, subprocess.SubprocessError):
         return None
     if found.returncode != 0:

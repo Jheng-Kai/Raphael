@@ -55,6 +55,10 @@ export const WORKER_COST_CAPS: Choice[] = [
   { value: "0.2", label: "US$0.20" },
   { value: "0.5", label: "US$0.50" },
   { value: "1", label: "US$1.00" },
+  { value: "2", label: "US$2.00" },
+  { value: "5", label: "US$5.00" },
+  { value: "10", label: "US$10.00" },
+  { value: "20", label: "US$20.00" },
 ];
 export const SIZES: Choice[] = [
   { value: "120", get label() { return t("settings.017"); }, get desc() { return t("settings.018"); } },

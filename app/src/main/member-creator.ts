@@ -6,7 +6,7 @@ import "./member-creator.css";
 import { t } from "./i18n";
 import { type Dialog, openDialog } from "./member-dialogs";
 import { bindNavLayer } from "./nav-layers";
-import { NAME_MAX, cleanName, isMemberNameTaken } from "./members";
+import { cleanName, isMemberNameTaken } from "./members";
 import { defaultSlimeAvatar, pickSlime, slimeFaceHTML } from "./slime";
 import { selectSlimeTab, slimeKeys, slimePickerHTML } from "./slime-tabs";
 import type { Member, NewMember } from "./types";
@@ -35,7 +35,7 @@ export function openMemberCreator(o: MemberCreatorOptions): Dialog {
     title: t("members.newMember"),
     cls: "cr-dialog mb-confirm",
     body: `<div class="cr-face"></div>` +
-      `<input id="mb-new-name" class="mb-fin cr-name" maxlength="${NAME_MAX}" placeholder="${esc(t("members.name"))}" aria-label="${esc(t("members.name"))}" autocomplete="off" spellcheck="false">` +
+      `<input id="mb-new-name" class="mb-fin cr-name" placeholder="${esc(t("members.name"))}" aria-label="${esc(t("members.name"))}" autocomplete="off" spellcheck="false">` +
       // A name another member has is refused here, in the owner's words, and goes when the name is typed again.
       `<p class="note field-error" role="alert" hidden></p>` +
       // The picker's rules belong to `.menu.mb-avpop` (slime.css); the dialog stands it in its body unchanged and takes off only the popover's chrome.

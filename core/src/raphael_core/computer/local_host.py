@@ -37,14 +37,17 @@ class Output:
         self.total += len(chunk)
         missing = self.limit // 2 - len(self.head)
         self.head += chunk[:max(0, missing)]
-        self.tail = (self.tail + chunk[max(0, missing):])[-(self.limit // 2):]
+        tail_limit = self.limit - self.limit // 2
+        self.tail = (self.tail + chunk[max(0, missing):])[-tail_limit:] if tail_limit else b""
 
     @property
     def truncated(self):
         return self.total > self.limit
 
     def text(self):
-        return (self.head + (b"\n... output truncated ...\n" if self.truncated else b"") + self.tail).decode("utf-8", errors="replace")
+        omitted = self.total - len(self.head) - len(self.tail)
+        marker = f"\n[... {omitted:,} output bytes omitted ...]\n".encode() if omitted else b""
+        return (self.head + marker + self.tail).decode("utf-8", errors="replace")
 
 
 class CommandChild(Child):
@@ -58,7 +61,7 @@ class CommandChild(Child):
 
 
 class LocalHost:
-    async def execute(self, command, *, cwd=None, timeout_seconds=60, output=None, errors=None):
+    async def execute(self, command, *, cwd=None, timeout_seconds=600, output=None, errors=None):
         from ..background.host import worker_environment
         if PLATFORM == "darwin":
             argv = ["/bin/zsh", "-f", "-c", ZSH_RUNNER]

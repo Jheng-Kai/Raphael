@@ -44,12 +44,15 @@ const QUESTION: BackgroundQuestion = {
 const visible = (html: string): string => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 
 describe("the card of a question of the background", () => {
-  test("it is Raphael's face and plain question, then 否 outlined and 是 gold, both real buttons", () => {
+  test("it is Raphael's face and plain question, 允許一次 gold, and declining is the × at its top right", () => {
     const html = backgroundQuestionHTML(QUESTION);
     expect(html).toContain('class="conversation-card connector-card bgq-card"');
     expect(html).toContain('data-bgq-card="q-1"');
-    expect(visible(html)).toBe("需要你的允許 需要你允許 是否讓「Notes」執行「note」（買牛奶）？ 允許一次 拒絕");
-    expect(html).toContain('<button type="button" class="btn sm bgq-no" data-bgq="no" data-task="7" data-id="q-1">拒絕</button>');
+    expect(visible(html)).toBe("需要你的允許 需要你允許 是否讓「Notes」執行「note」（買牛奶）？ 允許一次");
+    const deny = new DOMParser().parseFromString(html, "text/html").querySelector<HTMLButtonElement>(".card-head .card-close")!;
+    expect(deny.dataset).toMatchObject({ bgq: "no", task: "7", id: "q-1" });
+    expect(deny.getAttribute("aria-label")).toBe("拒絕");
+    expect(html).not.toContain(">拒絕</button>");
     expect(html).toContain('<button type="button" class="btn sm pri bgq-yes" data-bgq="yes" data-task="7" data-id="q-1">允許一次</button>');
     expect(html).not.toContain("/brand/app-emblem-light-64.webp");
   });
@@ -57,7 +60,7 @@ describe("the card of a question of the background", () => {
   test("in a member's thread it is that member's: their face and name, plain words, no 《》 and no emblem", () => {
     const face = '<span class="av mb-av mb-av-letter bgq-face" aria-hidden="true">小</span>';
     const html = backgroundQuestionHTML({ ...QUESTION, member_id: 3, prefix: "問" }, false, { face, name: "小幫手" });
-    expect(visible(html)).toBe("小幫手 想要執行動作 需要你允許 是否讓「Notes」執行「note」（買牛奶）？ 允許一次 拒絕");
+    expect(visible(html)).toBe("小幫手 想要執行動作 需要你允許 是否讓「Notes」執行「note」（買牛奶）？ 允許一次");
     expect(html).not.toContain("《");
     expect(html).not.toContain("/brand/");
     expect(html).toContain("小幫手 想要執行動作");
@@ -80,7 +83,7 @@ describe("the card of a question of the background", () => {
   test("one language at a time", () => {
     setLocale("en");
     expect(visible(backgroundQuestionHTML({ ...QUESTION, prefix: "Question", text: "Allow Notes to run note?" }))).toBe(
-      "Needs your permission Approval needed Allow Notes to run note? Allow once Deny",
+      "Needs your permission Approval needed Allow Notes to run note? Allow once",
     );
   });
 });
@@ -139,11 +142,11 @@ describe("the cards of a thread", () => {
     expect(toaster.info).not.toHaveBeenCalled();
   });
 
-  test("否 answers no", async () => {
+  test("its × answers no", async () => {
     answered = "denied";
     const cards = make();
     await cards.load();
-    cards.element.querySelector<HTMLButtonElement>(".bgq-no")!.click();
+    cards.element.querySelector<HTMLButtonElement>('.card-close[data-bgq="no"]')!.click();
     await vi.waitFor(() => expect(api.core).toHaveBeenCalledWith("background.answer", { task_id: 7, question_id: "q-1", approved: false }));
     expect(toaster.info).not.toHaveBeenCalled();
   });

@@ -3,7 +3,7 @@
 // as a turn of its own that opens with one centred line naming the apps it waited for.
 // Every state and public catalog logo comes from the core; no authorization URL or token is kept here.
 
-import { cardDisclosureHTML, cardHTML, cardPromptText, ownerCloseHTML, waitingOwnerQuestion } from "./card";
+import { cardCloseHTML, cardDisclosureHTML, cardHTML, cardPromptText, waitingOwnerQuestion } from "./card";
 import { NAME, eventLineHTML } from "./event-line";
 import { asksGoogleClient, googleSetupHTML } from "./google-card";
 import { getLocale, t } from "./i18n";
@@ -116,14 +116,12 @@ function actionHTML(card: ConnectorCard): string {
   // The owner's own Google: the form (steps, two fields and 連接 Google) is in the card itself; with a Client ID kept, one button signs in.
   if (card.needs === "own_google") {
     if (asksGoogleClient(card)) return "";
-    if (card.state === "pending" || card.state === "failed" || card.state === "cancelled") {
+    if (card.state === "pending" || card.state === "failed") {
       return card.state === "failed" && !retryOf(card) ? "" : btn(esc(plain(card.reconnect ? "card.googleReconnect" : "card.googleConnect")), "sm pri", on("card-connect"));
     }
   }
   switch (card.state) {
     case "pending": return connect(card.reconnect ? "card.reconnect" : "card.connect");
-    case "authorizing": return btn(esc(plain("card.cancel")), "sm", on("card-cancel"));
-    case "cancelled": return connect("card.connect");
     case "failed":
       // Where retrying cannot help the card says what to put right and offers nothing else: the settings for the key, the form for what it asks.
       if (fixOf(card) === "settings") return btn(esc(plain("card.openConnections")), "sm", on("card-settings"));
@@ -132,10 +130,11 @@ function actionHTML(card: ConnectorCard): string {
   }
 }
 
-/** `waiting`: the background question this card belongs to, whose way out is the card's × (`ownerCloseHTML`). */
+/** `waiting`: the background question this card belongs to, whose way out is the card's × (`cardCloseHTML`), which answers it too. */
 export function connectorCardHTML(card: ConnectorCard, waiting?: OwnerQuestion): string {
   const state = cardStateText(card);
   const connected = card.state === "connected";
+  const closed = card.state === "cancelled";
   // The card's words already say what is missing: its note is then only the repair, not the sentence again (R-UI-02).
   const note = card.missing ? (missingText(card.missing).trim() === state.trim() ? missingRepairHTML(card.missing) : missingHTML(card.missing)) : "";
   // What could not be named keeps its short technical reason, folded: never on the card's face.
@@ -146,11 +145,14 @@ export function connectorCardHTML(card: ConnectorCard, waiting?: OwnerQuestion):
   return cardHTML({
     title: asking && ["pending", "failed", "cancelled"].includes(card.state) ? t("cards.connect", { p0: card.name }) : card.name, mark: google ? appMarkHTML("Google", undefined, "google") : appMarkHTML(card.app, card.logo),
     status: connected ? "done" : card.state === "failed" ? "failed" : card.state === "expired" || card.state === "cancelled" ? "ready" : "waiting",
-    statusText: connected ? t("cards.connected") : card.state === "authorizing" ? t("card.authorizing") : asking && card.state === "pending" ? cardPromptText("key") : card.state === "pending" ? cardPromptText("connect") : card.state === "expired" ? t("cards.expired") : card.state === "cancelled" ? t("cards.cancelled") : undefined,
-    body: state || t("cards.connectWhy"),
-    content: note + reason + (asksGoogleClient(card) ? googleSetupHTML(card) : asksMore(card) && ["pending", "failed", "cancelled"].includes(card.state) ? setupSlotHTML(card) : ""),
-    actions: connected ? btn(`${ico("check")}${esc(t("cards.connected"))}`, "sm", " disabled") : actionHTML(card),
-    ...(waiting ? { close: ownerCloseHTML(waiting), statusInHeading: true } : {}),
+    statusText: connected ? t("cards.connected") : card.state === "authorizing" ? t("card.authorizing") : asking && card.state === "pending" ? cardPromptText("key") : card.state === "pending" ? cardPromptText("connect") : card.state === "expired" ? t("cards.expired") : card.state === "cancelled" ? t(card.error === "skipped" ? "ownerQuestion.left" : "cards.cancelled") : undefined,
+    // Closed by its × or left behind when the owner wrote again, a card is its title and pill alone: no form, no button.
+    // A sign-in under way says so in its pill beside the title; the same words again under it would only repeat it.
+    body: closed || card.state === "authorizing" ? undefined : state || t("cards.connectWhy"),
+    content: closed ? "" : note + reason + (asksGoogleClient(card) ? googleSetupHTML(card) : asksMore(card) && ["pending", "failed"].includes(card.state) ? setupSlotHTML(card) : ""),
+    actions: connected ? btn(`${ico("check")}${esc(t("cards.connected"))}`, "sm", " disabled") : closed ? "" : actionHTML(card),
+    // Every card that waits closes with its ×; closing it in the core also answers background work waiting on it.
+    ...(waiting || ["pending", "failed", "authorizing"].includes(card.state) ? { close: cardCloseHTML(card.id), statusInHeading: true } : {}),
     attrs: ` data-connector="${esc(card.id)}" data-card-state="${esc(card.state)}"`,
   });
 }

@@ -425,23 +425,24 @@ class Conversation:
 
     # --- what the model reads ----------------------------------------------------------------------
 
-    def _read(self) -> list[Turn]:
+    def _read(self, *, omit_cards=()) -> list[Turn]:
         """Every turn of the thread, oldest first, whatever its status."""
-        return self._history.after(0, member_id=self.member_id, conversation_id=self._conversation_id(), exchanges=True)
+        return self._history.after(0, member_id=self.member_id, conversation_id=self._conversation_id(),
+                                   exchanges=True, omit_cards=omit_cards)
 
     def _worked(self, turns: list[Turn]) -> list[Turn]:
         """`turns`, each one that did not finish told what it already did (only the turns that are
         read: a long conversation may hold many failed ones, with many steps)."""
         return self._history.with_work(turns, self.changes)
 
-    def context(self, *, context_window: int | None = None) -> Context:
+    def context(self, *, context_window: int | None = None, omit_cards=()) -> Context:
         """Full history below the effective trigger; opening and protected recent turns otherwise.
 
         Reading context never folds, saves state or emits change notifications.
         """
         try:
             summary = self.summary()
-            answered = [turn for turn in self._read() if is_readable(turn)]
+            answered = [turn for turn in self._read(omit_cards=omit_cards) if is_readable(turn)]
             start = answered[:KEEP_START_TURNS]
             tail = [turn for turn in answered[KEEP_START_TURNS:] if (turn.id or 0) > summary.through_turn_id]
             self._worked(start + tail)

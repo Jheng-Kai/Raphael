@@ -114,8 +114,8 @@ class SlackChannel(PairedHistory):
         await receive(self, self.poll, deliver)
 
     async def send(self, chat, text):
-        for start in range(0, len(text), 3500):
-            part = text[start:start + 3500]
+        for start in range(0, len(text), 40000):
+            part = text[start:start + 40000]
             await send_through_rate_limits(lambda: self.api("chat.postMessage", channel=chat, text=part,
                 unfurl_links=False, unfurl_media=False), asyncio.sleep)
 

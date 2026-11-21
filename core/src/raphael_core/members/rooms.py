@@ -193,7 +193,7 @@ class RoomsService:
         room["member_ids"] = self._ids(room)
         room["roles"] = json.loads(room["roles"]) if isinstance(room.get("roles"), str) else room.get("roles", {})
         room.pop("meeting_pending", None)
-        if not room["is_team"] and (self._members.primary_id() not in room["member_ids"] or not 2 <= len(room["member_ids"]) <= 6):
+        if not room["is_team"] and (self._members.primary_id() not in room["member_ids"] or len(room["member_ids"]) < 2):
             room["membership_state"] = "needs_adjustment"
         if room["default_responder"].startswith("member:") and int(room["default_responder"][7:]) not in room["member_ids"]:
             room["default_responder"] = "auto"
@@ -201,9 +201,9 @@ class RoomsService:
 
     def _validated_ids(self, ids, *, team=False):
         if (not isinstance(ids, list) or any(type(i) is not int or not self._members.member_exists(i) for i in ids)
-                or len(set(ids)) != len(ids) or (not team and (self._members.primary_id() not in ids or not 2 <= len(ids) <= 6))
-                or (team and len(ids) > 101)):
-            raise invalid_params("ordinary rooms require the chief and 2 to 6 distinct members")
+                or len(set(ids)) != len(ids)
+                or (not team and (self._members.primary_id() not in ids or len(ids) < 2))):
+            raise invalid_params("ordinary rooms require the chief and at least 2 distinct members")
         return ids
 
     def _thread(self, room, thread_id=None):

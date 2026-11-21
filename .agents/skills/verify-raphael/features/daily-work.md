@@ -22,8 +22,8 @@ See [Conversation](conversation.md#calm-conversations) for R-UI-101/R-CLI-07 and
   such as the composer, has the focus, because none of them types anything;
   Alt+Up/Down stay with the text and the combinations a field uses itself
   (Ctrl+A, C, V, X, Z, Y, Enter, arrows) are never taken.
-- R-ROUTINE-01: A member, including Raphael, has at most 50 routines, enabled or
-  paused. Every trigger shares admission: 300 runs per rolling hour across the
+- R-ROUTINE-01: A member, including Raphael, can keep any number of routines.
+  Every trigger shares admission: 300 runs per rolling hour across the
   team, 200 for one member. Persisted bounded admission receipts survive deletion
   and restart; historical run rows also count. A limited scheduled slot retries
   after one minute without changing last_run. Event receipts remain pending and

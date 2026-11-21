@@ -134,7 +134,7 @@ class Driver:
         try:
             await self.child.send({"jsonrpc": "2.0", "id": identifier, "method": "turn/steer",
                                    "params": {"threadId": thread, "input": [{"type": "text", "text": text}], "expectedTurnId": turn}})
-            return await asyncio.wait_for(future, 10)
+            return await asyncio.wait_for(future, 60)
         except (OSError, TimeoutError, RuntimeError):
             return False
         finally:

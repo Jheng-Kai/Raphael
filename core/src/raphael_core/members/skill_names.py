@@ -1,14 +1,13 @@
 """One naming contract for newly written or imported member skill documents."""
 
 import re
+import unicodedata
 
 
 SKILL_NAME_RULE = (
-    "name must be an English slug such as taichung-weather "
-    "(lowercase ASCII letters/digits and single hyphens, starting with a letter, at least 2 characters); "
+    "prefer an English slug such as taichung-weather; other names are normalized when saved; "
     "put the title and purpose in the owner's language in description"
 )
-_SLUG = re.compile(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*")
 # No length of its own: a third-party skill keeps its name whole. This is only what a stored name holds.
 NAME_MAX = 100
 
@@ -68,10 +67,22 @@ def similar_skill(name, description, skills):
     return None
 
 
-def validate_skill_name(name, *, previous_name=None):
-    """Keep an existing command usable; never normalize a new or changed name."""
-    if previous_name is not None and name == previous_name:
-        return
-    if not isinstance(name, str) or not 2 <= len(name) <= NAME_MAX or not _SLUG.fullmatch(name):
-        from .store import MemberError
-        raise MemberError("name", SKILL_NAME_RULE)
+def normalize_skill_name(name: str) -> str:
+    """Make a stored slash name from a skill's display name."""
+    ascii_name = unicodedata.normalize("NFKD", name).casefold().encode("ascii", "ignore").decode("ascii")
+    slug = re.sub(r"[^a-z0-9]+", "-", ascii_name).strip("-")
+    if not slug:
+        return "skill"
+    if not slug[0].isalpha() or len(slug) == 1:
+        slug = "skill-" + slug
+    return slug[:NAME_MAX].rstrip("-")
+
+
+def unique_skill_name(name: str, taken: set[str]) -> str:
+    """Choose the first free slug, fitting any numeric suffix in the stored name."""
+    candidate, number = name, 2
+    while candidate.casefold() in taken:
+        suffix = f"-{number}"
+        candidate = name[:NAME_MAX - len(suffix)].rstrip("-") + suffix
+        number += 1
+    return candidate

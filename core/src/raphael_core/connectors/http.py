@@ -8,7 +8,7 @@ from typing import Any
 import httpx
 from ..failures import classify
 
-REQUEST_TIMEOUT_S = 20.0
+REQUEST_TIMEOUT_S = 120.0
 
 
 class ConnectorFailure(Exception):

@@ -129,6 +129,17 @@ async def test_stop_pressed_just_after_done_ends_the_run_and_nothing_resumes(rig
     assert run.final is not None and run.final.kind == "stopped"
 
 
+async def test_closing_an_owner_handback_ends_the_run_and_keeps_its_cancelled_state(rig):
+    run, card = await rig.hand_over(reply(content="You have the computer."))
+    rig.events.clear()
+    assert rig.cards.close(card).state == "cancelled"
+    await rig.settle()
+    assert run.done and not run.owner_has_control
+    assert rig.state(card).state == "cancelled"
+    assert rig.resumed == []
+    assert rig.events == [("agent.turn", {"turn_id": rig.turn, "member_id": 0})]
+
+
 async def test_a_session_stop_ends_a_waiting_run_and_its_card_never_resumes(rig):
     run, card = await rig.hand_over(reply(content="不應該到這裡。"))
     assert rig.runs.stop_session("s-1")

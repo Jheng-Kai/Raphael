@@ -21,19 +21,23 @@ from .skill_plugins import PluginSets
 MAX_SKILL_BYTES = 128 * 1024
 # What `skill_read` gives of the other files in a skill's folder: text a run uses (a page template, a stylesheet, data).
 MAX_SKILL_FILE_BYTES = 256 * 1024
-SKILL_FILE_TYPES = frozenset({".html", ".htm", ".css", ".js", ".mjs", ".json", ".md", ".txt", ".svg", ".csv", ".xml", ".yaml", ".yml"})
 _SECRET_FILE = re.compile(r"secret|credential|passw|token|vault|\.env|id_rsa|\.pem$|\.key$|\.db(?:-|$)|\.sqlite", re.I)
-MAX_SKILLS = 40
-MAX_COMMANDS = 50
-_PART = re.compile(r"[A-Za-z0-9_.-]{1,100}")
+DOWNLOAD_SECONDS = 3600
+DOWNLOAD_STALL_SECONDS = 120
 _COMMAND = re.compile(r"[a-z][a-z0-9_-]{0,31}")
 # A `/name` that begins a word: the start of the message, or after a space or a line break; never inside a word, a path or an address.
 _SLASH_WORD = re.compile(r"(?<!\S)/(\S+)")
 
 
+def safe_source_part(part: str) -> bool:
+    return bool(part and part not in (".", "..") and not any(
+        char in "/\\" or ord(char) < 32 or ord(char) == 127 for char in part
+    ))
+
+
 def skill_urls(source: object) -> tuple[str, list[str]]:
     """Normalize a supported source without permitting arbitrary network destinations."""
-    if not isinstance(source, str) or len(source) > 800:
+    if not isinstance(source, str):
         raise MemberError("source", "a skill needs a GitHub repository or SKILL.md URL")
     source = source.strip()
     parts = source.split("/")
@@ -68,16 +72,20 @@ def skill_urls(source: object) -> tuple[str, list[str]]:
         if len(parts) != 2:
             raise MemberError("source", "a repository is owner/repo")
         paths = ["main/SKILL.md", "master/SKILL.md"]
-    if not all(_PART.fullmatch(part) and part not in (".", "..") for part in parts):
+    if not all(safe_source_part(part) for part in parts):
         raise MemberError("source", "invalid skill source path")
-    repo = "/".join(parts[:2])
-    return source, [f"https://raw.githubusercontent.com/{repo}/{path}" for path in paths]
+    repo = "/".join(quote(part, safe="") for part in parts[:2])
+    return source, [f"https://raw.githubusercontent.com/{repo}/{quote(path, safe='/')}" for path in paths]
 
 
 async def download_skill(source: object) -> tuple[str, str]:
+    return await _download_skill(source, asyncio.get_running_loop().time() + DOWNLOAD_SECONDS)
+
+
+async def _download_skill(source: object, deadline: float) -> tuple[str, str]:
     source, urls = skill_urls(source)
     try:
-        async with asyncio.timeout(25), httpx.AsyncClient(timeout=10, follow_redirects=False, trust_env=False) as client:
+        async with asyncio.timeout_at(deadline), httpx.AsyncClient(timeout=DOWNLOAD_STALL_SECONDS, follow_redirects=False, trust_env=False) as client:
             for url in urls:
                 async with client.stream("GET", url, headers={"Accept": "text/plain"}) as response:
                     if response.status_code == 404:
@@ -116,23 +124,24 @@ async def _bounded_get(client: httpx.AsyncClient, url: str, limit: int) -> bytes
 
 async def download_skills(source: object) -> list[tuple[str, str]]:
     """Import repository collections too, fetching only SKILL.md blobs and bounded tree metadata."""
+    deadline = asyncio.get_running_loop().time() + DOWNLOAD_SECONDS
     try:
-        return [await download_skill(source)]
+        return [await _download_skill(source, deadline)]
     except MemberError as error:
         if error.kind != "not_found":
             raise
     normalized, candidates = skill_urls(source)
     parsed = urlsplit(normalized)
     is_repo = "://" not in normalized
-    wanted = parsed.path.strip("/").split("/")[-1] if parsed.hostname in ("skills.sh", "www.skills.sh") else None
+    wanted = unquote(parsed.path.strip("/").split("/")[-1]) if parsed.hostname in ("skills.sh", "www.skills.sh") else None
     if not is_repo and wanted is None:
         raise MemberError("not_found", "no SKILL.md found at that source")
     repo = "/".join(urlsplit(candidates[0]).path.strip("/").split("/")[:2])
     try:
-        async with asyncio.timeout(30), httpx.AsyncClient(timeout=10, follow_redirects=False, trust_env=False) as client:
+        async with asyncio.timeout_at(deadline), httpx.AsyncClient(timeout=DOWNLOAD_STALL_SECONDS, follow_redirects=False, trust_env=False) as client:
             metadata = json.loads(await _bounded_get(client, f"https://api.github.com/repos/{repo}", 128 * 1024))
             branch = metadata.get("default_branch") if isinstance(metadata, dict) else None
-            if not isinstance(branch, str) or not all(_PART.fullmatch(part) and part not in (".", "..") for part in branch.split("/")):
+            if not isinstance(branch, str) or not all(safe_source_part(part) for part in branch.split("/")):
                 raise MemberError("source", "invalid repository branch metadata")
             tree = json.loads(await _bounded_get(client, f"https://api.github.com/repos/{repo}/git/trees/{quote(branch, safe='')}?recursive=1", 2 * 1024 * 1024))
             if not isinstance(tree, dict) or tree.get("truncated"):
@@ -143,18 +152,16 @@ async def download_skills(source: object) -> list[tuple[str, str]]:
                     continue
                 path = entry.get("path", "")
                 parts = path.split("/") if isinstance(path, str) else []
-                if not parts or parts[-1] != "SKILL.md" or not all(_PART.fullmatch(part) and part not in (".", "..") for part in parts):
+                if not parts or parts[-1] != "SKILL.md" or not all(safe_source_part(part) for part in parts):
                     continue
                 if wanted is not None and (len(parts) < 2 or parts[-2] != wanted):
                     continue
                 paths.append(path)
             if not paths:
                 raise MemberError("not_found", "no SKILL.md found in that repository")
-            if len(paths) > MAX_SKILLS:
-                raise MemberError("full", "repository has too many skills; import individual SKILL.md URLs")
             documents = []
             for path in sorted(paths):
-                url = f"https://raw.githubusercontent.com/{repo}/{branch}/{path}"
+                url = f"https://raw.githubusercontent.com/{repo}/{quote(branch, safe='/')}/{quote(path, safe='/')}"
                 raw = await _bounded_get(client, url, MAX_SKILL_BYTES)
                 text = raw.decode("utf-8-sig")
                 if not text.strip() or "\x00" in text:
@@ -188,10 +195,12 @@ def skill_metadata(text: str, *, writing=False, previous_name=None) -> tuple[str
                     field = key
                 else:
                     values[key] = value.strip("\"'")
-    from .skill_names import NAME_MAX, validate_skill_name
-    if writing:
-        validate_skill_name(values.get("name", ""), previous_name=previous_name)
-    name = _text(values.get("name", ""), "name", NAME_MAX, blank=False)
+    from .skill_names import normalize_skill_name
+    raw_name = values.get("name", "")
+    if writing and raw_name != previous_name:
+        name = normalize_skill_name(raw_name)
+    else:
+        name = raw_name or normalize_skill_name(raw_name)
     description = _text(values.get("description", ""), "description", 1000, blank=False)
     return name, description
 
@@ -239,16 +248,23 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
             skills.append({**skill, **(overrides or {}).get(skill["id"], {}), "references": self.reference_hashes(member_id, skill["id"])})
         self.homes.mirror(member_id, "skills.json", json.dumps(skills, ensure_ascii=False, indent=2) + "\n")
 
+    def _available_skill_name(self, member_id, source, text, name, *, exclude=None):
+        from .skill_names import unique_skill_name
+
+        plugin = skill_plugin(text, source).casefold()
+        taken = {skill["name"].casefold() for skill in self.owned_skills(member_id)
+                 if skill["id"] != exclude and skill.get("plugin", "").casefold() == plugin}
+        if name.casefold() in taken and name == skill_metadata(text)[0]:
+            raise MemberError("taken", "a skill with that name already exists")
+        return unique_skill_name(name, taken)
+
     def keep_skill(self, member_id: int, source: str, text: str, *, mirror=True) -> dict:
         self.check(member_id)
         if len(text.encode("utf-8")) > MAX_SKILL_BYTES:
             raise MemberError("size", "skill document is too large")
         text = redact_secrets(text)
         name, description = skill_metadata(text, writing=True)
-        if len(self.owned_skills(member_id)) >= MAX_SKILLS:
-            raise MemberError("full", "member skill limit reached")
-        if any(skill["name"].casefold() == name.casefold() and skill.get("plugin", "").casefold() == skill_plugin(text, source).casefold() for skill in self.owned_skills(member_id)):
-            raise MemberError("taken", "a skill with that name already exists")
+        name = self._available_skill_name(member_id, source, text, name)
         path = None
         try:
             with self.conn:
@@ -332,9 +348,11 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
         if not text.strip() or "\x00" in text:
             raise MemberError("skill", "skill must be a UTF-8 Markdown document")
         name, description = skill_metadata(text, writing=True, previous_name=current["name"])
+        _, previous_text = self.document(member_id, skill_id)
+        if skill_metadata(previous_text)[0] == skill_metadata(text)[0]:
+            name = current["name"]
         source = current["source"]
-        if any(other["id"] != skill_id and other["name"].casefold() == name.casefold() and other.get("plugin", "").casefold() == skill_plugin(text, source).casefold() for other in self.owned_skills(member_id)):
-            raise MemberError("taken", "a skill with that name already exists")
+        name = self._available_skill_name(member_id, source, text, name, exclude=skill_id)
         path = self._path(member_id, skill_id)
         try:
             with self.conn:
@@ -366,7 +384,7 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
         """A text file that lies in the folder of an enabled skill (a page template, a data file, a script's source) by
         its path in that folder: what a run reads to do what the skill says, through the tool meant for it
         (`skill_read`) and not through a command, which the data floor does not let touch Raphael's own folders.
-        The folder of ONE skill, text types only, no secret-looking name, no link out: the database, the vault, keys and
+        The folder of ONE skill, UTF-8 text only, no secret-looking name, no link out: the database, the vault, keys and
         `.env` are never in it, and a path that leaves it is refused. MemberError names what is wrong."""
         if not isinstance(name, str):
             raise MemberError("skill", "give the skill's exact name")
@@ -405,14 +423,12 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
 
     @staticmethod
     def _reference_parts(reference: object) -> list[str]:
-        """The parts of a path inside a skill's folder, or MemberError: relative, no `..`, a name that is not a
-        secret's and a text type."""
-        if not isinstance(reference, str) or not reference.strip() or len(reference) > 200 or "\x00" in reference:
+        """The parts of a relative path inside a skill's folder, excluding secret filenames and traversal."""
+        if not isinstance(reference, str) or not reference.strip() or "\x00" in reference:
             raise MemberError("reference", "give a path in the skill's folder, such as templates/page.html")
         parts = [part for part in reference.strip().replace("\\", "/").split("/") if part not in ("", ".")]
         if (reference.strip().startswith(("/", "\\")) or re.match(r"[A-Za-z]:", reference.strip()) or not parts
-                or any(part == ".." or ":" in part or _SECRET_FILE.search(part) for part in parts)
-                or Path(parts[-1]).suffix.casefold() not in SKILL_FILE_TYPES):
+                or any(part == ".." or ":" in part or _SECRET_FILE.search(part) for part in parts)):
             raise MemberError("reference", "that path is not a text file in the skill's own folder")
         return parts
 
@@ -435,7 +451,7 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
                     reference = self.homes.safe(self.homes.home(self.skill_owner(member_id, skill["id"])) / relative)
                     if reference.stat().st_size <= 8000 and reference.suffix in (".md", ".txt", ".json"):
                         try:
-                            content = reference.read_text(encoding="utf-8")[:8000]
+                            content = reference.read_text(encoding="utf-8")
                         except UnicodeError:
                             continue
                         text += "\n\n<reference name=" + json.dumps(relative) + ">\n" + content + "\n</reference>"
@@ -458,8 +474,6 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
             raise MemberError("template", "command template must include {input}")
         if command_id is not None and not any(command["id"] == command_id for command in commands):
             raise MemberError("not_found", "no such member command")
-        if command_id is None and len(commands) >= MAX_COMMANDS:
-            raise MemberError("full", "member command limit reached")
         try:
             with self.conn:
                 if command_id is None:

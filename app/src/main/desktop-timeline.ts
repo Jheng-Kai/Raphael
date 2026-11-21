@@ -4,7 +4,7 @@ import type { DesktopState } from "./desktop-viewer";
 import { t } from "./i18n";
 import { esc, ico } from "./ui";
 import { btn, patchHTML } from "./ui";
-import { cardDisclosureHTML, cardHTML, cardPromptText } from "./card";
+import { cardDisclosureHTML, cardHTML, cardPromptText, waitingCloseHTML } from "./card";
 
 export interface DesktopWork {
   id: string;
@@ -52,7 +52,8 @@ export function mountDesktopTimeline(host: HTMLElement): { update(state: Desktop
       if (work?.state === "waiting_control") asked.add(work.id);
       const html = !work ? "" : work.state === "waiting_control" ? cardHTML({ title: t("card.pcTitle"), status: "waiting", statusText: cardPromptText("computer"), body: desktopWorkText(work),
         content: `<div class="card-computer-screen" data-card-desktop-screen><button type="button" class="btn" data-card-desktop="take" aria-label="${esc(t("cards.takeover"))}">${ico("monitor")}</button></div>`,
-        actions: btn(esc(t("cards.takeover")), "sm pri", ' data-card-desktop="take"') + btn(esc(t("desktop.done")), "sm", ' data-card-desktop="return"') + btn(esc(t("cards.skip")), "sm card-quiet", ' data-card-desktop="skip"'),
+        actions: btn(esc(t("cards.takeover")), "sm pri", ' data-card-desktop="take"') + btn(esc(t("desktop.done")), "sm", ' data-card-desktop="return"'),
+        close: waitingCloseHTML(' data-card-desktop="skip"', t("cards.skip")), statusInHeading: true,
         cls: "computer-card", attrs: ` data-desktop-work="${esc(work.id)}" data-work-state="${work.state}"`,
       }) : (asked.has(work.id) || !!work.request_id) ? settledCardHTML(work) : "";
       if (rendered.get(slot) === html) continue;

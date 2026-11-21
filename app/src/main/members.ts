@@ -36,10 +36,8 @@ export const memberRole = (member: { id: number; role?: string; chief?: boolean 
   (member.chief ?? member.id === RAPHAEL_ID) ? t("rooms.chief") : member.role ?? "";
 
 /** The longest name, role, instructions and group name the core takes (members.* and groups.*). */
-export const NAME_MAX = 16;
 export const ROLE_MAX = 24;
 export const PERSONALITY_MAX = 2000;
-export const INSTRUCTIONS_MAX = 2000;
 export const GROUP_NAME_MAX = 24;
 
 /** The composer's placeholder in a member's thread: the same English words in every language, as "Ask Raphael" is. */

@@ -10,7 +10,7 @@ import re
 import time
 import uuid
 
-from .logins import LoginVault, origin
+from .logins import LoginVault, origin, redactable_program_key
 from ..integrations.vault import SecretTooLong
 from ..protocol import invalid_params
 
@@ -27,7 +27,6 @@ KEY_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,63}")
 KEY_REFUSED = frozenset(("PATH", "HOME", "USER", "LOGNAME", "SHELL", "SH", "PWD", "OLDPWD", "TZ", "LANG", "TERM", "IFS", "ENV",
                          "PS1", "PS4", "DISPLAY", "XAUTHORITY", "TMPDIR"))
 KEY_REFUSED_PREFIXES = ("LD_", "DYLD_", "BASH", "VNC_", "RAPHAEL_", "CUA_")
-KEY_MIN, KEY_MAX = 6, 800
 # A key the owner marked as no secret (#281), kept in the entry's origin column, which a key leaves empty otherwise.
 PLAIN = "plain"
 
@@ -128,18 +127,13 @@ class VaultEntries(LoginVault):
 
     def put_key(self, member, name, purpose, value, *, secret=True):
         """Keep the key `name` of this member (a new value replaces the old one) in the OS vault; `purpose` is the
-        short line the owner reads beside it. The value goes nowhere else, and a secret one is withheld from every output
-        at once. A value the owner marked as no secret (a user name, an address, a site ID: `secret=False`) is kept the
-        same way and given to programs the same way, but may be short and is not withheld from what is shown (#281): a
-        short value withheld would blank ordinary words."""
+        short line the owner reads beside it. The value is available to programs even when it is too short to scrub.
+        Secret values of at least six characters are registered for scrubbing immediately. Values the owner marked
+        as no secret (`secret=False`) are kept and passed to programs without registering them for scrubbing (#281)."""
         if not key_name_ok(name) or not isinstance(purpose, str) or len(purpose) > 240 or "\n" in purpose or "\r" in purpose:
             raise ValueError("invalid_key")
         if not isinstance(value, str) or not value or value != value.strip() or any(ord(ch) < 32 or ord(ch) == 127 for ch in value):
             raise ValueError("invalid_key")
-        if secret and len(value) < KEY_MIN:
-            raise ValueError("key_too_short")
-        if len(value) > KEY_MAX:
-            raise SecretTooLong("The key is longer than the Credential Manager can hold")
         values = {"value": value}
         identifier = uuid.uuid4().hex
         credential = "computer-entry:" + identifier
@@ -158,8 +152,8 @@ class VaultEntries(LoginVault):
         except Exception:
             self.vault.delete(credential)
             raise
-        # Everything a command prints or a file shows from now on is checked for a secret one, for any member of a shared computer.
-        if secret:
+        # Register the value for every member already reading from a shared computer.
+        if secret and redactable_program_key(value):
             for holder in {member, *self.values}:
                 self.remember(holder, values)
         for stale in reversed(old):
@@ -179,7 +173,7 @@ class VaultEntries(LoginVault):
             if not isinstance(values, dict) or not isinstance(values.get("value"), str) or not values["value"]:
                 missing.append(name)
                 continue
-            if row["origin"] != PLAIN:
+            if row["origin"] != PLAIN and redactable_program_key(values["value"]):
                 self.remember(member, values)
             found[name] = values["value"]
         return found, missing
@@ -240,11 +234,13 @@ class VaultEntries(LoginVault):
 
     def preload(self, member):
         # Shared desktop output can show any saved entry, including another member's data.
-        for row in self.conn.execute("SELECT credential FROM vault_entries WHERE origin IS NOT ?", (PLAIN,)):
+        for row in self.conn.execute("SELECT kind,credential FROM vault_entries WHERE origin IS NOT ?", (PLAIN,)):
             try:
-                raw = self.vault.get(row[0])
+                raw = self.vault.get(row["credential"])
                 if raw:
-                    self.remember(member, json.loads(raw))
+                    values = json.loads(raw)
+                    if row["kind"] != "key" or redactable_program_key(values.get("value")):
+                        self.remember(member, values)
             except Exception:
                 continue
 

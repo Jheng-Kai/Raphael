@@ -218,7 +218,7 @@ class ChatGPTAuth:
 
     async def request(self, method, url, **kwargs):
         try:
-            response = await self.http().request(method, url, follow_redirects=False, timeout=20, **kwargs)
+            response = await self.http().request(method, url, follow_redirects=False, timeout=120, **kwargs)
         except httpx.TimeoutException:
             raise OpenRouterError(0, "timeout", "ChatGPT request timed out") from None
         except httpx.TransportError:
@@ -498,7 +498,7 @@ class ChatGPTAuth:
                 try:
                     tokens = await asyncio.shield(renewal)
                 except asyncio.CancelledError:
-                    await asyncio.wait({renewal}, timeout=25)
+                    await asyncio.wait({renewal}, timeout=125)
                     raise
             if tokens.get("identity_pending"):
                 # A check that fails is not a revocation: the tokens stay, unused, and the next request checks again.

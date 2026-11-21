@@ -70,7 +70,6 @@ def test_every_server_gets_an_id_of_its_own():
     [
         {"name": ""},
         {"name": "   "},
-        {"name": "x" * 41},
         {"name": "a\nb"},
         {"name": 5},
         {"transport": "sse"},
@@ -311,12 +310,11 @@ def test_removing_a_server_removes_it_from_the_file(tmp_path):
     assert ConfigStore(tmp_path).servers() == []
 
 
-def test_the_number_of_servers_is_limited(tmp_path):
+def test_more_than_twenty_servers_can_be_saved_and_reopened(tmp_path):
     store = ConfigStore(tmp_path)
-    for n in range(config.MAX_SERVERS):
+    for n in range(25):
         store.add(parse_new_server(stdio(name=f"S{n}"), []).config)
-    with pytest.raises(ValueError):
-        store.add(parse_new_server(stdio(name="One more"), []).config)
+    assert len(ConfigStore(tmp_path).servers()) == 25
 
 
 def test_a_file_that_cannot_be_read_is_set_aside_and_the_plugins_start_again(tmp_path):

@@ -105,22 +105,26 @@ def component_paths(manifest, kind):
     extra = manifest.get(kind, [])
     if isinstance(extra, str):
         extra = [extra]
-    if not isinstance(extra, list) or len(extra) > 40 or any(not isinstance(p, str) for p in extra):
+    if not isinstance(extra, list) or any(not isinstance(p, str) for p in extra):
         raise MemberError("source", "unsupported plugin component paths")
     return [kind, *[relative_path(p) for p in extra]]
 
 
 def plugin_parts(files, *, existing_names=None):
     from .capabilities import MAX_SKILL_BYTES, skill_metadata
+    from .skill_names import unique_skill_name
     from ..bots.homes import redact_secrets
 
     manifest = manifest_from(files)
     parts = []
+    taken = set()
+    skills = component_paths(manifest, "skills")
+    commands = component_paths(manifest, "commands")
     for path, data in sorted(files.items()):
         kind = None
-        if path.endswith("/SKILL.md") and any(path.startswith(root + "/") for root in component_paths(manifest, "skills")):
+        if path.endswith("/SKILL.md") and any(path.startswith(root + "/") for root in skills):
             kind = "skill"
-        elif path.endswith(".md") and any(path == root or path.startswith(root + "/") for root in component_paths(manifest, "commands")):
+        elif path.endswith(".md") and any(path == root or path.startswith(root + "/") for root in commands):
             kind = "command"
         if kind is None:
             continue
@@ -135,14 +139,14 @@ def plugin_parts(files, *, existing_names=None):
         text = redact_secrets(text)
         if kind == "command":
             name = PurePosixPath(path).stem
-            match = re.search(r"^description:[ \t]*([^\r\n]+)", text[:4096], re.M)
+            match = re.search(r"^description:[ \t]*([^\r\n]+)", text, re.M)
             description = match[1].strip().strip("\"'") if match else name
-            text = "---\nname: " + json.dumps(name) + "\ndescription: " + json.dumps(description) + "\n---\n" + text
+            text = "---\nname: " + json.dumps(name, ensure_ascii=False) + "\ndescription: " + json.dumps(description, ensure_ascii=False) + "\n---\n" + text
         key = str(PurePosixPath(path).parent) if kind == "skill" else path
         name, description = skill_metadata(text, writing=True, previous_name=(existing_names or {}).get(key))
+        name = unique_skill_name(name, taken)
+        taken.add(name.casefold())
         parts.append({"key": path, "kind": kind, "name": name, "description": description, "text": text})
-    if len(parts) > 40 or len({p["name"].casefold() for p in parts}) != len(parts):
-        raise MemberError("source", "plugin has too many or duplicate skill and command names")
     return manifest, parts
 
 
@@ -156,7 +160,7 @@ def mcp_servers(files, manifest):
     extra = manifest.get("mcpServers", [])
     if isinstance(extra, (str, dict)):
         extra = [extra]
-    if not isinstance(extra, list) or len(extra) > 16:
+    if not isinstance(extra, list):
         raise MemberError("source", "unsupported MCP declarations")
     for value in extra:
         if isinstance(value, str):
@@ -173,12 +177,12 @@ def mcp_servers(files, manifest):
         if not isinstance(items, dict):
             raise MemberError("source", "invalid MCP declaration")
         for name, value in items.items():
-            if not isinstance(name, str) or not isinstance(value, dict) or len(servers) >= 16:
+            if not isinstance(name, str) or not isinstance(value, dict):
                 raise MemberError("source", "invalid MCP declaration")
             transport = "http" if value.get("type") in ("http", "sse") or "url" in value else "stdio"
             if not isinstance(value.get("env", {}), dict) or not isinstance(value.get("headers", {}), dict):
                 raise MemberError("source", "invalid MCP declaration")
-            fields = {"name": name[:40], "transport": transport, "command": value.get("command", ""),
+            fields = {"name": name, "transport": transport, "command": value.get("command", ""),
                              "args": value.get("args", []), "url": value.get("url", ""),
                              "env": list(value.get("env", {})), "headers": list(value.get("headers", {}))}
             from ..integrations.config import parse_new_server
@@ -246,18 +250,20 @@ def source_target(source, marketplace, catalog_sha):
 
 async def catalog(repo):
     github_repo(repo)
+    from .capabilities import DOWNLOAD_SECONDS, DOWNLOAD_STALL_SECONDS
+
     try:
-        async with asyncio.timeout(45), httpx.AsyncClient(timeout=15, follow_redirects=False, trust_env=False) as client:
+        async with asyncio.timeout(DOWNLOAD_SECONDS), httpx.AsyncClient(timeout=DOWNLOAD_STALL_SECONDS, follow_redirects=False, trust_env=False) as client:
             sha = await commit(client, repo)
             data = json_object(await get_bytes(client, f"https://raw.githubusercontent.com/{repo}/{sha}/.claude-plugin/marketplace.json", MAX_MANIFEST_BYTES))
-            if not isinstance(data.get("name"), str) or not isinstance(data.get("plugins"), list) or len(data["plugins"]) > 200:
+            if not isinstance(data.get("name"), str) or not isinstance(data.get("plugins"), list):
                 raise MemberError("source", "invalid marketplace manifest")
             plugins, names = [], set()
             for entry in data["plugins"]:
                 if not isinstance(entry, dict) or not isinstance(entry.get("name"), str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,99}", entry["name"]) or entry["name"] in names:
                     raise MemberError("source", "invalid or duplicate marketplace plugin")
                 names.add(entry["name"])
-                item = {"name": entry["name"], "description": str(entry.get("description", ""))[:1000], "version": entry.get("version", "") if isinstance(entry.get("version", ""), str) else "", "installable": False}
+                item = {"name": entry["name"], "description": str(entry.get("description", "")), "version": entry.get("version", "") if isinstance(entry.get("version", ""), str) else "", "installable": False}
                 try:
                     target = source_target(entry.get("source"), repo, sha)
                     target["commit"] = await commit(client, target["repo"], target.pop("ref"))
@@ -266,7 +272,7 @@ async def catalog(repo):
                     manifest = manifest_from({".claude-plugin/plugin.json": raw})
                     if manifest["name"] != entry["name"] or (item["version"] and item["version"] != manifest["version"]):
                         raise MemberError("source", "listed plugin name or version differs from its manifest")
-                    item.update(version=manifest["version"], description=item["description"] or str(manifest.get("description", ""))[:1000], target=target, installable=True)
+                    item.update(version=manifest["version"], description=item["description"] or str(manifest.get("description", "")), target=target, installable=True)
                 except (MemberError, httpx.HTTPError, ValueError, TypeError) as error:
                     item["reason"] = str(error) if isinstance(error, MemberError) else "plugin manifest is unavailable"
                 plugins.append(item)
@@ -278,8 +284,10 @@ async def catalog(repo):
 
 
 async def download_plugin(target):
+    from .capabilities import DOWNLOAD_SECONDS, DOWNLOAD_STALL_SECONDS
+
     try:
-        async with asyncio.timeout(120), httpx.AsyncClient(timeout=15, follow_redirects=False, trust_env=False) as client:
+        async with asyncio.timeout(DOWNLOAD_SECONDS), httpx.AsyncClient(timeout=DOWNLOAD_STALL_SECONDS, follow_redirects=False, trust_env=False) as client:
             repo, sha, prefix = target["repo"], target["commit"], target["path"]
             tree = json_object(await get_bytes(client, f"https://api.github.com/repos/{repo}/git/trees/{sha}?recursive=1", MAX_TREE_BYTES))
             entries = tree.get("tree")
@@ -354,7 +362,7 @@ class PluginSets:
                                             children.append(describe(directory, root, remaining))
                                             dirs[:] = []
                                 item = {"kind": "plugin", "name": manifest["name"], "version": manifest["version"],
-                                        "description": str(manifest.get("description", ""))[:1000], "source": "local:" + str(folder.resolve()),
+                                        "description": str(manifest.get("description", "")), "source": "local:" + str(folder.resolve()),
                                         "plugin": manifest["name"], "skill_count": len(children), "command_count": command_count, "skills": children}
                                 result[(str(root), market.name, plugin.name)] = item
                                 break
@@ -401,7 +409,6 @@ class PluginSets:
 
     def install_set(self, source, files, *, marketplace="", target=None, access=None, expected_id=None, require_new=False, required_skill=None):
         """Validate everything before one database commit; failed installs leave grants intact."""
-        from .capabilities import MAX_SKILLS
         from .skills import stored_skill_name
 
         manifest = manifest_from(files)
@@ -418,9 +425,6 @@ class PluginSets:
             SkillPackages(self).validate_access(access)
         old = {row["set_key"]: dict(row) for row in self.conn.execute("SELECT * FROM member_skills WHERE set_id=?", (previous["id"],))} if previous else {}
         _, parts = plugin_parts(files, existing_names={key: row["name"].partition(":")[2] for key, row in old.items()})
-        current = self.conn.execute("SELECT COUNT(*) FROM member_skills WHERE member_id=-1").fetchone()[0]
-        if current - len(old) + len(parts) > MAX_SKILLS:
-            raise MemberError("full", "shared skill limit reached")
         own = self.conn.execute("SELECT name FROM member_skills WHERE member_id=-1 AND (set_id IS NULL OR set_id IS NOT ?)", (previous["id"] if previous else None,))
         taken = {r[0].casefold() for r in own}
         for part in parts:
@@ -460,7 +464,7 @@ class PluginSets:
             info = {"marketplace": marketplace, "target": target, "mcp_servers": public_servers,
                     "fingerprint": local_stamp(Path(source[6:])) if source.startswith("local:") else None}
             with self.conn:
-                values = (manifest["name"], manifest["version"], source, str(manifest.get("description", ""))[:1000], folder.relative_to(self.homes.home(SHARED)).as_posix(), json.dumps(info))
+                values = (manifest["name"], manifest["version"], source, str(manifest.get("description", "")), folder.relative_to(self.homes.home(SHARED)).as_posix(), json.dumps(info))
                 if previous:
                     identifier = previous["id"]
                     self.conn.execute("UPDATE skill_sets SET name=?,version=?,source=?,description=?,folder=?,metadata=? WHERE id=?", (*values, identifier))
@@ -498,11 +502,17 @@ class PluginSets:
             info = json.loads(previous["metadata"])
             source, marketplace, name = previous["source"], info.get("marketplace"), previous["name"]
         if marketplace:
-            data = await self.add_marketplace(marketplace)
-            plugin = next((p for p in data["plugins"] if p["name"] == name), None)
-            if not plugin or not plugin["installable"]:
-                raise MemberError("source", "this marketplace plugin is not installable")
-            files = await download_plugin(plugin["target"])
+            from .capabilities import DOWNLOAD_SECONDS
+
+            try:
+                async with asyncio.timeout(DOWNLOAD_SECONDS):
+                    data = await self.add_marketplace(marketplace)
+                    plugin = next((p for p in data["plugins"] if p["name"] == name), None)
+                    if not plugin or not plugin["installable"]:
+                        raise MemberError("source", "this marketplace plugin is not installable")
+                    files = await download_plugin(plugin["target"])
+            except TimeoutError:
+                raise MemberError("download", "the plugin download exceeded one hour") from None
             manifest = manifest_from(files)
             if manifest["name"] != plugin["name"] or manifest["version"] != plugin["version"]:
                 raise MemberError("source", "download differs from the listed plugin version")

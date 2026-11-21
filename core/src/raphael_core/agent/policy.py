@@ -38,7 +38,7 @@ from typing import Any
 PLUGIN_PREFIX = "mcp:"
 # How long a question waits for its answer; after this a yes is too late. It is the overlay's spoken yes or no, the
 # attended run on the desktop and any card of a call a CLI brain holds open (a CLI's own tool call cannot wait long).
-CONFIRM_TIMEOUT_S = 30.0
+CONFIRM_TIMEOUT_S = 600.0
 # A question that has no timer: it ends when it is answered, cancelled or replaced, never by the clock.
 NO_TIMER_S = float("inf")
 CONFIRM_TIMEOUT_MS = round(CONFIRM_TIMEOUT_S * 1000)

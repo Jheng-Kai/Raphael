@@ -1,5 +1,5 @@
-"""A key the owner pasted on a card for a program in a member's computer (R-KEY-01..03): kept in the vault, given to one
-command's environment and never to its command line, and withheld from everything that command or a later read returns.
+"""A program key stays in the vault and reaches one command through its environment. Keys with six or more characters
+are scrubbed from command output and later reads.
 Every key here is generated for the test; nothing reaches Docker, a network or a model."""
 
 import asyncio
@@ -173,7 +173,7 @@ def test_a_key_is_never_given_under_a_name_the_shell_or_the_computer_reads(conn,
         VaultEntries(Vault(), conn=conn).put_key(0, name, "p", make_key())
 
 
-@pytest.mark.parametrize("value", ["", "short", " padded-key-value ", "line\nbreak-key-value", "nul\x00-key-value", 5])
+@pytest.mark.parametrize("value", ["", " padded-key-value ", "line\nbreak-key-value", "nul\x00-key-value", 5])
 def test_a_value_that_is_not_a_key_is_refused_and_nothing_is_kept(conn, value):
     vault = Vault()
     with pytest.raises(ValueError):
@@ -181,14 +181,36 @@ def test_a_value_that_is_not_a_key_is_refused_and_nothing_is_kept(conn, value):
     assert vault.values == {} and conn.execute("SELECT COUNT(*) FROM vault_entries").fetchone()[0] == 0
 
 
-def test_a_value_marked_as_no_secret_may_be_short_and_is_not_withheld_from_output(conn):
-    """#281: a Jira user name `jon` could not be kept (a key needs six characters, so that withholding it never blanks
-    ordinary words) and the card said only that it was empty. Marked as no secret, a short value is kept, given to programs
-    the same way, and not withheld; a secret one still needs six characters and is withheld."""
+def test_a_one_character_secret_key_can_be_saved_and_is_given_whole_but_never_blanks_words(conn):
     vault = Vault()
     entries = VaultEntries(vault, conn=conn)
-    with pytest.raises(ValueError, match="key_too_short"):
-        entries.put_key(0, "JIRA_USERNAME", "the Jira user", "jon")
+    entries.put_key(0, "API_KEY", "the API", "x")
+    assert entries.redact(0, "extra text") == "extra text"
+    assert entries.key_values(0, ["API_KEY"]) == ({"API_KEY": "x"}, [])
+    assert entries.redact(0, "extra text") == "extra text"
+    restarted = VaultEntries(vault, conn=conn)
+    restarted.preload(1)
+    assert restarted.redact(1, "extra text") == "extra text"
+
+
+def test_a_secret_key_of_six_characters_or_more_is_withheld_from_output(conn):
+    vault = Vault()
+    entries = VaultEntries(vault, conn=conn)
+    entries.put_key(0, "API_KEY", "the API", "abcdef")
+    entries.put_key(0, "SHORT_KEY", "the other API", "abcde")
+    text = "Use abcdef after abcde."
+    assert entries.redact(0, text) == "Use [private] after abcde."
+    restarted = VaultEntries(vault, conn=conn)
+    assert restarted.key_values(0, ["API_KEY", "SHORT_KEY"]) == ({"API_KEY": "abcdef", "SHORT_KEY": "abcde"}, [])
+    assert restarted.redact(0, text) == "Use [private] after abcde."
+    restarted.preload(1)
+    assert restarted.redact(1, text) == "Use [private] after abcde."
+
+
+def test_a_value_marked_as_no_secret_may_be_short_and_is_not_withheld_from_output(conn):
+    """A short non-secret value is kept and given to programs without withholding it from output."""
+    vault = Vault()
+    entries = VaultEntries(vault, conn=conn)
     entries.put_key(0, "JIRA_USERNAME", "the Jira user", "jon", secret=False)
     assert entries.key_values(0, ["JIRA_USERNAME"]) == ({"JIRA_USERNAME": "jon"}, [])
     entries.preload(1)
@@ -204,7 +226,7 @@ def test_a_value_marked_as_no_secret_may_be_short_and_is_not_withheld_from_outpu
 def test_a_key_longer_than_the_vault_can_hold_is_refused(conn):
     vault = Vault()
     with pytest.raises(SecretTooLong):
-        VaultEntries(vault, conn=conn).put_key(0, "SOME_KEY", "p", "k" * 801)
+        VaultEntries(vault, conn=conn).put_key(0, "SOME_KEY", "p", "k" * 1100)
     assert vault.values == {}
 
 
@@ -419,6 +441,22 @@ async def test_what_a_command_or_a_later_read_returns_has_the_value_replaced(des
         assert value not in result.text and value[:12] not in result.text and "[private]" in result.text
 
 
+@pytest.mark.parametrize("value,expected", [("x", "x"), ("abcde", "abcde"), ("abcdef", "[private]")])
+async def test_vm_exec_scrubs_command_output_only_for_keys_at_least_six_characters_long(desktop, value, expected):
+    vm, target, _ = desktop
+    run = vm.run
+
+    async def echoing(args, **kwargs):
+        if "env" not in kwargs:
+            return await run(args, **kwargs)
+        assert kwargs["env"] == {"API_KEY": value}
+        return Result(0, kwargs["redact"](f"Extra text: {value}"), "")
+
+    vm.run = echoing
+    result = await vm.execute(target, "run program", keys={"API_KEY": value})
+    assert result["output"] == f"Extra text: {expected}"
+
+
 async def test_a_key_that_is_not_saved_is_an_error_that_says_to_ask_for_it(desktop, tmp_path, conn):
     vm, runtime, entries, hub, tool = await hub_with(desktop, tmp_path, conn)
     entries.put_key(0, "OPENROUTER_API_KEY", "price script", make_key())
@@ -522,7 +560,7 @@ async def test_saving_a_replacement_card_keeps_one_new_value_and_deletes_the_old
     assert original not in output and replacement not in output
 
 
-@pytest.mark.parametrize("value,error", [("short", "too_short"), ("with space inside-but-ok-" + "k" * 4, None), ("k" * 900, "too_long"), ("ctrl\x07-key-value", "invalid")])
+@pytest.mark.parametrize("value,error", [("with space inside-but-ok-" + "k" * 4, None), ("k" * 1100, "too_long"), ("ctrl\x07-key-value", "invalid")])
 async def test_a_bad_value_leaves_the_card_waiting_and_the_vault_alone(conn, value, error):
     rig = CardRig(conn)
     card = rig.show()
@@ -534,12 +572,11 @@ async def test_a_bad_value_leaves_the_card_waiting_and_the_vault_alone(conn, val
     assert rig.vault.values == {} and rig.resumed == []
 
 
-async def test_a_short_key_card_says_why(conn):
-    """#281: the card names the rule a short key broke; a card keeps no value that is no secret."""
+async def test_a_one_character_key_is_saved_through_the_secret_card(conn):
     rig = CardRig(conn)
-    result, card = await rig.save(rig.show("JIRA_API_TOKEN", "the Jira API"), "abc")
-    assert (result["saved"], card.state, card.error) == (False, "failed", "too_short")
-    assert rig.entries.key_values(0, ["JIRA_API_TOKEN"])[0] == {}
+    result, card = await rig.save(rig.show("JIRA_API_TOKEN", "the Jira API"), "x")
+    assert result["saved"] is True and not card.error
+    assert rig.entries.key_values(0, ["JIRA_API_TOKEN"]) == ({"JIRA_API_TOKEN": "x"}, [])
 
 
 async def test_a_key_card_refuses_names_and_purposes_it_cannot_show(conn):

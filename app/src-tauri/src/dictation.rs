@@ -9985,8 +9985,8 @@ mod tests {
     async fn the_time_of_a_question_is_the_cores_within_reason() {
         for (named, shown) in [
             (json!(5_000), 5_000),
-            (json!(null), 30_000),
-            (json!(10_000_000), 120_000),
+            (json!(null), 600_000),
+            (json!(10_000_000), 600_000),
         ] {
             let mut reply = question("c-1", 1);
             reply["confirm"]["timeout_ms"] = named.clone();

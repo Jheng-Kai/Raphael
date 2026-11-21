@@ -7,7 +7,7 @@ import type { StoreService } from "../types";
 export const SERVICES_SHOWN = 18;
 
 /** How long the services step waits for the store's lists before it offers 重試. */
-export const SERVICES_WAIT_MS = 15_000;
+export const SERVICES_WAIT_MS = 600_000;
 
 /**
  * `promise`, or a rejection after `ms`: a call the core does not answer never keeps a screen spinning.

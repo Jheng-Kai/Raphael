@@ -490,11 +490,11 @@ class AgentHistory:
                 if turn:
                     self._index(turn_id, turn.question, turn.text, turn.detail)
 
-    def _with_messages(self, turns: list[Turn]) -> list[Turn]:
+    def _with_messages(self, turns: list[Turn], *, omit_cards: Iterable[str] = ()) -> list[Turn]:
         saved = self.messages(turn.id for turn in turns if turn.id is not None)
         from .reactions import private_reactions
         from .card_context import card_outcomes
-        outcomes = card_outcomes(self._conn, (turn.id for turn in turns), self._now_ms())
+        outcomes = card_outcomes(self._conn, (turn.id for turn in turns), self._now_ms(), omit_cards=omit_cards)
         asked = self.asked_from(turn.id for turn in turns if turn.id is not None)
         for turn in turns:
             turn.card_outcomes = outcomes.get(turn.id, [])
@@ -695,7 +695,7 @@ class AgentHistory:
 
     def after(
         self, turn_id: int, *, limit: int | None = None, member_id: int = 0,
-        conversation_id: int | None = None, exchanges: bool = False,
+        conversation_id: int | None = None, exchanges: bool = False, omit_cards: Iterable[str] = (),
     ) -> list[Turn]:
         """The turns of the thread of `member_id` made after the turn `turn_id`, whatever their
         status, oldest first; with a `limit`, only the newest that many of them. `exchanges` as
@@ -707,14 +707,14 @@ class AgentHistory:
             rows = self._conn.execute(
                 f"SELECT {_COLUMNS} FROM agent_turns WHERE {where} ORDER BY id", params,
             ).fetchall()
-            return self._with_messages([_to_turn(row) for row in rows])
+            return self._with_messages([_to_turn(row) for row in rows], omit_cards=omit_cards)
         if limit <= 0:
             return []
         rows = self._conn.execute(
             f"SELECT {_COLUMNS} FROM agent_turns WHERE {where} ORDER BY id DESC LIMIT ?",
             [*params, limit],
         ).fetchall()
-        return self._with_messages([_to_turn(row) for row in reversed(rows)])
+        return self._with_messages([_to_turn(row) for row in reversed(rows)], omit_cards=omit_cards)
 
     def last_id(self) -> int:
         """The id of the latest turn of any thread; 0 when there is none."""
@@ -734,10 +734,10 @@ class AgentHistory:
         self,
         query: str,
         *,
-        limit: int = 5,
+        limit: int | None = 5,
         since_ms: int | None = None,
         exclude: Sequence[int] = (),
-        most: int = SEARCH_MAX,
+        most: int | None = SEARCH_MAX,
         member_id: int | None = 0,
         conversation_id: int | None = None,
     ) -> list[Turn]:
@@ -749,8 +749,11 @@ class AgentHistory:
         ones the model already reads) are left out by the query itself, before the limit, so that
         the older turns behind them are found however many of them match. Only the thread of
         `member_id` is searched."""
-        words = query_words(query)
-        limit = max(1, min(limit, most))
+        words = query_words(query, limit=None) if limit is None or most is None else query_words(query)
+        if limit is None:
+            limit = -1
+        else:
+            limit = max(1, min(limit, most if most is not None else 2**63 - 1))
         if not words:
             return []
         self._repair_event_index()
@@ -789,6 +792,15 @@ class AgentHistory:
     ) -> list[Turn]:
         """The search where this SQLite has no FTS5: the same terms, read with LIKE, newest first.
         The table holds a few thousand turns a year, so a scan takes milliseconds."""
+        # Batch the predicates within SQLite's expression depth and bind parameter limits.
+        if len(words) > 400:
+            found = {
+                turn.id: turn
+                for start in range(0, len(words), 400)
+                for turn in self._search_like(words[start:start + 400], limit, where, params)
+            }
+            ordered = sorted(found, reverse=True)
+            return [found[turn_id] for turn_id in ordered[:limit if limit > 0 else None]]
         conditions: list[str] = []
         terms: list[object] = []
         for word in words:

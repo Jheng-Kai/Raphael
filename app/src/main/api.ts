@@ -228,7 +228,7 @@ export const workerCancel = (taskId: number): Promise<{ cancelled: boolean }> =>
 export const workerRerun = (taskId: number): Promise<{ task_id: number }> => core("worker.rerun", { task_id: taskId });
 /** The answered turns whose words hold `query`, best first, over the whole history, in the shape of `agentHistoryList`. */
 export const agentHistorySearch = (query: string, memberId = 0, conversationId?: number): Promise<{ turns: AgentTurn[] }> =>
-  core("agent.history.search", { query, limit: 100, member_id: memberId, ...(conversationId !== undefined ? { conversation_id: conversationId } : {}) });
+  core("agent.history.search", { query, member_id: memberId, ...(conversationId !== undefined ? { conversation_id: conversationId } : {}) });
 
 /**
  * Asks Raphael in writing (the composer of the 拉斐爾 page). The question goes the way a spoken one

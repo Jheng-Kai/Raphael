@@ -135,7 +135,7 @@ export interface OverlayView {
 /** The app answers a question that ran out itself; the page lets go of it this long after. */
 const ASK_GRACE_MS = 1500;
 /** Used when a question does not say how long it waits. */
-const DEFAULT_ASK_TIMEOUT_MS = 30_000;
+const DEFAULT_ASK_TIMEOUT_MS = 600_000;
 
 interface Notice {
   text: string;

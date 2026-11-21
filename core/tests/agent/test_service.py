@@ -736,7 +736,7 @@ async def test_an_answer_with_a_search_pays_for_the_search_and_gives_the_model_i
     assert result["prefix"] == "告"
     search = client.text_calls[0]
     assert search["user"] == "明天台北會下雨嗎" and search["model"] == "openai/gpt-6-luna"
-    assert search["plugins"] == [{"id": "web", "max_results": 3}]
+    assert search["plugins"] == [{"id": "web"}]
     assert 'web_search: {"answer": "明天台北有雨。"' in client.json_calls[0]["user"]
     assert [row[2] for row in rig.spent()] == [0.00004, 0.012, 0.0009]
     (turn,) = await rig.turns()
@@ -1145,7 +1145,7 @@ async def test_copying_asks_first_and_touches_nothing(rig, client, actions):
         "text": "是否將上一則回答複製到剪貼簿？",
         "yes": "是",
         "no": "否",
-        "timeout_ms": 30000,
+        "timeout_ms": 600000,
     }
     assert actions.calls == []
     assert (await rig.turns())[0]["status"] == "confirm"
@@ -1248,17 +1248,17 @@ async def test_a_no_copies_nothing_and_says_it_understood(rig, client, actions):
 async def test_a_yes_that_comes_too_late_does_nothing_and_says_so(rig, client, actions):
     rig.seed("q", "a")
     asked = await ask_to_copy(rig, client)
-    rig.clock.now += 30
+    rig.clock.now += 600
     done = await rig.confirm(asked["confirm"]["id"], True)
     assert done == {"status": "done", "turn_id": 2, "prefix": "否", "text": "逾時未獲回應。未執行。"}
     assert actions.calls == []
     assert (await rig.turns())[0]["status"] == "expired"
 
 
-async def test_a_yes_a_moment_before_thirty_seconds_still_counts(rig, client, actions):
+async def test_a_yes_a_moment_before_ten_minutes_still_counts(rig, client, actions):
     rig.seed("q", "a")
     asked = await ask_to_copy(rig, client)
-    rig.clock.now += 29.5
+    rig.clock.now += 599.5
     assert (await rig.confirm(asked["confirm"]["id"], True))["prefix"] == "了"
     assert len(actions.calls) == 1
 
@@ -1268,7 +1268,7 @@ async def test_a_question_nobody_answered_is_expired_in_the_history_without_bein
 ):
     rig.seed("q", "a")
     await ask_to_copy(rig, client)
-    rig.clock.now += 31
+    rig.clock.now += 601
     (turn,) = [t for t in await rig.turns() if t["route"] == "command"]
     assert turn["status"] == "expired" and turn["prefix"] == "否"
     assert actions.calls == []
@@ -1322,7 +1322,7 @@ async def test_a_question_that_ran_out_before_a_new_request_is_expired_not_denie
 ):
     rig.seed("q", "a")
     asked = await ask_to_copy(rig, client)
-    rig.clock.now += 31
+    rig.clock.now += 601
     client.decisions.append(decision("chat"))
     client.replies.append(spoken("答", "好。"))
     await rig.ask("你好", session="s2")
@@ -1615,18 +1615,18 @@ async def test_the_history_search_finds_turns_of_the_whole_history_in_the_shape_
     assert (await rig.call("agent.history.search", {"query": "找不到的字串", "conversation_id": conversation}))["turns"] == []
 
 
-async def test_the_history_search_gives_up_to_a_hundred_turns(rig):
+async def test_history_search_returns_all_matches_unless_the_caller_limits_them(rig):
     for n in range(120):
         rig.seed(f"會議 {n}", "好。")
     conversation = rig.service.conversations.quick()
-    assert len((await rig.call("agent.history.search", {"query": "會議", "conversation_id": conversation}))["turns"]) == 50
-    assert len((await rig.call("agent.history.search", {"query": "會議", "limit": 1000, "conversation_id": conversation}))["turns"]) == 100
+    assert len((await rig.call("agent.history.search", {"query": "會議", "conversation_id": conversation}))["turns"]) == 120
+    assert len((await rig.call("agent.history.search", {"query": "會議", "limit": 110, "conversation_id": conversation}))["turns"]) == 110
     assert len((await rig.call("agent.history.search", {"query": "會議", "limit": 0, "conversation_id": conversation}))["turns"]) == 1
 
 
 @pytest.mark.parametrize(
     "params",
-    [{}, {"query": ""}, {"query": "   "}, {"query": 5}, {"query": "x" * 201},
+    [{}, {"query": ""}, {"query": "   "}, {"query": 5},
      {"query": "會議", "limit": "5"}, {"query": "會議", "limit": True}, {"query": "會議", "limit": 2.5}],
 )  # fmt: skip
 async def test_the_history_search_checks_its_params(rig, params):

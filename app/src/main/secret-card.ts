@@ -7,7 +7,7 @@
 // read when Save is pressed and emptied at once, and a card drawn again takes the characters from the old
 // field to the new one (`carryTyped`) so that a redraw does not cost what the owner was typing.
 
-import { cardDisclosureHTML, cardHTML, cardPromptText, ownerCloseHTML, waitingOwnerQuestion } from "./card";
+import { cardCloseHTML, cardDisclosureHTML, cardHTML, cardPromptText, waitingOwnerQuestion } from "./card";
 import { NAME, eventLineHTML } from "./event-line";
 import { t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
@@ -20,7 +20,6 @@ import { btn, esc, ico, iconBtn } from "./ui";
 
 const FAILURES: Record<string, MessageKey> = {
   invalid: "card.keyInvalid",
-  too_short: "card.keyTooShort",
   too_long: "card.keyTooLong",
   vault: "card.keyVault",
   gone: "card.keyGone",
@@ -67,12 +66,10 @@ function actionHTML(card: SecretCard): string {
     if (card.login) return `<div class="sc-form sc-login"><label><span>${esc(t("card.loginUser"))}</span><span class="field sc-field"><input data-login-user="${esc(card.id)}" autocomplete="off" spellcheck="false"></span></label>` +
       `<label><span>${esc(t("card.loginPassword"))}</span><span class="field sc-field">${ico("lock")}<input type="password" data-secret-input="${esc(card.id)}" autocomplete="off" spellcheck="false" autocapitalize="off"></span></label>` +
       btn(esc(t("card.keySave")), "sm pri", `${on("card-save")} disabled`) + `</div>`;
-    // A program key needs six characters, said under its field while it is shorter (#281).
-    const hint = card.key ? `<p class="sc-hint" data-secret-hint hidden>${esc(t("card.keyMin"))}</p>` : "";
     return `<div class="sc-form"><label class="field sc-field">${card.key ? "" : ico("lock")}` +
       `<input type="password" data-secret-input="${esc(card.id)}" placeholder="${esc(card.login ? t("card.loginPassword") : card.platform ? t("msg.tg.tokenHint") : t("card.keyField"))}" aria-label="${esc(label)}" ` +
       `autocomplete="off" spellcheck="false" autocapitalize="off"></label>` +
-      btn(esc(t("card.keySave")), "sm pri", `${on("card-save")} disabled`) + `</div>` + hint;
+      btn(esc(t("card.keySave")), "sm pri", `${on("card-save")} disabled`) + `</div>`;
   }
   if (card.state === "saved" && card.error) return btn(esc(t("card.retry")), "sm pri", on("card-resume"));
   return "";
@@ -119,8 +116,12 @@ function keyCardHTML(card: SecretCard, close: string | undefined): string {
  * (`waiting`, the background question the card belongs to). Nothing of the card stands under it.
  */
 export function secretCardHTML(card: SecretCard, canCancelTurn = false, waiting?: OwnerQuestion): string {
+  // Left unanswered when the owner wrote again (`error: "skipped"`): its name and a quiet pill. Closed by its × it reads as stopped.
+  if (card.state === "cancelled" && card.error === "skipped") return cardHTML({ title: card.name, mark: card.key ? undefined : connectionMarkHTML(card.name),
+    status: "ready", statusText: t("ownerQuestion.left"), cls: `secret-card${card.key ? " key-card" : ""}`,
+    attrs: ` data-secret-card="${esc(card.id)}" data-card-state="cancelled" data-card-error="skipped"` });
   const close = canCancelTurn && secretNeedsInput(card) ? iconBtn("x", t("common.cancel"), ' data-act="cancel-secret-turn"', "card-close")
-    : waiting ? ownerCloseHTML(waiting) : undefined;
+    : waiting || secretNeedsInput(card) ? cardCloseHTML(card.id) : undefined;
   if (card.platform) return botCardHTML(card as SecretCard & { platform: "telegram" | "slack" | "discord" }, close);
   if (card.key) return keyCardHTML(card, close);
   const active = secretNeedsInput(card), action = actionHTML(card);

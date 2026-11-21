@@ -107,7 +107,7 @@ class QueryWord:
     char: str | None = None
 
 
-def query_words(query: str, *, limit: int = 8) -> list[QueryWord]:
+def query_words(query: str, *, limit: int | None = 8) -> list[QueryWord]:
     """The words of a search, each made into terms; at most `limit`, each once. A query written
     without spaces (a whole sentence in Chinese) is one long word: the search tries its pairs one
     by one when the phrase is not found."""
@@ -120,7 +120,7 @@ def query_words(query: str, *, limit: int = 8) -> list[QueryWord]:
         seen.add(word)
         char = terms[0] if len(terms) == 1 and _CJK_CHAR.fullmatch(terms[0]) else None
         words.append(QueryWord(word, terms, char))
-        if len(words) >= limit:
+        if limit is not None and len(words) >= limit:
             break
     return words
 

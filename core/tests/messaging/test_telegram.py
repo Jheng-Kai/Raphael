@@ -368,11 +368,13 @@ async def test_typing_is_shown_while_the_assistant_works(fake, http):
     assert fake.actions[0] == OWNER
 
 
-async def test_a_long_answer_is_sent_in_pieces(fake, http):
+async def test_a_five_thousand_character_reply_arrives_in_two_telegram_messages(fake, http):
     fake.message(OWNER, "essay")
-    gateway = make_gateway(fake, http, answer="a " * 5000)
-    await run_until(gateway, lambda: len(fake.sent) >= 3)
-    assert all(len(text) <= 4096 for _, text in fake.sent)
+    answer = "a" * 5000
+    gateway = make_gateway(fake, http, answer=answer)
+    await run_until(gateway, lambda: len(fake.sent) >= 2)
+    assert [len(text) for _, text in fake.sent] == [4096, 904]
+    assert "".join(text for _, text in fake.sent) == answer
 
 
 async def test_groups_and_bots_are_ignored(fake, http):

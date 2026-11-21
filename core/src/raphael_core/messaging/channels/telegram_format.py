@@ -167,12 +167,10 @@ def split_html(html: str, limit: int = MAX_MESSAGE_UNITS) -> list[str]:
                 if found is not None and found[0] - start >= (index - start) // 2:
                     end, left_open = found
                     break
-        body = "".join(atoms[start:end]).rstrip()
+        body = "".join(atoms[start:end])
         message = "".join(tag for _, tag in carried) + body + _closers(left_open)
         if re.sub(r"<[^>]*>", "", message).strip():
             messages.append(message)
-        while end < len(atoms) and atoms[end] in ("\n", " ") and not left_open:
-            end += 1
         start, carried = end, left_open
     return messages
 

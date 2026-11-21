@@ -172,7 +172,7 @@ ROUTINE_CLI_GAP_S = 10.0
 # A reply in a room has no clock of its own: it goes on while it makes progress (a word or
 # a step of its CLI, a model's reply, a tool coming back, a new attempt) and ends after this long with none. A chosen wait
 # before another attempt is not a stall. A total of 60 seconds used to cut long rooms off mid-reply.
-ROOM_STALL_S = 180.0
+ROOM_STALL_S = 1800.0
 # How many turns of the conversation a task is shown.
 CONTEXT_TURNS = 3
 # The core waits this much longer than the task's own time, and the start of the worker
@@ -1836,7 +1836,7 @@ class BackgroundService:
             )  # fmt: skip
             return
         self._store.start(task.id)
-        limits = dataclasses.replace(self._limits,seconds=min(self._limits.seconds,ROOM_STALL_S),model_calls=min(self._limits.model_calls,4),tool_calls=min(self._limits.tool_calls,8)) if task.scope == 'room' else self._limits
+        limits = dataclasses.replace(self._limits,seconds=min(self._limits.seconds,ROOM_STALL_S),model_calls=min(self._limits.model_calls,20),tool_calls=min(self._limits.tool_calls,50)) if task.scope == 'room' else self._limits
         ledger = Ledger(self._spend)
         # What the spend calls this work (brain/meter.py): speaking in a group, a hand-off's work, a consultation.
         ledger.job = "room" if task.scope == "room" else task.mode if task.mode in ("work", "consult") else "task"
