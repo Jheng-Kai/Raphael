@@ -11,7 +11,7 @@ export default [
   scene("skill-library-back", "From a package low in a long library, Esc returns to the list where it was left, the focus on that package's row", [
     ...list, scroll('[data-skl-pack="pack:37"]'), click('[data-skl="open"][data-key="pack:37"]'), wait('.skl-page[data-skl-page="pack:37"]'), check("skill-library-page-top"),
     key("Escape"), waitGone(".skl-page"), check("skill-library-back")], { skillPackages: true }),
-  scene("skill-library-access", "Who may use a package: the whole team, or the characters ticked, in one menu that stays open while names are ticked", [
+  scene("skill-library-access", "Who may use a package: the whole team, or the characters ticked, in one menu that stays open while names are ticked; each row leads with a face (the team's own picture for the whole team) and its check stands at the right", [
     ...list, click('[data-skl="access"][data-key="pack:2"]'), wait(".skl-access-menu [data-member]"), check("skill-library-access")]),
   scene("skill-library-import", "The importer is the tab's first card: a link or owner/repo, or pasted SKILL.md in its place, a file, a folder, and one 匯入", [
     ...importing, click('[data-skl="paste"]'), wait("#skl-text"), check("skill-library-import")]),

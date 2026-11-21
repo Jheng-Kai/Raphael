@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, expect, test, vi } from "vitest";
-const api = vi.hoisted(() => ({ core: vi.fn(), pickOutputFolder: vi.fn() }));
+const api = vi.hoisted(() => ({ core: vi.fn(), membersList: vi.fn(), pickOutputFolder: vi.fn() }));
 vi.mock("./api", () => api);
 import { createSkillLibrary, failureText, skillLibraryHTML, type LibraryPackage } from "./skill-library";
 import { closeMenu, toaster } from "./ui";
@@ -16,11 +16,15 @@ const packages = (): LibraryPackage[] => [
     skills: [skill(6, "會議紀錄")] },
 ];
 const members = [{ id: 1, name: "小晴" }, { id: 2, name: "小森" }, { id: 3, name: "小葵" }];
+/** 小森's generated picture, as the roster carries it: the face the window draws for it everywhere. */
+const PICTURE = "data:image/png;base64,AAAA";
+const roster = { members: [{ id: 0, name: "Raphael" }, { id: 1, name: "小晴" }, { id: 2, name: "小森", avatar: "file:2.png", avatar_url: PICTURE }, { id: 3, name: "小葵" }] };
 
 afterEach(() => { closeMenu(); document.body.replaceChildren(); vi.resetAllMocks(); });
 
 async function setup(answer: (method: string, params: Record<string, unknown>) => unknown = () => ({})) {
   const state = { packages: packages() };
+  api.membersList.mockResolvedValue(roster);
   api.core.mockImplementation(async (method: string, params: Record<string, unknown>) => {
     if (method === "skills.library.list") return { packages: state.packages, members };
     return answer(method, params);
@@ -141,6 +145,37 @@ test("the access menu ticks characters one by one and turns into the whole team 
   expect(api.core).toHaveBeenLastCalledWith("skills.library.update", { key: "set:1", access: "all" });
   await settle();
   expect(accessOf(root, "set:1")).toBe("整個團隊");
+});
+
+test("each row of the access menu leads with who it names, a face or the team's own picture, and its check stands at the right", async () => {
+  const { root } = await setup();
+  press(root, '[data-skl="access"][data-key="pack:2"]');
+  const menu = document.querySelector(".skl-access-menu")!;
+  const rows = [...menu.querySelectorAll<HTMLElement>("[data-access], [data-member]")];
+  // No check on the left any more: the face, the name, then the check's place at the right edge, on every row.
+  expect(rows.map(row => [...row.children].map(part => part.className))).toEqual(rows.map(() => ["mlead", "mt", "ck"]));
+  const all = menu.querySelector('[data-access="all"]')!;
+  // The whole team is drawn as the sidebar draws it: its first faces in one square, Raphael first.
+  expect([...all.querySelectorAll(".mlead > .room-avatar > .av")].map(face => face.getAttribute("data-presence-member"))).toEqual(["0", "1", "2", "3"]);
+  // Each character's own face, from the roster: 小森's picture, the others their slimes.
+  expect([...menu.querySelectorAll("[data-member] .mlead > .av")].map(face => face.getAttribute("data-presence-member"))).toEqual(["1", "2", "3"]);
+  expect(menu.querySelector('[data-member="2"] .mlead .mb-av-pic img')?.getAttribute("src")).toBe(PICTURE);
+  // 小晴 and 小森 may use 研究工具: their checks stand at the right, and 小葵 and the whole team keep only the check's place.
+  expect([...menu.querySelectorAll("[data-member]")].map(row => !!row.querySelector(".ck:last-child svg"))).toEqual([true, true, false]);
+  expect(all.querySelector(".ck svg")).toBeNull();
+});
+
+test("the access menu still opens with a face on every row when the roster cannot be read", async () => {
+  api.membersList.mockRejectedValue(new Error("offline"));
+  api.core.mockImplementation(async (method: string) => method === "skills.library.list" ? { packages: packages(), members } : {});
+  const root = document.createElement("div");
+  document.body.append(root);
+  const library = createSkillLibrary(root, () => { root.innerHTML = skillLibraryHTML(library.view()); });
+  await library.load();
+  press(root, '[data-skl="access"][data-key="pack:2"]');
+  const menu = document.querySelector(".skl-access-menu")!;
+  expect(menu.querySelectorAll("[data-member] .mlead > .av")).toHaveLength(3);
+  expect(menu.querySelector('[data-access="all"] .mlead > .room-avatar')?.getAttribute("data-faces")).toBe("4");
 });
 
 test("the importer sends a link, pasted text or a file to the core and opens the new package", async () => {

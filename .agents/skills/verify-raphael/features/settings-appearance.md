@@ -56,7 +56,7 @@ This supersedes the About-you grouping and the search notes below.
 
 ## 團隊技能庫 (R-SKILL-17)
 
-The tab lists the shared skills in packages (skill-library.ts): a row per package with its count, who may use it, its switch and ⋯ (also on a right click). Pressing a package of several (its name, count or chevron) opens it on a page of its own in the tab, in the list's place: the back arrow and its name, its dropdown, switch and ⋯ as on its row, where it came from, then its skills, each with a switch. The back arrow, Esc or a step back return to the list scrolled where it was left, the focus on that row; nothing folds open in the list, and a skill alone keeps its one row. A new package of several opens its page at once. The importer is the tab's first card, with no line above it: a link or owner/repo (or pasted SKILL.md in its place), a picked or dropped file, a folder from the system's dialog (the output folder's picker), and one 匯入. Who may use a package is the vault's choice (整個團隊 or the characters ticked). A character's skills page shows the packages given to it read-only under 來自團隊技能庫, with a button to this tab. The core is `skills.library.*` (R-SKILL-15, R-SKILL-16); the shell lets those four methods through `core_call`.
+The tab lists the shared skills in packages (skill-library.ts): a row per package with its count, who may use it, its switch and ⋯ (also on a right click). Pressing a package of several (its name, count or chevron) opens it on a page of its own in the tab, in the list's place: the back arrow and its name, its dropdown, switch and ⋯ as on its row, where it came from, then its skills, each with a switch. The back arrow, Esc or a step back return to the list scrolled where it was left, the focus on that row; nothing folds open in the list, and a skill alone keeps its one row. A new package of several opens its page at once. The importer is the tab's first card, with no line above it: a link or owner/repo (or pasted SKILL.md in its place), a picked or dropped file, a folder from the system's dialog (the output folder's picker), and one 匯入. Who may use a package is the vault's choice (整個團隊 or the characters ticked). Its menu leads each row with who it names, a character's 20 px face from the roster and, for 整個團隊, the team's own picture (its first four faces in one square, Raphael first, as the sidebar draws the team); a ticked row's check stands at its right edge, never at the left (R-UI-174, `skill-library-access`). A character's skills page shows the packages given to it read-only under 來自團隊技能庫, with a button to this tab. The core is `skills.library.*` (R-SKILL-15, R-SKILL-16); the shell lets those four methods through `core_call`.
 
 ```powershell
 npm run look -- skill-library skill-library-open skill-library-back skill-library-access skill-library-import skill-library-imported skill-library-import-failed member-skills-library --theme both --width 1120,720,1920x1080
@@ -428,7 +428,15 @@ scenes plus desktop-panel, both themes at 1120,720,1920x1080.
 R-VAULT-01..05: Settings > Safety contains Vault. Entries have login, contact or
 card kinds, counted list filters, a label, one-line owner hint and all/chosen-member
 access. The counted filters browse records; they are not setting-value controls.
-Use the shared fieldHTML, sel/openMenu and row action menu. Removing an entry is three
+Use the shared fieldHTML, sel/openMenu and row action menu. Nothing in Safety is a box to
+tick (R-UI-174): once 指定對象 is chosen, each member is a row of the group dialog's kind
+(`.room-row`, one button with `aria-pressed`), its 28 px face and name at the left and the
+round check at the right edge; a chosen row is filled the whole way with `--selected`. They
+stand in two columns, one below 800 px so that a long name is read whole. The
+rows of an imported file's preview are the same, an entry's label over its site, all chosen
+at first. A press chooses where it stands and keeps the private fields typed above it.
+`vault-sharing` presses a member and `vault-import-preview` leaves one entry out, each with
+the pointer moved away, so the pictures show a chosen row as it stays. Removing an entry is three
 presses: ⋯ (or a right click), 移除, which asks 「確定移除這筆資料？」 in its own place in the
 same menu (`ActionItem.ask`), and that item again; no second menu opens.
 

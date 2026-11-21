@@ -203,6 +203,12 @@ export function faceHTML(member: { id: number; name: string; avatar?: string | n
   return slimeFaceHTML(member, size, o.cls, o.moving);
 }
 
+/** A group's picture: up to four of its faces sharing one square, as the sidebar draws a group and the whole team. */
+export function groupFacesHTML(members: readonly Parameters<typeof faceHTML>[0][], size: number): string {
+  const faces = members.slice(0, 4);
+  return `<span class="room-avatar" data-faces="${faces.length}" style="--av:${size}px" aria-hidden="true">${faces.map(member => faceHTML(member, size)).join("")}</span>`;
+}
+
 // ---------- routines ----------
 
 const DAY_KEYS: readonly MessageKey[] = ["members.day0", "members.day1", "members.day2", "members.day3", "members.day4", "members.day5", "members.day6"];

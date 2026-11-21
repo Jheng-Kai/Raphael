@@ -547,6 +547,20 @@ export function checkRendered(name, context = {}) {
       require(visible(menu) && menu.querySelector('[data-access="all"]')?.getAttribute('aria-checked') === 'false', 'the menu offers the whole team, not chosen now');
       const ticked = items.filter(item => item.getAttribute('aria-checked') === 'true').map(item => item.textContent.trim());
       require(items.length === 3 && ticked.join('、') === '小晴、小森', `the three characters are listed, those the row names ticked (${items.length}: ${ticked.join('、')})`);
+      // R-UI-174: each row leads with who it names, the check (when ticked) at its right edge; never a check on the left.
+      const all = menu.querySelector('[data-access="all"]'), rows = [all, ...items];
+      require(all.querySelector(':scope > .mlead > .room-avatar')?.querySelectorAll(':scope > .av').length === 4, "the whole team leads with the team's own picture, its first faces in one square");
+      require(items.every(item => visible(item.querySelector(':scope > .mlead > .av'))), 'each character leads with its face');
+      for (const item of rows) {
+        const [lead, words, mark] = [':scope > .mlead', ':scope > .mt', ':scope > .ck'].map(part => item.querySelector(part)?.getBoundingClientRect());
+        const box = item.getBoundingClientRect(), label = item.textContent.trim();
+        require(lead && words && mark && lead.right <= words.left + 1 && words.right <= mark.left + 1, `${label}: the face, then the name, then the check's place`);
+        require(box.right - mark.right <= 12 && lead.left - box.left <= 12, `${label}: the face at the left edge and the check at the right edge (${Math.round(lead.left - box.left)}, ${Math.round(box.right - mark.right)})`);
+        require(Math.abs(lead.width - 20) <= 0.5 && Math.abs(lead.height - 20) <= 0.5 && Math.abs((lead.top + lead.bottom) / 2 - (box.top + box.bottom) / 2) <= 1, `${label}: a 20 px face in the middle of its row`);
+        require(!!item.querySelector('.ck svg') === (item.getAttribute('aria-checked') === 'true'), `${label}: a check only when it is ticked`);
+      }
+      const leads = rows.map(item => item.querySelector('.mlead').getBoundingClientRect().left), marks = rows.map(item => item.querySelector('.ck').getBoundingClientRect().right);
+      require(Math.max(...leads) - Math.min(...leads) <= 1 && Math.max(...marks) - Math.min(...marks) <= 1, 'the faces are one column and the checks another');
       const anchor = rowOf('pack:2').querySelector('.skl-access').getBoundingClientRect(), frame = menu.getBoundingClientRect();
       require(frame.top >= anchor.bottom - 1 && frame.bottom <= innerHeight + 1, 'the menu stands under its button, inside the window');
     }
@@ -583,13 +597,40 @@ export function checkRendered(name, context = {}) {
   }
   if (name.startsWith('vault-')) {
     const vault = document.querySelector('.vault');
+    /**
+     * R-UI-174: what Safety lets the owner choose (who may use an entry, what a file brings in) is rows with no box: each row
+     * one button, a member's 28 px face (`faces`) or the words at its left, the round check at its right edge, and a chosen
+     * row filled the whole way with the selected colour while the others stay on the pane. Returns the chosen rows.
+     */
+    const vaultPicks = (list, faces) => {
+      const rows = [...vault.querySelectorAll(`${list} > .btn.room-row[aria-pressed]`)];
+      require(rows.length >= 2 && !vault.querySelector('input[type="checkbox"]'), `${list}: rows to press and no box to tick (${rows.length})`);
+      const probe = document.createElement('i'); probe.style.backgroundColor = 'var(--selected)'; vault.append(probe);
+      const selected = getComputedStyle(probe).backgroundColor; probe.remove();
+      for (const row of rows) {
+        const box = row.getBoundingClientRect(), label = row.textContent.trim();
+        const words = row.querySelector(':scope > .room-row-name').getBoundingClientRect(), mark = row.querySelector(':scope > .room-row-mark').getBoundingClientRect();
+        require(words.width > 0 && words.right <= mark.left + 1 && box.right - mark.right <= 12, `${label}: the words, then the check at the right edge (${Math.round(box.right - mark.right)})`);
+        const lines = faces ? [row.querySelector('.room-row-name')] : [...row.querySelectorAll('.room-row-name > *')];
+        require(lines.every(line => line.scrollWidth <= line.clientWidth + 1), `${label}: its words are whole, not cut`);
+        if (faces) {
+          const face = row.querySelector(':scope > .av')?.getBoundingClientRect();
+          require(face && Math.abs(face.width - 28) <= 0.5 && face.left - box.left <= 16 && face.right <= words.left + 1 && Math.abs((face.top + face.bottom) / 2 - (box.top + box.bottom) / 2) <= 1, `${label}: a 28 px face at the left, in the middle of its row`);
+        }
+        const on = row.getAttribute('aria-pressed') === 'true', fill = getComputedStyle(row).backgroundColor;
+        require(on ? fill === selected && visible(row.querySelector('.room-row-mark svg')) : /rgba\(0, 0, 0, 0\)|transparent/.test(fill) && !row.querySelector('.room-row-mark svg'),
+          `${label}: ${on ? 'chosen, filled the whole way and checked' : 'not chosen, on the pane with no check'} (${fill} against ${selected})`);
+      }
+      return rows.filter(row => row.getAttribute('aria-pressed') === 'true');
+    };
     if (name === 'vault-payment') {
       const card = document.querySelector('[data-permission-card]');
       const body = card?.querySelector('.card-body');
       require(visible(body) && ['公司差旅卡', 'https://travel.example.invalid', 'NT$ 1,280', '最後付款由你完成'].every(text => body.innerText.includes(text)), 'payment visibly names the card, merchant, amount and owner final step without expanding details');
       require(!card.querySelector('[data-act="perm-always"]'), 'no standing payment approval is offered');
     } else if (name === 'vault-preview') {
-      require(vault.querySelectorAll('[data-vault-import]').length === 2 && vault.querySelectorAll('[data-vault-import]:checked').length === 1, 'preview supports individual selection');
+      require(vault.querySelectorAll('[data-vault-import]').length === 2 && vault.querySelectorAll('[data-vault-import][aria-pressed="true"]').length === 1, 'preview supports individual selection');
+      vaultPicks('.vault-preview', false);
       require(!window.__look.calls.some(call => ['vault.add','vault.import'].includes(call.method)), 'preview writes no credentials');
     } else if (name.startsWith('vault-new-')) {
       const fields = { login:2, contact:4, card:4 }[name.slice(10)];
@@ -603,7 +644,11 @@ export function checkRendered(name, context = {}) {
       require(!window.__look.calls.some(call => call.method === 'vault.remove'), 'nothing is removed before the second press');
     }
     else if (name === 'vault-filter') require(vault.querySelectorAll('.vault-row').length === 1 && vault.textContent.includes('公司差旅卡'), 'card filter selects only cards');
-    else if (name === 'vault-sharing') require(vault.querySelectorAll('[data-vault-member]').length >= 2 && vault.querySelector('#vault-label').value === '出差聯絡資料', 'sharing preserves form input');
+    else if (name === 'vault-sharing') {
+      require(vault.querySelectorAll('[data-vault-member]').length >= 2 && vault.querySelector('#vault-label').value === '出差聯絡資料', 'sharing preserves form input');
+      const chosen = vaultPicks('.vault-members', true);
+      require(chosen.length === 1 && chosen[0].dataset.vaultMember === '1', `the member pressed is the one chosen (${chosen.map(row => row.dataset.vaultMember).join(',')})`);
+    }
     else {
       require(vault.querySelectorAll('.vault-row').length === 3 && vault.textContent.includes('出差用公司卡'), 'all kinds and hints appear');
       const about = vault.querySelector(':scope > p.dim'), lines = new Map();

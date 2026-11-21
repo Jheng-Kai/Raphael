@@ -7,13 +7,18 @@
 .vault-editor h3, .vault-editor p { margin: 0; }
 .vault-editor .field { width: 100%; }
 .vault-editor .vault-actions { justify-content: flex-end; }
-.vault-members, .vault-preview { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+/* Who may use an entry, and what a file brings in: rows with no box (R-UI-174), the group dialog's `.room-row` on the pane itself,
+   so that a chosen row's selected fill stands out from the pane in both themes. */
+.vault-members, .vault-preview { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }
 .vault-members { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .vault-preview { max-height: 260px; overflow-x: hidden; overflow-y: auto; }
-.vault-members label, .vault-preview label { display: flex; align-items: center; gap: 10px; }
-.vault-preview span, .vault-copy { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; }
+.vault-preview .room-row { padding-block: var(--sp-1); }
+.vault-preview .room-row-name, .vault-copy { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; }
+.vault-preview .room-row-name > * { overflow: hidden; text-overflow: ellipsis; }
+.vault-preview .room-row-name small { font-size: var(--fs-xs); color: var(--text-3); }
 .vault-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-block: 16px; border-bottom: 1px solid var(--line); }
 .vault-copy strong, .vault-copy small, .vault-copy p { overflow-wrap: anywhere; margin: 0; }
 .vault-copy small { color: var(--text-3); }
 .vault-copy p { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-@media (max-width: 800px) { .vault-actions { flex-wrap: wrap; } }
+/* Narrow, the members stand in one column, so that a long name is read whole rather than cut. */
+@media (max-width: 800px) { .vault-actions { flex-wrap: wrap; } .vault-members { grid-template-columns: minmax(0, 1fr); } }

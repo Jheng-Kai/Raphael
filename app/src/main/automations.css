@@ -137,6 +137,8 @@ div.handoff-event > .event-line { min-width: 0; max-width: 100%; }
 .room-list { display: grid; grid-template-columns: minmax(0, 1fr); padding: var(--sp-1); border-radius: var(--r-lg); background: color-mix(in srgb, var(--text) 5%, transparent); }
 .btn.room-row, .room-row { display: flex; align-items: center; gap: var(--sp-3); width: 100%; min-width: 0; min-height: 44px; padding: 0 var(--sp-2) 0 var(--sp-3); border: 0; border-radius: var(--r-md); background: transparent; color: var(--text); font-size: var(--fs-sm); font-weight: var(--weight-regular); text-align: left; }
 .btn.room-row:hover:not(:disabled) { background: var(--hover); }
+/* A chosen row is filled the whole way, as the window's chosen rows are, its check at its right (R-UI-174). */
+.btn.room-row[aria-pressed="true"] { background: var(--selected); }
 .btn.room-row:disabled { opacity: 1; cursor: default; }
 .room-row-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Who takes part: a round check at the right, filled when chosen. */

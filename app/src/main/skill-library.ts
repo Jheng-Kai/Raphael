@@ -8,11 +8,12 @@
 // owner/repo, or pasted SKILL.md text in its place, a .zip, .tar.gz or .md file picked or dropped on the card, or a folder
 // picked in the system's dialog, and one 匯入 (#249). The core does the work: skills.library.* (members/service.py).
 
-import { core, pickOutputFolder } from "./api";
+import { core, membersList, pickOutputFolder } from "./api";
 import { t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
 import { isTopLayer } from "./dismissals";
 import { openActions } from "./member-column";
+import { faceHTML, groupFacesHTML, RAPHAEL_ID } from "./members";
 import { bindNavLayer } from "./nav-layers";
 import { btn, closeMenu, esc, fieldHTML, ico, iconBtn, iconButton, openPopover, tg, toaster } from "./ui";
 import "./skill-library.css";
@@ -24,6 +25,8 @@ export interface LibraryPackage {
   enabled: boolean; access: Access; updatable: boolean; skills: LibrarySkill[];
 }
 export interface LibraryMember { id: number; name: string }
+/** A member's face as the roster draws it: its slime or its picture. */
+type Face = Parameters<typeof faceHTML>[0];
 export interface SkillLibraryView {
   packages: LibraryPackage[]; members: LibraryMember[]; loaded: boolean; failed: boolean;
   /** The package whose page is open in the list's place, or null for the list. */
@@ -141,12 +144,17 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
   let epoch = 0;
   /** How far the list was scrolled when a package's page took its place. */
   let listScroll = 0;
+  /** The members' faces by id, from the roster the rest of the window draws them from; without it a face is its id's own colour. */
+  let faces = new Map<number, Face>();
   const load = async (): Promise<void> => {
     const request = ++epoch;
+    const roster = Promise.resolve().then(() => membersList()).then(list => list.members, () => null);
     try {
       const result = await core<{ packages: LibraryPackage[]; members: LibraryMember[] }>("skills.library.list", {});
+      const team = await roster;
       if (request !== epoch) return;
       state.packages = result.packages; state.members = result.members; state.loaded = true; state.failed = false;
+      if (team) faces = new Map(team.map(member => [member.id, member]));
     } catch { if (request === epoch) state.failed = true; }
     if (request === epoch) redraw();
   };
@@ -198,14 +206,22 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
     if (file.size > MAX_FILE) { state.error = t("skillLib.tooLarge"); redraw(); return; }
     await bring({ file: { name: file.name, data: base64(await file.arrayBuffer()) } });
   };
-  /** Who may use a package: the whole team, or the characters ticked; the menu stays open while names are ticked. */
+  /**
+   * Who may use a package: the whole team, or the characters ticked; the menu stays open while names are ticked. Each row
+   * leads with who it names, as the @ menu does: a character's face, and for the whole team the team's own picture (its
+   * first faces in one square, as the sidebar draws the team, Raphael first); the check, when chosen, stands at the right.
+   */
   const chooseAccess = (anchor: HTMLElement, key: string): void => {
+    const face = (m: LibraryMember): Face => faces.get(m.id) ?? m;
+    const team = (): string => groupFacesHTML([{ id: RAPHAEL_ID, name: "" }, ...state.members.filter(m => m.id !== RAPHAEL_ID)].map(face), 20);
+    const parts = (lead: string, name: string, on: boolean): string =>
+      `<span class="mlead" aria-hidden="true">${lead}</span><span class="mt">${esc(name)}</span><span class="ck">${on ? ico("check") : ""}</span>`;
     const items = (access: Access): string =>
-      `<button type="button" role="menuitemradio" tabindex="-1" data-access="all" aria-checked="${access === "all"}"><span class="ck">${access === "all" ? ico("check") : ""}</span><span class="mt">${esc(t("vault.everyone"))}</span></button>` +
+      `<button type="button" role="menuitemradio" tabindex="-1" data-access="all" aria-checked="${access === "all"}">${parts(team(), t("vault.everyone"), access === "all")}</button>` +
       `<div class="menu-sep" role="separator"></div>` +
       state.members.map(m => {
         const on = access === "all" || access.includes(m.id);
-        return `<button type="button" role="menuitemcheckbox" tabindex="-1" data-member="${m.id}" aria-checked="${on}"><span class="ck">${on ? ico("check") : ""}</span><span class="mt">${esc(m.name)}</span></button>`;
+        return `<button type="button" role="menuitemcheckbox" tabindex="-1" data-member="${m.id}" aria-checked="${on}">${parts(faceHTML(face(m), 20), m.name, on)}</button>`;
       }).join("");
     const menu = openPopover(anchor, items(byKey(key)?.access ?? "all"), { className: "menu skl-access-menu", role: "menu", label: t("vault.access") });
     menu.addEventListener("click", event => {
