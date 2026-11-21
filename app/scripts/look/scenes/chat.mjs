@@ -69,6 +69,10 @@ const pendingReply = [type('.cmp-input', "請整理這週的研究重點。"), k
 const voiceReply = [{ action: "main-event", event: { type: "Dictation", phase: "listening", agent: true, member_id: 0 } },
   { action: "main-event", event: { type: "Dictation", phase: "processing", agent: true, member_id: 0 } }, ...quickOpen, rosterRefresh, ...stopSlot, check("pending-work")];
 export default [
+  scene("composer-typing-performance", "Typing and keyboard completion stay responsive with a full skill library and long history", [
+    wait('.page-agent:not([hidden]) .thread [data-id="10399"]'),
+    { action: "typing-probe", measure: { name: "typing" } },
+  ], { typingPerformance: "Analyst" }),
 
   scene("composer-stop-roster", "Roster refresh cannot repaint a restored running reply's Stop as an emblem", [rosterRefresh, ...stopSlot], { running: true }),
   { ...scene("composer-stop-pending", "A typed CLI request shares the running work line before its first turn", [...pendingReply, { action: "freeze-motion", at: 600 }, check("work-dots")], { stopPending: true }), motion: true },

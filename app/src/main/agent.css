@@ -246,7 +246,7 @@
 .message-actions { display: flex; flex: none; align-items: center; justify-content: flex-start; gap: var(--sp-1); height: 28px; opacity: 0; }
 .message-tooltip { position: fixed; z-index: 100; pointer-events: none; max-width: calc(100vw - 16px); padding: var(--sp-1) var(--sp-2); border: 1px solid var(--float-edge); border-radius: var(--r-sm); background: var(--float); color: var(--text); box-shadow: var(--pop); font: var(--fs-2xs)/1.5 var(--ui); }
 .message-tooltip { white-space: pre-line; overflow-wrap: anywhere; }
-.message-tooltip[hidden], :has([data-cancel-armed="true"]) > .message-tooltip { display: none; }
+.message-tooltip[hidden] { display: none; }
 .page-agent .btn.quote-pill { position: fixed; z-index: 99; width: auto; min-height: var(--h-ctl); padding: 3px var(--sp-3); gap: var(--sp-1); border: 1px solid var(--edge); border-radius: var(--r-pill); background: var(--panel); color: var(--text); box-shadow: var(--pop); font: var(--fs-xs)/calc(var(--h-ctl) - 8px) var(--ui); }
 .page-agent .btn.quote-pill[hidden], .cmp-quote[hidden] { display: none; }
 /* A reply that failed on a plan's usage limit leads with that plan's Manage usage, under its words. */

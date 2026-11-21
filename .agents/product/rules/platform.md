@@ -2,6 +2,12 @@
 
 Speed, start-up, the network and how the repository is worked. Part of [the product rules](../RULES.md); a rule's ID is unique across every file.
 
+## Composer input and completion
+
+| ID | Date | Rule | Check | Severity | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-PERF-22 | 2026-11-22 | Typing and keyboard completion leave transcript and sidebar DOM and geometry untouched. Completion filters prepared names, preserves unchanged rows, and mounts a bounded scroll window for a large inventory. The Edge journey records per-key main-thread, frame, layout, style, IPC and mutation evidence against 150 skills, 25 members and 400 stored turns. Aim for p95 below 4 ms plain and 8 ms filtering, with the scene's regression ceilings allowing for measurement and host variance. | look | hard | composer-typing-performance; app/scripts/look/mock-ipc.test.mjs::serves the composer performance fixture through normal reads |
+
 ## Shared release data
 
 | ID | Date | Rule | Check | Severity | Evidence |

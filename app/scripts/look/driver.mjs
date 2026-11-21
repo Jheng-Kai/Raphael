@@ -5,6 +5,7 @@ import { idleCost, paintedSlime, slimeBoard, slimeParts, slimePointer, slimeShar
 import { eventStorm } from "./event-storm.mjs";
 import { placesProblems, slimePlaces } from "./slime-places.mjs";
 import { sendProbe } from "./send-probe.mjs";
+import { typingProbe } from "./typing-probe.mjs";
 import { dragProbe } from "./drag-probe.mjs";
 import { followProbe } from "./follow-probe.mjs";
 import { animationAudit, motionCost, motionDetails } from "./motion-cost.mjs";
@@ -777,6 +778,7 @@ export async function perform(page, step, evidenceDirectory) {
     // From now on the roster answers after `ms` (the mock's rosterDelay): the thread is asked for first and the roster comes late.
     case "late-roster": await page.evaluate(ms => { window.__look.rosterDelay = ms; }, step.ms); break;
     case "send-probe": return await sendProbe(page, step);
+    case "typing-probe": return await typingProbe(page);
     case "drag-probe": return await dragProbe(page, step, evidenceDirectory);
     case "follow-probe": return await followProbe(page, step);
     case "advance-time":

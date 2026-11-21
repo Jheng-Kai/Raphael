@@ -28,13 +28,17 @@ export function bindPageComposer(input: HTMLTextAreaElement) {
   let pageId: string | undefined;
   const draw = (): void => {
     if (!input.value.trim()) pageId = undefined;
-    note.hidden = !pageId;
-    note.textContent = t("page.composerNote");
-    note.title = note.textContent;
+    if (note.hidden === !!pageId) note.hidden = !pageId;
+  };
+  const translate = (): void => {
+    const label = t("page.composerNote");
+    note.textContent = label;
+    note.title = label;
   };
   input.addEventListener("input", draw);
   input.addEventListener("composer-draft-restored", () => { pageId = undefined; draw(); });
-  onLocaleChange(draw);
+  onLocaleChange(translate);
+  translate();
   return {
     get pageId() { return input.value.trim() ? pageId : undefined; },
     restore(id?: string) { pageId = id; draw(); },
@@ -185,7 +189,7 @@ function fitComposerRow(bar: HTMLElement): void {
  *  app gave it on its own, as opening a conversation does, marks nothing, since a jump lights nothing (R-UI-118). */
 export function bindComposerRow(form: HTMLElement): void {
   fitComposerRow(form.querySelector<HTMLElement>(".cmp-bar")!);
-  const engage = (): void => { form.dataset.engaged = ""; };
+  const engage = (): void => { if (!form.hasAttribute("data-engaged")) form.dataset.engaged = ""; };
   form.addEventListener("pointerdown", engage);
   form.addEventListener("keydown", engage);
   form.addEventListener("focusout", event => { if (!form.contains(event.relatedTarget as Node | null)) delete form.dataset.engaged; });
@@ -245,7 +249,11 @@ export function createChatComposer(options: { placeholder(): string; transcriptT
       cardFailure(failed.firstElementChild, () => el.requestSubmit(), () => failed?.remove(), null);
     }).finally(() => { if (submitted === revision) { fit(); input.focus(); } });
   });
-  input.addEventListener("input",fit);input.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229){e.preventDefault();el.requestSubmit();}});
+  input.addEventListener("input", () => {
+    const disabled = busy || attaching > 0 || recording || starting || (!input.value.trim() && !files.length);
+    if (send.disabled !== disabled) send.disabled = disabled;
+  });
+  input.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229){e.preventDefault();el.requestSubmit();}});
   el.querySelector<HTMLElement>(".cmp-attach")!.addEventListener("click",()=>{picker.value="";picker.click();});bindActionMode(el.querySelector<HTMLElement>(".cmp-mode")!);bindComposerRow(el);
   // The composer keeps its clicks (below), so a waiting picture opens large from here.
   el.querySelector(".cmp-file")!.addEventListener("click",e=>{const picture=(e.target as Element).closest<HTMLElement>(".cmp-pic"),src=picture?.querySelector("img")?.getAttribute("src");if(picture){if(src)openMediaLightbox(picture,src);return;}const button=(e.target as Element).closest<HTMLElement>("[data-file]");if(button){files=files.filter((_,i)=>i!==Number(button.dataset.file));draw();}});

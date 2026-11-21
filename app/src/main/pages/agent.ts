@@ -417,6 +417,7 @@ export function createAgent(app: AppContext, places?: {
     composerFolder?.draw();
     caption.textContent = title;
     caption.hidden = !title;
+    caption.closest(".mb-chat")?.toggleAttribute("data-chat-caption", !!title);
     drawTitleLabel(title);
   }
 
@@ -1662,7 +1663,8 @@ export function createAgent(app: AppContext, places?: {
 
   /** Send takes words or files; the field sizes itself to its text (`.cmp-input` in agent.css). */
   function fit(): void {
-    sendButton.disabled = !sendable();
+    const disabled = !sendable();
+    if (sendButton.disabled !== disabled) sendButton.disabled = disabled;
   }
 
   /**

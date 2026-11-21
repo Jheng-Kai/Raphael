@@ -17,7 +17,7 @@
    so that its first message stands clear of the row, and what scrolls up fades out as it reaches the row (conversations.css). */
 .mb-chat { --row-edge: var(--pa-chat-pad); --row-hang: 0px; --row-lead: calc(var(--pa-top) + var(--row-hang)); display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); min-width: 0; min-height: 0; padding: 0 var(--pa-chat-pad); }
 /* A quick question's caption hangs under the pill (agent.ts): the thread starts below it. */
-.mb-chat:has(.conversation-caption:not(:empty, [hidden])) { --row-hang: 20px; }
+.mb-chat[data-chat-caption] { --row-hang: 20px; }
 /* Tools at the top right stop short of the window's buttons where the pane reaches the window's edge; where another pane stands at
    the right (the details panel as a column, a room's side thread) that pane's own top row carries them and the tools go to the
    pane's edge. */

@@ -8,9 +8,21 @@ The composer's + (`composer-plus.ts`, R-UI-166) is the third way in. In a member
 
 ## How to get to it (user POV)
 
-Open a private conversation and type @ or /, at the start or after other words: both open where an @ stands or a / begins a word (`completion-trigger.ts` holds the two rules; a / inside a word or an address such as `a/b` or `https://x.com/y` opens nothing). Open a group through the sidebar for the allowed-recipient consumer. With nothing typed the @ menu is one list of every other member and then every offered app, in a menu of a fixed height (seven rows and half of the next, so the cut row says it goes on) that scrolls with the mouse wheel and keeps the row the arrow keys reach in view (there is no Show all row and no pages). Oversized skill lists of the / menu still page to fit the available height. Search caps results at eight and ranks exact, prefix and substring name/alias matches (the one matcher, R-FIND-01), members before apps. The fixture contains 32 synthetic services, including unavailable connections and plugin provenance.
+Open a private conversation and type @ or /, at the start or after other words: both open where an @ stands or a / begins a word (`completion-trigger.ts` holds the two rules; a / inside a word or an address such as `a/b` or `https://x.com/y` opens nothing). Open a group through the sidebar for the allowed-recipient consumer. With nothing typed the @ menu is one list of every other member and then every offered app, in a menu of a fixed height (seven rows and half of the next, so the cut row says it goes on) that scrolls with the mouse wheel and keeps the row the arrow keys reach in view (there is no Show all row and no pages). Oversized skill lists in the / menu use one scroll window and keep the keyboard selection visible. Search caps results at eight and ranks exact, prefix and substring name/alias matches (the one matcher, R-FIND-01), members before apps. The fixture contains 32 synthetic services, including unavailable connections and plugin provenance.
 
 ## Driving it with look
+
+```powershell
+npm run look -- composer-typing-performance --theme both --width 1120,720,1920x1080
+```
+
+R-PERF-22 drives the real composer with 400 stored turns (the ordinary
+transcript window still bounds what is mounted), 25 members and 150 skills,
+including a 60-skill package. It measures 40 plain keys, each opening key,
+ten slash and six mention filter keys, and eight arrows in each menu. It checks
+the mounted window can wrap to the last skill and select it, and rejects
+transcript/sidebar mutations, geometry reads and repeated inventory reads.
+Set `LOOK_TRACE=1` for per-key trace marks, renderer stacks and style invalidation. Timings from this mode are diagnostic.
 
 Selected look matrix, both themes at 1120,720,1920x1080:
 
