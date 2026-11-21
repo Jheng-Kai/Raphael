@@ -10,6 +10,43 @@ from raphael_core.failures import Failure
 from .test_service import make_rig  # noqa: F401
 
 
+BROKEN = r'{"text":"有，若你說的是 DrunkDeer G65…nn1. 首選：…","messages":"有，若你說的是 **DrunkDeer G65**…\n\n1. **首選…**\n   - [DrunkDeer 原廠防塵罩頁 (https://…)nn2. …"]}]}'
+RECOVERED = "有，若你說的是 **DrunkDeer G65**…\n\n1. **首選…**\n   - [DrunkDeer 原廠防塵罩頁 (https://…)\n2. …"
+
+
+@pytest.mark.parametrize("literal", [False, True], ids=["API", "written CLI"])
+def test_recovers_the_reported_broken_reply_envelope(literal):
+    from raphael_core.agent.answers import parse_reply
+
+    reply = parse_reply(BROKEN, "zh-TW", plain=True, long=True, literal=literal)
+    assert reply.text == RECOVERED
+
+
+@pytest.mark.parametrize("literal", [False, True], ids=["API", "written CLI"])
+def test_reply_envelope_preserves_authored_text_and_decodes_escapes(literal):
+    from raphael_core.agent.answers import parse_reply
+
+    words = 'He said "use C:\\Notes".\n\n1. Done.'
+    envelope = json.dumps({"text": words})
+    assert parse_reply(envelope, "en", literal=literal).text == words
+    assert parse_reply(envelope + "]}", "en", literal=literal).text == words
+    for authored in (
+        'The JSON field is "text": "Example".nn1. Keep this.',
+        '```json\n{"text":"Example", "id":1}\n```',
+        '```json\n[{"text":"Example"}]\n```',
+    ):
+        assert parse_reply(authored, "en", literal=literal).text == authored
+
+
+def test_broken_envelope_falls_back_to_words_and_logs_only_the_shape(caplog):
+    from raphael_core.agent.answers import parse_reply
+
+    broken = '{"text": Draft without quotes, "thinking": "Private notes"}]}'
+    assert parse_reply(broken, "en", plain=True).text == "Draft without quotes"
+    assert "Malformed reply envelope" in caplog.text
+    assert "Draft without quotes" not in caplog.text and "Private notes" not in caplog.text
+
+
 ENVELOPE = json.dumps({"text": "Gmail needs a connection.", "messages": ["Gmail needs a connection."], "say_ja": "接続が必要です。"})
 
 

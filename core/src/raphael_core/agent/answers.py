@@ -381,6 +381,99 @@ _CUT = object()  # an object of the protocol's own fields that stops before it i
 # A model often types a real line break inside a string of its object: the words are good, so they are read (`strict`
 # would make that a failed turn).
 _LENIENT = json.JSONDecoder(strict=False)
+_REPLY_FIELDS = {"text", "messages"}
+_JSON_STRING = re.compile(r'"(?:[^"\\]|\\[\s\S])*"')
+_JSON_TOKEN = re.compile(_JSON_STRING.pattern + r'|[{}\[\]]')
+_FIELD_COLON = re.compile(r'\s*:\s*')
+_ARRAY_STRING = re.compile(r'\s*(' + _JSON_STRING.pattern + r')\s*,?')
+_ESCAPE = re.compile(r'\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4})|\\[\s\S]')
+_LOST_BREAK = re.compile(r'([.!?。！？…])([)）]?)nn(?=\d|[-+*][ \t])')
+
+
+def _reply_breaks(words: str) -> str:
+    return _LOST_BREAK.sub(r'\1\2\n', words)
+
+
+def _decode_reply_string(token: str) -> str:
+    try:
+        return _LENIENT.decode(token)
+    except ValueError:
+        def unescape(match: re.Match) -> str:
+            try:
+                return json.loads(f'"{match[0]}"')
+            except ValueError:
+                return match[0]
+
+        return _ESCAPE.sub(unescape, token[1:-1])
+
+
+def _broken_reply(text: str) -> dict | None:
+    """Recover only visible fields from one malformed, bare reply object."""
+    if not text.startswith("{"):
+        return None
+    try:
+        _, end = _LENIENT.raw_decode(text)
+    except ValueError:
+        pass
+    else:
+        if text[end:].strip(" \t\r\n,]}"):
+            return None  # a run of objects or authored prose belongs to the existing parser
+
+    fields = {}
+    key, start, depth, end = "", 0, 1, len(text)
+    for token in _JSON_TOKEN.finditer(text, 1):
+        mark = token[0]
+        if depth == 1:
+            if mark == "}":
+                end = token.start()
+                break
+            if mark.startswith('"') and (colon := _FIELD_COLON.match(text, token.end())):
+                if key in _REPLY_FIELDS:
+                    fields[key] = text[start:token.start()]
+                key, start = mark[1:-1], colon.end()
+        if mark in ("{", "["):
+            depth += 1
+        elif mark in ("}", "]"):
+            depth = max(1, depth - 1)
+    if key in _REPLY_FIELDS:
+        fields[key] = text[start:end]
+    if not fields:
+        return None
+
+    candidates = {}
+    for key, raw in fields.items():
+        if match := _JSON_STRING.match(raw):
+            candidates[key] = [_decode_reply_string(match[0])]
+        elif key == "messages" and raw.startswith("["):
+            parts, at = [], 1
+            while match := _ARRAY_STRING.match(raw, at):
+                parts.append(_decode_reply_string(match[1]))
+                at = match.end()
+            candidates[key] = parts
+    words = candidates.get("text", [""])[0]
+    messages = [part for part in candidates.get("messages", []) if part.strip()]
+    if messages and (not words.strip() or any("\n" in part or "\r" in part for part in messages)):
+        return {"messages": [_reply_breaks(part) for part in messages]}
+    if words.strip():
+        return {"text": _reply_breaks(words)}
+
+    # Keep only the visible field's remaining words. In particular, never copy progress or private metadata.
+    logger.warning("Malformed reply envelope needed plain-text fallback: chars=%d", len(text))
+    raw = fields.get("text", "").strip(' \t\r\n{}[]",:') or fields.get("messages", "").strip(' \t\r\n{}[]",:')
+    return {"text": _reply_breaks(_decode_reply_string(f'"{raw}"'))}
+
+
+def _normalize_envelope(data: dict) -> dict:
+    """Repair lost list breaks only in words taken from actual envelope fields."""
+    result = dict(data)
+    if isinstance(words := result.get("text"), str):
+        result["text"] = _reply_breaks(words)
+    if isinstance(messages := result.get("messages"), list):
+        result["messages"] = [_reply_breaks(part) if isinstance(part, str) else part for part in messages]
+    elif isinstance(messages, str) and messages.strip() and (not _one_line_text(result.get("text")).strip()
+                                                           or "\n" in messages or "\r" in messages):
+        result["messages"] = [_reply_breaks(messages)]
+    return result
 
 
 def _object_run(text: str, at: int) -> tuple[list[dict], int, bool]:
@@ -516,11 +609,13 @@ def _nested_envelope(body: str) -> dict | None:
     try:
         value = _LENIENT.decode(body)
     except ValueError:
+        if (recovered := _broken_reply(body.strip())) is not None:
+            return recovered
         read = _read_envelope(body, edges=False)
         return read if isinstance(read, dict) else None
     if isinstance(value, str):
         return _inner_envelope(value)
-    return value if isinstance(value, dict) and ("text" in value or "messages" in value) else None
+    return _normalize_envelope(value) if isinstance(value, dict) and value.keys() & _REPLY_FIELDS else None
 
 
 def _reply_input(value: str, default_prefix: str | None = None, *, literal: bool = False) -> dict:
@@ -536,18 +631,22 @@ def _reply_input(value: str, default_prefix: str | None = None, *, literal: bool
         obj = _LENIENT.decode(envelope)
     except ValueError:
         obj = None
+        if not fenced and (recovered := _broken_reply(text)) is not None:
+            return recovered
+    if fenced and (isinstance(obj, list) or isinstance(obj, dict) and not (_exact_envelope(obj) or obj.keys() & _STRONG_KEYS)):
+        return {"text": value, "prefix": default_prefix}
     if literal:
         # Written CLI replies admit only the protocol's exact outer shape, or objects of its fields one after another; all
         # other JSON is authored content. A CLI is never offered memory or a lookup, so what it wrote of them is dropped.
         if _exact_envelope(obj):
-            return {key: item for key, item in obj.items() if key not in ("memory", "need")}
+            return _normalize_envelope({key: item for key, item in obj.items() if key not in ("memory", "need")})
         if isinstance(read := _read_envelope(envelope, edges=False, strict=True), dict):
             return {key: item for key, item in read.items() if key not in ("memory", "need")}
         return {"text": value, "prefix": default_prefix}
     if isinstance(obj, dict) and ("text" in obj or "messages" in obj):
-        return obj
+        return _normalize_envelope(obj)
     if isinstance(obj, str) and (inner := _inner_envelope(obj)) is not None:
-        return inner
+        return _normalize_envelope(inner)
     if obj is None and (read := _read_envelope(text)) is not None:
         if read is _CUT:
             raise AgentFailure("error")

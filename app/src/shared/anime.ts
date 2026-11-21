@@ -42,12 +42,72 @@ export function plainReplies(texts: readonly string[]): string[] {
     plain[index] = text.trimStart().slice(opening[0].length);
   });
   close(texts.length - 1);
-  return plain;
+  return plain.map((text, index) => OPENING.test(texts[index].trimStart()) && text !== texts[index] ? replyBody(text) : text);
 }
 
 /** Older stored CLI envelopes still read as words; authored JSON without reply keys stays intact. */
 export function replyBody(text: string): string {
   return replyMessages(text).join("\n\n");
+}
+
+const replyBreaks = (words: string): string => words.replace(/([.!?。！？…])([)）]?)nn(?=\d|[-+*][ \t])/gu, "$1$2\n");
+const jsonString = /"(?:[^"\\]|\\[\s\S])*"/;
+const replyTokens = new RegExp(jsonString.source + "|[{}\\[\\]]", "g");
+const arrayString = new RegExp("\\s*(" + jsonString.source + ")\\s*,?", "y");
+const fieldColon = /\s*:\s*/y;
+
+function decodeReplyString(token: string): string {
+  try { return JSON.parse(token); } catch {
+    return token.slice(1, -1).replace(/\\(?:["\\/bfnrt]|u[\da-fA-F]{4})|\\[\s\S]/g, escape => {
+      try { return JSON.parse('"' + escape + '"'); } catch { return escape; }
+    });
+  }
+}
+
+/** Older history can still hold the broken object that reached the window before core recovery. */
+function brokenReply(body: string): string[] | null {
+  const text = body.trimStart();
+  if (!text.startsWith("{")) return null;
+  const fields = new Map<string, string>();
+  let depth = 1, key = "", start = 0, end = text.length;
+  for (const token of text.matchAll(replyTokens)) {
+    const mark = token[0];
+    if (token.index === 0) continue;
+    if (depth === 1) {
+      if (mark === "}") { end = token.index; break; }
+      fieldColon.lastIndex = token.index + mark.length;
+      if (mark.startsWith('"') && fieldColon.test(text)) {
+        if (key === "text" || key === "messages") fields.set(key, text.slice(start, token.index));
+        key = mark.slice(1, -1);
+        start = fieldColon.lastIndex;
+      }
+    }
+    if (mark === "{" || mark === "[") depth++;
+    else if (mark === "}" || mark === "]") depth = Math.max(1, depth - 1);
+  }
+  if (end < text.length && /[^\s,}\]]/.test(text.slice(end + 1))) return null;
+  if (key === "text" || key === "messages") fields.set(key, text.slice(start, end));
+  if (!fields.size) return null;
+
+  const quoted = (raw: string): string => {
+    const match = jsonString.exec(raw);
+    return match?.index === 0 ? decodeReplyString(match[0]) : "";
+  };
+  const rawText = fields.get("text") ?? "", rawMessages = fields.get("messages") ?? "";
+  const words = quoted(rawText), messages = [quoted(rawMessages)];
+  if (rawMessages.startsWith("[")) {
+    arrayString.lastIndex = 1;
+    let match: RegExpExecArray | null;
+    while ((match = arrayString.exec(rawMessages))) messages.push(decodeReplyString(match[1]));
+  }
+  const readable = messages.filter(part => part.trim());
+  if (readable.length && (!words.trim() || readable.some(part => /[\r\n]/.test(part)))) return readable.map(replyBreaks);
+  if (words.trim()) return [replyBreaks(words)];
+
+  console.warn("Malformed reply envelope needed plain-text fallback", { chars: text.length });
+  const strip = (raw: string) => raw.replace(/^[\s{}[\]",:]+|[\s{}[\]",:]+$/g, "");
+  const fallback = strip(rawText) || strip(rawMessages);
+  return fallback ? [replyBreaks(decodeReplyString('"' + fallback + '"'))] : [];
 }
 
 /** Preserve authored reply envelopes as separate messages; never split Markdown text. */
@@ -58,9 +118,11 @@ export function replyMessages(text: string): string[] {
       const value = JSON.parse(body);
       if (!value || Array.isArray(value) || typeof value !== "object" || !("text" in value || "messages" in value)) return [body];
       const messages = Array.isArray(value.messages) ? value.messages.filter((item: unknown) => typeof item === "string" && item.trim()) : [];
-      if (messages.length) return messages;
-      body = typeof value.text === "string" ? value.text : "";
-    } catch { return [body]; }
+      if (messages.length) return messages.map(replyBreaks);
+      const words = typeof value.text === "string" ? value.text : "";
+      if (typeof value.messages === "string" && value.messages.trim() && (!words.trim() || /[\r\n]/.test(value.messages))) return [replyBreaks(value.messages)];
+      body = replyBreaks(words);
+    } catch { return brokenReply(body) ?? [body]; }
   }
   return [];
 }
