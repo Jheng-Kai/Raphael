@@ -4487,20 +4487,56 @@ export function checkRendered(name, context = {}) {
     return {check: name};
   }
   if (name === "language-rows") {
-    // R-UI-165: a row is one button, its whole width lit under the pointer; the chip of a language with several written forms
-    // stands on it, chosen or not, and never covers the language's name.
+    // R-UI-165: a row is one button, its whole width lit under the pointer; the dropdown of a language with several written
+    // forms stands on it, chosen or not, with no fill or frame of its own, and never covers the language's name.
     const rows = [...document.querySelectorAll('.lang-panel .lang-row')];
     require(rows.length > 5 && !document.querySelector('.lang-panel').textContent.includes("種寫法"), "every language is a row, and none says how many forms it has instead of its chip");
     for (const row of rows.filter(row => row.classList.contains("has-variants"))) {
-      const chip = row.querySelector('.lang-variant-chip'), name_ = row.querySelector('.lang-item .mt'), box = row.getBoundingClientRect();
+      const chip = row.querySelector('.sel.lang-variant-sel'), name_ = row.querySelector('.lang-item .mt'), box = row.getBoundingClientRect();
       require(visible(chip), `the chip of ${name_.textContent} shows whether it is chosen or not`);
       const c = chip.getBoundingClientRect(), n = name_.getBoundingClientRect();
       require(c.left >= box.left && c.right <= box.right + 0.5 && c.top >= box.top - 0.5 && c.bottom <= box.bottom + 0.5, `the chip of ${name_.textContent} stands on its row`);
       require(n.right <= c.left - 4, `the chip does not cover ${name_.textContent}`);
+      const look = getComputedStyle(chip);
+      require(/rgba\(0, 0, 0, 0\)|transparent/.test(look.backgroundColor) && (parseFloat(look.borderTopWidth) === 0 || /rgba\(0, 0, 0, 0\)|transparent/.test(look.borderTopColor)), `the dropdown of ${name_.textContent} has no fill or frame (${look.backgroundColor}, ${look.borderTopColor})`);
     }
     const hovered = document.querySelector('.lang-panel [data-language="zh"]').closest('.lang-row');
     const lit = getComputedStyle(hovered).backgroundColor, button = getComputedStyle(hovered.querySelector('.lang-item')).backgroundColor;
     require(!/rgba\(0, 0, 0, 0\)|transparent/.test(lit) && /rgba\(0, 0, 0, 0\)|transparent/.test(button), `the whole row lights, not the button alone: row ${lit}, button ${button}`);
+    return {check: name};
+  }
+  if (name === "language-variant-hover") {
+    // R-UI-165: the written form of a language is the settings rows' dropdown, its value and a chevron with no box or fill,
+    // whose words alone brighten under the pointer, as the dropdowns on the settings card do.
+    const clear = colour => colour === 'transparent' || /rgba\([^)]*,\s*0\)$/.test(colour) || /\/\s*0\)$/.test(colour);
+    const hovered = document.querySelector('.lang-panel [data-variant-menu="zh"]'), resting = document.querySelector('.lang-panel [data-variant-menu="en"]');
+    require(hovered?.matches(':hover') && hovered.matches('.sel') && resting?.matches('.sel'), "the written forms are the settings rows' dropdown, and the pointer is on 中文's");
+    // On the card behind: 聽寫方式's dropdown at rest, and 你說的語言's lit while its picker is open.
+    const cardResting = getComputedStyle(document.querySelector('.modal-scrim .slist [data-k="mode"]')), cardLit = getComputedStyle(document.querySelector('.modal-scrim .slist [data-k="languages"]'));
+    const on = getComputedStyle(hovered), off = getComputedStyle(resting);
+    for (const [style, what] of [[on, "under the pointer"], [off, "at rest"]]) {
+      const framed = ['Top', 'Right', 'Bottom', 'Left'].some(side => parseFloat(style[`border${side}Width`]) > 0 && !clear(style[`border${side}Color`]));
+      require(clear(style.backgroundColor) && !framed && style.boxShadow === 'none', `no fill or frame ${what} (${style.backgroundColor}, ${style.borderTopWidth} ${style.borderTopColor}, ${style.boxShadow})`);
+    }
+    require(off.color === cardResting.color && off.fontSize === cardResting.fontSize && off.fontWeight === cardResting.fontWeight, `at rest it is written as the card's dropdowns (${off.color} ${off.fontSize} ${off.fontWeight} against ${cardResting.color} ${cardResting.fontSize} ${cardResting.fontWeight})`);
+    require(on.color !== off.color && on.color === cardLit.color, `under the pointer its words brighten as a card dropdown's do (${on.color} against ${off.color}, the card's ${cardLit.color})`);
+    const chevron = hovered.querySelector('svg.i'), cardChevron = document.querySelector('.modal-scrim .slist [data-k="mode"] svg.i');
+    require(visible(chevron) && Math.round(chevron.getBoundingClientRect().width) === Math.round(cardChevron.getBoundingClientRect().width) && getComputedStyle(chevron).color === getComputedStyle(cardChevron).color, "its chevron is the card dropdowns' chevron");
+    const row = hovered.closest('.lang-row'), box = hovered.getBoundingClientRect(), language = row.querySelector('.lang-item .mt').getBoundingClientRect();
+    require(box.right <= row.getBoundingClientRect().right + 0.5 && language.right <= box.left - 4 && hovered.querySelector('span').scrollWidth <= hovered.querySelector('span').clientWidth + 1, "it ends its row, never covers the language's name, and its words are whole");
+    require(!clear(getComputedStyle(row).backgroundColor), "its row lights behind it");
+    return {check: name};
+  }
+  if (name === "language-variant-focus") {
+    // R-UI-165: reached with Tab, the written form's dropdown draws the app's keyboard ring (an outline outside it, as every
+    // settings dropdown does), not a menu item's inset frame or fill.
+    const dropdown = document.querySelector('.lang-panel [data-variant-menu="zh"]');
+    require(document.documentElement.hasAttribute('data-keys') && document.activeElement === dropdown, `Tab reaches 中文's dropdown (${document.activeElement?.outerHTML.slice(0, 80)})`);
+    const style = getComputedStyle(dropdown);
+    require(style.outlineStyle === 'solid' && style.outlineWidth === '2px' && style.outlineOffset === '2px' && style.boxShadow === 'none', `the app's ring: ${style.outlineStyle} ${style.outlineWidth} offset ${style.outlineOffset}, shadow ${style.boxShadow}`);
+    require(/rgba\(0, 0, 0, 0\)|transparent/.test(style.backgroundColor), `no fill under the ring (${style.backgroundColor})`);
+    const box = dropdown.getBoundingClientRect(), list = dropdown.closest('.lang-list').getBoundingClientRect(), reach = parseFloat(style.outlineOffset) + parseFloat(style.outlineWidth);
+    require(box.top - reach >= list.top - 0.5 && box.right + reach <= list.right + 0.5, `the ring is whole, not cut by the list's edge (ring top ${Math.round(box.top - reach)}, list top ${Math.round(list.top)})`);
     return {check: name};
   }
   if (name === "language-variants-toggle") {

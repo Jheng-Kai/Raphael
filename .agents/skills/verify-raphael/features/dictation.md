@@ -63,13 +63,15 @@ Option (the `AltRight` binding: one key code, named by `keys.ts` and `mac-catalo
 ## The spoken languages: one row each, written forms beside the picker; cleanup in no one language
 
 Settings > Dictation > 你說的語言 opens one picker with every language on one row (checked or not, up to five). A chosen
-language with several written forms (中文: 台灣、香港、簡體、粵語; English; Español) ends its row with a chip naming the form in
-use (`data-variant-menu`); the chip, or Right on it, opens the forms in a submenu beside the picker (`placement: "beside"`,
-`variantMenuHTML`), so the list never grows or jumps. A pick closes only the submenu (`closeSubmenus`) and keeps the picker open.
+language with several written forms (中文: 台灣、香港、簡體、粵語; English; Español) ends its row with a dropdown naming the form
+in use (`data-variant-menu`). It is the settings rows' own dropdown (`.sel`, the rule of settings-polish.css): its value and a
+chevron with no box, fill or pill, at rest or under the pointer, where only its words brighten, as the card's 你說的語言 and
+聽寫方式 do; it keeps the app's keyboard ring rather than a menu item's. The dropdown, or Right on it, opens the forms in a
+submenu beside the picker (`placement: "beside"`, `variantMenuHTML`), so the list never grows or jumps. A pick closes only the submenu (`closeSubmenus`) and keeps the picker open.
 The core rules are unchanged: one form per language, the order is the priority.
 
-The chip's accessible name is one translated string (`languages.variantsOf`, the language and the form in use) and it has
-no `title`: the form is on the chip already. A language's own name ("English", "日本語", "English (United States)") carries
+The dropdown's accessible name is one translated string (`languages.variantsOf`, the language and the form in use) and it
+has no `title`: the form is on it already. A language's own name ("English", "日本語", "English (United States)") carries
 its `lang`, so it is read in that language; the Chinese names, which the window translates, carry none. The look audit
 does not take text marked with another language's `lang` for English interface copy (R-UI-14), which "English" in this
 list otherwise was in a zh-TW window.
@@ -91,8 +93,14 @@ What proves it: `tests/brain/test_cleanup.py`, `test_dictation_finish.py`, `test
 and `tests/test_packaging.py` from core/.
 
 ```powershell
-npm run look -- dictation-languages dictation-language-variants dictation-language-variants-toggle --theme both --width 1120,720,1920x1080
+npm run look -- dictation-languages dictation-language-variant-hover dictation-language-variant-focus dictation-language-variants dictation-language-variants-toggle --theme both --width 1120,720,1920x1080
 ```
+
+`dictation-languages` hovers 中文's row and checks that every dropdown stands on its lit row with no fill or frame;
+`dictation-language-variant-hover` points at 中文's dropdown and checks that it has no fill, frame or shadow at rest or under
+the pointer, is written as 聽寫方式's dropdown at rest, brightens to the colour of 你說的語言's open dropdown, has the same
+chevron, and never covers the language's name; `dictation-language-variant-focus` presses Tab from 中文 and checks that its
+dropdown draws the app's ring (a 2 px outline 2 px outside, no inset frame or fill), whole inside the list.
 
 ## Changing the shortcuts: one 編輯, one dialog (R-KEYS-EDIT-01)
 
