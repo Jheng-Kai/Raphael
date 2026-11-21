@@ -1,5 +1,12 @@
 # Member computer (Phases A and B)
 
+## Recovering the seat browser after an unreadable stale lock
+
+R-PC-LOCK-01. The guest checks process arguments before clearing old Chromium startup entries. If a local workspace mount
+refuses to remove one, the host unlinks only the reported entry from that computer's profile and retries the seat launch once.
+The core tests use a simulated permission error and a temporary host workspace. The original Windows Docker mount is a
+separate native acceptance check.
+
 ## A launch opens on its member's screen
 
 R-COMP-SEAT-02. Seen on the owner's shared computer: a member at seat 5 launched `xfce4-terminal --title=PR-progress ...`

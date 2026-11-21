@@ -583,7 +583,7 @@ export const zhCN = {
   "handoff.withheld": "权限已撤回",
   "card.connect": "链接",
   "card.reconnect": "重新链接",
-  "card.cancel": "取消",
+ 
   "common.cancel": "取消",
   "local.cancel": "取消",
   "conn.cancel": "取消",

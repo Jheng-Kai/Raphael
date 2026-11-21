@@ -7,7 +7,7 @@
 // Every state comes from the core (`agent.drafts`). What the owner types lives in the fields only until it is
 // saved as a version (`mail-actions.ts`); a card drawn again takes it from the old field to the new one (`carryMail`).
 
-import { cardDisclosureHTML, cardHTML, cardPromptText } from "./card";
+import { cardDisclosureHTML, cardHTML, cardPromptText, waitingCloseHTML } from "./card";
 import { noticeHTML } from "./missing";
 import { NAME, eventLineHTML } from "./event-line";
 import { appLogo } from "./app-logos";
@@ -118,7 +118,8 @@ function offerHTML(draft: MailDraftCard, _look: MailLook): string {
   if (!draft.offer || draft.state !== "draft") return "";
   const on = (act: string): string => ` data-act="${act}" data-mail="${esc(draft.id)}"`;
   return cardHTML({ title: t("mail.handover", { p0: draft.offer.name }), status: "waiting", statusText: cardPromptText("handover"), actions:
-    btn(esc(plain("mail.handoverYes")), "sm pri", on("mail-handover-yes")) + btn(esc(plain("mail.handoverNo")), "sm", on("mail-handover-no")),
+    btn(esc(plain("mail.handoverYes")), "sm pri", on("mail-handover-yes")),
+    close: waitingCloseHTML(on("mail-handover-no"), plain("mail.handoverNo")), statusInHeading: true,
     cls: "mail-offer", attrs: ` data-mail-offer="${esc(draft.id)}"`,
   });
 }

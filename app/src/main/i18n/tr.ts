@@ -583,7 +583,7 @@ export const tr = {
   "handoff.withheld": "Erişim geri alındı",
   "card.connect": "Bağla",
   "card.reconnect": "Yeniden bağla",
-  "card.cancel": "İptal",
+ 
   "common.cancel": "İptal",
   "local.cancel": "İptal",
   "conn.cancel": "İptal",

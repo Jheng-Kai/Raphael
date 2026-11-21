@@ -231,7 +231,7 @@ async def test_a_cleanup_that_fails_is_logged_and_never_stops_the_computer(deskt
     async def run(args, **kwargs):
         if args == scratch_args(target):
             attempts.append(args)
-            if len(attempts) == 1:
+            if len(attempts) <= 2:
                 if failure == "timeout":
                     raise TimeoutError
                 return Result(1, "", f"find: cannot delete {old_log.name}: Permission denied")
@@ -245,11 +245,15 @@ async def test_a_cleanup_that_fails_is_logged_and_never_stops_the_computer(deskt
         assert old_log.exists() and not vm.scratch_cleaned
         vm.running.clear()
         assert (await vm.start(target))["ready"]
+        assert old_log.exists() and not vm.scratch_cleaned
+        vm.running.clear()
+        assert (await vm.start(target))["ready"]
         assert not old_log.exists() and vm.scratch_cleaned
         vm.running.clear()
         assert (await vm.start(target))["ready"]
-    assert attempts == [scratch_args(target)] * 2
-    assert "scratch could not be cleared" in caplog.text
+    assert attempts == [scratch_args(target)] * 3
+    assert caplog.text.count("scratch could not be cleared") == 1
+    assert ("TimeoutError" if failure == "timeout" else "cannot delete undeletable.log: Permission denied") in caplog.text
 
 
 async def test_detached_output_is_capped_without_changing_the_job_exit_code(desktop, tmp_path, monkeypatch):

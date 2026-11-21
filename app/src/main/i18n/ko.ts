@@ -583,7 +583,7 @@ export const ko = {
   "handoff.withheld": "접근 권한 취소됨",
   "card.connect": "연결",
   "card.reconnect": "다시 연결",
-  "card.cancel": "취소",
+ 
   "common.cancel": "취소",
   "local.cancel": "취소",
   "conn.cancel": "취소",

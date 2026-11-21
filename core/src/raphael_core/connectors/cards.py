@@ -22,6 +22,7 @@ reply), and the model never sees them. A card that failed for want of something 
 (`needs_composio_key`, `needs_key`, `needs_own_app`, `key_rejected`), to the owner and to the member. Connected
 means the app's read tools can be called now, so a sign-in that granted less (a partial consent) is
 `scope`, never connected. `integrations.card_cancel {id}` ends a sign-in under way.
+A pending, failed or authorizing card can also be closed.
 
 A card that did not connect always says why. Every way an attempt can fail is a cause of `CAUSES`, with a retry flag
 (can pressing again help?) and a `fix` where the owner has to put something right first (`settings`: the Composio key in
@@ -63,8 +64,8 @@ CARD_WAIT_MS = 24 * 3600 * 1000
 
 # The only moves a card's state makes.
 MOVES: dict[str, tuple[str, ...]] = {
-    "pending": ("authorizing", "expired"),
-    "failed": ("authorizing", "expired"),
+    "pending": ("authorizing", "cancelled", "expired"),
+    "failed": ("authorizing", "cancelled", "expired"),
     "cancelled": ("authorizing", "expired"),
     "authorizing": ("connected", "failed", "cancelled"),
     "connected": (),
@@ -242,7 +243,7 @@ class Card:
 
     def view(self) -> dict:
         """The card as the window draws it. One that timed out has nothing left to set up."""
-        error = _shown_error(self.cause, self.app)
+        error = "skipped" if self.error == "skipped" else _shown_error(self.cause, self.app)
         failed = self.state == "failed" and error in CAUSES
         return {"id": self.id, "app": self.app, "name": self.name, "logo": self.app_logo, "state": self.state,
                 "error": error or None, "reconnect": self.reconnect, "tool_count": self.tool_count,
@@ -355,6 +356,8 @@ class ConnectorCards:
     """The cards' flow. `router` calls the connectors' own sign-in methods (their lock and their
     value-free failures included); `connectors` says which tools can be called now; `resume`, set by
     the agent, carries on the task of a turn once its cards are connected."""
+
+    waiting_states = ("pending", "failed", "authorizing")
 
     def __init__(self, conn: sqlite3.Connection, router, connectors, *,
                  notify: Callable[[str, dict], None] | None = None, now_ms: Callable[[], int] = wall_clock_ms,
@@ -625,12 +628,23 @@ class ConnectorCards:
         return {"card": self.view(moved), "started": True}
 
     async def _cancel(self, params: dict) -> dict:
-        card = self._card(params)
-        if self._login is None or self._login[0] != card.id or self._login[1].done():
-            return {"cancelled": False}
+        return {"cancelled": self._cancel_sign_in(self._card(params).id)}
+
+    def _cancel_sign_in(self, card_id: str) -> bool:
+        if self._login is None or self._login[0] != card_id or self._login[1].done():
+            return False
         self._owner_cancelled = True
         self._login[1].cancel()
-        return {"cancelled": True}
+        return True
+
+    def close(self, card: Card, *, error: str = "") -> Card | None:
+        if card.state not in self.waiting_states:
+            return None
+        moved = self.store.move(card.id, "cancelled", error=error)
+        if moved is not None:
+            self._cancel_sign_in(card.id)
+            self._changed(moved)
+        return moved
 
     def _provider(self, app: App) -> tuple[str, dict] | None:
         """The sign-in to use: the owner's own Google authorization first, then Composio."""
@@ -726,6 +740,7 @@ class ConnectorCards:
     async def _sign_in(self, card: Card, fields: dict | None = None) -> None:
         known = APPS.get(card.app)
         app = known if known and known.provider == card.provider else App(card.app, card.name, "", card.app, card.provider)
+        ended = None
         try:
             try:
                 if card.reconnect or not self.ready_tools(app):
@@ -777,7 +792,9 @@ class ConnectorCards:
         finally:
             if self._login is not None and self._login[0] == card.id:
                 self._login = None
-            self._changed(self.store.get(card.id) or card)
+            latest = self.store.get(card.id) or card
+            if ended is not None or latest.state != "cancelled":
+                self._changed(latest)
         if ended is not None and ended.state == "connected" and self.store.claim_resume(ended.turn_id) and self.resume:
             try:
                 outcome = await self.resume(ended.turn_id)

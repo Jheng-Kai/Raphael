@@ -170,6 +170,7 @@ def build_user_message(
     source: str = "",
     messaging: str = "",
     viewing: str = "",
+    skipped_cards: str = "",
     standing: str = "",
 ) -> str:
     """What the model is shown: the summary of the earlier conversation, the latest turns
@@ -205,7 +206,7 @@ def build_user_message(
     if recall:
         parts.append(recall)
     from .card_context import source_text
-    if current := source_text(source) + messaging + viewing:
+    if current := source_text(source) + messaging + viewing + skipped_cards:
         parts.append(current)
     parts.append(f"<question>\n{question}\n</question>")
     if looked_up:
@@ -789,6 +790,7 @@ class Voice:
         source: str = "",
         messaging: str = "",
         viewing: str = "",
+        skipped_cards: str = "",
         owner_screen: bool = False,
     ) -> Reply:
         """What Raphael says to `question` on `route` ("answer", "discuss" or "chat"). `language` is the interface
@@ -806,6 +808,7 @@ class Voice:
         user = build_user_message(
             question, moment, context, tools, background=background,
             summary=summary, looked_up=looked_up, member=plain, recall=recall, source=source, messaging=messaging, viewing=viewing,
+            skipped_cards=skipped_cards,
             standing="\n\n".join(part for part in standing if part),
         )  # fmt: skip
         if plain:

@@ -4,7 +4,7 @@
 // own card is the secret card (secret-card.ts, `platform`).
 
 import * as api from "./api";
-import { cardFailure, cardHTML } from "./card";
+import { cardFailure, cardHTML, waitingCloseHTML } from "./card";
 import { describeError } from "./format";
 import { t } from "./i18n";
 import { openDialog } from "./member-dialogs";
@@ -31,7 +31,8 @@ function pairingCardHTML(card: PairingCard): string {
     body: t("cards.pairBody", { p0: card.who || t("msg.tg.someone"), p1: name }),
     content: `<p class="card-body pair-code"><span class="code">${esc(card.code)}</span></p>`,
     // A card's primary action comes first, as on every card of the conversation.
-    actions: pending ? btn(esc(t("cards.pairAllow")), "sm pri", on("pairing-allow")) + btn(esc(t("cards.pairDeny")), "sm", on("pairing-deny")) : "",
+    actions: pending ? btn(esc(t("cards.pairAllow")), "sm pri", on("pairing-allow")) : "",
+    ...(pending ? { close: waitingCloseHTML(on("pairing-deny"), t("cards.pairDeny")), statusInHeading: true } : {}),
     cls: "pairing-card", attrs: ` data-pairing-card="${esc(card.id)}" data-card-state="${esc(card.state)}"`,
   });
 }

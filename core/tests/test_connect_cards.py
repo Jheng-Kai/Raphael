@@ -274,7 +274,9 @@ async def test_a_card_moves_only_along_its_edges(conn):
     AgentHistory(conn).add(session_id="s", question="q", route="answer", prefix="", text="", status="done", source="app")
     card = store.open(turn_id=1, member_id=0, conversation_id=None, app="gmail", language="en", reconnect=False)
     assert store.open(turn_id=1, member_id=0, conversation_id=None, app="gmail", language="en", reconnect=False).id == card.id
-    assert store.move(card.id, "connected") is None and store.move(card.id, "cancelled") is None
+    assert store.move(card.id, "connected") is None
+    assert store.move(card.id, "cancelled").state == "cancelled"
+    assert store.move(card.id, "cancelled") is None
     assert store.move(card.id, "authorizing").state == "authorizing"
     assert store.move(card.id, "authorizing") is None
     assert store.move(card.id, "connected", tool_count=2).state == "connected"

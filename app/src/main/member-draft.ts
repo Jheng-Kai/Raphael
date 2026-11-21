@@ -1,7 +1,7 @@
 // Inline editable draft panel for `team_admin_batch` confirmations, and the settled one-line
 // summary (`已建立 COO、PM、RD`) once the owner confirms.
 
-import { cardHTML } from "./card";
+import { cardHTML, waitingCloseHTML } from "./card";
 import { hasDetail, highlightHTML } from "./conversation";
 import { t } from "./i18n";
 import { PERSONALITY_MAX, ROLE_MAX } from "./members";
@@ -172,7 +172,8 @@ export function createDraftPanel(host: DraftPanelHost): DraftPanelController {
     el.innerHTML = cardHTML({ title: t("members.draftTitle"), status: "waiting",
       body: t("cards.teamReview"),
       content: groupPills + `<div class="draft-list">${currentDrafts.map(draft => draftRowHTML(draft, choices)).join("")}</div>`,
-      actions: btn(esc(primaryLabel()), "pri", ` data-draft-act="confirm"${isBusy ? " disabled" : ""}`) + btn(esc(t("common.cancel")), "draft-cancel", ` data-draft-act="cancel"${isBusy ? " disabled" : ""}`),
+      actions: btn(esc(primaryLabel()), "pri", ` data-draft-act="confirm"${isBusy ? " disabled" : ""}`),
+      close: waitingCloseHTML(` data-draft-act="cancel"${isBusy ? " disabled" : ""}`), statusInHeading: true,
     });
 
     if (focusedCardId && focusedField) {

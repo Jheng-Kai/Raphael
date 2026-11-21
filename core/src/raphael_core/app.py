@@ -1055,6 +1055,7 @@ class App(Router):
             owner_language=lambda: configured_language(data_dir),
         )
         self.agent.register(self)
+        self.register("integrations.card_close", self.agent.close_waiting_card)
         self.rooms.turn_view = lambda turn: self.agent._turn_views([turn])[0]
         from .native_journeys import bot_homes_brain
         native_brain = bot_homes_brain(fake_llm, data_dir)

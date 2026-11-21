@@ -583,7 +583,7 @@ export const ru = {
   "handoff.withheld": "Доступ отозван",
   "card.connect": "Подключить",
   "card.reconnect": "Переподключить",
-  "card.cancel": "Отмена",
+ 
   "common.cancel": "Отмена",
   "local.cancel": "Отмена",
   "conn.cancel": "Отмена",

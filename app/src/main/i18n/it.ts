@@ -583,7 +583,7 @@ export const it = {
   "handoff.withheld": "Accesso revocato",
   "card.connect": "Connetti",
   "card.reconnect": "Riconnetti",
-  "card.cancel": "Annulla",
+ 
   "common.cancel": "Annulla",
   "local.cancel": "Annulla",
   "conn.cancel": "Annulla",

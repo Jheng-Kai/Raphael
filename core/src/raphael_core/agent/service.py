@@ -199,7 +199,7 @@ from .ledger import Ledger
 from .reactions import private_reactions_for_turns
 from ..background.final import is_pass
 from .drafts import DraftError, clean_field, is_mail_sender, is_slack_sender
-from .card_context import viewing_text
+from .card_context import skipped_cards_text, viewing_text
 from .pages import Pages, PageError, checked_text, is_report
 from .report_page import checked_report, report_fallback, report_html
 from .public_events import event_record
@@ -512,6 +512,7 @@ class _Ask:
     quote: dict[str, str] | None = None
     # The page the owner had open beside this request when they typed it (`Pages.viewed_by`).
     viewing: dict | None = None
+    skipped_cards: dict[str, str] = field(default_factory=dict)
     intent: str | None = None
     # Who answers: Raphael, or a member of the team (`speaker`), in whose thread the turn is.
     speaker: Speaker = RAPHAEL
@@ -1455,7 +1456,7 @@ class AgentService:
             )
         if self._attachment_store and ask.attachments:
             ask.attachments = [await asyncio.to_thread(self._attachment_store.save, a) for a in ask.attachments]
-        if not ask.attachments and await self._join_running_work(ask):
+        if not ask.attachments and not self._waiting_cards_before(ask) and await self._join_running_work(ask):
             self._record(ask, "owner_input", "", "", "done", None, Ledger(self._spend))
             return {"status": "done", "turn_id": ask.turn_id, "prefix": "", "text": "", "steered": True}
         return await self._run_ask(ask)
@@ -1542,7 +1543,9 @@ class AgentService:
             "SELECT 1 FROM agent_inbox WHERE member_id=? AND conversation_id=? AND state='queued' AND seq<?",
             (*scope, row['seq']),
         ).fetchone()
-        if active and not older and not ask.attachments and not active.owner_input.closed:
+        # A message that closes a card needs a turn of its own to tell the member what closed.
+        may_steer = not older and not ask.attachments and not self._waiting_cards_before(ask)
+        if active and may_steer and not active.owner_input.closed:
             self._inbox.transfer(ask.turn_id)
             self._handing.add(ask.turn_id)
             try:
@@ -1555,7 +1558,7 @@ class AgentService:
             self._inbox.requeue(ask.turn_id)
             self._turn_changed(ask.turn_id, ask.speaker.id)
         steer = getattr(self._background, "steer", None)
-        if not older and not ask.attachments and steer is not None:
+        if may_steer and steer is not None:
             self._inbox.transfer(ask.turn_id)
             self._handing.add(ask.turn_id)
             try:
@@ -1767,6 +1770,10 @@ class AgentService:
         # The questions that ran out are expired, and a new request replaces those that still wait
         # in its conversation: a quick question leaves a formal one waiting, and the other way round.
         self._expire(self._confirmations.sweep())
+        for cards, identifier in self._waiting_cards_before(ask):
+            if (card := cards.store.get(identifier)) and (closed := self._close_card(cards, card, error="skipped")):
+                ask.skipped_cards[identifier] = (closed.server_id if getattr(closed, "kind", None) == "key"
+                                                 else getattr(closed, "name", None) or getattr(closed, "app", "") or "the computer")
         if ask.source in _AT_THIS_COMPUTER:
             self._deny(self._confirmations.cancel_where(
                 lambda pending: (getattr(self.turn(pending.turn_id), "member_id", None),
@@ -1877,7 +1884,7 @@ class AgentService:
                 decision = await self._decider.classify(
                     ask.text, self._on_its_service(settings.model),
                     ledger, background_line(self._briefs(ask.speaker.id)),
-                    context=self._before_run(ask.speaker, ask.conversation_id, source=ask.source),
+                    context=self._before_run(ask.speaker, ask.conversation_id, source=ask.source, skipped=ask.skipped_cards),
                 )
             except AgentFailure as error:
                 failure = error.kind
@@ -1972,7 +1979,7 @@ class AgentService:
         with what was found. AgentFailure as `Voice.reply` raises it. A member of the team reads
         its own conversation and memory, and speaks as itself."""
         member_id = ask.speaker.id
-        context = self._memory_context(ask.speaker, ask.conversation_id)
+        context = self._memory_context(ask.speaker, ask.conversation_id, omit_cards=ask.skipped_cards)
         memory = None if self._memory is None else self._memory.snapshot(member_id)
 
         async def word(results: list[ToolResult], looked_up: bool) -> Reply:
@@ -1993,7 +2000,8 @@ class AgentService:
                 roster=roster_prompt(self._team, ask.speaker, self._chat_language(ask)), owner=owner_context(self._settings, ask.speaker.id),
                 reasoning_effort=self._effort(settings),
                 recall=self._recall(ask, context), source=ask.source, messaging=self._messaging_context(ask.speaker.id),
-                viewing=viewing_text(ask.viewing), owner_screen=self._owner_screen(ask),
+                viewing=viewing_text(ask.viewing), skipped_cards=skipped_cards_text(ask.skipped_cards),
+                owner_screen=self._owner_screen(ask),
             )
             return owner_script(reply, chinese_variant(self._settings.get("languages")))
 
@@ -2146,7 +2154,7 @@ class AgentService:
             ledger=ledger,
             over_budget=lambda: self._over_budget(limit),
             open_app=self._open_for_run,
-            background=self._before_run(ask.speaker, ask.conversation_id, source=ask.source),
+            background=self._before_run(ask.speaker, ask.conversation_id, source=ask.source, skipped=ask.skipped_cards),
             clock=self._clock,
             now_ms=self._now_ms,
             # A sign-in is the owner's to do: in a private chat they are at the run waits for them
@@ -2165,13 +2173,14 @@ class AgentService:
         from .card_context import messaging_state
         return messaging_state(getattr(self._secret_cards, "messaging", None), member_id)
 
-    def _before_run(self, speaker: Speaker = RAPHAEL, conversation_id: int | None = None, *, source: str = "") -> str:
+    def _before_run(self, speaker: Speaker = RAPHAEL, conversation_id: int | None = None, *,
+                    source: str = "", skipped: dict[str, str] | None = None) -> str:
         """What a run is told of what came before its request: the memory's index, and the
         conversation as a quick answer reads it (the summary and the last few turns). A run
         writes no note, now or later: its turn holds what the model read on the screen, which is
         untrusted, and a note is written only from the owner's own words (see `_remember`, and the
         reflection pass, which reads only the owner's question of an `operate` turn)."""
-        context = self._conversation_of(speaker.id, conversation_id).context()
+        context = self._conversation_of(speaker.id, conversation_id).context(omit_cards=skipped or ())
         index = "" if self._memory is None else self._memory.snapshot(speaker.id)
         if isinstance(index, MemorySnapshot):  # USER.md, then the speaker's own file
             index = "\n".join(part for part in (index.shared, index.own) if part)
@@ -2181,7 +2190,8 @@ class AgentService:
             f"Owner's instructions: {speaker.instructions}\n\n"
         )
         from .card_context import source_text
-        return persona + owner_context(self._settings, speaker.id) + conversation_block(context.summary, context.turns, index) + source_text(source) + self._messaging_context(speaker.id)
+        return (persona + owner_context(self._settings, speaker.id) + conversation_block(context.summary, context.turns, index)
+                + source_text(source) + self._messaging_context(speaker.id) + skipped_cards_text(skipped or {}))
 
     @member_turn(lambda self, run: run.context.speaker.id)
     @tool_step(lambda self, run: "computer")
@@ -2462,7 +2472,7 @@ class AgentService:
             prepare = getattr(self._plugins, "prepare", None)
             if prepare is not None:
                 await prepare(ask.speaker.id)
-            context = self._memory_context(ask.speaker, ask.conversation_id)
+            context = self._memory_context(ask.speaker, ask.conversation_id, omit_cards=ask.skipped_cards)
             memory = None if self._memory is None else self._memory.snapshot(ask.speaker.id)
             # The system prompt says who the speaker is and how it works, and is the same turn after turn: a
             # change in it has the provider read the whole conversation again at full price. What holds for
@@ -2515,6 +2525,7 @@ class AgentService:
                 quote=ask.quote,
                 recall=self._recall(ask, context), source=ask.source, messaging=self._messaging_context(ask.speaker.id),
                 viewing=viewing_text(ask.viewing),
+                skipped_cards=skipped_cards_text(ask.skipped_cards),
                 standing="\n\n".join(part for part in standing if part),
             )
             user = build_user_message(**message_args)
@@ -4411,6 +4422,42 @@ class AgentService:
             result.data = {**result.data, "owner_card": card}
         return result
 
+    def _closable_card_services(self):
+        return (("connect_cards", self._cards), ("secret_cards", self._secret_cards), ("handback_cards", self._handbacks))
+
+    def _waiting_cards_before(self, ask):
+        if (ask.scope != "private" or ask.nested or ask.resumption is not None or ask.source == RESUMED
+                or ask.source not in _OWNER_CHAT_SOURCES or ask.conversation_id is None or not ask.text.strip()):
+            return []
+        found = []
+        for table, cards in self._closable_card_services():
+            if cards is None or not hasattr(cards, "store"):
+                continue
+            states = ",".join("?" * len(cards.waiting_states))
+            rows = self._conn.execute(
+                f"SELECT c.id FROM {table} c JOIN agent_turns t ON t.id=c.turn_id "
+                f"WHERE t.scope='private' AND c.member_id=? AND c.conversation_id=? "
+                f"AND (? IS NULL OR c.turn_id<?) AND c.state IN ({states}) "
+                "ORDER BY c.turn_id, c.rowid",
+                (ask.speaker.id, ask.conversation_id, ask.turn_id or None, ask.turn_id, *cards.waiting_states),
+            )
+            found.extend((cards, row["id"]) for row in rows)
+        return found
+
+    def _close_card(self, cards, card, *, error=""):
+        closed = cards.close(card, error=error)
+        if closed is not None and (questions := getattr(self._background, "owner_questions", None)) is not None:
+            questions.close_for_card(card.id)
+        return closed
+
+    async def close_waiting_card(self, params):
+        identifier = params.get("id")
+        if isinstance(identifier, str) and identifier:
+            for _, cards in self._closable_card_services():
+                if cards is not None and (card := cards.store.get(identifier)) is not None:
+                    return {"closed": self._close_card(cards, card) is not None}
+        raise invalid_params("There is no such card")
+
     async def cancel_owner_card(self, question):
         kind, identifier = question["kind"], question["card_id"]
         if kind == CONNECT_APP and self._cards:
@@ -4711,7 +4758,7 @@ class AgentService:
             ask.steps.append(self._step("tool", "session_search", BUILTIN_SERVER, "ok", time.perf_counter(), None, "external_content"))
         return text
 
-    def _memory_context(self, speaker, conversation_id):
+    def _memory_context(self, speaker, conversation_id, *, omit_cards=()):
         conversation = self._conversation_of(speaker.id, conversation_id)
         model = self._read_settings(speaker, conversation_id).model
         catalog = self._tool_support._catalog() or []
@@ -4721,7 +4768,7 @@ class AgentService:
         if self._memory is not None:
             self._memory.configure_conversation(conversation)
             conversation._client = self._memory._brain(speaker.id)
-        return conversation.context()
+        return conversation.context(omit_cards=omit_cards)
 
     def _conversation_of(self, member_id: int, conversation_id: int | None = None) -> Conversation:
         """The conversation of the thread of `member_id`: Raphael's for 0. A request of it that did

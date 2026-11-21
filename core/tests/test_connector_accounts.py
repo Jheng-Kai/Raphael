@@ -649,7 +649,7 @@ async def test_a_google_sign_in_finishes_and_keeps_the_switch_pressed_while_it_w
 
 async def test_signing_in_again_replaces_the_expired_account_and_keeps_its_name(tmp_path, conn):
     fake = Accounts(statuses=("ACTIVE",))
-    router, service, hub, vault = setup_service(tmp_path, conn, fake, sleep=no_wait, wall=lambda: NOW)
+    router, service, hub, vault = setup_service(tmp_path, conn, fake, open_browser=no_wait, sleep=no_wait, wall=lambda: NOW)
     await router.call("connectors.set_key", {"key": "ak_private"})
     old = Connector("composio:gmail", "composio", status="EXPIRED", name="Gmail",
                     accounts=[account("ca_work", "EXPIRED", label="公司信箱"), account("ca_home", "ACTIVE", label="家裡")])
@@ -663,7 +663,7 @@ async def test_signing_in_again_replaces_the_expired_account_and_keeps_its_name(
 
 async def test_replace_never_removes_a_connected_account_or_one_composio_will_not_take_back(tmp_path, conn):
     fake = Accounts(statuses=("ACTIVE",), delete_status=503)
-    router, service, hub, vault = setup_service(tmp_path, conn, fake, sleep=no_wait, wall=lambda: NOW)
+    router, service, hub, vault = setup_service(tmp_path, conn, fake, open_browser=no_wait, sleep=no_wait, wall=lambda: NOW)
     await router.call("connectors.set_key", {"key": "ak_private"})
     service.store.connectors["composio:gmail"] = Connector("composio:gmail", "composio", status="ACTIVE", name="Gmail",
         accounts=[account("ca_live", "ACTIVE"), account("ca_dead", "EXPIRED")])
@@ -677,7 +677,7 @@ async def test_replace_never_removes_a_connected_account_or_one_composio_will_no
 async def test_signing_in_again_lets_the_core_choose_from_what_it_holds_not_from_the_windows_list(tmp_path, conn):
     """`again` with no account named: the core takes every account it holds as stopped, never a connected one beside it."""
     fake = Accounts(statuses=("ACTIVE",))
-    router, service, hub, vault = setup_service(tmp_path, conn, fake, sleep=no_wait, wall=lambda: NOW)
+    router, service, hub, vault = setup_service(tmp_path, conn, fake, open_browser=no_wait, sleep=no_wait, wall=lambda: NOW)
     await router.call("connectors.set_key", {"key": "ak_private"})
     service.store.connectors["composio:gmail"] = Connector("composio:gmail", "composio", status="EXPIRED", name="Gmail",
         accounts=[account("ca_work", "EXPIRED", label="公司信箱"), account("ca_home", "ACTIVE", label="家裡"),
@@ -693,7 +693,7 @@ async def test_signing_in_again_to_an_app_with_one_login_takes_its_place_even_wh
     """Its tools were refused (the app reads expired) while Composio still lists the account as connected: 重新登入 is that
     login again, so the one account goes back (not revoked: it may be the same grant) and the new one keeps its name."""
     fake = Accounts(statuses=("ACTIVE",))
-    router, service, hub, vault = setup_service(tmp_path, conn, fake, sleep=no_wait, wall=lambda: NOW)
+    router, service, hub, vault = setup_service(tmp_path, conn, fake, open_browser=no_wait, sleep=no_wait, wall=lambda: NOW)
     await router.call("connectors.set_key", {"key": "ak_private"})
     service.store.connectors["composio:gmail"] = Connector("composio:gmail", "composio", status="EXPIRED", name="Gmail",
         accounts=[account("ca_main", "ACTIVE", label="Jack")])
@@ -706,7 +706,7 @@ async def test_signing_in_again_to_an_app_with_one_login_takes_its_place_even_wh
 async def test_adding_another_account_takes_no_ones_place(tmp_path, conn):
     """加入另一個帳號 (no `again`, nothing named) leaves the app's one connected account and its dead one as they are."""
     fake = Accounts(statuses=("ACTIVE",))
-    router, service, hub, vault = setup_service(tmp_path, conn, fake, sleep=no_wait, wall=lambda: NOW)
+    router, service, hub, vault = setup_service(tmp_path, conn, fake, open_browser=no_wait, sleep=no_wait, wall=lambda: NOW)
     await router.call("connectors.set_key", {"key": "ak_private"})
     service.store.connectors["composio:gmail"] = Connector("composio:gmail", "composio", status="ACTIVE", name="Gmail",
         accounts=[account("ca_main", "ACTIVE", label="Jack")])
@@ -717,7 +717,7 @@ async def test_adding_another_account_takes_no_ones_place(tmp_path, conn):
 
 async def test_a_sign_in_that_fails_replaces_nothing(tmp_path, conn):
     fake = Accounts(statuses=("FAILED",))
-    router, service, hub, vault = setup_service(tmp_path, conn, fake, sleep=no_wait, wall=lambda: NOW)
+    router, service, hub, vault = setup_service(tmp_path, conn, fake, open_browser=no_wait, sleep=no_wait, wall=lambda: NOW)
     await router.call("connectors.set_key", {"key": "ak_private"})
     service.store.connectors["composio:gmail"] = Connector("composio:gmail", "composio", status="EXPIRED", name="Gmail",
         accounts=[account("ca_dead", "EXPIRED", label="公司信箱")])

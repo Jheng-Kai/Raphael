@@ -56,7 +56,7 @@ describe("the owner's own Google card", () => {
     const denied = connectorCardHTML(card({ google: kept, state: "failed", error: "denied", retry: true, fix: null }));
     expect(visible(denied)).toContain(t("card.denied"));
     expect(actions(denied)).toEqual(["card-connect"]);
-    expect(actions(connectorCardHTML(card({ google: kept, state: "authorizing" })))).toEqual(["card-cancel"]);
+    expect(actions(connectorCardHTML(card({ google: kept, state: "authorizing" })))).toEqual([]);
   });
 
   test("a client Google refused is asked for again, with the cause and the form", () => {

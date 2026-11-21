@@ -11,7 +11,7 @@
 // `backgroundQuestionHTML` draws one card from a question (pure, so it can be tested without a
 // browser). Nothing here logs a question.
 
-import { cardHTML, cardFailure } from "./card";
+import { cardHTML, cardFailure, waitingCloseHTML } from "./card";
 import { core } from "./api";
 import { onAvatarChange } from "./avatar";
 import { faceHTML, RAPHAEL_ID } from "./members";
@@ -60,8 +60,8 @@ export function backgroundQuestionHTML(q: BackgroundQuestion, busy = false, aske
   const off = busy ? " disabled" : "";
   const ids = ` data-task="${q.task_id}" data-id="${esc(q.id)}"`;
   return cardHTML({ title: asker.name ? t("cards.permission", { p0: asker.name }) : t("perm.title"), status: "waiting", body: q.text,
-    actions: `<button type="button" class="btn sm pri bgq-yes" data-bgq="yes"${ids}${off}>${esc(t("perm.once"))}</button>` +
-      `<button type="button" class="btn sm bgq-no" data-bgq="no"${ids}${off}>${esc(t("perm.deny"))}</button>`,
+    actions: `<button type="button" class="btn sm pri bgq-yes" data-bgq="yes"${ids}${off}>${esc(t("perm.once"))}</button>`,
+    close: waitingCloseHTML(` data-bgq="no"${ids}${off}`, t("perm.deny")), statusInHeading: true,
     cls: "bgq-card", attrs: ` data-bgq-card="${esc(q.id)}"`,
   });
 }
