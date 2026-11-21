@@ -2,6 +2,14 @@
 
 How a member answers: the core loop, replies, memory, models, CLI brains, the queue and handoffs. Part of [the product rules](../RULES.md); a rule's ID is unique across every file.
 
+## A malformed final reply still reads as the member's words
+
+For a standalone final envelope with recoverable words, this rule supersedes R-TEXT-11's cut-object behavior.
+
+| ID | Date | Rule | Check | Severity | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-TEXT-12 | | A final API or CLI reply with a malformed bare `text` or `messages` envelope shows the recovered words. Prefer `messages` with line breaks, then `text`, and recover lost list breaks only inside an envelope. A standalone cut envelope may use a plain-text fallback and logs only its shape. Unfinished live messages still stay withheld, and authored prose and examples in code fences remain intact. Older stored replies use the same recovery in the window, and unfinished links and fences keep the remaining words or source readable. | pytest, vitest, look | hard | core/tests/agent/test_reply_envelopes.py::test_recovers_the_reported_broken_reply_envelope; core/tests/agent/test_reply_envelopes.py::test_broken_envelope_falls_back_to_words_and_logs_only_the_shape; app/src/shared/anime.test.ts::older replies recover malformed envelopes inside and outside persona frames; app/src/main/message-content.test.ts::an unclosed link label cannot swallow a later link or list item; recovered-member-reply; recovered-room-reply |
+
 ## A colleague's exchange during work stands where it came, above the work's live line
 
 A member's live line 「正在電腦上執行 cd」 stood above 「與 X 的 2 則訊息」, a colleague's question that came while that work ran: the thread drew each turn whole, ordered by when it began, so what the work did after the question was left above it.

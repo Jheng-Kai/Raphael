@@ -97,6 +97,9 @@ describe("primary display order", () => {
   test("a preview says what a message says, without its Markdown", () => {
     expect(plainLine("### 結論\n先完成 **測試**，再看 [上線清單](https://example.test) 與 `npm run look`。\n\n### 下一步\n- 小晴：檢查")).toBe("結論 先完成 測試，再看 上線清單 與 npm run look。 下一步 小晴：檢查");
     expect(plainLine("C# 與 issue #5 不變")).toBe("C# 與 issue #5 不變");
+    expect(plainLine("1. [Unfinished [Vendor](https://example.test/)\n2. Still readable.")).toBe("1. Unfinished Vendor 2. Still readable.");
+    expect(plainLine("[Unfinished label (https://example.test/)")).toBe("Unfinished label (https://example.test/)");
+    expect(plainLine("Use a literal [bracket.")).toBe("Use a literal [bracket.");
     expect(plainLine("比較如下\n| 方案 | 費用 |\n|---|:--:|\n| A | 10 |\n```mermaid\nflowchart TD\n A-->B\n```\n結束")).toBe("比較如下 方案 費用 A 10 結束");
   });
 

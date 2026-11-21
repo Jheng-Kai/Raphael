@@ -1,5 +1,15 @@
 # Conversation
 
+## Recovered member replies (R-TEXT-12)
+
+Open a member conversation or a room with a stored malformed reply. The words render as a list with the complete
+link under its own label, and a code fence left open at the end keeps its source readable. Both scenes exercise
+the desktop's recorded-reply fallback. The offline core tests exercise the API and written CLI parsing boundary.
+
+```powershell
+npm run look -- recovered-member-reply recovered-room-reply --theme both --width 1120,720,1920x1080
+```
+
 ## A conversation read at its bottom stays at its bottom (R-FOLLOW-01)
 
 A thread read at its bottom does not move at all while a member replies. Following the bottom was a correction queued by the

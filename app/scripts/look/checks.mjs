@@ -3186,6 +3186,19 @@ export function checkRendered(name, context = {}) {
     require(Object.values(tokens).every(value=>/^#([0-9a-f]{2})\1\1$/i.test(value)), "both themes are neutral greys including text, accent, focus and selection");
     return {check:name, surfaces, tokens};
   }
+  if (name === "recovered-reply") {
+    const link = [...document.querySelectorAll('.thread a[data-url="https://example.com/reply"]')].find(visible);
+    const prose = link?.closest(".message-text");
+    const items = [...(prose?.querySelectorAll("li") ?? [])].map(item => item.textContent.trim());
+    const source = link?.closest(".thread")?.querySelector('.message-code[data-complete="false"] code')?.textContent;
+    require(link?.textContent === "Vendor", "the complete link has only its own label");
+    require(items.join("|") === "Unfinished Vendor|Still readable…|Last item.", "the malformed link and lost break leave all three items readable");
+    require(prose?.textContent.startsWith("Here is the full reply."), "the visible reply is prose without envelope fields");
+    require(source === '{"example": true}', "an unclosed fence keeps its source");
+    const preview = [...document.querySelectorAll(".au-room-row .mb-row-p")].find(line => line.textContent.includes("Here is the full reply."));
+    if (innerWidth > 720) require(visible(preview) && preview.textContent.includes("Unfinished Vendor"), "the expanded sidebar preview also drops the broken link syntax");
+    return { check: name, items, source, preview: preview?.textContent };
+  }
   if (name.startsWith("rich-")) {
     const scope = document.querySelector('.page-agent:not([hidden])');
     const cards = [...scope.querySelectorAll('.rich-block')];

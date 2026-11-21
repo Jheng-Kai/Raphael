@@ -58,6 +58,23 @@ test("shortUrl still names a page by host and path, capped at 32 characters, for
   expect(shortUrl(url)).toHaveLength(32);
 });
 
+test("an unclosed link label cannot swallow a later link or list item", () => {
+  const el = document.createElement("div");
+  el.innerHTML = messageHTML("1. [Unfinished [Vendor](https://example.com/)\n2. Keep reading.", "", true);
+  expect(el.querySelector("a")?.textContent).toBe("Vendor");
+  expect(el.querySelector("li")?.textContent).toBe("Unfinished Vendor");
+  expect(el.querySelector("li:last-child")?.textContent).toBe("Keep reading.");
+  el.innerHTML = messageHTML("[Draft](https://example.com/path\n\nAfter the draft.", "", true);
+  expect(el.querySelector("p:last-child")?.textContent).toBe("After the draft.");
+});
+
+test("a code fence at end of reply keeps all source readable", () => {
+  const el = document.createElement("div");
+  el.innerHTML = messageHTML('Before\n\n```json\n{"text":"Example"}\nmore source', "", true);
+  expect(el.querySelector("p")?.textContent).toBe("Before");
+  expect(el.querySelector("pre code")?.textContent).toBe('{"text":"Example"}\nmore source');
+});
+
 test("reply markdown renders lists, emphasis, breaks and copyable code without interpreting HTML", () => {
   const el = document.createElement("div");
   el.innerHTML = messageHTML('**bold** and *italic* with `a < b`\nnext\n\n- one\n- two\n\n1. first\n2. second\n\n```js\n<script>alert(1)</script>\n```\n<img src=x onerror=alert(1)>\n[bad](javascript:alert(1))\n[site](https://example.com/a?x=1&y=2)', "", true);
