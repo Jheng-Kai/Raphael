@@ -85,7 +85,7 @@ export function messageTooltip(host: HTMLElement): () => void {
     const button = (event.target as Element).closest<HTMLElement>("[data-tooltip]");
     if (button === target) return;
     hide();
-    if (!button || !button.dataset.tooltip || !host.contains(button) || button.dataset.cancelArmed === "true") return;
+    if (!button || !button.dataset.tooltip || !host.contains(button) || host.querySelector('[data-cancel-armed="true"]')) return;
     const said = (() => { target = button; const value = wordsFor(); target = null; return value; })();
     if (echoesItsText(button, said)) return;
     target = button;
@@ -108,5 +108,6 @@ export function messageTooltip(host: HTMLElement): () => void {
   host.addEventListener("focusout", hide);
   host.addEventListener("scroll", hide, true);
   host.addEventListener("keydown", hide);
+  host.addEventListener("cancel-gesture-armed", hide);
   return hide;
 }

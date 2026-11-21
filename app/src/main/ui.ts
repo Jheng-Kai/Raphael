@@ -7,7 +7,7 @@ import { pressWentThrough, pressWithoutOpener, registerDismissal } from "./dismi
 
 import { type Notifier, UNDO_MS } from "./undo";
 import { ICON } from "./icon-set";
-import { nameScore } from "./find-match";
+import { prepareName, prepareQuery, scorePreparedQuery, type PreparedName } from "./find-match";
 
 // ---------- HTML ----------
 
@@ -392,6 +392,8 @@ interface MenuState {
   /** Set when a right click asked for the menu: it stands at that point rather than under its button. */
   at?: PointerAt;
   stopHover?: () => void;
+  completion?: (choices: Choice[], pick: (value: string) => void, anchorRect?: () => DOMRect) => void;
+  completionRect?: DOMRect;
   reopen?: HTMLElement;
 }
 let menu: MenuState | null = null;
@@ -488,10 +490,11 @@ function listenForMenuEvents(): void {
       anchor.focus({ preventScroll: true });
       return;
     }
-    const items = menuItems(menu.el);
     if (e.key === "ArrowRight" && (document.activeElement as HTMLElement | null)?.getAttribute("aria-haspopup") === "menu") {
       e.preventDefault(); (document.activeElement as HTMLElement).click(); return;
     }
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) return;
+    const items = menuItems(menu.el);
     if (items.length === 0) return;
     const i = items.indexOf(document.activeElement as HTMLButtonElement);
     if (e.key === "ArrowDown") {
@@ -611,10 +614,24 @@ export function submenuPlacement(
 }
 
 /** Dropdowns prefer below; start-aligned text completions prefer above their character. */
-export function placeMenu(): void {
+export function placeMenu(reuseCompletionAnchor = false): void {
   if (!menu) return;
   const { el, anchor } = menu;
-  const r = menu.anchorRect?.() ?? menu.rect;
+  const r = (reuseCompletionAnchor ? menu.completionRect : undefined) ?? menu.anchorRect?.() ?? menu.rect;
+  if (menu.completion) {
+    menu.completionRect = r;
+    const style = getComputedStyle(el);
+    const token = (name: string, fallback: number): number => parseFloat(style.getPropertyValue(name)) || fallback;
+    const headerBottom = token("--window-controls-height", 32);
+    const padding = token("--sp-1", 4) * 2;
+    const cap = padding + (el.classList.contains("described") ? token("--h-row", 48) * 7 : token("--h-menu", 28) * 7.5);
+    const height = Math.min(cap, el.scrollHeight + el.offsetHeight - el.clientHeight);
+    const box = menuPlacement(r, { width: el.offsetWidth, height }, { width: innerWidth, height: innerHeight, headerBottom }, menu.placement === "start" ? "start" : "end");
+    el.style.maxHeight = `${Math.min(cap, box.maxHeight)}px`;
+    el.style.left = `${box.left}px`;
+    el.style.top = `${box.top}px`;
+    return;
+  }
   const headerBottom = document.getElementById("window-chrome")?.getBoundingClientRect().bottom ?? 0;
   // A dropdown's menu is at least as wide as the dropdown itself.
   if (anchor.classList?.contains("sel")) el.style.minWidth = `${Math.round(r.width)}px`;
@@ -701,6 +718,7 @@ export interface PopoverOptions {
   /** A live text/caret rectangle; the field remains the dismissal and focus anchor. */
   anchorRect?: () => DOMRect;
   onClose?: () => void;
+  deferPlacement?: boolean;
   /** The classes of the panel, `menu` among them. */
   className: string;
   role: string;
@@ -724,7 +742,7 @@ export function openPopover(anchor: HTMLElement, html: string, o: PopoverOptions
   const parentRect = parent?.el.getBoundingClientRect();
   const sameAnchor = menu && (menu.anchor === anchor || (!menu.anchor.isConnected && anchor.dataset.k && menu.anchor.dataset.k === anchor.dataset.k));
   const previous = !parent && sameAnchor && !menu!.at && !o.anchorRect ? menu!.rect : undefined;
-  const rect = at ? pointRect(at) : o.anchorRect?.() ?? (parentRect ? { top: rowRect.top, bottom: rowRect.bottom, height: rowRect.height,
+  const rect = at ? pointRect(at) : (parentRect ? { top: rowRect.top, bottom: rowRect.bottom, height: rowRect.height,
     left: parentRect.left, right: parentRect.right, width: parentRect.width } as DOMRect : previous ?? rowRect);
   if (parent) {
     parent.reopen = undefined;
@@ -762,7 +780,7 @@ export function openPopover(anchor: HTMLElement, html: string, o: PopoverOptions
     }), onKey: o.onKey, onClose: o.onClose };
   anchor.setAttribute("aria-expanded", "true");
   anchor.setAttribute("aria-controls", el.id);
-  placeMenu();
+  if (!o.deferPlacement) placeMenu();
   listenForSubmenus(menu);
   return el;
 }
@@ -821,6 +839,206 @@ export interface MenuAction {
   run(anchor: HTMLElement): void;
 }
 
+type MenuPlacement = Pick<PopoverOptions, "placement" | "anchorRect"> & {
+  selectionIndicator?: boolean;
+  focus?: boolean;
+  completion?: boolean;
+  className?: string;
+  scroll?: boolean;
+};
+
+function choiceBody(o: Choice, indicator: string): string {
+  return (o.lead ? `<span class="mlead" aria-hidden="true">${o.lead}</span>` : "") +
+    (o.desc
+      ? `<span class="mtd"><span class="mt">${esc(o.label)}</span><span class="mdesc">${esc(o.desc)}</span>${o.source ? `<small class="msource">${esc(o.source)}</small>` : ""}</span>`
+      : `<span class="mt">${esc(o.label)}</span>`) +
+    (!o.desc && o.source ? `<small class="msource">${esc(o.source)}</small>` : "") +
+    (o.tag ? `<span class="mtag">${esc(o.tag)}</span>` : "") +
+    (o.trail ? `<span class="mtrail">${esc(o.trail)}</span>` : "") +
+    (o.detail ? `<span class="md num">${esc(o.detail)}</span>` : "") + indicator;
+}
+
+const menuHeading = (text: string): string => `<div class="menu-head" aria-hidden="true">${esc(text)}</div>`;
+
+/** Completion keeps its panel and shared rows alive while the query changes. Large lists mount a scroll window. */
+function openCompletion(anchor: HTMLElement, choices: Choice[], pick: (value: string) => void, placement: MenuPlacement): void {
+  if (menu?.anchor === anchor && menu.completion && (!placement.className || menu.el.classList.contains(placement.className))) {
+    menu.completion(choices, pick, placement.anchorRect);
+    return;
+  }
+  let options: Choice[] = [], onPick = pick, selected = 0, lastPoint = "";
+  let rows = new Map<Choice, HTMLButtonElement>(), headings = new Map<string, HTMLElement>();
+  let active: HTMLButtonElement | undefined;
+  let offsets: number[] = [], ends: number[] = [];
+  let firstMounted = 0, lastMounted = 0;
+  const template = document.createElement("template");
+  const leading = document.createElement("div"), trailing = document.createElement("div");
+  for (const spacer of [leading, trailing]) spacer.setAttribute("aria-hidden", "true");
+  const isSlash = placement.className === "slash-menu";
+  const el = openPopover(anchor, "", {
+    ...placement, className: `menu menu-scroll completion-menu ${placement.className ?? ""}`, role: "listbox",
+    label: anchor.getAttribute("aria-label") ?? undefined, deferPlacement: true,
+    onClose: () => { anchor.removeEventListener("keydown", keydown, true); anchor.removeAttribute("aria-activedescendant"); resize?.disconnect(); },
+  });
+  const state = menu!;
+  if (isSlash) el.style.minWidth = `${Math.min(360, state.rect.width, innerWidth - 16)}px`;
+  if (placement.className === "team-mentions-menu") el.dataset.teamMentions = "true";
+  let fieldSize = state.rect;
+  const resize = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(() => {
+    if (menu !== state) return;
+    const box = anchor.getBoundingClientRect();
+    if (fieldSize.width === box.width && fieldSize.height === box.height) return;
+    fieldSize = box;
+    if (isSlash) el.style.minWidth = `${Math.min(360, box.width, innerWidth - 16)}px`;
+    placeMenu();
+  });
+  resize?.observe(anchor);
+
+  function measureRows(): void {
+    offsets = []; ends = [];
+    if (options.length <= 64) return;
+    const style = getComputedStyle(el), token = (name: string, fallback: number) => parseFloat(style.getPropertyValue(name)) || fallback;
+    const row = token("--h-menu", 28), small = token("--fs-xs", 13), pad = token("--sp-1", 4);
+    const heading = small * 1.6 + pad * 3 + 1;
+    let offset = 0;
+    options.forEach((option, index) => {
+      offsets.push(offset);
+      if (option.group && option.group !== options[index - 1]?.group) offset += heading;
+      offset += row + (option.desc ? small * 1.4 : 0) + (option.desc && option.source ? row - pad * 2 : 0);
+      ends.push(offset);
+    });
+  }
+
+  function highlight(): void {
+    const next = rows.get(options[selected]!);
+    if (active === next) return;
+    active?.classList.remove("is-active");
+    active?.setAttribute("aria-selected", "false");
+    active = next;
+    if (!active) { anchor.removeAttribute("aria-activedescendant"); return; }
+    active.classList.add("is-active");
+    active.setAttribute("aria-selected", "true");
+    anchor.setAttribute("aria-activedescendant", active.id);
+  }
+
+  function draw(top = 0, height = 400): void {
+    const virtual = offsets.length > 0;
+    const firstVisible = ends.findIndex(end => end > top);
+    const first = virtual ? Math.max(0, (firstVisible < 0 ? ends.length - 1 : firstVisible) - 4) : 0;
+    let last = first;
+    while (last < options.length && (!virtual || offsets[last]! < top + height + 240)) last++;
+    firstMounted = first; lastMounted = last;
+    const nextRows = new Map<Choice, HTMLButtonElement>(), nextHeadings = new Map<string, HTMLElement>(), children: HTMLElement[] = [];
+    if (virtual) {
+      const height = `${offsets[first]}px`;
+      if (leading.style.height !== height) leading.style.height = height;
+      children.push(leading);
+    }
+    for (let index = first; index < last; ++index) {
+      const option = options[index]!, group = option.group;
+      if (group && group !== options[index - 1]?.group) {
+        let heading = headings.get(group);
+        if (!heading) { template.innerHTML = menuHeading(group); heading = template.content.firstElementChild as HTMLElement; }
+        nextHeadings.set(group, heading);
+        children.push(heading);
+      }
+      let row = rows.get(option);
+      if (!row) {
+        template.innerHTML = `<button type="button" class="menu-choice" role="option" tabindex="-1" data-value="${esc(option.value)}" aria-selected="false"${option.title ? ` title="${esc(option.title)}"` : ""}>${choiceBody(option, "")}</button>`;
+        row = template.content.firstElementChild as HTMLButtonElement;
+      }
+      const id = `completion-${index}`, position = String(index + 1), count = String(options.length);
+      if (row.id !== id) row.id = id;
+      if (row.getAttribute("aria-posinset") !== position) row.setAttribute("aria-posinset", position);
+      if (row.getAttribute("aria-setsize") !== count) row.setAttribute("aria-setsize", count);
+      if (isSlash && row.dataset.slash !== String(index)) row.dataset.slash = String(index);
+      nextRows.set(option, row);
+      children.push(row);
+    }
+    if (virtual) {
+      const height = `${ends[ends.length - 1]! - ends[last - 1]!}px`;
+      if (trailing.style.height !== height) trailing.style.height = height;
+      children.push(trailing);
+    }
+    const keep = new Set(children);
+    for (const child of [...el.children]) if (!keep.has(child as HTMLElement)) child.remove();
+    let at = el.firstChild;
+    for (const child of children) {
+      if (child !== at) el.insertBefore(child, at);
+      at = child.nextSibling;
+    }
+    rows = nextRows; headings = nextHeadings;
+    highlight();
+    if (active && anchor.getAttribute("aria-activedescendant") !== active.id) anchor.setAttribute("aria-activedescendant", active.id);
+  }
+
+  function choose(value: string): void {
+    closeMenu();
+    anchor.focus({ preventScroll: true });
+    onPick(value);
+  }
+  function ensureWindow(top: number, height: number): void {
+    if (top < offsets[firstMounted]! || (lastMounted < options.length && top + height > ends[lastMounted - 1]!)) draw(top, height);
+  }
+  function keydown(event: KeyboardEvent): void {
+    if (event.isComposing || event.keyCode === 229 || !["ArrowDown", "ArrowUp", "Enter", "Tab", "Escape"].includes(event.key)) return;
+    event.preventDefault(); event.stopImmediatePropagation();
+    if (event.key === "Escape") { closeMenu(); return; }
+    if (event.key === "Enter" || event.key === "Tab") { if (options[selected]) choose(options[selected]!.value); return; }
+    selected = (selected + (event.key === "ArrowDown" ? 1 : -1) + options.length) % options.length;
+    if (offsets.length) {
+      const height = el.clientHeight, current = el.scrollTop;
+      const top = Math.max(0, Math.min(offsets[selected]!, Math.max(current, ends[selected]! - height + 12)));
+      if (top !== current) { ensureWindow(top, height); el.scrollTop = top; }
+    }
+    const button = rows.get(options[selected]!);
+    if (!offsets.length) button?.scrollIntoView?.({ block: "nearest" });
+    highlight();
+  }
+  anchor.addEventListener("keydown", keydown, true);
+  el.addEventListener("scroll", () => { if (offsets.length) ensureWindow(el.scrollTop, el.clientHeight); });
+  el.addEventListener("pointerdown", event => event.preventDefault());
+  el.addEventListener("pointermove", event => {
+    const row = (event.target as Element).closest("button");
+    const point = `${event.clientX},${event.clientY}`;
+    if (!row || point === lastPoint) return;
+    if (!row.hasAttribute("title")) {
+      const label = row.querySelector<HTMLElement>(".mt");
+      const description = offsets.length ? row.querySelector<HTMLElement>(".mdesc") : null;
+      const clipped = [label, description].filter(line => line && line.scrollWidth > line.clientWidth);
+      if (clipped.length) row.title = clipped.map(line => line!.textContent).join("\n");
+    }
+    lastPoint = point;
+    selected = Number(row.getAttribute("aria-posinset")) - 1;
+    highlight();
+  });
+  el.addEventListener("click", event => {
+    const row = (event.target as Element).closest("button");
+    if (row) choose(row.dataset.value ?? "");
+  });
+  state.completion = (next, nextPick, anchorRect) => {
+    onPick = nextPick;
+    const moved = state.anchorRect !== anchorRect;
+    state.anchorRect = anchorRect;
+    selected = 0;
+    if (options.length === next.length && options.every((option, index) => option === next[index]) && rows.has(next[0]!)) {
+      if (el.scrollTop) el.scrollTop = 0;
+      highlight();
+      if (moved) placeMenu();
+      return;
+    }
+    options = next;
+    el.classList.toggle("described", next.some(option => option.desc));
+    el.classList.toggle("detailed", next.some(option => option.detail));
+    measureRows();
+    el.classList.toggle("is-virtual", offsets.length > 0);
+    draw();
+    placeMenu(!moved);
+    if (el.scrollTop) el.scrollTop = 0;
+  };
+  state.completion(choices, pick, placement.anchorRect);
+}
+
 /**
  * Opens a menu of `options` under `anchor`, with `current` checked. `onPick` gets the value chosen.
  * `head` is a line of small print above the choices (what their details mean), and `actions` are
@@ -833,10 +1051,10 @@ export function openMenu(
   onPick: (value: string) => void,
   head?: string,
   actions: readonly MenuAction[] = [],
-  placement?: Pick<PopoverOptions, "placement" | "anchorRect"> & { selectionIndicator?: boolean; /** `false`: the focus stays where it is (a field an input method is composing in). */ focus?: boolean; completion?: boolean; className?: string;
-    /** The menu has a fixed height in its CSS and every row stays on one list that scrolls (a mouse wheel, the arrow keys). A completion menu always does: no menu of the app is ever in pages. */ scroll?: boolean },
+  placement?: MenuPlacement,
 ): void {
-  const scrolls = !!(placement?.scroll || placement?.completion);
+  if (placement?.completion) { openCompletion(anchor, options, onPick, placement); return; }
+  const scrolls = placement?.scroll;
   const active = document.activeElement as HTMLElement | null;
   const again = menu && (menu.anchor === anchor || (!menu.anchor.isConnected && menu.anchor.dataset.k === anchor.dataset.k)) &&
     active && menu.el.contains(active) ? active : null;
@@ -847,18 +1065,10 @@ export function openMenu(
     options
       .map(
         (o, index) =>
-          (o.group && o.group !== options[index - 1]?.group ? `<div class="menu-head" aria-hidden="true">${esc(o.group)}</div>` : "") +
-          `<button type="button" class="menu-choice" role="${placement?.completion ? "option" : "menuitemradio"}" tabindex="-1" data-value="${esc(o.value)}" ${placement?.completion ? `aria-selected="false" aria-posinset="${index + 1}" aria-setsize="${options.length}"` : `aria-checked="${o.value === current}"`}` +
+          (o.group && o.group !== options[index - 1]?.group ? menuHeading(o.group) : "") +
+          `<button type="button" class="menu-choice" role="menuitemradio" tabindex="-1" data-value="${esc(o.value)}" aria-checked="${o.value === current}"` +
           `${o.title ? ` title="${esc(o.title)}"` : ""}>` +
-          (o.lead ? `<span class="mlead" aria-hidden="true">${o.lead}</span>` : "") +
-          (o.desc
-            ? `<span class="mtd"><span class="mt">${esc(o.label)}</span><span class="mdesc">${esc(o.desc)}</span>${o.source ? `<small class="msource">${esc(o.source)}</small>` : ""}</span>`
-            : `<span class="mt">${esc(o.label)}</span>`) +
-          (!o.desc && o.source ? `<small class="msource">${esc(o.source)}</small>` : "") +
-          (o.tag ? `<span class="mtag">${esc(o.tag)}</span>` : "") +
-          (o.trail ? `<span class="mtrail">${esc(o.trail)}</span>` : "") +
-          (o.detail ? `<span class="md num">${esc(o.detail)}</span>` : "") +
-          (placement?.selectionIndicator === false ? "" : `<span class="ck">${o.value === current ? CHECK : ""}</span>`) +
+          choiceBody(o, placement?.selectionIndicator === false ? "" : `<span class="ck">${o.value === current ? CHECK : ""}</span>`) +
           `</button>`,
       )
       .join("") +
@@ -866,50 +1076,16 @@ export function openMenu(
     actions
       .map(
         (a, i) =>
-          `<button type="button" role="${placement?.completion ? "option" : "menuitem"}"${placement?.completion ? ' aria-selected="false"' : ""} tabindex="-1" class="menu-action" data-action="${i}"${a.busy ? ' aria-disabled="true"' : ""}${a.submenu ? ' aria-haspopup="menu" aria-expanded="false"' : ""}>` +
+          `<button type="button" role="menuitem" tabindex="-1" class="menu-action" data-action="${i}"${a.busy ? ' aria-disabled="true"' : ""}${a.submenu ? ' aria-haspopup="menu" aria-expanded="false"' : ""}>` +
           `${a.mark ? `<span class="mmark" aria-hidden="true">${a.mark}</span>` : `<span class="ck">${a.icon ? ico(a.icon) : ""}</span>`}<span class="mtd"><span class="mt">${esc(a.label)}</span>${a.desc ? `<span class="mdesc">${esc(a.desc)}</span>` : ""}</span>${a.submenu ? ico("right") : ""}</button>`,
       )
       .join("");
   const el = openPopover(anchor, html, {
     ...placement,
-    className: `menu${detailed ? " detailed" : ""}${described ? " described" : ""}${placement?.placement === "beside" ? " menu-submenu" : ""}${placement?.completion ? " completion-menu" : ""}${scrolls ? " menu-scroll" : ""}${placement?.className ? " " + placement.className : ""}`,
-    role: placement?.completion ? "listbox" : "menu",
+    className: `menu${detailed ? " detailed" : ""}${described ? " described" : ""}${placement?.placement === "beside" ? " menu-submenu" : ""}${scrolls ? " menu-scroll" : ""}${placement?.className ? " " + placement.className : ""}`,
+    role: "menu",
     label: anchor.getAttribute("aria-label") ?? undefined,
-    onClose: placement?.completion ? () => { anchor.removeEventListener("keydown", completionKey, true); anchor.removeAttribute("aria-activedescendant"); } : undefined,
   });
-  let selected = 0;
-  const buttons = [...el.querySelectorAll<HTMLButtonElement>("button")];
-  function highlight(keyboard = false): void {
-    buttons.forEach((button, index) => {
-      button.id = `completion-${index}`;
-      if (button.hasAttribute("aria-selected")) button.setAttribute("aria-selected", String(index === selected));
-      button.setAttribute("aria-posinset", String(index + 1)); button.setAttribute("aria-setsize", String(buttons.length));
-      button.classList.toggle("is-active", index === selected);
-    });
-    if (buttons[selected]) anchor.setAttribute("aria-activedescendant", buttons[selected].id);
-    // The arrow keys carry the highlight out of sight in a list that scrolls: the row they land on comes into view.
-    if (keyboard && scrolls) buttons[selected]?.scrollIntoView?.({ block: "nearest" });
-  }
-  function completionKey(event: KeyboardEvent): void {
-    if (event.isComposing || event.keyCode === 229 || !["ArrowDown", "ArrowUp", "Enter", "Tab", "Escape"].includes(event.key)) return;
-    event.preventDefault(); event.stopImmediatePropagation();
-    if (event.key === "Escape") { closeMenu(); return; }
-    if (event.key === "Enter" || event.key === "Tab") { buttons[selected]?.click(); return; }
-    selected = (selected + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length;
-    highlight(true);
-  }
-  if (placement?.completion) {
-    anchor.addEventListener("keydown", completionKey, true);
-    el.addEventListener("pointerdown", event => event.preventDefault());
-    // A list that scrolls moves under a pointer that has not: the browser's own pointermove for that carries the same point and is no choice.
-    let lastPoint = "";
-    buttons.forEach((button, index) => button.addEventListener("pointermove", event => {
-      const point = `${event.clientX},${event.clientY}`;
-      if (point === lastPoint) return;
-      lastPoint = point; selected = index; highlight();
-    }));
-    highlight();
-  }
   // The menu is only so wide (styles.css): a label it cuts short has its whole text as a tooltip.
   el.querySelectorAll<HTMLElement>("button").forEach((button) => {
     const label = button.querySelector<HTMLElement>(".mt");
@@ -932,22 +1108,32 @@ export function openMenu(
   // action by its place.
   const remembered = again === null ? null : Array.from(el.querySelectorAll<HTMLElement>("button")).find((button) =>
     again.dataset.action !== undefined ? button.dataset.action === again.dataset.action : button.dataset.value === again.dataset.value);
-  if (placement?.focus !== false && !placement?.completion) (remembered ?? el.querySelector<HTMLElement>('[aria-checked="true"]') ?? el.querySelector<HTMLElement>("button") ?? el).focus();
+  if (placement?.focus !== false) (remembered ?? el.querySelector<HTMLElement>('[aria-checked="true"]') ?? el.querySelector<HTMLElement>("button") ?? el).focus();
 }
 
 /** Matches within each section, best first and stable: exact, start, inside, then near misses (`find-match.ts`), by
  * the value, the label and other names. */
+const choiceNames = new WeakMap<Choice, { lower: string[]; prepared: PreparedName[] }>();
 export function matchingChoices(options: Choice[], query: string): Choice[] {
   // A space after the words ends them: 「@研究組 」 is a finished mention, and only a longer name that goes on after those
   // words ("Google " for Google Calendar) still answers it.
   const finished = /\s$/u.test(query) ? query.trimStart().toLocaleLowerCase() : "";
-  const scores = new Map(options.map(choice => {
-    const names = [choice.value, choice.label.replace(/^[@/]/, ""), ...(choice.aliases ?? [])];
-    return [choice, finished && !names.some(name => name.toLocaleLowerCase().startsWith(finished)) ? Infinity : nameScore(names, query)];
-  }));
-  const score = (choice: Choice): number => scores.get(choice)!;
-  const groups = [...new Set(options.map(option => option.group))];
-  return groups.flatMap(group => options.filter(option => option.group === group && score(option) < Infinity).sort((a, b) => score(a) - score(b)));
+  const wanted = prepareQuery(query);
+  const groups = new Map<string | undefined, { choice: Choice; score: number }[]>();
+  for (const choice of options) {
+    let group = groups.get(choice.group);
+    if (!group) groups.set(choice.group, group = []);
+    let names = choiceNames.get(choice);
+    if (!names) {
+      const distinct = [...new Set([choice.value, choice.label.replace(/^[@/]/, ""), ...(choice.aliases ?? [])].filter(Boolean))];
+      names = { lower: distinct.map(name => name.toLocaleLowerCase()), prepared: distinct.map(prepareName) };
+      choiceNames.set(choice, names);
+    }
+    if (finished && !names.lower.some(name => name.startsWith(finished))) continue;
+    const score = scorePreparedQuery(names.prepared, wanted);
+    if (score < Infinity) group.push({ choice, score });
+  }
+  return [...groups.values()].flatMap(group => group.sort((a, b) => a.score - b.score).map(item => item.choice));
 }
 
 /** The check mark of a chosen item: drawn, so that it is the same in every font; the `check` of ICON,

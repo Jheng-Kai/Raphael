@@ -23,6 +23,46 @@ const INTERACTIVE = "button, a, input, select, textarea, [contenteditable], [rol
  */
 export const RESIZE_SETTLE_MS = 100;
 
+/** Follow only frame boundaries. A document-wide relational selector here invalidates the thread on composer edits. */
+export function followConversationChrome(main: HTMLElement, chrome: HTMLElement): () => void {
+  const body = main.ownerDocument.body;
+  const parts = new MutationObserver(update);
+  const bodyChildren = new MutationObserver(records => {
+    const coversHeader = (node: Node): boolean => node instanceof Element && node.matches(".mb-scrim, .side-search");
+    if (records.some(record => [...record.addedNodes, ...record.removedNodes].some(coversHeader))) update();
+  });
+  bodyChildren.observe(body, { childList: true });
+  update();
+  return () => { parts.disconnect(); bodyChildren.disconnect(); };
+
+  function update(): void {
+    parts.disconnect();
+    parts.observe(main, { childList: true });
+    const page = main.querySelector<HTMLElement>(":scope > .page-agent");
+    const chats = page?.querySelectorAll<HTMLElement>(":scope > .mb-chat") ?? [];
+    const settings = page?.querySelector<HTMLElement>(":scope > .ms-pane");
+    if (page) parts.observe(page, { childList: true, attributes: true, attributeFilter: ["hidden", "class", "data-det"] });
+    for (const chat of chats) parts.observe(chat, { childList: true, attributes: true, attributeFilter: ["hidden"] });
+    if (settings) parts.observe(settings, { attributes: true, attributeFilter: ["hidden", "data-scrolled"] });
+    const cover = settings?.querySelector(".ms-cover");
+    if (cover) parts.observe(cover, { attributes: true, attributeFilter: ["data-pattern"] });
+    const conversation = !!page && !page.hidden;
+    const header = conversation && [...chats].some(chat => !chat.hidden && chat.querySelector(":scope > .mb-head"));
+    const scrims = [...body.querySelectorAll(":scope > .mb-scrim")];
+    const search = body.querySelector(":scope > .side-search");
+    for (const scrim of scrims) parts.observe(scrim, { attributes: true, attributeFilter: ["class"] });
+    const covered = (settings && !settings.hidden) || scrims.length > 0 || !!search;
+    const dialog = scrims.some(scrim => !scrim.classList.contains("store-scrim"));
+    chrome.toggleAttribute("data-conversation-caption", conversation);
+    chrome.toggleAttribute("data-conversation-details", conversation && page.dataset.det === "open" && !page.classList.contains("is-room"));
+    chrome.toggleAttribute("data-settings-caption", !!settings && !settings.hidden && !settings.hasAttribute("data-scrolled") && cover?.getAttribute("data-pattern") === "image");
+    chrome.toggleAttribute("data-creator-caption", scrims.length > 0 && scrims.every(scrim => scrim.classList.contains("cr-scrim")));
+    chrome.toggleAttribute("data-member-dialog", dialog);
+    chrome.toggleAttribute("data-caption-dimmed", !!search || dialog);
+    chrome.toggleAttribute("data-conversation-drag", header && !covered);
+  }
+}
+
 /** The names of the frame's controls, in the language of the window. */
 export interface WindowControlLabels {
   controls: string;

@@ -2,10 +2,10 @@
 import { membersCommandsList, membersSkillsList } from "./api";
 import { eventRead } from './event-read';
 import { RECALL } from "./composer-history";
-import { t } from "./i18n";
+import { getLocale, t } from "./i18n";
 import type { MemberCommand, MemberSkill } from "./types";
-import { textPositionRect } from "./text-position";
-import { closeMenu, matchingChoices, menuIsOpenFor, openMenu, placeMenu, type Choice } from "./ui";
+import { completionAnchor } from "./text-position";
+import { closeMenu, matchingChoices, menuIsOpenFor, openMenu, type Choice } from "./ui";
 import { findsName } from "./find-match";
 import { slashTrigger, type SlashTrigger } from "./completion-trigger";
 
@@ -29,6 +29,7 @@ export function mountSlashMenu(input: HTMLTextAreaElement | HTMLInputElement, op
   let loadedFor: number | null = null;
   let stale = false;
   let commands: MemberCommand[] = [], skills: MemberSkill[] = [];
+  let choices: Choice[] = [], locale: string | undefined, loadingFor: number | null = null;
   function close(): void {
     if (menuIsOpenFor(input) && document.querySelector("#app-popover.slash-menu")) closeMenu();
   }
@@ -36,14 +37,9 @@ export function mountSlashMenu(input: HTMLTextAreaElement | HTMLInputElement, op
     const trigger = triggerOf(input);
     if (!alive || document.activeElement !== input || loadedFor !== options.memberId() || !trigger) { close(); return; }
     const { query, start } = trigger;
-    const choices: Choice[] = [
-      ...commands.map(command => ({ value: command.name, label: "/" + command.name, desc: command.description, group: t("completion.commands") })),
-      ...skills.filter(skill => skill.enabled).map(skill => ({ value: skill.slash_name ?? skill.name, label: "/" + (skill.slash_name ?? skill.name), desc: skill.description,
-        aliases: [skill.name], source: skill.plugin, group: t("completion.skills") })),
-    ];
+    if (locale !== getLocale()) indexChoices();
     // As the @ menu: everything on one list that scrolls, and the best eight of what was typed.
-    const matched = matchingChoices(choices, query);
-    const shown = query ? matched.slice(0, 8) : matched;
+    const shown = query ? matchingChoices(choices, query).slice(0, 8) : choices;
     if (!shown.length) { close(); return; }
     const caret = start + 1 + query.length;
     openMenu(input, shown, "", value => {
@@ -53,15 +49,21 @@ export function mountSlashMenu(input: HTMLTextAreaElement | HTMLInputElement, op
       input.setSelectionRange(at, at);
       input.focus();
       input.dispatchEvent(new Event("input", { bubbles: true }));
-    }, undefined, [], { placement: "start", anchorRect: () => textPositionRect(input, start), selectionIndicator: false, focus: false, completion: true, className: "slash-menu" });
-    const panel = document.querySelector<HTMLElement>("#app-popover")!;
-    panel.querySelectorAll<HTMLElement>("[data-value]").forEach((row, index) => { row.dataset.slash = String(index); });
-    panel.style.minWidth = `${Math.min(360, input.getBoundingClientRect().width, innerWidth - 16)}px`;
-    placeMenu();
+    }, undefined, [], { placement: "start", anchorRect: completionAnchor(input, start), completion: true, className: "slash-menu" });
+  }
+  function indexChoices(): void {
+    locale = getLocale();
+    const commandGroup = t("completion.commands"), skillGroup = t("completion.skills");
+    choices = [
+      ...commands.map(command => ({ value: command.name, label: "/" + command.name, desc: command.description, group: commandGroup })),
+      ...skills.filter(skill => skill.enabled).map(skill => ({ value: skill.slash_name ?? skill.name, label: "/" + (skill.slash_name ?? skill.name), desc: skill.description,
+        aliases: [skill.name], source: skill.plugin, group: skillGroup })),
+    ];
   }
   async function refresh(fromEvent=false): Promise<void> {
     const mine = ++generation, memberId = options.memberId();
     stale = false;
+    loadingFor = memberId;
     close();
     try {
       const [commandAnswer, skillAnswer] = await Promise.all(fromEvent ? [eventRead(`members.commands.list:${memberId}`,()=>membersCommandsList(memberId),options.scope ?? input),eventRead(`members.skills.list:${memberId}`,()=>membersSkillsList(memberId),options.scope ?? input)] : [membersCommandsList(memberId), membersSkillsList(memberId)]);
@@ -71,15 +73,19 @@ export function mountSlashMenu(input: HTMLTextAreaElement | HTMLInputElement, op
       const stamp = (known: MemberSkill[]) => JSON.stringify(known.map(skill => [skill.id, skill.enabled, skill.slash_name ?? skill.name]));
       const nextSkills = skillAnswer.skills;
       const changed = loadedFor !== memberId || stamp(previousSkills) !== stamp(nextSkills);
+      indexChoices();
       loadedFor = memberId; draw();
       if (changed) options.changed?.();
     } catch { if (mine === generation) { loadedFor = null; close(); } }
+    finally { if (mine === generation) loadingFor = null; }
   }
   const onInput = (event?: Event): void => {
     if ((event as InputEvent | undefined)?.inputType === RECALL || !triggerOf(input)) { close(); return; }
-    if (loadedFor === options.memberId() && !stale) draw(); else void refresh();
+    const memberId = options.memberId();
+    if (loadingFor === memberId) return;
+    if (loadedFor === memberId && !stale) draw(); else void refresh();
   };
-  const onBlur = (): void => { generation++; close(); };
+  const onBlur = (): void => { generation++; loadingFor = null; close(); };
   input.addEventListener("input", onInput);
   input.addEventListener("focus", onInput);
   input.addEventListener("compositionend", onInput);

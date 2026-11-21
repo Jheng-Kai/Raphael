@@ -5,6 +5,19 @@ import { checkRendered } from "./checks.mjs";
 
 const fixture = JSON.parse(readFileSync(new URL("./fixture.json", import.meta.url), "utf8"));
 describe("shared look IPC boundary", () => {
+  it("serves the composer performance fixture through normal reads", async () => {
+    const target = {}, { data } = installMock(fixture, { fixture: { typingPerformance: "Analyst" } }, target);
+    const call = (method, params) => target.__TAURI_INTERNALS__.invoke("core_call", { method, params });
+    const conversation = data.conversations.find(item => item.member_id === 0 && item.is_default);
+    const { turns } = await call("agent.history.list", { member_id: 0, conversation_id: conversation.id, limit: 400 });
+    const { skills } = await call("members.skills.list", { member_id: 0 });
+    expect(turns).toHaveLength(400);
+    expect(turns.every(turn => turn.messages.length > 1 && turn.steps.length > 0)).toBe(true);
+    expect(turns.filter(turn => turn.drafts.length)).toHaveLength(50);
+    expect(data.members).toHaveLength(25);
+    expect(skills).toHaveLength(150);
+    expect(data.skillLibrary[0].skills).toHaveLength(60);
+  });
   it("keeps member-store empty, offline and warning variants at the IPC boundary", async () => {
     for (const variant of [{storeEmpty:true}, {storeOffline:true}, {storeWarning:true}]) {
       const target = {}, state = installMock(fixture, {fixture:variant}, target);

@@ -199,6 +199,7 @@ export function mountPageView(stage: HTMLElement, shell?: PageShell): PageView {
     bindNavLayer(host, close, { place: true });
     shell?.fold();
     stage.classList.add("is-page");
+    pane?.setAttribute("data-conversation-page", "");
     watchFoot();
     if (back) { back.hidden = false; back.setAttribute("aria-label", t("chooser.back")); back.title = t("chooser.back"); }
     drawAction();
@@ -217,6 +218,7 @@ export function mountPageView(stage: HTMLElement, shell?: PageShell): PageView {
     status.replaceChildren();
     delete status.dataset.drawn;
     stage.classList.remove("is-page");
+    pane?.removeAttribute("data-conversation-page");
     delete stage.dataset.pageKind;
     unwatchFoot();
     if (back) back.hidden = true;

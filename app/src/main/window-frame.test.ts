@@ -58,8 +58,8 @@ describe("keyboard focus and the window controls", () => {
   });
 
   test("a dialog dims the caption too and starts below it, whichever dialog it is", () => {
-    for (const dimmed of [":root:has(.mb-scrim:not(.store-scrim))", ":root:has(.menu.side-search)"]) {
-      expect(lastOf(`${dimmed} .window-chrome`, "background")).toBe("transparent");
+    for (const dimmed of [".window-chrome[data-caption-dimmed]", ".ob:has(.cs-scrim) ~ .window-chrome"]) {
+      expect(lastOf(dimmed, "background")).toBe("transparent");
       expect(lastOf(`${dimmed} .window-button:focus-visible:not(:hover)`, "background")).toBe("transparent");
     }
     const dialogs = readFileSync(path.join(import.meta.dirname, "members.css"), "utf8");
@@ -116,8 +116,8 @@ describe("a conversation's header is the window's top row", () => {
   test("the row's empty parts move the window, and the strip's own drag cell steps aside over it so that the pill and the buttons press", () => {
     for (const [file, marker] of [["pages/agent.ts", 'class="page-head mb-head" data-window-drag'], ["group-chats.ts", 'class="page-head mb-head" data-window-drag'], ["member-details.ts", 'class="mb-det-head" data-window-drag'], ["peer-chat.ts", 'class="peer-head" data-window-drag'], ["room-thread.ts", "<header data-window-drag>"]] as const)
       expect(source(file), file).toContain(marker);
-    expect(styles).toContain(':where(:root[data-window-layout="main"]:not([data-window-modal="true"], [data-desktop-expanded], [data-sidebar-open]):has(.main > .page-agent:not([hidden]) > .mb-chat:not([hidden]) > .mb-head):not(:has(.page-agent > .ms-pane:not([hidden]), .mb-scrim, .menu.side-search))) .window-chrome { pointer-events: none; }');
-    expect(styles).toContain(':where(:root[data-window-layout="main"]:not([data-window-modal="true"], [data-desktop-expanded], [data-sidebar-open]):has(.main > .page-agent:not([hidden]) > .mb-chat:not([hidden]) > .mb-head):not(:has(.page-agent > .ms-pane:not([hidden]), .mb-scrim, .menu.side-search))) .window-chrome > :not(.window-drag) { pointer-events: auto; }');
+    expect(styles).toContain(':where(:root[data-window-layout="main"]:not([data-window-modal="true"], [data-desktop-expanded], [data-sidebar-open])) .window-chrome:where([data-conversation-drag]) { pointer-events: none; }');
+    expect(styles).toContain(':where(:root[data-window-layout="main"]:not([data-window-modal="true"], [data-desktop-expanded], [data-sidebar-open])) .window-chrome:where([data-conversation-drag]) > :not(.window-drag) { pointer-events: auto; }');
     // Under 1120 px the details panel lies over the chat and its scrim dims the header: the scrim's top row moves the window instead.
     expect(members).toContain(".mb-det-scrim-row { position: absolute; inset: 0 0 auto; height: var(--pa-top); }");
     expect(source("pages/agent.ts")).toContain('<span class="mb-det-scrim-row" data-window-drag></span>');

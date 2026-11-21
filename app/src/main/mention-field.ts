@@ -6,7 +6,7 @@
 // the same way, in the link colour, but stay ordinary words (R-UI-168): a mistyped one is corrected a letter at a time, so
 // backspace takes one letter and the caret rests anywhere in it. The words hold its whole address (composer-links.ts), and
 // copying or sending gives the same text.
-import { esc } from "./ui";
+import { esc, patchHTML } from "./ui";
 import { linkRanges, shortenLinks, wholeLinks } from "./composer-links";
 import { mentionChipHTML, mentionRanges, type MentionTarget } from "./mention-text";
 
@@ -39,20 +39,31 @@ export function bindMentionField(input: HTMLTextAreaElement, targets: () => read
   };
   const place = (): void => {
     // A scrollbar narrows the textarea's lines; the copy has to wrap at the same letter.
-    mirror.style.setProperty("--cmp-bar", `${Math.max(0, input.offsetWidth - input.clientWidth)}px`);
+    if (!ranges.length) return;
+    const bar = `${Math.max(0, input.offsetWidth - input.clientWidth)}px`;
+    if (mirror.style.getPropertyValue("--cmp-bar") !== bar) mirror.style.setProperty("--cmp-bar", bar);
     mirror.scrollTop = input.scrollTop;
   };
+  const size = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(place);
   const draw = (): void => {
     const text = input.value;
     // Long restored/typed drafts use the textarea's own paint instead of a second large DOM.
-    if (text.length >= 2000) { ranges = []; units = []; field.classList.remove("has-mentions"); mirror.textContent = ""; return; }
-    const links: ChipRange[] = linkRanges(text).map(range => ({ ...range, url: true })), mentions = /[@＠]/u.test(text) ? mentionRanges(text, targets()) : [];
-    const free = (item: ChipRange, taken: readonly ChipRange[]): boolean => !taken.some(other => other.start < item.end && item.start < other.end);
-    const chips = [...links, ...mentions.filter(item => free(item, links))];
-    ranges = [...chips, ...(text.includes("/") ? skillRanges(text).filter(item => free(item, chips)) : [])].sort((a, b) => a.start - b.start);
-    units = ranges.filter(range => !range.url && !range.skill);
-    field.classList.toggle("has-mentions", ranges.length > 0);
-    if (!ranges.length) { mirror.textContent = ""; return; }
+    if (text.length >= 2000) { ranges = []; units = []; }
+    else {
+      const links: ChipRange[] = linkRanges(text).map(range => ({ ...range, url: true })), mentions = /[@＠]/u.test(text) ? mentionRanges(text, targets()) : [];
+      const free = (item: ChipRange, taken: readonly ChipRange[]): boolean => !taken.some(other => other.start < item.end && item.start < other.end);
+      const chips = [...links, ...mentions.filter(item => free(item, links))];
+      ranges = [...chips, ...(text.includes("/") ? skillRanges(text).filter(item => free(item, chips)) : [])].sort((a, b) => a.start - b.start);
+      units = ranges.filter(range => !range.url && !range.skill);
+    }
+    if (!ranges.length) {
+      if (field.classList.contains("has-mentions")) { size?.disconnect(); field.classList.remove("has-mentions"); mirror.textContent = ""; }
+      return;
+    }
+    if (!field.classList.contains("has-mentions")) {
+      field.classList.add("has-mentions");
+      size?.observe(input);
+    }
     let html = "", at = 0;
     for (const range of ranges) {
       const chip = text.slice(range.start, range.end);
@@ -60,8 +71,8 @@ export function bindMentionField(input: HTMLTextAreaElement, targets: () => read
       at = range.end;
     }
     // A last empty line needs something in it, as the textarea's has its caret.
-    mirror.innerHTML = html + words(text, at, text.length) + "​";
-    place();
+    patchHTML(mirror, html + words(text, at, text.length) + "​");
+    if (!size) place();
   };
 
   // Every write of the words redraws them, wherever it comes from: a draft put back, a send that empties the field, a paste.

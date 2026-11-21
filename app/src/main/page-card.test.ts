@@ -389,7 +389,7 @@ test("the way back is the round arrow at the header's top left, named 返回, wh
   expect(arrow.querySelector("svg")).not.toBeNull();
   // The search is the thread's, and the thread is not in sight: the css puts it away, and the page's title is in sight in the header's pill.
   const css = readFileSync(join(__dirname, "page-view.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
-  expect(css).toContain('.mb-chat:has(> .ra-stage.is-page) .mb-head [data-act="status"] { display: none; }');
+  expect(css).toContain('.mb-chat[data-conversation-page] .mb-head [data-act="status"] { display: none; }');
   const pill = document.querySelector<HTMLElement>(".mb-head-c > .pgv-pill")!;
   expect(pill.hidden).toBe(false);
   expect(pill.textContent).toBe("藍色背包 <b>");

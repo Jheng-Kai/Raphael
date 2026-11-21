@@ -94,10 +94,17 @@ function wordScore(needle: string, { hay, parts, tight: hayTight }: PreparedName
  */
 export const nameScore = (names: readonly string[], query: string): number => preparedScore(names.filter(Boolean).map(prepareName), query);
 
+export const prepareQuery = (query: string) => {
+  const whole = foldName(query).trim();
+  return { whole, wanted: words(whole) };
+};
+
 /** `nameScore` for names prepared once (`prepareName`), for long lists searched at every key. */
 export function preparedScore(names: readonly PreparedName[], query: string): number {
-  const whole = foldName(query).trim();
-  const wanted = words(whole);
+  return scorePreparedQuery(names, prepareQuery(query));
+}
+
+export function scorePreparedQuery(names: readonly PreparedName[], { whole, wanted }: ReturnType<typeof prepareQuery>): number {
   if (!wanted.length) return 0;
   if (names.some((name) => name.hay === whole)) return 0;
   let worst = 0;

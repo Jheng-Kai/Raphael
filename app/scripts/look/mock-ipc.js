@@ -2,6 +2,31 @@
 export function installMock(fixture, config = {}, target = window) {
   const data = structuredClone(fixture);
   const variant = config.fixture ?? {};
+  if (variant.typingPerformance) {
+    const conversation = data.conversations.find(item => item.member_id === 0 && item.is_default);
+    const base = data.turns.find(turn => turn.conversation_id === conversation.id);
+    const sample = data.windowSample;
+    data.turns = Array.from({ length: 400 }, (_, index) => {
+      const id = 10000 + index, at = data.now - (400 - index) * 60000;
+      const text = `${sample.answer}\n\n${sample.paragraph}`;
+      return { ...base, id, session_id: `typing-${id}`, created_at_ms: at, status: "done",
+        question: `${sample.question} ${index + 1}`, text,
+        messages: [{ seq: 1, kind: "progress", text: sample.paragraph, at_ms: at }, { seq: 2, kind: "reply", text, at_ms: at + 500 }],
+        steps: [{ kind: "tool", tool: "read_file", server: "Raphael", outcome: "ok", ms: 240, at_ms: at + 240 }],
+        drafts: index % 8 === 3 ? data.mailTurns.draft.drafts.map(draft => ({ ...draft, id: `typing-draft-${id}` })) : [] };
+    });
+    data.members = [data.members[0], ...Array.from({ length: 24 }, (_, index) => ({
+      ...data.members[1 + index % 3], id: index + 1, name: `Analyst ${String(index + 1).padStart(2, "0")}`,
+      position: index, activity: "idle", unread: false, waiting: false,
+    }))];
+    const description = "Collect source documents, compare their conclusions and caveats, and deliver a short evidence summary with references for every claim.";
+    data.skills = Array.from({ length: 150 }, (_, index) => ({
+      id: 1000 + index, member_id: index < 60 ? -1 : 0, name: `researcher-${String(index + 1).padStart(3, "0")}`,
+      description, enabled: true, ...(index < 60 ? { plugin: "Field Notes", source: "plugin:field-notes" } : { source: "owner" }),
+    }));
+    data.skillLibrary = [{ key: "pack:typing", name: "Field Notes", kind: "pack", source: "example/field-notes",
+      description, version: "1.0", enabled: true, access: "all", skills: data.skills.slice(0, 60) }];
+  }
   /** The conversation in which the owner asked for their own Google: the member answers with the card that walks the steps (`connectors/cards.py`, the app `google`). */
   function ownGoogleTurn(data) {
     const turn = structuredClone(data.connectorTurns.server);

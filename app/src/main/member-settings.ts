@@ -721,6 +721,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     open() {
       if (!el.hidden) { draw(); return; }
       el.hidden = false;
+      el.closest(".page-agent")?.setAttribute("data-member-settings-open", "");
       bindNavLayer(el, () => view.kind === "main" ? host.back() : back(), { step: (_direction, withinLayer) => withinLayer(), place: true });
       view = { kind: "main" }; category = CATEGORIES[0].id; editing.clear(); saving.clear(); adding = false; source = ""; skillText = null; skillBusy = false;
       skills = "loading"; commands = "loading"; toolChoices = "loading"; reposition = null; delete cover.dataset.repositioning;
@@ -733,6 +734,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     close() {
       if (el.hidden) return;
       el.hidden = true;
+      el.closest(".page-agent")?.removeAttribute("data-member-settings-open");
       epoch++;
       reposition = null; delete cover.dataset.repositioning;
     },

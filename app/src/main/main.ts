@@ -37,7 +37,7 @@ import { prefetchEmojiWhenIdle } from "./emoji-data";
 import { fixedDevicePatch } from "./device-fixed";
 import { followTray } from "./tray-open";
 import { followTemplateFile, openPendingTemplate, type TemplateOpenTarget } from "./template-open";
-import { installWindowChrome, labelWindowControls, showMaximized } from "./window-chrome";
+import { followConversationChrome, installWindowChrome, labelWindowControls, showMaximized } from "./window-chrome";
 import { IS_MAC, markPlatform } from "../shared/platform";
 import { guardImeKeys } from "../shared/ime";
 import { setVideoBase } from "./timeline";
@@ -113,6 +113,7 @@ prefersDark.addEventListener("change", applyTheme);
 function mountWindowChrome(): void {
   markPlatform();
   const chrome = document.getElementById("window-chrome")!;
+  followConversationChrome(document.getElementById("main")!, chrome);
   const translate = (): void =>
     labelWindowControls(chrome, {
       controls: t("window.controls"),
