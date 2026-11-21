@@ -463,17 +463,24 @@ is called with automatic language detection (no hint): a forced zh would bend En
 
 ## How to get to it (user POV)
 
-Choose Dictation, then use the compact horizontal Overview/History/Dictionary tabs beside the title: the app's shared plain tabs (ui.ts `tabs`, the same as Connect apps), never a look of their own. Every return to Dictation opens on Overview, whichever tab was last chosen; nothing is kept between visits. Left/Right/Home/End change the selected tab while retaining keyboard focus; legacy history/dictionary deep links remain available. The overview's small words (card labels, the activity sum, the heatmap axis and legend, shortcut names) are medium weight in the secondary ink rather than thin grey. Four separate stat cards form a 2 by 2 left grid; shortcuts stand beside them in the right column, end with them and share the header tabs' right edge, and the activity heatmap runs under both. At 720 the order is totals, shortcuts, activity. A heatmap day says its words only in its title under the pointer;
-pressing it does nothing, and no history opens from the grid. Settings > Dictation configures recognition/shortcuts. Actual dictation
+Choose Dictation, then use the compact horizontal Overview/History/Dictionary tabs beside the title: the app's shared plain tabs (ui.ts `tabs`, the same as Connect apps), never a look of their own. Every return to Dictation opens on Overview, whichever tab was last chosen; nothing is kept between visits. Left/Right/Home/End change the selected tab while retaining keyboard focus; legacy history/dictionary deep links remain available. The overview's small words (card labels, the activity sum, the heatmap axis and legend, shortcut names) are medium weight in the secondary ink rather than thin grey. Four separate stat cards form a 2 by 2 left grid; shortcuts stand beside them in the right column, end with them and share the header tabs' right edge, and the activity heatmap runs under both. At 720 the order is totals, shortcuts, activity. A heatmap day under the pointer says its words in the app's own tip above it (below it near the window's top, always inside the window) and is outlined; the pointer leaving the day, a key or a scroll puts the words away (R-DICT-HEAT-01). Nothing on the 聽寫 pages answers only a press: a day is no button (the pointer stays an arrow), pressing it adds nothing and no history opens from the grid; history rows, dictionary words and icon buttons already light under the pointer, and icon buttons say their name in their tooltip. A month that begins in the heatmap's last two weeks ends its name at the grid's right edge instead of running past it, and nothing of a 聽寫 page goes past the line under its tabs. Settings > Dictation configures recognition/shortcuts. Actual dictation
 begins with the configured global key while a target field has focus.
 
 ## Driving it with look
 
 ```powershell
-npm run look -- dictation-overview dictation-history dictation-heat-press dictation-dictionary dictation-keyboard dictation-notice dictation --theme both --width 1120,720,1920x1080
+npm run look -- dictation-overview dictation-history dictation-heat-hover dictation-heat-edge dictation-dictionary dictation-keyboard dictation-notice dictation --theme both --width 1120,720,1920x1080
 npm run look -- overlay-transcribing overlay-cleaning overlay-emblem-gold overlay-emblem-angry --theme both --width 1120,720,1920x1080
 npm run look -- composer-learn member-composer-learn room-composer-learn --theme both --width 1120,720,1920x1080
 ```
+
+`dictation-heat-hover` points at a day (`dictation-heat-hover`: its words in the app's tip beside it, outlined, inside the
+window, no title, no button, no history opened). `dictation-heat-edge` moves the fixture's days on to end on 2 November
+(`statsUntil`), so November begins in the last column, and points at the newest day. Every 聽寫 page scene also runs
+`dictation-right-edge`: no element of the page ends past the line under its tabs, nor past a box that clips it (the
+heatmap's drawing, a card), at whatever width; a name ellipsized on purpose does not count. It found the month name the
+drawing cut off and is how a cut at the right edge shows up from now on. The grid is also drawn again when the window
+changes width (the page is watched; `.usage`, which has no box of its own, never reported a change).
 
 Keep tab/heatmap/day-filter/dictionary/settings PNGs and report; check the filter
 matches fixture history. The navigation assertion checks horizontal geometry, one

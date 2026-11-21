@@ -22,6 +22,8 @@
 /* The sections of 一般 that hold sections of their own (messaging): their cards follow one another under one name. */
 .set-messaging > .sgroup { margin-top: var(--sp-2); }
 .set-messaging > h2 + .sgroup { margin-top: 0; }
+/* 關於你 is a section around the owner's own card: the card sits under its name with the air every section has. */
+.set-account > h2 + .sgroup { margin-top: 0; }
 
 /* The settings rows: a choice is its value and a chevron on the row's right edge, with no box
    and no fill, not even under the pointer; only its words brighten. The chevrons line up. */

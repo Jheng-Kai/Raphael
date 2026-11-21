@@ -65,13 +65,23 @@ describe("labels and drawing", () => {
     expect(labels[labels.length - 1].text).toBe("10 月");
   });
 
+  test("a month that begins in the last weeks ends at the grid's right edge instead of running past it", () => {
+    // Up to Monday 2 November 2026: November begins in the last column, where its name has 18 px, less than 「11 月」.
+    const november = Array.from({ length: 30 }, (_, k) => ({ date: new Date(Date.UTC(2026, 10, 2, 12) - (29 - k) * 86_400_000).toISOString().slice(0, 10), dictations: 1, words: 10 }));
+    const svg = heatmapSVG(buildGrid(november, 5));
+    const width = svg.match(/<svg class="heat" width="(\d+)"/)![1];
+    expect(svg).toContain(`<text class="ax" x="${width}" y="164" text-anchor="end">11 月</text>`);
+    // A month with room keeps its place at its first column.
+    expect(svg).toMatch(/<text class="ax" x="\d+" y="164">10 月<\/text>/);
+  });
+
   test("weeks that fit a width stay between 6 and 53", () => {
     expect(weeksThatFit(100)).toBe(6);
     expect(weeksThatFit(500)).toBe(22);
     expect(weeksThatFit(5000)).toBe(53);
   });
 
-  test("the SVG has a square per day, the words of each known day for its press, and a label", () => {
+  test("the SVG has a square per day, the words of each known day for the pointer, and a label", () => {
     const svg = heatmapSVG(buildGrid(days(14, (k) => (k < 3 ? 100 : 0)), 2));
     expect(svg.match(/<rect class="(h\d|future|nodata)"/g)).toHaveLength(14);
     expect(svg).toContain('data-tip="10 月 14 日：100 字"');

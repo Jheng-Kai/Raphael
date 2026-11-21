@@ -2048,6 +2048,7 @@ export const en = {
   "usage.colCost": "Spent",
   "usage.colModel": "Most used model",
   "usage.more": "Show more",
+  "usage.less": "Show less",
   "usage.noReplies": "No one replied in this period.",
   "usage.toolsTitle": "Tool use",
  

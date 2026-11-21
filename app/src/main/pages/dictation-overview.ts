@@ -1,4 +1,3 @@
-import { bindNavLayer } from "../nav-layers";
 import { visibilityGate } from "../window-visibility";
 // Dictation overview: four usage numbers, activity grid and shortcuts.
 
@@ -184,10 +183,11 @@ export function createDictationOverview(app: AppContext): Page {
     paintGrid();
   }
 
-  // A day's words, shown when the day is pressed; pressed again, elsewhere or Esc, gone.
+  // A day's words under the pointer: the day is outlined and its words stand above it (below it near the window's top),
+  // inside the window. The pointer leaving the day, a key or a scroll puts them away; a press adds nothing (no history opens).
   const dayTip = document.createElement("div");
   dayTip.className = "message-tooltip heat-tip";
-  dayTip.setAttribute("role", "status");
+  dayTip.setAttribute("role", "tooltip");
   dayTip.hidden = true;
   el.append(dayTip);
   let picked: SVGRectElement | null = null;
@@ -197,31 +197,32 @@ export function createDictationOverview(app: AppContext): Page {
     dayTip.hidden = true;
   }
   function showDay(day: SVGRectElement): void {
+    if (day === picked) return;
     hideDay();
     picked = day;
     day.classList.add("is-picked");
     dayTip.textContent = day.dataset.tip ?? "";
-    bindNavLayer(dayTip, hideDay);
     dayTip.hidden = false;
     const box = day.getBoundingClientRect(), size = dayTip.getBoundingClientRect();
     dayTip.style.left = `${Math.max(8, Math.min(window.innerWidth - size.width - 8, box.left + (box.width - size.width) / 2))}px`;
     dayTip.style.top = `${box.top - size.height - 6 < 8 ? box.bottom + 6 : box.top - size.height - 6}px`;
   }
-  document.addEventListener("pointerdown", (e) => { if (picked && !(e.target as Element).closest?.(".heat rect[data-tip]")) hideDay(); }, true);
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && picked) hideDay(); });
+  const dayOf = (node: EventTarget | null): SVGRectElement | null => (node instanceof Element ? node.closest<SVGRectElement>(".heat rect[data-tip]") : null);
+  el.addEventListener("pointerover", (e) => { const day = dayOf(e.target); if (day) showDay(day); });
+  el.addEventListener("pointerout", (e) => { if (picked && !dayOf(e.relatedTarget)) hideDay(); });
+  document.addEventListener("keydown", () => { if (picked) hideDay(); });
   el.addEventListener("scroll", hideDay, true);
 
   el.addEventListener("click", (e) => {
     const target = e.target as Element;
-    const day = target.closest<SVGRectElement>(".heat rect[data-tip]");
-    if (day) { if (day === picked) hideDay(); else showDay(day); return; }
     const go = target.closest<HTMLElement>("[data-go]");
     if (go) app.go(go.dataset.go as PageId, go.dataset.pane as SettingsPane | undefined);
     const act = target.closest<HTMLElement>("[data-act]")?.dataset.act;
     if (act === "older" || act === "newer") void turn(act === "older");
   });
 
-  // The grid shows as many weeks as fit.
+  // The grid shows as many weeks as fit. The page is watched, not `.usage`: that has no box of its own (display: contents),
+  // so a watch on it never saw the window change width and the grid kept the weeks of its first width.
   let lastWidth = 0;
   new ResizeObserver(() => {
     const width = el.querySelector<HTMLElement>(".heat-box")?.clientWidth ?? 0;
@@ -229,7 +230,7 @@ export function createDictationOverview(app: AppContext): Page {
       lastWidth = width;
       paintGrid();
     }
-  }).observe(usage);
+  }).observe(el);
 
   getVersion()
     .then((v) => {

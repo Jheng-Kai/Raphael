@@ -422,6 +422,12 @@ export function installMock(fixture, config = {}, target = window) {
   data.primaryId = variant.primaryMember ?? 0;
   data.roomWrapupMessage.member_id = data.primaryId;
   if (variant.problem) data.status.openrouter.state = "no_key";
+  // The dictation days moved on to end on another day (`statsUntil`, YYYY-MM-DD): the first days of a month put its name
+  // in the heatmap's last column.
+  if (variant.statsUntil) {
+    const end = Date.parse(`${variant.statsUntil}T12:00:00Z`), count = data.stats.by_day.length;
+    data.stats = { ...data.stats, by_day: data.stats.by_day.map((day, index) => ({ ...day, date: new Date(end - (count - 1 - index) * 86400000).toISOString().slice(0, 10) })) };
+  }
   let adminQuestion = variant.adminApproval ? data.adminQuestions[variant.adminApproval] : null;
   let adminTurn = adminQuestion ? data.turns.find(turn => turn.id === adminQuestion.turn_id) : null;
   if (variant.unconfiguredRaphael) {

@@ -287,6 +287,23 @@ test("分析 reads its period from the core when it is opened, draws its four se
   expect([...page.el.querySelectorAll('[data-ua-card="messages"] .ua-lname')].map((n) => n.textContent)).toEqual(["Typed"]);
 });
 
+test("誰花最多's 顯示更多 shows everyone and the same button folds them back to five, keeping the focus", async () => {
+  const people = Array.from({ length: 7 }, (_, id) => ({ id, name: `P${id}`, role: "", turns: 10 - id, cost_usd: 1 - id / 10, share: 0, models: [] }));
+  api.usageAnalytics.mockResolvedValue({ ...ANALYTICS, members: people });
+  await mount("usage");
+  click('[data-usage-tab="analysis"]'); await flush();
+  const button = () => page.el.querySelector<HTMLButtonElement>("[data-ua-more]")!;
+  const rows = () => page.el.querySelectorAll(".ua-table tbody tr").length;
+  expect([rows(), button().textContent, button().getAttribute("aria-expanded")]).toEqual([5, "Show more", "false"]);
+  button().focus();
+  button().click(); await flush();
+  expect([rows(), button().textContent, button().getAttribute("aria-expanded")]).toEqual([7, "Show less", "true"]);
+  expect(document.activeElement).toBe(button());
+  button().click(); await flush();
+  expect([rows(), button().textContent, button().getAttribute("aria-expanded")]).toEqual([5, "Show more", "false"]);
+  expect(document.activeElement).toBe(button());
+});
+
 test("keeps drawing and video unset until the owner chooses their separate paid models", async () => {
   await mount();
   for (const key of ["image-model", "video-model"]) {

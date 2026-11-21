@@ -3,7 +3,7 @@
 .run-allowance { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); }
 .run-allowance > header { display: grid; grid-template-columns: minmax(0, 1fr); }
 /* The same small heading as every settings group, so the cards and this month's card read as one page. */
-.run-allowance > header h2 { margin: 0 0 0 var(--sp-4); font: 500 var(--fs-xs)/1.4 var(--ui); color: var(--text-2); }
+.run-allowance > header h2 { margin: 0; font: 500 var(--fs-xs)/1.4 var(--ui); color: var(--text-2); }
 .run-subscription { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); border: 1px solid var(--float-edge); border-radius: var(--r-lg); padding: var(--sp-4); background: var(--panel); }
 .run-subscription > header { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); flex-wrap: wrap; min-width: 0; }
 .run-subscription h4 { display: flex; align-items: center; gap: var(--sp-2); margin: 0; font-size: var(--fs-sm); font-weight: var(--weight-semibold); }

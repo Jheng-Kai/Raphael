@@ -2,7 +2,7 @@
 // Settings › 用量 › 分析: a period's charts drawn from the core's `usage.analytics`, in words, never raw keys.
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { setLocale } from "./i18n";
-import { createUsageAnalysis, scaleTop, seriesLabel, usageAnalysisHTML, type UsageAnalysisView } from "./usage-analysis";
+import { bindUsageReadings, createUsageAnalysis, dayAt, readingAt, scaleTop, seriesLabel, usageAnalysisHTML, type UsageAnalysisView } from "./usage-analysis";
 import type { UsageAnalytics, UsageBreakdown } from "./usage-analytics-types";
 
 afterEach(() => { document.body.replaceChildren(); setLocale("zh-TW"); });
@@ -58,7 +58,9 @@ describe("花費紀錄", () => {
     expect((days[6] as HTMLElement).style.height).toBe("96.67%");
     expect(days[6].querySelectorAll("i")).toHaveLength(5);
     expect(days[2].querySelectorAll("i")).toHaveLength(0);
-    expect(days[6].getAttribute("title")).toBe("11/21 · US$2.90");
+    // The day says what it cost under the pointer, in the app's own tip, never the browser's title.
+    expect(days[6].getAttribute("title")).toBeNull();
+    expect([(days[6] as HTMLElement).dataset.day, (days[6] as HTMLElement).dataset.total]).toEqual(["11/21", "US$2.90"]);
     expect(texts(card, ".ua-x > span")).toEqual(["11/15", "", "", "11/18", "", "", "11/21"]);
     // Purposes read as words, __other__ as 其他, each with its share, in the chart's colours in order and 其他 grey.
     expect(texts(card, ".ua-lname")).toEqual(["對話", "聽寫整理", "語音轉文字", "記憶", "畫圖", "其他"]);
@@ -96,7 +98,7 @@ describe("花費紀錄", () => {
 });
 
 describe("誰花最多", () => {
-  test("five rows, the one who cost most first, each with a face, replies, cost and most used model, then 顯示更多", () => {
+  test("five rows, the one who cost most first, each with a face, replies, cost and most used model, then 顯示更多, which folds back with 顯示較少", () => {
     const people = new Map([[0, { id: 0, name: "拉斐爾", avatar: "" }], [2, { id: 2, name: "小森", avatar: "slime:green-plain" }]]);
     const host = draw({ people });
     expect(texts(host, ".ua-table thead th")).toEqual(["名字", "回覆", "花費", "最常用的模型"]);
@@ -113,11 +115,16 @@ describe("誰花最多", () => {
     expect(host.querySelector('[data-ua-person="0"] .av')!.getAttribute("data-presence-member")).toBe("0");
     expect(host.querySelector<HTMLButtonElement>("[data-ua-more]")!.className).toBe("btn sm ua-more");
     expect(host.querySelector("[data-ua-more]")!.textContent).toBe("顯示更多");
-    // 顯示更多 shows everyone, and a model the core did not record reads 未記錄.
+    expect(host.querySelector("[data-ua-more]")!.getAttribute("aria-expanded")).toBe("false");
+    // 顯示更多 shows everyone, and a model the core did not record reads 未記錄; the same button then says 顯示較少.
     const all = draw({ allPeople: true });
     expect(all.querySelectorAll(".ua-table tbody tr")).toHaveLength(7);
     expect(all.querySelector('[data-ua-person="6"] .ua-model')!.textContent).toBe("未記錄");
-    expect(all.querySelector("[data-ua-more]")).toBeNull();
+    const less = all.querySelector<HTMLButtonElement>("[data-ua-more]")!;
+    expect([less.textContent, less.getAttribute("aria-expanded"), less.getAttribute("aria-controls"), less.dataset.k]).toEqual(["顯示較少", "true", "ua-people", "ua-more"]);
+    expect(all.querySelector("#ua-people")).not.toBeNull();
+    // Five people or fewer need no button at all.
+    expect(draw({ data: { ...WEEK, members: WEEK.members.slice(0, 5) } }).querySelector("[data-ua-more]")).toBeNull();
   });
 
   test("Raphael without the list is named in the window's language, not by the core's English name", () => {
@@ -130,7 +137,8 @@ describe("工具使用 and 訊息", () => {
     const card = draw().querySelector('[data-ua-card="tools"]')!;
     expect(texts(card, ".ua-sum > *")).toEqual(["工具呼叫", "16"]);
     const svg = card.querySelector("svg.ua-lines")!;
-    expect(svg.getAttribute("aria-label")).toBe("每天的工具呼叫次數");
+    const box = card.querySelector<HTMLElement>(".ua-linebox")!;
+    expect([box.getAttribute("role"), box.getAttribute("aria-label"), box.getAttribute("tabindex"), svg.getAttribute("aria-hidden")]).toEqual(["img", "每天的工具呼叫次數", "0", "true"]);
     expect(svg.querySelectorAll("polyline")).toHaveLength(3);
     expect(svg.querySelectorAll("line.ua-grid")).toHaveLength(2);
     // The busiest day (4 searches) touches the top of the scale (4): its point is at the top line.
@@ -150,6 +158,110 @@ describe("工具使用 and 訊息", () => {
     const bySource = draw({ messages: "source" });
     expect(texts(bySource, '[data-ua-card="messages"] .ua-lname')).toEqual(["打字", "Telegram", "其他"]);
     expect(texts(bySource, '[data-ua-card="messages"] .ua-legend strong')).toEqual(["12 則", "6 則", "1 則"]);
+  });
+});
+
+describe("every chart answers the pointer", () => {
+  /** A chart laid out 700 px wide from x 100 (happy-dom lays nothing out). */
+  const laidOut = (node: Element, top = 300): void => {
+    node.getBoundingClientRect = () => ({ left: 100, width: 700, right: 800, top, bottom: top + 160, height: 160, x: 100, y: top, toJSON: () => ({}) }) as DOMRect;
+  };
+  const point = (node: Element, x: number): void => { node.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, clientX: x, clientY: 380 })); };
+  const rows = (tip: Element): string[][] => [...tip.querySelectorAll("li")].map((row) => [(row as HTMLElement).dataset.s ?? "", ...texts(row, "span, strong")]);
+
+  test("a bar of 花費紀錄 says its day, its total and what each colour cost that day, and lights while the others step back", () => {
+    const host = draw();
+    bindUsageReadings(host);
+    const plot = host.querySelector<HTMLElement>('[data-ua-card="cost"] .ua-plot')!;
+    expect([plot.getAttribute("tabindex"), plot.dataset.uaRead]).toEqual(["0", "cost"]);
+    laidOut(plot.querySelector(".ua-bars")!);
+    // 700 px over seven days: x 760 is the last day's column.
+    point(plot.querySelector(".ua-day:nth-child(7)")!, 760);
+    const tip = host.querySelector<HTMLElement>(".ua-tip")!;
+    expect(tip.hidden).toBe(false);
+    expect(tip.matches(".message-tooltip")).toBe(true);
+    expect(texts(tip, ".ua-tip-day > *")).toEqual(["11/21", "US$2.90"]);
+    expect(rows(tip)).toEqual([["1", "對話", "US$1.00"], ["2", "聽寫整理", "US$0.20"], ["3", "語音轉文字", "US$0.20"], ["4", "記憶", "US$0.00"], ["5", "畫圖", "US$1.00"], ["other", "其他", "US$0.50"]]);
+    expect(plot.classList.contains("is-reading")).toBe(true);
+    expect([...plot.querySelectorAll(".ua-day")].map((bar) => bar.classList.contains("is-on"))).toEqual([false, false, false, false, false, false, true]);
+    expect(plot.getAttribute("aria-describedby")).toBe(tip.id);
+    // The pointer moving left reads the day under it; leaving the chart puts the tip away and the bars back.
+    point(plot, 150);
+    expect(texts(tip, ".ua-tip-day > *")).toEqual(["11/15", "US$2.00"]);
+    plot.dispatchEvent(new PointerEvent("pointerout", { bubbles: true, relatedTarget: host }));
+    expect(tip.hidden).toBe(true);
+    expect(plot.querySelector(".is-on")).toBeNull();
+    expect(plot.classList.contains("is-reading")).toBe(false);
+  });
+
+  test("a line chart shows the day under the pointer with a guide, a dot on each line and each line's value there", () => {
+    const host = draw();
+    bindUsageReadings(host);
+    const box = host.querySelector<HTMLElement>('[data-ua-card="tools"] .ua-linebox')!;
+    laidOut(box);
+    // The nearest point to x 330: (330 - 100) / 700 × 6 days ≈ 2, the third day.
+    point(box, 330);
+    const tip = host.querySelector<HTMLElement>(".ua-tip")!;
+    expect(texts(tip, ".ua-tip-day > *")).toEqual(["11/17"]);
+    expect(rows(tip)).toEqual([["1", "搜尋網路", "0 次"], ["2", "Gmail", "0 次"], ["other", "其他", "0 次"]]);
+    point(box, 800);
+    expect(texts(tip, ".ua-tip-day > *")).toEqual(["11/21"]);
+    expect(rows(tip)).toEqual([["1", "搜尋網路", "4 次"], ["2", "Gmail", "2 次"], ["other", "其他", "1 次"]]);
+    expect(box.querySelector<HTMLElement>(".ua-guide")!.style.left).toBe("100%");
+    const dots = [...box.querySelectorAll<HTMLElement>(".ua-dot")];
+    // Each dot where its line is that day: search at the top of the scale (4), Gmail at its middle (2), 其他 at a quarter.
+    expect(dots.map((dot) => [dot.dataset.s, parseFloat(dot.style.left), parseFloat(dot.style.top)])).toEqual([["1", 100, 5], ["2", 100, 51.25], ["other", 100, 74.38]]);
+    // 訊息 reads its messages the same way, and the tools' guide goes.
+    const messages = host.querySelector<HTMLElement>('[data-ua-card="messages"] .ua-linebox')!;
+    laidOut(messages);
+    point(messages, 100);
+    expect(rows(tip)).toEqual([["1", "GPT-6 Sol", "4 則"], ["2", "未記錄", "1 則"]]);
+    expect(box.querySelector(".ua-guide, .ua-dot")).toBeNull();
+  });
+
+  test("the keys read a chart too: the last day on focus, then the arrows, Home and End", () => {
+    const host = draw();
+    bindUsageReadings(host);
+    const plot = host.querySelector<HTMLElement>('[data-ua-card="cost"] .ua-plot')!;
+    laidOut(plot.querySelector(".ua-bars")!);
+    const matches = plot.matches.bind(plot);
+    plot.matches = ((selector: string) => selector === ":focus-visible" || matches(selector)) as typeof plot.matches;
+    plot.focus();
+    const tip = host.querySelector<HTMLElement>(".ua-tip")!;
+    expect(texts(tip, ".ua-tip-day > *")).toEqual(["11/21", "US$2.90"]);
+    expect(tip.getAttribute("aria-live")).toBe("polite");
+    const key = (name: string): void => { plot.dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true })); };
+    key("ArrowLeft");
+    expect(texts(tip, ".ua-tip-day > *")[0]).toBe("11/20");
+    key("Home");
+    expect(texts(tip, ".ua-tip-day > *")[0]).toBe("11/15");
+    key("ArrowLeft");
+    expect(texts(tip, ".ua-tip-day > *")[0]).toBe("11/15");
+    key("End");
+    expect(texts(tip, ".ua-tip-day > *")[0]).toBe("11/21");
+    plot.blur();
+    expect(tip.hidden).toBe(true);
+  });
+
+  test("the tab drawn again takes the tip of the chart that was read with it", async () => {
+    const host = draw();
+    bindUsageReadings(host);
+    const plot = host.querySelector<HTMLElement>('[data-ua-card="cost"] .ua-plot')!;
+    laidOut(plot.querySelector(".ua-bars")!);
+    point(plot, 760);
+    const tip = host.querySelector<HTMLElement>(".ua-tip")!;
+    expect(tip.hidden).toBe(false);
+    host.querySelector('[data-ua-section="cost"]')!.remove();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(tip.hidden).toBe(true);
+  });
+
+  test("what a day says comes from what the chart drew, and the day under the pointer is its column or the nearest point", () => {
+    const host = draw();
+    expect(readingAt(host.querySelector<HTMLElement>(".ua-plot")!, 7)).toBeNull();
+    expect(readingAt(host.querySelector<HTMLElement>('[data-ua-card="messages"] .ua-linebox')!, 0)!.rows.map((row) => row.value)).toEqual(["4 則", "1 則"]);
+    expect([dayAt("cost", 100, 100, 700, 7), dayAt("cost", 199, 100, 700, 7), dayAt("cost", 200, 100, 700, 7), dayAt("cost", 900, 100, 700, 7)]).toEqual([0, 0, 1, 6]);
+    expect([dayAt("lines", 100, 100, 700, 7), dayAt("lines", 160, 100, 700, 7), dayAt("lines", 0, 100, 700, 7), dayAt("lines", 800, 100, 700, 7)]).toEqual([0, 1, 0, 6]);
   });
 });
 
@@ -216,6 +328,10 @@ describe("the tab's state", () => {
     const more = document.createElement("button"); more.dataset.uaMore = "";
     expect(tab.click(more)).toBe(true);
     expect(tab.view().allPeople).toBe(true);
+    // Pressed again (it says 顯示較少 then), it folds the table back to five.
+    expect(tab.click(more)).toBe(true);
+    expect(tab.view().allPeople).toBe(false);
+    tab.click(more);
     const source = document.createElement("button"); source.dataset.uaMessages = "source";
     expect(tab.click(source)).toBe(true);
     expect(tab.view().messages).toBe("source");

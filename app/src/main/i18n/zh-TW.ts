@@ -2047,6 +2047,7 @@ export const zhTW = {
   "usage.colCost": "花費",
   "usage.colModel": "最常用的模型",
   "usage.more": "顯示更多",
+  "usage.less": "顯示較少",
   "usage.noReplies": "這段時間沒有人回覆。",
   "usage.toolsTitle": "工具使用",
  

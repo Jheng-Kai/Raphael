@@ -14,6 +14,7 @@ import { formatPerMinute, formatPerMtok } from "./pricing";
 import { modelMark, providerMark } from "./provider-marks";
 import { genericMark } from "./service-mark";
 import { CLIS, cliModels } from "./cli-brains";
+import { knownClis } from "./brain-lists";
 import type { CatalogModel, ChatGptStatus, CliBrain, CliBrainId, ModelCatalog, ModelRole, ModelProvider } from "./types";
 import { CHECK, btn, esc, ico, openMenu, sel } from "./ui";
 import { openActions } from "./member-column";
@@ -516,31 +517,57 @@ const shortName = (id: string): string => {
 export function pickerModelsFor(o: ModelPickerLook): CatalogModel[] { return pickerModels(o); }
 
 /**
- * The name people read for the model `ref` ("GPT-6 Sol"): the catalogue's own, or, for a model it does not list, its id made
- * into words ("gpt-6-sol" is "GPT-6 Sol"). Never the bare id of a model the catalogue knows.
+ * An id made into words: "gpt-6-sol" is GPT-6 Sol (the number of a generation sticks to its family), and a version written
+ * with a dash keeps its dot ("claude-opus-5-5" is Claude Opus 5.5, as Claude Code names it); a date in the id is no part of
+ * the name ("claude-opus-4-1-20250805" is Claude Opus 4.1).
  */
-export function modelDisplayName(catalog: ModelCatalog | null | undefined, ref: string): string {
+function idWords(id: string): string {
+  const parts = id.split(/[-_]/).filter(Boolean);
+  const words: string[] = [];
+  for (let k = 0; k < parts.length; k++) {
+    const part = parts[k];
+    if (/^\d{8}$/.test(part)) continue;
+    if (/^\d{1,2}$/.test(part) && /^\d{1,2}$/.test(parts[k + 1] ?? "") && !/^\d+$/.test(parts[k - 1] ?? "")) {
+      words.push(`${part}.${parts[++k]}`);
+      continue;
+    }
+    words.push(/^(gpt|llm|ai|pdf|tts|stt)$/i.test(part) ? part.toUpperCase() : part.charAt(0).toUpperCase() + part.slice(1));
+  }
+  return (/^GPT$/.test(words[0] ?? "") && /^\d/.test(words[1] ?? "") ? [`${words[0]}-${words[1]}`, ...words.slice(2)] : words).join(" ");
+}
+
+/**
+ * A name a service gave that is only an id ("gpt-6-luna"), or ChatGPT's dashed form of one ("GPT-6-Luna"), reads as the app
+ * words ids, so one model never reads two ways ("GPT-6 Luna" from OpenRouter, "GPT-6-Luna" from ChatGPT). Other names stay.
+ */
+const modelWords = (name: string, ref: string): string =>
+  /^[\w.]+(?:-[\w.]+)+$/.test(name) && (name.toLowerCase() === shortName(ref).toLowerCase() || /^gpt-\d/i.test(name)) ? idWords(name) : name;
+
+/**
+ * The name people read for the model `ref` ("GPT-6 Sol"), as the picker names it: a subscription program's own list for its
+ * models (Claude Code's "Claude Opus 5.5", found by an alias such as `cli:claude:opus` too), else the catalogue's, else its
+ * id made into words. Never the bare id of a model the catalogue or a program knows.
+ */
+export function modelDisplayName(catalog: ModelCatalog | null | undefined, ref: string, clis: readonly CliBrain[] = knownClis()): string {
   if (!ref) return "";
   const base = baseRef(ref);
-  const listed = catalog ? (["answer", "stt", "image", "video"] as const).flatMap((role) => modelsFor(catalog, role)) : [];
+  const listed = [...cliModels(clis, false), ...(catalog ? (["answer", "stt", "image", "video"] as const).flatMap((role) => modelsFor(catalog, role)) : [])];
   const model = listed.find((m) => refsOf(m).includes(base) || m.id === base);
-  if (model) return model.name;
-  const words = shortName(ref).split(/[-_]/).filter(Boolean).map((part) => (/^(gpt|llm|ai|pdf|tts|stt)$/i.test(part) ? part.toUpperCase() : part.charAt(0).toUpperCase() + part.slice(1)));
-  // "gpt-6-sol" is GPT-6 Sol: the number of a generation sticks to its family.
-  return (/^GPT$/.test(words[0] ?? "") && /^\d/.test(words[1] ?? "") ? [`${words[0]}-${words[1]}`, ...words.slice(2)] : words).join(" ");
+  return model ? localName(model).name : idWords(shortName(ref));
 }
 
 /** The core names a subscription's own model in English ("Codex (subscription)", agent/cli/images.py); the window says it in its language. */
 const SUBSCRIPTION_NAME = /^(.+?) \(subscription\)$/i;
 const localName = (model: CatalogModel): CatalogModel => {
   const hit = SUBSCRIPTION_NAME.exec(model.name);
-  return hit ? { ...model, name: `${hit[1]} ${t("brains.subscription")}` } : model;
+  const name = hit ? `${hit[1]} ${t("brains.subscription")}` : modelWords(model.name, model.id);
+  return name === model.name ? model : { ...model, name };
 };
 
 function pickerModels(o: ModelPickerLook): CatalogModel[] {
   const models = o.catalog ? modelsFor(o.catalog, o.role).filter((m) =>
     !m.id.startsWith("cli:") && o.providers?.find((p) => p.id === connectionId(m))?.enabled !== false).map(localName) : [];
-  return [...models, ...(o.role === "answer" ? cliModels(o.clis ?? []) : [])];
+  return [...models, ...(o.role === "answer" ? cliModels(o.clis ?? []).map(localName) : [])];
 }
 
 export function chooserSources(o: ModelPickerLook): ChooserSource[] {
@@ -656,7 +683,7 @@ function choiceOf(o: ModelPickerLook): { name: string; source: string; provider:
   if (!baseRef(o.current) && !o.lead && !o.local?.active) return { name: t("media.unset"), source: "", provider: "" };
   if (unconnectedChoice(o)) return { name: t("media.unset"), source: "", provider: "" };
   // Public cached names remain useful after logout; only pickerModels can supply runnable rows.
-  const models = [...(o.catalog ? modelsFor(o.catalog, o.role).filter((m) => !m.id.startsWith("cli:")).map(localName) : []), ...cliModels(o.clis ?? [], false)];
+  const models = [...(o.catalog ? modelsFor(o.catalog, o.role).filter((m) => !m.id.startsWith("cli:")) : []), ...cliModels(o.clis ?? [], false)].map(localName);
   const inherited = baseRef(o.current) === o.lead?.id && o.inheritFrom;
   const ref = concreteCurrent(inherited ? { ...o, current: inherited } : o, models), model = models.find((m) => m.id === ref);
   const local = o.local?.active ? faceTitle(o.local) : null;

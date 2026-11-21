@@ -2233,6 +2233,7 @@ export const vi = {
   "usage.colCost": "Chi tiêu",
   "usage.colModel": "Mô hình dùng nhiều nhất",
   "usage.more": "Hiện thêm",
+  "usage.less": "Hiện ít hơn",
   "usage.noReplies": "Không ai trả lời trong khoảng này.",
   "usage.toolsTitle": "Dùng công cụ",
  

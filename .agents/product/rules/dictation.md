@@ -2,6 +2,14 @@
 
 Dictation, the microphone, paste, text tidy and voice keys. Part of [the product rules](../RULES.md); a rule's ID is unique across every file.
 
+## The 聽寫 overview answers the pointer, and nothing of it is cut at the right
+
+A heatmap day said its words only when pressed (the scene was `dictation-heat-press`), and part of the 聽寫 page was sometimes cut off at the right.
+
+| ID | Date | Rule | Check | Severity | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-DICT-HEAT-01 | 2026-11-21 | A day of the 聽寫 overview's activity heatmap says its words under the pointer, in the app's own tip (`message-tooltip`) above the day, or below it near the window's top, always inside the window, and the day is outlined; the pointer leaving the day, a key or a scroll puts the words away. Nothing on the 聽寫 pages gives its feedback only on a press: a day is no button (no `role="button"`, no tab stop, the pointer stays an arrow), pressing it adds nothing and opens no history; history rows, dictionary words and icon buttons light under the pointer and icon buttons say their name in their tooltip. A month that begins in the heatmap's last two weeks ends its name at the grid's right edge (it ran past the drawing, which cut it: 「11」 with no 月 in a month's first days, or after paging back); the grid is drawn again when the page changes width (it watched `.usage`, which has no box of its own). No element of a 聽寫 page ends past the line under its tabs or past a box that clips it, at any width. | vitest, look | hard | app/src/main/pages/dictation-overview-hover.test.ts::says its words under the pointer, outlined, and puts them away when the pointer leaves it; app/src/main/pages/dictation-overview-hover.test.ts::a press adds nothing: no history opens and the words stay what the pointer showed; app/src/main/heatmap-open.test.ts::a day opens nothing and is no button: the pointer only reads its words; app/src/main/heatmap.test.ts::a month that begins in the last weeks ends at the grid's right edge instead of running past it; dictation-heat-hover; dictation-heat-edge; look `dictation-right-edge` (dictation-overview, dictation-history, dictation-dictionary, dictation-keyboard, dictation-notice, dictation-heat-hover, dictation-heat-edge) |
+
 ## A muted microphone is said a second in, not at the release
 
 With a headset's mute switch on, the owner talked for a long time and only learned at the release of the key that nothing was heard.

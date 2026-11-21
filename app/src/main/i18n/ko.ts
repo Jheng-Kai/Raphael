@@ -2233,6 +2233,7 @@ export const ko = {
   "usage.colCost": "지출",
   "usage.colModel": "가장 많이 쓴 모델",
   "usage.more": "더 보기",
+  "usage.less": "간략히 보기",
   "usage.noReplies": "이 기간에는 답장이 없습니다.",
   "usage.toolsTitle": "도구 사용",
  

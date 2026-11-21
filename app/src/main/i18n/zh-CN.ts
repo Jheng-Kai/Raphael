@@ -2233,6 +2233,7 @@ export const zhCN = {
   "usage.colCost": "花费",
   "usage.colModel": "最常用的模型",
   "usage.more": "显示更多",
+  "usage.less": "显示较少",
   "usage.noReplies": "这段时间没有人回复。",
   "usage.toolsTitle": "工具使用",
  

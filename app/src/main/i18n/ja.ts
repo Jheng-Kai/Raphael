@@ -2048,6 +2048,7 @@ export const ja = {
   "usage.colCost": "支出",
   "usage.colModel": "よく使うモデル",
   "usage.more": "さらに表示",
+  "usage.less": "表示を減らす",
   "usage.noReplies": "この期間の返信はありません。",
   "usage.toolsTitle": "ツールの利用",
  

@@ -201,6 +201,13 @@ export default [
   ]),
   // The top of 分析 as it opens: 花費紀錄's bars, legend and 誰花最多, the picture the scene above scrolls past.
   scene("settings-usage-analytics-top", "Usage › 分析 as it opens: 花費紀錄 with its 7 天 bars, legend and the start of 誰花最多", [...analysis, check("usage-analytics")]),
+  // Every chart answers the pointer (R-USE-03): the day under it says its date and each line's value in the app's own tip.
+  scene("settings-usage-bar-hover", "Usage › 分析: a bar of 花費紀錄 under the pointer lights, the others step back, and its tip says the day, its total and what each colour cost", [...analysis, hover('[data-ua-card="cost"] .ua-bars'), check("usage-reading-bar")]),
+  scene("settings-usage-line-hover", "Usage › 分析: a day of 工具使用 under the pointer shows a guide, a dot on each line and a tip with each line's count", [...analysis, scroll('[data-ua-section="tools"]'), hover('[data-ua-card="tools"] .ua-linebox'), check("usage-reading-line")]),
+  scene("settings-usage-people-less", "Usage › 分析: 顯示更多 shows everyone, then the same button says 顯示較少 and folds 誰花最多 back to five, keeping the focus", [
+    ...analysis, scroll('[data-ua-section="people"]'), click("[data-ua-more]"), wait('.ua-table tbody tr:nth-child(6)'), check("usage-people-all"),
+    click("[data-ua-more]"), waitGone('.ua-table tbody tr:nth-child(6)'), check("usage-people-less"),
+  ]),
   scene("settings-usage-analytics-empty", "Usage › 分析 with nothing in the period: one quiet line a section, no chart frames", [...usage, click('[data-usage-tab="analysis"]'), wait('[data-ua-section="messages"]'), check("usage-analytics-empty")], { usageEmpty: true }),
   scene("usage-opens-quietly", "The app reads the allowances once after it starts, and Settings again each time it opens, on any tab: no refresh button, the numbers already there, the same numbers touch nothing, a new number replaces the old in place", [
     check("usage-open-launch"), ...settings("general"), check("usage-open-general"),
@@ -212,7 +219,9 @@ export default [
     dictionary: ["Raphael", "Methelia", "GitHub", "Composio", "OpenRouter", "Notion", "Slack", "Telegram", "Calendar", "Claude", "Codex", "Gemini"].map((word, index) => ({ id: index + 1, word, misheard: index === 0 ? ["Rafael"] : [], source: index % 2 ? "learned" : "manual", created_at_ms: 1792720800000 })),
   } : {})),
   scene("dictation-keyboard", "Horizontal dictation navigation with keyboard focus", [...dictation("overview"), key("ArrowRight"), wait('[data-dictation-tab="history"][aria-selected="true"]'), key("ArrowLeft"), wait('[data-dictation-tab="overview"][aria-selected="true"]'), key("End"), key("Home"), wait('[data-dictation-tab="overview"][aria-selected="true"]'), key("End"), wait('[data-dictation-tab="dictionary"][aria-selected="true"]'), check("dictation-navigation")]),
-  scene("dictation-heat-press", "Pressing a heatmap day shows its words above it; nothing shows under the pointer", [...dictation("overview"), click('.heat [data-date="2026-10-24"]'), check("dictation-heat-press")]),
+  scene("dictation-heat-hover", "A heatmap day under the pointer shows its words above it, outlined; nothing waits for a press", [...dictation("overview"), hover('.heat [data-date="2026-10-24"]'), check("dictation-heat-hover"), check("dictation-right-edge")]),
+  // The first days of a month put its name in the heatmap's last column, and the newest day is at the grid's right end.
+  scene("dictation-heat-edge", "In a month's first days its name ends at the heatmap's right edge, and the newest day's words stay inside the window", [...dictation("overview"), hover('.heat [data-date="2026-11-02"]'), check("dictation-heat-hover"), check("dictation-right-edge")], { statsUntil: "2026-11-02" }),
   scene("dictation-notice", "Dictation connection notice", dictation("overview"), { problem: true }),
   scene("conversation-notice", "Conversation connection notice", [], { problem: true }),
   scene("onboarding", "First-run welcome: Raphael's emblem, its name, one promise, the language dropdown and one wide black pill", [wait('#ob:not([hidden]) [data-ob="next"]'), wait('.ob-emblem canvas.ob-emb'), check("guide-window-fixed"), check("onboarding-welcome")], { onboarding: true }),

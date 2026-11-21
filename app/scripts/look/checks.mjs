@@ -5438,6 +5438,32 @@ export function checkRendered(name, context = {}) {
         const box = child.getBoundingClientRect();
         require(box.left >= edge.left - 1 && box.right <= edge.right + 1, `settings content shares one measure: ${child.className}`);
       }
+      // Every section's small title stands on its card's left edge, not inset like the card's content, and the controls
+      // under it (a period, a grouping) start on that edge with air under the title.
+      for (const title of settings.querySelectorAll(':is(.sgroup, .run-allowance) > h2, :is(.sgroup, .run-allowance) > :is(header, .data-heading) > h2, .set-messaging > h2')) {
+        if (!visible(title)) continue;
+        const section = title.closest('.sgroup, .run-allowance, .set-messaging'), words = document.createRange();
+        words.selectNodeContents(title);
+        const left = words.getBoundingClientRect().left;
+        const card = [...section.children].find(child => !child.contains(title) && visible(child) && child.localName !== 'h2'
+          && (parseFloat(getComputedStyle(child).borderLeftWidth) > 0 || getComputedStyle(child).backgroundColor !== 'rgba(0, 0, 0, 0)'));
+        const cardLeft = (card ?? section).getBoundingClientRect().left;
+        require(Math.abs(left - cardLeft) <= 1, `a section's title stands on its card's left edge: 「${title.textContent.trim()}」 is ${Math.round(left - cardLeft)} px in`);
+        const controls = section.querySelector(':scope > .ua-controls');
+        if (visible(controls)) {
+          require(Math.abs(controls.firstElementChild.getBoundingClientRect().left - cardLeft) <= 1, `「${title.textContent.trim()}」's controls start on the same edge`);
+          const air = controls.getBoundingClientRect().top - title.getBoundingClientRect().bottom;
+          require(air >= 6 && air <= 16, `「${title.textContent.trim()}」's controls have a little air under it (${Math.round(air)} px)`);
+        }
+        // What follows the title (its card, its line, its controls, a section of its own) has the same small air under it.
+        const holder = title.parentElement === section ? title : title.parentElement;
+        let next = holder.nextElementSibling;
+        while (next && !visible(next)) next = next.nextElementSibling;
+        if (next) {
+          const gap = next.getBoundingClientRect().top - holder.getBoundingClientRect().bottom;
+          require(gap >= 0 && gap <= 16, `what follows 「${title.textContent.trim()}」 stands close under it (${Math.round(gap)} px)`);
+        }
+      }
       const action = settings.querySelector('.set-head > :last-child:not(h1)');
       const form = settings.querySelector('.cs-form .add-grid');
       const contentRight = form ? form.getBoundingClientRect().left + form.clientWidth - parseFloat(getComputedStyle(form).paddingRight) : edge.right;
@@ -8967,16 +8993,43 @@ export function checkRendered(name, context = {}) {
     require(!room || !message.contains(room), 'the room beside the message is not part of it');
     return { check: name, message: Math.round(box.width), bubble: Math.round(b.width) };
   }
-  if (name === "dictation-heat-press") {
-    // A day says its words when pressed, never under the pointer.
-    const day = document.querySelector('.heat [data-date="2026-10-24"]'), tip = document.querySelector('.heat-tip');
-    require(!document.querySelector('.heat title'), "no day shows a title under the pointer");
-    require(visible(tip) && /10 月 24 日.*字/.test(tip.textContent) && day.classList.contains('is-picked'), "the pressed day shows its words above it and is outlined");
+  if (name === "dictation-heat-hover") {
+    // A day says its words under the pointer, in the app's own tip, never the browser's title, and nothing waits for a press.
+    const day = document.querySelector('.heat rect.is-picked'), tip = document.querySelector('.heat-tip');
+    require(!document.querySelector('.heat title'), "no day has the browser's title");
+    require(day && visible(tip) && tip.matches('.message-tooltip') && /\d+ 月 \d+ 日：[\d,]+ 字/.test(tip.textContent) && tip.textContent === day.dataset.tip, `the day under the pointer shows its words and is outlined: ${tip?.textContent}`);
     const tipBox = tip.getBoundingClientRect(), dayBox = day.getBoundingClientRect();
     require(tipBox.bottom <= dayBox.top + 1 || tipBox.top >= dayBox.bottom - 1, "the words stand beside the day, never over it");
+    require(tipBox.left >= 0 && tipBox.right <= innerWidth && tipBox.top >= 0 && tipBox.bottom <= innerHeight, "the words stay inside the window");
+    require(getComputedStyle(day).cursor !== 'pointer', "a day is no button: the pointer stays an arrow over it");
     require(!document.querySelector('.heat [role="button"], .heat [tabindex]'), 'no day is a button');
-    require(visible(document.querySelector('.page-overview .heat')) && !visible(document.querySelector('.day-row')) && document.querySelector('.page-overview:not([hidden])'), 'pressing a day leaves the grid as it was: no history opened');
-    return { check: name };
+    require(visible(document.querySelector('.page-overview .heat')) && !visible(document.querySelector('.day-row')) && document.querySelector('.page-overview:not([hidden])'), 'the grid stays as it was: no history opened');
+    return { check: name, words: tip.textContent };
+  }
+  if (name === "dictation-right-edge") {
+    // Nothing of a 聽寫 page goes past its right edge (part of it was cut off at the window's): every card, the
+    // heatmap and its month names, the shortcuts and long words end inside the line under the page's tabs, and nothing is
+    // cut short by a box that clips it (the heatmap's drawing, a card). A name ellipsized on purpose is not cut.
+    const nav = [...document.querySelectorAll('.dictation-navigation')].find(visible);
+    require(nav, "a 聽寫 page is open");
+    const page = nav.closest('.page-dictation'), main = page.closest('.main');
+    const edge = Math.min(nav.getBoundingClientRect().right, main ? main.getBoundingClientRect().right : innerWidth, innerWidth);
+    const past = [];
+    for (const node of page.querySelectorAll('*')) {
+      if (!visible(node) || node.closest('.heat-tip')) continue;
+      const box = node.getBoundingClientRect();
+      let limit = edge;
+      for (let up = node.parentElement; up && up !== page; up = up.parentElement) {
+        const style = getComputedStyle(up);
+        if (style.textOverflow === 'ellipsis' || style.webkitLineClamp !== 'none' && style.webkitLineClamp) { limit = Infinity; break; }
+        if (style.overflowX !== 'visible' || up.localName === 'svg') limit = Math.min(limit, up.getBoundingClientRect().right - (parseFloat(style.borderRightWidth) || 0));
+      }
+      if (box.right > limit + 1) past.push(`${node.localName}.${node.getAttribute('class') ?? ''} 「${node.textContent.trim().slice(0, 16)}」 ${Math.round(box.right - limit)} px`);
+    }
+    require(past.length === 0, `past the page's right edge: ${past.slice(0, 6).join(', ')}`);
+    const tip = document.querySelector('.heat-tip');
+    if (visible(tip)) require(tip.getBoundingClientRect().left >= 0 && tip.getBoundingClientRect().right <= innerWidth, "a day's words stay inside the window");
+    return { check: name, edge: Math.round(edge) };
   }
   if (name === "settings-tidy-key") {
     const scrim = document.querySelector('.modal-scrim[data-page="settings"]') ?? document.querySelector('.modal-scrim');
@@ -9861,6 +9914,46 @@ export function checkRendered(name, context = {}) {
       require(sources.join() === "打字,Telegram,例行工作", `the messages by source, in words: ${sources.join()}`);
     }
     return { check: name, asked };
+  }
+  if (name === "usage-reading-bar" || name === "usage-reading-line") return (async () => {
+    // R-USE-03: the day under the pointer says its date and each line's value there in the app's own tip, beside the day
+    // and inside the window; its bar lights (the others step back) or a guide and a dot on each line mark it.
+    await new Promise(resolve => setTimeout(resolve, 250));
+    const bar = name === "usage-reading-bar", card = document.querySelector(bar ? '[data-ua-card="cost"]' : '[data-ua-card="tools"]');
+    const chart = card.querySelector('[data-ua-read]'), tip = document.querySelector('.ua-tip');
+    require(visible(tip) && tip.matches('.message-tooltip') && chart.classList.contains('is-reading') && chart.getAttribute('aria-describedby') === tip.id, "the day under the pointer has its tip, the app's own");
+    const legend = [...card.querySelectorAll('.ua-legend > li')], rows = [...tip.querySelectorAll('li')];
+    require(rows.length === legend.length && rows.every((row, k) => row.querySelector('span').textContent === legend[k].querySelector('.ua-lname').textContent
+      && getComputedStyle(row.querySelector('i')).backgroundColor === getComputedStyle(legend[k].querySelector('i')).backgroundColor), "each line of the legend, in its own colour, in the tip");
+    require(rows.every(row => /\d/.test(row.querySelector('strong').textContent)), "every line says its value that day");
+    const box = tip.getBoundingClientRect();
+    require(box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight, "the tip is inside the window");
+    const day = tip.querySelector('.ua-tip-day span').textContent;
+    if (bar) {
+      const lit = [...chart.querySelectorAll('.ua-day')].filter(item => item.classList.contains('is-on'));
+      require(lit.length === 1 && getComputedStyle(lit[0]).opacity === '1', "one bar is lit");
+      require([...chart.querySelectorAll('.ua-day:not(.is-on)')].every(item => Number(getComputedStyle(item).opacity) < 0.6), "the other days step back");
+      require(day === lit[0].dataset.day && tip.querySelector('.ua-tip-day strong')?.textContent === lit[0].dataset.total, `the tip names the lit day and its total: ${day}`);
+      const column = lit[0].getBoundingClientRect();
+      require(box.left >= column.right - 1 || box.right <= column.left + 1, "the tip stands beside the bar, never over it");
+      return { check: name, day };
+    }
+    const guide = chart.querySelector('.ua-guide'), dots = [...chart.querySelectorAll('.ua-dot')];
+    require(visible(guide) && dots.length === chart.querySelectorAll('polyline').length && dots.every(visible), "a guide across the lines and a dot on each");
+    const line = guide.getBoundingClientRect(), area = chart.getBoundingClientRect();
+    require(box.left >= line.right - 1 || box.right <= line.left + 1, "the tip stands beside the guide, never over it");
+    const days = JSON.parse(chart.dataset.days), at = Math.round((line.left - area.left) / area.width * (days.length - 1));
+    require(day === days[at], `the tip names the day under the guide: ${day} (${days[at]})`);
+    return { check: name, day };
+  })();
+  if (name === "usage-people-all" || name === "usage-people-less") {
+    // R-USE-03: 誰花最多's one button: 顯示更多 shows everyone, then says 顯示較少 and folds the table back to five; the
+    // focus stays on it.
+    const all = name === "usage-people-all", button = document.querySelector('[data-ua-more]'), rows = document.querySelectorAll('.ua-table tbody tr').length;
+    require(visible(button) && button.textContent.trim() === (all ? "顯示較少" : "顯示更多") && button.getAttribute('aria-expanded') === String(all), `the button says what it will do: ${button?.textContent}`);
+    require(rows === (all ? 6 : 5), `${all ? "everyone" : "five people"} in the table (${rows})`);
+    require(document.activeElement === button, "the focus stays on the button");
+    return { check: name, rows };
   }
   if (name === "usage-plain") {
     // 用量 › 概覽: what was spent this month, then what each subscription has left. An OpenRouter key is its provider card's.

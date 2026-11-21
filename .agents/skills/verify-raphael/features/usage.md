@@ -27,9 +27,21 @@ cannot be read), from the same readings, decided once in `usage-blocks.ts`.
 `usage.runs`, `usage.export` and `usage.clear`: commands.rs `usage_is_a_named_read_of_the_main_window_only`) for 7 or 30
 days. Four sections: 花費紀錄 (the period's total, a stacked bar a day with its scale and two lines, the dates of a few days,
 and a legend with each line's share; by purpose, model or provider in a dropdown; no 依成員, since no member is kept a day),
-誰花最多 (each one's face, replies, cost and most used model, five rows then 顯示更多), 工具使用 (a line a day per kind of tool,
+誰花最多 (each one's face, replies, cost and most used model, five rows then 顯示更多, one button that then says 顯示較少 and
+folds the table back to five, the focus staying on it, `aria-expanded` true or false), 工具使用 (a line a day per kind of tool,
 with counts) and 訊息 (a line a day per model or source, a segmented choice). A section with nothing in the period says so in
-one line; `__other__` reads 其他, a model as the app names models, purposes, tools and sources in words.
+one line; `__other__` reads 其他, a model as the app names models (model-picker.ts `modelDisplayName`: a subscription
+program's own list first, so `cli:claude:claude-opus-5-5` and its alias `cli:claude:opus` read Claude Opus 5.5, then the
+catalogue; an id with no name keeps its version's dot, and a dashed name such as ChatGPT's GPT-6-Luna reads GPT-6 Luna as
+OpenRouter's does), purposes, tools and sources in words.
+
+Each section's name stands on its card's left edge, as every Settings section's does (styles.css `.modal-body .sgroup >
+h2`, no inset), and its controls (7 天 / 30 天, 分類方式, 依模型 / 依來源) start on that edge 8 px under the name. Every chart
+answers the pointer (`bindUsageReadings`): over 花費紀錄 the day's column lights (the other bars step back to 40%) and a tip of
+the app's own (`.message-tooltip.ua-tip`) beside the bar says the date, the day's total and each colour's cost that day in
+the legend's order; over 工具使用 or 訊息 a guide and a dot on each line mark the nearest day and the tip says each line's count.
+A chart reached with Tab reads its last day and the arrows, Home and End move the day (the tip is said aloud then); leaving
+the chart, a scroll or a redraw puts the tip away. Nothing animates but the bars' opacity (0.16 s).
 
 A window with 10% or less left is said once (R-QUOTA-01).
 Whoever reads it (a CLI turn, a background task or this page), the core tells each provider,
@@ -68,7 +80,7 @@ subscription's window reaches nine-tenths used.
 ## Driving it with look
 
 ```powershell
-npm run look -- settings-usage-overview settings-usage-cap settings-usage-analytics settings-usage-analytics-top settings-usage-analytics-empty usage usage-owner usage-allowances-chatgpt usage-empty usage-opens-quietly --theme both --width 1120,720,1920x1080
+npm run look -- settings-usage-overview settings-usage-cap settings-usage-analytics settings-usage-analytics-top settings-usage-bar-hover settings-usage-line-hover settings-usage-people-less settings-usage-analytics-empty usage usage-owner usage-allowances-chatgpt usage-empty usage-opens-quietly --theme both --width 1120,720,1920x1080
 ```
 
 `settings-usage-overview` checks `usage-overview`: 這個月 says what it counts, the gear stands at the card's top right with
@@ -80,6 +92,12 @@ checks the week (`usage-analytics`: `usage.analytics` asked for 7d, seven bars a
 其他, five people then 顯示更多, six lines) and, after 顯示更多, 依來源 and 30 天, the month (`usage-analytics-month`: thirty
 bars and five dates, six people, the sources in words). `settings-usage-analytics-empty` is a period with nothing in it:
 one line a section and no chart frame. The mock's `usage.analytics` (mock-ipc.js) makes its numbers from fixed waves.
+`settings-usage-bar-hover` points at the middle of the bars (`usage-reading-bar`: one bar lit, the others under 0.6, the tip
+names that day and its total, each legend line in its own colour with a number, beside the bar and inside the window);
+`settings-usage-line-hover` points at 工具使用 (`usage-reading-line`: the guide, a dot per line, the tip names the day under
+the guide); `settings-usage-people-less` presses 顯示更多 (`usage-people-all`: six rows, 顯示較少, `aria-expanded` true, the
+focus on it) and again (`usage-people-less`: five rows, 顯示更多). The standing `content-width` check of every Settings scene
+also requires each section's title on its card's left edge and a section's controls on that edge with 6 to 16 px of air.
 
 `usage-owner` is the owner's own mix (Codex live, Claude whose window has reset, the ChatGPT sign-in, OpenRouter) and checks `usage-owner-cards`: four cards in that order, Claude with no number or bar.
 `usage-plain` asserts this month's card leads 概覽 and the allowance cards follow it, the bars keep their height, no chart

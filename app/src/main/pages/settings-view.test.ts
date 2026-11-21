@@ -366,7 +366,7 @@ describe("聽寫", () => {
     const off = rowOf(tab("dictation"), "自動加入字典");
     expect(off).toMatch(/class="tg"[^>]*data-k="auto-learn"/);
     expect(off).toContain('aria-checked="false"');
-    expect(off).toContain("token");
+    expect(off).toContain("額度");
     const on = rowOf(tab("dictation", { device: { ...device, auto_learn: true } }), "自動加入字典");
     expect(on).toContain('aria-checked="true"');
   });

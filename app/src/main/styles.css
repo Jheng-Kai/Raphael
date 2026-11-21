@@ -542,11 +542,12 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 /* A settings pane has one measure, including its header, tools and grids. */
 .modal-body > * { max-width: var(--layout-reading-max); }
 .modal-body :is(.list, .slist, .cs-list, .cs) { max-width: var(--layout-reading-max); }
-/* A section of Settings has a small name, then its rows on one rounded card with no lines between them. */
+/* A section of Settings has a small name, then its rows on one rounded card with no lines between them. The name stands on
+   the card's left edge, not inset like the card's content: one edge from the title down. */
 .modal-body .slist { --slist-pad: var(--sp-4); padding-inline: var(--slist-pad); border-radius: var(--r-lg); border: 1px solid var(--float-edge); background: var(--panel); }
 .modal-body .slist > .row { min-height: 52px; padding: var(--sp-2) 0; }
 .modal-body .slist > .row + .row::before, .modal-body .slist > .note + .row::before { display: none; }
-.modal-body .sgroup > h2, .modal-body .sgroup > .data-heading > h2 { margin: 0 0 var(--sp-2) var(--sp-4); font-weight: 500; font-size: var(--fs-xs); }
+.modal-body .sgroup > h2, .modal-body .sgroup > .data-heading > h2 { margin: 0 0 var(--sp-2); font-weight: 500; font-size: var(--fs-xs); }
 .modal-body .sgroup > .data-heading { padding-left: 0; }
 .modal-body .sgroup > .data-heading > h2 { margin-bottom: 0; }
 .modal-body .sgroup > .foot { margin-inline: var(--sp-4); }

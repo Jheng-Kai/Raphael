@@ -2233,6 +2233,7 @@ export const ptBR = {
   "usage.colCost": "Gasto",
   "usage.colModel": "Modelo mais usado",
   "usage.more": "Mostrar mais",
+  "usage.less": "Mostrar menos",
   "usage.noReplies": "Ninguém respondeu neste período.",
   "usage.toolsTitle": "Uso de ferramentas",
  

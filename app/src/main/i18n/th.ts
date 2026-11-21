@@ -2233,6 +2233,7 @@ export const th = {
   "usage.colCost": "ค่าใช้จ่าย",
   "usage.colModel": "โมเดลที่ใช้บ่อย",
   "usage.more": "แสดงเพิ่มเติม",
+  "usage.less": "แสดงน้อยลง",
   "usage.noReplies": "ไม่มีใครตอบในช่วงนี้",
   "usage.toolsTitle": "การใช้เครื่องมือ",
  

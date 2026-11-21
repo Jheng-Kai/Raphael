@@ -2233,6 +2233,7 @@ export const tr = {
   "usage.colCost": "Harcama",
   "usage.colModel": "En çok kullanılan model",
   "usage.more": "Daha fazla göster",
+  "usage.less": "Daha az göster",
   "usage.noReplies": "Bu dönemde kimse yanıt vermedi.",
   "usage.toolsTitle": "Araç kullanımı",
  

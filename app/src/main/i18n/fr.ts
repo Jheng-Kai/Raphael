@@ -2233,6 +2233,7 @@ export const fr = {
   "usage.colCost": "Dépensé",
   "usage.colModel": "Modèle le plus utilisé",
   "usage.more": "Afficher plus",
+  "usage.less": "Afficher moins",
   "usage.noReplies": "Personne n’a répondu sur cette période.",
   "usage.toolsTitle": "Utilisation des outils",
  

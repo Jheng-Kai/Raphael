@@ -1,10 +1,12 @@
 // Settings › 用量 › 分析: what a period of 7 or 30 days cost and was used for, from the core's `usage.analytics`
 // (core brain/usage.py; costs from the spend ledger only). Four sections, each a heading, a line of what it counts and
 // one card: 花費紀錄 (the period's total, a stacked bar a day, a legend with each line's share, by purpose, model or
-// provider), 誰花最多 (everyone's replies, cost and most used model, five rows then 顯示更多), 工具使用 and 訊息 (a line a
-// day per tool or per model / source, with their counts). A section with nothing in the period says so in one quiet
-// line: no empty chart, and never a raw key (`__other__` reads 其他, a model reads as the app names models elsewhere).
-// What is drawn here is pure: settings.ts keeps the state through `createUsageAnalysis` and draws the tab.
+// provider), 誰花最多 (everyone's replies, cost and most used model, five rows then 顯示更多, which folds back with 顯示較少),
+// 工具使用 and 訊息 (a line a day per tool or per model / source, with their counts). Every chart answers the pointer: a day
+// under it says its date and each line's value there in a small tip of the app's own, its bar lit or a guide on the lines,
+// and the arrow keys read the days of a focused chart (`bindUsageReadings`). A section with nothing in the period says so
+// in one quiet line: no empty chart, and never a raw key (`__other__` reads 其他, a model reads as the app names models
+// elsewhere). What is drawn here is pure: settings.ts keeps the state through `createUsageAnalysis` and draws the tab.
 
 import "./usage-analysis.css";
 import { formatUsd } from "./format";
@@ -24,7 +26,7 @@ export interface UsageAnalysisView {
   range: UsageRange;
   group: CostGroup;
   messages: MessageGroup;
-  /** 顯示更多 was pressed: every row of 誰花最多, not the first five. */
+  /** 顯示更多 was pressed (and not 顯示較少 after it): every row of 誰花最多, not the first five. */
   allPeople: boolean;
   /** The period's reading: null while the first one is out, "failed" when none could be had. */
   data: UsageAnalytics | null | "failed";
@@ -91,6 +93,9 @@ const heading = (title: string, controls = ""): string =>
   `<h2>${esc(title)}</h2>` + (controls ? `<div class="ua-controls">${controls}</div>` : "");
 const emptyLine = (text: string): string => `<p class="ua-line">${esc(text)}</p>`;
 
+/** A day's values, one a line, in words, for the reading of the day under the pointer (`readingAt`). */
+const json = (values: string[]): string => esc(JSON.stringify(values));
+
 /** The legend under a chart: each line's colour, its name and what it adds up to. */
 const legendHTML = (series: UsageSeries[], label: (s: UsageSeries) => string, value: (s: UsageSeries) => string): string =>
   `<ul class="ua-legend">${series.map((s, i) => `<li data-s="${slot(s, i)}"><i aria-hidden="true"></i><span class="ua-lname">${esc(label(s))}</span><strong class="num">${esc(value(s))}</strong></li>`).join("")}</ul>`;
@@ -105,12 +110,14 @@ function costHTML(v: UsageAnalysisView, data: UsageAnalytics, names: UsageAnalys
   const bars = days.map((day, i) => {
     const height = totals[i] > 0 ? Math.max(1, (totals[i] / top) * 100) : 0;
     const parts = totals[i] > 0 ? breakdown.series.map((s, k) => (s.values[i] ?? 0) > 0 ? `<i data-s="${slot(s, k)}" style="height:${((s.values[i] / totals[i]) * 100).toFixed(2)}%"></i>` : "").join("") : "";
-    return `<span class="ua-day" style="height:${height.toFixed(2)}%" title="${esc(`${shortDay(day)} · ${formatUsd(totals[i])}`)}">${parts}</span>`;
+    // What the day says under the pointer: its date, its total and what each line of the legend cost that day.
+    return `<span class="ua-day" style="height:${height.toFixed(2)}%" data-day="${esc(shortDay(day))}" data-total="${esc(formatUsd(totals[i]))}"` +
+      ` data-v="${json(breakdown.series.map((s) => formatUsd(s.values[i] ?? 0)))}">${parts}</span>`;
   }).join("");
   const ticks = days.map((day, i) => `<span>${labelled(days.length, i) ? esc(shortDay(day)) : ""}</span>`).join("");
   return `<div class="ua-card" data-ua-card="cost">` +
     `<div class="ua-sum"><span>${esc(t("usage.periodSpent", { p0: shortDay(days[0]), p1: shortDay(days[days.length - 1]) }))}</span><strong class="num">${esc(formatUsd(breakdown.total))}</strong></div>` +
-    `<div class="ua-plot" role="img" aria-label="${esc(t("usage.costChart"))}">` +
+    `<div class="ua-plot" role="img" aria-label="${esc(t("usage.costChart"))}" tabindex="0" data-ua-read="cost" data-k="ua-read-cost">` +
     `<div class="ua-y" aria-hidden="true"><span>${esc(formatUsd(top))}</span><span>${esc(formatUsd(top / 2))}</span><span>${esc(formatUsd(0))}</span></div>` +
     `<div class="ua-area"><div class="ua-bars" data-n="${days.length}" style="--n:${days.length}">${bars}</div>` +
     `<div class="ua-x" aria-hidden="true" style="--n:${days.length}">${ticks}</div></div></div>` +
@@ -130,40 +137,46 @@ function peopleHTML(v: UsageAnalysisView, data: UsageAnalytics, names: UsageAnal
       `<td class="num">${esc(count(person.turns))}</td><td class="num">${esc(formatUsd(person.cost_usd))}</td>` +
       `<td class="ua-model">${model ? esc(seriesLabel("model", { key: model, label: model }, names)) : ""}</td></tr>`;
   }).join("");
-  return `<div class="ua-card ua-table-card"><table class="ua-table"><thead><tr>` +
+  // One toggle: 顯示更多 shows everyone, then the same button says 顯示較少 and folds the table to five again.
+  const toggle = people.length > MOST_PEOPLE
+    ? btn(esc(t(v.allPeople ? "usage.less" : "usage.more")), "sm ua-more", ` data-ua-more data-k="ua-more" aria-expanded="${v.allPeople}" aria-controls="ua-people"`) : "";
+  return `<div class="ua-card ua-table-card"><table class="ua-table" id="ua-people"><thead><tr>` +
     `<th scope="col">${esc(t("usage.colName"))}</th><th scope="col" class="num">${esc(t("usage.colReplies"))}</th>` +
     `<th scope="col" class="num">${esc(t("usage.colCost"))}</th><th scope="col">${esc(t("usage.colModel"))}</th>` +
-    `</tr></thead><tbody>${rows}</tbody></table></div>` +
-    (!v.allPeople && people.length > MOST_PEOPLE ? btn(esc(t("usage.more")), "sm ua-more", " data-ua-more") : "");
+    `</tr></thead><tbody>${rows}</tbody></table></div>` + toggle;
 }
 
-/** A line a day for each line of a breakdown, on one scale, with the first and last day under it. */
-function linesHTML(breakdown: UsageBreakdown, days: string[], label: string): string {
+/** A line a day for each line of a breakdown, on one scale, with the first and last day under it. `value` says a day's
+ *  count of a line in words, for the reading of the day under the pointer. */
+function linesHTML(breakdown: UsageBreakdown, days: string[], label: string, key: string, value: (n: number) => string): string {
   const top = scaleTop(Math.max(...breakdown.series.flatMap((s) => s.values)));
   const x = (i: number): string => (days.length > 1 ? (i / (days.length - 1)) * 600 : 300).toFixed(1);
-  const y = (value: number): string => (156 - (value / top) * 148).toFixed(1);
-  const lines = breakdown.series.map((s, k) => `<polyline data-s="${slot(s, k)}" points="${s.values.map((value, i) => `${x(i)},${y(value)}`).join(" ")}"></polyline>`).join("");
-  return `<svg class="ua-lines" viewBox="0 0 600 160" preserveAspectRatio="none" role="img" aria-label="${esc(label)}">` +
+  const y = (n: number): string => (156 - (n / top) * 148).toFixed(1);
+  const lines = breakdown.series.map((s, k) => `<polyline data-s="${slot(s, k)}" data-v="${json(s.values.map(value))}" points="${s.values.map((n, i) => `${x(i)},${y(n)}`).join(" ")}"></polyline>`).join("");
+  return `<div class="ua-linebox" role="img" aria-label="${esc(label)}" tabindex="0" data-ua-read="lines" data-k="ua-read-${key}" data-days="${json(days.map(shortDay))}">` +
+    `<svg class="ua-lines" viewBox="0 0 600 160" preserveAspectRatio="none" aria-hidden="true">` +
     `<line class="ua-grid" x1="0" y1="8" x2="600" y2="8"></line><line class="ua-grid" x1="0" y1="82" x2="600" y2="82"></line>` +
-    `<line class="ua-base" x1="0" y1="156" x2="600" y2="156"></line>${lines}</svg>` +
+    `<line class="ua-base" x1="0" y1="156" x2="600" y2="156"></line>${lines}</svg></div>` +
     `<div class="ua-ends" aria-hidden="true"><span>${esc(shortDay(days[0]))}</span><span>${esc(shortDay(days[days.length - 1]))}</span></div>`;
 }
 
 /** 工具使用: every tool call of the period, a line a day per kind of tool. */
 function toolsHTML(data: UsageAnalytics, names: UsageAnalysisNames): string {
   if (!data.tools.total) return emptyLine(t("usage.noTools"));
+  const calls = (n: number): string => t("usage.calls", { p0: count(n) });
   return `<div class="ua-card" data-ua-card="tools"><div class="ua-sum"><span>${esc(t("usage.toolCalls"))}</span><strong class="num">${esc(count(data.tools.total))}</strong></div>` +
-    linesHTML(data.tools, data.days, t("usage.toolsChart")) +
-    legendHTML(data.tools.series, (s) => seriesLabel("tool", s, names), (s) => t("usage.calls", { p0: count(s.total) })) + `</div>`;
+    linesHTML(data.tools, data.days, t("usage.toolsChart"), "tools", calls) +
+    legendHTML(data.tools.series, (s) => seriesLabel("tool", s, names), (s) => calls(s.total)) + `</div>`;
 }
 
 /** 訊息: the replies of the period, a line a day per model or per where the message came from. */
 function messagesHTML(v: UsageAnalysisView, data: UsageAnalytics, names: UsageAnalysisNames): string {
   const breakdown = data.messages_by[v.messages];
   if (!breakdown.total) return emptyLine(t("usage.noMessages"));
+  const messages = (n: number): string => t("usage.messages", { p0: count(n) });
   return `<div class="ua-card" data-ua-card="messages"><div class="ua-sum"><span>${esc(t("usage.messagesTitle"))}</span><strong class="num">${esc(count(breakdown.total))}</strong></div>` +
-    linesHTML(breakdown, data.days, t("usage.messagesChart")) +
-    legendHTML(breakdown.series, (s) => seriesLabel(v.messages, s, names), (s) => t("usage.messages", { p0: count(s.total) })) + `</div>`;
+    linesHTML(breakdown, data.days, t("usage.messagesChart"), "messages", messages) +
+    legendHTML(breakdown.series, (s) => seriesLabel(v.messages, s, names), (s) => messages(s.total)) + `</div>`;
 }
 
 /** The choices of 花費紀錄's 分類 dropdown. No per-member series is kept a day, so there is no 依成員. */
@@ -206,7 +219,7 @@ export interface UsageAnalysis {
   view(): UsageAnalysisView;
   /** Reads the period that is chosen; what was last known for it stays on the page until the answer comes. */
   load(): Promise<void>;
-  /** A press on the tab: a period, 訊息's grouping or 顯示更多. True when it was one of them. */
+  /** A press on the tab: a period, 訊息's grouping or 顯示更多 / 顯示較少. True when it was one of them. */
   click(target: Element): boolean;
   /** The menu of 花費紀錄's 分類 dropdown (`data-k="ua-group"`). */
   menuFor(k: string): { choices: Choice[]; current: string; pick(value: string): void } | null;
@@ -244,7 +257,8 @@ export function createUsageAnalysis(o: { api: UsageAnalysisApi; redraw(): void }
         if (by !== messages) { messages = by; o.redraw(); }
         return true;
       }
-      if (target.closest("[data-ua-more]")) { allPeople = true; o.redraw(); return true; }
+      // 顯示更多 and 顯示較少 are one button; the page gives the focus back to it by its `data-k` once it is drawn again.
+      if (target.closest("[data-ua-more]")) { allPeople = !allPeople; o.redraw(); return true; }
       return false;
     },
     menuFor(k) {
@@ -254,4 +268,152 @@ export function createUsageAnalysis(o: { api: UsageAnalysisApi; redraw(): void }
       } };
     },
   };
+}
+
+// ---------- the reading of the day under the pointer ----------
+
+/** What a chart says of one day: its date, its total (花費紀錄's), and each line of its legend with its value that day. */
+export interface DayReading { day: string; total: string; rows: { slot: string; name: string; value: string }[] }
+
+const parsed = (text: string | null | undefined): string[] => { try { return JSON.parse(text ?? "[]") as string[]; } catch { return []; } };
+/** How many days a chart (`[data-ua-read]`) draws. */
+const daysOf = (chart: HTMLElement): number =>
+  chart.dataset.uaRead === "cost" ? chart.querySelectorAll(".ua-day").length : parsed(chart.dataset.days).length;
+
+/** What the chart `chart` (`[data-ua-read]`) says of its day `i`, from what it drew: null for a day it does not have. */
+export function readingAt(chart: HTMLElement, i: number): DayReading | null {
+  const legend = [...(chart.closest(".ua-card")?.querySelectorAll<HTMLElement>(".ua-legend > li") ?? [])]
+    .map((item) => ({ slot: item.dataset.s ?? "", name: item.querySelector(".ua-lname")?.textContent ?? "" }));
+  if (chart.dataset.uaRead === "cost") {
+    const bar = chart.querySelectorAll<HTMLElement>(".ua-day")[i];
+    if (!bar) return null;
+    const values = parsed(bar.dataset.v);
+    return { day: bar.dataset.day ?? "", total: bar.dataset.total ?? "", rows: legend.map((line, k) => ({ ...line, value: values[k] ?? "" })) };
+  }
+  const day = parsed(chart.dataset.days)[i];
+  if (day === undefined) return null;
+  const lines = [...chart.querySelectorAll("polyline")];
+  return { day, total: "", rows: legend.map((line, k) => ({ ...line, value: parsed(lines[k]?.getAttribute("data-v"))[i] ?? "" })) };
+}
+
+/** The day under the pointer at `x` across a chart `width` wide from `left`: a bar's column, or the nearest point of a line. */
+export function dayAt(kind: "cost" | "lines", x: number, left: number, width: number, days: number): number {
+  if (days <= 1 || width <= 0) return 0;
+  const at = kind === "cost" ? Math.floor(((x - left) / width) * days) : Math.round(((x - left) / width) * (days - 1));
+  return Math.max(0, Math.min(days - 1, at));
+}
+
+/** The tip's words: the date and the day's total, then each line's colour, name and value that day. */
+export const readingHTML = (r: DayReading): string =>
+  `<div class="ua-tip-day"><span>${esc(r.day)}</span>${r.total ? `<strong class="num">${esc(r.total)}</strong>` : ""}</div>` +
+  `<ul>${r.rows.map((row) => `<li data-s="${esc(row.slot)}"><i aria-hidden="true"></i><span>${esc(row.name)}</span><strong class="num">${esc(row.value)}</strong></li>`).join("")}</ul>`;
+
+/**
+ * Every chart of 分析 answers the pointer (inside `root`, the settings dialog, which the tab is drawn into again and again):
+ * the day under it says its date and each line's value there in a small tip of the app's own beside it, its bar lit (the
+ * others dimmed) or, on the lines, a guide and a dot on each line. A chart reached with Tab reads its last day, and the
+ * arrow keys, Home and End move the day. Nothing moves but the tip; leaving the chart, or the page scrolling, puts it away.
+ */
+export function bindUsageReadings(root: HTMLElement): void {
+  const tip = document.createElement("div");
+  tip.className = "message-tooltip ua-tip";
+  tip.id = "ua-reading";
+  tip.setAttribute("role", "tooltip");
+  tip.hidden = true;
+  root.append(tip);
+  let chart: HTMLElement | null = null;
+  let at = -1;
+  function unmark(): void {
+    if (!chart) return;
+    chart.classList.remove("is-reading");
+    chart.querySelectorAll(".ua-day.is-on").forEach((bar) => bar.classList.remove("is-on"));
+    chart.querySelectorAll(".ua-guide, .ua-dot").forEach((mark) => mark.remove());
+  }
+  function hide(): void {
+    unmark();
+    chart?.removeAttribute("aria-describedby");
+    chart = null;
+    at = -1;
+    tip.hidden = true;
+  }
+  /** Lights the day `i`: its bar, or a guide across the lines with a dot on each. */
+  function mark(target: HTMLElement, i: number): void {
+    target.classList.add("is-reading");
+    if (target.dataset.uaRead === "cost") { target.querySelectorAll(".ua-day")[i]?.classList.add("is-on"); return; }
+    const days = daysOf(target), guide = document.createElement("i");
+    guide.className = "ua-guide";
+    guide.setAttribute("aria-hidden", "true");
+    guide.style.left = `${days > 1 ? (i / (days - 1)) * 100 : 50}%`;
+    target.append(guide);
+    for (const line of target.querySelectorAll("polyline")) {
+      const [x, y] = (line.getAttribute("points") ?? "").split(" ")[i]?.split(",").map(Number) ?? [];
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      const dot = document.createElement("i");
+      dot.className = "ua-dot";
+      dot.dataset.s = line.getAttribute("data-s") ?? "";
+      dot.setAttribute("aria-hidden", "true");
+      dot.style.left = `${((x / 600) * 100).toFixed(2)}%`;
+      dot.style.top = `${((y / 160) * 100).toFixed(2)}%`;
+      target.append(dot);
+    }
+  }
+  /** Beside the day, at the top of the plot: to the right of its bar (or of the guide), or to its left where the window ends. */
+  function place(target: HTMLElement, i: number): void {
+    const cost = target.dataset.uaRead === "cost";
+    const area = (cost ? target.querySelector<HTMLElement>(".ua-bars") ?? target : target).getBoundingClientRect();
+    const days = daysOf(target), bar = cost ? target.querySelectorAll<HTMLElement>(".ua-day")[i]?.getBoundingClientRect() : null;
+    const at = area.left + (days > 1 ? i / (days - 1) : 0.5) * area.width;
+    const [from, to] = bar ? [bar.left, bar.right] : [at, at];
+    const size = tip.getBoundingClientRect();
+    const right = to + 10, left = from - 10 - size.width;
+    tip.style.left = `${Math.max(8, right + size.width <= window.innerWidth - 8 ? right : left)}px`;
+    tip.style.top = `${Math.max(8, Math.min(window.innerHeight - size.height - 8, area.top))}px`;
+  }
+  function show(target: HTMLElement, i: number, keys: boolean): void {
+    if (target === chart && i === at && !tip.hidden) return;
+    const reading = readingAt(target, i);
+    if (!reading) { hide(); return; }
+    if (target !== chart) hide();
+    unmark();
+    chart = target;
+    at = i;
+    mark(target, i);
+    tip.innerHTML = readingHTML(reading);
+    // Said aloud when the keys move the day, not at every move of the pointer.
+    tip.setAttribute("aria-live", keys ? "polite" : "off");
+    target.setAttribute("aria-describedby", tip.id);
+    tip.hidden = false;
+    place(target, i);
+  }
+  const chartOf = (node: EventTarget | null): HTMLElement | null => (node instanceof Element ? node.closest<HTMLElement>("[data-ua-read]") : null);
+  root.addEventListener("pointermove", (event) => {
+    const target = chartOf(event.target);
+    if (!target) return;
+    const kind = target.dataset.uaRead === "cost" ? "cost" : "lines";
+    const area = (kind === "cost" ? target.querySelector<HTMLElement>(".ua-bars") ?? target : target).getBoundingClientRect();
+    show(target, dayAt(kind, event.clientX, area.left, area.width, daysOf(target)), false);
+  });
+  root.addEventListener("pointerout", (event) => {
+    if (!chart || chart.contains(event.relatedTarget as Node | null)) return;
+    // A chart that has the keyboard's focus keeps its reading.
+    if (document.activeElement === chart && chart.matches(":focus-visible")) return;
+    hide();
+  });
+  root.addEventListener("focusin", (event) => {
+    const target = chartOf(event.target);
+    if (target && target === event.target && target.matches(":focus-visible")) show(target, daysOf(target) - 1, true);
+  });
+  root.addEventListener("focusout", (event) => { if (chart && event.target === chart) hide(); });
+  root.addEventListener("keydown", (event) => {
+    const target = chartOf(event.target);
+    if (!target || target !== event.target) return;
+    const days = daysOf(target), from = target === chart ? at : days - 1;
+    const next = event.key === "ArrowLeft" ? from - 1 : event.key === "ArrowRight" ? from + 1 : event.key === "Home" ? 0 : event.key === "End" ? days - 1 : null;
+    if (next === null) return;
+    event.preventDefault();
+    show(target, Math.max(0, Math.min(days - 1, next)), true);
+  });
+  root.addEventListener("scroll", hide, true);
+  // The tab drawn again leaves the chart that was read: its tip goes with it.
+  new MutationObserver(() => { if (chart && !chart.isConnected) hide(); }).observe(root, { childList: true, subtree: true });
 }

@@ -44,7 +44,7 @@ import { createServices } from "../services";
 import { createCliBrains } from "../cli-brains";
 import { createProviders } from "../providers";
 import { mountUsageAnalytics, type UsageAnalyticsMount } from "../usage-analytics";
-import { createUsageAnalysis } from "../usage-analysis";
+import { bindUsageReadings, createUsageAnalysis } from "../usage-analysis";
 import { createUsageCap } from "../usage-cap";
 import { MonitorSwitch } from "../monitor";
 import type { AppContext, AudioDevices, BrainSettings, DeviceSettings, LocalModel, MainEvent, ModelCatalog, ModelRole, Page, PageArgument, SettingsPane, Status } from "../types";
@@ -255,6 +255,8 @@ export function createSettings(app: AppContext): SettingsPage {
     api: { usageAnalytics: (range) => api.usageAnalytics(range), membersList: () => api.membersList(getLocale()) },
     redraw: () => { if (visible && pane === "usage" && usageTab === "analysis") render(); },
   });
+  // 分析's charts answer the pointer and the keys: the day under them says what it cost or counted.
+  bindUsageReadings(el);
   /** The monthly limit's popover, from the gear of 這個月's card: a change is stored at once (usage-cap.ts). */
   const cap = createUsageCap({ limit: () => limitOf(view()), save: (limit) => changeBrain("monthly_limit_usd", limit) });
   app.onEvent((event) => {

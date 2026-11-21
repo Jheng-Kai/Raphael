@@ -2233,6 +2233,7 @@ export const id = {
   "usage.colCost": "Biaya",
   "usage.colModel": "Model tersering",
   "usage.more": "Tampilkan lainnya",
+  "usage.less": "Tampilkan lebih sedikit",
   "usage.noReplies": "Tidak ada yang membalas pada periode ini.",
   "usage.toolsTitle": "Penggunaan alat",
  

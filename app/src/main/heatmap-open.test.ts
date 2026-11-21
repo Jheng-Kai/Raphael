@@ -19,14 +19,14 @@ function days(n: number, words: (back: number) => number = () => 0) {
 const grid = () => buildGrid(days(21, (k) => ({ 1: 40, 4: 120, 6: 15 })[k] ?? 0), 3);
 
 describe("the days of the grid", () => {
-  test("a day carries its words for the press that shows them, in the language of the window, and no hover title", () => {
+  test("a day carries its words for the app's own tip under the pointer, in the language of the window, and no browser title", () => {
     expect(heatmapSVG(grid())).toContain('data-tip="10 月 13 日：40 字"');
     expect(heatmapSVG(grid())).not.toContain("<title>");
     setLocale("en");
     expect(heatmapSVG(grid())).toContain('40 words"');
   });
 
-  test("a day opens nothing: pressing it only says its words", () => {
+  test("a day opens nothing and is no button: the pointer only reads its words", () => {
     const svg = heatmapSVG(grid());
     expect(svg).not.toContain('role="button"');
     expect(svg).not.toContain("tabindex");

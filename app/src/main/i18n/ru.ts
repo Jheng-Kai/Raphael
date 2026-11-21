@@ -2233,6 +2233,7 @@ export const ru = {
   "usage.colCost": "Расходы",
   "usage.colModel": "Частая модель",
   "usage.more": "Показать ещё",
+  "usage.less": "Показать меньше",
   "usage.noReplies": "За этот период ответов нет.",
   "usage.toolsTitle": "Использование инструментов",
  
