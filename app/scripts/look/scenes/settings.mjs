@@ -199,6 +199,8 @@ export default [
     // The picture ends on 工具使用 and 訊息, under the chart and the people the checks read.
     scroll('[data-ua-section="messages"]'),
   ]),
+  // The top of 分析 as it opens: 花費紀錄's bars, legend and 誰花最多, the picture the scene above scrolls past.
+  scene("settings-usage-analytics-top", "Usage › 分析 as it opens: 花費紀錄 with its 7 天 bars, legend and the start of 誰花最多", [...analysis, check("usage-analytics")]),
   scene("settings-usage-analytics-empty", "Usage › 分析 with nothing in the period: one quiet line a section, no chart frames", [...usage, click('[data-usage-tab="analysis"]'), wait('[data-ua-section="messages"]'), check("usage-analytics-empty")], { usageEmpty: true }),
   scene("usage-opens-quietly", "The app reads the allowances once after it starts, and Settings again each time it opens, on any tab: no refresh button, the numbers already there, the same numbers touch nothing, a new number replaces the old in place", [
     check("usage-open-launch"), ...settings("general"), check("usage-open-general"),

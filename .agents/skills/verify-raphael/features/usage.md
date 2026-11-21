@@ -68,7 +68,7 @@ subscription's window reaches nine-tenths used.
 ## Driving it with look
 
 ```powershell
-npm run look -- settings-usage-overview settings-usage-cap settings-usage-analytics settings-usage-analytics-empty usage usage-owner usage-allowances-chatgpt usage-empty usage-opens-quietly --theme both --width 1120,720,1920x1080
+npm run look -- settings-usage-overview settings-usage-cap settings-usage-analytics settings-usage-analytics-top settings-usage-analytics-empty usage usage-owner usage-allowances-chatgpt usage-empty usage-opens-quietly --theme both --width 1120,720,1920x1080
 ```
 
 `settings-usage-overview` checks `usage-overview`: 這個月 says what it counts, the gear stands at the card's top right with
