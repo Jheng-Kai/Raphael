@@ -63,13 +63,15 @@ Option (the `AltRight` binding: one key code, named by `keys.ts` and `mac-catalo
 ## The spoken languages: one row each, written forms beside the picker; cleanup in no one language
 
 Settings > Dictation > 你說的語言 opens one picker with every language on one row (checked or not, up to five). A chosen
-language with several written forms (中文: 台灣、香港、簡體、粵語; English; Español) ends its row with a chip naming the form in
-use (`data-variant-menu`); the chip, or Right on it, opens the forms in a submenu beside the picker (`placement: "beside"`,
-`variantMenuHTML`), so the list never grows or jumps. A pick closes only the submenu (`closeSubmenus`) and keeps the picker open.
+language with several written forms (中文: 台灣、香港、簡體、粵語; English; Español) ends its row with a dropdown naming the form
+in use (`data-variant-menu`). It is the settings rows' own dropdown (`.sel`, the rule of settings-polish.css): its value and a
+chevron with no box, fill or pill, at rest or under the pointer, where only its words brighten, as the card's 你說的語言 and
+聽寫方式 do; it keeps the app's keyboard ring rather than a menu item's. The dropdown, or Right on it, opens the forms in a
+submenu beside the picker (`placement: "beside"`, `variantMenuHTML`), so the list never grows or jumps. A pick closes only the submenu (`closeSubmenus`) and keeps the picker open.
 The core rules are unchanged: one form per language, the order is the priority.
 
-The chip's accessible name is one translated string (`languages.variantsOf`, the language and the form in use) and it has
-no `title`: the form is on the chip already. A language's own name ("English", "日本語", "English (United States)") carries
+The dropdown's accessible name is one translated string (`languages.variantsOf`, the language and the form in use) and it
+has no `title`: the form is on it already. A language's own name ("English", "日本語", "English (United States)") carries
 its `lang`, so it is read in that language; the Chinese names, which the window translates, carry none. The look audit
 does not take text marked with another language's `lang` for English interface copy (R-UI-14), which "English" in this
 list otherwise was in a zh-TW window.
@@ -91,17 +93,25 @@ What proves it: `tests/brain/test_cleanup.py`, `test_dictation_finish.py`, `test
 and `tests/test_packaging.py` from core/.
 
 ```powershell
-npm run look -- dictation-languages dictation-language-variants dictation-language-variants-toggle --theme both --width 1120,720,1920x1080
+npm run look -- dictation-languages dictation-language-variant-hover dictation-language-variant-focus dictation-language-variants dictation-language-variants-toggle --theme both --width 1120,720,1920x1080
 ```
+
+`dictation-languages` hovers 中文's row and checks that every dropdown stands on its lit row with no fill or frame;
+`dictation-language-variant-hover` points at 中文's dropdown and checks that it has no fill, frame or shadow at rest or under
+the pointer, is written as 聽寫方式's dropdown at rest, brightens to the colour of 你說的語言's open dropdown, has the same
+chevron, and never covers the language's name; `dictation-language-variant-focus` presses Tab from 中文 and checks that its
+dropdown draws the app's ring (a 2 px outline 2 px outside, no inset frame or fill), whole inside the list.
 
 ## Changing the shortcuts: one 編輯, one dialog (R-KEYS-EDIT-01)
 
 The shortcuts are listed read-only, in the order of use (聽寫, 問拉斐爾, 整理選取文字, 貼上上一次, then 取消/Esc), in Settings >
 聽寫與快捷鍵's 快捷鍵 section and on the 聽寫 overview's card; no row has a pencil. One small 「編輯」 at the section's (or the
-card's) top right opens 編輯快捷鍵 (`shortcut-editor.ts`), the app's compact dialog: the same five rows, every shortcut but Esc
-with its keys on a button. Pressing a button records new keys with the shared recorder (`hotkey-recording.ts`: the global
-hotkeys pause, the keys show as they are held, they are taken when let go; Esc before any key drops the recording, a navigation
-chord steps it back and is never recorded). What is recorded waits in the dialog; a combination that is no good or that another
+card's) top right opens 編輯快捷鍵 (`shortcut-editor.ts`), the app's compact dialog: the same five rows drawn as the lists' rows
+(`row-shortcut`: name left, key caps right, no frame, field or fill), every shortcut but Esc with a pencil (a row's icon button)
+after its caps, the pencils in one column and Esc's caps ending where the others' do. Pressing a pencil records new keys with the
+shared recorder (`hotkey-recording.ts`: the global hotkeys pause, the row's caps give way to the plain words asking for the keys,
+the keys show as they are held, they are taken when let go; the focus stays on the pencil; Esc before any key drops that recording
+only, a navigation chord steps it back and is never recorded). What is recorded waits in the dialog; a combination that is no good or that another
 shortcut of the dialog has is said under the rows and kept out. 儲存 sends what changed in one `device_settings_set` patch, so two
 shortcuts can trade keys; 貼上上一次 (`paste_last_keys`) is changed like the others. The shell refuses a combination two actions
 would share; that refusal is said in the dialog, which stays open. A save that went through closes the dialog and the list shows
@@ -112,9 +122,10 @@ npm run look -- settings-tidy-key settings-keys-dialog settings-keys-recording s
 ```
 
 `settings-keys-dialog` opens the dialog from Settings, records Ctrl+F8 for 貼上上一次 and checks the five rows and their order,
-the four named key buttons ending on one edge, Esc's key where theirs end, the foot (取消 then 儲存), that nothing was saved yet
-and that the list behind still shows the keys in force; `settings-keys-recording` shows a key being recorded (the hint inside its
-button, the focus on it); `settings-keys-saved` presses 儲存 and checks one `device_settings_set` of `paste_last_keys` alone, the
+that nothing in the rows but the caps has a border or a fill, the four named pencils (22 px row icon buttons) in one column after
+the caps, every row's caps (Esc's too) ending on one edge, the rows as tall as the list's behind with its name style and caps, the
+foot (取消 then 儲存), that nothing was saved yet and that the list behind still shows the keys in force; `settings-keys-recording`
+shows a key being recorded (the words in the row where its caps were, frameless, before the pencil, the focus on the pencil); `settings-keys-saved` presses 儲存 and checks one `device_settings_set` of `paste_last_keys` alone, the
 dialog gone, the list's new keys and the focus back on 編輯; `dictation-keys-dialog` opens the same dialog from the overview's card.
 Not proved here: the global hotkey service taking the new keys (the shell's `apply_changes`); the owner presses a changed key
 once in another app.
