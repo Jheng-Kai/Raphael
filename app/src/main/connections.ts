@@ -702,14 +702,19 @@ const accountStatus = (status: string): { kind: "ok" | "warn" | "err" | "idle"; 
   return { kind: known.kind, text: tr(known.key) };
 };
 
-/**
- * The account(s) a service is signed in with, using public owner labels and status:
- * a row for each account of a managed service (two when one was signed in again and the first has not gone), the owner's own Google as
- * one, and a signed-in server as one. A server that needs no sign-in has none.
- */
+function accountName(account: NonNullable<ConnectionGroup["accounts"]>[number], index: number): string {
+  const identity = account.display_name || account.alias;
+  if (identity && account.label && account.label !== identity) return `${identity} · ${account.label}`;
+  return identity || account.label || t("conn.accountN", { p0: index + 1 });
+}
+
+/** Show one row per managed account, or one for a signed-in custom server. */
 function accountsHTML(g: ConnectionGroup): string {
   const rows: { label: string; kind: "ok" | "warn" | "err" | "idle"; text: string }[] =
-    g.source === "composio" ? (g.accounts ?? []).map((account, n) => ({ label: account.label || t("conn.accountN", { p0: n + 1 }), ...accountStatus(account.status) }))
+    g.source === "composio" ? (g.accounts ?? []).map((account, n) => ({
+      label: account.display_name ? `${g.name} · ${accountName(account, n)}` : accountName(account, n),
+      ...accountStatus(account.status),
+    }))
     : g.source === "google" ? [{ label: g.accounts?.[0]?.label || t("conn.googleAccount"), ...accountStatus(g.accounts?.[0]?.status ?? (g.status === "ready" ? "ACTIVE" : "INACTIVE")) }]
     : g.auth !== "none" ? [{ label: t("conn.account"), ...(needsLogin(g) ? { kind: "err" as const, text: t("conn.status.relogin") } : { kind: "ok" as const, text: t("conn.signedIn") }) }]
     : [];
@@ -1272,7 +1277,7 @@ export function createConnections(host: ConnectionsHost): Connections {
       if (anchor) { click(anchor); document.querySelector<HTMLButtonElement>('.menu [data-conn="disconnect"]')?.focus(); }
       return;
     }
-    const name = account.label || t("conn.accountN", { p0: (group.accounts ?? []).indexOf(account) + 1 });
+    const name = accountName(account, (group.accounts ?? []).indexOf(account));
     if (connected && !(await confirmDelete(name, { words: { title: t("account.removeConfirm", { p0: name }), hint: t("account.removeHint"), action: t("account.remove") } }))) return;
     void act(id, async () => { await api.connectorsRemoveAccount(id, accountId); });
   }

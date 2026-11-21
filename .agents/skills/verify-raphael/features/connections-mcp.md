@@ -135,6 +135,14 @@ A sign-in cancelled half way can be removed, so no useless accounts pile up, and
   and then 移除 in red. A row that is not connected (等待登入, 已過期, 已撤銷, 失敗, 未啟用) is removed at once; a connected one asks the app's
   delete question first (「移除「name」？」, one sentence, 取消 and a red 移除); the last connected account is the app, so its 移除 is the app's own
   two-press disconnect (the menu then says 「確定中斷？」). 加入另一個帳號 is unchanged.
+- For R-ACCT-05, sign in to two Gmail accounts, open the Gmail page from Connect apps and check that each account row
+  shows Gmail and its provider address. Use the first row's menu to remove it and check that the second remains connected.
+  In a member turn, `connections_list` and the Composio execution tool identify both active accounts by their IDs and
+  display names or aliases. A request for both mailboxes uses two execution items with distinct `account` values and
+  `user_id: "me"` in each. Report any failed item with its account name. Offline coverage is in
+  `core/tests/test_connectors.py` and `app/src/main/connections.test.ts`. The existing `accounts-card` and
+  `accounts-remove-yes` scenes cover the account row and removal controls with fixture responses.
+
 - A sign-in that was given up leaves no account: the core gives back (Composio and the list) the account of a flow that was cancelled, closed,
   failed or ran out, and any waiting one older than ten minutes when the list is read. `look` cannot prove that (the core is a mock there):
   `core/tests/test_connector_accounts.py` does, and the scene `accounts-card` shows the list after the core gave the old one back.

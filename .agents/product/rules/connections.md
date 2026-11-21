@@ -7,6 +7,11 @@ Connected apps and accounts, the store, skills, shared templates and the cards t
 | ID | Date | Rule | Check | Gate | Evidence |
 | --- | --- | --- | --- | --- | --- |
 | R-SKILL-18 | 2026-11-21 | Repository archives and local folder collections select the skill folders before opening their entries. A symbolic link to a regular file inside the skill is copied as file data. An out-of-folder or unresolved link is skipped and recorded in package information. Selected entries retain path, name, size, entry and hard-link checks. Validate the snapshot before publishing it. | pytest | hard | core/tests/members/test_skill_packages.py::test_only_selected_skill_links_are_resolved_and_external_links_are_noted; core/tests/members/test_skill_packages.py::test_missing_skill_document_is_refused_before_writing; core/tests/members/test_skill_imports.py::test_remote_import_loads_the_selected_snapshot_and_ignores_root_link |
+## Choosing a connected account
+
+| ID | Date | Rule | Check | Severity | Evidence |
+|---|---|---|---|---|---|
+| R-ACCT-05 | 2026-11-21 | Composio sessions support multiple accounts per toolkit and require explicit selection when several are active. The member's tool list shows account IDs with provider display names or aliases. Each batch item selects its account with `account`, Gmail uses `user_id: "me"`, and reading both mailboxes makes one item per account and identifies any account that failed. Connect apps displays each account's provider identity in its own row and removes only the selected account when another is connected. | pytest, vitest | hard | core/tests/test_connectors.py::test_composio_creates_and_upgrades_sessions_with_explicit_account_selection; core/tests/test_connectors.py::test_composio_lists_and_routes_two_gmail_accounts; app/src/main/connections.test.ts::two Gmail addresses have separate rows and removal targets only the selected account |
 
 ## A limit stops only what would harm the app
 

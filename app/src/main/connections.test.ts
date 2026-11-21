@@ -1994,11 +1994,11 @@ describe("what the dialog does", () => {
   });
 
   describe("the accounts of an app (R-ACCT-01)", () => {
-    const gmail = (accounts: { id: string; status: string; label?: string }[]) => ({
+    const gmail = (accounts: NonNullable<ConnectionGroup["accounts"]>) => ({
       id: "composio:gmail", kind: "composio", name: "Gmail", description: "", logo: "", status: accounts.some((a) => a.status === "ACTIVE") ? "ACTIVE" : "INITIATED", enabled: true,
       accounts, enabled_tools: [], disabled_tools: [],
     });
-    const openGmail = async (accounts: { id: string; status: string; label?: string }[]) => {
+    const openGmail = async (accounts: NonNullable<ConnectionGroup["accounts"]>) => {
       api.connectorsStatus.mockResolvedValue({ connectors: [gmail(accounts)], composio_configured: true, google_configured: false });
       api.connectorsRemoveAccount.mockResolvedValue({ connector: gmail([]) });
       api.connectorsDisconnect.mockResolvedValue({ disconnected: true });
@@ -2009,6 +2009,25 @@ describe("what the dialog does", () => {
       return c;
     };
     const TWO = [{ id: "a1", status: "ACTIVE", label: "Work" }, { id: "a2", status: "ACTIVE", label: "Me" }, { id: "a3", status: "INITIATED" }];
+
+    test("two Gmail addresses have separate rows and removal targets only the selected account", async () => {
+      const work = { id: "a1", status: "ACTIVE", display_name: "work@example.test" };
+      const home = { id: "a2", status: "ACTIVE", display_name: "home@example.test" };
+      const c = await openGmail([work, home]);
+      try {
+        const d = dom(connectionsHTML(c.view()));
+        expect(texts(d, ".cs-acct .nm")).toEqual(["Gmail · work@example.test", "Gmail · home@example.test"]);
+        const menus = [...d.querySelectorAll<HTMLElement>('.cs-acct [data-conn="account-menu"]')];
+        expect(menus.map(row => row.dataset.account)).toEqual(["a1", "a2"]);
+        api.connectorsStatus.mockResolvedValue({ connectors: [gmail([home])], composio_configured: true, google_configured: false });
+        c.click(button("account-remove", { id: "composio:gmail", account: menus[0]?.dataset.account ?? "" }));
+        await settle();
+        expect(confirmDelete).toHaveBeenCalledWith("work@example.test", expect.anything());
+        expect(api.connectorsRemoveAccount).toHaveBeenCalledWith("composio:gmail", "a1");
+        expect(api.connectorsDisconnect).not.toHaveBeenCalled();
+        expect(texts(dom(connectionsHTML(c.view())), ".cs-acct .nm")).toEqual(["Gmail · home@example.test"]);
+      } finally { c.reset(); }
+    });
 
     test("every row is a person, a name, a status and a ⋯; the 帳號名稱 button is gone", async () => {
       const c = await openGmail(TWO);
