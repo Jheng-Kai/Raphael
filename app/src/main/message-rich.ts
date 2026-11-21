@@ -266,7 +266,7 @@ export function mountRichContent(root: HTMLElement): void {
                 block.querySelector<HTMLElement>(".rich-note")!.hidden = true;
                 block.querySelector<HTMLButtonElement>('[data-rich-act="expand"]')!.hidden = false;
                 block.dataset.diagramState = "rendered";
-                // The drawn chart is one control that opens it larger (R-UI-172): pressed, or Enter or Space on it.
+                // The drawn chart is one control that opens it larger (R-UI-173): pressed, or Enter or Space on it.
                 view.dataset.richAct = "open-diagram"; view.tabIndex = 0; view.setAttribute("role", "button"); view.setAttribute("aria-label", t("chat.diagramOpen"));
               } else {
                 block.dataset.diagramState = "source";
@@ -395,7 +395,7 @@ function showLarge(title: string, body: string): void {
 const PRESS_SLOP_PX = 4;
 
 /**
- * A diagram, larger (R-UI-172): fitted to the view, zoomed by the wheel, a pinch or the head's − and +, dragged with any mouse
+ * A diagram, larger (R-UI-173): fitted to the view, zoomed by the wheel, a pinch or the head's − and +, dragged with any mouse
  * button, put back by a double press or the head's reset, and one quiet line under it says so. Its × and Escape close it.
  * `ground` is the conversation's panel the chart was drawn on: a dialog's own panel is lighter (the floating surface), and on
  * it the dark theme's nodes sank into the ground and the light theme's label boxes stood out.

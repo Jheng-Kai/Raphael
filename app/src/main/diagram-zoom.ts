@@ -1,4 +1,4 @@
-// The larger view of a reply's diagram (R-UI-172). The chart starts fitted to its stage; the wheel or a pinch zooms it about the
+// The larger view of a reply's diagram (R-UI-173). The chart starts fitted to its stage; the wheel or a pinch zooms it about the
 // pointer, a press of the left, middle or right button drags it, a double press puts it back, and the dialog's −, + and reset do
 // the same from its head. The arrows move it and + - 0 zoom and reset it from the keyboard. The chart is redrawn at each size
 // (its width and height change, never a scaled picture of it), so its lines and words stay sharp at every zoom.

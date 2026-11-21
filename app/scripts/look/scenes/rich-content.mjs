@@ -1,7 +1,7 @@
 import { scene, wait, check, click, scroll, member, room, hover, focus, key } from "./steps.mjs";
 const table = '.rich-block.message-table';
 const diagram = '.message-diagram[data-diagram-state="rendered"]';
-// R-UI-172: the drawn chart under the card's header opens the larger view, which zooms and drags.
+// R-UI-173: the drawn chart under the card's header opens the larger view, which zooms and drags.
 const chart = `${diagram} > .diagram-view`, larger = '.diagram-dialog .diagram-stage .diagram-pan > svg';
 const zoomed = [{ action: "wheel", selector: ".diagram-dialog .diagram-stage", deltaY: -300 }, { action: "wheel", selector: ".diagram-dialog .diagram-stage", deltaY: -300 },
   { action: "pointer-drag", selector: ".diagram-dialog .diagram-stage", dx: -140, dy: -50 },

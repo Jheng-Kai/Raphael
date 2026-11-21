@@ -1938,7 +1938,7 @@ conversation's whole column, as wide as the composer, and a table's columns take
 npm run look -- rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-invalid rich-streaming rich-sequence rich-line-breaks rich-class rich-state rich-er rich-architecture rich-wide-table reply-split-bubbles conversation-chief-up conversation-member-up conversation-room-up long-owner long-owner-expanded long-room-messages chat --theme both --width 1120,720,1920x1080
 ```
 
-A diagram opens larger from its whole chart, not only the header's expand icon (R-UI-172): the drawn chart under the header is
+A diagram opens larger from its whole chart, not only the header's expand icon (R-UI-173): the drawn chart under the header is
 one control (`role="button"`, 放大檢視圖表, one Tab stop once drawn) that a press, Enter or Space opens; the header's copy,
 source and expand keep their own actions, and a press that moved or selected words opens nothing (message-rich.ts). Under the
 pointer the chart shows the pointer and one grey step laid over it (a `::after` veil of `--text` at 5%, so the nodes keep

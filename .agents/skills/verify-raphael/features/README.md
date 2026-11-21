@@ -259,7 +259,7 @@ loads on demand with strict security, SVG labels, no directives, HTML, clicks or
 external resources. Invalid/unclosed diagrams retain escaped source with a quiet
 note. Source, copy and expand use shared controls and dialogs. A drawn diagram also
 opens from a press, Enter or Space on its whole chart, and its larger view fits,
-zooms (wheel, pinch, − +), drags and resets, with one hint line (R-UI-172,
+zooms (wheel, pinch, − +), drags and resets, with one hint line (R-UI-173,
 conversation.md "Rich replies"). Colors derive only
 from theme tokens, including a future black palette. Markdown images initially
 have no src; only Load image assigns a source, always without a referrer.

@@ -31,7 +31,7 @@
 .rich-note { margin: 0; padding: var(--sp-2) var(--sp-3); color: var(--text-3); font-size: var(--fs-xs); }
 .diagram-view { padding: var(--sp-4); overflow-x: auto; overflow-y: auto; text-align: center; }
 .diagram-view > .diagram-canvas { display: block; max-width: 100%; height: auto; margin: auto; }
-/* A drawn chart opens larger when it is pressed (R-UI-172): the pointer, and one grey step laid over the whole chart under it,
+/* A drawn chart opens larger when it is pressed (R-UI-173): the pointer, and one grey step laid over the whole chart under it,
    say so. The step is a veil over the drawing, not a new ground, so the chart's nodes keep their contrast in both themes. */
 .message-diagram[data-diagram-state="rendered"] > .diagram-view { position: relative; cursor: pointer; }
 .message-diagram[data-diagram-state="rendered"] > .diagram-view:hover::after { content: ""; position: absolute; inset: 0; background: color-mix(in srgb, var(--text) 5%, transparent); pointer-events: none; }

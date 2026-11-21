@@ -3146,7 +3146,7 @@ export function checkRendered(name, context = {}) {
       require(!dialog.querySelector('.mb-dlg-act'), "its × closes it, with no 「關閉」 at its foot");
       require(dialog.getBoundingClientRect().width >= Math.min(1200, innerWidth - 48) - 1, "expanded view uses the large viewport-bound dialog width");
     }
-    // R-UI-172: the drawn chart is one control that opens the larger view, and says so under the pointer, calmly.
+    // R-UI-173: the drawn chart is one control that opens the larger view, and says so under the pointer, calmly.
     if (name === "rich-diagram-hover") {
       const view = diagram.querySelector('.diagram-view');
       require(view.matches(':hover'), "the pointer is over the chart");
