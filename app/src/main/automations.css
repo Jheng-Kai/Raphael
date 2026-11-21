@@ -121,7 +121,7 @@
 div.handoff-event { display: flex; justify-content: center; min-width: 0; text-align: center; overflow-wrap: anywhere; }
 div.handoff-event > .event-line { min-width: 0; max-width: 100%; }
 .btn.event-count { display: inline; min-height: 0; height: auto; padding: 0; border: 0; border-radius: 0; background: transparent; font: inherit; line-height: inherit; color: inherit; white-space: normal; cursor: pointer; }
-.btn.event-count:hover:not(:disabled), .btn.event-count:active:not(:disabled) { background: transparent; color: var(--text-2); text-decoration: underline; text-underline-offset: 2px; }
+.btn.event-count:hover:not(:disabled), .btn.event-count:active:not(:disabled) { background: transparent; color: var(--text); }
 .handoff-event > summary { cursor: pointer; list-style: none; }
 .handoff-event > summary::-webkit-details-marker { display: none; }
 .handoff-detail { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); width: fit-content; max-width: min(calc(560px + 160 * var(--pa-u)), 100%); margin: var(--sp-2) auto 0; padding: calc(10px + 4 * var(--pa-u)) calc(12px + 6 * var(--pa-u)); border-radius: var(--r-lg); background: var(--surface-2); font-size: var(--pa-fs-d); line-height: 1.6; color: var(--text-2); overflow-wrap: anywhere; }
@@ -137,6 +137,8 @@ div.handoff-event > .event-line { min-width: 0; max-width: 100%; }
 .room-list { display: grid; grid-template-columns: minmax(0, 1fr); padding: var(--sp-1); border-radius: var(--r-lg); background: color-mix(in srgb, var(--text) 5%, transparent); }
 .btn.room-row, .room-row { display: flex; align-items: center; gap: var(--sp-3); width: 100%; min-width: 0; min-height: 44px; padding: 0 var(--sp-2) 0 var(--sp-3); border: 0; border-radius: var(--r-md); background: transparent; color: var(--text); font-size: var(--fs-sm); font-weight: var(--weight-regular); text-align: left; }
 .btn.room-row:hover:not(:disabled) { background: var(--hover); }
+/* A chosen row is filled the whole way, as the window's chosen rows are, its check at its right (R-UI-174). */
+.btn.room-row[aria-pressed="true"] { background: var(--selected); }
 .btn.room-row:disabled { opacity: 1; cursor: default; }
 .room-row-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Who takes part: a round check at the right, filled when chosen. */

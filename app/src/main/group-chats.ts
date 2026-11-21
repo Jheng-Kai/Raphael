@@ -42,7 +42,7 @@ import { composioAction, composioText } from "./composio-result";
 import { mountPages } from "./page-card";
 import { carryTyped } from "./secret-card";
 import { carryMail } from "./mail-card";
-import { plainLine, primaryFirst, primaryIdOf, memberRole, faceHTML, memberOf } from "./members";
+import { plainLine, primaryFirst, primaryIdOf, memberRole, faceHTML, groupFacesHTML, memberOf } from "./members";
 import { NAME, eventLineHTML } from "./event-line";
 import { handoffRun, roomHandoffHTML } from "./handoff-line";
 import { memberColor, nameAccent } from "./owner-bubble";
@@ -145,8 +145,7 @@ export async function openNewGroupChat(opts: { onCreated?(room: Room): void } = 
 
 /** Up to four actual member faces share a square grid everywhere. */
 export function roomAvatarHTML(room: Pick<Room, "member_ids">, list: MembersList, size = 40): string {
-  const members = room.member_ids.map(id => list.members.find(m => m.id === id)).filter((m): m is NonNullable<typeof m> => !!m).slice(0, 4);
-  return `<span class="room-avatar" data-faces="${members.length}" style="--av:${size}px" aria-hidden="true">${members.map(member => faceHTML(member, size)).join("")}</span>`;
+  return groupFacesHTML(room.member_ids.map(id => list.members.find(m => m.id === id)).filter((m): m is NonNullable<typeof m> => !!m), size);
 }
 
 export async function openGroupChat(roomId: number): Promise<void> {

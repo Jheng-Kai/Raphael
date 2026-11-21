@@ -1,8 +1,11 @@
 import { core, membersList } from "./api";
 import { t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
-import { btn, esc, fieldHTML, iconBtn, openMenu, sel, tabs } from "./ui";
+import { btn, esc, fieldHTML, ico, iconBtn, openMenu, sel, tabs } from "./ui";
 import { openActions } from "./member-column";
+import { faceHTML } from "./members";
+// The rows to choose from are the group dialog's (`.room-row`, automations.css).
+import "./automations.css";
 import "./vault.css";
 
 export type EntryKind = "login" | "contact" | "card" | "key";
@@ -11,7 +14,8 @@ interface Preview { token: string; entries: { id: number; label: string; origin:
 export interface VaultView {
   entries: VaultEntry[]; filter: string; loaded: boolean; error: string; busy: boolean;
   editing: VaultEntry | null; kind: EntryKind | null; access: "all" | "chosen";
-  members: { id: number; name: string }[]; preview: Preview | null;
+  /** As the roster gives them, so each is drawn with its own face. */
+  members: Parameters<typeof faceHTML>[0][]; preview: Preview | null;
 }
 export const emptyVaultView = (): VaultView => ({ entries: [], members: [], filter: "all", loaded: false, error: "", busy: false, editing: null, kind: null, access: "all", preview: null });
 /** The kinds the owner adds here by hand: a key is saved only from the card a member shows (`request_secret`), and listed, edited and removed here. */
@@ -27,10 +31,20 @@ const words = {
 } as const satisfies Record<string, MessageKey>;
 const word = (key: keyof typeof words): string => t(words[key]);
 const action = (name: keyof typeof words | "confirm", label: keyof typeof words = name === "confirm" ? "import" : name, kind = ""): string => btn(word(label), kind, ` data-vault="${name}"`);
+/**
+ * A row to choose or leave out, with no box (R-UI-174): the whole row is one button, what it names on its left (a member's
+ * face and name, or an entry's label over its site) and the group dialog's round check at its right; a chosen row takes the
+ * selected fill.
+ */
+const pickRow = (lead: string, text: string, on: boolean, attrs: string): string =>
+  btn(`${lead}<span class="room-row-name">${text}</span><span class="room-row-mark" data-check aria-hidden="true">${on ? ico("check") : ""}</span>`,
+    "room-row", ` data-vault="pick" aria-pressed="${on}"${attrs}`);
+const membersHTML = (members: VaultView["members"], chosen: (id: number) => boolean): string =>
+  `<div class="vault-members" role="group" aria-label="${esc(word("chosen"))}">${members.map(m => pickRow(faceHTML(m, 28), esc(m.name), chosen(m.id), ` data-vault-member="${m.id}"`)).join("")}</div>`;
 
 export function vaultHTML(v: VaultView): string {
   const access = (current: "all" | number[] = "all"): string => `<div class="vault-access"><span>${esc(word("access"))}</span>${sel([{ value: "all", label: word("everyone") }, { value: "chosen", label: word("chosen") }], v.access, word("access"), ' data-k="vault-access"')}</div>` +
-    (v.access === "chosen" ? `<div class="vault-members">${v.members.map(m => `<label><input type="checkbox" data-vault-member="${m.id}"${current !== "all" && current.includes(m.id) ? " checked" : ""}>${esc(m.name)}</label>`).join("")}</div>` : "");
+    (v.access === "chosen" ? membersHTML(v.members, id => current !== "all" && current.includes(id)) : "");
   const editor = v.kind ? `<div class="vault-editor" data-trap><h3>${esc(word(v.editing ? "edit" : v.kind))}</h3>` +
     fieldHTML(word("label"), v.editing?.label ?? "", { id: "vault-label" }) +
     fieldHTML(word("hint"), v.editing?.hint ?? "", { id: "vault-hint" }) +
@@ -41,8 +55,8 @@ export function vaultHTML(v: VaultView): string {
   // A key appears only once a member has asked for one.
   const filters: ("all" | EntryKind)[] = ["all", ...kinds, ...(v.entries.some(e => e.kind === "key") ? ["key" as const] : [])];
   const preview = v.preview ? `<div class="vault-editor" data-trap><h3>${esc(word("preview"))}</h3><p class="dim">${esc(word("previewAbout"))}</p>` +
-    `<p>${esc(t("vault.rejected", { count: v.preview.rejected }))}</p><div class="vault-preview">` + v.preview.entries.map(row =>
-      `<label><input type="checkbox" data-vault-import="${row.id}" checked><span><strong>${esc(row.label)}</strong><small>${esc(row.origin)}</small></span></label>`).join("") +
+    `<p>${esc(t("vault.rejected", { count: v.preview.rejected }))}</p><div class="vault-preview" role="group" aria-label="${esc(word("preview"))}">` + v.preview.entries.map(row =>
+      pickRow("", `<strong>${esc(row.label)}</strong><small>${esc(row.origin)}</small>`, true, ` data-vault-import="${row.id}"`)).join("") +
     `</div>${access()}<div class="vault-actions">${action("cancel")}${action("confirm", "import", "pri")}</div></div>` : "";
   return `<section class="vault" aria-label="${esc(word("title"))}"><div class="vault-heading"><h2>${esc(word("title"))}</h2><div class="vault-actions">${action("import")}${action("new")}</div></div>` +
     `<p class="dim">${esc(word("about"))}</p><input type="file" id="vault-file" accept=".csv,text/csv" hidden>` +
@@ -73,7 +87,7 @@ export function createVault(root: HTMLElement, redraw: () => void) {
     if (state.preview) void core("vault.cancel", { token: state.preview.token }).catch(() => {});
     state.preview = null; state.kind = null; state.editing = null; state.error = ""; state.access = "all";
   };
-  const selectedMembers = (): "all" | number[] => state.access === "all" ? "all" : Array.from(root.querySelectorAll<HTMLInputElement>("[data-vault-member]:checked")).map(el => Number(el.dataset.vaultMember));
+  const selectedMembers = (): "all" | number[] => state.access === "all" ? "all" : Array.from(root.querySelectorAll<HTMLElement>('[data-vault-member][aria-pressed="true"]')).map(el => Number(el.dataset.vaultMember));
   const run = async (operation: () => Promise<unknown>): Promise<void> => {
     state.busy = true; state.error = "";
     try { await operation(); }
@@ -100,8 +114,13 @@ export function createVault(root: HTMLElement, redraw: () => void) {
         const area = target.closest(".vault-access")!;
         area.querySelector("button span")!.textContent = word(state.access === "all" ? "everyone" : "chosen");
         area.nextElementSibling?.classList.contains("vault-members") && area.nextElementSibling.remove();
-        if (state.access === "chosen") area.insertAdjacentHTML("afterend", `<div class="vault-members">${state.members.map(m => `<label><input type="checkbox" data-vault-member="${m.id}">${esc(m.name)}</label>`).join("")}</div>`);
+        if (state.access === "chosen") area.insertAdjacentHTML("afterend", membersHTML(state.members, () => false));
       });
+    } else if (name === "pick") {
+      // Chosen or left out where it stands: a redraw would clear the private fields typed above.
+      const on = target.getAttribute("aria-pressed") !== "true";
+      target.setAttribute("aria-pressed", String(on));
+      target.querySelector("[data-check]")!.innerHTML = on ? ico("check") : "";
     } else if (name === "filter") { state.filter = target.dataset.kind!; redraw(); }
     else if (name === "new") openMenu(target, kinds.map(value => ({ value, label: word(value) })), "", value => { cancel(); state.kind = value as EntryKind; redraw(); root.querySelector<HTMLInputElement>("#vault-label")?.focus(); });
     else if (name === "cancel") { cancel(); redraw(); }
@@ -114,7 +133,7 @@ export function createVault(root: HTMLElement, redraw: () => void) {
       root.querySelectorAll<HTMLInputElement>("[id^='vault-value-']").forEach(input => { input.value = ""; });
       void run(async () => { await core(state.editing ? "vault.update" : "vault.add", params); cancel(); await load(); });
     } else if (name === "confirm" && state.preview) {
-      const params = { token: state.preview.token, members: selectedMembers(), ids: Array.from(root.querySelectorAll<HTMLInputElement>("[data-vault-import]:checked")).map(input => Number(input.dataset.vaultImport)) };
+      const params = { token: state.preview.token, members: selectedMembers(), ids: Array.from(root.querySelectorAll<HTMLElement>('[data-vault-import][aria-pressed="true"]')).map(row => Number(row.dataset.vaultImport)) };
       void run(async () => { const result = await core<{ saved: number; remaining: number }>("vault.import", params); cancel(); if (result.remaining) state.error = t("vault.partial", { count: result.saved }); await load(); });
     }
   });

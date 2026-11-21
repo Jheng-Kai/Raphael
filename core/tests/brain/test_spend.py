@@ -255,6 +255,13 @@ def test_a_limit_of_zero_is_always_reached(conn):
     assert tracker_at(conn, ms(2026, 10, 17)).is_over(0.0)
 
 
+def test_no_limit_is_never_reached(conn):
+    # None is 不設上限: however much the month has cost, nothing is over.
+    s = tracker_at(conn, ms(2026, 10, 17))
+    s.record(purpose="agent", model="m", cost_usd=1000.0, prompt_tokens=1, completion_tokens=1)
+    assert not s.is_over(None)
+
+
 # Daily totals.
 
 

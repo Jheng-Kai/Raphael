@@ -1,5 +1,16 @@
 # Dictation
 
+## A muted microphone is said a second in
+
+R-DICT-MUTE-01. The core says `dictation.sound` (`heard` false) when a recording's first second stays at digital silence,
+and `heard` true at the first sound after it; the shell (dictation.rs `on_sound`) puts 《告。未收到聲音。麥克風可能已靜音。》
+beside the listening emblem and shows the emblem again without a line once sound arrives. The recording goes on either
+way. Scenes: `overlay-mic-quiet`, `overlay-mic-heard`. A real headset mute switch is a native check on the owner's PC.
+
+```powershell
+npm run look -- overlay-mic-quiet overlay-mic-heard --theme both --width 1120,720,1920x1080
+```
+
 ## macOS
 
 The same controller runs on a Mac (`dictation.rs` `app::spawn`, no longer Windows-only). The dictation key is Right
@@ -51,14 +62,17 @@ Option (the `AltRight` binding: one key code, named by `keys.ts` and `mac-catalo
 
 ## The spoken languages: one row each, written forms beside the picker; cleanup in no one language
 
-Settings > Dictation > 你說的語言 opens one picker with every language on one row (checked or not, up to five). A chosen
-language with several written forms (中文: 台灣、香港、簡體、粵語; English; Español) ends its row with a chip naming the form in
-use (`data-variant-menu`); the chip, or Right on it, opens the forms in a submenu beside the picker (`placement: "beside"`,
-`variantMenuHTML`), so the list never grows or jumps. A pick closes only the submenu (`closeSubmenus`) and keeps the picker open.
+Settings > Dictation > 你說的語言 opens one picker with every language on one row (checked or not, up to five). A
+language with several written forms (中文: 台灣、香港、簡體、粵語; English; Español) ends its row with a dropdown naming the form
+in use or the default form when unchecked (`data-variant-menu`). It is the settings rows' own dropdown (`.sel`, the rule of settings-polish.css): its value and a
+chevron with no box, fill or pill, at rest or under the pointer, where only its words brighten, as the card's 你說的語言 and
+聽寫方式 do; it keeps the app's keyboard ring rather than a menu item's. The dropdown, or Right on it, opens the forms in a
+submenu beside the picker (`placement: "beside"`, `variantMenuHTML`), so the list never grows or jumps. A pick closes the submenu (`closeSubmenus`) and keeps the picker open.
+Pressing a language row updates its check, the form, the selected count and the Settings summary together (R-UI-175).
 The core rules are unchanged: one form per language, the order is the priority.
 
-The chip's accessible name is one translated string (`languages.variantsOf`, the language and the form in use) and it has
-no `title`: the form is on the chip already. A language's own name ("English", "日本語", "English (United States)") carries
+The dropdown's accessible name is one translated string (`languages.variantsOf`, the language and the form in use) and it
+has no `title`: the form is on it already. A language's own name ("English", "日本語", "English (United States)") carries
 its `lang`, so it is read in that language; the Chinese names, which the window translates, carry none. The look audit
 does not take text marked with another language's `lang` for English interface copy (R-UI-14), which "English" in this
 list otherwise was in a zh-TW window.
@@ -80,16 +94,54 @@ What proves it: `tests/brain/test_cleanup.py`, `test_dictation_finish.py`, `test
 and `tests/test_packaging.py` from core/.
 
 ```powershell
-npm run look -- dictation-languages dictation-language-variants dictation-language-variants-toggle --theme both --width 1120,720,1920x1080
+npm run look -- dictation-languages dictation-language-variant-hover dictation-language-variant-focus dictation-language-variants dictation-language-variants-toggle dictation-language-untick --theme both --width 1120,720,1920x1080
 ```
+
+`dictation-languages` hovers 中文's row and checks that every dropdown stands on its lit row with no fill or frame;
+`dictation-language-variant-hover` points at 中文's dropdown and checks that it has no fill, frame or shadow at rest or under
+the pointer, is written as 聽寫方式's dropdown at rest, brightens to the colour of 你說的語言's open dropdown, has the same
+chevron, and never covers the language's name; `dictation-language-variant-focus` presses Tab from 中文 and checks that its
+dropdown draws the app's ring (a 2 px outline 2 px outside, no inset frame or fill), whole inside the list.
+`dictation-language-untick` presses the checked Chinese row with its Taiwan written forms submenu open. It checks that
+the submenu closes, the row is unchecked and its dropdown shows the default form, the count falls to one, and English
+stays checked with its written form and is the only language in the Settings summary.
+
+## Changing the shortcuts: one 編輯, one dialog (R-KEYS-EDIT-01)
+
+The shortcuts are listed read-only, in the order of use (聽寫, 問拉斐爾, 整理選取文字, 貼上上一次, then 取消/Esc), in Settings >
+聽寫與快捷鍵's 快捷鍵 section and on the 聽寫 overview's card; no row has a pencil. One small 「編輯」 at the section's (or the
+card's) top right opens 編輯快捷鍵 (`shortcut-editor.ts`), the app's compact dialog: the same five rows drawn as the lists' rows
+(`row-shortcut`: name left, key caps right, no frame, field or fill), every shortcut but Esc with a pencil (a row's icon button)
+after its caps, the pencils in one column and Esc's caps ending where the others' do. Pressing a pencil records new keys with the
+shared recorder (`hotkey-recording.ts`: the global hotkeys pause, the row's caps give way to the plain words asking for the keys,
+the keys show as they are held, they are taken when let go; the focus stays on the pencil; Esc before any key drops that recording
+only, a navigation chord steps it back and is never recorded). What is recorded waits in the dialog; a combination that is no good or that another
+shortcut of the dialog has is said under the rows and kept out. 儲存 sends what changed in one `device_settings_set` patch, so two
+shortcuts can trade keys; 貼上上一次 (`paste_last_keys`) is changed like the others. The shell refuses a combination two actions
+would share; that refusal is said in the dialog, which stays open. A save that went through closes the dialog and the list shows
+the new keys; Esc, × and 取消 close it with nothing saved.
+
+```powershell
+npm run look -- settings-tidy-key settings-keys-dialog settings-keys-recording settings-keys-saved dictation-keys-dialog dictation-overview dictation-keyboard dictation --theme both --width 1120,720,1920x1080
+```
+
+`settings-keys-dialog` opens the dialog from Settings, records Ctrl+F8 for 貼上上一次 and checks the five rows and their order,
+that nothing in the rows but the caps has a border or a fill, the four named pencils (22 px row icon buttons) in one column after
+the caps, every row's caps (Esc's too) ending on one edge, the rows as tall as the list's behind with its name style and caps, the
+foot (取消 then 儲存), that nothing was saved yet and that the list behind still shows the keys in force; `settings-keys-recording`
+shows a key being recorded (the words in the row where its caps were, frameless, before the pencil, the focus on the pencil); `settings-keys-saved` presses 儲存 and checks one `device_settings_set` of `paste_last_keys` alone, the
+dialog gone, the list's new keys and the focus back on 編輯; `dictation-keys-dialog` opens the same dialog from the overview's card.
+Not proved here: the global hotkey service taking the new keys (the shell's `apply_changes`); the owner presses a changed key
+once in another app.
 
 ## The tidy key: Right Alt+T tidies the text that is selected
 
 In any app, select text and press Right Alt+T; the
 dictation cleanup tidies it and it replaces the selection, the clipboard is what it was, and Ctrl+Z in that app undoes it as
 for any paste. R-TIDY-01. It is a dictation feature and nothing else was added to the app: one key, stored in the device
-settings as `tidy_keys` beside `paste_last_keys` (empty allowed: then there is no key), one row in Settings > 聽寫 (`settings-tidy-key`:
-named 整理選取文字, with its key caps and a pencil, between 貼上上一次 and 取消) and one line in the 聽寫 overview's shortcut card. No first-run lesson.
+settings as `tidy_keys` beside `paste_last_keys` (empty allowed: then there is no key), one read-only row in Settings > 聽寫 (`settings-tidy-key`:
+named 整理選取文字, with its key caps, third in the order of use, between 問拉斐爾 and 貼上上一次), one line in the 聽寫 overview's
+shortcut card, and one row of the 編輯 dialog where it is changed with the others. No first-run lesson.
 
 How it runs. The hook reports `HotkeyEvent::Tidy` for the chord exactly as it reports `PasteLast` for Right Alt+V: the Right Alt
 went down first and started a dictation, and `DictationController::tidy_at` drops a recording that is less than a second old
@@ -103,7 +155,7 @@ selected": nothing is pasted and the overlay says 《告。未選取任何文字
 cleanup's model, dictionary, languages, target-app tone, chunking, guards and spend, plus `brain/tidy.py`'s addendum that the text
 was typed, not spoken, so the prompt template is untouched), and the paster copies the selection again before replacing it.
 If the text differs or the selection cannot be confirmed, the tidied result stays on the clipboard for manual paste.
-An unavailable tidy model or connection points to Models & usage, and a timeout invites a retry.
+An unavailable tidy model or connection points to Models, and a timeout invites a retry.
 An unsuccessful tidy keeps the original selection and clipboard. Its RPC reply carries no replacement text.
 
 ```powershell
@@ -117,9 +169,10 @@ cd core; $env:PYTHONPATH="$PWD\src"; .\.venv\Scripts\python.exe -m pytest tests/
 cd app\src-tauri; cargo test --lib -- hotkey:: dictation:: commands:: device_settings:: paste:: notices:: core_process::
 ```
 
-`settings-tidy-key` opens Settings > 聽寫 and checks that the row is there after the dictation shortcuts and before Esc, shows
-右 Alt and T, has its pencil where the question key's is, is as high and as wide as that row, has a whole name and does not make
-the page scroll sideways, and that no Accessibility note shows where that permission is not missing;
+`settings-tidy-key` opens Settings > 聽寫 and checks that the five shortcut rows stand in the order of use (聽寫, 問拉斐爾,
+整理選取文字, 貼上上一次, Esc), that the tidy row shows 右 Alt and T, that no row has a button and one 「編輯」 stands beside the
+section's name at the card's top right, that every row's keys end on one edge, that the tidy row is as high and as wide as the
+question key's, has a whole name and does not make the page scroll sideways, and that no Accessibility note shows where that permission is not missing;
 `settings-accessibility-off` is a Mac without Accessibility (the look mock's `accessibility_access` answers false): 聽寫
 shows the `missing.accessibility` note above the shortcuts, saying to add Raphael with +, no wider than them, with the one
 button that opens the Accessibility pane (R-PRIV-AX-01);
@@ -452,17 +505,24 @@ is called with automatic language detection (no hint): a forced zh would bend En
 
 ## How to get to it (user POV)
 
-Choose Dictation, then use the compact horizontal Overview/History/Dictionary tabs beside the title: the app's shared plain tabs (ui.ts `tabs`, the same as Connect apps), never a look of their own. Every return to Dictation opens on Overview, whichever tab was last chosen; nothing is kept between visits. Left/Right/Home/End change the selected tab while retaining keyboard focus; legacy history/dictionary deep links remain available. The overview's small words (card labels, the activity sum, the heatmap axis and legend, shortcut names) are medium weight in the secondary ink rather than thin grey. Four separate stat cards form a 2 by 2 left grid; shortcuts stand beside them in the right column, end with them and share the header tabs' right edge, and the activity heatmap runs under both. At 720 the order is totals, shortcuts, activity. A heatmap day says its words only in its title under the pointer;
-pressing it does nothing, and no history opens from the grid. Settings > Dictation configures recognition/shortcuts. Actual dictation
+Choose Dictation, then use the compact horizontal Overview/History/Dictionary tabs beside the title: the app's shared plain tabs (ui.ts `tabs`, the same as Connect apps), never a look of their own. Every return to Dictation opens on Overview, whichever tab was last chosen; nothing is kept between visits. Left/Right/Home/End change the selected tab while retaining keyboard focus; legacy history/dictionary deep links remain available. The overview's small words (card labels, the activity sum, the heatmap axis and legend, shortcut names) are medium weight in the secondary ink rather than thin grey. Four separate stat cards form a 2 by 2 left grid; shortcuts stand beside them in the right column, end with them and share the header tabs' right edge, and the activity heatmap runs under both. At 720 the order is totals, shortcuts, activity. A heatmap day under the pointer says its words in the app's own tip above it (below it near the window's top, always inside the window) and is outlined; the pointer leaving the day, a key or a scroll puts the words away (R-DICT-HEAT-01). Nothing on the 聽寫 pages answers only a press: a day is no button (the pointer stays an arrow), pressing it adds nothing and no history opens from the grid; history rows, dictionary words and icon buttons already light under the pointer, and icon buttons say their name in their tooltip. A month that begins in the heatmap's last two weeks ends its name at the grid's right edge instead of running past it, and nothing of a 聽寫 page goes past the line under its tabs. Settings > Dictation configures recognition; the shortcuts change in the 編輯 dialog that the card and Settings both open. Actual dictation
 begins with the configured global key while a target field has focus.
 
 ## Driving it with look
 
 ```powershell
-npm run look -- dictation-overview dictation-history dictation-heat-press dictation-dictionary dictation-keyboard dictation-notice dictation --theme both --width 1120,720,1920x1080
+npm run look -- dictation-overview dictation-history dictation-heat-hover dictation-heat-edge dictation-dictionary dictation-keyboard dictation-notice dictation --theme both --width 1120,720,1920x1080
 npm run look -- overlay-transcribing overlay-cleaning overlay-emblem-gold overlay-emblem-angry --theme both --width 1120,720,1920x1080
 npm run look -- composer-learn member-composer-learn room-composer-learn --theme both --width 1120,720,1920x1080
 ```
+
+`dictation-heat-hover` points at a day (`dictation-heat-hover`: its words in the app's tip beside it, outlined, inside the
+window, no title, no button, no history opened). `dictation-heat-edge` moves the fixture's days on to end on 2 November
+(`statsUntil`), so November begins in the last column, and points at the newest day. Every 聽寫 page scene also runs
+`dictation-right-edge`: no element of the page ends past the line under its tabs, nor past a box that clips it (the
+heatmap's drawing, a card), at whatever width; a name ellipsized on purpose does not count. It found the month name the
+drawing cut off and is how a cut at the right edge shows up from now on. The grid is also drawn again when the window
+changes width (the page is watched; `.usage`, which has no box of its own, never reported a change).
 
 Keep tab/heatmap/day-filter/dictionary/settings PNGs and report; check the filter
 matches fixture history. The navigation assertion checks horizontal geometry, one
@@ -580,7 +640,7 @@ without stretching a stat beyond 384px. dictation-layout asserts those edges.
 
 ## The shortcut button in the overview
 
-Dictation removes the spoken-languages helper while retaining the setting. dictation-overview uses the shared pencil icon button for changing shortcuts, with an accessible localized name and matching tooltip. compact-action checks this alongside Usage export at the same widths/themes.
+Dictation removes the spoken-languages helper while retaining the setting. The overview's shortcut card is read-only; its one control is a small 「編輯」 at the card's top right, the same button as Settings' 快捷鍵 section has, which opens the 編輯快捷鍵 dialog over the page (R-KEYS-EDIT-01, `dictation-keys-dialog`). compact-action checks it at the same widths/themes.
 
 ## The orb's Stop and two-Escape cancellation
 

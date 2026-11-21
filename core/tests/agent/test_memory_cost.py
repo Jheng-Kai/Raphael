@@ -32,7 +32,7 @@ async def test_monthly_cap_blocks_every_foreground_source_before_any_paid_call(m
         "ui_language": "en", "source": source, **({"destination": "quick"} if source == "voice" else {})})
     assert result["prefix"] == "Negative" and rig.history.get(result["turn_id"]).status == "error"
     assert "monthly spending limit of US$0.01" in result["text"]
-    assert "Settings > Models & usage" in result["text"]
+    assert "Settings > Usage" in result["text"]
     assert client.calls == 0 and not client.chat_calls
     assert rig.service._over_budget(.01)
 
@@ -48,6 +48,20 @@ async def test_raising_monthly_cap_allows_the_same_foreground_request(make_rig, 
     result = await rig.call("agent.ask", {**params, "session_id": "allowed"})
     assert result["status"] == "done" and result["text"] == "Synthetic example explained."
     assert len(client.chat_calls) == 1 and not rig.service._over_budget(10)
+
+
+async def test_no_monthly_limit_never_blocks_a_foreground_request(make_rig, client):
+    # 不設上限 (null) is the default of a new install: however much the month cost, the answer goes on.
+    rig = make_rig()
+    rig.spend.record(purpose="agent", model="synthetic", cost_usd=1000.0, prompt_tokens=1, completion_tokens=1)
+    rig.settings.set("monthly_limit_usd", 5)
+    rig.settings.set("monthly_limit_usd", None)
+    assert rig.service._read_settings().limit_usd is None and not rig.service._over_budget(None)
+    client.chats.append(chat("Synthetic example explained."))
+    result = await rig.call("agent.ask", {"session_id": "unlimited", "text": "Explain this synthetic example",
+        "ui_language": "en", "source": "app"})
+    assert result["status"] == "done" and result["text"] == "Synthetic example explained."
+    assert len(client.chat_calls) == 1
 
 
 @pytest.mark.parametrize("language", LANGUAGES)

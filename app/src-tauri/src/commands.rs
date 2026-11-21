@@ -524,6 +524,8 @@ const ALLOWED_METHODS: &[&str] = &[
     "chatgpt.models",
     "stats.summary",
     "usage.allowances",
+    // Settings › 用量 › 分析: a read-only period of spending, replies, tools and messages. The export stays closed.
+    "usage.analytics",
     "messaging.telegram.status",
     "messaging.telegram.connect",
     "messaging.telegram.set_enabled",
@@ -795,7 +797,8 @@ pub fn validate_core_call(method: &str, params: &Value) -> Result<(), String> {
         return Ok(()); // the core refuses it
     };
     let fine = match key {
-        "monthly_limit_usd" => value.as_f64().is_some_and(|limit| limit >= 0.0),
+        // null is 不設上限 (Settings › 用量): no monthly limit at all.
+        "monthly_limit_usd" => value.is_null() || value.as_f64().is_some_and(|limit| limit >= 0.0),
         "history_retention_days" => value.as_i64().is_some_and(|days| days >= 1),
         "cleanup_model" => value.as_str().is_some_and(|model| !model.trim().is_empty()),
         "worker_cost_cap_usd" => value.as_f64().is_some_and(|cap| {
@@ -3191,16 +3194,13 @@ mod tests {
     fn usage_is_a_named_read_of_the_main_window_only() {
         assert!(is_allowed_method("home.overview"));
         assert!(validate_core_call("home.overview", &json!({"tz": "Asia/Taipei"})).is_ok());
-        // The usage page shows only subscription allowances: the analytics, runs and CSV reads are closed.
-        for retired in [
-            "usage.analytics",
-            "usage.runs",
-            "usage.export",
-            "usage.clear",
-        ] {
+        // The usage page reads the allowances and, in 用量 › 分析, the analytics; the runs and CSV reads stay closed.
+        for retired in ["usage.runs", "usage.export", "usage.clear"] {
             assert!(!is_allowed_method(retired), "{retired}");
         }
         assert!(is_allowed_method("usage.allowances"));
+        assert!(is_allowed_method("usage.analytics"));
+        assert!(validate_core_call("usage.analytics", &json!({"range": "30d"})).is_ok());
         assert!(ensure_caller(crate::MAIN_WINDOW, crate::MAIN_WINDOW).is_ok());
         assert!(ensure_caller("overlay", crate::MAIN_WINDOW).is_err());
         assert!(ensure_caller("worker", crate::MAIN_WINDOW).is_err());
@@ -3833,14 +3833,15 @@ mod tests {
     }
 
     #[test]
-    fn the_monthly_limit_is_a_number_of_0_or_more() {
+    fn the_monthly_limit_is_a_number_of_0_or_more_or_null_for_none() {
         assert!(set("monthly_limit_usd", json!(0)).is_ok());
         assert!(set("monthly_limit_usd", json!(10)).is_ok());
         assert!(set("monthly_limit_usd", json!(7.5)).is_ok());
+        // 不設上限 in Settings › 用量 stores null: no limit at all.
+        assert!(set("monthly_limit_usd", json!(null)).is_ok());
         assert!(set("monthly_limit_usd", json!(-1)).is_err());
         assert!(set("monthly_limit_usd", json!(-0.01)).is_err());
         assert!(set("monthly_limit_usd", json!("10")).is_err());
-        assert!(set("monthly_limit_usd", json!(null)).is_err());
         assert!(set("monthly_limit_usd", json!(true)).is_err());
     }
 

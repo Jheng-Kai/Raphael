@@ -105,7 +105,7 @@ const LOCAL_MODELS: LocalModel[] = [
 const view = (over: Partial<SettingsView> = {}): SettingsView => ({
   pane: "general", device, brain, hasKey: true, openrouter, spend, catalog,
   devices: { devices: [{ index: 0, name: REALTEK, is_default: true }], selected: null, automatic_device: REALTEK },
-  altgr: false, version: "0.1.0", limitDraft: null, limitError: null,
+  altgr: false, version: "0.1.0",
   languageGroups: GROUPS, now: NOW, connections: emptyConnectionsView(),
   localModels: LOCAL_MODELS, localDownload: null, ...over,
 });
@@ -216,12 +216,13 @@ const described = (html: string): string[] =>
   html.split(/(?=<div class="row[ "])/).filter((r) => r.includes('<div class="d">')).map((r) => /<div class="t">(.*?)<\/div>/.exec(r)![1]);
 
 describe("the tabs", () => {
-  test("are the seven: General, Tools, Team skill library, Safety, Models & usage, Dictation and About, in each language", () => {
-    expect(IDS).toEqual(["general", "tools", "skills", "safety", "models", "dictation", "about", "connections"]);
+  test("are ordered General, Models, Usage, Tools, Team skills, Dictation, Safety and About", () => {
+    expect(IDS).toEqual(["general", "models", "usage", "tools", "skills", "dictation", "safety", "about", "connections"]);
+    expect(PANES.find((p) => p.id === "usage")!.icon).toBe("gauge");
     const titles = {
-      "zh-TW": ["一般", "工具", "團隊技能庫", "安全", "模型與用量", "聽寫與快捷鍵", "關於", "連結應用程式"],
-      en: ["General", "Tools", "Team skill library", "Safety", "Models & usage", "Dictation & shortcuts", "About", "Connect apps"],
-      ja: ["一般", "ツール", "チームのスキルライブラリ", "安全", "モデルと使用量", "音声入力とショートカット", "アプリ情報", "アプリを連携"],
+      "zh-TW": ["一般", "模型", "用量", "工具", "團隊技能", "聽寫與快捷鍵", "安全", "關於", "連結應用程式"],
+      en: ["General", "Models", "Usage", "Tools", "Team skills", "Dictation & shortcuts", "Safety", "About", "Connect apps"],
+      ja: ["一般", "モデル", "使用量", "ツール", "チームのスキル", "音声入力とショートカット", "安全", "アプリ情報", "アプリを連携"],
     };
     for (const locale of LOCALES) {
       setLocale(locale);
@@ -232,13 +233,15 @@ describe("the tabs", () => {
   test("sit flat: no group names and no search", () => {
     const list = paneListHTML();
     // 連結應用程式 is no tab: the sidebar opens it as a dialog of its own (R-UI-111).
-    expect([...list.matchAll(/data-pane="(\w+)"/g)].map((m) => m[1])).toEqual(["general", "tools", "skills", "safety", "models", "dictation", "about"]);
+    expect([...list.matchAll(/data-pane="(\w+)"/g)].map((m) => m[1])).toEqual(["general", "models", "usage", "tools", "skills", "dictation", "safety", "about"]);
     expect(list).not.toContain("nav-group");
     expect(list).not.toContain("set-search");
   });
 
   test("every tab is a real button and links of before land on their new tab", () => {
-    expect(paneListHTML().match(/<button type="button" class="nav" data-pane="\w+" aria-current="false">/g)).toHaveLength(7);
+    expect(paneListHTML().match(/<button type="button" class="nav" data-pane="\w+" aria-current="false">/g)).toHaveLength(8);
+    // A link to 用量 opens 用量 itself, no longer a view of 模型.
+    expect(canonicalPane("usage")).toBe("usage");
     expect(paneListHTML()).not.toContain('data-pane="agent"');
     expect(canonicalPane("agent")).toBe("tools");
     expect(canonicalPane("appearance")).toBe("general");
@@ -255,7 +258,7 @@ describe("the tabs", () => {
         expect(html).not.toContain("set-purpose");
         // Connections' Add stands beside its search, clear of the dialog's ✕.
         if (id === "connections") expect(html).toMatch(/<div class="cs-bar">.*?<\/div><button type="button" class="sel cs-add"[^>]*data-k="conn-add"/s);
-        // No tab has a button beside its name: 模型與用量 is read again by each opening of Settings, not by a refresh.
+        // No tab has a button beside its name: 用量 is read again by each opening of Settings, not by a refresh.
         // (Connections' name stands in the first row of its one view, where its chip of the connected apps comes after it.)
         expect(html.startsWith(id === "connections" ? `<div class="cs cs-apps"><div class="cs-top">${head}` : head)).toBe(true);
         expect(html).not.toMatch(/set-head|models-refresh/);
@@ -266,7 +269,7 @@ describe("the tabs", () => {
 
   test("keeps the pane title while settings are being read", () => {
     const html = loadingHTML(view({ pane: "usage" }));
-    expect(html).toContain('<h1 id="set-title" tabindex="-1">模型與用量</h1>');
+    expect(html).toContain('<h1 id="set-title" tabindex="-1">用量</h1>');
     expect(html).not.toContain('<p class="purpose">');
     expect(html).toContain("settings-skeleton");
   });
@@ -355,27 +358,33 @@ describe("聽寫", () => {
   test("is how a dictation starts, how Raphael listens, what it learns, then how long the history is kept", () => {
     const html = tab("dictation");
     expect(groups(html)).toEqual(["快捷鍵", "開始方式", "聆聽方式", "字典", "聽寫紀錄"]);
-    expect(names(html)).toEqual(["問拉斐爾", "聽寫", "貼上上一次", "整理選取文字", "取消", "聽寫方式", "你說的語言", "麥克風", "自動加入字典", "保留聽寫紀錄"]);
+    expect(names(html)).toEqual(["聽寫", "問拉斐爾", "整理選取文字", "貼上上一次", "取消", "聽寫方式", "你說的語言", "麥克風", "自動加入字典", "保留聽寫紀錄"]);
   });
 
   test("learning from corrections is a switch that is off until the owner turns it on", () => {
     const off = rowOf(tab("dictation"), "自動加入字典");
     expect(off).toMatch(/class="tg"[^>]*data-k="auto-learn"/);
     expect(off).toContain('aria-checked="false"');
-    expect(off).toContain("token");
+    expect(off).toContain("額度");
     const on = rowOf(tab("dictation", { device: { ...device, auto_learn: true } }), "自動加入字典");
     expect(on).toContain('aria-checked="true"');
   });
 
-  test("shows each shortcut as key caps, with a pencil (變更) on the one that can be changed here", () => {
+  test("lists every shortcut read-only as key caps, with one 編輯 at the section's top right and no pencil on any row", () => {
     const html = tab("dictation");
     const dictate = rowOf(html, "聽寫");
     expect(dictate).toContain('data-row="hotkey"');
     expect(dictate).toContain("<kbd>右 Alt</kbd>");
-    expect(dictate).toContain(`<button type="button" class="btn icon row" aria-label="變更" title="變更" data-act="rec" data-k="rec">${ico("pencil")}</button>`);
+    expect(rowOf(html, "貼上上一次")).toContain('data-row="paste-hotkey"');
     expect(rowOf(html, "貼上上一次")).toContain("<kbd>V</kbd>");
     expect(rowOf(html, "取消")).toContain("<kbd>Esc</kbd>");
-    for (const name of ["貼上上一次", "取消"]) expect(buttons(rowOf(html, name))).toEqual([]);
+    for (const name of ["聽寫", "問拉斐爾", "整理選取文字", "貼上上一次", "取消"]) expect(buttons(rowOf(html, name)), name).toEqual([]);
+    expect(html).not.toContain(ico("pencil"));
+    expect(html).not.toMatch(/data-act="rec/);
+    // One 編輯, a small button with its word, beside the section's name and before its first row.
+    const section = html.slice(html.indexOf('<section class="sgroup set-shortcuts">'), html.indexOf('<div class="row', html.indexOf("set-shortcuts")));
+    expect(section).toContain(`<div class="data-heading"><h2>快捷鍵</h2><button type="button" class="btn sm" data-act="keys-edit" data-k="keys-edit">編輯</button></div>`);
+    expect(html.match(/data-act="keys-edit"/g)).toHaveLength(1);
     expect(rowOf(html, "聽寫方式")).toMatch(/class="sel"[^>]*data-k="mode"/);
   });
 
@@ -434,8 +443,8 @@ describe("聽寫", () => {
 });
 
 describe("拉斐爾", () => {
-  test("moved rows keep their existing field ids and shortcut action", () => {
-    expect(rowOf(tab("dictation"), "問拉斐爾")).toContain('data-act="rec-agent"');
+  test("moved rows keep their existing field ids and shortcut row", () => {
+    expect(rowOf(tab("dictation"), "問拉斐爾")).toContain('data-row="agent-hotkey"');
     expect(rowOf(tab("general"), "輸出資料夾")).toContain('data-act="output-pick"');
   });
 
@@ -450,33 +459,33 @@ describe("拉斐爾", () => {
     expect(tab("agent")).not.toContain("Telegram");
   });
 
-  test("lists the tidy key with its keys and a pencil, after the dictation ones and before Esc", () => {
+  test("lists the shortcuts in the order of use: 聽寫, 問拉斐爾, 整理選取文字, 貼上上一次, then Esc", () => {
     const html = tab("dictation");
     const row = rowOf(html, "整理選取文字");
     expect(row).toContain('data-row="tidy-hotkey"');
-    expect(row).toContain('data-act="rec-tidy"');
     expect(row).toContain("<kbd>右 Alt</kbd>");
     expect(row).toContain("<kbd>T</kbd>");
     const at = (name: string): number => html.indexOf(`<div class="t">${name}</div>`);
-    expect(at("整理選取文字")).toBeGreaterThan(at("聽寫"));
-    expect(at("整理選取文字")).toBeGreaterThan(at("貼上上一次"));
-    expect(at("整理選取文字")).toBeLessThan(at("取消"));
-    expect(HOTKEY_ROWS.tidy_keys).toBe("tidy-hotkey");
+    const order = ["聽寫", "問拉斐爾", "整理選取文字", "貼上上一次", "取消"].map(at);
+    expect(order.every((place) => place >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    expect(HOTKEY_ROWS).toEqual({ dictation_keys: "hotkey", agent_keys: "agent-hotkey", tidy_keys: "tidy-hotkey", paste_last_keys: "paste-hotkey" });
   });
 
-  test("changes the tidy key in English, and says it is not set when no key is", () => {
+  test("names the tidy key in English, and says it is not set when no key is", () => {
     setLocale("en");
-    expect(rowOf(tab("dictation"), "Tidy selected text")).toContain('data-act="rec-tidy"');
+    expect(rowOf(tab("dictation"), "Tidy selected text")).toContain('data-row="tidy-hotkey"');
+    expect(tab("dictation")).toContain('data-act="keys-edit" data-k="keys-edit">Edit</button>');
     setLocale("zh-TW");
     const none = rowOf(tab("dictation", { device: { ...device, tidy_keys: [] } }), "整理選取文字");
     expect(none).toContain("尚未設定");
-    expect(none).toContain('data-act="rec-tidy"');
+    expect(buttons(none)).toEqual([]);
     const older = { ...device } as Partial<DeviceSettings>;
     delete older.tidy_keys;
     expect(rowOf(tab("dictation", { device: older as DeviceSettings }), "整理選取文字")).toContain("尚未設定");
   });
 
-  test("shows the missing shortcut beside its change action", () => {
+  test("says a missing shortcut is not set", () => {
     const html = tab("dictation", { device: { ...device, agent_keys: [] } });
     expect(html).not.toContain('class="purpose"');
     expect(rowOf(html, "問拉斐爾")).toContain("尚未設定");
@@ -485,7 +494,13 @@ describe("拉斐爾", () => {
   test("warns about Right Alt under their key only when the keyboard uses it as AltGr", () => {
     const html = tab("dictation", { altgr: true });
     expect(html).toContain("AltGr");
-    expect(html.indexOf("AltGr")).toBeGreaterThan(html.indexOf('data-row="agent-hotkey"'));
+    // Under the dictation key, then under the question key, each of which holds Right Alt.
+    const notes = [...html.matchAll(/AltGr/g)].map((m) => m.index!);
+    expect(notes.length).toBeGreaterThanOrEqual(2);
+    expect(notes[0]).toBeGreaterThan(html.indexOf('data-row="hotkey"'));
+    expect(notes[0]).toBeLessThan(html.indexOf('data-row="agent-hotkey"'));
+    expect(notes[notes.length - 1]).toBeGreaterThan(html.indexOf('data-row="agent-hotkey"'));
+    expect(notes[notes.length - 1]).toBeLessThan(html.indexOf('data-row="tidy-hotkey"'));
     expect(tab("agent")).not.toContain("AltGr");
     expect(tab("dictation", { altgr: true, device: { ...device, dictation_keys: ["F9"], agent_keys: ["ControlLeft+Space"] } })).not.toContain("AltGr");
   });
@@ -506,7 +521,7 @@ describe("Models", () => {
     expect(modelPickerLook(view({ providers: ready }), "image").shipped).toBeUndefined();
   });
 
-  test("puts providers and model choices on Models, existing usage controls and analytics slot on Usage", () => {
+  test("puts providers and model choices on Models with no views inside, and this month's spending and the allowances on Usage", () => {
     const html = tab("models");
     expect(groups(html)).toEqual(["使用的模型", "訂閱帳號", "供應商"]);
     expect(names(html)).toEqual(["拉斐爾的快速提問", "整理文字", "語音轉文字", "畫圖", "做影片"]);
@@ -516,12 +531,16 @@ describe("Models", () => {
     expect(html).not.toContain('data-row="raphael-spend"');
     expect(html).not.toContain("data-usage-host");
     expect(html).not.toContain("data-fallback");
+    // 模型 shows its content directly: no 模型 / 用量 pill tabs inside it any more.
+    expect(html).not.toMatch(/role="tablist"|data-models-tab|models-panel/);
+    expect(html.indexOf('<div class="models-page"><section class="sgroup">')).toBeGreaterThan(0);
     const usage = tab("usage");
     // This month's spending of the app is the spending card above the allowances; an OpenRouter account's own usage is
     // read on OpenRouter. An OpenRouter key is its provider card's, on Models.
     expect(names(usage)).toEqual([]);
     expect(usage.indexOf('data-row="raphael-spend"')).toBeLessThan(usage.indexOf("data-usage-host"));
-    expect(usage).toContain("<h2>拉斐爾本月花費</h2>");
+    expect(usage).toContain("<h2>這個月</h2>");
+    expect(usage).toContain('<p class="spend-label">本月花費</p>');
     expect(usage).not.toContain("OpenRouter 帳號本月用量");
     expect(usage).toContain("data-usage-host");
     expect(usage).not.toContain("data-model-picker");
@@ -530,15 +549,42 @@ describe("Models", () => {
   });
 
   test("this month's spending is the spending card: the amount, the share of the monthly limit as a bar, the month's end", () => {
-    const card = (over: Partial<SettingsView>): string => /<section class="spend-card"[\s\S]*?<\/section>/.exec(tab("usage", over))![0];
+    const card = (over: Partial<SettingsView>): string => /<div class="spend-card"[\s\S]*?<\/div><\/section>/.exec(tab("usage", over))![0];
     const full = card({});
-    expect(full).toContain('<strong class="num">US$1.20</strong><small>已使用 12%</small>');
-    expect(full).toContain('role="progressbar" aria-label="拉斐爾本月花費" aria-valuemin="0" aria-valuemax="100" aria-valuenow="12"><i style="width:12%">');
-    expect(full).toContain("每月上限 US$10.00 · 照目前速度，月底約 US$2.50");
+    expect(full).toContain('<p class="spend-value"><strong class="num">US$1.20</strong></p>');
+    expect(full).toContain('role="progressbar" aria-label="每月上限" aria-valuemin="0" aria-valuemax="100" aria-valuenow="12"><i style="width:12%">');
+    expect(full).toContain("照目前速度，月底約 US$2.50 · 上限 US$10.00，已用 12%");
     expect(card({ spend: { ...spend, month_usd: 14 } })).toContain('aria-valuenow="100"');
     const unknown = card({ spend: null });
     expect(unknown).toContain("暫時無法取得");
     expect(unknown).not.toContain("progressbar");
+  });
+
+  test("with no monthly limit the card says 未設上限 and draws no bar, and its gear at the top right opens the limit", () => {
+    const usage = tab("usage", { spend: { ...spend, limit_usd: null }, brain: { ...brain, monthly_limit_usd: null } });
+    const card = /<div class="spend-card"[\s\S]*?<\/div><\/section>/.exec(usage)![0];
+    expect(card).toContain("照目前速度，月底約 US$2.50 · 未設上限");
+    expect(card).not.toContain("progressbar");
+    // The gear is the app's icon button, named 每月上限 for the popover it opens (usage-cap.ts), last in the card.
+    expect(card).toMatch(/<button type="button" class="btn icon row spend-cap" aria-label="每月上限" title="每月上限" data-act="usage-cap" data-k="usage-cap" aria-haspopup="dialog" aria-expanded="false"><svg[^>]*>[\s\S]*?<\/svg><\/button><\/div><\/section>$/);
+    // The section says what it counts, from the first of the month.
+    expect(usage).toContain('<p class="ua-note">大家用 API 金鑰花的錢，從 10月1日 算起。訂閱方案不算在這裡。</p>');
+    // While the core does not answer, the limit cannot be changed.
+    expect(tab("usage", { brain: null })).toMatch(/data-act="usage-cap"[^>]*disabled>/);
+  });
+
+  test("用量 has two small tabs, 概覽 and 分析, drawn with the shared tabs, and 分析 draws its period's sections", () => {
+    const overview = tab("usage");
+    expect(overview).toMatch(/<div class="tabs plain" role="tablist" aria-label="用量">/);
+    expect([...overview.matchAll(/data-usage-tab="(\w+)"/g)].map((m) => m[1])).toEqual(["overview", "analysis"]);
+    expect(overview).toMatch(/<button type="button" class="tab" role="tab" aria-selected="true" id="usage-tab-overview"[^>]*>概覽<\/button>/);
+    expect(overview).toContain('id="usage-panel-analysis" role="tabpanel" aria-labelledby="usage-tab-analysis" hidden></div>');
+    const analysis = tab("usage", { usageTab: "analysis", analysis: { range: "7d", group: "purpose", messages: "model", allPeople: false, data: null, people: new Map() } });
+    expect(analysis).toMatch(/<button type="button" class="tab" role="tab" aria-selected="true" id="usage-tab-analysis"[^>]*>分析<\/button>/);
+    expect(analysis).not.toContain('data-row="raphael-spend"');
+    expect(analysis).not.toContain("data-usage-host");
+    expect(analysis).toContain('<h2>花費紀錄</h2>');
+    expect(analysis).toContain('<p class="ua-line" role="status">正在載入用量…</p>');
   });
 
   test("usage asks for no OpenRouter key, with or without one: that key is OpenRouter's card among the providers", () => {
@@ -702,6 +748,7 @@ describe("while the core does not answer", () => {
     expect(rowOf(tab("dictation", down), "問拉斐爾")).not.toContain("disabled");
     const usage = tab("usage", down);
     expect(usage).not.toContain('id="limit-input"');
+    expect(usage).toMatch(/data-act="usage-cap"[^>]*disabled>/);
     for (const name of ["語音轉文字", "整理文字", "拉斐爾的快速提問"]) expect(rowOf(tab("models", down), name)).toMatch(/data-k="[\w-]+" disabled>/);
   });
 });

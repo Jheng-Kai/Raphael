@@ -36,52 +36,38 @@ pub(super) fn text(source: &str, language: &str) -> Option<&'static str> {
             "tr" => Some("《Metin düzenleme zaman aşımına uğradı. Yeniden deneyin.》"),
             _ => None,
         },
-        "《Negative. Reconnect the model selected for text tidying in Models & usage.》" => {
+        "《Negative. Reconnect the model selected for text tidying in Models.》" => {
             match language {
-                "zh-CN" => Some("《请在「模型与用量」重新连接文本整理所选的模型。》"),
-                "ko" => Some("《모델 및 사용량에서 텍스트 정리 모델을 다시 연결하세요.》"),
-                "es" => {
-                    Some("《Vuelve a conectar el modelo de corrección de texto en Modelos y uso.》")
-                }
-                "fr" => Some(
-                    "《Reconnectez le modèle de révision de texte dans Modèles et utilisation.》",
-                ),
-                "de" => Some(
-                    "《Verbinde das Modell zur Textüberarbeitung unter Modelle und Nutzung erneut.》",
-                ),
-                "pt-BR" => Some("《Reconecte o modelo de revisão de texto em Modelos e uso.》"),
-                "it" => {
-                    Some("《Ricollega il modello di revisione del testo in Modelli e utilizzo.》")
-                }
+                "zh-CN" => Some("《请在「模型」重新连接文本整理所选的模型。》"),
+                "ko" => Some("《모델에서 텍스트 정리 모델을 다시 연결하세요.》"),
+                "es" => Some("《Vuelve a conectar el modelo de corrección de texto en Modelos.》"),
+                "fr" => Some("《Reconnectez le modèle de révision de texte dans Modèles.》"),
+                "de" => Some("《Verbinde das Modell zur Textüberarbeitung unter Modelle erneut.》"),
+                "pt-BR" => Some("《Reconecte o modelo de revisão de texto em Modelos.》"),
+                "it" => Some("《Ricollega il modello di revisione del testo in Modelli.》"),
                 "ru" => Some(
-                    "《Восстановите подключение модели для правки текста в разделе «Модели и использование».》",
+                    "《Восстановите подключение модели для правки текста в разделе «Модели».》",
                 ),
-                "vi" => Some("《Kết nối lại mô hình chỉnh văn bản trong Mô hình và mức dùng.》"),
-                "th" => Some("《เชื่อมต่อโมเดลปรับข้อความอีกครั้งใน โมเดลและการใช้งาน》"),
-                "id" => Some("《Hubungkan kembali model perapian teks di Model dan penggunaan.》"),
-                "tr" => Some(
-                    "《Modeller ve kullanım bölümünde metin düzenleme modelini yeniden bağlayın.》",
-                ),
+                "vi" => Some("《Kết nối lại mô hình chỉnh văn bản trong Mô hình.》"),
+                "th" => Some("《เชื่อมต่อโมเดลปรับข้อความอีกครั้งใน โมเดล》"),
+                "id" => Some("《Hubungkan kembali model perapian teks di Model.》"),
+                "tr" => Some("《Modeller bölümünde metin düzenleme modelini yeniden bağlayın.》"),
                 _ => None,
             }
         }
-        "《Negative. Choose a text tidying model in Models & usage.》" => match language {
-            "zh-CN" => Some("《请在「模型与用量」选择文本整理模型。》"),
-            "ko" => Some("《모델 및 사용량에서 텍스트 정리 모델을 선택하세요.》"),
-            "es" => Some("《Elige un modelo para corregir texto en Modelos y uso.》"),
-            "fr" => {
-                Some("《Choisissez un modèle de révision de texte dans Modèles et utilisation.》")
-            }
-            "de" => Some("《Wähle unter Modelle und Nutzung ein Modell zur Textüberarbeitung.》"),
-            "pt-BR" => Some("《Escolha um modelo de revisão de texto em Modelos e uso.》"),
-            "it" => Some("《Scegli un modello di revisione del testo in Modelli e utilizzo.》"),
-            "ru" => {
-                Some("《Выберите модель для правки текста в разделе «Модели и использование».》")
-            }
-            "vi" => Some("《Chọn mô hình chỉnh văn bản trong Mô hình và mức dùng.》"),
-            "th" => Some("《เลือกโมเดลปรับข้อความใน โมเดลและการใช้งาน》"),
-            "id" => Some("《Pilih model perapian teks di Model dan penggunaan.》"),
-            "tr" => Some("《Modeller ve kullanım bölümünde metin düzenleme modeli seçin.》"),
+        "《Negative. Choose a text tidying model in Models.》" => match language {
+            "zh-CN" => Some("《请在「模型」选择文本整理模型。》"),
+            "ko" => Some("《모델에서 텍스트 정리 모델을 선택하세요.》"),
+            "es" => Some("《Elige un modelo para corregir texto en Modelos.》"),
+            "fr" => Some("《Choisissez un modèle de révision de texte dans Modèles.》"),
+            "de" => Some("《Wähle unter Modelle ein Modell zur Textüberarbeitung.》"),
+            "pt-BR" => Some("《Escolha um modelo de revisão de texto em Modelos.》"),
+            "it" => Some("《Scegli un modello di revisione del testo in Modelli.》"),
+            "ru" => Some("《Выберите модель для правки текста в разделе «Модели».》"),
+            "vi" => Some("《Chọn mô hình chỉnh văn bản trong Mô hình.》"),
+            "th" => Some("《เลือกโมเดลปรับข้อความใน โมเดล》"),
+            "id" => Some("《Pilih model perapian teks di Model.》"),
+            "tr" => Some("《Modeller bölümünde metin düzenleme modeli seçin.》"),
             _ => None,
         },
         "《Negative. The microphone is not allowed. Allow Raphael in System Settings > Privacy & Security > Microphone.》" => {
@@ -626,43 +612,43 @@ pub(super) fn text(source: &str, language: &str) -> Option<&'static str> {
                 _ => None,
             }
         }
-        "《Negative. Cloud recognition is not connected. Set the OpenRouter key in Settings > Models & usage > Usage, or download a local model in Settings > Dictation & shortcuts.》" => {
+        "《Negative. Cloud recognition is not connected. Set the OpenRouter key in Settings > Models, or download a local model in Settings > Dictation & shortcuts.》" => {
             match language {
                 "zh-CN" => Some(
-                    "《否。云端语音辨识尚未连接。请到「设置 › 模型与用量 › 用量」设置 OpenRouter 密钥，或到「设置 › 听写与快捷键」下载本机模型。》",
+                    "《否。云端语音辨识尚未连接。请到「设置 › 模型」设置 OpenRouter 密钥，或到「设置 › 听写与快捷键」下载本机模型。》",
                 ),
                 "ko" => Some(
-                    "《거절. 클라우드 음성 인식이 연결되지 않았습니다. 설정 > 모델 및 사용량 > 사용량에서 OpenRouter 키를 설정하거나 설정 > 받아쓰기 및 단축키에서 로컬 모델을 다운로드해 주세요.》",
+                    "《거절. 클라우드 음성 인식이 연결되지 않았습니다. 설정 > 모델에서 OpenRouter 키를 설정하거나 설정 > 받아쓰기 및 단축키에서 로컬 모델을 다운로드해 주세요.》",
                 ),
                 "es" => Some(
-                    "《No. El reconocimiento en la nube no está conectado. Configura la clave OpenRouter en Configuración > Modelos y uso > Uso o descarga un modelo local en Configuración > Dictado y atajos.》",
+                    "《No. El reconocimiento en la nube no está conectado. Configura la clave OpenRouter en Configuración > Modelos o descarga un modelo local en Configuración > Dictado y atajos.》",
                 ),
                 "fr" => Some(
-                    "《Non. La reconnaissance cloud n’est pas connectée. Définissez la clé OpenRouter dans Réglages > Modèles et utilisation > Utilisation ou téléchargez un modèle local dans Réglages > Dictée et raccourcis.》",
+                    "《Non. La reconnaissance cloud n’est pas connectée. Définissez la clé OpenRouter dans Réglages > Modèles ou téléchargez un modèle local dans Réglages > Dictée et raccourcis.》",
                 ),
                 "de" => Some(
-                    "《Nein. Cloud-Spracherkennung ist nicht verbunden. Hinterlege den OpenRouter-Schlüssel unter Einstellungen > Modelle und Nutzung > Nutzung oder lade unter Einstellungen > Diktat und Tastenkürzel ein lokales Modell herunter.》",
+                    "《Nein. Cloud-Spracherkennung ist nicht verbunden. Hinterlege den OpenRouter-Schlüssel unter Einstellungen > Modelle oder lade unter Einstellungen > Diktat und Tastenkürzel ein lokales Modell herunter.》",
                 ),
                 "pt-BR" => Some(
-                    "《Não. O reconhecimento na nuvem não está conectado. Configure a chave OpenRouter em Configurações > Modelos e uso > Uso ou baixe um modelo local em Configurações > Ditado e atalhos.》",
+                    "《Não. O reconhecimento na nuvem não está conectado. Configure a chave OpenRouter em Configurações > Modelos ou baixe um modelo local em Configurações > Ditado e atalhos.》",
                 ),
                 "it" => Some(
-                    "《No. Il riconoscimento cloud non è collegato. Imposta la chiave OpenRouter in Impostazioni > Modelli e utilizzo > Utilizzo o scarica un modello locale in Impostazioni > Dettatura e scorciatoie.》",
+                    "《No. Il riconoscimento cloud non è collegato. Imposta la chiave OpenRouter in Impostazioni > Modelli o scarica un modello locale in Impostazioni > Dettatura e scorciatoie.》",
                 ),
                 "ru" => Some(
-                    "《Нет. Облачное распознавание не подключено. Задайте ключ OpenRouter в Настройки > Модели и использование > Использование или скачайте локальную модель в Настройки > Диктовка и горячие клавиши.》",
+                    "《Нет. Облачное распознавание не подключено. Задайте ключ OpenRouter в Настройки > Модели или скачайте локальную модель в Настройки > Диктовка и горячие клавиши.》",
                 ),
                 "vi" => Some(
-                    "《Không. Chưa kết nối nhận dạng đám mây. Đặt khóa OpenRouter tại Cài đặt > Mô hình và mức dùng > Mức dùng hoặc tải mô hình cục bộ tại Cài đặt > Đọc chính tả và phím tắt.》",
+                    "《Không. Chưa kết nối nhận dạng đám mây. Đặt khóa OpenRouter tại Cài đặt > Mô hình hoặc tải mô hình cục bộ tại Cài đặt > Đọc chính tả và phím tắt.》",
                 ),
                 "th" => Some(
-                    "《ไม่. ยังไม่เชื่อมต่อการรู้จำบนคลาวด์ ตั้งคีย์ OpenRouter ที่ การตั้งค่า > โมเดลและการใช้งาน > การใช้งาน หรือดาวน์โหลดโมเดลในเครื่องที่ การตั้งค่า > เขียนตามคำบอกและปุ่มลัด》",
+                    "《ไม่. ยังไม่เชื่อมต่อการรู้จำบนคลาวด์ ตั้งคีย์ OpenRouter ที่ การตั้งค่า > โมเดล หรือดาวน์โหลดโมเดลในเครื่องที่ การตั้งค่า > เขียนตามคำบอกและปุ่มลัด》",
                 ),
                 "id" => Some(
-                    "《Tidak. Pengenalan cloud belum terhubung. Atur kunci OpenRouter di Pengaturan > Model dan penggunaan > Penggunaan atau unduh model lokal di Pengaturan > Dikte dan pintasan.》",
+                    "《Tidak. Pengenalan cloud belum terhubung. Atur kunci OpenRouter di Pengaturan > Model atau unduh model lokal di Pengaturan > Dikte dan pintasan.》",
                 ),
                 "tr" => Some(
-                    "《Hayır. Bulut tanıma bağlı değil. Ayarlar > Modeller ve kullanım > Kullanım’da OpenRouter anahtarını ayarlayın veya Ayarlar > Dikte ve kısayollar ve kısayollar bölümünden yerel model indirin.》",
+                    "《Hayır. Bulut tanıma bağlı değil. Ayarlar > Modeller’de OpenRouter anahtarını ayarlayın veya Ayarlar > Dikte ve kısayollar ve kısayollar bölümünden yerel model indirin.》",
                 ),
                 _ => None,
             }
@@ -708,43 +694,43 @@ pub(super) fn text(source: &str, language: &str) -> Option<&'static str> {
                 _ => None,
             }
         }
-        "《Negative. Speech recognition is not ready. Download a local model in Settings > Dictation & shortcuts; for cloud recognition check the connection in Settings > Models & usage.》" => {
+        "《Negative. Speech recognition is not ready. Download a local model in Settings > Dictation & shortcuts; for cloud recognition check the connection in Settings > Models.》" => {
             match language {
                 "zh-CN" => Some(
-                    "《否。语音辨识尚未就绪。请到「设置 › 听写与快捷键」下载本机模型；使用云端辨识时，请在「设置 › 模型与用量」确认连接。》",
+                    "《否。语音辨识尚未就绪。请到「设置 › 听写与快捷键」下载本机模型；使用云端辨识时，请在「设置 › 模型」确认连接。》",
                 ),
                 "ko" => Some(
-                    "《거절. 음성 인식이 준비되지 않았습니다. 설정 > 받아쓰기 및 단축키에서 로컬 모델을 다운로드해 주세요. 클라우드 인식은 설정 > 모델 및 사용량에서 연결을 확인해 주세요.》",
+                    "《거절. 음성 인식이 준비되지 않았습니다. 설정 > 받아쓰기 및 단축키에서 로컬 모델을 다운로드해 주세요. 클라우드 인식은 설정 > 모델에서 연결을 확인해 주세요.》",
                 ),
                 "es" => Some(
-                    "《No. El reconocimiento de voz no está listo. Descarga un modelo local en Configuración > Dictado y atajos; para la nube comprueba la conexión en Configuración > Modelos y uso.》",
+                    "《No. El reconocimiento de voz no está listo. Descarga un modelo local en Configuración > Dictado y atajos; para la nube comprueba la conexión en Configuración > Modelos.》",
                 ),
                 "fr" => Some(
-                    "《Non. La reconnaissance vocale n’est pas prête. Téléchargez un modèle local dans Réglages > Dictée et raccourcis ; pour le cloud, vérifiez la connexion dans Réglages > Modèles et utilisation.》",
+                    "《Non. La reconnaissance vocale n’est pas prête. Téléchargez un modèle local dans Réglages > Dictée et raccourcis ; pour le cloud, vérifiez la connexion dans Réglages > Modèles.》",
                 ),
                 "de" => Some(
-                    "《Nein. Die Spracherkennung ist nicht bereit. Lade unter Einstellungen > Diktat und Tastenkürzel ein lokales Modell herunter; prüfe für Cloud-Erkennung die Verbindung unter Einstellungen > Modelle und Nutzung.》",
+                    "《Nein. Die Spracherkennung ist nicht bereit. Lade unter Einstellungen > Diktat und Tastenkürzel ein lokales Modell herunter; prüfe für Cloud-Erkennung die Verbindung unter Einstellungen > Modelle.》",
                 ),
                 "pt-BR" => Some(
-                    "《Não. O reconhecimento de fala não está pronto. Baixe um modelo local em Configurações > Ditado e atalhos; para a nuvem, confira a conexão em Configurações > Modelos e uso.》",
+                    "《Não. O reconhecimento de fala não está pronto. Baixe um modelo local em Configurações > Ditado e atalhos; para a nuvem, confira a conexão em Configurações > Modelos.》",
                 ),
                 "it" => Some(
-                    "《No. Il riconoscimento vocale non è pronto. Scarica un modello locale in Impostazioni > Dettatura e scorciatoie; per il cloud controlla la connessione in Impostazioni > Modelli e utilizzo.》",
+                    "《No. Il riconoscimento vocale non è pronto. Scarica un modello locale in Impostazioni > Dettatura e scorciatoie; per il cloud controlla la connessione in Impostazioni > Modelli.》",
                 ),
                 "ru" => Some(
-                    "《Нет. Распознавание речи не готово. Скачайте локальную модель в Настройки > Диктовка и горячие клавиши; для облака проверьте подключение в Настройки > Модели и использование.》",
+                    "《Нет. Распознавание речи не готово. Скачайте локальную модель в Настройки > Диктовка и горячие клавиши; для облака проверьте подключение в Настройки > Модели.》",
                 ),
                 "vi" => Some(
-                    "《Không. Nhận dạng giọng nói chưa sẵn sàng. Tải mô hình cục bộ tại Cài đặt > Đọc chính tả và phím tắt; với đám mây, kiểm tra kết nối tại Cài đặt > Mô hình và mức dùng.》",
+                    "《Không. Nhận dạng giọng nói chưa sẵn sàng. Tải mô hình cục bộ tại Cài đặt > Đọc chính tả và phím tắt; với đám mây, kiểm tra kết nối tại Cài đặt > Mô hình.》",
                 ),
                 "th" => Some(
-                    "《ไม่. การรู้จำเสียงยังไม่พร้อม ดาวน์โหลดโมเดลในเครื่องที่ การตั้งค่า > เขียนตามคำบอกและปุ่มลัด สำหรับคลาวด์ตรวจสอบการเชื่อมต่อที่ การตั้งค่า > โมเดลและการใช้งาน》",
+                    "《ไม่. การรู้จำเสียงยังไม่พร้อม ดาวน์โหลดโมเดลในเครื่องที่ การตั้งค่า > เขียนตามคำบอกและปุ่มลัด สำหรับคลาวด์ตรวจสอบการเชื่อมต่อที่ การตั้งค่า > โมเดล》",
                 ),
                 "id" => Some(
-                    "《Tidak. Pengenalan suara belum siap. Unduh model lokal di Pengaturan > Dikte dan pintasan; untuk cloud periksa koneksi di Pengaturan > Model dan penggunaan.》",
+                    "《Tidak. Pengenalan suara belum siap. Unduh model lokal di Pengaturan > Dikte dan pintasan; untuk cloud periksa koneksi di Pengaturan > Model.》",
                 ),
                 "tr" => Some(
-                    "《Hayır. Konuşma tanıma hazır değil. Ayarlar > Dikte ve kısayollar ve kısayollar bölümünden yerel model indirin; bulut tanıma için Ayarlar > Modeller ve kullanım’da bağlantıyı kontrol edin.》",
+                    "《Hayır. Konuşma tanıma hazır değil. Ayarlar > Dikte ve kısayollar ve kısayollar bölümünden yerel model indirin; bulut tanıma için Ayarlar > Modeller’de bağlantıyı kontrol edin.》",
                 ),
                 _ => None,
             }
@@ -951,6 +937,27 @@ pub(super) fn text(source: &str, language: &str) -> Option<&'static str> {
             "th" => Some("《เข้าใจแล้ว. จดไว้แล้ว》"),
             "id" => Some("《Dipahami. Dicatat.》"),
             "tr" => Some("《Anlaşıldı. Not edildi.》"),
+            _ => None,
+        },
+        "《Notice. No sound yet. The microphone may be muted.》" => match language {
+            "zh-CN" => Some("《告。未收到声音。麦克风可能已静音。》"),
+            "ko" => {
+                Some("《알림. 아직 소리가 들리지 않습니다. 마이크가 음소거되었을 수 있습니다.》")
+            }
+            "es" => Some("《Aviso. Aún no llega sonido. Puede que el micrófono esté silenciado.》"),
+            "fr" => Some("《Avis. Aucun son pour l’instant. Le micro est peut-être coupé.》"),
+            "de" => {
+                Some("《Hinweis. Noch kein Ton. Das Mikrofon ist vielleicht stummgeschaltet.》")
+            }
+            "pt-BR" => Some("《Aviso. Nenhum som ainda. O microfone pode estar mudo.》"),
+            "it" => {
+                Some("《Avviso. Ancora nessun suono. Il microfono potrebbe essere disattivato.》")
+            }
+            "ru" => Some("《Уведомление. Звука пока нет. Возможно, микрофон выключен.》"),
+            "vi" => Some("《Thông báo. Chưa nhận được âm thanh. Có thể micrô đang tắt tiếng.》"),
+            "th" => Some("《แจ้งให้ทราบ. ยังไม่ได้รับเสียง ไมโครโฟนอาจปิดเสียงอยู่》"),
+            "id" => Some("《Pemberitahuan. Belum ada suara. Mikrofon mungkin dibisukan.》"),
+            "tr" => Some("《Bildirim. Henüz ses gelmiyor. Mikrofon sessize alınmış olabilir.》"),
             _ => None,
         },
         "《Notice. Standing by, Master.》" => match language {

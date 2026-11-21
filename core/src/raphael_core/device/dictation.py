@@ -90,6 +90,12 @@ MIN_SPEECH_SECONDS = 0.3
 # either, the result of `dictation.stop` says `silent`, so the app can tell the user to check the
 # microphone instead of leaving them to wonder why nothing was pasted.
 SILENT_PEAK = 0.003
+# A muted microphone (a headset's mute switch) delivers digital silence, far below any real microphone's noise floor
+# (audio._SILENT_RMS). A recording whose first MUTED_SECONDS stayed below MUTED_PEAK is said at once
+# (`dictation.sound`, `heard` false), while it goes on, instead of only when the key is released; the first block
+# above it says `heard` true. A microphone that gates its own noise to zero is heard again the moment someone speaks.
+MUTED_PEAK = 2e-4
+MUTED_SECONDS = 1.0
 # Windows MME may never tell us that a microphone was unplugged: the frames just stop. A recording
 # that gets no frames for this long is treated like one whose recorder reported an error.
 MIC_STALL_SECONDS = 2.0
@@ -111,6 +117,7 @@ _PROGRESS_METHOD = "dictation.progress"
 # The recording can hear nothing more because what listens or transcribes has failed: the app stops
 # it. (The name is from when silence ended a recording too.)
 _SILENCE_METHOD = "dictation.silence"
+_SOUND_METHOD = "dictation.sound"
 
 # What goes on a session's queues besides frames and stretches of speech: the last item of each.
 _FLUSH = object()  # the recording is over: finish and transcribe what is left
@@ -191,6 +198,9 @@ class _Session:
         # When the app was told to stop the recording (`dictation.silence`, because it cannot hear
         # any more), on the service's clock; None until then. The loop's.
         self.silence_told_at: float | None = None
+        # Whether the app was told the microphone gives no sound (`dictation.sound`): None until the first second
+        # is in, then True (told, nothing heard yet) or False. The audio thread's, under `lock`.
+        self.told_muted: bool | None = None
         self.close_lock = asyncio.Lock()
         self.hints: list[str] = []
 
@@ -489,12 +499,22 @@ class DictationService:
             if session.closed or session.fatal or frames.size == 0:
                 return
             session.received += frames.size
-            session.peak = max(session.peak, self._rms(frames))
+            loudness = self._rms(frames)
+            session.peak = max(session.peak, loudness)
+            heard: bool | None = None
+            if session.told_muted is None and session.received >= SAMPLE_RATE * MUTED_SECONDS:
+                session.told_muted = session.peak < MUTED_PEAK
+                heard = False if session.told_muted else None
+            elif session.told_muted and loudness >= MUTED_PEAK:
+                session.told_muted = False
+                heard = True
             send_level = session.levels_on and now - session.last_level_at >= self._level_interval
             if send_level:
                 session.last_level_at = now
         # The listener takes them off as they come, and lets them go once the segmenter has them.
         session.queue.put(frames)
+        if heard is not None:
+            self._call_on_loop(session, self._tell_sound, session, heard)
         if send_level:
             # Here and not on a session's thread: the listener may be waiting for the detector to
             # load, and the ring that shows the level should keep moving while the user talks.
@@ -597,6 +617,17 @@ class DictationService:
             self._on_voice_activity(session.id, "failed")
         else:
             self._router.notify(_SILENCE_METHOD, {"session_id": session.id})
+
+    def _tell_sound(self, session: _Session, heard: bool) -> None:
+        """On the loop: `dictation.sound`, whether the microphone of the recording gives any sound, while the
+        recording goes on. Only while the session is still the one recording (frames can come before its start has
+        finished), and never for a voice chat, whose own page shows the level."""
+        if (session.state not in ("starting", "recording") or session.cancelled or self._session is not session
+                or session.purpose == "voice_chat"):
+            return
+        if not heard:
+            logger.info("The microphone gives no sound a second into the recording")
+        self._router.notify(_SOUND_METHOD, {"session_id": session.id, "heard": heard})
 
     def _finish(self, session: _Session, *, transcribe: bool) -> None:
         """The end of the recording: the speech that was still going on, and a segmenter that is

@@ -52,6 +52,7 @@ export function createProblemNotice(app: AppContext, changed: () => void = () =>
   el.addEventListener("click", event => {
     if (!(event.target as Element).closest("[data-problem-action]")) return;
     if (report?.action?.target === "settings") app.go("settings", "models");
+    else if (report?.action?.target === "usage") app.go("settings", "usage");
     else void check();
   });
   onLocaleChange(paint);

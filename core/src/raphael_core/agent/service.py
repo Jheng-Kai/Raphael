@@ -755,7 +755,7 @@ EXCHANGE_SOURCE = "member"
 class _Settings:
     model: str
     city: str
-    limit_usd: float
+    limit_usd: float | None
     effort: str = "none"
     quick: bool = False
 
@@ -2334,7 +2334,7 @@ class AgentService:
                     self._finish(ask, "answer", run.final.which, final["text"], run.ledger,
                                  status=run.final.status, detail=run.final.detail)
 
-    def _over_budget(self, limit_usd: float) -> bool:
+    def _over_budget(self, limit_usd: float | None) -> bool:
         return self._spend.is_over(limit_usd)
 
     async def _open_for_run(self, name: str) -> str | None:

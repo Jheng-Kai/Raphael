@@ -74,6 +74,9 @@ speaker-draft-chief, member-draft-switch and primary-contact-set.
 npm run look -- member-settings-skill-row-hover member-settings-switch-hover member-settings member-settings-raphael member-settings-skills member-settings-tools member-settings-notify member-settings-field member-persona-empty member-persona-filled member-persona-mixed member-persona-long member-persona-editing member-persona-editing-long member-persona-saved member-persona-escape member-settings-skill member-settings-command member-settings-cover member-settings-cover-picture member-settings-back-hover member-settings-back member-settings-back-bottom member-settings-back-kept details member-panel-library member-face-hover --theme both --width 1120,720,1920x1080
 ```
 
+`member-settings-skills` waits for the assigned team skills section to appear, then checks the order of the skills,
+team skills and commands sections and the read-only list of assigned packages.
+
 R-UI-157: a skill's row, and every member settings row that opens something, is lit as one under the pointer with its
 switch on the fill; the details panel's routine rows too. The look audit fails a row whose button lights alone beside its switch.
 
@@ -660,7 +663,7 @@ Memory is managed behind the scenes: the member page's 記憶 kind (cards, some 
 No page, tab, card or count shows a member's memory or the shared memory (R-MEM-10). The core keeps both files, the
 memory tools and the `MemoryChanged` event as before; the app neither reads nor draws them. When a memory is wrong the
 owner tells the member in the conversation and the member corrects its own file with its memory tool. The member page's
-kinds are 工具, 技能與指令, 個性與指示 and 通知; Settings' tabs are 一般, 工具, 安全, 模型與用量, 聽寫與快捷鍵 and 關於; an old link to the 記憶 tab
+kinds are 工具, 技能與指令, 個性與指示 and 通知; Settings' tabs are 一般, 模型, 用量, 工具, 團隊技能, 聽寫與快捷鍵, 安全 and 關於; an old link to the 記憶 tab
 lands on 一般. `memory-view.ts`, its styles and the scenes that opened it are gone.
 
 ```powershell
@@ -920,13 +923,15 @@ npm run look -- send-prompt send-prompt-slow --theme both --width 1120,720,1920x
 ```
 
 
-## Team skill library
+## Team skills
 
-Settings > Team Skill Library manages shared packages. The owner can import a plugin,
+Settings > Team skills manages shared packages. The owner can import a plugin,
 a repository, a selected folder or file, an uploaded archive or Markdown, or pasted
 Markdown. A single skill defaults to every member. A multi-skill import defaults to
 an empty audience. Each member's details summarize assigned, switched-on packages
 under `members.skills.list.library`. Private skills keep their own edit controls.
+A package of several opens on a page of its own in the tab, never folded open under its row
+(R-SKILL-17, settings-appearance.md).
 
 The owner RPCs are `skills.library.list`, `import`, `update` and `delete` under the
 same prefix. Refresh replaces the source snapshot, preserves retained switches

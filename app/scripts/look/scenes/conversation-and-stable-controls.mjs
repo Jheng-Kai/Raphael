@@ -28,8 +28,8 @@ export default [
     stableClick('[data-dictation-tab="overview"]'), stableClick('[data-dictation-tab="dictionary"]'),
     stableClick('[data-filter="auto"]'), stableClick('[data-filter="manual"]'), stableClick('[data-filter="all"]'),
   ]),
-  scene("stable-settings-controls", "Existing Settings panes and Models tabs remain fixed", [
-    ...settings("models"), stableClick('[data-models-tab="usage"]'), stableClick('[data-models-tab="models"]'),
+  scene("stable-settings-controls", "Existing Settings panes and Usage's tabs remain fixed", [
+    ...settings("usage"), stableClick('[data-usage-tab="analysis"]'), stableClick('[data-usage-tab="overview"]'),
     stableClick('.modal-scrim [data-pane="general"]'), stableClick('.modal-scrim [data-pane="dictation"]'),
   ]),
 ];

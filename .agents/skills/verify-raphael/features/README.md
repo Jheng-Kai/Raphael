@@ -257,7 +257,10 @@ copy as TSV and preserve Markdown in whole-reply copy. Code scrolls locally, nev
 executes, and loads only eight small highlighting grammars when needed. Mermaid
 loads on demand with strict security, SVG labels, no directives, HTML, clicks or
 external resources. Invalid/unclosed diagrams retain escaped source with a quiet
-note. Source, copy and expand use shared controls and dialogs. Colors derive only
+note. Source, copy and expand use shared controls and dialogs. A drawn diagram also
+opens from a press, Enter or Space on its whole chart, and its larger view fits,
+zooms (wheel, pinch, − +), drags and resets, with one hint line (R-UI-173,
+conversation.md "Rich replies"). Colors derive only
 from theme tokens, including a future black palette. Markdown images initially
 have no src; only Load image assigns a source, always without a referrer.
 
@@ -443,7 +446,7 @@ behavior the fixture cannot prove.
 | [Dictation](dictation.md) | Overview, history, dictionary, shortcuts, microphone and paste |
 | [Settings and appearance](settings-appearance.md) | Profile/preferences, black and white themes, languages, models and app information |
 | [Connections and MCP](connections-mcp.md) | Connect apps as one view (chip of the connected apps, search, category chips, 為你推薦 and sections, an app's page), the one colour of everything that floats, connected apps and their count, an app's accounts and tools, members' private skills, managed catalog, MCP setup/discovery and the calendar's private Google calendar read |
-| [Usage](usage.md) | Spend overview, CLI allowances read unseen at each opening of Settings (no refresh button), and the once-per-window 90% warning |
+| [Usage](usage.md) | Settings › 用量: 概覽 (this month's spending with the monthly limit's gear, CLI allowances read unseen at each opening of Settings, no refresh button), 分析 (a period's charts from `usage.analytics`), and the once-per-window 90% warning |
 | [Onboarding](onboarding.md) | Welcome, optional setup and immediate conversation |
 
 Keep entry points, prerequisites and observable end states current. If data is
@@ -525,7 +528,7 @@ Appearance uses the shared theme/language dropdown rows; dictionary entries reta
 Representative main-page acceptance (all consumers of the shared layout):
 
 ```powershell
-npm run look -- chat details details-routines sidebar sidebar-folders dictation-overview dictation-history dictation-heat-press dictation-dictionary dictation-keyboard profile appearance models dictation agent about plugins-installed plugins-store usage automations-calendar automations-day --theme both --width 1120,720,1920x1080
+npm run look -- chat details details-routines sidebar sidebar-folders dictation-overview dictation-history dictation-heat-hover dictation-dictionary dictation-keyboard profile appearance models dictation agent about plugins-installed plugins-store usage automations-calendar automations-day --theme both --width 1120,720,1920x1080
 ```
 
 The dictionary scene uses twelve words to expose column count and wrapping; the

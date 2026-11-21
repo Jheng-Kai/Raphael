@@ -11,7 +11,8 @@ const serverDetail = [...linked, click('[data-conn="open"][data-id="notes"]'), w
 const store = [...connections, wait('.cs-card')];
 // A key made up for the scenes: it is typed into a masked field and must reach nothing but the one call that adds the app.
 const setupKey = "zk-look-0123456789";
-const usage = [...settings("models"), click('[data-models-tab="usage"]'), wait('[data-row="raphael-spend"]')];
+const usage = [...settings("usage"), wait('[data-usage-tab="overview"][aria-selected="true"]'), wait('[data-row="raphael-spend"]')];
+const analysis = [...usage, click('[data-usage-tab="analysis"]'), wait('[data-ua-card="cost"]')];
 const cliMenu = [...settings("models"), scroll(".cli-accounts"), click('[data-cli-menu="codex"]')];
 const cliDisconnected = [...cliMenu, click('#app-popover [data-pick="disconnect"]'), wait('[data-cli="codex"]')];
 const modelChooser = role => [...settings("models"), click(`.modal-scrim [data-model-picker="${role}"] .mp-trigger`), wait(".model-chooser .mc-row")];
@@ -21,9 +22,13 @@ const downloaded = [
   { name: "sensevoice", title: "SenseVoice", languages: ["zh", "en", "ja", "ko", "yue"], note: "fast", size: 163002883, ready: true },
 ];
 const dictation = tab => [page("dictation"), click(`[data-dictation-tab="${tab}"]`), check("dictation-navigation"), ...(tab === "overview" ? [wait('.page-overview .icard'), check("dictation-overview")] : [])];
+// 編輯快捷鍵 (shortcut-editor.ts): the one place where the shortcuts change; Ctrl+F8 is recorded for 貼上上一次.
+const keysDialog = [...settings("dictation"), click('.modal-scrim [data-act="keys-edit"]'), wait('.kd-dialog [data-dlg="record"][data-field="paste_last_keys"]')];
+const pasteRecorded = [...keysDialog, click('.kd-dialog [data-field="paste_last_keys"]'), wait(".kd-dialog [data-recording]"),
+  { action: "key", key: "F8", ctrl: true }, waitGone(".kd-dialog [data-recording]")];
 export default [
-  scene("nav-layer-settings", "Back from Usage returns to Models inside the same Settings dialog", [
-    ...usage, navKey("back"), wait('.modal [data-models-tab="models"][aria-selected="true"]'), wait('.modal [data-model-picker="stt"]'),
+  scene("nav-layer-settings", "Back from Usage's analysis returns to its overview inside the same Settings dialog", [
+    ...analysis, navKey("back"), wait('.modal [data-usage-tab="overview"][aria-selected="true"]'), wait('.modal [data-row="raphael-spend"]'),
   ]),
   scene("nav-side-settings", "Mouse Back closes Settings in one step and Forward leaves the conversation in view", [
     member(1), member(2), check("nav-conversation-2"), ...settings("tools"), check("nav-settings-tools"),
@@ -36,8 +41,16 @@ export default [
   scene("settings-owner-about-typing", "關於我 being written: no drag handle, and the box grows with every line of a long text", [...settings("general"), wait('[data-owner="owner_about"]'), type('[data-owner="owner_about"]', aboutLong), check('owner-about-typing')]),
   scene("settings-owner-about-rest", "關於我 left with a long text: four lines and its start in sight, the rest folded, the settings under it in reach", [...settings("general"), wait('[data-owner="owner_about"]'), type('[data-owner="owner_about"]', aboutLong), click('[data-owner="owner_name"]'), check('owner-about-rest')]),
   scene("settings-about-brand", "The about tab's mark and name cannot be selected", [...settings("about"), wait('.about-brand'), check('about-brand-unselectable')]),
-  // R-TIDY-01: the key that tidies the selected text is listed and changeable with the other shortcuts, Right Alt+T by default.
-  scene("settings-tidy-key", "The 聽寫 tab lists 整理選取文字 with its key and a pencil beside the other shortcuts, as wide as theirs", [...settings("dictation"), wait('.modal-scrim [data-row="tidy-hotkey"]'), check("settings-tidy-key")]),
+  // R-TIDY-01, R-KEYS-EDIT-01: the key that tidies the selected text is listed with the other shortcuts, Right Alt+T by default, and changed
+  // with them in the one 編輯 dialog.
+  scene("settings-tidy-key", "The 聽寫 tab lists every shortcut read-only in the order of use, 整理選取文字 third with its key, as wide as the others, and one 編輯 at the section's top right", [...settings("dictation"), wait('.modal-scrim [data-row="tidy-hotkey"]'), check("settings-tidy-key")]),
+  scene("settings-keys-dialog", "編輯 opens one dialog whose rows are the list's, with no frame: all five shortcuts in the order of use, a pencil after the caps of each but Esc, 貼上上一次 too; a key recorded waits in it until 儲存", [...pasteRecorded, check("settings-keys-dialog")]),
+  scene("settings-keys-recording", "The pencil of a shortcut puts the words that ask for the new keys, and Esc to cancel, where its caps were, still with no frame", [
+    ...keysDialog, click('.kd-dialog [data-field="tidy_keys"]'), wait(".kd-dialog [data-recording] .rec-hint"), check("settings-keys-recording")]),
+  scene("settings-keys-saved", "儲存 sends the new keys through the device settings, closes the dialog, and the list shows them", [
+    ...pasteRecorded, click('.kd-dialog [data-dlg="save"]'), waitGone(".kd-dialog"), check("settings-keys-saved")]),
+  scene("dictation-keys-dialog", "The 聽寫 overview's 編輯 opens the same dialog over the page", [
+    ...dictation("overview"), click('.page-overview .keys-card [data-act="keys-edit"]'), wait('.kd-dialog [data-dlg="record"]'), check("dictation-keys-dialog")]),
   // R-PRIV-MIC-01: a Mac's meter never opens the microphone before the owner allows it; 測試麥克風 asks macOS, once.
   scene("settings-mic-undecided", "A Mac whose microphone macOS has not asked about: 聽寫 says so with 測試麥克風, and the meter stays closed until it is pressed", [...settings("dictation"), wait('.modal-scrim [data-act="mic-ask"]'), check("settings-mic-undecided")], { microphone: "undecided" }),
   scene("settings-mic-denied", "A Mac whose microphone was refused: 聽寫 says where to allow it, its button opens that pane, and the meter stays closed", [...settings("dictation"), wait('.modal-scrim .missing-note [data-missing-pane]'), check("settings-mic-denied")], { microphone: "denied", mac: true }),
@@ -102,9 +115,17 @@ export default [
   scene("window-hover-modal", "Caption hover stays usable while settings dim the window", [...settings("models"), { action: "window-control", control: "close", hoverOnly: true }]),
   scene("connections-recommended", "Under the connected apps, a few popular ones not added yet, each addable in place", [...settings("connections"), check("connections-recommended")]),
   ...["general", "appearance", "connections", "models", "dictation", "tools", "safety", "about"].map(pane => scene(pane === "general" ? "profile" : pane, `${pane} settings pane`, [...settings(pane), ...(pane === "appearance" ? [check("appearance-settings")] : [])])),
-  scene("dictation-languages", "The spoken languages: one row per language, one button, and every language with several written forms carries its chip on the row, chosen or not", [...settings("dictation"), click('[data-k="languages"]'), wait('.lang-panel [data-language="zh"]'), hover('.lang-panel [data-language="zh"]'), check("language-rows")]),
-  scene("dictation-language-variants", "A chip opens the written forms of its language beside the picker, never under it", [...settings("dictation"), click('[data-k="languages"]'), wait('.lang-panel [data-variant-menu="zh"]'), click('.lang-panel [data-variant-menu="zh"]'), wait('.lang-variant-menu [data-variant="zh-TW"]')]),
-  scene("dictation-language-variants-toggle", "Pressing the chip again folds the written forms away and leaves the picker open", [...settings("dictation"), click('[data-k="languages"]'), wait('.lang-panel [data-variant-menu="zh"]'), click('.lang-panel [data-variant-menu="zh"]'), wait('.lang-variant-menu [data-variant="zh-TW"]'), click('.lang-panel [data-variant-menu="zh"]'), waitGone('.lang-variant-menu'), check("language-variants-toggle")]),
+  scene("dictation-languages", "The spoken languages: one row per language, one button, and every language with several written forms carries its dropdown on the row, chosen or not", [...settings("dictation"), click('[data-k="languages"]'), wait('.lang-panel [data-language="zh"]'), hover('.lang-panel [data-language="zh"]'), check("language-rows")]),
+  scene("dictation-language-variant-hover", "A written form is the settings rows' dropdown: no box or fill at rest or under the pointer, only its words brighten, its row lit behind it", [...settings("dictation"), click('[data-k="languages"]'), wait('.lang-panel [data-variant-menu="zh"]'), hover('.lang-panel [data-variant-menu="zh"]'), check("language-variant-hover")]),
+  scene("dictation-language-variant-focus", "Tab from 中文 reaches its written form's dropdown, which draws the app's keyboard ring with no fill", [...settings("dictation"), click('[data-k="languages"]'), wait('.lang-panel [data-variant-menu="zh"]'), key('Tab'), check("language-variant-focus")]),
+  scene("dictation-language-variants", "A written form's dropdown opens the forms of its language beside the picker, never under it", [...settings("dictation"), click('[data-k="languages"]'), wait('.lang-panel [data-variant-menu="zh"]'), click('.lang-panel [data-variant-menu="zh"]'), wait('.lang-variant-menu [data-variant="zh-TW"]')]),
+  scene("dictation-language-untick", "Pressing the checked 中文 row with its written forms open unticks it and updates the picker and Settings together", [
+    ...settings("dictation"), click('[data-k="languages"]'),
+    wait('.lang-panel [data-language="zh"][aria-pressed="true"]'), wait('.lang-panel [data-language="en"][aria-pressed="true"]'),
+    click('.lang-panel [data-variant-menu="zh"]'), wait('.lang-variant-menu [data-variant="zh-TW"][aria-checked="true"]'),
+    click('.lang-panel [data-language="zh"]'), check("language-untick"),
+  ]),
+  scene("dictation-language-variants-toggle", "Pressing the dropdown again folds the written forms away and leaves the picker open", [...settings("dictation"), click('[data-k="languages"]'), wait('.lang-panel [data-variant-menu="zh"]'), click('.lang-panel [data-variant-menu="zh"]'), wait('.lang-variant-menu [data-variant="zh-TW"]'), click('.lang-panel [data-variant-menu="zh"]'), waitGone('.lang-variant-menu'), check("language-variants-toggle")]),
   scene("appearance-menu", "One shared theme dropdown without a preview gallery", [...settings("appearance"), click('[data-k="appearance"]'), wait('.menu [data-value="dark"]'), check("appearance-settings")]),
   scene("appearance-keyboard", "Theme choices retain visible keyboard focus in every palette", [...settings("appearance"), click('[data-k="appearance"]'), key('Tab'), {...key('Tab'),shift:true}, key('ArrowDown'), check('appearance-settings'), check('appearance-focus')]),
   scene("plugins-installed", "Unified managed, private Google and custom MCP plugins", [...linked, wait('[data-conn="open"][data-id="composio:notion"]')]),
@@ -185,17 +206,42 @@ export default [
   scene("usage-allowances-chatgpt", "ChatGPT sits with the other subscriptions, with the button to its own usage page", [...usage, wait('[data-allowance="chatgpt"]'), scroll('[data-allowance="chatgpt"]'), check("usage-plain")], { chatgptSignedIn: true }),
   scene("usage-owner", "The owner's own mix: Codex live, Claude whose window has reset (已重置, no stale number or bar), the ChatGPT sign-in and OpenRouter's own spend, one card each as the account menu's blocks", [...usage, wait('[data-allowance="openrouter"]'), check("usage-plain"), check("usage-owner-cards")], { usageOwner: true }),
   scene("usage-empty", "With no subscription signed in, the rows of what was spent stand alone", [...usage, check("usage-plain")], { usageEmpty: true }),
+  scene("settings-usage-overview", "Usage › 概覽: 這個月's card with the limit and its gear, then 方案額度, one card per subscription with each window's reset and what is left", [...usage, wait(".run-subscription"), check("usage-plain"), check("usage-overview")]),
+  scene("settings-usage-cap", "The gear of 這個月 opens the monthly limit: 設上限 with an amount, stored at once, the card's bar follows; 不設上限 takes it away", [
+    ...usage, click('[data-act="usage-cap"]'), wait("#app-popover.usage-cap"), check("usage-cap-open"),
+    click('#app-popover [data-cap-mode="none"]'), wait('#app-popover [data-cap-mode="none"][aria-pressed="true"]'), check("usage-cap-none"),
+    click('#app-popover [data-cap-mode="set"]'), wait("#app-popover #limit-input"),
+    type("#app-popover #limit-input", "30"), key("Enter"), check("usage-cap-set"),
+  ]),
+  scene("settings-usage-analytics", "Usage › 分析: 花費紀錄 by purpose with its stacked bars and legend, 誰花最多 with five rows and 顯示更多, 工具使用 and 訊息 lines, and 30 days", [
+    ...analysis, check("usage-analytics"), scroll('[data-ua-section="people"]'), click("[data-ua-more]"), wait('.ua-table tbody tr:nth-child(6)'), scroll('[data-ua-section="messages"]'),
+    click('[data-ua-messages="source"]'), wait('[data-ua-messages="source"][aria-pressed="true"]'), scroll('[data-ua-section="cost"]'), click('[data-ua-range="30d"]'), wait('.ua-bars[data-n="30"]'), check("usage-analytics-month"),
+    // The picture ends on 工具使用 and 訊息, under the chart and the people the checks read.
+    scroll('[data-ua-section="messages"]'),
+  ]),
+  // The top of 分析 as it opens: 花費紀錄's bars, legend and 誰花最多, the picture the scene above scrolls past.
+  scene("settings-usage-analytics-top", "Usage › 分析 as it opens: 花費紀錄 with its 7 天 bars, legend and the start of 誰花最多", [...analysis, check("usage-analytics")]),
+  // Every chart answers the pointer (R-USE-03): the day under it says its date and each line's value in the app's own tip.
+  scene("settings-usage-bar-hover", "Usage › 分析: a bar of 花費紀錄 under the pointer lights, the others step back, and its tip says the day, its total and what each colour cost", [...analysis, hover('[data-ua-card="cost"] .ua-bars'), check("usage-reading-bar")]),
+  scene("settings-usage-line-hover", "Usage › 分析: a day of 工具使用 under the pointer shows a guide, a dot on each line and a tip with each line's count", [...analysis, scroll('[data-ua-section="tools"]'), hover('[data-ua-card="tools"] .ua-linebox'), check("usage-reading-line")]),
+  scene("settings-usage-people-less", "Usage › 分析: 顯示更多 shows everyone, then the same button says 顯示較少 and folds 誰花最多 back to five, keeping the focus", [
+    ...analysis, scroll('[data-ua-section="people"]'), click("[data-ua-more]"), wait('.ua-table tbody tr:nth-child(6)'), check("usage-people-all"),
+    click("[data-ua-more]"), waitGone('.ua-table tbody tr:nth-child(6)'), check("usage-people-less"),
+  ]),
+  scene("settings-usage-analytics-empty", "Usage › 分析 with nothing in the period: one quiet line a section, no chart frames", [...usage, click('[data-usage-tab="analysis"]'), wait('[data-ua-section="messages"]'), check("usage-analytics-empty")], { usageEmpty: true }),
   scene("usage-opens-quietly", "The app reads the allowances once after it starts, and Settings again each time it opens, on any tab: no refresh button, the numbers already there, the same numbers touch nothing, a new number replaces the old in place", [
     check("usage-open-launch"), ...settings("general"), check("usage-open-general"),
-    click('.modal-scrim [data-pane="models"]'), click('[data-models-tab="usage"]'), wait(".run-subscription"), check("usage-plain"), check("usage-open-arm"),
-    click(".modal-x"), { action: "advance-time", ms: 31000 }, ...settings("models"), click('[data-models-tab="usage"]'), wait(".run-subscription"), check("usage-open-same"),
-    check("usage-open-lower"), click(".modal-x"), { action: "advance-time", ms: 31000 }, ...settings("models"), click('[data-models-tab="usage"]'), wait(".run-subscription"), check("usage-open-changed"), check("usage-plain"),
+    click('.modal-scrim [data-pane="usage"]'), wait(".run-subscription"), check("usage-plain"), check("usage-open-arm"),
+    click(".modal-x"), { action: "advance-time", ms: 31000 }, ...settings("usage"), wait(".run-subscription"), check("usage-open-same"),
+    check("usage-open-lower"), click(".modal-x"), { action: "advance-time", ms: 31000 }, ...settings("usage"), wait(".run-subscription"), check("usage-open-changed"), check("usage-plain"),
   ], { traceCalls: true }),
   ...["overview", "history", "dictionary"].map(tab => scene(`dictation-${tab}`, `Dictation ${tab}`, [...dictation(tab), ...(tab === "history" ? [wait(".hrow"), check("history-sent-to")] : []), ...(tab === "dictionary" ? [wait(".wrow"), click('[data-act="word-menu"]'), wait('#app-popover [data-pick="delete"]'), key("Escape")] : [])], tab === "dictionary" ? {
     dictionary: ["Raphael", "Methelia", "GitHub", "Composio", "OpenRouter", "Notion", "Slack", "Telegram", "Calendar", "Claude", "Codex", "Gemini"].map((word, index) => ({ id: index + 1, word, misheard: index === 0 ? ["Rafael"] : [], source: index % 2 ? "learned" : "manual", created_at_ms: 1792720800000 })),
   } : {})),
   scene("dictation-keyboard", "Horizontal dictation navigation with keyboard focus", [...dictation("overview"), key("ArrowRight"), wait('[data-dictation-tab="history"][aria-selected="true"]'), key("ArrowLeft"), wait('[data-dictation-tab="overview"][aria-selected="true"]'), key("End"), key("Home"), wait('[data-dictation-tab="overview"][aria-selected="true"]'), key("End"), wait('[data-dictation-tab="dictionary"][aria-selected="true"]'), check("dictation-navigation")]),
-  scene("dictation-heat-press", "Pressing a heatmap day shows its words above it; nothing shows under the pointer", [...dictation("overview"), click('.heat [data-date="2026-10-24"]'), check("dictation-heat-press")]),
+  scene("dictation-heat-hover", "A heatmap day under the pointer shows its words above it, outlined; nothing waits for a press", [...dictation("overview"), hover('.heat [data-date="2026-10-24"]'), check("dictation-heat-hover"), check("dictation-right-edge")]),
+  // The first days of a month put its name in the heatmap's last column, and the newest day is at the grid's right end.
+  scene("dictation-heat-edge", "In a month's first days its name ends at the heatmap's right edge, and the newest day's words stay inside the window", [...dictation("overview"), hover('.heat [data-date="2026-11-02"]'), check("dictation-heat-hover"), check("dictation-right-edge")], { statsUntil: "2026-11-02" }),
   scene("dictation-notice", "Dictation connection notice", dictation("overview"), { problem: true }),
   scene("conversation-notice", "Conversation connection notice", [], { problem: true }),
   scene("onboarding", "First-run welcome: Raphael's emblem, its name, one promise, the language dropdown and one wide black pill", [wait('#ob:not([hidden]) [data-ob="next"]'), wait('.ob-emblem canvas.ob-emb'), check("guide-window-fixed"), check("onboarding-welcome")], { onboarding: true }),

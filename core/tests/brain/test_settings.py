@@ -11,9 +11,34 @@ from raphael_core.brain.settings import (
 
 def test_defaults_and_set(conn):
     s = SettingsStore(conn)
-    assert s.get("monthly_limit_usd") == 10.0
+    assert s.get("monthly_limit_usd") is None
     s.set("monthly_limit_usd", 20)
     assert s.get("monthly_limit_usd") == 20.0
+
+
+def test_the_monthly_limit_is_none_until_set_and_none_again_for_no_limit(conn):
+    s = SettingsStore(conn)
+    # No hidden cap for a new install: no limit until the owner sets one.
+    assert s.get("monthly_limit_usd") is None and not s.chosen("monthly_limit_usd")
+    s.set("monthly_limit_usd", 30)
+    assert s.get("monthly_limit_usd") == 30.0
+    # 不設上限 (Settings › 用量) is stored as null, and reads as no limit.
+    s.set("monthly_limit_usd", None)
+    assert s.get("monthly_limit_usd") is None and s.all()["monthly_limit_usd"] is None
+    assert conn.execute("SELECT value FROM settings WHERE key = 'monthly_limit_usd'").fetchone()[0] == "null"
+
+
+def test_a_monthly_limit_saved_before_stays(conn):
+    conn.execute("INSERT INTO settings (key, value) VALUES ('monthly_limit_usd', '10.0')")
+    assert SettingsStore(conn).get("monthly_limit_usd") == 10.0
+
+
+def test_a_negative_monthly_limit_is_refused_and_not_saved(conn):
+    s = SettingsStore(conn)
+    s.set("monthly_limit_usd", 5)
+    with pytest.raises(ValueError, match="negative"):
+        s.set("monthly_limit_usd", -1)
+    assert s.get("monthly_limit_usd") == 5.0
 
 
 def test_a_retired_saved_skin_is_ignored(conn):
@@ -49,7 +74,7 @@ def test_the_defaults_are_the_documented_ones():
         "routine_owner_seen_ms": 0,
         "routine_run_window": [],
         "owner_photo": "",
-        "monthly_limit_usd": 10.0,
+        "monthly_limit_usd": None,
         "cleanup_model": "",
         "languages": ["zh-TW"],
         "history_retention_days": 30,
@@ -169,7 +194,7 @@ def test_non_finite_numbers_are_rejected_and_not_saved(conn):
         s.set("monthly_limit_usd", float("nan"))
     with pytest.raises(ValueError, match="not JSON compliant"):
         s.set("monthly_limit_usd", float("inf"))
-    assert s.get("monthly_limit_usd") == 10.0
+    assert s.get("monthly_limit_usd") is None
 
 
 # --- speech-to-text ----------------------------------------------------------------------------

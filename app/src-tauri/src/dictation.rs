@@ -1052,6 +1052,7 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
             "dictation.progress" => self.on_progress(&notification.params),
             "agent.progress" => self.on_agent_progress(&notification.params),
             "dictation.silence" => drop(self.on_silence(&notification.params, now_ms)),
+            "dictation.sound" => self.on_sound(&notification.params),
             CORE_RESTARTED => {
                 self.on_core_restarted();
                 self.overlay
@@ -1161,6 +1162,46 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
                 self.stop_agent(now_ms)
             }
             None => None,
+        }
+    }
+
+    /// The core's `dictation.sound` (`{session_id, heard}`): whether the microphone of the recording it names
+    /// gives any sound. A muted microphone is said a second in, beside the listening emblem
+    /// ([`notices::MIC_QUIET`]), instead of only after the key is released, and the line goes as soon as sound
+    /// arrives. The recording goes on either way. A notification about any other session, one whose `heard` is
+    /// not a boolean, or a question that the 拉斐爾 page shows instead of the emblem, is dropped.
+    pub fn on_sound(&self, params: &Value) {
+        let (Some(session), Some(heard)) = (
+            params.get("session_id").and_then(Value::as_str),
+            params.get("heard").and_then(Value::as_bool),
+        ) else {
+            log::debug!("dictation.sound ignored: {params}");
+            return;
+        };
+        let _transition = lock(&self.transitions);
+        {
+            let state = lock(&self.state);
+            let current = state.phase == Phase::Recording
+                && state
+                    .session
+                    .as_ref()
+                    .is_some_and(|current| current.id == session);
+            let shown = match state.kind() {
+                Some(Kind::Dictation) => true,
+                Some(Kind::Agent) => state.on_overlay,
+                None => false,
+            };
+            if !current || !shown {
+                log::debug!("dictation.sound ignored: not a recording on the emblem");
+                return;
+            }
+        }
+        if heard {
+            self.overlay.show(Mode::Listening);
+        } else {
+            log::info!("dictation: the microphone gives no sound");
+            self.overlay
+                .greet(notices::MIC_QUIET.text(&self.language.get()));
         }
     }
 
@@ -3701,8 +3742,8 @@ mod tests {
     use crate::hotkey::{CancelSwitch, HotkeyEvent};
     use crate::notices::{
         ASK_FAILED, BUDGET, CORE_DOWN, ELEVATED, FOCUS_CHANGED, GREETING, INCOMPLETE, MIC_ASKED,
-        MIC_DENIED, NO_LOCAL_MODEL as NO_LOCAL_NOTICE, NO_MIC, NO_PASTE_PERMISSION, NO_SOUND,
-        NO_TIDY_PERMISSION, NOT_READY, NOTHING_SELECTED, OFFLINE, TIDY_FAILED,
+        MIC_DENIED, MIC_QUIET, NO_LOCAL_MODEL as NO_LOCAL_NOTICE, NO_MIC, NO_PASTE_PERMISSION,
+        NO_SOUND, NO_TIDY_PERMISSION, NOT_READY, NOTHING_SELECTED, OFFLINE, TIDY_FAILED,
     };
     use crate::overlay::{Mode, OverlayApi, OverlayEvent, Progress, takes_clicks};
     use crate::paste::{CopyReason, PasteOutcome, Paster, Selection, Target};
@@ -11254,6 +11295,60 @@ mod tests {
         run(&c, DictationDown, 0).await;
         settle().await;
         assert_eq!(seen.lock().unwrap().last(), Some(&(Phased::Failed, false)));
+    }
+
+    // ---------- a microphone that gives no sound is said while the recording goes on (dictation.sound) ----------
+
+    #[tokio::test]
+    async fn a_microphone_that_gives_no_sound_is_said_at_once_and_the_line_goes_when_sound_arrives()
+    {
+        for mode in BOTH_MODES {
+            let c = controller_in(
+                mode,
+                FakeCore::with("dictation.stop", stop_result("好。", None)),
+                FakePaster::pasting("Code.exe"),
+            );
+            run(&c, DictationDown, 0).await;
+            if mode == DictationMode::Toggle {
+                run(&c, DictationUp, 200).await;
+            }
+            let id = started_id(&c);
+            c.on_sound(&json!({ "session_id": id, "heard": false }));
+            assert_eq!(
+                *c.overlay().greetings.lock().unwrap(),
+                vec![MIC_QUIET.zh.to_owned()],
+                "{mode:?}: said beside the listening emblem a second in"
+            );
+            assert_eq!(
+                c.phase(),
+                Phase::Recording,
+                "{mode:?}: the recording goes on"
+            );
+            c.on_sound(&json!({ "session_id": id, "heard": true }));
+            assert_eq!(
+                c.overlay().events(),
+                vec!["show:listening", "greet", "show:listening"],
+                "{mode:?}: the line goes once sound arrives"
+            );
+            assert_eq!(c.phase(), Phase::Recording, "{mode:?}");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_sound_notification_for_another_session_or_with_no_answer_is_dropped() {
+        let c = controller_in(
+            DictationMode::Hold,
+            FakeCore::with("dictation.stop", stop_result("好。", None)),
+            FakePaster::pasting("Code.exe"),
+        );
+        c.on_sound(&json!({ "session_id": "nobody", "heard": false }));
+        run(&c, DictationDown, 0).await;
+        let id = started_id(&c);
+        c.on_sound(&json!({ "session_id": "other", "heard": false }));
+        c.on_sound(&json!({ "session_id": id }));
+        c.on_sound(&json!({ "session_id": id, "heard": "no" }));
+        assert!(c.overlay().greetings.lock().unwrap().is_empty());
+        assert_eq!(c.overlay().events(), vec!["show:listening"]);
     }
 
     // ---------- the core says a recording can hear nothing more (dictation.silence) ----------

@@ -174,7 +174,7 @@ function keyEntry(o: { id: string; placeholder: string; label: string; busy: boo
 }
 
 /**
- * Every provider the app can connect, as tiles, from the core's catalog (the same as Settings › 模型與用量's 新增供應商):
+ * Every provider the app can connect, as tiles, from the core's catalog (the same as Settings › 模型's 新增供應商):
  * the guide is for everyone, not only the providers one owner uses. A tile's button opens the same editor as Settings, for
  * OpenRouter as for any other: it is one gateway among them, with no key tile of its own. ChatGPT is a sign-in among the
  * accounts.

@@ -1,0 +1,95 @@
+/* Settings › 用量: the two tabs, this month's card with its limit, and 分析's sections (usage-analysis.ts). Each section is a
+   heading, a quiet line of what it counts, its controls and one card, as the other settings' cards. The series take the chart
+   colours in order (styles.css --chart-1…, as a report's charts), 其他 a quiet grey. */
+.usage-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-5); margin-top: var(--sp-5); }
+.usage-page > .tabs.plain { justify-self: start; }
+.usage-content:not([hidden]) { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-6); min-width: 0; }
+.usage-content > .sgroup, .usage-content > .run-allowance { margin: 0; }
+/* A section's name, the line under it, its controls and its card share one left edge (the card's), as every settings
+   section's do; the controls have the same air under the name as a card has (styles.css `.sgroup > h2`). */
+.modal-body .usage-content .sgroup > h2:has(+ .ua-note) { margin-bottom: 0; }
+.ua-note { margin: var(--sp-1) 0 var(--sp-3); font-size: var(--fs-2xs); line-height: 1.5; color: var(--text-3); text-wrap: pretty; }
+.ua-line { margin: 0; font-size: var(--fs-xs); color: var(--text-3); }
+.ua-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-2); margin: 0 0 var(--sp-3); }
+.ua-controls .sel { max-width: 100%; }
+.ua-card { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); min-width: 0; padding: var(--sp-4); border-radius: var(--r-lg); border: 1px solid var(--float-edge); background: var(--panel); }
+.ua-sum { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; }
+.ua-sum > span { font-size: var(--fs-xs); color: var(--text-2); }
+.ua-sum > strong { font: 500 var(--fs-lg)/1.3 var(--display); letter-spacing: -0.01em; }
+:is(.ua-card, .ua-tip) [data-s="1"] { --c: var(--chart-1); } :is(.ua-card, .ua-tip) [data-s="2"] { --c: var(--chart-2); } :is(.ua-card, .ua-tip) [data-s="3"] { --c: var(--chart-3); }
+:is(.ua-card, .ua-tip) [data-s="4"] { --c: var(--chart-4); } :is(.ua-card, .ua-tip) [data-s="5"] { --c: var(--chart-5); } :is(.ua-card, .ua-tip) [data-s="other"] { --c: var(--text-3); }
+
+/* 花費紀錄: the scale on the left, a stacked bar a day, two lines across and the base. */
+.ua-plot { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--sp-2); }
+/* The scale's three amounts stand centred on the top line, the middle line and the base: half a line above and below the bars. */
+.ua-y { align-self: start; display: flex; flex-direction: column; justify-content: space-between; height: calc(160px + 1.2em); margin-top: -0.6em; font-size: var(--fs-2xs); line-height: 1.2; text-align: right; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.ua-area { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }
+.ua-bars { position: relative; display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); column-gap: clamp(4px, 3%, 24px); align-items: end; height: 160px; border-bottom: 1px solid var(--line);
+  background: linear-gradient(var(--line), var(--line)) 0 0 / 100% 1px no-repeat, linear-gradient(var(--line), var(--line)) 0 50% / 100% 1px no-repeat; }
+.ua-bars[data-n="30"] { column-gap: 2px; }
+.ua-day { display: flex; flex-direction: column-reverse; gap: 1px; min-width: 0; overflow: hidden; border-radius: var(--mark-radius) var(--mark-radius) 0 0; transition: opacity 0.16s ease; }
+.ua-day > i { display: block; flex: none; background: var(--c); }
+/* The day under the pointer (or the keys) lights: the other days step back while its tip says what it cost. */
+.ua-plot.is-reading .ua-day:not(.is-on) { opacity: 0.4; }
+.ua-plot { border-radius: var(--r-sm); }
+.ua-x { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); height: 1.4em; font-size: var(--fs-2xs); line-height: 1.4; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.ua-x > span { justify-self: center; white-space: nowrap; }
+.ua-x > span:first-child { justify-self: start; }
+.ua-x > span:last-child { justify-self: end; }
+
+/* The legend: a short bar of the line's colour, its name and what it adds up to. */
+.ua-legend { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-3) var(--sp-4); margin: 0; padding: var(--sp-1) 0 0; list-style: none; }
+.ua-legend > li { display: grid; grid-template-columns: 3px minmax(0, 1fr); column-gap: var(--sp-2); align-items: center; min-width: 0; }
+.ua-legend > li > i { grid-row: 1 / span 2; align-self: stretch; border-radius: var(--mark-radius); background: var(--c); }
+.ua-lname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-xs); color: var(--text-2); }
+.ua-legend strong { font-size: var(--fs-sm); font-weight: var(--weight-semibold); }
+
+/* 工具使用 and 訊息: a line a day per line of the breakdown, drawn to the card's width with a stroke that does not stretch. */
+.ua-linebox { position: relative; border-radius: var(--r-sm); }
+.ua-lines { display: block; width: 100%; height: 160px; overflow: visible; }
+/* The day under the pointer: a guide across the lines and a dot on each, the line's colour ringed by the card. */
+.ua-guide { position: absolute; top: 0; bottom: 0; width: 1px; margin-left: -0.5px; background: var(--edge); pointer-events: none; }
+.ua-dot { position: absolute; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: var(--r-pill); background: var(--c); box-shadow: 0 0 0 2px var(--panel); pointer-events: none; }
+/* The reading's tip: the date and the day's total, then each line's colour, name and value. The app's own tooltip. */
+.message-tooltip.ua-tip:not([hidden]) { display: grid; grid-template-columns: minmax(0, 1fr); }
+.message-tooltip.ua-tip { gap: var(--sp-1); min-width: 152px; padding: var(--sp-2) var(--sp-3); white-space: normal; font-size: var(--fs-xs); }
+.ua-tip-day { display: flex; justify-content: space-between; gap: var(--sp-4); font-weight: var(--weight-semibold); }
+.ua-tip ul { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; margin: 0; padding: 0; list-style: none; }
+.ua-tip li { display: grid; grid-template-columns: 3px minmax(0, 1fr) auto; align-items: center; column-gap: var(--sp-2); }
+.ua-tip li > i { align-self: stretch; border-radius: var(--mark-radius); background: var(--c); }
+.ua-tip li > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); }
+.ua-tip li > strong { font-weight: 400; }
+.ua-lines .ua-grid, .ua-lines .ua-base { stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.ua-lines polyline { fill: none; stroke: var(--c); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.ua-ends { display: flex; justify-content: space-between; margin-top: calc(-1 * var(--sp-2)); font-size: var(--fs-2xs); color: var(--text-3); font-variant-numeric: tabular-nums; }
+
+/* 誰花最多: a row a person, their face and name, then the numbers right-aligned and the model they used most. */
+.ua-table-card { padding: 0 var(--sp-4); }
+.ua-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: var(--fs-sm); }
+.ua-table th, .ua-table td { height: 44px; padding: 0 var(--sp-2); text-align: left; font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ua-table th:first-child, .ua-table td:first-child { padding-left: 0; }
+.ua-table th:last-child, .ua-table td:last-child { padding-right: 0; }
+.ua-table thead th { height: 40px; font-size: var(--fs-xs); color: var(--text-2); }
+.ua-table tbody tr { border-top: 1px solid var(--line); }
+.ua-table .num { width: 18%; text-align: right; font-variant-numeric: tabular-nums; }
+.ua-table thead th:first-child { width: 34%; }
+.ua-table .ua-model { font-size: var(--fs-xs); color: var(--text-2); }
+.ua-who { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
+.ua-who > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ua-who .av { flex: none; }
+.ua-more { justify-self: start; margin-top: var(--sp-3); }
+
+/* 這個月: the card of what was spent, with the monthly limit's gear at its top right. */
+.usage-month .spend-card { position: relative; }
+.usage-month .spend-card > .spend-cap { position: absolute; top: var(--sp-2); right: var(--sp-2); }
+.usage-month .spend-label { margin: 0; padding-right: var(--sp-6); font-size: var(--fs-xs); color: var(--text-2); }
+
+/* The monthly limit's popover: its name, 不設上限 or 設上限 as a dropdown (a choice of Settings, R-UI-20), the amount when there
+   is one, and a line of what it does. The same shape as the computer's location (desktop-viewer.css). */
+.menu.usage-cap { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); width: min(300px, calc(100vw - var(--sp-4))); padding: var(--sp-3); }
+.usage-cap h3 { margin: 0; font-size: var(--fs-sm); font-weight: var(--weight-semibold); }
+/* 不設上限 / 設上限 side by side: a menu's buttons are rows of their own (styles.css `.menu button`), these two share one. */
+.usage-cap .tabs.seg { display: flex; width: 100%; }
+.usage-cap .tabs.seg > .tab { flex: 1 1 0; width: auto; justify-content: center; text-align: center; }
+.usage-cap .field { width: 100%; }
+.usage-cap .cap-error { margin: 0; font-size: var(--fs-2xs); color: var(--err); }

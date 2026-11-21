@@ -1013,7 +1013,7 @@ async def test_over_the_monthly_limit_free_commands_work_but_paid_answers_are_bl
     assert did(actions) == [("open_url", "https://youtube.com/")]
     result = await rig.ask("hello", language="en")
     assert rig.history.get(result["turn_id"]).status == "error" and "monthly spending limit of US$1" in result["text"]
-    assert "Settings > Models & usage" in result["text"]
+    assert "Settings > Usage" in result["text"]
     assert client.calls == 0
 
 

@@ -13,6 +13,14 @@ export function installMock(fixture, config = {}, target = window) {
       google: { redirect: "http://127.0.0.1", scopes: ["https://www.googleapis.com/auth/gmail.modify", "https://www.googleapis.com/auth/calendar.events"], configured: false } }];
     return turn;
   }
+  if (variant.skillPackages) {
+    // A library longer than the tab: the way back from a package's page must land where the list was left.
+    const kits = ["寫作工具", "資料分析", "客服回覆", "行銷素材", "財務報表", "招募流程", "產品規格", "設計檢查"];
+    data.skillLibrary = [...data.skillLibrary, ...kits.map((name, at) => ({
+      key: `pack:${30 + at}`, name, kind: "pack", source: `example/kit-${at + 1}`, description: "", version: "", enabled: true, access: "all", updatable: true,
+      skills: [{ id: 300 + 2 * at, name: `${name}一`, description: `${name}的第一個技能`, enabled: true }, { id: 301 + 2 * at, name: `${name}二`, description: `${name}的第二個技能`, enabled: true }],
+    }))];
+  }
   if (variant.hiddenMember) {
     // One member and one group chat taken off the list: they wait in the sidebar's hidden folder.
     const member = data.members.find(item => item.id === 2), room = data.rooms.find(item => item.id === 1);
@@ -422,6 +430,12 @@ export function installMock(fixture, config = {}, target = window) {
   data.primaryId = variant.primaryMember ?? 0;
   data.roomWrapupMessage.member_id = data.primaryId;
   if (variant.problem) data.status.openrouter.state = "no_key";
+  // The dictation days moved on to end on another day (`statsUntil`, YYYY-MM-DD): the first days of a month put its name
+  // in the heatmap's last column.
+  if (variant.statsUntil) {
+    const end = Date.parse(`${variant.statsUntil}T12:00:00Z`), count = data.stats.by_day.length;
+    data.stats = { ...data.stats, by_day: data.stats.by_day.map((day, index) => ({ ...day, date: new Date(end - (count - 1 - index) * 86400000).toISOString().slice(0, 10) })) };
+  }
   let adminQuestion = variant.adminApproval ? data.adminQuestions[variant.adminApproval] : null;
   let adminTurn = adminQuestion ? data.turns.find(turn => turn.id === adminQuestion.turn_id) : null;
   if (variant.unconfiguredRaphael) {
@@ -1189,6 +1203,45 @@ export function installMock(fixture, config = {}, target = window) {
     if (!item) throw new Error(`Fixture item not found: ${id}`);
     Object.assign(item, patch); return item;
   };
+  // `usage.analytics` (core brain/usage.py) for 7 or 30 local days ending on the fixture's day: the same shape, a day's value per
+  // line, the top five and __other__. The numbers are made from fixed waves, so every run draws the same charts; `usageEmpty` is
+  // a period with nothing in it.
+  const usageAnalytics = range => {
+    const count = range === "30d" ? 30 : 7, end = new Date(data.now);
+    const days = Array.from({ length: count }, (_, i) => {
+      const day = new Date(end.getFullYear(), end.getMonth(), end.getDate() - (count - 1 - i));
+      return `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
+    });
+    const none = { total: 0, series: [] };
+    if (variant.usageEmpty) return { range, days, cost_by: { purpose: none, model: none, provider: none }, members: [], tools: none, messages_by: { model: none, source: none } };
+    const wave = (seed, peak, digits = 2) => days.map((_, i) => {
+      const weekend = [0, 6].includes(new Date(`${days[i]}T00:00:00`).getDay()) ? 0.4 : 1;
+      return Number((peak * (0.2 + 0.8 * Math.abs(Math.sin(i * 1.3 + seed))) * weekend).toFixed(digits));
+    });
+    const breakdown = lines => {
+      const series = lines.map(([key, values, label]) => ({ key, label: label ?? key, values, total: values.reduce((a, b) => a + b, 0) }));
+      const total = series.reduce((sum, line) => sum + line.total, 0);
+      return { total, series: series.map(line => ({ ...line, share: total ? line.total / total : 0 })) };
+    };
+    const people = [[0, "拉斐爾", 214, 0.42, "openai/gpt-6-sol"], [1, "小晴", 96, 0.25, "anthropic/claude-sonnet-5.5"], [2, "小森", 71, 0.19, "openai/gpt-6-luna"],
+      [3, "小葵", 40, 0.08, "openai/gpt-6-luna"], [7, "阿哲", 18, 0.04, "openai/gpt-6-sol"], [8, "小安", 9, 0.02, "openai/gpt-6-luna"]];
+    const cost = count === 7 ? 4.62 : 17.94, scale = count === 7 ? 1 : 3.9;
+    return {
+      range, days,
+      cost_by: {
+        purpose: breakdown([["agent", wave(0.2, 0.42)], ["memory", wave(1.1, 0.12)], ["cleanup", wave(2.3, 0.08)], ["stt", wave(3.1, 0.05)], ["image", wave(4.2, 0.03)], ["__other__", wave(5.3, 0.02)]]),
+        model: breakdown([["openai/gpt-6-sol", wave(0.4, 0.38)], ["anthropic/claude-sonnet-5.5", wave(1.7, 0.18)], ["openai/gpt-6-luna", wave(2.9, 0.1)], ["__other__", wave(3.6, 0.05)]]),
+        provider: breakdown([["openrouter", wave(0.6, 0.45), "OpenRouter"], ["p2", wave(2.2, 0.14), "Anthropic"], ["p3", wave(3.8, 0.1), "OpenAI API"]]),
+      },
+      members: people.map(([id, name, turns, share, model]) => ({ id, name, role: "", turns: Math.round(turns * scale), cost_usd: Number((cost * share).toFixed(2)), share,
+        models: [{ model, turns: Math.round(turns * scale), cost_usd: Number((cost * share).toFixed(2)) }] })),
+      tools: breakdown([["web_search", wave(0.3, 14, 0)], ["connection:Gmail", wave(1.4, 8, 0), "Gmail"], ["computer", wave(2.6, 5, 0)]]),
+      messages_by: {
+        model: breakdown([["openai/gpt-6-sol", wave(0.8, 22, 0)], ["anthropic/claude-sonnet-5.5", wave(2.1, 12, 0)], ["openai/gpt-6-luna", wave(3.3, 9, 0)]]),
+        source: breakdown([["app", wave(0.5, 26, 0)], ["telegram", wave(1.9, 10, 0)], ["routine", wave(2.8, 6, 0)]]),
+      },
+    };
+  };
   // members/store.py `_move`: `item` goes to `place` among `items` (the last place when that is past the end) and the places are numbered again from 0.
   const moveInto = (items, item, place) => {
     const order = items.filter(other => other !== item).sort((a, b) => a.position - b.position || a.id - b.id);
@@ -1307,7 +1360,7 @@ export function installMock(fixture, config = {}, target = window) {
   async function core(method, p = {}) {
     // Settings reads the hidden list as it opens, before the list's section is drawn; the sidebar keeps the roster it already read.
     switch (method) {
-      // The team skill library (skill-library.ts, members/service.py skills.library.*).
+      // Team skills (skill-library.ts, members/service.py skills.library.*).
       case "skills.library.list": return { packages: data.skillLibrary, members: data.members.filter(m => m.id !== 0).map(m => ({ id: m.id, name: m.name })) };
       case "skills.library.update": {
         const pack = data.skillLibrary.find(item => item.key === p.key);
@@ -2263,6 +2316,7 @@ export function installMock(fixture, config = {}, target = window) {
       }
       case "integrations.disconnect": update(data.servers, p.id, { enabled: false, status: "disconnected", auth: "none" }); return { disconnected: true };
       case "usage.allowances": return data.allowances;
+      case "usage.analytics": return usageAnalytics(p.range);
       case "messaging.telegram.status": return data.messaging;
       // A member's own bot (its panel's 建議) and the overview of who has one: none set up in the fixture.
       case "messaging.accounts": return {accounts: []};

@@ -1,5 +1,5 @@
 /// <reference types="node" />
-// R-COPY-01: a message that sends the user to 「設定 › …」 names a place Settings has today. The tabs are the six of
+// R-COPY-01: a message that sends the user to 「設定 › …」 names a place Settings has today. The tabs are those of
 // PANES, and what is inside each is what the page draws (settings-view.ts); a path that is not there (「設定 › 連接 › 商店」,
 // 「設定 › 拉斐爾 › 服務」) sends people to a place that does not exist. The same words are checked in every catalogue,
 // in the core (failures.py, persona.py, the tables of _ui_words_data.py ...) and in the shell's notices (notices.rs).
@@ -33,20 +33,19 @@ export function settingsTree(locale: Locale): Branch {
   const media = [m["settings.quickModel"], m["settings.035"], m["settings.031"], m["media.image"], m["media.video"]];
   return under(
     [m["settings.paneGeneral"], branch(m["settings.ownerSection"], m["skin.title"], m["settings.067"], m["settings.059"], m["agent.title"], m["zone.title"], m["output.folder"])],
+    // 模型 holds the models in use, the subscription accounts and the providers; a model row is named from 模型 too.
+    [m["providers.title"], under(
+      [m["models.used"], branch(...media)],
+      [m["brains.accounts"], branch("ChatGPT", "Claude Code", "Codex")],
+      [m["models.providers"], branch()],
+      ...media.map((name): [string, Branch] => [name, branch()]),
+    )],
+    // 用量 has its two views: 概覽 (this month and the allowances) and 分析.
+    [m["models.usage"], branch(m["usage.overview"], m["usage.analysis"])],
     [m["settings.paneTools"], under([m["services.title"], under(
       [m["services.search"], branch("SearXNG")], [m["services.read"], branch()], [m["services.vision"], branch()], [m["services.pdf"], branch()],
     )])],
     [m["settings.paneSkills"], branch()],
-    [m["settings.paneSafety"], branch(m["vault.title"], m["rules.title"])],
-    [m["settings.paneUsage"], under(
-      [m["providers.title"], under(
-        [m["models.used"], branch(...media)],
-        [m["brains.accounts"], branch("ChatGPT", "Claude Code", "Codex")],
-        [m["models.providers"], branch()],
-      )],
-      [m["models.usage"], branch()],
-      ...media.map((name): [string, Branch] => [name, branch()]),
-    )],
     [m["settings.paneDictation"], under(
       [m["home.shortcuts"], branch()],
       [m["settings.groupStart"], branch()],
@@ -55,6 +54,7 @@ export function settingsTree(locale: Locale): Branch {
       [m["transcription.title"], branch()],
       [m["common.microphone"], branch()],
     )],
+    [m["settings.paneSafety"], branch(m["vault.title"], m["rules.title"])],
     [m["common.about"], branch()],
   );
 }
@@ -131,7 +131,8 @@ describe("a path into Settings names a place Settings has", () => {
     expect(missingPlaces("en", "Open Settings > Connections.")).toHaveLength(1);
     expect(missingPlaces("zh-TW", "請到「設定 › 工具 › 服務 › 搜尋網路 › SearXNG」")).toEqual([]);
     expect(missingPlaces("zh-TW", "請到「設定 › 聽寫與快捷鍵 › 麥克風」選擇。")).toEqual([]);
-    expect(missingPlaces("en", "Check it in Settings > Models & usage > Models > Subscription accounts, then refresh.")).toEqual([]);
+    expect(missingPlaces("en", "Check it in Settings > Models > Subscription accounts, then refresh.")).toEqual([]);
+    expect(missingPlaces("zh-TW", "請到「設定 › 用量」調整上限。")).toEqual([]);
     expect(missingPlaces("en", "from Settings > Project Settings > API Keys on the Composio website")).toEqual([]);
     expect(missingPlaces("zh-TW", "請到「系統設定 › 隱私權與安全性 › 輔助使用」允許拉斐爾。")).toEqual([]);
     expect(missingPlaces("en", "Allow Raphael in System Settings > Privacy & Security > Accessibility.")).toEqual([]);
@@ -143,7 +144,7 @@ describe("a path into Settings names a place Settings has", () => {
       for (const { id } of LOCALES) {
         setLocale(id);
         const tabs = PANES.filter((pane) => pane.id !== STANDALONE_PANE).map((pane) => pane.title());
-        expect(tabs).toHaveLength(7);
+        expect(tabs).toHaveLength(8);
         expect([...settingsTree(id).keys()]).toEqual(tabs);
       }
     } finally { setLocale("zh-TW"); }

@@ -113,7 +113,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
   const saving = new Map<string, string>();
   let adding = false;
   let skills: Loaded<MemberSkill[]> = "loading";
-  /** The packages of the team skill library given to this member: shown here, changed only in the library (#280). */
+  /** The Team skills packages assigned to this member. */
   let library: LibraryRef[] = [];
   let commands: Loaded<MemberCommand[]> = "loading";
   let toolChoices: Loaded<ToolChoices> = "loading";
@@ -219,7 +219,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     return section(title, rows, tool, "ms-skills") + libraryHTML();
   }
 
-  /** What the team skill library gives this member, read-only, in a section of its own with the way to the library. */
+  /** This member's assigned packages, with a link to Team skills. */
   function libraryHTML(): string {
     if (!library.length) return "";
     const open = btn(esc(t("skillLib.openLibrary")), "sm", ' data-ms="open-library" data-k="ms-open-library"');

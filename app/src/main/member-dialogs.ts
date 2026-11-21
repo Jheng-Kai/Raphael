@@ -52,6 +52,8 @@ export interface DialogOptions {
   cls?: string;
   /** No × in the head: the dialog is answered by its buttons, Escape and a press beside it (a question's compact box). */
   noClose?: boolean;
+  /** Controls of what the dialog shows, as HTML, in its head before the × (a larger diagram's zoom); a `data-dlg` reaches onAct. */
+  tools?: string;
 }
 
 /** Opens a dialog over the window (see the top of the file). The first field, or the first button, has the focus. */
@@ -63,7 +65,7 @@ export function openDialog(o: DialogOptions): Dialog {
   const id = `mb-dlg-${Math.random().toString(36).slice(2, 8)}`;
   scrim.innerHTML =
     `<div class="mb-dialog${o.cls ? ` ${o.cls}` : ""}" role="dialog" aria-modal="true" aria-labelledby="${id}"${o.describedByBody ? ` aria-describedby="${id}-body"` : ""}>` +
-    `<div class="mb-dlg-head"><h2 id="${id}">${esc(o.title)}</h2>${o.noClose ? "" : iconButton("x", t("common.close"), ' data-dlg="close"')}</div>` +
+    `<div class="mb-dlg-head"><h2 id="${id}">${esc(o.title)}</h2>${o.tools ?? ""}${o.noClose ? "" : iconButton("x", t("common.close"), ' data-dlg="close"')}</div>` +
     `<div class="mb-dlg-body" id="${id}-body">${o.body}</div>` +
     // A dialog that only shows something has no footer: its × closes it.
     (o.actions.primary || o.actions.secondary || o.actions.destructive ? actionRow({ ...o.actions, cls: "mb-dlg-act" }) : "") +

@@ -655,7 +655,7 @@ export interface TurnLook {
   answerable?: (cardId: string) => boolean;
   /** Whom the owner's words may address: each `@Name` among them is drawn as a chip. */
   mentions?: readonly MentionTarget[];
-  /** The stretch of the turn this line draws, when owner messages that joined its work stand inside it (threadItems). */
+  /** The stretch of the turn this line draws, when owner messages or exchanges that joined its work stand inside it (threadItems). */
   part?: TurnPart;
 }
 
@@ -1251,7 +1251,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
   const textAnswer = turn.status === "confirm" || settledDraft || turn.route === "draft" || !turn.text.trim()
     ? "" : messageBlockHTML(turn, "reply", turn.text, turn.created_at_ms, query, state, true, regenerate, true, true, turn.id === look.signinTurnId);
   const name = turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title");
-  // Owner messages that joined the work stand inside its line (threadItems): the turn's own words open its first stretch,
+  // Owner messages and exchanges that joined the work stand inside its line (threadItems): the turn's own words open its first stretch,
   // and only its last one holds what ends the turn.
   const part = look.part, first = part?.from === undefined, ends = part?.until === undefined;
   const settledCards = first ? permissionCardsHTML(turn, look.answerable, true, name) : "";
@@ -1283,7 +1283,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
       : "") +
     turnEventsHTML(turn, look) + mailHandedLinesHTML(turn, look);
   if (!ends) {
-    // A stretch before an owner message that joined the work: what the work said in it, and nothing that ends the turn.
+    // A stretch before an owner message or exchange that joined the work: what the work said in it, and nothing that ends the turn.
     const stretch = hasMsgs ? turnMessagesHTML(turn, state, query, regenerate, revealing, settledCards, "", waitingForOwner, turn.id === look.signinTurnId, part) : "";
     if (!stretch && !head) return "";
     return line(stretch ? "" : " is-owner-only", head + (stretch ? `<div class="ra"><div class="ra-body">${stretch}</div></div>` : ""));

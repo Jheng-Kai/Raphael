@@ -17,17 +17,24 @@
 
 .data-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); margin-bottom: var(--sp-3); }
 .data-heading h2 { margin: 0; }
+/* In Settings a section's action (聽寫與快捷鍵's 編輯) stands over its card's controls, as the section's name stands over its rows' names. */
+.modal-body .sgroup > .data-heading { margin-bottom: var(--sp-2); padding-right: var(--sp-4); }
 /* A tab's name alone heads it; its first section keeps the gap of the others. */
 .modal-body > h1 + .sgroup, .modal-body > h1 + div > .sgroup:first-child { margin-top: var(--sp-5); }
 /* The sections of 一般 that hold sections of their own (messaging): their cards follow one another under one name. */
 .set-messaging > .sgroup { margin-top: var(--sp-2); }
 .set-messaging > h2 + .sgroup { margin-top: 0; }
+/* 關於你 is a section around the owner's own card: the card sits under its name with the air every section has. */
+.set-account > h2 + .sgroup { margin-top: 0; }
 
 /* The settings rows: a choice is its value and a chevron on the row's right edge, with no box
-   and no fill, not even under the pointer; only its words brighten. The chevrons line up. */
-.modal-body .slist .ctl .sel { width: auto; max-width: 100%; justify-content: flex-end; gap: var(--sp-1); padding-inline: var(--sp-2); border-color: transparent; background-color: transparent; color: var(--text-2); }
-.modal-body .slist .ctl .sel:hover:not(:disabled), .modal-body .slist .ctl .sel[aria-expanded="true"] { border-color: transparent; background-color: transparent; color: var(--text); }
+   and no fill, not even under the pointer; only its words brighten. The chevrons line up. The written form of a language
+   in the languages' picker is the same dropdown (R-UI-165). */
+.modal-body .slist .ctl .sel, .lang-row > .sel { width: auto; max-width: 100%; justify-content: flex-end; gap: var(--sp-1); padding-inline: var(--sp-2); border-color: transparent; background-color: transparent; color: var(--text-2); }
+.modal-body .slist .ctl .sel:hover:not(:disabled), .modal-body .slist .ctl .sel[aria-expanded="true"], .lang-row > .sel:hover:not(:disabled), .lang-row > .sel[aria-expanded="true"] { border-color: transparent; background-color: transparent; color: var(--text); }
 .modal-body .slist .ctl .sel:disabled:hover { border-color: transparent; }
+/* In the picker it ends its language's row and never covers the language's name. */
+.lang-row > .sel { flex: none; max-width: calc(52% + var(--sp-6)); margin-inline-end: var(--sp-1); }
 /* The model picker is a card with the model's mark, name and price, and keeps its frame. */
 .modal-body .slist .ctl .sel.mp-trigger { justify-content: flex-start; padding-inline: var(--sp-3); border-color: var(--btn-edge); background-color: var(--btn); color: var(--text); }
 .modal-body .slist .ctl .sel.mp-trigger:hover:not(:disabled) { background-color: var(--hover); }

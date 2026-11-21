@@ -23,6 +23,28 @@ export default [{
     { type: "step", text: "《告。正在查看今天下午的行程。》", language: "zh-TW" },
   ] }), entry: "overlay.html",
 }, {
+  // A muted microphone is said beside the listening emblem a second into the recording (dictation.rs `on_sound`).
+  ...scene("overlay-mic-quiet", "A recording whose microphone gives no sound says so beside the listening emblem while it goes on", [
+    { action: "advance-time", ms: 1500 }, check("overlay-mic-quiet"),
+  ], { overlayEvents: [
+    { type: "settings", px: 96, subtitles: "on", language: "zh-TW" },
+    { type: "show", mode: "listening" },
+    { type: "level", value: 0 },
+    { type: "show", mode: "listening", line: "《告。未收到聲音。麥克風可能已靜音。》" },
+  ] }), entry: "overlay.html", ready: ".subs.on .sub-line",
+}, {
+  // Once sound arrives the shell shows the emblem again without a line, and the line goes.
+  ...scene("overlay-mic-heard", "Once the microphone gives sound the line beside the listening emblem goes and the ring follows the voice", [
+    { action: "advance-time", ms: 1500 }, check("overlay-mic-heard"),
+  ], { overlayEvents: [
+    { type: "settings", px: 96, subtitles: "on", language: "zh-TW" },
+    { type: "show", mode: "listening" },
+    { type: "show", mode: "listening", line: "《告。未收到聲音。麥克風可能已靜音。》" },
+    { type: "level", value: 0.5 },
+    { type: "show", mode: "listening" },
+    { type: "level", value: 0.5 },
+  ] }), entry: "overlay.html", ready: "#emblem",
+}, {
   // A quick answer that arrived while the owner dictated is held by the shell and said once the dictation completed
   // (dictation.rs `wait_for_overlay`): the corner finishes the dictation's 100 % and then tells the answer, nothing else.
   ...scene("overlay-held-answer", "A quick answer held through a dictation is told in the corner once the dictation has completed", [

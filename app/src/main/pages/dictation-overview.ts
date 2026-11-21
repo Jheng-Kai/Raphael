@@ -1,4 +1,3 @@
-import { bindNavLayer } from "../nav-layers";
 import { visibilityGate } from "../window-visibility";
 // Dictation overview: four usage numbers, activity grid and shortcuts.
 
@@ -12,7 +11,9 @@ import { bindingLabels } from "../keys";
 import { loadingHTML } from "../loading";
 import { durationParts, formatCount, hasDictations, periodSpeed } from "../stats";
 import type { AppContext, DeviceSettings, Page, PageId, SettingsPane, StatsSummary } from "../types";
-import { esc, iconBtn, keys } from "../ui";
+import { SHORTCUTS } from "../hotkey-recording";
+import { openShortcutEditor } from "../shortcut-editor";
+import { btn, esc, iconBtn, keys } from "../ui";
 import "../dictation-overview.css";
 
 /** How often the page is read again while it is on screen. */
@@ -72,20 +73,18 @@ function activityHTML(s: StatsSummary): string {
 /** The lasting usage cards: the four numbers, then the activity. */
 export const usageHTML = (s: StatsSummary): string => statsHTML(s) + activityHTML(s);
 
-/** The shortcuts: what each does and its keys. A key that is not set is not listed. */
+/**
+ * The shortcuts, read-only: what each does and its keys, in the order of use, then Esc. A key that is not set is not listed
+ * (an app from before the question key has no `agent_keys` yet, nor one from before the tidy key `tidy_keys`). The card's
+ * 編輯 opens the dialog where they are changed (shortcut-editor.ts).
+ */
 export function keysCardHTML(d: DeviceSettings): string {
-  const shortcut = (name: string, bindings: string[]): string =>
+  const shortcut = (name: string, bindings: readonly string[]): string =>
     `<div class="kc-row"><div class="kc-name">${esc(name)}</div>` +
     `<div class="kc-keys">${bindings.map((b) => keys(bindingLabels(b))).join(t("home.017"))}</div></div>`;
-  // an app from before the question key has no `agent_keys` yet, nor one from before the tidy key `tidy_keys`
-  const agentKeys = d.agent_keys ?? [];
-  const tidyKeys = d.tidy_keys ?? [];
   return (
-    `<div class="card-head"><h2>${esc(t("home.shortcuts"))}</h2>${iconBtn("pencil", t("home.018"), ' data-go="settings" data-pane="dictation"')}</div>` +
-    shortcut(t("home.020"), d.dictation_keys) +
-    (agentKeys.length ? shortcut(t("home.askRaphael"), agentKeys) : "") +
-    (d.paste_last_keys.length ? shortcut(t("home.021"), d.paste_last_keys) : "") +
-    (tidyKeys.length ? shortcut(t("settings.tidyKeys"), tidyKeys) : "") +
+    `<div class="card-head"><h2>${esc(t("home.shortcuts"))}</h2>${btn(esc(t("keys.edit")), "sm", ' data-act="keys-edit"')}</div>` +
+    SHORTCUTS.map(({ field, name }) => ((d[field] ?? []).length ? shortcut(name(), d[field] ?? []) : "")).join("") +
     shortcut(t("common.cancel"), ["Escape"])
   );
 }
@@ -184,10 +183,11 @@ export function createDictationOverview(app: AppContext): Page {
     paintGrid();
   }
 
-  // A day's words, shown when the day is pressed; pressed again, elsewhere or Esc, gone.
+  // A day's words under the pointer: the day is outlined and its words stand above it (below it near the window's top),
+  // inside the window. The pointer leaving the day, a key or a scroll puts them away; a press adds nothing (no history opens).
   const dayTip = document.createElement("div");
   dayTip.className = "message-tooltip heat-tip";
-  dayTip.setAttribute("role", "status");
+  dayTip.setAttribute("role", "tooltip");
   dayTip.hidden = true;
   el.append(dayTip);
   let picked: SVGRectElement | null = null;
@@ -197,31 +197,38 @@ export function createDictationOverview(app: AppContext): Page {
     dayTip.hidden = true;
   }
   function showDay(day: SVGRectElement): void {
+    if (day === picked) return;
     hideDay();
     picked = day;
     day.classList.add("is-picked");
     dayTip.textContent = day.dataset.tip ?? "";
-    bindNavLayer(dayTip, hideDay);
     dayTip.hidden = false;
     const box = day.getBoundingClientRect(), size = dayTip.getBoundingClientRect();
     dayTip.style.left = `${Math.max(8, Math.min(window.innerWidth - size.width - 8, box.left + (box.width - size.width) / 2))}px`;
     dayTip.style.top = `${box.top - size.height - 6 < 8 ? box.bottom + 6 : box.top - size.height - 6}px`;
   }
-  document.addEventListener("pointerdown", (e) => { if (picked && !(e.target as Element).closest?.(".heat rect[data-tip]")) hideDay(); }, true);
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && picked) hideDay(); });
+  const dayOf = (node: EventTarget | null): SVGRectElement | null => (node instanceof Element ? node.closest<SVGRectElement>(".heat rect[data-tip]") : null);
+  el.addEventListener("pointerover", (e) => { const day = dayOf(e.target); if (day) showDay(day); });
+  el.addEventListener("pointerout", (e) => { if (picked && !dayOf(e.relatedTarget)) hideDay(); });
+  document.addEventListener("keydown", () => { if (picked) hideDay(); });
   el.addEventListener("scroll", hideDay, true);
 
   el.addEventListener("click", (e) => {
     const target = e.target as Element;
-    const day = target.closest<SVGRectElement>(".heat rect[data-tip]");
-    if (day) { if (day === picked) hideDay(); else showDay(day); return; }
     const go = target.closest<HTMLElement>("[data-go]");
     if (go) app.go(go.dataset.go as PageId, go.dataset.pane as SettingsPane | undefined);
     const act = target.closest<HTMLElement>("[data-act]")?.dataset.act;
     if (act === "older" || act === "newer") void turn(act === "older");
+    else if (act === "keys-edit") openShortcutEditor(app, () => {
+      // The dialog gave the focus back to 編輯, which is drawn anew with the new keys.
+      const focused = keysCard.contains(document.activeElement);
+      keysCard.innerHTML = keysCardHTML(app.device());
+      if (focused) keysCard.querySelector<HTMLElement>('[data-act="keys-edit"]')?.focus({ preventScroll: true });
+    });
   });
 
-  // The grid shows as many weeks as fit.
+  // The grid shows as many weeks as fit. The page is watched, not `.usage`: that has no box of its own (display: contents),
+  // so a watch on it never saw the window change width and the grid kept the weeks of its first width.
   let lastWidth = 0;
   new ResizeObserver(() => {
     const width = el.querySelector<HTMLElement>(".heat-box")?.clientWidth ?? 0;
@@ -229,7 +236,7 @@ export function createDictationOverview(app: AppContext): Page {
       lastWidth = width;
       paintGrid();
     }
-  }).observe(usage);
+  }).observe(el);
 
   getVersion()
     .then((v) => {

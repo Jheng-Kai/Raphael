@@ -1,0 +1,16 @@
+/* 編輯快捷鍵 (shortcut-editor.ts): the app's compact dialog whose rows are the shortcut lists' own (`.row.row-shortcut`): the
+   name at the left, the key caps at the right with no frame and no fill, and a pencil after them on every shortcut that can
+   be changed. While one records, the words that ask for the keys stand where its caps were, frameless too. */
+.mb-dialog.kd-dialog { width: min(440px, 100%); }
+.kd-list { display: grid; grid-template-columns: minmax(0, 1fr); }
+/* As tall as the rows of Settings' list behind it, the names in the list's colour rather than the dialog's quieter words. */
+.kd-list > .row { min-height: 52px; }
+.kd-list > .row > .lbl > .t { color: var(--text); overflow-wrap: anywhere; }
+.kd-list > .row > .ctl { flex: 0 1 auto; min-width: 0; }
+.kd-list .caps { flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
+/* The pencil is a row's icon button (ui.ts iconBtn) with the row's 16 px icon, not the dialog's larger button and icon. */
+.kd-dialog .btn.icon.row { flex: none; width: var(--h-ctl-sm); min-height: var(--h-ctl-sm); }
+.kd-dialog .btn.icon.row .i { width: 16px; height: 16px; }
+/* Esc has no pencil: its caps end where the others' do, the pencils standing in a column of their own. */
+.kd-fixed > .ctl { padding-right: calc(var(--h-ctl-sm) + var(--sp-2)); }
+.kd-error { margin: var(--sp-2) 0 0; color: var(--err); font-size: var(--fs-sm); }

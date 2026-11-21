@@ -27,7 +27,7 @@ import {
   withFavorite,
   listHTML,
 } from "./model-picker";
-import type { CatalogModel, ModelCatalog } from "./types";
+import type { CatalogModel, CliBrain, ModelCatalog } from "./types";
 
 afterEach(() => setLocale("zh-TW"));
 
@@ -306,7 +306,7 @@ describe("the rows a role cannot use", () => {
   });
 
   test("every reason has its words, and a reason the app does not know still has some", () => {
-    expect(reasonText("no_structured_output")).toBe("無法依指定格式（JSON）回覆");
+    expect(reasonText("no_structured_output")).toBe("無法照指定的格式回覆");
     expect(reasonText("no_reasoning_setting")).toBe("不接受關閉推理的設定");
     expect(reasonText("no_max_tokens")).toBe("無法限制回覆長度");
     expect(reasonText("something_new")).toBe("這裡無法使用");
@@ -478,7 +478,8 @@ describe("the picker of 看圖片 (the role vision)", () => {
     const look = { role: "vision" as const, label: "看圖片", catalog: { ...CATALOG, llm: [seeing] }, lead: LEAD, showPrice: false };
     expect(modelPickerHTML({ ...look, current: "" })).toContain('<strong class="mp-tname">與回答相同</strong>');
     expect(modelPickerHTML({ ...look, current: "" })).toContain('aria-label="看圖片: 與回答相同 · 與回答相同"');
-    expect(modelPickerHTML({ ...look, current: "google/gemini-4-flash" })).toContain('<strong class="mp-tname">gemini-4-flash</strong>');
+    // A model the catalogue names only by its id reads as the app words ids, as everywhere else.
+    expect(modelPickerHTML({ ...look, current: "google/gemini-4-flash" })).toContain('<strong class="mp-tname">Gemini 4 Flash</strong>');
   });
 });
 
@@ -520,5 +521,23 @@ describe("a choice whose connection is not connected", () => {
     expect(modelDisplayName(CATALOG, "elevenlabs/scribe-v2")).toBe("Scribe v2");
     expect(modelDisplayName(null, "openai/gpt-6-sol")).toBe("GPT-6 Sol");
     expect(modelDisplayName(CATALOG, "")).toBe("");
+  });
+
+  test("a model reads as the picker names it, with its version's dot, and one model never reads two ways", () => {
+    const claude = { id: "claude", available: true, installed: true, models: [
+      { id: "cli:claude:claude-opus-5-5", name: "Claude Opus 5.5", aliases: ["opus"], reasoning_efforts: ["high"], default_effort: "high", is_default: false },
+    ] } as unknown as CliBrain;
+    // Claude Code's own name, found by its id or by the alias a member was saved with, effort and all.
+    expect(modelDisplayName(CATALOG, "cli:claude:claude-opus-5-5?effort=xhigh", [claude])).toBe("Claude Opus 5.5");
+    expect(modelDisplayName(CATALOG, "cli:claude:opus?effort=high", [claude])).toBe("Claude Opus 5.5");
+    // With no list to name it, the id keeps the dot of its version and loses its date.
+    expect(modelDisplayName(null, "cli:claude:claude-opus-5-5", [])).toBe("Claude Opus 5.5");
+    expect(modelDisplayName(null, "cli:claude:claude-opus-4-1-20250805", [])).toBe("Claude Opus 4.1");
+    expect(modelDisplayName(null, "cli:codex:gpt-6.1-terra", [])).toBe("GPT-6.1 Terra");
+    // ChatGPT names its model "GPT-6-Luna" where OpenRouter says "GPT-6 Luna": both read GPT-6 Luna.
+    const chatgpt = { ...CATALOG, llm: [...CATALOG.llm, llm("gpt-6-luna", { name: "GPT-6-Luna", provider_id: "chatgpt", provider_name: "ChatGPT", provider: "OpenAI" })] };
+    expect(modelDisplayName(chatgpt, "@chatgpt:gpt-6-luna", [])).toBe("GPT-6 Luna");
+    expect(modelDisplayName(chatgpt, "openai/gpt-6-luna", [])).toBe("GPT-6 Luna");
+    expect(modelDisplayName(null, "cli:codex:gpt-6-luna", [])).toBe("GPT-6 Luna");
   });
 });

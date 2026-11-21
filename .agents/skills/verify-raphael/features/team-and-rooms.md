@@ -125,7 +125,8 @@ stage instead, escape the clip at its depth in a long room and stretch the main 
 the last message would scroll the whole room away. Scene: `room-long-reply-wheel`; R-UI-62.
 The room's right-click dialogs 參與者 and 房內角色 (and the new room dialog) are one list of rows
 (`.room-list`): each member's face and name, a check on the right of a chosen member,
-a pressed state for a reader; in 房內角色 each row carries its role as a bare dropdown on the right.
+a pressed state for a reader and the selected fill on a chosen row, as Safety's member rows have it
+(R-UI-174); in 房內角色 each row carries its role as a bare dropdown on the right.
 No separate list of picked names. Scenes: `primary-room-members`, `room-role-assignment`, `new-room`,
 `plus-create-room`, `room-replies`.
 

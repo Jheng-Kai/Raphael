@@ -9,6 +9,7 @@ from raphael_core.agent.answers import MESSAGE_BREAK, parse_reply
 from raphael_core.agent.cli.drivers import Driver, Event
 from raphael_core.messaging.cards import LINKS
 from raphael_core.messaging.service import member_account
+from raphael_core.messaging.words import words
 from test_chat_setup_share import rig, setup_card  # noqa: F401
 
 
@@ -47,6 +48,30 @@ async def test_late_pairing_is_a_new_bottom_turn_and_replacement_updates_it(rig,
     answer = await rig.agent.call("messaging.pairing.answer", {"id": pairing["id"], "approve": True})
     assert answer["card"]["state"] == "approved"
     assert [u.user_id for u in rig.messaging._config.channel(member_account(owner, platform)).allowed] == ["U2"]
+
+
+@pytest.mark.parametrize("platform", list(LINKS))
+async def test_an_allowed_pairing_ends_with_its_member_saying_so_under_the_card(rig, platform):
+    """R-PAIR-LINE-01: the newest words stand last, never the card the owner just answered."""
+    card, running = await connected(rig, platform)
+    running.switchboard.pairing.issue("U1", "D1", "Owner")
+    [paired_turn] = [t for t in await rig.agent.turns(member_id=card.member_id) if t.get("pairings")]
+    await rig.agent.call("messaging.pairing.answer", {"id": paired_turn["pairings"][0]["id"], "approve": True})
+    turns = await rig.agent.turns(member_id=card.member_id)  # newest first
+    last = turns[0]
+    assert last["id"] > paired_turn["id"] and not last.get("pairings")
+    assert last["text"] == words(rig.messaging._language(), "paired")
+    assert last["conversation_id"] == paired_turn["conversation_id"]
+    assert ("agent.turn", {"turn_id": last["id"], "member_id": card.member_id}) in rig.events
+
+
+async def test_a_refused_pairing_adds_no_line(rig):
+    card, running = await connected(rig, "telegram")
+    running.switchboard.pairing.issue("U1", "D1", "Stranger")
+    [paired_turn] = [t for t in await rig.agent.turns(member_id=card.member_id) if t.get("pairings")]
+    await rig.agent.call("messaging.pairing.answer", {"id": paired_turn["pairings"][0]["id"], "approve": False})
+    turns = await rig.agent.turns(member_id=card.member_id)  # newest first
+    assert turns[0]["id"] == paired_turn["id"]
 
 
 @pytest.mark.parametrize("platform", list(LINKS))
@@ -204,12 +229,14 @@ async def test_terminal_pairing_updates_in_place_then_next_code_adds_a_turn(rig,
         await rig.agent.call("messaging.pairing.answer", {"id": row["id"], "approve": state == "approved"})
     [updated] = rig.messaging.cards.views([row["turn_id"]])[row["turn_id"]]
     assert updated["state"] == state and updated["code"] == code
-    assert len(await rig.agent.turns(member_id=card.member_id)) == before
+    # An allowed pairing ends with its member's line under the card (R-PAIR-LINE-01); the card itself stays in place.
+    said = 1 if state == "approved" else 0
+    assert len(await rig.agent.turns(member_id=card.member_id)) == before + said
     assert ("agent.turn", {"turn_id": row["turn_id"], "member_id": card.member_id}) in rig.events
     next_code = running.switchboard.pairing.issue("U2", "D2", "Next")
     [latest] = rig.conn.execute("SELECT * FROM messaging_pairing_cards ORDER BY rowid DESC LIMIT 1").fetchall()
     assert latest["turn_id"] > row["turn_id"] and latest["code"] == next_code
-    assert len(await rig.agent.turns(member_id=card.member_id)) == before + 1
+    assert len(await rig.agent.turns(member_id=card.member_id)) == before + said + 1
 
 
 async def test_pairing_restart_and_deleted_turn_cannot_be_answered(rig):

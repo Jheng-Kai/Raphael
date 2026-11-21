@@ -408,6 +408,18 @@ async def test_transient_api_retry_is_three_times_and_after_work_it_goes_on_with
     assert client.chat_calls[1]["messages"] == client.chat_calls[-1]["messages"]
 
 
+def test_self_check_says_no_monthly_limit_as_null(make_rig):
+    from raphael_core.agent.self_check import snapshot
+    from raphael_core.agent.speaker import RAPHAEL
+    rig = make_rig()
+    result = snapshot(rig.service, SimpleNamespace(speaker=RAPHAEL, conversation_id=None))
+    # A new install has no limit (不設上限): the facts the model reads say null, never a made-up amount.
+    assert result["settings"]["monthly_limit_usd"] is None
+    assert '"monthly_limit_usd": null' in json.dumps(result["settings"])
+    rig.service._settings.set("monthly_limit_usd", 30)
+    assert snapshot(rig.service, SimpleNamespace(speaker=RAPHAEL, conversation_id=None))["settings"]["monthly_limit_usd"] == 30.0
+
+
 def test_self_check_exposes_content_free_memory_health(make_rig):
     from raphael_core.agent.self_check import snapshot
     from raphael_core.agent.speaker import RAPHAEL

@@ -1,29 +1,31 @@
-/* What each subscription has left, one card each (usage-analytics.ts). */
-.run-allowance { margin-bottom: var(--sp-5); min-width: 0; }
-.run-allowance > header { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); flex-wrap: wrap; }
-/* The same small heading as every settings group, so the cards and the rows below read as one page. */
-.run-allowance > header h2 { margin: 0 0 0 var(--sp-1); font: 500 var(--fs-sm)/1.4 var(--ui); color: var(--text-2); }
-.run-subscription { border: 1px solid var(--line); border-radius: var(--r-lg); padding: var(--sp-4); margin-top: var(--sp-3); background: var(--panel); }
-.run-subscription > header { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); flex-wrap: wrap; }
-.run-subscription h4 { display: flex; align-items: center; gap: var(--sp-2); margin: 0; font-size: var(--fs-xs); }
+/* What each subscription has left, one card each (usage-analytics.ts): the service and its account at the top, then each
+   window's name, when it resets and what is left over a bar in Raphael's blue. */
+.run-allowance { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); }
+.run-allowance > header { display: grid; grid-template-columns: minmax(0, 1fr); }
+/* The same small heading as every settings group, so the cards and this month's card read as one page. */
+.run-allowance > header h2 { margin: 0; font: 500 var(--fs-xs)/1.4 var(--ui); color: var(--text-2); }
+.run-subscription { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); border: 1px solid var(--float-edge); border-radius: var(--r-lg); padding: var(--sp-4); background: var(--panel); }
+.run-subscription > header { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); flex-wrap: wrap; min-width: 0; }
+.run-subscription h4 { display: flex; align-items: center; gap: var(--sp-2); margin: 0; font-size: var(--fs-sm); font-weight: var(--weight-semibold); }
 .run-subscription h4 .mono { width: 22px; height: 22px; flex: none; }
+.run-who { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-xs); color: var(--text-2); }
 .run-allowance-unavailable, .run-quota small { font-size: var(--fs-2xs); color: var(--text-3); }
-.run-allowance-unavailable { margin: var(--sp-3) 0 0; }
-.run-quota { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; font-size: var(--fs-2xs); }
-.run-window { display: flex; gap: var(--sp-2); align-items: center; flex-wrap: wrap; margin: var(--sp-3) 0; font-size: var(--fs-2xs); }
-.run-window:last-child { margin-bottom: 0; }
+.run-allowance-unavailable { margin: 0; }
+.run-unreadable { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); flex-wrap: wrap; }
+.run-quota { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; margin: 0; font-size: var(--fs-2xs); }
+.run-window { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); min-width: 0; }
+.run-window-name { font-size: var(--fs-sm); }
+.run-window-line { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-3); font-size: var(--fs-xs); color: var(--text-2); }
+.run-window-line > strong { flex: none; font-weight: 400; }
 .run-window small { color: var(--text-3); font-size: var(--fs-2xs); }
-.run-window .run-bar-track { width: 100%; }
-.run-bar-track { background: var(--hover); height: 7px; border-radius: var(--r-sm); overflow: hidden; }
+.run-bar-track { margin-top: var(--sp-1); background: var(--hover); height: 7px; border-radius: var(--r-sm); overflow: hidden; }
 .run-bar-track i { display: block; background: var(--meter); height: 100%; border-radius: var(--r-sm); }
-/* What the app spent this month, in a card: the amount large, the share of the monthly limit beside it, a
-   coloured bar and one quiet line (settings-view.ts `spendCardHTML`). */
-.spend-card { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); padding: var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--panel); }
-.spend-card h2 { margin: 0; font: 500 var(--fs-sm)/1.4 var(--ui); color: var(--text); }
+/* What the app spent this month, in a card: its name, the amount large, one quiet line with where the month ends at this pace
+   and the limit, and the share of the limit as a bar in Raphael's blue (settings-view.ts `spendCardHTML`). */
+.spend-card { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); padding: var(--sp-4); border: 1px solid var(--float-edge); border-radius: var(--r-lg); background: var(--panel); }
 .spend-value { display: flex; align-items: baseline; gap: var(--sp-2); margin: 0; }
 .spend-value strong { font: 500 var(--fs-h1)/1.2 var(--display); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
-.spend-value small { font-size: var(--fs-xs); color: var(--text-2); }
-.spend-bar { height: 7px; border-radius: var(--r-sm); background: var(--hover); overflow: hidden; }
+.spend-bar { height: 7px; margin-top: var(--sp-1); border-radius: var(--r-sm); background: var(--hover); overflow: hidden; }
 .spend-bar i { display: block; height: 100%; min-width: 4px; border-radius: var(--r-sm); background: var(--meter); }
 .spend-note { margin: 0; font-size: var(--fs-2xs); color: var(--text-3); }
 .spend-note:empty { display: none; }

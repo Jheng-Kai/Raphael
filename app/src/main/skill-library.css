@@ -1,4 +1,4 @@
-/* 團隊技能庫 (skill-library.ts): one row per package in Settings' list, its skills folded under it. */
+/* Team skills (skill-library.ts): one row per package in Settings' list; a package of several opens on a page of its own. */
 .skl-import { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); margin-bottom: var(--sp-4); padding: var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--panel); }
 .skl-import-alt { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); }
 .skl-link { display: flex; align-items: center; gap: var(--sp-2); }
@@ -11,7 +11,7 @@
 .skl-empty { margin: 0; padding-block: var(--sp-4); color: var(--text-3); font-size: var(--fs-sm); }
 
 .slist > .row.skl-pack { flex-wrap: nowrap; }
-/* The package's name opens it: bare words with a chevron, never a filled button (Settings fills its .btn). */
+/* The package's name opens its page: bare words with the chevron that says so, never a filled button (Settings fills its .btn). */
 .skl .btn.skl-open { flex: 1 1 auto; min-width: 0; justify-content: flex-start; gap: var(--sp-2); height: auto; min-height: var(--h-field); padding: 0; border: 0; box-shadow: none; background: transparent; color: var(--text); font-size: var(--fs-md); font-weight: var(--weight-regular); text-align: left; }
 .skl .btn.skl-open:hover:not(:disabled), .skl .btn.skl-open:active:not(:disabled) { background: transparent; }
 .skl-open > .i { flex: none; color: var(--text-3); }
@@ -24,12 +24,21 @@
 .skl-access { max-width: 200px; }
 .skl-access > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.skl-skills { display: grid; grid-template-columns: minmax(0, 1fr); padding: 0 0 var(--sp-3) calc(16px + var(--sp-2)); }
-/* Settings' rows have no lines between them (R-UI-115): spacing alone parts a package's skills. */
-.skl-skills > .row { min-height: 48px; padding: var(--sp-2) 0; }
-.skl-skills > .row > .lbl { min-width: 0; }
+/* A package's page, in the list's place: the back arrow (as an app's page of 連接 has it), the name and the count, its
+   controls as on its row, where it came from, then its skills on one card of Settings' rows. */
+.row.skl-page-head { gap: var(--sp-2); min-height: var(--h-row); padding: 0; flex-wrap: nowrap; }
+.skl .btn.icon.skl-back { flex: none; width: 36px; min-width: 36px; height: 36px; min-height: 36px; margin-left: -9px; padding: 0; border-radius: var(--r-pill); }
+.skl .btn.icon.skl-back .i { width: 18px; height: 18px; }
+.skl-page-name { min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 var(--fs-lg)/1.3 var(--display); color: var(--text); }
+/* Its controls end where its skills' switches do, and its dropdown is its words and chevron, as on its row. */
+.row.skl-page-head { padding-right: var(--sp-4); }
+.skl-page-head > .ctl { margin-left: auto; }
+.modal-body .skl-page-head .ctl .sel { width: auto; max-width: 100%; justify-content: flex-end; gap: var(--sp-1); padding-inline: var(--sp-2); border-color: transparent; background-color: transparent; color: var(--text-2); }
+.modal-body .skl-page-head .ctl .sel:hover:not(:disabled), .modal-body .skl-page-head .ctl .sel[aria-expanded="true"] { border-color: transparent; background-color: transparent; color: var(--text); }
+.skl-source { margin: var(--sp-1) 0 var(--sp-3); padding-left: calc(36px - 9px + var(--sp-2)); color: var(--text-3); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.slist.skl-skills > .row { flex-wrap: nowrap; }
+.slist.skl-skills > .row > .lbl { min-width: 0; }
 .skl-skills > .row .d { overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-.skl-source { margin: 0 0 var(--sp-2); color: var(--text-3); font-size: var(--fs-sm); overflow-wrap: anywhere; }
 
 .skl-access-menu { max-height: min(360px, calc(100vh - 16px)); }
 

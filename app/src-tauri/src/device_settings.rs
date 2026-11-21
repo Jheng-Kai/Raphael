@@ -1507,6 +1507,43 @@ mod tests {
     }
 
     #[test]
+    fn the_paste_last_keys_are_changed_like_the_others_and_never_share_a_combination() {
+        // The shortcuts dialog changes them as it changes the rest, in the same patch.
+        let mut s = DeviceSettings::default();
+        assert_eq!(s.paste_last_keys, ["AltRight+V"]);
+        s.apply_patch(&json!({"paste_last_keys": ["ControlRight+F8"]}))
+            .unwrap();
+        assert_eq!(s.paste_last_keys, ["ControlRight+F8"]);
+        // another action's combination, in any spelling, no key at all and keys that cannot be offered
+        for (value, says) in [
+            (json!(["AltRight"]), "聽寫"),
+            (json!(["altright+space"]), "問拉斐爾"),
+            (json!(["AltRight+KeyT"]), "整理選取文字"),
+            (json!([]), "至少"),
+            (json!(["V"]), ""),
+            (json!(["Escape"]), "Esc"),
+        ] {
+            let refused = s
+                .apply_patch(&json!({ "paste_last_keys": value }))
+                .unwrap_err();
+            assert!(refused.contains(says), "{value}: {refused}");
+        }
+        assert_eq!(s.paste_last_keys, ["ControlRight+F8"], "nothing changed");
+        // two shortcuts trading their keys in one patch is fine
+        s.apply_patch(
+            &json!({"paste_last_keys": ["AltRight"], "dictation_keys": ["ControlRight+F8"]}),
+        )
+        .unwrap();
+        assert_eq!(
+            (s.paste_last_keys.clone(), s.dictation_keys.clone()),
+            (
+                vec!["AltRight".to_owned()],
+                vec!["ControlRight+F8".to_owned()]
+            )
+        );
+    }
+
+    #[test]
     fn a_file_from_before_the_tidy_key_gets_it_without_touching_the_other_keys() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join(FILE_NAME);

@@ -936,7 +936,7 @@ async def test_background_provider_failure_keeps_its_repair_in_report_and_stored
     rig.client.replies = [error]
     task_id = rig.submit()
     [done] = await rig.wait_for_reports()
-    assert "Settings > Models & usage > Models" in done["text"]
+    assert "Settings > Models" in done["text"]
     assert "OpenRouter" not in done["text"] and "private" not in done["text"]
     (step,) = rig.steps(task_id)
     missing = step_view(step)["missing"]

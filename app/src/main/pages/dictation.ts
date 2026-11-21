@@ -18,7 +18,7 @@ export function createDictation(app: AppContext, pages: Record<DictationTab, Pag
   let selected: DictationTab = "overview", visible = false;
   function paint(): void {
     const restoreFocus = head.contains(document.activeElement);
-    // The app's one tab component (ui.ts tabs()), as the panel's and 模型與用量's.
+    // The app's one tab component (ui.ts tabs()), as the panel's and 用量's.
     head.innerHTML = `<div class="page-head"><h1>${esc(t("nav.dictation"))}</h1></div>` +
       `<div class="dictation-nav">${tabs(TAB_IDS.map(id => ({
         id, label: t(id === "overview" ? "dictation.overview" : id === "history" ? "main.002" : "main.003"),

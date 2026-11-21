@@ -98,8 +98,8 @@ page they would have to find. Check setup again afterwards and continue the orig
   `winget install --id Gyan.FFmpeg -e`, on macOS `brew install ffmpeg`; Raphael finds it after it restarts.
 - A subscription brain needs its program installed and signed in (self_check's brains). Claude Code installs with
   `npm install -g @anthropic-ai/claude-code`, Codex with `npm install -g @openai/codex` (both need Node.js); signing in
-  is the owner's, from the reply's sign-in button or Settings > Models & usage.
-- With no model at all, the owner connects one source in Settings > Models & usage: a subscription sign-in, an API key or a
+  is the owner's, from the reply's sign-in button or Settings > Models.
+- With no model at all, the owner connects one source in Settings > Models: a subscription sign-in, an API key or a
   local server.
 """
 

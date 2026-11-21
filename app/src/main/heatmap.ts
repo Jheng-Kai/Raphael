@@ -1,8 +1,7 @@
 // The activity grid of the home page: one square a day, a column a week (Sunday on top), tinted by
 // how many words were dictated that day. Days the history no longer knows (before the first day it
 // has, or pruned by the retention) are hatched; days still to come in this week are outlines. A day
-// with a dictation is a button that opens the history at that day: one tab stop for the grid, and
-// the arrow keys move between those days.
+// says its words under the pointer; no day is a button and none opens the history.
 
 import { t } from "./i18n";
 
@@ -102,8 +101,8 @@ const BOTTOM = 18;
 export const weeksThatFit = (width: number): number => Math.max(6, Math.min(53, Math.floor((width - LEFT + GAP) / PITCH)));
 
 /**
- * The grid as inline SVG; the whole has a label for a screen reader. A day's words show when the day is pressed, never
- * under the pointer: each day carries them in `data-tip` for the page to show.
+ * The grid as inline SVG; the whole has a label for a screen reader. A day's words show under the pointer, in the app's
+ * own tip, never the browser's title: each day carries them in `data-tip` for the page to show.
  */
 export function heatmapSVG(grid: Grid): string {
   const weeks = grid.weeks;
@@ -133,8 +132,12 @@ export function heatmapSVG(grid: Grid): string {
   const rows = DAY_NAMES().map((name, d) =>
     d % 2 === 1 ? `<text class="ax" x="0" y="${d * PITCH + CELL - 2}">${name}</text>` : "",
   ).join("");
+  // A month that begins in one of the last two weeks has less room than its name: it ends at the grid's right edge
+  // instead of running past it, where the drawing cut it off ("11" with no 月 in the first days of a month).
   const months = monthLabels(weeks)
-    .map((m) => `<text class="ax" x="${LEFT + m.column * PITCH}" y="${7 * PITCH - GAP + 14}">${esc(m.text)}</text>`)
+    .map((m) => m.column >= weeks.length - 2
+      ? `<text class="ax" x="${width}" y="${7 * PITCH - GAP + 14}" text-anchor="end">${esc(m.text)}</text>`
+      : `<text class="ax" x="${LEFT + m.column * PITCH}" y="${7 * PITCH - GAP + 14}">${esc(m.text)}</text>`)
     .join("");
   return (
     `<svg class="heat" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="group" aria-label="${esc(label)}">` +

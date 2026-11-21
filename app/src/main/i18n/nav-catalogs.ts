@@ -15,7 +15,7 @@ export const navZh = {
   "brains.welcomeTitle": "你正在使用 ChatGPT 方案", "brains.welcomeBody": "符合條件的要求會用你的 ChatGPT 方案額度，用量可以在 ChatGPT 設定管理。", "brains.welcomeDone": "知道了",
   "brains.failDeclined": "你沒有同意這次連線，需要時再按一次。", "brains.failTimeout": "等太久了，這次登入已結束，請再按一次。", "brains.failNetwork": "連不上 OpenAI，請確認網路後再試一次。", "brains.failVault": "登入憑證存不進 Windows 認證管理員，請再試一次。", "brains.failBrowser": "打不開瀏覽器，請確認預設瀏覽器後再試一次。", "brains.failCheck": "這次登入沒有通過驗證，帳號和憑證都沒有變動，請再試一次。",
   "mcp.add": "新增 MCP 伺服器", "mcp.paste": "貼上設定", "mcp.fromApps": "從其他 AI 應用匯入", "mcp.importHint": "只匯入 MCP 伺服器。登入資料與歷史紀錄不會讀取；匯入後預設關閉。", "mcp.json": "MCP JSON 設定", "mcp.preview": "預覽", "mcp.import": "匯入所選", "mcp.nothing": "沒有可加入的新伺服器", "mcp.skipped": "已略過無效設定", "mcp.test": "測試", "mcp.edit": "編輯伺服器", "mcp.save": "儲存", "mcp.testOk": "連線成功，工具清單已讀取", "mcp.testFailed": "連線失敗", "mcp.commandTab": "執行指令", "mcp.urlTab": "連到網址", "mcp.args": "引數（每行一個）", "mcp.limit": "結果大小上限（字元）", "mcp.keepSecrets": "每行 KEY=value；留空值保留已儲存的值，移除整行即可刪除。", "mcp.badPair": "請使用每行 KEY=value 的格式",
-  "runs.allowance": "訂閱額度", "runs.chatgptAllowance": "額度的數字在 ChatGPT 網站上。", "runs.fiveHour": "5 小時", "runs.weekly": "每週", "runs.remaining": "剩餘", "runs.resets": "重設時間",
+  "runs.allowance": "方案額度", "runs.chatgptAllowance": "額度的數字在 ChatGPT 網站上。", "runs.fiveHour": "5 小時", "runs.weekly": "每週", "runs.remaining": "剩餘", "runs.resets": "重設時間",
 } as const;
 
 export const navEn: Record<keyof typeof navZh, string> = {

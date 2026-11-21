@@ -2,6 +2,22 @@
 
 How a member answers: the core loop, replies, memory, models, CLI brains, the queue and handoffs. Part of [the product rules](../RULES.md); a rule's ID is unique across every file.
 
+## A colleague's exchange during work stands where it came, above the work's live line
+
+A member's live line 「正在電腦上執行 cd」 stood above 「與 X 的 2 則訊息」, a colleague's question that came while that work ran: the thread drew each turn whole, ordered by when it began, so what the work did after the question was left above it.
+
+| ID | Date | Rule | Check | Severity | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-EXCHANGE-01 | | A colleague's exchange with a member (a question or a hand-off, `exchangeTurn`) stands in that member's thread at its own moment inside the newest of the member's own work before it that is still at work (running, at a card, a task under way or waiting) or has shown something since it came: what the work said before it stays above the exchange line, and what the work does after it, its live line while it runs and the answer it gives once over, comes below it, so the live line is always last. Work over before the exchange came takes nothing of it, nor does work behind queued words. Owner messages that joined the same work keep their own places beside it (R-QUEUE-09). Exchanges with the same colleague in a row stay one line 「與 X 的 N 則訊息」 while the work shows nothing between them. | vitest, look | hard | app/src/main/conversation.test.ts::running work: what it said before stays above the exchange line, and the rest of it, its live line, below; app/src/main/conversation.test.ts::finished work: the reply it gave after the exchange stays under the exchange line; app/src/main/conversation.test.ts::two exchanges with the same colleague are one line while the work says nothing between them, and two when it does; app/src/main/conversation.test.ts::owner messages and an exchange in the same work each stand at their own moment inside it; app/src/main/conversation.test.ts::older work still under way takes the exchange past finished turns, and queued words keep the exchange out of it; app/src/main/timeline.test.ts::a live turn broken by a turn that came while it worked keeps its live line and later words in the stretch after it; app/src/main/pages/agent-stop.test.ts::a colleague's exchange that came while the member worked stands above its live line, and above its reply once done; exchange-mid-work; exchange-mid-work-answered |
+
+## An allowed pairing ends with its member saying so
+
+The owner allowed a Telegram pairing and then could not find the member's last words: the card stood last, its reply above it.
+
+| ID | Date | Rule | Check | Severity | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-PAIR-LINE-01 | | Once the owner allows a messaging pairing, its member says so in the same conversation under the card, in the words the chat itself is sent (`paired`), so the newest words stand last; a refused or expired pairing adds no line. | pytest | hard | core/tests/test_pairing_language.py::test_an_allowed_pairing_ends_with_its_member_saying_so_under_the_card; core/tests/test_pairing_language.py::test_a_refused_pairing_adds_no_line |
+
 ## What a member says on a reaction is only the words in its envelope
 
 After a thumbs-down a member's reply showed the instruction it was given and a note to itself before its question (#292).

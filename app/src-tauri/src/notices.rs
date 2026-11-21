@@ -149,15 +149,15 @@ pub const TIDY_FAILED: Notice = Notice {
 };
 
 pub const TIDY_MODEL: Notice = Notice {
-    zh: "《否。請到「模型與用量」選擇文字整理模型。》",
-    en: "《Negative. Choose a text tidying model in Models & usage.》",
-    ja: "《否。「モデルと使用量」で文章整理モデルを選んでください。》",
+    zh: "《否。請到「模型」選擇文字整理模型。》",
+    en: "《Negative. Choose a text tidying model in Models.》",
+    ja: "《否。「モデル」で文章整理モデルを選んでください。》",
 };
 
 pub const TIDY_CONNECTION: Notice = Notice {
-    zh: "《否。請到「模型與用量」重新連線文字整理使用的模型。》",
-    en: "《Negative. Reconnect the model selected for text tidying in Models & usage.》",
-    ja: "《否。「モデルと使用量」で文章整理に選んだモデルに再接続してください。》",
+    zh: "《否。請到「模型」重新連線文字整理使用的模型。》",
+    en: "《Negative. Reconnect the model selected for text tidying in Models.》",
+    ja: "《否。「モデル」で文章整理に選んだモデルに再接続してください。》",
 };
 
 pub const TIDY_TIMEOUT: Notice = Notice {
@@ -198,6 +198,14 @@ const NO_SOUND_MAC: Notice = Notice {
     ja: "《否。音声を受信できません。ミュートを解除し、「システム設定 › プライバシーとセキュリティ › マイク」でラファエルを許可してください。》",
 };
 
+/// Said beside the listening emblem while a recording goes on, when its microphone has given no sound for its first
+/// second (`dictation.sound`, `heard` false: muted, or a headset asleep). It goes once sound arrives.
+pub const MIC_QUIET: Notice = Notice {
+    zh: "《告。未收到聲音。麥克風可能已靜音。》",
+    en: "《Notice. No sound yet. The microphone may be muted.》",
+    ja: "《告。音声が届いていません。マイクがミュートかもしれません。》",
+};
+
 /// macOS has refused this app the microphone (or a profile restricts it): nothing was recorded.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub const MIC_DENIED: Notice = Notice {
@@ -217,9 +225,9 @@ pub const MIC_ASKED: Notice = Notice {
 
 /// The cloud speech model's credentials are missing.
 pub const CLOUD_STT_MISSING: Notice = Notice {
-    zh: "《否。雲端語音辨識尚未連接。請到「設定 › 模型與用量 › 用量」設定 OpenRouter 金鑰，或到「設定 › 聽寫與快捷鍵」下載本機模型。》",
-    en: "《Negative. Cloud recognition is not connected. Set the OpenRouter key in Settings > Models & usage > Usage, or download a local model in Settings > Dictation & shortcuts.》",
-    ja: "《否。クラウド認識は未接続です。「設定 › モデルと使用量 › 使用量」で OpenRouter キーを設定するか、「設定 › 音声入力とショートカット」でモデルをダウンロードしてください。》",
+    zh: "《否。雲端語音辨識尚未連接。請到「設定 › 模型」設定 OpenRouter 金鑰，或到「設定 › 聽寫與快捷鍵」下載本機模型。》",
+    en: "《Negative. Cloud recognition is not connected. Set the OpenRouter key in Settings > Models, or download a local model in Settings > Dictation & shortcuts.》",
+    ja: "《否。クラウド認識は未接続です。「設定 › モデル」で OpenRouter キーを設定するか、「設定 › 音声入力とショートカット」でモデルをダウンロードしてください。》",
 };
 
 /// The selected local speech model has not been downloaded.
@@ -231,9 +239,9 @@ pub const LOCAL_MODEL_MISSING: Notice = Notice {
 
 /// The core cannot dictate yet: the speech model is not ready (`NOT_CONFIGURED`).
 pub const NOT_READY: Notice = Notice {
-    zh: "《否。語音辨識尚未就緒。請到「設定 › 聽寫與快捷鍵」下載本機模型；使用雲端辨識時，請在「設定 › 模型與用量」確認連線。》",
-    en: "《Negative. Speech recognition is not ready. Download a local model in Settings > Dictation & shortcuts; for cloud recognition check the connection in Settings > Models & usage.》",
-    ja: "《否。音声認識の準備ができていません。「設定 › 音声入力とショートカット」でモデルをダウンロードし、クラウド認識の場合は「設定 › モデルと使用量」で接続を確認してください。》",
+    zh: "《否。語音辨識尚未就緒。請到「設定 › 聽寫與快捷鍵」下載本機模型；使用雲端辨識時，請在「設定 › 模型」確認連線。》",
+    en: "《Negative. Speech recognition is not ready. Download a local model in Settings > Dictation & shortcuts; for cloud recognition check the connection in Settings > Models.》",
+    ja: "《否。音声認識の準備ができていません。「設定 › 音声入力とショートカット」でモデルをダウンロードし、クラウド認識の場合は「設定 › モデル」で接続を確認してください。》",
 };
 
 /// The cloud could not transcribe the speech and no local model is left to take over
@@ -340,7 +348,7 @@ mod tests {
     use super::*;
 
     /// Every notice, with the Windows and the macOS wording of those that differ.
-    const ALL: [Notice; 27] = [
+    const ALL: [Notice; 28] = [
         NOTHING_SELECTED,
         MIC_DENIED,
         MIC_ASKED,
@@ -362,6 +370,7 @@ mod tests {
         NO_MIC,
         NO_SOUND_WINDOWS,
         NO_SOUND_MAC,
+        MIC_QUIET,
         NOT_READY,
         NO_LOCAL_MODEL,
         INCOMPLETE,

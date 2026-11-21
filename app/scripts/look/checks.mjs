@@ -488,11 +488,14 @@ export function checkRendered(name, context = {}) {
     return { check: name, positions };
   }
   if (name.startsWith('skill-library') || name === 'member-skills-library') {
-    // 團隊技能庫 (skill-library.ts, #280): packages with who may use each; the importer (#249); a character's read-only list.
+    // Team skills (skill-library.ts): packages with access controls, an importer and a member's read-only list.
     const rowOf = key => document.querySelector(`.skl-pack[data-skl-pack="${key}"]`);
     const accessOf = key => rowOf(key)?.querySelector('.skl-access span')?.textContent.trim();
-    if (name !== 'member-skills-library') {
+    // A package's page stands in the list's place (R-SKILL-17): it has no importer of its own.
+    const onPage = name === 'skill-library-open' || name === 'skill-library-page-top';
+    if (name !== 'member-skills-library' && !onPage) {
       const pane = document.querySelector('.modal-scrim .skl');
+      require(pane?.getAttribute('aria-label') === '團隊技能', 'the Settings section names Team skills');
       require(visible(pane) && pane.querySelectorAll('[data-skl="import-go"]').length === 1 && pane.firstElementChild?.matches('.skl-import'), 'the importer is the first card of the tab, with one 匯入');
       require(!pane.querySelector('.skl-head, .skl-drop-hint') && !pane.previousElementSibling?.matches?.('p'), 'nothing is written between the tab name and its first card');
       const box = pane.getBoundingClientRect();
@@ -508,11 +511,36 @@ export function checkRendered(name, context = {}) {
       require(accessOf('set:1') === '還沒給任何人' && accessOf('pack:2') === '小晴、小森' && accessOf('skill:3') === '整個團隊', `who may use each is said on its row (${accessOf('set:1')} / ${accessOf('pack:2')} / ${accessOf('skill:3')})`);
       require(!rowOf('skill:3').querySelector('.skl-count, [data-skl="open"]') && rowOf('skill:3').querySelector('.skl-single .d')?.textContent === '把會議逐字稿整理成決議與待辦', 'a skill alone is one row: its words under its name, nothing to open');
     }
+    if (onPage) {
+      const page = document.querySelector('.modal-scrim .skl-page'), head = page?.querySelector('.skl-page-head');
+      require(visible(page) && !document.querySelector('.modal-scrim .skl-import, .modal-scrim .skl-list'), "the package's page takes the list's place: no importer, no other package");
+      const back = head.querySelector('[data-skl="back"]');
+      require(visible(back) && back.matches('.btn.icon') && back.hasAttribute('data-nav-back') && !!back.getAttribute('aria-label'), 'a back arrow leads the page');
+      require(document.activeElement === back, 'the focus is on the back arrow');
+      const title = head.querySelector('.skl-page-name');
+      require(title?.textContent.trim().length > 0 && title.scrollWidth <= title.clientWidth + 1, "the package's name is whole");
+      require(visible(head.querySelector('.skl-access')) && visible(head.querySelector('.tg[role="switch"]')) && visible(head.querySelector('[data-skl="more"]')), 'who may use it, its switch and its ⋯ stand as on its row');
+      const box = page.getBoundingClientRect();
+      for (const part of [back, head.querySelector('.ctl')]) {
+        const r = part.getBoundingClientRect();
+        require(r.left >= box.left - 10 && r.right <= box.right + 1, `the head stays inside the tab (${Math.round(r.left)}-${Math.round(r.right)} in ${Math.round(box.left)}-${Math.round(box.right)})`);
+      }
+      require(document.querySelector('.modal-scrim .modal-body').scrollTop === 0, 'the page opens at its top');
+      require(document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, 'the window does not scroll sideways');
+    }
     if (name === 'skill-library-open') {
-      const skills = [...document.querySelectorAll('.skl-skills .skl-skill')];
-      require(skills.length === 7 && skills.every(row => visible(row.querySelector('.tg[role="switch"]'))), `the seven skills are listed under pstack, each with its own switch (${skills.length})`);
-      require(rowOf('set:1').querySelector('[data-skl="open"]').getAttribute('aria-expanded') === 'true', 'the row says it is open');
-      require(document.querySelector('.skl-source')?.textContent.includes('jheng-kai/pstack'), 'where it came from is said once');
+      const skills = [...document.querySelectorAll('.skl-page .skl-skills .skl-skill')];
+      require(skills.length === 7 && skills.every(row => visible(row.querySelector('.tg[role="switch"]'))), `the seven skills of pstack are listed on its page, each with its own switch (${skills.length})`);
+      require(document.querySelector('.skl-page-name')?.textContent.trim() === 'pstack' && accessOf('set:1') === '還沒給任何人', 'the page names pstack and who may use it');
+      require(document.querySelector('.skl-page .skl-source')?.textContent.includes('jheng-kai/pstack'), 'where it came from is said once');
+    }
+    if (name === 'skill-library-back') {
+      const body = document.querySelector('.modal-scrim .modal-body'), opener = document.querySelector('[data-skl="open"][data-key="pack:37"]');
+      require(visible(document.querySelector('.modal-scrim .skl-import')) && document.querySelectorAll('.modal-scrim .skl-pack').length === 11, 'the whole list is back, with the importer');
+      require(document.activeElement === opener, "the focus is back on the package's row");
+      const row = opener.getBoundingClientRect(), view = body.getBoundingClientRect();
+      require(body.scrollTop > 0 && row.top >= view.top - 1 && row.bottom <= view.bottom + 1, `the list is where it was left, the package's row in view (scrolled ${Math.round(body.scrollTop)})`);
+      require(!document.querySelector('[data-skl="open"][aria-expanded]') && !document.querySelector('.skl-list .skl-skill'), 'no package folds open in the list');
     }
     if (name === 'skill-library-access') {
       const menu = document.querySelector('.skl-access-menu');
@@ -520,6 +548,20 @@ export function checkRendered(name, context = {}) {
       require(visible(menu) && menu.querySelector('[data-access="all"]')?.getAttribute('aria-checked') === 'false', 'the menu offers the whole team, not chosen now');
       const ticked = items.filter(item => item.getAttribute('aria-checked') === 'true').map(item => item.textContent.trim());
       require(items.length === 3 && ticked.join('、') === '小晴、小森', `the three characters are listed, those the row names ticked (${items.length}: ${ticked.join('、')})`);
+      // R-UI-174: each row leads with who it names, the check (when ticked) at its right edge; never a check on the left.
+      const all = menu.querySelector('[data-access="all"]'), rows = [all, ...items];
+      require(all.querySelector(':scope > .mlead > .room-avatar')?.querySelectorAll(':scope > .av').length === 4, "the whole team leads with the team's own picture, its first faces in one square");
+      require(items.every(item => visible(item.querySelector(':scope > .mlead > .av'))), 'each character leads with its face');
+      for (const item of rows) {
+        const [lead, words, mark] = [':scope > .mlead', ':scope > .mt', ':scope > .ck'].map(part => item.querySelector(part)?.getBoundingClientRect());
+        const box = item.getBoundingClientRect(), label = item.textContent.trim();
+        require(lead && words && mark && lead.right <= words.left + 1 && words.right <= mark.left + 1, `${label}: the face, then the name, then the check's place`);
+        require(box.right - mark.right <= 12 && lead.left - box.left <= 12, `${label}: the face at the left edge and the check at the right edge (${Math.round(lead.left - box.left)}, ${Math.round(box.right - mark.right)})`);
+        require(Math.abs(lead.width - 20) <= 0.5 && Math.abs(lead.height - 20) <= 0.5 && Math.abs((lead.top + lead.bottom) / 2 - (box.top + box.bottom) / 2) <= 1, `${label}: a 20 px face in the middle of its row`);
+        require(!!item.querySelector('.ck svg') === (item.getAttribute('aria-checked') === 'true'), `${label}: a check only when it is ticked`);
+      }
+      const leads = rows.map(item => item.querySelector('.mlead').getBoundingClientRect().left), marks = rows.map(item => item.querySelector('.ck').getBoundingClientRect().right);
+      require(Math.max(...leads) - Math.min(...leads) <= 1 && Math.max(...marks) - Math.min(...marks) <= 1, 'the faces are one column and the checks another');
       const anchor = rowOf('pack:2').querySelector('.skl-access').getBoundingClientRect(), frame = menu.getBoundingClientRect();
       require(frame.top >= anchor.bottom - 1 && frame.bottom <= innerHeight + 1, 'the menu stands under its button, inside the window');
     }
@@ -545,6 +587,8 @@ export function checkRendered(name, context = {}) {
     }
     if (name === 'member-skills-library') {
       const lib = document.querySelector('.ms-pane [data-k="ms-library"]');
+      require(lib.querySelector('.ms-head h2')?.textContent.trim() === '來自團隊技能', 'the member section names Team skills');
+      require(lib.querySelector('[data-ms="open-library"]')?.textContent.trim() === '開啟團隊技能', 'the button names Team skills');
       const names = [...lib.querySelectorAll('.ms-lib-row .ms-label')].map(el => el.textContent.trim());
       require(names.join('、') === '研究工具、會議紀錄', `the packages given to 小晴 are listed, and pstack, given to nobody, is not (${names.join('、')})`);
       require(!lib.querySelector('.tg, [data-ms="skill-toggle"]') && visible(lib.querySelector('.ms-head [data-ms="open-library"]')), 'read-only here, in a section of its own whose head has the way to the library');
@@ -556,13 +600,40 @@ export function checkRendered(name, context = {}) {
   }
   if (name.startsWith('vault-')) {
     const vault = document.querySelector('.vault');
+    /**
+     * R-UI-174: what Safety lets the owner choose (who may use an entry, what a file brings in) is rows with no box: each row
+     * one button, a member's 28 px face (`faces`) or the words at its left, the round check at its right edge, and a chosen
+     * row filled the whole way with the selected colour while the others stay on the pane. Returns the chosen rows.
+     */
+    const vaultPicks = (list, faces) => {
+      const rows = [...vault.querySelectorAll(`${list} > .btn.room-row[aria-pressed]`)];
+      require(rows.length >= 2 && !vault.querySelector('input[type="checkbox"]'), `${list}: rows to press and no box to tick (${rows.length})`);
+      const probe = document.createElement('i'); probe.style.backgroundColor = 'var(--selected)'; vault.append(probe);
+      const selected = getComputedStyle(probe).backgroundColor; probe.remove();
+      for (const row of rows) {
+        const box = row.getBoundingClientRect(), label = row.textContent.trim();
+        const words = row.querySelector(':scope > .room-row-name').getBoundingClientRect(), mark = row.querySelector(':scope > .room-row-mark').getBoundingClientRect();
+        require(words.width > 0 && words.right <= mark.left + 1 && box.right - mark.right <= 12, `${label}: the words, then the check at the right edge (${Math.round(box.right - mark.right)})`);
+        const lines = faces ? [row.querySelector('.room-row-name')] : [...row.querySelectorAll('.room-row-name > *')];
+        require(lines.every(line => line.scrollWidth <= line.clientWidth + 1), `${label}: its words are whole, not cut`);
+        if (faces) {
+          const face = row.querySelector(':scope > .av')?.getBoundingClientRect();
+          require(face && Math.abs(face.width - 28) <= 0.5 && face.left - box.left <= 16 && face.right <= words.left + 1 && Math.abs((face.top + face.bottom) / 2 - (box.top + box.bottom) / 2) <= 1, `${label}: a 28 px face at the left, in the middle of its row`);
+        }
+        const on = row.getAttribute('aria-pressed') === 'true', fill = getComputedStyle(row).backgroundColor;
+        require(on ? fill === selected && visible(row.querySelector('.room-row-mark svg')) : /rgba\(0, 0, 0, 0\)|transparent/.test(fill) && !row.querySelector('.room-row-mark svg'),
+          `${label}: ${on ? 'chosen, filled the whole way and checked' : 'not chosen, on the pane with no check'} (${fill} against ${selected})`);
+      }
+      return rows.filter(row => row.getAttribute('aria-pressed') === 'true');
+    };
     if (name === 'vault-payment') {
       const card = document.querySelector('[data-permission-card]');
       const body = card?.querySelector('.card-body');
       require(visible(body) && ['公司差旅卡', 'https://travel.example.invalid', 'NT$ 1,280', '最後付款由你完成'].every(text => body.innerText.includes(text)), 'payment visibly names the card, merchant, amount and owner final step without expanding details');
       require(!card.querySelector('[data-act="perm-always"]'), 'no standing payment approval is offered');
     } else if (name === 'vault-preview') {
-      require(vault.querySelectorAll('[data-vault-import]').length === 2 && vault.querySelectorAll('[data-vault-import]:checked').length === 1, 'preview supports individual selection');
+      require(vault.querySelectorAll('[data-vault-import]').length === 2 && vault.querySelectorAll('[data-vault-import][aria-pressed="true"]').length === 1, 'preview supports individual selection');
+      vaultPicks('.vault-preview', false);
       require(!window.__look.calls.some(call => ['vault.add','vault.import'].includes(call.method)), 'preview writes no credentials');
     } else if (name.startsWith('vault-new-')) {
       const fields = { login:2, contact:4, card:4 }[name.slice(10)];
@@ -576,7 +647,11 @@ export function checkRendered(name, context = {}) {
       require(!window.__look.calls.some(call => call.method === 'vault.remove'), 'nothing is removed before the second press');
     }
     else if (name === 'vault-filter') require(vault.querySelectorAll('.vault-row').length === 1 && vault.textContent.includes('公司差旅卡'), 'card filter selects only cards');
-    else if (name === 'vault-sharing') require(vault.querySelectorAll('[data-vault-member]').length >= 2 && vault.querySelector('#vault-label').value === '出差聯絡資料', 'sharing preserves form input');
+    else if (name === 'vault-sharing') {
+      require(vault.querySelectorAll('[data-vault-member]').length >= 2 && vault.querySelector('#vault-label').value === '出差聯絡資料', 'sharing preserves form input');
+      const chosen = vaultPicks('.vault-members', true);
+      require(chosen.length === 1 && chosen[0].dataset.vaultMember === '1', `the member pressed is the one chosen (${chosen.map(row => row.dataset.vaultMember).join(',')})`);
+    }
     else {
       require(vault.querySelectorAll('.vault-row').length === 3 && vault.textContent.includes('出差用公司卡'), 'all kinds and hints appear');
       const about = vault.querySelector(':scope > p.dim'), lines = new Map();
@@ -3110,7 +3185,7 @@ export function checkRendered(name, context = {}) {
       require(card.getBoundingClientRect().right <= innerWidth + 1, "card fits the conversation column");
     }
     const diagram = scope.querySelector('.message-diagram');
-    if (["rich-content", "rich-diagram", "rich-source", "rich-expand"].includes(name)) {
+    if (["rich-content", "rich-diagram", "rich-source", "rich-expand", "rich-diagram-hover", "rich-diagram-view", "rich-diagram-zoomed"].includes(name)) {
       require(diagram?.dataset.diagramState === "rendered" && diagram.querySelector('.diagram-view svg'), "Mermaid produces a visible SVG");
       const canvas = diagram.querySelector('.diagram-view > svg'), intrinsicWidth = canvas.viewBox.baseVal.width;
       require(!intrinsicWidth || canvas.getBoundingClientRect().width <= intrinsicWidth + 1, "inline diagrams fit the column without enlarging narrow diagrams into oversized text");
@@ -3142,9 +3217,58 @@ export function checkRendered(name, context = {}) {
     if (name === "rich-source") require(!diagram.querySelector('pre').hidden && diagram.querySelector('[data-rich-act="view-source"]').getAttribute('aria-expanded') === 'true', "source toggle reveals complete source");
     if (name === "rich-expand") {
       const dialog = document.querySelector('.rich-view-dialog');
-      require(visible(dialog?.querySelector('.diagram-view svg')) && dialog.querySelector('.mb-dlg-head [data-dlg="close"]'), "expanded diagram uses the shared accessible dialog");
+      require(visible(dialog?.querySelector('.diagram-stage svg')) && dialog.querySelector('.mb-dlg-head [data-dlg="close"]'), "expanded diagram uses the shared accessible dialog");
       require(!dialog.querySelector('.mb-dlg-act'), "its × closes it, with no 「關閉」 at its foot");
       require(dialog.getBoundingClientRect().width >= Math.min(1200, innerWidth - 48) - 1, "expanded view uses the large viewport-bound dialog width");
+    }
+    // R-UI-173: the drawn chart is one control that opens the larger view, and says so under the pointer, calmly.
+    if (name === "rich-diagram-hover") {
+      const view = diagram.querySelector('.diagram-view');
+      require(view.matches(':hover'), "the pointer is over the chart");
+      require(getComputedStyle(view).cursor === 'pointer', `the chart shows the pointer of something to press: ${getComputedStyle(view).cursor}`);
+      const veil = getComputedStyle(view, '::after');
+      require(veil.content !== 'none' && veil.backgroundColor !== 'rgba(0, 0, 0, 0)' && veil.pointerEvents === 'none', "one grey step lies over the whole chart under the pointer, and takes no press");
+      const card = view.getBoundingClientRect(), step = { left: parseFloat(veil.left), right: parseFloat(veil.right), top: parseFloat(veil.top), bottom: parseFloat(veil.bottom) };
+      require(Object.values(step).every(value => value === 0) && card.width > 0, `the step covers the chart area from edge to edge: ${JSON.stringify(step)}`);
+      require(getComputedStyle(diagram).borderTopColor === getComputedStyle(diagram.querySelector('.rich-head')).borderBottomColor, "no frame lights on hover: the card keeps its edge");
+      require(view.getAttribute('role') === 'button' && view.tabIndex === 0 && view.getAttribute('aria-label') && !view.hasAttribute('title'), "the chart is one named control with no tooltip");
+    }
+    if (name === "rich-diagram-view" || name === "rich-diagram-zoomed") {
+      const dialog = document.querySelector('.mb-dialog.rich-view-dialog.diagram-dialog');
+      require(visible(dialog), "the larger diagram is open in the shared dialog");
+      const stage = dialog.querySelector('.diagram-stage'), svg = stage.querySelector('.diagram-pan > svg'), hint = dialog.querySelector('.diagram-hint');
+      require(visible(svg), "the chart is drawn in the larger view");
+      const area = stage.getBoundingClientRect(), shape = dialog.getBoundingClientRect(), line = hint.getBoundingClientRect();
+      require(shape.top >= 0 && shape.bottom <= innerHeight + 1 && shape.right <= innerWidth + 1, "the larger view fits the window");
+      require(shape.width >= Math.min(1200, innerWidth - 48) - 1, "it uses the large viewport-bound dialog width");
+      const head = [...dialog.querySelectorAll('.mb-dlg-head button')];
+      require(head.map(button => button.dataset.dlg).join() === "zoom-out,zoom-in,zoom-reset,close" && head.every(visible), `zoom out, zoom in and reset stand before the ×: ${head.map(button => button.dataset.dlg)}`);
+      const close = head.at(-1).getBoundingClientRect();
+      require(head.every(button => { const box = button.getBoundingClientRect(); return Math.abs(box.width - close.width) < 1 && Math.abs(box.height - close.height) < 1 && Math.abs(box.top - close.top) < 1; }), "the zoom controls are the same round buttons as the ×, on its row");
+      require(head.every(button => button.querySelector('svg') && !button.textContent.trim()), "the zoom controls are icons with names, no words");
+      require(!dialog.querySelector('.mb-dlg-act'), "a dialog that only shows something keeps no footer");
+      require(visible(hint) && line.top >= area.bottom - 1 && line.bottom <= shape.bottom + 1, "one quiet line stands under the chart, inside the dialog");
+      const words = document.createRange(); words.selectNodeContents(hint);
+      const lines = new Set([...words.getClientRects()].map(rect => Math.round(rect.top))).size;
+      require(lines === 1, `the hint is one line: ${lines}`);
+      if (document.documentElement.lang === 'zh-TW') require(hint.textContent === '滾輪縮放，按住拖曳移動，雙擊重設', `the hint's words: ${hint.textContent}`);
+      require(!hint.hasAttribute('title') && [...dialog.querySelectorAll('[title]')].every(node => node.closest('.mb-dlg-head button')), "no tooltip repeats the words on screen");
+      require(stage.getAttribute('aria-describedby') === hint.id, "the view is described by the hint");
+      // On the dialog's own lighter panel the dark theme's nodes sank into the ground: the chart keeps the ground it was drawn on.
+      require(getComputedStyle(stage).backgroundColor === getComputedStyle(diagram).backgroundColor, `the larger chart stands on the card's ground: ${getComputedStyle(stage).backgroundColor} / ${getComputedStyle(diagram).backgroundColor}`);
+      const chart = svg.getBoundingClientRect(), panTransform = getComputedStyle(stage.querySelector('.diagram-pan')).transform;
+      require(panTransform === 'none' || new DOMMatrix(panTransform).a === 1, "the chart is drawn at its size, never a scaled picture of it");
+      if (name === "rich-diagram-view") {
+        require(stage.dataset.zoom === '100', `the chart starts at its fitted size: ${stage.dataset.zoom}%`);
+        require(chart.left >= area.left - 1 && chart.right <= area.right + 1 && chart.top >= area.top - 1 && chart.bottom <= area.bottom + 1, "the whole chart starts inside its view");
+        require(Math.abs(chart.left + chart.width / 2 - area.left - area.width / 2) <= 1 && Math.abs(chart.top + chart.height / 2 - area.top - area.height / 2) <= 1, "the fitted chart stands in the middle of its view");
+        require(Math.abs(chart.width - (area.width - 48)) <= 1 || Math.abs(chart.height - (area.height - 48)) <= 1 || chart.width >= svg.viewBox.baseVal.width * 2 - 1, "the fitted chart fills its view but for the air around it");
+      } else {
+        require(Number(stage.dataset.zoom) > 100, `the wheel zoomed the chart in: ${stage.dataset.zoom}%`);
+        require(Math.abs(chart.left + chart.width / 2 - area.left - area.width / 2) > 20 || Math.abs(chart.top + chart.height / 2 - area.top - area.height / 2) > 20, "dragging moved the chart away from the middle");
+        require(Math.min(chart.right, area.right) - Math.max(chart.left, area.left) >= 47 && Math.min(chart.bottom, area.bottom) - Math.max(chart.top, area.top) >= 47, "some of the chart stays in its view");
+        require(!stage.hasAttribute('data-dragging') && !document.querySelector('#app-popover'), "the drag ended and no menu opened");
+      }
     }
     if (name === "rich-image") require(scope.querySelector('[data-rich-act="load-image"]') && !scope.querySelector('.message-image [src]'), "a real load control precedes any image source");
     if (name === "rich-image-loaded") require(scope.querySelector('.message-image img')?.referrerPolicy === 'no-referrer', "consented image omits referrer");
@@ -3954,6 +4078,30 @@ export function checkRendered(name, context = {}) {
     require(presence.every(node => node.getBoundingClientRect().top >= bubble.bottom), "the working slime stays under the message");
     return {check:name,lines:lines.length};
   }
+  if (name === "exchange-mid-work" || name === "exchange-mid-work-answered") {
+    // The work's start and what it said before the colleague wrote, the exchange line, then the work going on under it as the
+    // last line: its live line while it runs, the answer it gave after the exchange once it is over.
+    const lines = [...document.querySelectorAll('.thread > li.tn')];
+    const started = lines.findIndex(line => line.matches('[data-id="802"]:not([data-after])'));
+    const exchange = lines.findIndex(line => line.matches('[data-id="812"]') && line.querySelector('.exchange-event'));
+    const after = lines.findIndex(line => line.matches('[data-id="802"][data-after="812"]'));
+    require(started >= 0 && exchange === started + 1 && after === exchange + 1 && after === lines.length - 1,
+      `the work's start, the exchange, then the work going on last: ${[started, exchange, after, lines.length]}`);
+    require(lines[started].querySelector('.owner-message') && lines[started].textContent.includes("資料夾"), "the question and what the work said before stay above the exchange");
+    const line = lines[exchange].querySelector('.exchange-event');
+    require(visible(line) && line.textContent.includes("小森"), "the exchange line names the colleague");
+    const presence = [...document.querySelectorAll('.thread .live-presence')].filter(visible);
+    if (name === "exchange-mid-work") {
+      require(presence.length === 1 && lines[after].contains(presence[0]) && presence[0].getBoundingClientRect().top >= line.getBoundingClientRect().bottom,
+        `one live line, under the exchange line: ${presence.length}`);
+      require(presence[0].textContent.includes("cd"), "the live line says what the work does now");
+    } else {
+      const reply = [...lines[after].querySelectorAll('.chat-message[data-reply]')].find(node => node.textContent.includes("測試完了"));
+      require(!presence.length && visible(reply) && reply.getBoundingClientRect().top >= line.getBoundingClientRect().bottom, "the answer stands under the exchange line");
+      require(![...lines[started].querySelectorAll('.chat-message[data-reply]')].some(node => node.textContent.includes("測試完了")), "nothing said after the exchange is left above it");
+    }
+    return {check:name,lines:lines.length};
+  }
   if (name === "link-chips") {
     // As inline source chips: each link once, in the words, with no row of cards under the reply.
     const reply = [...document.querySelectorAll('.thread .chat-message[data-reply]')].filter(visible).at(-1);
@@ -4411,26 +4559,82 @@ export function checkRendered(name, context = {}) {
     return {check: name};
   }
   if (name === "language-rows") {
-    // R-UI-165: a row is one button, its whole width lit under the pointer; the chip of a language with several written forms
-    // stands on it, chosen or not, and never covers the language's name.
+    // R-UI-165: a row is one button, its whole width lit under the pointer; the dropdown of a language with several written
+    // forms stands on it, chosen or not, with no fill or frame of its own, and never covers the language's name.
     const rows = [...document.querySelectorAll('.lang-panel .lang-row')];
     require(rows.length > 5 && !document.querySelector('.lang-panel').textContent.includes("種寫法"), "every language is a row, and none says how many forms it has instead of its chip");
     for (const row of rows.filter(row => row.classList.contains("has-variants"))) {
-      const chip = row.querySelector('.lang-variant-chip'), name_ = row.querySelector('.lang-item .mt'), box = row.getBoundingClientRect();
+      const chip = row.querySelector('.sel.lang-variant-sel'), name_ = row.querySelector('.lang-item .mt'), box = row.getBoundingClientRect();
       require(visible(chip), `the chip of ${name_.textContent} shows whether it is chosen or not`);
       const c = chip.getBoundingClientRect(), n = name_.getBoundingClientRect();
       require(c.left >= box.left && c.right <= box.right + 0.5 && c.top >= box.top - 0.5 && c.bottom <= box.bottom + 0.5, `the chip of ${name_.textContent} stands on its row`);
       require(n.right <= c.left - 4, `the chip does not cover ${name_.textContent}`);
+      const look = getComputedStyle(chip);
+      require(/rgba\(0, 0, 0, 0\)|transparent/.test(look.backgroundColor) && (parseFloat(look.borderTopWidth) === 0 || /rgba\(0, 0, 0, 0\)|transparent/.test(look.borderTopColor)), `the dropdown of ${name_.textContent} has no fill or frame (${look.backgroundColor}, ${look.borderTopColor})`);
     }
     const hovered = document.querySelector('.lang-panel [data-language="zh"]').closest('.lang-row');
     const lit = getComputedStyle(hovered).backgroundColor, button = getComputedStyle(hovered.querySelector('.lang-item')).backgroundColor;
     require(!/rgba\(0, 0, 0, 0\)|transparent/.test(lit) && /rgba\(0, 0, 0, 0\)|transparent/.test(button), `the whole row lights, not the button alone: row ${lit}, button ${button}`);
     return {check: name};
   }
+  if (name === "language-variant-hover") {
+    // R-UI-165: the written form of a language is the settings rows' dropdown, its value and a chevron with no box or fill,
+    // whose words alone brighten under the pointer, as the dropdowns on the settings card do.
+    const clear = colour => colour === 'transparent' || /rgba\([^)]*,\s*0\)$/.test(colour) || /\/\s*0\)$/.test(colour);
+    const hovered = document.querySelector('.lang-panel [data-variant-menu="zh"]'), resting = document.querySelector('.lang-panel [data-variant-menu="en"]');
+    require(hovered?.matches(':hover') && hovered.matches('.sel') && resting?.matches('.sel'), "the written forms are the settings rows' dropdown, and the pointer is on 中文's");
+    // On the card behind: 聽寫方式's dropdown at rest, and 你說的語言's lit while its picker is open.
+    const cardResting = getComputedStyle(document.querySelector('.modal-scrim .slist [data-k="mode"]')), cardLit = getComputedStyle(document.querySelector('.modal-scrim .slist [data-k="languages"]'));
+    const on = getComputedStyle(hovered), off = getComputedStyle(resting);
+    for (const [style, what] of [[on, "under the pointer"], [off, "at rest"]]) {
+      const framed = ['Top', 'Right', 'Bottom', 'Left'].some(side => parseFloat(style[`border${side}Width`]) > 0 && !clear(style[`border${side}Color`]));
+      require(clear(style.backgroundColor) && !framed && style.boxShadow === 'none', `no fill or frame ${what} (${style.backgroundColor}, ${style.borderTopWidth} ${style.borderTopColor}, ${style.boxShadow})`);
+    }
+    require(off.color === cardResting.color && off.fontSize === cardResting.fontSize && off.fontWeight === cardResting.fontWeight, `at rest it is written as the card's dropdowns (${off.color} ${off.fontSize} ${off.fontWeight} against ${cardResting.color} ${cardResting.fontSize} ${cardResting.fontWeight})`);
+    require(on.color !== off.color && on.color === cardLit.color, `under the pointer its words brighten as a card dropdown's do (${on.color} against ${off.color}, the card's ${cardLit.color})`);
+    const chevron = hovered.querySelector('svg.i'), cardChevron = document.querySelector('.modal-scrim .slist [data-k="mode"] svg.i');
+    require(visible(chevron) && Math.round(chevron.getBoundingClientRect().width) === Math.round(cardChevron.getBoundingClientRect().width) && getComputedStyle(chevron).color === getComputedStyle(cardChevron).color, "its chevron is the card dropdowns' chevron");
+    const row = hovered.closest('.lang-row'), box = hovered.getBoundingClientRect(), language = row.querySelector('.lang-item .mt').getBoundingClientRect();
+    require(box.right <= row.getBoundingClientRect().right + 0.5 && language.right <= box.left - 4 && hovered.querySelector('span').scrollWidth <= hovered.querySelector('span').clientWidth + 1, "it ends its row, never covers the language's name, and its words are whole");
+    require(!clear(getComputedStyle(row).backgroundColor), "its row lights behind it");
+    return {check: name};
+  }
+  if (name === "language-variant-focus") {
+    // R-UI-165: reached with Tab, the written form's dropdown draws the app's keyboard ring (an outline outside it, as every
+    // settings dropdown does), not a menu item's inset frame or fill.
+    const dropdown = document.querySelector('.lang-panel [data-variant-menu="zh"]');
+    require(document.documentElement.hasAttribute('data-keys') && document.activeElement === dropdown, `Tab reaches 中文's dropdown (${document.activeElement?.outerHTML.slice(0, 80)})`);
+    const style = getComputedStyle(dropdown);
+    require(style.outlineStyle === 'solid' && style.outlineWidth === '2px' && style.outlineOffset === '2px' && style.boxShadow === 'none', `the app's ring: ${style.outlineStyle} ${style.outlineWidth} offset ${style.outlineOffset}, shadow ${style.boxShadow}`);
+    require(/rgba\(0, 0, 0, 0\)|transparent/.test(style.backgroundColor), `no fill under the ring (${style.backgroundColor})`);
+    const box = dropdown.getBoundingClientRect(), list = dropdown.closest('.lang-list').getBoundingClientRect(), reach = parseFloat(style.outlineOffset) + parseFloat(style.outlineWidth);
+    require(box.top - reach >= list.top - 0.5 && box.right + reach <= list.right + 0.5, `the ring is whole, not cut by the list's edge (ring top ${Math.round(box.top - reach)}, list top ${Math.round(list.top)})`);
+    return {check: name};
+  }
   if (name === "language-variants-toggle") {
     require(visible(document.querySelector('.lang-panel')), "the picker stays open when the chip is pressed again");
     require(!document.querySelector('.lang-variant-menu'), "the written forms are folded away");
     require(document.querySelector('.lang-panel [data-variant-menu="zh"]').getAttribute('aria-expanded') === "false", "the chip says its forms are closed");
+    return {check: name};
+  }
+  if (name === "language-untick") {
+    // R-UI-175: pressing the language with its submenu open redraws the picker and Settings together.
+    const panel = document.querySelector('.lang-panel');
+    require(visible(panel), "the picker stays open after unticking 中文");
+    const chinese = panel.querySelector('[data-language="zh"]');
+    const english = panel.querySelector('[data-language="en"]');
+    require(visible(chinese) && chinese.getAttribute("aria-pressed") === "false" && !chinese.querySelector('.ck svg'), "中文 is unticked visually and in its pressed state");
+    require(!document.querySelector('.lang-variant-menu'), "the written-form submenu is closed");
+    // R-UI-165: the collapsed control stays on a language with several forms so a form can still be picked.
+    const chineseForm = chinese.closest('.lang-row').querySelector('[data-variant-menu="zh"]');
+    require(visible(chineseForm) && chineseForm.getAttribute("aria-expanded") === "false"
+      && chineseForm.querySelector('span')?.textContent === "繁體中文（台灣）", "中文 keeps its default written form on the collapsed control");
+    require(panel.querySelector('.lang-count')?.textContent === "已選 1／5", "the picker says one language is selected");
+    require(visible(english) && english.getAttribute("aria-pressed") === "true" && visible(english.querySelector('.ck svg')), "English stays ticked");
+    const englishForm = english.closest('.lang-row').querySelector('[data-variant-menu="en"]');
+    require(visible(englishForm) && englishForm.querySelector('span')?.textContent === "English (United States)", "English keeps its written form");
+    const summary = document.querySelector('.modal-scrim [data-k="languages"] span');
+    require(visible(summary) && summary.textContent === "English (United States)", "the Settings row names only English (United States)");
     return {check: name};
   }
   if (name === "desktop-frame") {
@@ -5224,10 +5428,13 @@ export function checkRendered(name, context = {}) {
     return { check: name, rows: rows.length };
   }
   if (name === "compact-action") {
-    const action = document.querySelector('.keys-card [data-go="settings"]');
-    require(visible(action) && action.classList.contains('icon') && !action.textContent.trim(), "secondary actions use a bare icon");
-    require(!!action.getAttribute('aria-label') && action.title === action.getAttribute('aria-label'), "icon actions retain a localized name and tooltip");
-    return { check: name, label: action.getAttribute('aria-label') };
+    // The shortcuts card's one action is 編輯, a small button with its word at the card's top right (the same as Settings' list has).
+    const action = document.querySelector('.keys-card .card-head [data-act="keys-edit"]');
+    require(visible(action) && action.matches('.btn.sm') && action.textContent.trim().length > 0, "the shortcuts card's 編輯 is a small button with its word");
+    require(document.querySelectorAll('.keys-card button').length === 1 && !document.querySelector('.keys-card [data-go]'), "the card is read-only: 編輯 is its only control");
+    const head = action.closest('.card-head').getBoundingClientRect(), box = action.getBoundingClientRect();
+    require(Math.abs(box.right - head.right) < 1 && box.height <= head.height + 1, "編輯 stands at the card's top right");
+    return { check: name, label: action.textContent.trim() };
   }
   if (name === "details-alignment") {
     const panel=document.querySelector('.mb-det:not([hidden])');
@@ -5437,6 +5644,32 @@ export function checkRendered(name, context = {}) {
         if (!visible(child) || ['absolute', 'fixed'].includes(getComputedStyle(child).position)) continue;
         const box = child.getBoundingClientRect();
         require(box.left >= edge.left - 1 && box.right <= edge.right + 1, `settings content shares one measure: ${child.className}`);
+      }
+      // Every section's small title stands on its card's left edge, not inset like the card's content, and the controls
+      // under it (a period, a grouping) start on that edge with air under the title.
+      for (const title of settings.querySelectorAll(':is(.sgroup, .run-allowance) > h2, :is(.sgroup, .run-allowance) > :is(header, .data-heading) > h2, .set-messaging > h2')) {
+        if (!visible(title)) continue;
+        const section = title.closest('.sgroup, .run-allowance, .set-messaging'), words = document.createRange();
+        words.selectNodeContents(title);
+        const left = words.getBoundingClientRect().left;
+        const card = [...section.children].find(child => !child.contains(title) && visible(child) && child.localName !== 'h2'
+          && (parseFloat(getComputedStyle(child).borderLeftWidth) > 0 || getComputedStyle(child).backgroundColor !== 'rgba(0, 0, 0, 0)'));
+        const cardLeft = (card ?? section).getBoundingClientRect().left;
+        require(Math.abs(left - cardLeft) <= 1, `a section's title stands on its card's left edge: 「${title.textContent.trim()}」 is ${Math.round(left - cardLeft)} px in`);
+        const controls = section.querySelector(':scope > .ua-controls');
+        if (visible(controls)) {
+          require(Math.abs(controls.firstElementChild.getBoundingClientRect().left - cardLeft) <= 1, `「${title.textContent.trim()}」's controls start on the same edge`);
+          const air = controls.getBoundingClientRect().top - title.getBoundingClientRect().bottom;
+          require(air >= 6 && air <= 16, `「${title.textContent.trim()}」's controls have a little air under it (${Math.round(air)} px)`);
+        }
+        // What follows the title (its card, its line, its controls, a section of its own) has the same small air under it.
+        const holder = title.parentElement === section ? title : title.parentElement;
+        let next = holder.nextElementSibling;
+        while (next && !visible(next)) next = next.nextElementSibling;
+        if (next) {
+          const gap = next.getBoundingClientRect().top - holder.getBoundingClientRect().bottom;
+          require(gap >= 0 && gap <= 16, `what follows 「${title.textContent.trim()}」 stands close under it (${Math.round(gap)} px)`);
+        }
       }
       const action = settings.querySelector('.set-head > :last-child:not(h1)');
       const form = settings.querySelector('.cs-form .add-grid');
@@ -6048,6 +6281,12 @@ export function checkRendered(name, context = {}) {
     require(!visible(document.querySelector("#progress")) || !/\d+ %/.test(document.querySelector("#progress").textContent), "the dictation's percentage is gone before the answer");
     require(!visible(document.querySelector("#ask")) && !visible(document.querySelector("#overlay-stop")), "an answer to read has no buttons");
     return { check: name, text: line.textContent };
+  }
+  if (name === "overlay-mic-quiet" || name === "overlay-mic-heard") {
+    const line = [...document.querySelectorAll('.sub-line')].find(visible);
+    if (name === "overlay-mic-quiet") require(line && line.textContent.includes("未收到聲音"), `the muted microphone is said beside the emblem (${line?.textContent ?? "no line"})`);
+    else require(!line || !line.textContent.trim(), `the line went once sound arrived (${line?.textContent})`);
+    return { check: name };
   }
   if (name === "overlay-step") {
     require(document.getElementById('progress')?.textContent === "《告。正在查看今天下午的行程。》", "the latest shared turn narration is the subtitle");
@@ -8460,8 +8699,8 @@ export function checkRendered(name, context = {}) {
     require(middle.a === 1 && getComputedStyle(dialog).backgroundColor === colourOf('backgroundColor', '--dialog'), `the dialog is the middle layer, --dialog (${getComputedStyle(dialog).backgroundColor})`);
     const nav = dialog.querySelector('.modal-nav');
     if (visible(nav)) require(['rgba(0, 0, 0, 0)', 'transparent', getComputedStyle(dialog).backgroundColor].includes(getComputedStyle(nav).backgroundColor), `the nav is the dialog's own colour (${getComputedStyle(nav).backgroundColor})`);
-    // the lightest layer is a card (a settings group, an app's information box); the list of apps in 連結應用程式 has none and shows the dialog with the controls on it
-    const card = [...dialog.querySelectorAll('.slist, .cs-box')].find(visible) ?? null;
+    // the lightest layer is a card (a settings group, an app's information box, 用量's cards); the list of apps in 連結應用程式 has none and shows the dialog with the controls on it
+    const card = [...dialog.querySelectorAll('.slist, .cs-box, .spend-card, .run-subscription, .ua-card')].find(visible) ?? null;
     require(card || !visible(nav), "a settings pane shows its groups as cards");
     const control = card ? null : [...dialog.querySelectorAll('.cs-connect, .cs-chip:not([aria-pressed="true"])')].find(visible) ?? null;
     // the order of lightness, outside < dialog < card, with room enough to be seen (the card's hairline carries the rest in the light theme)
@@ -8911,12 +9150,12 @@ export function checkRendered(name, context = {}) {
     require(getComputedStyle(modal).borderTopLeftRadius === "12px", "settings uses the dialog radius rather than a pill");
     const box = close.getBoundingClientRect(), hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
     require(close === hit || close.contains(hit), "rounded corners do not clip the close control");
-    // The settings: flat tabs, no group names, no search and no line under a tab's name; seven
-    // since 記憶 left 一般 for a tab of its own.
+    // The settings: flat tabs, no group names, no search and no line under a tab's name.
     const scrim = modal.closest('.modal-scrim');
     if (!scrim.hasAttribute('data-standalone')) {
-      // Seven since 團隊技能庫 came (#280); memory is not shown anywhere.
-      require(scrim.querySelectorAll('.modal-nav [data-pane]').length === 7 && !scrim.querySelector('.nav-group, #set-search, [data-pane="memory"]'), "seven tabs sit flat, with no group names and no search");
+      const panes = [...scrim.querySelectorAll('.modal-nav [data-pane]')].map(tab => tab.dataset.pane);
+      require(panes.join(' ') === 'general models usage tools skills dictation safety about', 'the eight tabs follow the Settings order');
+      require(!scrim.querySelector('.nav-group, #set-search'), "the tabs sit flat, with no group names and no search");
       require(!scrim.querySelector('.set-purpose'), "a tab is its name alone, with no line under it");
     }
     return { check: name, radius: getComputedStyle(modal).borderTopLeftRadius };
@@ -8962,38 +9201,141 @@ export function checkRendered(name, context = {}) {
     require(!room || !message.contains(room), 'the room beside the message is not part of it');
     return { check: name, message: Math.round(box.width), bubble: Math.round(b.width) };
   }
-  if (name === "dictation-heat-press") {
-    // A day says its words when pressed, never under the pointer.
-    const day = document.querySelector('.heat [data-date="2026-10-24"]'), tip = document.querySelector('.heat-tip');
-    require(!document.querySelector('.heat title'), "no day shows a title under the pointer");
-    require(visible(tip) && /10 月 24 日.*字/.test(tip.textContent) && day.classList.contains('is-picked'), "the pressed day shows its words above it and is outlined");
+  if (name === "dictation-heat-hover") {
+    // A day says its words under the pointer, in the app's own tip, never the browser's title, and nothing waits for a press.
+    const day = document.querySelector('.heat rect.is-picked'), tip = document.querySelector('.heat-tip');
+    require(!document.querySelector('.heat title'), "no day has the browser's title");
+    require(day && visible(tip) && tip.matches('.message-tooltip') && /\d+ 月 \d+ 日：[\d,]+ 字/.test(tip.textContent) && tip.textContent === day.dataset.tip, `the day under the pointer shows its words and is outlined: ${tip?.textContent}`);
     const tipBox = tip.getBoundingClientRect(), dayBox = day.getBoundingClientRect();
     require(tipBox.bottom <= dayBox.top + 1 || tipBox.top >= dayBox.bottom - 1, "the words stand beside the day, never over it");
+    require(tipBox.left >= 0 && tipBox.right <= innerWidth && tipBox.top >= 0 && tipBox.bottom <= innerHeight, "the words stay inside the window");
+    require(getComputedStyle(day).cursor !== 'pointer', "a day is no button: the pointer stays an arrow over it");
     require(!document.querySelector('.heat [role="button"], .heat [tabindex]'), 'no day is a button');
-    require(visible(document.querySelector('.page-overview .heat')) && !visible(document.querySelector('.day-row')) && document.querySelector('.page-overview:not([hidden])'), 'pressing a day leaves the grid as it was: no history opened');
-    return { check: name };
+    require(visible(document.querySelector('.page-overview .heat')) && !visible(document.querySelector('.day-row')) && document.querySelector('.page-overview:not([hidden])'), 'the grid stays as it was: no history opened');
+    return { check: name, words: tip.textContent };
+  }
+  if (name === "dictation-right-edge") {
+    // Nothing of a 聽寫 page goes past its right edge (part of it was cut off at the window's): every card, the
+    // heatmap and its month names, the shortcuts and long words end inside the line under the page's tabs, and nothing is
+    // cut short by a box that clips it (the heatmap's drawing, a card). A name ellipsized on purpose is not cut.
+    const nav = [...document.querySelectorAll('.dictation-navigation')].find(visible);
+    require(nav, "a 聽寫 page is open");
+    const page = nav.closest('.page-dictation'), main = page.closest('.main');
+    const edge = Math.min(nav.getBoundingClientRect().right, main ? main.getBoundingClientRect().right : innerWidth, innerWidth);
+    const past = [];
+    for (const node of page.querySelectorAll('*')) {
+      if (!visible(node) || node.closest('.heat-tip')) continue;
+      const box = node.getBoundingClientRect();
+      let limit = edge;
+      for (let up = node.parentElement; up && up !== page; up = up.parentElement) {
+        const style = getComputedStyle(up);
+        if (style.textOverflow === 'ellipsis' || style.webkitLineClamp !== 'none' && style.webkitLineClamp) { limit = Infinity; break; }
+        if (style.overflowX !== 'visible' || up.localName === 'svg') limit = Math.min(limit, up.getBoundingClientRect().right - (parseFloat(style.borderRightWidth) || 0));
+      }
+      if (box.right > limit + 1) past.push(`${node.localName}.${node.getAttribute('class') ?? ''} 「${node.textContent.trim().slice(0, 16)}」 ${Math.round(box.right - limit)} px`);
+    }
+    require(past.length === 0, `past the page's right edge: ${past.slice(0, 6).join(', ')}`);
+    const tip = document.querySelector('.heat-tip');
+    if (visible(tip)) require(tip.getBoundingClientRect().left >= 0 && tip.getBoundingClientRect().right <= innerWidth, "a day's words stay inside the window");
+    return { check: name, edge: Math.round(edge) };
   }
   if (name === "settings-tidy-key") {
     const scrim = document.querySelector('.modal-scrim[data-page="settings"]') ?? document.querySelector('.modal-scrim');
     const rows = [...scrim.querySelectorAll('.row-shortcut')], at = id => scrim.querySelector(`[data-row="${id}"]`);
-    const tidy = at("tidy-hotkey"), agent = at("agent-hotkey"), dictation = at("hotkey");
-    require(visible(tidy) && visible(agent) && visible(dictation), "the tidy, question and dictation shortcuts are all on the page");
-    // After the shortcuts that start something, before Esc, which is not changeable.
-    require(rows.indexOf(tidy) > rows.indexOf(dictation) && rows.indexOf(tidy) === rows.length - 2, "the tidy shortcut stands after the dictation ones and before Esc");
+    const tidy = at("tidy-hotkey"), agent = at("agent-hotkey"), dictation = at("hotkey"), paste = at("paste-hotkey");
+    require(visible(tidy) && visible(agent) && visible(dictation) && visible(paste), "the tidy, question, dictation and paste-last shortcuts are all on the page");
+    // In the order of use: 聽寫, 問拉斐爾, 整理選取文字, 貼上上一次, then Esc.
+    require(rows.length === 5 && [dictation, agent, tidy, paste].every((row, index) => rows.indexOf(row) === index), "the shortcuts stand in the order of use, Esc last");
     const caps = [...tidy.querySelectorAll('.caps kbd')].map(cap => cap.textContent.trim());
     require(caps.length === 2 && caps[1] === "T", `its keys are Right Alt and T (${caps.join(" + ")})`);
-    const pencil = tidy.querySelector('[data-act="rec-tidy"]');
-    require(visible(pencil) && pencil.getAttribute("aria-label"), "a pencil changes the key, and says so");
+    // Read-only: no row has a control; one 編輯 at the section's top right opens the dialog.
+    require(rows.every(row => !row.querySelector('button')), "no shortcut row has a button: the list is read-only");
+    const edit = scrim.querySelectorAll('[data-act="keys-edit"]');
+    require(edit.length === 1 && visible(edit[0]) && edit[0].matches('.btn.sm') && edit[0].textContent.trim().length > 0, "one 編輯, a small button with its word");
+    const card = rows[0].closest('.slist').getBoundingClientRect(), edge = edit[0].getBoundingClientRect(), heading = edit[0].closest('.data-heading').querySelector('h2').getBoundingClientRect();
+    require(edge.bottom <= card.top && Math.abs(edge.top + edge.height / 2 - (heading.top + heading.height / 2)) < 2 && edge.right <= card.right + 1 && edge.right >= card.right - 24, "編輯 stands beside the section's name, at the card's top right");
     const label = tidy.querySelector('.lbl .t');
     require(label.scrollWidth <= label.clientWidth + 1 && label.textContent.trim().length > 0, "its name is whole");
     const box = tidy.getBoundingClientRect(), other = agent.getBoundingClientRect();
     require(Math.abs(box.height - other.height) < 1 && Math.abs(box.left - other.left) < 1 && Math.abs(box.right - other.right) < 1, "it is a row like the question key's: same height and width");
-    require(Math.abs(pencil.getBoundingClientRect().right - agent.querySelector('[data-act="rec-agent"]').getBoundingClientRect().right) < 1, "its pencil is where the question key's is");
+    const capsRight = row => [...row.querySelectorAll('.caps kbd')].at(-1).getBoundingClientRect().right;
+    require(rows.every(row => Math.abs(capsRight(row) - capsRight(agent)) < 1), "every row's keys end where the question key's do");
     const list = tidy.closest('.list') ?? tidy.parentElement;
     require(list.scrollWidth <= list.clientWidth + 1, "the shortcuts fit their list");
     require(document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, "the page does not scroll sideways");
     require(!scrim.querySelector('.missing-note [data-missing-pane]'), "no Accessibility note where that permission is not missing");
     return { check: name, keys: caps.join(" + ") };
+  }
+  if (name === "settings-keys-dialog" || name === "dictation-keys-dialog" || name === "settings-keys-recording") {
+    // 編輯快捷鍵 (R-KEYS-EDIT-01): the app's compact dialog whose rows are the shortcut lists' own, with no frame anywhere; every
+    // shortcut in the order of use, all but Esc with a pencil after its caps that records new keys.
+    const dialog = document.querySelector('.mb-dialog.kd-dialog');
+    require(visible(dialog) && dialog.getAttribute('role') === 'dialog' && dialog.querySelector('.mb-dlg-head h2')?.textContent.trim() === '編輯快捷鍵', "the dialog is open, named 編輯快捷鍵");
+    const rows = [...dialog.querySelectorAll('.kd-list > .row')];
+    require(rows.map(row => row.querySelector('.lbl .t').textContent.trim()).join('、') === '聽寫、問拉斐爾、整理選取文字、貼上上一次、取消', `the five shortcuts in the order of use (${rows.map(row => row.textContent.trim()).join(' | ')})`);
+    require(rows.every(row => row.matches('.row.row-shortcut') && row.querySelector(':scope > .ctl > .caps')), "every row is a row of the shortcut lists, its caps in the row itself");
+    // No boxes: nothing in the rows but the key caps has a border or a fill at rest (the pencils' focus ring is an outline).
+    const clear = colour => colour === 'transparent' || /rgba\([^)]*,\s*0\)$/.test(colour) || /\/\s*0\)$/.test(colour);
+    for (const part of dialog.querySelectorAll('.kd-list *')) {
+      if (part.closest('kbd') || part instanceof SVGElement) continue;
+      const style = getComputedStyle(part);
+      const edged = ['Top', 'Right', 'Bottom', 'Left'].some(side => parseFloat(style[`border${side}Width`]) > 0 && !clear(style[`border${side}Color`]));
+      require(!edged && clear(style.backgroundColor), `no frame or field in the rows (${part.tagName.toLowerCase()}.${[...part.classList].join('.')}: border ${style.borderTopWidth} ${style.borderTopColor}, fill ${style.backgroundColor})`);
+    }
+    const pencils = [...dialog.querySelectorAll('[data-dlg="record"]')];
+    require(pencils.map(b => b.dataset.field).join() === 'dictation_keys,agent_keys,tidy_keys,paste_last_keys' && pencils.every(b => visible(b) && b.getAttribute('aria-label') && b.matches('.btn.icon.row') && b.querySelector('svg.i') && !b.textContent.trim()), "each but Esc has a named pencil, 貼上上一次 too");
+    require(!rows.at(-1).querySelector('button') && rows.at(-1).querySelector('.caps kbd')?.textContent.trim() === 'Esc', "Esc stays as it is, with no pencil");
+    const frame = dialog.getBoundingClientRect();
+    require(frame.left >= 0 && frame.right <= innerWidth && frame.top >= 0 && frame.bottom <= innerHeight, "the dialog fits the window");
+    const rights = pencils.map(b => b.getBoundingClientRect().right);
+    require(rights.every(right => Math.abs(right - rights[0]) < 1) && rights.every(right => right <= frame.right - 8), "the pencils stand in one column inside the dialog");
+    for (const b of pencils) {
+      const box = b.getBoundingClientRect(), row = b.closest('.kd-row').getBoundingClientRect();
+      require([22, 26, 28, 30].includes(Math.round(box.width)) && Math.abs(box.width - box.height) < 1 && box.top >= row.top - 0.5 && box.bottom <= row.bottom + 0.5, `a pencil is a row's icon button, standing in its row (${Math.round(box.width)} x ${Math.round(box.height)} px)`);
+      const icon = b.querySelector('svg.i').getBoundingClientRect();
+      require(Math.round(icon.width) === 16 && Math.round(icon.height) === 16, `its pencil is the rows' 16 px icon (${Math.round(icon.width)} px)`);
+    }
+    const capsRight = row => row.querySelector('.caps').getBoundingClientRect().right;
+    require(rows.every(row => Math.abs(capsRight(row) - capsRight(rows[0])) < 1.5), `every row's caps end on one edge, Esc's too (${rows.map(row => Math.round(capsRight(row))).join(', ')})`);
+    require(pencils.every(b => b.getBoundingClientRect().left >= capsRight(b.closest('.kd-row')) - 0.5), "the pencils come after the caps");
+    require(rows.every(row => Math.abs(row.getBoundingClientRect().height - rows[0].getBoundingClientRect().height) < 1 && row.getBoundingClientRect().height >= 48), "every row is as tall as the others");
+    for (const label of dialog.querySelectorAll('.kd-list .lbl .t')) require(label.scrollWidth <= label.clientWidth + 1, "every name is whole");
+    // The rows read like the list behind: the same height, name and caps (Settings' list is under the dialog).
+    const behind = document.querySelector('.modal-scrim [data-row="tidy-hotkey"]');
+    if (behind) {
+      const listName = getComputedStyle(behind.querySelector('.lbl .t')), rowName = getComputedStyle(rows[2].querySelector('.lbl .t'));
+      require(Math.abs(behind.getBoundingClientRect().height - rows[2].getBoundingClientRect().height) < 1, `a row is as tall as the list's (${Math.round(rows[2].getBoundingClientRect().height)} against ${Math.round(behind.getBoundingClientRect().height)})`);
+      require(rowName.fontSize === listName.fontSize && rowName.color === listName.color && rowName.fontWeight === listName.fontWeight, `a name is written as the list's (${rowName.fontSize} ${rowName.color} against ${listName.fontSize} ${listName.color})`);
+      const cap = getComputedStyle(rows[0].querySelector('kbd')), listCap = getComputedStyle(behind.querySelector('kbd'));
+      require(cap.height === listCap.height && cap.fontSize === listCap.fontSize && cap.backgroundColor === listCap.backgroundColor, "the key caps are the list's");
+    }
+    require([...dialog.querySelectorAll('.mb-dlg-act .btn')].map(b => b.textContent.trim()).join() === '取消,儲存', "取消 then 儲存 at the foot");
+    require(document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, "the page does not scroll sideways");
+    // The app writes other device settings of its own as it opens; only a write of shortcut keys is the dialog's.
+    const saves = window.__look.calls.filter(call => call.command === 'device_settings_set' && Object.keys(call.patch ?? {}).some(field => field.endsWith('_keys')));
+    if (name === "settings-keys-dialog") {
+      const caps = [...dialog.querySelectorAll('[data-kd-row="paste_last_keys"] .caps kbd')].map(cap => cap.textContent.trim());
+      require(caps.at(-1) === 'F8' && caps.length === 2, `the keys just recorded for 貼上上一次 wait in the dialog (${caps.join(' + ')})`);
+      require(saves.length === 0, "nothing is saved before 儲存");
+      require([...document.querySelectorAll('.modal-scrim [data-row="paste-hotkey"] kbd')].at(-1)?.textContent.trim() === 'V', "the list behind still shows the keys in force");
+    }
+    if (name === "settings-keys-recording") {
+      const recording = dialog.querySelector('[data-recording]'), hint = recording?.querySelector('.caps .rec-hint');
+      require(recording?.dataset.kdRow === 'tidy_keys' && visible(hint) && hint.textContent.includes('Esc') && !recording.querySelector('kbd'), "the tidy key's caps give way to the words that ask for the new keys, and Esc to cancel");
+      const words = hint.getBoundingClientRect(), pencil = recording.querySelector('[data-dlg="record"]');
+      require(words.left >= recording.querySelector('.lbl .t').getBoundingClientRect().right && words.right <= pencil.getBoundingClientRect().left + 0.5 && words.bottom <= recording.getBoundingClientRect().bottom, "the words stand where the caps were, whole, before the pencil");
+      require(document.activeElement === pencil && visible(pencil), "the focus stays on the pencil of the row being recorded");
+    }
+    return { check: name, saves: saves.length };
+  }
+  if (name === "settings-keys-saved") {
+    require(!document.querySelector('.kd-dialog'), "a save that went through closes the dialog");
+    const saves = window.__look.calls.filter(call => call.command === 'device_settings_set' && Object.keys(call.patch ?? {}).some(field => field.endsWith('_keys')));
+    require(saves.length === 1 && JSON.stringify(saves[0].patch) === JSON.stringify({ paste_last_keys: ['ControlLeft+F8'] }), `one save, through the device settings, of what changed (${JSON.stringify(saves.map(call => call.patch))})`);
+    const caps = [...document.querySelectorAll('.modal-scrim [data-row="paste-hotkey"] kbd')].map(cap => cap.textContent.trim());
+    require(caps.at(-1) === 'F8', `the list shows the new keys (${caps.join(' + ')})`);
+    require(document.activeElement?.dataset.act === 'keys-edit', "the focus is back on 編輯");
+    return { check: name, keys: caps.join(' + ') };
   }
   if (name === "settings-mic-undecided" || name === "settings-mic-denied") return (async () => {
     const scrim = document.querySelector('.modal-scrim[data-page="settings"]') ?? document.querySelector('.modal-scrim');
@@ -9038,7 +9380,7 @@ export function checkRendered(name, context = {}) {
   if (name === "dictation-navigation") {
     const nav = document.querySelector('.dictation-nav [role="tablist"]'), tabs = [...nav.querySelectorAll('[role="tab"]')];
     const active = tabs.filter(tab => tab.getAttribute("aria-selected") === "true");
-    // The app's one tab component, as the panel's and 模型與用量's.
+    // The app's one tab component, as the panel's and 用量's.
     require(nav.matches(".tabs.plain") && tabs.every(tab => tab.matches(".tab")), "the tabs are the shared tabs() pills");
     require((nav.getAttribute("aria-orientation") ?? "horizontal") === "horizontal" && active.length === 1, "one selected horizontal tab");
     const panel = document.getElementById(active[0].getAttribute("aria-controls"));
@@ -9743,9 +10085,9 @@ export function checkRendered(name, context = {}) {
       en: "This is a Composio consumer key (starting with ck_). Use a project key from Composio Settings → Project Settings → API Keys.",
       ja: "これは Composio のコンシューマーキー（ck_ で始まるキー）です。Composio の「Settings → Project Settings → API Keys」にあるプロジェクトキーを使用してください。",
     } : {
-      "zh-TW": "這是 OpenRouter 的金鑰，請到「設定 → 模型與用量」輸入。",
-      en: "This is an OpenRouter key. Enter it in Settings → Models & usage.",
-      ja: "これは OpenRouter のキーです。「設定 → モデルと使用量」で入力してください。",
+      "zh-TW": "這是 OpenRouter 的金鑰，請到「設定 → 模型」輸入。",
+      en: "This is an OpenRouter key. Enter it in Settings → Models.",
+      ja: "これは OpenRouter のキーです。「設定 → モデル」で入力してください。",
     };
     require(visible(alert) && Object.values(expected).includes(alert.textContent), "the key form explains how to correct the key type");
     require(document.querySelector('#conn-key').value === "", "the key field is cleared");
@@ -9756,7 +10098,7 @@ export function checkRendered(name, context = {}) {
   }
   if (name === "usage-owner-cards") {
     // The same mix as the account menu's blocks (R-SIDE-02): one card for each provider, and a window that has reset keeps no stale number or bar.
-    const panel = document.querySelector('#models-panel-usage'), cards = [...panel.querySelectorAll('.run-allowance .run-subscription')].filter(visible);
+    const panel = document.querySelector('#usage-panel-overview'), cards = [...panel.querySelectorAll('.run-allowance .run-subscription')].filter(visible);
     const named = cards.map(card => card.querySelector('h4').textContent.trim());
     require(named.join() === 'Codex,Claude,ChatGPT,OpenRouter', `a card for each of the four providers, in order: ${named.join()}`);
     const [codex, claude, chatgpt, openrouter] = cards;
@@ -9766,21 +10108,153 @@ export function checkRendered(name, context = {}) {
     require(openrouter.dataset.allowance === 'openrouter' && /3\.21/.test(openrouter.textContent) && !/%/.test(openrouter.textContent), `OpenRouter says this month's use of the key: ${openrouter.textContent}`);
     return { check: name, cards: named };
   }
+  if (name === "usage-overview") {
+    // 用量 › 概覽 (R-USE-01): 這個月 with what it counts and its card, the gear at the card's top right, then 方案額度's cards, each
+    // window's name over when it resets and what is left, and its bar; nothing wider than the tab.
+    const panel = document.querySelector('#usage-panel-overview'), month = panel.querySelector('.usage-month');
+    require(visible(document.querySelector('[data-usage-tab="overview"][aria-selected="true"]')), "概覽 is the open tab");
+    require(month.querySelector('h2').textContent === "這個月" && visible(month.querySelector('.ua-note')), "這個月 says what it counts under its name");
+    const card = month.querySelector('.spend-card').getBoundingClientRect(), gear = month.querySelector('[data-act="usage-cap"]').getBoundingClientRect();
+    require(gear.right <= card.right - 4 && gear.right >= card.right - 24 && gear.top >= card.top + 4 && gear.top <= card.top + 16, `the gear stands at the card's top right: ${JSON.stringify([gear.left, gear.top, card.right, card.top])}`);
+    // The words themselves, not the line's box, which is as wide as the card.
+    const words = document.createRange(); words.selectNodeContents(month.querySelector('.spend-label'));
+    const label = words.getBoundingClientRect();
+    require(label.right <= gear.left + 1 || label.bottom <= gear.top, "the card's words never run under the gear");
+    const width = panel.getBoundingClientRect();
+    for (const node of panel.querySelectorAll('.spend-card, .run-subscription')) {
+      const box = node.getBoundingClientRect();
+      require(box.left >= width.left - 1 && box.right <= width.right + 1 && node.scrollWidth <= node.clientWidth + 1, `a card stays inside the tab: ${node.className}`);
+    }
+    const cards = [...panel.querySelectorAll('.run-subscription')].filter(visible);
+    require(cards.length > 0 && cards.every(item => item.querySelector('h4') && item.querySelector('.run-who')), "each subscription's card names it and its account or plan");
+    for (const meter of panel.querySelectorAll('.run-subscription .run-window')) {
+      const parts = meter.querySelectorAll('.run-window-line > *');
+      // A key with no limit (OpenRouter's) has only what this month used: nothing is left to say.
+      require(meter.querySelector('.run-window-name') && parts.length >= 1 && parts.length <= 2, "each window has its name, then when it resets and what is left on one line");
+      if (parts.length === 2) {
+        const [left, right] = [...parts].map(part => part.getBoundingClientRect());
+        require(Math.abs(left.bottom - right.bottom) < 4 && right.left >= left.right, `when it resets stands left, what is left right, on the same line: ${meter.textContent}`);
+      }
+    }
+    return { check: name, cards: cards.length };
+  }
+  if (name === "usage-cap-open" || name === "usage-cap-none" || name === "usage-cap-set") {
+    // R-USE-02: the gear's popover, a dropdown of 不設上限 / 設上限 and the amount; each change goes to the core at once.
+    const popover = document.querySelector('#app-popover.usage-cap'), gear = document.querySelector('[data-act="usage-cap"]');
+    require(visible(popover) && popover.getAttribute('role') === 'dialog' && popover.getAttribute('aria-label') === "每月上限", "the monthly limit's popover is open");
+    require(gear.getAttribute('aria-expanded') === 'true', "the gear says its popover is open");
+    const box = popover.getBoundingClientRect();
+    require(box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight, "the popover is inside the window");
+    const sets = window.__look.calls.filter(call => call.method === "settings.set" && call.params?.key === "monthly_limit_usd").map(call => call.params.value);
+    const card = document.querySelector('[data-row="raphael-spend"]'), note = card.querySelector('.spend-note').textContent, bar = card.querySelector('[role="progressbar"]');
+    const field = popover.querySelector('#limit-input'), choice = popover.querySelector('[data-cap-mode][aria-pressed="true"]').textContent;
+    require(popover.querySelectorAll('.tabs.seg [data-cap-mode]').length === 2, "不設上限 and 設上限 are two tabs, not a dropdown");
+    if (name === "usage-cap-open") {
+      require(choice === "設上限" && field?.value === "20" && sets.length === 0, `a limit in force opens as 設上限 with its amount: ${choice} ${field?.value}`);
+      require(document.activeElement === popover.querySelector('[data-cap-mode][aria-pressed="true"]'), "the focus is on the chosen tab");
+    } else if (name === "usage-cap-none") {
+      require(choice === "不設上限" && !field && JSON.stringify(sets) === "[null]", `不設上限 stores null at once: ${JSON.stringify(sets)}`);
+      require(note.includes("未設上限") && !bar, `the card says 未設上限 with no bar: ${note}`);
+    } else {
+      require(choice === "設上限" && field?.value === "30" && JSON.stringify(sets) === "[null,30]", `the amount is stored at once: ${JSON.stringify(sets)}`);
+      require(note.includes("上限 US$30.00，已用 4%") && bar?.getAttribute('aria-valuenow') === "4", `the card follows the new limit: ${note}`);
+    }
+    return { check: name, sets };
+  }
+  if (name === "usage-analytics" || name === "usage-analytics-month" || name === "usage-analytics-empty") {
+    // R-USE-03: 分析 from `usage.analytics`: four sections, in words, nothing wider than the tab.
+    const panel = document.querySelector('#usage-panel-analysis');
+    require(visible(panel) && visible(document.querySelector('[data-usage-tab="analysis"][aria-selected="true"]')), "分析 is the open tab");
+    const asked = window.__look.calls.filter(call => call.method === "usage.analytics").map(call => call.params.range);
+    require([...panel.querySelectorAll('[data-ua-section]')].map(section => section.dataset.uaSection).join() === "cost,people,tools,messages", "its four sections, in order");
+    require(!panel.textContent.includes("__other__") && !/\b(?:web_search|connection:|cleanup|agent)\b/.test(panel.textContent), "no raw key is on the tab");
+    if (name === "usage-analytics-empty") {
+      require(panel.querySelectorAll('.ua-line').length === 4 && !panel.querySelector('.ua-card, svg.ua-lines, table'), "a period with nothing says so once a section, with no chart frame");
+      return { check: name, asked };
+    }
+    const width = panel.getBoundingClientRect();
+    for (const node of panel.querySelectorAll('.ua-card, .ua-controls')) {
+      const box = node.getBoundingClientRect();
+      require(box.left >= width.left - 1 && box.right <= width.right + 1 && node.scrollWidth <= node.clientWidth + 1, `nothing is wider than the tab: ${node.className}`);
+    }
+    const days = panel.querySelectorAll('.ua-bars > .ua-day'), labels = [...panel.querySelectorAll('.ua-x > span')].filter(span => span.textContent);
+    require(panel.querySelectorAll('.ua-y > span').length === 3 && panel.querySelectorAll('.ua-legend').length >= 3, "the scale, and a legend under each chart");
+    const lines = panel.querySelectorAll('svg.ua-lines polyline');
+    require(lines.length === 6 && [...lines].every(line => getComputedStyle(line).stroke !== 'none'), "a line a day per tool and per model or source");
+    for (const label of labels) {
+      const box = label.getBoundingClientRect();
+      require(box.left >= width.left - 1 && box.right <= width.right + 1, `a date under the bars stays inside: ${label.textContent}`);
+    }
+    if (name === "usage-analytics") {
+      require(JSON.stringify(asked) === '["7d"]' && days.length === 7 && labels.length === 3, `a week: seven bars and three dates (${days.length}, ${labels.length})`);
+      require(panel.querySelectorAll('.ua-table tbody tr').length === 5 && visible(panel.querySelector('[data-ua-more]')), "five people, then 顯示更多");
+      const legend = [...panel.querySelectorAll('[data-ua-card="cost"] .ua-lname')].map(item => item.textContent);
+      require(legend.join() === "對話,記憶,聽寫整理,語音轉文字,畫圖,其他", `the purposes in words, __other__ as 其他: ${legend.join()}`);
+    } else {
+      require(asked.at(-1) === "30d" && days.length === 30 && labels.length === 5, `a month: thirty bars and five dates (${days.length}, ${labels.length})`);
+      // A new period lists its first five again, with 顯示更多 (the scene saw the sixth row before it chose 30 天).
+      require(panel.querySelectorAll('.ua-table tbody tr').length === 5 && visible(panel.querySelector('[data-ua-more]')), "a new period starts again at five people");
+      const sources = [...panel.querySelectorAll('[data-ua-card="messages"] .ua-lname')].map(item => item.textContent);
+      require(sources.join() === "打字,Telegram,例行工作", `the messages by source, in words: ${sources.join()}`);
+    }
+    return { check: name, asked };
+  }
+  if (name === "usage-reading-bar" || name === "usage-reading-line") return (async () => {
+    // R-USE-03: the day under the pointer says its date and each line's value there in the app's own tip, beside the day
+    // and inside the window; its bar lights (the others step back) or a guide and a dot on each line mark it.
+    await new Promise(resolve => setTimeout(resolve, 250));
+    const bar = name === "usage-reading-bar", card = document.querySelector(bar ? '[data-ua-card="cost"]' : '[data-ua-card="tools"]');
+    const chart = card.querySelector('[data-ua-read]'), tip = document.querySelector('.ua-tip');
+    require(visible(tip) && tip.matches('.message-tooltip') && chart.classList.contains('is-reading') && chart.getAttribute('aria-describedby') === tip.id, "the day under the pointer has its tip, the app's own");
+    const legend = [...card.querySelectorAll('.ua-legend > li')], rows = [...tip.querySelectorAll('li')];
+    require(rows.length === legend.length && rows.every((row, k) => row.querySelector('span').textContent === legend[k].querySelector('.ua-lname').textContent
+      && getComputedStyle(row.querySelector('i')).backgroundColor === getComputedStyle(legend[k].querySelector('i')).backgroundColor), "each line of the legend, in its own colour, in the tip");
+    require(rows.every(row => /\d/.test(row.querySelector('strong').textContent)), "every line says its value that day");
+    const box = tip.getBoundingClientRect();
+    require(box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight, "the tip is inside the window");
+    const day = tip.querySelector('.ua-tip-day span').textContent;
+    if (bar) {
+      const lit = [...chart.querySelectorAll('.ua-day')].filter(item => item.classList.contains('is-on'));
+      require(lit.length === 1 && getComputedStyle(lit[0]).opacity === '1', "one bar is lit");
+      require([...chart.querySelectorAll('.ua-day:not(.is-on)')].every(item => Number(getComputedStyle(item).opacity) < 0.6), "the other days step back");
+      require(day === lit[0].dataset.day && tip.querySelector('.ua-tip-day strong')?.textContent === lit[0].dataset.total, `the tip names the lit day and its total: ${day}`);
+      const column = lit[0].getBoundingClientRect();
+      require(box.left >= column.right - 1 || box.right <= column.left + 1, "the tip stands beside the bar, never over it");
+      return { check: name, day };
+    }
+    const guide = chart.querySelector('.ua-guide'), dots = [...chart.querySelectorAll('.ua-dot')];
+    require(visible(guide) && dots.length === chart.querySelectorAll('polyline').length && dots.every(visible), "a guide across the lines and a dot on each");
+    const line = guide.getBoundingClientRect(), area = chart.getBoundingClientRect();
+    require(box.left >= line.right - 1 || box.right <= line.left + 1, "the tip stands beside the guide, never over it");
+    const days = JSON.parse(chart.dataset.days), at = Math.round((line.left - area.left) / area.width * (days.length - 1));
+    require(day === days[at], `the tip names the day under the guide: ${day} (${days[at]})`);
+    return { check: name, day };
+  })();
+  if (name === "usage-people-all" || name === "usage-people-less") {
+    // R-USE-03: 誰花最多's one button: 顯示更多 shows everyone, then says 顯示較少 and folds the table back to five; the
+    // focus stays on it.
+    const all = name === "usage-people-all", button = document.querySelector('[data-ua-more]'), rows = document.querySelectorAll('.ua-table tbody tr').length;
+    require(visible(button) && button.textContent.trim() === (all ? "顯示較少" : "顯示更多") && button.getAttribute('aria-expanded') === String(all), `the button says what it will do: ${button?.textContent}`);
+    require(rows === (all ? 6 : 5), `${all ? "everyone" : "five people"} in the table (${rows})`);
+    require(document.activeElement === button, "the focus stays on the button");
+    return { check: name, rows };
+  }
   if (name === "usage-plain") {
-    // Plain usage summary: what each subscription has left, then what was spent. An OpenRouter key is its provider card's.
-    const panel = document.querySelector('#models-panel-usage');
-    require(visible(panel), "the usage tab is open");
-    require(!panel.querySelector('svg.ua-chart, .ua-chart, .run-tiles, .run-tile, .run-bill, .run-groups, table, [data-range], [data-run-act="export"], [data-run-act="period"], .foot'), "no periods, charts, breakdowns, tiles, exports or footnotes");
+    // 用量 › 概覽: what was spent this month, then what each subscription has left. An OpenRouter key is its provider card's.
+    // Its charts are 分析's (R-USE-03), never here.
+    const panel = document.querySelector('#usage-panel-overview');
+    require(visible(panel), "the usage tab is open at 概覽");
+    require(!panel.querySelector('svg.ua-lines, .ua-card, .ua-plot, .run-tiles, .run-tile, .run-bill, .run-groups, table, [data-ua-range], [data-run-act="export"], [data-run-act="period"], .foot'), "no periods, charts, breakdowns, tiles, exports or footnotes on 概覽");
     const rows = ["raphael-spend"].map(row => panel.querySelector(`[data-row="${row}"]`));
     require(rows.every(visible) && !panel.querySelector('[data-row="openrouter-usage"], [data-row="openrouter-key"], #key-input'), "this month's spending of the app shows; no OpenRouter key row asks for or shows a key here");
-    const spend = rows[0], bar = spend.querySelector('.spend-bar i'), limit = window.__look.data.status.spend.limit_usd;
+    const spend = rows[0], bar = spend.querySelector('.spend-bar i'), limit = window.__look.data.settings.monthly_limit_usd ?? window.__look.data.status.spend.limit_usd;
     if (limit > 0) {
       require(visible(spend.querySelector('.spend-bar')) && bar, "the spending has a bar against the monthly limit");
       const [r, g, b] = getComputedStyle(bar).backgroundColor.match(/[\d.]+/g).map(Number);
       require(Math.max(r, g, b) - Math.min(r, g, b) > 60, `the bar is a member's colour, not black or white: rgb(${r}, ${g}, ${b})`);
     }
     // No refresh anywhere: opening Settings reads the allowances (`usage-open-*`), so nothing stands beside the tab's name.
-    const heading = document.querySelector('.set-content > #set-title'), page = heading?.parentElement, first = page?.querySelector('.models-page');
+    const heading = document.querySelector('.set-content > #set-title'), page = heading?.parentElement, first = page?.querySelector('.usage-page');
     require(heading && first, "the tab's name stands alone above its views");
     const beside = [...page.children].slice(0, [...page.children].indexOf(first)).filter(child => child !== heading);
     require(!document.querySelector('[data-act="models-refresh"], .models-refresh, .set-head') && beside.every(child => !child.matches('button') && !child.querySelector('button')), "no refresh button or icon beside the tab's name");
@@ -9789,7 +10263,7 @@ export function checkRendered(name, context = {}) {
     const cards = [...panel.querySelectorAll('.run-subscription')].filter(visible), allowance = panel.querySelector('.run-allowance');
     const subscriptions = window.__look.data.allowances.brains.length;
     if (subscriptions) {
-      require(cards.length >= subscriptions && spend.compareDocumentPosition(allowance) & Node.DOCUMENT_POSITION_FOLLOWING && allowance.compareDocumentPosition(rows[1]) & Node.DOCUMENT_POSITION_FOLLOWING, "spending leads, each subscription has a card below it, then the key");
+      require(cards.length >= subscriptions && spend.compareDocumentPosition(allowance) & Node.DOCUMENT_POSITION_FOLLOWING, "this month's spending leads, and each subscription has a card below it");
       for (const track of panel.querySelectorAll('.run-allowance .run-bar-track')) {
         const fill = track.querySelector('i'), box = track.getBoundingClientRect();
         require(box.width > 0 && box.height === 7 && fill.getBoundingClientRect().height === 7, "allowance bars keep their visible height");
@@ -9825,7 +10299,7 @@ export function checkRendered(name, context = {}) {
       })();
     }
     if (stage === "general") {
-      require(visible(document.querySelector('.modal-scrim [data-pane="general"][aria-current="page"]')) && !document.querySelector('[data-models-tab]'), "Settings is open on 一般, not on the allowances' tab");
+      require(visible(document.querySelector('.modal-scrim [data-pane="general"][aria-current="page"]')) && !document.querySelector('[data-usage-tab]'), "Settings is open on 一般, not on the allowances' tab");
       require(window.__look.calls.some(call => call.from), "the scene traces where each call comes from");
       require(!document.querySelector('[data-act="models-refresh"]'), "no refresh button exists");
       // Settings asks at its opening, before its first tab is drawn; the account menu it was opened from asked on its own (api.ts ASKED_AGAIN: no earlier answer stands in for it).
@@ -10085,7 +10559,7 @@ export function checkRendered(name, context = {}) {
         require(rows.size <= 3 && rows.size < kinds.length, `a narrow page's kinds are pills that wrap, not a tall list (${rows.size} rows)`);
       }
       for (const item of kinds) require(item.querySelector("span").scrollWidth <= item.querySelector("span").clientWidth + 1, `${item.dataset.cat} shows its whole name`);
-      const expected = { soul: ["ms-personality", "ms-instructions"], skills: ["ms-skills", "ms-commands"], tools: ["ms-tools", "ms-draft", "ms-folders"], notify: ["ms-notify"] }[category];
+      const expected = { soul: ["ms-personality", "ms-instructions"], skills: ["ms-skills", "ms-library", "ms-commands"], tools: ["ms-tools", "ms-draft", "ms-folders"], notify: ["ms-notify"] }[category];
       const sections = [...pane.querySelectorAll(".ms-section[data-k]")].filter(visible).map(section => section.dataset.k);
       require(sections.join() === expected.join(), `${category} shows ${expected.join()} (${sections.join()})`);
       for (const section of pane.querySelectorAll(".ms-section[data-k]")) {
@@ -10098,8 +10572,8 @@ export function checkRendered(name, context = {}) {
         if (head?.querySelector("h2")) require(head.querySelector("h2").getBoundingClientRect().left > list.getBoundingClientRect().left, `${section.dataset.k}: the name starts inside the list's edge`);
         require(list.scrollHeight <= list.clientHeight + 1 && getComputedStyle(list).overflowY === "visible", `${section.dataset.k} does not scroll inside`);
       }
-      // No word-buttons where an icon says it: edits, adds and menus are icons, the rest are rows or switches.
-      const words = [...pane.querySelectorAll(".ms-section button.btn, .ms-id button.btn")].filter(button => visible(button) && !button.matches(".icon, .ms-open, .mb-face-edit, .ms-add .btn.sm, [data-missing-repair]"));
+      // Edits, adds and menus use icons; the Team skills section has a labelled button to open the library.
+      const words = [...pane.querySelectorAll(".ms-section button.btn, .ms-id button.btn")].filter(button => visible(button) && !button.matches('.icon, .ms-open, .mb-face-edit, .ms-add .btn.sm, [data-missing-repair], [data-k="ms-library"] [data-ms="open-library"]'));
       require(words.length === 0, `no text buttons: ${words.map(button => button.textContent.trim()).join("|")}`);
       require(![...pane.querySelectorAll("button")].some(button => visible(button) && /^(編輯|Edit|編集)$/.test(button.textContent.trim())), "no 編輯 button");
       for (const edit of pane.querySelectorAll('[data-ms="edit"]')) require(visible(edit.querySelector("svg.i")), "a long field ends in its pencil");

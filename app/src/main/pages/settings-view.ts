@@ -8,12 +8,11 @@
 // line under a row's name only where the setting would otherwise be set wrong. Each tab opens with
 // its name, then its rows in a few named sections, each a rounded card.
 //
-// Six tabs sit flat on the left: 一般 (account, appearance, the bot's timezone and folder, messaging),
-// 工具, 安全, 模型與用量, 聽寫與快捷鍵 and 關於. No group names, no search, no line under a tab's name. No tab shows
-// memory; the core keeps it.
+// The tabs sit flat on the left, with no group names, no search and no line under a tab's name.
+// No tab shows memory; the core keeps it.
 
 
-import { LOCALES, t } from "../i18n";
+import { LOCALES, getLocale, t } from "../i18n";
 import { updateHTML } from "../updates";
 import { detectedTimezone, zoneLabel } from "../timezones";
 import { ownerProfileHTML } from "../owner-settings";
@@ -22,8 +21,8 @@ import { brandIcon } from "../brand";
 import { type ConnectionsView, connectionsHTML } from "../connections";
 import { DICTATION_MODES } from "../dictation";
 import { KEEP_FOREVER_DAYS, formatRetention, formatUsd } from "../format";
+import { type UsageAnalysisView, usageAnalysisHTML } from "../usage-analysis";
 import { type LanguageGroup, languageSelectHTML, normalizeLanguages } from "../languages";
-import { bindingLabels } from "../keys";
 import { type RulesView, rulesHTML } from "../safety-rules";
 import { type VaultView, emptyVaultView, vaultHTML } from "../vault";
 import { type SkillLibraryView, emptySkillLibraryView, skillLibraryHTML } from "../skill-library";
@@ -35,10 +34,10 @@ import { type ServicesView, servicesHTML } from "../services";
 import { type ProvidersView, providersHTML, providersAddHTML, emptyProvidersView } from "../providers";
 import { type CliBrainsView, cliBrainsHTML, cliDirectoryHTML, cliModels, emptyCliBrainsView } from "../cli-brains";
 import { pricingNote } from "../pricing";
-import type { HotkeyField } from "../hotkey-recording";
+import { type HotkeyField, SHORTCUTS, shortcutCaps } from "../hotkey-recording";
 import type { AudioDevices, BrainSettings, DeviceSettings, LocalModel, ModelCatalog, ModelRole, SettingsPane, Status } from "../types";
 import { micRow } from "../setup-rows";
-import { type Choice, type IconName, btn, esc, ico, iconBtn, keys, note, row, sel, st, tabs, tg } from "../ui";
+import { type Choice, type IconName, btn, esc, ico, iconBtn, note, row, sel, st, tabs, tg } from "../ui";
 
 /** The models the core reads when none is chosen (brain/settings.py), shown while it does not answer. */
 const DEFAULT_MODELS = { cleanup: "openai/gpt-6-luna", answer: "openai/gpt-6-luna", stt: "elevenlabs/scribe-v2" } as const;
@@ -75,17 +74,17 @@ export const RETENTIONS: Choice[] = [1, 7, 30, 365, KEEP_FOREVER_DAYS].map((days
 const PRICES_LOADING = () => t("settings.026");
 
 /**
- * The tabs on the left of the panel, flat and in order: appearance and messaging
- * are sections of 一般 now, and 連結應用程式 is no tab.
+ * General comes first, then Models (the setup needed before chatting) and Usage (spending).
+ * Next are what members can do (Tools and Team skills), Dictation, Safety (vault and rules), and About.
  */
 export const PANES: { id: SettingsPane; icon: IconName; title: () => string }[] = [
   { id: "general", icon: "gear", title: () => t("settings.paneGeneral") },
+  { id: "models", icon: "bot", title: () => t("providers.title") },
+  { id: "usage", icon: "gauge", title: () => t("models.usage") },
   { id: "tools", icon: "steps", title: () => t("settings.paneTools") },
   { id: "skills", icon: "sparkle", title: () => t("settings.paneSkills") },
-  { id: "safety", icon: "lock", title: () => t("settings.paneSafety") },
-  { id: "models", icon: "bot", title: () => t("settings.paneUsage") },
-  // Dictation and its keys are not what most people come here for: under the models.
   { id: "dictation", icon: "mic", title: () => t("settings.paneDictation") },
+  { id: "safety", icon: "lock", title: () => t("settings.paneSafety") },
   { id: "about", icon: "info", title: () => t("common.about") },
   // Not a tab: the sidebar's 連結應用程式 opens it as a dialog of its own, its only way in (R-UI-111).
   { id: "connections", icon: "plug", title: () => t("nav.apps") },
@@ -101,20 +100,24 @@ const paneButton = (p: (typeof PANES)[number]): string =>
 /** The flat list of tabs. */
 export const paneListHTML = (): string => PANES.filter((p) => p.id !== STANDALONE_PANE).map(paneButton).join("");
 
-/** Where a link to a tab of before lands: Models for usage, Tools for the agent, 聽寫 for data, 一般 for appearance, messaging and the memory tab that is gone. */
+/** Where a link to a tab of before lands: Tools for the agent, 聽寫 for data, 一般 for appearance, messaging and the memory tab that is gone. */
 export const canonicalPane = (id: SettingsPane): SettingsPane =>
-  id === "usage" ? "models" : id === "agent" ? "tools" : id === "data" ? "dictation" : id === "appearance" || id === "messaging" || id === "memory" ? "general" : id;
+  id === "agent" ? "tools" : id === "data" ? "dictation" : id === "appearance" || id === "messaging" || id === "memory" ? "general" : id;
 /** The name of a tab, in the language of the window. */
 export const paneTitle = (id: SettingsPane): string => PANES.find((p) => p.id === canonicalPane(id))!.title();
-export type ModelsTab = "models" | "usage";
+/** The two views of 用量: what this month and each subscription stand at, and the charts of a period. */
+export type UsageTab = "overview" | "analysis";
 
-/** The shortcuts recorded here, and the row of each. */
-export const HOTKEY_ROWS: Record<HotkeyField, string> = { dictation_keys: "hotkey", agent_keys: "agent-hotkey", tidy_keys: "tidy-hotkey" };
+/** The row of each shortcut in 聽寫與快捷鍵's read-only list. */
+export const HOTKEY_ROWS: Record<HotkeyField, string> = { dictation_keys: "hotkey", agent_keys: "agent-hotkey", tidy_keys: "tidy-hotkey", paste_last_keys: "paste-hotkey" };
 
 /** Everything a tab is drawn from: what the panel has read, and what is being typed or done. */
 export interface SettingsView {
   update?: import("../api").UpdateView | null;
-  modelsTab?: ModelsTab;
+  /** The view of 用量 that is open (概覽 when none is said). */
+  usageTab?: UsageTab;
+  /** 用量 › 分析: the period, the groupings and what the core read for them (none: not drawn yet). */
+  analysis?: UsageAnalysisView;
   pane: SettingsPane;
   device: DeviceSettings;
   /** The brain's settings; null while the core does not answer. */
@@ -133,16 +136,13 @@ export interface SettingsView {
   accessibility?: boolean | null;
   /** The app's version, as Tauri gives it; empty while it is not known. */
   version: string;
-  /** What was typed in the limit field while it is not a limit, and what is wrong with it. */
-  limitDraft: string | null;
-  limitError: (() => string) | null;
   /** What is typed in the weather city while it is not saved, and what is wrong with it. */
   /** Telegram, in the 訊息平台 tab. */
   /** Members with a bot of their own, set up in each member's panel. */
   /** The shared safety rules, in Safety (none: not drawn). */
   rules?: RulesView;
   vault?: VaultView;
-  /** 團隊技能庫: the shared skills in packages, and who may use each (none: not drawn yet). */
+  /** Team skills: the shared skills in packages, and who may use each (none: not drawn yet). */
   skillLibrary?: SkillLibraryView;
   /** Shared services, in Tools: who searches, reads pages and PDFs, and looks at images (none: not drawn). */
   services?: ServicesView;
@@ -319,22 +319,35 @@ const modelRow = (v: SettingsView, { role, k, label }: (typeof MODEL_ROWS)[numbe
   row(label(), role === "image" || role === "video" ? `<span data-media-price="${role}">${priceHTML(mediaRowPrice(v, role))}</span>` : priceSpan(v, k, "price num"),
     modelPickerHTML(modelPickerLook(v, role)), { cls: "row-model", attrs: ` data-row="${k}"` });
 
+/** The monthly limit in force, from the status (null for none: 不設上限, or the core does not say). */
+export const limitOf = (v: Pick<SettingsView, "spend" | "brain">): number | null => {
+  const limit = v.spend ? v.spend.limit_usd : v.brain?.monthly_limit_usd ?? null;
+  return typeof limit === "number" && Number.isFinite(limit) && limit >= 0 ? limit : null;
+};
+
 /**
- * What this app spent this month, in a card: the amount, how much of the monthly limit
- * it is, as a bar in a member's colour, and where the month ends at this pace. Only the app's own spending: an OpenRouter
- * account's usage is the owner's to read on OpenRouter.
+ * 這個月: what this app spent this month with API keys, in a card under its section's name and a line of what it counts:
+ * the amount, where the month ends at this pace and the limit (未設上限, or 上限 US$ X 已用 N% with a bar in Raphael's
+ * blue). The gear at the card's top right opens the monthly limit (usage-cap.ts). Subscriptions are not counted here.
  */
 function spendCardHTML(v: SettingsView): string {
   const { spend } = v;
-  if (!spend) return `<section class="spend-card" data-row="raphael-spend"><h2>${esc(t("settings.050"))}</h2><p class="spend-note">${esc(t("settings.usageUnavailable"))}</p></section>`;
-  const limit = Number.isFinite(spend.limit_usd) && spend.limit_usd > 0 ? spend.limit_usd : null;
-  const share = limit ? Math.round(Math.max(0, Math.min(100, spend.month_usd / limit * 100))) : null;
+  const first = new Date(v.now); first.setDate(1);
+  const since = new Intl.DateTimeFormat(getLocale(), { month: "long", day: "numeric" }).format(first);
+  const gear = iconBtn("gear", t("common.monthlyLimit"), ` data-act="usage-cap" data-k="usage-cap" aria-haspopup="dialog" aria-expanded="false"${v.brain === null ? " disabled" : ""}`, "spend-cap");
+  const head = `<h2>${esc(t("usage.month"))}</h2><p class="ua-note">${esc(t("usage.monthNote", { p0: since }))}</p>`;
+  if (!spend) return `<section class="sgroup usage-month">${head}<div class="spend-card" data-row="raphael-spend"><p class="spend-label">${esc(t("usage.spent"))}</p><p class="spend-note">${esc(t("settings.usageUnavailable"))}</p>${gear}</div></section>`;
+  const limit = limitOf(v);
+  const share = limit !== null ? Math.round(Math.max(0, Math.min(100, limit > 0 ? spend.month_usd / limit * 100 : 100))) : null;
   const forecast = Number.isFinite(spend.forecast_usd) && spend.forecast_usd > spend.month_usd ? spend.forecast_usd : null;
-  return `<section class="spend-card" data-row="raphael-spend"><h2>${esc(t("settings.050"))}</h2>` +
-    `<p class="spend-value"><strong class="num">${esc(formatUsd(spend.month_usd))}</strong>${share !== null ? `<small>${esc(t("overview.used", { p0: share }))}</small>` : ""}</p>` +
-    (share !== null ? `<div class="spend-bar" role="progressbar" aria-label="${esc(t("settings.050"))}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${share}"><i style="width:${share}%"></i></div>` : "") +
-    `<p class="spend-note">${[limit ? esc(t("settings.spendLimit", { p0: formatUsd(limit) })) : "", forecast ? esc(t("settings.spendForecast", { p0: formatUsd(forecast) })) : ""].filter(Boolean).join(" · ")}</p>` +
-    `</section>`;
+  const note = [forecast ? t("settings.spendForecast", { p0: formatUsd(forecast) }) : "",
+    limit === null ? t("usage.noLimit") : t("usage.limitUsed", { p0: formatUsd(limit), p1: share ?? 0 })].filter(Boolean).join(" · ");
+  return `<section class="sgroup usage-month">${head}<div class="spend-card" data-row="raphael-spend">` +
+    `<p class="spend-label">${esc(t("usage.spent"))}</p>` +
+    `<p class="spend-value"><strong class="num">${esc(formatUsd(spend.month_usd))}</strong></p>` +
+    `<p class="spend-note">${esc(note)}</p>` +
+    (share !== null ? `<div class="spend-bar" role="progressbar" aria-label="${esc(t("common.monthlyLimit"))}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${share}"><i style="width:${share}%"></i></div>` : "") +
+    gear + `</div></section>`;
 }
 
 // ---------- the parts of every tab ----------
@@ -345,20 +358,22 @@ const section = (title: string, rows: string[], foot = ""): string =>
   (foot ? `<p class="foot">${foot}</p>` : "") +
   `</section>`;
 
+/** A shortcut, read-only: its keys as caps. They are changed in the dialog that the section's 編輯 opens (shortcut-editor.ts). */
+const shortcutRow = (name: string, bindings: readonly string[], field?: HotkeyField): string =>
+  row(name, "", `<span class="caps">${shortcutCaps(bindings)}</span>`, { cls: "row-shortcut", attrs: field ? ` data-row="${HOTKEY_ROWS[field]}"` : "" });
+
 /**
- * A shortcut: its keys as caps and, for one that can be changed here, a pencil (「變更」) that records
- * new ones (`change` names the button for the click handler and the focus).
+ * 快捷鍵: every shortcut in the order of use, then Esc, read-only, with one 編輯 at the section's top right that opens the
+ * dialog where they are changed. The AltGr warning stands under the shortcut whose keys hold Right Alt.
  */
-function shortcutRow(name: string, bindings: readonly string[], change?: { act: string; field: HotkeyField }): string {
-  const caps = bindings.length > 0
-    ? bindings.map((binding) => keys(bindingLabels(binding))).join(t("common.or"))
-    : `<span class="val">${esc(t("home.noKeys"))}</span>`;
-  return row(
-    name,
-    "",
-    `<span class="caps">${caps}</span>` + (change ? iconBtn("pencil", t("home.018"), ` data-act="${change.act}" data-k="${change.act}"`) : ""),
-    { cls: "row-shortcut", attrs: change ? ` data-row="${HOTKEY_ROWS[change.field]}"` : "" },
-  );
+function shortcutsSection(v: SettingsView): string {
+  const rows = SHORTCUTS.flatMap(({ field, name }) => {
+    const bindings = v.device[field] ?? [];
+    return [shortcutRow(name(), bindings, field), ...(field === "dictation_keys" || field === "agent_keys" ? altgrNote(v, bindings) : [])];
+  });
+  return `<section class="sgroup set-shortcuts"><div class="data-heading"><h2>${esc(t("home.shortcuts"))}</h2>` +
+    btn(esc(t("keys.edit")), "sm", ' data-act="keys-edit" data-k="keys-edit"') + `</div>` +
+    `<div class="slist">${[...rows, shortcutRow(t("common.cancel"), ["Escape"])].join("")}</div></section>`;
 }
 
 /** The warning under a shortcut whose keys hold Right Alt, on a keyboard layout that makes that key AltGr. */
@@ -438,15 +453,7 @@ function dictationHTML(v: SettingsView): string {
     coreNote(v) +
     accessibilityNote(v) +
     microphoneNote(v) +
-    section(t("home.shortcuts"), [
-      shortcutRow(t("settings.agentKeys"), v.device.agent_keys ?? [], { act: "rec-agent", field: "agent_keys" }),
-      ...altgrNote(v, v.device.agent_keys ?? []),
-      shortcutRow(t("home.020"), d.dictation_keys, { act: "rec", field: "dictation_keys" }),
-      ...altgrNote(v, d.dictation_keys),
-      ...(d.paste_last_keys.length ? [shortcutRow(t("home.021"), d.paste_last_keys)] : []),
-      shortcutRow(t("settings.tidyKeys"), d.tidy_keys ?? [], { act: "rec-tidy", field: "tidy_keys" }),
-      shortcutRow(t("common.cancel"), ["Escape"]),
-    ]) +
+    shortcutsSection(v) +
     section(t("settings.groupStart"), [row(t("settings.055"), "", sel(DICTATION_MODES, d.dictation_mode, t("settings.055"), ' data-k="mode"'))]) +
     section(t("settings.groupListen"), [
       row(
@@ -483,7 +490,7 @@ function toolsHTML(v: SettingsView): string {
   return headingHTML(v) + coreNote(v) + (v.services ? servicesHTML(v.services, modelPickerHTML(visionPickerLook(v)), v.brain, (id) => modelDisplayName(catalogOf(v), id)) : "");
 }
 
-/** 團隊技能庫: every shared skill in its package, and who may use each (skill-library.ts). */
+/** Team skills: every shared skill in its package, and who may use each (skill-library.ts). */
 function skillsHTML(v: SettingsView): string {
   return headingHTML(v) + coreNote(v) + skillLibraryHTML(v.skillLibrary ?? emptySkillLibraryView());
 }
@@ -508,23 +515,36 @@ export function retentionChoices(v: SettingsView): Choice[] {
 export const retentionOf = (v: SettingsView): string => String(v.brain?.history_retention_days ?? 30);
 
 /**
- * One page with model connections and usage in separate views. Legacy ids choose their own view. Usage is as plain as
- * Usage: what each subscription has left, then the key and what was spent, with no charts.
+ * 模型: the models in use, the subscription accounts and the providers, one after the other with no views inside. What was
+ * spent and what each subscription has left are 用量's.
  */
 function modelsHTML(v: SettingsView): string {
   const providers = v.providers ?? emptyProvidersView();
-  const selected = v.modelsTab ?? (v.pane === "usage" ? "usage" : "models");
-  const content = selected === "models" ? section(t("models.used"), [quickRow(v), ...MODEL_ROWS.slice(1).map(r => modelRow(v, r))], v.catalog === "failed" ? priceSpan(v, "note") : "") +
-    cliBrainsHTML(v.cliBrains ?? emptyCliBrainsView()) + providersHTML(providers) + providersAddHTML(providers, cliDirectoryHTML(v.cliBrains ?? emptyCliBrainsView(), providers.role)) :
-    // An OpenRouter key is that provider's, on its card among the others (模型 › 供應商), never a section of its own here.
-    spendCardHTML(v) + `<div data-usage-host></div>`;
-  // No refresh of its own: opening Settings reads it all again, unseen (settings.ts `refreshInBackground`).
   return headingHTML(v) + coreNote(v) + `<div class="models-page">` +
-    tabs((["models", "usage"] as const).map((id) => ({
-      id, label: id === "models" ? t("providers.title") : t("models.usage"),
-      attrs: ` id="models-tab-${id}" data-models-tab="${id}" data-k="models-tab:${id}" aria-controls="models-panel-${id}" tabindex="${id === selected ? 0 : -1}"`,
-    })), selected, { label: t("settings.paneUsage"), kind: "nav", plain: true }) +
-    (["models", "usage"] as const).map((id) => `<div class="models-content" id="models-panel-${id}" role="tabpanel" aria-labelledby="models-tab-${id}"${id === selected ? "" : " hidden"}>${id === selected ? content : ""}</div>`).join("") + `</div>`;
+    section(t("models.used"), [quickRow(v), ...MODEL_ROWS.slice(1).map(r => modelRow(v, r))], v.catalog === "failed" ? priceSpan(v, "note") : "") +
+    cliBrainsHTML(v.cliBrains ?? emptyCliBrainsView()) + providersHTML(providers) + providersAddHTML(providers, cliDirectoryHTML(v.cliBrains ?? emptyCliBrainsView(), providers.role)) +
+    `</div>`;
+}
+
+/** The ids of 用量's two views, for the tab and its panel. */
+export const USAGE_TABS = ["overview", "analysis"] as const;
+
+/**
+ * 用量, in two small tabs: 概覽 (this month's spending with its limit, then what each subscription has left: the allowance
+ * cards mount in `data-usage-host`, usage-analytics.ts) and 分析 (a period's charts, usage-analysis.ts). No refresh of its
+ * own: opening Settings reads the allowances again, unseen (settings.ts `refreshInBackground`); 分析 reads its period when
+ * it is opened.
+ */
+function usageHTML(v: SettingsView): string {
+  const selected = v.usageTab ?? "overview";
+  const content = selected === "overview" ? spendCardHTML(v) + `<div data-usage-host></div>`
+    : v.analysis ? usageAnalysisHTML(v.analysis, { model: (id) => modelDisplayName(catalogOf(v), id) }) : "";
+  return headingHTML(v) + coreNote(v) + `<div class="usage-page">` +
+    tabs(USAGE_TABS.map((id) => ({
+      id, label: id === "overview" ? t("usage.overview") : t("usage.analysis"),
+      attrs: ` id="usage-tab-${id}" data-usage-tab="${id}" data-k="usage-tab:${id}" aria-controls="usage-panel-${id}" tabindex="${id === selected ? 0 : -1}"`,
+    })), selected, { label: t("models.usage"), kind: "nav", plain: true }) +
+    USAGE_TABS.map((id) => `<div class="usage-content" id="usage-panel-${id}" role="tabpanel" aria-labelledby="usage-tab-${id}"${id === selected ? "" : " hidden"}>${id === selected ? content : ""}</div>`).join("") + `</div>`;
 }
 
 /** 關於: the version, the license and the fan-project statement. */
@@ -565,9 +585,10 @@ export function paneHTML(v: SettingsView): string {
       return skillsHTML(v);
     case "connections":
       return connectionsTabHTML(v);
-    case "usage":
     case "models":
       return modelsHTML(v);
+    case "usage":
+      return usageHTML(v);
     case "about":
       return aboutHTML(v);
   }

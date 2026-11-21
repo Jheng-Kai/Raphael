@@ -19,7 +19,7 @@ const api = vi.hoisted(() => ({
   providersKinds: vi.fn(), providersList: vi.fn(), providersModels: vi.fn(), providersAdd: vi.fn(), servicesStatus: vi.fn(),
   brainsCli: vi.fn(), brainsCliLogin: vi.fn(), brainsCliDisconnect: vi.fn(), openExternalUrl: vi.fn(),
   chatgptStatus: vi.fn(async () => ({ signed_in: false })), chatgptSignIn: vi.fn(), chatgptCancel: vi.fn(), chatgptSignOut: vi.fn(), chatgptModels: vi.fn(async () => ({ models: [] })),
-  usageAllowances: vi.fn(),
+  usageAllowances: vi.fn(), usageAnalytics: vi.fn(), membersList: vi.fn(),
   // The read-ahead after start-up also reads 連接 (connections.ts load); here that core does not answer it.
   toolsetsList: vi.fn(async () => { throw new Error("offline"); }), connectorsStatus: vi.fn(async () => { throw new Error("offline"); }),
   integrationsAudit: vi.fn(async () => { throw new Error("offline"); }), integrationsInventory: vi.fn(async () => { throw new Error("offline"); }),
@@ -54,7 +54,7 @@ async function mount(open: SettingsPane = "models") {
 }
 function create() {
   page = createSettings({
-    device: () => ({ dictation_keys: ["AltRight"], agent_keys: ["AltRight+Space"], ui_language: "en", dictation_mode: "hold" }),
+    device: () => ({ dictation_keys: ["AltRight"], agent_keys: ["AltRight+Space"], ui_language: "en", dictation_mode: "hold", microphone: null }),
     onEvent: (handler: (event: MainEvent) => void) => { listeners.add(handler); return () => { listeners.delete(handler); }; },
     refreshDevice: async () => {}, undo: { begin: vi.fn() },
     go, closeSettings, cleared: new Cleared(),
@@ -63,10 +63,10 @@ function create() {
 }
 const click = (selector: string) => { const button = document.querySelector<HTMLButtonElement>(selector); expect(button, selector).not.toBeNull(); button!.click(); };
 
-test.each(navInputs)("navigation in the key recorder never saves a navigation chord with %s", async input => {
-  const setDevice = vi.fn(), ended = vi.fn(), cell = document.createElement("button");
+test.each(navInputs)("navigation in the key recorder never records a navigation chord with %s", async input => {
+  const recorded = vi.fn(), ended = vi.fn(), cell = document.createElement("button");
   document.body.append(cell);
-  const recorder = createHotkeyRecording({ setDevice } as unknown as AppContext, ended);
+  const recorder = createHotkeyRecording(recorded, ended);
   await recorder.start("dictation_keys", cell);
   cell.focus();
   pressLayer(input, "forward");
@@ -75,7 +75,7 @@ test.each(navInputs)("navigation in the key recorder never saves a navigation ch
   expect(recorder.active()).toBe(false);
   await flush();
   expect(ended).toHaveBeenCalledOnce();
-  expect(setDevice).not.toHaveBeenCalled();
+  expect(recorded).not.toHaveBeenCalled();
 });
 
 test.each(navInputs)("back clears a private vault draft and leaves Settings open with %s", async input => {
@@ -92,22 +92,22 @@ test.each(navInputs)("back clears a private vault draft and leaves Settings open
   expect(closeSettings).not.toHaveBeenCalled();
 });
 
-test.each(navInputs)("Settings retraces Models and Usage before closing with %s", async input => {
-  await mount();
+test.each(navInputs)("Settings retraces Usage's overview and analysis before closing with %s", async input => {
+  await mount("usage");
   const navigation = new Navigation({
     where: () => ({ page: "agent", pane: page.pane(), paneView: page.navView() }),
     inGuide: () => false,
     stepLayer: stepOpenLayer,
-    show(place) { expect(place.pane).toBe("models"); page.showNavView(place.pane!, place.paneView!); },
+    show(place) { expect(place.pane).toBe("usage"); page.showNavView(place.pane!, place.paneView!); },
   });
   const stop = installNavInput(window, direction => navigation.step(direction), hasOpenLayer);
   try {
     navigation.note();
-    click('[data-models-tab="usage"]');
+    click('[data-usage-tab="analysis"]');
     sendNavInput(input, "back");
-    expect(page.navView()).toBe("models");
+    expect(page.navView()).toBe("overview");
     sendNavInput(input, "forward");
-    expect(page.navView()).toBe("usage");
+    expect(page.navView()).toBe("analysis");
     sendNavInput(input, "forward");
     expect(closeSettings).not.toHaveBeenCalled();
     sendNavInput(input, "back");
@@ -128,10 +128,13 @@ test("opening Settings and navigating back to Models starts at the top and a red
   page.hide(); await page.show('models'); await flush();
   expect(body.scrollTop).toBe(0);
   body.scrollTop = 190;
-  click('[data-models-tab="usage"]'); await flush();
+  click('[data-pane="usage"]'); await flush();
   expect(body.scrollTop).toBe(0);
   body.scrollTop = 140;
-  click('[data-models-tab="models"]'); await flush();
+  click('[data-usage-tab="analysis"]'); await flush();
+  expect(body.scrollTop).toBe(0);
+  body.scrollTop = 120;
+  click('[data-usage-tab="overview"]'); await flush();
   expect(body.scrollTop).toBe(0);
 });
 
@@ -184,9 +187,122 @@ beforeEach(() => {
   api.providersList.mockResolvedValue({ providers: [] });
   api.brainsCli.mockResolvedValue({ clis: [] });
   api.usageAllowances.mockResolvedValue({ brains: [{ id: "codex", name: "Codex", source: "live", windows: [{ period: "weekly", remaining_percent: 89, resets_at: 1792900000 }] }] });
+  api.usageAnalytics.mockResolvedValue(ANALYTICS);
+  // The roster is not read by these tests (the vault reads it too): 分析's own test answers it.
+  api.membersList.mockRejectedValue(new Error("offline"));
   api.settingsSet.mockImplementation(async (key: string, value: string) => ({ settings: { stt_engine: "cloud", [key]: value } }));
 });
 afterEach(() => { page?.hide(); document.body.innerHTML = ""; setLocale("zh-TW"); });
+
+/** A week of `usage.analytics`, as the core answers it (brain/usage.py). */
+const DAYS = ["2026-11-15", "2026-11-16", "2026-11-17", "2026-11-18", "2026-11-19", "2026-11-20", "2026-11-21"];
+const series = (key: string, values: number[], share: number, label = key) => ({ key, label, values, total: values.reduce((a, b) => a + b, 0), share });
+const ANALYTICS = {
+  range: "7d", days: DAYS,
+  cost_by: {
+    purpose: { total: 2, series: [series("agent", [0.5, 0, 0, 0.5, 0, 0, 0.5], 0.75), series("cleanup", [0, 0.5, 0, 0, 0, 0, 0], 0.25)] },
+    model: { total: 2, series: [series("openai/gpt-6-sol", [0.5, 0.5, 0, 0.5, 0, 0, 0.5], 1)] },
+    provider: { total: 2, series: [series("openrouter", [0.5, 0.5, 0, 0.5, 0, 0, 0.5], 1, "OpenRouter")] },
+  },
+  members: [{ id: 0, name: "Raphael", role: "", turns: 12, cost_usd: 1.5, share: 0.75, models: [{ model: "openai/gpt-6-sol", turns: 12, cost_usd: 1.5 }] },
+    { id: 2, name: "Mori", role: "", turns: 4, cost_usd: 0.5, share: 0.25, models: [{ model: "openai/gpt-6-sol", turns: 4, cost_usd: 0.5 }] }],
+  tools: { total: 5, series: [series("web_search", [1, 0, 2, 0, 0, 1, 1], 1)] },
+  messages_by: { model: { total: 16, series: [series("openai/gpt-6-sol", [2, 2, 2, 2, 2, 2, 4], 1)] }, source: { total: 16, series: [series("app", [2, 2, 2, 2, 2, 2, 4], 1)] } },
+};
+
+test("the gear of this month's card opens the monthly limit: no limit, or a limit in US$, each stored at once", async () => {
+  api.statusGet.mockResolvedValue({ openrouter: null, spend: { month_usd: 3, today_usd: 0, limit_usd: null, forecast_usd: 6, daily: [] } });
+  api.settingsGet.mockResolvedValue({ settings: { stt_engine: "cloud", monthly_limit_usd: null } });
+  api.settingsSet.mockImplementation(async (key: string, value: unknown) => ({ settings: { stt_engine: "cloud", [key]: value } }));
+  await mount("usage"); await flush();
+  const note = () => page.el.querySelector('[data-row="raphael-spend"] .spend-note')!.textContent;
+  const bar = () => page.el.querySelector('[data-row="raphael-spend"] [role="progressbar"]');
+  const popover = () => document.querySelector<HTMLElement>("#app-popover.usage-cap");
+  expect(note()).toContain("No limit");
+  expect(bar()).toBeNull();
+  click('[data-act="usage-cap"]');
+  expect(popover()!.getAttribute("role")).toBe("dialog");
+  expect(popover()!.getAttribute("aria-label")).toBe("Monthly limit");
+  expect(popover()!.querySelector('[data-cap-mode][aria-pressed="true"]')!.textContent).toBe("No limit");
+  expect([...popover()!.querySelectorAll("[data-cap-mode]")].map(tab => tab.textContent)).toEqual(["No limit", "Set a limit"]);
+  expect(popover()!.querySelector("#limit-input")).toBeNull();
+  // 設上限: the amount's field comes, focused; nothing is stored until an amount is typed.
+  click('#app-popover [data-cap-mode="set"]');
+  const field = popover()!.querySelector<HTMLInputElement>("#limit-input")!;
+  expect(document.activeElement).toBe(field);
+  expect(api.settingsSet).not.toHaveBeenCalled();
+  field.value = "30"; field.dispatchEvent(new Event("input", { bubbles: true })); field.dispatchEvent(new Event("change", { bubbles: true })); await flush();
+  expect(api.settingsSet).toHaveBeenCalledExactlyOnceWith("monthly_limit_usd", 30);
+  expect(note()).toContain("Limit US$30.00, 10% used");
+  expect(bar()!.getAttribute("aria-valuenow")).toBe("10");
+  // The popover stayed open over the page drawn again, with what was typed, on the gear drawn again.
+  expect(popover()!.querySelector<HTMLInputElement>("#limit-input")!.value).toBe("30");
+  expect(page.el.querySelector('[data-act="usage-cap"]')!.getAttribute("aria-expanded")).toBe("true");
+  // What is not a number is said under the field and stored nowhere.
+  const again = popover()!.querySelector<HTMLInputElement>("#limit-input")!;
+  again.value = "lots"; again.dispatchEvent(new Event("input", { bubbles: true })); again.dispatchEvent(new Event("change", { bubbles: true })); await flush();
+  expect(popover()!.querySelector('.cap-error[role="alert"]')!.textContent).toBe("Enter a number greater than or equal to 0");
+  expect(api.settingsSet).toHaveBeenCalledTimes(1);
+  // 不設上限: null, at once.
+  click('#app-popover [data-cap-mode="none"]'); await flush();
+  expect(api.settingsSet).toHaveBeenLastCalledWith("monthly_limit_usd", null);
+  expect(note()).toContain("No limit");
+  expect(bar()).toBeNull();
+  expect(popover()!.querySelector("#limit-input")).toBeNull();
+  // The gear closes it again.
+  click('[data-act="usage-cap"]');
+  expect(popover()).toBeNull();
+});
+
+test("an amount typed in the monthly limit is stored when the popover is closed with Escape", async () => {
+  api.statusGet.mockResolvedValue({ openrouter: null, spend: { month_usd: 1, today_usd: 0, limit_usd: 20, forecast_usd: 2, daily: [] } });
+  api.settingsGet.mockResolvedValue({ settings: { stt_engine: "cloud", monthly_limit_usd: 20 } });
+  await mount("usage"); await flush();
+  click('[data-act="usage-cap"]');
+  const field = document.querySelector<HTMLInputElement>("#app-popover #limit-input")!;
+  expect(field.value).toBe("20");
+  field.focus(); field.value = "12.5"; field.dispatchEvent(new Event("input", { bubbles: true }));
+  field.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); await flush();
+  expect(document.querySelector("#app-popover")).toBeNull();
+  expect(api.settingsSet).toHaveBeenCalledExactlyOnceWith("monthly_limit_usd", 12.5);
+});
+
+test("分析 reads its period from the core when it is opened, draws its four sections, and reads 30 days when asked", async () => {
+  api.membersList.mockResolvedValue({ members: [{ id: 0, name: "Raphael", avatar: "" }, { id: 2, name: "Mori", avatar: "" }], groups: [] });
+  await mount("usage");
+  expect(api.usageAnalytics).not.toHaveBeenCalled();
+  click('[data-usage-tab="analysis"]'); await flush();
+  expect(api.usageAnalytics).toHaveBeenCalledExactlyOnceWith("7d");
+  expect([...page.el.querySelectorAll<HTMLElement>("[data-ua-section]")].map((s) => s.dataset.uaSection)).toEqual(["cost", "people", "tools", "messages"]);
+  expect([...page.el.querySelectorAll('[data-ua-card="cost"] .ua-lname')].map((n) => n.textContent)).toEqual(["Conversations", "Dictation tidying"]);
+  // The members' names come from the list: Raphael and Mori, the one who cost most first.
+  expect([...page.el.querySelectorAll(".ua-table tbody th")].map((n) => n.textContent)).toEqual(["Raphael", "Mori"]);
+  click('[data-k="ua-group"]');
+  click('#app-popover [data-value="provider"]'); await flush();
+  expect([...page.el.querySelectorAll('[data-ua-card="cost"] .ua-lname')].map((n) => n.textContent)).toEqual(["OpenRouter"]);
+  click('[data-ua-range="30d"]'); await flush();
+  expect(api.usageAnalytics).toHaveBeenLastCalledWith("30d");
+  expect(page.el.querySelector('[data-ua-range="30d"]')!.getAttribute("aria-pressed")).toBe("true");
+  click('[data-ua-messages="source"]');
+  expect([...page.el.querySelectorAll('[data-ua-card="messages"] .ua-lname')].map((n) => n.textContent)).toEqual(["Typed"]);
+});
+
+test("誰花最多's 顯示更多 shows everyone and the same button folds them back to five, keeping the focus", async () => {
+  const people = Array.from({ length: 7 }, (_, id) => ({ id, name: `P${id}`, role: "", turns: 10 - id, cost_usd: 1 - id / 10, share: 0, models: [] }));
+  api.usageAnalytics.mockResolvedValue({ ...ANALYTICS, members: people });
+  await mount("usage");
+  click('[data-usage-tab="analysis"]'); await flush();
+  const button = () => page.el.querySelector<HTMLButtonElement>("[data-ua-more]")!;
+  const rows = () => page.el.querySelectorAll(".ua-table tbody tr").length;
+  expect([rows(), button().textContent, button().getAttribute("aria-expanded")]).toEqual([5, "Show more", "false"]);
+  button().focus();
+  button().click(); await flush();
+  expect([rows(), button().textContent, button().getAttribute("aria-expanded")]).toEqual([7, "Show less", "true"]);
+  expect(document.activeElement).toBe(button());
+  button().click(); await flush();
+  expect([rows(), button().textContent, button().getAttribute("aria-expanded")]).toEqual([5, "Show more", "false"]);
+  expect(document.activeElement).toBe(button());
+});
 
 test("keeps drawing and video unset until the owner chooses their separate paid models", async () => {
   await mount();
@@ -253,7 +369,7 @@ test("models in use precede subscription accounts and providers, login uses the 
   api.brainsCli.mockResolvedValue({ clis: [claude] });
   api.brainsCliLogin.mockResolvedValue({ started: true });
   await mount();
-  const sections = [...page.el.querySelectorAll(".models-content > section h2")].map((el) => el.textContent);
+  const sections = [...page.el.querySelectorAll(".models-page > section h2")].map((el) => el.textContent);
   expect(sections.slice(0, 3)).toEqual(["Models in use", "Subscription accounts", "Providers"]);
   click('[data-cli="claude"]'); await flush();
   expect(api.brainsCliLogin).toHaveBeenCalledWith("claude");
@@ -269,16 +385,22 @@ test("models in use precede subscription accounts and providers, login uses the 
   expect(document.querySelector('[data-source="cli:claude"]')).toBeNull();
 });
 
-test.each(["usage", "models"] as const)("%s opens the single Models pane without exposing saved fallback settings", async (alias) => {
+test("models opens Models with no tabs inside and no saved fallback settings, and usage opens its own tab at 概覽", async () => {
   api.settingsGet.mockResolvedValue({ settings: { stt_engine: "cloud", cleanup_fallbacks: ["@p1:private-chain"] } });
-  await mount(); await page.show(alias); await flush();
+  await mount(); await page.show("models"); await flush();
   expect(page.pane()).toBe("models");
+  expect(page.el.querySelector("#set-title")?.textContent).toBe("Models");
   expect(page.el.querySelectorAll('.set-list [data-pane="models"]')).toHaveLength(1);
-  expect(page.el.querySelector('.set-list [data-pane="usage"]')).toBeNull();
-  expect(page.el.querySelector('[role="tab"][aria-selected="true"]')?.getAttribute("data-models-tab")).toBe(alias);
-  expect(page.el.querySelectorAll('[data-model-picker]')).toHaveLength(alias === "models" ? 5 : 0);
+  expect(page.el.querySelector('.modal-body [role="tablist"], [data-models-tab], .models-content')).toBeNull();
+  expect(page.el.querySelectorAll('[data-model-picker]')).toHaveLength(5);
   expect(page.el.querySelector('[data-fallback-purpose]')).toBeNull();
   expect(page.el.textContent).not.toContain("Fallback models");
+  await page.show("usage"); await flush();
+  expect(page.pane()).toBe("usage");
+  expect(page.el.querySelector("#set-title")?.textContent).toBe("Usage");
+  expect(page.el.querySelector('.set-list [data-pane="usage"][aria-current="page"]')).not.toBeNull();
+  expect(page.el.querySelector('[data-usage-tab="overview"][aria-selected="true"]')).not.toBeNull();
+  expect(page.el.querySelectorAll('[data-model-picker]')).toHaveLength(0);
   expect(api.settingsSet).not.toHaveBeenCalled();
 });
 
@@ -305,13 +427,13 @@ test("settings delegates the CLI row menu and refreshes an open model chooser on
 test("Models contains no spending and Usage mounts its allowances once, plainly, across tabs and redraws", async () => {
   const mountAnalytics = vi.spyOn(analytics, "mountUsageAnalytics");
   await mount();
-  expect(page.el.querySelector("#set-title")?.textContent).toBe("Models & usage");
+  expect(page.el.querySelector("#set-title")?.textContent).toBe("Models");
   expect(page.el.querySelector('[data-row="openrouter-usage"]')).toBeNull();
   expect(page.el.querySelector('[data-row="raphael-spend"]')).toBeNull();
   // Opening Settings read the allowances already, on the tab that was not the usage.
   expect(mountAnalytics).toHaveBeenCalledTimes(1);
   expect(api.usageAllowances).toHaveBeenCalledTimes(1);
-  click('[data-models-tab="usage"]'); await flush();
+  click('[data-pane="usage"]'); await flush();
   expect(mountAnalytics).toHaveBeenCalledTimes(1);
   expect(api.usageAllowances).toHaveBeenCalledTimes(1);
   // Only what the app itself spent: an OpenRouter account's usage is read on OpenRouter.
@@ -325,43 +447,48 @@ test("Models contains no spending and Usage mounts its allowances once, plainly,
   // No refresh button anywhere on the tab, and nothing beside its name: opening Settings reads it all.
   expect(node.querySelector("button.icon")).toBeNull();
   expect(page.el.querySelector('[data-act="models-refresh"], .set-head, .models-refresh')).toBeNull();
-  expect(page.el.querySelector(".set-content > h1")?.nextElementSibling?.classList.contains("models-page")).toBe(true);
-  expect(page.el.querySelector(".ua-chart, .run-tiles, .run-bill, [data-range], .foot")).toBeNull();
+  expect(page.el.querySelector(".set-content > h1")?.nextElementSibling?.classList.contains("usage-page")).toBe(true);
+  // 概覽 has no chart: the charts of a period are 分析's.
+  expect(page.el.querySelector(".ua-card, .ua-chart, .run-tiles, .run-bill, [data-ua-range], .foot")).toBeNull();
   setLocale("ja"); await flush();
   expect(page.el.querySelector(".usage-analytics")).toBe(node);
-  click('[data-models-tab="models"]');
+  click('[data-usage-tab="analysis"]');
   expect(page.el.querySelector(".usage-analytics")).toBeNull();
-  click('[data-models-tab="usage"]'); await flush();
+  click('[data-usage-tab="overview"]'); await flush();
+  expect(page.el.querySelector(".usage-analytics")).toBe(node);
+  click('[data-pane="models"]');
+  expect(page.el.querySelector(".usage-analytics")).toBeNull();
+  click('[data-pane="usage"]'); await flush();
   expect(page.el.querySelector(".usage-analytics")).toBe(node);
   expect(mountAnalytics).toHaveBeenCalledTimes(1);
 });
 
 test("the allowances are kept across tabs and Settings closing, refresh on completed activity while visible, and are read again by the next opening", async () => {
   const mountAnalytics = vi.spyOn(analytics, "mountUsageAnalytics");
-  await mount(); click('[data-models-tab="usage"]'); await flush();
+  await mount("usage"); await flush();
   const first = mountAnalytics.mock.results[0].value;
   const destroyed = vi.spyOn(first, "destroy");
   const calls = api.usageAllowances.mock.calls.length;
   send({ type: "ProvidersChanged" }); await flush();
   send({ type: "AgentTurn", turn_id: 42 }); await flush();
   expect(api.usageAllowances).toHaveBeenCalledTimes(calls + 2);
-  click('[data-models-tab="models"]');
+  click('[data-usage-tab="analysis"]');
   send({ type: "AgentTurn", turn_id: 43 }); await flush();
   expect(api.usageAllowances).toHaveBeenCalledTimes(calls + 2);
   // Leaving the tab keeps what was read and reads nothing; closing Settings keeps it too, and the next opening reads once.
-  click('[data-pane="general"]'); click('[data-pane="models"]'); click('[data-models-tab="usage"]'); await flush();
+  click('[data-pane="general"]'); click('[data-pane="usage"]'); await flush();
   expect(api.usageAllowances).toHaveBeenCalledTimes(calls + 2);
-  page.hide(); await page.show("models"); click('[data-models-tab="usage"]'); await flush();
+  page.hide(); await page.show("usage"); await flush();
   expect(destroyed).not.toHaveBeenCalled();
   expect(mountAnalytics).toHaveBeenCalledTimes(1);
   expect(api.usageAllowances).toHaveBeenCalledTimes(calls + 3);
-  // Every opening starts afresh: 模型與用量 is at 模型 again, not at the 用量 looked at last.
-  await page.show("general"); click('[data-pane="models"]'); await flush();
-  expect(page.el.querySelector('[data-models-tab="models"][aria-selected="true"]')).not.toBeNull();
+  // Every opening starts afresh: 用量 is at 概覽 again, not at the 分析 looked at last.
+  click('[data-usage-tab="analysis"]'); await flush();
+  await page.show("general"); click('[data-pane="usage"]'); await flush();
+  expect(page.el.querySelector('[data-usage-tab="overview"][aria-selected="true"]')).not.toBeNull();
+  click('[data-usage-tab="analysis"]'); await flush();
   await page.show("usage");
-  expect(page.el.querySelector('[data-models-tab="usage"][aria-selected="true"]')).not.toBeNull();
-  await page.show("models");
-  expect(page.el.querySelector('[data-models-tab="models"][aria-selected="true"]')).not.toBeNull();
+  expect(page.el.querySelector('[data-usage-tab="overview"][aria-selected="true"]')).not.toBeNull();
 });
 
 test("the models' usage is read once after the app starts, before Settings is ever opened, and again at the opening", async () => {
@@ -394,7 +521,7 @@ test("every opening of Settings reads the allowances again at once, on any tab, 
     expect(mountAnalytics).toHaveBeenCalledTimes(1);
     expect(api.usageAllowances).toHaveBeenCalledTimes(1);
     expect(page.el.querySelector('[data-act="models-refresh"]')).toBeNull();
-    click('[data-pane="models"]'); click('[data-models-tab="usage"]');
+    click('[data-pane="usage"]');
     // The numbers are on the page the moment the tab is: nothing is waited for.
     expect(cardsOf()).toHaveLength(1);
     expect(cardsOf()[0]).toContain("89%");
@@ -408,7 +535,7 @@ test("every opening of Settings reads the allowances again at once, on any tab, 
 
     // On another tab, a new value replaces the old one in place: the same card, no busy state at any moment.
     api.usageAllowances.mockResolvedValue(windowsOf(72));
-    page.hide(); await page.show("models"); click('[data-models-tab="usage"]');
+    page.hide(); await page.show("usage");
     const card = document.querySelector(".usage-analytics .run-subscription");
     const busy: string[] = [];
     const watch = new MutationObserver(() => busy.push(document.querySelector(".usage-analytics")!.getAttribute("aria-busy") ?? ""));
@@ -427,11 +554,11 @@ test("every opening of Settings reads the allowances again at once, on any tab, 
 test("a window that was reset shows its higher number at the very next opening, with no wait between two openings", async () => {
   const weekly = (left: number) => ({ brains: [{ id: "claude", name: "Claude", source: "live", windows: [{ period: "weekly", remaining_percent: left, resets_at: 1792900000 }] }] });
   api.usageAllowances.mockResolvedValue(weekly(4));
-  await mount("models"); click('[data-models-tab="usage"]'); await flush();
+  await mount("usage"); await flush();
   expect(cardsOf()[0]).toContain("4%");
   const asked = api.usageAllowances.mock.calls.length;
   api.usageAllowances.mockResolvedValue(weekly(29));
-  page.hide(); await page.show("models"); click('[data-models-tab="usage"]'); await flush();
+  page.hide(); await page.show("usage"); await flush();
   expect(api.usageAllowances).toHaveBeenCalledTimes(asked + 1);
   expect(cardsOf()[0]).toContain("29%");
   expect(cardsOf()[0]).not.toContain("4% ");
@@ -440,14 +567,14 @@ test("a window that was reset shows its higher number at the very next opening, 
 test("a reading at an opening that finds the same numbers touches nothing, and one that fails keeps what is shown without a word", async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   try {
-    await mount("models"); click('[data-models-tab="usage"]'); await flush();
+    await mount("usage"); await flush();
     const root = document.querySelector(".usage-analytics")!;
     const before = root.innerHTML, card = root.querySelector(".run-subscription");
     const touched: MutationRecord[] = [];
     const watch = new MutationObserver(records => touched.push(...records));
     watch.observe(root, { attributes: true, childList: true, characterData: true, subtree: true });
     vi.setSystemTime(Date.now() + 31_000);
-    page.hide(); await page.show("models"); click('[data-models-tab="usage"]'); await flush();
+    page.hide(); await page.show("usage"); await flush();
     expect(api.usageAllowances).toHaveBeenCalledTimes(2);
     expect(touched).toEqual([]);
     expect(root.innerHTML).toBe(before);
@@ -455,7 +582,7 @@ test("a reading at an opening that finds the same numbers touches nothing, and o
     // The core does not answer at the next opening: the page still shows what it last knew, and says nothing about it.
     vi.setSystemTime(Date.now() + 31_000);
     api.usageAllowances.mockRejectedValue(new Error("offline"));
-    page.hide(); await page.show("models"); click('[data-models-tab="usage"]'); await flush();
+    page.hide(); await page.show("usage"); await flush();
     expect(api.usageAllowances).toHaveBeenCalledTimes(3);
     watch.disconnect();
     expect(touched).toEqual([]);
@@ -479,20 +606,70 @@ test("an opening while a reading is under way joins it instead of asking again",
   expect(api.usageAllowances).toHaveBeenCalledTimes(1);
   expect(api.modelsCatalog.mock.calls.length).toBe(1);
   finish(result); await flush();
-  click('[data-pane="models"]'); click('[data-models-tab="usage"]'); await flush();
+  click('[data-pane="usage"]'); await flush();
   expect(cardsOf()).toHaveLength(1);
   expect(api.usageAllowances).toHaveBeenCalledTimes(1);
 });
 
 test("the shared tabs support arrow keys, and Settings has no search", async () => {
-  await mount();
-  const modelTab = page.el.querySelector<HTMLElement>('[data-models-tab="models"]')!;
-  modelTab.focus(); modelTab.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })); await flush();
-  expect((document.activeElement as HTMLElement).dataset.modelsTab).toBe("usage");
+  await mount("usage");
+  const overview = page.el.querySelector<HTMLElement>('[data-usage-tab="overview"]')!;
+  overview.focus(); overview.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })); await flush();
+  expect((document.activeElement as HTMLElement).dataset.usageTab).toBe("analysis");
   expect(document.activeElement?.getAttribute("aria-selected")).toBe("true");
   document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true }));
-  expect((document.activeElement as HTMLElement).dataset.modelsTab).toBe("models");
+  expect((document.activeElement as HTMLElement).dataset.usageTab).toBe("overview");
   expect(page.el.querySelector("#set-search")).toBeNull();
+});
+
+test("the Settings list follows its pane order with the up and down arrows", async () => {
+  await mount("general");
+  page.el.querySelector<HTMLElement>('[data-pane="general"]')!.focus();
+  const press = (key: string) => document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+  for (const pane of ["models", "usage", "tools", "skills", "dictation", "safety", "about"]) {
+    press("ArrowDown");
+    expect((document.activeElement as HTMLElement).dataset.pane).toBe(pane);
+  }
+  press("ArrowUp");
+  expect((document.activeElement as HTMLElement).dataset.pane).toBe("safety");
+  expect(page.pane()).toBe("general");
+});
+
+test.each([false, true])("pressing a spoken language redraws the picker and Settings row with the variants submenu open: %s", async (variantsOpen) => {
+  setLocale("zh-TW");
+  api.settingsGet.mockResolvedValue({ settings: { languages: ["zh-HK", "en-US"] } });
+  api.languagesList.mockResolvedValue({ groups: [
+    { id: "zh", name: "Chinese", variants: [{ id: "zh-TW", name: "Taiwan" }, { id: "zh-HK", name: "Hong Kong" }] },
+    { id: "en", name: "English", variants: [{ id: "en-US", name: "English (United States)" }, { id: "en-GB", name: "English (United Kingdom)" }] },
+  ] });
+  await mount("dictation");
+  click('[data-k="languages"]');
+  await flush();
+  const language = '.lang-panel [data-language="zh"]';
+  const variant = '.lang-panel [data-variant-menu="zh"]';
+  const expectPicker = (pressed: boolean, count: number, form: string, summary: string) => {
+    expect(document.querySelector('[data-k="languages"] span')?.textContent).toBe(summary);
+    expect(document.querySelector(language)?.getAttribute("aria-pressed")).toBe(String(pressed));
+    expect(!!document.querySelector(`${language} .ck svg`)).toBe(pressed);
+    expect(document.querySelector(".lang-panel .lang-count")?.textContent).toBe(`已選 ${count}／5`);
+    expect(document.querySelector(`${variant} span`)?.textContent).toBe(form);
+  };
+  expectPicker(true, 2, "繁體中文（香港）", "繁體中文（香港）、English (United States)");
+  if (variantsOpen) {
+    click(variant);
+    expect(document.querySelector('.lang-variant-menu [data-variant="zh-HK"][aria-checked="true"]')).not.toBeNull();
+  }
+  document.querySelector<HTMLElement>(language)!.focus();
+  click(language);
+  expectPicker(false, 1, "繁體中文（台灣）", "English (United States)");
+  expect(document.querySelector('.lang-variant-menu')).toBeNull();
+  expect(document.activeElement).toBe(document.querySelector(language));
+  expect(api.settingsSet).toHaveBeenLastCalledWith("languages", ["en-US"]);
+  await flush();
+  click(language);
+  expectPicker(true, 2, "繁體中文（台灣）", "English (United States)、繁體中文（台灣）");
+  expect(api.settingsSet).toHaveBeenLastCalledWith("languages", ["en-US", "zh-TW"]);
+  await flush();
 });
 
 test("opening on the allowances waits for their first reading, other tabs never do, and leaving during it keeps the reading off the page", async () => {
@@ -532,7 +709,7 @@ test("activity during the initial reading is coalesced into one refresh", async 
   api.usageAllowances.mockClear();
   let finish!: (value: unknown) => void;
   api.usageAllowances.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
-  await mount(); click('[data-models-tab="usage"]');
+  await mount("general"); click('[data-pane="usage"]');
   expect(api.usageAllowances).toHaveBeenCalledTimes(1);
   send({ type: "AgentTurn", turn_id: 45 });
   send({ type: "AgentTurn", turn_id: 46 });
@@ -547,7 +724,7 @@ test("a quota change the page's own reading caused does not start a second readi
   api.usageAllowances.mockClear();
   let finish!: (value: unknown) => void;
   api.usageAllowances.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
-  await mount(); click('[data-models-tab="usage"]');
+  await mount("general"); click('[data-pane="usage"]');
   expect(api.usageAllowances).toHaveBeenCalledTimes(1);
   send({ type: "QuotaChanged" });
   finish(result); await flush();

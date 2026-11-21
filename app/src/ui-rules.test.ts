@@ -278,10 +278,11 @@ describe("colours", () => {
 });
 
 describe("tabs", () => {
-  // The member Library sorts its deliverables by kind with the same filter.
-  test("the segmented filter is used by History, Dictionary and the member Library only", () => {
+  // The member Library sorts its deliverables by kind with the same filter, and 用量 › 分析 chooses its period and how its
+  // messages are grouped with it: views of what was recorded, never the values of a setting.
+  test("the segmented filter is used by History, Dictionary, the member Library, Usage's analysis and the monthly limit only", () => {
     const users = sources.filter((f) => /kind: "filter"|\btabs seg\b/.test(read(f))).map(rel).sort();
-    expect(users).toEqual(["member-panel-work.ts", "pages/dictionary.ts", "pages/history.ts", "ui.ts"]);
+    expect(users).toEqual(["member-panel-work.ts", "pages/dictionary.ts", "pages/history.ts", "ui.ts", "usage-analysis.ts", "usage-cap.ts"]);
   });
 
   test("there is one tab implementation: the old class names are gone", () => {
@@ -373,4 +374,26 @@ describe("icons", () => {
     }).map(rel);
     expect(copies).toEqual([]);
   });
+});
+
+test("a Settings section's title stands on its card's left edge: no stylesheet insets it like the card's content", () => {
+  // 使用的模型, 這個月, 花費紀錄… were inset like the rows of their card while the card and the
+  // controls under them stood on its edge. The look check `content-width` measures it in every Settings scene; this keeps
+  // the stylesheets from bringing an inset back.
+  const TITLES = /\.sgroup\s*>\s*(?:h2|\.data-heading\s*>\s*h2)|\.run-allowance\s*>\s*header\s+h2|\.set-messaging\s*>\s*h2/;
+  const inset: string[] = [];
+  for (const file of mainFiles.filter((f) => f.endsWith(".css"))) {
+    const css = read(file).replace(/\/\*[\s\S]*?\*\//g, "");
+    for (const [, selectors, body] of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      // A rule of Settings' own (the dialog's body or one of its pages); `.sgroup > h2` alone is the member panel's too.
+      if (!selectors!.split(",").some((one) => TITLES.test(one) && /\.(?:modal-body|run-allowance|set-messaging|usage-content|models-page)\b/.test(one))) continue;
+      for (const [, property, value] of body!.matchAll(/(margin(?:-left|-inline(?:-start)?)?|padding(?:-left|-inline(?:-start)?)?)\s*:\s*([^;]+)/g)) {
+        const parts = value!.trim().split(/\s+/);
+        // margin: a b c d puts the left fourth (or second with two or three values); margin-left and -inline-start are it.
+        const left = /-(?:left|inline-start)$/.test(property!) ? parts[0] : /-inline$/.test(property!) ? parts[0] : parts[parts.length === 4 ? 3 : parts.length >= 2 ? 1 : 0];
+        if (left && !/^0(?:px)?$/.test(left) && !/^auto$/.test(left)) inset.push(`${rel(file)}: ${selectors!.trim()} { ${property}: ${value!.trim()} }`);
+      }
+    }
+  }
+  expect(inset).toEqual([]);
 });

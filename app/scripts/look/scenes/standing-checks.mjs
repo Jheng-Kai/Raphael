@@ -21,6 +21,8 @@ export function withStandingChecks(scenes) {
     ...(["profile", "dictation", "appearance", "skins", "models", "usage"].includes(original.name) ? [check("settings-concise")] : []),
     ...(original.name === "models" ? [check("models-responsive"), check("price-parts")] : []),
     ...(original.name === "dictation-overview" ? [check("compact-action")] : []),
+    // Nothing of a 聽寫 page goes past its right edge (part of it was cut off at the window's), at any width.
+    ...(["dictation-overview", "dictation-history", "dictation-dictionary", "dictation-keyboard", "dictation-notice"].includes(original.name) ? [check("dictation-right-edge")] : []),
     ...(["chat", "details", "details-closed", "member-text", "raphael-details"].includes(original.name) ? [check("conversation-header"), check("details-alignment")] : []),
   ]}));
 }

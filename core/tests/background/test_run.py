@@ -188,6 +188,17 @@ async def test_a_month_whose_limit_is_used_up_still_allows_the_task(rig):
     assert rig.run.ledger.total == pytest.approx(0.3)
 
 
+async def test_a_room_task_stops_at_the_monthly_limit_but_never_without_one(rig):
+    rig.run.room_budget = lambda: 100.0
+    rig.spend.record(purpose="agent", model="m", cost_usd=50.0, prompt_tokens=1, completion_tokens=1)
+    # No limit (null, a new install's default): the room's task goes on however much the month cost.
+    assert rig.settings.get("monthly_limit_usd") is None
+    rig.client.replies = [turn("Still working")]
+    assert (await rig.chat())["content"] == "Still working"
+    rig.settings.set("monthly_limit_usd", 10.0)
+    assert await stop_of(rig.chat()) == ("limit_month", None)
+
+
 async def test_a_task_out_of_time_asks_for_nothing(rig):
     rig.clock.now += 1801
     assert await stop_of(rig.chat()) == ("limit_time", None)

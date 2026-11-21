@@ -981,7 +981,7 @@ The shared image_generate/video_generate tools use only the owner's explicit ima
 and video_model settings. Both default unset: discovery is not consent. These separate
 paid API models are independent of every member's conversational brain, including CLI
 subscriptions; changing a brain changes neither setting. The owner chooses in existing
-Settings > Models & usage rows, with provider, per-image/per-request/token pricing when
+Settings > Models rows, with provider, per-image/per-request/token pricing when
 known and an explicit API-charge note. Image-only catalog entries remain selectable.
 No compatible discovered video model is shown as none available, never invented.
 
@@ -1938,6 +1938,27 @@ conversation's whole column, as wide as the composer, and a table's columns take
 npm run look -- rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-invalid rich-streaming rich-sequence rich-line-breaks rich-class rich-state rich-er rich-architecture rich-wide-table reply-split-bubbles conversation-chief-up conversation-member-up conversation-room-up long-owner long-owner-expanded long-room-messages chat --theme both --width 1120,720,1920x1080
 ```
 
+A diagram opens larger from its whole chart, not only the header's expand icon (R-UI-173): the drawn chart under the header is
+one control (`role="button"`, 放大檢視圖表, one Tab stop once drawn) that a press, Enter or Space opens; the header's copy,
+source and expand keep their own actions, and a press that moved or selected words opens nothing (message-rich.ts). Under the
+pointer the chart shows the pointer and one grey step laid over it (a `::after` veil of `--text` at 5%, so the nodes keep
+their contrast). The larger view (`showDiagram`, diagram-zoom.ts) is the shared dialog with `.diagram-dialog`: −, + and reset
+are head icon buttons before the × (`tools` of `openDialog`), the stage's ground is the conversation's panel the chart was
+drawn on (`--diagram-ground`; the dialog's own panel sank the dark nodes), it fits the chart in its middle (air of 24 px, at most
+twice its own size), the wheel or a pinch zooms about the pointer from 25% to 400% of the fit (always up to twice the chart's
+own size), any mouse button drags it with no menu and keeps 48 px of it in view, a double press, reset or 0 fits it again,
+and the arrows and + - work from the keyboard. The chart is redrawn at each size (its width and height), never scaled as a
+picture. One line under the stage (`.diagram-hint`, `chat.diagramHint`) says how to use it in the window's language. Esc and ×
+close it as before. `rich-diagram-hover` measures the pointer and the veil, `rich-diagram-press` and `rich-diagram-key` open
+it by a press and by Enter and check the fit, the head's controls beside the × and the hint's one line, and
+`rich-diagram-zoomed` zooms with the wheel, drags with the left and the right button and checks the zoom, the move and that no
+menu opened. Unit tests: message-rich.test.ts (the press, the keys, a moved press) and diagram-zoom.test.ts (fit, limits,
+wheel, pan, reset, the dialog's head and hint). The fixture cannot prove a real trackpad's pinch; it is unverified there.
+
+```powershell
+npm run look -- rich-diagram rich-expand rich-diagram-hover rich-diagram-press rich-diagram-key rich-diagram-zoomed rich-source rich-line-breaks rich-sequence rich-invalid rich-streaming --theme both --width 1120,720,1920x1080
+```
+
 ## Small core regressions
 
 The mention menu, chips, mirror and room recipients accept both ASCII `@` and full-width
@@ -2079,6 +2100,8 @@ still under way, a background task, with other turns between. Each message and t
 after it stand in the message's own place in time, so that work's answer stands under the
 message, below the turns between, never up in the work's first line (issue 231).
 `owner-addition-older-work` checks that order.
+A colleague's exchange that comes while the work goes on breaks its line the same way, in the same list of the work's
+stretches (see Where an exchange stands in work that goes on, R-EXCHANGE-01).
 CLI handoffs preserve accepted input in their saved continuation.
 Room messages use that inbox for a single active recipient in the same room and
 thread. Several addressees, files or a sealed inbox start a new room turn without
@@ -2267,6 +2290,26 @@ npm run look -- handoff-group handoff-group-done handoff-group-many handoff-grou
 The line 「與 X 的 N 則訊息」 is words with no disclosure under it, and only its count 「N 則訊息」 is a button (a press beside it opens nothing): N counts each request and each answer. The count's own words (`handoff.count`) sit in each language's sentence (`handoff.group`, `handoff.between`). peer-chat.ts opens the conversation in place over the member's header, thread and composer (`.mb-chat > .peer-chat`): the pill 「A ⇄ B」, the exchanges between the same members at the same time in the loaded thread (or room) oldest first (one begun more than 30 minutes after the last one moved is another conversation with its own line, `PEER_SESSION_GAP_MS`) under each speaker's face and coloured name (owner-bubble.ts `nameAccent`), day dividers, an unfinished answer as its state and reason (the reason has a line of its own for a file that is missing, there but unreadable or changed, no verified action, an incomplete final answer, work it handed on still open, and a stop; `peer-chat.test.ts` keeps each in every language), and 「關閉對話」 where the composer was. Esc and leaving the conversation close it; an arriving answer redraws it. The scenes peer-chat (two days with one member, a third member's exchange excluded) and peer-chat-close drive it; handoff-group-open keeps it open through arriving receipts; bot-ask-centred, handoff-centred-line and room-workflow-blocked read the request, result, files and reason inside it.
 
 For member-to-member exchanges, `receivedLineHTML` appears in the respondent's own thread for its received ask or consult handoff. Its completed exchange is part of that member's later conversation context, scoped to that member and conversation; the asker retains the colleague's answer in its source turn context. `bot-message-from-centred` exercises the ask_member/consult receipt in the respondent's thread.
+
+### Where an exchange stands in work that goes on
+
+A colleague's exchange that comes while the respondent works stands at its own moment inside that work (R-EXCHANGE-01,
+conversation.ts `joinedWork` and `threadItems`), with the same stretches (`TurnPart`) an owner message that joined the work
+has (see Owner input): the work's line breaks at the exchange's time, what it said before stays above the exchange line,
+and the stretch after it (`data-after` naming the exchange: later replies and files, its live line while it runs, its cards,
+its work and its answer) comes below, so the live line is the thread's last. The work it joins is the newest of the member's
+own work before it (never an exchange or an owner_input row) that is still at work (running, at a card, a task under way or
+waiting) or has shown something since the exchange came: still-running work takes it before saying anything more, since
+nothing waits on the work reading it; work over before it came, or behind queued words, takes nothing. Exchanges with the
+same colleague in a row are still one line while the stretch of work between them shows nothing (no reply, file, event line
+or settled question; for the work's first stretch also no question, brief, hand-off or card): the quiet stretch goes on
+under the one line instead. Group rooms draw their own messages (room-thread.ts, group-chats.ts) and are not affected.
+`exchange-mid-work` checks the running order (the work's start, the exchange line, then one live line under it) and
+`exchange-mid-work-answered` the finished one (the answer under the exchange line, nothing said after it left above).
+
+```powershell
+npm run look -- exchange-mid-work exchange-mid-work-answered bot-message-from-centred bot-exchange-count owner-addition-answered owner-addition-older-work --theme both --width 1120,720,1920x1080
+```
 
 ```powershell
 npm run look -- peer-chat peer-chat-close handoff-group handoff-group-open handoff-group-room centred-system-events bot-ask-centred handoff-centred-line room-workflow-blocked room-workflow-childwork-open room-workflow-file-unreadable room-handoff-result --theme both --width 1120,720,1920x1080

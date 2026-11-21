@@ -438,11 +438,13 @@ describe("skills and commands", () => {
     expect(page.el.dataset.view).toBe("main");
   });
 
-  test("the packages the team library gives are read-only here with the way to the library; deleting one of its own waits for a second press", async () => {
+  test("Team skills are read-only here with a link to Settings; deleting a private skill waits for a second press", async () => {
     api.membersSkillsList.mockResolvedValue({ skills: SKILLS, library: [{ key: "pack:2", name: "研究工具", skills: 2 }, { key: "skill:3", name: "會議紀錄", skills: 1 }] });
     await open();
     await cat("skills");
     const library = $('[data-k="ms-library"]');
+    expect(library.querySelector(".ms-head h2")?.textContent).toBe("來自團隊技能");
+    expect(library.querySelector('[data-ms="open-library"]')?.textContent).toBe("開啟團隊技能");
     expect([...library.querySelectorAll(".ms-lib-row .ms-label")].map((row) => row.textContent)).toEqual(["研究工具", "會議紀錄"]);
     expect([...library.querySelectorAll(".ms-lib-count")].map((row) => row.textContent)).toEqual(["2 個技能"]);
     expect(library.querySelector('.ms-list [role="switch"], [data-ms="skill-open"]')).toBeNull();

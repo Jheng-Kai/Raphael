@@ -32,9 +32,12 @@ const device = {
 const names = (html: string): string[] => [...html.matchAll(/<div class="kc-name">(.*?)<\/div>/g)].map((m) => m[1]!);
 
 describe("the shortcuts card", () => {
-  test("lists the tidy key beside the others, before Esc", () => {
+  test("lists the shortcuts in the order of use, then Esc, read-only with one 編輯 at its top right", () => {
     const html = keysCardHTML(device);
-    expect(names(html)).toEqual(["聽寫", "問拉斐爾", "貼上上一次", "整理選取文字", "取消"]);
+    expect(names(html)).toEqual(["聽寫", "問拉斐爾", "整理選取文字", "貼上上一次", "取消"]);
+    expect(html).toContain('<div class="card-head"><h2>快捷鍵</h2><button type="button" class="btn sm" data-act="keys-edit">編輯</button></div>');
+    expect(html.match(/<button\b/g)).toHaveLength(1);
+    expect(html).not.toContain('data-go="settings"');
     const tidy = html.slice(html.indexOf("整理選取文字"));
     expect(tidy).toContain("<kbd>T</kbd>");
     setLocale("en");
@@ -45,6 +48,7 @@ describe("the shortcuts card", () => {
     expect(names(keysCardHTML({ ...device, tidy_keys: [] }))).not.toContain("整理選取文字");
     const { tidy_keys: _gone, ...older } = device;
     expect(names(keysCardHTML(older as DeviceSettings))).toEqual(["聽寫", "問拉斐爾", "貼上上一次", "取消"]);
+    expect(names(keysCardHTML({ ...device, agent_keys: [] }))).toEqual(["聽寫", "整理選取文字", "貼上上一次", "取消"]);
   });
 });
 

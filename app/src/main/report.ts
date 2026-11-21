@@ -10,14 +10,14 @@ import type { Status } from "./types";
 export interface Report {
   /** The sentence as it is spoken, 《告。…》, in the interface language. */
   text: string;
-  /** The button next to the report. `settings` goes to Settings' models, `retry` asks OpenRouter again. */
-  action?: { label: string; target: "settings" | "retry" };
+  /** The button next to the report. `settings` goes to Settings' models, `usage` to its usage and the monthly limit, `retry` asks OpenRouter again. */
+  action?: { label: string; target: "settings" | "usage" | "retry" };
 }
 
 const SET_KEY = { get label() { return t("report.001"); }, target: "settings" } as const;
 const SET_MODEL = { get label() { return t("report.setModel"); }, target: "settings" } as const;
 const RETRY = { get label() { return t("report.002"); }, target: "retry" } as const;
-const ADJUST_LIMIT = { get label() { return t("report.003"); }, target: "settings" } as const;
+const ADJUST_LIMIT = { get label() { return t("report.003"); }, target: "usage" } as const;
 
 
 /**
@@ -37,6 +37,8 @@ export function buildReport(s: Status, nowMs: number): Report {
   if (s.cleanup_ready === false || s.cleanup_ready === undefined && openrouter.state === "no_key") return { text: t("report.noKey"), action: SET_MODEL };
 
   const { month_usd: month, limit_usd: limit } = spend;
+  // No monthly limit (不設上限): nothing about the budget to report.
+  if (limit === null) return { text: t("report.allWellNoLimit") };
   // As in the core: being at the limit is being over it.
   if (month >= limit) return { text: t("report.limitReached"), action: ADJUST_LIMIT };
 

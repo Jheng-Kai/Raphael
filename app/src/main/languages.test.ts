@@ -122,15 +122,17 @@ describe("the language picker", () => {
     expect(html).toContain("已選 2／5");
   });
 
-  test("ends the row of a chosen language with several variants with a chip naming the one in use", () => {
+  test("ends the row of a chosen language with several variants with a dropdown naming the one in use", () => {
     const html = languagePanelHTML(GROUPS, ["en-GB", "zh-HK", "ja-JP"]);
     const zh = html.indexOf('data-language="zh"');
     const chip = html.indexOf('data-variant-menu="zh"');
     expect(zh).toBeLessThan(chip);
     expect(chip).toBeLessThan(html.indexOf('data-language="en"'));
-    // One translated name for the chip, and no tooltip repeating the form it shows.
+    // The settings rows' dropdown, one translated name for it, and no tooltip repeating the form it shows.
     expect(html).toContain('data-variant-menu="zh" aria-haspopup="menu" aria-expanded="false" aria-label="中文的寫法：繁體中文（香港）"><span>繁體中文（香港）</span>');
-    expect(html).not.toMatch(/class="btn lang-variant-chip"[^>]*title=/);
+    expect(html).toContain('<button type="button" class="sel lang-variant-sel" data-variant-menu="zh"');
+    expect(html).not.toMatch(/class="sel lang-variant-sel"[^>]*title=/);
+    expect(html).not.toContain("btn lang-variant");
     expect(html).toContain('data-variant-menu="en"');
     // The variants themselves are not in the list: they open beside it, so the list never grows.
     expect(html).not.toContain("data-variant=");
@@ -158,10 +160,10 @@ describe("the language picker", () => {
     expect(variantMenuHTML(GROUPS, ["zh-HK"], "zh")).not.toContain("lang=");
   });
 
-  test("a language with several written forms always carries its chip, chosen or not, and one with a single form none", () => {
-    // R-UI-165: the row is one button; the chip on it names the form in use, or the one choosing the language starts with.
+  test("a language with several written forms always carries its dropdown, chosen or not, and one with a single form none", () => {
+    // R-UI-165: the row is one button; the dropdown on it names the form in use, or the one choosing the language starts with.
     const html = languagePanelHTML(GROUPS, ["ja-JP"]);
-    expect(html).toContain('<div class="lang-row has-variants"><button type="button" class="lang-item lang-language" data-language="zh" aria-pressed="false"><span class="ck"></span><span class="mt">中文</span></button><button type="button" class="btn lang-variant-chip" data-variant-menu="zh"');
+    expect(html).toContain('<div class="lang-row has-variants"><button type="button" class="lang-item lang-language" data-language="zh" aria-pressed="false"><span class="ck"></span><span class="mt">中文</span></button><button type="button" class="sel lang-variant-sel" data-variant-menu="zh"');
     expect(html).toContain('data-variant-menu="zh" aria-haspopup="menu" aria-expanded="false" aria-label="中文的寫法：繁體中文（台灣）"><span>繁體中文（台灣）</span>');
     expect(html).not.toContain('data-variant-menu="ja"');
     expect(html).not.toContain("種寫法");

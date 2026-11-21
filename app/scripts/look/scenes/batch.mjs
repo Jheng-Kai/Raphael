@@ -29,6 +29,18 @@ const olderWork = [
     text: "每天 18:00 的詢問設好了。", messages: [{seq: 1, kind: "reply", text: "每天 18:00 的詢問設好了。", at_ms: 1792807180000}] }),
   turn(1, { id: 811, session_id: "look-older-steer", route: "owner_input", question: "等一下，你重複了，11 號也可以放進去。", text: "", messages: [], created_at_ms: 1792807190000 }),
 ];
+// A colleague's question that came while the member worked on the computer: the work's start above the exchange line, the
+// work going on under it (its live line while it runs, its answer once it is over).
+const asked = { id: 812, session_id: "look-mid-exchange", member_id: 1, peer_id: 2, conversation_id: 11, scope: "exchange",
+  created_at_ms: 1792807170000, question: "網站測試有什麼發現了嗎？", route: "exchange", source: "member", prefix: "",
+  text: "首頁可以打開，其他頁面還在檢查。", detail: null, status: "done", cost_usd: 0, messages: [], steps: [], attachments: [] };
+const midWork = (done) => [
+  turn(1, { question: "請測試新網站的每一頁能不能正常打開。", text: done ? "測試完了，三個頁面都能正常打開。" : "", status: done ? "done" : "running", messages: [
+    {seq: 1, kind: "reply", text: "好，我先在電腦上打開網站的資料夾。", at_ms: 1792807156000},
+    {seq: 2, kind: "progress", text: "正在電腦上執行 cd", at_ms: 1792807185000},
+    ...done ? [{seq: 3, kind: "reply", text: "測試完了，三個頁面都能正常打開。", at_ms: 1792807200000}] : []] }),
+  asked,
+];
 export default [
   scene("owner-addition", "An owner addition appears immediately beside continuing work and Stop", [member(1), type('.cmp-input', "也請保留原始檔案。"), key("Enter"), wait('.tn[data-id="901"] .owner-message'), waitGone('.tn[data-id="901"] .ra-face'), wait('.composer[data-task-state="running"]')],
     {running: true, runningMember: 1, ownerAddition: true}),
@@ -36,6 +48,10 @@ export default [
     {turns: steered, generatedFile: drawn, generatedData: png}),
   scene("owner-addition-older-work", "A message taken by older work still under way stands last, with that work's answer under it, below the turn in between", [member(1), wait('.tn[data-after="811"] .chat-message[data-reply]'), check("owner-addition-older-work")],
     {turns: olderWork}),
+  scene("exchange-mid-work", "A colleague's question that came while the member worked stands above the work's live line, under what the work said before it", [member(1), wait('.tn[data-after="812"] .live-presence'), check("exchange-mid-work")],
+    {turns: midWork(false)}),
+  scene("exchange-mid-work-answered", "Once that work is over, the answer it gave after the colleague's question stands under the exchange line", [member(1), wait('.tn[data-after="812"] .chat-message[data-reply]'), check("exchange-mid-work-answered")],
+    {turns: midWork(true)}),
   scene("composer-send-while-working", "Words in the field make the slot Send while work runs; message after message goes out at once and nothing stops", [member(1), wait('.composer[data-task-state="running"]'), check("composer-slot-stop"), type('.cmp-input', "第一則補充"), check("composer-slot-send"), click('.cmp-send'), wait('.tn[data-id="901"] .owner-message'), check("composer-slot-stop"), type('.cmp-input', "第二則補充"), key("Enter"), wait('.tn[data-id="902"] .owner-message'), type('.cmp-input', "第三則補充"), key("Enter"), wait('.tn[data-id="903"] .owner-message'), check("composer-slot-stop"), check("owner-additions-in-order")],
     {running: true, runningMember: 1, ownerAddition: true}),
   scene("composer-queued", "Queued bubbles retain sent order, real withdraw controls and one live presence below the newest", [member(1), type('.cmp-input', "第二個範例請求"), key("Enter"), wait('.tn[data-id="901"] .queued-send-now'), type('.cmp-input', "第三個範例請求"), key("Enter"), wait('.tn[data-id="902"] .queued-send-now'), check("composer-queued")],

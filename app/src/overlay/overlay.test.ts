@@ -382,6 +382,20 @@ test("a question that took a dictation over is greeted on its emblem, which does
   expect(lines()).toEqual([`line:${GREETING}`]);
 });
 
+test("a muted microphone's line stands beside the listening emblem and goes once sound arrives", () => {
+  const QUIET = "《告。未收到聲音。麥克風可能已靜音。》";
+  send({ type: "show", mode: "listening" });
+  vi.advanceTimersByTime(1000);
+  send({ type: "show", mode: "listening", line: QUIET });
+  vi.advanceTimersByTime(10);
+  expect(view.last).toBe(`line:${QUIET}`);
+  send({ type: "level", value: 0.4 });
+  // the shell shows the emblem again without a line once the microphone gives sound
+  send({ type: "show", mode: "listening" });
+  expect(view.last).toBe("clear");
+  expect(emblem.log.filter((entry) => entry === "appear")).toHaveLength(1);
+});
+
 test("the greeting is written even with the subtitles off, as answers are", () => {
   send(settings("off"));
   send({ type: "show", mode: "listening", line: GREETING });
