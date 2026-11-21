@@ -187,14 +187,19 @@ ${workflowRun("Publish verified release assets")}
     ].join("\n");
     const result = spawnSync(bash, ["--noprofile", "--norc", "-ec", commands], {
       cwd: root, encoding: "utf8", windowsHide: true,
-      env: { ...process.env, TAURI_SIGNING_PRIVATE_KEY: privateKey, RAPHAEL_UPDATER_PUBLIC_KEY: publicKey, APPLE_API_KEY_CONTENT: "", GITHUB_OUTPUT: output },
+      env: { ...process.env, TAURI_SIGNING_PRIVATE_KEY: privateKey, RAPHAEL_UPDATER_PUBLIC_KEY: publicKey, APPLE_API_KEY_CONTENT: "", GITHUB_OUTPUT: output, RUNNER_TEMP: root },
     });
     expect(result.status, result.stderr).toBe(0);
     expect(readFileSync(output, "utf8").trim()).toBe(`updater=${mode}`);
     const signed = mode === "signed";
-    expect(result.stdout.trim().split(/\r?\n/)).toEqual([
+    const lines = result.stdout.trim().split(/\r?\n/);
+    if (signed) {
+      expect(lines[7]).toMatch(/updater-pubkey\.conf\.json$/);
+      expect(JSON.parse(readFileSync(join(root, "updater-pubkey.conf.json"), "utf8"))).toEqual({ plugins: { updater: { pubkey: publicKey } } });
+    }
+    expect(lines).toEqual([
       "scripts/tauri.mjs", "build", "--config", "src-tauri/tauri.release.conf.json", "--config", "src-tauri/tauri.release.macos.conf.json",
-      ...(!signed ? ["--config", "src-tauri/tauri.release-no-updater.conf.json"] : []), "--bundles", "app,dmg", "--ci", "--", "--locked",
+      "--config", signed ? lines[7] : "src-tauri/tauri.release-no-updater.conf.json", "--bundles", "app,dmg", "--ci", "--", "--locked",
       `public=${signed ? "set" : ""}`, `private=${signed ? "set" : ""}`,
     ]);
   });
@@ -220,14 +225,16 @@ ${workflowRun("Sign updater artifact with its version")}
 ${workflowRun("Prepare release assets and checksums")}
 `;
     const result = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], {
-      encoding: "utf8", windowsHide: true, env: { ...process.env, TAURI_SIGNING_PRIVATE_KEY: privateKey, RAPHAEL_UPDATER_PUBLIC_KEY: publicKey, TAURI_SIGNING_PRIVATE_KEY_PASSWORD: "test-password", GITHUB_OUTPUT: join(root, "output.txt"), TEST_INSTALLER: installer, RELEASE_VERSION: "0.1.0" },
+      encoding: "utf8", windowsHide: true, env: { ...process.env, TAURI_SIGNING_PRIVATE_KEY: privateKey, RAPHAEL_UPDATER_PUBLIC_KEY: publicKey, TAURI_SIGNING_PRIVATE_KEY_PASSWORD: "test-password", GITHUB_OUTPUT: join(root, "output.txt"), RUNNER_TEMP: root, TEST_INSTALLER: installer, RELEASE_VERSION: "0.1.0" },
     });
     expect(result.status, result.stderr).toBe(0);
     const calls = result.stdout.split(/\r?\n/).filter(line => line.startsWith("CALL:")).map(line => JSON.parse(line.slice(5)));
     const signed = mode === "signed";
     expect(calls).toHaveLength(signed ? 3 : 2);
     // PowerShell consumes the standalone -- for a function; the native command retains it.
-    expect(calls[0].argv).toEqual(["scripts/tauri.mjs", "build", "--config", "src-tauri/tauri.release.conf.json", ...(!signed ? ["--config", "src-tauri/tauri.release-no-updater.conf.json"] : []), "--bundles", "nsis", "--ci", "--locked"]);
+    const pubkeyConfig = join(root, "updater-pubkey.conf.json");
+    expect(calls[0].argv).toEqual(["scripts/tauri.mjs", "build", "--config", "src-tauri/tauri.release.conf.json", "--config", signed ? pubkeyConfig : "src-tauri/tauri.release-no-updater.conf.json", "--bundles", "nsis", "--ci", "--locked"]);
+    if (signed) expect(JSON.parse(readFileSync(pubkeyConfig, "utf8"))).toEqual({ plugins: { updater: { pubkey: publicKey } } });
     expect(calls[0]).toMatchObject({ privateKey: signed, publicKey: signed });
     if (signed) expect(calls[1].argv).toEqual(["scripts/tauri.mjs", "signer", "sign", "--app-version", "0.1.0", installer]);
     const assets = calls.at(-1).argv;
