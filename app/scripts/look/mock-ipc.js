@@ -166,6 +166,7 @@ export function installMock(fixture, config = {}, target = window) {
   }
   // The member settings page (member-settings.ts): two connections that are on.
   if (variant.memberSettings) {
+    if (variant.memberComputerMode) data.members.find(member => member.id === 1).computer_mode = variant.memberComputerMode;
     data.servers.forEach(server => { server.enabled = true; });
     data.servers.push({ ...structuredClone(data.servers[0]), id: "calendar", name: "行事曆" });
     // An app named as its connector is named, drawn with its own mark.
@@ -747,7 +748,11 @@ export function installMock(fixture, config = {}, target = window) {
       }
     }
   }
-  if (variant.computerCard) data.turns.push(structuredClone(data.computerTurns[variant.computerCard]));
+  if (variant.computerCard) {
+    const turn = structuredClone(data.computerTurns[variant.computerCard]);
+    if (variant.browserHandback) Object.assign(turn.computers[0], { browser: true, app: "Chrome" });
+    data.turns.push(turn);
+  }
   if (variant.composioResults) {
     const turn = structuredClone(data.turns.find(turn => turn.member_id === 1 && turn.conversation_id === 11));
     const raw = JSON.stringify({data:{results:[{tool_slug:"GMAIL_FETCH_EMAILS",response:{successful:true,data:{subject:"範例排程",snippet:"下週有兩場範例會議",access_token:"synthetic-hidden-value"}}}]}});

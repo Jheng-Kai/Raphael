@@ -1,6 +1,16 @@
 import type { Messages } from "./zh-TW";
 
 export const id = {
+  "memberComputer.mode": "Komputer",
+  "memberComputer.host": "Komputer ini",
+  "memberComputer.docker": "Komputer terisolasi (Docker)",
+  "memberComputer.hostHint": "Menggunakan Chrome milik Raphael di komputer ini agar Anda bisa masuk ke intranet.",
+  "memberComputer.dockerHint": "Bekerja dalam lingkungan Docker yang terisolasi.",
+  "memberComputer.desktopControl": "Kendalikan desktop",
+  "memberComputer.showTab": "Tampilkan tab Chrome",
+  "memberComputer.setup": "Bantu saya menyiapkan komputer terisolasi (Docker).",
+  "memberComputer.certificate": "Pilih atau konfirmasi sertifikat di {p0}.",
+  "memberComputer.verification": "Masukkan kode verifikasi di {p0}.",
   "conn.connecting": "Menghubungkan…",
   "agent.thinking": "Berpikir…",
   "agent.cmd.volumeMute": "Bisukan",

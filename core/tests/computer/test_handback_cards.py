@@ -65,6 +65,35 @@ def rig(conn, shell, make_run):
     return Rig(conn, shell, make_run)
 
 
+@pytest.mark.parametrize("finish", ["done", "stop"])
+async def test_browser_handback_focuses_the_same_tab_and_only_resolves_once(rig, finish):
+    from raphael_core.computer.host_browser import BrowserError
+
+    focused = []
+
+    async def focus():
+        focused.append("original tab")
+
+    waiting = asyncio.create_task(rig.cards.wait_for_browser(
+        turn_id=rig.turn, member_id=0, conversation_id=None, language="zh-TW", reason="sign_in", focus=focus))
+    await asyncio.sleep(0)
+    card, = rig.cards.cards_of(rig.turn)
+    assert card.view()["browser"] and focused == ["original tab"]
+    assert await rig.router.call("integrations.card_focus_browser", {"id": card.id}) == {"focused": True}
+    assert focused == ["original tab", "original tab"]
+    if finish == "done":
+        assert (await rig.done(card))["done"]
+        assert not (await rig.done(card))["done"]
+        await waiting
+        assert rig.state(card).state == "done"
+    else:
+        assert (await rig.stop(card))["stopped"]
+        with pytest.raises(BrowserError, match="browser_handback_stopped"):
+            await waiting
+        assert rig.state(card).state == "stopped"
+    assert not rig.resumed
+
+
 async def test_a_card_follows_its_run_and_the_task_resumes_once_when_it_ends_after_the_owners_turn(rig):
     run, card = await rig.hand_over(reply(content="頁面顯示確認碼 YT-4F2A。"))
     assert (card.state, card.reason, card.app, card.seq) == ("control", "sign_in", "Google Chrome", 1)

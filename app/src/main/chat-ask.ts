@@ -18,6 +18,7 @@ const WORDS: Record<FixedIntent, MessageKey> = {
   "setup-telegram": "chat.ask.setupTelegram",
   "setup-slack": "chat.ask.setupSlack",
   "setup-discord": "chat.ask.setupDiscord",
+  "setup-docker": "memberComputer.setup",
   "share-template": "chat.ask.share",
   settings: "chat.ask.settings",
 };

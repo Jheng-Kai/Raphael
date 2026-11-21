@@ -261,7 +261,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     paint(retry, "textContent", t(state?.error === 'docker_stopped' ? 'desktop.startDocker' : state?.state === 'missing' && state.image === false ? 'desktop.prepareImage' : "desktop.retry"));
     // One press on the screen starts it, whatever stopped it (the cover's click below); no button is drawn on it.
     paint(retry, "hidden", true); paint(retry, "disabled", opening);
-    paint(enlarge, 'hidden', expanded || !!preparing);
+    paint(enlarge, 'hidden', expanded || !!preparing || state?.error === 'host_browser');
     paint(enlarge, 'disabled', asleep && opening);
     const source = ownWallpaper ?? fallback;
     const paintWallpaper = (image: HTMLImageElement): void => {
@@ -276,7 +276,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     if (picture && last.src !== picture) paint(last, "src", picture);
     paint(placeholder, "hidden", (!!running && connected) || (!!picture && !stalled));
     // Nothing is written or drawn over a computer that is not showing its screen, asleep, starting or stopped: the wallpaper alone, and a press anywhere starts it. Its state stays in the panel's data and labels.
-    patchHTML(stateContent, '');
+    patchHTML(stateContent, state?.error === 'host_browser' ? `<p>${esc(t("memberComputer.hostHint"))}</p>` : '');
     patchHTML(stateRecovery, '');
     if (!running && frame.hasAttribute('src')) { frame.remove(); frame.removeAttribute('src'); connected = interactive = false; }
     if (running && session && !frame.hasAttribute('src') && active()) { paint(frame, "src", session.url); panel.querySelector('.desktop-screen')!.append(frame); }

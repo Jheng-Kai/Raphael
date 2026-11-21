@@ -335,8 +335,11 @@ class VmTools:
         self.names = lambda member_id: None
         self.lease_since, self.lease_used, self.stale = {}, {}, set()
         self.commands = {}  # the shell commands under way on each desktop: they are not input at the screen
+        self.detached_commands = {}
         self.audit = AuditLog(conn) if conn is not None else None
         self.conn = conn
+        self.host_computer = None
+        self.desktop_allowed = lambda member: True
         self.catalogs, self.tools, self.routes, self.locks, self.actions = {}, {}, {}, {}, {}
         self.schemas = {}
         self.problem = None
@@ -452,6 +455,8 @@ class VmTools:
             member = row[0]
         else:
             return PluginResult(False, "blocked")
+        if self.host_computer and self.vm.uses_host(member):
+            return PluginResult(False, "computer_asleep")
         await self.prepare(member)
         target = self.vm.target(member)
         # No computer here (computer tools off, or no Docker on this PC): nothing to read the page with.
@@ -515,8 +520,11 @@ class VmTools:
     async def prepare(self, member_id=0):
         if not self.vm.enabled:
             return
+        if self.host_computer and self.vm.uses_host(member_id):
+            self.host_computer.offered(member_id)
+            return
         # Looking for the program runs nothing. With no Docker on this PC there is no computer to offer.
-        if self.vm.desktop and not self.vm.desktop.installed():
+        if not self.vm.remote and self.vm.desktop and not self.vm.desktop.installed():
             return
         try:
             target = await self.vm.seat(member_id)
@@ -617,10 +625,31 @@ class VmTools:
         self.refreshes[target.key] = asyncio.create_task(refresh())
 
     def offered_for(self, member_id):
+        if self.host_computer and self.vm.enabled and self.vm.uses_host(member_id):
+            return [*self.delegate.offered(), *self.host_computer.offered(member_id)]
         target = self.vm.target(member_id)
         # Every member has its computer for the work that needs one, as it has any tool: nothing asks the owner first.
         native = [self.tools[key] for key in self.catalogs.get(target.key, []) if self.routes[key] == target] if self.vm.enabled else []
         return [*self.delegate.offered(), *native]
+
+    def mode_busy(self, member):
+        target = self.vm.target(member)
+        if self.host_computer and (self.host_computer.active[member] or
+                                  self.host_computer.browser.busy(member)):
+            return True
+        return (bool(self.vm.active.get(target.key)) or target.key in self.vm.held
+                or self.detached_busy(target) or self.vm.busy(target.key) or self.vm.preparing_now(target)
+                or target.state_key in self.vm.maintenance)
+
+    def detached_busy(self, target):
+        now = time.monotonic()
+        jobs = [(deadline, receipt) for deadline, receipt in self.detached_commands.get(target.key, ())
+                if deadline > now and (receipt is None or not receipt.is_file())]
+        if jobs:
+            self.detached_commands[target.key] = jobs
+        else:
+            self.detached_commands.pop(target.key, None)
+        return bool(jobs)
 
     def offered(self):
         return self.offered_for(0)
@@ -629,6 +658,8 @@ class VmTools:
         # True once the member's own computer has a tool catalog. Without one (computer tools off, no Docker on this PC)
         # a member simply has no computer: only a quick question shows anything on the owner's screen, and an ordinary
         # turn never falls back to it (R-PC-01, R-PC-06).
+        if self.host_computer and self.vm.enabled and self.vm.uses_host(member_id):
+            return True
         return self.vm.enabled and bool(self.catalogs.get(self.vm.target(member_id).key))
 
     def page_tool(self, server_id, name):
@@ -638,6 +669,9 @@ class VmTools:
         return key in self.tools
 
     def tier_of(self, key):
+        if self.host_computer and key in self.host_computer.routes:
+            member, tool = self.host_computer.routes[key]
+            return tool.tier if self.vm.enabled and self.vm.uses_host(member) else None
         if key in self.tools:
             shared = self.vm.mode == "shared"
             matches = (self.routes[key].container == "shared") == shared
@@ -645,6 +679,8 @@ class VmTools:
         return self.delegate.tier_of(key)
 
     def tier_for_call(self, key, arguments):
+        if self.host_computer and key in self.host_computer.routes:
+            return self.host_computer.tier_for_call(key, arguments) if self.tier_of(key) is not None else None
         # The hub knows nothing about computer tools, so it must not be asked about them.
         return self.tier_of(key) if self.is_computer_tool(key) else self.delegate.tier_for_call(key, arguments)
 
@@ -663,13 +699,22 @@ class VmTools:
                 approver=approver, outcome=outcome if outcome in ("ok", "timeout", "denied", "expired", "blocked") else "error", task_id=task_id)
 
     def record_unrun(self, key, *, outcome, task_id=None):
-        if key in self.tools:
+        if self.host_computer and key in self.host_computer.routes and self.audit:
+            _, tool = self.host_computer.routes[key]
+            self.audit.add(server="computer", tool=tool.name, tier=tool.tier.name, approver="none", outcome=outcome, task_id=task_id)
+        elif key in self.tools:
             self._audit(key, outcome, "none", task_id)
         else:
             self.delegate.record_unrun(key, outcome=outcome, task_id=task_id)
 
+    def private_task_origin(self, task_id):
+        return self.conn.execute("SELECT w.member_id, a.conversation_id, w.turn_id FROM worker_tasks w "
+                                 "JOIN agent_turns a ON a.id=w.turn_id WHERE w.id=? AND w.scope='private' "
+                                 "AND w.room_id IS NULL AND a.scope='private'", (task_id,)).fetchone()
+
     async def call(self, key, arguments, *, approver, task_id=None, pool=None):
-        if not self.is_computer_tool(key):
+        host_key = self.host_computer is not None and key in self.host_computer.routes
+        if not host_key and not self.is_computer_tool(key):
             return await self.delegate.call(key, arguments, approver=approver, task_id=task_id, pool=pool)
         scope = _SCOPE.get()
         member = scope[1] if scope and scope[0] == "turn" else 0
@@ -677,6 +722,35 @@ class VmTools:
             row = self.conn.execute("SELECT member_id FROM worker_tasks WHERE id=?", (task_id,)).fetchone()
             if row:
                 member = row[0]
+        if self.host_computer:
+            host_mode = self.vm.enabled and self.vm.uses_host(member)
+            if host_key:
+                target = self.vm.target(member)
+                if (not host_mode or self.vm.active.get(target.key) or target.key in self.vm.held
+                        or self.vm.preparing_now(target) or self.detached_busy(target)):
+                    return PluginResult(False, "computer_changed")
+                turn_id, private, _ = _TURN.get()
+                conversation_id = scope[2] if scope and scope[0] == "turn" else None
+                if task_id and self.conn is not None:
+                    origin = self.private_task_origin(task_id)
+                    if origin is not None:
+                        turn_id, conversation_id, private = origin["turn_id"], origin["conversation_id"], True
+                progress, language = _NOTE.get()
+                announce = _NOTICE.get() or progress
+                def browser_opened():
+                    if announce:
+                        from .host_computer import CHROME_OPENED
+                        announce(CHROME_OPENED.get(language, CHROME_OPENED["en"]))
+                result = await self.host_computer.call(
+                    key, arguments, member=member, scope=scope, turn_id=turn_id, conversation_id=conversation_id, private=private,
+                    approver=approver, language=language, announce=browser_opened)
+                if self.audit:
+                    _, tool = self.host_computer.routes[key]
+                    self.audit.add(server="computer", tool=tool.name, tier=tool.tier.name, approver=approver,
+                                   outcome="ok" if result.ok else "blocked", task_id=task_id)
+                return result
+            if host_mode or self.host_computer.browser.busy(member):
+                return PluginResult(False, "computer_changed", "The computer mode changed. Continue with the current computer's tools.")
         picture_target = self.routes.get(key, self.vm.target(member))
         private_before = picture_target.key in self.payment_holds or any(
             page[0] == picture_target.key for page in self.private_pages)
@@ -908,6 +982,8 @@ class VmTools:
                 if row is None:
                     return PluginResult(False, "blocked")
                 member = row[0]
+            if self.host_computer and self.vm.uses_host(member):
+                return PluginResult(False, "computer_changed")
             if target.screen == 0 and target == self.vm.target(member):
                 await self.vm.seat(member)
                 return PluginResult(False, "computer_changed")
@@ -940,9 +1016,7 @@ class VmTools:
             owner = _SCOPE.get() or ("async", asyncio.current_task())
             turn = _TURN.get()
             if task_id and self.conn is not None:
-                origin = self.conn.execute("SELECT w.member_id, a.conversation_id, w.turn_id FROM worker_tasks w "
-                    "JOIN agent_turns a ON a.id=w.turn_id WHERE w.id=? AND w.scope='private' "
-                    "AND w.room_id IS NULL AND a.scope='private'", (task_id,)).fetchone()
+                origin = self.private_task_origin(task_id)
                 if origin:
                     owner = ("task", task_id, origin["member_id"], origin["conversation_id"])
                     turn = (origin["turn_id"], True, None)
@@ -990,6 +1064,10 @@ class VmTools:
                         return self._busy(target, None, self.busy_wait_s)
                 else:
                     await lock.acquire()
+            if self.host_computer and self.vm.uses_host(member):
+                if lock is not None:
+                    lock.release()
+                return PluginResult(False, "computer_changed")
             self.vm.active[target.key] = self.vm.active.get(target.key, 0) + 1
             self.vm.physical_active[target.physical] = self.vm.physical_active.get(target.physical, 0) + 1
             # Not input at the screen: the owner's press to take control does not wait for these.
@@ -1016,6 +1094,8 @@ class VmTools:
                     carried = {"keys": keys} if keys else {}
                     if background:
                         data = await self.vm.execute(target, arguments["command"], wait, background=True, **carried)
+                        receipt = None if target.remote else target.workspace / ".raphael-jobs" / f"{data['job']}.exit"
+                        self.detached_commands.setdefault(target.key, []).append((time.monotonic() + wait + 5, receipt))
                     else:
                         data = await self.vm.execute(target, arguments["command"], wait, **carried)
                     # A command that ran and exited non-zero (tests that fail) is what the model asked to find out, not a broken tool.
@@ -2000,7 +2080,17 @@ class VmTools:
         if held is not None:
             await held[0].__aexit__(None, None, None)
 
+    async def close_task_browser(self, task_id):
+        if self.host_computer is not None:
+            await self.host_computer.browser.close_scope(("task", task_id))
+
+    def close_turn_browser(self, turn_id):
+        if self.host_computer is not None:
+            self.host_computer.close_turn(turn_id)
+
     async def aclose(self):
+        if self.host_computer is not None:
+            await self.host_computer.aclose()
         for task in list(self.refreshes.values()):
             task.cancel()
         await asyncio.gather(*list(self.refreshes.values()), return_exceptions=True)

@@ -5,6 +5,16 @@ import { missingEn } from "./missing-catalogs";
 import type { Messages } from './zh-TW';
 
 export const en = {
+  "memberComputer.mode": "Computer",
+  "memberComputer.host": "This computer",
+  "memberComputer.docker": "Isolated computer (Docker)",
+  "memberComputer.hostHint": "Uses Raphael’s Chrome on this computer so you can sign in to your intranet.",
+  "memberComputer.dockerHint": "Works in an isolated Docker environment.",
+  "memberComputer.desktopControl": "Operate the desktop",
+  "memberComputer.showTab": "Show Chrome tab",
+  "memberComputer.setup": "Help me set up the isolated computer (Docker).",
+  "memberComputer.certificate": "Choose or confirm the certificate in {p0}.",
+  "memberComputer.verification": "Enter the verification code in {p0}.",
   "output.pick": "Choose folder",
   "account.label": "Account label",
   "account.labelHelp": "Name this account so work and personal use are easy to tell apart.",

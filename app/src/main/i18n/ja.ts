@@ -5,6 +5,16 @@ import { missingJa } from "./missing-catalogs";
 import type { Messages } from './zh-TW';
 
 export const ja = {
+  "memberComputer.mode": "コンピューター",
+  "memberComputer.host": "このコンピューター",
+  "memberComputer.docker": "分離されたコンピューター（Docker）",
+  "memberComputer.hostHint": "このコンピューターの Raphael 専用 Chrome で社内ネットワークにログインできます。",
+  "memberComputer.dockerHint": "Docker の分離環境で作業します。",
+  "memberComputer.desktopControl": "デスクトップを操作する",
+  "memberComputer.showTab": "Chrome のタブを表示",
+  "memberComputer.setup": "分離されたコンピューター（Docker）の設定を手伝ってください。",
+  "memberComputer.certificate": "{p0} で証明書を選択または確認してください。",
+  "memberComputer.verification": "{p0} に確認コードを入力してください。",
   "output.pick": "フォルダーを選択",
   "account.label": "アカウント名",
   "account.labelHelp": "このアカウントに名前を付けると、仕事用と個人用を区別しやすくなります。",

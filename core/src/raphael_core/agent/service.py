@@ -2142,7 +2142,7 @@ class AgentService:
         language = ask.language
         if not self._owner_screen(ask):
             return self._finish(ask, "operate", "negative", phrase(language, "computer_away"), ledger)
-        if self._computer is None:
+        if self._computer is None or not getattr(self._plugins, "desktop_allowed", lambda member: True)(ask.speaker.id):
             return self._finish(
                 ask, "operate", "negative", phrase(language, "computer_unavailable"), ledger
             )
@@ -5790,6 +5790,7 @@ class AgentService:
             self._write(lambda: self._forget_cli_thread(turn.conversation_id))
         # The owner's own "no", and a question nobody answered, are not said back.
         silent = status in _UNSPOKEN
+        self._close_turn_browser(pending.turn_id)
         self._turn_changed(pending.turn_id)
         result = {"status": "done", "turn_id": pending.turn_id, "prefix": prefix, "text": text}
         return _Silent(result) if silent else result
@@ -5803,6 +5804,7 @@ class AgentService:
             self._card_state(pending.id, "cancelled")
             self._drop_followup(pending, "denied")
             if superseded:
+                self._close_turn_browser(pending.turn_id)
                 if turn := self._history.get(pending.turn_id):
                     self._write(lambda: self._history.resolve(
                         pending.turn_id, prefix=turn.prefix, text=turn.text, detail=turn.detail, status="superseded"
@@ -6801,6 +6803,8 @@ class AgentService:
                      if message["kind"] == "reply"]
             text = "\n\n".join(saved or ask.replies) or text
         turn_id = self._record(ask, route, prefix, text, status, detail, ledger, failure=failure)
+        if status != "confirm":
+            self._close_turn_browser(turn_id)
         replies = []
         if (ask.source != VOICE or not ask.speaker.is_raphael) and status != "confirm":
             replies = ask.replies or ([text] if status != "superseded" else [])
@@ -6815,6 +6819,11 @@ class AgentService:
             # Every message written above, for a caller that sends them on (a messaging chat).
             result["messages"] = list(replies)
         return result
+
+    def _close_turn_browser(self, turn_id):
+        close = getattr(self._plugins, "close_turn_browser", None)
+        if turn_id and close is not None:
+            close(turn_id)
 
     @staticmethod
     def _done(turn_id: int, language: str, which: str, text: str, *, silent: bool = False) -> dict:

@@ -25,6 +25,9 @@ export default [
   scene('card-login','Login credentials stay masked in the card',[member(1),wait('[data-login-user]'),type('[data-login-user]','reader@example.invalid'),type('[data-secret-input]','synthetic-password'),check('card-shell')],{loginCard:true}),
   scene('card-question-key','A focused question takes B, while typing A stays in the answer field', [member(1),wait('[data-owner-question="owner-choice"]'),type('[data-owner-answer-input]','A'),check('card-question-typing'),click('[data-owner-question="owner-choice"] .card-title'),key('b'),wait('[data-card-state="answered"]'),check('card-question-key')],{ownerQuestion:'asked'}),
   scene('card-computer-waiting','The existing live stream sits inside the waiting card', [...entry,check('card-computer-inline')],computer),
+  scene('card-browser-sign-in', 'Chrome sign-in uses the existing handback card with the exact tab action',
+    [member(1), wait('[data-computer-card="card-pc"] [data-act="card-browser-focus"]'), check('card-shell')],
+    {computerCard: 'signin', browserHandback: true}),
   // R-PANEL-09: a sign-in is no work for a small picture. The card's screen and its 接手 carry the same stream into the larger view,
   // where the owner's input reaches it and the pill's 我完成了 gives the request back once.
   scene('card-computer-takeover','A click on the card screen takes the same stream into the larger view under the owner hands without reconnecting', [...entry,click('[data-card-desktop-screen] button'),wait('.desktop-panel[data-expanded][data-interactive="true"] .desktop-screen iframe'),{action:'desktop-owner-typing'},check('computer-takeover-owner')],computer),

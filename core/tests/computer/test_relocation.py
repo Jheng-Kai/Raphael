@@ -81,8 +81,8 @@ async def test_a_new_install_keeps_the_computers_folders_in_the_machine_local_fo
     engine = Engine()
     vm = machine(data, local, engine)
     target = vm.target_for("", "a1b2c3d4e5f60718")
-    assert target.workspace == local.resolve() / "vm-homes" / "a1b2c3d4e5f60718"
-    assert target.shared == local.resolve() / "vm-shared"
+    assert target.workspace == local.resolve() / "members" / "a1b2c3d4e5f60718"
+    assert target.shared == local.resolve() / "team"
     # The owner label stays the data directory's: the same computers stay this app's.
     assert vm.owner == LocalVm(data, runner=engine).owner
     assert await vm.relocate() == "nothing"
@@ -103,8 +103,8 @@ async def test_an_earlier_install_moves_once_by_rename_and_its_stopped_computers
     assert await vm.relocate() == "moved"
 
     assert not (data / "vm-homes").exists() and not (data / "vm-shared").exists()
-    moved = local / "vm-homes" / key / "notes.txt"
-    assert moved.read_text(encoding="utf-8") == "kept" and (local / "vm-shared" / "projects" / "plan.md").exists()
+    moved = local / "members" / key / "notes.txt"
+    assert moved.read_text(encoding="utf-8") == "kept" and (local / "team" / "projects" / "plan.md").exists()
     assert os.stat(moved).st_ino == before  # renamed in place, never copied
     # Both stopped computers that bound the old place are gone, to be made again at their next start; another
     # owner's computer is not even looked at.
@@ -112,7 +112,7 @@ async def test_an_earlier_install_moves_once_by_rename_and_its_stopped_computers
     assert ["rm", mine] in engine.calls and ["rm", shared] in engine.calls
     assert not any(call[:2] == ["container", "inspect"] and call[2] == foreign for call in engine.calls)
     target = vm.target_for("", key)
-    assert target.workspace == local.resolve() / "vm-homes" / key and target.shared == local.resolve() / "vm-shared"
+    assert target.workspace == local.resolve() / "members" / key and target.shared == local.resolve() / "team"
     engine.calls.clear()
     assert await machine(data, local, engine).relocate() == "nothing"  # the next start has nothing to move
     assert engine.calls == []
@@ -142,7 +142,7 @@ async def test_the_move_waits_while_anything_could_still_use_the_old_folders(tmp
     assert reason == {"running": "running", "carry": "carry", "engine": "engine", "preparing": "busy", "removal": "remove"}[hold]
     assert (data / "vm-homes" / key / "notes.txt").read_text(encoding="utf-8") == "kept"
     assert (data / "vm-shared" / "projects" / "plan.md").exists()
-    assert not (local / "vm-homes").exists() and not (local / "vm-shared").exists()
+    assert not (local / "members").exists() and not (local / "team").exists()
     assert vm.target_for("", key).workspace == data.resolve() / "vm-homes" / key
     if hold != "removal":
         assert name in engine.containers and not any(call[0] == "rm" for call in engine.calls)
@@ -167,7 +167,21 @@ async def test_a_folder_on_another_volume_stays_where_it_is(tmp_path, monkeypatc
     monkeypatch.setattr(vm_module, "os", os_with(stat=stat))
 
     assert await vm.relocate() == "volume"
-    assert (data / "vm-homes").exists() and (data / "vm-shared").exists() and not (local / "vm-homes").exists()
+    assert (data / "vm-homes").exists() and (data / "vm-shared").exists() and not (local / "members").exists()
+
+
+async def test_legacy_folders_already_on_this_pc_are_renamed_without_docker(tmp_path):
+    data, local = earlier_install(tmp_path)
+    (data / "vm-homes").rename(local / "vm-homes")
+    (data / "vm-shared").rename(local / "vm-shared")
+    engine = Engine()
+    engine.up = False
+    vm = machine(local, local, engine)
+    vm.desktop = SimpleNamespace(installed=lambda: False)
+    assert await vm.relocate() == "moved"
+    assert (local / "members" / "a1b2c3d4e5f60718" / "notes.txt").read_text() == "kept"
+    assert (local / "team" / "projects" / "plan.md").read_text() == "plan"
+    assert not (local / "vm-homes").exists() and not (local / "vm-shared").exists()
 
 
 async def test_a_rename_that_fails_half_way_uses_each_folder_where_it_is(tmp_path, monkeypatch):
@@ -184,13 +198,13 @@ async def test_a_rename_that_fails_half_way_uses_each_folder_where_it_is(tmp_pat
 
     assert await vm.relocate() == "rename"
     target = vm.target_for("", "a1b2c3d4e5f60718")
-    assert target.workspace == local.resolve() / "vm-homes" / "a1b2c3d4e5f60718"
+    assert target.workspace == local.resolve() / "members" / "a1b2c3d4e5f60718"
     assert target.shared == data.resolve() / "vm-shared"
     assert (target.workspace / "notes.txt").exists() and (target.shared / "projects" / "plan.md").exists()
     monkeypatch.undo()
     # The next start moves what is left.
     assert await machine(data, local, engine).relocate() == "moved"
-    assert (local / "vm-shared" / "projects" / "plan.md").exists() and not (data / "vm-shared").exists()
+    assert (local / "team" / "projects" / "plan.md").exists() and not (data / "vm-shared").exists()
 
 
 async def test_a_target_taken_before_the_move_is_refused_and_the_old_place_is_not_made_again(tmp_path):
@@ -211,7 +225,7 @@ async def test_a_folder_made_again_at_the_old_place_after_the_move_is_never_used
     assert await machine(data, local, engine).relocate() == "moved"
     (data / "vm-shared").mkdir()  # something wrote there with a path it took before the move
     vm = machine(data, local, engine)
-    assert vm.target_for("", "shared").shared == local.resolve() / "vm-shared"
+    assert vm.target_for("", "shared").shared == local.resolve() / "team"
     assert await vm.relocate() == "nothing"
     assert (data / "vm-shared").exists()  # left as it is: never merged, never deleted
 
@@ -230,7 +244,7 @@ async def test_the_receipts_of_tasks_name_their_files_at_the_new_place(tmp_path,
     assert await vm.relocate() == "moved"
 
     rows = {row[0]: (row[1], row[2]) for row in conn.execute("SELECT tool_call_id, workspace, uri FROM task_evidence")}
-    moved = local.resolve() / "vm-shared"
+    moved = local.resolve() / "team"
     assert rows == {"made": (str(moved), "projects/plan.md"), "before": (None, str(moved / "projects" / "plan.md")),
                     "output": (str(output), "report.md")}
     assert (Path(rows["made"][0]) / rows["made"][1]).read_text(encoding="utf-8") == "plan"
@@ -242,8 +256,8 @@ async def test_a_member_computer_is_erased_from_its_moved_home(tmp_path):
     vm = machine(data, local, engine)
     assert await vm.relocate() == "moved"
     await vm.erase(vm.target_for("", "a1b2c3d4e5f60718"), engine=False)
-    assert not (local / "vm-homes" / "a1b2c3d4e5f60718").exists()
-    assert (local / "vm-shared" / "projects" / "plan.md").exists()
+    assert not (local / "members" / "a1b2c3d4e5f60718").exists()
+    assert (local / "team" / "projects" / "plan.md").exists()
 
 
 async def test_every_start_waits_for_a_move_under_way(tmp_path):
@@ -265,7 +279,7 @@ async def test_every_start_waits_for_a_move_under_way(tmp_path):
     gate.set()
     target = await seated
     assert vm.relocation.result() == "moved"
-    assert target.workspace.parent == local.resolve() / "vm-homes"
+    assert target.workspace.parent == local.resolve() / "members"
 
 async def test_a_move_that_waited_for_a_running_computer_happens_once_that_computer_stops(tmp_path):
     data, local = earlier_install(tmp_path)
@@ -275,12 +289,12 @@ async def test_a_move_that_waited_for_a_running_computer_happens_once_that_compu
     name = engine.add(vm, key, running=True)
     vm.task = asyncio.get_running_loop().create_future()  # the core runs its monitor
     assert await vm.relocate_soon() == "running"
-    assert (data / "vm-homes" / key / "notes.txt").exists() and not (local / "vm-homes").exists()
+    assert (data / "vm-homes" / key / "notes.txt").exists() and not (local / "members").exists()
     # The computer stops while the core runs (idle, the owner's press, a member's stop): the move is tried again now.
     engine.containers[name]["State"]["Running"] = False
     retry = vm.relocate_again()
     assert retry is not None and await retry == "moved"
-    assert (local / "vm-homes" / key / "notes.txt").read_text(encoding="utf-8") == "kept"
+    assert (local / "members" / key / "notes.txt").read_text(encoding="utf-8") == "kept"
     assert vm.relocate_again() is None  # a move that is done is not tried again
     vm.task.cancel()
 

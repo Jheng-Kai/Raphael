@@ -626,6 +626,7 @@ export interface TemplateCard {
 
 /** A computer card: the owner's turn at the computer for a sign-in, a password or a payment. Never what was on screen. */
 export interface ComputerCard {
+  browser?: boolean;
   id: string;
   seq: number;
   /** Why it is the owner's: sign_in, password, payment, captcha or other. */
@@ -1012,6 +1013,8 @@ export interface GroupDraft {
  * its thread (the core cuts it to one line), `last_at` when it was said.
  */
 export interface Member {
+  computer_mode?: "host" | "docker";
+  desktop_control?: boolean;
   /** Whether the owner has confirmed the first Bot's profile (identity 0). */
   profile_ready?: boolean;
   id: number;
@@ -1130,7 +1133,7 @@ export interface NewMember {
  * What `members.update` may change, beside its `id`: the avatar only as `""` or `"preset:<stem>"`
  * (a picture of the PC goes by `members.set_avatar`).
  */
-export type MemberPatch = Partial<Pick<Member, "name" | "role" | "personality" | "instructions" | "group_id" | "model" | "tools" | "avatar" | "position" | "blurb" | "reply_style" | "notify" | "ask_before_members" | "draft_first" | "pinned" | "hidden">> & {
+export type MemberPatch = Partial<Pick<Member, "computer_mode" | "desktop_control" | "name" | "role" | "personality" | "instructions" | "group_id" | "model" | "tools" | "avatar" | "position" | "blurb" | "reply_style" | "notify" | "ask_before_members" | "draft_first" | "pinned" | "hidden">> & {
   /** `pattern:<id>` chooses a pattern; null puts the dotted band back and forgets a picture. */
   cover?: string | null;
   /** Where a cover picture is shown, 0 (its top) to 100 (its bottom). */

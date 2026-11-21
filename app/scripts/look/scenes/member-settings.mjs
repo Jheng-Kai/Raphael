@@ -11,6 +11,7 @@ const page = [member(1), ...gear];
 // Chooses a kind in the page's left column and waits for its first section.
 const kind = (id, ready) => [click(`.ms-pane .ms-nav [data-cat="${id}"]`), wait(`.ms-pane .ms-nav [data-cat="${id}"][aria-current="page"]`), wait(ready)];
 const filled = { memberSettings: true, skills: [learnedSkill(1), sharedSourceSkill] };
+const computer = [...page, ...kind("computer", '[data-k="ms-computer-mode"]')];
 export const memberSettingsPage = page;
 // A long conversation of the member's, so that the thread scrolls and its place can be told.
 const longThread = { ...filled, heavyThread: { member: 1, count: 30, newest: 300050 } };
@@ -68,6 +69,12 @@ const stepScenes = [
 ];
 export default [
   ...personaScenes,
+  scene("member-computer-host", "The default computer mode uses Raphael's Chrome and desktop control starts off", computer, {
+    ...filled, memberComputerMode: "host",
+  }),
+  scene("member-computer-docker", "The selected Docker mode explains the isolated computer", computer, {
+    ...filled, memberComputerMode: "docker",
+  }),
   ...stepScenes,
   scene('member-settings', 'The gear opens the member as a page: a cover it can change, the face across it, name and role in place, the kinds of settings on the left and only the chosen one beside them', [...page, check('member-settings')], filled),
   scene('member-settings-raphael', 'Raphael has the same page and the same kinds as every member: tools, skills and commands, personality and instructions, notifications', [{ action: 'open-details' }, click('.mb-det [data-det="gear"]'), wait('.ms-pane:not([hidden]) .ms-name'), wait('.ms-pane .ms-nav [data-cat="tools"][aria-current="page"]'), check('member-settings'), check('member-settings-raphael')], filled),

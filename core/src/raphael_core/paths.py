@@ -15,7 +15,7 @@ Raphael's long-term memory (`memory_dir`, raphael_core.memory) is machine-local 
 reason: it is what Raphael knows about the user, which must stay on this PC, so it never goes where
 a roaming profile could carry it.
 
-The members' computer folders (`vm-homes`, `vm-shared`, raphael_core.computer.vm) are machine-local too: they hold
+The members' computer folders (`members`, `team`, raphael_core.computer.vm) are machine-local too: they hold
 gigabytes that belong to this PC's Docker (`machine_dir`). An install made before keeps them in the data directory
 until `LocalVm.relocate` has moved them.
 """

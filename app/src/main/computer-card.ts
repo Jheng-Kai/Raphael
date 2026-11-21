@@ -21,6 +21,8 @@ function reasonText(reason: string, window: string): string {
     case "sign_in": return t("card.pcSignIn", { p0: window });
     case "password": return t("card.pcPassword", { p0: window });
     case "payment": return t("card.pcPayment", { p0: window });
+    case "two_factor": return t("memberComputer.verification", { p0: window });
+    case "certificate": return t("memberComputer.certificate", { p0: window });
     case "captcha": return t("card.pcCaptcha", { p0: window });
     default: return t("card.pcOther", { p0: window });
   }
@@ -45,6 +47,8 @@ export function computerStateText(card: ComputerCard): string {
 function actionHTML(card: ComputerCard): string {
   const on = (act: string): string => ` data-act="${act}" data-card="${esc(card.id)}"`;
   // Stopping is the card's × (computerCardHTML), never a button of its own.
+  if (card.state === "control" && card.browser) return btn(esc(t("memberComputer.showTab")), "sm", on("card-browser-focus")) +
+    btn(esc(t("card.pcDone")), "sm pri", on("card-done"));
   if (card.state === "control") return btn(esc(t("cards.takeover")), "sm pri", on("card-takeover")) + btn(esc(t("card.pcDone")), "sm", on("card-done"));
   return "";
 }
@@ -55,7 +59,7 @@ export function computerCardHTML(card: ComputerCard): string {
   return cardHTML({ title: t("card.pcTitle"), status: active || card.state === "returning" ? "waiting" : card.state === "failed" ? "failed" : closed ? "ready" : "done",
     statusText: active || card.state === "returning" ? cardPromptText("computer") : card.state === "failed" ? t("cards.failed")
       : closed ? t(card.error === "skipped" ? "ownerQuestion.left" : "cards.cancelled") : t("cards.done"), body: active ? computerStateText(card) : undefined,
-    content: active ? `<div class="card-computer-screen" data-card-screen><button type="button" class="btn" data-act="card-takeover" data-card="${esc(card.id)}" aria-label="${esc(t("cards.takeover"))}">${ico("monitor")}</button></div>` +
+    content: active && card.browser ? undefined : active ? `<div class="card-computer-screen" data-card-screen><button type="button" class="btn" data-act="card-takeover" data-card="${esc(card.id)}" aria-label="${esc(t("cards.takeover"))}">${ico("monitor")}</button></div>` +
       (card.note === "still" ? `<p class="card-body">${esc(t("card.pcStill"))}</p>` : "") : cardDisclosureHTML(card.id, `<p class="card-body">${esc(computerStateText(card))}</p><p class="card-body">${esc(reasonText(card.reason, windowOf(card)))}</p>`),
     actions: actionHTML(card), cls: "computer-card",
     ...(active || card.state === "returning" ? { close: waitingCloseHTML(` data-act="card-stop" data-card="${esc(card.id)}"`, t(active ? "cards.skip" : "card.pcStop")), statusInHeading: true } : {}), attrs: ` data-computer-card="${esc(card.id)}" data-card-state="${esc(card.state)}"${card.note ? ` data-card-note="${esc(card.note)}"` : ""}`,

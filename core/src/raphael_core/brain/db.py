@@ -2393,6 +2393,14 @@ PRAGMA user_version = 94;
 COMMIT;
 """
 
+_MIGRATIONS[95] = """
+BEGIN;
+ALTER TABLE members ADD COLUMN computer_mode TEXT NOT NULL DEFAULT 'host' CHECK (computer_mode IN ('host', 'docker'));
+ALTER TABLE members ADD COLUMN desktop_control INTEGER NOT NULL DEFAULT 0 CHECK (desktop_control IN (0, 1));
+PRAGMA user_version = 95;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 

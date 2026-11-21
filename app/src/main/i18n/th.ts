@@ -1,6 +1,16 @@
 import type { Messages } from "./zh-TW";
 
 export const th = {
+  "memberComputer.mode": "คอมพิวเตอร์",
+  "memberComputer.host": "คอมพิวเตอร์เครื่องนี้",
+  "memberComputer.docker": "คอมพิวเตอร์แยก (Docker)",
+  "memberComputer.hostHint": "ใช้ Chrome ของ Raphael บนเครื่องนี้เพื่อให้คุณลงชื่อเข้าใช้เครือข่ายภายในได้",
+  "memberComputer.dockerHint": "ทำงานในสภาพแวดล้อม Docker แบบแยก",
+  "memberComputer.desktopControl": "ควบคุมเดสก์ท็อป",
+  "memberComputer.showTab": "แสดงแท็บ Chrome",
+  "memberComputer.setup": "ช่วยตั้งค่าคอมพิวเตอร์แยก (Docker) ให้ฉันหน่อย",
+  "memberComputer.certificate": "เลือกหรือยืนยันใบรับรองใน {p0}",
+  "memberComputer.verification": "ป้อนรหัสยืนยันใน {p0}",
   "conn.connecting": "กำลังเชื่อมต่อ…",
   "agent.thinking": "กำลังคิด…",
   "agent.cmd.volumeMute": "ปิดไมโครโฟน",

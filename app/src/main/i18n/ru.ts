@@ -1,6 +1,16 @@
 import type { Messages } from "./zh-TW";
 
 export const ru = {
+  "memberComputer.mode": "Компьютер",
+  "memberComputer.host": "Этот компьютер",
+  "memberComputer.docker": "Изолированный компьютер (Docker)",
+  "memberComputer.hostHint": "Использует Chrome Рафаэля на этом компьютере, чтобы вы могли войти во внутреннюю сеть.",
+  "memberComputer.dockerHint": "Работает в изолированной среде Docker.",
+  "memberComputer.desktopControl": "Управлять рабочим столом",
+  "memberComputer.showTab": "Показать вкладку Chrome",
+  "memberComputer.setup": "Помоги мне настроить изолированный компьютер (Docker).",
+  "memberComputer.certificate": "Выберите или подтвердите сертификат в {p0}.",
+  "memberComputer.verification": "Введите код подтверждения в {p0}.",
   "conn.connecting": "Подключение…",
   "agent.thinking": "Думает…",
   "agent.cmd.volumeMute": "Выключить микрофон",

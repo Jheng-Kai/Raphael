@@ -1,6 +1,16 @@
 import type { Messages } from "./zh-TW";
 
 export const ptBR = {
+  "memberComputer.mode": "Computador",
+  "memberComputer.host": "Este computador",
+  "memberComputer.docker": "Computador isolado (Docker)",
+  "memberComputer.hostHint": "Usa o Chrome do Raphael neste computador para que você possa entrar na sua intranet.",
+  "memberComputer.dockerHint": "Trabalha em um ambiente isolado do Docker.",
+  "memberComputer.desktopControl": "Controlar a área de trabalho",
+  "memberComputer.showTab": "Mostrar aba do Chrome",
+  "memberComputer.setup": "Ajude-me a configurar o computador isolado (Docker).",
+  "memberComputer.certificate": "Selecione ou confirme o certificado no {p0}.",
+  "memberComputer.verification": "Digite o código de verificação em {p0}.",
   "conn.connecting": "Conectando…",
   "agent.thinking": "Pensando…",
   "agent.cmd.volumeMute": "Silenciar",

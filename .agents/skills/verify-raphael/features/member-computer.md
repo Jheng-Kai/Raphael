@@ -1,5 +1,27 @@
 # Member computer (Phases A and B)
 
+## This computer mode
+
+R-COMP-HOST-01 through R-COMP-HOST-06. The per-member choice is stored independently of
+the Docker host and seat settings. Windows uses %LOCALAPPDATA%\Raphael\browser. macOS
+uses the Raphael Application Support folder. An isolated test data folder gets its own
+browser profile. The background browser's turn or task owns each tab and the main Chrome
+connection never goes into a workspace. Chrome sign-in uses the existing handback card,
+keeps the exact tab, and proceeds only after the owner returns it. Actual desktop
+control is separately enabled per member.
+
+Run from `app/`:
+```sh
+npm run look -- member-computer-host member-computer-docker card-browser-sign-in --theme both --width 1120,720,1920x1080
+```
+
+Inspect both dropdown states and the sign-in card with its Chrome tab action and Done.
+The fixture shows the controls only. Run the local-page Chrome test in
+`core/tests/computer/test_host_computer.py` for browser state, tab isolation,
+background input, downloads and idle close. Use an isolated native data directory for
+the visible Chrome, OS certificate prompt and real sign-in journey.
+
+
 ## Recovering the seat browser after an unreadable stale lock
 
 R-PC-LOCK-01. The guest checks process arguments before clearing old Chromium startup entries. If a local workspace mount
@@ -120,7 +142,7 @@ one-time folder move, replace stale containers while preserving the moved bind-m
 | Logs | `%LOCALAPPDATA%\<F>\logs` | shell `lib.rs` `log_plugin`, `identity.rs` | 3.5 MB | per line | 1 MB files, three kept |
 | Speech models | `%LOCALAPPDATA%\Raphael\models` (both builds) | `paths.models_dir`; `identity.rs` `data_env` | 956 MB | per model fetched | a fixed set; deleted from Settings |
 | Webview data | `%LOCALAPPDATA%\<F>\WebView2` | shell `data_layout.rs` `WEBVIEW_DIR` | 211 MB dev, 82 MB release | the webview's cache | WebView2's own |
-| Members' computer homes `vm-homes/<key>` and the team folder `vm-shared` | `%LOCALAPPDATA%\<F>` (were `%APPDATA%\<F>`; an earlier install moves them at a start, or as soon as a computer stops if that start found one running, R-COMP-PLACE-01) | `computer/vm.py` `placed`, `target_for`, `relocate` | 3,776 MB (the shared computer's home 3,021 MB) and 3,507 MB (projects 2,055 MB, bot-office 1,312 MB) | members' files, browser profiles, checkpoints | nothing on this PC: the 90% disk notice, a reset, a member's deletion; inside a computer `/tmp` and job logs (`scratch_args`), with failed cleanup retried on the next preparation |
+| Members' computer homes `members/<key>` and the team folder `team` | `%LOCALAPPDATA%\<F>` (were `%APPDATA%\<F>`; an earlier install moves them at a start, or as soon as a computer stops if that start found one running, R-COMP-PLACE-01) | `computer/vm.py` `placed`, `target_for`, `relocate` | 3,776 MB (the shared computer's home 3,021 MB) and 3,507 MB (projects 2,055 MB, bot-office 1,312 MB) | members' files, browser profiles, checkpoints | nothing on this PC: the 90% disk notice, a reset, a member's deletion; inside a computer `/tmp` and job logs (`scratch_args`), with failed cleanup retried on the next preparation |
 | The owner's desktop picture for the computers | `%APPDATA%\<F>\computer-wallpaper.jpg` | `vm.py` `OWN_WALLPAPER` | none (a `wallpaper-own-kept` folder of 0.2 MB that no code writes) | one file | 8 MB |
 | Pictures of members | `%LOCALAPPDATA%\<F>\avatars`, `avatar` | shell `avatar.rs`; `MembersService` | 7.2 MB | one per member | replaced |
 | Exported templates | `%LOCALAPPDATA%\<F>\template-exports` | `members/member_catalog.py` | 4 folders, under 1 MB | per export | nothing |

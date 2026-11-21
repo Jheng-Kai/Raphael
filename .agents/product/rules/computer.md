@@ -2,6 +2,18 @@
 
 Each member's computer: its engine, image, screen, viewer, hold and takeover, and teaching on it. Part of [the product rules](../RULES.md); a rule's ID is unique across every file.
 
+## This computer and the isolated computer
+
+| ID | Date | Rule | Check | Severity | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-COMP-HOST-01 | 2026-11-22 | Each member chooses This computer or Isolated computer (Docker). This computer is the default. If local Docker is missing, the saved choice is retained and work can use Chrome while the conversation guides setup. | pytest | hard | core/tests/computer/test_host_computer.py::test_computer_preferences_are_per_member_and_opt_in; core/tests/computer/test_host_computer.py::test_docker_falls_back_without_changing_the_choice |
+| R-COMP-HOST-02 | 2026-11-22 | Raphael uses a shared Chrome profile in its machine-local browser folder and assigns background tabs to the work that created them. Owner tabs and other work's tabs are not targets. Downloads from an assigned tab go to its work folder, and the app closes its tabs and idle browser. | pytest | hard | core/tests/computer/test_host_computer.py::test_chrome_has_scoped_tabs_page_input_private_forms_and_downloads |
+| R-COMP-HOST-03 | 2026-11-22 | Chrome sign-in, verification and owner-only prompts use the private conversation handback. Focus uses the exact tab, and only the first Done returns it. The browser tools never enter credentials or solve a CAPTCHA. | pytest | hard | core/tests/computer/test_handback_cards.py::test_browser_handback_focuses_the_same_tab_and_only_resolves_once |
+| R-COMP-HOST-04 | 2026-11-22 | Operating the owner's actual desktop is a per-member opt-in and starts off. Background Chrome page operations do not use desktop input. | pytest | hard | core/tests/computer/test_host_computer.py::test_computer_preferences_are_per_member_and_opt_in |
+| R-COMP-HOST-05 | 2026-11-22 | Use work and team folders for ordinary work. Local Docker shares the same roots, named members and team. Relocation renames prior roots only when safe, preserves files, and re-points the receipts. | pytest | hard | core/tests/computer/test_relocation.py::test_legacy_folders_already_on_this_pc_are_renamed_without_docker; core/tests/computer/test_relocation.py::test_the_receipts_of_tasks_name_their_files_at_the_new_place |
+| R-COMP-HOST-06 | 2026-11-22 | The member can write into its workspace, team folder and projects the owner selected. Other file writes require the owner's yes, and the existing private storage and outward-action rules apply. | pytest | hard | core/tests/computer/test_host_computer.py::test_host_writes_use_work_roots_and_need_an_explicit_yes_elsewhere |
+
+
 ## A stale browser lock cannot prevent the seat browser from starting
 
 The Windows workspace mount can leave Chromium's old Singleton links unreadable from inside the computer.

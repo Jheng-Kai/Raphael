@@ -1780,7 +1780,12 @@ class BackgroundService:
     async def _execute(self, task: Task, files: Sequence[Attachment] = ()) -> None:
         from ..computer.vm_tools import vm_scope
         with vm_scope(("task", task.id), progress=lambda text: self._progress(task, text), notice=lambda text: self._computer_notice(task, text), woke=lambda text: self._computer_woke(task, text), language=task.language):
-            await self._execute_scoped(task, files)
+            try:
+                await self._execute_scoped(task, files)
+            finally:
+                close_browser = getattr(self._gate.plugins, "close_task_browser", None)
+                if close_browser is not None:
+                    await close_browser(task.id)
 
     async def _execute_scoped(self, task: Task, files: Sequence[Attachment] = ()) -> None:
         language = task.language

@@ -131,6 +131,8 @@ _KEPT_IN_HOME = (
     "Library/Application Support/Arc", "Library/Application Support/Firefox", "Library/Application Support/1Password",
     "Library/Application Support/Bitwarden", "Library/Group Containers/2BUA8C4S2C.com.1password",
     "AppData/Local/Google/Chrome/User Data", "AppData/Local/Microsoft/Edge/User Data", "AppData/Local/BraveSoftware",
+    "AppData/Local/Raphael/browser", "AppData/Local/Raphael Dev/browser",
+    "Library/Application Support/Raphael/browser", "Library/Application Support/Raphael Dev/browser",
     "AppData/Roaming/Mozilla/Firefox", "AppData/Local/1Password", "AppData/Roaming/Bitwarden",
     "AppData/Roaming/Microsoft/Credentials", "AppData/Local/Microsoft/Credentials", "AppData/Roaming/Microsoft/Protect",
     "AppData/Roaming/Microsoft/Crypto", "AppData/Roaming/Microsoft/Vault", "AppData/Local/Microsoft/Vault",

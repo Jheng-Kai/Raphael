@@ -140,6 +140,8 @@ class Member:
     hidden: bool = False
     # Writes mail as a draft for the owner to edit and send, unless they turned it off (`agent.drafts`).
     draft_first: bool = True
+    computer_mode: str = "host"
+    desktop_control: bool = False
 
     def speaker(self) -> Speaker:
         """The member as the assistant takes it (`agent.speaker.Speaker`)."""
@@ -344,6 +346,15 @@ def _reply_style(value: Any) -> str:
     return value
 
 
+def _computer_mode(value: Any) -> str:
+    if value not in ("host", "docker"):
+        raise MemberError("computer_mode", "computer_mode must be host or docker")
+    return value
+
+
+COMPUTER_FIELDS = {"computer_mode": _computer_mode, "desktop_control": _boolean}
+
+
 PROFILE_FIELDS: dict[str, Callable[[Any], Any]] = {
     "blurb": lambda value: _text(value, "blurb", 280),
     "reply_style": _reply_style,
@@ -352,7 +363,7 @@ PROFILE_FIELDS: dict[str, Callable[[Any], Any]] = {
 
 _MEMBER_COLUMNS = (
     "id, name, role, instructions, avatar, group_id, model, position, created_at_ms, tools, personality,"
-    " blurb, reply_style, read_aloud, notify, ask_before_members, pinned, hidden, draft_first"
+    " blurb, reply_style, read_aloud, notify, ask_before_members, pinned, hidden, draft_first, computer_mode, desktop_control"
 )
 _ROUTINE_COLUMNS = (
     "id, member_id, title, prompt, schedule, enabled, last_run_ms, next_run_ms, created_at_ms,"
@@ -366,13 +377,14 @@ _MEMBER_FIELDS: dict[str, Callable[[Any], Any]] = {
     "avatar": clean_avatar,
     "model": clean_model,
     **PROFILE_FIELDS,
+    **COMPUTER_FIELDS,
 }
 
 
 def _member(row: sqlite3.Row) -> Member:
     data = dict(row)
     data["tools"] = _tools_of(data.get("tools"))
-    for field in ("read_aloud", "notify", "ask_before_members", "pinned", "hidden", "draft_first"):
+    for field in ("read_aloud", "notify", "ask_before_members", "pinned", "hidden", "draft_first", "desktop_control"):
         data[field] = bool(data[field])
     return Member(**data)
 

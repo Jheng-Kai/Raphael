@@ -4,6 +4,16 @@ import { reviewZh } from "./review-catalogs";
 import { missingZh } from "./missing-catalogs";
 // Traditional Chinese is the source catalogue. Placeholders are interpolated by t().
 export const zhTW = {
+  "memberComputer.mode": "電腦",
+  "memberComputer.host": "這台電腦",
+  "memberComputer.docker": "隔離電腦（Docker）",
+  "memberComputer.hostHint": "使用 Raphael 在這台電腦上的 Chrome，你可以登入公司內網。",
+  "memberComputer.dockerHint": "在 Docker 的隔離環境中工作。",
+  "memberComputer.desktopControl": "操作桌面",
+  "memberComputer.showTab": "開啟 Chrome 分頁",
+  "memberComputer.setup": "請幫我設定隔離電腦（Docker）。",
+  "memberComputer.certificate": "請在 {p0} 選擇或確認憑證。",
+  "memberComputer.verification": "請在 {p0} 輸入驗證碼。",
   "output.pick": "選擇資料夾",
   "account.label": "帳號名稱",
   "account.labelHelp": "為這個帳號命名，方便分辨工作與私人用途。",

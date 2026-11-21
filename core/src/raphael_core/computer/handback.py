@@ -106,7 +106,8 @@ class HandbackCard:
     def view(self) -> dict:
         """The card as the window draws it."""
         return {"id": self.id, "seq": self.seq, "reason": self.reason, "app": self.app, "state": self.state,
-                "error": self.error or None, "note": self.note or None, "expires_at_ms": self.expires_at_ms}
+                "error": self.error or None, "note": self.note or None, "expires_at_ms": self.expires_at_ms,
+                **({"browser": True} if self.run_id.startswith("browser:") else {})}
 
 
 def _card(row: sqlite3.Row) -> HandbackCard:
@@ -193,10 +194,61 @@ class HandbackCards:
         self._permissions = permissions
         self.resume: Callable[[int, ComputerReport], Awaitable[object]] | None = None
         self._tasks: set[asyncio.Task] = set()
+        self._browser = {}
+        self._wait_ms = wait_ms
 
     def register(self, router) -> None:
         router.register("integrations.card_done", self._done)
         router.register("integrations.card_stop", self._stop)
+        router.register("integrations.card_focus_browser", self._focus_browser)
+
+    async def wait_for_browser(self, *, turn_id, member_id, conversation_id, language, reason, focus):
+        """Wait in the original call, keeping only a callback to its exact tab."""
+        from .host_browser import BrowserError
+
+        if not turn_id:
+            raise BrowserError("private_conversation_required")
+        run_id = "browser:" + secrets.token_hex(12)
+        returned = asyncio.get_running_loop().create_future()
+        card = self.store.open(turn_id=turn_id, member_id=member_id, conversation_id=conversation_id,
+                               run_id=run_id, reason=reason, app="Chrome", language=language)
+        self._browser[run_id] = (returned, focus)
+        self._changed(card)
+        try:
+            await focus()
+            async with asyncio.timeout(self._wait_ms / 1000):
+                if not await returned:
+                    raise BrowserError("browser_handback_stopped")
+            if moved := self.store.move(card.id, "done"):
+                self._changed(moved)
+        except TimeoutError:
+            if moved := self.store.move(card.id, "expired"):
+                self._changed(moved)
+            raise BrowserError("browser_handback_expired") from None
+        except asyncio.CancelledError:
+            self.close(card, error="interrupted")
+            raise
+        except Exception:
+            if moved := self.store.move(card.id, "failed", error="gone") or self.store.move(card.id, "cancelled", error="gone"):
+                self._changed(moved)
+            raise
+        finally:
+            self._browser.pop(run_id, None)
+
+    async def _focus_browser(self, params: dict) -> dict:
+        card = self._card(params)
+        waiting = self._browser.get(card.run_id)
+        if card.state != "control" or waiting is None or waiting[0].done():
+            return {"focused": False}
+        await waiting[1]()
+        return {"focused": True}
+
+    def _return_browser(self, run_id, accepted):
+        if waiting := self._browser.get(run_id):
+            if not waiting[0].done():
+                waiting[0].set_result(accepted)
+                return True
+        return False
 
     # --- what the agent does ----------------------------------------------------------------------
 
@@ -236,7 +288,9 @@ class HandbackCards:
         moved = self.store.move(card.id, "returning")
         if moved is None:
             return {"card": self.store.get(card.id).view(), "done": False}  # type: ignore[union-attr]
-        if not self._computer.give_back(card.run_id):
+        returned = (self._return_browser(card.run_id, True) if card.run_id.startswith("browser:")
+                    else self._computer.give_back(card.run_id))
+        if not returned:
             # The run is gone (or is not waiting): nothing is carried on, and the card says so.
             moved = self.store.move(card.id, "failed", error="gone") or moved
             self._changed(moved)
@@ -250,7 +304,8 @@ class HandbackCards:
         moved = self.store.move(card.id, "stopped") if card.state in ("control", "returning") else None
         if moved is None:
             return {"card": card.view(), "stopped": False}
-        self._computer.stop_run(card.run_id, "owner")
+        if not self._return_browser(card.run_id, False):
+            self._computer.stop_run(card.run_id, "owner")
         self._changed(moved)
         return {"card": moved.view(), "stopped": True}
 
@@ -259,7 +314,8 @@ class HandbackCards:
             return None
         moved = self.store.move(card.id, "cancelled", error=error)
         if moved is not None:
-            self._computer.stop_run(card.run_id, "owner")
+            if not self._return_browser(card.run_id, False):
+                self._computer.stop_run(card.run_id, "owner")
             self._changed(moved)
         return moved
 
@@ -347,6 +403,8 @@ class HandbackCards:
             await asyncio.gather(*list(self._tasks), return_exceptions=True)
 
     async def aclose(self) -> None:
+        for run_id in list(self._browser):
+            self._return_browser(run_id, False)
         for task in list(self._tasks):
             task.cancel()
         await asyncio.gather(*list(self._tasks), return_exceptions=True)

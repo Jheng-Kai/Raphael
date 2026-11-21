@@ -566,7 +566,7 @@ class IsolatedDocker:
                     root = home.parent.parent.resolve()
                     import hashlib
                     expected_owner = hashlib.sha256(os.path.normcase(str(root)).encode()).hexdigest()[:16]
-                    require(home.resolve() == root / 'vm-homes' / key and expected_owner == self.owner
+                    require(home.resolve() == root / 'members' / key and expected_owner == self.owner
                             or home.resolve() in {folder / key for folder in self.moved_homes},
                             'Expected workspace in this run\'s data root')
                     target = vm.Target(key, name, home)
@@ -2888,7 +2888,7 @@ class Acceptance:
             require(next_start == "nothing", f"Expected nothing left to move, observed {next_start!r}")
         finally:
             await moved.aclose(stop=False)
-        return ("vm-homes and vm-shared renamed into the machine-local folder; the stopped computer that bound them removed, "
+        return ("legacy computer folders renamed to members and team in the machine-local folder; the stopped computer that bound them removed, "
                 "made again there with its workspace file, and nothing left to move")
 
     async def cleanup(self):

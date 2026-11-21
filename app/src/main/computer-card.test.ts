@@ -21,6 +21,15 @@ const visible = (html: string): string => html.replace(/<[^>]+>/g, " ").replace(
 const actions = (html: string): string[] => [...html.matchAll(/data-act="([^"]+)"/g)].map(match => match[1]);
 
 describe("a computer card", () => {
+  test("the Chrome handback opens the tab and reuses the same Done and Stop actions", () => {
+    const html = computerCardHTML(card({ browser: true }));
+    expect(actions(html)).toEqual(["card-stop", "card-browser-focus", "card-done"]);
+    expect(html).not.toContain("data-card-screen");
+    setLocale("en");
+    expect(visible(computerCardHTML(card({ browser: true, reason: "certificate" }))))
+      .toContain("Choose or confirm the certificate in Google Chrome.");
+  });
+
   test("names the window to use, says the computer is the owner's and offers 接手 and 我完成了, its × skipping", () => {
     const html = computerCardHTML(card());
     expect(visible(html)).toBe("電腦 需要你 請在「Google Chrome」登入你的帳號，完成後交還控制 接手 我完成了");
