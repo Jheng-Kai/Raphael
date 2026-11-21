@@ -47,8 +47,9 @@ export function computerStateText(card: ComputerCard): string {
 function actionHTML(card: ComputerCard): string {
   const on = (act: string): string => ` data-act="${act}" data-card="${esc(card.id)}"`;
   // Stopping is the card's × (computerCardHTML), never a button of its own.
-  if (card.state === "control" && card.browser) return btn(esc(t("memberComputer.showTab")), "sm", on("card-browser-focus")) +
-    btn(esc(t("card.pcDone")), "sm pri", on("card-done"));
+  // The primary comes first in the markup; the row lays it out rightmost.
+  if (card.state === "control" && card.browser) return btn(esc(t("card.pcDone")), "sm pri", on("card-done")) +
+    btn(esc(t("memberComputer.showTab")), "sm", on("card-browser-focus"));
   if (card.state === "control") return btn(esc(t("cards.takeover")), "sm pri", on("card-takeover")) + btn(esc(t("card.pcDone")), "sm", on("card-done"));
   return "";
 }

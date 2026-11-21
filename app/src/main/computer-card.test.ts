@@ -23,7 +23,7 @@ const actions = (html: string): string[] => [...html.matchAll(/data-act="([^"]+)
 describe("a computer card", () => {
   test("the Chrome handback opens the tab and reuses the same Done and Stop actions", () => {
     const html = computerCardHTML(card({ browser: true }));
-    expect(actions(html)).toEqual(["card-stop", "card-browser-focus", "card-done"]);
+    expect(actions(html)).toEqual(["card-stop", "card-done", "card-browser-focus"]);
     expect(html).not.toContain("data-card-screen");
     setLocale("en");
     expect(visible(computerCardHTML(card({ browser: true, reason: "certificate" }))))
