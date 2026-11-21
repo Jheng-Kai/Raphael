@@ -83,13 +83,39 @@ and `tests/test_packaging.py` from core/.
 npm run look -- dictation-languages dictation-language-variants dictation-language-variants-toggle --theme both --width 1120,720,1920x1080
 ```
 
+## Changing the shortcuts: one 編輯, one dialog (R-KEYS-EDIT-01)
+
+The shortcuts are listed read-only, in the order of use (聽寫, 問拉斐爾, 整理選取文字, 貼上上一次, then 取消/Esc), in Settings >
+聽寫與快捷鍵's 快捷鍵 section and on the 聽寫 overview's card; no row has a pencil. One small 「編輯」 at the section's (or the
+card's) top right opens 編輯快捷鍵 (`shortcut-editor.ts`), the app's compact dialog: the same five rows, every shortcut but Esc
+with its keys on a button. Pressing a button records new keys with the shared recorder (`hotkey-recording.ts`: the global
+hotkeys pause, the keys show as they are held, they are taken when let go; Esc before any key drops the recording, a navigation
+chord steps it back and is never recorded). What is recorded waits in the dialog; a combination that is no good or that another
+shortcut of the dialog has is said under the rows and kept out. 儲存 sends what changed in one `device_settings_set` patch, so two
+shortcuts can trade keys; 貼上上一次 (`paste_last_keys`) is changed like the others. The shell refuses a combination two actions
+would share; that refusal is said in the dialog, which stays open. A save that went through closes the dialog and the list shows
+the new keys; Esc, × and 取消 close it with nothing saved.
+
+```powershell
+npm run look -- settings-tidy-key settings-keys-dialog settings-keys-recording settings-keys-saved dictation-keys-dialog dictation-overview dictation-keyboard dictation --theme both --width 1120,720,1920x1080
+```
+
+`settings-keys-dialog` opens the dialog from Settings, records Ctrl+F8 for 貼上上一次 and checks the five rows and their order,
+the four named key buttons ending on one edge, Esc's key where theirs end, the foot (取消 then 儲存), that nothing was saved yet
+and that the list behind still shows the keys in force; `settings-keys-recording` shows a key being recorded (the hint inside its
+button, the focus on it); `settings-keys-saved` presses 儲存 and checks one `device_settings_set` of `paste_last_keys` alone, the
+dialog gone, the list's new keys and the focus back on 編輯; `dictation-keys-dialog` opens the same dialog from the overview's card.
+Not proved here: the global hotkey service taking the new keys (the shell's `apply_changes`); the owner presses a changed key
+once in another app.
+
 ## The tidy key: Right Alt+T tidies the text that is selected
 
 In any app, select text and press Right Alt+T; the
 dictation cleanup tidies it and it replaces the selection, the clipboard is what it was, and Ctrl+Z in that app undoes it as
 for any paste. R-TIDY-01. It is a dictation feature and nothing else was added to the app: one key, stored in the device
-settings as `tidy_keys` beside `paste_last_keys` (empty allowed: then there is no key), one row in Settings > 聽寫 (`settings-tidy-key`:
-named 整理選取文字, with its key caps and a pencil, between 貼上上一次 and 取消) and one line in the 聽寫 overview's shortcut card. No first-run lesson.
+settings as `tidy_keys` beside `paste_last_keys` (empty allowed: then there is no key), one read-only row in Settings > 聽寫 (`settings-tidy-key`:
+named 整理選取文字, with its key caps, third in the order of use, between 問拉斐爾 and 貼上上一次), one line in the 聽寫 overview's
+shortcut card, and one row of the 編輯 dialog where it is changed with the others. No first-run lesson.
 
 How it runs. The hook reports `HotkeyEvent::Tidy` for the chord exactly as it reports `PasteLast` for Right Alt+V: the Right Alt
 went down first and started a dictation, and `DictationController::tidy_at` drops a recording that is less than a second old
@@ -117,9 +143,10 @@ cd core; $env:PYTHONPATH="$PWD\src"; .\.venv\Scripts\python.exe -m pytest tests/
 cd app\src-tauri; cargo test --lib -- hotkey:: dictation:: commands:: device_settings:: paste:: notices:: core_process::
 ```
 
-`settings-tidy-key` opens Settings > 聽寫 and checks that the row is there after the dictation shortcuts and before Esc, shows
-右 Alt and T, has its pencil where the question key's is, is as high and as wide as that row, has a whole name and does not make
-the page scroll sideways, and that no Accessibility note shows where that permission is not missing;
+`settings-tidy-key` opens Settings > 聽寫 and checks that the five shortcut rows stand in the order of use (聽寫, 問拉斐爾,
+整理選取文字, 貼上上一次, Esc), that the tidy row shows 右 Alt and T, that no row has a button and one 「編輯」 stands beside the
+section's name at the card's top right, that every row's keys end on one edge, that the tidy row is as high and as wide as the
+question key's, has a whole name and does not make the page scroll sideways, and that no Accessibility note shows where that permission is not missing;
 `settings-accessibility-off` is a Mac without Accessibility (the look mock's `accessibility_access` answers false): 聽寫
 shows the `missing.accessibility` note above the shortcuts, saying to add Raphael with +, no wider than them, with the one
 button that opens the Accessibility pane (R-PRIV-AX-01);
@@ -453,7 +480,7 @@ is called with automatic language detection (no hint): a forced zh would bend En
 ## How to get to it (user POV)
 
 Choose Dictation, then use the compact horizontal Overview/History/Dictionary tabs beside the title: the app's shared plain tabs (ui.ts `tabs`, the same as Connect apps), never a look of their own. Every return to Dictation opens on Overview, whichever tab was last chosen; nothing is kept between visits. Left/Right/Home/End change the selected tab while retaining keyboard focus; legacy history/dictionary deep links remain available. The overview's small words (card labels, the activity sum, the heatmap axis and legend, shortcut names) are medium weight in the secondary ink rather than thin grey. Four separate stat cards form a 2 by 2 left grid; shortcuts stand beside them in the right column, end with them and share the header tabs' right edge, and the activity heatmap runs under both. At 720 the order is totals, shortcuts, activity. A heatmap day says its words only in its title under the pointer;
-pressing it does nothing, and no history opens from the grid. Settings > Dictation configures recognition/shortcuts. Actual dictation
+pressing it does nothing, and no history opens from the grid. Settings > Dictation configures recognition; the shortcuts change in the 編輯 dialog that the card and Settings both open. Actual dictation
 begins with the configured global key while a target field has focus.
 
 ## Driving it with look
@@ -580,7 +607,7 @@ without stretching a stat beyond 384px. dictation-layout asserts those edges.
 
 ## The shortcut button in the overview
 
-Dictation removes the spoken-languages helper while retaining the setting. dictation-overview uses the shared pencil icon button for changing shortcuts, with an accessible localized name and matching tooltip. compact-action checks this alongside Usage export at the same widths/themes.
+Dictation removes the spoken-languages helper while retaining the setting. The overview's shortcut card is read-only; its one control is a small 「編輯」 at the card's top right, the same button as Settings' 快捷鍵 section has, which opens the 編輯快捷鍵 dialog over the page (R-KEYS-EDIT-01, `dictation-keys-dialog`). compact-action checks it at the same widths/themes.
 
 ## The orb's Stop and two-Escape cancellation
 

@@ -23,7 +23,6 @@ import { type ConnectionsView, connectionsHTML } from "../connections";
 import { DICTATION_MODES } from "../dictation";
 import { KEEP_FOREVER_DAYS, formatRetention, formatUsd } from "../format";
 import { type LanguageGroup, languageSelectHTML, normalizeLanguages } from "../languages";
-import { bindingLabels } from "../keys";
 import { type RulesView, rulesHTML } from "../safety-rules";
 import { type VaultView, emptyVaultView, vaultHTML } from "../vault";
 import { type SkillLibraryView, emptySkillLibraryView, skillLibraryHTML } from "../skill-library";
@@ -35,10 +34,10 @@ import { type ServicesView, servicesHTML } from "../services";
 import { type ProvidersView, providersHTML, providersAddHTML, emptyProvidersView } from "../providers";
 import { type CliBrainsView, cliBrainsHTML, cliDirectoryHTML, cliModels, emptyCliBrainsView } from "../cli-brains";
 import { pricingNote } from "../pricing";
-import type { HotkeyField } from "../hotkey-recording";
+import { type HotkeyField, SHORTCUTS, shortcutCaps } from "../hotkey-recording";
 import type { AudioDevices, BrainSettings, DeviceSettings, LocalModel, ModelCatalog, ModelRole, SettingsPane, Status } from "../types";
 import { micRow } from "../setup-rows";
-import { type Choice, type IconName, btn, esc, ico, iconBtn, keys, note, row, sel, st, tabs, tg } from "../ui";
+import { type Choice, type IconName, btn, esc, ico, iconBtn, note, row, sel, st, tabs, tg } from "../ui";
 
 /** The models the core reads when none is chosen (brain/settings.py), shown while it does not answer. */
 const DEFAULT_MODELS = { cleanup: "openai/gpt-6-luna", answer: "openai/gpt-6-luna", stt: "elevenlabs/scribe-v2" } as const;
@@ -108,8 +107,8 @@ export const canonicalPane = (id: SettingsPane): SettingsPane =>
 export const paneTitle = (id: SettingsPane): string => PANES.find((p) => p.id === canonicalPane(id))!.title();
 export type ModelsTab = "models" | "usage";
 
-/** The shortcuts recorded here, and the row of each. */
-export const HOTKEY_ROWS: Record<HotkeyField, string> = { dictation_keys: "hotkey", agent_keys: "agent-hotkey", tidy_keys: "tidy-hotkey" };
+/** The row of each shortcut in 聽寫與快捷鍵's read-only list. */
+export const HOTKEY_ROWS: Record<HotkeyField, string> = { dictation_keys: "hotkey", agent_keys: "agent-hotkey", tidy_keys: "tidy-hotkey", paste_last_keys: "paste-hotkey" };
 
 /** Everything a tab is drawn from: what the panel has read, and what is being typed or done. */
 export interface SettingsView {
@@ -345,20 +344,22 @@ const section = (title: string, rows: string[], foot = ""): string =>
   (foot ? `<p class="foot">${foot}</p>` : "") +
   `</section>`;
 
+/** A shortcut, read-only: its keys as caps. They are changed in the dialog that the section's 編輯 opens (shortcut-editor.ts). */
+const shortcutRow = (name: string, bindings: readonly string[], field?: HotkeyField): string =>
+  row(name, "", `<span class="caps">${shortcutCaps(bindings)}</span>`, { cls: "row-shortcut", attrs: field ? ` data-row="${HOTKEY_ROWS[field]}"` : "" });
+
 /**
- * A shortcut: its keys as caps and, for one that can be changed here, a pencil (「變更」) that records
- * new ones (`change` names the button for the click handler and the focus).
+ * 快捷鍵: every shortcut in the order of use, then Esc, read-only, with one 編輯 at the section's top right that opens the
+ * dialog where they are changed. The AltGr warning stands under the shortcut whose keys hold Right Alt.
  */
-function shortcutRow(name: string, bindings: readonly string[], change?: { act: string; field: HotkeyField }): string {
-  const caps = bindings.length > 0
-    ? bindings.map((binding) => keys(bindingLabels(binding))).join(t("common.or"))
-    : `<span class="val">${esc(t("home.noKeys"))}</span>`;
-  return row(
-    name,
-    "",
-    `<span class="caps">${caps}</span>` + (change ? iconBtn("pencil", t("home.018"), ` data-act="${change.act}" data-k="${change.act}"`) : ""),
-    { cls: "row-shortcut", attrs: change ? ` data-row="${HOTKEY_ROWS[change.field]}"` : "" },
-  );
+function shortcutsSection(v: SettingsView): string {
+  const rows = SHORTCUTS.flatMap(({ field, name }) => {
+    const bindings = v.device[field] ?? [];
+    return [shortcutRow(name(), bindings, field), ...(field === "dictation_keys" || field === "agent_keys" ? altgrNote(v, bindings) : [])];
+  });
+  return `<section class="sgroup set-shortcuts"><div class="data-heading"><h2>${esc(t("home.shortcuts"))}</h2>` +
+    btn(esc(t("keys.edit")), "sm", ' data-act="keys-edit" data-k="keys-edit"') + `</div>` +
+    `<div class="slist">${[...rows, shortcutRow(t("common.cancel"), ["Escape"])].join("")}</div></section>`;
 }
 
 /** The warning under a shortcut whose keys hold Right Alt, on a keyboard layout that makes that key AltGr. */
@@ -438,15 +439,7 @@ function dictationHTML(v: SettingsView): string {
     coreNote(v) +
     accessibilityNote(v) +
     microphoneNote(v) +
-    section(t("home.shortcuts"), [
-      shortcutRow(t("settings.agentKeys"), v.device.agent_keys ?? [], { act: "rec-agent", field: "agent_keys" }),
-      ...altgrNote(v, v.device.agent_keys ?? []),
-      shortcutRow(t("home.020"), d.dictation_keys, { act: "rec", field: "dictation_keys" }),
-      ...altgrNote(v, d.dictation_keys),
-      ...(d.paste_last_keys.length ? [shortcutRow(t("home.021"), d.paste_last_keys)] : []),
-      shortcutRow(t("settings.tidyKeys"), d.tidy_keys ?? [], { act: "rec-tidy", field: "tidy_keys" }),
-      shortcutRow(t("common.cancel"), ["Escape"]),
-    ]) +
+    shortcutsSection(v) +
     section(t("settings.groupStart"), [row(t("settings.055"), "", sel(DICTATION_MODES, d.dictation_mode, t("settings.055"), ' data-k="mode"'))]) +
     section(t("settings.groupListen"), [
       row(

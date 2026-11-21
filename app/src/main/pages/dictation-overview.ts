@@ -12,7 +12,9 @@ import { bindingLabels } from "../keys";
 import { loadingHTML } from "../loading";
 import { durationParts, formatCount, hasDictations, periodSpeed } from "../stats";
 import type { AppContext, DeviceSettings, Page, PageId, SettingsPane, StatsSummary } from "../types";
-import { esc, iconBtn, keys } from "../ui";
+import { SHORTCUTS } from "../hotkey-recording";
+import { openShortcutEditor } from "../shortcut-editor";
+import { btn, esc, iconBtn, keys } from "../ui";
 import "../dictation-overview.css";
 
 /** How often the page is read again while it is on screen. */
@@ -72,20 +74,18 @@ function activityHTML(s: StatsSummary): string {
 /** The lasting usage cards: the four numbers, then the activity. */
 export const usageHTML = (s: StatsSummary): string => statsHTML(s) + activityHTML(s);
 
-/** The shortcuts: what each does and its keys. A key that is not set is not listed. */
+/**
+ * The shortcuts, read-only: what each does and its keys, in the order of use, then Esc. A key that is not set is not listed
+ * (an app from before the question key has no `agent_keys` yet, nor one from before the tidy key `tidy_keys`). The card's
+ * 編輯 opens the dialog where they are changed (shortcut-editor.ts).
+ */
 export function keysCardHTML(d: DeviceSettings): string {
-  const shortcut = (name: string, bindings: string[]): string =>
+  const shortcut = (name: string, bindings: readonly string[]): string =>
     `<div class="kc-row"><div class="kc-name">${esc(name)}</div>` +
     `<div class="kc-keys">${bindings.map((b) => keys(bindingLabels(b))).join(t("home.017"))}</div></div>`;
-  // an app from before the question key has no `agent_keys` yet, nor one from before the tidy key `tidy_keys`
-  const agentKeys = d.agent_keys ?? [];
-  const tidyKeys = d.tidy_keys ?? [];
   return (
-    `<div class="card-head"><h2>${esc(t("home.shortcuts"))}</h2>${iconBtn("pencil", t("home.018"), ' data-go="settings" data-pane="dictation"')}</div>` +
-    shortcut(t("home.020"), d.dictation_keys) +
-    (agentKeys.length ? shortcut(t("home.askRaphael"), agentKeys) : "") +
-    (d.paste_last_keys.length ? shortcut(t("home.021"), d.paste_last_keys) : "") +
-    (tidyKeys.length ? shortcut(t("settings.tidyKeys"), tidyKeys) : "") +
+    `<div class="card-head"><h2>${esc(t("home.shortcuts"))}</h2>${btn(esc(t("keys.edit")), "sm", ' data-act="keys-edit"')}</div>` +
+    SHORTCUTS.map(({ field, name }) => ((d[field] ?? []).length ? shortcut(name(), d[field] ?? []) : "")).join("") +
     shortcut(t("common.cancel"), ["Escape"])
   );
 }
@@ -219,6 +219,12 @@ export function createDictationOverview(app: AppContext): Page {
     if (go) app.go(go.dataset.go as PageId, go.dataset.pane as SettingsPane | undefined);
     const act = target.closest<HTMLElement>("[data-act]")?.dataset.act;
     if (act === "older" || act === "newer") void turn(act === "older");
+    else if (act === "keys-edit") openShortcutEditor(app, () => {
+      // The dialog gave the focus back to 編輯, which is drawn anew with the new keys.
+      const focused = keysCard.contains(document.activeElement);
+      keysCard.innerHTML = keysCardHTML(app.device());
+      if (focused) keysCard.querySelector<HTMLElement>('[data-act="keys-edit"]')?.focus({ preventScroll: true });
+    });
   });
 
   // The grid shows as many weeks as fit.

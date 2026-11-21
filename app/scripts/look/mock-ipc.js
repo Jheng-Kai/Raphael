@@ -13,6 +13,14 @@ export function installMock(fixture, config = {}, target = window) {
       google: { redirect: "http://127.0.0.1", scopes: ["https://www.googleapis.com/auth/gmail.modify", "https://www.googleapis.com/auth/calendar.events"], configured: false } }];
     return turn;
   }
+  if (variant.skillPackages) {
+    // A library longer than the tab: the way back from a package's page must land where the list was left.
+    const kits = ["寫作工具", "資料分析", "客服回覆", "行銷素材", "財務報表", "招募流程", "產品規格", "設計檢查"];
+    data.skillLibrary = [...data.skillLibrary, ...kits.map((name, at) => ({
+      key: `pack:${30 + at}`, name, kind: "pack", source: `example/kit-${at + 1}`, description: "", version: "", enabled: true, access: "all", updatable: true,
+      skills: [{ id: 300 + 2 * at, name: `${name}一`, description: `${name}的第一個技能`, enabled: true }, { id: 301 + 2 * at, name: `${name}二`, description: `${name}的第二個技能`, enabled: true }],
+    }))];
+  }
   if (variant.hiddenMember) {
     // One member and one group chat taken off the list: they wait in the sidebar's hidden folder.
     const member = data.members.find(item => item.id === 2), room = data.rooms.find(item => item.id === 1);

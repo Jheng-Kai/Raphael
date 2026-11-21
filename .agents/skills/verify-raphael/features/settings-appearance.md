@@ -56,10 +56,10 @@ This supersedes the About-you grouping and the search notes below.
 
 ## 團隊技能庫 (R-SKILL-17)
 
-The tab lists the shared skills in packages (skill-library.ts): a row per package with its count, who may use it, its switch and ⋯ (also on a right click). The name opens its skills, each with a switch. The importer is the tab's first card, with no line above it: a link or owner/repo (or pasted SKILL.md in its place), a picked or dropped file, a folder from the system's dialog (the output folder's picker), and one 匯入. Who may use a package is the vault's choice (整個團隊 or the characters ticked). A character's skills page shows the packages given to it read-only under 來自團隊技能庫, with a button to this tab. The core is `skills.library.*` (R-SKILL-15, R-SKILL-16); the shell lets those four methods through `core_call`.
+The tab lists the shared skills in packages (skill-library.ts): a row per package with its count, who may use it, its switch and ⋯ (also on a right click). Pressing a package of several (its name, count or chevron) opens it on a page of its own in the tab, in the list's place: the back arrow and its name, its dropdown, switch and ⋯ as on its row, where it came from, then its skills, each with a switch. The back arrow, Esc or a step back return to the list scrolled where it was left, the focus on that row; nothing folds open in the list, and a skill alone keeps its one row. A new package of several opens its page at once. The importer is the tab's first card, with no line above it: a link or owner/repo (or pasted SKILL.md in its place), a picked or dropped file, a folder from the system's dialog (the output folder's picker), and one 匯入. Who may use a package is the vault's choice (整個團隊 or the characters ticked). A character's skills page shows the packages given to it read-only under 來自團隊技能庫, with a button to this tab. The core is `skills.library.*` (R-SKILL-15, R-SKILL-16); the shell lets those four methods through `core_call`.
 
 ```powershell
-npm run look -- skill-library skill-library-open skill-library-access skill-library-import skill-library-imported skill-library-import-failed member-skills-library --theme both --width 1120,720,1920x1080
+npm run look -- skill-library skill-library-open skill-library-back skill-library-access skill-library-import skill-library-imported skill-library-import-failed member-skills-library --theme both --width 1120,720,1920x1080
 ```
 
 ```powershell

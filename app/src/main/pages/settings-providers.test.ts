@@ -63,10 +63,10 @@ function create() {
 }
 const click = (selector: string) => { const button = document.querySelector<HTMLButtonElement>(selector); expect(button, selector).not.toBeNull(); button!.click(); };
 
-test.each(navInputs)("navigation in the key recorder never saves a navigation chord with %s", async input => {
-  const setDevice = vi.fn(), ended = vi.fn(), cell = document.createElement("button");
+test.each(navInputs)("navigation in the key recorder never records a navigation chord with %s", async input => {
+  const recorded = vi.fn(), ended = vi.fn(), cell = document.createElement("button");
   document.body.append(cell);
-  const recorder = createHotkeyRecording({ setDevice } as unknown as AppContext, ended);
+  const recorder = createHotkeyRecording(recorded, ended);
   await recorder.start("dictation_keys", cell);
   cell.focus();
   pressLayer(input, "forward");
@@ -75,7 +75,7 @@ test.each(navInputs)("navigation in the key recorder never saves a navigation ch
   expect(recorder.active()).toBe(false);
   await flush();
   expect(ended).toHaveBeenCalledOnce();
-  expect(setDevice).not.toHaveBeenCalled();
+  expect(recorded).not.toHaveBeenCalled();
 });
 
 test.each(navInputs)("back clears a private vault draft and leaves Settings open with %s", async input => {
