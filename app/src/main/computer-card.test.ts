@@ -21,14 +21,15 @@ const visible = (html: string): string => html.replace(/<[^>]+>/g, " ").replace(
 const actions = (html: string): string[] => [...html.matchAll(/data-act="([^"]+)"/g)].map(match => match[1]);
 
 describe("a computer card", () => {
-  test("names the window to use, says the computer is the owner's and offers 停止 then 我完成了", () => {
+  test("names the window to use, says the computer is the owner's and offers 接手 and 我完成了, its × skipping", () => {
     const html = computerCardHTML(card());
-    expect(visible(html)).toBe("電腦 需要你 請在「Google Chrome」登入你的帳號，完成後交還控制 接手 我完成了 略過");
-    expect(actions(html)).toEqual(["card-takeover", "card-takeover", "card-done", "card-stop"]);
-    // Real framed buttons, the primary last; no 開啟電腦 step on the owner's own computer.
-    expect(html).toContain('class="btn sm card-quiet" data-act="card-stop" data-card="p1"');
+    expect(visible(html)).toBe("電腦 需要你 請在「Google Chrome」登入你的帳號，完成後交還控制 接手 我完成了");
+    expect(actions(html)).toEqual(["card-stop", "card-takeover", "card-takeover", "card-done"]);
+    // Real framed buttons; skipping is the × at the top right, never a button in the footer. No 開啟電腦 step on the owner's own computer.
+    const head = html.slice(0, html.indexOf("</header>"));
+    expect(head).toContain('class="btn icon row card-close" aria-label="略過" title="略過" data-act="card-stop" data-card="p1"');
+    expect(html).not.toContain(">略過</button>");
     expect(html).toContain('class="btn sm pri" data-act="card-takeover" data-card="p1"');
-    expect(html.indexOf("card-done")).toBeLessThan(html.indexOf("card-stop"));
     expect(html).not.toContain("開啟電腦");
     expect(html).toContain("<svg");
     expect(html).not.toContain("tile");
@@ -46,12 +47,12 @@ describe("a computer card", () => {
 
   test("each state has the actions it can take, and a form that is still there is said", () => {
     expect(actions(computerCardHTML(card({ state: "returning" })))).toEqual(["card-stop"]);
-    for (const state of ["done", "stopped", "expired", "failed"] as const) {
+    for (const state of ["done", "stopped", "expired", "failed", "cancelled"] as const) {
       expect(actions(computerCardHTML(card({ state })))).toEqual([]);
     }
     const still = computerCardHTML(card({ note: "still" }));
     expect(visible(still)).toContain("看起來還沒完成，請再試一次");
-    expect(actions(still)).toEqual(["card-takeover", "card-takeover", "card-done", "card-stop"]);
+    expect(actions(still)).toEqual(["card-stop", "card-takeover", "card-takeover", "card-done"]);
     expect(visible(computerCardHTML(card({ state: "returning" })))).toContain("已交還控制，繼續中…");
     expect(visible(computerCardHTML(card({ state: "returning" })))).not.toContain("你正在控制");
     expect(visible(computerCardHTML(card({ state: "done" })))).toContain("已交還控制 · 工作已繼續");
@@ -63,13 +64,16 @@ describe("a computer card", () => {
     expect(visible(computerCardHTML(card({ state: "stopped" })))).toContain("已停止，這項工作沒有繼續");
     expect(visible(computerCardHTML(card({ state: "expired" })))).toContain("已逾時，這項工作沒有繼續");
     expect(visible(computerCardHTML(card({ state: "failed", error: "interrupted" })))).toContain("連線中斷，這項工作沒有繼續");
+    // Closed by its ×, or left behind when the owner wrote again: a quiet pill, never 完成.
+    expect(visible(computerCardHTML(card({ state: "cancelled" })))).toMatch(/^電腦 已取消/);
+    expect(visible(computerCardHTML(card({ state: "cancelled", error: "skipped" })))).toMatch(/^電腦 未回答/);
   });
 
   test("speaks only the window's language", () => {
     setLocale("en");
-    expect(visible(computerCardHTML(card()))).toBe("Computer Action needed Sign in to your account in Google Chrome, then hand control back Take over I'm done Skip");
+    expect(visible(computerCardHTML(card()))).toBe("Computer Action needed Sign in to your account in Google Chrome, then hand control back Take over I'm done");
     setLocale("ja");
-    expect(visible(computerCardHTML(card()))).toBe("コンピューター 操作が必要 Google Chrome でアカウントにサインインし、完了したら操作を返してください 引き継ぐ 完了しました スキップ");
+    expect(visible(computerCardHTML(card()))).toBe("コンピューター 操作が必要 Google Chrome でアカウントにサインインし、完了したら操作を返してください 引き継ぐ 完了しました");
   });
 
   test("escapes the app's name", () => {

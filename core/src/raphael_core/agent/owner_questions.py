@@ -156,6 +156,14 @@ class OwnerQuestions:
             self.changed(row[0])
         return self.get(identifier)
 
+    def close_for_card(self, card_id):
+        """Settle a card that has already closed, as if its owner had answered with null."""
+        rows = self.conn.execute(
+            "SELECT id FROM owner_questions WHERE card_id=? AND result IS NULL", (card_id,)
+        ).fetchall()
+        for row in rows:
+            self.settle(row["id"], {"state": "cancelled"})
+
     def close_for_message(self, *, said, conversation_id=None, member_id=None, room_id=None, thread_id=None, source=None):
         """The owner wrote something instead of answering: the card that waits in this conversation closes, unanswered,
         and the member is told what was said. In a messaging chat a reply that names the card's letters or words, or

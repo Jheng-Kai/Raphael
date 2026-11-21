@@ -401,7 +401,7 @@ SCHEMA_V27 = {
         "stop_requested INTEGER NOT NULL DEFAULT 0", "wrapup_sent INTEGER NOT NULL DEFAULT 0", "reason TEXT NOT NULL DEFAULT ''",
     ],
 }
-LATEST = 92
+LATEST = 93
 
 
 def test_v59_existing_tasks_default_to_no_artifact_and_keep_their_reports(monkeypatch, tmp_path):
@@ -727,7 +727,13 @@ SCHEMA_V92["skill_packages"] = ["key TEXT PK", "name TEXT NOT NULL", "source TEX
     "enabled INTEGER NOT NULL DEFAULT 1", """access TEXT NOT NULL DEFAULT '"all"'""", "origin TEXT NOT NULL DEFAULT 'source'"]
 
 
-@pytest.mark.parametrize("start_version, expected_steps", [(version, [step for step in (63, 64, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92) if step > version]) for version in (62, 63, 64, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91)])
+PENDING_UPGRADES = (63, 64, *range(67, 94))
+
+
+@pytest.mark.parametrize("start_version, expected_steps", [
+    (version, [step for step in PENDING_UPGRADES if step > version])
+    for version in (62, *PENDING_UPGRADES[:-1])
+])
 def test_latest_upgrade_runs_only_pending_migrations_and_preserves_vault_entries(monkeypatch, tmp_path, start_version, expected_steps):
     path = tmp_path / f"v{start_version}-to-latest.db"
     with monkeypatch.context() as old:
@@ -1899,3 +1905,26 @@ def test_shared_packages_migrate_with_access_to_every_skill_the_member_kept(tmp_
     assert list(map(tuple, conn.execute("SELECT id,package_key FROM member_skills ORDER BY id"))) == [
         (1, f"set:{plugin}"), (2, f"set:{plugin}"), (3, "skill:3"), (4, "skill:4")]
     conn.close()
+
+
+def test_migration_preserves_existing_handbacks_and_allows_them_to_be_cancelled(monkeypatch):
+    from raphael_core.agent.history import AgentHistory
+    from raphael_core.computer.handback import HandbackStore
+
+    with monkeypatch.context() as old:
+        old.setattr(db, "LATEST_VERSION", 92)
+        conn = db.connect(":memory:")
+    try:
+        history = AgentHistory(conn)
+        identifier = history.add(session_id="handback", question="Sign in", route="answer", prefix="",
+                                 text="", status="done", member_id=0)
+        store = HandbackStore(conn)
+        card = store.open(turn_id=identifier, member_id=0, conversation_id=None, run_id="browser", reason="sign_in",
+                          app="Browser", language="en")
+        db.migrate(conn)
+        assert store.get(card.id) == card
+        assert store.move(card.id, "cancelled", error="skipped").error == "skipped"
+        history.delete(identifier)
+        assert store.get(card.id) is None
+    finally:
+        conn.close()

@@ -1462,7 +1462,7 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
       result.cards.push({ ...authorized, steps });
       await capture(`member-${memberId}-authorizing`);
       {
-        await click(page, '[data-connector] [data-act="card-cancel"]');
+        await click(page, '[data-connector] [data-card-close]');
         await page.waitForFunction(() => !!document.querySelector('[data-connector][data-card-state="cancelled"]'));
       }
     }

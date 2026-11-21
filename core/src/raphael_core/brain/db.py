@@ -2336,6 +2336,39 @@ def _skill_package_migration(conn):
 
 _MIGRATIONS[92] = _skill_package_migration
 
+_MIGRATIONS[93] = """
+BEGIN;
+DROP TRIGGER clear_handback_cards;
+CREATE TABLE handback_cards_next (
+    id TEXT PRIMARY KEY,
+    turn_id INTEGER NOT NULL,
+    seq INTEGER NOT NULL,
+    member_id INTEGER NOT NULL,
+    conversation_id INTEGER,
+    run_id TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    app TEXT NOT NULL DEFAULT '',
+    language TEXT NOT NULL,
+    state TEXT NOT NULL CHECK(state IN ('control','returning','done','stopped','expired','failed','cancelled')),
+    error TEXT NOT NULL DEFAULT '',
+    note TEXT NOT NULL DEFAULT '',
+    done TEXT NOT NULL DEFAULT '[]',
+    created_at_ms INTEGER NOT NULL,
+    updated_at_ms INTEGER NOT NULL,
+    expires_at_ms INTEGER NOT NULL,
+    returned_at_ms INTEGER,
+    UNIQUE(turn_id, seq)
+);
+INSERT INTO handback_cards_next SELECT * FROM handback_cards;
+DROP TABLE handback_cards;
+ALTER TABLE handback_cards_next RENAME TO handback_cards;
+CREATE TRIGGER clear_handback_cards AFTER DELETE ON agent_turns BEGIN
+  DELETE FROM handback_cards WHERE turn_id=OLD.id;
+END;
+PRAGMA user_version = 93;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 

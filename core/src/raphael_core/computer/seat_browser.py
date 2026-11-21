@@ -1,5 +1,17 @@
 """Run the installed seat launcher with startup recovery, without rebuilding layer 14."""
 
+import re
+
+PROFILE_PARTS = (".browser-profiles", "driver", "main")
+RECOVER_STALE_LOCKS = "--recover-stale-locks"
+STALE_LOCK_EXIT = 75
+_STALE_LOCK = re.compile(r"RAPHAEL_STALE_LOCK (Singleton[A-Za-z0-9_-]*|DevToolsActivePort)")
+
+
+def stale_locks(stderr):
+    return [match[1] for line in (stderr or "").splitlines() if (match := _STALE_LOCK.fullmatch(line))]
+
+
 # This runs as cua inside the computer. The image owns window attribution, placement and settling.
 LAUNCH = r"""
 import os
@@ -23,12 +35,18 @@ def prepare_profile(profile, proc):
             continue
         if flag + b"=" + directory in args or (flag, directory) in zip(args, args[1:]):
             return
+    blocked = False
     for artifact in (*profile.glob("Singleton*"), profile / "DevToolsActivePort"):
         try:
             if not stat.S_ISDIR(artifact.lstat().st_mode):
                 artifact.unlink()
         except (FileNotFoundError, IsADirectoryError):
             pass
+        except OSError:
+            name = artifact.name.encode("unicode_escape").decode("ascii")
+            print(f"RAPHAEL_STALE_LOCK {name}", file=sys.stderr)
+            blocked = True
+    return blocked
 
 
 # Keep only a small tail during startup. After the launcher removes its temporary directory,
@@ -117,7 +135,12 @@ if __name__ == "__main__":
         source = launch_script(launcher.read_text(encoding="utf-8"), profile)
     except UnicodeDecodeError:
         source = None
-    prepare_profile(profile, Path("/proc"))
+    recover = sys.argv[1:2] == ["--recover-stale-locks"]
+    if recover:
+        del sys.argv[1]
+    if prepare_profile(profile, Path("/proc")) and recover:
+        # Let the host clear the stale entries before any browser can take this profile.
+        sys.exit(75)
     if source is not None:
         os.execv("/bin/sh", ["sh", "-c", source, *sys.argv[1:]])
     else:

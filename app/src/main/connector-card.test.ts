@@ -60,8 +60,10 @@ describe("a connector card", () => {
     expect(pending).not.toContain("tile");
     expect(pending).toContain('class="btn sm pri" data-act="card-connect" data-card="c1"');
     expect(visible(pending)).toBe("Gmail 需要你 連結後就能繼續這項工作，隨時可以在設定中斷連結。 連結");
-    expect(actions(connectorCardHTML(card({ state: "authorizing" })))).toEqual(["card-cancel"]);
-    expect(actions(connectorCardHTML(card({ state: "cancelled" })))).toEqual(["card-connect"]);
+    // Stopping a sign-in is the card's × (`card_close`); a closed card is its title and pill alone.
+    expect(actions(connectorCardHTML(card({ state: "authorizing" })))).toEqual([]);
+    expect(connectorCardHTML(card({ state: "authorizing" }))).toContain('data-card-close="c1"');
+    expect(actions(connectorCardHTML(card({ state: "cancelled" })))).toEqual([]);
     expect(actions(connectorCardHTML(card({ state: "failed", error: "denied" })))).toEqual(["card-connect"]);
     expect(actions(connectorCardHTML(card({ state: "failed", error: "not_configured" })))).toEqual(["card-settings"]);
     expect(actions(connectorCardHTML(card({ state: "connected", tool_count: 2 })))).toEqual([]);
@@ -92,8 +94,8 @@ describe("a connector card", () => {
     const rejected = connectorCardHTML({ ...key, state: "failed", error: "key_rejected" });
     expect(visible(rejected)).toBe("連結 Acme 未能完成 這把金鑰沒有被接受，請再填一次 填入金鑰"); // closed by the × at its top right
     expect(actions(rejected)).toEqual(["card-setup"]);
-    expect(actions(connectorCardHTML({ ...key, state: "cancelled" }))).toEqual(["card-setup"]);
-    expect(actions(connectorCardHTML({ ...key, state: "authorizing" }))).toEqual(["card-cancel"]);
+    expect(actions(connectorCardHTML({ ...key, state: "cancelled" }))).toEqual([]);
+    expect(actions(connectorCardHTML({ ...key, state: "authorizing" }))).toEqual([]);
   });
 
   test("with no Composio key the failed card says so and opens the settings, not a vague retry", () => {

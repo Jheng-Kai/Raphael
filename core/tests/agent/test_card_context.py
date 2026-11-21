@@ -15,6 +15,10 @@ from raphael_core.agent.service import Resumption, _Ask
 from raphael_core.background.run import RunLimits
 from raphael_core.background.service import _prompts
 from raphael_core.background.tasks import TaskStore
+from raphael_core.computer.handback import HandbackCards
+from raphael_core.connectors.apps import SERVER_APPS
+from raphael_core.connectors.cards import ConnectorCards
+from raphael_core.connectors.secret_cards import SecretCards
 from raphael_core.memory.conversation import Conversation, turn_text
 
 from .test_narration import chat, typed
@@ -50,6 +54,62 @@ class Messaging:
 
 def capture(client):
     return "\n".join(str(message.get("content", "")) for message in client.chat_calls[-1]["messages"])
+
+
+@pytest.mark.parametrize("source", ["app", "voice", "telegram", "slack", "discord", "overlay"])
+async def test_a_new_owner_message_skips_only_earlier_waiting_cards_in_its_conversation(make_rig, client, conn, source):
+    clock = lambda: NOW_MS
+    stopped = []
+    connectors = ConnectorCards(conn, None, None, now_ms=clock)
+    secrets = SecretCards(conn, None, now_ms=clock)
+    handbacks = HandbackCards(conn, SimpleNamespace(stop_run=lambda run, _: stopped.append(run)), now_ms=clock)
+    rig = make_rig(cards=connectors, secret_cards=secrets, handbacks=handbacks)
+    quick = source == "overlay"
+    conversation = rig.service.conversations.quick() if quick else rig.service.conversations.main(0)
+    other = rig.service.conversations.main(0) if quick else rig.service.conversations.quick()
+
+    def add(*, member_id=0, destination=conversation):
+        identifier = turn(rig.history, member_id=member_id, conversation_id=destination)
+        common = dict(turn_id=identifier, member_id=member_id, conversation_id=destination, language="en")
+        connector = connectors.store.open(**common, app="n8n", app_name="n8n", reconnect=False)
+        secret = secrets.store.open(**common, server_id="EXAMPLE_KEY", name="Synthetic key", kind="key", secret="key")
+        return common, connector, secret
+
+    scope, connect, secret = add()
+    _, other_connect, other_secret = add(destination=other)
+    _, member_connect, member_secret = add(member_id=5, destination=rig.service.conversations.main(5))
+    handback = handbacks.store.open(**scope, run_id="waiting-run", reason="sign_in", app="Browser")
+    client.chats = [chat("We can do that tomorrow.")]
+    await rig.call("agent.ask", dict(session_id="new-message", text="Let's do this tomorrow.", ui_language="en",
+                                    source=source, conversation_id=conversation, **({"destination": "quick"} if quick else {})))
+
+    for cards, card in ((connectors, connect), (secrets, secret), (handbacks, handback)):
+        closed = cards.store.get(card.id)
+        assert (closed.state, closed.error) == ("cancelled", "skipped")
+        assert closed.view()["error"] == "skipped"
+    assert stopped == ["waiting-run"]
+    for cards, card in ((connectors, other_connect), (secrets, other_secret),
+                        (connectors, member_connect), (secrets, member_secret)):
+        assert cards.store.get(card.id).state == "pending"
+    prompt = capture(client)
+    for name in ("n8n", "EXAMPLE_KEY", "Browser"):
+        assert prompt.count(f'The card for "{name}" was left unfilled and closed when the owner wrote again.') == 1
+        assert prompt.count(f'"{name}"') == 1
+    assert '"Synthetic key"' not in prompt
+
+
+async def test_a_message_keeps_cards_of_the_turn_it_is_answering_and_later_turns(make_rig, client, conn):
+    cards = ConnectorCards(conn, None, None, now_ms=lambda: NOW_MS)
+    rig = make_rig(cards=cards)
+    conversation = rig.service.conversations.main(0)
+    identifiers = [turn(rig.history, conversation_id=conversation) for _ in range(3)]
+    shown = [cards.show(turn_id=identifier, member_id=0, conversation_id=conversation, app=SERVER_APPS["n8n"],
+                        language="en") for identifier in identifiers]
+    client.chats = [chat("We can wait.")]
+    await rig.service._run_ask(_Ask("new", "Tomorrow", "en", source="app", turn_id=identifiers[1],
+                                    conversation_id=conversation))
+    assert [cards.store.get(card.id).state for card in shown] == ["cancelled", "pending", "pending"]
+    assert capture(client).count("was left unfilled and closed when the owner wrote again.") == 1
 
 
 async def test_approved_pairing_is_in_next_actual_prompt_without_pair_instructions(make_rig, client, conn):

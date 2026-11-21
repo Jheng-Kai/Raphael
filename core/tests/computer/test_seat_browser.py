@@ -4,10 +4,11 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path, PurePosixPath
+from unittest.mock import AsyncMock
 
 import pytest
 
-from raphael_core.computer import seat_browser
+from raphael_core.computer import seat_browser, vm
 
 PROFILE = PurePosixPath("/home/cua/workspace/.browser-profiles/driver/main")
 LAUNCHER = Path(seat_browser.__file__).parent / "image/layer12/raphael-seat-browser"
@@ -56,6 +57,86 @@ def test_stale_browser_symlink_is_unlinked_without_following_it(tmp_path, guest)
         raise
     guest["prepare_profile"](profile, tmp_path / "proc")
     assert not lock.is_symlink()
+
+
+@pytest.mark.parametrize("method", ["lstat", "unlink"])
+def test_an_unreadable_stale_lock_is_named_and_the_other_locks_are_still_cleared(tmp_path, guest, monkeypatch, capsys, method):
+    profile = tmp_path / ".browser-profiles" / "driver" / "main"
+    profile.mkdir(parents=True)
+    bad = profile / "SingletonCookie"
+    good = profile / "DevToolsActivePort"
+    bad.touch()
+    good.touch()
+    original = getattr(Path, method)
+
+    def check(path, *args, **kwargs):
+        if path == bad:
+            raise PermissionError(13, "Permission denied", str(path))
+        return original(path, *args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, method, check)
+        assert guest["prepare_profile"](profile, tmp_path / "no-processes")
+        assert capsys.readouterr().err == "RAPHAEL_STALE_LOCK SingletonCookie\n"
+        assert not good.exists()
+        proc = tmp_path / "proc"
+        cmdline = proc / "123" / "cmdline"
+        cmdline.parent.mkdir(parents=True)
+        cmdline.write_bytes(b"chrome\0--user-data-dir=" + os.fsencode(profile) + b"\0")
+        good.touch()
+        assert not guest["prepare_profile"](profile, proc)
+        assert capsys.readouterr().err == ""
+        assert good.exists()
+    assert bad.exists()
+
+
+@pytest.mark.parametrize("scenario", ["stale", "live", "remote", "redirected"])
+async def test_the_seat_browser_retries_after_host_cleanup_only_on_a_stale_lock_verdict(tmp_path, monkeypatch, scenario):
+    machine = vm.LocalVm(tmp_path, runner=AsyncMock())
+    host = "remote" if scenario == "remote" else ""
+    target = machine.shared_target(host, 7, 2)
+    profile = machine.homes / "shared" / Path(*seat_browser.PROFILE_PARTS)
+    profile.mkdir(parents=True)
+    if scenario == "redirected":
+        outside = tmp_path / "outside"
+        profile.rmdir()
+        outside.mkdir()
+        try:
+            profile.symlink_to(outside, target_is_directory=True)
+        except OSError as error:
+            if getattr(error, "winerror", None) == 1314:
+                pytest.skip("Windows does not allow this process to create symbolic links")
+            raise
+    lock = profile / "SingletonCookie"
+    untouched = profile / "SingletonSocket"
+    lock.touch()
+    untouched.touch()
+    (profile / "Preferences").write_text("keep")
+    monkeypatch.setattr("raphael_core.computer.carry.before_browser", AsyncMock())
+    calls = []
+
+    async def launch(target, args, **kwargs):
+        calls.append(args)
+        if len(calls) == 1:
+            assert lock.exists()
+            assert (seat_browser.RECOVER_STALE_LOCKS in args) is (scenario != "remote")
+            if scenario != "live":
+                return vm.Result(seat_browser.STALE_LOCK_EXIT, "", "RAPHAEL_STALE_LOCK SingletonCookie\n"
+                                 "RAPHAEL_STALE_LOCK ../Preferences\nRAPHAEL_STALE_LOCK SingletonSocket:stream\n")
+        else:
+            assert seat_browser.RECOVER_STALE_LOCKS not in args
+            assert lock.exists() is (scenario != "stale")
+        return vm.Result(0, "pid=71 window_id=42")
+
+    monkeypatch.setattr(machine, "run_for", launch)
+    if scenario == "remote":
+        with pytest.raises(vm.VmError, match="browser_window_missing"):
+            await machine.seat_browser(target)
+    else:
+        assert await machine.seat_browser(target) == {"pid": 71, "window_id": 42}
+    assert len(calls) == (2 if scenario in ("stale", "redirected") else 1)
+    assert lock.exists() is (scenario != "stale")
+    assert untouched.exists() and (profile / "Preferences").read_text() == "keep"
 
 
 def test_browser_stderr_reader_keeps_the_tail_and_drains_after_cleanup(tmp_path, guest):

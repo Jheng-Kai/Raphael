@@ -2190,8 +2190,9 @@ export function checkRendered(name, context = {}) {
     // Work the member handed itself waits on the key: its way out is the card's ×, and no 取消 of the question stands outside it.
     const card = document.querySelector('[data-secret-card=card-key]'), box = card?.getBoundingClientRect();
     require(visible(card) && card.closest('.tn')?.dataset.id === '135', 'the key card stands in the work\'s own line');
-    const x = card.querySelector('.card-head > [data-owner-answer=cancel][data-owner-question]');
-    require(visible(x) && x.classList.contains('icon') && box.right - x.getBoundingClientRect().right <= 24, 'the × at the top right answers the waiting question');
+    // Its × closes the card in the core (integrations.card_close), which answers the waiting question too (R-CARD-CLOSE-01).
+    const x = card.querySelector('.card-head > [data-card-close=card-key]');
+    require(visible(x) && x.classList.contains('icon') && box.right - x.getBoundingClientRect().right <= 24, 'the × at the top right closes the card and its waiting question');
     require(card.querySelector('.card-heading .card-status')?.textContent === '等你填入', 'the status stands beside the title');
     const outside = [...document.querySelectorAll('.cc-actions [data-owner-answer], .tn .btn')].filter(button => visible(button) && !button.closest('.conversation-card, .message-actions, .composer') && button.textContent.trim());
     require(!outside.length, `no button of the card stands outside it: ${outside.map(button => button.textContent.trim()).join(', ')}`);
@@ -3459,7 +3460,7 @@ export function checkRendered(name, context = {}) {
     const bot=document.querySelector('[data-secret-card="card-slack"]'),pair=document.querySelector('[data-pairing-card="pair-1"]'),tpl=document.querySelector('[data-template-card-id="tpl-1"]');
     require(visible(bot)&&bot.querySelector('input[type=password][data-secret-input]')&&bot.querySelector('[data-act="bot-link"][data-platform="slack"]'),"the bot card has where to make the bot and one masked field");
     require(!bot.innerHTML.includes('xoxb')&&!bot.querySelector('input')?.value,"no token in the markup");
-    require(pair&&pair.querySelector('.code')?.textContent==='SL7Q2K'&&pair.querySelector('[data-act="pairing-allow"]')&&pair.querySelector('[data-act="pairing-deny"]'),"the pairing card shows its code with Allow and Deny");
+    require(pair&&pair.querySelector('.code')?.textContent==='SL7Q2K'&&pair.querySelector('.card-actions [data-act="pairing-allow"]')&&pair.querySelector('.card-head .card-close[data-act="pairing-deny"]')&&!pair.querySelector('.card-actions [data-act="pairing-deny"]'),"the pairing card shows its code with Allow, and Deny is its ×");
     require(tpl&&tpl.querySelector('[data-act="template-view"]')&&tpl.querySelector('.pri[data-act="template-save"]')&&tpl.textContent.includes('Gmail'),"the template card says what it brings and offers Save file as primary and View contents");
     return {check:name};
   }
@@ -7026,8 +7027,8 @@ export function checkRendered(name, context = {}) {
     const confirmBtn = panel.querySelector('[data-draft-act="confirm"]');
     const cancelBtn = panel.querySelector('[data-draft-act="cancel"]');
     require(visible(confirmBtn) && visible(cancelBtn), "confirm and cancel buttons are visible");
-    // The primary is the first Tab stop and stands rightmost, 取消 to its left (R-CARD-01).
-    require(confirmBtn.compareDocumentPosition(cancelBtn) & Node.DOCUMENT_POSITION_FOLLOWING && cancelBtn.getBoundingClientRect().right <= confirmBtn.getBoundingClientRect().left, "the primary comes first and stands at the right of 取消");
+    // The way out is the card's × at its top right, as every waiting card's is (R-CARD-CLOSE-02); the footer holds the primary alone.
+    require(cancelBtn.matches('.card-head > .card-close') && !cancelBtn.closest('.card-actions'), "取消 is the card's × at its top right, not a button beside the primary");
     for (const card of cards) {
       const roleInput = card.querySelector('[data-draft-field="role"]');
       const nameInput = card.querySelector('[data-draft-field="name"]');
@@ -10660,7 +10661,7 @@ export function checkRendered(name, context = {}) {
     if (step === "authorizing") {
       require(card.dataset.cardState === "authorizing" && state.includes("等你在瀏覽器登入"), `the card waits for the browser (${state})`);
       require(sent.length === 1 && sent[0].params.id === "card-google" && sent[0].params.fields.client_secret === secret && sent[0].params.fields.client_id === "look-client-id.apps.googleusercontent.com", "both crossed the one call, integrations.card_connect");
-      require(fields.length === 0 && footer.length === 1 && footer[0].dataset.act === "card-cancel", "the form is gone and Cancel is the one action");
+      require(fields.length === 0 && footer.length === 0 && visible(card.querySelector('.card-head .card-close[data-card-close="card-google"]')), "the form is gone and the × is the one way out");
     }
     if (step === "connected") {
       require(card.dataset.cardState === "connected" && state === "已連結 · owner@example.test · 7 個工具", `which account, and the tools (${state})`);
@@ -10713,8 +10714,8 @@ export function checkRendered(name, context = {}) {
     const expected = {
       "connector-card": ["pending", "", "連結", true],
       "connector-slack": ["pending", "", "連結", true],
-      "connector-slack-authorizing": ["authorizing", "等你在瀏覽器登入", "取消", false],
-      "connector-authorizing": ["authorizing", "等你在瀏覽器登入", "取消", false],
+      "connector-slack-authorizing": ["authorizing", "等你在瀏覽器登入", "×", false],
+      "connector-authorizing": ["authorizing", "等你在瀏覽器登入", "×", false],
       "connector-expired": ["pending", "授權已過期", "重新連結", true],
       "connector-key": ["pending", "需要你的 API 金鑰", "填入金鑰", true],
       "connector-app": ["pending", "需要你自己的開發者應用程式", "設定開發者應用程式", true],
@@ -10725,8 +10726,10 @@ export function checkRendered(name, context = {}) {
     const [state, words, action, primary] = expected;
     if (!words) require(status?.textContent.trim(), "a pending card explains why connecting helps");
     require(card.dataset.cardState === state && (!words || said === words), `${app}'s card reads "${words}" (${card.dataset.cardState}: "${said}")`);
-    const connectButton = card.querySelector('[data-act="card-connect"],[data-act="card-cancel"]');
-    if (action === null) require(card.querySelector('.card-actions button:disabled'), 'connected card keeps its checked disabled button');
+    const connectButton = card.querySelector('[data-act="card-connect"]');
+    // A sign-in under way is stopped by the card's × alone (R-CARD-CLOSE-02), never a 取消 in its footer.
+    if (action === "×") require(visible(card.querySelector(`.card-head .card-close[data-card-close="${card.dataset.connector}"]`)) && !card.querySelector('footer button'), "the × at the top right is the one way out of a sign-in under way");
+    else if (action === null) require(card.querySelector('.card-actions button:disabled'), 'connected card keeps its checked disabled button');
     else if (['connector-key','connector-app','connector-server'].includes(name)) require(card.querySelector('[data-inline-setup]'), 'setup fields belong to the card');
     else require(connectButton?.textContent.trim() === action && connectButton.classList.contains('pri') === primary, 'the connection action matches the state');
     if (name === "connector-server") {
@@ -10806,7 +10809,7 @@ export function checkRendered(name, context = {}) {
       if (name !== "pc-handback") {
         require(card.dataset.cardState === "control", `the owner has the computer (${card.dataset.cardState})`);
         require(visible(live) && live.textContent.includes("需要你") && visible(live.querySelector('i')), "it says the owner is in control, with a dot and a word");
-        require(visible(card.querySelector('[data-act="card-takeover"]')) && visible(card.querySelector('[data-act="card-done"]')) && visible(card.querySelector('[data-act="card-stop"]')), 'takeover, done and skip remain available');
+        require(visible(card.querySelector('[data-act="card-takeover"]')) && visible(card.querySelector('[data-act="card-done"]')) && visible(card.querySelector('.card-head > .card-close[data-act="card-stop"]')), 'takeover and done remain available, and skip is the × at the top right');
         require(state.startsWith('請在「Google Chrome」登入你的帳號，完成後交還控制'), 'the card names the app to use');
 
       }
@@ -10849,7 +10852,10 @@ export function checkRendered(name, context = {}) {
     require(visible(mark) && mark.querySelector('svg.logo path'), "R-UI-34: the service's own drawn mark");
     if (mark) require(markStyle.backgroundColor === 'rgba(0, 0, 0, 0)' && parseFloat(markStyle.borderTopWidth) === 0, "R-UI-34: the mark is bare, on no tile");
     const buttons = [...card.querySelectorAll('.card-actions > button')].filter(visible);
-    require(buttons.map(button => button.textContent.trim()).join('|') === (waiting ? '允許一次|一律允許|拒絕' : '允許一次|拒絕'), 'permission actions keep once/always/deny semantics with primary first');
+    require(buttons.map(button => button.textContent.trim()).join('|') === (waiting ? '允許一次|一律允許' : '允許一次'), 'permission actions keep once/always semantics with primary first');
+    // 拒絕 is the card's × at its top right (R-CARD-CLOSE-02), never a button in the footer.
+    const deny = card.querySelector('.card-head > .card-close[data-act="perm-deny"]');
+    require(visible(deny) && deny.getAttribute('aria-label') === '拒絕' && !deny.disabled, 'declining is the × at the top right');
     require(buttons[0].classList.contains('pri') && buttons.every(button => !button.disabled), 'answers are available');
     require(card.querySelector('.card-title').textContent.includes('Gmail'), 'the title names who wants to act');
     require(card.querySelector('.card-detail').hidden && card.querySelector('.card-detail').textContent.includes('send_email'), 'the exact action remains in a folded disclosure');
