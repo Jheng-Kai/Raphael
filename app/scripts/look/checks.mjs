@@ -3110,7 +3110,7 @@ export function checkRendered(name, context = {}) {
       require(card.getBoundingClientRect().right <= innerWidth + 1, "card fits the conversation column");
     }
     const diagram = scope.querySelector('.message-diagram');
-    if (["rich-content", "rich-diagram", "rich-source", "rich-expand"].includes(name)) {
+    if (["rich-content", "rich-diagram", "rich-source", "rich-expand", "rich-diagram-hover", "rich-diagram-view", "rich-diagram-zoomed"].includes(name)) {
       require(diagram?.dataset.diagramState === "rendered" && diagram.querySelector('.diagram-view svg'), "Mermaid produces a visible SVG");
       const canvas = diagram.querySelector('.diagram-view > svg'), intrinsicWidth = canvas.viewBox.baseVal.width;
       require(!intrinsicWidth || canvas.getBoundingClientRect().width <= intrinsicWidth + 1, "inline diagrams fit the column without enlarging narrow diagrams into oversized text");
@@ -3142,9 +3142,58 @@ export function checkRendered(name, context = {}) {
     if (name === "rich-source") require(!diagram.querySelector('pre').hidden && diagram.querySelector('[data-rich-act="view-source"]').getAttribute('aria-expanded') === 'true', "source toggle reveals complete source");
     if (name === "rich-expand") {
       const dialog = document.querySelector('.rich-view-dialog');
-      require(visible(dialog?.querySelector('.diagram-view svg')) && dialog.querySelector('.mb-dlg-head [data-dlg="close"]'), "expanded diagram uses the shared accessible dialog");
+      require(visible(dialog?.querySelector('.diagram-stage svg')) && dialog.querySelector('.mb-dlg-head [data-dlg="close"]'), "expanded diagram uses the shared accessible dialog");
       require(!dialog.querySelector('.mb-dlg-act'), "its × closes it, with no 「關閉」 at its foot");
       require(dialog.getBoundingClientRect().width >= Math.min(1200, innerWidth - 48) - 1, "expanded view uses the large viewport-bound dialog width");
+    }
+    // R-UI-173: the drawn chart is one control that opens the larger view, and says so under the pointer, calmly.
+    if (name === "rich-diagram-hover") {
+      const view = diagram.querySelector('.diagram-view');
+      require(view.matches(':hover'), "the pointer is over the chart");
+      require(getComputedStyle(view).cursor === 'pointer', `the chart shows the pointer of something to press: ${getComputedStyle(view).cursor}`);
+      const veil = getComputedStyle(view, '::after');
+      require(veil.content !== 'none' && veil.backgroundColor !== 'rgba(0, 0, 0, 0)' && veil.pointerEvents === 'none', "one grey step lies over the whole chart under the pointer, and takes no press");
+      const card = view.getBoundingClientRect(), step = { left: parseFloat(veil.left), right: parseFloat(veil.right), top: parseFloat(veil.top), bottom: parseFloat(veil.bottom) };
+      require(Object.values(step).every(value => value === 0) && card.width > 0, `the step covers the chart area from edge to edge: ${JSON.stringify(step)}`);
+      require(getComputedStyle(diagram).borderTopColor === getComputedStyle(diagram.querySelector('.rich-head')).borderBottomColor, "no frame lights on hover: the card keeps its edge");
+      require(view.getAttribute('role') === 'button' && view.tabIndex === 0 && view.getAttribute('aria-label') && !view.hasAttribute('title'), "the chart is one named control with no tooltip");
+    }
+    if (name === "rich-diagram-view" || name === "rich-diagram-zoomed") {
+      const dialog = document.querySelector('.mb-dialog.rich-view-dialog.diagram-dialog');
+      require(visible(dialog), "the larger diagram is open in the shared dialog");
+      const stage = dialog.querySelector('.diagram-stage'), svg = stage.querySelector('.diagram-pan > svg'), hint = dialog.querySelector('.diagram-hint');
+      require(visible(svg), "the chart is drawn in the larger view");
+      const area = stage.getBoundingClientRect(), shape = dialog.getBoundingClientRect(), line = hint.getBoundingClientRect();
+      require(shape.top >= 0 && shape.bottom <= innerHeight + 1 && shape.right <= innerWidth + 1, "the larger view fits the window");
+      require(shape.width >= Math.min(1200, innerWidth - 48) - 1, "it uses the large viewport-bound dialog width");
+      const head = [...dialog.querySelectorAll('.mb-dlg-head button')];
+      require(head.map(button => button.dataset.dlg).join() === "zoom-out,zoom-in,zoom-reset,close" && head.every(visible), `zoom out, zoom in and reset stand before the ×: ${head.map(button => button.dataset.dlg)}`);
+      const close = head.at(-1).getBoundingClientRect();
+      require(head.every(button => { const box = button.getBoundingClientRect(); return Math.abs(box.width - close.width) < 1 && Math.abs(box.height - close.height) < 1 && Math.abs(box.top - close.top) < 1; }), "the zoom controls are the same round buttons as the ×, on its row");
+      require(head.every(button => button.querySelector('svg') && !button.textContent.trim()), "the zoom controls are icons with names, no words");
+      require(!dialog.querySelector('.mb-dlg-act'), "a dialog that only shows something keeps no footer");
+      require(visible(hint) && line.top >= area.bottom - 1 && line.bottom <= shape.bottom + 1, "one quiet line stands under the chart, inside the dialog");
+      const words = document.createRange(); words.selectNodeContents(hint);
+      const lines = new Set([...words.getClientRects()].map(rect => Math.round(rect.top))).size;
+      require(lines === 1, `the hint is one line: ${lines}`);
+      if (document.documentElement.lang === 'zh-TW') require(hint.textContent === '滾輪縮放，按住拖曳移動，雙擊重設', `the hint's words: ${hint.textContent}`);
+      require(!hint.hasAttribute('title') && [...dialog.querySelectorAll('[title]')].every(node => node.closest('.mb-dlg-head button')), "no tooltip repeats the words on screen");
+      require(stage.getAttribute('aria-describedby') === hint.id, "the view is described by the hint");
+      // On the dialog's own lighter panel the dark theme's nodes sank into the ground: the chart keeps the ground it was drawn on.
+      require(getComputedStyle(stage).backgroundColor === getComputedStyle(diagram).backgroundColor, `the larger chart stands on the card's ground: ${getComputedStyle(stage).backgroundColor} / ${getComputedStyle(diagram).backgroundColor}`);
+      const chart = svg.getBoundingClientRect(), panTransform = getComputedStyle(stage.querySelector('.diagram-pan')).transform;
+      require(panTransform === 'none' || new DOMMatrix(panTransform).a === 1, "the chart is drawn at its size, never a scaled picture of it");
+      if (name === "rich-diagram-view") {
+        require(stage.dataset.zoom === '100', `the chart starts at its fitted size: ${stage.dataset.zoom}%`);
+        require(chart.left >= area.left - 1 && chart.right <= area.right + 1 && chart.top >= area.top - 1 && chart.bottom <= area.bottom + 1, "the whole chart starts inside its view");
+        require(Math.abs(chart.left + chart.width / 2 - area.left - area.width / 2) <= 1 && Math.abs(chart.top + chart.height / 2 - area.top - area.height / 2) <= 1, "the fitted chart stands in the middle of its view");
+        require(Math.abs(chart.width - (area.width - 48)) <= 1 || Math.abs(chart.height - (area.height - 48)) <= 1 || chart.width >= svg.viewBox.baseVal.width * 2 - 1, "the fitted chart fills its view but for the air around it");
+      } else {
+        require(Number(stage.dataset.zoom) > 100, `the wheel zoomed the chart in: ${stage.dataset.zoom}%`);
+        require(Math.abs(chart.left + chart.width / 2 - area.left - area.width / 2) > 20 || Math.abs(chart.top + chart.height / 2 - area.top - area.height / 2) > 20, "dragging moved the chart away from the middle");
+        require(Math.min(chart.right, area.right) - Math.max(chart.left, area.left) >= 47 && Math.min(chart.bottom, area.bottom) - Math.max(chart.top, area.top) >= 47, "some of the chart stays in its view");
+        require(!stage.hasAttribute('data-dragging') && !document.querySelector('#app-popover'), "the drag ended and no menu opened");
+      }
     }
     if (name === "rich-image") require(scope.querySelector('[data-rich-act="load-image"]') && !scope.querySelector('.message-image [src]'), "a real load control precedes any image source");
     if (name === "rich-image-loaded") require(scope.querySelector('.message-image img')?.referrerPolicy === 'no-referrer', "consented image omits referrer");

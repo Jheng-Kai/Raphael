@@ -4,7 +4,15 @@ import { replyContentHTML } from "./message-content";
 import { firstBelow, followRichScroll, mountRichContent, preserveRichScroll, releaseRichScroll, richScrollFollows } from "./message-rich";
 import { copyButton } from "./ui";
 import { renderDiagram } from "./message-diagram";
-vi.mock("./member-dialogs", () => ({ openDialog: vi.fn() }));
+import { openDialog } from "./member-dialogs";
+import { t } from "./i18n";
+// The dialog's own behaviour is diagram-zoom.test.ts's: here it only has to stand as the larger view's element.
+vi.mock("./member-dialogs", () => ({ openDialog: vi.fn((options: { body: string; tools?: string }) => {
+  const el = document.createElement("div");
+  el.innerHTML = `<div class="mb-dlg-head">${options.tools ?? ""}</div><div class="mb-dlg-body">${options.body}</div>`;
+  document.body.append(el);
+  return { el, close: vi.fn() };
+}) }));
 vi.mock("./message-highlight", () => ({ highlight: () => '<span>Highlighted code</span>' }));
 vi.mock("./message-diagram", () => ({ renderDiagram: vi.fn(async () => '<svg><path d="M0 0L1 1" /></svg>') }));
 vi.mock("./ui", async importOriginal => ({ ...await importOriginal<typeof import("./ui")>(), copyButton: vi.fn(async () => {}) }));
@@ -55,6 +63,87 @@ test("a diagram retains its render across text updates and rerenders for changed
   document.documentElement.dataset.theme = 'dark';
   await vi.waitFor(() => expect(vi.mocked(renderDiagram).mock.calls.length).toBe(before + 2));
   delete document.documentElement.dataset.theme;
+});
+
+/** A reply whose diagram has been drawn (its own source, so no other test's drawing is reused). */
+async function drawnDiagram(source: string): Promise<HTMLElement> {
+  const root = document.createElement("div"); document.body.append(root);
+  root.innerHTML = replyContentHTML("```mermaid\n" + source + "\n```");
+  vi.spyOn(root, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 600, 400));
+  vi.spyOn(root.querySelector(".message-code")!, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 600, 40));
+  mountRichContent(root);
+  await vi.waitFor(() => expect(root.querySelector('.message-diagram[data-diagram-state="rendered"] .diagram-view svg')).not.toBeNull());
+  return root;
+}
+const press = (target: Element, at: [number, number], to = at): void => {
+  target.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, clientX: at[0], clientY: at[1], button: 0 }));
+  target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, clientX: to[0], clientY: to[1], detail: 1 }));
+};
+const opened = (): number => vi.mocked(openDialog).mock.calls.filter(([options]) => options.cls?.includes("diagram-dialog")).length;
+
+test("a press anywhere on a drawn diagram's chart opens it larger, and the header's icons keep their own actions", async () => {
+  // Before it is drawn, the chart is nothing to press: the source stands in its place.
+  const pending = document.createElement("div"); document.body.append(pending);
+  pending.innerHTML = replyContentHTML("```mermaid\nflowchart LR\n  Writing -->");
+  expect(pending.querySelector(".diagram-view")!.matches('[role], [tabindex], [data-rich-act]')).toBe(false);
+
+  const root = await drawnDiagram("flowchart LR\n  Press --> Opens");
+  const view = root.querySelector<HTMLElement>(".diagram-view")!;
+  expect(view.getAttribute("role")).toBe("button");
+  expect(view.tabIndex).toBe(0);
+  expect(view.getAttribute("aria-label")).toBe(t("chat.diagramOpen"));
+  expect(view.hasAttribute("title")).toBe(false);
+  vi.mocked(openDialog).mockClear();
+
+  root.querySelector<HTMLButtonElement>('[data-rich-act="copy-source"]')!.click();
+  expect(copyButton).toHaveBeenLastCalledWith(expect.any(HTMLElement), "flowchart LR\n  Press --> Opens");
+  root.querySelector<HTMLButtonElement>('[data-rich-act="view-source"]')!.click();
+  expect(root.querySelector<HTMLElement>(".message-diagram pre")!.hidden).toBe(false);
+  press(root.querySelector(".message-diagram .rich-head")!, [580, 12]);
+  expect(opened()).toBe(0);
+
+  press(view.querySelector("path")!, [120, 60]);
+  expect(opened()).toBe(1);
+  const options = vi.mocked(openDialog).mock.calls[0]![0];
+  expect(options.title).toBe(t("chat.diagram"));
+  expect(options.body).toContain("<svg");
+  expect(options.body).not.toContain("data-rich-act");
+  press(view, [8, 8]);
+  expect(opened()).toBe(2);
+  root.querySelector<HTMLButtonElement>('[data-rich-act="expand"]')!.click();
+  expect(opened()).toBe(3);
+});
+
+test("a press that moved, or that selected words of the chart, does not open the diagram", async () => {
+  vi.mocked(renderDiagram).mockResolvedValueOnce('<svg viewBox="0 0 200 100"><text>Selectable words</text></svg>');
+  const root = await drawnDiagram("flowchart LR\n  Select --> Words");
+  const view = root.querySelector<HTMLElement>(".diagram-view")!, words = view.querySelector("text")!;
+  vi.mocked(openDialog).mockClear();
+  press(words, [40, 40], [90, 42]);
+  expect(opened()).toBe(0);
+  getSelection()!.selectAllChildren(words);
+  press(words, [40, 40]);
+  expect(opened()).toBe(0);
+  getSelection()!.removeAllRanges();
+  press(words, [40, 40], [42, 41]);
+  expect(opened()).toBe(1);
+});
+
+test("Enter or Space on the focused chart opens the diagram larger, and other keys do not", async () => {
+  const root = await drawnDiagram("flowchart LR\n  Keys --> Open");
+  const view = root.querySelector<HTMLElement>(".diagram-view")!;
+  vi.mocked(openDialog).mockClear();
+  view.focus();
+  for (const key of ["Tab", "a", "ArrowDown"]) view.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+  expect(opened()).toBe(0);
+  const enter = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+  view.dispatchEvent(enter);
+  expect(opened()).toBe(1);
+  expect(enter.defaultPrevented).toBe(true);
+  const space = new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true });
+  view.dispatchEvent(space);
+  expect(opened()).toBe(2);
+  expect(space.defaultPrevented).toBe(true);
 });
 
 test("the end of an older mounted window is not the newest conversation turn", () => {
