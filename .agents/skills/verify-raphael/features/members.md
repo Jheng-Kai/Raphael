@@ -927,6 +927,8 @@ a repository, a selected folder or file, an uploaded archive or Markdown, or pas
 Markdown. A single skill defaults to every member. A multi-skill import defaults to
 an empty audience. Each member's details summarize assigned, switched-on packages
 under `members.skills.list.library`. Private skills keep their own edit controls.
+A package of several opens on a page of its own in the tab, never folded open under its row
+(R-SKILL-17, settings-appearance.md).
 
 The owner RPCs are `skills.library.list`, `import`, `update` and `delete` under the
 same prefix. Refresh replaces the source snapshot, preserves retained switches

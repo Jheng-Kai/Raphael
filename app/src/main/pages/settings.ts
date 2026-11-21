@@ -37,7 +37,8 @@ import {
   languageSummary,
   toggleTranscriptionLanguage,
 } from "../languages";
-import { createHotkeyRecording } from "../hotkey-recording";
+import { openShortcutEditor } from "../shortcut-editor";
+import type { Dialog } from "../member-dialogs";
 import { isTopLayer, registerDismissal } from "../dismissals";
 import { type ModelPicker, type ModelPickerLook, type PickerRole, mountModelPicker, priceHTML, replacementNotices, splitEffort, withFavorite } from "../model-picker";
 import { createServices } from "../services";
@@ -71,7 +72,6 @@ import { AUTO_MICROPHONE } from "../microphone";
 import { optionalRead } from "../startup-reads";
 import {
   APPEARANCES,
-  HOTKEY_ROWS,
   quickModels,
   quickPickerLook,
   WORKER_COST_CAPS,
@@ -221,10 +221,8 @@ export function createSettings(app: AppContext): SettingsPage {
   let microphone: import("../types").MicrophonePermission | null = null;
   let accessibility: boolean | null = null;
   let version = "";
-  /** A shortcut being recorded (「變更」): the row is drawn again when it is over. */
-  const recording = createHotkeyRecording(app, () => {
-    if (visible) render();
-  });
+  /** 編輯快捷鍵, while it is open over the 聽寫 tab: it goes with Settings. */
+  let keysDialog: Dialog | null = null;
   /** The languages the core offers (`languages.list`); null while unknown or when it cannot say. */
   let languageGroups: LanguageGroup[] | null = null;
   let languagePanel: HTMLElement | null = null;
@@ -246,7 +244,7 @@ export function createSettings(app: AppContext): SettingsPage {
   app.onEvent((event) => connections.followEvent(event));
   const rules = createRules({ visible: () => visible && pane === "safety", redraw: () => render(), undo: app.undo });
   const vault = createVault(el, () => { if (visible && pane === "safety") render(); });
-  const skillLibrary = createSkillLibrary(el, () => { if (visible && pane === "skills") render(); });
+  const skillLibrary = createSkillLibrary(el, () => { if (visible && pane === "skills") render(); }, () => body);
   const services = createServices({ root: el, visible: () => visible && pane === "tools", redraw: () => render(), brain: () => brain, changeSetting: (key, value) => changeBrain(key, value) });
   const cliBrains = createCliBrains({ visible: () => visible, redraw: () => render() });
   const providers = createProviders({ root: el, visible: () => visible && pane === "models", redraw: () => render() });
@@ -481,6 +479,7 @@ export function createSettings(app: AppContext): SettingsPage {
     if (capOpen) cap.follow(body.querySelector<HTMLElement>('[data-act="usage-cap"]'));
     // The row of category chips never wraps: those that do not fit are in 更多, so it is fitted to the width the dialog has.
     if (pane === "connections") connections.painted();
+    if (pane === "skills") skillLibrary.painted();
   }
 
   // ---------- the tabs ----------
@@ -1071,14 +1070,9 @@ export function createSettings(app: AppContext): SettingsPage {
         void api.microphoneAsk().catch(() => false).then(() => readMicrophone()).finally(() => { if (button?.isConnected) button.disabled = false; });
         break;
       }
-      case "rec":
-      case "rec-agent":
-      case "rec-tidy": {
-        const field = act === "rec" ? "dictation_keys" : act === "rec-agent" ? "agent_keys" : "tidy_keys";
-        const cell = el.querySelector<HTMLElement>(`[data-row="${HOTKEY_ROWS[field]}"] .caps`);
-        if (cell) void recording.start(field, cell);
+      case "keys-edit":
+        keysDialog = openShortcutEditor(app, () => { if (visible) render(); });
         break;
-      }
       case "help":
         void api.openExternalUrl("https://github.com/Jheng-Kai/Raphael/issues").catch(error => toaster.info(describeError(error)));
         break;
@@ -1119,7 +1113,7 @@ export function createSettings(app: AppContext): SettingsPage {
     const chrome = document.getElementById("window-chrome");
     if (!visible || !(e.target instanceof Node) || !ownsSettingsKey(e.target, [el, chrome], [document.body, document.documentElement])) return;
     if (openMenuOnArrow(e)) return;
-    if (e.key === "Escape" && isTopLayer(el.querySelector(".modal")) && !recording.active() && !e.defaultPrevented) {
+    if (e.key === "Escape" && isTopLayer(el.querySelector(".modal")) && !e.defaultPrevented) {
       e.preventDefault();
       app.closeSettings();
     } else if (e.key === "Tab") {
@@ -1249,8 +1243,8 @@ export function createSettings(app: AppContext): SettingsPage {
       if (repair) open = ({ search: "tools", read: "tools", vision: "tools", pdf: "tools", store: "connections", relogin: "connections" } as Record<string, SettingsPane>)[repair[0]] ?? repair[0] as SettingsPane;
       visible = true;
       stopOutside();
-      stopOutside = registerDismissal(el.querySelector<HTMLElement>(".modal")!, () => app.closeSettings(), () => !recording.active(), undefined,
-        (_direction, withinSettings) => recording.active() || withinSettings());
+      stopOutside = registerDismissal(el.querySelector<HTMLElement>(".modal")!, () => app.closeSettings(), undefined, undefined,
+        (_direction, withinSettings) => withinSettings());
       cliBrains.start();
       document.addEventListener("keydown", settingsKey);
       const mine = ++loads;
@@ -1353,7 +1347,8 @@ export function createSettings(app: AppContext): SettingsPage {
       loading = false;
       loads++;
       closeMenu();
-      void recording.cancel();
+      keysDialog?.close();
+      keysDialog = null;
       stopEvents?.();
       stopEvents = null;
       syncMonitor();

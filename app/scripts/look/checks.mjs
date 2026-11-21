@@ -491,7 +491,9 @@ export function checkRendered(name, context = {}) {
     // 團隊技能庫 (skill-library.ts, #280): packages with who may use each; the importer (#249); a character's read-only list.
     const rowOf = key => document.querySelector(`.skl-pack[data-skl-pack="${key}"]`);
     const accessOf = key => rowOf(key)?.querySelector('.skl-access span')?.textContent.trim();
-    if (name !== 'member-skills-library') {
+    // A package's page stands in the list's place (R-SKILL-17): it has no importer of its own.
+    const onPage = name === 'skill-library-open' || name === 'skill-library-page-top';
+    if (name !== 'member-skills-library' && !onPage) {
       const pane = document.querySelector('.modal-scrim .skl');
       require(visible(pane) && pane.querySelectorAll('[data-skl="import-go"]').length === 1 && pane.firstElementChild?.matches('.skl-import'), 'the importer is the first card of the tab, with one 匯入');
       require(!pane.querySelector('.skl-head, .skl-drop-hint') && !pane.previousElementSibling?.matches?.('p'), 'nothing is written between the tab name and its first card');
@@ -508,11 +510,36 @@ export function checkRendered(name, context = {}) {
       require(accessOf('set:1') === '還沒給任何人' && accessOf('pack:2') === '小晴、小森' && accessOf('skill:3') === '整個團隊', `who may use each is said on its row (${accessOf('set:1')} / ${accessOf('pack:2')} / ${accessOf('skill:3')})`);
       require(!rowOf('skill:3').querySelector('.skl-count, [data-skl="open"]') && rowOf('skill:3').querySelector('.skl-single .d')?.textContent === '把會議逐字稿整理成決議與待辦', 'a skill alone is one row: its words under its name, nothing to open');
     }
+    if (onPage) {
+      const page = document.querySelector('.modal-scrim .skl-page'), head = page?.querySelector('.skl-page-head');
+      require(visible(page) && !document.querySelector('.modal-scrim .skl-import, .modal-scrim .skl-list'), "the package's page takes the list's place: no importer, no other package");
+      const back = head.querySelector('[data-skl="back"]');
+      require(visible(back) && back.matches('.btn.icon') && back.hasAttribute('data-nav-back') && !!back.getAttribute('aria-label'), 'a back arrow leads the page');
+      require(document.activeElement === back, 'the focus is on the back arrow');
+      const title = head.querySelector('.skl-page-name');
+      require(title?.textContent.trim().length > 0 && title.scrollWidth <= title.clientWidth + 1, "the package's name is whole");
+      require(visible(head.querySelector('.skl-access')) && visible(head.querySelector('.tg[role="switch"]')) && visible(head.querySelector('[data-skl="more"]')), 'who may use it, its switch and its ⋯ stand as on its row');
+      const box = page.getBoundingClientRect();
+      for (const part of [back, head.querySelector('.ctl')]) {
+        const r = part.getBoundingClientRect();
+        require(r.left >= box.left - 10 && r.right <= box.right + 1, `the head stays inside the tab (${Math.round(r.left)}-${Math.round(r.right)} in ${Math.round(box.left)}-${Math.round(box.right)})`);
+      }
+      require(document.querySelector('.modal-scrim .modal-body').scrollTop === 0, 'the page opens at its top');
+      require(document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, 'the window does not scroll sideways');
+    }
     if (name === 'skill-library-open') {
-      const skills = [...document.querySelectorAll('.skl-skills .skl-skill')];
-      require(skills.length === 7 && skills.every(row => visible(row.querySelector('.tg[role="switch"]'))), `the seven skills are listed under pstack, each with its own switch (${skills.length})`);
-      require(rowOf('set:1').querySelector('[data-skl="open"]').getAttribute('aria-expanded') === 'true', 'the row says it is open');
-      require(document.querySelector('.skl-source')?.textContent.includes('jheng-kai/pstack'), 'where it came from is said once');
+      const skills = [...document.querySelectorAll('.skl-page .skl-skills .skl-skill')];
+      require(skills.length === 7 && skills.every(row => visible(row.querySelector('.tg[role="switch"]'))), `the seven skills of pstack are listed on its page, each with its own switch (${skills.length})`);
+      require(document.querySelector('.skl-page-name')?.textContent.trim() === 'pstack' && accessOf('set:1') === '還沒給任何人', 'the page names pstack and who may use it');
+      require(document.querySelector('.skl-page .skl-source')?.textContent.includes('jheng-kai/pstack'), 'where it came from is said once');
+    }
+    if (name === 'skill-library-back') {
+      const body = document.querySelector('.modal-scrim .modal-body'), opener = document.querySelector('[data-skl="open"][data-key="pack:37"]');
+      require(visible(document.querySelector('.modal-scrim .skl-import')) && document.querySelectorAll('.modal-scrim .skl-pack').length === 11, 'the whole list is back, with the importer');
+      require(document.activeElement === opener, "the focus is back on the package's row");
+      const row = opener.getBoundingClientRect(), view = body.getBoundingClientRect();
+      require(body.scrollTop > 0 && row.top >= view.top - 1 && row.bottom <= view.bottom + 1, `the list is where it was left, the package's row in view (scrolled ${Math.round(body.scrollTop)})`);
+      require(!document.querySelector('[data-skl="open"][aria-expanded]') && !document.querySelector('.skl-list .skl-skill'), 'no package folds open in the list');
     }
     if (name === 'skill-library-access') {
       const menu = document.querySelector('.skl-access-menu');
@@ -5273,10 +5300,13 @@ export function checkRendered(name, context = {}) {
     return { check: name, rows: rows.length };
   }
   if (name === "compact-action") {
-    const action = document.querySelector('.keys-card [data-go="settings"]');
-    require(visible(action) && action.classList.contains('icon') && !action.textContent.trim(), "secondary actions use a bare icon");
-    require(!!action.getAttribute('aria-label') && action.title === action.getAttribute('aria-label'), "icon actions retain a localized name and tooltip");
-    return { check: name, label: action.getAttribute('aria-label') };
+    // The shortcuts card's one action is 編輯, a small button with its word at the card's top right (the same as Settings' list has).
+    const action = document.querySelector('.keys-card .card-head [data-act="keys-edit"]');
+    require(visible(action) && action.matches('.btn.sm') && action.textContent.trim().length > 0, "the shortcuts card's 編輯 is a small button with its word");
+    require(document.querySelectorAll('.keys-card button').length === 1 && !document.querySelector('.keys-card [data-go]'), "the card is read-only: 編輯 is its only control");
+    const head = action.closest('.card-head').getBoundingClientRect(), box = action.getBoundingClientRect();
+    require(Math.abs(box.right - head.right) < 1 && box.height <= head.height + 1, "編輯 stands at the card's top right");
+    return { check: name, label: action.textContent.trim() };
   }
   if (name === "details-alignment") {
     const panel=document.querySelector('.mb-det:not([hidden])');
@@ -9083,24 +9113,76 @@ export function checkRendered(name, context = {}) {
   if (name === "settings-tidy-key") {
     const scrim = document.querySelector('.modal-scrim[data-page="settings"]') ?? document.querySelector('.modal-scrim');
     const rows = [...scrim.querySelectorAll('.row-shortcut')], at = id => scrim.querySelector(`[data-row="${id}"]`);
-    const tidy = at("tidy-hotkey"), agent = at("agent-hotkey"), dictation = at("hotkey");
-    require(visible(tidy) && visible(agent) && visible(dictation), "the tidy, question and dictation shortcuts are all on the page");
-    // After the shortcuts that start something, before Esc, which is not changeable.
-    require(rows.indexOf(tidy) > rows.indexOf(dictation) && rows.indexOf(tidy) === rows.length - 2, "the tidy shortcut stands after the dictation ones and before Esc");
+    const tidy = at("tidy-hotkey"), agent = at("agent-hotkey"), dictation = at("hotkey"), paste = at("paste-hotkey");
+    require(visible(tidy) && visible(agent) && visible(dictation) && visible(paste), "the tidy, question, dictation and paste-last shortcuts are all on the page");
+    // In the order of use: 聽寫, 問拉斐爾, 整理選取文字, 貼上上一次, then Esc.
+    require(rows.length === 5 && [dictation, agent, tidy, paste].every((row, index) => rows.indexOf(row) === index), "the shortcuts stand in the order of use, Esc last");
     const caps = [...tidy.querySelectorAll('.caps kbd')].map(cap => cap.textContent.trim());
     require(caps.length === 2 && caps[1] === "T", `its keys are Right Alt and T (${caps.join(" + ")})`);
-    const pencil = tidy.querySelector('[data-act="rec-tidy"]');
-    require(visible(pencil) && pencil.getAttribute("aria-label"), "a pencil changes the key, and says so");
+    // Read-only: no row has a control; one 編輯 at the section's top right opens the dialog.
+    require(rows.every(row => !row.querySelector('button')), "no shortcut row has a button: the list is read-only");
+    const edit = scrim.querySelectorAll('[data-act="keys-edit"]');
+    require(edit.length === 1 && visible(edit[0]) && edit[0].matches('.btn.sm') && edit[0].textContent.trim().length > 0, "one 編輯, a small button with its word");
+    const card = rows[0].closest('.slist').getBoundingClientRect(), edge = edit[0].getBoundingClientRect(), heading = edit[0].closest('.data-heading').querySelector('h2').getBoundingClientRect();
+    require(edge.bottom <= card.top && Math.abs(edge.top + edge.height / 2 - (heading.top + heading.height / 2)) < 2 && edge.right <= card.right + 1 && edge.right >= card.right - 24, "編輯 stands beside the section's name, at the card's top right");
     const label = tidy.querySelector('.lbl .t');
     require(label.scrollWidth <= label.clientWidth + 1 && label.textContent.trim().length > 0, "its name is whole");
     const box = tidy.getBoundingClientRect(), other = agent.getBoundingClientRect();
     require(Math.abs(box.height - other.height) < 1 && Math.abs(box.left - other.left) < 1 && Math.abs(box.right - other.right) < 1, "it is a row like the question key's: same height and width");
-    require(Math.abs(pencil.getBoundingClientRect().right - agent.querySelector('[data-act="rec-agent"]').getBoundingClientRect().right) < 1, "its pencil is where the question key's is");
+    const capsRight = row => [...row.querySelectorAll('.caps kbd')].at(-1).getBoundingClientRect().right;
+    require(rows.every(row => Math.abs(capsRight(row) - capsRight(agent)) < 1), "every row's keys end where the question key's do");
     const list = tidy.closest('.list') ?? tidy.parentElement;
     require(list.scrollWidth <= list.clientWidth + 1, "the shortcuts fit their list");
     require(document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, "the page does not scroll sideways");
     require(!scrim.querySelector('.missing-note [data-missing-pane]'), "no Accessibility note where that permission is not missing");
     return { check: name, keys: caps.join(" + ") };
+  }
+  if (name === "settings-keys-dialog" || name === "dictation-keys-dialog" || name === "settings-keys-recording") {
+    // 編輯快捷鍵 (R-KEYS-EDIT-01): the app's compact dialog; every shortcut in the order of use, all but Esc on a button that records.
+    const dialog = document.querySelector('.mb-dialog.kd-dialog');
+    require(visible(dialog) && dialog.getAttribute('role') === 'dialog' && dialog.querySelector('.mb-dlg-head h2')?.textContent.trim() === '編輯快捷鍵', "the dialog is open, named 編輯快捷鍵");
+    const rows = [...dialog.querySelectorAll('.kd-row')];
+    require(rows.map(row => row.querySelector('.kd-name').textContent.trim()).join('、') === '聽寫、問拉斐爾、整理選取文字、貼上上一次、取消', `the five shortcuts in the order of use (${rows.map(row => row.textContent.trim()).join(' | ')})`);
+    const buttons = [...dialog.querySelectorAll('[data-dlg="record"]')];
+    require(buttons.map(b => b.dataset.field).join() === 'dictation_keys,agent_keys,tidy_keys,paste_last_keys' && buttons.every(b => visible(b) && b.getAttribute('aria-label')), "each but Esc has its keys on a named button, 貼上上一次 too");
+    require(!rows.at(-1).querySelector('button') && rows.at(-1).querySelector('kbd')?.textContent.trim() === 'Esc', "Esc stays as it is");
+    const frame = dialog.getBoundingClientRect();
+    require(frame.left >= 0 && frame.right <= innerWidth && frame.top >= 0 && frame.bottom <= innerHeight, "the dialog fits the window");
+    const rights = buttons.map(b => b.getBoundingClientRect().right);
+    require(rights.every(right => Math.abs(right - rights[0]) < 1) && rights.every(right => right <= frame.right - 8), "the buttons end on one edge inside the dialog");
+    for (const b of buttons) {
+      const box = b.getBoundingClientRect(), row = b.closest('.kd-row').getBoundingClientRect();
+      require(box.height >= 30 - 0.5 && box.top >= row.top - 0.5 && box.bottom <= row.bottom + 0.5, `a key button stands in its row (${Math.round(box.height)} px)`);
+      require(b.scrollWidth <= b.clientWidth + 1, "what a key button shows fits it");
+    }
+    const escCap = rows.at(-1).querySelector('kbd').getBoundingClientRect(), lastCap = buttons[0].querySelector('kbd')?.getBoundingClientRect();
+    if (lastCap) require(Math.abs(escCap.right - lastCap.right) < 2, `Esc's key ends where the others' do (${Math.round(escCap.right)} against ${Math.round(lastCap.right)})`);
+    for (const label of dialog.querySelectorAll('.kd-name')) require(label.scrollWidth <= label.clientWidth + 1, "every name is whole");
+    require([...dialog.querySelectorAll('.mb-dlg-act .btn')].map(b => b.textContent.trim()).join() === '取消,儲存', "取消 then 儲存 at the foot");
+    require(document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, "the page does not scroll sideways");
+    // The app writes other device settings of its own as it opens; only a write of shortcut keys is the dialog's.
+    const saves = window.__look.calls.filter(call => call.command === 'device_settings_set' && Object.keys(call.patch ?? {}).some(field => field.endsWith('_keys')));
+    if (name === "settings-keys-dialog") {
+      const caps = [...dialog.querySelector('[data-field="paste_last_keys"]').querySelectorAll('kbd')].map(cap => cap.textContent.trim());
+      require(caps.at(-1) === 'F8' && caps.length === 2, `the keys just recorded for 貼上上一次 wait in the dialog (${caps.join(' + ')})`);
+      require(saves.length === 0, "nothing is saved before 儲存");
+      require([...document.querySelectorAll('.modal-scrim [data-row="paste-hotkey"] kbd')].at(-1)?.textContent.trim() === 'V', "the list behind still shows the keys in force");
+    }
+    if (name === "settings-keys-recording") {
+      const recording = dialog.querySelector('[data-recording]'), hint = recording?.querySelector('.rec-hint');
+      require(recording?.dataset.field === 'tidy_keys' && visible(hint) && hint.textContent.includes('Esc'), "the tidy key's button says to press the new keys, and Esc to cancel");
+      require(document.activeElement === recording, "the focus stays on the button being recorded");
+    }
+    return { check: name, saves: saves.length };
+  }
+  if (name === "settings-keys-saved") {
+    require(!document.querySelector('.kd-dialog'), "a save that went through closes the dialog");
+    const saves = window.__look.calls.filter(call => call.command === 'device_settings_set' && Object.keys(call.patch ?? {}).some(field => field.endsWith('_keys')));
+    require(saves.length === 1 && JSON.stringify(saves[0].patch) === JSON.stringify({ paste_last_keys: ['ControlLeft+F8'] }), `one save, through the device settings, of what changed (${JSON.stringify(saves.map(call => call.patch))})`);
+    const caps = [...document.querySelectorAll('.modal-scrim [data-row="paste-hotkey"] kbd')].map(cap => cap.textContent.trim());
+    require(caps.at(-1) === 'F8', `the list shows the new keys (${caps.join(' + ')})`);
+    require(document.activeElement?.dataset.act === 'keys-edit', "the focus is back on 編輯");
+    return { check: name, keys: caps.join(' + ') };
   }
   if (name === "settings-mic-undecided" || name === "settings-mic-denied") return (async () => {
     const scrim = document.querySelector('.modal-scrim[data-page="settings"]') ?? document.querySelector('.modal-scrim');

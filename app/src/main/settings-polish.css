@@ -17,6 +17,8 @@
 
 .data-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); margin-bottom: var(--sp-3); }
 .data-heading h2 { margin: 0; }
+/* In Settings a section's action (聽寫與快捷鍵's 編輯) stands over its card's controls, as the section's name stands over its rows' names. */
+.modal-body .sgroup > .data-heading { margin-bottom: var(--sp-2); padding-right: var(--sp-4); }
 /* A tab's name alone heads it; its first section keeps the gap of the others. */
 .modal-body > h1 + .sgroup, .modal-body > h1 + div > .sgroup:first-child { margin-top: var(--sp-5); }
 /* The sections of 一般 that hold sections of their own (messaging): their cards follow one another under one name. */

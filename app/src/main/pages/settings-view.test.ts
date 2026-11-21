@@ -359,7 +359,7 @@ describe("聽寫", () => {
   test("is how a dictation starts, how Raphael listens, what it learns, then how long the history is kept", () => {
     const html = tab("dictation");
     expect(groups(html)).toEqual(["快捷鍵", "開始方式", "聆聽方式", "字典", "聽寫紀錄"]);
-    expect(names(html)).toEqual(["問拉斐爾", "聽寫", "貼上上一次", "整理選取文字", "取消", "聽寫方式", "你說的語言", "麥克風", "自動加入字典", "保留聽寫紀錄"]);
+    expect(names(html)).toEqual(["聽寫", "問拉斐爾", "整理選取文字", "貼上上一次", "取消", "聽寫方式", "你說的語言", "麥克風", "自動加入字典", "保留聽寫紀錄"]);
   });
 
   test("learning from corrections is a switch that is off until the owner turns it on", () => {
@@ -371,15 +371,21 @@ describe("聽寫", () => {
     expect(on).toContain('aria-checked="true"');
   });
 
-  test("shows each shortcut as key caps, with a pencil (變更) on the one that can be changed here", () => {
+  test("lists every shortcut read-only as key caps, with one 編輯 at the section's top right and no pencil on any row", () => {
     const html = tab("dictation");
     const dictate = rowOf(html, "聽寫");
     expect(dictate).toContain('data-row="hotkey"');
     expect(dictate).toContain("<kbd>右 Alt</kbd>");
-    expect(dictate).toContain(`<button type="button" class="btn icon row" aria-label="變更" title="變更" data-act="rec" data-k="rec">${ico("pencil")}</button>`);
+    expect(rowOf(html, "貼上上一次")).toContain('data-row="paste-hotkey"');
     expect(rowOf(html, "貼上上一次")).toContain("<kbd>V</kbd>");
     expect(rowOf(html, "取消")).toContain("<kbd>Esc</kbd>");
-    for (const name of ["貼上上一次", "取消"]) expect(buttons(rowOf(html, name))).toEqual([]);
+    for (const name of ["聽寫", "問拉斐爾", "整理選取文字", "貼上上一次", "取消"]) expect(buttons(rowOf(html, name)), name).toEqual([]);
+    expect(html).not.toContain(ico("pencil"));
+    expect(html).not.toMatch(/data-act="rec/);
+    // One 編輯, a small button with its word, beside the section's name and before its first row.
+    const section = html.slice(html.indexOf('<section class="sgroup set-shortcuts">'), html.indexOf('<div class="row', html.indexOf("set-shortcuts")));
+    expect(section).toContain(`<div class="data-heading"><h2>快捷鍵</h2><button type="button" class="btn sm" data-act="keys-edit" data-k="keys-edit">編輯</button></div>`);
+    expect(html.match(/data-act="keys-edit"/g)).toHaveLength(1);
     expect(rowOf(html, "聽寫方式")).toMatch(/class="sel"[^>]*data-k="mode"/);
   });
 
@@ -438,8 +444,8 @@ describe("聽寫", () => {
 });
 
 describe("拉斐爾", () => {
-  test("moved rows keep their existing field ids and shortcut action", () => {
-    expect(rowOf(tab("dictation"), "問拉斐爾")).toContain('data-act="rec-agent"');
+  test("moved rows keep their existing field ids and shortcut row", () => {
+    expect(rowOf(tab("dictation"), "問拉斐爾")).toContain('data-row="agent-hotkey"');
     expect(rowOf(tab("general"), "輸出資料夾")).toContain('data-act="output-pick"');
   });
 
@@ -454,33 +460,33 @@ describe("拉斐爾", () => {
     expect(tab("agent")).not.toContain("Telegram");
   });
 
-  test("lists the tidy key with its keys and a pencil, after the dictation ones and before Esc", () => {
+  test("lists the shortcuts in the order of use: 聽寫, 問拉斐爾, 整理選取文字, 貼上上一次, then Esc", () => {
     const html = tab("dictation");
     const row = rowOf(html, "整理選取文字");
     expect(row).toContain('data-row="tidy-hotkey"');
-    expect(row).toContain('data-act="rec-tidy"');
     expect(row).toContain("<kbd>右 Alt</kbd>");
     expect(row).toContain("<kbd>T</kbd>");
     const at = (name: string): number => html.indexOf(`<div class="t">${name}</div>`);
-    expect(at("整理選取文字")).toBeGreaterThan(at("聽寫"));
-    expect(at("整理選取文字")).toBeGreaterThan(at("貼上上一次"));
-    expect(at("整理選取文字")).toBeLessThan(at("取消"));
-    expect(HOTKEY_ROWS.tidy_keys).toBe("tidy-hotkey");
+    const order = ["聽寫", "問拉斐爾", "整理選取文字", "貼上上一次", "取消"].map(at);
+    expect(order.every((place) => place >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    expect(HOTKEY_ROWS).toEqual({ dictation_keys: "hotkey", agent_keys: "agent-hotkey", tidy_keys: "tidy-hotkey", paste_last_keys: "paste-hotkey" });
   });
 
-  test("changes the tidy key in English, and says it is not set when no key is", () => {
+  test("names the tidy key in English, and says it is not set when no key is", () => {
     setLocale("en");
-    expect(rowOf(tab("dictation"), "Tidy selected text")).toContain('data-act="rec-tidy"');
+    expect(rowOf(tab("dictation"), "Tidy selected text")).toContain('data-row="tidy-hotkey"');
+    expect(tab("dictation")).toContain('data-act="keys-edit" data-k="keys-edit">Edit</button>');
     setLocale("zh-TW");
     const none = rowOf(tab("dictation", { device: { ...device, tidy_keys: [] } }), "整理選取文字");
     expect(none).toContain("尚未設定");
-    expect(none).toContain('data-act="rec-tidy"');
+    expect(buttons(none)).toEqual([]);
     const older = { ...device } as Partial<DeviceSettings>;
     delete older.tidy_keys;
     expect(rowOf(tab("dictation", { device: older as DeviceSettings }), "整理選取文字")).toContain("尚未設定");
   });
 
-  test("shows the missing shortcut beside its change action", () => {
+  test("says a missing shortcut is not set", () => {
     const html = tab("dictation", { device: { ...device, agent_keys: [] } });
     expect(html).not.toContain('class="purpose"');
     expect(rowOf(html, "問拉斐爾")).toContain("尚未設定");
@@ -489,7 +495,13 @@ describe("拉斐爾", () => {
   test("warns about Right Alt under their key only when the keyboard uses it as AltGr", () => {
     const html = tab("dictation", { altgr: true });
     expect(html).toContain("AltGr");
-    expect(html.indexOf("AltGr")).toBeGreaterThan(html.indexOf('data-row="agent-hotkey"'));
+    // Under the dictation key, then under the question key, each of which holds Right Alt.
+    const notes = [...html.matchAll(/AltGr/g)].map((m) => m.index!);
+    expect(notes.length).toBeGreaterThanOrEqual(2);
+    expect(notes[0]).toBeGreaterThan(html.indexOf('data-row="hotkey"'));
+    expect(notes[0]).toBeLessThan(html.indexOf('data-row="agent-hotkey"'));
+    expect(notes[notes.length - 1]).toBeGreaterThan(html.indexOf('data-row="agent-hotkey"'));
+    expect(notes[notes.length - 1]).toBeLessThan(html.indexOf('data-row="tidy-hotkey"'));
     expect(tab("agent")).not.toContain("AltGr");
     expect(tab("dictation", { altgr: true, device: { ...device, dictation_keys: ["F9"], agent_keys: ["ControlLeft+Space"] } })).not.toContain("AltGr");
   });

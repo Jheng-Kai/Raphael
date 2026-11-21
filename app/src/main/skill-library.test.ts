@@ -4,6 +4,7 @@ const api = vi.hoisted(() => ({ core: vi.fn(), pickOutputFolder: vi.fn() }));
 vi.mock("./api", () => api);
 import { createSkillLibrary, failureText, skillLibraryHTML, type LibraryPackage } from "./skill-library";
 import { closeMenu, toaster } from "./ui";
+import { navInputs, pressLayer } from "./test-support/nav-layer-input";
 
 const skill = (id: number, name: string, enabled = true) => ({ id, name, description: `${name} 的說明`, enabled });
 const packages = (): LibraryPackage[] => [
@@ -26,7 +27,8 @@ async function setup(answer: (method: string, params: Record<string, unknown>) =
   });
   const root = document.createElement("div");
   document.body.append(root);
-  const library = createSkillLibrary(root, () => { root.innerHTML = skillLibraryHTML(library.view()); });
+  // As Settings draws it: the tab scrolls, and a drawing keeps where it was scrolled.
+  const library = createSkillLibrary(root, () => { const at = root.scrollTop; root.innerHTML = skillLibraryHTML(library.view()); root.scrollTop = at; library.painted(); }, () => root);
   await library.load();
   return { root, library, state };
 }
@@ -34,7 +36,7 @@ const press = (root: ParentNode, selector: string) => root.querySelector<HTMLEle
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
 const accessOf = (root: ParentNode, key: string) => root.querySelector(`.skl-pack[data-skl-pack="${key}"] .skl-access span`)?.textContent;
 
-test("one row per package says who may use it, and its name opens its skills", async () => {
+test("one row per package says who may use it, and its name opens its skills on a page of its own", async () => {
   const { root } = await setup();
   expect(root.querySelectorAll(".skl-pack")).toHaveLength(3);
   expect(root.querySelector('.skl-pack[data-skl-pack="set:1"] .skl-count')?.textContent).toBe("3 個技能");
@@ -42,15 +44,87 @@ test("one row per package says who may use it, and its name opens its skills", a
   expect(root.querySelector('.skl-pack[data-skl-pack="skill:3"] .skl-single .d')?.textContent).toBe("會議紀錄 的說明");
   expect([accessOf(root, "set:1"), accessOf(root, "pack:2"), accessOf(root, "skill:3")]).toEqual(["還沒給任何人", "小晴、小森", "整個團隊"]);
   expect(root.querySelector(".skl-skill")).toBeNull();
+  // No row folds open any more: the row is a way to its page, with no expanded state.
+  expect(root.querySelector('[data-skl="open"]')?.hasAttribute("aria-expanded")).toBe(false);
   press(root, '[data-skl="open"][data-key="pack:2"]');
-  const rows = [...root.querySelectorAll(".skl-skill")];
+  // The page takes the list's place: the importer and the other packages are gone from it.
+  const page = root.querySelector<HTMLElement>('.skl-page[data-skl-page="pack:2"]')!;
+  expect(page).not.toBeNull();
+  expect(root.querySelector(".skl-import, .skl-list")).toBeNull();
+  expect(root.querySelectorAll(".skl-pack")).toHaveLength(1);
+  expect(page.querySelector(".skl-page-name")?.textContent).toBe("研究工具");
+  expect(document.activeElement).toBe(page.querySelector('[data-skl="back"]'));
+  // Its access, switch and ⋯ as on its row.
+  expect(accessOf(root, "pack:2")).toBe("小晴、小森");
+  expect(page.querySelector('.skl-page-head [data-skl="toggle"][data-key="pack:2"]')).not.toBeNull();
+  expect(page.querySelector('.skl-page-head [data-skl="more"][data-key="pack:2"]')).not.toBeNull();
+  const rows = [...page.querySelectorAll(".skl-skill")];
   expect(rows.map(row => row.querySelector(".t")?.textContent)).toEqual(["來源核對", "每週摘要"]);
   expect(rows[1].querySelector(".tg")?.getAttribute("aria-checked")).toBe("false");
   // A skill's own switch, and the package's.
   press(root, '[data-skl="skill"][data-id="5"]');
   expect(api.core).toHaveBeenCalledWith("skills.library.update", { key: "pack:2", skill: { id: 5, enabled: true } });
-  press(root, '[data-skl="toggle"][data-key="set:1"]');
-  expect(api.core).toHaveBeenCalledWith("skills.library.update", { key: "set:1", enabled: false });
+  press(root, '[data-skl="toggle"][data-key="pack:2"]');
+  expect(api.core).toHaveBeenCalledWith("skills.library.update", { key: "pack:2", enabled: false });
+  expect(root.querySelector<HTMLButtonElement>('[data-skl="skill"][data-id="4"]')!.disabled).toBe(true);
+  // A skill alone has no page: its row is all of it.
+  press(root, '[data-skl="back"]');
+  expect(root.querySelector('[data-skl="open"][data-key="skill:3"]')).toBeNull();
+});
+
+test.each(navInputs)("a step back with %s returns from a package's page to the list", async input => {
+  const { root } = await setup();
+  root.scrollTop = 90;
+  press(root, '[data-skl="open"][data-key="set:1"]');
+  expect(root.querySelector(".skl-page")).not.toBeNull();
+  pressLayer(input);
+  expect(root.querySelector(".skl-page")).toBeNull();
+  expect(root.scrollTop).toBe(90);
+});
+
+test("the back arrow and Esc return to the list where it was left, with the focus on the package's row", async () => {
+  const { root } = await setup();
+  root.scrollTop = 180;
+  press(root, '[data-skl="open"][data-key="set:1"]');
+  expect(root.querySelector(".skl-page")).not.toBeNull();
+  expect(root.scrollTop).toBe(0);
+  press(root, '[data-skl="back"]');
+  expect(root.querySelector(".skl-page")).toBeNull();
+  expect(root.querySelector(".skl-import")).not.toBeNull();
+  expect(root.scrollTop).toBe(180);
+  expect(document.activeElement).toBe(root.querySelector('[data-skl="open"][data-key="set:1"]'));
+  // Esc does the same, and is taken: Settings stays open.
+  root.scrollTop = 120;
+  press(root, '[data-skl="open"][data-key="pack:2"]');
+  const escape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+  root.querySelector<HTMLElement>('[data-skl="back"]')!.dispatchEvent(escape);
+  expect(escape.defaultPrevented).toBe(true);
+  expect(root.querySelector(".skl-page")).toBeNull();
+  expect(root.scrollTop).toBe(120);
+  expect(document.activeElement).toBe(root.querySelector('[data-skl="open"][data-key="pack:2"]'));
+  // On the list, Esc is left to Settings.
+  const closing = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+  root.querySelector<HTMLElement>('[data-skl="open"]')!.dispatchEvent(closing);
+  expect(closing.defaultPrevented).toBe(false);
+});
+
+test("a package deleted from its own page leaves for the list, and a reset starts on the list", async () => {
+  const { root, library } = await setup(() => ({ deleted: true }));
+  press(root, '[data-skl="open"][data-key="set:1"]');
+  press(root, '.skl-page-head [data-skl="more"][data-key="set:1"]');
+  // 刪除 asks in its own place: the second press deletes.
+  const remove = () => document.querySelector<HTMLElement>('[data-pick="delete"]')!;
+  remove().click();
+  remove().click();
+  await settle();
+  expect(api.core).toHaveBeenCalledWith("skills.library.delete", { key: "set:1" });
+  expect(root.querySelector(".skl-page")).toBeNull();
+  expect(root.querySelector(".skl-import")).not.toBeNull();
+  expect(root.querySelector('.skl-pack[data-skl-pack="set:1"]')).toBeNull();
+  press(root, '[data-skl="open"][data-key="pack:2"]');
+  library.reset();
+  root.innerHTML = skillLibraryHTML(library.view());
+  expect(root.querySelector(".skl-page")).toBeNull();
 });
 
 test("the access menu ticks characters one by one and turns into the whole team when all are ticked", async () => {
@@ -84,22 +158,26 @@ test("the importer sends a link, pasted text or a file to the core and opens the
   press(root, '[data-skl="import-go"]');
   await settle(); await settle();
   expect(api.core).toHaveBeenCalledWith("skills.library.import", { source: "owner/slides" });
-  expect(root.querySelector<HTMLInputElement>("#skl-source")!.value).toBe("");
-  expect(root.querySelector('[data-skl="open"][data-key="pack:9"]')?.getAttribute("aria-expanded")).toBe("true"); // opened, so whom it is for can be chosen
+  // A package of several opens on its page, so whom it is for can be chosen at once.
+  expect(root.querySelector('.skl-page[data-skl-page="pack:9"]')).not.toBeNull();
   expect(info).toHaveBeenCalledWith("已匯入「簡報工具」");
+  press(root, '[data-skl="back"]');
+  expect(root.querySelector<HTMLInputElement>("#skl-source")!.value).toBe("");
   // Pasted text takes the link's place, and the same 匯入 sends it.
   press(root, '[data-skl="paste"]');
   expect(root.querySelector("#skl-source")).toBeNull();
   root.querySelector<HTMLTextAreaElement>("#skl-text")!.value = "---\nname: travel\n---\n";
   press(root, '[data-skl="import-go"]');
-  await settle();
+  await settle(); await settle();
   expect(api.core).toHaveBeenCalledWith("skills.library.import", { text: "---\nname: travel\n---\n" });
+  press(root, '[data-skl="back"]');
   const input = root.querySelector<HTMLInputElement>("#skl-file")!;
   expect(input.accept).toBe(".zip,.tar.gz,.tgz,.md");
   Object.defineProperty(input, "files", { configurable: true, value: [new File(["# hi"], "skill.md")] });
   input.dispatchEvent(new Event("change", { bubbles: true }));
   await settle(); await settle();
   expect(api.core).toHaveBeenCalledWith("skills.library.import", { file: { name: "skill.md", data: btoa("# hi") } });
+  press(root, '[data-skl="back"]');
   // A folder comes from the system's own dialog, as a local path.
   api.pickOutputFolder.mockResolvedValue("D:\\skills\\travel");
   press(root, '[data-skl="pick-folder"]');

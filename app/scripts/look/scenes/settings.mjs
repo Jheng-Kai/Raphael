@@ -22,6 +22,10 @@ const downloaded = [
   { name: "sensevoice", title: "SenseVoice", languages: ["zh", "en", "ja", "ko", "yue"], note: "fast", size: 163002883, ready: true },
 ];
 const dictation = tab => [page("dictation"), click(`[data-dictation-tab="${tab}"]`), check("dictation-navigation"), ...(tab === "overview" ? [wait('.page-overview .icard'), check("dictation-overview")] : [])];
+// 編輯快捷鍵 (shortcut-editor.ts): the one place where the shortcuts change; Ctrl+F8 is recorded for 貼上上一次.
+const keysDialog = [...settings("dictation"), click('.modal-scrim [data-act="keys-edit"]'), wait('.kd-dialog [data-dlg="record"][data-field="paste_last_keys"]')];
+const pasteRecorded = [...keysDialog, click('.kd-dialog [data-field="paste_last_keys"]'), wait(".kd-dialog [data-recording]"),
+  { action: "key", key: "F8", ctrl: true }, waitGone(".kd-dialog [data-recording]")];
 export default [
   scene("nav-layer-settings", "Back from Usage's analysis returns to its overview inside the same Settings dialog", [
     ...analysis, navKey("back"), wait('.modal [data-usage-tab="overview"][aria-selected="true"]'), wait('.modal [data-row="raphael-spend"]'),
@@ -37,8 +41,16 @@ export default [
   scene("settings-owner-about-typing", "關於我 being written: no drag handle, and the box grows with every line of a long text", [...settings("general"), wait('[data-owner="owner_about"]'), type('[data-owner="owner_about"]', aboutLong), check('owner-about-typing')]),
   scene("settings-owner-about-rest", "關於我 left with a long text: four lines and its start in sight, the rest folded, the settings under it in reach", [...settings("general"), wait('[data-owner="owner_about"]'), type('[data-owner="owner_about"]', aboutLong), click('[data-owner="owner_name"]'), check('owner-about-rest')]),
   scene("settings-about-brand", "The about tab's mark and name cannot be selected", [...settings("about"), wait('.about-brand'), check('about-brand-unselectable')]),
-  // R-TIDY-01: the key that tidies the selected text is listed and changeable with the other shortcuts, Right Alt+T by default.
-  scene("settings-tidy-key", "The 聽寫 tab lists 整理選取文字 with its key and a pencil beside the other shortcuts, as wide as theirs", [...settings("dictation"), wait('.modal-scrim [data-row="tidy-hotkey"]'), check("settings-tidy-key")]),
+  // R-TIDY-01, R-KEYS-EDIT-01: the key that tidies the selected text is listed with the other shortcuts, Right Alt+T by default, and changed
+  // with them in the one 編輯 dialog.
+  scene("settings-tidy-key", "The 聽寫 tab lists every shortcut read-only in the order of use, 整理選取文字 third with its key, as wide as the others, and one 編輯 at the section's top right", [...settings("dictation"), wait('.modal-scrim [data-row="tidy-hotkey"]'), check("settings-tidy-key")]),
+  scene("settings-keys-dialog", "編輯 opens one dialog with all five shortcuts in the order of use, 貼上上一次 too; a key recorded waits in it until 儲存", [...pasteRecorded, check("settings-keys-dialog")]),
+  scene("settings-keys-recording", "A shortcut being recorded says to press the new keys, and Esc to cancel, inside its own button", [
+    ...keysDialog, click('.kd-dialog [data-field="tidy_keys"]'), wait(".kd-dialog [data-recording] .rec-hint"), check("settings-keys-recording")]),
+  scene("settings-keys-saved", "儲存 sends the new keys through the device settings, closes the dialog, and the list shows them", [
+    ...pasteRecorded, click('.kd-dialog [data-dlg="save"]'), waitGone(".kd-dialog"), check("settings-keys-saved")]),
+  scene("dictation-keys-dialog", "The 聽寫 overview's 編輯 opens the same dialog over the page", [
+    ...dictation("overview"), click('.page-overview .keys-card [data-act="keys-edit"]'), wait('.kd-dialog [data-dlg="record"]'), check("dictation-keys-dialog")]),
   // R-PRIV-MIC-01: a Mac's meter never opens the microphone before the owner allows it; 測試麥克風 asks macOS, once.
   scene("settings-mic-undecided", "A Mac whose microphone macOS has not asked about: 聽寫 says so with 測試麥克風, and the meter stays closed until it is pressed", [...settings("dictation"), wait('.modal-scrim [data-act="mic-ask"]'), check("settings-mic-undecided")], { microphone: "undecided" }),
   scene("settings-mic-denied", "A Mac whose microphone was refused: 聽寫 says where to allow it, its button opens that pane, and the meter stays closed", [...settings("dictation"), wait('.modal-scrim .missing-note [data-missing-pane]'), check("settings-mic-denied")], { microphone: "denied", mac: true }),
