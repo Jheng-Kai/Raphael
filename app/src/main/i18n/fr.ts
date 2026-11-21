@@ -1470,7 +1470,7 @@ export const fr = {
   "settings.groupStart": "Comment démarrer",
   "settings.groupListen": "Comment il écoute",
   "settings.autoLearn": "Ajouter automatiquement les mots corrigés",
-  "settings.autoLearnHelp": "Quand vous modifiez une dictée collée, l’IA repère les mots mal compris et les ajoute au dictionnaire. Chaque vérification utilise quelques jetons.",
+  "settings.autoLearnHelp": "Quand vous modifiez une dictée collée, l’IA repère les mots mal compris et les ajoute au dictionnaire. Chaque vérification consomme un peu de votre usage du modèle.",
   "settings.searchingMicrophones": "Recherche…",
   "mic.automaticShort": "Automatique ({p0})",
   "languages.variantsOf": "Comment s’écrit {p0} : {p1}",

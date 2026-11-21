@@ -1470,7 +1470,7 @@ export const th = {
   "settings.groupStart": "วิธีเริ่ม",
   "settings.groupListen": "วิธีฟัง",
   "settings.autoLearn": "เพิ่มคำที่แก้ไขลงพจนานุกรมโดยอัตโนมัติ",
-  "settings.autoLearnHelp": "เมื่อคุณแก้ข้อความจากการพูดที่วางไว้ AI จะเลือกคำที่ได้ยินผิดและเพิ่มลงพจนานุกรม การตรวจแต่ละครั้งใช้โทเค็นเล็กน้อย",
+  "settings.autoLearnHelp": "เมื่อคุณแก้ข้อความจากการพูดที่วางไว้ AI จะเลือกคำที่ได้ยินผิดและเพิ่มลงพจนานุกรม การตรวจแต่ละครั้งใช้โควตาโมเดลเล็กน้อย",
   "settings.searchingMicrophones": "กำลังค้นหา…",
   "mic.automaticShort": "อัตโนมัติ ({p0})",
   "languages.variantsOf": "วิธีเขียน {p0}: {p1}",

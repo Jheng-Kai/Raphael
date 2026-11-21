@@ -9810,10 +9810,11 @@ export function checkRendered(name, context = {}) {
     require(box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight, "the popover is inside the window");
     const sets = window.__look.calls.filter(call => call.method === "settings.set" && call.params?.key === "monthly_limit_usd").map(call => call.params.value);
     const card = document.querySelector('[data-row="raphael-spend"]'), note = card.querySelector('.spend-note').textContent, bar = card.querySelector('[role="progressbar"]');
-    const field = popover.querySelector('#limit-input'), choice = popover.querySelector('[data-k="usage-cap-mode"]').textContent;
+    const field = popover.querySelector('#limit-input'), choice = popover.querySelector('[data-cap-mode][aria-pressed="true"]').textContent;
+    require(popover.querySelectorAll('.tabs.seg [data-cap-mode]').length === 2, "不設上限 and 設上限 are two tabs, not a dropdown");
     if (name === "usage-cap-open") {
       require(choice === "設上限" && field?.value === "20" && sets.length === 0, `a limit in force opens as 設上限 with its amount: ${choice} ${field?.value}`);
-      require(document.activeElement === popover.querySelector('[data-k="usage-cap-mode"]'), "the focus is on the choice");
+      require(document.activeElement === popover.querySelector('[data-cap-mode][aria-pressed="true"]'), "the focus is on the chosen tab");
     } else if (name === "usage-cap-none") {
       require(choice === "不設上限" && !field && JSON.stringify(sets) === "[null]", `不設上限 stores null at once: ${JSON.stringify(sets)}`);
       require(note.includes("未設上限") && !bar, `the card says 未設上限 with no bar: ${note}`);

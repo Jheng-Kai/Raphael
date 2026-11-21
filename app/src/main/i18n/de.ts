@@ -1470,7 +1470,7 @@ export const de = {
   "settings.groupStart": "So starten Sie",
   "settings.groupListen": "So hört es zu",
   "settings.autoLearn": "Korrigierte Wörter automatisch hinzufügen",
-  "settings.autoLearnHelp": "Wenn du eingefügtes Diktat bearbeitest, erkennt die KI falsch verstandene Wörter und nimmt sie ins Wörterbuch auf. Jede Prüfung verbraucht ein paar Tokens.",
+  "settings.autoLearnHelp": "Wenn du eingefügtes Diktat bearbeitest, erkennt die KI falsch verstandene Wörter und nimmt sie ins Wörterbuch auf. Jede Prüfung verbraucht ein wenig von deinem Modellkontingent.",
   "settings.searchingMicrophones": "Suche läuft…",
   "mic.automaticShort": "Automatisch ({p0})",
   "languages.variantsOf": "Schreibweise von {p0}: {p1}",

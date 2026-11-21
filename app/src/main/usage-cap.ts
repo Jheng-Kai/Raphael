@@ -1,11 +1,11 @@
-// The monthly limit (Settings › 用量 › 概覽, the gear on 這個月's card): a small popover with 不設上限 or 設上限 as a dropdown,
+// The monthly limit (Settings › 用量 › 概覽, the gear on 這個月's card): a small popover with 不設上限 and 設上限 as two tabs,
 // the amount in US$ when there is one. A change goes to the core at once, with no save
 // button: 不設上限 stores null, an amount is stored when it is typed (Enter, leaving the field, or closing the popover).
 // The popover stays open over a redraw of the page, on the gear drawn again in its place (`follow`).
 
 import { parseLimit } from "./format";
 import { t } from "./i18n";
-import { type Choice, closeMenu, esc, fieldHTML, menuIsOpenFor, openMenu, openPopover, patchHTML, placeMenu, sel } from "./ui";
+import { type Choice, closeMenu, esc, fieldHTML, menuIsOpenFor, openPopover, patchHTML, placeMenu, tabs } from "./ui";
 
 export type CapMode = "none" | "set";
 
@@ -20,7 +20,9 @@ export const CAP_MODES = (): Choice[] => [
 /** What the popover shows: the choice, the amount being typed and whether it is one. */
 export function usageCapHTML(o: { mode: CapMode; draft: string; invalid: boolean }): string {
   return `<h3>${esc(t("common.monthlyLimit"))}</h3>` +
-    sel(CAP_MODES(), o.mode, t("common.monthlyLimit"), ' data-k="usage-cap-mode"') +
+    // Two tabs the owner chose over a dropdown: the choice is seen at once, and one press makes it (R-USE-02).
+    tabs(CAP_MODES().map(mode => ({ id: mode.value, label: mode.label, attrs: ` data-cap-mode="${mode.value}" data-k="usage-cap-mode:${mode.value}"` })),
+      o.mode, { label: t("common.monthlyLimit"), kind: "filter" }) +
     (o.mode === "set" ? fieldHTML("", o.draft, { id: "limit-input", pre: "US$", num: true, label: t("common.monthlyLimit"), invalid: o.invalid }) : "") +
     (o.invalid ? `<p class="cap-error" role="alert">${esc(t("common.limitInvalid"))}</p>` : "");
 }
@@ -79,18 +81,12 @@ export function createUsageCap(o: { limit(): number | null; save(limit: number |
     });
     const here = panel;
     here.addEventListener("click", (event) => {
-      const choose = (event.target as Element).closest<HTMLElement>('[data-k="usage-cap-mode"]');
-      if (!choose) return;
-      openMenu(choose, CAP_MODES(), mode, (value) => {
-        if (value !== "none" && value !== "set") return;
-        // The submenu closed the popover with it: it opens again where it was, with the new choice.
-        moving = true;
-        try { show(anchor.isConnected ? anchor : choose, null); } finally { moving = false; }
-        if (value === mode) { focusIn(focus === "field" ? "field" : "choice"); return; }
-        mode = value; invalid = false;
-        if (value === "none") { draft = ""; draw(); focusIn("choice"); if (o.limit() !== null) void o.save(null); }
-        else { draft = o.limit() === null ? "" : limitText(o.limit()!); draw(); focusIn("field"); }
-      }, undefined, [], { placement: "beside" });
+      const choose = (event.target as Element).closest<HTMLElement>("[data-cap-mode]");
+      const value = choose?.dataset.capMode;
+      if (value !== "none" && value !== "set" || value === mode) return;
+      mode = value; invalid = false;
+      if (value === "none") { draft = ""; draw(); focusIn("choice"); if (o.limit() !== null) void o.save(null); }
+      else { draft = o.limit() === null ? "" : limitText(o.limit()!); draw(); focusIn("field"); }
     });
     here.addEventListener("keydown", (event) => {
       const input = event.target as HTMLInputElement;
@@ -109,7 +105,7 @@ export function createUsageCap(o: { limit(): number | null; save(limit: number |
 
   function focusIn(focus: "choice" | "field" | null): void {
     if (!panel || focus === null) return;
-    const target = focus === "field" ? panel.querySelector<HTMLInputElement>("#limit-input") : panel.querySelector<HTMLElement>('[data-k="usage-cap-mode"]');
+    const target = focus === "field" ? panel.querySelector<HTMLInputElement>("#limit-input") : panel.querySelector<HTMLElement>('[data-cap-mode][aria-pressed="true"]');
     target?.focus({ preventScroll: true });
   }
 

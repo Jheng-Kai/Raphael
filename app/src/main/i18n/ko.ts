@@ -1470,7 +1470,7 @@ export const ko = {
   "settings.groupStart": "시작 방법",
   "settings.groupListen": "듣는 방식",
   "settings.autoLearn": "수정한 단어를 사전에 자동 추가",
-  "settings.autoLearnHelp": "붙여넣은 받아쓰기 텍스트를 고치면 AI가 잘못 들린 단어를 골라 사전에 추가합니다. 확인할 때마다 토큰이 조금 사용됩니다.",
+  "settings.autoLearnHelp": "붙여넣은 받아쓰기 텍스트를 고치면 AI가 잘못 들린 단어를 골라 사전에 추가합니다. 확인할 때마다 모델 사용량이 조금 듭니다.",
   "settings.searchingMicrophones": "검색 중…",
   "mic.automaticShort": "자동 ({p0})",
   "languages.variantsOf": "{p0} 표기 방식: {p1}",

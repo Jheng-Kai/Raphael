@@ -1193,7 +1193,7 @@ export const ja = {
   "settings.groupStart": "始め方",
   "settings.groupListen": "聞き取り",
   "settings.autoLearn": "直した言葉を自動で辞書に追加",
-  "settings.autoLearnHelp": "貼り付けた音声入力の文字を直すと、聞き間違えられた言葉を AI が判断して辞書に追加します。判断のたびに少しトークンを使います。",
+  "settings.autoLearnHelp": "貼り付けた音声入力の文字を直すと、聞き間違えられた言葉を AI が判断して辞書に追加します。判断のたびにモデルの利用枠を少し使います。",
   "settings.sttLocalPrice": "無料",
   "settings.searchingMicrophones": "検索中…",
   "mic.automaticShort": "自動（{p0}）",

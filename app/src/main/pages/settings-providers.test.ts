@@ -223,11 +223,11 @@ test("the gear of this month's card opens the monthly limit: no limit, or a limi
   click('[data-act="usage-cap"]');
   expect(popover()!.getAttribute("role")).toBe("dialog");
   expect(popover()!.getAttribute("aria-label")).toBe("Monthly limit");
-  expect(popover()!.querySelector('[data-k="usage-cap-mode"]')!.textContent).toBe("No limit");
+  expect(popover()!.querySelector('[data-cap-mode][aria-pressed="true"]')!.textContent).toBe("No limit");
+  expect([...popover()!.querySelectorAll("[data-cap-mode]")].map(tab => tab.textContent)).toEqual(["No limit", "Set a limit"]);
   expect(popover()!.querySelector("#limit-input")).toBeNull();
   // 設上限: the amount's field comes, focused; nothing is stored until an amount is typed.
-  click('#app-popover [data-k="usage-cap-mode"]');
-  click('#app-submenu [data-value="set"]');
+  click('#app-popover [data-cap-mode="set"]');
   const field = popover()!.querySelector<HTMLInputElement>("#limit-input")!;
   expect(document.activeElement).toBe(field);
   expect(api.settingsSet).not.toHaveBeenCalled();
@@ -244,8 +244,7 @@ test("the gear of this month's card opens the monthly limit: no limit, or a limi
   expect(popover()!.querySelector('.cap-error[role="alert"]')!.textContent).toBe("Enter a number greater than or equal to 0");
   expect(api.settingsSet).toHaveBeenCalledTimes(1);
   // 不設上限: null, at once.
-  click('#app-popover [data-k="usage-cap-mode"]');
-  click('#app-submenu [data-value="none"]'); await flush();
+  click('#app-popover [data-cap-mode="none"]'); await flush();
   expect(api.settingsSet).toHaveBeenLastCalledWith("monthly_limit_usd", null);
   expect(note()).toContain("No limit");
   expect(bar()).toBeNull();

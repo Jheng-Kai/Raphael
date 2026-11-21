@@ -189,8 +189,8 @@ export default [
   scene("settings-usage-overview", "Usage › 概覽: 這個月's card with the limit and its gear, then 方案額度, one card per subscription with each window's reset and what is left", [...usage, wait(".run-subscription"), check("usage-plain"), check("usage-overview")]),
   scene("settings-usage-cap", "The gear of 這個月 opens the monthly limit: 設上限 with an amount, stored at once, the card's bar follows; 不設上限 takes it away", [
     ...usage, click('[data-act="usage-cap"]'), wait("#app-popover.usage-cap"), check("usage-cap-open"),
-    click('#app-popover [data-k="usage-cap-mode"]'), wait("#app-submenu"), click('#app-submenu [data-value="none"]'), wait("#app-popover.usage-cap"), check("usage-cap-none"),
-    click('#app-popover [data-k="usage-cap-mode"]'), wait("#app-submenu"), click('#app-submenu [data-value="set"]'), wait("#app-popover #limit-input"),
+    click('#app-popover [data-cap-mode="none"]'), wait('#app-popover [data-cap-mode="none"][aria-pressed="true"]'), check("usage-cap-none"),
+    click('#app-popover [data-cap-mode="set"]'), wait("#app-popover #limit-input"),
     type("#app-popover #limit-input", "30"), key("Enter"), check("usage-cap-set"),
   ]),
   scene("settings-usage-analytics", "Usage › 分析: 花費紀錄 by purpose with its stacked bars and legend, 誰花最多 with five rows and 顯示更多, 工具使用 and 訊息 lines, and 30 days", [

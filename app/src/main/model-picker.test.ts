@@ -306,7 +306,7 @@ describe("the rows a role cannot use", () => {
   });
 
   test("every reason has its words, and a reason the app does not know still has some", () => {
-    expect(reasonText("no_structured_output")).toBe("無法依指定格式（JSON）回覆");
+    expect(reasonText("no_structured_output")).toBe("無法照指定的格式回覆");
     expect(reasonText("no_reasoning_setting")).toBe("不接受關閉推理的設定");
     expect(reasonText("no_max_tokens")).toBe("無法限制回覆長度");
     expect(reasonText("something_new")).toBe("這裡無法使用");

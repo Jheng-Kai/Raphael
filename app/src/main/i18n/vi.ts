@@ -1470,7 +1470,7 @@ export const vi = {
   "settings.groupStart": "Cách bắt đầu",
   "settings.groupListen": "Cách nghe",
   "settings.autoLearn": "Tự động thêm từ đã sửa",
-  "settings.autoLearnHelp": "Khi bạn sửa văn bản đọc chính tả đã dán, AI sẽ chọn ra những từ bị nghe nhầm và thêm vào từ điển. Mỗi lần kiểm tra tốn một ít token.",
+  "settings.autoLearnHelp": "Khi bạn sửa văn bản đọc chính tả đã dán, AI sẽ chọn ra những từ bị nghe nhầm và thêm vào từ điển. Mỗi lần kiểm tra tốn một chút hạn mức mô hình.",
   "settings.searchingMicrophones": "Đang tìm…",
   "mic.automaticShort": "Tự động ({p0})",
   "languages.variantsOf": "Cách viết {p0}: {p1}",

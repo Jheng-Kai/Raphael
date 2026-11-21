@@ -1470,7 +1470,7 @@ export const ptBR = {
   "settings.groupStart": "Como começar",
   "settings.groupListen": "Como ouve",
   "settings.autoLearn": "Adicionar palavras corrigidas automaticamente",
-  "settings.autoLearnHelp": "Quando você edita um ditado colado, a IA identifica as palavras mal entendidas e as adiciona ao dicionário. Cada verificação usa alguns tokens.",
+  "settings.autoLearnHelp": "Quando você edita um ditado colado, a IA identifica as palavras mal entendidas e as adiciona ao dicionário. Cada verificação usa um pouco do seu uso do modelo.",
   "settings.searchingMicrophones": "Pesquisando…",
   "mic.automaticShort": "Automático ({p0})",
   "languages.variantsOf": "Como {p0} é escrito: {p1}",

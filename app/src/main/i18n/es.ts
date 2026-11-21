@@ -1470,7 +1470,7 @@ export const es = {
   "settings.groupStart": "Cómo empezar",
   "settings.groupListen": "Cómo escucha",
   "settings.autoLearn": "Añadir automáticamente las palabras corregidas",
-  "settings.autoLearnHelp": "Cuando editas un dictado pegado, la IA detecta las palabras mal entendidas y las añade al diccionario. Cada revisión usa algunos tokens.",
+  "settings.autoLearnHelp": "Cuando editas un dictado pegado, la IA detecta las palabras mal entendidas y las añade al diccionario. Cada revisión gasta un poco de tu uso del modelo.",
   "settings.searchingMicrophones": "Buscando…",
   "mic.automaticShort": "Automático ({p0})",
   "languages.variantsOf": "Cómo se escribe {p0}: {p1}",

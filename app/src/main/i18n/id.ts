@@ -1470,7 +1470,7 @@ export const id = {
   "settings.groupStart": "Cara memulai",
   "settings.groupListen": "Cara mendengarkan",
   "settings.autoLearn": "Tambahkan kata yang dikoreksi secara otomatis",
-  "settings.autoLearnHelp": "Saat Anda mengedit hasil dikte yang ditempel, AI memilih kata yang salah dengar dan menambahkannya ke kamus. Setiap pemeriksaan memakai sedikit token.",
+  "settings.autoLearnHelp": "Saat Anda mengedit hasil dikte yang ditempel, AI memilih kata yang salah dengar dan menambahkannya ke kamus. Setiap pemeriksaan memakai sedikit kuota model.",
   "settings.searchingMicrophones": "Mencari…",
   "mic.automaticShort": "Otomatis ({p0})",
   "languages.variantsOf": "Cara penulisan {p0}: {p1}",
