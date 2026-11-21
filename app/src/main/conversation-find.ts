@@ -35,8 +35,8 @@ export function mountConversationFind(o: { button?: HTMLElement; bar: HTMLElemen
   function position(scroll = false): void {
     if (results) {
       const target = results[resultIndex];
-      // A turn that owner messages or exchanges joined is drawn in several lines (`turn:<id>:after:<turn>`, conversation.ts threadItems).
-      const matching = target ? marks.filter(mark => mark.closest<HTMLElement>("[data-key]")?.dataset.key?.replace(/:after:\d+$/, "") === target.key) : [];
+      // A turn can be drawn in several lines (conversation.ts threadItems).
+      const matching = target ? marks.filter(mark => mark.closest<HTMLElement>("[data-key]")?.dataset.key?.replace(/:(?:after:\d+|answer)$/, "") === target.key) : [];
       index = matching.length ? marks.indexOf(matching[Math.min(target!.occurrence, matching.length - 1)]!) : -1;
     }
     marks.forEach((mark, at) => { mark.classList.toggle("is-current", at === index); if (at === index) mark.setAttribute("aria-current", "true"); else mark.removeAttribute("aria-current"); });

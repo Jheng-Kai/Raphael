@@ -8,6 +8,7 @@ import pytest
 
 from raphael_core.agent.cli import loop as cli
 from raphael_core.agent.cli.drivers import Event
+from raphael_core.agent.steps import Step
 from raphael_core.brain.settings import SettingsStore
 from raphael_core.protocol import RpcError
 from raphael_core.worker.loop import ToolOutcome
@@ -131,6 +132,9 @@ async def test_send_now_ends_the_running_turn_and_starts_the_message_as_its_own(
     await asyncio.wait_for(state.started.wait(), 2)
     queued = await ask_with_file(rig, "with-file", "Request B")
     assert queued["status"] == "queued"  # a file never steers
+    running = next(t for t in await rig.turns() if t["question"] == "Request A")
+    rig.history.add_message(running["id"], "reply", "I will check every page.")
+    rig.history.add_steps(running["id"], [Step(kind="tool", tool="local_time", server="Raphael", outcome="ok", ms=10)])
     assert (await send_now(rig, queued, "with-file")) == {"sent": True, "stopped": True}
     await asyncio.gather(first, return_exceptions=True)
     await until(lambda: len(state.calls) == 3 and not rig.service._drains)
@@ -139,7 +143,11 @@ async def test_send_now_ends_the_running_turn_and_starts_the_message_as_its_own(
     if brain != "codex":
         assert state.calls[2]["session"] == "native-1"  # the next turn resumes the stored native session
     turns = await rig.turns()
-    assert status_of(turns, "Request A") == "cancelled" and status_of(turns, "Request B") == "done"
+    ended = next(t for t in turns if t["id"] == running["id"])
+    assert (ended["status"], ended["text"]) == ("superseded", "I will check every page.")
+    assert [message["text"] for message in ended["messages"] if message["kind"] == "reply"] == ["I will check every page."]
+    assert [step["tool"] for step in ended["steps"]] == ["local_time"]
+    assert status_of(turns, "Request B") == "done"
     assert rig.service._inbox.get(next(t for t in turns if t["question"] == "Request A")["id"])["outcome"] == "cancelled"
     assert rig.service._inbox.get(queued["turn_id"])["outcome"] == "completed"
     # The memory that would block the next request is not left behind.
@@ -216,4 +224,6 @@ async def test_send_now_cancels_an_api_turn_and_the_message_runs_next(make_rig, 
     await asyncio.gather(first, return_exceptions=True)
     await until(lambda: rig.service.turn(queued["turn_id"]).status == "done" and not rig.service._drains)
     assert "Request B" in str(client.chat_calls[-1]["messages"])
-    assert status_of(await rig.turns(), "Request A") == "cancelled"
+    ended = next(turn for turn in await rig.turns() if turn["question"] == "Request A")
+    assert ended["status"] == "superseded"
+    assert not ended["text"] and not any(message["kind"] == "reply" for message in ended["messages"])

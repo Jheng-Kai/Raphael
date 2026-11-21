@@ -354,13 +354,15 @@ async def test_clearing_running_conversation_removes_queued_rows_without_drainin
         await asyncio.gather(first, return_exceptions=True)
 
 
-async def test_recovery_keeps_the_answer_committed_before_inbox_settlement(make_rig, client):
+@pytest.mark.parametrize(("status", "outcome"), [("done", "completed"), ("superseded", "cancelled")])
+async def test_recovery_keeps_the_answer_committed_before_inbox_settlement(make_rig, client, status, outcome):
     rig = make_rig()
     client.chats = [chat("Persisted answer")]
     turn_id = (await typed(rig, "A question"))["turn_id"]
     with rig.conn:
+        rig.conn.execute("UPDATE agent_turns SET status=? WHERE id=?", (status, turn_id))
         rig.conn.execute("UPDATE agent_inbox SET state='started',outcome=NULL,settled_at_ms=NULL WHERE turn_id=?", (turn_id,))
     restarted = make_rig()
     turn = restarted.history.get(turn_id)
-    assert (turn.status, turn.text) == ("done", "Persisted answer")
-    assert restarted.service._inbox.get(turn_id)["outcome"] == "completed"
+    assert (turn.status, turn.text) == (status, "Persisted answer")
+    assert restarted.service._inbox.get(turn_id)["outcome"] == outcome

@@ -70,6 +70,8 @@ VOICE = "voice"
 # stopped it, or nobody answered it. It is part of the conversation all the same: the owner said it. A turn
 # still "running" or waiting for a yes ("confirm") is not over, and says nothing yet.
 UNFINISHED = ("error", "denied", "expired", "cancelled")
+# A superseded request is still useful context for the message that took over.
+_CONTEXT_UNFINISHED = (*UNFINISHED, "superseded")
 
 
 @dataclass
@@ -82,7 +84,7 @@ class Turn:
     prefix: str  # how Raphael answered, in the language the user reads
     text: str  # the short line of the overlay; empty for a command that was done
     detail: str | None  # the longer text of an answer, if it had one
-    # "done", "confirm" (waiting for a yes or a no), "denied", "expired" or "error".
+    # "superseded" records work taken over by Send Now, distinct from an owner's Stop.
     status: str
     cost_usd: float = 0.0
     source: str = VOICE  # "voice", or the chat app the request came from
@@ -111,10 +113,10 @@ class Turn:
 
 
 def is_unfinished(turn: Turn) -> bool:
-    """Whether the owner asked for `turn` and it ended without an answer (UNFINISHED). What a routine
+    """Whether the owner asked for `turn` and it ended without an answer. What a routine
     or a colleague asked is not the owner's, and a failed routine is no part of their conversation."""
     return (
-        turn.status in UNFINISHED
+        turn.status in _CONTEXT_UNFINISHED
         and turn.source not in ("routine", "member")
         and turn.route not in ("routine", "exchange")
     )
@@ -214,7 +216,7 @@ _EXCHANGES = "scope = 'exchange' AND peer_id IS NOT NULL"
 _OWN_EXCHANGES = _EXCHANGES
 # The turns the model reads as the conversation (`is_readable`), as SQL.
 _READABLE = (
-    f"(status = 'done' OR (status IN ({', '.join(repr(status) for status in UNFINISHED)})"
+    f"(status = 'done' OR (status IN ({', '.join(repr(status) for status in _CONTEXT_UNFINISHED)})"
     " AND source NOT IN ('routine', 'member') AND route NOT IN ('routine', 'exchange')))"
 )
 

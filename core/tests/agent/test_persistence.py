@@ -290,6 +290,13 @@ def test_an_answer_that_gave_up_after_a_failed_call_is_read_back_as_unfinished(c
     assert "Other ways were not ruled out" in text
 
 
+def test_superseded_work_keeps_its_words_and_reason_in_the_next_turns_context(conn):
+    history = AgentHistory(conn, lambda: NOW_MS)
+    history.add(session_id="original", question="Test the website", route="answer", prefix="",
+                text="I opened the website", status="superseded", member_id=3)
+    assert 'the owner\'s next message took over after the assistant said "I opened the website"' in context_text(conn)
+
+
 @pytest.mark.parametrize("text,steps", [
     ("我無法讀到原頁，所以用另一個來源做好了今天的頁面。", [failed_step("web_read"), ok_step("web_search")]),  # got past it
     ("Here is the page. " + "Vocabulary and grammar notes. " * 40 + "I could not check one word.", [failed_step("show_page")]),

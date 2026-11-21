@@ -112,7 +112,7 @@ class AgentInbox:
                 "UPDATE agent_inbox AS i SET state='terminal', settled_at_ms=?, outcome=CASE t.status"
                 " WHEN 'done' THEN 'completed' WHEN 'error' THEN 'failed' WHEN 'expired' THEN 'failed' ELSE 'cancelled' END"
                 " FROM agent_turns AS t WHERE i.turn_id=t.id AND i.state='started'"
-                " AND t.status IN ('done','error','expired','cancelled','denied','withdrawn')", (self.now_ms(),),
+                " AND t.status IN ('done','error','expired','cancelled','superseded','denied','withdrawn')", (self.now_ms(),),
             )
             self.conn.execute("UPDATE agent_turns SET status='expired' WHERE id IN (SELECT turn_id FROM agent_inbox WHERE state='started')")
             self.conn.execute("UPDATE agent_inbox SET state='terminal',outcome='lost',settled_at_ms=? WHERE state='started'", (self.now_ms(),))

@@ -84,7 +84,7 @@ function denyCloseHTML(card: PermissionCard, answerable: boolean): string {
  * One card. `answerable` is false while the window holds no question to answer it with (an `ask` card whose
  * question has not come yet, or is being answered): the buttons are there and cannot be pressed.
  */
-export function permissionCardHTML(card: PermissionCard, answerable = true, memberName?: string): string {
+export function permissionCardHTML(card: PermissionCard, answerable = true, memberName?: string, hideOutcome = false): string {
   if (isComposioTool(card.service, card.tool)) card = { ...card, summary: composioText(card.summary, card.tool, "tool") };
   const waiting = waitsForYes(card);
   const actor = memberName || (localCard(card) ? nameOf(card) : t("agent.title"));
@@ -99,10 +99,12 @@ export function permissionCardHTML(card: PermissionCard, answerable = true, memb
     const value = card.message?.[key as keyof typeof labels];
     return value ? `<div class="card-field"><span>${esc(t(label))}</span><span>${esc(value)}</span></div>` : "";
   }).join("") + `<p class="card-body">${linkedText(card.message.body)}</p>` : "";
-  const details = `<div class="card-well">${!waiting ? `<p class="card-body">${esc(permissionStateText(card))}</p>` : ""}${card.message ? message : localCard(card) ? `<pre class="local-command">${esc(card.summary)}</pre>${card.reason ? `<p class="card-body">${esc(card.reason)}</p>` : ""}` : `<div class="card-field"><span>${esc(nameOf(card))}</span><span>${linkedText(card.summary)}</span></div>`}</div>`;
+  const outcome = !waiting && !hideOutcome ? `<p class="card-body">${esc(permissionStateText(card))}</p>` : "";
+  const details = `<div class="card-well">${outcome}${card.message ? message : localCard(card) ? `<pre class="local-command">${esc(card.summary)}</pre>${card.reason ? `<p class="card-body">${esc(card.reason)}</p>` : ""}` : `<div class="card-field"><span>${esc(nameOf(card))}</span><span>${linkedText(card.summary)}</span></div>`}</div>`;
   return cardHTML({
     title, mark: markOf(card),
     status: waiting ? "waiting" : card.state === "allowed" || card.state === "always" ? "done" : "ready",
+    hideStatus: hideOutcome,
     statusText: waiting ? cardPromptText("permission") : t(({ allowed: "cards.allowed", always: "cards.always", denied: "cards.denied", expired: "cards.expired", cancelled: "cards.cancelled", pending: "cards.waiting" } as const)[card.state]),
     body,
     // A command that waits is shown itself, not behind a disclosure: the owner allows what they can read. Once answered it folds away with the rest.
@@ -115,7 +117,9 @@ export function permissionCardHTML(card: PermissionCard, answerable = true, memb
 
 /** The cards a turn shows, below what it said. `answerable` says whether the window can answer a question by its id now. */
 export function permissionCardsHTML(turn: AgentTurn, answerable: (id: string) => boolean = () => true, settled = false, memberName?: string): string {
-  return (turn.permissions ?? []).filter((card) => waitsForYes(card) !== settled).map((card) => permissionCardHTML(card, card.source === "run" || answerable(card.id), memberName)).join("");
+  return (turn.permissions ?? []).filter(card => waitsForYes(card) !== settled).map(card =>
+    permissionCardHTML(card, card.source === "run" || answerable(card.id), memberName,
+      turn.status === "superseded" && card.state === "cancelled")).join("");
 }
 
 /** Owner questions share the conversation card, with choices instead of permission controls. */

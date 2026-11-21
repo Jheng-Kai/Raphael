@@ -2069,12 +2069,12 @@ Unverified by definition: a real model choosing the new fields, and a real Teleg
 ## Owner input
 
 ```powershell
-npm run look -- owner-addition owner-addition-answered owner-addition-older-work composer-send-while-working --theme both --width 1120,720,1920x1080
+npm run look -- owner-sendnow-order owner-addition owner-addition-answered owner-addition-older-work exchange-mid-work exchange-mid-work-answered composer-queued composer-queued-sendnow composer-send-while-working --theme both --width 1120,720,1920x1080
 ```
 
 An owner message in an active private conversation is an ordinary owner bubble and
 enters the same loop as a user-role message at its next step, after the complete
-tool batch. Stop, or 「立即送出」 on a queued message, cancels the work. The inbox seals
+tool batch. Stop cancels the work. 「立即送出」 lets a queued turn take over. The inbox seals
 atomically at the final reply; a later message starts a new turn. Codex takes the addition
 natively (turn/steer); Claude Code and Antigravity read it with the result of their next
 call to Raphael's tools, or, when no call follows, in the next turn that resumes the
@@ -2102,6 +2102,11 @@ message, below the turns between, never up in the work's first line (issue 231).
 `owner-addition-older-work` checks that order.
 A colleague's exchange that comes while the work goes on breaks its line the same way, in the same list of the work's
 stretches (see Where an exchange stands in work that goes on, R-EXCHANGE-01).
+An owner message with its own answer also stands at its send time once it starts if earlier work
+in the same member's conversation showed something later. The earlier work's later words and any
+live line stand below the owner bubble, followed by the new answer. A bubble that is still queued
+waits at the tail. `owner-sendnow-order` drives the button and checks this order and the absence of
+a cancellation line or stopped styling.
 CLI handoffs preserve accepted input in their saved continuation.
 Room messages use that inbox for a single active recipient in the same room and
 thread. Several addressees, files or a sealed inbox start a new room turn without
@@ -2560,10 +2565,10 @@ A message queued behind running work is either taken by the model at its next st
 queued bubble (a small text button in sight, first in its action row, not in the ⋯ menu; no 「排隊中」 words stand beside
 it, the button alone says the message waits) interrupts the work now and adds the message as context. R-QUEUE-05:
 `agent.history.send_now {session_id, member_id, turn_id}` puts that inbox row first and ends the
-running work as Stop does, without the cancel memory (Codex `turn/interrupt`; a Claude Code or
+running work without the cancel memory (Codex `turn/interrupt`; a Claude Code or
 Antigravity child is ended and the next turn resumes its stored native session; an API loop's
-task is cancelled). The interrupted turn ends cancelled with its words kept, and pending
-confirmation cards of that conversation are denied, as Stop does. A message with files is
+task is cancelled). The earlier turn ends as `superseded` with its steps and words kept and no
+cancellation reply or stopped styling. Pending confirmation cards of that conversation are denied. A message with files is
 started as its own turn this way too (it never steers). Rooms keep a new exchange per message.
 A message already steered and read, or already started, is not sent again (`sent: false`).
 Known gap: a message handed to a running Claude Code or Antigravity turn but not yet read

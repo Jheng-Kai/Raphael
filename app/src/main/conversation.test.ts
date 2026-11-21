@@ -127,8 +127,8 @@ describe("one thread", () => {
     const running = { ...work, status: "running", messages: [said(1, 1), step] };
     expect(lines([running, joined(2, 3)]).map(([key]) => key)).toEqual(["turn:1", "turn:2"]);
     expect(lines([{ ...running, status: "done" }, joined(2, 3)]).map(([key]) => key)).toEqual(["turn:1", "turn:2", "turn:1:after:2"]);
-    // Queued words are a turn of their own, answered after the work: they never stand inside it, nor does a message after them.
-    expect(lines([work, joined(5, 2, { route: "answer", status: "queued" }), joined(6, 3)])).toEqual([["turn:1", null], ["turn:5", null], ["turn:6", null]]);
+    // Waiting words keep later owner input out of earlier work and stay at the tail themselves.
+    expect(lines([work, joined(5, 2, { route: "answer", status: "queued" }), joined(6, 3)])).toEqual([["turn:1", null], ["turn:6", null], ["turn:5", null]]);
     // A colleague's question is no work of the owner's to join.
     const asked = turn(7, "2026-10-20T09:00:00+08:00", { source: "member", scope: "exchange", peer_id: 2, messages: [said(1, 1), said(2, 5)] });
     expect(lines([asked, joined(8, 3)]).map(([key]) => key)).toEqual(["turn:7", "turn:8"]);
@@ -144,16 +144,59 @@ describe("one thread", () => {
     const asked = turn(2, "2026-10-20T09:04:00+08:00", { messages: [said(1, 6)] });
     const message = turn(3, "2026-10-20T09:10:00+08:00", { route: "owner_input", text: "", source: "app" });
     expect(lines([message, asked, task])).toEqual([
-      ["turn:1", { until: start + 10 * 60_000 }],
-      ["turn:2", null],
+      ["turn:1", { until: start + 4 * 60_000 }],
+      ["turn:2", { owner: "question" }],
+      ["turn:1:after:2", { from: start + 4 * 60_000, until: start + 10 * 60_000, after: 2 }],
+      ["turn:2:answer", { owner: "answer" }],
       ["turn:3", null],
       ["turn:1:after:3", { from: start + 10 * 60_000, after: 3 }],
     ]);
     // The newer work answering it is the one that took it, even when the older one also said something since.
     const answered = { ...asked, messages: [said(1, 6), said(2, 11)] };
-    expect(lines([task, answered, message]).map(([key]) => key)).toEqual(["turn:1", "turn:2", "turn:3", "turn:2:after:3"]);
+    expect(lines([task, answered, message]).map(([key]) => key)).toEqual(["turn:1", "turn:2", "turn:1:after:2", "turn:2:answer", "turn:3", "turn:2:after:3"]);
     // Work that has said nothing since the message took nothing of it: the message stays below every line.
     expect(lines([{ ...task, messages: [said(1, 1)] }, asked, message]).map(([key]) => key)).toEqual(["turn:1", "turn:2", "turn:3"]);
+  });
+
+  describe("an owner's own answer turn during earlier work", () => {
+    const start = at("2026-10-20T20:41:08+08:00");
+    const later = at("2026-10-20T20:43:21+08:00");
+    const sent = at("2026-10-20T20:42:24+08:00");
+    const row = (id: number, time: number, more: Partial<AgentTurn> = {}) =>
+      turn(id, "2026-10-20T20:41:08+08:00", { created_at_ms: time, member_id: 2, conversation_id: 4, source: "app", ...more });
+    const work = row(2072, start, { status: "superseded", messages: [
+      { seq: 1, kind: "reply", at_ms: start + 1000, text: "I opened the site." },
+      { seq: 2, kind: "reply", at_ms: later, text: "I will check the whole page." },
+    ] });
+    const answer = row(2073, sent);
+    const keys = (...turns: AgentTurn[]) => threadItems(turns, now).filter(item => item.kind === "turn").map(item => item.key);
+
+    test("send now puts the owner's message ahead of the earlier work's later words and keeps its own answer below them", () => {
+      expect(keys(answer, work)).toEqual(["turn:2072", "turn:2073", "turn:2072:after:2073", "turn:2073:answer"]);
+    });
+
+    test("a separate message after work ended keeps its intact turn in the same conversation", () => {
+      expect(keys(work, { ...answer, created_at_ms: later + 1 })).toEqual(["turn:2072", "turn:2073"]);
+      expect(keys({ ...work, status: "done", messages: work.messages?.slice(0, 1) }, answer)).toEqual(["turn:2072", "turn:2073"]);
+      expect(keys(work, { ...answer, conversation_id: 5 })).toEqual(["turn:2072", "turn:2073"]);
+      expect(keys(work, { ...answer, member_id: 3 })).toEqual(["turn:2072", "turn:2073"]);
+      expect(keys(work, { ...answer, scope: "room" })).toEqual(["turn:2072"]);
+    });
+
+    test("a queued bubble stays below all work until it starts", () => {
+      const waiting = row(2074, sent - 1, { status: "queued", text: "" });
+      expect(keys(work, { ...answer, status: "queued" })).toEqual(["turn:2072", "turn:2073"]);
+      expect(keys(waiting, answer, work)).toEqual(["turn:2072", "turn:2073", "turn:2072:after:2073", "turn:2073:answer", "turn:2074"]);
+    });
+
+    test("owner input, a colleague exchange and an independent owner turn divide the same work", () => {
+      const input = row(2074, sent - 20_000, { route: "owner_input", text: "" });
+      const exchange = row(2075, sent - 10_000, { route: "exchange", scope: "exchange", source: "member", peer_id: 3 });
+      expect(keys(answer, work, exchange, input)).toEqual([
+        "turn:2072", "turn:2074", "turn:2072:after:2074", "turn:2075",
+        "turn:2072:after:2075", "turn:2073", "turn:2072:after:2073", "turn:2073:answer",
+      ]);
+    });
   });
 
   describe("a colleague's exchange that came while the member worked stands inside that work, where it came", () => {
@@ -239,7 +282,7 @@ describe("one thread", () => {
         ["turn:1:after:3", { from: min(4), after: 3 }, []],
       ]);
       const queued = turn(2, "2026-10-20T09:02:00+08:00", { status: "queued", route: "answer", text: "", source: "app" });
-      expect(lines([work(), queued, exchange(3, 4)]).map(([key]) => key)).toEqual(["turn:1", "turn:2", "turn:3"]);
+      expect(lines([work(), queued, exchange(3, 4)]).map(([key]) => key)).toEqual(["turn:1", "turn:3", "turn:2"]);
     });
   });
 

@@ -6,7 +6,7 @@ test("find navigates unmounted records without mounting the entire history", asy
   document.body.innerHTML = '<button></button><aside></aside><main></main>';
   const thread = document.querySelector<HTMLElement>('main')!;
   const records = Array.from({length:150}, (_, id) => ({key:`turn:${id}`, texts:[id === 5 || id === 140 ? 'needle' : 'other words']}));
-  const reveal = vi.fn((key: string) => { thread.innerHTML = `<li data-key="${key}"><div class="message-text">needle</div></li>`; });
+  const reveal = vi.fn((key: string) => { thread.innerHTML = `<li data-key="${key}:answer"><div class="message-text">needle</div></li>`; });
   const find = mountConversationFind({button:document.querySelector('button')!,bar:document.querySelector('aside')!,thread,scroll:thread,load:async()=>{},records:()=>records,reveal});
   find.open();
   const input = document.querySelector<HTMLInputElement>('input')!;
@@ -16,7 +16,7 @@ test("find navigates unmounted records without mounting the entire history", asy
   expect(document.querySelector('.ra-find-count')!.textContent).toBe('2/2');
   input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',shiftKey:true}));
   expect(reveal).toHaveBeenLastCalledWith('turn:5');
-  expect(document.querySelector('mark.is-current')?.closest<HTMLElement>('[data-key]')?.dataset.key).toBe('turn:5');
+  expect(document.querySelector('mark.is-current')?.closest<HTMLElement>('[data-key]')?.dataset.key).toBe('turn:5:answer');
   expect(thread.children).toHaveLength(1);
 });
 
