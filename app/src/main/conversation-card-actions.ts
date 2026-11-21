@@ -6,8 +6,6 @@ import { t } from "./i18n";
 import { mountMailActions } from "./mail-actions";
 import { toaster } from "./ui";
 
-// A secret program key's least length, as the core's vault keeps it (computer/vault_entries.py KEY_MIN).
-const KEY_MIN = 6;
 
 /** Room cards use the same services and forms as private conversations. */
 export function mountConversationCardActions(thread: HTMLElement, _manageConnections: () => void): void {
@@ -16,18 +14,13 @@ export function mountConversationCardActions(thread: HTMLElement, _manageConnect
     return { connected: result.started || !["pending", "failed", "cancelled"].includes(result.card.state) };
   });
   mountMailActions(thread, error => toaster.info(describeError(error)), text => toaster.info(text));
-  // Save waits for every field; a program key also for its six characters, said under it while it is shorter (#281).
+  // Save waits for every field; a key of any length saves (R-LIMIT-01).
   const fieldsChanged = (event: Event): void => {
     const input = (event.target as Element).closest<HTMLInputElement>("input[data-secret-input], input[data-login-user]");
     const card = input?.closest(".secret-card");
     const save = card?.querySelector<HTMLButtonElement>('[data-act="card-save"]');
     if (!card || !save) return;
-    const secret = card.querySelector<HTMLInputElement>("input[data-secret-input]");
-    const short = !!card.querySelector("[data-key-card]") || card.matches("[data-key-card]")
-      ? !!secret && secret.value.trim().length > 0 && secret.value.trim().length < KEY_MIN : false;
-    const hint = card.querySelector<HTMLElement>("[data-secret-hint]");
-    if (hint) hint.hidden = !short;
-    save.disabled = short || [...card.querySelectorAll<HTMLInputElement>("input")].some(field => !field.value.trim());
+    save.disabled = [...card.querySelectorAll<HTMLInputElement>("input")].some(field => !field.value.trim());
   };
   thread.addEventListener("input", fieldsChanged);
   thread.addEventListener("click", event => {

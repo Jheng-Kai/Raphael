@@ -21,7 +21,7 @@ import { onLocaleChange, getLocale, t } from "./i18n";
 import { openMemberAvatarMenu } from "./member-avatar-menu";
 import type { MessageKey } from "./i18n/zh-TW";
 import { pickPicture, readPicture } from "./member-dialogs";
-import { INSTRUCTIONS_MAX, NAME_MAX, PERSONALITY_MAX, RAPHAEL_ID, ROLE_MAX, cleanName, faceHTML, isMemberNameTaken, stableMember } from "./members";
+import { PERSONALITY_MAX, RAPHAEL_ID, ROLE_MAX, cleanName, faceHTML, isMemberNameTaken, stableMember } from "./members";
 import { entryIcon } from "./service-mark";
 import { rememberAppLogos } from "./app-logos";
 import { connectedApps, toolOn, toolsAfterToggle, type ToolChoices } from "./member-tools";
@@ -180,7 +180,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     // Raphael's name is not the owner's to change here, nor has it a role.
     if (member.id === RAPHAEL_ID) return face + `<b class="ms-name ms-static">${esc(member.name)}</b>`;
     return face +
-      `<input class="mb-edit ms-name" id="ms-name" data-member="${member.id}" type="text" maxlength="${NAME_MAX}" value="${esc(member.name)}" aria-label="${esc(t("members.name"))}" autocomplete="off" spellcheck="false">` +
+      `<input class="mb-edit ms-name" id="ms-name" data-member="${member.id}" type="text" value="${esc(member.name)}" aria-label="${esc(t("members.name"))}" autocomplete="off" spellcheck="false">` +
       `<input class="mb-edit ms-role" id="ms-role" data-member="${member.id}" type="text" maxlength="${ROLE_MAX}" value="${esc(member.role)}" placeholder="${esc(t("members.role"))}" aria-label="${esc(t("members.role"))}" autocomplete="off" spellcheck="false">`;
   }
 
@@ -195,7 +195,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     const pending = saving.get(`${member.id}:${field}`);
     const value = pending ?? member[field] ?? "";
     if (editing.has(field)) {
-      return `<textarea id="ms-${field}" data-member="${member.id}" data-field="${field}" class="mb-fin mb-ta ms-field" rows="1" maxlength="${field === "personality" ? PERSONALITY_MAX : INSTRUCTIONS_MAX}" aria-label="${esc(label)}" placeholder="${esc(hint)}" spellcheck="false">${esc(value)}</textarea>`;
+      return `<textarea id="ms-${field}" data-member="${member.id}" data-field="${field}" class="mb-fin mb-ta ms-field" rows="1" ${field === "personality" ? `maxlength="${PERSONALITY_MAX}"` : ""} aria-label="${esc(label)}" placeholder="${esc(hint)}" spellcheck="false">${esc(value)}</textarea>`;
     }
     const words = value.trim();
     const mark = pending === undefined ? ico("pencil") : `<span class="spin" aria-hidden="true"></span>`;
@@ -210,7 +210,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     else if (skills === "failed") rows = muted(t("mem.loadFailed"));
     else {
       rows = (adding
-        ? `<div class="ms-add"><input id="ms-skill-source" class="mb-fin" maxlength="2048" value="${esc(source)}" placeholder="${esc(t("members.profile.source"))}" aria-label="${esc(t("members.profile.source"))}" autocomplete="off">${btn(esc(t("members.profile.import")), "sm", ' data-ms="skill-import" data-k="ms-skill-import"')}</div>` : "") +
+        ? `<div class="ms-add"><input id="ms-skill-source" class="mb-fin" value="${esc(source)}" placeholder="${esc(t("members.profile.source"))}" aria-label="${esc(t("members.profile.source"))}" autocomplete="off">${btn(esc(t("members.profile.import")), "sm", ' data-ms="skill-import" data-k="ms-skill-import"')}</div>` : "") +
         skills.filter(skill => !skill.shared).map(skill =>
           `<div class="ms-row" data-k="ms-skill:${skill.id}"><button type="button" class="btn ms-open" data-ms="skill-open" data-id="${skill.id}" data-k="ms-skill-open:${skill.id}"><span class="ms-label">${esc(skill.name)}</span></button>` +
           `${tg(skill.enabled, `${t("members.profile.enable")} ${skill.name}`, ` data-ms="skill-toggle" data-id="${skill.id}" data-k="ms-skill-toggle:${skill.id}"`)}</div>`).join("") +

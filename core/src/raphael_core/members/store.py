@@ -3,14 +3,14 @@
 - `member_groups`: a group of the member column, with a name (at most GROUP_NAME_MAX characters), a
   place (`position`) and the places its members look for progress (`sources`, "看的地方"): a GitHub
   repository (`owner/repo`) or a Notion page (its id or its address), at most MAX_SOURCES.
-- `members`: a member, with a name (at most NAME_MAX characters, one no other member has and none
+- `members`: a member, with a name (one no other member has and none
   of Raphael's), a role (ROLE_MAX), its character and speaking style (PERSONALITY_MAX), the owner's
-  instructions for its work (INSTRUCTIONS_MAX), a picture
+  instructions for its work, a picture
   (`avatar`: "", "preset:<file stem>", "file:<stored file name>" or "slime:<mascot>"), a group or none (未分組), a model
   ("" answers on Raphael's; `members.create` gives each its own), a place, when it was made, and the tools and connections it may use
   (`tools`: a list of ids, or None for every one that is on).
 - `routines`: what a member does on a schedule (`schedule`, see `schedule.py`), with a title
-  (TITLE_MAX) and the prompt it runs with (PROMPT_MAX), whether it is on, and when it last ran and
+  (TITLE_MAX) and the prompt it runs with, whether it is on, and when it last ran and
   runs next. Raphael has routines too, as member 0.
 - `member_unread`: the threads (Raphael's as 0) with news the owner has not seen.
 
@@ -48,21 +48,16 @@ ROUTINE_RUN_STATUS_SQL = """CASE WHEN r.finished IS NOT NULL THEN r.status
         )) THEN 'confirm'
     ELSE COALESCE(t.status,r.status) END"""
 
-NAME_MAX = 16
 ROLE_MAX = 24
 PERSONALITY_MAX = 2000
-INSTRUCTIONS_MAX = 2000
 GROUP_NAME_MAX = 24
 TITLE_MAX = 40
-PROMPT_MAX = 1000
 MODEL_MAX = 200
 MAX_SOURCES = 10
 SOURCE_MAX = 300
 MAX_TOOLS = 200
 TOOL_ID_MAX = 200
-MAX_MEMBERS = 100
 MAX_GROUPS = 40
-MAX_ROUTINES = 50  # of one member
 SOURCE_KINDS = ("github", "notion")
 
 
@@ -190,7 +185,7 @@ class Routine:
 # --- checking what the owner wrote -----------------------------------------------------------------
 
 
-def _text(value: Any, field: str, limit: int, *, blank: bool = True, one_line: bool = True) -> str:
+def _text(value: Any, field: str, limit: int | None = None, *, blank: bool = True, one_line: bool = True) -> str:
     """`value` as text the owner wrote: no control character (but a line break, in a text that may
     have several lines), the spaces around it gone, at most `limit` characters."""
     if not isinstance(value, str):
@@ -203,13 +198,13 @@ def _text(value: Any, field: str, limit: int, *, blank: bool = True, one_line: b
         raise MemberError(field, f"{field} has a character that cannot be shown")
     if not blank and not value:
         raise MemberError(field, f"{field} must not be empty")
-    if len(value) > limit:
+    if limit is not None and len(value) > limit:
         raise MemberError(field, f"{field} must be at most {limit} characters")
     return value
 
 
 def clean_name(value: Any) -> str:
-    return _text(value, "name", NAME_MAX, blank=False)
+    return _text(value, "name", blank=False)
 
 
 def clean_group_name(value: Any) -> str:
@@ -221,7 +216,7 @@ def clean_role(value: Any) -> str:
 
 
 def clean_instructions(value: Any) -> str:
-    return _text(value, "instructions", INSTRUCTIONS_MAX, one_line=False)
+    return _text(value, "instructions", one_line=False)
 
 
 def clean_personality(value: Any) -> str:
@@ -233,7 +228,7 @@ def clean_title(value: Any) -> str:
 
 
 def clean_prompt(value: Any) -> str:
-    return _text(value, "prompt", PROMPT_MAX, blank=False, one_line=False)
+    return _text(value, "prompt", blank=False, one_line=False)
 
 
 def clean_model(value: Any) -> str:
@@ -583,8 +578,6 @@ class MemberStore:
                 raise MemberError(field, "unknown member preference")
             values[field] = PROFILE_FIELDS[field](value)
         picked = clean_tools(tools)
-        if len(self.members()) >= MAX_MEMBERS:
-            raise MemberError("full", f"there are {MAX_MEMBERS} members already")
         with self.transaction():
             (position,) = self._conn.execute(
                 "SELECT COALESCE(MAX(position), -1) + 1 FROM members"
@@ -739,8 +732,6 @@ class MemberStore:
         if check is not None and trigger is not None:
             raise MemberError("precheck", "A precheck belongs to a routine with a schedule, not to an event")
         values = (clean_title(title), clean_prompt(prompt), clean_schedule(schedule) if trigger is None else None)
-        if len(self.routines(member_id)) >= MAX_ROUTINES:
-            raise MemberError("full", f"a member has at most {MAX_ROUTINES} routines")
         with self._conn:
             cursor = self._conn.execute(
                 "INSERT INTO routines (member_id, title, prompt, schedule, enabled, next_run_ms,"

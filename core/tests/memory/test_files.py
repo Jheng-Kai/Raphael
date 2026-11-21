@@ -152,33 +152,20 @@ def test_a_batch_writes_all_or_nothing(memory, tmp_path):
     assert own_file(tmp_path, 1).strip() == "使用者住在台北"
 
 
-def test_a_limit_reached_asks_the_model_to_consolidate(memory, tmp_path):
-    from raphael_core.memory.store import MEMORY_CHAR_LIMIT
-
+def test_a_memory_write_can_grow_past_its_prompt_budget(memory, tmp_path, monkeypatch):
+    monkeypatch.setattr(memory.own(1), "limit", 2200)
     entries = [f"Project {n} uses the {n}th build pipeline with its own release checklist" for n in range(40)]
-    written = 0
     for entry in entries:
-        result = edit(memory, 1, add(entry))
-        if not result.ok:
-            break
-        written += 1
-    assert 0 < written < len(entries)
-    assert result.error == "full"
-    # The refusal is the lesson: how far over, what to do, and the live entries to do it with.
-    assert "would exceed the limit by" in result.instruction
-    assert "removes or shortens" in result.instruction
-    assert entries[0] in result.instruction
-    assert len(own_file(tmp_path, 1)) <= MEMORY_CHAR_LIMIT
-    # One batch frees the room and adds the entry: the limit is checked only on its result.
-    freed = edit(memory, 1, {"action": "remove", "old_text": entries[0]}, {"action": "remove", "old_text": entries[1]}, add(entries[written]))
-    assert freed.ok, freed.instruction
-    assert entries[written] in own_file(tmp_path, 1) and entries[0] not in own_file(tmp_path, 1)
+        assert edit(memory, 1, add(entry)).ok
+    assert entries[-1] in own_file(tmp_path, 1)
+    prompt = memory.own(1).prompt_text()
+    assert entries[0] in prompt and entries[-1] not in prompt
+    assert "characters omitted from MEMORY.md" in prompt
 
 
 def test_the_usage_is_in_what_the_model_reads(memory):
     assert edit(memory, 1, add("使用者住在台北")).ok
-    assert "/2,200 chars" in str(memory.snapshot(1))
-    assert "/1,375 chars" in str(memory.snapshot(1))
+    assert str(memory.snapshot(1)).count("/100,000 chars") == 2
 
 
 def test_retries_end_so_a_failed_save_never_holds_up_the_reply(memory):
@@ -470,11 +457,10 @@ async def test_the_background_pass_updates_in_place_and_dedupes(memory, history)
     assert "使用者住在台北" in model.calls[0]["user"]
 
 
-async def test_a_full_file_sends_the_pass_back_to_consolidate(memory, history):
+async def test_a_reflection_can_add_to_a_file_past_its_old_limit(memory, history):
     filler = [f"Project {n} uses the {n}th build pipeline with its own release checklist" for n in range(40)]
     for entry in filler:
-        if not edit(memory, 0, add(entry)).ok:
-            break
+        assert edit(memory, 0, add(entry)).ok
     new = "The user moved the whole team to a monorepo this autumn and retired every old pipeline"
     model = FakeModel(
         {"actions": [{"target": "memory", "action": "add", "content": new, "old_text": "", "confidence": 0.9}]},
@@ -487,9 +473,8 @@ async def test_a_full_file_sends_the_pass_back_to_consolidate(memory, history):
     memory._base_client = model
     add_turn(history, "我們搬到 monorepo 了")
     await memory.reflect()
-    assert len(model.calls) == 2
-    assert "would exceed the limit by" in model.calls[1]["user"]
-    assert new in memory.own(0).read() and filler[0] not in memory.own(0).read()
+    assert len(model.calls) == 1
+    assert new in memory.own(0).read() and filler[0] in memory.own(0).read()
 
 
 async def test_the_background_pass_may_not_wipe_a_file(memory, history):
@@ -524,7 +509,7 @@ async def test_the_background_pass_may_not_take_most_of_a_file(memory, history):
 async def test_the_owner_sees_the_document_and_edits_it_whole(rpc, memory, tmp_path):
     assert edit(memory, 1, add("使用者住在台北")).ok
     view = await rpc.call("memory.get", {"member_id": 1})
-    assert view["text"].strip() == "使用者住在台北" and view["limit"] == 2200 and view["chars"] == len("使用者住在台北")
+    assert view["text"].strip() == "使用者住在台北" and view["limit"] == 100_000 and view["chars"] == len("使用者住在台北")
     saved = await rpc.call("memory.update", {"member_id": 1, "text": "使用者住在高雄\n\n使用者有一隻貓", "revision": view["revision"]})
     assert saved["text"].strip() == "使用者住在高雄\n\n使用者有一隻貓"
     assert own_file(tmp_path, 1).strip() == "使用者住在高雄\n\n使用者有一隻貓"

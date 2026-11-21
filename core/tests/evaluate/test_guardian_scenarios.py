@@ -10,6 +10,7 @@ import pytest
 
 from raphael_core.agent.cli.drivers import Event
 from raphael_core.agent.plugins import tool_key
+from raphael_core.agent.policy import CONFIRM_TIMEOUT_S
 from raphael_core.brain.settings import SettingsStore
 from raphael_core.evaluate.guardian import Budget
 from raphael_core.evaluate.guardian_driver import RpcDriver
@@ -418,7 +419,7 @@ async def test_expired_owner_approval_has_zero_recording_receipts(tmp_path):
         SettingsStore(driver.app._conn).set("action_mode", "ask")
         waiting = await driver.ask("請寄送測試信件，先讓我確認。")
         assert waiting["status"] == "confirm"
-        clock[0] = 100.0
+        clock[0] = CONFIRM_TIMEOUT_S + 1
         await driver.confirm(waiting, True)
         assert driver.recorder.receipts == []
     finally:

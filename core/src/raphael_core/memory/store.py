@@ -18,12 +18,9 @@ The model edits by `add`, `replace` and `remove`, in one atomic batch (`MemoryFi
   To rewrite an entry, its whole text is the span.
 - `remove` deletes the entry `old_text` is part of.
 
-A file has a limit, in characters, and a batch that would pass it is refused with a note that says by
-how much and shows the entries, so that the model frees the room and adds in one batch: the limit is
-checked on the batch's result alone. A file over its limit (the owner's own edit, a migration) keeps
-every word and may only shrink until it is back under it. Failed attempts are counted through a turn:
-past MAX_FAILURES_PER_TURN the model is told to stop and answer, since a failed save must never hold up
-the reply.
+The prompt has a character budget. The file can grow past it up to the home storage bound.
+Failed attempts are counted through a turn: past MAX_FAILURES_PER_TURN the model is told to stop
+and answer, since a failed save must never hold up the reply.
 
 Every write holds the file's lock, reads the file again, and replaces it atomically through
 `bots.homes.BotHomes` (allowlisted paths, secrets masked, a revision journal outside the homes), so two
@@ -52,8 +49,8 @@ from .terms import normalized, parts, tokens
 
 logger = logging.getLogger(__name__)
 
-MEMORY_CHAR_LIMIT = 2200
-USER_CHAR_LIMIT = 1375
+MEMORY_CHAR_LIMIT = 100_000
+USER_CHAR_LIMIT = 100_000
 ENTRY_DELIMITER = "\n\n"
 # Failed attempts in one turn before the model is told to stop trying and answer.
 MAX_FAILURES_PER_TURN = 3
@@ -347,7 +344,11 @@ class MemoryFile:
     def prompt_text(self) -> str:
         """The file as a turn reads it. A line that fails the scan (it reached the file by hand) is a
         note in the prompt alone: the file keeps it, for the owner to see and remove."""
-        return ENTRY_DELIMITER.join(self._sanitized(entry) for entry in self.entries())
+        text = ENTRY_DELIMITER.join(self._sanitized(entry) for entry in self.entries())
+        if len(text) <= self.limit:
+            return text
+        omitted = len(text) - self.limit
+        return text[:self.limit] + f"\n[{omitted:,} characters omitted from {self.name} for this prompt.]"
 
     def _sanitized(self, entry: str) -> str:
         if scan.refusal(entry) is None:
@@ -567,14 +568,6 @@ class MemoryFile:
             return "too_much_removed", (
                 f"This would take away more than half of {self.name}. Merge entries and keep their facts. "
                 "Nothing was changed.")
-        if new_total > self.limit and new_total > old_total:
-            over = new_total - self.limit
-            return "full", (
-                f"{self.name} at {old_total:,}/{self.limit:,} chars; this would exceed the limit by {over:,} chars. "
-                f"Retry as ONE 'operations' batch that removes or shortens (replace) stale entries from "
-                f"current_entries below to free at least {over:,} chars AND makes this change: the limit is "
-                "checked only on the batch's result. Merge what overlaps; drop what no longer matters."
-                + _listed("current_entries", before))
         return None
 
     def _persist(self, entries: Sequence[str]) -> None:

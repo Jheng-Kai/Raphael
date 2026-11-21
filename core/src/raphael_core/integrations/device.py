@@ -39,7 +39,7 @@ DEFAULT_EXPIRES_S = 900
 # waits a little longer than this (core_process.rs `timeout_for`), so the core ends the login first.
 MAX_EXPIRES_S = 900
 TOTAL_S = MAX_EXPIRES_S + 30
-REQUEST_TIMEOUT_S = 15.0
+REQUEST_TIMEOUT_S = 120.0
 
 
 @dataclass(frozen=True)

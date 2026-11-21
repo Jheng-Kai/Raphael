@@ -78,6 +78,7 @@ async def test_cli_timeout_is_classified_and_closed(memory, monkeypatch):
 @pytest.mark.parametrize("reference", ["@chatgpt:gpt-6-luna?effort=high", "cli:claude", "cli:codex", "cli:gemini"])
 async def test_subscription_consolidation_writes(memory, monkeypatch, reference):
     original = "\n\n".join(f"Build {n} uses the amber notebook pipeline with stable paths" for n in range(40))
+    memory.own(0).limit = 2200
     memory.own(0).edit_document(original, None)
     old = memory.own(0).entries()[0]
     plan = {"actions": [{"target": "memory", "action": "replace", "content": "Build zero uses the amber pipeline.",

@@ -122,16 +122,18 @@ async def test_a_quick_question_publishes_running_action_before_completion_and_s
         await asyncio.gather(task, return_exceptions=True)
 
 
-async def test_foreground_command_cannot_request_an_unbounded_timeout(make_rig, conn):
+async def test_foreground_commands_can_request_up_to_one_hour(make_rig, conn):
     from raphael_core.computer.local_tools import _CONTEXT
     rig, hub, host = rig_with_command(make_rig, conn)
     token = _CONTEXT.set((('chat', 0, 1), False, True, 'synthetic', True, 0))
     try:
         host.execute.return_value = {'exit_code': None, 'stdout': '', 'stderr': '', 'timed_out': True, 'truncated': False}
-        result = await hub.call('mcp:local/local_exec', {'command': COMMAND, 'timeout_seconds': 86400}, approver='user')
-        assert host.execute.await_args.kwargs['timeout_seconds'] == 120
+        result = await hub.call('mcp:local/local_exec', {'command': COMMAND, 'timeout_seconds': 3600}, approver='user')
+        assert host.execute.await_args.kwargs['timeout_seconds'] == 3600
         assert not result.ok and result.kind == 'timeout'
         assert 'stopped' in json.loads(result.text)['message']
+        refused = await hub.call('mcp:local/local_exec', {'command': COMMAND, 'timeout_seconds': 3601}, approver='user')
+        assert refused.kind == 'bad_arguments' and host.execute.await_count == 1
     finally:
         _CONTEXT.reset(token)
 

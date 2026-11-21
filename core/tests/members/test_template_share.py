@@ -8,7 +8,7 @@ import pytest
 
 from raphael_core.members import member_catalog
 from raphael_core.members.member_catalog import PUBLIC_KEYS, Catalog
-from raphael_core.members.store import NAME_MAX, ROLE_MAX
+from raphael_core.members.store import ROLE_MAX
 from raphael_core.members.template_author import SCHEMA
 from raphael_core.protocol import RpcError
 
@@ -74,13 +74,13 @@ async def test_a_member_exported_to_a_file_and_imported_again_is_a_copy_of_the_r
 
 
 async def test_the_names_a_template_may_have_are_the_core_names_everywhere(rig):
-    assert SCHEMA["properties"]["name"]["maxLength"] == NAME_MAX == 16
+    assert "maxLength" not in SCHEMA["properties"]["name"]
     assert SCHEMA["properties"]["role"]["maxLength"] == ROLE_MAX
-    catalog = json.loads((ROOT / "catalog-template/member.schema.json").read_text(encoding="utf-8"))["properties"]
-    assert catalog["name"]["maxLength"] == NAME_MAX and catalog["role"]["maxLength"] == ROLE_MAX
-    value = (await rig.call("members.template", {"action": "export", "id": (await rig.call("members.create", {"name": "N" * NAME_MAX}))["member"]["id"]}))["template"]
-    with pytest.raises(RpcError):
-        await rig.call("members.template", {"action": "preview", "template": {**value, "name": "N" * (NAME_MAX + 1)}})
+    name = "N" * 80
+    member = (await rig.call("members.create", {"name": name}))["member"]
+    value = (await rig.call("members.template", {"action": "export", "id": member["id"]}))["template"]
+    preview = await rig.call("members.template", {"action": "preview", "template": value})
+    assert preview["template"]["name"] == name
 
 
 async def test_a_publish_request_says_where_its_files_are_and_only_that_folder_can_be_shown(rig):

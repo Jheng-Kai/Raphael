@@ -72,6 +72,14 @@ def test_a_sentence_with_no_spaces_falls_back_to_its_pairs(history):
     assert questions(history.search("上次說的出差")) == ["下週的出差行程"]
 
 
+def test_a_long_query_can_match_terms_in_every_batch(history):
+    add_turn(history, "The older orchard")
+    add_turn(history, "The newest harvest")
+    query = " ".join(["orchard", *(f"unused{n}" for n in range(1100)), "harvest"])
+    assert set(questions(history.search(query, limit=None))) == {"The older orchard", "The newest harvest"}
+    assert len(history.search(query, limit=1, most=None)) == 1
+
+
 def test_only_answered_turns_are_found_and_the_limit_holds(history):
     for n in range(12):
         add_turn(history, f"會議 {n}")

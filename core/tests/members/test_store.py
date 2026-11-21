@@ -5,8 +5,6 @@ import pytest
 from raphael_core.agent.speaker import RAPHAEL_ID
 from raphael_core.members.schedule import Schedule
 from raphael_core.members.store import (
-    INSTRUCTIONS_MAX,
-    MAX_ROUTINES,
     MemberError,
     MemberStore,
     Source,
@@ -130,9 +128,7 @@ def test_names_are_unique_whatever_the_case_and_none_is_raphaels(store):
     ("fields", "kind"),
     [
         ({"name": ""}, "name"),
-        ({"name": "x" * 17}, "name"),
         ({"name": "a", "role": "x" * 25}, "role"),
-        ({"name": "a", "instructions": "x" * (INSTRUCTIONS_MAX + 1)}, "instructions"),
         ({"name": "a", "group_id": 42}, "group"),
         ({"name": "a", "group_id": "1"}, "group"),
         ({"name": "a", "avatar": "C:\\Users\\me\\a.png"}, "avatar"),
@@ -229,7 +225,6 @@ def test_raphael_has_routines_too_and_nobody_else_who_is_not_there(store):
         ({"title": ""}, "title"),
         ({"title": "x" * 41}, "title"),
         ({"prompt": ""}, "prompt"),
-        ({"prompt": "x" * 1001}, "prompt"),
         ({"schedule": {"kind": "daily", "time": "25:00"}}, "schedule"),
         ({"enabled": "yes"}, "enabled"),
     ],
@@ -239,19 +234,17 @@ def test_what_a_routine_cannot_be_is_refused(store, fields, kind):
     assert kind_of(lambda: store.create_routine(member_id=0, next_run_ms=1, **values)) == kind
 
 
-def test_a_member_has_a_limited_number_of_routines(store):
-    assert MAX_ROUTINES == 50
-    for n in range(MAX_ROUTINES):
+def test_members_keep_long_names_instructions_and_routine_prompts(store):
+    name, instructions, prompt = "n" * 80, "i" * 3000, "p" * 1500
+    member = store.create_member(name=name, instructions=instructions)
+    assert (member.name, member.instructions) == (name, instructions)
+    for n in range(55):
         store.create_routine(
-            member_id=0, title=f"t{n}", prompt="p", schedule={"kind": "every", "hours": 1},
-            next_run_ms=1,
-        )  # fmt: skip
-    assert kind_of(
-        lambda: store.create_routine(
-            member_id=0, title="one more", prompt="p", schedule={"kind": "every", "hours": 1},
-            next_run_ms=1,
+            member_id=member.id, title=f"t{n}", prompt=prompt,
+            schedule={"kind": "every", "hours": 1}, next_run_ms=1,
         )
-    ) == "full"  # fmt: skip
+    assert len(store.routines(member.id)) == 55
+    assert {routine.prompt for routine in store.routines(member.id)} == {prompt}
 
 
 def test_the_routines_that_are_due_are_the_ones_that_are_on_and_past_their_time(store):

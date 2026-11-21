@@ -703,7 +703,7 @@ class ConnectorCards:
         from an earlier try is used, so that a card whose sign-in only needs pressing again asks for nothing."""
         if fields:
             client_id, secret = str(fields.get("client_id", "")).strip(), str(fields.get("client_secret", "")).strip()
-            if (set(fields) - {"client_id", "client_secret"} or not client_id or not secret or len(client_id) > 300 or len(secret) > 300
+            if (set(fields) - {"client_id", "client_secret"} or not client_id or not secret
                     or re.search(r"[\s\x00-\x1f]", client_id) or re.search(r"[\x00-\x1f]", secret)):
                 raise _Failed("needs_own_google")
             result = await self._router.call("connectors.google.configure", {"client_id": client_id, "client_secret": secret})

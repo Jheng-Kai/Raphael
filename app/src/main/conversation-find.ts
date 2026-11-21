@@ -12,7 +12,7 @@ export function mountConversationFind(o: { button?: HTMLElement; bar: HTMLElemen
   let painted: {query: string; text: string | null; marks: HTMLElement[]} | undefined;
   o.bar.className = "ra-find";
   o.bar.hidden = true;
-  o.bar.innerHTML = `<span class="ra-find-ic">${ico("search")}</span><input type="search" class="ra-find-input" maxlength="200" autocomplete="off" spellcheck="false" aria-label="${esc(t("agent.search"))}" placeholder="${esc(t("agent.search"))}">` +
+  o.bar.innerHTML = `<span class="ra-find-ic">${ico("search")}</span><input type="search" class="ra-find-input" autocomplete="off" spellcheck="false" aria-label="${esc(t("agent.search"))}" placeholder="${esc(t("agent.search"))}">` +
     `<span class="ra-find-count num" role="status" aria-live="polite"></span>` +
     iconButton("up", t("chat.findPrevious"), ' data-find="previous"', "ra-tool") +
     iconButton("down", t("chat.findNext"), ' data-find="next"', "ra-tool") +

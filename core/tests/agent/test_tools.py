@@ -452,7 +452,7 @@ async def test_a_search_asks_the_model_with_the_web_plugin_and_returns_what_it_f
     call = client.text_calls[0]
     assert call["model"] == "openai/gpt-6-luna"
     assert call["user"] == "明天台北會下雨嗎"  # the question, as it was asked
-    assert call["plugins"] == SEARCH_PLUGINS == [{"id": "web", "max_results": 3}]
+    assert call["plugins"] == SEARCH_PLUGINS == [{"id": "web"}]
     assert call["reasoning_effort"] == "none"
     assert call["timeout_s"] > 0 and call["max_tokens"] > 0
     assert "web results" in call["system"] and "three" in call["system"]

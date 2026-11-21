@@ -104,7 +104,7 @@ async def search(service, query, *, key, call, firecrawl_url=""):
     elif service in MCP_URLS:
         exa = service == "exa-free"
         text = await _mcp(service, "web_search_exa" if exa else "web_search",
-            {"query": query, "numResults": 5} if exa else {"objective": query, "search_queries": [query], "session_id": MCP_SESSION_ID}, call)
+            {"query": query} if exa else {"objective": query, "search_queries": [query], "session_id": MCP_SESSION_ID}, call)
         if exa:
             items = []
             for block in re.split(r"\n---+\n|(?=^Title:)", text, flags=re.MULTILINE):
@@ -121,23 +121,23 @@ async def search(service, query, *, key, call, firecrawl_url=""):
         if service == "keenable":
             headers["Authorization"] = f"Bearer {need_key(service, key)}"
         body = _object(await call("POST", "https://api.keenable.ai/v1/search" + ("/public" if service.endswith("-free") else ""),
-            headers=headers, json={"query": query, "max_results": 5}), service)
+            headers=headers, json={"query": query}), service)
         items = body.get("results")
     elif service in ("tavily-free", "firecrawl", "firecrawl-free", "firecrawl-selfhosted", "parallel", "perplexity"):
         headers = {}
         if not service.endswith("-free") and service != "firecrawl-selfhosted":
             headers = {("x-api-key" if service == "parallel" else "Authorization"): need_key(service, key) if service == "parallel" else f"Bearer {need_key(service, key)}"}
         if service == "tavily-free":
-            url, payload = "https://api.tavily.com/search", {"query": query, "max_results": 5, "include_answer": True}
+            url, payload = "https://api.tavily.com/search", {"query": query, "include_answer": True}
         elif service.startswith("firecrawl"):
             base = _firecrawl_base(firecrawl_url) if service == "firecrawl-selfhosted" else "https://api.firecrawl.dev"
-            url, payload = base + "/v2/search", {"query": query, "limit": 5}
+            url, payload = base + "/v2/search", {"query": query}
             if service == "firecrawl-selfhosted" and key:
                 headers["Authorization"] = f"Bearer {key}"
         elif service == "parallel":
             url, payload = "https://api.parallel.ai/v1/search", {"objective": query, "search_queries": [query]}
         else:
-            url, payload = "https://api.perplexity.ai/search", {"query": query, "max_results": 5, "search_context_size": "low"}
+            url, payload = "https://api.perplexity.ai/search", {"query": query, "search_context_size": "low"}
         body = _object(await call("POST", url, headers=headers, json=payload), service)
         items = body.get("results", body.get("data"))
         if isinstance(items, dict):

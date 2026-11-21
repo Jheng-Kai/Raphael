@@ -371,7 +371,7 @@ async def test_a_tool_at_t2_or_t3_asks_first_and_runs_nothing(rig, plugins, clie
     # It names the service, the tool and the start of what it is given, and it asks.
     assert "Notes" in confirm["text"] and "note" in confirm["text"] and ARGUMENT in confirm["text"]
     assert confirm["text"].endswith("？")
-    assert confirm["timeout_ms"] == 30000
+    assert confirm["timeout_ms"] == 600000
     assert calls == [] and plugins.audit() == []
     assert (await rig.turns())[0]["status"] == "confirm"
 
@@ -438,9 +438,9 @@ async def test_a_no_runs_nothing_and_is_written_down(rig, plugins, client, calls
     assert (await rig.turns())[0]["status"] == "denied"
 
 
-async def test_no_answer_in_thirty_seconds_is_a_no(rig, plugins, client, calls):
+async def test_no_answer_in_ten_minutes_is_a_no(rig, plugins, client, calls):
     asked = await ask_for_note(rig, plugins, client)
-    rig.clock.now += 30
+    rig.clock.now += 600
     done = await rig.confirm(asked["confirm"]["id"], True)
     assert (done["prefix"], done["text"]) == ("否", phrase("zh-TW", "expired"))
     assert calls == []
@@ -450,7 +450,7 @@ async def test_no_answer_in_thirty_seconds_is_a_no(rig, plugins, client, calls):
 
 async def test_a_question_that_ran_out_is_written_down_once(rig, plugins, client, calls):
     asked = await ask_for_note(rig, plugins, client)
-    rig.clock.now += 31
+    rig.clock.now += 601
     await rig.turns()  # listing the turns sweeps the questions that ran out
     await rig.confirm(asked["confirm"]["id"], True)
     await rig.confirm(asked["confirm"]["id"], False)

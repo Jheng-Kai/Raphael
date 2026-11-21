@@ -128,7 +128,7 @@ def test_an_approval_that_is_not_one_is_refused(registry):
 # --- opening a confirmation ----------------------------------------------------------------------
 
 
-def test_a_confirmation_has_a_uuid_the_tier_and_thirty_seconds(confirmations):
+def test_a_confirmation_has_a_uuid_the_tier_and_ten_minutes(confirmations):
     pending = open_one(confirmations, tier=Tier.T3, session="s9", turn=42, language="ja")
     assert str(uuid.UUID(pending.id)) == pending.id  # a uuid
     assert (pending.session_id, pending.turn_id, pending.tier, pending.language) == (
@@ -138,7 +138,7 @@ def test_a_confirmation_has_a_uuid_the_tier_and_thirty_seconds(confirmations):
         "ja",
     )
     assert pending.action.tool == "write"
-    assert CONFIRM_TIMEOUT_S == 30.0 and CONFIRM_TIMEOUT_MS == 30_000
+    assert CONFIRM_TIMEOUT_S == 600.0 and CONFIRM_TIMEOUT_MS == 600_000
 
 
 def test_every_confirmation_has_an_id_of_its_own(confirmations):
@@ -181,16 +181,16 @@ def test_a_yes_for_one_confirmation_does_not_approve_another(confirmations):
     assert confirmations.resolve(second.id, False).outcome is Outcome.DENIED
 
 
-# --- thirty seconds ------------------------------------------------------------------------------
+# --- ten minutes ------------------------------------------------------------------------------
 
 
-def test_a_yes_within_thirty_seconds_counts(confirmations, clock):
+def test_a_yes_within_ten_minutes_counts(confirmations, clock):
     pending = open_one(confirmations)
-    clock.now += 29.9
+    clock.now += CONFIRM_TIMEOUT_S - 0.1
     assert confirmations.resolve(pending.id, True).outcome is Outcome.APPROVED
 
 
-def test_a_yes_after_thirty_seconds_is_too_late_and_gives_no_approval(confirmations, clock):
+def test_a_yes_after_ten_minutes_is_too_late_and_gives_no_approval(confirmations, clock):
     pending = open_one(confirmations)
     clock.now += CONFIRM_TIMEOUT_S
     result = confirmations.resolve(pending.id, True)
@@ -201,9 +201,9 @@ def test_a_yes_after_thirty_seconds_is_too_late_and_gives_no_approval(confirmati
     assert confirmations.resolve(pending.id, True).outcome is Outcome.EXPIRED
 
 
-def test_a_no_after_thirty_seconds_is_expired_too(confirmations, clock):
+def test_a_no_after_ten_minutes_is_expired_too(confirmations, clock):
     pending = open_one(confirmations)
-    clock.now += 31
+    clock.now += CONFIRM_TIMEOUT_S + 1
     assert confirmations.resolve(pending.id, False).outcome is Outcome.EXPIRED
 
 
@@ -211,9 +211,9 @@ def test_sweeping_takes_out_the_confirmations_that_ran_out_and_leaves_the_others
     confirmations, clock
 ):
     old = open_one(confirmations, turn=1)
-    clock.now += 20
+    clock.now += CONFIRM_TIMEOUT_S - 10
     young = open_one(confirmations, turn=2)
-    clock.now += 11  # old is 31 s old, young 11
+    clock.now += 11  # The old question has expired while the new one is still live.
     assert confirmations.sweep() == [old]
     assert confirmations.sweep() == []  # once
     assert confirmations.resolve(old.id, True).outcome is Outcome.EXPIRED
@@ -222,11 +222,11 @@ def test_sweeping_takes_out_the_confirmations_that_ran_out_and_leaves_the_others
 
 def test_the_confirmations_that_ran_out_are_remembered_only_so_far(confirmations, clock):
     first = open_one(confirmations, turn=0)
-    clock.now += 31
+    clock.now += CONFIRM_TIMEOUT_S + 1
     confirmations.sweep()
     for number in range(1, 100):
         open_one(confirmations, turn=number)
-        clock.now += 31
+        clock.now += CONFIRM_TIMEOUT_S + 1
         confirmations.sweep()
     assert confirmations.resolve(first.id, True).outcome is Outcome.UNKNOWN  # forgotten, not yes
 
@@ -262,7 +262,7 @@ def test_cancelling_where_denies_only_the_picked_confirmations(confirmations):
 
 def test_a_confirmation_that_ran_out_is_not_returned_by_a_cancel(confirmations, clock):
     pending = open_one(confirmations)
-    clock.now += 40
+    clock.now += CONFIRM_TIMEOUT_S + 1
     assert confirmations.cancel_session("s1") == []
     assert confirmations.resolve(pending.id, True).outcome is Outcome.EXPIRED
 
@@ -338,7 +338,7 @@ def test_a_core_that_started_again_has_no_questions_so_an_old_yes_finds_nothing(
     assert after.resolve(pending.id, True, pending.digest).outcome is Outcome.UNKNOWN
 
 
-def test_a_question_nobody_sits_at_waits_thirty_minutes_not_thirty_seconds(confirmations, clock):
+def test_a_question_nobody_sits_at_waits_thirty_minutes_not_ten(confirmations, clock):
     assert UNATTENDED_WAIT_S == 1800.0 and UNATTENDED_WAIT_MS == 1_800_000
     attended = open_one(confirmations, turn=1)
     unattended = confirmations.open("s1", 2, Action("write", {"text": "x"}), Tier.T2, "en", wait_s=UNATTENDED_WAIT_S)

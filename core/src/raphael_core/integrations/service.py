@@ -66,7 +66,6 @@ from . import catalog
 from .audit import LIST_DEFAULT, AuditLog
 from .client import CALL_TOTAL_S, LOGIN_TIMEOUT_S, REFRESH_TOTAL_S, LoginResult, McpConnector, McpFailure
 from .config import (
-    MAX_NAME_CHARS,
     ConfigStore,
     ServerConfig,
     ToolRecord,
@@ -338,7 +337,7 @@ class IntegrationsService:
         candidate, n = name, 1
         while candidate.casefold() in taken:
             n += 1
-            candidate = f"{name[: MAX_NAME_CHARS - 4]} {n}"
+            candidate = f"{name} {n}"
         return candidate
 
     async def _connect(self, params: dict) -> dict:
@@ -416,7 +415,7 @@ class IntegrationsService:
                 self._config.save()
         except (ValueError, OSError) as exc:
             self._wipe_login(server, True)
-            if isinstance(exc, ValueError):  # too many plugins
+            if isinstance(exc, ValueError):
                 raise invalid_params(str(exc)) from None
             raise _not_saved(exc) from None
         self._failure.pop(server.id, None)
@@ -485,7 +484,7 @@ class IntegrationsService:
         except SecretTooLong as exc:
             self._forget(stored)
             raise invalid_params(str(exc)) from None
-        except ValueError as exc:  # too many plugins
+        except ValueError as exc:
             self._forget(stored)
             raise invalid_params(str(exc)) from None
         except OSError as exc:

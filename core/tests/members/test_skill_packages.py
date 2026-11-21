@@ -62,7 +62,7 @@ async def test_the_library_accepts_documents_and_packaged_skills(rig, layout):
 
 @pytest.mark.parametrize("problem,kind", [("traversal", "archive"), ("absolute", "archive"), ("link", "archive"),
     ("case", "archive"), ("parent_case", "archive"), ("size", "size"), ("expanded", "size"), ("entries", "size"),
-    ("skill_size", "size"), ("missing", "not_found"), ("bad_name", "name")])
+    ("skill_size", "size"), ("missing", "not_found")])
 async def test_invalid_packages_leave_the_library_and_files_untouched(rig, monkeypatch, problem, kind):
     entries = [("notes/SKILL.md", document("read-notes").encode())]
     if problem in ("traversal", "absolute"):
@@ -77,8 +77,6 @@ async def test_invalid_packages_leave_the_library_and_files_untouched(rig, monke
         entries.append(("NOTES/help.txt", b"x"))
     elif problem == "missing":
         entries = [("help.txt", b"x")]
-    elif problem == "bad_name":
-        entries.append(("other/SKILL.md", document("Not a slug").encode()))
     elif problem == "entries":
         monkeypatch.setattr(skill_sources, "MAX_PACKAGE_FILES", 1)
         entries.append(("notes/help.txt", b"x"))

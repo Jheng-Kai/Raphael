@@ -37,7 +37,7 @@ class TerminalSignIn:
         script.write_text(script_text(argv, self._pid_file, self._code_file), encoding="utf-8")
         script.chmod(0o700)
         try:
-            completed = opener(["/usr/bin/open", "-a", "Terminal", str(script)], capture_output=True, timeout=30, check=False)
+            completed = opener(["/usr/bin/open", "-a", "Terminal", str(script)], capture_output=True, timeout=60, check=False)
         except (OSError, subprocess.SubprocessError):
             self._cleanup()
             raise OSError("Terminal could not be opened") from None

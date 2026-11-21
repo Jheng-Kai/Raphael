@@ -8,7 +8,7 @@ import { resolve } from "node:path";
 import ts from "typescript-6";
 import { describe, expect, test } from "vitest";
 import { connectionName, type MemberTemplate } from "./member-templates";
-import { NAME_MAX, ROLE_MAX } from "./members";
+import { ROLE_MAX } from "./members";
 import { routineText } from "./members";
 import { reviewPageHTML, type ReviewPage } from "./template-review";
 import { t } from "./i18n";
@@ -59,12 +59,12 @@ describe("the MemberTemplate type is the core's recipe", () => {
   });
 });
 
-describe("a member's name and role are as long as the core says, in every field of sharing", () => {
+describe("a member's role is as long as the core says, and its name has no cap, in every field of sharing", () => {
   const store = readFileSync(resolve(root, "core/src/raphael_core/members/store.py"), "utf8");
   const limit = (name: string): number => Number(new RegExp(`^${name} = ([0-9]+)`, "m").exec(store)![1]);
 
   test("the window's limits are the core's", () => {
-    expect(NAME_MAX).toBe(limit("NAME_MAX"));
+    expect(store).not.toMatch(/^NAME_MAX = /m);
     expect(ROLE_MAX).toBe(limit("ROLE_MAX"));
   });
 });

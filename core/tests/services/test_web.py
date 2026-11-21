@@ -264,7 +264,24 @@ async def test_brave_is_asked_with_its_key_in_its_header_and_its_results_are_rea
     }
     (request,) = api.requests
     assert request.headers["x-subscription-token"] == KEY
-    assert request.url.params["q"] == "raphael app" and request.url.params["count"] == "5"
+    assert request.url.params["q"] == "raphael app" and request.url.params["count"] == "20"
+
+
+async def test_a_long_search_collects_all_provider_pages(fast_search):
+    query = "long query " * 40
+    def answer(request):
+        assert request.url.params["q"] == query
+        offset = int(request.url.params["offset"])
+        return httpx.Response(200, json={
+            "query": {"more_results_available": offset < 2},
+            "web": {"results": [
+                {"url": f"https://example.com/{offset}/{number}"} for number in range(20)
+            ]},
+        })
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(answer)) as client:
+        result = await web.search("brave", query, http=client, key=KEY)
+    assert len(result["results"]) == 60
 
 
 async def test_tavily_gives_its_own_answer_besides_the_results():

@@ -154,8 +154,8 @@ class DiscordChannel(PairedHistory):
             backoff = min(60, backoff * 2)
 
     async def send(self, chat, text):
-        for start in range(0, len(text), 1900):
-            payload = {"content": text[start:start + 1900], "allowed_mentions": {"parse": []}}
+        for start in range(0, len(text), 2000):
+            payload = {"content": text[start:start + 2000], "allowed_mentions": {"parse": []}}
             await send_through_rate_limits(lambda: self.api("POST", f"/channels/{chat}/messages", json=payload), asyncio.sleep)
 
     async def send_attachment(self, chat, file):

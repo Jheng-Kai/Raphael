@@ -9,10 +9,10 @@ use serde_json::Value;
 use crate::overlay::{AskPrompt, Tier};
 
 /// How long a question waits for its answer when the core names no time (`timeout_ms`). The core
-/// lets a confirmation expire after the same 30 s.
-pub const ASK_TIMEOUT_DEFAULT_MS: u64 = 30_000;
+/// lets a confirmation expire after the same ten minutes.
+pub const ASK_TIMEOUT_DEFAULT_MS: u64 = 600_000;
 /// The longest a question may wait, whatever the core says: Esc is held for as long as one is open.
-pub const ASK_TIMEOUT_MAX_MS: u64 = 120_000;
+pub const ASK_TIMEOUT_MAX_MS: u64 = ASK_TIMEOUT_DEFAULT_MS;
 
 /// The YES to a `T3` question (one that cannot be undone) is armed by a long press on the page
 /// (600 ms). The controller does not take one sooner than this after the question was shown, so a

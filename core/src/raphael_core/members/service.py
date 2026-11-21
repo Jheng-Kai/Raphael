@@ -111,9 +111,7 @@ from .schedule import Schedule, first_eligible_slot, next_run
 from .covers import Covers, selection as cover_selection
 from .store import (
     ROUTINE_RUN_STATUS_SQL,
-    PROMPT_MAX,
     PROFILE_FIELDS,
-    NAME_MAX,
     Group,
     Member,
     MemberError,
@@ -251,8 +249,6 @@ def routine_template(sources: Sequence[Source], language: str) -> dict[str, Any]
     prompt = _TEMPLATE_PROMPT[language]
     for source in sources:
         line = f"\n- {_SOURCE_LABEL[source.kind]}{_COLON[language]}{source.ref}"
-        if len(prompt) + len(line) > PROMPT_MAX:
-            break
         prompt += line
     return {
         "title": _TEMPLATE_TITLE[language],
@@ -1104,7 +1100,7 @@ class MembersService:
         assert original is not None
         for number in range(2, 1000):
             suffix = f" ({number})"
-            name = original.name[:NAME_MAX - len(suffix)] + suffix
+            name = original.name + suffix
             if self.store.by_name(name) is None:
                 break
         fields = {field: getattr(original, field) for field in

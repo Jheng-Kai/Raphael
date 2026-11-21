@@ -102,16 +102,14 @@ pub struct ComputerApp {
 }
 
 impl ComputerApp {
-    /// Whether the entry is one the app can keep: an executable's file name in lower case, of
-    /// the characters such names have, and a name of one line, neither too long.
+    /// Keep a single executable filename and a one-line display name.
     pub fn is_valid(&self) -> bool {
         let exe = &self.exe;
-        let exe_ok = (5..=128).contains(&exe.len())
-            && exe.ends_with(".exe")
-            && exe
-                .chars()
-                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || " ._()-".contains(c))
-            && !exe.starts_with(['.', ' ', '-']);
+        let exe_ok = exe
+            .strip_suffix(".exe")
+            .is_some_and(|stem| !stem.trim().is_empty())
+            && !exe.chars().any(char::is_control)
+            && !exe.contains(['/', '\\', ':', '<', '>', '"', '|', '?', '*']);
         let name_ok = !self.name.trim().is_empty()
             && self.name.chars().count() <= 80
             && !self.name.chars().any(char::is_control);
@@ -785,8 +783,11 @@ mod tests {
                 "{bad}"
             );
         }
-        // nothing changed by a patch that failed
+        // Nothing changed by a patch that failed.
         assert_eq!(s.computer_apps.len(), 1);
+        s.apply_patch(&json!({"computer_apps": [{"exe": "révision+.exe", "name": "Review"}]}))
+            .unwrap();
+        assert_eq!(s.computer_apps[0].exe, "révision+.exe");
         s.apply_patch(&json!({"computer_apps": []})).unwrap();
         assert!(s.computer_apps.is_empty());
     }

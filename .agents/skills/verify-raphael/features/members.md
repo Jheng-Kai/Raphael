@@ -580,7 +580,7 @@ Phase 2 adds automatic capture, recall/folding and owner pending review below. L
 
 Rows of 待確認 notes could repeat each other, so memory is a file that keeps being edited.
 Each member has `bots/<id>/MEMORY.md` (the pane's 「<name> 的記憶」), which no other member
-reads, and all read the one `shared/USER.md` (共同記憶). The limits are 2,200 and 1,375 characters.
+reads, and all read the one `shared/USER.md` (共同記憶). Both files use a 100,000-character prompt budget with a counted omission notice. Edits can exceed that prompt budget, subject to the home storage bound.
 
 Every API/CLI brain edits them through one tool, `memory_update {target: memory|user, operations: [{action:
 add|replace|remove, content?, old_text?}]}` (and an API brain's reply field `memory`, the same edits). Useful

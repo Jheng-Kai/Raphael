@@ -41,7 +41,6 @@ from .words import heard, words
 
 logger = logging.getLogger(__name__)
 
-MAX_INCOMING_CHARS = 4000
 MAX_PENDING_MESSAGES = 64
 # A voice message larger than this is declined without being downloaded. It is the most a bot may
 # download from Telegram (getFile), so no message the bot could fetch is turned away for its size;
@@ -257,7 +256,7 @@ class Switchboard:
         if text.startswith("/"):
             await self._command(message.chat, text, language)
             return
-        await self._converse(message.chat, language, text=text[:MAX_INCOMING_CHARS])
+        await self._converse(message.chat, language, text=text)
 
     async def _take_files(
         self, chat: str, language: str, attachments: list[Attachment], caption: str | None
@@ -268,7 +267,7 @@ class Switchboard:
                  self._channel.kind in ("slack", "discord") and a.kind == "other"]
         if files:
             await self._converse(
-                chat, language, text=(caption or "")[:MAX_INCOMING_CHARS], files=files
+                chat, language, text=caption or "", files=files
             )
         elif attachments:
             logger.info(

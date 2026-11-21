@@ -4,7 +4,7 @@
 import { cardHTML } from "./card";
 import { hasDetail, highlightHTML } from "./conversation";
 import { t } from "./i18n";
-import { INSTRUCTIONS_MAX, NAME_MAX, PERSONALITY_MAX, ROLE_MAX } from "./members";
+import { PERSONALITY_MAX, ROLE_MAX } from "./members";
 import type {
   AgentQuestion,
   AgentTurn,
@@ -130,7 +130,7 @@ export function createDraftPanel(host: DraftPanelHost): DraftPanelController {
       `<article class="draft-card" data-draft-id="${id}">` +
       `<div class="draft-card-top">` +
       `<div class="draft-card-ident">` +
-      `<input type="text" class="mb-fin draft-name" data-draft-field="name" maxlength="${NAME_MAX}" value="${esc(draft.name)}" placeholder="${esc(t("members.name"))}" aria-label="${esc(t("members.name"))}" autocomplete="off" spellcheck="false"${isBusy ? " disabled" : ""}>` +
+      `<input type="text" class="mb-fin draft-name" data-draft-field="name" value="${esc(draft.name)}" placeholder="${esc(t("members.name"))}" aria-label="${esc(t("members.name"))}" autocomplete="off" spellcheck="false"${isBusy ? " disabled" : ""}>` +
       `</div>` +
       iconButton("x", removeLabel, ` data-draft-act="remove"${isBusy ? " disabled" : ""}`, "draft-remove") +
       `</div>` +
@@ -150,7 +150,7 @@ export function createDraftPanel(host: DraftPanelHost): DraftPanelController {
       `<label class="draft-field"><span>${esc(t("members.personality"))}</span>` +
       `<textarea class="mb-fin mb-ta draft-personality" data-draft-field="personality" maxlength="${PERSONALITY_MAX}" rows="2"${isBusy ? " disabled" : ""}>${esc(draft.personality)}</textarea></label>` +
       `<label class="draft-field"><span>${esc(t("members.instructions"))}</span>` +
-      `<textarea class="mb-fin mb-ta draft-instructions" data-draft-field="instructions" maxlength="${INSTRUCTIONS_MAX}" rows="3"${isBusy ? " disabled" : ""}>${esc(draft.instructions)}</textarea></label>` +
+      `<textarea class="mb-fin mb-ta draft-instructions" data-draft-field="instructions" rows="3"${isBusy ? " disabled" : ""}>${esc(draft.instructions)}</textarea></label>` +
       `</div>` +
       `</div>` +
       `</article>`

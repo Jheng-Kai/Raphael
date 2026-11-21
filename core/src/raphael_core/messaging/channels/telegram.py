@@ -76,7 +76,7 @@ def _units(text: str) -> int:
 def split_message(text: str, limit: int = MAX_MESSAGE_UNITS) -> list[str]:
     """`text` in pieces Telegram accepts, cut at a line break or a space where one is near."""
     pieces: list[str] = []
-    rest = text.strip("\n")
+    rest = text
     while rest:
         if _units(rest) <= limit:
             pieces.append(rest)
@@ -90,9 +90,9 @@ def split_message(text: str, limit: int = MAX_MESSAGE_UNITS) -> list[str]:
             if at >= cut // 2:
                 cut = at + len(mark)
                 break
-        pieces.append(rest[:cut].rstrip())
-        rest = rest[cut:].lstrip("\n")
-    return [piece for piece in pieces if piece.strip()]
+        pieces.append(rest[:cut])
+        rest = rest[cut:]
+    return pieces
 
 
 # --- the Bot API -----------------------------------------------------------------------------

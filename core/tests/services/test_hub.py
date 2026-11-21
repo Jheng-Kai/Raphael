@@ -14,7 +14,7 @@ from raphael_core.brain.settings import SettingsStore
 from raphael_core.protocol import INVALID_PARAMS, RpcError
 from raphael_core.router import Router
 from raphael_core.services.hub import ServiceHub, offline_transport
-from raphael_core.services.keys import MAX_KEY_CHARS, credential_keys, memory_keys
+from raphael_core.services.keys import credential_keys, memory_keys
 from raphael_core.services.urls import SeenUrls, page_key, urls_in
 
 from brain.test_catalog import RECORDED, Clock, FakeModelsClient, edited
@@ -202,7 +202,7 @@ async def test_tavily_has_one_key_for_its_search_and_its_reader(rig):
 
 @pytest.mark.parametrize(
     ("key", "kind"),
-    [("   ", "blank"), ("x" * (MAX_KEY_CHARS + 1), "long"), ("two words", "characters"),
+    [("   ", "blank"), ("two words", "characters"),
      ("line\x00break", "characters")],
 )  # fmt: skip
 async def test_a_key_that_is_none_is_refused_by_its_kind_and_not_echoed(rig, key, kind, caplog):
@@ -214,8 +214,8 @@ async def test_a_key_that_is_none_is_refused_by_its_kind_and_not_echoed(rig, key
     assert rig.keys.get("exa") is None
 
 
-async def test_a_key_of_the_longest_length_is_taken(rig):
-    await rig.call("services.set_key", {"service": "exa", "key": "k" * MAX_KEY_CHARS})
+async def test_a_service_key_longer_than_five_hundred_characters_is_saved(rig):
+    await rig.call("services.set_key", {"service": "exa", "key": "k" * 640})
     assert rig.keys.has("exa")
 
 

@@ -6,7 +6,8 @@ from pathlib import PurePosixPath
 
 from ..bots.homes import redact_secrets
 from ..protocol import invalid_params
-from .store import clean_name, clean_role, clean_instructions, clean_personality, clean_title, clean_prompt, clean_schedule
+from .skill_plugins import relative_path
+from .store import MemberError, clean_name, clean_role, clean_instructions, clean_personality, clean_title, clean_prompt, clean_schedule
 
 MAX_BYTES = 512 * 1024
 FIELDS = ("name", "role", "personality", "instructions", "reply_style")
@@ -54,26 +55,22 @@ def checked(value, *, review=False):
     clean_instructions(value["instructions"])
     if value["reply_style"] not in ("full", "conversational"):
         raise invalid_params("Invalid reply style")
-    for key, maximum in (("skills", 40), ("routines", 50), ("connections", 30)):
-        if not isinstance(value[key], list) or len(value[key]) > maximum:
+    for key in ("skills", "routines", "connections"):
+        if not isinstance(value[key], list):
             raise invalid_params("Invalid template list")
-    file_count = 1
     for skill in value["skills"]:
         if not isinstance(skill, dict) or not {"text"} <= set(skill) <= {"text", "files"} or not isinstance(skill["text"], str) or not 0 < len(skill["text"].encode()) <= 128 * 1024:
             raise invalid_params("Invalid template skill")
         files = skill.get("files", {})
-        if not isinstance(files, dict) or len(files) > 100:
+        if not isinstance(files, dict):
             raise invalid_params("Invalid template skill files")
-        file_count += 1 + len(files)
-        if file_count > 100:
-            raise invalid_params("Member template has too many files")
         for name, content in files.items():
-            if not isinstance(name, str):
-                raise invalid_params("Invalid template dependency path")
-            path = PurePosixPath(name)
-            if (len(name) > 300 or "\\" in name or ":" in name
-                    or path.is_absolute() or path.as_posix() != name or any(p in (".", "..") or p.startswith(".") for p in path.parts)
-                    or path.suffix.lower() not in (".md", ".txt", ".json", ".py", ".sh", ".js", ".ts", ".ps1", ".toml", ".yaml", ".yml")
+            try:
+                safe_name = relative_path(name)
+            except MemberError:
+                raise invalid_params("Invalid template dependency path") from None
+            path = PurePosixPath(safe_name)
+            if (len(name) > 300 or safe_name != name or any(p.startswith(".") for p in path.parts)
                     or path.name.casefold() in ("skill.md", "memory.md", "user.md", "soul.md")
                     or not isinstance(content, str) or "\x00" in content or len(content.encode()) > 128 * 1024):
                 raise invalid_params("Only safe, public text dependencies belong in a skill recipe")

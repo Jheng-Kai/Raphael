@@ -431,7 +431,7 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
   function openSearch(anchor: HTMLElement): void {
     if (document.querySelector(".side-search")) { closeMenu(); return; }
     const panel = openPopover(anchor,
-      `<label class="side-search-field">${ico("search")}<input type="search" class="side-search-input" autocomplete="off" spellcheck="false" maxlength="40"></label>` +
+      `<label class="side-search-field">${ico("search")}<input type="search" class="side-search-input" autocomplete="off" spellcheck="false"></label>` +
       `<div class="side-search-rows"></div>` +
       `<button type="button" class="nav side-search-new" data-search-new>${ico("plus")}<span>${esc(t("members.newMember"))}</span></button>`,
       {

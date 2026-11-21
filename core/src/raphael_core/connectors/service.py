@@ -35,7 +35,7 @@ COMPOSIO_SERVER = "connectors_composio"
 GOOGLE_SERVER = "connectors_google"
 _CALENDAR_READ = ContextVar("calendar_read", default=None)
 logger = logging.getLogger(__name__)
-RPC_TIMEOUT_S = 30.0
+RPC_TIMEOUT_S = 120.0
 # How long the app store's list of apps counts as fresh, and the file that keeps the last good one between runs.
 CATALOG_TTL_S = 3600
 CATALOG_FILE = "connectors-catalog.json"
@@ -61,9 +61,9 @@ def _created_at(value) -> float | None:
     return (moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)).timestamp()
 
 
-def _text(params: dict, key: str, *, optional=False) -> str:
+def _text(params: dict, key: str, *, optional=False, maximum=1000) -> str:
     value = params.get(key, "" if optional else None)
-    if not isinstance(value, str) or len(value) > 1000 or any(ord(c) < 32 for c in value) or (not optional and not value):
+    if not isinstance(value, str) or (maximum is not None and len(value) > maximum) or any(ord(c) < 32 for c in value) or (not optional and not value.strip()):
         raise invalid_params(f"{key} must be valid text")
     return value.strip()
 
@@ -1043,8 +1043,8 @@ class ConnectorsService:
             return await self._google_configure(params)
 
     async def _google_configure(self, params):
-        client_id = _text(params, "client_id")
-        client_secret = _text(params, "client_secret", optional=True)
+        client_id = _text(params, "client_id", maximum=None)
+        client_secret = _text(params, "client_secret", optional=True, maximum=None)
         gmail, calendar = params.get("gmail", "write"), params.get("calendar", "write")
         try:
             scopes_for(gmail, calendar)

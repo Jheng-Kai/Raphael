@@ -271,6 +271,7 @@ def test_output_retains_head_and_tail_with_bounded_memory():
     output = Output(limit=100)
     output.add(b"first" + b"x" * 1_000_000 + b"last")
     assert output.truncated and output.text().startswith("first") and output.text().endswith("last")
+    assert "999,909 output bytes omitted" in output.text()
     assert len(output.head) + len(output.tail) <= 100
     assert len(EXEC_DESCRIPTION) <= 400
 

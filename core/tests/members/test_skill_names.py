@@ -1,11 +1,10 @@
-"""New skill names are slugs; existing commands and plugin namespaces stay usable."""
+"""New skill names normalize to slugs and existing commands stay usable."""
 
 import json
 
 import pytest
 
-from raphael_core.members.store import MemberError
-from raphael_core.protocol import RpcError
+from raphael_core.members.skill_names import normalize_skill_name
 from .test_skill_growth import DOCUMENT
 
 
@@ -27,41 +26,39 @@ async def test_each_member_learns_a_slug_with_an_owner_language_description(rig,
 
 
 @pytest.mark.parametrize("name", INVALID)
-async def test_learning_refuses_non_slugs_without_writes_and_with_value_free_guidance(rig, name):
-    cap = rig.service.capabilities
-    with pytest.raises(MemberError, match="name must be an English slug") as caught:
-        rig.service.learn_skill(0, {"text": DOCUMENT.replace("research-summary", name)})
-    from raphael_core.members.skill_names import SKILL_NAME_RULE
-    assert str(caught.value) == SKILL_NAME_RULE
-    assert cap.skills(0) == []
-    assert not list(cap.homes.home(0).glob("skills/*/SKILL.md"))
+async def test_learning_normalizes_a_display_name_and_keeps_the_document(rig, name):
+    text = DOCUMENT.replace("research-summary", name)
+    skill = rig.service.learn_skill(0, {"text": text})
+    assert skill["name"] == normalize_skill_name(name)
+    expanded = rig.service.capabilities.expand(0, "/" + skill["slash_name"])
+    assert text in json.loads(expanded.rsplit("\n", 1)[-1])["document"]
 
 
 @pytest.mark.parametrize("path", ["remote", "local", "recipe", "plugin-set"])
 @pytest.mark.parametrize("name", ["台中天氣與空品日報", "weather_report", "a" * 101])
-async def test_every_import_writer_refuses_new_non_slugs(rig, tmp_path, monkeypatch, path, name):
+async def test_every_import_writer_normalizes_new_non_slugs(rig, tmp_path, monkeypatch, path, name):
     cap = rig.service.capabilities
     text = DOCUMENT.replace("research-summary", name)
-    with pytest.raises((MemberError, RpcError), match="name must be an English slug"):
-        if path == "remote":
-            async def download(source):
-                return [(source, text)]
-            monkeypatch.setattr("raphael_core.members.service.download_skills", download)
-            await rig.call("members.skills.import", {"member_id": 0, "source": "owner/repo"})
-        elif path == "local":
-            cap.skill_home = tmp_path / "synthetic-home"
-            folder = cap.skill_home / ".codex/skills/weather"
-            folder.mkdir(parents=True)
-            (folder / "SKILL.md").write_text(text, encoding="utf-8")
-            cap.import_local(0, "local:" + str(folder))
-        elif path == "recipe":
-            cap.keep_recipe(0, text, {})
-        else:
-            from .test_skill_plugins import package
-            files = package()
-            files["skills/write/SKILL.md"] = text.encode("utf-8")
-            cap.install_set("local:" + str(tmp_path / "desk/1.0.0"), files)
-    assert cap.skills(0) == [] and cap.plugin_sets() == []
+    if path == "remote":
+        async def download(source):
+            return [(source, text)]
+        monkeypatch.setattr("raphael_core.members.service.download_skills", download)
+        await rig.call("members.skills.import", {"member_id": 0, "source": "owner/repo"})
+    elif path == "local":
+        cap.skill_home = tmp_path / "synthetic-home"
+        folder = cap.skill_home / ".codex/skills/weather"
+        folder.mkdir(parents=True)
+        (folder / "SKILL.md").write_text(text, encoding="utf-8")
+        cap.import_local(0, "local:" + str(folder))
+    elif path == "recipe":
+        cap.keep_recipe(0, text, {})
+    else:
+        from .test_skill_plugins import package
+        files = package()
+        files["skills/write/SKILL.md"] = text.encode("utf-8")
+        cap.install_set("local:" + str(tmp_path / "desk/1.0.0"), files)
+    skills = cap.skills(-1 if path == "plugin-set" else 0)
+    assert normalize_skill_name(name) in {skill["name"] for skill in skills}
 
 
 @pytest.mark.parametrize("name", ["principle-migrate-callers-then-delete-legacy-apis", "principle-separate-before-serializing-shared-state"])
@@ -96,12 +93,11 @@ async def test_existing_non_slug_can_toggle_run_and_edit_without_a_rename(rig, n
                                         "expected_hash": cap._skill(0, identifier)["revision"]})
     assert learned["name"] == name and learned["slash_name"] == original["slash_name"]
     assert "A reusable check." in cap.expand(0, command)
-    with pytest.raises(MemberError, match="name must be an English slug"):
-        cap.rewrite_skill(0, identifier, edited.replace(name, "Another title"))
-    assert cap._skill(0, identifier)["name"] == name
+    cap.rewrite_skill(0, identifier, edited.replace(name, "Another title"))
+    assert cap._skill(0, identifier)["name"] == "another-title"
 
 
-async def test_plugin_skill_keeps_its_namespace_and_rejects_an_invalid_update_atomically(rig, tmp_path):
+async def test_plugin_skill_keeps_its_namespace_when_an_updated_name_is_normalized(rig, tmp_path):
     from .test_skill_plugins import local, package
     cap = rig.service.capabilities
     folder = local(cap, tmp_path)
@@ -110,13 +106,12 @@ async def test_plugin_skill_keeps_its_namespace_and_rejects_an_invalid_update_at
     plugin = next(s for s in cap.skills(0) if s.get("plugin") == "desk" and s["name"] == "write")
     assert plugin["slash_name"] == "desk:write"
     assert rig.conn.execute("SELECT name FROM member_skills WHERE id=?", (plugin["id"],)).fetchone()[0] == "desk:write"
-    before = cap._path(0, plugin["id"]).read_bytes()
     files = package("2.0.0")
     files["skills/write/SKILL.md"] = DOCUMENT.replace("research-summary", "Weather Report").encode()
-    with pytest.raises(MemberError, match="name must be an English slug"):
-        cap.install_set("local:" + str(folder), files)
-    assert cap.plugin_sets()[0]["id"] == installed["id"] and cap.plugin_sets()[0]["version"] == "1.0.0"
-    assert cap._path(0, plugin["id"]).read_bytes() == before
+    cap.install_set("local:" + str(folder), files)
+    assert cap.plugin_sets()[0]["id"] == installed["id"] and cap.plugin_sets()[0]["version"] == "2.0.0"
+    assert cap._skill(0, plugin["id"])["slash_name"] == "weather-report"
+    assert rig.conn.execute("SELECT name FROM member_skills WHERE id=?", (plugin["id"],)).fetchone()[0] == "desk:weather-report"
 
 
 async def test_existing_plugin_non_slug_can_refresh_without_renaming(rig, tmp_path):

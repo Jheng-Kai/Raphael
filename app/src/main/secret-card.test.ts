@@ -222,12 +222,10 @@ describe("a key for a program in a member's computer", () => {
     expect(html).not.toContain("連結");
   });
 
-  test("a key card has no choice of its own under its field, only the least length waiting hidden (#281)", () => {
+  test("a key card has no choice of its own under its field and no least length (R-LIMIT-01)", () => {
     document.body.innerHTML = secretCardHTML(key());
     expect(document.querySelector("[data-secret-plain], .sc-plain, input[type=checkbox]")).toBeNull();
-    expect(document.querySelector<HTMLElement>("[data-secret-hint]")?.hidden).toBe(true);
-    expect(document.querySelector(".sc-form [data-secret-hint]")).toBeNull();  // under the row of the field and Save, not in it
-    expect(visible(secretCardHTML(key({ state: "failed", error: "too_short" })))).toContain(t("card.keyTooShort"));
+    expect(document.querySelector("[data-secret-hint]")).toBeNull();
     // The title says what the key is for, and the purpose is no second line under it.
     expect(visible(secretCardHTML(key())).split("價格腳本要呼叫模型").length).toBe(2);
   });

@@ -69,8 +69,8 @@ USER_AGENT = f"Raphael/{__version__} ({'macOS' if sys.platform == 'darwin' else 
 # The most a job may take, connecting included. Starting a server that is fetched first (npx) can
 # take most of the refresh's time; a call the assistant makes waits for much less, since someone is
 # listening.
-REFRESH_TOTAL_S = 30.0
-CALL_TOTAL_S = 15.0
+REFRESH_TOTAL_S = 120.0
+CALL_TOTAL_S = 600.0
 # How long a person is given to finish a login in the browser.
 LOGIN_TIMEOUT_S = 300.0
 # What of a tool's result is passed on, in characters: what a task may be shown of it at most (`worker.guards`).
@@ -197,7 +197,7 @@ async def open_client(server: ServerConfig, secrets: Secrets) -> Any:
     import httpx2
     from mcp.client.streamable_http import streamable_http_client
 
-    timeout = httpx2.Timeout(15.0, read=CALL_TOTAL_S * 2)
+    timeout = httpx2.Timeout(REFRESH_TOTAL_S, read=CALL_TOTAL_S)
     async with contextlib.AsyncExitStack() as stack:
         if server.auth == "device" and secrets.oauth:
             from .device import BearerAuth

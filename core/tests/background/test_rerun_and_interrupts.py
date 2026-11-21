@@ -257,13 +257,13 @@ def test_the_previous_attempt_is_neutralised_like_the_rest():
 # --- the cost of one task ---------------------------------------------------------------------------
 
 
-def test_the_cost_cap_is_one_of_four_amounts_and_twenty_cents_by_default(conn):
+def test_the_task_cost_accepts_positive_amounts_and_defaults_to_twenty_cents(conn):
     settings = SettingsStore(conn)
     assert settings.get("worker_cost_cap_usd") == 0.20
-    for value in (0.10, 0.50, 1.00, 1, 0.2):
+    for value in (0.10, 0.50, 1.00, 1, 0.3, 2.0, 0.2):
         settings.set("worker_cost_cap_usd", value)
         assert settings.get("worker_cost_cap_usd") == float(value)
-    for bad in (0.3, 0, -1, 2.0):
+    for bad in (0, -1, float("inf"), float("nan")):
         with pytest.raises(ValueError):
             settings.set("worker_cost_cap_usd", bad)
     with pytest.raises(TypeError):

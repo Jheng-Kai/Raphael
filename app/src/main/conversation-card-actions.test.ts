@@ -17,22 +17,19 @@ function typed(input: HTMLInputElement, value: string): void {
   input.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
-test("a program key waits for six characters and says so under its field, then saves the value alone (#281)", async () => {
+test("a program key of any length saves, the value alone (R-LIMIT-01)", async () => {
   const thread = document.createElement("div");
   thread.innerHTML = secretCardHTML(key);
   document.body.append(thread);
   mountConversationCardActions(thread, () => {});
   const field = thread.querySelector<HTMLInputElement>("input[data-secret-input]")!;
   const save = thread.querySelector<HTMLButtonElement>('[data-act="card-save"]')!;
-  const hint = thread.querySelector<HTMLElement>("[data-secret-hint]")!;
+  expect(save.disabled).toBe(true);
   typed(field, "abc");
   expect(field.type).toBe("password");
-  expect(save.disabled).toBe(true);
-  expect(hint.hidden).toBe(false);
-  typed(field, "sk-long-enough-key");
   expect(save.disabled).toBe(false);
-  expect(hint.hidden).toBe(true);
+  expect(thread.querySelector("[data-secret-hint]")).toBeNull();
   save.click();
-  expect(api.cardSave).toHaveBeenCalledWith("k1", "sk-long-enough-key");
+  expect(api.cardSave).toHaveBeenCalledWith("k1", "abc");
   expect(field.value).toBe("");
 });

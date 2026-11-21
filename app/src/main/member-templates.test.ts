@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 import { beforeEach, expect, test, vi } from "vitest";
 import { previewTemplate, previewTemplateFile, starterTemplate, templateContents } from "./member-templates";
-import { NAME_MAX } from "./members";
 import { openMemberStore } from "./member-store";
 import type { Member } from "./types";
 import { catalogs, t } from "./i18n";
@@ -148,9 +147,9 @@ const flush = async (): Promise<void> => { for (let i = 0; i < 12; i++) await Pr
 const BOM = String.fromCharCode(0xfeff);
 const said = (): string => document.body.textContent ?? "";
 
-test("the name field takes what a member's name can be and no more, the core's NAME_MAX", async () => {
+test("the name field takes a name of any length, as the core does (R-LIMIT-01)", async () => {
   await previewTemplate(starterTemplate(0), "slime:blue-plain", vi.fn(), null, vi.fn());
-  expect(document.querySelector<HTMLInputElement>("[data-template-name]")!.maxLength).toBe(NAME_MAX);
+  expect(document.querySelector<HTMLInputElement>("[data-template-name]")!.hasAttribute("maxlength")).toBe(false);
 });
 
 test("an empty name is refused in the field, nothing is added, and typing again takes the complaint back", async () => {
@@ -253,13 +252,12 @@ test("an entry the store cannot give says so in the owner's words", async () => 
   expect(said()).toContain(t("store.unavailable"));
 });
 
-test("every starter's name, in every language, fits what the core takes of a member name", () => {
-  const long: string[] = [];
+test("every starter's name, in every language, is a name the core takes: not empty", () => {
+  const empty: string[] = [];
   for (const [locale, messages] of Object.entries(catalogs)) {
     for (const key of ["coordinator", "researcher", "writer", "developer", "planner", "analyst", "editor", "inbox"] as const) {
-      const name = messages[`template.${key}` as const];
-      if ([...name].length > NAME_MAX) long.push(`${locale} ${key}: ${name}`);
+      if (!messages[`template.${key}` as const].trim()) empty.push(`${locale} ${key}`);
     }
   }
-  expect(long).toEqual([]);
+  expect(empty).toEqual([]);
 });

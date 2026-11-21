@@ -106,9 +106,8 @@ class GrowingSkills:
             metadata = document.read(4096) if document else ""
             plugin = skill_plugin(metadata, skill["source"])
         name = skill["name"]
-        if plugin and metadata:
-            from .capabilities import skill_metadata
-            name = skill_metadata(metadata)[0]
+        if plugin and name.casefold().startswith(plugin.casefold() + ":"):
+            name = name[len(plugin) + 1:]
         return {**skill, "name": name, **({"plugin": plugin} if plugin else {}), "provenance": provenance,
                 "revision": revision,
                 "learned_at": previous.get("learned_at") or (updated if provenance == "learned" else None),
@@ -132,7 +131,7 @@ class GrowingSkills:
                 raise HomeError("invalid reference name")
             if not isinstance(content, str) or "\x00" in content or len(content.encode("utf-8")) > 8000:
                 raise HomeError("reference must be bounded UTF-8 text")
-        from .capabilities import MAX_SKILL_BYTES, MAX_SKILLS, skill_metadata
+        from .capabilities import MAX_SKILL_BYTES, skill_metadata
         from ..bots.homes import redact_secrets
         if len(text.encode("utf-8")) > MAX_SKILL_BYTES or "\x00" in text:
             raise HomeError("skill must be bounded UTF-8 text")
@@ -143,10 +142,11 @@ class GrowingSkills:
         previous = next((s for s in skills if s["id"] == identifier), {})
         name, _ = skill_metadata(redact_secrets(text), writing=True, previous_name=previous.get("name"))
         source = previous.get("source", "")
-        if any(s["id"] != identifier and s["name"].casefold() == name.casefold() and s.get("plugin", "").casefold() == skill_plugin(text, source).casefold() for s in skills):
-            raise HomeError("a skill with that name already exists")
-        if identifier is None and len(skills) >= MAX_SKILLS:
-            raise HomeError("member skill limit reached")
+        from .store import MemberError
+        try:
+            self._available_skill_name(member_id, source, text, name, exclude=identifier)
+        except MemberError as error:
+            raise HomeError(str(error)) from None
         if identifier is not None:
             if type(identifier) is not int:
                 raise HomeError("invalid skill id")

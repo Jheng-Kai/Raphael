@@ -43,6 +43,41 @@ def local(cap, tmp_path, version="1.0.0", **kwargs):
     return folder
 
 
+async def test_downloads_allow_a_full_hour_and_wait_two_minutes_for_data(monkeypatch):
+    from raphael_core.members.capabilities import DOWNLOAD_SECONDS, download_skill
+
+    timeouts = []
+    original = httpx.AsyncClient
+    def http(**kwargs):
+        timeouts.append(kwargs["timeout"])
+        return original(transport=httpx.MockTransport(lambda request: httpx.Response(200, text="Skill document")), **kwargs)
+
+    monkeypatch.setattr(httpx, "AsyncClient", http)
+    assert DOWNLOAD_SECONDS == 3600
+    assert await download_skill("owner/skills") == ("owner/skills", "Skill document")
+    assert timeouts == [120]
+
+
+async def test_a_plugin_imports_one_hundred_twenty_skills(rig, tmp_path):
+    cap = rig.service.capabilities
+    folder = local(cap, tmp_path, removed=True)
+    (folder / "skills/write/SKILL.md").unlink()
+    for number in range(120):
+        directory = folder / "skills" / f"skill-{number}"
+        directory.mkdir()
+        (directory / "SKILL.md").write_text(
+            f"---\nname: Skill {number}\ndescription: Use skill number {number}\n---\nDo the work.",
+            encoding="utf-8",
+        )
+    installed = await rig.call("members.skills.import", {
+        "member_id": 0, "shared": True, "plugin": True, "access": "all", "source": "local:" + str(folder),
+    })
+    assert installed["set"]["skill_count"] == 120
+    assert {s["name"] for s in cap.skills(0) if s.get("set_kind") == "skill"} == {
+        f"skill-{number}" for number in range(120)
+    }
+
+
 async def test_local_plugin_is_one_set_with_individual_imports_and_all_member_access(rig, tmp_path):
     cap = rig.service.capabilities
     folder = local(cap, tmp_path)

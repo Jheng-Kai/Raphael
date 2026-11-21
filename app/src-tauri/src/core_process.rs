@@ -58,41 +58,30 @@ const TURN_TIMEOUT_S: u64 = 30 * 24 * 3600;
 /// How long a call to `method` may take before it fails with `TIMEOUT`.
 pub fn timeout_for(method: &str) -> Duration {
     let seconds = match method {
-        // The last stretch of speech-to-text (the rest was transcribed while the recording went
-        // on), then the cleanup request to the LLM. The first dictation after launch also waits
-        // for the speech engine to load (about 31 s). The controller gives a long recording more
-        // ([`dictation_stop_timeout`]): its cleanup takes longer.
-        "dictation.stop" => 150,
+        // The startup handshake runs in the background.
+        "core.hello" => 60,
         // A narrated conversation may work for thirty minutes before its final reply or next
         // permission question. Leave time for routing and transport; Esc still stops it earlier.
         // A turn works until the job is done or the owner stops it.
         "agent.ask" | "agent.confirm" => TURN_TIMEOUT_S,
-        // Starts the plugin (a program that may first have to be fetched), reads its tools.
-        "integrations.refresh" => 40,
         // Waits for the user to log in in the browser: up to five minutes (the core ends it at
-        // 330 s with a kind of failure), or, for a login with a code (GitHub), until the code
-        // runs out: 900 s at most, and the core ends it at 930 s. Then reads the tools.
-        "integrations.connect" => 960,
+        // 420 s with a kind of failure), or, for a login with a code (GitHub), until the code
+        // runs out: 900 s at most, and the core ends it at 1020 s. Then reads the tools.
+        "integrations.connect" => 1080,
         // Managed app OAuth leaves time for a human browser round trip and final tool discovery.
         "connectors.connect" => 780,
-        "connectors.google.connect" => 180,
         // Waits for the owner to sign in in the browser; the core ends it at 180 s by default.
         "chatgpt.sign_in" => 600,
-        "chatgpt.models" => 30,
-        "connectors.catalog"
-        | "connectors.categories"
-        | "connectors.toolkit"
-        | "connectors.status"
-        | "connectors.disconnect"
-        | "connectors.remove_account"
-        | "connectors.tools"
-        | "connectors.set_tools"
-        | "connectors.set_key" => 120,
-        // Downloads speech models.
-        "models.ensure" | "models.local_use" => 3600,
-        // One picture from the owner's image model; an asynchronous provider is polled until it is drawn.
-        "members.avatar_generate" => 300,
-        _ => 15,
+        // Downloads models or fetches, installs or refreshes skill and plugin packages.
+        "models.ensure"
+        | "models.local_use"
+        | "skills.library.list"
+        | "skills.library.import"
+        | "skills.library.update"
+        | "members.skills.import"
+        | "members.skills.update"
+        | "members.template" => 3600,
+        _ => 600,
     };
     Duration::from_secs(seconds)
 }
@@ -111,7 +100,7 @@ pub fn dictation_stop_timeout(recorded: Duration) -> Duration {
 /// text is given 10 s and a second for every 15 characters at the most (`cleanup.timeout_for` for
 /// the speech such a text stands for, `chars / 5` seconds), and the wait here has to hold it.
 pub fn tidy_timeout(chars: usize) -> Duration {
-    Duration::from_secs(30 + (chars / 10) as u64)
+    timeout_for("dictation.tidy") + Duration::from_secs((chars / 10) as u64)
 }
 
 /// What to run to start the core.
@@ -1014,10 +1003,10 @@ mod tests {
         assert_eq!(timeout_for("connectors.connect"), Duration::from_secs(780));
         assert_eq!(
             timeout_for("connectors.google.connect"),
-            Duration::from_secs(180)
+            Duration::from_secs(600)
         );
-        assert_eq!(timeout_for("connectors.status"), Duration::from_secs(120));
-        assert_eq!(timeout_for("dictation.stop"), Duration::from_secs(150));
+        assert_eq!(timeout_for("connectors.status"), Duration::from_secs(600));
+        assert_eq!(timeout_for("dictation.stop"), Duration::from_secs(600));
         assert_eq!(timeout_for("models.ensure"), Duration::from_secs(3600));
         assert_eq!(timeout_for("models.local_use"), Duration::from_secs(3600));
         assert_eq!(
@@ -1028,15 +1017,17 @@ mod tests {
             timeout_for("agent.confirm"),
             Duration::from_secs(TURN_TIMEOUT_S)
         );
-        assert_eq!(timeout_for("integrations.refresh"), Duration::from_secs(40));
+        assert_eq!(
+            timeout_for("integrations.refresh"),
+            Duration::from_secs(600)
+        );
         assert_eq!(
             timeout_for("integrations.connect"),
-            Duration::from_secs(960)
+            Duration::from_secs(1080)
         );
         for method in [
             "secrets.set_openrouter_key",
             "status.check_openrouter",
-            "core.hello",
             "history.list",
             "agent.cancel",
             "agent.history.list",
@@ -1045,22 +1036,37 @@ mod tests {
             "integrations.catalog",
             "anything.else",
         ] {
-            assert_eq!(timeout_for(method), Duration::from_secs(15), "{method}");
+            assert_eq!(timeout_for(method), Duration::from_secs(600), "{method}");
+        }
+    }
+
+    #[test]
+    fn startup_and_skill_methods_have_dedicated_waits() {
+        assert_eq!(timeout_for("core.hello"), Duration::from_secs(60));
+        for method in [
+            "skills.library.list",
+            "skills.library.import",
+            "skills.library.update",
+            "members.skills.import",
+            "members.skills.update",
+            "members.template",
+        ] {
+            assert_eq!(timeout_for(method), Duration::from_secs(3600), "{method}");
         }
     }
 
     #[test]
     fn the_stop_of_a_long_recording_is_given_time_for_its_cleanup() {
         let stop = |seconds| dictation_stop_timeout(Duration::from_secs(seconds));
-        // the tidy of a selection: half a minute and more for a longer text, never the 15 s of a call
-        assert_eq!(tidy_timeout(0), Duration::from_secs(30));
-        assert_eq!(tidy_timeout(2_500), Duration::from_secs(280));
+        // Tidy gives a longer selection extra cleanup time.
+        assert_eq!(tidy_timeout(0), Duration::from_secs(600));
+        assert_eq!(tidy_timeout(2_500), Duration::from_secs(850));
         assert!(tidy_timeout(30_000) > Duration::from_secs(3_000));
         // A short dictation: the method's usual time.
-        assert_eq!(stop(0), Duration::from_secs(150));
-        assert_eq!(stop(30), Duration::from_secs(160));
+        assert_eq!(stop(0), Duration::from_secs(600));
+        assert_eq!(stop(30), Duration::from_secs(610));
         // An hour: the cleanup alone is given 10 s + 3600 / 3 (cleanup.timeout_for), which fits.
-        assert_eq!(stop(3600), Duration::from_secs(1350));
+        assert_eq!(stop(3600), Duration::from_secs(1800));
         assert!(stop(3600) > Duration::from_secs(10 + 3600 / 3));
     }
 

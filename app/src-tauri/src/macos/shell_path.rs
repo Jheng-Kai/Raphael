@@ -9,7 +9,7 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 /// How long the login shell may take to say its PATH.
-const SHELL_TIMEOUT: Duration = Duration::from_secs(3);
+const SHELL_TIMEOUT: Duration = Duration::from_secs(15);
 /// launchd's PATH: an app started from a terminal already has a longer one.
 const LAUNCHD_PATH: &str = "/usr/bin:/bin:/usr/sbin:/sbin";
 

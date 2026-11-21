@@ -14,7 +14,7 @@ import httpx
 
 # The address of the owner's share service (share-template/README.md), without a trailing slash. Empty: sharing by link is off.
 SHARE_URL = ""
-TIMEOUT_S = 15
+TIMEOUT_S = 120
 ANSWER_CAP = 16 * 1024
 _ID = re.compile(r"[0-9A-Za-z]{10}")
 _TOKEN = re.compile(r"[0-9a-f]{64}")

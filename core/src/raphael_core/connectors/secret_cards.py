@@ -398,9 +398,9 @@ class SecretCards:
                 error = "too_long"
             except NoSuchSecret:
                 error = "gone"
-            except ValueError as failure:
+            except ValueError:
                 # Which rule a key broke, so the card says it (#281): a secret key has at least six characters.
-                error = "too_short" if str(failure) == "key_too_short" else "invalid"
+                error = "invalid"
             except Exception as exc:  # the vault: its message could hold anything
                 logger.warning("A card's secret could not be kept: %s", type(exc).__name__)
                 error = "vault"
