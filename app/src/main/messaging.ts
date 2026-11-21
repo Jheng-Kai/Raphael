@@ -333,7 +333,6 @@ function createChannelMessaging(host: MessagingHost, kind: MessagingKind, ops: C
         token = ""; // it is in the vault now: nothing of it stays on this page
         status = reply.status;
         schedule();
-        toaster.info(t("msg.tg.connected", { p0: reply.status.bot?.username ? `@${reply.status.bot.username}` : title(kind) }));
       } else {
         tokenError = reply.reason === "network" ? "msg.tg.networkError" : "msg.tg.badToken";
       }
@@ -416,11 +415,7 @@ function createChannelMessaging(host: MessagingHost, kind: MessagingKind, ops: C
         }
         clearTimeout(confirmTimer);
         confirming = false;
-        void act(async () => {
-          const next = await ops.disconnect();
-          toaster.info(words("msg.tg.disconnected", kind));
-          return next;
-        });
+        void act(() => ops.disconnect());
         return true;
     }
     return false;

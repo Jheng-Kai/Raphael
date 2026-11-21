@@ -116,7 +116,6 @@ export function createMemberActions(host: MemberActionHost) {
     }
     host.deleted(id);
     if (host.current() === id) host.select(RAPHAEL_ID);
-    toaster.info(t("members.deleted", { p0: m.name }));
     await host.load();
   }
 

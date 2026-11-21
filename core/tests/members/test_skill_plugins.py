@@ -284,6 +284,8 @@ async def test_plugin_skills_and_commands_use_native_delivery_without_plugin_hoo
     installed = await cap.import_plugin("local:" + str(folder), access="all")
     check = next(s for s in cap.skills(0) if s["name"] == "check")
     cap.update_skill(-1, check["id"], False)
+    broken = cap.keep_skill(0, "paste", "---\nname: broken\ndescription: Broken skill\n---\nBody")
+    cap._path(0, broken["id"]).unlink()
     script = tmp_path / "fake-cli.py"
     record = tmp_path / "native.json"
     script.write_text('''import json, sys, tomllib
@@ -323,5 +325,7 @@ for line in sys.stdin:
     driver = Driver(brain, [sys.executable, str(script), str(record)], home=tmp_path, environ=environment)
     events = [event async for event in driver.run(user="Review the plan", system="Use approved MCP actions only", endpoint="http://127.0.0.1:1/mcp", token="synthetic", permission=None, cwd=str(tmp_path), skills=cap.native_skills(0))]
     assert events[-1].kind == "final", events
+    [notice] = [event.data for event in events if event.kind == "skill_unavailable"]
+    assert notice == {"type": "skill_unavailable", "name": "broken", "reason": "not_found"}
     assert len(json.loads(record.read_text(encoding="utf-8"))) == 2
     assert cap.plugin_sets()[0]["id"] == installed["id"]

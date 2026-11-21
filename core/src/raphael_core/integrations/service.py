@@ -60,6 +60,7 @@ from ..agent.plugins import (
 )
 from ..agent.policy import PLUGIN_PREFIX, Tier
 from ..clock import wall_clock_ms
+from ..connectors.http import ConnectorFailure
 from ..protocol import INTERNAL_ERROR, RpcError, invalid_params
 from ..router import Router
 from . import catalog
@@ -789,7 +790,9 @@ class IntegrationsService:
                 "tools": len(ready),
                 "state": app_state(enabled=entry.enabled, status=status, error=error, tools=len(ready), waiting=waiting),
                 "services": services, "source": entry.kind,
-                "accounts": [{"id": a["id"], "status": a["status"], "label": a.get("label", "")} for a in entry.accounts],
+                "accounts": [{"id": a["id"], "status": a["status"], "label": a.get("label", ""),
+                              **{key: a[key] for key in ("display_name", "alias") if a.get(key)}}
+                             for a in entry.accounts],
                 # The app's own mark, so every place that names it (the @ menu, the list, a card) draws the same one.
                 **({"logo": entry.logo} if getattr(entry, "logo", "") else {}),
                 **({"last_used_at": entry.last_used_at} if entry.last_used_at else {})}
@@ -888,18 +891,22 @@ class IntegrationsService:
                 if server.tool_on(tool) and (not server.managed_by or (
                     self.managed is not None and self.managed.tool_available(server.id, tool.name)
                 )):
+                    description, schema = tool.description, tool.input_schema
+                    if server.managed_by == "composio":
+                        description, schema = self.managed.composio_offer(tool.name, description, schema)
                     tools.append(
                         PluginTool(
                             key=tool_key(server.id, tool.name),
                             server=server.name,
                             name=tool.name,
-                            description=tool.description,
-                            schema=tool.input_schema,
+                            description=description,
+                            schema=schema,
                             tier=self.managed.tier(server.id, tool.name) if server.managed_by else self._tier_for(tool),
                             # Composio's router is one door to every app connected through it: the tool that
                             # executes what the search found shares no word with any request, so a turn's
                             # narrowing by its words must never leave the three of them out.
                             pinned=server.managed_by == "composio",
+                            whole=description != tool.description,
                         )
                     )
         return tools
@@ -1005,6 +1012,17 @@ class IntegrationsService:
             return end("blocked", PluginResult(False, "blocked"))
         if server.managed_by and not self.managed.allow_call(server.id, tool.name, arguments, approver):
             return end("blocked", PluginResult(False, "blocked"))
+        if server.managed_by == "composio":
+            try:
+                await self.managed.prepare_composio_call()
+            except ConnectorFailure as error:
+                return end("error", PluginResult(False, error.kind))
+            usable = self._usable(key)
+            if usable is None:
+                return end("blocked", PluginResult(False, "blocked"))
+            server, tool = usable
+            if not self.managed.allow_call(server.id, tool.name, arguments, approver):
+                return end("blocked", PluginResult(False, "blocked"))
         # A call that cannot be right from its top level alone is not sent: the model is told the shape that fits, so the
         # service's allowance is not spent on trying again and again (R-TOOL-01).
         if (problem := shape_problem(tool.name, tool.input_schema, arguments)) is not None:

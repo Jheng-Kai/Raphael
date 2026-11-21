@@ -88,17 +88,18 @@ def test_each_member_is_told_its_own_folders_and_one_with_none_the_output_folder
         settings.set("member_write_folders", {"4": [3]})
 
 
-def test_the_one_shared_list_becomes_every_members_own_with_the_output_folder_first(tmp_path):
+def test_the_one_shared_list_becomes_every_members_own_with_the_output_folder_first(tmp_path, monkeypatch):
     # Migration 88: no member loses a folder it could write to before the folders became each member's own.
     import sqlite3
     from raphael_core.brain import db
     path = tmp_path / "old.db"
-    conn = db.connect(path)
+    with monkeypatch.context() as old:
+        old.setattr(db, "LATEST_VERSION", 87)
+        conn = db.connect(path)
     from raphael_core.members.store import MemberStore
     MemberStore(conn).create_member(name="Sample", role="Helper")
     conn.execute("INSERT INTO settings (key, value) VALUES ('owner_output_folder', ?), ('owner_write_folders', ?)",
                  (json.dumps(str(tmp_path / "out")), json.dumps([str(tmp_path / "proj"), str(tmp_path / "out")])))
-    conn.execute("PRAGMA user_version = 87")
     conn.commit()
     conn.close()
     conn = db.connect(path)

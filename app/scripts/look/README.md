@@ -128,7 +128,7 @@ controls: their turns and messages must survive deletion and remain readable thr
 fail as orphans. Current UI cannot create legacy `scope=quarantine` rows; none are fabricated.
 
 Console errors, page exceptions, unhandled rejections and unexpected/error toasts
-fail the journey. Explicit creation/deletion/history-clearing success toasts are the only toast exemption.
+fail the journey. The expected notice about assigning models to previously empty features is exempt.
 Locale sweeps inspect visible text/labels against scripts and exact other-language
 catalog phrases, retaining offending elements. The brand `Raphael` is accepted;
 actual OS microphone names (including their shortened device prefix) from `audio.devices` are exempt only inside the microphone

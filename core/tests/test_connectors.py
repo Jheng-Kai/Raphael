@@ -369,7 +369,10 @@ class Platform:
             if rpc == "initialize":
                 result = {"protocolVersion": "2025-03-26", "capabilities": {}, "serverInfo": {"name": "test", "version": "1"}}
             elif rpc == "tools/list":
-                result = {"tools": [{"name": "COMPOSIO_MULTI_EXECUTE_TOOL", "inputSchema": {"type": "object"}},
+                execute_schema = {"type": "object", "properties": {"tools": {"type": "array", "items": {
+                    "type": "object", "properties": {"tool_slug": {"type": "string"}, "arguments": {"type": "object"}},
+                    "required": ["tool_slug", "arguments"], "additionalProperties": False}}}}
+                result = {"tools": [{"name": "COMPOSIO_MULTI_EXECUTE_TOOL", "inputSchema": execute_schema},
                                     {"name": "COMPOSIO_REMOTE_BASH_TOOL", "inputSchema": {"type": "object"}}]}
             else:
                 result = {"content": [{"type": "text", "text": "mail-private"}]}
@@ -406,7 +409,7 @@ async def test_connect_poll_enable_managed_mcp_and_local_enforcement(tmp_path, c
     assert not (await hub.call(tool_key(record.id, "COMPOSIO_MULTI_EXECUTE_TOOL"), args, approver="user")).ok
     assert len(fake.requests) == before
     for path in (tmp_path / "connectors.json", tmp_path / "integrations.json"):
-        assert not any(secret in path.read_text() for secret in ("ak_private", "lt_private", "mail-private", "refresh_token", "private@example.com"))
+        assert not any(secret in path.read_text() for secret in ("ak_private", "lt_private", "mail-private", "refresh_token", "access_token"))
     await router.call("connectors.disconnect", {"id": "composio:gmail"})
     assert not hub.offered()
     assert any(r.method == "DELETE" and r.url.params.get("revoke_on_delete") == "true" for r in fake.requests)
@@ -662,6 +665,76 @@ async def test_conflict_keeps_local_restrictions_and_entire_tools_map(tmp_path, 
     assert result["error"] == "conflict"
     assert not service.allow_call("connectors_composio", "COMPOSIO_MULTI_EXECUTE_TOOL", {
         "tools": [{"tool_slug": "GMAIL_FETCH_EMAILS", "arguments": {}}]}, "user")
+
+
+async def test_composio_creates_and_upgrades_sessions_with_explicit_account_selection(tmp_path, conn):
+    router, service, hub, vault, fake = await connected(tmp_path, conn)
+    path = "/api/v3.1/tool_router/session"
+    create = next(request for request in fake.requests if request.method == "POST" and request.url.path == path)
+    expected = {"enable": True, "max_accounts_per_toolkit": 5, "require_explicit_selection": True}
+    assert json.loads(create.content)["multi_account"] == expected
+    assert create.headers["x-api-key"] == "ak_private"
+
+    # Simulate an existing session after opening the saved connections in a new core process.
+    fake.config.pop("multi_account")
+    reopened = ConnectorsService(tmp_path, vault, hub, transport=httpx.MockTransport(fake))
+    assert reopened.store.session_id == "trs_test"
+    before = len(fake.requests)
+    key = tool_key("connectors_composio", "COMPOSIO_MULTI_EXECUTE_TOOL")
+    args = {"tools": [{"tool_slug": "GMAIL_FETCH_EMAILS", "arguments": {"user_id": "me"}}]}
+    assert (await hub.call(key, args, approver="user")).ok
+    requests = fake.requests[before:]
+    patch = next(request for request in requests if request.method == "PATCH")
+    assert patch.url.path == path + "/trs_test"
+    assert json.loads(patch.content)["multi_account"] == expected
+    dispatch = next(request for request in requests if request.url.path == "/mcp" and
+                    json.loads(request.content)["method"] == "tools/call")
+    assert requests.index(patch) < requests.index(dispatch)
+    assert (await hub.call(key, args, approver="user")).ok
+    assert sum(request.method == "PATCH" for request in fake.requests[before:]) == 1
+
+
+async def test_composio_lists_and_routes_two_gmail_accounts(tmp_path, conn):
+    class TwoAccounts(Platform):
+        def __call__(self, request):
+            if request.url.path == "/api/v3.1/connected_accounts":
+                assert request.url.params["user_ids"] == service.store.user_id
+                return httpx.Response(200, json={"items": [
+                    {"id": "ca_work", "status": "ACTIVE", "toolkit": {"slug": "gmail"}, "alias": "work",
+                     "state": {"val": {"displayName": "work@example.test", "access_token": "secret-work"}}},
+                    {"id": "ca_home", "status": "ACTIVE", "toolkit": {"slug": "gmail"},
+                     "state": {"val": {"displayName": "home@example.test", "access_token": "secret-home"}}},
+                ]})
+            return super().__call__(request)
+
+    router, service, hub, vault, fake = await connected(tmp_path, conn, TwoAccounts(["ACTIVE"]))
+    status = await router.call("connectors.status")
+    accounts = hub.connections()[0]["accounts"]
+    assert [(a["id"], a["display_name"]) for a in accounts] == [
+        ("ca_work", "work@example.test"), ("ca_home", "home@example.test")]
+    assert accounts[0]["alias"] == "work"
+    assert all("secret-" not in value for value in (json.dumps(accounts), json.dumps(status),
+                                                    service.store.path.read_text()))
+    key = tool_key("connectors_composio", "COMPOSIO_MULTI_EXECUTE_TOOL")
+    offer = next(tool for tool in hub.offered() if tool.key == key)
+    assert offer.whole
+    assert all(a["display_name"] in offer.description and a["id"] in offer.description for a in accounts)
+    offered_item = offer.schema["properties"]["tools"]["items"]
+    assert offered_item["properties"]["account"]["type"] == "string"
+    assert "account" not in offered_item["required"]
+    stored = hub._config.get("connectors_composio").tool("COMPOSIO_MULTI_EXECUTE_TOOL").input_schema
+    assert "account" not in stored["properties"]["tools"]["items"]["properties"]
+
+    fetch = {"tool_slug": "GMAIL_FETCH_EMAILS", "arguments": {"user_id": "me"}}
+    before = len(fake.requests)
+    for call in (fetch, {**fetch, "account": "ca_unknown"}, {**fetch, "account": "work@example.test"},
+                 {**fetch, "account": "ca_work", "arguments": {"user_id": "home@example.test"}}):
+        assert not (await hub.call(key, {"tools": [call]}, approver="user")).ok
+    assert len(fake.requests) == before
+    args = {"tools": [{**fetch, "account": "work"}, {**fetch, "account": "ca_home"}]}
+    assert (await hub.call(key, args, approver="auto")).ok
+    sent = [json.loads(r.content) for r in fake.requests[before:] if r.url.path == "/mcp"]
+    assert [body["params"]["arguments"] for body in sent if body["method"] == "tools/call"] == [args]
 
 
 @pytest.mark.parametrize("arguments", [{}, {"tools": []}, {"tools": [{"tool_slug": "GMAIL_SEND_EMAIL"}]},
@@ -1124,7 +1197,8 @@ async def test_notifications_and_status_projection_never_return_account_credenti
     router.set_notifier(lambda name, params: notifications.append((name, params)))
     result = await router.call("connectors.status")
     assert result["connectors"][0]["status"] == "ACTIVE"
-    assert result["connectors"][0]["accounts"] == [{"id": "ca_test", "status": "ACTIVE", "label": ""}]
+    assert result["connectors"][0]["accounts"] == [
+        {"id": "ca_test", "status": "ACTIVE", "label": "", "display_name": "private@example.com"}]
     assert "refresh_token" not in json.dumps(result)
     assert ("connectors.changed", {}) in notifications
     assert all(params == {} for name, params in notifications if name == "connectors.changed")

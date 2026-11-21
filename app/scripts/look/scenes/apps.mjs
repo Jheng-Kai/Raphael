@@ -152,7 +152,7 @@ export default [
   ], { composioConfigured: true, pluginsConnecting: true }),
   scene("connector-uninstalled", "Uninstalling an app on the second press: it leaves the list, and the chip's count goes down with the connected list", [
     ...open, click('[data-conn="connected"]'), click('[data-conn="open"][data-id="composio:notion"]'), click('[data-conn="server-menu"][data-id="composio:notion"]'),
-    click('.menu [data-conn="disconnect"]'), click('.menu [data-conn="disconnect"]'), waitGone('[data-k="cs-open:composio:notion"]'), wait(".toast"), check("apps-count"),
+    click('.menu [data-conn="disconnect"]'), click('.menu [data-conn="disconnect"]'), waitGone('[data-k="cs-open:composio:notion"]'), check("apps-count"),
   ], {
     managedConnectors: [notion(), google, connector("composio:linear", { name: "Linear", description: "追蹤專案與團隊議題", enabled_tools: ["LINEAR_LIST_ISSUES"] })],
     pluginTools: { ...base.pluginTools, "composio:notion": notionTools },

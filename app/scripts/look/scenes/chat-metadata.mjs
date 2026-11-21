@@ -20,7 +20,13 @@ const editField = '.tn[data-id="8201"] [data-edit-input]', pagerOf = '.tn[data-i
 const openBubble = [check('message-edit-bubble-before'), hover(owner), click(ownerMenu), wait('#app-popover [data-pick="edit"]'), click('#app-popover [data-pick="edit"]'), wait(editField)];
 const later = '.tn[data-id="8205"] .chat-message.owner-message';
 const editedWords = '改過的說法：請整理這份範例研究摘要，並列出三個重點。';
+const ownerSkill = `${owner} [data-act="open-owner-skill"]`;
+const skillFixture = { chatMetadata: "reaction", ownerSkillLinks: true };
 export default [
+  scene("owner-skill-links", "Known skill and literal URL are readable in the owner's bubble, with a quiet notice below", [
+    ...privateOpen, wait(ownerSkill), check("owner-skill-links")], skillFixture),
+  scene("owner-skill-open", "A skill reference opens and focuses its skill in Team skills", [
+    ...privateOpen, wait(ownerSkill), click(ownerSkill), wait('.skl-page [data-library-skill="715"]:focus'), check("owner-skill-open")], skillFixture),
   scene('message-edit-open', "Choosing 編輯 on the owner's last message while its member still thinks about it takes it into the composer, words ready and the caret after them; its bubble leaves the thread, the member's line stays", [...thinkingOpen, ...takeBack, check('message-edit-open'), hover('.ra-scroll')], {chatMetadata:'reaction', ownerEdit:'short', ...stillThinking}),
   scene('message-edit-long', "A long message of several lines goes into the composer whole, which grows with the words", [...thinkingOpen, ...takeBack, check('message-edit-open'), hover('.ra-scroll')], {chatMetadata:'reaction', ownerEdit:'long', ...stillThinking}),
   scene('message-edit-armed', 'Changed words need Escape twice: the first arms the cancel (Esc) and says so, the edit stays and the bubble stays away', [...thinkingOpen, ...takeBack, type(composerField, '改到一半的字'), key('Escape'), check('message-edit-armed')], {chatMetadata:'reaction', ownerEdit:'short', ...stillThinking}),

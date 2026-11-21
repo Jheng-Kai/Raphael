@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { setLocale, t } from "./i18n";
+import { threadItems } from "./conversation";
 import type { MentionTarget } from "./mention-text";
 import { ico } from "./ui";
 import { genericGlyph } from "./service-mark";
@@ -70,7 +71,7 @@ test("a connected tool its service will refuse for a while says why and when it 
 test("queued owner bubbles contain withdraw and send now, with no queued words or live presence", () => {
   setLocale("en");
   document.body.innerHTML = turnHTML(turn(91, { status: "queued", text: "", messages: [], model: null }), emptyTimelineState(), false, LOOK);
-  expect([...document.querySelectorAll<HTMLButtonElement>(".bubble .queued-actions button")].map(button => button.dataset.act)).toEqual(["cancel-message", "send-now"]);
+  expect([...document.querySelectorAll<HTMLButtonElement>(".bubble + .queued-actions button")].map(button => button.dataset.act)).toEqual(["cancel-message", "send-now"]);
   expect(document.body.textContent).not.toContain("Queued");
   expect(document.querySelector('button[data-act="more-message"][data-owner-act="cancel"]')).toBeNull();
   expect(document.querySelector('[data-owner-act="edit"],.live-presence,.work-section')).toBeNull();
@@ -378,6 +379,66 @@ test("an old turn without messages still renders its answer once", () => {
   expect(html.match(/class="ans"/g)).toHaveLength(1);
   expect(visible(html)).toContain("台北現在 24 度。");
   expect(html).not.toContain("《");
+});
+
+describe("an owner message with its own answer during earlier work", () => {
+  const say = (seq: number, text: string, seconds: number) => ({ seq, kind: "reply" as const, text, at_ms: T0 + seconds * 1000 });
+  const work = turn(2072, { source: "app", question: "Test every page", status: "superseded", text: "", steps: [step()],
+    messages: [say(1, "I opened the site.", 10), say(2, "I will test the whole page.", 133)] });
+  const answer = turn(2073, { source: "app", question: "Also test mobile", created_at_ms: T0 + 76_000, text: "",
+    messages: [say(1, "The mobile checks passed.", 145)] });
+  const render = (...turns: AgentTurn[]) => {
+    const list = document.createElement("ul");
+    list.innerHTML = threadItems(turns, T0).map(item => item.kind === "turn"
+      ? turnHTML(item.turn, emptyTimelineState(), false, { ...LOOK, part: item.part }) : "").join("");
+    return list;
+  };
+  const messages = (list: HTMLElement) => [...list.querySelectorAll(".owner-message, .chat-message[data-reply], .exchange-event")];
+  const words = (list: HTMLElement) => messages(list).map(message => message.querySelector(".message-text")?.textContent?.trim() ?? message.textContent?.trim());
+
+  test("send now keeps the earlier words and steps without a stopped appearance", () => {
+    const permissions: AgentTurn["permissions"] = [{ id: "unapproved", source: "ask", kind: "tool", service: "Sample",
+      tool: "send", summary: "Send a review", reason: null, digest: "digest", always: false, state: "cancelled", expires_at_ms: 0 }];
+    const list = render({ ...work, permissions }, answer);
+    expect(words(list)).toEqual(["Test every page", "I opened the site.", "Also test mobile", "I will test the whole page.", "The mobile checks passed."]);
+    expect(list.querySelector('[data-id="2072"][data-after="2073"] .work-sentences li')?.textContent).toBeTruthy();
+    expect(list.querySelector('[data-status="cancelled"], .is-latest-failure')).toBeNull();
+    const card = list.querySelector(".permission-card");
+    expect(card?.textContent).toContain("Send a review");
+    expect(card?.querySelector(".card-status")?.textContent?.trim()).toBe("已取消");
+    expect(card?.querySelector(".card-body")?.textContent).toBe("已取消，沒有執行");
+    expect(card?.querySelector(".card-close, .card-actions")).toBeNull();
+    expect(render({ ...work, status: "cancelled", permissions }, answer).querySelector(".permission-card .card-status")?.textContent?.trim()).toBe("已取消");
+  });
+
+  test("an answer for a message sent after work ended stays with its own bubble", () => {
+    const list = render({ ...work, status: "done" }, { ...answer, created_at_ms: T0 + 140_000 });
+    expect(words(list)).toEqual(["Test every page", "I opened the site.", "I will test the whole page.", "Also test mobile", "The mobile checks passed."]);
+    expect(list.querySelectorAll('[data-id="2073"]')).toHaveLength(1);
+    const waited = render({ ...work, status: "done", messages: work.messages?.slice(0, 1) }, answer);
+    expect(words(waited)).toEqual(["Test every page", "I opened the site.", "Also test mobile", "The mobile checks passed."]);
+    expect(waited.querySelectorAll('[data-id="2073"]')).toHaveLength(1);
+  });
+
+  test("a still-queued owner bubble stays below the earlier work with its action", () => {
+    const list = render({ ...work, status: "running" }, { ...answer, status: "queued", messages: [] });
+    expect(words(list)).toEqual(["Test every page", "I opened the site.", "I will test the whole page.", "Also test mobile"]);
+    expect(list.lastElementChild?.querySelector(".queued-send-now")).not.toBeNull();
+    expect(list.querySelectorAll('[data-id="2073"]')).toHaveLength(1);
+  });
+
+  test("owner input, a colleague exchange and an independent owner message each come before the later work", () => {
+    const input = turn(2074, { created_at_ms: T0 + 30_000, question: "Keep the screenshots", route: "owner_input", text: "" });
+    const exchange = turn(2075, { created_at_ms: T0 + 40_000, scope: "exchange", route: "exchange", source: "member", peer_id: 3 });
+    const list = render({ ...work, status: "running" }, input, exchange, answer);
+    expect(messages(list).map(message => message.closest(".tn")?.getAttribute("data-id"))).toEqual(["2072", "2072", "2074", "2075", "2073", "2072", "2073"]);
+    expect(list.querySelector('[data-id="2072"][data-after="2073"] .live-presence')).not.toBeNull();
+    const onlyProgress = render({ ...work, status: "running",
+      messages: [say(1, "I opened the site.", 10), { ...say(2, "Checking the whole page", 133), kind: "progress" }] }, answer);
+    const presence = onlyProgress.querySelector('[data-id="2072"][data-after="2073"] .live-presence');
+    expect(presence?.textContent).toContain("Checking the whole page");
+    expect(presence?.closest(".tn")?.nextElementSibling?.textContent).toContain("The mobile checks passed.");
+  });
 });
 
 test("a reply carries no play control or transcript, even when stored data still has legacy voice memo fields", () => {
@@ -1042,4 +1103,25 @@ test("live HTML is independent of the clock for turns, task details and pending 
   const before = [turnHTML(live, state, false, LOOK), stepsHTML(live, state), pendingTurnHTML("Draft", "app", LOOK, [], { id: "pending", time: T0 }, state.nowMs)];
   state.nowMs += 10000;
   expect([turnHTML(live, state, false, LOOK), stepsHTML(live, state), pendingTurnHTML("Draft", "app", LOOK, [], { id: "pending", time: T0 }, state.nowMs)]).toEqual(before);
+});
+
+
+test("owner skill and URL links preserve literal words and a skipped skill is one quiet notice", () => {
+  setLocale("en");
+  const text = JSON.stringify({ type: "skill_unavailable", name: "code-review", reason: "archive" });
+  document.body.innerHTML = turnHTML(turn(97, {
+    question: "/code-review https://example.com/changes /unknown",
+    text: "I reviewed what was available.",
+    failure: null,
+    messages: [{ kind: "event", seq: 1, text, at_ms: 1 }, { kind: "event", seq: 2, text, at_ms: 2 }],
+  }), emptyTimelineState(), false, { ...LOOK, skills: new Map([["code-review", 71]]) });
+  const bubble = document.querySelector(".owner-message .bubble")!;
+  expect(bubble.querySelector("[data-skill='71']")?.textContent).toBe("/code-review");
+  expect(bubble.querySelector("[data-act='open-url']")?.getAttribute("href")).toBe("https://example.com/changes");
+  expect(bubble.querySelectorAll(".message-link")).toHaveLength(2);
+  expect(bubble.textContent).toContain("/unknown");
+  const notices = document.querySelectorAll("[data-skill-notice]");
+  expect(notices).toHaveLength(1);
+  expect(notices[0]?.textContent).toBe(t("skillLib.skipped", { p0: "code-review", p1: t("skillLib.invalidPackage") }));
+  expect(bubble.compareDocumentPosition(notices[0]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });

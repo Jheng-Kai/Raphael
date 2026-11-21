@@ -37,6 +37,26 @@ def archive(entries, tar=False):
     return buffer.getvalue()
 
 
+@pytest.mark.parametrize("format", ["folder", "zip", "tgz"])
+async def test_a_single_skill_in_a_manifest_package_is_listed_as_a_plugin(rig, tmp_path, format):
+    manifest = ".claude-plugin/plugin.json"
+    entries = [(manifest, b'{"name":"notes","version":"1.0.0"}'),
+               ("skills/notes/SKILL.md", document("read-notes").encode())]
+    if format == "folder":
+        for relative, contents in entries:
+            path = tmp_path / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(contents)
+        args = {"source": f"local:{tmp_path}"}
+    else:
+        args = upload(f"notes.{format}", archive(entries, format == "tgz"))
+    package = (await rig.call("skills.library.import", args))["package"]
+    assert package["kind"] == "plugin"
+    assert len(package["skills"]) == 1
+    await rig.call("skills.library.delete", {"key": package["key"]})
+    assert not (await rig.call("skills.library.list", {}))["packages"]
+
+
 @pytest.mark.parametrize("layout", ["text", "md", "root", "wrapped", "multiple", "tgz"])
 async def test_the_library_accepts_documents_and_packaged_skills(rig, layout):
     text = document("read-notes")
@@ -60,17 +80,16 @@ async def test_the_library_accepts_documents_and_packaged_skills(rig, layout):
         assert rig.service.skill_file(0, "read-notes", "guide.txt") == "Read this first"
 
 
-@pytest.mark.parametrize("problem,kind", [("traversal", "archive"), ("absolute", "archive"), ("link", "archive"),
+@pytest.mark.parametrize("problem,kind", [("traversal", "archive"), ("absolute", "archive"), ("reserved", "archive"),
     ("case", "archive"), ("parent_case", "archive"), ("size", "size"), ("expanded", "size"), ("entries", "size"),
     ("skill_size", "size"), ("missing", "not_found")])
 async def test_invalid_packages_leave_the_library_and_files_untouched(rig, monkeypatch, problem, kind):
-    entries = [("notes/SKILL.md", document("read-notes").encode())]
+    prefix = "" if problem == "absolute" else "notes/"
+    entries = [(prefix + "SKILL.md", document("read-notes").encode())]
     if problem in ("traversal", "absolute"):
-        entries.append(("../outside" if problem == "traversal" else "/outside", b"x"))
-    elif problem == "link":
-        info = zipfile.ZipInfo("linked")
-        info.external_attr = (stat.S_IFLNK | 0o777) << 16
-        entries.append((info, b"elsewhere"))
+        entries.append(("notes/../outside" if problem == "traversal" else "/outside", b"x"))
+    elif problem == "reserved":
+        entries.append(("notes/.raphael-source.json", b"{}"))
     elif problem == "case":
         entries.append(("notes/skill.md", b"x"))
     elif problem == "parent_case":
@@ -96,7 +115,7 @@ async def test_invalid_packages_leave_the_library_and_files_untouched(rig, monke
 
 async def test_a_repository_import_is_one_package_with_no_members_until_granted(rig, monkeypatch):
     async def download(source):
-        return [(source + "/" + slug, document(slug)) for slug in ("read-notes", "write-notes")]
+        return [(source + "/" + slug, {"SKILL.md": document(slug).encode()}) for slug in ("read-notes", "write-notes")]
     monkeypatch.setattr("raphael_core.members.service.download_skills", download)
     package = (await rig.call("skills.library.import", {"source": "owner/notes"}))["package"]
     assert (package["kind"], package["name"], package["source"], package["access"]) == ("pack", "notes", "owner/notes", [])
@@ -227,17 +246,75 @@ async def test_owner_picked_files_can_be_imported_into_a_members_private_skills(
         assert rig.service.skill_file(member, "review", "check.txt") == "done"
 
 
-async def test_a_tar_link_is_refused_before_the_valid_skill_is_written(rig):
+@pytest.mark.parametrize("tar", [False, True])
+async def test_only_selected_skill_links_are_resolved_and_external_links_are_noted(rig, tar):
     buffer = io.BytesIO()
-    with tarfile.open(fileobj=buffer, mode="w:gz") as out:
-        data = document("weekly").encode()
-        item = tarfile.TarInfo("SKILL.md")
-        item.size = len(data)
-        out.addfile(item, io.BytesIO(data))
-        link = tarfile.TarInfo("alias")
-        link.type = tarfile.LNKTYPE
-        link.linkname = "SKILL.md"
-        out.addfile(link)
-    with pytest.raises(RpcError) as error:
-        await rig.call("skills.library.import", upload("notes.tgz", buffer.getvalue()))
-    assert error.value.data["kind"] == "archive" and not rig.service.packages.list()
+    files = [("notes/SKILL.md", document("read-notes").encode()), ("notes/guide.txt", b"read this")]
+    links = [("AGENTS.md", "outside"), ("notes/deep/read.txt", "../guide.txt"),
+             ("notes/external.txt", "../AGENTS.md")]
+    if tar:
+        with tarfile.open(fileobj=buffer, mode="w:gz") as output:
+            for name, data in files:
+                entry = tarfile.TarInfo(name)
+                entry.size = len(data)
+                output.addfile(entry, io.BytesIO(data))
+            for name, target in links:
+                entry = tarfile.TarInfo(name)
+                entry.type = tarfile.SYMTYPE
+                entry.linkname = target
+                output.addfile(entry)
+    else:
+        with zipfile.ZipFile(buffer, "w") as output:
+            for name, data in files:
+                output.writestr(name, data)
+            for name, target in links:
+                entry = zipfile.ZipInfo(name)
+                entry.create_system = 3
+                entry.external_attr = (stat.S_IFLNK | 0o777) << 16
+                output.writestr(entry, target)
+    data = buffer.getvalue()
+    name = "notes.tgz" if tar else "notes.zip"
+    [files] = skill_sources.read_archive(name, data, subpath="notes")
+    assert files["deep/read.txt"] == b"read this"
+    assert "external.txt" not in files and "AGENTS.md" not in files
+    assert files.skipped_links == ["external.txt"]
+    package = (await rig.call("skills.library.import", upload(name, data)))["package"]
+    skill = package["skills"][0]
+    assert package["skipped_links"] == {str(skill["id"]): ["external.txt"]}
+    assert rig.service.skill_file(0, "read-notes", "deep/read.txt") == "read this"
+
+    from raphael_core.members.skill_library import package as load_package
+
+    [native] = rig.service.native_skills(0)
+    from pathlib import Path
+
+    folder = Path(native["path"]).parent
+    with pytest.raises(MemberError, match="invalid skill package"):
+        load_package(folder)
+    assert load_package(folder, installed=True)["deep/read.txt"] == b"read this"
+
+
+async def test_missing_skill_document_is_refused_before_writing(rig):
+    data = archive([("notes/SKILL.md", b"\x00invalid")])
+    with pytest.raises(RpcError, match="UTF-8 Markdown"):
+        await rig.call("skills.library.import", upload("notes.zip", data))
+    assert not rig.service.packages.list()
+
+
+def test_local_skill_copies_an_absolute_link_only_within_the_selected_folder(tmp_path):
+    root = tmp_path / "repository"
+    folder = root / "notes"
+    folder.mkdir(parents=True)
+    (folder / "SKILL.md").write_text(document("read-notes"), encoding="utf-8")
+    guide = folder / "guide.txt"
+    guide.write_bytes(b"read this")
+    outside = root / "outside.txt"
+    outside.write_bytes(b"outside the skill")
+    try:
+        (folder / "read.txt").symlink_to(guide)
+        (folder / "external.txt").symlink_to(outside)
+    except OSError as error:
+        pytest.skip(f"cannot create local symlinks: {error}")
+    [files], _ = skill_sources.local(f"local:{root}")
+    assert files["read.txt"] == b"read this"
+    assert files.skipped_links == ["external.txt"]

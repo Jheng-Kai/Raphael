@@ -10,13 +10,16 @@ WHY_CHARS = 120
 
 def unfinished_note(turn: Turn) -> str:
     """What stands for Raphael's words in a turn that ended without an answer: that it did not finish
-    and why, and what it already did (`Turn.work`). The line it ended with is an apology or a refusal,
-    not an answer, so it is only quoted as the reason of a failure."""
+    and why, and what it already did (`Turn.work`). Any quoted words are context for the unfinished work."""
     said = " ".join((turn.text or turn.prefix or "").split())[:WHY_CHARS]
     if turn.status == "denied":
         why = "the owner said no or stopped it"
     elif turn.status == "expired":
         why = "nobody answered it before the app closed or time ran out"
+    elif turn.status == "superseded":
+        why = "the owner's next message took over"
+        if said:
+            why += f' after the assistant said "{said}"'
     elif turn.stopped:
         # An answer that gave up after a failed call (R-PERSIST-05): what failed then is no rule for now.
         why = f"it stopped after calls that failed ({turn.stopped}) and said it could not go on. Other ways were not ruled out"

@@ -192,7 +192,7 @@
 /* The first column stops at the bubble's own limit: a long paragraph would otherwise stretch the message to the whole
    column, so the empty room beside the bubble answered the pointer and a right click, and the actions stood far from it
    (measured: 900 px for a 500 px bubble). */
-.chat-message { display: grid; grid-template-columns: fit-content(60ch) auto; column-gap: var(--sp-1); justify-items: start; align-items: start; width: fit-content; min-width: 0; max-width: 100%; position: relative; }
+.chat-message { --h-message-action: 28px; display: grid; grid-template-columns: fit-content(60ch) auto; column-gap: var(--sp-1); justify-items: start; align-items: start; width: fit-content; min-width: 0; max-width: 100%; position: relative; }
 .chat-message > * { grid-column: 1; min-width: 0; max-width: 100%; }
 .chat-message > .message-actions { grid-column: 2; grid-row: 1; align-self: center; }
 /* A message with no actions beside it (a conversation between members) keeps no gap for them. */
@@ -208,8 +208,12 @@
 .owner-message.is-editing > .message-actions.is-held { visibility: hidden; }
 .msg-editor-under { justify-self: end; display: grid; grid-template-columns: minmax(0, auto); justify-items: end; gap: var(--sp-1); max-width: 100%; margin-top: var(--sp-1); }
 .msg-editor-files { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-1); }
-.msg-editor-actions, .queued-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-2); }
-.queued-actions { margin-top: var(--sp-1); }
+.msg-editor-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-2); }
+.queued-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-1); margin-top: var(--sp-1); }
+.queued-actions .btn.sm { height: var(--h-message-action); min-height: var(--h-message-action); padding: 0 var(--sp-2); border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text-2); }
+.queued-actions .btn.sm:hover:not(:disabled) { background: var(--hover); }
+.queued-actions .btn.sm:active:not(:disabled) { background: var(--pressed); }
+.queued-actions .btn.queued-send-now { font-weight: var(--weight-medium); color: var(--text); }
 /* The armed 取消 says 「再按一次取消」 below it, not above: above it would cover the words being edited. */
 .msg-editor-actions [data-cancel-armed="true"]::after { bottom: auto; top: calc(100% + 8px); }
 /* The height of the buttons of a card in the thread (`.conversation-card .card-actions`): the same kind of control, the same size. */
@@ -243,10 +247,10 @@
 .message-code pre { margin: 0; padding: 34px var(--sp-3) var(--sp-3); border-radius: var(--r-sm); background: var(--surface-2); white-space: pre-wrap; overflow-wrap: anywhere; }
 .message-code pre code { padding: 0; background: transparent; }
 .message-code > .btn.icon { position: absolute; inset-block-start: 3px; inset-inline-end: 3px; }
-.message-actions { display: flex; flex: none; align-items: center; justify-content: flex-start; gap: var(--sp-1); height: 28px; opacity: 0; }
+.message-actions { display: flex; flex: none; align-items: center; justify-content: flex-start; gap: var(--sp-1); height: var(--h-message-action, 28px); opacity: 0; }
 .message-tooltip { position: fixed; z-index: 100; pointer-events: none; max-width: calc(100vw - 16px); padding: var(--sp-1) var(--sp-2); border: 1px solid var(--float-edge); border-radius: var(--r-sm); background: var(--float); color: var(--text); box-shadow: var(--pop); font: var(--fs-2xs)/1.5 var(--ui); }
 .message-tooltip { white-space: pre-line; overflow-wrap: anywhere; }
-.message-tooltip[hidden], :has([data-cancel-armed="true"]) > .message-tooltip { display: none; }
+.message-tooltip[hidden] { display: none; }
 .page-agent .btn.quote-pill { position: fixed; z-index: 99; width: auto; min-height: var(--h-ctl); padding: 3px var(--sp-3); gap: var(--sp-1); border: 1px solid var(--edge); border-radius: var(--r-pill); background: var(--panel); color: var(--text); box-shadow: var(--pop); font: var(--fs-xs)/calc(var(--h-ctl) - 8px) var(--ui); }
 .page-agent .btn.quote-pill[hidden], .cmp-quote[hidden] { display: none; }
 /* A reply that failed on a plan's usage limit leads with that plan's Manage usage, under its words. */
@@ -824,8 +828,8 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .chat-message > .ans { max-width: 100%; border: 0; border-radius: var(--pa-br); }
 
 .bubble .message-quote, .bubble .quote-author { color: var(--on-bubble); border-color: currentColor; }
-/* A link in a neutral bubble stays in the link colour; only a bubble that wears a member's colour needs its own words colour to read. */
-.mb-chat[data-member-bubble] .owner-message .bubble .message-link { color: var(--on-bubble); }
+.owner-message .bubble .message-link { color: var(--owner-bubble-link, var(--link)); }
+.owner-skill-notice { text-align: end; margin: 0 0 var(--sp-2); }
 /* Send and Raphael voice form one quiet, equal-sized pair in every composer. */
 .cmp-pair { display: inline-flex; flex: none; align-items: center; gap: var(--sp-1); }
 .composer .cmp-pair .btn { width: 32px; height: 32px; min-height: 32px; padding: 0; border: 0; border-radius: var(--r-sm); background: transparent; }

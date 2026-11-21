@@ -23,7 +23,7 @@ import { serviceIconOf } from "./service-icons";
 import { entryIcon } from "./service-mark";
 export { entryIcon, iconHTML } from "./service-mark";
 import type { AuditEntry, ConnectionGroup, ConnectionTool, MainEvent, NewConnection, StoreService, Words } from "./types";
-import { DISCONNECT_CONFIRM_MS, type Choice, actionRow, btn, closeMenu, esc, fieldHTML, ico, iconBtn, iconButton, openPopover, row, sel, st, tg, toaster } from "./ui";
+import { DISCONNECT_CONFIRM_MS, type Choice, actionRow, btn, closeMenu, esc, fieldHTML, ico, iconBtn, backButton, iconButton, openPopover, row, sel, st, tg, toaster } from "./ui";
 
 /** How long the next sign-in waits for the one it cancelled to give its account back before it gives up beginning. */
 const LOGIN_STOP_MS = 600_000;
@@ -573,11 +573,8 @@ export const connectionsAddHTML = (): string =>
   `<span>${esc(t("conn.addMenu"))}</span>${ico("down")}</button>`;
 
 /** A bare chevron at the top left: back from an app's page or from the list of the connected apps. */
-const backHTML = (): string => iconButton("left", t("conn.back"), ' data-conn="back" data-k="cs-back" data-nav-back', "cs-back");
+const backHTML = (): string => backButton(t("conn.back"), ' data-conn="back" data-k="cs-back"', "cs-back");
 /** The connected list's title is its way back: the chevron and the title are one button. */
-const backTitleHTML = (title: string): string =>
-  btn(`${ico("left")}<span>${esc(title)}</span>`, "cs-back cs-back-title", ` data-conn="back" data-k="cs-back" data-nav-back title="${esc(t("conn.back"))}"`);
-
 // ---------- the connected apps: one list ----------
 
 /** The app switch reflects only the app's enabled flag; tool exclusions stay independent. */
@@ -702,14 +699,19 @@ const accountStatus = (status: string): { kind: "ok" | "warn" | "err" | "idle"; 
   return { kind: known.kind, text: tr(known.key) };
 };
 
-/**
- * The account(s) a service is signed in with, using public owner labels and status:
- * a row for each account of a managed service (two when one was signed in again and the first has not gone), the owner's own Google as
- * one, and a signed-in server as one. A server that needs no sign-in has none.
- */
+function accountName(account: NonNullable<ConnectionGroup["accounts"]>[number], index: number): string {
+  const identity = account.display_name || account.alias;
+  if (identity && account.label && account.label !== identity) return `${identity} · ${account.label}`;
+  return identity || account.label || t("conn.accountN", { p0: index + 1 });
+}
+
+/** Show one row per managed account, or one for a signed-in custom server. */
 function accountsHTML(g: ConnectionGroup): string {
   const rows: { label: string; kind: "ok" | "warn" | "err" | "idle"; text: string }[] =
-    g.source === "composio" ? (g.accounts ?? []).map((account, n) => ({ label: account.label || t("conn.accountN", { p0: n + 1 }), ...accountStatus(account.status) }))
+    g.source === "composio" ? (g.accounts ?? []).map((account, n) => ({
+      label: account.display_name ? `${g.name} · ${accountName(account, n)}` : accountName(account, n),
+      ...accountStatus(account.status),
+    }))
     : g.source === "google" ? [{ label: g.accounts?.[0]?.label || t("conn.googleAccount"), ...accountStatus(g.accounts?.[0]?.status ?? (g.status === "ready" ? "ACTIVE" : "INACTIVE")) }]
     : g.auth !== "none" ? [{ label: t("conn.account"), ...(needsLogin(g) ? { kind: "err" as const, text: t("conn.status.relogin") } : { kind: "ok" as const, text: t("conn.signedIn") }) }]
     : [];
@@ -897,7 +899,7 @@ export function connectionsHTML(v: ConnectionsView, heading = ""): string {
   const target = openTarget(v);
   if (target) return `<div class="cs cs-page">${quietHeading(heading)}${appPageHTML(target.entry, target.group, v)}</div>` + key;
   if (v.screen === "connected" && Array.isArray(v.groups) && v.groups.length) {
-    return `<div class="cs cs-connected"><div class="cs-top"><h2 class="cs-top-t">${backTitleHTML(t("conn.tab.installed"))}</h2></div>${quietHeading(heading)}` +
+    return `<div class="cs cs-connected"><div class="cs-top">${backHTML()}<h2 class="cs-top-t">${esc(t("conn.tab.installed"))}</h2></div>${quietHeading(heading)}` +
       `<div class="cs-body" data-cs-body>${installedHTML(v)}</div></div>` + key;
   }
   // The connected apps could not be read: the chip that would open them says so instead, with the way to read them again.
@@ -1245,9 +1247,13 @@ export function createConnections(host: ConnectionsHost): Connections {
     const group = groupById(id);
     void act(id, async () => {
       if (group?.source) await api.connectorsDisconnect(id);
-      else await api.integrationsDisconnect(id);
+      else {
+        const result = await api.integrationsDisconnect(id);
+        if (result.removed && !result.revoked && group && group.auth !== "none") {
+          toaster.info(t("conn.revokeInApp", { p0: group.name }));
+        }
+      }
       if (open && (open.id === id || openedGroup()?.id === id)) open = null;
-      if (group) notify(t(group.auth !== "none" ? "conn.disconnectedLogin" : "conn.disconnected", { p0: group.name }));
     });
   }
 
@@ -1268,7 +1274,7 @@ export function createConnections(host: ConnectionsHost): Connections {
       if (anchor) { click(anchor); document.querySelector<HTMLButtonElement>('.menu [data-conn="disconnect"]')?.focus(); }
       return;
     }
-    const name = account.label || t("conn.accountN", { p0: (group.accounts ?? []).indexOf(account) + 1 });
+    const name = accountName(account, (group.accounts ?? []).indexOf(account));
     if (connected && !(await confirmDelete(name, { words: { title: t("account.removeConfirm", { p0: name }), hint: t("account.removeHint"), action: t("account.remove") } }))) return;
     void act(id, async () => { await api.connectorsRemoveAccount(id, accountId); });
   }
@@ -1344,7 +1350,7 @@ export function createConnections(host: ConnectionsHost): Connections {
     login = null;
     if (result.connected) {
       loginError = null;
-      if (!fromDialog || open === fromDialog || !dialogOpen()) notify(t(again ? "conn.relogged" : "conn.connected", { p0: name }));
+      if (!host.visible() && !dialogOpen()) toaster.info(t(again ? "conn.relogged" : "conn.connected", { p0: name }));
     } else if (result.error !== "cancelled") {
       // Closing or replacing a page discards its pending failure as well as its visible one.
       if (!fromDialog || open === fromDialog) loginError = { target: key, kind: result.error ?? "error" };
@@ -1396,7 +1402,6 @@ export function createConnections(host: ConnectionsHost): Connections {
       else await api.integrationsAdd(request);
       form = null; // the values were sent to the core's vault: nothing of them stays here
       screen = "connected";
-      notify(t("conn.connected", { p0: request.name }));
       await load();
       return;
     } catch (err) {
@@ -1533,7 +1538,6 @@ export function createConnections(host: ConnectionsHost): Connections {
         if (groupById(id)?.source) { void loadTools(id); break; }
         void act(id, async () => {
           await api.integrationsRefresh(id);
-          notify(t("conn.refreshed"));
         });
         break;
       case "disconnect":

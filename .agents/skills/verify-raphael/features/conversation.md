@@ -1,5 +1,21 @@
 # Conversation
 
+## Owner links and unavailable skills
+
+R-SKILL-18 and R-SKILL-19 cover selected package snapshots and recoverable skill-load notices. A turn that skips a skill still answers, and its localized notice shows under the owner's message. R-LINK-02 covers the safe URL and known skill in the owner bubble and the Team skills destination. Unknown slash words stay plain.
+
+npm run look -- owner-skill-links owner-skill-open --theme both --width 1120,720,1920x1080
+
+## Recovered member replies (R-TEXT-12)
+
+Open a member conversation or a room with a stored malformed reply. The words render as a list with the complete
+link under its own label, and a code fence left open at the end keeps its source readable. Both scenes exercise
+the desktop's recorded-reply fallback. The offline core tests exercise the API and written CLI parsing boundary.
+
+```powershell
+npm run look -- recovered-member-reply recovered-room-reply --theme both --width 1120,720,1920x1080
+```
+
 ## A conversation read at its bottom stays at its bottom (R-FOLLOW-01)
 
 A thread read at its bottom does not move at all while a member replies. Following the bottom was a correction queued by the
@@ -632,13 +648,23 @@ npm run look -- conversation-share chat search --theme both --width 1120,720,192
 
 The left of a member conversation's top row is the status list (status-light.ts, R-HEAD-01): one icon whose tooltip
 names who waits, works or finished. A press lists them in the shared menu with a coloured dot each: 等你 (waiting for the
-owner, or work that went wrong), 工作中, then 完成 (finished work not opened yet); picking one opens its conversation. It
+owner, or work that went wrong), 完成 (finished work not opened yet), then 工作中; picking one opens its conversation. It
 follows `slime-activity`, told by slime.ts whenever a member's live state changes, the roster's `waiting` and `unread`,
-and `conversation-opened`. Neither a member's nor a group's top row has a search button; Ctrl+F (⌘F) opens the search
+and the conversation's actual opening path. The menu leaves the header dot on while any conversation
+has unopened finished news or an unseen waiting card. It uses the most urgent unseen colour, with no dot
+for work under way. The sidebar, status list and other conversation entry points acknowledge only the
+conversation opened. Waiting cards retain their row until answered and a different card lights the icon
+again. Finished news uses the existing member_unread table, now keyed by member and conversation, so
+opening Raphael's main conversation keeps the quick conversation's news. The status-light-seen scene
+opens the menu with two finished conversations, then opens one through the menu and the other through
+the sidebar. It checks the row and header dots at each step.
+Neither a member's nor a group's top row has a search button; Ctrl+F (⌘F) opens the search
 bar. The title pill draws no dot, and its arrow shows on a hover only while the details panel is closed (R-HEAD-02).
 
 ```powershell
 npm run look -- status-light-idle status-light-list status-light-dot status-light-seen status-light-pill-open top-row-find top-row-room-find conversation-share --theme both --width 1120,720,1920x1080
+```
+
 ## A waiting card read out of sight
 
 A card that waits for the owner stays where it was born (card-float.ts, R-CARD-FLOAT-01). When the newest one is read
@@ -2069,12 +2095,12 @@ Unverified by definition: a real model choosing the new fields, and a real Teleg
 ## Owner input
 
 ```powershell
-npm run look -- owner-addition owner-addition-answered owner-addition-older-work composer-send-while-working --theme both --width 1120,720,1920x1080
+npm run look -- owner-sendnow-order owner-addition owner-addition-answered owner-addition-older-work exchange-mid-work exchange-mid-work-answered composer-queued composer-queued-sendnow composer-send-while-working --theme both --width 1120,720,1920x1080
 ```
 
 An owner message in an active private conversation is an ordinary owner bubble and
 enters the same loop as a user-role message at its next step, after the complete
-tool batch. Stop, or 「立即送出」 on a queued message, cancels the work. The inbox seals
+tool batch. Stop cancels the work. 「立即送出」 lets a queued turn take over. The inbox seals
 atomically at the final reply; a later message starts a new turn. Codex takes the addition
 natively (turn/steer); Claude Code and Antigravity read it with the result of their next
 call to Raphael's tools, or, when no call follows, in the next turn that resumes the
@@ -2102,6 +2128,11 @@ message, below the turns between, never up in the work's first line (issue 231).
 `owner-addition-older-work` checks that order.
 A colleague's exchange that comes while the work goes on breaks its line the same way, in the same list of the work's
 stretches (see Where an exchange stands in work that goes on, R-EXCHANGE-01).
+An owner message with its own answer also stands at its send time once it starts if earlier work
+in the same member's conversation showed something later. The earlier work's later words and any
+live line stand below the owner bubble, followed by the new answer. A bubble that is still queued
+waits at the tail. `owner-sendnow-order` drives the button and checks this order and the absence of
+a cancellation line or stopped styling.
 CLI handoffs preserve accepted input in their saved continuation.
 Room messages use that inbox for a single active recipient in the same room and
 thread. Several addressees, files or a sealed inbox start a new room turn without
@@ -2557,13 +2588,12 @@ and CLI) and core/tests/test_e2e_steering.py (a real core over stdio, the fake L
 script of native_journeys.py).
 
 A message queued behind running work is either taken by the model at its next step or sent now. Both are built: the model takes a new message at its next step, and 「立即送出」 on a
-queued bubble (a small text button in sight, first in its action row, not in the ⋯ menu; no 「排隊中」 words stand beside
-it, the button alone says the message waits) interrupts the work now and adds the message as context. R-QUEUE-05:
+queued bubble (a quiet text button beside 取消, in a right-aligned row beneath the bubble; both controls are frameless at rest) interrupts the work now and adds the message as context. R-QUEUE-05:
 `agent.history.send_now {session_id, member_id, turn_id}` puts that inbox row first and ends the
-running work as Stop does, without the cancel memory (Codex `turn/interrupt`; a Claude Code or
+running work without the cancel memory (Codex `turn/interrupt`; a Claude Code or
 Antigravity child is ended and the next turn resumes its stored native session; an API loop's
-task is cancelled). The interrupted turn ends cancelled with its words kept, and pending
-confirmation cards of that conversation are denied, as Stop does. A message with files is
+task is cancelled). The earlier turn ends as `superseded` with its steps and words kept and no
+cancellation reply or stopped styling. Pending confirmation cards of that conversation are denied. A message with files is
 started as its own turn this way too (it never steers). Rooms keep a new exchange per message.
 A message already steered and read, or already started, is not sent again (`sent: false`).
 Known gap: a message handed to a running Claude Code or Antigravity turn but not yet read

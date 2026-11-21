@@ -69,6 +69,10 @@ const pendingReply = [type('.cmp-input', "請整理這週的研究重點。"), k
 const voiceReply = [{ action: "main-event", event: { type: "Dictation", phase: "listening", agent: true, member_id: 0 } },
   { action: "main-event", event: { type: "Dictation", phase: "processing", agent: true, member_id: 0 } }, ...quickOpen, rosterRefresh, ...stopSlot, check("pending-work")];
 export default [
+  scene("composer-typing-performance", "Typing and keyboard completion stay responsive with a full skill library and long history", [
+    wait('.page-agent:not([hidden]) .thread [data-id="10399"]'),
+    { action: "typing-probe", measure: { name: "typing" } },
+  ], { typingPerformance: "Analyst" }),
 
   scene("composer-stop-roster", "Roster refresh cannot repaint a restored running reply's Stop as an emblem", [rosterRefresh, ...stopSlot], { running: true }),
   { ...scene("composer-stop-pending", "A typed CLI request shares the running work line before its first turn", [...pendingReply, { action: "freeze-motion", at: 600 }, check("work-dots")], { stopPending: true }), motion: true },
@@ -336,7 +340,7 @@ export default [
     check("member-delete-ask"), check("delete-confirmation")]),
   scene("member-delete","A member is deleted from its ⋯ menu after the confirmation: its row leaves and a notice says so", [
     member(2), { action: "member-column", collapsed: false }, click('.mb-col [data-member-more="2"]'), click('#app-popover [data-pick="delete"]'), wait(".mb-dialog"),
-    click('.mb-dialog [data-dlg="delete"]'), waitGone('.mb-col [data-member="2"]'), wait(".toast"), check("member-deleted")]),
+    click('.mb-dialog [data-dlg="delete"]'), waitGone('.mb-col [data-member="2"]'), check("member-deleted")]),
   // The panel's close is one of the window edges' soft round buttons (R-UI-16), so it has a surface.
   scene("details", "Title opens member details", [...details, click('.mb-det-head'), check("details-pointer-focus")]),
   scene("raphael-details", "Title opens Raphael details", [{ action: "open-details" }, check("member-details")]),

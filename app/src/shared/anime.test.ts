@@ -1,9 +1,17 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, test } from "vitest";
-import { PREFIXES, plainReplies, replyLine, userLine } from "./anime";
+import { PREFIXES, plainReplies, replyLine, replyMessages, userLine } from "./anime";
 
 describe("plainReplies", () => {
+  test("older replies recover malformed envelopes inside and outside persona frames", () => {
+    const envelope = '{"text":"Short。nn1. List","messages":"**Full**\\n\\n1. First…nn2. Second"]}]}';
+    const words = "**Full**\n\n1. First…\n2. Second";
+    expect(replyMessages(envelope)).toEqual([words]);
+    expect(plainReplies([replyLine("答", envelope)])).toEqual([words]);
+    expect(replyMessages('JSON example: {"text":"Short。nn1. List"}')).toEqual(['JSON example: {"text":"Short。nn1. List"}']);
+  });
+
   test("undoes replyLine in every language, so the window shows Raphael's words plainly", () => {
     for (const [prefix, text] of [["答", "台北現在 24 度。"], ["解", "東京は晴れです。"], ["Answer", "It is 24 degrees."], ["告", "正在查看行程。"]])
       expect(plainReplies([replyLine(prefix, text)])).toEqual([text]);

@@ -1090,7 +1090,7 @@ class App(Router):
         self.background.use_cli(self.agent._cli_brains, self.agent.quotas.record)
         # The questions the background waits on: a thread one waits in is `waiting` in the member
         # column, and the overlay's notice of one names the member whose thread holds it.
-        self.members.add_waiting_source(self.background.waiting_members)
+        self.members.add_waiting_source(self.background.waiting_member_cards)
         self.background.use_member_names(self.members.name_of)
         # Work that was to leave a file is judged on the file found in the member's computer; the
         # shared computer says who holds it by the member's name.

@@ -185,11 +185,10 @@ describe("the guide", () => {
       }
       expect(back!.getAttribute("aria-label")).toBe("Back");
       expect(primary!.getAttribute("aria-label")).toBe(step === "abilities" ? "Start using Raphael" : "Next");
-      // The same filled triangle on both, turned round for the way back; the last step's way on finishes, and is a
-      // check instead.
-      expect(back!.classList.contains("ob-tri")).toBe(true);
+      // Back uses the shared round control and the forward action has its own icon.
+      expect(back!.classList.contains("back-button")).toBe(true);
       expect(primary!.classList.contains("ob-tri")).toBe(step !== "abilities");
-      expect(back!.querySelector("svg.i")!.innerHTML === primary!.querySelector("svg.i")!.innerHTML).toBe(step !== "abilities");
+      expect(back!.querySelector("svg.i")!.innerHTML).not.toBe(primary!.querySelector("svg.i")!.innerHTML);
     }
   });
 

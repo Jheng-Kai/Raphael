@@ -1,10 +1,56 @@
-import { t } from "./i18n";
+import { onLocaleChange, t } from "./i18n";
 import * as api from "./api";
 import type { MessageKey } from "./i18n/zh-TW";
 import type { PageArgument, PageId } from "./types";
-import { btn, esc } from "./ui";
+import { btn, esc, patchHTML } from "./ui";
 import { IS_MAC } from "../shared/platform";
+import { updateErrorText, UPDATE_STATUS_MS } from "./updates";
 import "./missing.css";
+
+export function mountNewerDataUpdate(panel: HTMLElement): void {
+  let view: api.UpdateView | null = null;
+  let busy = false;
+  let timer: ReturnType<typeof setInterval> | undefined;
+  const draw = (): void => {
+    const state = view?.state;
+    const status = state === "checking" ? t("update.checking") : state === "downloading" ? t("update.downloading")
+      : state === "waiting" ? t("update.waiting") : state === "installing" ? t("update.restart")
+      : state === "idle" ? t("update.current") : state === "error" ? updateErrorText(view!.error) : "";
+    const unavailable = state === "error" && view?.error === "not_configured";
+    const label = busy ? status || t("update.checking") : t(state === "waiting" ? "update.cancel" : "update.now");
+    patchHTML(panel, `<div class="startup-update"><p class="missing-note" role="status">${esc(t("missing.newerDatabase"))}</p>` +
+      (unavailable ? "" : btn(esc(label), "pri", ` data-startup-update${busy || state === "installing" ? " disabled" : ""}`)) +
+      `<p class="startup-update-result" role="status"${!status || busy ? " hidden" : ""}>${esc(status)}</p></div>`);
+  };
+  const read = async (progress: boolean): Promise<void> => {
+    try {
+      const status = await api.updateControl("status");
+      if (busy !== progress) return;
+      if (progress ? status.state !== "downloading" : view?.state !== "waiting") return;
+      view = status;
+      if (!busy && status.state !== "waiting") clearInterval(timer);
+      draw();
+    } catch { /* The action itself reports failures when it completes. */ }
+  };
+  panel.addEventListener("click", async event => {
+    if (busy || !(event.target as Element).closest("[data-startup-update]")) return;
+    const action = view?.state === "waiting" ? "cancel" : "install";
+    busy = true;
+    if (action === "install") view = { state: "checking", version: "", notes: "", error: "" };
+    draw();
+    clearInterval(timer);
+    timer = setInterval(() => void read(busy), UPDATE_STATUS_MS);
+    try { view = await api.updateControl(action); }
+    catch { view = { state: "error", version: "", notes: "", error: "feed" }; }
+    finally {
+      busy = false;
+      if (view?.state !== "waiting") clearInterval(timer);
+      draw();
+    }
+  });
+  onLocaleChange(draw);
+  draw();
+}
 
 export interface Missing {
   resource: string;
@@ -19,6 +65,7 @@ const messages: Record<string, MissingKey> = {
   "hidden": "missing.hidden",
   "routines": "missing.routines",
   "startup": "missing.startup",
+  "newer_database": "missing.newerDatabase",
   "learned": "missing.learned",
   "models": "missing.models",
   "retired": "missing.retired",

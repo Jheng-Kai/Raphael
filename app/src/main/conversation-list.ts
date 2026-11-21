@@ -80,7 +80,6 @@ export function mountConversationList(host: HTMLElement, options: { memberId: nu
         if (!yes) return;
         await api.core("conversations.clear", { id: quick.id });
         conversationChange(options.memberId);
-        toaster.info(t("conversations.cleared", { p0: conversationTitle(quick) }));
       }).catch(error => toaster.info(describeError(error)));
     });
     document.querySelector('[data-pick="clear"]')?.classList.add("danger");

@@ -349,7 +349,7 @@ describe("the dialog of a capability", () => {
 describe("the page of one service", () => {
   test("has a back chevron and a close button, both borderless, and the service's name", () => {
     const d = inDialog(dialog("search", "brave"));
-    expect(d).toMatch(/<div class="cs-dlg-head sub"><button type="button" class="btn icon" aria-label="返回" title="返回" data-svc="back" data-k="svc-back" data-nav-back>/);
+    expect(d).toMatch(/<div class="cs-dlg-head sub"><button type="button" class="btn icon back-button" aria-label="返回" title="返回" data-nav-back data-svc="back" data-k="svc-back">/);
     expect(d).toContain('<h2 class="cs-dlg-name" id="svc-dlg-title">Brave</h2>');
     expect(d).toMatch(/data-svc="close"/);
     expect(d).not.toContain("已安裝");
@@ -410,7 +410,7 @@ describe("the page of one service", () => {
 
   test("only real buttons: a bordered text button or a borderless icon one", () => {
     for (const d of [dialog("search", "brave"), dialog("search", "searxng")]) {
-      for (const tag of buttons(inDialog(d))) expect(tag).toMatch(/class="btn(?: icon| pri| danger)?"/);
+      for (const tag of buttons(inDialog(d))) expect(tag).toMatch(/class="btn(?: icon(?: back-button)?| pri| danger)?"/);
     }
   });
 });
@@ -688,7 +688,7 @@ describe("what the section does", () => {
     await flush();
     expect(host.querySelector('[data-svc-line="brave"]')!.textContent).toBe("移除已設定");
     expect(host.innerHTML).not.toContain("BSA-typed-key");
-    expect(toaster.info).toHaveBeenCalledWith("已存進 Windows 認證管理員");
+    expect(toaster.info).not.toHaveBeenCalled();
     expect(titleOf(host)).toBe("Brave"); // it stays on the page of the service
   });
 
@@ -727,7 +727,7 @@ describe("what the section does", () => {
     await flush();
     expect(api.servicesClearKey).toHaveBeenCalledWith("brave");
     expect(host.querySelector(`#${keyInputId("brave")}`)).not.toBeNull();
-    expect(toaster.info).toHaveBeenCalledWith("已移除 Brave 的金鑰");
+    expect(toaster.info).not.toHaveBeenCalled();
   });
 
   test("SearXNG's address is saved with settings.set, and only an http(s) one", async () => {

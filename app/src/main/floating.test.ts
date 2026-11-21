@@ -67,8 +67,9 @@ describe("everything that floats", () => {
   });
 
   test("every floating surface stands on the floating tokens and says it in one scope", () => {
-    const scope = /:where\(([^)]*)\)\s*\{([^}]*)\}/.exec(styles);
-    expect(scope, "the shared scope of the floating surfaces").not.toBeNull();
+    const scope = [...styles.matchAll(/^:where\(([^()]*)\)\s*\{([^}]*)\}/gm)]
+      .find(([, selectors]) => selectors!.split(",").some((selector) => selector.trim() === ".menu"));
+    expect(scope, "the shared scope of the floating surfaces").toBeDefined();
     const listed = scope![1]!.split(",").map((part) => part.trim());
     const body = scope![2]!;
     // Inside a floating surface the ordinary tokens point at the floating ones.

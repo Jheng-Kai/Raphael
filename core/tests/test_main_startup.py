@@ -1,10 +1,15 @@
 """The speech libraries load beside the application and are joined before stdin is read."""
 
 import ast
+import asyncio
 import threading
 from pathlib import Path
 
+import pytest
+
 from raphael_core import __main__ as entry
+from raphael_core.brain.db import NewerDatabaseError
+from raphael_core.protocol import NEWER_DATABASE, RpcError
 
 
 class _FakeApp:
@@ -67,6 +72,31 @@ def test_the_application_module_is_imported_by_a_statement_the_frozen_build_can_
     imported = {(node.module, alias.name) for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) for alias in node.names}
     assert ("raphael_core", "app") in imported
     assert not any(isinstance(node, ast.Call) and getattr(node.func, "attr", "") == "import_module" for node in ast.walk(tree))
+
+
+def test_newer_database_returns_a_startup_error_on_the_normal_rpc_channel(monkeypatch):
+    protocol = object()
+    served = []
+
+    def build_app(**kwargs):
+        raise NewerDatabaseError("synthetic newer schema")
+
+    def serve(router, *, output):
+        assert output is protocol
+        for method in ("core.hello", "settings.get", "settings.set"):
+            with pytest.raises(RpcError) as refusal:
+                asyncio.run(router.call(method))
+            assert (refusal.value.code, refusal.value.message) == (NEWER_DATABASE, "newer_database")
+            served.append(method)
+
+    monkeypatch.setattr(entry, "trust_the_system_certificates", lambda: None)
+    monkeypatch.setattr(entry, "import_speech_libraries", lambda: None)
+    monkeypatch.setattr(entry, "load_application", lambda: type("Module", (), {"build_app": staticmethod(build_app)}))
+    monkeypatch.setattr(entry, "claim_stdout", lambda: protocol)
+    monkeypatch.setattr(entry, "run_stdio", serve)
+    monkeypatch.setattr(entry.sys, "argv", ["raphael_core"])
+    entry.main()
+    assert served == ["core.hello", "settings.get", "settings.set"]
 
 
 def test_a_background_worker_trusts_the_system_certificates_too(monkeypatch):

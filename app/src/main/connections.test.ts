@@ -557,12 +557,11 @@ describe("the connected apps", () => {
     const d = dom(html);
     expect(d.querySelectorAll(".cs.cs-connected")).toHaveLength(1);
     expect(d.querySelector(".cs-apps")).toBeNull();
-    // The chevron and the title are one button: its name is the title, its tooltip says where it goes.
-    const back = d.querySelector(".cs-top-t > button")!;
+    const back = d.querySelector(".cs-top > .back-button")!;
     expect(back.getAttribute("data-conn")).toBe("back");
     expect(back.getAttribute("title")).toBe("返回");
     expect(back.querySelector("svg.i")).not.toBeNull();
-    expect(d.querySelector(".cs-top > .btn.icon")).toBeNull();
+    expect(d.querySelector(".cs-top-t > button")).toBeNull();
     expect(d.querySelector(".cs-top-t")!.textContent).toBe("已連結");
     expect(d.querySelectorAll(".cs-body > .cs-grid")).toHaveLength(1);
     const [notion, files] = rows(html);
@@ -735,14 +734,9 @@ describe("a connected row and the back chevron", () => {
     expect(rule(".cs-sec-head")).toMatch(/padding-inline:\s*var\(--sp-2\)/);
   });
 
-  test("the back chevron is the dialog ✕'s own control: 36 px, round, bare, with an 18 px glyph", () => {
-    const body = rule(".cs .btn.icon.cs-back");
-    for (const property of ["width", "min-width", "height", "min-height"]) expect(body, property).toMatch(new RegExp(`[{;\\s]${property}:\\s*36px`));
-    expect(body).toMatch(/border-radius:\s*var\(--r-pill\)/);
-    expect(body).not.toMatch(/background|box-shadow|border:/);
-    expect(rule(".cs .btn.icon.cs-back .i")).toMatch(/width:\s*18px;\s*height:\s*18px/);
+  test("the connected list and app pages use the shared round back button", () => {
     // The list's title row and an app's page carry the same button, and the one view carries none.
-    for (const html of [connectedList(), groupPage("ab12"), appPage("linear")]) expect(dom(html).querySelectorAll(".cs-back")).toHaveLength(1);
+    for (const html of [connectedList(), groupPage("ab12"), appPage("linear")]) expect(dom(html).querySelectorAll(".cs-back.back-button[data-nav-back]")).toHaveLength(1);
     expect(dom(connectionsHTML(view())).querySelector(".cs-back")).toBeNull();
   });
 });
@@ -1863,7 +1857,7 @@ describe("what the dialog does", () => {
     expect(c.view().login).toBeNull();
   });
 
-  test("signs in to an app of the view with its 連結, and a card that was pressed reports in a toast", async () => {
+  test("signs in from the visible app card without a success toast", async () => {
     let finish!: (value: { connected: boolean; error?: string }) => void;
     api.integrationsConnect.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
     const c = createConnections(host);
@@ -1875,7 +1869,7 @@ describe("what the dialog does", () => {
     expect(api.integrationsConnect).toHaveBeenCalledTimes(1);
     finish({ connected: true }); await settle();
     expect(c.view().login).toBeNull();
-    expect(lastToast()).toBe("已連接 Linear");
+    expect(toaster.info).not.toHaveBeenCalled();
     expect(c.view().screen).toBe("apps");
   });
 
@@ -1893,13 +1887,13 @@ describe("what the dialog does", () => {
     c.click(button("join", { id: "linear" }));
     await settle();
     expect(c.view().open).toEqual({ kind: "app", id: "linear" });
-    expect(c.view().dialogNotice).toEqual({ text: "已連接 Linear", kind: "ok" });
+    expect(c.view().dialogNotice).toBeNull();
     expect(toaster.info).not.toHaveBeenCalled();
     const d = dom(connectionsHTML(c.view()));
     expect(d.querySelector(".cs-join .cs-state")).not.toBeNull();
     expect(d.querySelector(".cs-join [role=switch]")).not.toBeNull();
     expect(d.querySelector(".cs-join .cs-connect")).toBeNull();
-    expect(d.querySelector("[data-cs-notice]")!.textContent).toContain("已連接 Linear");
+    expect(d.querySelector("[data-cs-notice]")).toBeNull();
   });
 
   test("a login that fails says why on the app's page, with no toast; from a row it is a toast, and a cancelled one says nothing", async () => {
@@ -1994,11 +1988,11 @@ describe("what the dialog does", () => {
   });
 
   describe("the accounts of an app (R-ACCT-01)", () => {
-    const gmail = (accounts: { id: string; status: string; label?: string }[]) => ({
+    const gmail = (accounts: NonNullable<ConnectionGroup["accounts"]>) => ({
       id: "composio:gmail", kind: "composio", name: "Gmail", description: "", logo: "", status: accounts.some((a) => a.status === "ACTIVE") ? "ACTIVE" : "INITIATED", enabled: true,
       accounts, enabled_tools: [], disabled_tools: [],
     });
-    const openGmail = async (accounts: { id: string; status: string; label?: string }[]) => {
+    const openGmail = async (accounts: NonNullable<ConnectionGroup["accounts"]>) => {
       api.connectorsStatus.mockResolvedValue({ connectors: [gmail(accounts)], composio_configured: true, google_configured: false });
       api.connectorsRemoveAccount.mockResolvedValue({ connector: gmail([]) });
       api.connectorsDisconnect.mockResolvedValue({ disconnected: true });
@@ -2009,6 +2003,25 @@ describe("what the dialog does", () => {
       return c;
     };
     const TWO = [{ id: "a1", status: "ACTIVE", label: "Work" }, { id: "a2", status: "ACTIVE", label: "Me" }, { id: "a3", status: "INITIATED" }];
+
+    test("two Gmail addresses have separate rows and removal targets only the selected account", async () => {
+      const work = { id: "a1", status: "ACTIVE", display_name: "work@example.test" };
+      const home = { id: "a2", status: "ACTIVE", display_name: "home@example.test" };
+      const c = await openGmail([work, home]);
+      try {
+        const d = dom(connectionsHTML(c.view()));
+        expect(texts(d, ".cs-acct .nm")).toEqual(["Gmail · work@example.test", "Gmail · home@example.test"]);
+        const menus = [...d.querySelectorAll<HTMLElement>('.cs-acct [data-conn="account-menu"]')];
+        expect(menus.map(row => row.dataset.account)).toEqual(["a1", "a2"]);
+        api.connectorsStatus.mockResolvedValue({ connectors: [gmail([home])], composio_configured: true, google_configured: false });
+        c.click(button("account-remove", { id: "composio:gmail", account: menus[0]?.dataset.account ?? "" }));
+        await settle();
+        expect(confirmDelete).toHaveBeenCalledWith("work@example.test", expect.anything());
+        expect(api.connectorsRemoveAccount).toHaveBeenCalledWith("composio:gmail", "a1");
+        expect(api.connectorsDisconnect).not.toHaveBeenCalled();
+        expect(texts(dom(connectionsHTML(c.view())), ".cs-acct .nm")).toEqual(["Gmail · home@example.test"]);
+      } finally { c.reset(); }
+    });
 
     test("every row is a person, a name, a status and a ⋯; the 帳號名稱 button is gone", async () => {
       const c = await openGmail(TWO);
@@ -2171,7 +2184,7 @@ describe("what the dialog does", () => {
     expect(api.integrationsRefresh).toHaveBeenCalledWith("ab12");
   });
 
-  test("disconnects only on the second press, and tells where else the access can be taken away", async () => {
+  test("disconnects on the second press without a toast after successful revocation", async () => {
     vi.useFakeTimers();
     try {
       const c = createConnections(host);
@@ -2189,10 +2202,22 @@ describe("what the dialog does", () => {
       expect(api.integrationsDisconnect).toHaveBeenCalledTimes(1);
       expect(api.integrationsDisconnect).toHaveBeenCalledWith("ab12");
       expect(c.view().open).toBeNull();
-      expect(lastToast()).toContain("Notion 自己的設定");
+      expect(toaster.info).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  test("says where to revoke access if it was not revoked by the provider", async () => {
+    api.toolsetsList.mockResolvedValue({ groups: [{ ...notes, auth: "oauth" }, custom] });
+    api.integrationsDisconnect.mockResolvedValue({ removed: true, revoked: false });
+    const c = createConnections(host);
+    await c.load();
+    c.click(button("open", { id: "ab12" }));
+    c.click(button("disconnect", { id: "ab12" }));
+    c.click(button("disconnect", { id: "ab12" }));
+    await settle();
+    expect(toaster.info).toHaveBeenCalledExactlyOnceWith(t("conn.revokeInApp", { p0: "Notion" }));
   });
 
   test("a service whose login ran out signs in again from its page, which stays open", async () => {
@@ -2205,7 +2230,7 @@ describe("what the dialog does", () => {
     expect(api.integrationsConnect).toHaveBeenCalledWith({ id: "ab12" });
     await settle();
     expect(c.view().open).toEqual({ kind: "group", id: "ab12" });
-    expect(c.view().dialogNotice).toEqual({ text: "已重新登入 Notion", kind: "ok" });
+    expect(c.view().dialogNotice).toBeNull();
     expect(toaster.info).not.toHaveBeenCalled();
   });
 

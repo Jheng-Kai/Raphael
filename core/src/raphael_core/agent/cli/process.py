@@ -125,17 +125,28 @@ class _WindowsJob:
         self.kernel.AssignProcessToJobObject.argtypes = [w.HANDLE, w.HANDLE]
         self.kernel.CloseHandle.argtypes = [w.HANDLE]
         self.handle = self.kernel.CreateJobObjectW(None, None)
-        limits = Limits()
-        limits.basic.flags = 0x2000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        self._limits = Limits()
         process = self.kernel.OpenProcess(0x0101, False, pid)
         try:
-            if not (self.handle and process and self.kernel.SetInformationJobObject(self.handle, 9, c.byref(limits), c.sizeof(limits))
+            if not (self.handle and process and self._kill_on_close(True)
                     and self.kernel.AssignProcessToJobObject(self.handle, process)):
                 self.close()
                 raise OSError("job_assignment")
         finally:
             if process:
                 self.kernel.CloseHandle(process)
+
+    def _kill_on_close(self, enabled):
+        import ctypes as c
+
+        self._limits.basic.flags = 0x2000 if enabled else 0  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        return self.kernel.SetInformationJobObject(self.handle, 9, c.byref(self._limits), c.sizeof(self._limits))
+
+    def release(self):
+        """Close the job handle and let the remaining processes continue."""
+        if not self._kill_on_close(False):
+            raise OSError("job_release")
+        self.close()
 
     def close(self):
         if self.handle:

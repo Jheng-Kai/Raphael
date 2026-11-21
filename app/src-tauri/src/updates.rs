@@ -1,4 +1,5 @@
-//! Signed desktop updates. No update network traffic unless About is opened or auto update is on.
+//! Signed desktop updates. The background task checks and downloads; only an owner request
+//! can install. If members are busy, the in-memory request waits and can be cancelled.
 use crate::{
     core_process::{CoreApi, CoreProcess},
     device_settings::DeviceStore,
@@ -34,6 +35,13 @@ struct Pending {
     view: View,
     update: Option<Update>,
     bytes: Option<Vec<u8>>,
+}
+impl Pending {
+    fn cancel(&mut self) {
+        if self.view.state == "waiting" {
+            self.view.state = "ready";
+        }
+    }
 }
 /// Managed on the builder before any window (`early_state` in lib.rs): a page asks for it at once.
 #[derive(Default)]
@@ -133,58 +141,38 @@ fn members_idle(value: &Value) -> bool {
         })
 }
 
-#[cfg(windows)]
-fn idle_seconds() -> u64 {
-    use windows::Win32::{
-        System::SystemInformation::GetTickCount,
-        UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO},
-    };
-    let mut input = LASTINPUTINFO {
-        cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32,
-        ..Default::default()
-    };
-    // SAFETY: the initialized structure has the required size and remains valid for the call.
-    unsafe {
-        if GetLastInputInfo(&mut input).as_bool() {
-            GetTickCount().wrapping_sub(input.dwTime) as u64 / 1000
-        } else {
-            0
-        }
-    }
-}
-#[cfg(target_os = "macos")]
-fn idle_seconds() -> u64 {
-    crate::macos::power::idle_seconds()
-}
-#[cfg(not(any(windows, target_os = "macos")))]
-fn idle_seconds() -> u64 {
-    0
-}
-
-async fn safe_to_install(app: &AppHandle, automatic: bool) -> bool {
-    if !idle_window(automatic, auto(app).await, idle_seconds()) {
-        return false;
-    }
+async fn safe_to_install(app: &AppHandle) -> bool {
     let Some(core) = app.try_state::<Arc<CoreProcess>>() else {
         return false;
     };
-    // The roster includes Raphael, foreground turns, queued work and waiting cards.
-    core.call("members.list", json!({}))
+    // A core that rejected newer data has no running members. Other RPC failures do
+    // not establish safety. The roster includes Raphael, queued work and waiting cards.
+    match core
+        .call_within("members.list", json!({}), Duration::from_secs(2))
         .await
-        .is_ok_and(|value| members_idle(&value))
+    {
+        Ok(value) => members_idle(&value),
+        Err(error) => error.code == 1007 && error.message == "newer_database",
+    }
 }
 
-fn idle_window(automatic: bool, enabled: bool, idle: u64) -> bool {
-    !automatic || (enabled && idle >= 600)
+#[derive(Debug, PartialEq)]
+enum InstallDecision {
+    None,
+    Wait,
+    Install,
 }
 
-async fn install(app: &AppHandle, state: &Updates, automatic: bool) -> Result<(), String> {
-    if state.pending.lock().await.view.state == "installing" {
-        return Ok(());
+fn install_decision(waiting: bool, pressed: bool, ready: bool, idle: bool) -> InstallDecision {
+    match (waiting, pressed, ready, idle) {
+        (false, false, _, _) | (_, _, false, _) => InstallDecision::None,
+        (_, _, true, true) => InstallDecision::Install,
+        _ => InstallDecision::Wait,
     }
-    if !safe_to_install(app, automatic).await {
-        return Err("busy".into());
-    }
+}
+
+// The caller holds the operation lock across the decision and installation.
+async fn install(app: &AppHandle, state: &Updates) -> Result<(), String> {
     let mut pending = state.pending.lock().await;
     let Some(update) = pending.update.as_ref() else {
         return Err("unavailable".into());
@@ -211,45 +199,99 @@ async fn install(app: &AppHandle, state: &Updates, automatic: bool) -> Result<()
     Ok(())
 }
 
-async fn operate(app: &AppHandle, action: &str, automatic: bool) -> View {
-    let state = app.state::<Updates>();
-    let _operation = state.operation.lock().await;
-    let result = match action {
-        "check" => {
-            let checked = check(app, &state).await;
-            if checked.is_ok() && auto(app).await {
-                download(&state).await
-            } else {
-                checked
-            }
+async fn consider_install(app: &AppHandle, state: &Updates, pressed: bool) -> Result<(), String> {
+    let (waiting, ready) = {
+        let mut pending = state.pending.lock().await;
+        if pending.view.state == "installing" {
+            return Ok(());
         }
-        "install" => match download(&state).await {
-            Ok(()) => install(app, &state, automatic).await,
-            Err(error) => Err(error),
-        },
-        _ => Ok(()),
+        if pressed {
+            pending.view.error.clear();
+        }
+        (pending.view.state == "waiting", pending.bytes.is_some())
     };
+    let idle = (waiting || pressed) && ready && safe_to_install(app).await;
     let mut pending = state.pending.lock().await;
+    // Cancel can arrive while the roster is being read. It wins until installation starts.
+    let waiting = pending.view.state == "waiting";
+    let decision = install_decision(waiting, pressed, ready, idle);
+    match decision {
+        InstallDecision::Install => {
+            pending.view.state = "installing";
+            drop(pending);
+            install(app, state).await
+        }
+        InstallDecision::Wait => {
+            pending.view.state = "waiting";
+            Ok(())
+        }
+        InstallDecision::None => Ok(()),
+    }
+}
+
+async fn record_error(state: &Updates, result: Result<(), String>) {
     if let Err(error) = result {
+        let mut pending = state.pending.lock().await;
         pending.view.state = "error";
         pending.view.error = error;
     }
-    if action == "status"
-        && let Some(store) = app.try_state::<DeviceStore>()
-    {
-        let mut settings = store.lock().await;
-        if settings.update_receipt == app.package_info().version.to_string() {
-            let version = std::mem::take(&mut settings.update_receipt);
-            if settings.save(store.path()).is_ok() {
-                pending.view.installed = version;
-            } else {
-                settings.update_receipt = version;
+}
+
+async fn operate(app: &AppHandle, action: &str) -> View {
+    let state = app.state::<Updates>();
+    if action == "status" {
+        return state.pending.lock().await.view.clone();
+    }
+    if action == "cancel" {
+        let mut pending = state.pending.lock().await;
+        pending.cancel();
+        return pending.view.clone();
+    }
+    if action == "receipt" {
+        let mut view = state.pending.lock().await.view.clone();
+        if let Some(store) = app.try_state::<DeviceStore>() {
+            let mut settings = store.lock().await;
+            if settings.update_receipt == app.package_info().version.to_string() {
+                let version = std::mem::take(&mut settings.update_receipt);
+                if settings.save(store.path()).is_ok() {
+                    view.installed = version;
+                } else {
+                    settings.update_receipt = version;
+                }
             }
         }
+        return view;
     }
-    let view = pending.view.clone();
-    pending.view.installed.clear();
-    view
+    let _operation = state.operation.lock().await;
+    let result = async {
+        if state.pending.lock().await.view.state == "installing" {
+            return Ok(());
+        }
+        match action {
+            "check" => {
+                check(app, &state).await?;
+                if auto(app).await {
+                    download(&state).await?;
+                }
+            }
+            "install" => {
+                let needs_check = {
+                    let pending = state.pending.lock().await;
+                    pending.bytes.is_none() && pending.update.is_none()
+                };
+                if needs_check {
+                    check(app, &state).await?;
+                }
+                download(&state).await?;
+                consider_install(app, &state, true).await?;
+            }
+            _ => unreachable!("validated update action"),
+        }
+        Ok(())
+    }
+    .await;
+    record_error(&state, result).await;
+    state.pending.lock().await.view.clone()
 }
 
 #[tauri::command]
@@ -258,35 +300,50 @@ pub async fn update_control(
     webview: Webview,
     action: String,
 ) -> Result<View, String> {
-    if webview.label() != "main" || !matches!(action.as_str(), "status" | "check" | "install") {
+    if webview.label() != "main"
+        || !matches!(
+            action.as_str(),
+            "status" | "receipt" | "check" | "install" | "cancel"
+        )
+    {
         return Err("not allowed".into());
     }
-    Ok(operate(&app, &action, false).await)
+    Ok(operate(&app, &action).await)
 }
 
 pub fn start(app: &AppHandle) {
     if crate::native_journey() {
         return;
     }
-    let app = app.clone();
+    let background = app.clone();
     tauri::async_runtime::spawn(async move {
         let mut last_check = None;
         loop {
             tokio::time::sleep(Duration::from_secs(60)).await;
-            if !auto(&app).await {
+            if !auto(&background).await {
                 last_check = None;
                 continue;
             }
             if last_check
                 .is_none_or(|time: std::time::Instant| time.elapsed() >= Duration::from_secs(3600))
             {
-                operate(&app, "check", true).await;
+                operate(&background, "check").await;
                 last_check = Some(std::time::Instant::now());
             }
-            if app.state::<Updates>().pending.lock().await.bytes.is_some()
-                && safe_to_install(&app, true).await
-            {
-                operate(&app, "install", true).await;
+        }
+    });
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        loop {
+            tokio::time::sleep(Duration::from_secs(2)).await;
+            let state = app.state::<Updates>();
+            if let Ok(_operation) = state.operation.try_lock() {
+                let waiting = state.pending.lock().await.view.state == "waiting";
+                if !waiting {
+                    continue;
+                }
+                let result = consider_install(&app, &state, false).await;
+                record_error(&state, result).await;
             }
         }
     });
@@ -429,11 +486,51 @@ mod tests {
     }
 
     #[test]
+    fn download_and_idle_members_are_not_consent() {
+        assert_eq!(
+            install_decision(false, false, true, true),
+            InstallDecision::None
+        );
+    }
+
+    #[test]
+    fn pressing_installs_when_idle_or_waits_until_members_finish() {
+        assert_eq!(
+            install_decision(false, true, true, true),
+            InstallDecision::Install
+        );
+        assert_eq!(
+            install_decision(false, true, true, false),
+            InstallDecision::Wait
+        );
+        assert_eq!(
+            install_decision(true, false, true, false),
+            InstallDecision::Wait
+        );
+        assert_eq!(
+            install_decision(true, false, true, true),
+            InstallDecision::Install
+        );
+        assert_eq!(
+            install_decision(false, true, false, true),
+            InstallDecision::None
+        );
+    }
+
+    #[test]
+    fn cancelling_clears_consent_before_a_later_idle_poll() {
+        let mut pending = Pending::default();
+        pending.view.state = "waiting";
+        pending.cancel();
+        assert_eq!(pending.view.state, "ready");
+        assert_eq!(
+            install_decision(pending.view.state == "waiting", false, true, true),
+            InstallDecision::None
+        );
+    }
+
+    #[test]
     fn only_a_complete_idle_roster_allows_installation() {
-        assert!(!idle_window(true, false, 600));
-        assert!(!idle_window(true, true, 599));
-        assert!(idle_window(true, true, 600));
-        assert!(idle_window(false, false, 0));
         assert!(members_idle(
             &json!({"members":[{"activity":"idle","waiting":false}]})
         ));

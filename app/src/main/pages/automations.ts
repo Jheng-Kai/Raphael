@@ -359,7 +359,7 @@ export function createAutomationsPage(app: AppContext): Page {
       run: () => {
         closePanel();
         items = items.filter(item => item.id !== entry.id); draw();
-        void api.calendarDelete(entry.eventId!).then(() => toaster.info(t("members.deleted", { p0: entry.title })), error => { toaster.info(describeError(error)); void load(); });
+        void api.calendarDelete(entry.eventId!).catch(error => { toaster.info(describeError(error)); void load(); });
       },
     });
   }

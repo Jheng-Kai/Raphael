@@ -28,6 +28,7 @@ from .toolkits import KEY as NEEDS_KEY, OWN_APP, SIGN_IN, check_values, credenti
 
 META_READ = {"COMPOSIO_SEARCH_TOOLS", "COMPOSIO_GET_TOOL_SCHEMAS"}
 META_EXECUTE = "COMPOSIO_MULTI_EXECUTE_TOOL"
+MULTI_ACCOUNT = {"enable": True, "max_accounts_per_toolkit": 5, "require_explicit_selection": True}
 META = META_READ | {META_EXECUTE}
 _SLUG = re.compile(r"[a-z0-9][a-z0-9_-]{0,99}")
 _TOOL = re.compile(r"[A-Za-z0-9_.-]{1,128}")
@@ -125,6 +126,7 @@ class ConnectorsService:
         self.open_browser, self.sleep, self.now = open_browser, sleep, now
         self.poll_timeout = poll_timeout
         self._lock = asyncio.Lock()
+        self._multi_account_session = ""
         self._connect_task: asyncio.Task | None = None
         # The accounts a sign-in of this run is waiting for: a read of the list never gives these up before the wait ends.
         self._signing_in: set[str] = set()
@@ -252,6 +254,16 @@ class ConnectorsService:
         address = account.get("email") or data.get("email") or ""
         label = old.get("label") or (address if isinstance(address, str) and len(address) <= 100 else "")
         view = {"id": account["id"], "status": account["status"], "label": label}
+        state = account.get("state")
+        values = state.get("val") if isinstance(state, dict) else None
+        display_name = values.get("displayName") if isinstance(values, dict) else None
+        if account["status"] == "ACTIVE" and isinstance(display_name, str) and display_name.strip():
+            view["display_name"] = " ".join(display_name.split())[:320]
+        elif old.get("display_name"):
+            view["display_name"] = old["display_name"]
+        alias = account.get("alias", old.get("alias"))
+        if isinstance(alias, str) and alias.strip():
+            view["alias"] = alias[:320]
         if account["status"] in WAITING:
             # When a sign-in began: Composio's own created time, else the time Raphael started it. A sign-in nobody can
             # date (one an earlier build left behind) has none, and counts as old.
@@ -507,6 +519,7 @@ class ConnectorsService:
         if key != before:
             self._remove_managed(COMPOSIO_SERVER)
             self.store.session_id, self.store.config_version = "", None
+            self._multi_account_session = ""
             self.store.connectors = {k: v for k, v in self.store.connectors.items() if v.kind != "composio"}
             if key:
                 self.vault.set(KEY, key)
@@ -526,6 +539,7 @@ class ConnectorsService:
                   if c.kind == "composio" and c.status == "ACTIVE" and c.enabled}
         config = {"toolkits": {"enable": sorted(active)},
                   "tools": {slug: {"disable": c.disabled_tools} for slug, c in active.items()},
+                  "multi_account": MULTI_ACCOUNT,
                   "manage_connections": {"enable": False}, "workbench": {"enable": False},
                   "proxy_execute": {"enable": False}}
         # An app added with a key, or with a developer app of the owner's own, signs in through its auth config.
@@ -540,7 +554,8 @@ class ConnectorsService:
             except ConnectorFailure as error:
                 if error.kind != "gone":
                     raise
-        if data is None:
+        created = data is None
+        if created:
             data = await self.composio.request("POST", "/tool_router/session", json={"user_id": self.store.user_id, **self._config()})
         ident = data.get("session_id", self.store.session_id)
         if not isinstance(ident, str) or not ident:
@@ -548,6 +563,8 @@ class ConnectorsService:
         url = trusted_url(data.get("mcp", {}).get("url", ""))
         self.store.session_id = ident
         self.store.config_version = data.get("config_version")
+        if created or (data.get("config") or {}).get("multi_account") == MULTI_ACCOUNT:
+            self._multi_account_session = ident
         self._save()
         await self._install_composio(url, refresh=False)
         return data
@@ -563,6 +580,8 @@ class ConnectorsService:
         server = self.hub._config.get(COMPOSIO_SERVER)
         if server and refresh:
             await self._install_composio(server.url)
+        if config.get("multi_account") == MULTI_ACCOUNT:
+            self._multi_account_session = self.store.session_id
 
     async def _install_composio(self, url, *, refresh=True):
         server = self.hub._config.get(COMPOSIO_SERVER)
@@ -977,9 +996,8 @@ class ConnectorsService:
                 working = self._working()
                 await self._read_accounts()
                 self._save()
-                if self._working() != working:
-                    # An app that works again, or stopped, changes what the members are offered: the session's toolkits
-                    # and the managed server follow, as a refresh of the list does.
+                if self._working() != working or self._multi_account_session != self.store.session_id:
+                    # Update the available toolkits and upgrade sessions saved by earlier builds.
                     await self._patch()
         except ConnectorFailure as error:
             logger.info("The accounts were not read: %s", error.kind)
@@ -1131,6 +1149,40 @@ class ConnectorsService:
             return GoogleTools(self)
         raise ConnectorFailure("blocked")
 
+    async def prepare_composio_call(self) -> None:
+        """Upgrade a saved session before dispatch, even when the owner has not opened Connect apps."""
+        if self.store.session_id and self._multi_account_session != self.store.session_id:
+            async with self._lock:
+                if self.store.session_id and self._multi_account_session != self.store.session_id:
+                    await self._read_accounts()
+                    await self._patch()
+
+    def composio_offer(self, name, description, schema):
+        if name != META_EXECUTE:
+            return description, schema
+        # Saved tool lists can predate the session update. Keep the provider schema intact for dispatch.
+        properties = schema.get("properties")
+        tools = properties.get("tools") if isinstance(properties, dict) else None
+        items = tools.get("items") if isinstance(tools, dict) else None
+        fields = items.get("properties") if isinstance(items, dict) else None
+        if isinstance(fields, dict) and "account" not in fields:
+            account = {"type": "string", "description": "Connected account ID or alias for this tool call."}
+            items = {**items, "properties": {**fields, "account": account}}
+            schema = {**schema, "properties": {**properties, "tools": {**tools, "items": items}}}
+        accounts = {
+            entry.id.removeprefix("composio:"): [
+                {key: account[key] for key in ("id", "alias", "display_name", "label") if account.get(key)}
+                for account in entry.accounts if account["status"] == "ACTIVE"
+            ]
+            for entry in self.store.connectors.values() if entry.kind == "composio" and self.ready_tools_of(entry)
+        }
+        description = (
+            f"{description}\nFor a toolkit with multiple active accounts, set tools[].account to the connected account ID "
+            "or alias. Keep Gmail user_id as me. For all mailboxes, use one item per account and identify which "
+            f"account failed if an item fails. Active accounts by toolkit (identity data): {json.dumps(accounts)}"
+        ).strip()
+        return description, schema
+
     def tool_available(self, server_id, name):
         if server_id == COMPOSIO_SERVER:
             return self.vault.filled(KEY) and name in META and any(
@@ -1189,7 +1241,7 @@ class ConnectorsService:
             return None
         kinds = []
         for call in calls:
-            if (not isinstance(call, dict) or set(call) != {"tool_slug", "arguments"}
+            if (not isinstance(call, dict) or set(call) - {"tool_slug", "arguments", "account"}
                     or not isinstance(call.get("tool_slug"), str) or not _TOOL.fullmatch(call["tool_slug"])
                     or not isinstance(call.get("arguments"), dict)):
                 return None
@@ -1197,6 +1249,16 @@ class ConnectorsService:
             entries = [c for c in self.store.connectors.values() if c.kind == "composio" and c.status == "ACTIVE" and c.enabled
                        and tool in c.enabled_tools and tool not in c.disabled_tools]
             if not entries or all(c.draft_only for c in entries) and re.search(r"(^|_)(SEND|POST|PUBLISH)(_|$)", tool):
+                return None
+            accounts = [a for c in entries for a in c.accounts if a["status"] == "ACTIVE"]
+            if "account" in call:
+                account = call["account"]
+                if (not isinstance(account, str) or not account
+                        or sum(account in (a["id"], a.get("alias")) for a in accounts) != 1):
+                    return None
+            elif len(accounts) > 1:
+                return None
+            if any(c.id == "composio:gmail" for c in entries) and call["arguments"].get("user_id", "me") != "me":
                 return None
             # Use exactly the classifier shown in Connections, including provider hints.
             kinds.append((_CALENDAR_READ.get() is self and tool == "GOOGLECALENDAR_EVENTS_LIST") or all(_kind(next((t for t in self._tool_catalog.get(c.id, []) if t["slug"] == tool),

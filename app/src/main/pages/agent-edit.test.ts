@@ -155,11 +155,11 @@ test("the key card's × retracts its own turn and restores the draft", async () 
   agent.hide();
 });
 
-test("Cancel inside a queued bubble withdraws that message", async () => {
+test("Cancel below a queued bubble withdraws that message", async () => {
   const agent = mount([turn(8, { status: "queued", text: "", question: "Queued draft" })]);
   await flush(); await pickMember(3);
   api.agentRetract.mockImplementation(async (session: string) => { rows = rows.filter(item => item.session_id !== session); });
-  $('.tn[data-id="8"] .bubble [data-act="cancel-message"]').click(); await flush();
+  $('.tn[data-id="8"] .queued-actions [data-act="cancel-message"]').click(); await flush();
   expect(api.agentRetract).toHaveBeenCalledExactlyOnceWith("s8", 3, 8);
   expect(document.querySelector('.tn[data-id="8"]')).toBeNull();
   expect(box().value).toBe("Queued draft");
@@ -398,6 +398,25 @@ describe("the message being edited is gone from the conversation", () => {
     expect(composerNow().replacing).toBe(true);
     agent.hide();
   });
+});
+
+test("an edit of a split owner turn shows one pending bubble in the original message slot", async () => {
+  const message = turn(8, { question: "Also test mobile", text: "Mobile passed." });
+  const work = turn(7, { status: "superseded", text: "", messages: [
+    { seq: 1, kind: "reply", text: "I will test the whole page.", at_ms: message.created_at_ms + 100 },
+  ] });
+  api.agentAskText.mockReturnValue(new Promise(() => {}));
+  const agent = mount([message, work]); await flush(); await pickMember(3);
+  try {
+    expect(lines(8)).toBe(2);
+    await editMessage(8);
+    const input = $<HTMLTextAreaElement>("[data-edit-input]");
+    input.value = "Also test tablet"; input.dispatchEvent(new Event("input", { bubbles: true }));
+    $('[data-act="edit-send"]').click(); await flush();
+    expect(shown("Also test tablet")).toBe(1);
+    expect($(".thread").textContent?.indexOf("Also test tablet")).toBeLessThan($(".thread").textContent!.indexOf("I will test the whole page."));
+    expect($(".thread").textContent).not.toContain("Mobile passed.");
+  } finally { agent.hide(); }
 });
 
 describe("the actions of a message stand on the message, whatever it carries", () => {

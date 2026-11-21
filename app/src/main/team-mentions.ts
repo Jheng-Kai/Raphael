@@ -9,7 +9,7 @@ import type { MentionTarget } from "./mention-text";
 import { serviceIconOf } from "./service-icons";
 import type { AppState, MembersList } from "./types";
 import { closeMenu, ico, matchingChoices, menuIsOpenFor, openMenu, type Choice } from "./ui";
-import { textPositionRect } from "./text-position";
+import { completionAnchor } from "./text-position";
 
 /** The names the core takes for everyone and for Raphael, in every language (members/rooms.py `_targets`): the catalogue's own words. */
 const inEveryLanguage = (key: "team.everyone" | "agent.title"): string[] => Object.values(catalogs).map(catalog => catalog[key]);
@@ -54,6 +54,23 @@ export interface MentionMenuOptions {
 
 /** An app that is not usable yet but one step from it: waiting for a sign-in or for a key. */
 const waiting = (app: RosterEntry): boolean => app.state === "needs_sign_in" || app.state === "needs_secret";
+const menuChoices = new WeakMap<TargetRoster, { people: { id?: number; choice: Choice }[]; apps: Choice[]; signIn: Set<string> }>();
+
+function rosterChoices(targets: TargetRoster) {
+  const cached = menuChoices.get(targets);
+  if (cached) return cached;
+  const memberLabel = t("completion.kindMember"), appLabel = t("completion.kindApp");
+  const toChoice = (target: RosterEntry, trail: string): Choice => {
+    let lead: string | undefined;
+    return { value: target.name, label: target.name, get lead() { return lead ??= target.mark(16); }, tag: target.tag, aliases: target.aliases,
+      trail };
+  };
+  const people = targets.filter(target => target.kind === "member").map(target => ({ id: target.id, choice: toChoice(target, memberLabel) }));
+  const apps = targets.filter(target => target.kind === "app" && (target.state === "ready" || waiting(target)));
+  const choices = { people, apps: apps.map(target => toChoice(target, appLabel)), signIn: new Set(apps.filter(waiting).map(target => target.name)) };
+  menuChoices.set(targets, choices);
+  return choices;
+}
 
 /**
  * The @ menu (R-MENU-01): the other members, then the apps the member can use, each row a mark,
@@ -66,20 +83,15 @@ export function teamMentions(input: HTMLTextAreaElement, list: MembersList, allo
     if (menuIsOpenFor(input) && document.querySelector("#app-popover.team-mentions-menu")) closeMenu();
     return;
   }
-  const targets = mentionTargets(list, allowed);
+  const indexed = rosterChoices(mentionTargets(list, allowed));
   const query = match[1];
-  const people = targets.filter(target => target.kind === "member" && target.id !== options.self);
-  const apps = targets.filter(target => target.kind === "app" && (target.state === "ready" || waiting(target)));
-  const toChoice = (target: RosterEntry): Choice => ({ value: target.name, label: target.name, lead: target.mark(16), tag: target.tag, aliases: target.aliases,
-    trail: t(target.kind === "app" ? "completion.kindApp" : "completion.kindMember") });
-  const found = (rows: RosterEntry[]): Choice[] => matchingChoices(rows.map(toChoice), query);
-  const choices = query ? [...found(people), ...found(apps)].slice(0, 8) : [...people, ...apps].map(toChoice);
+  const people = indexed.people.filter(person => person.id !== options.self).map(person => person.choice);
+  const choices = query ? [...matchingChoices(people, query), ...matchingChoices(indexed.apps, query)].slice(0, 8) : [...people, ...indexed.apps];
   if (!choices.length) { closeMenu(); return; }
   const caret = input.selectionStart;
-  const signIn = new Set(apps.filter(waiting).map(app => app.name));
   const pick = (value: string): void => {
     const prefix = before.slice(0, match.index);
-    if (options.connect && signIn.has(value) && !people.some(person => person.name === value)) {
+    if (options.connect && indexed.signIn.has(value) && !people.some(person => person.value === value)) {
       // An app that is not signed in cannot be asked yet: the typed @ goes and the place to sign it in opens.
       input.value = prefix + input.value.slice(caret);
       input.focus(); input.setSelectionRange(prefix.length, prefix.length);
@@ -93,8 +105,7 @@ export function teamMentions(input: HTMLTextAreaElement, list: MembersList, allo
   };
   // One list in a menu of a fixed height: the mouse wheel and the arrow keys take it from the first member to the last app.
   openMenu(input, choices, "", pick, undefined, [],
-    { placement: "start", anchorRect: () => textPositionRect(input, match.index), selectionIndicator: false, focus: false, completion: true, scroll: true, className: "team-mentions-menu" });
-  document.querySelector<HTMLElement>("#app-popover")!.dataset.teamMentions = "true";
+    { placement: "start", anchorRect: completionAnchor(input, match.index), completion: true, className: "team-mentions-menu" });
 }
 
 export interface TeamMentionsSource extends MentionMenuOptions { list: MembersList | null; allowed?: number[] }

@@ -63,6 +63,7 @@ def test_v68_moves_every_conversation_record_and_keeps_quick_and_target_context(
     quick_before = tuple(conn.execute("SELECT * FROM conversations WHERE id=?", (quick,)).fetchone())
     quick_turn_before = tuple(conn.execute("SELECT * FROM agent_turns WHERE id=?", (quick_turn,)).fetchone())
     child_turn = expected[1][0]
+    conn.execute("INSERT INTO member_unread(member_id, unread_from) VALUES (1, ?)", (child_turn,))
     common = dict(turn_id=child_turn, member_id=1, conversation_id=extra[0])
     records = {
         "connect_cards": dict(common, id="connect", app="notes", language="en", state="pending", created_at_ms=1, updated_at_ms=1, expires_at_ms=999),
@@ -104,7 +105,10 @@ def test_v68_moves_every_conversation_record_and_keeps_quick_and_target_context(
         row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         if "conversation_id" in {column[1] for column in conn.execute(f"PRAGMA table_info({row[0]})")}
     }
-    assert tables_with_conversations == set(records) | {"agent_turns", "agent_inbox", "conversation_context_summaries", "agent_conversation_cli_sessions"}
+    assert tables_with_conversations == set(records) | {
+        "agent_turns", "agent_inbox", "conversation_context_summaries", "agent_conversation_cli_sessions", "member_unread",
+    }
+    assert tuple(conn.execute("SELECT conversation_id, unread_from FROM member_unread WHERE member_id=1").fetchone()) == (target, child_turn)
     assert tuple(conn.execute("SELECT conversation_id,state FROM agent_inbox WHERE turn_id=?", (queued,)).fetchone()) == (target, "queued")
     for table in ("voice_call_turns", "page_revisions", "email_draft_versions"):
         assert conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] == 1

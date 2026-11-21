@@ -143,7 +143,7 @@ pub struct DeviceSettings {
     pub ui_language: String,
     /// Start with Windows.
     pub autostart: bool,
-    /// Download signed updates and install only after ten idle minutes without active members.
+    /// Check for signed updates and download them in the background.
     pub auto_update: bool,
     /// Learn the words the owner corrects in pasted dictations (`learn`): the cleanup model judges
     /// each edit, which costs a little, so it is off until the owner turns it on.

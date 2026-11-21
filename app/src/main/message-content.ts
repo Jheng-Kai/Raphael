@@ -137,6 +137,27 @@ export function linkedText(text: string): string {
   return out + esc(text.slice(from));
 }
 
+/** Owner messages keep their literal URLs and the slash names offered by the member. */
+export function ownerTextHTML(text: string, query: string, mentions: readonly MentionTarget[], skills?: ReadonlyMap<string, number>): string {
+  const tokens = /https?:\/\/|(?<!\S)\/\S+/gi;
+  const words = (plain: string): string => mentionsHTML(plain, mentions, value => highlightHTML(value, query));
+  let html = "", from = 0;
+  for (let match = tokens.exec(text); match; match = tokens.exec(text)) {
+    const start = match.index;
+    const raw = /^https?:/i.test(match[0]) ? bareUrl(text.slice(start)) : match[0];
+    const url = /^https?:/i.test(raw) ? messageUrl(raw) : null;
+    const id = raw.startsWith("/") ? skills?.get(raw.slice(1).toLowerCase()) : undefined;
+    if (!url && id === undefined) continue;
+    html += words(text.slice(from, start));
+    const label = highlightHTML(raw, query);
+    html += url
+      ? `<a class="message-link" href="${esc(url)}" data-act="open-url" data-url="${esc(url)}" rel="noreferrer noopener">${label}</a>`
+      : `<a class="message-link" href="#skill-${id}" data-act="open-owner-skill" data-skill="${id}">${label}</a>`;
+    from = tokens.lastIndex = start + raw.length;
+  }
+  return html + words(text.slice(from));
+}
+
 /** An address only this machine or its network can open: no public page, so no title to read and no preview. */
 export function isLocalAddress(url: string): boolean {
   const host = new URL(url).hostname;
@@ -178,7 +199,9 @@ function inline(text: string, query: string, markdown: boolean, urls: Set<string
       const end = text.indexOf(")", at + 3);
       plain += text.slice(at + 1, end < 0 ? text.length : end + 1); at = end < 0 ? text.length : end + 1; continue;
     }
-    if (markdown && text[at] === "\\" && at + 1 < text.length) { plain += text[at + 1]; at += 2; continue; }
+    if (markdown && text[at] === "\\" && /[\x21-\x2f\x3a-\x40\x5b-\x60\x7b-\x7e]/.test(text[at + 1] ?? "")) {
+      plain += text[at + 1]; at += 2; continue;
+    }
     if (markdown && text[at] === "`") {
       const marker = /^`+/.exec(text.slice(at))![0];
       const end = text.indexOf(marker, at + marker.length);
@@ -195,8 +218,15 @@ function inline(text: string, query: string, markdown: boolean, urls: Set<string
       plain += text.slice(at, end < 0 ? text.length : end + 1); at = end < 0 ? text.length : end + 1; continue;
     }
     if (markdown && text[at] === "[") {
-      const middle = text.indexOf("](", at + 1);
-      if (middle !== -1) {
+      // A later link starts its own label even when an earlier opening bracket was never closed.
+      let middle = at + 1, brackets = 1;
+      for (; middle < text.length; middle++) {
+        if (text[middle] === "\\" && middle + 1 < text.length) middle++;
+        else if (text[middle] === "[") brackets++;
+        else if (text[middle] === "]" && --brackets === 0) break;
+      }
+      if (brackets) { at++; continue; }
+      if (text[middle + 1] === "(") {
         let end = middle + 2, level = 1;
         for (; end < text.length && level; end++) { if (text[end] === "(") level++; if (text[end] === ")") level--; }
         if (!level) {
@@ -207,6 +237,7 @@ function inline(text: string, query: string, markdown: boolean, urls: Set<string
           // A file on a computer has no address to open: its path is what the owner can use, not the markdown around it.
           if (/^(?:\/|[A-Za-z]:[\\/])/.test(target)) { flush(); out += pathHTML(target, query); at = end; continue; }
         }
+        else { plain += text.slice(at + 1, middle) + " "; at = middle + 2; continue; }
       }
     }
     const raw = /^https?:\/\//i.test(text.slice(at, at + 8)) ? bareUrl(text.slice(at)) : "";

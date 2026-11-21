@@ -137,6 +137,13 @@ describe("buttons", () => {
     expect(all).not.toMatch(/icon-btn|class="link"|class="quiet"/);
   });
 
+  test("page back controls use one shared round button", () => {
+    for (const file of sources.filter(file => file !== join(MAIN, "ui.ts"))) {
+      expect(read(file), file).not.toMatch(/\bicon(?:Button|Btn)\("left", t\("[^"]*(?:back|Back)"\)/);
+    }
+    expect(read(join(MAIN, "styles.css"))).toMatch(/\.btn\.icon\.back-button\s*\{[^}]*width: 36px;[^}]*height: 36px;[^}]*border-radius: var\(--r-pill\)/);
+  });
+
   // Text buttons keep their surfaces; icon controls communicate through color and focus.
   test("icon-only controls have no hover/active surface and keep keyboard focus", () => {
     const strip = (css: string): string => css.replace(/\/\*[\s\S]*?\*\//g, "");
@@ -178,14 +185,15 @@ describe("buttons", () => {
         `styles.css: .page-agent .cmp-bar .btn.cmp-attach${state}`,
       ]),
       "styles.css: .btn.icon.modal-x:hover:not(:disabled)", "styles.css: .btn.icon.modal-x:active:not(:disabled)",
-      // The larger view's fold back and Back live in the window strip and fill as its own buttons do (R-COMP-PERF-07).
-      'desktop-viewer.css: .window-chrome > .btn.icon:is([data-desktop="collapse"], [data-desktop="back"]):is(:hover, :active):not(:disabled)',
-      'desktop-viewer.css: .window-chrome > .btn.icon:is([data-desktop="collapse"], [data-desktop="back"]):active:not(:disabled)',
+      // The larger view's collapse control keeps the window strip's hover (R-COMP-PERF-07).
+      'desktop-viewer.css: .window-chrome > .btn.icon[data-desktop="collapse"]:is(:hover, :active):not(:disabled)',
+      'desktop-viewer.css: .window-chrome > .btn.icon[data-desktop="collapse"]:active:not(:disabled)',
       "styles.css: .window-button:hover", "styles.css: .window-button:active",
       "styles.css: .window-close:hover", "styles.css: .window-close:active",
       // The guide's foot: a step's two round buttons (the way back and the way on, a triangle in each) are filled circles
       // in every state.
-      "styles.css: .ob-foot .ob-pair .btn.icon:hover:not(:disabled)", "styles.css: .ob-foot .ob-pair .btn.icon:active:not(:disabled)",
+      "styles.css: .ob-foot .ob-pair .btn.icon.ob-go:hover:not(:disabled)", "styles.css: .ob-foot .ob-pair .btn.icon.ob-go:active:not(:disabled)",
+      "styles.css: .btn.icon.back-button:hover:not(:disabled)", "styles.css: .btn.icon.back-button:active:not(:disabled)",
       // R-UI-50: the contextual latest action floats over messages and needs an opaque surface.
       "agent.css: .page-agent .btn.conversation-latest:hover:not(:disabled)",
       "conversations.css: .peer-chat > .btn.peer-latest:hover:not(:disabled)",

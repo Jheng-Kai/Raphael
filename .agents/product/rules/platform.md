@@ -2,6 +2,18 @@
 
 Speed, start-up, the network and how the repository is worked. Part of [the product rules](../RULES.md); a rule's ID is unique across every file.
 
+## Composer input and completion
+
+| ID | Date | Rule | Check | Severity | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-PERF-22 | 2026-11-22 | Typing and keyboard completion leave transcript and sidebar DOM and geometry untouched. Completion filters prepared names, preserves unchanged rows, and mounts a bounded scroll window for a large inventory. The Edge journey records per-key main-thread, frame, layout, style, IPC and mutation evidence against 150 skills, 25 members and 400 stored turns. Aim for p95 below 4 ms plain and 8 ms filtering, with the scene's regression ceilings allowing for measurement and host variance. | look | hard | composer-typing-performance; app/scripts/look/mock-ipc.test.mjs::serves the composer performance fixture through normal reads |
+
+## Shared release data
+
+| ID | Date | Rule | Check | Severity | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-START-08 | | An owner debug build compiled with `RAPHAEL_IDENTITY=release` uses the installed edition's identity, data and single-instance lock. Other debug builds default to the development identity. The core refuses a database whose committed SQLite user_version is newer than its latest migration before changing the database or its sidecars. The centered startup notice offers one Update action in the window's locale. It shows check and download progress, and explains an unavailable updater or a current version in place. | cargo, pytest, look | hard | app/src-tauri/src/identity.rs::only_an_explicit_release_request_changes_a_debug_builds_identity; core/tests/brain/test_db.py::test_newer_database_is_refused_before_switching_to_wal; core/tests/brain/test_db.py::test_newer_committed_schema_in_wal_is_refused_without_touching_sidecars; core/tests/test_main_startup.py::test_newer_database_returns_a_startup_error_on_the_normal_rpc_channel; start-newer-data |
+
 ## Long busy conversation input
 
 | ID | Date | Rule | Check | Severity | Evidence |

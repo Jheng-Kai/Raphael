@@ -203,12 +203,12 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 :root[data-window-modal="true"] .window-chrome { background: transparent; border-color: transparent; }
 /* Over the conversations the caption buttons are drawn into the window itself, with no
    strip of their own; the right panel reaches the window's top under them, and the columns below keep their room. */
-:root[data-window-layout="main"]:has(.main > .page-agent:not([hidden])) .window-chrome { background: transparent; }
+:root[data-window-layout="main"] .window-chrome[data-conversation-caption] { background: transparent; }
 /* The new member's page lies over a conversation from just under the strip down, so the right panel behind the conversation would show
    as a bar of its own colour across the top of a wide window: the strip takes the page's own surface instead. */
-:root[data-window-layout="main"]:has(.main > .page-agent:not([hidden])):has(.mb-scrim.cr-scrim):not(:has(.mb-scrim:not(.cr-scrim))) .window-chrome { background: var(--content); }
+:root[data-window-layout="main"] .window-chrome[data-conversation-caption][data-creator-caption] { background: var(--content); }
 /* A dialog dims the caption with everything else; its buttons still answer on top of the dim. */
-:root:has(.mb-scrim:not(.store-scrim)) .window-chrome, :root:has(.menu.side-search) .window-chrome, :root:has(.ob .cs-scrim) .window-chrome { background: transparent; border-color: transparent; }
+.window-chrome[data-caption-dimmed], .ob:has(.cs-scrim) ~ .window-chrome { background: transparent; border-color: transparent; }
 .window-drag { flex: 1; min-width: 0; }
 /* A conversation's header is the window's top row (members.css): its own empty stretch moves the window (it carries
    data-window-drag, window-chrome.ts), and this strip, whose drag cell would lie over the pill and the round buttons, lets the pointer
@@ -216,8 +216,8 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
    Anything that dims or replaces the header keeps the cell: a dialog, the store (a page over the conversation), the narrow sidebar,
    the member's settings page and the larger computer view. The details panel lying over the chat (under 1120 px) dims the row with its scrim, whose own top row moves the window
    instead (members.css). */
-:where(:root[data-window-layout="main"]:not([data-window-modal="true"], [data-desktop-expanded], [data-sidebar-open]):has(.main > .page-agent:not([hidden]) > .mb-chat:not([hidden]) > .mb-head):not(:has(.page-agent > .ms-pane:not([hidden]), .mb-scrim, .menu.side-search))) .window-chrome { pointer-events: none; }
-:where(:root[data-window-layout="main"]:not([data-window-modal="true"], [data-desktop-expanded], [data-sidebar-open]):has(.main > .page-agent:not([hidden]) > .mb-chat:not([hidden]) > .mb-head):not(:has(.page-agent > .ms-pane:not([hidden]), .mb-scrim, .menu.side-search))) .window-chrome > :not(.window-drag) { pointer-events: auto; }
+:where(:root[data-window-layout="main"]:not([data-window-modal="true"], [data-desktop-expanded], [data-sidebar-open])) .window-chrome:where([data-conversation-drag]) { pointer-events: none; }
+:where(:root[data-window-layout="main"]:not([data-window-modal="true"], [data-desktop-expanded], [data-sidebar-open])) .window-chrome:where([data-conversation-drag]) > :not(.window-drag) { pointer-events: auto; }
 /* Windows' own caption buttons, 46 px cells the strip's full height with square
    corners; under the pointer the whole cell fills, and close turns red with a white cross. */
 .window-controls { display: flex; flex: none; gap: 0; padding: 0; }
@@ -237,7 +237,7 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 /* Caption actions retain a visible keyboard outline inside the window. */
 .window-close:hover:focus-visible { outline-color: var(--focus); }
 :root[data-window-modal="true"] .window-button:focus-visible:not(:hover) { background: transparent; }
-:root:has(.mb-scrim:not(.store-scrim)) .window-button:focus-visible:not(:hover), :root:has(.menu.side-search) .window-button:focus-visible:not(:hover), :root:has(.ob .cs-scrim) .window-button:focus-visible:not(:hover) { background: transparent; }
+.window-chrome[data-caption-dimmed] .window-button:focus-visible:not(:hover), .ob:has(.cs-scrim) ~ .window-chrome .window-button:focus-visible:not(:hover) { background: transparent; }
 .window-close:hover { background: var(--close); color: var(--on-close); }
 .window-close:active { background: var(--close); color: var(--on-close); }
 .window-restore-glyph { display: none; }
@@ -281,6 +281,7 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 .usage-num { font-size: var(--fs-xs); color: var(--text-2); }
 .side-foot { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); margin-top: var(--sp-2); padding-top: var(--sp-2); border-top: 1px solid var(--line); }
 .main { position: relative; overflow-x: hidden; overflow-y: auto; background: var(--content); border-top-left-radius: var(--r-lg); border-left: 0; border-top: 0; min-height: 0; container: main / inline-size; scrollbar-gutter: stable; }
+.main.startup-failed { grid-column: 1 / -1; border-top-left-radius: 0; }
 /* A conversation scrolls inside itself, so the main area keeps no empty strip beside its details panel. */
 .main:has(> .page-agent:not([hidden])) { scrollbar-gutter: auto; }
 /* Each page is a column centred in the window: wide windows get margins, nothing stretches edge to edge. */
@@ -676,10 +677,10 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .menu .mtd .mt { white-space: normal; }
 .menu .mdesc { font-size: var(--fs-xs); line-height: 1.4; color: var(--text-3); text-wrap: pretty; }
 .menu-head { padding: var(--sp-1) var(--sp-2); font-size: var(--fs-xs); color: var(--text-3); text-align: left; border-bottom: 1px solid var(--line); margin-bottom: var(--sp-1); }
-.completion-menu { overflow-y: hidden; }
+.completion-menu { contain: layout; overflow-anchor: none; }
 .completion-menu button.is-active { background: var(--hover); }
 .completion-menu button:hover:not(.is-active) { background: transparent; }
-.completion-menu .mdesc, .completion-menu .mtd .mt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.completion-menu.is-virtual .mdesc, .completion-menu.is-virtual .mtd .mt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .menu .msource { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-xs); color: var(--text-3); }
 /* An item that does something rather than choose (「重新搜尋麥克風」), after a line under the choices. */
 .menu-sep { height: 1px; margin: var(--sp-1) var(--sp-1); background: var(--line); }
@@ -718,9 +719,9 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .lang-foot { margin: var(--sp-1) 0 0; padding: var(--sp-2) var(--sp-2) var(--sp-1); border-top: 1px solid var(--line); font-size: var(--fs-xs); color: var(--text-3); }
 .lang-empty { margin: 0; padding: var(--sp-1) var(--sp-2) var(--sp-3); font-size: var(--fs-sm); color: var(--text-2); }
 .toasts { position: fixed; right: 20px; bottom: 20px; z-index: 140; display: flex; flex-direction: column-reverse; align-items: flex-end; gap: var(--sp-2); pointer-events: none; }
-body:has(.page-agent:not([hidden])) .toasts { bottom: max(152px, var(--toast-lift, 0px)); }
-body:has(.page-agent:not([hidden])[data-det="open"]:not(.is-room)) .toasts { right: calc(var(--pa-det) + 20px); }
-body:has(.page-agent:not([hidden])[data-det="open"]:not(.is-room)) .toast { max-width: min(480px, calc(100vw - var(--pa-det) - 40px)); }
+.window-chrome[data-conversation-caption] ~ .toasts { bottom: max(152px, var(--toast-lift, 0px)); }
+.window-chrome[data-conversation-details] ~ .toasts { right: calc(var(--pa-det) + 20px); }
+.window-chrome[data-conversation-details] ~ .toasts .toast { max-width: min(480px, calc(100vw - var(--pa-det) - 40px)); }
 /* A toast is a soft pill on the floating surface, like the question reminder beside it (R-FLOAT-01): its words, and a button framed by the
    control fill when it has one, never a box in the inverse of the page. */
 .toast { position: relative; overflow: hidden; pointer-events: auto; display: flex; align-items: center; gap: var(--sp-3); min-height: var(--h-field); padding: var(--sp-1) var(--sp-1) var(--sp-1) var(--sp-4); border: 1px solid var(--float-edge); border-radius: var(--r-pill); background: var(--float); color: var(--text); font-size: var(--fs-sm); box-shadow: var(--pop); max-width: min(480px, calc(100vw - 40px)); animation: toast-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1); }
@@ -807,22 +808,20 @@ body:has(.page-agent:not([hidden])[data-det="open"]:not(.is-room)) .toast { max-
 .ob-foot .btn { min-height: var(--ob-pill); border-radius: 999px; font-size: var(--fs-md); }
 /* The welcome's one pill fills its row. */
 .ob-foot .ob-actions:not(.ob-pair) .btn.pri { flex: 1 1 0; min-width: 0; }
-/* A step's pair: two circles of one size side by side, as wide together as they are, so the foot centres them. Each
+/* A step's pair: two circles side by side, as wide together as they are, so the foot centres them. Each
    takes its surface and its ink from its own variables, in every state, and has no edge. */
 .ob-foot .ob-pair { --ob-round: 48px; justify-content: center; align-items: center; gap: var(--sp-3); width: auto; }
-.ob-foot .ob-pair .btn.icon { flex: none; width: var(--ob-round); height: var(--ob-round); min-height: var(--ob-round); border-color: transparent; border-radius: 50%; background: var(--ob-fill); color: var(--ob-ink); }
-.ob-foot .ob-pair .btn.icon:hover:not(:disabled) { border-color: transparent; background: var(--ob-fill-over); color: var(--ob-ink); }
-.ob-foot .ob-pair .btn.icon:active:not(:disabled) { border-color: transparent; background: var(--ob-fill-down); color: var(--ob-ink); }
+.ob-foot .ob-pair .btn.icon.ob-go { flex: none; width: var(--ob-round); height: var(--ob-round); min-height: var(--ob-round); border-color: transparent; border-radius: 50%; background: var(--ob-fill); color: var(--ob-ink); }
+.ob-foot .ob-pair .btn.icon.ob-go:hover:not(:disabled) { border-color: transparent; background: var(--ob-fill-over); color: var(--ob-ink); }
+.ob-foot .ob-pair .btn.icon.ob-go:active:not(:disabled) { border-color: transparent; background: var(--ob-fill-down); color: var(--ob-ink); }
 /* The way back is on a quiet grey, one step lighter under the pointer; the way on is the solid accent, a circle of ink. */
-.ob-foot .ob-pair .ob-prev { --ob-fill: var(--hover); --ob-fill-over: var(--pressed); --ob-fill-down: var(--pressed); --ob-ink: var(--text); }
 .ob-foot .ob-pair .ob-go { --ob-fill: var(--accent); --ob-fill-over: var(--accent-hover); --ob-fill-down: var(--accent-pressed); --ob-ink: var(--on-accent); }
-.ob-foot .ob-pair .btn.icon svg.i { width: 20px; height: 20px; }
-/* The triangle is the app's own play drawing, filled, and turned round for the way back. The drawing's box stays in the
+.ob-foot .ob-pair .btn.icon.ob-go svg.i { width: 20px; height: 20px; }
+/* The triangle is the app's own play drawing, filled for the way forward. The drawing's box stays in the
    middle of its circle; the triangle is moved inside the box toward its point (1.5 of the box's 24 units), since a
    triangle's weight sits away from its point and it would look pushed back otherwise. */
 .ob-foot .ob-pair .ob-tri svg.i { fill: currentColor; }
 .ob-foot .ob-pair .ob-tri svg.i path { transform: translateX(1.5px); }
-.ob-foot .ob-pair .ob-prev.ob-tri svg.i { transform: scaleX(-1); }
 /* The team's characters float by a step's title, each where screens.ts puts it: they take no room, and a narrow card
    drops them. */
 .ob-floaters { position: relative; height: 0; pointer-events: none; }
@@ -1008,3 +1007,10 @@ button.ob-tile:hover:not(:disabled) .ob-get { background: var(--pressed); }
 
 :where(:root[data-keys]) .side .nav:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .window-controls .window-button:focus-visible { outline-offset: -3px; }
+
+/* The member page's round navigation control, shared by every back button. */
+.btn.icon.back-button { flex: none; width: 36px; min-width: 36px; height: 36px; min-height: 36px; padding: 0; border-color: transparent; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--edge-rim); color: var(--text-2); }
+.btn.icon.back-button:hover:not(:disabled) { background: var(--hover); color: var(--text); }
+.btn.icon.back-button:active:not(:disabled) { background: var(--pressed); color: var(--text); }
+.btn.icon.back-button .i { width: 18px; height: 18px; }
+:root[data-keys] .btn.icon.back-button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }

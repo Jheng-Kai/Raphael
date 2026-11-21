@@ -334,9 +334,11 @@ export const membersSetCover = (id: number, file: WireAttachment): Promise<{ mem
 export const membersAvatarGenerate = (member_id: number, prompt: string): Promise<{ candidate: WireAttachment; model: string }> =>
   core("members.avatar_generate", { member_id, prompt });
 /** The owner read the thread of member `id`: it is no longer unread. */
-export const membersRead = (id: number): Promise<unknown> => core("members.read", { id });
+export const membersRead = (id: number, conversation?: number | null): Promise<unknown> =>
+  core("members.read", { id, ...(conversation !== undefined ? { conversation_id: conversation } : {}) });
 /** The thread on screen now (null for none): what arrives there is no news. */
-export const membersViewing = (id: number | null): Promise<unknown> => core("members.viewing", { id, tz: Intl.DateTimeFormat().resolvedOptions().timeZone });
+export const membersViewing = (id: number | null, conversation?: number | null): Promise<unknown> =>
+  core("members.viewing", { id, ...(conversation !== undefined ? { conversation_id: conversation } : {}), tz: Intl.DateTimeFormat().resolvedOptions().timeZone });
 /** Raphael's own tools a member may be given, by id, and the connections. */
 export const membersToolChoices = (): Promise<{ tools: string[]; connections: { id: string; name: string; enabled: boolean; logo?: string }[] }> =>
   core("members.tool_choices");
@@ -657,8 +659,8 @@ export const openAttachment = (id: string): Promise<void> => invoke("open_attach
  */
 export const attachmentSource = async (id: string): Promise<string> => convertFileSrc(await invoke<string>("attachment_source", { id }), "raphael-media");
 
-export interface UpdateView { state: "idle" | "checking" | "found" | "downloading" | "ready" | "installing" | "error"; version: string; notes: string; error: string; installed?: string; }
-export const updateControl = (action: "status" | "check" | "install"): Promise<UpdateView> => invoke("update_control", { action });
+export interface UpdateView { state: "idle" | "checking" | "found" | "downloading" | "ready" | "waiting" | "installing" | "error"; version: string; notes: string; error: string; installed?: string; }
+export const updateControl = (action: "status" | "receipt" | "check" | "install" | "cancel"): Promise<UpdateView> => invoke("update_control", { action });
 export const openTeamFile = (path: string): Promise<void> => invoke("open_team_file", { path });
 /** Opens a file a member delivered, by the handle its Library gave (`members.library_file`, checked by the core). */
 export const openLibraryFile = (memberId: number, id: string): Promise<void> => invoke("open_library_file", { memberId, id });

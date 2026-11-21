@@ -1053,7 +1053,10 @@ export interface Member {
   unread_from?: number | null;
   /** What the unseen news is: a message, a task or routine that ended well, or work that went wrong (null: none). */
   unread_kind?: "message" | "done" | "failed" | null;
+  unread_threads?: { conversation_id: number | null; from: number | null; kind: NonNullable<Member["unread_kind"]> }[];
+  main_conversation_id?: number | null;
   waiting: boolean;
+  waiting_cards?: { id: string; conversation_id: number | null }[];
   activity?: string;
   activity_label?: string;
   preview: string;
@@ -1271,7 +1274,7 @@ export type CalendarEventFocus = `calendar:${CalendarDate}:${string}`;
 export type CalendarCreate = `calendar-new:${CalendarDate}`;
 /** Calendar on the week of that day, its usual view. */
 export type CalendarWeek = `calendar-week:${CalendarDate}`;
-export type PageArgument = "computer" | "raphael" | SettingsPane | AgentDraft | CalendarDate | CalendarEventFocus | CalendarCreate | CalendarWeek | `repair:${string}:${string}` | `member-settings:${number}`;
+export type PageArgument = "computer" | "raphael" | SettingsPane | AgentDraft | CalendarDate | CalendarEventFocus | CalendarCreate | CalendarWeek | `repair:${string}:${string}` | `member-settings:${number}` | `skill:${number}`;
 
 /** One of the five pages of the main window. */
 export interface Page {
@@ -1334,7 +1337,7 @@ export interface ConnectionGroup {
   description?: string;
   logo?: string;
   /** The accounts a managed service is signed in with, by their status (`ACTIVE`, `EXPIRED`, ...): never an account's name or id. */
-  accounts?: { id?: string; status: string; label?: string }[];
+  accounts?: { id?: string; status: string; label?: string; display_name?: string; alias?: string }[];
   disabled_tools?: string[];
   tools_state?: "loading" | "failed" | "ready";
   result_size_limit?: number;

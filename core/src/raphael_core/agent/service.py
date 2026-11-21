@@ -188,7 +188,7 @@ from ..brain.owner import owner_context
 from .cities import cities_in
 from .commands import COMMANDS, AppCatalog, run_command
 from .device import DeviceActions
-from .failure import AgentFailure, failure_kind, provider_of, turn_failure
+from .failure import AgentFailure, failure_kind, provider_of, skill_failure, skill_instruction, turn_failure
 from ..failures import Failure, Missing, classify
 from .gate import BUILTIN_SERVER, ToolGate
 from .history import VOICE, AgentHistory, Turn
@@ -534,6 +534,7 @@ class _Ask:
     keep_answer: bool = False
     draft_text: str | None = None
     admission_stopped: bool = False
+    superseded: bool = False
     direct_reply: bool = False
     files_ready: asyncio.Event = field(default_factory=asyncio.Event, compare=False)
     page_call: str | None = None
@@ -554,6 +555,7 @@ class _Ask:
     management_pending: list[PlannedCall] = field(default_factory=list)
     management_screenings: list[Screening] = field(default_factory=list)
     memory_untrusted: bool = False
+    skill_notices: list[dict] = field(default_factory=list)
     # (tool key, argument digest) of each call made that changes something, in order.
     made: list[tuple[str, str]] = field(default_factory=list)
     # The apps whose connector cards this turn showed: it then waits for them and calls nothing else.
@@ -984,7 +986,6 @@ class AgentService:
         self._inflight_members: dict[str, int] = {}
         self._inflight_scopes: dict[str, tuple[int, int | None]] = {}
         self._owner_loops = {}
-        self._interrupted: set[str] = set()
         from .inbox import AgentInbox
         self._inbox = AgentInbox(conn, self._history, now_ms)
         self._inbox.recover()
@@ -1392,10 +1393,14 @@ class AgentService:
         conversation_id = self._destination(member_id, conversation_id, source, quick=quick)
         original_text = None
         skill_loaded = False
+        skill_notices = []
         resolve = getattr(self._team, "resolve_slash", None)
         expand = getattr(self._team, "expand_command", None)
         if resolve is not None or expand is not None:
-            expanded, skill_loaded = resolve(member_id, text) if resolve is not None else (expand(member_id, text), False)
+            expanded, skill_loaded = (resolve(member_id, text, on_failure=lambda name, error:
+                skill_notices.append(skill_failure(name, error))) if resolve is not None else (expand(member_id, text), False))
+            if skill_notices:
+                expanded += "\n\n" + skill_instruction(skill_notices)
             if expanded != text:
                 original_text, text = text, expanded
         from .intents import checked as check_intent
@@ -1406,7 +1411,8 @@ class AgentService:
             intent=intent,
             started_at_ms=self._now_ms(),
             original_text=original_text,
-            memory_untrusted=skill_loaded,
+            memory_untrusted=skill_loaded or bool(skill_notices),
+            skill_notices=skill_notices,
             text=text,
             language=normalize_language(ui_language),
             attachments=list(attachments),
@@ -1521,6 +1527,7 @@ class AgentService:
                         return self._done(0, ask.language, "understood", "", silent=True)
                 payload = dict(session_id=ask.session_id, draft_text=ask.draft_text, text=ask.text, original_text=ask.original_text, language=ask.language,
                                source=ask.source, quick=ask.quick, quote=ask.quote, memory_untrusted=ask.memory_untrusted,
+                               skill_notices=ask.skill_notices,
                                attachments=[a.metadata() for a in ask.attachments])
                 row, _ = self._inbox.admit(ask, payload)
                 if ask.place and row['turn_id'] != old.id:
@@ -1631,7 +1638,8 @@ class AgentService:
         return _Ask(history_generation=generation, session_id=payload.get('session_id', row['request_id']), turn_id=row['turn_id'], text=payload['text'],
                     language=payload['language'], source=payload['source'], quick=payload.get('quick', False), speaker=speaker,
                     conversation_id=row['conversation_id'], original_text=payload.get('original_text'),
-                    memory_untrusted=payload.get('memory_untrusted', False), quote=payload.get('quote'), attachments=files)
+                    memory_untrusted=payload.get('memory_untrusted', False), skill_notices=payload.get('skill_notices', []),
+                    quote=payload.get('quote'), attachments=files)
 
     async def _drain(self, scope, row, waiter):
         first = True
@@ -1653,9 +1661,8 @@ class AgentService:
                     else:
                         result = await self._run_ask(ask)
                         turn = self._history.get(turn_id)
-                        outcome = ('cancelled' if self._was_cancelled(ask.session_id) or ask.session_id in self._interrupted
+                        outcome = ('cancelled' if self._was_cancelled(ask.session_id) or (turn and turn.status == 'superseded')
                                    else 'failed' if turn and turn.status in ('error','expired') else 'completed')
-                        self._interrupted.discard(ask.session_id)
                         self._inbox.settle(turn_id, outcome)
                     turn = self._history.get(turn_id)
                     if turn and turn.status == 'queued' and self._was_cancelled(ask.session_id):
@@ -1808,6 +1815,8 @@ class AgentService:
         except asyncio.CancelledError:
             current = asyncio.current_task()
             if task.cancelled() and (current is None or not current.cancelling()):
+                if ask.superseded:
+                    return _Silent({"status": "done", "turn_id": 0, "prefix": "", "text": ""})
                 # Ended by agent.cancel (or by a newer request of the session), not by the caller.
                 return self._done(
                     0, ask.language, "understood", phrase(ask.language, "denied"), silent=True
@@ -2280,6 +2289,11 @@ class AgentService:
         if getattr(run, "narration", None) is not None:
             ask.steps.extend(steps)
             return {"status": final.status, "ok": final.status == "done", "text": final.text, "detail": final.detail}
+        if ask.superseded and final.status == "cancelled":
+            ask.steps.extend(steps)
+            reply = self._finish(ask, "operate", final.which, final.text, run.ledger, status=final.status)
+            run.turn_id = reply["turn_id"]
+            return _Silent(reply)
         if run.turn_id is None:
             ask.steps.extend(steps)
             reply = self._finish(
@@ -2439,6 +2453,10 @@ class AgentService:
                 line = line[len(compose(prefix, "", None)) - 1:]
             if not last:
                 line = line[:-1]
+        if kind == "event" and line.startswith('{"type": "skill_unavailable",'):
+            if any(m["kind"] == kind and m["text"] == line
+                   for m in self._history.messages([ask.turn_id]).get(ask.turn_id, ())):
+                return
         self._write(lambda: self._history.add_message(ask.turn_id, kind, line))
         if kind in ("progress", "thinking"):
             self._mark_latency(ask, "first_step")
@@ -2893,6 +2911,7 @@ class AgentService:
                                    for turn in context.turns if turn.id is not None],
                     context_owner_words=owner_words(context.turns),
                     skills=getattr(self._team, "native_skills", lambda member: [])(ask.speaker.id),
+                    skill_notice=lambda notice: self._message(ask, "event", json.dumps(notice, ensure_ascii=False)),
                     attachments=ask.attachments, resume_session=not ask.nested,
                     rate_limit_waits=() if ask.quick else None,
                     conversation_id=ask.conversation_id, quota=self.quotas.record,
@@ -5779,12 +5798,18 @@ class AgentService:
         """Drop a CLI brain's own thread of a conversation: its next request starts a new one from the history."""
         self._cli_sessions.invalidate(conversation_id)
 
-    def _deny(self, pendings: list[Pending]) -> None:
+    def _deny(self, pendings: list[Pending], *, superseded: bool = False) -> None:
         for pending in pendings:
             self._card_state(pending.id, "cancelled")
-            # The permission audit keeps its unapproved-call outcome; the turn itself was cancelled.
             self._drop_followup(pending, "denied")
-            self._outcome(pending, "understood", phrase(pending.language, "denied"), "cancelled")
+            if superseded:
+                if turn := self._history.get(pending.turn_id):
+                    self._write(lambda: self._history.resolve(
+                        pending.turn_id, prefix=turn.prefix, text=turn.text, detail=turn.detail, status="superseded"
+                    ))
+                    self._turn_changed(pending.turn_id)
+            else:
+                self._outcome(pending, "understood", phrase(pending.language, "denied"), "cancelled")
 
     def _computer_refusal(self, pending, kind):
         if pending.action.tool == "management_batch" and kind == "expired" and self._team is not None:
@@ -5916,8 +5941,8 @@ class AgentService:
 
     async def _history_send_now(self, params):
         """「立即送出」: a message that waits its turn is read now. It goes to the front of its conversation's inbox and the
-        work in that conversation is ended as Stop ends it (its words kept, its question denied), without the memory that
-        would refuse the next request, so the drain starts the message as its own turn. A Codex turn is told to stop
+        work in that conversation yields to it (its words kept, its question denied), without a cancellation reply or
+        memory that would refuse the next request. The drain starts the message as its own turn. A Codex turn is told to stop
         (`turn/interrupt`); a Claude Code or Antigravity child is ended and its native session is resumed by that turn; an
         API loop's task is cancelled. Whatever the stopped work had started is never run again. Words that ended work left
         unread go just ahead of it, in the order they were said (`_release_steering`): the drain takes them all. Private
@@ -5947,9 +5972,17 @@ class AgentService:
             return {'sent': False}
         self._inbox.promote(row['turn_id'])
         running = [(name, task) for name, task in self._inflight.items() if self._inflight_scopes.get(name) == scope and not task.done()]
-        for name, _ in running:
-            self._interrupted.add(name)
-            self.stop_session(name)
+        for name, task in running:
+            if ask := self._running_requests.get(name):
+                ask.superseded = True
+            if hasattr(self._plugins, "stop_session"):
+                self._plugins.stop_session(name)
+            task.cancel()
+        self._expire(self._confirmations.sweep())
+        self._deny(self._confirmations.cancel_where(
+            lambda pending: (current := self.turn(pending.turn_id)) is not None and current.scope == "private"
+            and (current.member_id, current.conversation_id) == scope
+        ), superseded=True)
         await asyncio.gather(*(task for _, task in running), return_exceptions=True)
         await asyncio.gather(*(loop.aclose() for loop in list(self._cli_loops) if loop.task and loop.task.cancelling()))
         self._turn_changed(row['turn_id'], member)
@@ -6760,10 +6793,17 @@ class AgentService:
         negative, ...) or a prefix as the model wrote it. A member of the team says it with no
         prefix: it speaks in plain sentences."""
         prefix = _prefix(ask.language, which) if ask.speaker.is_raphael else ""
+        if status == "cancelled" and ask.superseded:
+            status, text = "superseded", ""
+            if turn := self._history.get(ask.turn_id):
+                prefix, text, detail, route = turn.prefix, turn.text, turn.detail, turn.route
+            saved = [message["text"] for message in self._history.messages([ask.turn_id]).get(ask.turn_id, [])
+                     if message["kind"] == "reply"]
+            text = "\n\n".join(saved or ask.replies) or text
         turn_id = self._record(ask, route, prefix, text, status, detail, ledger, failure=failure)
         replies = []
         if (ask.source != VOICE or not ask.speaker.is_raphael) and status != "confirm":
-            replies = ask.replies or [text]
+            replies = ask.replies or ([text] if status != "superseded" else [])
             from .answers import pending_replies
             saved = [item["text"] for item in self._history.messages([turn_id]).get(turn_id, []) if item["kind"] == "reply"]
             pending = pending_replies(saved, replies)
@@ -6872,6 +6912,9 @@ class AgentService:
                     scope=ask.scope, room_id=ask.room_id, thread_id=ask.thread_id, failure=failure,
                 )
                 ask.turn_id = turn_id
+            for notice in ask.skill_notices:
+                self._message(ask, "event", json.dumps(notice, ensure_ascii=False))
+            ask.skill_notices.clear()
             ask.recorded_cost = cost
             from ..brain.runs import save_metrics
             save_metrics(self._metrics_conn, "turn", turn_id, ask.started_at_ms,

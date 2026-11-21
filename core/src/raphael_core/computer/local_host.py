@@ -4,11 +4,13 @@ stays in the core."""
 import asyncio
 import os
 import sys
+from contextlib import suppress
 from pathlib import Path
 
 from ..agent.cli.process import Child
 
 OUTPUT_LIMIT = 20_000
+OUTPUT_DRAIN_SECONDS = 1
 # Windows PowerShell prints all that a command outputs as one table, in the columns of what came first: a load figure and
 # then a process list leaves the list as blank lines. So each statement prints by itself, line by line as it comes. A
 # command that does not parse runs as written, which reports why.
@@ -49,6 +51,10 @@ class Output:
         marker = f"\n[... {omitted:,} output bytes omitted ...]\n".encode() if omitted else b""
         return (self.head + marker + self.tail).decode("utf-8", errors="replace")
 
+    async def read(self, stream):
+        while chunk := await stream.read(8192):
+            self.add(chunk)
+
 
 class CommandChild(Child):
     def __init__(self, *args, errors=None, **kwargs):
@@ -56,8 +62,16 @@ class CommandChild(Child):
         self.errors = errors if errors is not None else Output()
 
     async def _drain(self):
-        while chunk := await self.process.stderr.read(8192):
-            self.errors.add(chunk)
+        await self.errors.read(self.process.stderr)
+
+    def release_job(self):
+        if self._job:
+            self._job.release()
+
+    def close_pipes(self):
+        if self.process is not None:
+            # A descendant may still hold a writer open. Close the reader transport while the loop is alive.
+            self.process._transport.close()
 
 
 class LocalHost:
@@ -77,19 +91,32 @@ class LocalHost:
             environ = {**worker_environment(), "RAPHAEL_LOCAL_COMMAND": command}
         child = CommandChild(argv, environ=environ, cwd=cwd or str(Path.home()), errors=errors)
         stdout = output if output is not None else Output()
-        timed_out = False
+        reader = None
+        released = False
         try:
             await child.start()
             child.process.stdin.close()
-            async with asyncio.timeout(timeout_seconds):
-                while chunk := await child.process.stdout.read(8192):
-                    stdout.add(chunk)
-                await child.process.wait()
-                await child._stderr
-        except TimeoutError:
-            timed_out = True
+            reader = asyncio.create_task(stdout.read(child.process.stdout))
+            with suppress(TimeoutError):
+                async with asyncio.timeout(timeout_seconds):
+                    # A pending Process.wait() can wait for pipe disconnects as well as the exit.
+                    while child.process.returncode is None:
+                        await asyncio.sleep(.02)
+            timed_out = child.process.returncode is None
+            if not timed_out:
+                with suppress(TimeoutError):
+                    await asyncio.wait_for(asyncio.gather(reader, child._stderr), OUTPUT_DRAIN_SECONDS)
+                child.release_job()
+                released = True
         finally:
-            await child.kill()
+            try:
+                if not released:
+                    await child.kill()
+            finally:
+                child.close_pipes()
+                if not released and reader is not None:
+                    reader.cancel()
+                    await asyncio.gather(reader, return_exceptions=True)
         # Closing a Windows job can report 0; a timed-out command did not complete with an exit code.
         return {"exit_code": None if timed_out else child.process.returncode, "stdout": stdout.text(), "stderr": child.errors.text(),
                 "truncated": stdout.truncated or child.errors.truncated, "timed_out": timed_out}

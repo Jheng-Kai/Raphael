@@ -1,6 +1,8 @@
+// @vitest-environment happy-dom
 import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   RESIZE_SETTLE_MS,
+  followConversationChrome,
   installWindowChrome,
   labelWindowControls,
   showMaximized,
@@ -45,6 +47,20 @@ function fixture(initiallyMaximized = false) {
 }
 
 const settle = async () => { await Promise.resolve(); await Promise.resolve(); };
+
+test("the frame gives the active conversation header room to receive clicks", async () => {
+  const main = document.createElement("main"), chrome = document.createElement("div");
+  main.innerHTML = '<div class="page-agent"><section class="mb-chat"><header class="mb-head"></header></section><section class="mb-chat au-room-pane" hidden><header class="mb-head"></header></section></div>';
+  const [member, room] = main.querySelectorAll<HTMLElement>(".mb-chat");
+  const stop = followConversationChrome(main, chrome);
+  try {
+    expect(chrome.hasAttribute("data-conversation-drag")).toBe(true);
+    member!.hidden = true;
+    await vi.waitFor(() => expect(chrome.hasAttribute("data-conversation-drag")).toBe(false));
+    room!.hidden = false;
+    await vi.waitFor(() => expect(chrome.hasAttribute("data-conversation-drag")).toBe(true));
+  } finally { stop(); }
+});
 
 describe("main window chrome", () => {
   afterEach(() => {

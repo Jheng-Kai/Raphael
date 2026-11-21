@@ -14,7 +14,7 @@ import "./page-view.css";
 import { cancelGesture } from "../shared/cancel-gesture";
 import * as api from "./api";
 import { t } from "./i18n";
-import { type IconName, esc, ico, iconButton } from "./ui";
+import { type IconName, esc, ico, backButton, iconButton } from "./ui";
 
 export interface PageViewOpen {
   id: string;
@@ -150,7 +150,7 @@ export function mountPageView(stage: HTMLElement, shell?: PageShell): PageView {
     // The way back stands at the header's top left, where the search stood: the conversation header's round edge button.
     const slot = pane?.querySelector<HTMLElement>(":scope > .mb-head .mb-head-l, :scope > .mb-head .room-picker");
     if (slot) {
-      slot.insertAdjacentHTML("afterbegin", iconButton("left", t("chooser.back"), ' data-page-back data-nav-back hidden', "ra-tool pgv-back"));
+      slot.insertAdjacentHTML("afterbegin", backButton(t("chooser.back"), ' data-page-back hidden', "ra-tool pgv-back"));
       back = slot.querySelector<HTMLButtonElement>("[data-page-back]");
       back!.addEventListener("click", () => close());
     }
@@ -199,6 +199,7 @@ export function mountPageView(stage: HTMLElement, shell?: PageShell): PageView {
     bindNavLayer(host, close, { place: true });
     shell?.fold();
     stage.classList.add("is-page");
+    pane?.setAttribute("data-conversation-page", "");
     watchFoot();
     if (back) { back.hidden = false; back.setAttribute("aria-label", t("chooser.back")); back.title = t("chooser.back"); }
     drawAction();
@@ -217,6 +218,7 @@ export function mountPageView(stage: HTMLElement, shell?: PageShell): PageView {
     status.replaceChildren();
     delete status.dataset.drawn;
     stage.classList.remove("is-page");
+    pane?.removeAttribute("data-conversation-page");
     delete stage.dataset.pageKind;
     unwatchFoot();
     if (back) back.hidden = true;

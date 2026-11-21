@@ -1826,6 +1826,28 @@ async def test_stop_keeps_history_and_cancels_only_the_named_session(rig):
     assert rig.service._was_cancelled('typed-stop')
 
 
+async def test_send_now_closes_a_waiting_confirmation_without_a_cancellation_reply(rig, client):
+    from .test_narration import chat
+
+    rig.seed("What time is it?", "It is noon.")
+    pending = await ask_to_copy(rig, client)
+    assert pending["status"] == "confirm"
+    prior = rig.history.get(pending["turn_id"])
+    messages = rig.history.messages([prior.id])
+    ask = service._Ask("queued", "Tell me about this report", "en", source="app", conversation_id=prior.conversation_id)
+    queued, _ = rig.service._inbox.admit(ask, dict(text=ask.text, language=ask.language, source=ask.source))
+    client.chats = [chat("The report is ready.")]
+
+    assert (await rig.call("agent.history.send_now", {
+        "session_id": ask.session_id, "member_id": 0, "turn_id": queued["turn_id"],
+    }))["sent"] is True
+    await until(lambda: not rig.service._drains)
+    assert rig.history.get(prior.id).status == "superseded"
+    assert rig.history.messages([prior.id]) == messages
+    assert rig.history.get(queued["turn_id"]).status == "done"
+    assert (await rig.confirm(pending["confirm"]["id"], True))["prefix"] == "否"
+
+
 async def test_stop_of_work_that_asked_a_colleague_is_not_refused_by_the_exchange_it_wrote(rig):
     # Seen on a real computer: a member's work asked Raphael (ask_member), the exchange was written under the work's session in
     # Raphael's thread, and every Stop of that work was refused as "not this private conversation", so nothing stopped.

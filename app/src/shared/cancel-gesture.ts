@@ -68,6 +68,7 @@ export class CancelGesture {
     target.button.dataset.cancelArmed = "true";
     target.button.dataset.cancelHint = target.hint;
     target.button.setAttribute("aria-description", `Esc - ${target.hint}`);
+    target.button.dispatchEvent(new Event("cancel-gesture-armed", { bubbles: true }));
     this.timer = setTimeout(() => this.clear(), CANCEL_WINDOW_MS);
     return true;
   }

@@ -2,6 +2,31 @@
 export function installMock(fixture, config = {}, target = window) {
   const data = structuredClone(fixture);
   const variant = config.fixture ?? {};
+  if (variant.typingPerformance) {
+    const conversation = data.conversations.find(item => item.member_id === 0 && item.is_default);
+    const base = data.turns.find(turn => turn.conversation_id === conversation.id);
+    const sample = data.windowSample;
+    data.turns = Array.from({ length: 400 }, (_, index) => {
+      const id = 10000 + index, at = data.now - (400 - index) * 60000;
+      const text = `${sample.answer}\n\n${sample.paragraph}`;
+      return { ...base, id, session_id: `typing-${id}`, created_at_ms: at, status: "done",
+        question: `${sample.question} ${index + 1}`, text,
+        messages: [{ seq: 1, kind: "progress", text: sample.paragraph, at_ms: at }, { seq: 2, kind: "reply", text, at_ms: at + 500 }],
+        steps: [{ kind: "tool", tool: "read_file", server: "Raphael", outcome: "ok", ms: 240, at_ms: at + 240 }],
+        drafts: index % 8 === 3 ? data.mailTurns.draft.drafts.map(draft => ({ ...draft, id: `typing-draft-${id}` })) : [] };
+    });
+    data.members = [data.members[0], ...Array.from({ length: 24 }, (_, index) => ({
+      ...data.members[1 + index % 3], id: index + 1, name: `Analyst ${String(index + 1).padStart(2, "0")}`,
+      position: index, activity: "idle", unread: false, waiting: false,
+    }))];
+    const description = "Collect source documents, compare their conclusions and caveats, and deliver a short evidence summary with references for every claim.";
+    data.skills = Array.from({ length: 150 }, (_, index) => ({
+      id: 1000 + index, member_id: index < 60 ? -1 : 0, name: `researcher-${String(index + 1).padStart(3, "0")}`,
+      description, enabled: true, ...(index < 60 ? { plugin: "Field Notes", source: "plugin:field-notes" } : { source: "owner" }),
+    }));
+    data.skillLibrary = [{ key: "pack:typing", name: "Field Notes", kind: "pack", source: "example/field-notes",
+      description, version: "1.0", enabled: true, access: "all", skills: data.skills.slice(0, 60) }];
+  }
   /** The conversation in which the owner asked for their own Google: the member answers with the card that walks the steps (`connectors/cards.py`, the app `google`). */
   function ownGoogleTurn(data) {
     const turn = structuredClone(data.connectorTurns.server);
@@ -12,6 +37,13 @@ export function installMock(fixture, config = {}, target = window) {
       fields: [{ name: "client_id", label: "Client ID", required: true, secret: false }, { name: "client_secret", label: "Client secret", required: true, secret: true }],
       google: { redirect: "http://127.0.0.1", scopes: ["https://www.googleapis.com/auth/gmail.modify", "https://www.googleapis.com/auth/calendar.events"], configured: false } }];
     return turn;
+  }
+  if (variant.ownerSkillLinks) {
+    data.chatMetadataSample.question = "/code-review https://example.com/changes /不存在";
+    data.skillLibrary.push({ key: "pack:owner-links", name: "程式碼審閱工具", kind: "pack", source: "https://github.com/example/reviews",
+      description: "", version: "", enabled: true, access: "all", updatable: true,
+      skills: [{ id: 715, name: "code-review", description: "", enabled: true },
+        { id: 716, name: "outline", description: "", enabled: true }] });
   }
   if (variant.skillPackages) {
     // A library longer than the tab: the way back from a package's page must land where the list was left.
@@ -59,6 +91,7 @@ export function installMock(fixture, config = {}, target = window) {
       turn.attachments = variant.ownerFile ? [shots[0], { id: `${'d'.repeat(32)}.pdf`, name: '研究摘要.pdf', mime: 'application/pdf', size: 182_000 }, ...shots.slice(1)] : shots;
     }
     // R-UI-163: the member is still thinking about the owner's message and has sent no bubble for it, so 編輯 takes it into the composer.
+    if (variant.ownerSkillLinks) turn.messages.push({ seq: 1, kind: "event", at_ms: data.now, text: JSON.stringify({ type: "skill_unavailable", name: "code-review", reason: "archive" }) });
     if (variant.ownerThinking) Object.assign(turn, { status: 'running', prefix: '', text: '', messages: [], reactions: {} });
     // The owner's message was edited after its member answered it: the history's turn is its second version, the first is kept
     // beside it for `agent.history.version` (the core's `agent_turn_versions`).
@@ -398,6 +431,10 @@ export function installMock(fixture, config = {}, target = window) {
       waiting: { waiting: true, activity: "blocked", activity_label: "等你回答", unread: true, unread_kind: "message" },
     };
     for (const [id, state] of Object.entries(variant.sidebarLights)) Object.assign(data.members.find(member => member.id === Number(id)), states[state]);
+    if (variant.statusThreads) for (const member of data.members) {
+      member.main_conversation_id = data.conversations.find(conversation => conversation.member_id === member.id && conversation.is_default)?.id ?? null;
+      member.unread_threads = member.unread ? [{ conversation_id: member.main_conversation_id, from: null, kind: member.unread_kind }] : [];
+    }
     // What the scene's check expects, said here by the owner's rule and not read back from the app: thinking is no light, a question is orange.
     data.expectedLights = { members: Object.fromEntries(data.members.map(member => [member.id, { thinking: null, message: "message", done: "done", failed: "failed", waiting: "waiting" }[variant.sidebarLights[member.id]] ?? null])), rooms: {} };
   }
@@ -1358,6 +1395,7 @@ export function installMock(fixture, config = {}, target = window) {
     requestAnimationFrame(poll);
   };
   async function core(method, p = {}) {
+    if (variant.newerDatabase) throw "[1007] newer_database";
     // Settings reads the hidden list as it opens, before the list's section is drawn; the sidebar keeps the roster it already read.
     switch (method) {
       // Team skills (skill-library.ts, members/service.py skills.library.*).
@@ -1599,7 +1637,12 @@ export function installMock(fixture, config = {}, target = window) {
       case "members.viewing": case "members.read": {
         if (variant.unreadDivider || variant.sidebarLights) {
           const member = data.members.find(member => member.id === p.id);
-          if (member) Object.assign(member, { unread: false, unread_from: null, unread_kind: null });
+          if (member?.unread_threads) {
+            const conversation = p.conversation_id ?? member.main_conversation_id;
+            member.unread_threads = member.unread_threads.filter(thread => thread.conversation_id !== conversation);
+            member.unread = member.unread_threads.length > 0;
+            member.unread_kind = member.unread_threads[0]?.kind ?? null;
+          } else if (member) Object.assign(member, { unread: false, unread_from: null, unread_kind: null });
         }
         return {};
       }
@@ -1682,6 +1725,9 @@ export function installMock(fixture, config = {}, target = window) {
       }
       case "members.delete": if (Object.keys(p).some(key => key !== "id")) throw new Error("Invalid params: members.delete takes only the member's id"); data.members =data.members.filter(item => item.id !== p.id); if (p.id === data.primaryId) data.primaryId = 0; notify("MembersChanged", { member_id: p.id }); return { deleted: true };
       case "members.skills.list": {
+        if (variant.ownerSkillLinks && p.member_id === 1) return {
+          skills: [{ id: 715, name: "code-review", slash_name: "code-review", enabled: true, shared: true }], sets: [], library: [],
+        };
         if (p.marketplace) {
           const marketplace = structuredClone(data.skillMarketplaceCatalog);
           if (!marketplace || p.marketplace !== marketplace.repo) throw new Error("Invalid params: unknown synthetic marketplace");
@@ -1818,17 +1864,22 @@ export function installMock(fixture, config = {}, target = window) {
         }
         return { stopped: true, ...(returned.length ? {returned} : {}) };
       }
-      // 「立即送出」: the core ends the work running in the conversation as Stop does (denied, its steps kept) and the queued message starts as its own turn.
+      // Send Now ends the current work with its public output intact and starts the queued message.
       case "agent.history.send_now": {
         const target = data.turns.find(turn => turn.id === p.turn_id && turn.session_id === p.session_id && (turn.member_id ?? 0) === (p.member_id ?? 0));
         if (!target || target.status !== "queued") throw new Error("send now must identify a queued message of this private conversation");
         const ended = data.turns.filter(turn => turn.member_id === target.member_id && turn.conversation_id === target.conversation_id && ["running", "confirm"].includes(turn.status));
         for (const turn of ended) {
           pendingReplies.get(turn.session_id)?.(); pendingReplies.delete(turn.session_id);
-          Object.assign(turn, { status: "denied", prefix: "了", text: "已取消。", messages: turn.messages.filter(message => message.kind !== "reply") });
+          turn.status = "superseded";
+          for (const card of turn.permissions ?? []) {
+            if (card.state === "pending") card.state = "cancelled";
+          }
           notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
         }
-        Object.assign(target, { status: "running" });
+        Object.assign(target, variant.sendNowAnswer
+          ? { status: "done", text: variant.sendNowAnswer }
+          : { status: "running" });
         notify("AgentTurn", { turn_id: target.id, member_id: target.member_id });
         return { sent: true, stopped: ended.length > 0 };
       }
@@ -2489,7 +2540,7 @@ export function installMock(fixture, config = {}, target = window) {
       if (command === "update_control") {
         if (variant.appUpdate === "not_configured") return { state: "error", version: "", notes: "", error: "not_configured" };
         const sample = data.appUpdateSample;
-        return { state: variant.appUpdate === "ready" || data.device.auto_update ? "ready" : variant.appUpdate ? "found" : "idle", version: variant.appUpdate ? sample.version : "", notes: variant.appUpdate ? sample.notes : "", error: "" };
+        return { state: variant.appUpdate === "ready" || (variant.appUpdate && data.device.auto_update) ? "ready" : variant.appUpdate ? "found" : "idle", version: variant.appUpdate ? sample.version : "", notes: variant.appUpdate ? sample.notes : "", error: "" };
       }
       // The shell grants a stored id it can serve and answers with the id; the page asks for http://raphael-media.localhost/<id>
       // (convertFileSrc below), which the runner answers from storedFile with the native protocol's headers (media_protocol.rs).

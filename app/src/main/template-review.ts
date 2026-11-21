@@ -10,7 +10,7 @@ import { linkedText } from "./message-content";
 import { connectionName, skillContents, type MemberTemplate } from "./member-templates";
 import { routineSentenceHTML } from "./members";
 import { appMarkHTML } from "./connector-card";
-import { esc, ico, iconButton } from "./ui";
+import { esc, ico, backButton } from "./ui";
 
 export type ReviewPage = { kind: "main" } | { kind: "context" } | { kind: "skill"; index: number } | { kind: "routines" } | { kind: "routine"; index: number } | { kind: "integrations" };
 
@@ -95,7 +95,7 @@ export function mountTemplateReview(dialog: Dialog, template: MemberTemplate, o:
     dialog.el.dataset.page = page.kind;
     title.textContent = words;
     head.querySelector("[data-tpl-back]")?.remove();
-    if (page.kind !== "main") head.insertAdjacentHTML("afterbegin", iconButton("left", t("template.review.back"), " data-tpl-back"));
+    if (page.kind !== "main") head.insertAdjacentHTML("afterbegin", backButton(t("template.review.back"), " data-tpl-back"));
     body.innerHTML = html;
     body.scrollTop = 0;
     if (focus) (head.querySelector<HTMLElement>("[data-tpl-back]") ?? body.querySelector<HTMLElement>("[data-tpl-go]"))?.focus();

@@ -1931,6 +1931,7 @@ class BackgroundService:
         snapshot.tool_allowed = run.tool_allowed
         run.room_speech = task.scope == "room"
         run.owner_language = self._owner_words(task, speaker)
+        run.skill_notice = lambda notice: self._skill_notice(task, notice)
         # Work in a member's private conversation tells the owner how it goes (agent/progress_updates.py); a meeting's
         # reply is its post, a routine's owner reads only its last message, and a consultation answers a colleague.
         run.updates = (ProgressUpdates(self._clock)
@@ -1954,9 +1955,17 @@ class BackgroundService:
             run.reopen()
         expand = getattr(self._team, "expand_command", None)
         resolve = getattr(self._team, "resolve_slash", None)
-        request, skill_loaded = resolve(speaker.id, task.text) if resolve is not None else (
+        from ..agent.failure import skill_failure, skill_instruction
+
+        notices = []
+        request, skill_loaded = resolve(speaker.id, task.text,
+            on_failure=lambda name, error: notices.append(skill_failure(name, error))) if resolve is not None else (
             expand(speaker.id, task.text) if expand is not None else task.text, False)
-        run._memory_untrusted = run._memory_untrusted or skill_loaded
+        if notices:
+            request += "\n\n" + skill_instruction(notices)
+            for notice in notices:
+                self._skill_notice(task, notice)
+        run._memory_untrusted = run._memory_untrusted or skill_loaded or bool(notices)
         from ..agent.cli.discovery import brain_ref
         system, user = _prompts(
             request,
@@ -2533,8 +2542,18 @@ class BackgroundService:
 
     def waiting_members(self) -> set[int]:
         """The members a question waits in the thread of (0 is Raphael)."""
-        waiting = [*self.waiting_questions(), *self.owner_questions.pending()]
-        return {question["member_id"] for question in waiting if question.get("room_id") is None}
+        return {member for member, _, _ in self.waiting_member_cards()}
+
+    def waiting_member_cards(self) -> list[tuple[int, str, int | None]]:
+        """The private status list needs card identities and their conversation destinations."""
+        cards = []
+        for question in [*self.waiting_questions(), *self.owner_questions.pending()]:
+            if question.get("room_id") is not None:
+                continue
+            task = self._store.get(question["task_id"])
+            turn = self._history.get(task.turn_id) if task and task.turn_id else None
+            cards.append((question["member_id"], question["id"], turn.conversation_id if turn else None))
+        return cards
 
     async def _waiting_list(self, params: dict) -> dict:
         """Everyone who waits for the owner now, in order: what the app reminds of."""
@@ -2882,6 +2901,16 @@ class BackgroundService:
         if task.id in self._discarded or task.scope != 'private' or not self._has_linked_turn(task):
             return
         self._history.add_message(task.turn_id, 'reply', text)
+        self._changed(task.id, RUNNING)
+
+    def _skill_notice(self, task: Task, notice: dict) -> None:
+        if task.id in self._discarded or not self._has_linked_turn(task):
+            return
+        text = json.dumps(notice, ensure_ascii=False)
+        messages = self._history.messages([task.turn_id]).get(task.turn_id, [])
+        if any(message["kind"] == "event" and message["text"] == text for message in messages):
+            return
+        self._history.add_message(task.turn_id, "event", text)
         self._changed(task.id, RUNNING)
 
     def _computer_woke(self, task: Task, text: str) -> None:

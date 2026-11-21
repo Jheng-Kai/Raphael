@@ -37,12 +37,12 @@
 
 /* While a page stands there the thread's own tools wait: the arrow stands where the status light did, and the search bar
    the thread would have under the header is put away. */
-.mb-chat:has(> .ra-stage.is-page) > .ra-find { display: none; }
-.mb-chat:has(> .ra-stage.is-page) .mb-head [data-act="status"] { display: none; }
+.mb-chat[data-conversation-page] > .ra-find { display: none; }
+.mb-chat[data-conversation-page] .mb-head [data-act="status"] { display: none; }
 .mb-head [data-page-back][hidden] { display: none; }
 /* The header's top right is one place for what is on screen: the member's share on its thread, and on
    an open page that page's own button (a report's 存成檔案) or nothing. The member's share waits until the thread is back. */
-.mb-chat:has(> .ra-stage.is-page) .mb-head [data-act="share-member"] { display: none; }
+.mb-chat[data-conversation-page] .mb-head [data-act="share-member"] { display: none; }
 
 /* An HTML page: the whole area under the header, scrolling as one, and
    edge to edge (R-PAGE-10): the page is as wide as the area, with no side margin, frame, corner or edge, so its own background reaches the sidebar and the window's
@@ -65,11 +65,11 @@
 .pgv-pill { display: none; align-items: center; justify-content: center; gap: var(--sp-2); width: fit-content; max-width: min(360px, 100%); height: 40px; margin: 6px auto 0; padding: 0 var(--sp-4); border-radius: var(--r-pill); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--edge-rim); font-size: var(--pa-pill-fs); font-weight: var(--weight-semibold); line-height: 1.5; }
 .pgv-pill > .i { flex: none; width: 18px; height: 18px; color: var(--text-2); }
 .pgv-pill-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mb-chat:has(> .ra-stage.is-page) .pgv-pill:not([hidden]) { display: flex; }
-.mb-chat:has(> .ra-stage.is-page) .mb-head-c > .conversation-head { display: none; }
+.mb-chat[data-conversation-page] .pgv-pill:not([hidden]) { display: flex; }
+.mb-chat[data-conversation-page] .mb-head-c > .conversation-head { display: none; }
 /* A long title is cut by the pill, never into the arrow or Share: both sides of the row keep what they hold (the right one also what
    the window's buttons reserve), the pill gets the rest and stays in the middle (at 720 the pill and Share had 5 px between them). */
-.page-agent .mb-chat:has(> .ra-stage.is-page) > .mb-head:has(> .mb-head-c) { grid-template-columns: minmax(auto, 1fr) minmax(0, auto) minmax(auto, 1fr); }
+.page-agent .mb-chat[data-conversation-page] > .mb-head:has(> .mb-head-c) { grid-template-columns: minmax(auto, 1fr) minmax(0, auto) minmax(auto, 1fr); }
 
 /* A report runs under the composer to the window's foot too (R-PAGE-11), its background the view's: it scrolls its last line clear
    above the composer and the answer line over it. */

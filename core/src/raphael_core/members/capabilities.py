@@ -1,6 +1,6 @@
 """Member slash templates and shared/private skill documents with local package support.
 
-Remote imports fetch bounded UTF-8 SKILL.md files from GitHub's raw host. Local imports
+Remote package imports read bounded GitHub snapshots as data. Local imports
 preserve installed packages as data. Only the ordinary command tool may execute scripts.
 """
 
@@ -54,10 +54,14 @@ def skill_urls(source: object) -> tuple[str, list[str]]:
             raise MemberError("source", "skill URLs must be plain HTTPS URLs")
         parts = [unquote(part) for part in url.path.strip("/").split("/")]
         if url.hostname in ("github.com", "www.github.com"):
-            if len(parts) < 5 or parts[2] not in ("blob", "raw") or parts[-1] != "SKILL.md":
-                raise MemberError("source", "the GitHub URL must name a SKILL.md file")
-            parts = parts[:2] + parts[3:]
-            paths = ["/".join(parts[2:])]
+            if len(parts) == 2:
+                parts[1] = parts[1].removesuffix(".git")
+                paths = ["main/SKILL.md", "master/SKILL.md"]
+            else:
+                if len(parts) < 5 or parts[2] not in ("blob", "raw") or parts[-1] != "SKILL.md":
+                    raise MemberError("source", "the GitHub URL must name a repository or SKILL.md file")
+                parts = parts[:2] + parts[3:]
+                paths = ["/".join(parts[2:])]
         elif url.hostname == "raw.githubusercontent.com":
             if len(parts) < 4 or parts[-1] != "SKILL.md":
                 raise MemberError("source", "the URL must name a SKILL.md file")
@@ -118,60 +122,45 @@ async def _bounded_get(client: httpx.AsyncClient, url: str, limit: int) -> bytes
         async for chunk in response.aiter_bytes():
             data.extend(chunk)
             if len(data) > limit:
-                raise MemberError("size", "skill source metadata is too large")
+                raise MemberError("size", "skill source is too large")
         return bytes(data)
 
 
-async def download_skills(source: object) -> list[tuple[str, str]]:
-    """Import repository collections too, fetching only SKILL.md blobs and bounded tree metadata."""
-    deadline = asyncio.get_running_loop().time() + DOWNLOAD_SECONDS
-    try:
-        return [await _download_skill(source, deadline)]
-    except MemberError as error:
-        if error.kind != "not_found":
-            raise
+async def download_skills(source: object) -> list[tuple[str, dict]]:
+    """Download one bounded GitHub snapshot, then open only the selected skill folders."""
+    from .skill_library import MAX_PACKAGE_BYTES
+    from .skill_sources import read_archive
+
     normalized, candidates = skill_urls(source)
     parsed = urlsplit(normalized)
-    is_repo = "://" not in normalized
+    segments = urlsplit(candidates[0]).path.strip("/").split("/")
+    repo = "/".join(segments[:2])
+    explicit = parsed.path.rstrip("/").endswith("/SKILL.md")
     wanted = unquote(parsed.path.strip("/").split("/")[-1]) if parsed.hostname in ("skills.sh", "www.skills.sh") else None
-    if not is_repo and wanted is None:
-        raise MemberError("not_found", "no SKILL.md found at that source")
-    repo = "/".join(urlsplit(candidates[0]).path.strip("/").split("/")[:2])
     try:
-        async with asyncio.timeout_at(deadline), httpx.AsyncClient(timeout=DOWNLOAD_STALL_SECONDS, follow_redirects=False, trust_env=False) as client:
-            metadata = json.loads(await _bounded_get(client, f"https://api.github.com/repos/{repo}", 128 * 1024))
-            branch = metadata.get("default_branch") if isinstance(metadata, dict) else None
-            if not isinstance(branch, str) or not all(safe_source_part(part) for part in branch.split("/")):
+        async with asyncio.timeout(DOWNLOAD_SECONDS), httpx.AsyncClient(timeout=DOWNLOAD_STALL_SECONDS, follow_redirects=False, trust_env=False) as client:
+            if explicit:
+                ref = unquote(segments[2])
+                folder = "/".join(unquote(part) for part in segments[3:-1])
+            else:
+                metadata = json.loads(await _bounded_get(client, f"https://api.github.com/repos/{repo}", 128 * 1024))
+                ref = metadata.get("default_branch") if isinstance(metadata, dict) else None
+                folder = None
+            if not isinstance(ref, str) or not all(safe_source_part(part) for part in ref.split("/")):
                 raise MemberError("source", "invalid repository branch metadata")
-            tree = json.loads(await _bounded_get(client, f"https://api.github.com/repos/{repo}/git/trees/{quote(branch, safe='')}?recursive=1", 2 * 1024 * 1024))
-            if not isinstance(tree, dict) or tree.get("truncated"):
-                raise MemberError("size", "repository tree is too large")
-            paths = []
-            for entry in tree.get("tree", []):
-                if not isinstance(entry, dict) or entry.get("type") != "blob" or entry.get("mode") == "120000":
-                    continue
-                path = entry.get("path", "")
-                parts = path.split("/") if isinstance(path, str) else []
-                if not parts or parts[-1] != "SKILL.md" or not all(safe_source_part(part) for part in parts):
-                    continue
-                if wanted is not None and (len(parts) < 2 or parts[-2] != wanted):
-                    continue
-                paths.append(path)
-            if not paths:
-                raise MemberError("not_found", "no SKILL.md found in that repository")
-            documents = []
-            for path in sorted(paths):
-                url = f"https://raw.githubusercontent.com/{repo}/{quote(branch, safe='/')}/{quote(path, safe='/')}"
-                raw = await _bounded_get(client, url, MAX_SKILL_BYTES)
-                text = raw.decode("utf-8-sig")
-                if not text.strip() or "\x00" in text:
-                    raise MemberError("skill", "skill must be a UTF-8 Markdown document")
-                documents.append((url, text))
-            return documents
+            branch = quote(ref, safe="")
+            raw = await _bounded_get(client, f"https://codeload.github.com/{repo}/zip/{branch}", MAX_PACKAGE_BYTES)
+            files = read_archive("repository.zip", raw, subpath=folder, repository=True, wanted=wanted)
+            return [(f"https://github.com/{repo}/blob/{branch}/{quote(skill.folder, safe='/')}SKILL.md", skill)
+                    for skill in files]
     except MemberError:
         raise
+    except httpx.HTTPStatusError as error:
+        if error.response.status_code == 404:
+            raise MemberError("not_found", "no skill at that GitHub source") from None
+        raise MemberError("download", "could not download the GitHub skill package") from None
     except (httpx.HTTPError, UnicodeError, ValueError, TimeoutError):
-        raise MemberError("download", "could not download the repository's skill Markdown") from None
+        raise MemberError("download", "could not download the GitHub skill package") from None
 
 
 def skill_metadata(text: str, *, writing=False, previous_name=None) -> tuple[str, str]:
@@ -229,15 +218,37 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
         return [self.skill_details(member_id, {**dict(row), "enabled": bool(row["enabled"])}) for row in rows]
 
     def skills(self, member_id: int) -> list[dict]:
-        skills = self.owned_skills(member_id)
+        return slash_skills(self._visible_skill_rows(member_id, details=True), self.commands(member_id))
+
+    def _visible_skill_rows(self, member_id, *, details=False):
+        self.check(member_id)
+        rows = self.conn.execute(
+            "SELECT id,name,description,enabled,source,set_id,set_kind FROM member_skills WHERE member_id=? ORDER BY id",
+            (member_id,))
+        skills = [dict(row, enabled=bool(row["enabled"])) for row in rows]
         if member_id != SHARED:
             rows = self.conn.execute(
-                "SELECT s.id,s.name,s.description,s.source,s.enabled FROM member_skills s "
+                "SELECT s.id,s.name,s.description,s.source,s.enabled,s.set_id,s.set_kind FROM member_skills s "
                 "JOIN skill_packages p ON p.key=s.package_key WHERE s.member_id=-1 AND s.enabled AND p.enabled "
                 "AND (p.access=? OR ? IN (SELECT value FROM json_each(p.access))) ORDER BY s.id",
                 ('"all"', member_id))
-            skills += [self.skill_details(SHARED, {**dict(row), "enabled": True, "shared": True}) for row in rows]
-        return slash_skills(skills, self.commands(member_id))
+            skills += [dict(row, enabled=True, shared=True) for row in rows]
+        for index, row in enumerate(skills):
+            if details:
+                view = {k: v for k, v in row.items() if k not in ("set_id", "set_kind")}
+                try:
+                    skills[index] = self.skill_details(SHARED if row.get("shared") else member_id, view)
+                    continue
+                except (ValueError, OSError):
+                    # Discovery still knows a skill by its saved name when its files cannot be read.
+                    row = skills[index] = view
+            plugin, separator, name = row["name"].rpartition(":")
+            if separator:
+                row.update(name=name, plugin=plugin)
+        return skills
+
+    def turn_skills(self, member_id, commands):
+        return [s for s in slash_skills(self._visible_skill_rows(member_id), commands) if s["enabled"]]
 
     def _path(self, member_id: int, skill_id: int) -> Path:
         return self.set_skill_path(skill_id) or self.homes.path(self.skill_owner(member_id, skill_id), f"skills/{skill_id}/SKILL.md")
@@ -388,7 +399,7 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
         `.env` are never in it, and a path that leaves it is refused. MemberError names what is wrong."""
         if not isinstance(name, str):
             raise MemberError("skill", "give the skill's exact name")
-        skills = [skill for skill in self.skills(member_id) if skill["enabled"]]
+        skills = self.turn_skills(member_id, self.commands(member_id))
         matches = [skill for skill in skills if skill["slash_name"].casefold() == name.casefold()]
         matches = matches or [skill for skill in skills if skill["name"].casefold() == name.casefold()]
         if len(matches) != 1:
@@ -494,7 +505,7 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
     def expand(self, member_id: int, text: str) -> str:
         return self.resolve_slash(member_id, text)[0]
 
-    def resolve_slash(self, member_id: int, text: str) -> tuple[str, bool]:
+    def resolve_slash(self, member_id: int, text: str, *, on_failure=None) -> tuple[str, bool]:
         """Expands the one command or skill a message calls by `/name`.
 
         A call is a `/name` that begins a word (at the start, or after a space or a line break; never inside a
@@ -508,8 +519,9 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
         calls = list(_SLASH_WORD.finditer(text))
         if not calls:
             return text, False
-        commands = {command["name"].casefold(): command for command in self.commands(member_id)}
-        skills = {skill["slash_name"].casefold(): skill for skill in self.skills(member_id) if skill["enabled"]}
+        available_commands = self.commands(member_id)
+        commands = {command["name"].casefold(): command for command in available_commands}
+        skills = {skill["slash_name"].casefold(): skill for skill in self.turn_skills(member_id, available_commands)}
         for call in calls:
             name = call.group(1).casefold()
             command, skill = commands.get(name), skills.get(name)
@@ -527,9 +539,17 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
                 rest = before + (after[1:] if before.endswith("\n") and after.startswith("\n") else after)
             if command is not None:
                 return command["template"].replace("{input}", rest), False
-            document = self.read_skill(member_id, skill["slash_name"])
-            if document is None:
-                continue
+            from .skill_library import package
+
+            try:
+                package(self._path(member_id, skill["id"]).parent, installed=True)
+                document = self.read_skill(member_id, skill["slash_name"])
+                if document is None:
+                    raise MemberError("not_found", "skill document is unavailable")
+            except (MemberError, HomeError, OSError, UnicodeError) as error:
+                if on_failure is not None:
+                    on_failure(skill["slash_name"], error)
+                return rest, False
             if skill.get("set_kind") == "command":
                 document = document.replace("$ARGUMENTS", rest)
             return rest + ("\n\nThe owner explicitly selected this skill for this request. "

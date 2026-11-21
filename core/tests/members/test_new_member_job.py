@@ -60,7 +60,8 @@ async def test_member_shared_contract_requires_named_account_disambiguation(setu
     client.chats = [live_said("要使用工作信箱還是私人信箱？")]
     await typed(rig, "整理我的信件", new["id"])
     prompt = client.chat_calls[0]["messages"][0]["content"]
-    assert "multiple named accounts" in prompt and "ask which account" in prompt
+    assert "When a toolkit has multiple active accounts, set account on each tools item" in prompt
+    assert "If the intended account is unclear, ask which account before executing a tool." in prompt
     assert not team.background.submitted
 
 

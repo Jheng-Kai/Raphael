@@ -255,12 +255,12 @@ test("Stop targets the running turn and appends every queued draft after current
 test("a queued message shows its own actions and sends immediately by turn", async () => {
  turns=[live({question:"Original request"}),live({id:12,session_id:"queued-b",status:"queued",question:"Second",text:"",messages:[]})];
  api.agentSendNow.mockImplementation(async (session: string) => {
-   turns = turns.map(turn => turn.session_id === "reply-11" ? { ...turn, status: "denied" } : turn.session_id === session ? { ...turn, status: "running" } : turn);
+   turns = turns.map(turn => turn.session_id === "reply-11" ? { ...turn, status: "superseded" } : turn.session_id === session ? { ...turn, status: "running" } : turn);
    return { sent: true, stopped: true };
  });
  mount();await flush();
  const menu=async (id:number)=>{ $(`.tn[data-id="${id}"] [data-act="more-message"]`).click(); await flush(); return [...document.querySelectorAll<HTMLElement>("#app-popover [data-pick]")].map(item=>item.dataset.pick); };
- const button=$('.tn[data-id="12"] .bubble .queued-actions [data-act="send-now"]');
+ const button=$('.tn[data-id="12"] .bubble + .queued-actions [data-act="send-now"]');
  expect(button.textContent).toContain("立即送出");
  expect(button.previousElementSibling?.getAttribute("data-act")).toBe("cancel-message");
  expect($('.tn[data-id="12"]').textContent).not.toContain("排隊中");
@@ -287,6 +287,30 @@ test("a single live presence stays below additions without changing on an unchan
  expect(lines[lines.length-1]?.contains(presence)).toBe(true);
  await refresh({type:"AgentTurn",turn_id:12,member_id:0});
  expect($(".thread .live-presence")).toBe(presence);
+});
+
+test("send now moves the owner's message above the earlier work's later words without a cancellation reply", async () => {
+ const start = Date.now() - 150_000;
+ const old = live({ id: 2072, created_at_ms: start, messages: [
+   { seq: 1, kind: "reply", text: "I opened the site.", at_ms: start + 1000 },
+   { seq: 2, kind: "reply", text: "I will test the whole page.", at_ms: start + 133_000 },
+ ] });
+ const next = live({ id: 2073, session_id: "queued-mobile", created_at_ms: start + 76_000, status: "queued", question: "Also test mobile" });
+ turns = [old, next];
+ api.agentSendNow.mockImplementation(async () => {
+   turns = [{ ...old, status: "superseded" }, { ...next, status: "done", text: "The mobile checks passed." }];
+   return { sent: true, stopped: true };
+ });
+ mount(); await flush();
+ const pieces = () => [...document.querySelectorAll(".thread .message-text")].map(line => line.textContent?.trim());
+ expect(pieces()).toEqual(["Please prepare the report", "I opened the site.", "I will test the whole page.", "Also test mobile"]);
+ $('.tn[data-id="2073"] [data-act="send-now"]').click();
+ await flush();
+ await refresh({ type: "AgentTurn", turn_id: 2072, member_id: 0 });
+ expect(api.agentSendNow).toHaveBeenCalledExactlyOnceWith("queued-mobile", 0, 2073);
+ expect(pieces()).toEqual(["Please prepare the report", "I opened the site.", "Also test mobile", "I will test the whole page.", "The mobile checks passed."]);
+ expect($(".thread").textContent).not.toContain("已取消");
+ expect(document.querySelector('.tn[data-id="2072"][data-status="cancelled"], .tn[data-id="2072"].is-latest-failure')).toBeNull();
 });
 
 test("a message sent while the work runs stands where it was sent and the reply that answers it follows", async () => {

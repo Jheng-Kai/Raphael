@@ -28,7 +28,7 @@ import { connectedApps, toolOn, toolsAfterToggle, type ToolChoices } from "./mem
 import { skillOriginLabel } from "./skill-source";
 import { slimeColorOf } from "./slime";
 import type { AppContext, BrainSettings, LibraryRef, Member, MemberCommand, MemberPatch, MemberSkill, MembersList } from "./types";
-import { type IconName, actionRow, btn, closeMenu, esc, ico, iconBtn, iconButton, openConfirmMenu, openPopover, patchHTML, tg, toaster } from "./ui";
+import { type IconName, actionRow, btn, closeMenu, esc, ico, iconBtn, backButton as roundBackButton, iconButton, openConfirmMenu, openPopover, patchHTML, tg, toaster } from "./ui";
 
 export interface MemberSettingsHost {
   app: AppContext;
@@ -95,7 +95,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
   el.dataset.memberSettings = "";
   // The way back stays at the page's top left, on the cover and over a view's heading.
   el.innerHTML =
-    `<div class="ms-bar">${iconButton("left", t("chooser.back"), ' data-ms="back" data-k="ms-back" data-nav-back', "ms-back")}</div>` +
+    `<div class="ms-bar">${roundBackButton(t("chooser.back"), ' data-ms="back" data-k="ms-back"', "ms-back")}</div>` +
     `<div class="ms-scroll"><div class="ms-cover"></div><div class="ms-body"><div class="ms-id"></div><div class="ms-main"></div></div></div>`;
   const backButton = el.querySelector<HTMLElement>('[data-ms="back"]')!;
   const scroll = el.querySelector<HTMLElement>(".ms-scroll")!;
@@ -510,7 +510,6 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     skillBusy = true; draw();
     try {
       await api.core("members.skills.update", { member_id: host.member().id, id, text: current.text, expected_hash: current.revision });
-      toaster.info(t("mem.saved"));
       skillBusy = false; back(); await reloadSkills();
     } catch (error) { skillBusy = false; toaster.info(describeError(error)); draw(); }
   }
@@ -722,6 +721,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     open() {
       if (!el.hidden) { draw(); return; }
       el.hidden = false;
+      el.closest(".page-agent")?.setAttribute("data-member-settings-open", "");
       bindNavLayer(el, () => view.kind === "main" ? host.back() : back(), { step: (_direction, withinLayer) => withinLayer(), place: true });
       view = { kind: "main" }; category = CATEGORIES[0].id; editing.clear(); saving.clear(); adding = false; source = ""; skillText = null; skillBusy = false;
       skills = "loading"; commands = "loading"; toolChoices = "loading"; reposition = null; delete cover.dataset.repositioning;
@@ -734,6 +734,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     close() {
       if (el.hidden) return;
       el.hidden = true;
+      el.closest(".page-agent")?.removeAttribute("data-member-settings-open");
       epoch++;
       reposition = null; delete cover.dataset.repositioning;
     },

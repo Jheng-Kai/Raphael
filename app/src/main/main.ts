@@ -37,7 +37,7 @@ import { prefetchEmojiWhenIdle } from "./emoji-data";
 import { fixedDevicePatch } from "./device-fixed";
 import { followTray } from "./tray-open";
 import { followTemplateFile, openPendingTemplate, type TemplateOpenTarget } from "./template-open";
-import { installWindowChrome, labelWindowControls, showMaximized } from "./window-chrome";
+import { followConversationChrome, installWindowChrome, labelWindowControls, showMaximized } from "./window-chrome";
 import { IS_MAC, markPlatform } from "../shared/platform";
 import { guardImeKeys } from "../shared/ime";
 import { setVideoBase } from "./timeline";
@@ -45,12 +45,12 @@ import { sizeFieldsByScript } from "../shared/field-sizing";
 import { installWindowZoom } from "./window-zoom";
 import { stopOffscreenSlimes } from "./slime-offscreen";
 import { watchChipRows } from "./chip-scroll";
-import type { PageArgument, AppContext, DeviceSettings, MainEvent, MainPageId, Page, PageId, SettingsPane } from "./types";
+import type { PageArgument, AppContext, DeviceSettings, MainEvent, MainPageId, Page, PageId } from "./types";
 import { Undoable } from "./undo";
 import { Cleared } from "./cleared";
 import { leave, toaster } from "./ui";
 import { firstViewShown, holdOptionalReads, optionalRead } from "./startup-reads";
-import { bindMissing, missingHTML, noticeHTML } from "./missing";
+import { bindMissing, missingHTML, mountNewerDataUpdate, noticeHTML } from "./missing";
 import { warnQuota } from "./quota-warning";
 import { warnKeychainRefused } from "./keychain-refused";
 import { followDeviceLogin } from "./device-login";
@@ -113,6 +113,7 @@ prefersDark.addEventListener("change", applyTheme);
 function mountWindowChrome(): void {
   markPlatform();
   const chrome = document.getElementById("window-chrome")!;
+  followConversationChrome(document.getElementById("main")!, chrome);
   const translate = (): void =>
     labelWindowControls(chrome, {
       controls: t("window.controls"),
@@ -223,7 +224,11 @@ watchChipRows(document.body);
       // Settings and Connect apps read ahead once the first view is shown and answered, one read at a time: the core
       // answers on one loop, so a read ahead at start-up keeps the owner waiting for the page in front of them. The time since launch plays no part: a slow core start used to let it pass.
       void optionalRead(() => settings.preload());
-    } catch {
+    } catch (err) {
+      if ((err instanceof Error ? err.message : err) === "[1007] newer_database") {
+        showStartupFailure("newer_database");
+        return;
+      }
       // The core can be restarting: keep asking, or the owner's face and name stay blank.
       setTimeout(() => void refreshOwner(), 1000);
     }
@@ -353,7 +358,7 @@ watchChipRows(document.body);
    */
   function go(id: PageId, arg?: PageArgument): void {
     navigation.visit(() => {
-      if (id === "settings") openSettings(arg?.startsWith("draft:") ? undefined : (arg as SettingsPane | undefined));
+      if (id === "settings") openSettings(arg?.startsWith("draft:") ? undefined : arg);
       else showPage(id, id === "automations" || arg?.startsWith("draft:") || id === "agent" && (arg === "computer" || arg === "raphael" || arg?.startsWith("member-settings:")) ? arg : undefined);
     });
     notePlace();
@@ -381,7 +386,7 @@ watchChipRows(document.body);
 
   function openSettings(pane?: PageArgument): void {
     if (settingsOpen) {
-      if (pane?.startsWith("repair:")) void settings.show(pane);
+      if (pane?.startsWith("repair:") || pane?.startsWith("skill:")) void settings.show(pane);
       return;
     }
     settingsOpen = true;
@@ -524,12 +529,26 @@ function showPages(): void {
   document.querySelector<HTMLElement>(".wbody")!.hidden = false;
 }
 
-mountWindowChrome();
-start().catch((err) => {
-  console.error("main: could not start", err);
+function showStartupFailure(requirement: "startup" | "newer_database"): void {
   firstViewShown();
   // Whatever went wrong, the window must not stay blank.
   document.getElementById("ob")!.hidden = true;
   showPages();
-  document.getElementById("main")?.insertAdjacentHTML("afterbegin", noticeHTML("startup", null));
+  const main = document.getElementById("main");
+  if (requirement === "newer_database") {
+    // The core cannot open this data. Keep the notice in view without the unusable conversation.
+    document.getElementById("nav")!.hidden = true;
+    if (main && !main.classList.contains("startup-failed")) {
+      main.classList.add("startup-failed");
+      mountNewerDataUpdate(main);
+    }
+    return;
+  }
+  main?.insertAdjacentHTML("afterbegin", noticeHTML(requirement));
+}
+
+mountWindowChrome();
+start().catch((err) => {
+  console.error("main: could not start", err);
+  showStartupFailure("startup");
 });

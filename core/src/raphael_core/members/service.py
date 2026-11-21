@@ -153,6 +153,12 @@ _SOURCE_LABEL = {"github": "GitHub", "notion": "Notion"}
 _COLON = with_ui_words({"zh-TW": "：", "en": ": ", "ja": "："})
 _ASCII_WORD = re.compile(r"[A-Za-z0-9 ._-]+")
 
+# Live fields on members.list rows, including per-conversation status-light inputs.
+ROSTER_ACTIVITY_FIELDS = (
+    "waiting", "waiting_cards", "unread", "unread_from", "unread_kind", "unread_threads",
+    "preview", "last_at", "activity", "activity_label",
+)
+
 
 def unread_kind(turns: Sequence[tuple]) -> str:
     """What the unseen news of a thread is, from its unseen turns as `(status, source, routine, task)`:
@@ -337,8 +343,9 @@ class MembersService:
         self._pictures: dict[Path, _Picture] = {}
         self._covers = Covers(self._avatars / "covers", self._picture, self._pictures.pop)
         self._viewing: int | None = None
+        self._viewing_conversation: int | None = None
         self.activity.viewing = lambda: self._viewing
-        self._waiting_sources: list[Callable[[], Iterable[int]]] = []
+        self._waiting_sources: list[Callable[[], Iterable[int | tuple[int, str, int | None]]]] = []
         self._events = None
         self._prechecks: set[asyncio.Task] = set()
         self._event_poll_task: asyncio.Task | None = None
@@ -535,13 +542,13 @@ class MembersService:
                 return
             if turn is not None:
                 self._deliver_turn(turn)
-            if turn is None or (turn.source == "voice" and turn.member_id == 0) or turn.member_id == self._viewing:
+            if turn is None or (turn.source == "voice" and turn.member_id == 0):
+                return
+            if turn.member_id == self._viewing and self._viewing_conversation in (None, turn.conversation_id):
                 return
             if turn.status == "running" and not self._has_reply(turn):
                 return  # still thinking, nothing sent yet: the activity shows it, the list stays quiet
-            was_unread = turn.member_id in self.store.unread()
-            self.store.mark_unread(turn.member_id, turn_id)
-            if not was_unread:
+            if self.store.mark_unread(turn.member_id, turn_id, turn.conversation_id or 0):
                 self._changed()
         except sqlite3.Error as exc:
             logger.warning("Could not mark a thread unread: %s", type(exc).__name__)
@@ -554,7 +561,7 @@ class MembersService:
         """Whether a turn that is still running has already sent the owner a message."""
         return turn.id is not None and any(m["kind"] == "reply" for m in self._history.messages([turn.id]).get(turn.id, []))
 
-    def unread_kinds(self, unread: dict[int, int | None]) -> dict[int, str]:
+    def unread_kinds(self, unread: dict[int, int | None], conversation_id: int = 0) -> dict[int, str]:
         """What the unseen news of each unread thread is, by member: `failed`, `done` (a task or a routine
         ended) or `message` (see `unread_kind`). Only the turns from the first unseen one on are read."""
         kinds: dict[int, str] = {}
@@ -566,8 +573,9 @@ class MembersService:
                 rows = self._conn.execute(
                     "SELECT t.status, t.source, EXISTS(SELECT 1 FROM routine_runs r WHERE r.turn_id=t.id) AS routine,"
                     " (SELECT w.state FROM worker_tasks w WHERE w.turn_id=t.id ORDER BY w.id DESC LIMIT 1) AS task"
-                    " FROM agent_turns t WHERE t.member_id=? AND t.scope='private' AND t.id>=? ORDER BY t.id DESC LIMIT 200",
-                    (member_id, first),
+                    " FROM agent_turns t WHERE t.member_id=? AND t.scope='private' AND t.id>=?"
+                    " AND (?=0 OR t.conversation_id=?) ORDER BY t.id DESC LIMIT 200",
+                    (member_id, first, conversation_id, conversation_id),
                 ).fetchall()
             except sqlite3.Error as exc:
                 logger.warning("Could not read what is unread: %s", type(exc).__name__)
@@ -599,22 +607,31 @@ class MembersService:
         if member is not None:
             self._notice(member, "needs_input")
 
-    def add_waiting_source(self, source: Callable[[], Iterable[int]]) -> None:
-        """Add a source of threads with a question waiting for the owner: the members it names
-        are `waiting` too. The safety rules' questions from the background come in here."""
+    def add_waiting_source(self, source: Callable[[], Iterable[int | tuple[int, str, int | None]]]) -> None:
+        """Add waiting members, with card and conversation identities when the source has them."""
         self._waiting_sources.append(source)
 
     def waiting_members(self) -> set[int]:
         """The members (Raphael as 0) in whose thread a question waits for the owner."""
-        waiting = {
-            int(row[0])
-            for row in self._conn.execute(
-                "SELECT DISTINCT member_id FROM agent_turns WHERE scope = 'private' AND status = 'confirm'"
-            )
-        }
+        return set(self._waiting_cards())
+
+    def _waiting_cards(self) -> dict[int, list[dict]]:
+        waiting: dict[int, list[dict]] = {}
+        for member, turn, conversation, card in self._conn.execute(
+            "SELECT t.member_id, t.id, t.conversation_id, p.id FROM agent_turns t"
+            " LEFT JOIN permission_cards p ON p.turn_id=t.id AND p.state='pending'"
+            " WHERE t.scope='private' AND t.status='confirm'"
+            " ORDER BY t.id DESC, p.created_at_ms DESC"
+        ):
+            waiting.setdefault(member or 0, []).append({"id": card or f"turn:{turn}", "conversation_id": conversation})
         for source in self._waiting_sources:
             try:
-                waiting |= {member for member in source() if type(member) is int}
+                for entry in source():
+                    if type(entry) is int:
+                        waiting.setdefault(entry, [])
+                    elif isinstance(entry, tuple):
+                        member, card, conversation = entry
+                        waiting.setdefault(member, []).append({"id": card, "conversation_id": conversation})
             except Exception as exc:  # a source that breaks must not break the list
                 logger.warning("A source of waiting questions failed: %s", type(exc).__name__)
         return waiting
@@ -782,8 +799,8 @@ class MembersService:
     def expand_command(self, member_id: int, text: str) -> str:
         return self.capabilities.expand(member_id, text)
 
-    def resolve_slash(self, member_id: int, text: str) -> tuple[str, bool]:
-        return self.capabilities.resolve_slash(member_id, text)
+    def resolve_slash(self, member_id: int, text: str, *, on_failure=None) -> tuple[str, bool]:
+        return self.capabilities.resolve_slash(member_id, text, on_failure=on_failure)
 
     def enabled_skills(self, member_id: int) -> list[dict]:
         return [skill for skill in self.capabilities.skills(member_id) if skill["enabled"]]
@@ -926,7 +943,7 @@ class MembersService:
             files, name = skill_sources.local(source)
             return [(source, f) for f in files], source, "source", name
         documents = await download_skills(source)
-        return [(url, {"SKILL.md": text.encode()}) for url, text in documents], source, "source", source.split("/")[-1]
+        return documents, source, "source", source.rstrip("/").split("/")[-1]
 
     async def _import_package(self, member, params, *, new_package=False):
         self._package_fields(params, ("source", "text", "file", "access", "name", "plugin", "set_id", "marketplace"))
@@ -989,7 +1006,7 @@ class MembersService:
                 if not package["updatable"]:
                     raise MemberError("source", "this package has no available update source")
                 required = skill["id"] if skill else None
-                if package["kind"] == "plugin":
+                if key.startswith("set:"):
                     await self.capabilities.import_plugin(set_id=int(key[4:]), access=params.get("access"), required_skill=required)
                 else:
                     data = await self._package_documents({"source": package["source"]})
@@ -1131,7 +1148,8 @@ class MembersService:
             return await self._library({"member_id": params["panel_member_id"], "limit": params.get("panel_limit", 12)})
         language = self._ui_language(params)
         unread = self.store.unread_from()
-        waiting = self.waiting_members()
+        cards = self._waiting_cards()
+        waiting = set(cards)
         latest = self._history.latest_by_member()
         said = self._said(latest)
         roster = self.store.members()
@@ -1140,6 +1158,15 @@ class MembersService:
         kinds = self.unread_kinds(unread)
         members = [self._raphael_view(language, unread, waiting, latest, tasks=tasks.get(0, []) if tasks is not None else None, kinds=kinds, said=said)]
         members += [self._member_view(m, unread, waiting, latest, tasks=tasks.get(m.id, []) if tasks is not None else None, kinds=kinds, said=said) for m in roster]
+        threads: dict[int, list[dict]] = {}
+        for member, conversation, first in self.store.unread_threads():
+            kind = self.unread_kinds({member: first}, conversation)[member]
+            threads.setdefault(member, []).append({"conversation_id": conversation or None, "from": first, "kind": kind})
+        main = dict(self._conn.execute("SELECT member_id, id FROM conversations WHERE kind='standard'"))
+        for member in members:
+            member["main_conversation_id"] = main.get(member["id"])
+            member["unread_threads"] = threads.get(member["id"], [])
+            member["waiting_cards"] = cards.get(member["id"], [])
         return {"members": members, "groups": [group_view(g) for g in self.store.groups()],
                 "team_context": self.team_context(0, language)}
 
@@ -1481,10 +1508,17 @@ class MembersService:
         member_id = _whole(params, "id")
         if not self.store.exists(member_id):
             raise RpcError(INVALID_PARAMS, "Invalid params: no such member", {"kind": "not_found"})
+        conversation_id = self._read_conversation(params, member_id)
         self.activity.seen(member_id)
-        if self.store.mark_read(member_id):
+        if self.store.mark_read(member_id, conversation_id):
             self._changed()
         return {}
+
+    def _read_conversation(self, params: dict, member_id: int) -> int | None:
+        if "conversation_id" not in params:
+            return None
+        from ..agent.conversations import Conversations
+        return Conversations(self._conn, self._now_ms).resolve(member_id, params["conversation_id"])
 
     async def _viewing_now(self, params: dict) -> dict:
         if "tz" in params:
@@ -1503,20 +1537,23 @@ class MembersService:
             self._settings.set("routine_owner_seen_ms", self._now_ms())
             return {}
         member_id = params.get("id")
+        conversation_id = None
         if member_id is not None:
             member_id = _whole(params, "id")
             if not self.store.exists(member_id):
                 raise RpcError(
                     INVALID_PARAMS, "Invalid params: no such member", {"kind": "not_found"}
                 )
+            conversation_id = self._read_conversation(params, member_id)
             self.activity.seen(member_id)
-            if self.store.mark_read(member_id):
+            if self.store.mark_read(member_id, conversation_id):
                 self._changed()
         self.pause_absent_routines()
         if "tz" in params:
             self.observe_timezone(name)
         self._settings.set("routine_owner_seen_ms", self._now_ms())
         self._viewing = member_id
+        self._viewing_conversation = conversation_id
         return {}
 
     async def _tool_choices(self, params: dict) -> dict:

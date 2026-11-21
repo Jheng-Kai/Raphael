@@ -57,10 +57,10 @@ This supersedes the About-you grouping and the search notes below.
 
 ## 團隊技能 (R-SKILL-17)
 
-The tab lists the shared skills in packages (skill-library.ts): a row per package with its count, who may use it, its switch and ⋯ (also on a right click). Pressing a package of several (its name, count or chevron) opens it on a page of its own in the tab, in the list's place: the back arrow and its name, its dropdown, switch and ⋯ as on its row, where it came from, then its skills, each with a switch. The back arrow, Esc or a step back return to the list scrolled where it was left, the focus on that row; nothing folds open in the list, and a skill alone keeps its one row. A new package of several opens its page at once. The importer is the tab's first card, with no line above it: a link or owner/repo (or pasted SKILL.md in its place), a picked or dropped file, a folder from the system's dialog (the output folder's picker), and one 匯入. Who may use a package is the vault's choice (整個團隊 or the characters ticked). Its menu leads each row with who it names, a character's 20 px face from the roster and, for 整個團隊, the team's own picture (its first four faces in one square, Raphael first, as the sidebar draws the team); a ticked row's check stands at its right edge, never at the left (R-UI-174, `skill-library-access`). A character's skills page shows the packages given to it read-only under 來自團隊技能, with an 開啟團隊技能 button to this tab. The core is `skills.library.*` (R-SKILL-15, R-SKILL-16); the shell lets those four methods through `core_call`.
+The Team skills tab lists Plugins first and Skills second, with no heading or card for an empty section. A manifest or several skills makes a plugin. All rows have the same height, with a name and at most one ellipsized description line. A plugin's row opens its page through the name, its count with a trailing chevron or the empty space. The access menu, switch and overflow stay independent. The shared round back button, Escape or a step back restore the scroll and row focus. The full description is available on the plugin page and from Details in the overflow. The importer is the first card. Its chips name the accepted archives and Markdown, folders and pasted SKILL.md. A quiet hint names GitHub and skills.sh links, archives, folders containing SKILL.md and pasted text. Who may use a package is the vault's choice (整個團隊 or the characters ticked). Its menu leads each row with who it names, a character's 20 px face from the roster and, for 整個團隊, the team's own picture (its first four faces in one square, Raphael first, as the sidebar draws the team); a ticked row's check stands at its right edge, never at the left (R-UI-174, `skill-library-access`). A character's skills page shows the packages given to it read-only under 來自團隊技能, with an 開啟團隊技能 button to this tab. The core is `skills.library.*` (R-SKILL-15, R-SKILL-16); the shell lets those four methods through `core_call`.
 
 ```powershell
-npm run look -- skill-library skill-library-open skill-library-back skill-library-access skill-library-import skill-library-imported skill-library-import-failed member-skills-library --theme both --width 1120,720,1920x1080
+npm run look -- skill-library skill-library-open skill-library-back skill-library-access skill-library-details skill-library-import skill-library-imported skill-library-import-failed member-skills-library --theme both --width 1120,720,1920x1080
 ```
 
 ```powershell
@@ -71,7 +71,8 @@ npm run look -- profile appearance dictation tools safety models about settings-
 
 ## Signed updates
 
-Time zone and output folder keep their regrouped owner rows; updates stay in About.
+Time zone and output folder keep their regrouped owner rows. Updates are available in About and the sidebar.
+A newer database also offers an update directly from its startup notice.
 
 ```powershell
 npm run look -- about-no-updater-key update-found update-ready update-auto settings-owner about --theme both --width 1120,720,1920x1080
@@ -92,15 +93,16 @@ maps to a quiet About row with the current app version, localized release-page g
 one shared button. It opens https://github.com/Jheng-Kai/Raphael/releases through the existing
 open_external_url boundary. No unavailable check/install/automatic controls or error notice
 appear. The native check returns before contacting the feed; the release-page action makes
-no update request. The configured-key UI remains unchanged. about-no-updater-key checks the
-real settings entry, native opener boundary and absence of another update check.
-A newer version shows escaped notes
-and Download and restart. Auto update is off by default; opt-in downloads in the background,
-then installs only after ten minutes of native idle and a complete idle roster on either platform. On a Mac the
-updater replaces the app bundle and the shell requests a restart. The signed
-artifact must include the manifest's version. One startup receipt reports the installed
-version when the main page is visible; hidden startup retains the receipt. Unknown state,
-missing core, active or waiting members prevent installation.
+no update request. about-no-updater-key checks the real settings entry, native opener boundary and
+absence of another update check.
+A newer version shows escaped notes and an install action. Background checking is on by default and
+checks and downloads hourly. An owner's press authorizes installation. It proceeds with an idle roster;
+active or waiting members defer the request until idle, and a second press cancels. An unknown roster
+defers installation. A core that refused a newer database starts no members, so that startup screen can
+install on request. The startup screen shows checking and downloading in the primary button, and reports
+a current version or unavailable updater in one line. On a Mac the updater replaces the app bundle and
+the shell requests a restart. The signed artifact must include the manifest's version. One startup receipt
+reports the installed version when the main page is visible; hidden startup retains the receipt.
 
 Selected look for the release-page fallback: about, about-no-updater-key, update-found,
 update-ready and update-auto; zh-TW, both themes, 1120,720,1920x1080. Inspect every contact
@@ -113,7 +115,7 @@ profile, chat, attachment-limits and attachment-too-large;
 zh-TW, both themes, 1120,720,1920x1080. Compare About's update actions and switch with
 General's existing controls.
 Judge must use this same run and external references. Fake fixtures do not prove real
-GitHub releases, OS idle time, native asset ranges, upgrade restart or one-shot persistence.
+GitHub releases, native asset ranges, upgrade restart or one-shot persistence.
 
 Targeted checks: updates, attachment-stream, settings-view, agent-attach,
 chat-composer, attachment-media, architecture and catalog Vitest; memory service

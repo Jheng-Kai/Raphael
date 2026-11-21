@@ -77,7 +77,14 @@ R-PANEL-01 through R-PANEL-04 cover the member panel. See [Member computer](memb
 
 See [Settings and appearance](settings-appearance.md#signed-updates)
 and [Conversation](conversation.md#streaming-composer-files) for the selected
-matrix, signed-version requirement and native/dependency acceptance boundaries.
+matrix, signed-version requirement and native/dependency acceptance boundaries. The newer-data startup
+journey is `start-newer-data` under [Member computer](member-computer.md#where-the-apps-data-lives).
+
+## Toast feedback
+
+R-UI-177 uses the visible result as feedback for local changes. `member-delete`, `room-delete`,
+`quick-cleared`, `automations-delete-own` and `skill-library-imported` exercise deletion, clearing and import.
+The window's toast allowlist covers unseen results, failures and recovery actions, including Undo.
 
 ## Settings by purpose
 
@@ -689,7 +696,8 @@ for ask_owner, background card completion and the selected question-card matrix.
 
 ## Owner input and Telegram files
 
-See [Conversation](conversation.md#owner-input). Selected scene: owner-addition. Members make no audio
+See [Conversation](conversation.md#owner-input) for the selected owner input, exchange and Send Now scenes,
+including owner-sendnow-order. Members make no audio
 files ([No voice](conversation.md#no-voice)).
 
 

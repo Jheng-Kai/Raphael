@@ -1,6 +1,9 @@
 import json
 import logging
 import sqlite3
+import sys
+from contextlib import closing
+from pathlib import Path
 
 import pytest
 
@@ -10,6 +13,37 @@ from raphael_core.brain.history import HistoryStore
 from raphael_core.brain.settings import SettingsStore
 
 from .conftest import item
+
+
+@pytest.mark.parametrize("extended_path", [False, pytest.param(True, marks=pytest.mark.skipif(
+    sys.platform != "win32", reason="Windows extended paths"
+))])
+def test_newer_database_is_refused_before_switching_to_wal(tmp_path, extended_path):
+    path = tmp_path / "newer.db"
+    with closing(sqlite3.connect(path)) as conn:
+        conn.execute(f"PRAGMA user_version = {db.LATEST_VERSION + 1}")
+        with pytest.raises(db.NewerDatabaseError):
+            db.migrate(conn)
+
+    original = path.read_bytes()
+    open_path = Path("\\\\?\\" + str(path)) if extended_path else path
+    with pytest.raises(db.NewerDatabaseError):
+        db.connect(open_path)
+    assert list(tmp_path.iterdir()) == [path]
+    assert path.read_bytes() == original
+
+
+def test_newer_committed_schema_in_wal_is_refused_without_touching_sidecars(tmp_path):
+    path = tmp_path / "newer.db"
+    with closing(sqlite3.connect(path)) as writer:
+        writer.execute("PRAGMA journal_mode=WAL")
+        writer.execute(f"PRAGMA user_version = {db.LATEST_VERSION + 1}")
+        original = {file.name: file.read_bytes() for file in tmp_path.iterdir()}
+        assert path.name + "-wal" in original
+        assert int.from_bytes(original[path.name][60:64], "big") <= db.LATEST_VERSION
+        with pytest.raises(db.NewerDatabaseError):
+            db.connect(path)
+        assert {file.name: file.read_bytes() for file in tmp_path.iterdir()} == original
 
 
 def test_startup_migration_logging_only_records_executed_steps(caplog, tmp_path):
@@ -401,7 +435,7 @@ SCHEMA_V27 = {
         "stop_requested INTEGER NOT NULL DEFAULT 0", "wrapup_sent INTEGER NOT NULL DEFAULT 0", "reason TEXT NOT NULL DEFAULT ''",
     ],
 }
-LATEST = 93
+LATEST = 94
 
 
 def test_v59_existing_tasks_default_to_no_artifact_and_keep_their_reports(monkeypatch, tmp_path):
@@ -727,7 +761,12 @@ SCHEMA_V92["skill_packages"] = ["key TEXT PK", "name TEXT NOT NULL", "source TEX
     "enabled INTEGER NOT NULL DEFAULT 1", """access TEXT NOT NULL DEFAULT '"all"'""", "origin TEXT NOT NULL DEFAULT 'source'"]
 
 
-PENDING_UPGRADES = (63, 64, *range(67, 94))
+SCHEMA_V94 = {**SCHEMA_V92, "member_unread": [
+    "member_id INTEGER PK NOT NULL", "conversation_id INTEGER PK NOT NULL DEFAULT 0", "unread_from INTEGER",
+]}
+
+
+PENDING_UPGRADES = (63, 64, *range(67, 95))
 
 
 @pytest.mark.parametrize("start_version, expected_steps", [
@@ -755,7 +794,7 @@ def test_latest_upgrade_runs_only_pending_migrations_and_preserves_vault_entries
     db.migrate(conn)
     assert steps == expected_steps
     assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
-    for table, columns in SCHEMA_V92.items():
+    for table, columns in SCHEMA_V94.items():
         if table != "agent_turns_fts":
             assert describe_columns(conn, table) == columns
     entry = conn.execute("SELECT kind,label,hint,origin,members,credential FROM vault_entries WHERE id='legacy-login'").fetchone()
@@ -925,7 +964,7 @@ def describe_columns(conn, table):
 
 
 def test_connect_creates_the_latest_schema(conn):
-    assert schema_names(conn, "table") == set(SCHEMA_V92) | FTS_SHADOWS | SEQUENCE
+    assert schema_names(conn, "table") == set(SCHEMA_V94) | FTS_SHADOWS | SEQUENCE
     assert {
         "history_created",
         "agent_turns_created",
@@ -946,13 +985,44 @@ def test_connect_creates_the_latest_schema(conn):
         "one_standard_conversation",
     } <= schema_names(conn, "index")
     assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
-    for table, columns in SCHEMA_V92.items():
+    for table, columns in SCHEMA_V94.items():
         if table != "agent_turns_fts":
             assert describe_columns(conn, table) == columns
     assert [c["name"] for c in conn.execute("PRAGMA table_info(agent_turns_fts)")] == [
         "pairs",
         "chars",
     ]
+
+
+def test_unread_migration_keeps_turn_and_manual_marks_after_read_only_preflight(tmp_path, monkeypatch):
+    from raphael_core.agent.conversations import Conversations
+    from raphael_core.agent.history import AgentHistory
+
+    path = tmp_path / "unread.db"
+    with monkeypatch.context() as old:
+        old.setattr(db, "LATEST_VERSION", 93)
+        with closing(db.connect(path)) as conn:
+            quick = Conversations(conn).quick()
+            turn = AgentHistory(conn).add(session_id="quick", question="Question", route="answer", prefix="",
+                                          text="Reply", status="done", conversation_id=quick, member_id=0)
+            missing_turn = turn + 1
+            with conn:
+                conn.executemany("INSERT INTO member_unread(member_id, unread_from) VALUES (?, ?)",
+                                 [(0, turn), (2, None), (3, missing_turn)])
+
+    original = path.read_bytes()
+    db._check_existing_database(path)
+    assert path.read_bytes() == original
+    assert list(tmp_path.iterdir()) == [path]
+
+    with closing(db.connect(path)) as conn:
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
+        assert [tuple(row) for row in conn.execute(
+            "SELECT member_id, conversation_id, unread_from FROM member_unread ORDER BY member_id"
+        )] == [(0, quick, turn), (2, 0, None), (3, 0, missing_turn)]
+        with conn:
+            conn.execute("DELETE FROM conversations WHERE id=?", (quick,))
+        assert [row[0] for row in conn.execute("SELECT member_id FROM member_unread ORDER BY member_id")] == [2, 3]
 
 
 def test_a_v1_database_is_migrated_to_v2_and_keeps_its_rows(tmp_path):

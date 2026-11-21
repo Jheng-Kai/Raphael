@@ -2,6 +2,88 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.checkVisibility() && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  const tokenColour = (element, token) => {
+    const probe = document.createElement("i");
+    probe.style.color = "var(" + token + ")";
+    element.append(probe);
+    const result = getComputedStyle(probe).color;
+    probe.remove();
+    return result;
+  };
+  const roundBack = back => {
+    require(visible(back) && back.matches("button.btn.icon.back-button[data-nav-back]") && back.getAttribute("aria-label"), "a named shared round back button leads the page");
+    const { width, height } = back.getBoundingClientRect(), glyph = back.querySelector("svg.i")?.getBoundingClientRect();
+    require(width === 36 && height === 36 && glyph?.width === 18 && glyph.height === 18 && parseFloat(getComputedStyle(back).borderTopLeftRadius) >= 18, "the back button is a 36 px circle with an 18 px chevron");
+  };
+  const quietQueue = turn => {
+    const bubble = turn.querySelector(".bubble"), row = turn.querySelector(".queued-actions");
+    const [cancel, send] = row?.querySelectorAll("button") ?? [];
+    require(visible(cancel) && visible(send) && cancel.textContent.trim() === "取消" && send.textContent.trim() === "立即送出", "both waiting actions are visible below the bubble");
+    const box = bubble.getBoundingClientRect(), actions = row.getBoundingClientRect();
+    require(actions.top >= box.bottom && Math.abs(actions.right - box.right) <= 1, "the waiting row sits below and aligns with the bubble's right edge");
+    const height = turn.querySelector(".message-actions").getBoundingClientRect().height;
+    require([cancel, send].every(button => {
+      const style = getComputedStyle(button);
+      return style.backgroundColor === "rgba(0, 0, 0, 0)" && style.borderTopWidth === "0px" && button.getBoundingClientRect().height === height;
+    }), "both actions have no fill or border at rest and match the message action icon height");
+    require(getComputedStyle(cancel).color === tokenColour(row, "--text-2") && getComputedStyle(send).color === tokenColour(row, "--text"), "send now uses stronger ink than cancel");
+  };
+  if (name === "plugins-detail") {
+    roundBack(document.querySelector('.cs-page [data-conn="back"]'));
+    return { check: name };
+  }
+  if (name === "owner-skill-links") {
+    const turn = document.querySelector('.tn[data-id="8201"]');
+    const bubble = turn?.querySelector(".owner-message .bubble");
+    const links = [...(bubble?.querySelectorAll(".message-link") ?? [])];
+    require(links.length === 2 && links.every(visible), "only the known slash name and URL are links");
+    require(links[0].textContent === "/code-review" && links[1].textContent === "https://example.com/changes", "the links keep their written words");
+    const blue = getComputedStyle(links[1]).color;
+    const expected = tokenColour(bubble, bubble.closest(".mb-chat[data-member-bubble]") ? "--owner-bubble-link" : "--link");
+    const luminance = rgb => rgb.match(/[\d.]+/g).slice(0, 3).map(Number).reduce((sum, n, i) => {
+      const c = n / 255;
+      return sum + [0.2126, 0.7152, 0.0722][i] * (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+    }, 0);
+    const brightness = [blue, getComputedStyle(bubble).backgroundColor].map(luminance).sort((a, b) => b - a);
+    require((brightness[0] + 0.05) / (brightness[1] + 0.05) >= 4.5, "the link has at least 4.5:1 contrast against the bubble");
+    require(links.every(link => {
+      const style = getComputedStyle(link);
+      return style.color === expected && style.backgroundColor === "rgba(0, 0, 0, 0)" && style.paddingInlineStart === "0px" && style.borderTopWidth === "0px";
+    }), "both links are bare words in the link colour");
+    const notice = turn.querySelector("[data-skill-notice]");
+    require(visible(notice) && bubble.getBoundingClientRect().bottom <= notice.getBoundingClientRect().top,
+      "the skipped skill is shown below the owner bubble");
+    require(!turn.querySelector(".turn-signin"), "no brain repair action appears for the skipped skill");
+    return { check: name };
+  }
+  if (name === "owner-skill-open") {
+    require(document.activeElement?.matches('.skl-page [data-library-skill="715"]'), "the skill inside its Team skills package has focus");
+    return { check: name };
+  }
+  if (name === "start-newer-data" || name === "start-newer-data-current") {
+    const panel = document.querySelector(".main.startup-failed");
+    const notice = panel?.querySelector('.missing-note[role="status"]');
+    require(visible(notice), "the startup notice is visible");
+    require(panel.getBoundingClientRect().width === panel.parentElement.getBoundingClientRect().width, "the startup notice has the main window's full grid width");
+    require(!visible(document.getElementById("nav")) && !panel.querySelector(".composer"), "the unusable sidebar and conversation are absent");
+    const button = panel.querySelector("button.btn.pri[data-startup-update]");
+    const group = panel.querySelector(".startup-update");
+    require(visible(button) && !button.disabled && !group.querySelector("a") && group.querySelectorAll("button").length === 1, "one primary action offers an update");
+    const frame = panel.getBoundingClientRect(), line = notice.getBoundingClientRect();
+    require(Math.abs(line.left + line.width / 2 - (frame.left + frame.width / 2)) < 1, "the startup notice is centered horizontally");
+    require(Math.abs(line.top + line.height / 2 - (frame.top + frame.height / 2)) < 100, "the startup notice is centered vertically with its action");
+    if (name === "start-newer-data-current") {
+      require(window.__look.calls.filter(call => call.command === "update_control" && call.action === "install").length === 1, "one owner press asks the native updater");
+      require(visible(group.querySelector(".startup-update-result")) && !document.querySelector(".toast"), "the result stays on the startup screen");
+    }
+    if (document.documentElement.lang === "zh-TW") {
+      require(notice.textContent === "這份資料由較新版的 Raphael 建立。請更新 Raphael 後再開啟。", "the notice explains the newer data and asks the owner to update");
+    }
+    if (name === "start-newer-data-current" && document.documentElement.lang === "zh-TW") {
+      require(group.querySelector(".startup-update-result").textContent === "目前沒有可用更新。", "the result explains that there is no update");
+    }
+    return { check: name };
+  }
   // The providers' directory keeps its title and x at the top however far its list is scrolled (the way out is never lost).
   const directoryCloseStays = dialog => {
     const close = dialog.querySelector('[data-pv="close"]'), list = dialog.querySelector('.pv-scroll');
@@ -499,23 +581,39 @@ export function checkRendered(name, context = {}) {
       require(visible(pane) && pane.querySelectorAll('[data-skl="import-go"]').length === 1 && pane.firstElementChild?.matches('.skl-import'), 'the importer is the first card of the tab, with one 匯入');
       require(!pane.querySelector('.skl-head, .skl-drop-hint') && !pane.previousElementSibling?.matches?.('p'), 'nothing is written between the tab name and its first card');
       const box = pane.getBoundingClientRect();
-      for (const row of pane.querySelectorAll('.skl-pack')) {
+      const rows = [...pane.querySelectorAll('.skl-list > .skl-pack')];
+      require(rows.length > 0 && Math.max(...rows.map(row => row.offsetHeight)) === Math.min(...rows.map(row => row.offsetHeight)), "plugin and skill rows all have the same height");
+      for (const row of rows) {
         const r = row.getBoundingClientRect();
         require(r.left >= box.left - 1 && r.right <= box.right + 1, `a package row stays inside the tab (${Math.round(r.left)}-${Math.round(r.right)})`);
         require(row.querySelector('.tg[role="switch"]') && row.querySelector('[data-skl="more"]'), 'each package has its switch and ⋯');
       }
     }
     if (name === 'skill-library') {
+      const sections = [...document.querySelectorAll('.skl-section')];
+      require(sections.map(section => section.querySelector('h2').textContent).join('、') === '外掛、技能', "plugins and skills have their own headings, plugins first");
+      require(sections.map(section => section.querySelectorAll('.skl-pack').length).join(',') === '2,1', "multi-skill packages and manifest plugins are separate from single skills");
+      for (const section of sections) {
+        const [heading, card] = section.children;
+        require(Math.abs(heading.getBoundingClientRect().left - card.getBoundingClientRect().left) <= 1, "the heading is flush with the card");
+      }
+      for (const open of document.querySelectorAll('.skl-list .skl-open')) {
+        const title = open.querySelector('.skl-title'), count = title.querySelector('.skl-count');
+        require(title.firstElementChild.matches('.skl-name') && open.querySelectorAll('svg').length === 1 && !!count.querySelector('svg'), "the only chevron follows the count, after the name");
+        require(open.getBoundingClientRect().width === open.closest('.skl-pack').getBoundingClientRect().width, "the opener spans the row");
+      }
+      const description = rowOf('skill:3').querySelector('.skl-description'), style = getComputedStyle(description);
+      require(style.whiteSpace === 'nowrap' && style.textOverflow === 'ellipsis' && description.scrollWidth > description.clientWidth, "the long skill description is one truncated line");
       require(document.querySelectorAll('.skl-pack').length === 3, 'one row per package, not per skill');
       require(rowOf('set:1').querySelector('.skl-count')?.textContent.trim() === '7 個技能' && !document.querySelector('.skl-skill'), 'pstack is one folded row that says how many skills it holds');
       require(accessOf('set:1') === '還沒給任何人' && accessOf('pack:2') === '小晴、小森' && accessOf('skill:3') === '整個團隊', `who may use each is said on its row (${accessOf('set:1')} / ${accessOf('pack:2')} / ${accessOf('skill:3')})`);
-      require(!rowOf('skill:3').querySelector('.skl-count, [data-skl="open"]') && rowOf('skill:3').querySelector('.skl-single .d')?.textContent === '把會議逐字稿整理成決議與待辦', 'a skill alone is one row: its words under its name, nothing to open');
+      require(!rowOf('skill:3').querySelector('.skl-count, [data-skl="open"]') && rowOf('skill:3').querySelector('.skl-single .d')?.textContent.startsWith('把會議逐字稿整理成決議與待辦'), 'a skill alone is one row: its words under its name, nothing to open');
     }
     if (onPage) {
       const page = document.querySelector('.modal-scrim .skl-page'), head = page?.querySelector('.skl-page-head');
       require(visible(page) && !document.querySelector('.modal-scrim .skl-import, .modal-scrim .skl-list'), "the package's page takes the list's place: no importer, no other package");
       const back = head.querySelector('[data-skl="back"]');
-      require(visible(back) && back.matches('.btn.icon') && back.hasAttribute('data-nav-back') && !!back.getAttribute('aria-label'), 'a back arrow leads the page');
+      roundBack(back);
       require(document.activeElement === back, 'the focus is on the back arrow');
       const title = head.querySelector('.skl-page-name');
       require(title?.textContent.trim().length > 0 && title.scrollWidth <= title.clientWidth + 1, "the package's name is whole");
@@ -527,6 +625,12 @@ export function checkRendered(name, context = {}) {
       }
       require(document.querySelector('.modal-scrim .modal-body').scrollTop === 0, 'the page opens at its top');
       require(document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, 'the window does not scroll sideways');
+    }
+    if (name === 'skill-library-details') {
+      const description = rowOf('skill:3')?.querySelector('.skl-description');
+      const details = document.querySelector('.skl-details'), text = details?.querySelector('p');
+      require(visible(details) && text?.textContent === description?.textContent && !document.querySelector('.skl-page'), 'the overflow reveals the full description on the list');
+      require(text.scrollWidth <= text.clientWidth + 1 && text.getBoundingClientRect().height > description.getBoundingClientRect().height, 'the description wraps within the popover');
     }
     if (name === 'skill-library-open') {
       const skills = [...document.querySelectorAll('.skl-page .skl-skills .skl-skill')];
@@ -569,13 +673,15 @@ export function checkRendered(name, context = {}) {
       const panel = document.querySelector('.skl-import');
       require(visible(panel) && !panel.querySelector('#skl-source') && visible(panel.querySelector('#skl-text')), 'the pasted text stands in the link\'s place');
       require(['pick-file', 'pick-folder', 'paste'].every(act => visible(panel.querySelector(`[data-skl="${act}"]`))), 'a file, a folder, or pasted text');
+      require(visible(panel.querySelector('.skl-import-hint')) && panel.querySelector('.skl-import-hint').textContent.includes('GitHub'), "the hint names accepted sources");
+      require(panel.querySelector('[data-skl="pick-file"]').textContent.includes('.zip') && panel.querySelector('[data-skl="paste"]').textContent.includes('SKILL.md'), "the choices name the formats");
       require(panel.querySelector('#skl-file').accept === '.zip,.tar.gz,.tgz,.md', 'the file picker takes archives and Markdown');
       require(panel.getBoundingClientRect().right <= document.querySelector('.modal-scrim .skl').getBoundingClientRect().right + 1, 'the importer fits the tab');
     }
     if (name === 'skill-library-imported') {
       require(visible(document.querySelector('.skl-import #skl-source')) && !document.querySelector('#skl-text'), 'the card is back to the link');
       require(rowOf('pack:13')?.querySelector('.skl-single .d')?.textContent === '依日期整理行程與訂位' && accessOf('pack:13') === '整個團隊', 'the new skill is a row of its own, its words under its name, for the whole team');
-      require(document.querySelector('.toast')?.textContent.includes('已匯入「旅行行程」'), 'the owner is told it was imported');
+      require(!document.querySelector('.toast'), 'the new package is the only success feedback');
       const call = window.__look.calls.find(c => c.method === 'skills.library.import');
       require(call && call.params.text.includes('name: travel') && !('source' in call.params), 'the text went to the core as text');
     }
@@ -586,6 +692,7 @@ export function checkRendered(name, context = {}) {
       require(said?.textContent.trim() === '裡面找不到 SKILL.md。' && getComputedStyle(said).color === err, `the cause is said inside the importer, in the error colour (${said && getComputedStyle(said).color} against ${err})`);
     }
     if (name === 'member-skills-library') {
+      roundBack(document.querySelector('[data-ms="back"]'));
       const lib = document.querySelector('.ms-pane [data-k="ms-library"]');
       require(lib.querySelector('.ms-head h2')?.textContent.trim() === '來自團隊技能', 'the member section names Team skills');
       require(lib.querySelector('[data-ms="open-library"]')?.textContent.trim() === '開啟團隊技能', 'the button names Team skills');
@@ -901,7 +1008,7 @@ export function checkRendered(name, context = {}) {
     require(section.textContent.includes("改善更新安裝"), "release notes remain readable");
     require(visible(section.querySelector('[data-act="update-install"]')), "a framed install action is visible");
     if (name === "app-update-ready") require(section.textContent.includes("更新已驗證"), "verified state is explicit");
-    require(section.querySelector('[data-k="auto-update"]').getAttribute("aria-checked") === (name === "app-update-auto" ? "true" : "false"), "auto updates are opt-in");
+    require(section.querySelector('[data-k="auto-update"]').getAttribute("aria-checked") === (name === "app-update-auto" ? "true" : "false"), "the switch reflects whether background checks are enabled");
     return {check:name};
   }
   if (name === 'desktop-updating') {
@@ -3175,6 +3282,19 @@ export function checkRendered(name, context = {}) {
     require(Object.values(tokens).every(value=>/^#([0-9a-f]{2})\1\1$/i.test(value)), "both themes are neutral greys including text, accent, focus and selection");
     return {check:name, surfaces, tokens};
   }
+  if (name === "recovered-reply") {
+    const link = [...document.querySelectorAll('.thread a[data-url="https://example.com/reply"]')].find(visible);
+    const prose = link?.closest(".message-text");
+    const items = [...(prose?.querySelectorAll("li") ?? [])].map(item => item.textContent.trim());
+    const source = link?.closest(".thread")?.querySelector('.message-code[data-complete="false"] code')?.textContent;
+    require(link?.textContent === "Vendor", "the complete link has only its own label");
+    require(items.join("|") === "Unfinished Vendor|Still readable…|Last item.", "the malformed link and lost break leave all three items readable");
+    require(prose?.textContent.startsWith("Here is the full reply."), "the visible reply is prose without envelope fields");
+    require(source === '{"example": true}', "an unclosed fence keeps its source");
+    const preview = [...document.querySelectorAll(".au-room-row .mb-row-p")].find(line => line.textContent.includes("Here is the full reply."));
+    if (innerWidth > 720) require(visible(preview) && preview.textContent.includes("Unfinished Vendor"), "the expanded sidebar preview also drops the broken link syntax");
+    return { check: name, items, source, preview: preview?.textContent };
+  }
   if (name.startsWith("rich-")) {
     const scope = document.querySelector('.page-agent:not([hidden])');
     const cards = [...scope.querySelectorAll('.rich-block')];
@@ -3977,12 +4097,9 @@ export function checkRendered(name, context = {}) {
   if (name === "composer-queued-sendnow-menu") {
     const labels = [...document.querySelectorAll('#app-popover [data-pick]')].map(node => node.dataset.pick);
     require(labels.includes("copy") && !labels.some(item => ["send-now", "cancel", "edit"].includes(item)), "the menu does not repeat the waiting actions or offer Edit");
-    const turn = document.querySelector('.tn[data-id="901"]'), bubble = turn.querySelector('.bubble');
-    const [cancel, send] = bubble.querySelectorAll('.queued-actions button');
-    require(visible(cancel) && visible(send) && cancel.textContent.trim() === "取消" && send.textContent.trim() === "立即送出", "both waiting actions are visible inside the bubble");
+    const turn = document.querySelector('.tn[data-id="901"]');
+    quietQueue(turn);
     require(!turn.textContent.includes("排隊中"), "no 排隊中 words beside the message");
-    const box = bubble.getBoundingClientRect(), exit = cancel.getBoundingClientRect(), submit = send.getBoundingClientRect();
-    require(exit.right <= submit.left && submit.right <= box.right && submit.bottom <= box.bottom && submit.top >= bubble.querySelector('.message-text').getBoundingClientRect().bottom, "the action row sits below the text inside the bubble");
     const icons = [...document.querySelectorAll('#app-popover [data-pick] svg')].map(node => node.innerHTML);
     require(new Set(icons).size === icons.length, "each menu action has its own icon");
     require(!document.querySelector('.tn[data-id="902"]'), "only the one queued bubble exists");
@@ -3999,18 +4116,43 @@ export function checkRendered(name, context = {}) {
     require(document.querySelector('.cmp-input').value === "", "the field was not given words back");
     return {check: name, status: bubble.dataset.status};
   }
+  if (name === "owner-sendnow-order") {
+    const thread = document.querySelector(".thread");
+    const nodes = [
+      thread.querySelector('.tn[data-id="2072"]:not([data-after]) [data-reply] .message-text'),
+      thread.querySelector('.tn[data-id="2073"] .owner-message .message-text'),
+      thread.querySelector('.tn[data-id="2072"][data-after="2073"] [data-reply] .message-text'),
+      thread.querySelector('.tn[data-id="2073"] [data-reply] .message-text'),
+    ];
+    const words = nodes.map(node => node?.textContent.trim());
+    require(words.join("|") === "我已經打開網站。|也請測試手機版。|我會實測整頁。|手機版測試通過。", `the public words are kept: ${words}`);
+    require(nodes.every((node, index) => visible(node) && (!index || node.getBoundingClientRect().top >= nodes[index - 1].getBoundingClientRect().bottom)),
+      "the earlier start, owner's bubble, earlier later words and new answer are visible in that order");
+    require(![...thread.querySelectorAll('[data-reply] .message-text')].some(reply => reply.textContent.trim() === "已取消。") &&
+      !thread.querySelector('.tn[data-status="cancelled"], .tn[data-status="denied"], .tn.is-latest-failure'),
+      "send now leaves no stopped reply or styling");
+    const permission = thread.querySelector('[data-permission-card="look-unapproved"][data-card-state="cancelled"]');
+    const status = permission?.querySelector(".card-status");
+    require(visible(permission) && visible(status) && status.textContent.trim() === "已取消" &&
+      !permission.querySelector(".card-actions, .card-close"),
+      "the closed permission shows its settled status without active controls");
+    const sent = window.__look.calls.filter(call => call.method === "agent.history.send_now");
+    require(sent.length === 1 && sent[0].params.turn_id === 2073, "the queued message takes over through Send Now");
+    return {check: name, words};
+  }
   if (name === "composer-queued" || name === "composer-queued-withdraw" || name === "composer-queued-stop" || name === "room-send-while-working") {
     const calls = window.__look.calls;
     if (name === "composer-queued") {
       const queued = [...document.querySelectorAll('.tn[data-status="queued"]')];
       require(queued.length === 2, "both queued messages are visible");
       require(queued.map(node => node.querySelector('.message-text').textContent).join('|') === "第二個範例請求|第三個範例請求", "the bubbles retain send order");
-      require(queued.every(node => visible(node.querySelector('.bubble [data-act="cancel-message"]')) && !node.querySelector('[data-owner-act="cancel"]')), "each queued bubble owns its withdraw button");
-      require(queued.every(node => visible(node.querySelector('.bubble .queued-send-now')) && !node.textContent.includes("排隊中")), "each queued message shows 立即送出 and no 排隊中 words");
+      require(queued.every(node => visible(node.querySelector('.queued-actions [data-act="cancel-message"]')) && !node.querySelector('[data-owner-act="cancel"]')), "each queued bubble owns its withdraw button");
+      require(queued.every(node => visible(node.querySelector('.queued-actions .queued-send-now')) && !node.textContent.includes("排隊中")), "each queued message shows 立即送出 and no 排隊中 words");
+      queued.forEach(quietQueue);
       const presence = [...document.querySelectorAll('.thread .live-presence')];
       require(presence.length === 1 && presence[0].getBoundingClientRect().top >= queued[1].getBoundingClientRect().bottom, "one live presence follows the newest message");
       const bubbles = queued.map(node => node.querySelector('.bubble').getBoundingClientRect());
-      require(bubbles[1].top - bubbles[0].bottom <= 42, "consecutive owner bubbles keep a speaker-sized gap");
+      require(bubbles[1].top - queued[0].querySelector(".queued-actions").getBoundingClientRect().bottom <= 14, "consecutive owner bubbles keep a speaker-sized gap");
       require(!calls.some(call => call.method === "agent.history.stop" || call.method === "worker.cancel"), "admission stops no work");
       return {check:name,gap:bubbles[1].top-bubbles[0].bottom};
     }
@@ -4850,7 +4992,7 @@ export function checkRendered(name, context = {}) {
     return { check: name, inked };
   }
   // A step's foot: two round buttons together in the middle, the way back at the left and the way on at the
-  // right, each a filled triangle that points where it goes. The last step's way on is a check: it finishes.
+  // right. The last step's way on is a check: it finishes.
   const requireStepPair = (card, last) => {
     const rowEl = document.querySelector('.ob-foot .ob-actions');
     const buttons = [...rowEl.querySelectorAll(':scope > .btn')].filter(visible);
@@ -4864,23 +5006,12 @@ export function checkRendered(name, context = {}) {
       require(button.matches('.btn.icon') && !button.textContent.trim() && button.querySelectorAll(':scope > svg.i').length === 1, `${wanted[0]} is a drawing alone, with no words`);
       require(wanted.includes(button.getAttribute('aria-label')) && button.getAttribute('title') === button.getAttribute('aria-label'), `it is named ${wanted.join(" or ")} for assistive tech and in its tooltip (${button.getAttribute('aria-label')})`);
     }
-    // The drawing: one filled triangle on both, the way back's turned round, each pointing away from the other. The last
-    // step's way on is a check, a line and not a filled shape.
-    const drawing = button => button.querySelector(':scope > svg.i'), filled = button => !['none', 'rgba(0, 0, 0, 0)'].includes(getComputedStyle(drawing(button)).fill);
-    const flipped = button => new DOMMatrixReadOnly(getComputedStyle(drawing(button)).transform).a < 0;
-    require(back.matches('.ob-tri') && filled(back) && flipped(back), "the way back is a filled triangle that points left");
-    if (last) require(!primary.matches('.ob-tri') && !filled(primary) && drawing(primary).innerHTML !== drawing(back).innerHTML, "the last step's way on is a check, not a triangle");
-    else require(primary.matches('.ob-tri') && filled(primary) && !flipped(primary) && drawing(primary).innerHTML === drawing(back).innerHTML, "the way on is the same filled triangle, pointing right");
-    for (const button of buttons) {
-      const mark = drawing(button).getBoundingClientRect(), box = button.getBoundingClientRect();
-      require(Math.abs(mark.width - 20) <= .5 && Math.abs(mark.height - 20) <= .5, `the drawing is 20 px (${mark.width} x ${mark.height})`);
-      require(Math.abs((mark.left + mark.right) / 2 - (box.left + box.right) / 2) <= 1 && Math.abs((mark.top + mark.bottom) / 2 - (box.top + box.bottom) / 2) <= 1, "the drawing's box is in the middle of its circle");
-      // A circle: as wide as tall, a comfortable target, round all the way.
-      require(Math.abs(box.width - box.height) <= .5 && box.width >= 44 && box.width <= 56 && parseFloat(getComputedStyle(button).borderTopLeftRadius) >= box.width / 2 - 1, `it is a circle of a comfortable size (${Math.round(box.width)} x ${Math.round(box.height)})`);
-    }
-    // Together in the middle: one size, on one line, a small gap between them, and the pair centred in the card. It is
-    // the same on every step, so neither button moves from step to step.
-    require(Math.abs(left.width - ink.width) <= .5 && Math.abs((left.top + left.bottom) / 2 - (ink.top + ink.bottom) / 2) <= 1, `the two are one size on one line (${Math.round(left.width)} and ${Math.round(ink.width)})`);
+    const drawing = button => button.querySelector(':scope > svg.i'), filled = button => getComputedStyle(drawing(button)).fill !== 'none';
+    roundBack(back);
+    require(last ? !primary.matches('.ob-tri') && !filled(primary) : primary.matches('.ob-tri') && filled(primary), "the forward control keeps its own glyph");
+    const mark = drawing(primary).getBoundingClientRect();
+    require(mark.width === 20 && mark.height === 20 && ink.width === ink.height && ink.width >= 44 && ink.width <= 56, "the primary keeps its round shape and 20 px glyph");
+    require(Math.abs((left.top + left.bottom) / 2 - (ink.top + ink.bottom) / 2) <= 1, "the two controls share a centre line");
     const gap = ink.left - left.right;
     require(gap >= 8 && gap <= 16, `the two stand together, a small gap between them (${Math.round(gap)} px)`);
     require(Math.abs((left.left + ink.right) / 2 - (card.left + card.width / 2)) <= 1, `the pair is centred in the card (${Math.round((left.left + ink.right) / 2 - card.left - card.width / 2)} px off)`);
@@ -4911,14 +5042,14 @@ export function checkRendered(name, context = {}) {
     if (name === "onboarding-back-hover") {
       const style = getComputedStyle(back);
       require(back.matches(':hover'), "the pointer is on the way back");
-      require(style.backgroundColor === token('--pressed') && token('--pressed') !== token('--hover'), `the way back is one step lighter under the pointer (${style.backgroundColor})`);
+      require(style.backgroundColor === token('--hover') && token('--hover') !== token('--surface-2'), `the way back is one step lighter under the pointer (${style.backgroundColor})`);
       require(['rgba(0, 0, 0, 0)', 'transparent'].includes(style.borderTopColor) && style.color === token('--text'), `no edge appears under the pointer and its triangle keeps its ink (${style.borderTopColor}, ${style.color})`);
       require(!document.documentElement.hasAttribute('data-keys') && style.outlineStyle === 'none', "the pointer adds no keyboard ring");
     } else {
       const style = getComputedStyle(back);
       require(document.activeElement === back && document.documentElement.hasAttribute('data-keys'), "Shift+Tab from the primary lands on the way back, by the keyboard");
       require(style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) >= 2 && style.outlineColor !== 'rgba(0, 0, 0, 0)', `the way back shows the app's focus ring (${style.outlineWidth} ${style.outlineStyle} ${style.outlineColor})`);
-      require(style.backgroundColor === token('--hover'), "the way back rests on its quiet grey");
+      require(style.backgroundColor === token('--surface-2'), "the way back rests on its quiet surface");
       require(parseFloat(style.borderTopLeftRadius) >= back.getBoundingClientRect().height / 2 - 1, "the ring follows the circle");
     }
     return { check: name };
@@ -5595,7 +5726,7 @@ export function checkRendered(name, context = {}) {
     require(!document.querySelector('[data-cancel-armed]'),"the armed state ends with cancellation");return {check:name};
   }
   if(name === "deleted-view") {
-    require(visible(document.querySelector('.toast')),"a localized success notice is shown");
+    require(!document.querySelector(".toast"), "the closed view is the success feedback");
     require(![...document.querySelectorAll('.au-room-pane, .au-routine-dialog')].some(el=>visible(el)&&!el.closest('[hidden]')),"the deleted object's view is closed");
     require(!document.body.textContent.includes('not found'),"deletion never lands on a missing object");return {check:name};
   }
@@ -5829,6 +5960,7 @@ export function checkRendered(name, context = {}) {
     if (name === "quick-cleared") {
       require(window.__look.calls.filter(call => call.method === "conversations.clear" && call.params.id === 4).length === 1, "history is cleared exactly once");
       require(window.__look.data.conversations.some(c => c.id === 4 && c.kind === "quick"), "the quick identity remains");
+      require(!document.querySelector(".toast"), "the empty conversation is the success feedback");
     }
     return { check: name };
   }
@@ -6087,7 +6219,7 @@ export function checkRendered(name, context = {}) {
       require(document.querySelector('.mb-pill-t')?.textContent === window.__look.data.members.find(item => item.id === 0)?.name, "deleting the selected member returns to Raphael");
     const asked = window.__look.calls.filter(call => call.method === "members.delete");
     require(asked.length === 1 && JSON.stringify(asked[0].params) === '{"id":2}', "the core is asked once to delete that member, and nothing else is sent with it");    require(!window.__look.data.members.some(item => item.id === 2) && !document.querySelector('[data-member="2"]'), "the member is gone from the team and the list");
-    require(document.querySelector(".toast")?.textContent.includes("已刪除「小森」"), "a notice names who was deleted");
+    require(!document.querySelector(".toast"), "the removed row is the success feedback");
     return { check: name };
   }
   if (name === "slime-one-working") {
@@ -7003,7 +7135,7 @@ export function checkRendered(name, context = {}) {
   if (name === "calendar-deleted") {
     require(window.__look.calls.some(item => item.method === "calendar.delete" && item.params.id === 1), "the core is told");
     require(!document.querySelector('[data-entry="own:1"]') && !document.querySelector('.au-pop-detail'), "the event and its detail are gone");
-    require(/牙醫回診/.test(document.querySelector('.toast')?.textContent ?? ""), "the shared notice names it");
+    require(!document.querySelector(".toast"), "the removed event is the success feedback");
     return { check: name };
   }
   if (name === "calendar-moved" || name === "calendar-resized") {
@@ -8819,8 +8951,8 @@ export function checkRendered(name, context = {}) {
   }
   if (name === "connect-apps-connected") {
     const view = connectModal().querySelector('.cs-connected'), back = view?.querySelector('[data-conn="back"]');
-    // Its title is the way back: one button of the chevron and 已連結 (R-APPS-02).
-    require(visible(view) && visible(back) && back.tagName === 'BUTTON' && back.matches('.cs-back-title') && back.textContent.trim() === '已連結' && back.querySelector('svg'), "the connected list's title, with its chevron, is the button back");
+    require(visible(view) && visible(view.querySelector(".cs-top-t")), "the connected list has its own title");
+    roundBack(back);
     const box = back.getBoundingClientRect(), x = connectModal().querySelector('.modal-x').getBoundingClientRect(), glyph = back.querySelector('svg').getBoundingClientRect();
     require(Math.abs((box.top + box.bottom) / 2 - (x.top + x.bottom) / 2) <= 1 && Math.abs(glyph.left - connectModal().querySelector('.cs').getBoundingClientRect().left) <= 3, "it stands on the ✕'s line, its chevron on the content's left edge");
     require(!view.querySelector('.cs-chips, #conn-search') && view.querySelector('.cs-top-t')?.textContent === '已連結', "it is the list alone, under its own title");
@@ -8889,12 +9021,10 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name === "connected-back-title") {
-    // The connected list's chevron and its title are one button.
-    const modal = connectModal(), back = modal.querySelector('.cs-connected .cs-back-title');
-    require(back && back.matches('button[data-conn="back"]') && back.querySelector('svg.i') && back.textContent.trim().length > 0, "the chevron and the title are one button");
-    require(modal.querySelector('.cs-top-t')?.contains(back) && !modal.querySelector('.cs-connected .btn.icon.cs-back'), "no separate chevron beside the title");
-    const style = getComputedStyle(back);
-    require(back.matches(':hover') && style.color === colourOf('color', '--text') && /rgba\(0, 0, 0, 0\)|transparent/.test(style.backgroundColor), `drawn as the connected chip: no fill, its words brighten under the pointer (${style.color}, ${style.backgroundColor})`);
+    const modal = connectModal(), back = modal.querySelector('.cs-connected .back-button');
+    roundBack(back);
+    require(modal.querySelector('.cs-top-t')?.textContent === '已連結', "the title stands beside the shared back button");
+    require(back.matches(':hover') && getComputedStyle(back).backgroundColor === tokenColour(back, "--hover"), "the back button has the shared hover fill");
     return { check: name };
   }
   if (name === "app-row-hover") {
@@ -9941,7 +10071,7 @@ export function checkRendered(name, context = {}) {
     return { check: name, moved: Math.round(window.__rowWheel - scroller.scrollTop) };
   }
   // The status light (status-light.ts) and the title pill beside it.
-  if (name === "status-light-idle" || name === "status-light-list" || name === "status-light-pill-open" || name === "status-light-seen" || name === "status-light-dot") {
+  if (["status-light-idle", "status-light-list", "status-light-pill-open", "status-light-seen", "status-light-remaining", "status-light-cleared", "status-light-dot"].includes(name)) {
     const light = document.querySelector('.mb-chat .mb-head [data-act="status"]'), head = document.querySelector(".mb-chat .mb-head");
     require(visible(light) && light.getBoundingClientRect().left - head.getBoundingClientRect().left < head.getBoundingClientRect().width / 4, "the status light stands at the header's left");
     require(!document.querySelector('.mb-head [data-act="search"], [data-room-search]'), "no search button is left in a top row");
@@ -9955,16 +10085,25 @@ export function checkRendered(name, context = {}) {
     }
     if (name === "status-light-list") {
       require(light.dataset.level === "needs", `a member waiting for the owner is the list's level (${light.dataset.level})`);
-      require(!drawn && light.dataset.dot === undefined, "the list is open, so what it shows is seen: the icon's dot is gone");
+      require(drawn && light.dataset.dot === "needs" && mark.backgroundColor === colour("--warn"), "opening the list keeps the warning dot for the unopened waiting conversation");
       const rows = [...document.querySelectorAll(".menu .menu-choice")];
-      require(rows.length === 2 && rows[0].dataset.value === "2" && rows[1].dataset.value === "1", `the waiting member comes first, then the working one (${rows.map(row => row.dataset.value)})`);
+      require(rows.map(row => row.dataset.value).join(",") === "2,3,1", "waiting comes first, finished next, working last");
+      require([...document.querySelectorAll(".menu .menu-head")].map(head => head.textContent).join(",") === "等你,完成,工作中", "section headings follow the owner's priority");
       require(rows.every(row => row.querySelector(".mlead .av, .mlead svg")), "each row has the member's face");
       require(!document.querySelector(".menu .ck svg"), "nothing in the list is checked");
       const dots = rows.map(row => row.querySelector(".status-row-dot"));
-      require(dots[0]?.dataset.kind === "needs" && dots[1]?.dataset.kind === "busy" && getComputedStyle(dots[0]).backgroundColor !== getComputedStyle(dots[1]).backgroundColor, "each row has its own coloured dot, waiting unlike working");
+      require(dots.map(dot => dot?.dataset.kind).join(",") === "needs,done,busy" &&
+        new Set(dots.map(dot => getComputedStyle(dot).backgroundColor)).size === 3, "each group keeps its own dot colour");
     }
-    if (name === "status-light-seen") {
-      require(!drawn && light.dataset.dot === undefined && light.dataset.level === "needs", "once the list was opened the dot is gone, though the member still waits");
+    if (name === "status-light-seen" || name === "status-light-remaining") {
+      const rows = [...document.querySelectorAll(".menu .menu-choice")];
+      const expected = name === "status-light-seen" ? "2,3" : "3";
+      require(rows.map(row => row.dataset.value).join(",") === expected && rows.every(row => row.querySelector('.status-row-dot[data-kind="done"]')), "only the unopened finished conversations have rows");
+      require(drawn && light.dataset.dot === "done" && mark.backgroundColor === colour("--ok"), "the open list keeps the icon's dot while any finished conversation is unopened");
+    }
+    if (name === "status-light-cleared") {
+      require(!drawn && light.dataset.dot === undefined && document.querySelectorAll(".menu .menu-choice").length === 0,
+        "opening the remaining conversation through the sidebar clears the icon and both finished rows");
     }
     if (name === "status-light-idle") require(light.dataset.level === "done" ? drawn && mark.backgroundColor === colour("--ok") : !drawn, `with nothing new the icon has no dot; finished work not yet seen has the success colour (${light.dataset.level} ${mark.backgroundColor})`);
     if (name === "status-light-dot") {

@@ -25,6 +25,7 @@ import { createRules } from "../safety-rules";
 import { createVault } from "../vault";
 import { createSkillLibrary } from "../skill-library";
 import { createConnections } from "../connections";
+import { UPDATE_STATUS_MS } from "../updates";
 import { askInChat } from "../chat-ask";
 import { RAPHAEL_ID } from "../members";
 import { DICTATION_MODES, isDictationMode } from "../dictation";
@@ -191,16 +192,40 @@ export function createSettings(app: AppContext): SettingsPage {
   let usageAgain = false;
 
   let brain: BrainSettings | null = null;
- let update: api.UpdateView | null = null;
+  let update: api.UpdateView | null = null;
   let checkingUpdate = false;
-  async function checkUpdate(action: "check" | "install" = "check"): Promise<void> {
+  let updateTimer: ReturnType<typeof setTimeout> | undefined;
+  const aboutVisible = (): boolean => visible && pane === "about";
+  function watchWaitingUpdate(): void {
+    clearTimeout(updateTimer);
+    if (!aboutVisible() || update?.state !== "waiting") return;
+    const waiting = update;
+    updateTimer = setTimeout(async () => {
+      if (!aboutVisible() || update !== waiting || checkingUpdate) return;
+      try {
+        const status = await api.updateControl("status");
+        if (!aboutVisible() || update !== waiting || checkingUpdate) return;
+        if (status.state !== "waiting") {
+          update = status;
+          render();
+        }
+      } catch { /* Keep waiting while native services are unavailable. */ }
+      watchWaitingUpdate();
+    }, UPDATE_STATUS_MS);
+  }
+  async function checkUpdate(action: "check" | "install" | "cancel" = "check"): Promise<void> {
     if (checkingUpdate) return;
+    clearTimeout(updateTimer);
     checkingUpdate = true;
-    update = {state: action === "check" ? "checking" : "downloading", version: update?.version ?? "", notes: update?.notes ?? "", error: ""};
+    if (action !== "cancel") update = {state: action === "check" ? "checking" : "downloading", version: update?.version ?? "", notes: update?.notes ?? "", error: ""};
     if (visible) render();
     try { update = await api.updateControl(action); }
     catch { update = {state:"error", version:"", notes:"", error:"feed"}; }
-    finally { checkingUpdate = false; if (visible) render(); }
+    finally {
+      checkingUpdate = false;
+      if (visible) render();
+      watchWaitingUpdate();
+    }
   }
   const ownerControls = createOwnerControls(settings => { brain = settings; if (visible) render(); });
   let hasKey = false;
@@ -1056,6 +1081,7 @@ export function createSettings(app: AppContext): SettingsPage {
       case "output-pick": void api.pickOutputFolder().then(path => { if (path !== null) return changeBrain("owner_output_folder", path); }).catch(error => toaster.info(describeError(error))); break;
       case "update-check": void checkUpdate(); break;
       case "update-install": void checkUpdate("install"); break;
+      case "update-cancel": void checkUpdate("cancel"); break;
       case "update-releases":
         void api.openExternalUrl("https://github.com/Jheng-Kai/Raphael/releases").catch(error => toaster.info(describeError(error)));
         break;
@@ -1249,6 +1275,8 @@ export function createSettings(app: AppContext): SettingsPage {
       }
     },
     async show(open?: PageArgument) {
+      const skillId = open?.startsWith("skill:") ? Number(open.slice(6)) : null;
+      if (skillId !== null) open = "skills";
       const repair = open?.startsWith("repair:") ? open.split(":").slice(1) : null;
       if (repair?.[0] === "computer") { app.closeSettings(); app.go("agent", "computer"); return; }
       if (repair) open = ({ search: "tools", read: "tools", vision: "tools", pdf: "tools", store: "connections", relogin: "connections" } as Record<string, SettingsPane>)[repair[0]] ?? repair[0] as SettingsPane;
@@ -1273,7 +1301,7 @@ export function createSettings(app: AppContext): SettingsPage {
       if (pane === "about") void checkUpdate();
       if (pane === "connections") void connections.load();
       if (pane === "safety") { void rules.load(); void vault.load(); }
-      if (pane === "skills") void skillLibrary.load();
+      if (pane === "skills") void skillLibrary.load(skillId);
       if (pane === "tools") void services.load();
       if (pane === "models") void loadProviders();
       // At once, whatever the tab: the allowances are current by the time they are reached.
@@ -1343,6 +1371,7 @@ export function createSettings(app: AppContext): SettingsPage {
     },
     hide() {
       visible = false;
+      clearTimeout(updateTimer);
      stopOutside();
       for (const picker of pickers.values()) picker.close();
       cliBrains.stop();

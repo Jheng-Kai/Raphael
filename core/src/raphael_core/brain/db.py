@@ -7,9 +7,13 @@ use it, so open it on the thread that runs the brain's handlers.
 import json
 import sqlite3
 import logging
+import shutil
+import tempfile
 import time
 from collections.abc import Callable
+from contextlib import closing
 from pathlib import Path
+from urllib.parse import quote
 
 from ..slime_ids import current_avatar
 from .mishearing import may_become_rule
@@ -2369,7 +2373,62 @@ PRAGMA user_version = 93;
 COMMIT;
 """
 
+_MIGRATIONS[94] = """
+BEGIN;
+ALTER TABLE member_unread RENAME TO member_unread_previous;
+CREATE TABLE member_unread (
+    member_id INTEGER NOT NULL,
+    conversation_id INTEGER NOT NULL DEFAULT 0,
+    unread_from INTEGER,
+    PRIMARY KEY (member_id, conversation_id)
+);
+INSERT INTO member_unread (member_id, conversation_id, unread_from)
+SELECT m.member_id, coalesce(t.conversation_id, 0), m.unread_from
+FROM member_unread_previous m LEFT JOIN agent_turns t ON t.id = m.unread_from AND t.member_id = m.member_id;
+DROP TABLE member_unread_previous;
+CREATE TRIGGER clear_conversation_unread AFTER DELETE ON conversations BEGIN
+    DELETE FROM member_unread WHERE conversation_id = OLD.id;
+END;
+PRAGMA user_version = 94;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
+
+
+class NewerDatabaseError(RuntimeError):
+    """The database was migrated by a newer build of Raphael."""
+
+
+def _supported_version(conn: sqlite3.Connection) -> int:
+    (version,) = conn.execute("PRAGMA user_version").fetchone()
+    if version > LATEST_VERSION:
+        raise NewerDatabaseError(f"Database schema {version} exceeds supported schema {LATEST_VERSION}")
+    return version
+
+
+def _check_existing_database(path: Path) -> None:
+    """Check without SQLite recovery or sidecar writes in the original directory."""
+    try:
+        path.stat()
+    except FileNotFoundError:
+        return
+    sidecars = [p for suffix in ("-wal", "-journal") if (p := path.with_name(path.name + suffix)).exists()]
+    if not sidecars:
+        # Keep UNC and extended Windows paths in the URI's path, where SQLite can open them.
+        uri = "file:" + quote(str(path), safe="") + "?immutable=1"
+        with closing(sqlite3.connect(uri, uri=True)) as reader:
+            _supported_version(reader)
+        return
+    # SQLite ignores a WAL in immutable mode. Let it read the committed version and recover
+    # if needed in a private snapshot. The desktop takes its single-instance lock before startup.
+    with tempfile.TemporaryDirectory(prefix="raphael-schema-") as folder:
+        snapshot = Path(folder) / path.name
+        shutil.copyfile(path, snapshot)
+        for sidecar in sidecars:
+            shutil.copyfile(sidecar, snapshot.with_name(sidecar.name))
+        with closing(sqlite3.connect(snapshot)) as reader:
+            _supported_version(reader)
 
 
 def connect(path: Path | str) -> sqlite3.Connection:
@@ -2377,9 +2436,12 @@ def connect(path: Path | str) -> sqlite3.Connection:
 
     Rows come back as sqlite3.Row. A file database runs in WAL mode.
     """
+    if path != ":memory:":
+        _check_existing_database(Path(path).absolute())
     conn = sqlite3.connect(path)
     try:
         conn.row_factory = sqlite3.Row
+        _supported_version(conn)
         conn.execute("PRAGMA journal_mode=WAL")
         migrate(conn)
     except BaseException:
@@ -2394,10 +2456,10 @@ def migrate(conn: sqlite3.Connection) -> None:
     A database that is already current is left alone, so reopening a file is safe. Each migration
     is its own transaction: one that fails leaves the database at the version before it.
     """
+    version = _supported_version(conn)
     from ..memory.terms import index_terms
     conn.create_function("raphael_search_pairs", 1, lambda text: index_terms(text or "", "", "").pairs, deterministic=True)
     conn.create_function("raphael_search_chars", 1, lambda text: index_terms(text or "", "", "").chars, deterministic=True)
-    (version,) = conn.execute("PRAGMA user_version").fetchone()
     for target in sorted(target for target in _MIGRATIONS if version < target <= LATEST_VERSION):
         step = _MIGRATIONS[target]
         began = time.perf_counter()

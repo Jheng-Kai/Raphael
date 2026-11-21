@@ -11,6 +11,7 @@ from pathlib import Path
 from ..bots.homes import atomic, redact_secrets
 from .capabilities import MAX_SKILL_BYTES, skill_metadata, skill_urls
 from .skill_library import SHARED
+from .skill_sources import validate_files
 from .skills import skill_plugin, stored_skill_name
 from .store import MemberError
 
@@ -54,6 +55,14 @@ class SkillPackages:
                    "enabled": bool(s["enabled"])} for s in self.conn.execute(
                        "SELECT * FROM member_skills WHERE package_key=? ORDER BY id", (key,))]
         name, source = row["name"], row["source"]
+        skipped_links = {}
+        plugin_manifest = False
+        for skill in skills:
+            if not key.startswith("set:"):
+                info = self.cap.package_info(SHARED, skill["id"])
+                plugin_manifest |= info.get("plugin_manifest") is True
+                if info.get("skipped_links"):
+                    skipped_links[str(skill["id"])] = info["skipped_links"]
         version = description = ""
         updatable = refetchable(row["origin"], source)
         if key.startswith("set:"):
@@ -65,9 +74,12 @@ class SkillPackages:
             kind = "single" if len(skills) == 1 else "pack"
             if kind == "single":
                 description = skills[0]["description"]
+            if plugin_manifest:
+                kind = "plugin"
         return {"key": key, "name": name, "kind": kind, "source": source, "description": description,
                 "version": version, "enabled": bool(row["enabled"]), "access": json.loads(row["access"]),
-                "updatable": updatable, "skills": skills}
+                "updatable": updatable, "skills": skills,
+                **({"skipped_links": skipped_links} if skipped_links else {})}
 
     def list(self):
         packages = [self.view(r[0]) for r in self.conn.execute("SELECT key FROM skill_packages")]
@@ -96,7 +108,11 @@ class SkillPackages:
         from .skill_names import unique_skill_name
 
         prepared = []
+        plugin_manifest = False
         for skill_source, files in documents:
+            plugin_manifest |= getattr(files, "plugin_manifest", False)
+            skipped_links = getattr(files, "skipped_links", [])
+            files = validate_files(files)
             raw = files["SKILL.md"]
             if len(raw) > MAX_SKILL_BYTES:
                 raise MemberError("size", "skill document is too large")
@@ -122,7 +138,7 @@ class SkillPackages:
                 slug = unique_skill_name(slug, {name[len(prefix):] for name in taken if name.startswith(prefix)})
                 stored = stored_skill_name(slug, plugin)
             taken.add(stored.casefold())
-            prepared.append((stored, desc, skill_source, {**files, "SKILL.md": text.encode()}))
+            prepared.append((stored, desc, skill_source, validate_files({**files, "SKILL.md": text.encode()}), skipped_links))
         if required_skill is not None and not any(
                 old[name.casefold()]["id"] == required_skill for name, *_ in prepared if name.casefold() in old):
             raise MemberError("not_found", "the refreshed package no longer has that skill")
@@ -138,7 +154,7 @@ class SkillPackages:
                 self.conn.execute("INSERT INTO skill_packages(key,name,source,origin,access) VALUES (?,?,?,?,?)",
                                   (key, name or (prepared[0][0].rsplit(":", 1)[-1] if len(prepared) == 1 else label), source, origin,
                                    json.dumps(default if access is None else access)))
-            for stored, desc, skill_source, files in prepared:
+            for stored, desc, skill_source, files, skipped_links in prepared:
                 existing = old.pop(stored.casefold(), None)
                 if existing:
                     identifier = existing["id"]
@@ -154,6 +170,10 @@ class SkillPackages:
                 for path, data in files.items():
                     atomic(self.cap.homes.safe(target / path), data)
                 metadata = {"source": source, "origin": origin, "files": [p for p in files if p != "SKILL.md"]}
+                if plugin_manifest:
+                    metadata["plugin_manifest"] = True
+                if skipped_links:
+                    metadata["skipped_links"] = skipped_links
                 atomic(target / ".raphael-source.json", json.dumps(metadata).encode())
             for row in old.values():
                 self._backup(self.cap.homes.safe(root / str(row["id"])), temp, rollback)
@@ -182,7 +202,7 @@ class SkillPackages:
     def delete(self, key):
         package = self.view(key)
         home = self.cap.homes.home(SHARED)
-        plugin = package["kind"] == "plugin"
+        plugin = key.startswith("set:")
         if plugin:
             identifier = int(key[4:])
             folders = [self.cap.plugin_root(identifier)]

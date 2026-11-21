@@ -13,7 +13,7 @@ import zlib
 from pathlib import Path, PureWindowsPath
 
 from .capabilities import MAX_SKILL_BYTES
-from .skill_library import MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES, linked
+from .skill_library import MAX_DISCOVERY_DEPTH, MAX_DISCOVERY_ENTRIES, MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES, linked, walk
 from .skill_plugins import relative_path
 from .store import MemberError
 
@@ -26,13 +26,22 @@ def oversized():
     return MemberError("size", "skill package exceeds the size or entry limit")
 
 
+class SkillFiles(dict):
+    def __init__(self):
+        super().__init__()
+        self.skipped_links = []
+        self.folder = ""
+        self.plugin_manifest = False
+
+
 class Snapshot:
     def __init__(self, byte_limit=None, entry_limit=None):
         self.byte_limit = MAX_PACKAGE_BYTES if byte_limit is None else byte_limit
         self.entry_limit = MAX_PACKAGE_FILES if entry_limit is None else entry_limit
         self.paths = {}
         self.explicit = set()
-        self.files = {}
+        self.files = SkillFiles()
+        self.links = {}
         self.size = 0
 
     def entry(self, name, directory, size):
@@ -71,17 +80,157 @@ class Snapshot:
             raise invalid()
         self.files[key] = data
 
-    def skills(self):
-        roots = [path.split("/")[:-1] for path in self.files if path.split("/")[-1] == "SKILL.md"]
-        if not roots:
-            raise MemberError("not_found", "no SKILL.md found in the package")
-        result = []
-        for root in sorted(roots):
-            if any(other != root and root[:len(other)] == other for other in roots):
+    def finish(self):
+        for key, target in self.links.items():
+            parts = key.split("/")[:-1]
+            if target and not any(char in target for char in ":\\\x00") and not target.startswith("/"):
+                for part in target.split("/"):
+                    if part == "..":
+                        if not parts:
+                            break
+                        parts.pop()
+                    elif part not in ("", "."):
+                        parts.append(part)
+                else:
+                    data = self.files.get("/".join(parts))
+                    if data is not None:
+                        if len(data) > self.byte_limit - self.size or key.endswith("SKILL.md") and len(data) > MAX_SKILL_BYTES:
+                            raise oversized()
+                        self.files[key] = data
+                        self.size += len(data)
+                        continue
+            self.files.skipped_links.append(key)
+        if "SKILL.md" not in self.files:
+            raise MemberError("not_found", "no readable SKILL.md found in the package")
+        try:
+            text = self.files["SKILL.md"].decode("utf-8-sig")
+        except UnicodeError:
+            raise MemberError("skill", "skill must be UTF-8 Markdown") from None
+        if not text.strip() or "\x00" in text:
+            raise MemberError("skill", "skill must be UTF-8 Markdown")
+        return self.files
+
+
+def skill_roots(names, wanted=None):
+    roots = set()
+    root_skill = False
+    for name in names:
+        name = name.removeprefix("./")
+        if wanted is not None:
+            if name == "SKILL.md":
+                root_skill = True
+                continue
+            if not name.endswith(f"/{wanted}/SKILL.md") and name != f"{wanted}/SKILL.md":
+                continue
+        if name == "SKILL.md" or name.endswith("/SKILL.md"):
+            try:
+                clean = relative_path(name)
+            except MemberError:
+                raise invalid() from None
+            roots.add(clean.removesuffix("SKILL.md"))
+    if not roots and root_skill:
+        return [""]
+    if not roots:
+        raise MemberError("not_found", "no SKILL.md found in the package")
+    ordered = sorted(roots)
+    if any(right.startswith(left) for left, right in zip(ordered, ordered[1:])):
+        raise invalid()
+    return ordered
+
+
+PLUGIN_MANIFEST = ".claude-plugin/plugin.json"
+
+
+def snapshot_entries(entries, read_entry, subpath, *, wanted=None, regular):
+    roots = ([relative_path(subpath) + "/" if subpath else ""] if subpath is not None
+             else skill_roots((name for name, _ in entries), wanted))
+    snapshots = {root.casefold(): Snapshot() for root in roots}
+    if len(snapshots) != len(roots):
+        raise invalid()
+    manifests = set()
+    if subpath is None and wanted is None:
+        manifests = {
+            name.removeprefix("./").removesuffix(PLUGIN_MANIFEST)
+            for name, info in entries
+            if (name == PLUGIN_MANIFEST or name.endswith("/" + PLUGIN_MANIFEST)) and regular(info)
+        }
+    allocated = count = 0
+    for name, info in entries:
+        normalized = name.removeprefix("./")
+        parts = normalized.replace("\\", "/").split("/")
+        for length in range(len(parts)):
+            root = "/".join(parts[:length]) + "/" if length else ""
+            snapshot = snapshots.get(root.casefold())
+            if snapshot is None:
+                continue
+            if normalized in (".", "./") or normalized == root:
+                break
+            if root not in roots:
                 raise invalid()
-            prefix = "/".join(root) + "/" if root else ""
-            result.append({name[len(prefix):]: data for name, data in self.files.items() if name.startswith(prefix)})
-        return result
+            # Validate the selected entry's full spelling before stripping the prefix.
+            try:
+                relative_path(name)
+            except MemberError:
+                raise invalid() from None
+            snapshot.byte_limit = snapshot.size + MAX_PACKAGE_BYTES - allocated
+            snapshot.entry_limit = len(snapshot.explicit) + MAX_PACKAGE_FILES - count
+            previous = snapshot.size
+            read_entry(snapshot, normalized[len(root):], info)
+            allocated += snapshot.size - previous
+            count += 1
+            break
+    result = []
+    for root in roots:
+        snapshot = snapshots[root.casefold()]
+        snapshot.byte_limit = snapshot.size + MAX_PACKAGE_BYTES - allocated
+        previous = snapshot.size
+        files = snapshot.finish()
+        files.folder = root
+        # Classify a whole import without reading or enabling its plugin configuration.
+        prefix = ""
+        for part in root.split("/"):
+            if prefix in manifests:
+                files.plugin_manifest = True
+                break
+            prefix += part + "/"
+        result.append(files)
+        allocated += snapshot.size - previous
+    return result
+
+
+def zip_entry(archive, snapshot, name, info):
+    directory = info.is_dir()
+    kind = stat.S_IFMT(info.external_attr >> 16)
+    if (info.compress_type not in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED)
+            or info.flag_bits & 1 or info.external_attr & 0x400):
+        raise invalid()
+    if kind == stat.S_IFLNK and not directory:
+        key = snapshot.entry(name, False, info.file_size)
+        if info.file_size > 4096:
+            raise oversized()
+        with archive.open(info) as stream:
+            snapshot.links[key] = stream.read(4097).decode("utf-8")
+        return
+    if kind not in (0, stat.S_IFDIR if directory else stat.S_IFREG):
+        raise invalid()
+    key = snapshot.entry(name, directory, info.file_size)
+    if not directory:
+        with archive.open(info) as stream:
+            snapshot.read(key, stream, info.file_size)
+
+
+def tar_entry(archive, snapshot, name, info):
+    if info.issym():
+        if len(info.linkname) > 4096:
+            raise oversized()
+        snapshot.links[snapshot.entry(name, False, info.size)] = info.linkname
+        return
+    if info.type not in (tarfile.REGTYPE, tarfile.AREGTYPE, tarfile.DIRTYPE) or info.sparse:
+        raise invalid()
+    key = snapshot.entry(name, info.isdir(), info.size)
+    if not info.isdir():
+        with archive.extractfile(info) as stream:
+            snapshot.read(key, stream, info.size)
 
 
 def checked_zip(data):
@@ -98,7 +247,7 @@ def checked_zip(data):
         if position < 0 or data[position:position + 4] != zipfile.stringCentralDir or position + 46 > stop:
             raise invalid()
         count += 1
-        if count > MAX_PACKAGE_FILES:
+        if count > MAX_DISCOVERY_ENTRIES:
             raise oversized()
         lengths = struct.unpack_from("<HHH", data, position + 28)
         position += 46 + sum(lengths)
@@ -107,7 +256,7 @@ def checked_zip(data):
     return zipfile.ZipFile(stream)
 
 
-def read_archive(name, data):
+def read_archive(name, data, *, subpath=None, repository=False, wanted=None):
     if len(data) > MAX_PACKAGE_BYTES:
         raise oversized()
     name = name.lower()
@@ -115,45 +264,41 @@ def read_archive(name, data):
         if len(data) > MAX_SKILL_BYTES:
             raise oversized()
         return [{"SKILL.md": data}]
-    snapshot = Snapshot()
     try:
         if name.endswith(".zip"):
             with checked_zip(data) as archive:
-                for info in archive.infolist():
-                    directory = info.is_dir()
-                    kind = stat.S_IFMT(info.external_attr >> 16)
-                    if info.compress_type not in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED):
+                entries = [(info.orig_filename, info) for info in archive.infolist()]
+                if repository:
+                    wrappers = {name.split("/", 1)[0] for name, _ in entries}
+                    if len(wrappers) != 1:
                         raise invalid()
-                    if kind not in (0, stat.S_IFDIR if directory else stat.S_IFREG) or info.flag_bits & 1 or info.external_attr & 0x400:
-                        raise invalid()
-                    key = snapshot.entry(info.orig_filename, directory, info.file_size)
-                    if not directory:
-                        with archive.open(info) as stream:
-                            snapshot.read(key, stream, info.file_size)
-        elif name.endswith((".tgz", ".tar.gz")):
-            # Bound headers, padding and extended metadata before tarfile interprets them.
-            limit = MAX_PACKAGE_BYTES + MAX_PACKAGE_FILES * 1536 + tarfile.RECORDSIZE
+                    entries = [(name.partition("/")[2], info) for name, info in entries if name.partition("/")[2]]
+                    if subpath is None and wanted is None and any(
+                            name == "SKILL.md" and stat.S_IFMT(info.external_attr >> 16) in (0, stat.S_IFREG)
+                            for name, info in entries):
+                        subpath = ""
+                return snapshot_entries(entries, lambda snapshot, key, info: zip_entry(archive, snapshot, key, info),
+                                        subpath, wanted=wanted, regular=lambda info: not info.is_dir() and
+                                        stat.S_IFMT(info.external_attr >> 16) in (0, stat.S_IFREG))
+        if name.endswith((".tgz", ".tar.gz")):
+            # Bound decompression even for content outside the selected folders.
+            limit = MAX_PACKAGE_BYTES + MAX_DISCOVERY_ENTRIES * 1536 + tarfile.RECORDSIZE
             with gzip.GzipFile(fileobj=io.BytesIO(data)) as compressed:
                 raw = compressed.read(limit + 1)
             if len(raw) > limit:
                 raise oversized()
             with tarfile.open(fileobj=io.BytesIO(raw), mode="r:") as archive:
-                for count, info in enumerate(archive, start=1):
-                    if count > MAX_PACKAGE_FILES:
+                entries = []
+                for info in archive:
+                    if len(entries) >= MAX_DISCOVERY_ENTRIES:
                         raise oversized()
-                    if info.type not in (tarfile.REGTYPE, tarfile.AREGTYPE, tarfile.DIRTYPE) or info.sparse:
-                        raise invalid()
-                    if info.isdir() and info.name == ".":
-                        continue
-                    key = snapshot.entry(info.name, info.isdir(), info.size)
-                    if not info.isdir():
-                        with archive.extractfile(info) as stream:
-                            snapshot.read(key, stream, info.size)
-        else:
-            raise MemberError("source", "choose a Markdown, ZIP or tar.gz file")
+                    entries.append((info.name, info))
+                return snapshot_entries(entries,
+                    lambda snapshot, key, info: tar_entry(archive, snapshot, key, info), subpath,
+                    regular=tarfile.TarInfo.isfile)
     except (zipfile.BadZipFile, tarfile.TarError, OSError, EOFError, zlib.error, NotImplementedError, UnicodeError):
         raise invalid() from None
-    return snapshot.skills()
+    raise MemberError("source", "choose a Markdown, ZIP or tar.gz file")
 
 
 def uploaded(file):
@@ -189,10 +334,38 @@ def local(source):
             return read_archive(path.name, stream.read(MAX_PACKAGE_BYTES + 1)), path.name
     if not path.is_dir():
         raise MemberError("source", "local skill source does not exist")
-    return folder_snapshot(path).skills(), path.name
+    remaining = [MAX_DISCOVERY_ENTRIES]
+    folders = []
+    try:
+        for folder, dirs, _ in walk(path, remaining):
+            if os.path.lexists(folder / "SKILL.md"):
+                folders.append(folder)
+                dirs.clear()
+            elif len(folder.relative_to(path).parts) == MAX_DISCOVERY_DEPTH and dirs:
+                raise oversized()
+        if not folders:
+            raise MemberError("not_found", "no SKILL.md found in the package")
+        result, size, count = [], 0, 0
+        for folder in sorted(folders):
+            snapshot = folder_snapshot(folder, skill_links=True, byte_limit=MAX_PACKAGE_BYTES - size,
+                                       entry_limit=MAX_PACKAGE_FILES - count)
+            files = snapshot.finish()
+            for parent in (folder, *folder.parents):
+                manifest = parent / PLUGIN_MANIFEST
+                if not linked(manifest.parent) and not linked(manifest) and manifest.is_file():
+                    files.plugin_manifest = True
+                    break
+                if parent == path:
+                    break
+            result.append(files)
+            size += snapshot.size
+            count += len(snapshot.explicit)
+        return result, path.name
+    except OSError:
+        raise invalid() from None
 
 
-def folder_snapshot(path, *, byte_limit=None, entry_limit=None, depth_limit=None):
+def folder_snapshot(path, *, byte_limit=None, entry_limit=None, depth_limit=None, installed=False, skill_links=False):
     if any(linked(p) for p in (path, *path.parents)):
         raise invalid()
     snapshot = Snapshot(byte_limit, entry_limit)
@@ -204,12 +377,24 @@ def folder_snapshot(path, *, byte_limit=None, entry_limit=None, depth_limit=None
         with os.scandir(directory_path) as entries:
             for entry in entries:
                 child = Path(entry.path)
+                if installed and directory_path == path and child.name == ".raphael-source.json":
+                    continue
                 # DirEntry.stat on Windows omits the hard-link count.
                 info = child.stat(follow_symlinks=False)
                 directory = stat.S_ISDIR(info.st_mode)
+                relative = child.relative_to(path).as_posix()
+                if skill_links and child.is_symlink():
+                    target = child.readlink()
+                    # Windows readlink returns an extended-length path for absolute file links.
+                    if len(target.drive) == 6 and target.drive.startswith("\\\\?\\") and target.drive.endswith(":"):
+                        target = Path(str(target)[4:])
+                    if target.is_absolute() and target.is_relative_to(path) and ".." not in target.parts:
+                        target = Path(os.path.relpath(target, child.parent))
+                    snapshot.links[snapshot.entry(relative, False, 0)] = target.as_posix()
+                    continue
                 if linked(child) or not (directory or stat.S_ISREG(info.st_mode) and info.st_nlink == 1):
                     raise invalid()
-                key = snapshot.entry(child.relative_to(path).as_posix(), directory, 0 if directory else info.st_size)
+                key = snapshot.entry(relative, directory, 0 if directory else info.st_size)
                 if directory:
                     if depth_limit is not None and len(child.relative_to(path).parts) > depth_limit:
                         raise oversized()
@@ -221,3 +406,11 @@ def folder_snapshot(path, *, byte_limit=None, entry_limit=None, depth_limit=None
                             raise invalid()
                         snapshot.read(key, stream, info.st_size)
     return snapshot
+
+
+def validate_files(files):
+    snapshot = Snapshot()
+    for name, data in files.items():
+        key = snapshot.entry(name, False, len(data))
+        snapshot.files[key] = data
+    return snapshot.finish()

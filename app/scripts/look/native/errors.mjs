@@ -1,7 +1,6 @@
-// Native toasts share one style, including errors. Only explicitly expected success text is exempt: a deletion, a
-// creation, a cleared history, and a model source found on this PC filling the features that had no model (R-DEFAULT-05).
+// Native journeys accept the expected notice when local models fill previously empty features (R-DEFAULT-05).
 export function toastError(text) {
-  return !/^(Deleted |已刪除|削除しました|Created |已建立「|「[^\r\n]+」を作成しました$|Cleared the history of “[^\r\n]+”$|已清除「[^\r\n]+」的紀錄$|「[^\r\n]+」の履歴を消去しました$|Connected [^\r\n]+\. Empty features now use its recommended models\.$|已連上 [^\r\n]+，空著的功能用它的推薦模型填好了$|[^\r\n]+ を接続しました。空いていた機能におすすめのモデルを設定しました。$)/u.test(text.trim());
+  return !/^(?:Connected [^\r\n]+\. Empty features now use its recommended models\.$|已連上 [^\r\n]+，空著的功能用它的推薦模型填好了$|[^\r\n]+ を接続しました。空いていた機能におすすめのモデルを設定しました。$)/u.test(text.trim());
 }
 
 export function paidRequests(log, gmail = false, declared = []) {

@@ -183,3 +183,6 @@
 .account-window-name { color: var(--text-3); }
 .account-window-used { color: var(--text-3); text-align: right; white-space: nowrap; }
 .account-window-reset { grid-column: 1 / -1; color: var(--text-3); font-size: var(--fs-xs); }
+
+.side .side-foot .sidebar-update-btn:has([data-update-waiting]) { min-height: 40px; height: auto; padding-block: var(--sp-2); }
+.side .side-foot .sidebar-update-btn [data-update-waiting] { white-space: normal; }

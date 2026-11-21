@@ -45,7 +45,7 @@ beforeEach(() => {
 });
 afterEach(() => { document.body.innerHTML = ""; });
 
-test("the link is the file's chip, which opens that file once; a file of no turn is its words alone", async () => {
+test("the link opens a file of the conversation once and shows other files as words alone", async () => {
   const agent = createAgent({ go: vi.fn(), device: () => ({ dictation_mode: "hold" }), onEvent: (_handler: (event: MainEvent) => void) => () => {}, undo: { begin: vi.fn() }, cleared: new Cleared() } as unknown as AppContext);
   document.body.append(agent.el); agent.show(); await flush();
   const message = agent.el.querySelector<HTMLElement>('.tn[data-id="7"] [data-message="2"]')!;

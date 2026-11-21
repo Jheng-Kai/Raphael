@@ -3,7 +3,7 @@
    sections, each a name over one tinted list of rows. Nothing here scrolls but the page itself. */
 
 .page-agent > .ms-pane { grid-column: 1; grid-row: 1; position: relative; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); min-width: 0; min-height: 0; background: var(--content); container: ms-pane / inline-size; }
-.page-agent:has(> .ms-pane:not([hidden])) > .mb-chat { display: none; }
+.page-agent[data-member-settings-open] > .mb-chat { display: none; }
 .ms-pane:focus { outline: 0; }
 
 /* The way back stays in sight at the page's top left, on the cover's picture and over a view's heading, under the window's
@@ -15,7 +15,7 @@
 .ms-bar > .btn { pointer-events: auto; }
 /* Once the page has scrolled, the arrow stands on a band of the page's own ground, so no row slides under it. */
 .ms-pane[data-scrolled] .ms-bar { background: var(--content); box-shadow: 0 1px 0 var(--line); }
-:root:has(.ms-pane:not([hidden]):not([data-scrolled]) .ms-cover[data-pattern="image"]) .window-controls { border-bottom-left-radius: var(--r-lg); background: color-mix(in srgb, var(--content) 72%, transparent); }
+.window-chrome[data-settings-caption] .window-controls { border-bottom-left-radius: var(--r-lg); background: color-mix(in srgb, var(--content) 72%, transparent); }
 
 .ms-scroll { min-width: 0; min-height: 0; overflow-x: hidden; overflow-y: auto; }
 

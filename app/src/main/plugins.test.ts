@@ -263,7 +263,7 @@ test("one login at a time, connecting state, notification refresh and installed 
   const github = root.querySelector('[data-conn="open-store"][data-id="github"]')!.closest(".cs-card")!;
   expect(github.querySelector(".cs-state")).not.toBeNull();
   expect(github.querySelector('[data-conn="join"], [data-conn="cancel-login"]')).toBeNull();
-  expect(vi.mocked(toaster.info)).toHaveBeenCalledTimes(1);
+  expect(toaster.info).not.toHaveBeenCalled();
 });
 
 test("failed login restores actions without echoing provider text", async () => {

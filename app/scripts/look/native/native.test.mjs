@@ -146,7 +146,7 @@ describe("native error and cost collection", () => {
     page.emit("pageerror", new Error("outerHTML"));
     const binding = page.exposeFunction.mock.calls[0][1];
     binding("unhandledrejection", "rejected"); binding("toast", "the quick conversation is permanent");
-    binding("toast", "Deleted Native conversation");
+    binding("toast", "Connected Claude Code. Empty features now use its recommended models.");
     expect(errors.map(error => error.kind)).toEqual(["console", "exception", "unhandledrejection", "toast"]);
     expect(toastError("Something unexpected happened")).toBe(true);
     expect(page.evaluateOnNewDocument).toHaveBeenCalledOnce();

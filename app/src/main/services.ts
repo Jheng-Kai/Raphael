@@ -13,7 +13,7 @@ import { t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
 import type { ServiceIconId } from "./service-icons";
 import type { BrainSettings, ServiceOption, ServicesStatus } from "./types";
-import { type IconName, actionRow, btn, esc, fieldHTML, ico, iconButton, leave, st, tg, toaster } from "./ui";
+import { type IconName, actionRow, btn, esc, fieldHTML, ico, backButton, iconButton, leave, st, tg, toaster } from "./ui";
 
 /** The capabilities, in the order of the list. */
 export const CAPABILITIES = [
@@ -309,7 +309,7 @@ function subViewHTML(entry: (typeof CAPABILITIES)[number], service: string, v: S
   const on = isOn(entry.kind, status, brain);
   const head =
     `<div class="cs-dlg-head sub">` +
-    iconButton("left", t("conn.back"), ' data-svc="back" data-k="svc-back" data-nav-back') +
+    backButton(t("conn.back"), ' data-svc="back" data-k="svc-back"') +
     `<h2 class="cs-dlg-name" id="svc-dlg-title">${esc(name)}</h2>` +
     closeButton() +
     `</div>`;
@@ -562,7 +562,6 @@ export function createServices(host: ServicesHost): ServicesPanel {
     redraw();
     try {
       await api.servicesSetKey(service, key);
-      toaster.info(t("services.keySaved"));
     } catch (err) {
       toaster.info(describeError(err));
     }
@@ -576,7 +575,6 @@ export function createServices(host: ServicesHost): ServicesPanel {
     redraw();
     try {
       await api.servicesClearKey(service);
-      toaster.info(t("services.keyRemoved", { p0: serviceName(service) }));
     } catch (err) {
       toaster.info(describeError(err));
     }
@@ -598,7 +596,6 @@ export function createServices(host: ServicesHost): ServicesPanel {
     await host.changeSetting("searxng_url", url);
     busy = null;
     await load();
-    if (url !== "") toaster.info(t("services.urlSaved"));
   }
 
   // ----- the page's events -----
