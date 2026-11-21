@@ -942,6 +942,42 @@ async def test_two_threads_per_session_and_they_end(rig, router):
     await wait_until(lambda: not our_threads())
 
 
+# --- a microphone that gives no sound is said a second in ------------------------------------------
+
+
+def sounds(notifications, session: str) -> list:
+    return [params["heard"] for method, params in notifications if method == "dictation.sound" and params["session_id"] == session]
+
+
+async def test_a_muted_microphone_is_said_a_second_in_while_the_recording_goes_on(rig, router, notifications):
+    rig.segmenter.emit_nothing = True
+    rig.recorder.chunks = [chunk(0.5, DEAD_MIC)] * 4
+    await start(router, "m1")
+    await rig.recorder.fed(4)
+    await wait_until(lambda: sounds(notifications, "m1"))
+    r = await stop(router, "m1")
+    assert sounds(notifications, "m1") == [False]
+    assert r["silent"] is True
+
+
+async def test_sound_after_a_muted_start_is_said_once_when_it_arrives(rig, router, notifications):
+    rig.recorder.chunks = [chunk(0.5, DEAD_MIC)] * 2 + [chunk(0.5)] * 3
+    await start(router, "m2")
+    await rig.recorder.fed(5)
+    await wait_until(lambda: len(sounds(notifications, "m2")) == 2)
+    await stop(router, "m2")
+    assert sounds(notifications, "m2") == [False, True]
+
+
+async def test_a_quiet_room_is_never_taken_for_a_muted_microphone(rig, router, notifications):
+    rig.segmenter.emit_nothing = True
+    rig.recorder.chunks = [chunk(0.5, 0.002)] * 4  # a real microphone's noise floor, about -57 dBFS
+    await start(router, "m3")
+    await rig.recorder.fed(4)
+    await stop(router, "m3")
+    assert sounds(notifications, "m3") == []
+
+
 # --- levels --------------------------------------------------------------------------------------
 
 

@@ -6048,6 +6048,12 @@ export function checkRendered(name, context = {}) {
     require(!visible(document.querySelector("#ask")) && !visible(document.querySelector("#overlay-stop")), "an answer to read has no buttons");
     return { check: name, text: line.textContent };
   }
+  if (name === "overlay-mic-quiet" || name === "overlay-mic-heard") {
+    const line = [...document.querySelectorAll('.sub-line')].find(visible);
+    if (name === "overlay-mic-quiet") require(line && line.textContent.includes("未收到聲音"), `the muted microphone is said beside the emblem (${line?.textContent ?? "no line"})`);
+    else require(!line || !line.textContent.trim(), `the line went once sound arrived (${line?.textContent})`);
+    return { check: name };
+  }
   if (name === "overlay-step") {
     require(document.getElementById('progress')?.textContent === "《告。正在查看今天下午的行程。》", "the latest shared turn narration is the subtitle");
     return { check: name, text: document.getElementById('progress').textContent };
@@ -8459,8 +8465,8 @@ export function checkRendered(name, context = {}) {
     require(middle.a === 1 && getComputedStyle(dialog).backgroundColor === colourOf('backgroundColor', '--dialog'), `the dialog is the middle layer, --dialog (${getComputedStyle(dialog).backgroundColor})`);
     const nav = dialog.querySelector('.modal-nav');
     if (visible(nav)) require(['rgba(0, 0, 0, 0)', 'transparent', getComputedStyle(dialog).backgroundColor].includes(getComputedStyle(nav).backgroundColor), `the nav is the dialog's own colour (${getComputedStyle(nav).backgroundColor})`);
-    // the lightest layer is a card (a settings group, an app's information box); the list of apps in 連結應用程式 has none and shows the dialog with the controls on it
-    const card = [...dialog.querySelectorAll('.slist, .cs-box')].find(visible) ?? null;
+    // the lightest layer is a card (a settings group, an app's information box, 用量's cards); the list of apps in 連結應用程式 has none and shows the dialog with the controls on it
+    const card = [...dialog.querySelectorAll('.slist, .cs-box, .spend-card, .run-subscription, .ua-card')].find(visible) ?? null;
     require(card || !visible(nav), "a settings pane shows its groups as cards");
     const control = card ? null : [...dialog.querySelectorAll('.cs-connect, .cs-chip:not([aria-pressed="true"])')].find(visible) ?? null;
     // the order of lightness, outside < dialog < card, with room enough to be seen (the card's hairline carries the rest in the light theme)
@@ -8910,12 +8916,11 @@ export function checkRendered(name, context = {}) {
     require(getComputedStyle(modal).borderTopLeftRadius === "12px", "settings uses the dialog radius rather than a pill");
     const box = close.getBoundingClientRect(), hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
     require(close === hit || close.contains(hit), "rounded corners do not clip the close control");
-    // The settings: flat tabs, no group names, no search and no line under a tab's name; seven
-    // since 記憶 left 一般 for a tab of its own.
+    // The settings: flat tabs, no group names, no search and no line under a tab's name.
     const scrim = modal.closest('.modal-scrim');
     if (!scrim.hasAttribute('data-standalone')) {
-      // Seven since 團隊技能庫 came (#280); memory is not shown anywhere.
-      require(scrim.querySelectorAll('.modal-nav [data-pane]').length === 7 && !scrim.querySelector('.nav-group, #set-search, [data-pane="memory"]'), "seven tabs sit flat, with no group names and no search");
+      // Eight since 用量 left 模型與用量 for a tab of its own (R-USE-01); memory is not shown anywhere.
+      require(scrim.querySelectorAll('.modal-nav [data-pane]').length === 8 && !scrim.querySelector('.nav-group, #set-search, [data-pane="memory"]'), "eight tabs sit flat, with no group names and no search");
       require(!scrim.querySelector('.set-purpose'), "a tab is its name alone, with no line under it");
     }
     return { check: name, radius: getComputedStyle(modal).borderTopLeftRadius };
@@ -9037,7 +9042,7 @@ export function checkRendered(name, context = {}) {
   if (name === "dictation-navigation") {
     const nav = document.querySelector('.dictation-nav [role="tablist"]'), tabs = [...nav.querySelectorAll('[role="tab"]')];
     const active = tabs.filter(tab => tab.getAttribute("aria-selected") === "true");
-    // The app's one tab component, as the panel's and 模型與用量's.
+    // The app's one tab component, as the panel's and 用量's.
     require(nav.matches(".tabs.plain") && tabs.every(tab => tab.matches(".tab")), "the tabs are the shared tabs() pills");
     require((nav.getAttribute("aria-orientation") ?? "horizontal") === "horizontal" && active.length === 1, "one selected horizontal tab");
     const panel = document.getElementById(active[0].getAttribute("aria-controls"));
@@ -9742,9 +9747,9 @@ export function checkRendered(name, context = {}) {
       en: "This is a Composio consumer key (starting with ck_). Use a project key from Composio Settings → Project Settings → API Keys.",
       ja: "これは Composio のコンシューマーキー（ck_ で始まるキー）です。Composio の「Settings → Project Settings → API Keys」にあるプロジェクトキーを使用してください。",
     } : {
-      "zh-TW": "這是 OpenRouter 的金鑰，請到「設定 → 模型與用量」輸入。",
-      en: "This is an OpenRouter key. Enter it in Settings → Models & usage.",
-      ja: "これは OpenRouter のキーです。「設定 → モデルと使用量」で入力してください。",
+      "zh-TW": "這是 OpenRouter 的金鑰，請到「設定 → 模型」輸入。",
+      en: "This is an OpenRouter key. Enter it in Settings → Models.",
+      ja: "これは OpenRouter のキーです。「設定 → モデル」で入力してください。",
     };
     require(visible(alert) && Object.values(expected).includes(alert.textContent), "the key form explains how to correct the key type");
     require(document.querySelector('#conn-key').value === "", "the key field is cleared");
@@ -9755,7 +9760,7 @@ export function checkRendered(name, context = {}) {
   }
   if (name === "usage-owner-cards") {
     // The same mix as the account menu's blocks (R-SIDE-02): one card for each provider, and a window that has reset keeps no stale number or bar.
-    const panel = document.querySelector('#models-panel-usage'), cards = [...panel.querySelectorAll('.run-allowance .run-subscription')].filter(visible);
+    const panel = document.querySelector('#usage-panel-overview'), cards = [...panel.querySelectorAll('.run-allowance .run-subscription')].filter(visible);
     const named = cards.map(card => card.querySelector('h4').textContent.trim());
     require(named.join() === 'Codex,Claude,ChatGPT,OpenRouter', `a card for each of the four providers, in order: ${named.join()}`);
     const [codex, claude, chatgpt, openrouter] = cards;
@@ -9765,21 +9770,112 @@ export function checkRendered(name, context = {}) {
     require(openrouter.dataset.allowance === 'openrouter' && /3\.21/.test(openrouter.textContent) && !/%/.test(openrouter.textContent), `OpenRouter says this month's use of the key: ${openrouter.textContent}`);
     return { check: name, cards: named };
   }
+  if (name === "usage-overview") {
+    // 用量 › 概覽 (R-USE-01): 這個月 with what it counts and its card, the gear at the card's top right, then 方案額度's cards, each
+    // window's name over when it resets and what is left, and its bar; nothing wider than the tab.
+    const panel = document.querySelector('#usage-panel-overview'), month = panel.querySelector('.usage-month');
+    require(visible(document.querySelector('[data-usage-tab="overview"][aria-selected="true"]')), "概覽 is the open tab");
+    require(month.querySelector('h2').textContent === "這個月" && visible(month.querySelector('.ua-note')), "這個月 says what it counts under its name");
+    const card = month.querySelector('.spend-card').getBoundingClientRect(), gear = month.querySelector('[data-act="usage-cap"]').getBoundingClientRect();
+    require(gear.right <= card.right - 4 && gear.right >= card.right - 24 && gear.top >= card.top + 4 && gear.top <= card.top + 16, `the gear stands at the card's top right: ${JSON.stringify([gear.left, gear.top, card.right, card.top])}`);
+    // The words themselves, not the line's box, which is as wide as the card.
+    const words = document.createRange(); words.selectNodeContents(month.querySelector('.spend-label'));
+    const label = words.getBoundingClientRect();
+    require(label.right <= gear.left + 1 || label.bottom <= gear.top, "the card's words never run under the gear");
+    const width = panel.getBoundingClientRect();
+    for (const node of panel.querySelectorAll('.spend-card, .run-subscription')) {
+      const box = node.getBoundingClientRect();
+      require(box.left >= width.left - 1 && box.right <= width.right + 1 && node.scrollWidth <= node.clientWidth + 1, `a card stays inside the tab: ${node.className}`);
+    }
+    const cards = [...panel.querySelectorAll('.run-subscription')].filter(visible);
+    require(cards.length > 0 && cards.every(item => item.querySelector('h4') && item.querySelector('.run-who')), "each subscription's card names it and its account or plan");
+    for (const meter of panel.querySelectorAll('.run-subscription .run-window')) {
+      const parts = meter.querySelectorAll('.run-window-line > *');
+      // A key with no limit (OpenRouter's) has only what this month used: nothing is left to say.
+      require(meter.querySelector('.run-window-name') && parts.length >= 1 && parts.length <= 2, "each window has its name, then when it resets and what is left on one line");
+      if (parts.length === 2) {
+        const [left, right] = [...parts].map(part => part.getBoundingClientRect());
+        require(Math.abs(left.bottom - right.bottom) < 4 && right.left >= left.right, `when it resets stands left, what is left right, on the same line: ${meter.textContent}`);
+      }
+    }
+    return { check: name, cards: cards.length };
+  }
+  if (name === "usage-cap-open" || name === "usage-cap-none" || name === "usage-cap-set") {
+    // R-USE-02: the gear's popover, a dropdown of 不設上限 / 設上限 and the amount; each change goes to the core at once.
+    const popover = document.querySelector('#app-popover.usage-cap'), gear = document.querySelector('[data-act="usage-cap"]');
+    require(visible(popover) && popover.getAttribute('role') === 'dialog' && popover.getAttribute('aria-label') === "每月上限", "the monthly limit's popover is open");
+    require(gear.getAttribute('aria-expanded') === 'true', "the gear says its popover is open");
+    const box = popover.getBoundingClientRect();
+    require(box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight, "the popover is inside the window");
+    const sets = window.__look.calls.filter(call => call.method === "settings.set" && call.params?.key === "monthly_limit_usd").map(call => call.params.value);
+    const card = document.querySelector('[data-row="raphael-spend"]'), note = card.querySelector('.spend-note').textContent, bar = card.querySelector('[role="progressbar"]');
+    const field = popover.querySelector('#limit-input'), choice = popover.querySelector('[data-k="usage-cap-mode"]').textContent;
+    if (name === "usage-cap-open") {
+      require(choice === "設上限" && field?.value === "20" && sets.length === 0, `a limit in force opens as 設上限 with its amount: ${choice} ${field?.value}`);
+      require(document.activeElement === popover.querySelector('[data-k="usage-cap-mode"]'), "the focus is on the choice");
+    } else if (name === "usage-cap-none") {
+      require(choice === "不設上限" && !field && JSON.stringify(sets) === "[null]", `不設上限 stores null at once: ${JSON.stringify(sets)}`);
+      require(note.includes("未設上限") && !bar, `the card says 未設上限 with no bar: ${note}`);
+    } else {
+      require(choice === "設上限" && field?.value === "30" && JSON.stringify(sets) === "[null,30]", `the amount is stored at once: ${JSON.stringify(sets)}`);
+      require(note.includes("上限 US$30.00，已用 4%") && bar?.getAttribute('aria-valuenow') === "4", `the card follows the new limit: ${note}`);
+    }
+    return { check: name, sets };
+  }
+  if (name === "usage-analytics" || name === "usage-analytics-month" || name === "usage-analytics-empty") {
+    // R-USE-03: 分析 from `usage.analytics`: four sections, in words, nothing wider than the tab.
+    const panel = document.querySelector('#usage-panel-analysis');
+    require(visible(panel) && visible(document.querySelector('[data-usage-tab="analysis"][aria-selected="true"]')), "分析 is the open tab");
+    const asked = window.__look.calls.filter(call => call.method === "usage.analytics").map(call => call.params.range);
+    require([...panel.querySelectorAll('[data-ua-section]')].map(section => section.dataset.uaSection).join() === "cost,people,tools,messages", "its four sections, in order");
+    require(!panel.textContent.includes("__other__") && !/\b(?:web_search|connection:|cleanup|agent)\b/.test(panel.textContent), "no raw key is on the tab");
+    if (name === "usage-analytics-empty") {
+      require(panel.querySelectorAll('.ua-line').length === 4 && !panel.querySelector('.ua-card, svg.ua-lines, table'), "a period with nothing says so once a section, with no chart frame");
+      return { check: name, asked };
+    }
+    const width = panel.getBoundingClientRect();
+    for (const node of panel.querySelectorAll('.ua-card, .ua-controls')) {
+      const box = node.getBoundingClientRect();
+      require(box.left >= width.left - 1 && box.right <= width.right + 1 && node.scrollWidth <= node.clientWidth + 1, `nothing is wider than the tab: ${node.className}`);
+    }
+    const days = panel.querySelectorAll('.ua-bars > .ua-day'), labels = [...panel.querySelectorAll('.ua-x > span')].filter(span => span.textContent);
+    require(panel.querySelectorAll('.ua-y > span').length === 3 && panel.querySelectorAll('.ua-legend').length >= 3, "the scale, and a legend under each chart");
+    const lines = panel.querySelectorAll('svg.ua-lines polyline');
+    require(lines.length === 6 && [...lines].every(line => getComputedStyle(line).stroke !== 'none'), "a line a day per tool and per model or source");
+    for (const label of labels) {
+      const box = label.getBoundingClientRect();
+      require(box.left >= width.left - 1 && box.right <= width.right + 1, `a date under the bars stays inside: ${label.textContent}`);
+    }
+    if (name === "usage-analytics") {
+      require(JSON.stringify(asked) === '["7d"]' && days.length === 7 && labels.length === 3, `a week: seven bars and three dates (${days.length}, ${labels.length})`);
+      require(panel.querySelectorAll('.ua-table tbody tr').length === 5 && visible(panel.querySelector('[data-ua-more]')), "five people, then 顯示更多");
+      const legend = [...panel.querySelectorAll('[data-ua-card="cost"] .ua-lname')].map(item => item.textContent);
+      require(legend.join() === "對話,記憶,聽寫整理,語音轉文字,畫圖,其他", `the purposes in words, __other__ as 其他: ${legend.join()}`);
+    } else {
+      require(asked.at(-1) === "30d" && days.length === 30 && labels.length === 5, `a month: thirty bars and five dates (${days.length}, ${labels.length})`);
+      // A new period lists its first five again, with 顯示更多 (the scene saw the sixth row before it chose 30 天).
+      require(panel.querySelectorAll('.ua-table tbody tr').length === 5 && visible(panel.querySelector('[data-ua-more]')), "a new period starts again at five people");
+      const sources = [...panel.querySelectorAll('[data-ua-card="messages"] .ua-lname')].map(item => item.textContent);
+      require(sources.join() === "打字,Telegram,例行工作", `the messages by source, in words: ${sources.join()}`);
+    }
+    return { check: name, asked };
+  }
   if (name === "usage-plain") {
-    // Plain usage summary: what each subscription has left, then what was spent. An OpenRouter key is its provider card's.
-    const panel = document.querySelector('#models-panel-usage');
-    require(visible(panel), "the usage tab is open");
-    require(!panel.querySelector('svg.ua-chart, .ua-chart, .run-tiles, .run-tile, .run-bill, .run-groups, table, [data-range], [data-run-act="export"], [data-run-act="period"], .foot'), "no periods, charts, breakdowns, tiles, exports or footnotes");
+    // 用量 › 概覽: what was spent this month, then what each subscription has left. An OpenRouter key is its provider card's.
+    // Its charts are 分析's (R-USE-03), never here.
+    const panel = document.querySelector('#usage-panel-overview');
+    require(visible(panel), "the usage tab is open at 概覽");
+    require(!panel.querySelector('svg.ua-lines, .ua-card, .ua-plot, .run-tiles, .run-tile, .run-bill, .run-groups, table, [data-ua-range], [data-run-act="export"], [data-run-act="period"], .foot'), "no periods, charts, breakdowns, tiles, exports or footnotes on 概覽");
     const rows = ["raphael-spend"].map(row => panel.querySelector(`[data-row="${row}"]`));
     require(rows.every(visible) && !panel.querySelector('[data-row="openrouter-usage"], [data-row="openrouter-key"], #key-input'), "this month's spending of the app shows; no OpenRouter key row asks for or shows a key here");
-    const spend = rows[0], bar = spend.querySelector('.spend-bar i'), limit = window.__look.data.status.spend.limit_usd;
+    const spend = rows[0], bar = spend.querySelector('.spend-bar i'), limit = window.__look.data.settings.monthly_limit_usd ?? window.__look.data.status.spend.limit_usd;
     if (limit > 0) {
       require(visible(spend.querySelector('.spend-bar')) && bar, "the spending has a bar against the monthly limit");
       const [r, g, b] = getComputedStyle(bar).backgroundColor.match(/[\d.]+/g).map(Number);
       require(Math.max(r, g, b) - Math.min(r, g, b) > 60, `the bar is a member's colour, not black or white: rgb(${r}, ${g}, ${b})`);
     }
     // No refresh anywhere: opening Settings reads the allowances (`usage-open-*`), so nothing stands beside the tab's name.
-    const heading = document.querySelector('.set-content > #set-title'), page = heading?.parentElement, first = page?.querySelector('.models-page');
+    const heading = document.querySelector('.set-content > #set-title'), page = heading?.parentElement, first = page?.querySelector('.usage-page');
     require(heading && first, "the tab's name stands alone above its views");
     const beside = [...page.children].slice(0, [...page.children].indexOf(first)).filter(child => child !== heading);
     require(!document.querySelector('[data-act="models-refresh"], .models-refresh, .set-head') && beside.every(child => !child.matches('button') && !child.querySelector('button')), "no refresh button or icon beside the tab's name");
@@ -9788,7 +9884,7 @@ export function checkRendered(name, context = {}) {
     const cards = [...panel.querySelectorAll('.run-subscription')].filter(visible), allowance = panel.querySelector('.run-allowance');
     const subscriptions = window.__look.data.allowances.brains.length;
     if (subscriptions) {
-      require(cards.length >= subscriptions && spend.compareDocumentPosition(allowance) & Node.DOCUMENT_POSITION_FOLLOWING && allowance.compareDocumentPosition(rows[1]) & Node.DOCUMENT_POSITION_FOLLOWING, "spending leads, each subscription has a card below it, then the key");
+      require(cards.length >= subscriptions && spend.compareDocumentPosition(allowance) & Node.DOCUMENT_POSITION_FOLLOWING, "this month's spending leads, and each subscription has a card below it");
       for (const track of panel.querySelectorAll('.run-allowance .run-bar-track')) {
         const fill = track.querySelector('i'), box = track.getBoundingClientRect();
         require(box.width > 0 && box.height === 7 && fill.getBoundingClientRect().height === 7, "allowance bars keep their visible height");
@@ -9824,7 +9920,7 @@ export function checkRendered(name, context = {}) {
       })();
     }
     if (stage === "general") {
-      require(visible(document.querySelector('.modal-scrim [data-pane="general"][aria-current="page"]')) && !document.querySelector('[data-models-tab]'), "Settings is open on 一般, not on the allowances' tab");
+      require(visible(document.querySelector('.modal-scrim [data-pane="general"][aria-current="page"]')) && !document.querySelector('[data-usage-tab]'), "Settings is open on 一般, not on the allowances' tab");
       require(window.__look.calls.some(call => call.from), "the scene traces where each call comes from");
       require(!document.querySelector('[data-act="models-refresh"]'), "no refresh button exists");
       // Settings asks at its opening, before its first tab is drawn; the account menu it was opened from asked on its own (api.ts ASKED_AGAIN: no earlier answer stands in for it).

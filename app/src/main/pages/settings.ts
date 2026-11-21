@@ -1,8 +1,7 @@
-// Settings: panes in four groups: basics, team, integrations and account. Search jumps to a row
-// of any tab. Models & usage has two views, with legacy links selecting the matching view.
+// Settings: flat panes on the left. 用量 has two views, 概覽 and 分析; a link to 用量 opens it at 概覽.
 // This file holds what the panel knows and what it does; settings-view.ts draws each tab
 // from a snapshot of it. A change takes effect at once; there is no save button. The settings of
-// the brain (limit, models, languages, speech-to-text, how Raphael answers) go to the core with
+// the brain (the monthly limit, models, languages, speech-to-text, how Raphael answers) go to the core with
 // `settings.set`; the settings of this computer (hotkeys, microphone, emblem, theme, autostart) go
 // to the Rust side with `device_settings_set`. What is always wanted (pausing the music while
 // Raphael listens) has no switch: it is simply on. Learning from corrections asks the cleanup
@@ -11,7 +10,7 @@
 import { bindLayerCancels, bindNavLayer } from "../nav-layers";
 import { openTimezoneMenu } from "../timezones";
 import { knownCatalog, rememberCatalog } from "../brain-lists";
-import { isUiLocale, onLocaleChange, t } from "../i18n";
+import { getLocale, isUiLocale, onLocaleChange, t } from "../i18n";
 import { createOwnerControls } from "../owner-settings";
 
 import { getVersion } from "@tauri-apps/api/app";
@@ -29,7 +28,7 @@ import { createConnections } from "../connections";
 import { askInChat } from "../chat-ask";
 import { RAPHAEL_ID } from "../members";
 import { DICTATION_MODES, isDictationMode } from "../dictation";
-import { describeError, parseLimit } from "../format";
+import { describeError } from "../format";
 import {
   type LanguageGroup,
   chooseLanguageVariant,
@@ -45,6 +44,8 @@ import { createServices } from "../services";
 import { createCliBrains } from "../cli-brains";
 import { createProviders } from "../providers";
 import { mountUsageAnalytics, type UsageAnalyticsMount } from "../usage-analytics";
+import { createUsageAnalysis } from "../usage-analysis";
+import { createUsageCap } from "../usage-cap";
 import { MonitorSwitch } from "../monitor";
 import type { AppContext, AudioDevices, BrainSettings, DeviceSettings, LocalModel, MainEvent, ModelCatalog, ModelRole, Page, PageArgument, SettingsPane, Status } from "../types";
 import {
@@ -82,7 +83,8 @@ import {
   STANDALONE_PANE,
   SIZES,
   type SettingsView,
-  type ModelsTab,
+  type UsageTab,
+  limitOf,
   UI_LANGUAGES,
   languagesOf,
   loadingHTML,
@@ -181,7 +183,7 @@ export function createSettings(app: AppContext): SettingsPage {
   const body = el.querySelector<HTMLElement>(".modal-body")!;
   const navList = el.querySelector<HTMLElement>(".set-list")!;
   let pane: SettingsPane = "general";
-  let modelsTab: ModelsTab = "models";
+  let usageTab: UsageTab = "overview";
   const usageHost = document.createElement("div");
   usageHost.dataset.usageHost = "";
   let usage: UsageAnalyticsMount | null = null;
@@ -219,10 +221,6 @@ export function createSettings(app: AppContext): SettingsPage {
   let microphone: import("../types").MicrophonePermission | null = null;
   let accessibility: boolean | null = null;
   let version = "";
-  /** What was typed in the limit field while it is not a limit, and what is wrong with it. */
-  let limitDraft: string | null = null;
-  let limitError: (() => string) | null = null;
-  /** The same for the weather city. */
   /** A shortcut being recorded (「變更」): the row is drawn again when it is over. */
   const recording = createHotkeyRecording(app, () => {
     if (visible) render();
@@ -251,7 +249,14 @@ export function createSettings(app: AppContext): SettingsPage {
   const skillLibrary = createSkillLibrary(el, () => { if (visible && pane === "skills") render(); });
   const services = createServices({ root: el, visible: () => visible && pane === "tools", redraw: () => render(), brain: () => brain, changeSetting: (key, value) => changeBrain(key, value) });
   const cliBrains = createCliBrains({ visible: () => visible, redraw: () => render() });
-  const providers = createProviders({ root: el, visible: () => visible && pane === "models" && modelsTab === "models", redraw: () => render() });
+  const providers = createProviders({ root: el, visible: () => visible && pane === "models", redraw: () => render() });
+  /** 用量 › 分析: its period, its groupings and what the core read for each period (usage-analysis.ts). */
+  const analysis = createUsageAnalysis({
+    api: { usageAnalytics: (range) => api.usageAnalytics(range), membersList: () => api.membersList(getLocale()) },
+    redraw: () => { if (visible && pane === "usage" && usageTab === "analysis") render(); },
+  });
+  /** The monthly limit's popover, from the gear of 這個月's card: a change is stored at once (usage-cap.ts). */
+  const cap = createUsageCap({ limit: () => limitOf(view()), save: (limit) => changeBrain("monthly_limit_usd", limit) });
   app.onEvent((event) => {
     providers.followEvent(event);
     // Closed too: Settings open at once on what they hold, and a choice made at the composer must already be in it.
@@ -269,8 +274,8 @@ export function createSettings(app: AppContext): SettingsPage {
   /** What the tabs are drawn from, as the panel knows it now. */
   const view = (): SettingsView => ({
     update,
-    pane, modelsTab, device: app.device(), brain, hasKey, openrouter, spend, catalog: typeof catalog === "object" ? catalog : knownCatalog() ?? catalog, devices, altgr, microphone, accessibility, version,
-    limitDraft, limitError, languageGroups, now: Date.now(),
+    pane, usageTab, analysis: analysis.view(), device: app.device(), brain, hasKey, openrouter, spend, catalog: typeof catalog === "object" ? catalog : knownCatalog() ?? catalog, devices, altgr, microphone, accessibility, version,
+    languageGroups, now: Date.now(),
     connections: connections.view(), rules: rules.view(), vault: vault.view(), skillLibrary: skillLibrary.view(), services: services.view(), providers: providers.view(), cliBrains: cliBrains.view(), localModels, localDownload,
   });
 
@@ -348,7 +353,7 @@ export function createSettings(app: AppContext): SettingsPage {
           },
         };
       default:
-        return rules.menuFor(k) ?? connections.menuFor(k);
+        return rules.menuFor(k) ?? connections.menuFor(k) ?? analysis.menuFor(k);
     }
   }
 
@@ -366,7 +371,7 @@ export function createSettings(app: AppContext): SettingsPage {
     return anchor?.dataset.k;
   }
 
-  // 模型與用量 is kept between openings: its providers, the models' catalogue, this computer's speech models and the
+  // 模型 and 用量 are kept between openings: the providers, the models' catalogue, this computer's speech models and the
   // usage. A change the core tells of (a provider added) reads again at once, and each opening of Settings reads it all
   // again (`refreshInBackground`).
   let providersRead = false;
@@ -381,7 +386,7 @@ export function createSettings(app: AppContext): SettingsPage {
   const REFRESH_REUSE_MS = 30_000;
   let backgroundRead: Promise<void> | null = null, backgroundReadAt = -Infinity;
   /**
-   * Every opening of Settings, on whatever tab, reads 模型與用量 again at once and unseen, so that the allowances are
+   * Every opening of Settings, on whatever tab, reads 模型 and 用量 again at once and unseen, so that the allowances are
    * current when they are reached: what was last known stays on the page, and a new value replaces it in place (the
    * pieces draw only what changed). No spinner, no toast; a reading that fails leaves what is shown. An opening while
    * one is under way joins it. The allowances are asked at every opening, however soon after the last (a reset must show at the next opening); only the catalogue and the speech models
@@ -403,13 +408,13 @@ export function createSettings(app: AppContext): SettingsPage {
 
   /** Coalesce activity bursts and wait for the first reading before refreshing it. */
   function refreshUsage(): void {
-    if (!usage || !visible || pane !== "models" || modelsTab !== "usage") return;
+    if (!usage || !visible || pane !== "usage" || usageTab !== "overview") return;
     usageAgain = true;
     if (usageRefresh) return;
     const current = usage;
     usageRefresh = (async () => {
       await current.ready;
-      while (usage === current && usageAgain && visible && pane === "models" && modelsTab === "usage") {
+      while (usage === current && usageAgain && visible && pane === "usage" && usageTab === "overview") {
         usageAgain = false;
         // A background reading that fails keeps what is shown; only the page's refresh says it failed.
         await current.refresh().catch(() => {});
@@ -424,7 +429,8 @@ export function createSettings(app: AppContext): SettingsPage {
     const focusedId = active?.id;
     const ownerFocus = active?.dataset?.owner;
     const ownerDrafts = Array.from(el.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('[data-owner]:not(:disabled)')).filter(input => input === active).map(input => [input.dataset.owner!, input.value] as const);
-    const activeLimit = focusedId === "limit-input" ? el.querySelector<HTMLInputElement>("#limit-input")?.value : undefined;
+    // The monthly limit's popover stays open over a redraw, on the gear drawn again (usage-cap.ts).
+    const capOpen = cap.open();
     // What is being typed in 服務's fields stays through a drawing (a status that came in, say): it
     // is carried from the old field to the new one here, and kept nowhere else.
     const serviceDrafts = Array.from(el.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('.svc-line input, .pv-field input:not([type="file"]), .pv-field textarea')).map((input) => [input.id, input.value] as const);
@@ -451,8 +457,6 @@ export function createSettings(app: AppContext): SettingsPage {
       if (input && !input.disabled) input.value = value;
     }
     if (ownerFocus) el.querySelector<HTMLElement>(`[data-owner="${ownerFocus}"]`)?.focus({ preventScroll: true });
-    const limitInput = el.querySelector<HTMLInputElement>("#limit-input");
-    if (limitInput && activeLimit !== undefined) limitInput.value = activeLimit;
     for (const [id, value] of serviceDrafts) {
       const input = id ? el.querySelector<HTMLInputElement>(`#${CSS.escape(id)}`) : null;
       if (input && !input.disabled) input.value = value;
@@ -472,6 +476,7 @@ export function createSettings(app: AppContext): SettingsPage {
       if (anchor && openK === "languages") openLanguages(anchor);
       else if (anchor && menu) showMenu(anchor, menu);
     }
+    if (capOpen) cap.follow(body.querySelector<HTMLElement>('[data-act="usage-cap"]'));
     // The row of category chips never wraps: those that do not fit are in 更多, so it is fitted to the width the dialog has.
     if (pane === "connections") connections.painted();
   }
@@ -495,16 +500,15 @@ export function createSettings(app: AppContext): SettingsPage {
   /** 連接其他來源 in a model's choice: the ways to connect a source that can do that feature, subscriptions first
    *  (providers.ts directory). The answer and quick questions take every way. */
   function connectSource(role = ""): void {
-    openPane("models", "models");
+    openPane("models");
     void loadProviders().then(() => { if (visible) providers.openRepair(role ? `connect:${role}` : "connect"); });
   }
 
-  function openPane(next: SettingsPane, tab?: ModelsTab): void {
+  function openPane(next: SettingsPane, tab?: UsageTab): void {
     closeMenu();
-    // 模型與用量 opens at 模型 unless the way in names 用量: it never stays on what was looked at last.
-    if (next === "usage") modelsTab = "usage";
-    else if (tab) modelsTab = tab;
-    else if (canonicalPane(next) === "models" && canonicalPane(next) !== pane) modelsTab = "models";
+    // 用量 opens at 概覽 unless the way in names its view: it never stays on what was looked at last.
+    if (tab) usageTab = tab;
+    else if (canonicalPane(next) === "usage" && canonicalPane(next) !== pane) usageTab = "overview";
     pane = canonicalPane(next);
     if (pane === "about") void checkUpdate();
     if (pane === "connections") void connections.load();
@@ -516,7 +520,8 @@ export function createSettings(app: AppContext): SettingsPage {
     services.reset();
     providers.reset();
     if (pane === "tools") void services.load();
-    if (pane === "models" && modelsTab === "models") void loadProviders();
+    if (pane === "models") void loadProviders();
+    if (pane === "usage" && usageTab === "analysis") void analysis.load();
     syncMonitor();
     body.scrollTop = 0;
     render();
@@ -525,15 +530,15 @@ export function createSettings(app: AppContext): SettingsPage {
     replay(body, "pane-in");
   }
 
-  function switchModelsTab(next: ModelsTab): void {
-    if (next === modelsTab) return;
+  /** Goes to 用量's other view; 分析 reads its period again, showing what it last read until the answer comes. */
+  function switchUsageTab(next: UsageTab): void {
+    if (next === usageTab) return;
     closeMenu();
-    modelsTab = next;
-    if (next === "usage") providers.reset();
+    usageTab = next;
     render();
     body.scrollTop = 0;
-    body.querySelector<HTMLElement>(`[data-models-tab="${next}"]`)?.focus({ preventScroll: true });
-    if (next === "models") void loadProviders();
+    body.querySelector<HTMLElement>(`[data-usage-tab="${next}"]`)?.focus({ preventScroll: true });
+    if (next === "analysis") void analysis.load();
   }
 
   onLocaleChange(() => {
@@ -647,7 +652,7 @@ export function createSettings(app: AppContext): SettingsPage {
 
   // ---------- changes ----------
 
-  async function changeBrain(key: keyof BrainSettings, value: string | number | boolean | string[]): Promise<void> {
+  async function changeBrain(key: keyof BrainSettings, value: string | number | boolean | string[] | null): Promise<void> {
     try {
       brain = (await api.settingsSet(key, value)).settings;
       if (spend) spend = { ...spend, limit_usd: brain.monthly_limit_usd };
@@ -903,23 +908,6 @@ export function createSettings(app: AppContext): SettingsPage {
     render();
   }
 
-  function commitLimit(input: HTMLInputElement): void {
-    const limit = parseLimit(input.value);
-    if (limit === null) {
-      limitDraft = input.value;
-      limitError = () => t("common.limitInvalid");
-      render();
-      return;
-    }
-    limitDraft = null;
-    limitError = null;
-    if (limit === brain?.monthly_limit_usd) {
-      render();
-      return;
-    }
-    void changeBrain("monthly_limit_usd", limit);
-  }
-
   // ---------- the microphone and its level ----------
 
   // After a core restart the app switches the new core's monitoring back on by itself.
@@ -1014,13 +1002,14 @@ export function createSettings(app: AppContext): SettingsPage {
       void changeDevice({ auto_update: !app.device().auto_update }).then(() => { if (app.device().auto_update) void checkUpdate(); });
       return;
     }
-    const modelTab = target.closest<HTMLElement>("[data-models-tab]");
-    if (modelTab) { switchModelsTab(modelTab.dataset.modelsTab as ModelsTab); return; }
+    const usageView = target.closest<HTMLElement>("[data-usage-tab]");
+    if (usageView) { switchUsageTab(usageView.dataset.usageTab === "analysis" ? "analysis" : "overview"); return; }
     const paneButton = target.closest<HTMLElement>("[data-pane]");
     if (paneButton) {
       openPane(paneButton.dataset.pane as SettingsPane);
       return;
     }
+    if (pane === "usage" && analysis.click(target)) return;
 
     if (target.closest("[data-cli], [data-cli-menu], [data-chatgpt], [data-chatgpt-menu]")) { void cliBrains.click(target); return; }
     if (providers.click(target)) return;
@@ -1056,6 +1045,11 @@ export function createSettings(app: AppContext): SettingsPage {
 
     const act = target.closest<HTMLElement>("[data-act]")?.dataset.act;
     switch (act) {
+      case "usage-cap": {
+        const gear = target.closest<HTMLButtonElement>('[data-act="usage-cap"]');
+        if (gear && !gear.disabled) cap.toggle(gear);
+        break;
+      }
       case "output-pick": void api.pickOutputFolder().then(path => { if (path !== null) return changeBrain("owner_output_folder", path); }).catch(error => toaster.info(describeError(error))); break;
       case "update-check": void checkUpdate(); break;
       case "update-install": void checkUpdate("install"); break;
@@ -1101,22 +1095,19 @@ export function createSettings(app: AppContext): SettingsPage {
   el.addEventListener("change", (e) => {
     void ownerControls.change(e.target as Element);
     void providers.change(e.target as Element);
-    const input = e.target as HTMLInputElement;
-    if (input.id === "limit-input") commitLimit(input);
   });
   // A long list of apps draws its next rows as it is scrolled (scroll does not bubble: the capture phase sees it).
   el.addEventListener("scroll", (e) => { if (pane === "connections" && e.target instanceof Element) connections.scrolled(e.target); }, true);
   el.addEventListener("input", (e) => {
     const input = e.target as HTMLInputElement;
     providers.input(input);
-    if (connections.input(input) || rules.input(input)) return;
-    if (input.id === "limit-input") limitDraft = input.value;
+    void (connections.input(input) || rules.input(input));
   });
   el.addEventListener("keydown", (e) => {
-    const tab = (e.target as Element).closest<HTMLElement>("[data-models-tab]");
+    const tab = (e.target as Element).closest<HTMLElement>("[data-usage-tab]");
     if (tab && ["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) {
       e.preventDefault();
-      switchModelsTab(e.key === "Home" ? "models" : e.key === "End" ? "usage" : modelsTab === "models" ? "usage" : "models");
+      switchUsageTab(e.key === "Home" ? "overview" : e.key === "End" ? "analysis" : usageTab === "overview" ? "analysis" : "overview");
       return;
     }
     void (connections.key(e) || rules.key(e) || services.key(e) || providers.key(e));
@@ -1219,19 +1210,17 @@ export function createSettings(app: AppContext): SettingsPage {
     el,
     pane: () => pane,
     navView() {
-      if (pane === "models") return [modelsTab, providers.navView()].filter(Boolean).join("/");
+      if (pane === "models") return providers.navView();
+      if (pane === "usage") return usageTab;
       if (pane === "tools") return services.navView();
       if (pane === "connections") return connections.navView();
       return "";
     },
     showNavView(next, key) {
       if (canonicalPane(next) !== pane) openPane(next);
-      if (pane === "models") {
-        const at = key.indexOf("/");
-        const tab = at < 0 ? key : key.slice(0, at);
-        switchModelsTab(tab === "usage" ? "usage" : "models");
-        providers.showNavView(at < 0 ? "" : key.slice(at + 1));
-      } else if (pane === "tools") services.showNavView(key);
+      if (pane === "models") providers.showNavView(key);
+      else if (pane === "usage") switchUsageTab(key === "analysis" ? "analysis" : "overview");
+      else if (pane === "tools") services.showNavView(key);
       else if (pane === "connections") connections.showNavView(key);
     },
     async preload() {
@@ -1264,12 +1253,10 @@ export function createSettings(app: AppContext): SettingsPage {
       document.addEventListener("keydown", settingsKey);
       const mine = ++loads;
       loading = !readOnce;
-      limitDraft = null;
-      limitError = null;
       // the first tab, unless the way in knows better (the report that says there is no key goes to the key)
       pane = open && PANES.some((p) => p.id === canonicalPane(open as SettingsPane)) ? canonicalPane(open as SettingsPane) : "general";
-      // Every opening starts afresh: 模型與用量 at 模型, 用量 only when the way in asks for it.
-      modelsTab = open === "usage" ? "usage" : "models";
+      // Every opening starts afresh: 用量 at 概覽.
+      usageTab = "overview";
       connections.reset();
       rules.reset();
       vault.reset();
@@ -1281,7 +1268,7 @@ export function createSettings(app: AppContext): SettingsPage {
       if (pane === "safety") { void rules.load(); void vault.load(); }
       if (pane === "skills") void skillLibrary.load();
       if (pane === "tools") void services.load();
-      if (pane === "models" && modelsTab === "models") void loadProviders();
+      if (pane === "models") void loadProviders();
       // At once, whatever the tab: the allowances are current by the time they are reached.
       void refreshInBackground();
       body.scrollTop = 0;
@@ -1345,7 +1332,7 @@ export function createSettings(app: AppContext): SettingsPage {
       };
       syncMonitor();
       // On the allowances' own tab the opening waits for their first reading; elsewhere it never waits for them.
-      if (pane === "models" && modelsTab === "usage") await usage?.ready;
+      if (pane === "usage" && usageTab === "overview") await usage?.ready;
     },
     hide() {
       visible = false;

@@ -1,9 +1,6 @@
-/* Models shares the service list's surfaces, focus states and type scale. */
+/* Models shares the service list's surfaces, focus states and type scale: its sections one under the other, no views inside. */
 .models-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-6); margin-top: var(--sp-5); }
-/* The two views are the shared small tab pills, as the member panel's. */
-.models-page > .tabs.plain { justify-self: start; }
-.models-content:not([hidden]) { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-6); }
-.models-content > .sgroup { margin: 0; }
+.models-page > .sgroup { margin: 0; }
 .pv, .cli-accounts { container: models / inline-size; }
 .pv-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4); }
 .cli-card.pv-card { grid-template-columns: 24px minmax(0, 1fr) auto; gap: var(--sp-3); padding: var(--sp-4); }

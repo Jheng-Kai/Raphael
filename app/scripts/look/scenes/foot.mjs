@@ -42,7 +42,7 @@ export default [
   scene("foot-usage-none", "With no subscription window known 用量 has no number and no chevron, and opens the settings' usage itself",
     [accountMenu(), wait("#app-popover.account-menu"), check("foot-account-menu"), check("foot-usage-none")], { usageEmpty: true }),
   scene("foot-usage-manage", "管理用量 opens Settings at its usage section",
-    [...menuWithNumber, click('#app-popover [data-account="usage"]'), wait("#app-submenu"), click('#app-submenu [data-account="manage"]'), wait('.modal-scrim [data-models-tab="usage"][aria-selected="true"]'), waitGone("#app-popover")], tight),
+    [...menuWithNumber, click('#app-popover [data-account="usage"]'), wait("#app-submenu"), click('#app-submenu [data-account="manage"]'), wait('.modal-scrim [data-pane="usage"][aria-current="page"]'), wait('.modal-scrim [data-usage-tab="overview"][aria-selected="true"]'), waitGone("#app-popover")], tight),
   scene("foot-account-keys", "The face opens the menu from the keyboard, the arrows move through its rows, Escape closes it and returns the focus to the face",
     [focus("#nav .sidebar-account"), key("Enter"), wait("#app-popover.account-menu"), check("foot-account-focus-0"), key("ArrowDown"), check("foot-account-focus-1"), key("ArrowDown"), key("ArrowDown"), check("foot-account-focus-3"),
       key("ArrowDown"), check("foot-account-focus-0"), key("Escape"), waitGone("#app-popover"), check("foot-account-keys")], tight),

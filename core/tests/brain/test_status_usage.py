@@ -182,7 +182,7 @@ async def test_status_usage_refreshes_expired_cache_without_blocking_dictation(u
     # Account usage and key limits never change the app's own spend tracking or budget.
     spend = (await router.call("status.get", {}))["spend"]
     assert spend["month_usd"] == pytest.approx(0.0004)
-    assert spend["limit_usd"] == 10.0
+    assert spend["limit_usd"] is None
     endpoint.gate.set()
     fresh = await wait_status(router, lambda r: r["usage"]["monthly"] == 4.5)
     assert fresh["usage"]["total"] == 12.34

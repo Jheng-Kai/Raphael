@@ -2,6 +2,14 @@
 
 Dictation, the microphone, paste, text tidy and voice keys. Part of [the product rules](../RULES.md); a rule's ID is unique across every file.
 
+## A muted microphone is said a second in, not at the release
+
+With a headset's mute switch on, the owner talked for a long time and only learned at the release of the key that nothing was heard.
+
+| ID | Date | Rule | Check | Severity | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-DICT-MUTE-01 | | When a recording's first second stays at digital silence (below `MUTED_PEAK`, far under a real microphone's noise floor), the core says `dictation.sound` with `heard` false while the recording goes on, and the emblem shows 《告。未收到聲音。麥克風可能已靜音。》 beside it at once; the first sound after it says `heard` true and the line goes. A quiet room is never taken for a muted microphone. | pytest | hard | core/tests/device/test_dictation.py::test_a_muted_microphone_is_said_a_second_in_while_the_recording_goes_on; core/tests/device/test_dictation.py::test_sound_after_a_muted_start_is_said_once_when_it_arrives; core/tests/device/test_dictation.py::test_a_quiet_room_is_never_taken_for_a_muted_microphone |
+
 ## Automatic microphone picks the headset and stays on it
 
 | ID | Date | Rule | Check | Severity | Evidence |

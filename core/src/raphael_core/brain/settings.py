@@ -54,7 +54,9 @@ DEFAULTS: dict[str, Any] = {
     "routine_owner_seen_ms": 0,
     "routine_run_window": [],
     "owner_photo": "",
-    "monthly_limit_usd": 10.0,
+    # What the app may spend in a month on paid calls, or None for no limit: a new install has none until the owner sets
+    # one in Settings › 用量. A limit saved before stays.
+    "monthly_limit_usd": None,
     "memory_threshold_tokens_cap": 24000,
     "memory_max_unused_days": 90,
     "cleanup_model": "",
@@ -181,7 +183,7 @@ def _checked(key: str, value: Any) -> Any:
     A whole number is accepted for a float setting and saved as a float. Types are compared
     exactly, so True is not a number here.
     """
-    expected = type(DEFAULTS[key])
+    expected = float if key in _OPTIONAL_AMOUNTS else type(DEFAULTS[key])
     if type(value) is expected:
         return value
     if expected is float and type(value) is int:
@@ -191,6 +193,9 @@ def _checked(key: str, value: Any) -> Any:
 
 # The settings that may also be None: the local model, when there is none to fall back on.
 _NULLABLE = ("stt_local_model",)
+# The amounts in US dollars that are None for none at all: the monthly limit, which nobody has until the owner sets it
+# (Settings › 用量, 不設上限 or 設上限).
+_OPTIONAL_AMOUNTS = ("monthly_limit_usd",)
 
 
 def _allowed(key: str, value: Any) -> Any:
@@ -314,9 +319,11 @@ def checked(key: str, value: Any) -> tuple[str, Any]:
         return key, None if tools is None else list(tools)
     if key == "languages":
         return key, checked_languages(key, value)
-    if value is None and key in _NULLABLE:
+    if value is None and key in (*_NULLABLE, *_OPTIONAL_AMOUNTS):
         return key, None
     value = _allowed(key, _checked(key, value))
+    if key in _OPTIONAL_AMOUNTS and value < 0:
+        raise ValueError(f"Setting {key!r} cannot be negative; null is no limit")
     if key in ("memory_threshold_tokens_cap", "memory_max_unused_days") and value < 0:
         raise ValueError("Memory limits cannot be negative; zero disables the limit")
     if key in ("routine_timezone", "routine_detected_timezone") and value:

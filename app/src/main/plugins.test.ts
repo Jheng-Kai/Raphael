@@ -298,9 +298,9 @@ test("only trusted remote logos are rendered and they never send a referrer", ()
 
 test.each(["zh-TW", "en", "ja"] as const)("key failure copy is specific and private in %s", async locale => {
   const messages = {
-    "zh-TW": ["這是 OpenRouter 的金鑰，請到「設定 → 模型與用量」輸入。", "Composio 不接受這把金鑰。請使用 Composio「Settings → Project Settings → API Keys」中的專案金鑰。", "連不上 Composio，請稍後再試。", "無法儲存金鑰，請檢查金鑰後重試。", "這是 Composio 的消費者金鑰（ck_ 開頭）。請改用專案金鑰：Composio「Settings → Project Settings → API Keys」。"],
-    en: ["This is an OpenRouter key. Enter it in Settings → Models & usage.", "Composio did not accept this key. Use a project key from Composio Settings → Project Settings → API Keys.", "Could not reach Composio. Try again later.", "Could not save the key. Check it and retry.", "This is a Composio consumer key (starting with ck_). Use a project key from Composio Settings → Project Settings → API Keys."],
-    ja: ["これは OpenRouter のキーです。「設定 → モデルと使用量」で入力してください。", "Composio がこのキーを受け付けませんでした。Composio の「Settings → Project Settings → API Keys」にあるプロジェクトキーを使用してください。", "Composio に接続できません。しばらくしてから再試行してください。", "キーを保存できません。確認して再試行してください。", "これは Composio のコンシューマーキー（ck_ で始まるキー）です。Composio の「Settings → Project Settings → API Keys」にあるプロジェクトキーを使用してください。"],
+    "zh-TW": ["這是 OpenRouter 的金鑰，請到「設定 → 模型」輸入。", "Composio 不接受這把金鑰。請使用 Composio「Settings → Project Settings → API Keys」中的專案金鑰。", "連不上 Composio，請稍後再試。", "無法儲存金鑰，請檢查金鑰後重試。", "這是 Composio 的消費者金鑰（ck_ 開頭）。請改用專案金鑰：Composio「Settings → Project Settings → API Keys」。"],
+    en: ["This is an OpenRouter key. Enter it in Settings → Models.", "Composio did not accept this key. Use a project key from Composio Settings → Project Settings → API Keys.", "Could not reach Composio. Try again later.", "Could not save the key. Check it and retry.", "This is a Composio consumer key (starting with ck_). Use a project key from Composio Settings → Project Settings → API Keys."],
+    ja: ["これは OpenRouter のキーです。「設定 → モデル」で入力してください。", "Composio がこのキーを受け付けませんでした。Composio の「Settings → Project Settings → API Keys」にあるプロジェクトキーを使用してください。", "Composio に接続できません。しばらくしてから再試行してください。", "キーを保存できません。確認して再試行してください。", "これは Composio のコンシューマーキー（ck_ で始まるキー）です。Composio の「Settings → Project Settings → API Keys」にあるプロジェクトキーを使用してください。"],
   };
   setLocale(locale);
   api.connectorsStatus.mockResolvedValue({ connectors: [], composio_configured: false });

@@ -1011,7 +1011,6 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     await perform(page, { action: "account-menu", item: "settings" });
     await wait(page, ".modal-scrim [data-pane]");
     await click(page, '.modal-scrim [data-pane="models"]');
-    await click(page, '[data-models-tab="models"]');
     await choose('[data-k="quick-model"]', quick, "high", "quick");
     const settings = await saved("quick_model", quick.id, "quick");
     if (settings.quick_effort !== "high") await saved("quick_effort", "high", "quick");

@@ -443,7 +443,7 @@ behavior the fixture cannot prove.
 | [Dictation](dictation.md) | Overview, history, dictionary, shortcuts, microphone and paste |
 | [Settings and appearance](settings-appearance.md) | Profile/preferences, black and white themes, languages, models and app information |
 | [Connections and MCP](connections-mcp.md) | Connect apps as one view (chip of the connected apps, search, category chips, 為你推薦 and sections, an app's page), the one colour of everything that floats, connected apps and their count, an app's accounts and tools, members' private skills, managed catalog, MCP setup/discovery and the calendar's private Google calendar read |
-| [Usage](usage.md) | Spend overview, CLI allowances read unseen at each opening of Settings (no refresh button), and the once-per-window 90% warning |
+| [Usage](usage.md) | Settings › 用量: 概覽 (this month's spending with the monthly limit's gear, CLI allowances read unseen at each opening of Settings, no refresh button), 分析 (a period's charts from `usage.analytics`), and the once-per-window 90% warning |
 | [Onboarding](onboarding.md) | Welcome, optional setup and immediate conversation |
 
 Keep entry points, prerequisites and observable end states current. If data is

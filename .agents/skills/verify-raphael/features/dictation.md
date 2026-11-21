@@ -1,5 +1,16 @@
 # Dictation
 
+## A muted microphone is said a second in
+
+R-DICT-MUTE-01. The core says `dictation.sound` (`heard` false) when a recording's first second stays at digital silence,
+and `heard` true at the first sound after it; the shell (dictation.rs `on_sound`) puts 《告。未收到聲音。麥克風可能已靜音。》
+beside the listening emblem and shows the emblem again without a line once sound arrives. The recording goes on either
+way. Scenes: `overlay-mic-quiet`, `overlay-mic-heard`. A real headset mute switch is a native check on the owner's PC.
+
+```powershell
+npm run look -- overlay-mic-quiet overlay-mic-heard --theme both --width 1120,720,1920x1080
+```
+
 ## macOS
 
 The same controller runs on a Mac (`dictation.rs` `app::spawn`, no longer Windows-only). The dictation key is Right
@@ -103,7 +114,7 @@ selected": nothing is pasted and the overlay says 《告。未選取任何文字
 cleanup's model, dictionary, languages, target-app tone, chunking, guards and spend, plus `brain/tidy.py`'s addendum that the text
 was typed, not spoken, so the prompt template is untouched), and the paster copies the selection again before replacing it.
 If the text differs or the selection cannot be confirmed, the tidied result stays on the clipboard for manual paste.
-An unavailable tidy model or connection points to Models & usage, and a timeout invites a retry.
+An unavailable tidy model or connection points to Models, and a timeout invites a retry.
 An unsuccessful tidy keeps the original selection and clipboard. Its RPC reply carries no replacement text.
 
 ```powershell

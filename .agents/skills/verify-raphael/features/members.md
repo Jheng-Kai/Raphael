@@ -660,7 +660,7 @@ Memory is managed behind the scenes: the member page's 記憶 kind (cards, some 
 No page, tab, card or count shows a member's memory or the shared memory (R-MEM-10). The core keeps both files, the
 memory tools and the `MemoryChanged` event as before; the app neither reads nor draws them. When a memory is wrong the
 owner tells the member in the conversation and the member corrects its own file with its memory tool. The member page's
-kinds are 工具, 技能與指令, 個性與指示 and 通知; Settings' tabs are 一般, 工具, 安全, 模型與用量, 聽寫與快捷鍵 and 關於; an old link to the 記憶 tab
+kinds are 工具, 技能與指令, 個性與指示 and 通知; Settings' tabs are 一般, 工具, 團隊技能庫, 安全, 模型, 用量, 聽寫與快捷鍵 and 關於; an old link to the 記憶 tab
 lands on 一般. `memory-view.ts`, its styles and the scenes that opened it are gone.
 
 ```powershell

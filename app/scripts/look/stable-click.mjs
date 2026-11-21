@@ -1,5 +1,5 @@
 /** Persistent view controls under test. Navigation owned by the parallel sidebar/Home work is excluded. */
-export const stableControls = '[role="tab"], [role="switch"], button[aria-pressed], [data-pane], [data-models-tab], [data-filter], [data-au="view"], [data-conn="store-group"]';
+export const stableControls = '[role="tab"], [role="switch"], button[aria-pressed], [data-pane], [data-usage-tab], [data-filter], [data-au="view"], [data-conn="store-group"]';
 
 export function assertStableClick(before, after, tolerance = 1) {
   if (!before.length) throw new Error("stable-click: no visible control was recorded");

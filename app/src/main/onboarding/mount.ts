@@ -138,7 +138,7 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
     },
   });
 
-  // Every provider of the catalog, with the same editor as Settings › 模型與用量 (providers.ts).
+  // Every provider of the catalog, with the same editor as Settings › 模型 (providers.ts).
   const providers = createProviders({
     root,
     visible: () => !destroyed && flow.step === "tools",

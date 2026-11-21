@@ -271,7 +271,7 @@ class TaskRun:
         ledger: Ledger,
         store: TaskStore,
         spend: SpendTracker,
-        monthly_limit: Callable[[], float],
+        monthly_limit: Callable[[], float | None],
         city: Callable[[], str],
         changed: Callable[[], None] = lambda: None,
         progress: Callable[[str], None] = lambda text: None,

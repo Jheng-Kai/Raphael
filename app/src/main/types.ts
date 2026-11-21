@@ -29,7 +29,8 @@ export interface Status {
   spend: {
     month_usd: number;
     today_usd: number;
-    limit_usd: number;
+    /** The monthly limit, or null for none (不設上限). */
+    limit_usd: number | null;
     forecast_usd: number;
     daily: number[];
   };
@@ -741,7 +742,8 @@ export interface BrainSettings {
   pdf_fallbacks?: string[];
   stt_fallbacks?: string[];
   memory_fallbacks?: string[];
-  monthly_limit_usd: number;
+  /** What the app may spend a month on paid calls; null for no limit (Settings › 用量). */
+  monthly_limit_usd: number | null;
   cleanup_model: string;
   /** The languages the speech recognition listens for: locale ids such as "zh-TW", one to five. */
   languages: string[];

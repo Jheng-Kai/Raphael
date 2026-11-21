@@ -11,7 +11,8 @@ const serverDetail = [...linked, click('[data-conn="open"][data-id="notes"]'), w
 const store = [...connections, wait('.cs-card')];
 // A key made up for the scenes: it is typed into a masked field and must reach nothing but the one call that adds the app.
 const setupKey = "zk-look-0123456789";
-const usage = [...settings("models"), click('[data-models-tab="usage"]'), wait('[data-row="raphael-spend"]')];
+const usage = [...settings("usage"), wait('[data-usage-tab="overview"][aria-selected="true"]'), wait('[data-row="raphael-spend"]')];
+const analysis = [...usage, click('[data-usage-tab="analysis"]'), wait('[data-ua-card="cost"]')];
 const cliMenu = [...settings("models"), scroll(".cli-accounts"), click('[data-cli-menu="codex"]')];
 const cliDisconnected = [...cliMenu, click('#app-popover [data-pick="disconnect"]'), wait('[data-cli="codex"]')];
 const modelChooser = role => [...settings("models"), click(`.modal-scrim [data-model-picker="${role}"] .mp-trigger`), wait(".model-chooser .mc-row")];
@@ -22,8 +23,8 @@ const downloaded = [
 ];
 const dictation = tab => [page("dictation"), click(`[data-dictation-tab="${tab}"]`), check("dictation-navigation"), ...(tab === "overview" ? [wait('.page-overview .icard'), check("dictation-overview")] : [])];
 export default [
-  scene("nav-layer-settings", "Back from Usage returns to Models inside the same Settings dialog", [
-    ...usage, navKey("back"), wait('.modal [data-models-tab="models"][aria-selected="true"]'), wait('.modal [data-model-picker="stt"]'),
+  scene("nav-layer-settings", "Back from Usage's analysis returns to its overview inside the same Settings dialog", [
+    ...analysis, navKey("back"), wait('.modal [data-usage-tab="overview"][aria-selected="true"]'), wait('.modal [data-row="raphael-spend"]'),
   ]),
   scene("nav-side-settings", "Mouse Back closes Settings in one step and Forward leaves the conversation in view", [
     member(1), member(2), check("nav-conversation-2"), ...settings("tools"), check("nav-settings-tools"),
@@ -185,11 +186,25 @@ export default [
   scene("usage-allowances-chatgpt", "ChatGPT sits with the other subscriptions, with the button to its own usage page", [...usage, wait('[data-allowance="chatgpt"]'), scroll('[data-allowance="chatgpt"]'), check("usage-plain")], { chatgptSignedIn: true }),
   scene("usage-owner", "The owner's own mix: Codex live, Claude whose window has reset (已重置, no stale number or bar), the ChatGPT sign-in and OpenRouter's own spend, one card each as the account menu's blocks", [...usage, wait('[data-allowance="openrouter"]'), check("usage-plain"), check("usage-owner-cards")], { usageOwner: true }),
   scene("usage-empty", "With no subscription signed in, the rows of what was spent stand alone", [...usage, check("usage-plain")], { usageEmpty: true }),
+  scene("settings-usage-overview", "Usage › 概覽: 這個月's card with the limit and its gear, then 方案額度, one card per subscription with each window's reset and what is left", [...usage, wait(".run-subscription"), check("usage-plain"), check("usage-overview")]),
+  scene("settings-usage-cap", "The gear of 這個月 opens the monthly limit: 設上限 with an amount, stored at once, the card's bar follows; 不設上限 takes it away", [
+    ...usage, click('[data-act="usage-cap"]'), wait("#app-popover.usage-cap"), check("usage-cap-open"),
+    click('#app-popover [data-k="usage-cap-mode"]'), wait("#app-submenu"), click('#app-submenu [data-value="none"]'), wait("#app-popover.usage-cap"), check("usage-cap-none"),
+    click('#app-popover [data-k="usage-cap-mode"]'), wait("#app-submenu"), click('#app-submenu [data-value="set"]'), wait("#app-popover #limit-input"),
+    type("#app-popover #limit-input", "30"), key("Enter"), check("usage-cap-set"),
+  ]),
+  scene("settings-usage-analytics", "Usage › 分析: 花費紀錄 by purpose with its stacked bars and legend, 誰花最多 with five rows and 顯示更多, 工具使用 and 訊息 lines, and 30 days", [
+    ...analysis, check("usage-analytics"), scroll('[data-ua-section="people"]'), click("[data-ua-more]"), wait('.ua-table tbody tr:nth-child(6)'), scroll('[data-ua-section="messages"]'),
+    click('[data-ua-messages="source"]'), wait('[data-ua-messages="source"][aria-pressed="true"]'), scroll('[data-ua-section="cost"]'), click('[data-ua-range="30d"]'), wait('.ua-bars[data-n="30"]'), check("usage-analytics-month"),
+    // The picture ends on 工具使用 and 訊息, under the chart and the people the checks read.
+    scroll('[data-ua-section="messages"]'),
+  ]),
+  scene("settings-usage-analytics-empty", "Usage › 分析 with nothing in the period: one quiet line a section, no chart frames", [...usage, click('[data-usage-tab="analysis"]'), wait('[data-ua-section="messages"]'), check("usage-analytics-empty")], { usageEmpty: true }),
   scene("usage-opens-quietly", "The app reads the allowances once after it starts, and Settings again each time it opens, on any tab: no refresh button, the numbers already there, the same numbers touch nothing, a new number replaces the old in place", [
     check("usage-open-launch"), ...settings("general"), check("usage-open-general"),
-    click('.modal-scrim [data-pane="models"]'), click('[data-models-tab="usage"]'), wait(".run-subscription"), check("usage-plain"), check("usage-open-arm"),
-    click(".modal-x"), { action: "advance-time", ms: 31000 }, ...settings("models"), click('[data-models-tab="usage"]'), wait(".run-subscription"), check("usage-open-same"),
-    check("usage-open-lower"), click(".modal-x"), { action: "advance-time", ms: 31000 }, ...settings("models"), click('[data-models-tab="usage"]'), wait(".run-subscription"), check("usage-open-changed"), check("usage-plain"),
+    click('.modal-scrim [data-pane="usage"]'), wait(".run-subscription"), check("usage-plain"), check("usage-open-arm"),
+    click(".modal-x"), { action: "advance-time", ms: 31000 }, ...settings("usage"), wait(".run-subscription"), check("usage-open-same"),
+    check("usage-open-lower"), click(".modal-x"), { action: "advance-time", ms: 31000 }, ...settings("usage"), wait(".run-subscription"), check("usage-open-changed"), check("usage-plain"),
   ], { traceCalls: true }),
   ...["overview", "history", "dictionary"].map(tab => scene(`dictation-${tab}`, `Dictation ${tab}`, [...dictation(tab), ...(tab === "history" ? [wait(".hrow"), check("history-sent-to")] : []), ...(tab === "dictionary" ? [wait(".wrow"), click('[data-act="word-menu"]'), wait('#app-popover [data-pick="delete"]'), key("Escape")] : [])], tab === "dictionary" ? {
     dictionary: ["Raphael", "Methelia", "GitHub", "Composio", "OpenRouter", "Notion", "Slack", "Telegram", "Calendar", "Claude", "Codex", "Gemini"].map((word, index) => ({ id: index + 1, word, misheard: index === 0 ? ["Rafael"] : [], source: index % 2 ? "learned" : "manual", created_at_ms: 1792720800000 })),

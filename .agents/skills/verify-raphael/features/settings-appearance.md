@@ -26,7 +26,7 @@ npm run look -- overlay-locale-ko overlay-locale-th overlay-locale-de --theme bo
 
 ## Memory has no tab, and About's controls are icons
 
-Settings has six flat tabs: 一般, 工具, 安全, 模型與用量, 聽寫與快捷鍵 and 關於. No memory is shown anywhere
+Settings has flat tabs: 一般, 工具, 團隊技能庫, 安全, 模型, 用量, 聽寫與快捷鍵 and 關於. No memory is shown anywhere
 (R-MEM-10, see [Members](members.md#no-memory-on-screen)), so there is no memory tab, no memory list and no
 memory loading, and an old link or saved pane named `memory` opens 一般. There is no import from other assistants
 either; the memory lives in Raphael's data folder, and
@@ -43,9 +43,9 @@ The core no longer registers an owner memory-import RPC or management boundary r
 MemoryFile.apply and the four memory document/summary RPCs remain intact. Verify with
 core/tests/memory, the members management suites and architecture/test_boundaries.py.
 
-## The seven tabs (R-UI-115)
+## The eight tabs (R-UI-115)
 
-Settings has seven flat tabs: 一般, 聽寫與快捷鍵, 工具, 團隊技能庫, 安全, 模型與用量 and 關於. There are no
+Settings has eight flat tabs: 一般, 工具, 團隊技能庫, 安全, 模型, 用量 (R-USE-01, see [Usage](usage.md)), 聽寫與快捷鍵 and 關於. There are no
 group names, no search box and no line under a tab's name. Each tab is its name, then sections: a small name
 over one rounded card (`--panel`) of rows with no lines between them, the name left and the control right.
 一般 holds, in order: 關於你 (the owner's picture, name and about me), 外觀 (theme and language), 拉斐爾 (the
@@ -234,7 +234,7 @@ caption hover images at full size and keep the driver's centering, margins, tran
 tooltip, focus and close-contrast assertions. Native OS minimize/maximize/close and a real
 CLI login remain separate checks; never log out the user's shared CLI account.
 
-The model-choice scenes open Models and usage, then its answer, cleanup or speech
+The model-choice scenes open Models, then its answer, cleanup or speech
 picker. Speech's local source uses the shared synthetic catalogue, including models
 that are not downloaded. Rendered checks reject native outset borders, touching rows,
 clipped metadata and overlapping footer actions, reach the last model by scrolling,

@@ -92,18 +92,18 @@ _OWNER_MESSAGES = {
 
 _OWNER_MESSAGES["en"].update({
     "chatgpt_unavailable": "{name} cannot check ChatGPT plan availability right now. Try again later.",
-    "chatgpt_plan_unavailable": "{name}’s selected ChatGPT account cannot use this plan. Check the account and workspace eligibility in Settings > Models & usage > Models > Subscription accounts > ChatGPT, or choose another source.",
-    "chatgpt_scope": "{name}’s ChatGPT plan permission is missing. Sign in again and grant plan usage in Settings > Models & usage > Models > Subscription accounts > ChatGPT.",
+    "chatgpt_plan_unavailable": "{name}’s selected ChatGPT account cannot use this plan. Check the account and workspace eligibility in Settings > Models > Subscription accounts > ChatGPT, or choose another source.",
+    "chatgpt_scope": "{name}’s ChatGPT plan permission is missing. Sign in again and grant plan usage in Settings > Models > Subscription accounts > ChatGPT.",
 })
 _OWNER_MESSAGES["zh-TW"].update({
     "chatgpt_unavailable": "{name} 目前無法確認訂閱方案是否可用，請稍後重試。",
-    "chatgpt_plan_unavailable": "{name} 所選的 ChatGPT 帳號無法使用這項訂閱方案，請到「設定 › 模型與用量 › 模型 › 訂閱帳號 › ChatGPT」確認登入帳號與工作區資格，或改用其他來源。",
-    "chatgpt_scope": "{name} 的 ChatGPT 尚未獲准使用訂閱方案，請到「設定 › 模型與用量 › 模型 › 訂閱帳號 › ChatGPT」重新登入並允許使用方案。",
+    "chatgpt_plan_unavailable": "{name} 所選的 ChatGPT 帳號無法使用這項訂閱方案，請到「設定 › 模型 › 訂閱帳號 › ChatGPT」確認登入帳號與工作區資格，或改用其他來源。",
+    "chatgpt_scope": "{name} 的 ChatGPT 尚未獲准使用訂閱方案，請到「設定 › 模型 › 訂閱帳號 › ChatGPT」重新登入並允許使用方案。",
 })
 _OWNER_MESSAGES["ja"].update({
     "chatgpt_unavailable": "{name} は現在サブスクリプションの利用可否を確認できません。後でもう一度お試しください。",
-    "chatgpt_plan_unavailable": "{name} が選択した ChatGPT アカウントはこのプランを利用できません。「設定 › モデルと使用量 › モデル › サブスクリプションアカウント › ChatGPT」でアカウントとワークスペースの条件を確認するか、別のソースを選んでください。",
-    "chatgpt_scope": "{name} の ChatGPT プラン利用が許可されていません。「設定 › モデルと使用量 › モデル › サブスクリプションアカウント › ChatGPT」で再ログインして許可してください。",
+    "chatgpt_plan_unavailable": "{name} が選択した ChatGPT アカウントはこのプランを利用できません。「設定 › モデル › サブスクリプションアカウント › ChatGPT」でアカウントとワークスペースの条件を確認するか、別のソースを選んでください。",
+    "chatgpt_scope": "{name} の ChatGPT プラン利用が許可されていません。「設定 › モデル › サブスクリプションアカウント › ChatGPT」で再ログインして許可してください。",
 })
 _OWNER_MESSAGES["en"].update({
     "context_overflow": "{name} cannot take this much text at once. Start a new conversation or shorten the request.",
@@ -231,9 +231,9 @@ class Missing:
     def sentence(self, language):
         language = _language(language)
         paths = with_ui_words({
-            "zh-TW": {"models": "設定 › 模型與用量 › 模型", "connections": "側欄的「連結應用程式」", "store": "側欄的「連結應用程式」", "search": "設定 › 工具 › 服務 › 搜尋網路", "read": "設定 › 工具 › 服務 › 讀網頁", "vision": "設定 › 工具 › 服務 › 看圖片", "pdf": "設定 › 工具 › 服務 › 讀 PDF", "computer": "詳細資訊的「電腦」分頁", "dictation": "設定 › 聽寫與快捷鍵"},
-            "en": {"models": "Settings > Models & usage > Models", "connections": "Connect apps (sidebar)", "store": "Connect apps (sidebar)", "search": "Settings > Tools > Services > Web search", "read": "Settings > Tools > Services > Read web pages", "vision": "Settings > Tools > Services > Images", "pdf": "Settings > Tools > Services > PDFs", "computer": "the member's Computer tab", "dictation": "Settings > Dictation & shortcuts"},
-            "ja": {"models": "設定 › モデルと使用量 › モデル", "connections": "サイドバーの「アプリを連携」", "store": "サイドバーの「アプリを連携」", "search": "設定 › ツール › サービス › ウェブ検索", "read": "設定 › ツール › サービス › ウェブページを読む", "vision": "設定 › ツール › サービス › 画像", "pdf": "設定 › ツール › サービス › PDF を読む", "computer": "メンバーのコンピュータータブ", "dictation": "設定 › 音声入力とショートカット"},
+            "zh-TW": {"models": "設定 › 模型", "connections": "側欄的「連結應用程式」", "store": "側欄的「連結應用程式」", "search": "設定 › 工具 › 服務 › 搜尋網路", "read": "設定 › 工具 › 服務 › 讀網頁", "vision": "設定 › 工具 › 服務 › 看圖片", "pdf": "設定 › 工具 › 服務 › 讀 PDF", "computer": "詳細資訊的「電腦」分頁", "dictation": "設定 › 聽寫與快捷鍵"},
+            "en": {"models": "Settings > Models", "connections": "Connect apps (sidebar)", "store": "Connect apps (sidebar)", "search": "Settings > Tools > Services > Web search", "read": "Settings > Tools > Services > Read web pages", "vision": "Settings > Tools > Services > Images", "pdf": "Settings > Tools > Services > PDFs", "computer": "the member's Computer tab", "dictation": "Settings > Dictation & shortcuts"},
+            "ja": {"models": "設定 › モデル", "connections": "サイドバーの「アプリを連携」", "store": "サイドバーの「アプリを連携」", "search": "設定 › ツール › サービス › ウェブ検索", "read": "設定 › ツール › サービス › ウェブページを読む", "vision": "設定 › ツール › サービス › 画像", "pdf": "設定 › ツール › サービス › PDF を読む", "computer": "メンバーのコンピュータータブ", "dictation": "設定 › 音声入力とショートカット"},
         })
         name = {"searxng": "SearXNG", "chatgpt": "ChatGPT", "composio": "Composio", "search": "Search", "read": "Page reader", "vision": "Image reading", "pdf": "PDF", "computer": "Computer"}.get(self.resource, with_ui_words({"zh-TW": "這項功能", "en": "This feature", "ja": "この機能"})[language])
         if self.resource in ("search", "read", "vision", "computer"):

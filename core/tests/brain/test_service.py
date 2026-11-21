@@ -868,7 +868,7 @@ BAD_PARAMS = [
     ("settings.set", {"key": 5, "value": 1}, "settings.set: key number"),
     ("settings.set", {"key": "no_such_setting", "value": 1}, "settings.set: unknown key"),
     ("settings.set", {"key": "monthly_limit_usd", "value": True}, "settings.set: bool for float"),
-    ("settings.set", {"key": "monthly_limit_usd", "value": None}, "settings.set: null"),
+    ("settings.set", {"key": "monthly_limit_usd", "value": -1}, "settings.set: negative limit"),
     ("secrets.set_openrouter_key", {}, "set_openrouter_key: no key"),
     ("secrets.set_openrouter_key", {"key": 5}, "set_openrouter_key: key number"),
 ]
@@ -1194,6 +1194,19 @@ async def test_settings_get_and_set_round_trip(conn, fake_client, keys):
     # A whole number is a valid float setting.
     limit = await router.call("settings.set", {"key": "monthly_limit_usd", "value": 5})
     assert limit["settings"]["monthly_limit_usd"] == 5.0
+
+
+async def test_no_monthly_limit_is_null_in_the_settings_and_in_the_status(conn, fake_client, keys):
+    router = routed(Brain(conn, fake_client, keys))
+    # A new install has no limit, and the status says so the same way.
+    assert (await router.call("settings.get", {}))["settings"]["monthly_limit_usd"] is None
+    assert (await router.call("status.get", {}))["spend"]["limit_usd"] is None
+    await router.call("settings.set", {"key": "monthly_limit_usd", "value": 30})
+    assert (await router.call("status.get", {}))["spend"]["limit_usd"] == 30.0
+    # 不設上限 in Settings › 用量 stores null again.
+    cleared = await router.call("settings.set", {"key": "monthly_limit_usd", "value": None})
+    assert cleared["settings"]["monthly_limit_usd"] is None
+    assert (await router.call("status.get", {}))["spend"]["limit_usd"] is None
 
 
 async def test_a_rejected_setting_changes_nothing(conn, fake_client, keys):
@@ -1528,7 +1541,7 @@ async def test_status_without_a_key_or_history(router):
         "spend": {
             "month_usd": 0.0,
             "today_usd": 0.0,
-            "limit_usd": 10.0,
+            "limit_usd": None,
             "forecast_usd": 0.0,
             "daily": [0.0] * 30,
         },
@@ -1567,7 +1580,7 @@ async def test_status_after_a_cleanup(router, fake_client, keys):
     spend = status["spend"]
     assert spend["month_usd"] == pytest.approx(0.0003)
     assert spend["today_usd"] == pytest.approx(0.0003)
-    assert spend["limit_usd"] == 10.0
+    assert spend["limit_usd"] is None
     assert len(spend["daily"]) == 30 and spend["daily"][-1] == pytest.approx(0.0003)
     assert spend["forecast_usd"] >= spend["month_usd"]
     assert status["last"] == {

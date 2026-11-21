@@ -13,7 +13,7 @@ import type { LanguageGroup } from "./languages";
 import type { TelegramStatus } from "./messaging";
 import type { AvatarCrop } from "./avatar";
 import type { HomeOverview } from "./home-types";
-import type { CliAllowances } from "./usage-analytics-types";
+import type { CliAllowances, UsageAnalytics, UsageRange } from "./usage-analytics-types";
 import type {
   AgentQuestion,
   AgentTurn,
@@ -77,9 +77,9 @@ const SHARED_READS = new Set(["members.list", "settings.get", "rooms.list", "hom
   "models.catalog", "brains.cli", "languages.list", "toolsets.list", "background.waiting.list", "audio.devices",
   // Settings reads the allowances at every opening and the page asks again after a turn: a reading under way is joined, and
   // asking is not a change that makes the reads of the start-up ask the core again.
-  "usage.allowances", "chatgpt.status"]);
+  "usage.allowances", "chatgpt.status", "usage.analytics"]);
 /** Shared only while under way: an answer a moment old is never the answer (R-UI-109: every opening of Settings reads the allowances, however soon after the account menu did). */
-const ASKED_AGAIN = new Set(["usage.allowances"]);
+const ASKED_AGAIN = new Set(["usage.allowances", "usage.analytics"]);
 let changes = 0;
 const reading = new Map<string, { answer: Promise<unknown>; changes: number }>();
 /** Events that say something may have changed; the microphone's loudness and the like do not. */
@@ -397,7 +397,7 @@ export const dictionaryImport = (words: string[]): Promise<{ added: number; skip
 // ---------- the brain's settings and the key ----------
 
 export const settingsGet = (): Promise<{ settings: BrainSettings }> => core("settings.get");
-export const settingsSet = (key: keyof BrainSettings, value: string | number | boolean | string[] | Record<string, string[]>): Promise<{ settings: BrainSettings }> =>
+export const settingsSet = (key: keyof BrainSettings, value: string | number | boolean | string[] | Record<string, string[]> | null): Promise<{ settings: BrainSettings }> =>
   core("settings.set", { key, value });
 /** The languages the speech recognition can listen for, in groups (中文: 台灣、香港、…). */
 export const languagesList = (): Promise<{ groups: LanguageGroup[] }> => core("languages.list");
@@ -664,6 +664,8 @@ export const openTeamFile = (path: string): Promise<void> => invoke("open_team_f
 export const openLibraryFile = (memberId: number, id: string): Promise<void> => invoke("open_library_file", { memberId, id });
 
 export const usageAllowances = (): Promise<CliAllowances> => core("usage.allowances");
+/** Settings › 用量 › 分析: a period's spending, replies, tool calls and messages by local day (read-only; the export stays closed). */
+export const usageAnalytics = (range: UsageRange): Promise<UsageAnalytics> => core("usage.analytics", { range });
 export const pickOutputFolder = (): Promise<string | null> => invoke("pick_output_folder");
 export const memberTemplateFile = (action: "open" | "save", text = ""): Promise<string | null> => invoke("member_template_file", { action, text });
 /** The text of the template file the app was opened with (double-clicked in the file manager), once; null when there is none. */

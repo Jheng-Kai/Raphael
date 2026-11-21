@@ -227,6 +227,8 @@ export class OverlayController {
         this.activeShow = true;
         this.appearIfHidden();
         this.setMode(event.mode);
+        // A show without a line takes away the one beside the emblem (a muted microphone's, once sound arrives).
+        if (!words(event.line)) this.dropGreeting();
         this.greet(words(event.line));
         break;
       case "mode":

@@ -146,7 +146,7 @@ def spawn(tmp_path):
 def test_hello_settings_and_clean_exit(spawn):
     p = spawn()
     assert p.call("core.hello")["result"]["protocol"] == 1
-    assert p.call("settings.get")["result"]["settings"]["monthly_limit_usd"] == 10.0
+    assert p.call("settings.get")["result"]["settings"]["monthly_limit_usd"] is None
     assert p.close() == 0
 
 

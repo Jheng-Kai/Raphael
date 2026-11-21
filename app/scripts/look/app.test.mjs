@@ -50,20 +50,19 @@ describe("real app entry with the shared look fixture", () => {
     await viaAccountMenu("settings");
     await vi.waitFor(() => expect(document.querySelector('.modal-scrim [data-pane="general"]')).not.toBeNull());
     // 連結應用程式 is no tab: the sidebar opens it as a dialog of its own (R-UI-111).
-    // Six tabs: appearance is a section of 一般.
-    for (const pane of ["general", "dictation", "tools", "safety", "models", "about"]) {
+    // Appearance is a section of 一般; 用量 is a tab of its own after 模型.
+    for (const pane of ["general", "dictation", "tools", "safety", "models", "usage", "about"]) {
       document.querySelector(`.modal-scrim [data-pane="${pane}"]`).click();
       await vi.waitFor(() => expect(document.querySelector(`.modal-scrim [data-pane="${pane}"][aria-current="page"]`), pane).not.toBeNull());
     }
     expect(state.errors).toEqual([]);
   });
-  it("shows each subscription's allowance above the spending rows, with the shared fixture", async () => {
-    document.querySelector('.modal-scrim [data-pane="models"]').click();
-    await vi.waitFor(() => expect(document.querySelector('[data-models-tab="usage"]')).not.toBeNull());
-    document.querySelector('[data-models-tab="usage"]').click();
+  it("shows this month's spending above each subscription's allowance, with the shared fixture", async () => {
+    document.querySelector('.modal-scrim [data-pane="usage"]').click();
+    await vi.waitFor(() => expect(document.querySelector('[data-usage-tab="overview"][aria-selected="true"]')).not.toBeNull());
     await vi.waitFor(() => expect(document.querySelectorAll(".run-allowance .run-subscription").length).toBeGreaterThan(0));
     expect(document.querySelector('[data-row="raphael-spend"]')).not.toBeNull();
-    expect(document.querySelector(".run-tiles, .run-bill, .ua-chart")).toBeNull();
+    expect(document.querySelector(".run-tiles, .run-bill, .ua-card")).toBeNull();
   });
   it("deletes a dictionary word through its overflow menu and keeps undo available", async () => {
     document.querySelector('.modal-scrim [data-act="close"]').click();

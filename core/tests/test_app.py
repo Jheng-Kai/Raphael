@@ -1132,7 +1132,7 @@ async def test_every_method_is_there_from_the_start_even_while_the_kit_loads(tmp
             "protocol": PROTOCOL_VERSION,
             "version": raphael_core.__version__,
         }
-        assert (await app.call("settings.get"))["settings"]["monthly_limit_usd"] == 10.0
+        assert (await app.call("settings.get"))["settings"]["monthly_limit_usd"] is None
         assert await app.call("audio.set_device", {"name": "USB Mic"}) == {}
         assert [m["ready"] for m in (await app.call("models.status"))["models"]] == [False, False]
         assert (await app.call("secrets.status")) == {"has_key": True}

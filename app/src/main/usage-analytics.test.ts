@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
-// Settings › 用量: only what each subscription has left, one card each.
+// Settings › 用量 › 概覽: what each subscription has left, one card each.
 import { afterEach, expect, it, vi } from "vitest";
 import { setLocale } from "./i18n";
-import { mountUsageAnalytics, type UsageAnalyticsApi } from "./usage-analytics";
+import { mountUsageAnalytics, untilText, type UsageAnalyticsApi } from "./usage-analytics";
 
 afterEach(() => { document.body.replaceChildren(); setLocale("zh-TW"); });
 const mount = async (api: UsageAnalyticsApi) => {
@@ -59,7 +59,7 @@ it("renders and refreshes all allowance sources with maker marks and honest unkn
   void view.refresh().catch(() => {});
   await vi.waitFor(() => expect(host.querySelector(".run-allowance")!.textContent).toContain("12%"));
   expect(host.querySelectorAll(".run-subscription")).toHaveLength(1);
-  expect(host.querySelector(".run-subscription header")!.textContent).toBe("Claude");
+  expect(host.querySelector(".run-subscription header h4")!.textContent).toBe("Claude");
   setLocale("en"); expect(host.querySelector(".run-allowance")!.textContent).toContain("Updated");
   setLocale("ja"); expect(host.querySelector(".run-allowance")!.textContent).toContain("更新日時");
   view.destroy();
@@ -118,13 +118,51 @@ it("a failed reading says so, a quiet refresh that changes nothing touches nothi
   expect(host.childElementCount).toBe(0);
 });
 
+it("each window is named, says how long until it resets and what is left over its bar, and the card names its plan", async () => {
+  const now = Date.now();
+  const resets = Math.round(now / 1000) + 4 * 3600 + 57 * 60;
+  const { host, view } = await mount({
+    usageAllowances: vi.fn().mockResolvedValue({ brains: [{ id: "codex", name: "Codex", source: "live", windows: [
+      { period: "fiveHour", remaining_percent: 97, resets_at: resets }, { period: "weekly", remaining_percent: 22, resets_at: Math.round(now / 1000) + 4 * 86400 + 11 * 3600 + 30 },
+    ] }] }),
+    chatgptStatus: vi.fn().mockResolvedValue({ signed_in: true, plan_scope_granted: true, email: "owner@example.test" }),
+  });
+  const codex = host.querySelector('[data-allowance="codex"]')!;
+  expect(codex.querySelector(".run-who")!.textContent).toBe("訂閱");
+  const windows = [...codex.querySelectorAll(".run-window")].map((w) => [w.querySelector(".run-window-name")!.textContent, ...[...w.querySelectorAll(".run-window-line > *")].map((n) => n.textContent)]);
+  expect(windows).toEqual([["5 小時額度", "4 小時 57 分後重設", "剩 97%"], ["每週額度", "4 天 11 小時後重設", "剩 22%"]]);
+  // ChatGPT names the account it is, and its balance is on its own page.
+  const chatgpt = host.querySelector('[data-allowance="chatgpt"]')!;
+  expect(chatgpt.querySelector(".run-who")!.textContent).toBe("owner@example.test");
+  expect(chatgpt.querySelector(".run-unreadable [data-run-act=\"chatgpt-usage\"]")!.textContent).toBe("管理用量");
+  // The section says what these limits are.
+  expect(host.querySelector(".run-allowance > header")!.textContent).toBe("方案額度訂閱方案自己的上限，用完要等它重設。");
+  view.destroy();
+});
+
+it("the time to a reset reads in minutes, hours and minutes, or days and hours", () => {
+  expect(untilText(20_000)).toBe("1 分");
+  expect(untilText(12 * 60_000)).toBe("12 分");
+  expect(untilText((4 * 60 + 57) * 60_000)).toBe("4 小時 57 分");
+  expect(untilText((3 * 24 + 2) * 3_600_000)).toBe("3 天 2 小時");
+  // A part that is none is left out.
+  expect(untilText(2 * 3_600_000)).toBe("2 小時");
+  expect(untilText(24 * 3_600_000)).toBe("1 天");
+  setLocale("en");
+  expect(untilText((3 * 24 + 2) * 3_600_000)).toBe("3 d 2 h");
+});
+
 it("OpenRouter has its card, from the key's own reading, and says so when that cannot be read", async () => {
   const key = (usage: unknown, state = "ok") => ({ openrouter: { state, latency_ms: 1, checked_at_ms: 1, error: null, key: null, usage }, spend: { month_usd: 1, today_usd: 0, limit_usd: 20, forecast_usd: 1, daily: [] }, last: null });
   const statusGet = vi.fn().mockResolvedValue(key({ daily: 0, weekly: 0, monthly: 3.21, total: 9, limit: 20, limit_remaining: 16.79 }));
   const { host, view } = await mount({ usageAllowances: vi.fn().mockResolvedValue({ brains: [] }), statusGet });
   const card = host.querySelector('.run-allowance [data-allowance="openrouter"]')!;
   expect(card.classList.contains("run-subscription")).toBe(true);
-  expect(card.textContent).toContain("OpenRouter"); expect(card.textContent).toContain("本月"); expect(card.textContent).toContain("US$3.21"); expect(card.textContent).toContain("US$16.79 剩餘");
+  expect(card.querySelector("h4")!.textContent).toBe("OpenRouter"); expect(card.querySelector(".run-who")!.textContent).toBe("API 金鑰");
+  // Its key's limit: what this month used, what the limit is, what is left of it, and the bar of what is left.
+  expect(card.querySelector(".run-window-name")!.textContent).toBe("金鑰額度");
+  expect(card.querySelector(".run-window-line")!.textContent).toBe("本月已用 US$3.21，上限 US$20.00剩 US$16.79");
+  expect(card.querySelector('[role="progressbar"]')!.getAttribute("aria-valuenow")).toBe("84");
   expect(host.querySelector<HTMLElement>(".usage-analytics")!.hidden).toBe(false);
   statusGet.mockResolvedValueOnce(key({ daily: null, weekly: null, monthly: null, total: null, limit: null, limit_remaining: null }));
   await view.refresh();

@@ -981,7 +981,7 @@ The shared image_generate/video_generate tools use only the owner's explicit ima
 and video_model settings. Both default unset: discovery is not consent. These separate
 paid API models are independent of every member's conversational brain, including CLI
 subscriptions; changing a brain changes neither setting. The owner chooses in existing
-Settings > Models & usage rows, with provider, per-image/per-request/token pricing when
+Settings > Models rows, with provider, per-image/per-request/token pricing when
 known and an explicit API-charge note. Image-only catalog entries remain selectable.
 No compatible discovered video model is shown as none available, never invented.
 

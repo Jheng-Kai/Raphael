@@ -233,6 +233,17 @@ async def test_speech_a_restart_cut_off_is_a_status_line_and_is_not_run_again(ri
     await restored.aclose()
 
 
+async def test_no_monthly_limit_never_stops_a_group_for_cost(rig, exchange):
+    # 不設上限 (null, a new install's default): however much the month cost, the room's default responder is asked.
+    room, ids = await team(rig)
+    exchange._exchanges.spend.record(purpose="agent", model="m", cost_usd=1000.0, prompt_tokens=1, completion_tokens=1)
+    assert exchange._settings.get("monthly_limit_usd") is None
+    await send(rig, room, "Plans for today?")
+    assert speakers(rig) == [0]
+    result = await history(rig, room)
+    assert "cost" not in [i["reason"] for i in result["exchange"]["reply_intents"]]
+
+
 async def test_a_budget_stop_before_anyone_spoke_still_says_who_did_not_answer(rig, exchange):
     room, ids = await team(rig)
     exchange._settings.set("monthly_limit_usd", 1.0)

@@ -232,13 +232,18 @@ describe("shared look IPC boundary", () => {
     await call('groups.update', { id: 3, position: 0 });
     expect((await call('members.list')).groups.map(group => [group.id, group.position])).toEqual([[3, 0], [1, 1], [2, 2]]);
   });
-  it("the plain usage page reads only allowances, as the shell allows, and the month's spend stays the ledger's", async () => {
+  it("the usage page reads the allowances and a period's analytics, as the shell allows, and the month's spend stays the ledger's", async () => {
     const target = {};
     const state = installMock(fixture, {}, target);
     const call = (method, params = {}) => target.__TAURI_INTERNALS__.invoke("core_call", { method, params });
     expect((await call("usage.allowances")).brains.length).toBeGreaterThan(0);
     expect((await call("status.get")).spend.month_usd).toBeCloseTo(1.24);
-    for (const retired of ["usage.runs", "usage.analytics", "usage.export"]) await expect(call(retired, { range: "month" })).rejects.toThrow(`Unmocked IPC: ${retired}`);
+    // 用量 › 分析: a week or a month of local days ending on the fixture's day, the shape the core answers.
+    const week = await call("usage.analytics", { range: "7d" }), month = await call("usage.analytics", { range: "30d" });
+    expect([week.days.length, month.days.length, week.days.at(-1), month.members.length]).toEqual([7, 30, "2026-10-24", 6]);
+    expect(week.cost_by.purpose.series.map(series => series.key)).toEqual(["agent", "memory", "cleanup", "stt", "image", "__other__"]);
+    expect(week.cost_by.purpose.series.every(series => series.values.length === 7)).toBe(true);
+    for (const retired of ["usage.runs", "usage.export"]) await expect(call(retired, { range: "month" })).rejects.toThrow(`Unmocked IPC: ${retired}`);
     state.errors.length = 0;
   });
   it("usageEmpty has no subscriptions and nothing spent", async () => {

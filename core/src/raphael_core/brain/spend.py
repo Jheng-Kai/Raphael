@@ -155,9 +155,10 @@ class SpendTracker:
         spent = self._spent_between(_day_start_ms(first, zone), _day_start_ms(following, zone))
         return spent / today.day * (following - first).days
 
-    def is_over(self, limit_usd: float) -> bool:
-        """Whether this month's total has reached `limit_usd`. Being at the limit is being over."""
-        return self.month_total() >= limit_usd
+    def is_over(self, limit_usd: float | None) -> bool:
+        """Whether this month's total has reached `limit_usd`. Being at the limit is being over; None is no limit, never
+        reached."""
+        return limit_usd is not None and self.month_total() >= limit_usd
 
     def daily_totals(self, days: int = 30) -> list[float]:
         """What was spent on each of the last `days` days, the oldest first and today last.

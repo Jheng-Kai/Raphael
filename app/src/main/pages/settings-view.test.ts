@@ -105,7 +105,7 @@ const LOCAL_MODELS: LocalModel[] = [
 const view = (over: Partial<SettingsView> = {}): SettingsView => ({
   pane: "general", device, brain, hasKey: true, openrouter, spend, catalog,
   devices: { devices: [{ index: 0, name: REALTEK, is_default: true }], selected: null, automatic_device: REALTEK },
-  altgr: false, version: "0.1.0", limitDraft: null, limitError: null,
+  altgr: false, version: "0.1.0",
   languageGroups: GROUPS, now: NOW, connections: emptyConnectionsView(),
   localModels: LOCAL_MODELS, localDownload: null, ...over,
 });
@@ -216,12 +216,14 @@ const described = (html: string): string[] =>
   html.split(/(?=<div class="row[ "])/).filter((r) => r.includes('<div class="d">')).map((r) => /<div class="t">(.*?)<\/div>/.exec(r)![1]);
 
 describe("the tabs", () => {
-  test("are the seven: General, Tools, Team skill library, Safety, Models & usage, Dictation and About, in each language", () => {
-    expect(IDS).toEqual(["general", "tools", "skills", "safety", "models", "dictation", "about", "connections"]);
+  test("are the eight: General, Tools, Team skill library, Safety, Models, Usage, Dictation and About, in each language", () => {
+    // 用量 is a tab of its own right after 模型 (it was a view of 模型與用量), with a gauge as the account menu's 用量 has.
+    expect(IDS).toEqual(["general", "tools", "skills", "safety", "models", "usage", "dictation", "about", "connections"]);
+    expect(PANES.find((p) => p.id === "usage")!.icon).toBe("gauge");
     const titles = {
-      "zh-TW": ["一般", "工具", "團隊技能庫", "安全", "模型與用量", "聽寫與快捷鍵", "關於", "連結應用程式"],
-      en: ["General", "Tools", "Team skill library", "Safety", "Models & usage", "Dictation & shortcuts", "About", "Connect apps"],
-      ja: ["一般", "ツール", "チームのスキルライブラリ", "安全", "モデルと使用量", "音声入力とショートカット", "アプリ情報", "アプリを連携"],
+      "zh-TW": ["一般", "工具", "團隊技能庫", "安全", "模型", "用量", "聽寫與快捷鍵", "關於", "連結應用程式"],
+      en: ["General", "Tools", "Team skill library", "Safety", "Models", "Usage", "Dictation & shortcuts", "About", "Connect apps"],
+      ja: ["一般", "ツール", "チームのスキルライブラリ", "安全", "モデル", "使用量", "音声入力とショートカット", "アプリ情報", "アプリを連携"],
     };
     for (const locale of LOCALES) {
       setLocale(locale);
@@ -232,13 +234,15 @@ describe("the tabs", () => {
   test("sit flat: no group names and no search", () => {
     const list = paneListHTML();
     // 連結應用程式 is no tab: the sidebar opens it as a dialog of its own (R-UI-111).
-    expect([...list.matchAll(/data-pane="(\w+)"/g)].map((m) => m[1])).toEqual(["general", "tools", "skills", "safety", "models", "dictation", "about"]);
+    expect([...list.matchAll(/data-pane="(\w+)"/g)].map((m) => m[1])).toEqual(["general", "tools", "skills", "safety", "models", "usage", "dictation", "about"]);
     expect(list).not.toContain("nav-group");
     expect(list).not.toContain("set-search");
   });
 
   test("every tab is a real button and links of before land on their new tab", () => {
-    expect(paneListHTML().match(/<button type="button" class="nav" data-pane="\w+" aria-current="false">/g)).toHaveLength(7);
+    expect(paneListHTML().match(/<button type="button" class="nav" data-pane="\w+" aria-current="false">/g)).toHaveLength(8);
+    // A link to 用量 opens 用量 itself, no longer a view of 模型.
+    expect(canonicalPane("usage")).toBe("usage");
     expect(paneListHTML()).not.toContain('data-pane="agent"');
     expect(canonicalPane("agent")).toBe("tools");
     expect(canonicalPane("appearance")).toBe("general");
@@ -255,7 +259,7 @@ describe("the tabs", () => {
         expect(html).not.toContain("set-purpose");
         // Connections' Add stands beside its search, clear of the dialog's ✕.
         if (id === "connections") expect(html).toMatch(/<div class="cs-bar">.*?<\/div><button type="button" class="sel cs-add"[^>]*data-k="conn-add"/s);
-        // No tab has a button beside its name: 模型與用量 is read again by each opening of Settings, not by a refresh.
+        // No tab has a button beside its name: 用量 is read again by each opening of Settings, not by a refresh.
         // (Connections' name stands in the first row of its one view, where its chip of the connected apps comes after it.)
         expect(html.startsWith(id === "connections" ? `<div class="cs cs-apps"><div class="cs-top">${head}` : head)).toBe(true);
         expect(html).not.toMatch(/set-head|models-refresh/);
@@ -266,7 +270,7 @@ describe("the tabs", () => {
 
   test("keeps the pane title while settings are being read", () => {
     const html = loadingHTML(view({ pane: "usage" }));
-    expect(html).toContain('<h1 id="set-title" tabindex="-1">模型與用量</h1>');
+    expect(html).toContain('<h1 id="set-title" tabindex="-1">用量</h1>');
     expect(html).not.toContain('<p class="purpose">');
     expect(html).toContain("settings-skeleton");
   });
@@ -506,7 +510,7 @@ describe("Models", () => {
     expect(modelPickerLook(view({ providers: ready }), "image").shipped).toBeUndefined();
   });
 
-  test("puts providers and model choices on Models, existing usage controls and analytics slot on Usage", () => {
+  test("puts providers and model choices on Models with no views inside, and this month's spending and the allowances on Usage", () => {
     const html = tab("models");
     expect(groups(html)).toEqual(["使用的模型", "訂閱帳號", "供應商"]);
     expect(names(html)).toEqual(["拉斐爾的快速提問", "整理文字", "語音轉文字", "畫圖", "做影片"]);
@@ -516,12 +520,16 @@ describe("Models", () => {
     expect(html).not.toContain('data-row="raphael-spend"');
     expect(html).not.toContain("data-usage-host");
     expect(html).not.toContain("data-fallback");
+    // 模型 shows its content directly: no 模型 / 用量 pill tabs inside it any more.
+    expect(html).not.toMatch(/role="tablist"|data-models-tab|models-panel/);
+    expect(html.indexOf('<div class="models-page"><section class="sgroup">')).toBeGreaterThan(0);
     const usage = tab("usage");
     // This month's spending of the app is the spending card above the allowances; an OpenRouter account's own usage is
     // read on OpenRouter. An OpenRouter key is its provider card's, on Models.
     expect(names(usage)).toEqual([]);
     expect(usage.indexOf('data-row="raphael-spend"')).toBeLessThan(usage.indexOf("data-usage-host"));
-    expect(usage).toContain("<h2>拉斐爾本月花費</h2>");
+    expect(usage).toContain("<h2>這個月</h2>");
+    expect(usage).toContain('<p class="spend-label">本月花費</p>');
     expect(usage).not.toContain("OpenRouter 帳號本月用量");
     expect(usage).toContain("data-usage-host");
     expect(usage).not.toContain("data-model-picker");
@@ -530,15 +538,42 @@ describe("Models", () => {
   });
 
   test("this month's spending is the spending card: the amount, the share of the monthly limit as a bar, the month's end", () => {
-    const card = (over: Partial<SettingsView>): string => /<section class="spend-card"[\s\S]*?<\/section>/.exec(tab("usage", over))![0];
+    const card = (over: Partial<SettingsView>): string => /<div class="spend-card"[\s\S]*?<\/div><\/section>/.exec(tab("usage", over))![0];
     const full = card({});
-    expect(full).toContain('<strong class="num">US$1.20</strong><small>已使用 12%</small>');
-    expect(full).toContain('role="progressbar" aria-label="拉斐爾本月花費" aria-valuemin="0" aria-valuemax="100" aria-valuenow="12"><i style="width:12%">');
-    expect(full).toContain("每月上限 US$10.00 · 照目前速度，月底約 US$2.50");
+    expect(full).toContain('<p class="spend-value"><strong class="num">US$1.20</strong></p>');
+    expect(full).toContain('role="progressbar" aria-label="每月上限" aria-valuemin="0" aria-valuemax="100" aria-valuenow="12"><i style="width:12%">');
+    expect(full).toContain("照目前速度，月底約 US$2.50 · 上限 US$10.00，已用 12%");
     expect(card({ spend: { ...spend, month_usd: 14 } })).toContain('aria-valuenow="100"');
     const unknown = card({ spend: null });
     expect(unknown).toContain("暫時無法取得");
     expect(unknown).not.toContain("progressbar");
+  });
+
+  test("with no monthly limit the card says 未設上限 and draws no bar, and its gear at the top right opens the limit", () => {
+    const usage = tab("usage", { spend: { ...spend, limit_usd: null }, brain: { ...brain, monthly_limit_usd: null } });
+    const card = /<div class="spend-card"[\s\S]*?<\/div><\/section>/.exec(usage)![0];
+    expect(card).toContain("照目前速度，月底約 US$2.50 · 未設上限");
+    expect(card).not.toContain("progressbar");
+    // The gear is the app's icon button, named 每月上限 for the popover it opens (usage-cap.ts), last in the card.
+    expect(card).toMatch(/<button type="button" class="btn icon row spend-cap" aria-label="每月上限" title="每月上限" data-act="usage-cap" data-k="usage-cap" aria-haspopup="dialog" aria-expanded="false"><svg[^>]*>[\s\S]*?<\/svg><\/button><\/div><\/section>$/);
+    // The section says what it counts, from the first of the month.
+    expect(usage).toContain('<p class="ua-note">大家用 API 金鑰花的錢，從 10月1日 算起。訂閱方案不算在這裡。</p>');
+    // While the core does not answer, the limit cannot be changed.
+    expect(tab("usage", { brain: null })).toMatch(/data-act="usage-cap"[^>]*disabled>/);
+  });
+
+  test("用量 has two small tabs, 概覽 and 分析, drawn with the shared tabs, and 分析 draws its period's sections", () => {
+    const overview = tab("usage");
+    expect(overview).toMatch(/<div class="tabs plain" role="tablist" aria-label="用量">/);
+    expect([...overview.matchAll(/data-usage-tab="(\w+)"/g)].map((m) => m[1])).toEqual(["overview", "analysis"]);
+    expect(overview).toMatch(/<button type="button" class="tab" role="tab" aria-selected="true" id="usage-tab-overview"[^>]*>概覽<\/button>/);
+    expect(overview).toContain('id="usage-panel-analysis" role="tabpanel" aria-labelledby="usage-tab-analysis" hidden></div>');
+    const analysis = tab("usage", { usageTab: "analysis", analysis: { range: "7d", group: "purpose", messages: "model", allPeople: false, data: null, people: new Map() } });
+    expect(analysis).toMatch(/<button type="button" class="tab" role="tab" aria-selected="true" id="usage-tab-analysis"[^>]*>分析<\/button>/);
+    expect(analysis).not.toContain('data-row="raphael-spend"');
+    expect(analysis).not.toContain("data-usage-host");
+    expect(analysis).toContain('<h2>花費紀錄</h2>');
+    expect(analysis).toContain('<p class="ua-line" role="status">正在載入用量…</p>');
   });
 
   test("usage asks for no OpenRouter key, with or without one: that key is OpenRouter's card among the providers", () => {
@@ -702,6 +737,7 @@ describe("while the core does not answer", () => {
     expect(rowOf(tab("dictation", down), "問拉斐爾")).not.toContain("disabled");
     const usage = tab("usage", down);
     expect(usage).not.toContain('id="limit-input"');
+    expect(usage).toMatch(/data-act="usage-cap"[^>]*disabled>/);
     for (const name of ["語音轉文字", "整理文字", "拉斐爾的快速提問"]) expect(rowOf(tab("models", down), name)).toMatch(/data-k="[\w-]+" disabled>/);
   });
 });
