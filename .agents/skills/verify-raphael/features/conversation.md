@@ -1,5 +1,11 @@
 # Conversation
 
+## Owner links and unavailable skills
+
+R-SKILL-18 and R-SKILL-19 cover selected package snapshots and recoverable skill-load notices. A turn that skips a skill still answers, and its localized notice shows under the owner's message. R-LINK-02 covers the safe URL and known skill in the owner bubble and the Team skills destination. Unknown slash words stay plain.
+
+npm run look -- owner-skill-links owner-skill-open --theme both --width 1120,720,1920x1080
+
 ## A conversation read at its bottom stays at its bottom (R-FOLLOW-01)
 
 A thread read at its bottom does not move at all while a member replies. Following the bottom was a correction queued by the

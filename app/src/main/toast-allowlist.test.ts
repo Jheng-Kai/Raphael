@@ -50,7 +50,7 @@ const lookupKeys = [
   "missing.startup", "missing.unknown", "missing.url", "missing.urlRead", "missing.videoGeneration",
   "missing.vision", "models.missing.answer", "models.missing.cleanup", "models.missing.quick",
   "models.missing.stt", "picker.roleAnswer", "picker.roleCleanup", "picker.roleStt", "runs.fiveHour",
-  "runs.weekly", "runs.weeklyOpus", "runs.weeklySonnet", "skillLib.badArchive", "skillLib.badName",
+  "runs.weekly", "runs.weeklyOpus", "runs.weeklySonnet", "skillLib.badArchive", "skillLib.badName", "skillLib.invalidDocument",
   "skillLib.noSkill", "skillLib.tooLarge", "skillLib.unsupported", "template.file.damaged",
   "template.file.newer", "template.file.notTemplate", "template.file.secret", "template.file.tooLarge",
 ];

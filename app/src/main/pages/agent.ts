@@ -552,7 +552,7 @@ export function createAgent(app: AppContext, places?: {
   const input = composer.querySelector<HTMLTextAreaElement>(".cmp-input")!;
   const pageDraft = bindPageComposer(input);
   const correctionLearning = bindComposerLearning(input);
-  const slashMenu = mountSlashMenu(input, { memberId, scope: app });
+  const slashMenu = mountSlashMenu(input, { memberId, scope: app, changed: () => { presentationVersion++; render(); } });
   const attachButton = composer.querySelector<HTMLElement>(".cmp-attach")!;
   bindActionMode(composer.querySelector<HTMLElement>(".cmp-mode")!);
   composerFolder = mountComposerFolder(composer.querySelector<HTMLElement>(".cmp-folder")!, memberId, { onEvent: handler => app.onEvent(handler) });
@@ -779,6 +779,7 @@ export function createAgent(app: AppContext, places?: {
     const latest = latestAnsweredId();
     const busy = pacing.active || regenerating.size > 0 || outgoing.some(belongs) || own().some(turn => turn.status === "running" || isLive(turn.task));
     const shared = { regenerateTurnId: busy ? undefined : latest, revealing: (id: number) => pacing.waiting(id), waitingForOwner: desktop.waitingForOwner, memberName: members.nameOf, memberFace: (id: number, size = 18) => members.faceOf(id, size), mentions: members.mentionTargets(),
+      skills: new Map(slashMenu.skills().filter(skill => skill.enabled).map(skill => [(skill.slash_name ?? skill.name).toLowerCase(), skill.id])),
       // A permission card in the thread can be answered while the window holds its question and is not answering it.
       answerable: (cardId: string) => question?.id === cardId && !answering };
     if (inRaphael()) return { ...shared, face: moving => faceHTML(members.member(), 26, { moving }), liveFace: () => faceHTML(members.member(), 28, { moving: true }), activityLabel: members.member().activity_label };
@@ -2827,7 +2828,22 @@ export function createAgent(app: AppContext, places?: {
     if (save && !save.disabled) save.click();
   });
 
+  const openSkillLink = (event: MouseEvent): boolean => {
+    const link = (event.target as Element).closest<HTMLElement>('[data-act="open-owner-skill"]');
+    if (!link) return false;
+    event.preventDefault();
+    const skill = slashMenu.skills().find(item => item.id === Number(link.dataset.skill));
+    if (!skill) return true;
+    if (skill.shared) app.go("settings", `skill:${skill.id}`);
+    else {
+      app.go("agent", `member-settings:${memberId()}`);
+      members.settings.showNavView(`skills/skill:${skill.id}`);
+    }
+    return true;
+  };
+  el.addEventListener("auxclick", event => { if (event.button === 1) openSkillLink(event); });
   el.addEventListener("click", (e) => {
+    if (openSkillLink(e)) return;
     const act = (e.target as Element).closest<HTMLElement>("[data-act]");
     if (!act || (act as HTMLButtonElement).disabled) return;
     switch (act.dataset.act) {

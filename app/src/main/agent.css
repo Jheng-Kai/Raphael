@@ -825,7 +825,14 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 
 .bubble .message-quote, .bubble .quote-author { color: var(--on-bubble); border-color: currentColor; }
 /* A link in a neutral bubble stays in the link colour; only a bubble that wears a member's colour needs its own words colour to read. */
-.mb-chat[data-member-bubble] .owner-message .bubble .message-link { color: var(--on-bubble); }
+.owner-message .bubble .message-link {
+  color: var(--link);
+  background: var(--panel);
+  border-radius: var(--r-sm);
+  box-decoration-break: clone;
+  padding-inline: var(--sp-1);
+}
+.owner-skill-notice { text-align: end; margin: 0 0 var(--sp-2); }
 /* Send and Raphael voice form one quiet, equal-sized pair in every composer. */
 .cmp-pair { display: inline-flex; flex: none; align-items: center; gap: var(--sp-1); }
 .composer .cmp-pair .btn { width: 32px; height: 32px; min-height: 32px; padding: 0; border: 0; border-radius: var(--r-sm); background: transparent; }

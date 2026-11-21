@@ -782,8 +782,8 @@ class MembersService:
     def expand_command(self, member_id: int, text: str) -> str:
         return self.capabilities.expand(member_id, text)
 
-    def resolve_slash(self, member_id: int, text: str) -> tuple[str, bool]:
-        return self.capabilities.resolve_slash(member_id, text)
+    def resolve_slash(self, member_id: int, text: str, *, on_failure=None) -> tuple[str, bool]:
+        return self.capabilities.resolve_slash(member_id, text, on_failure=on_failure)
 
     def enabled_skills(self, member_id: int) -> list[dict]:
         return [skill for skill in self.capabilities.skills(member_id) if skill["enabled"]]
@@ -926,7 +926,7 @@ class MembersService:
             files, name = skill_sources.local(source)
             return [(source, f) for f in files], source, "source", name
         documents = await download_skills(source)
-        return [(url, {"SKILL.md": text.encode()}) for url, text in documents], source, "source", source.split("/")[-1]
+        return documents, source, "source", source.rstrip("/").split("/")[-1]
 
     async def _import_package(self, member, params, *, new_package=False):
         self._package_fields(params, ("source", "text", "file", "access", "name", "plugin", "set_id", "marketplace"))

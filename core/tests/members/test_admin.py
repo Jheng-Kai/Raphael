@@ -328,16 +328,23 @@ async def test_admin_turn_updates_groups_profiles_routines_and_commands_and_emit
 
 
 async def test_skill_import_uses_the_shared_download_and_notifies_the_member(setup, client, monkeypatch):
+    from .test_skill_packages import archive
+
     rig, team = setup
     one = member(team, name="COO")
     notes = []
     team.members._notify = lambda method, data: notes.append((method, data))
     real_client = httpx.AsyncClient
     document = "---\nname: operations\ndescription: Plan weekly operations\n---\nKeep clear decisions."
+    snapshot = archive([("operations-main/SKILL.md", document.encode())])
 
     def handle(request):
-        assert request.url.host == "raw.githubusercontent.com"
-        return httpx.Response(200, text=document)
+        if request.url.host == "api.github.com":
+            assert request.url.path == "/repos/owner/operations"
+            return httpx.Response(200, json={"default_branch": "main"})
+        assert request.url.host == "codeload.github.com"
+        assert request.url.path == "/owner/operations/zip/main"
+        return httpx.Response(200, content=snapshot)
 
     monkeypatch.setattr("raphael_core.members.capabilities.httpx.AsyncClient",
                         lambda **kwargs: real_client(**kwargs, transport=httpx.MockTransport(handle)))

@@ -1104,3 +1104,24 @@ test("live HTML is independent of the clock for turns, task details and pending 
   state.nowMs += 10000;
   expect([turnHTML(live, state, false, LOOK), stepsHTML(live, state), pendingTurnHTML("Draft", "app", LOOK, [], { id: "pending", time: T0 }, state.nowMs)]).toEqual(before);
 });
+
+
+test("owner skill and URL links preserve literal words and a skipped skill is one quiet notice", () => {
+  setLocale("en");
+  const text = JSON.stringify({ type: "skill_unavailable", name: "code-review", reason: "archive" });
+  document.body.innerHTML = turnHTML(turn(97, {
+    question: "/code-review https://example.com/changes /unknown",
+    text: "I reviewed what was available.",
+    failure: null,
+    messages: [{ kind: "event", seq: 1, text, at_ms: 1 }, { kind: "event", seq: 2, text, at_ms: 2 }],
+  }), emptyTimelineState(), false, { ...LOOK, skills: new Map([["code-review", 71]]) });
+  const bubble = document.querySelector(".owner-message .bubble")!;
+  expect(bubble.querySelector("[data-skill='71']")?.textContent).toBe("/code-review");
+  expect(bubble.querySelector("[data-act='open-url']")?.getAttribute("href")).toBe("https://example.com/changes");
+  expect(bubble.querySelectorAll(".message-link")).toHaveLength(2);
+  expect(bubble.textContent).toContain("/unknown");
+  const notices = document.querySelectorAll("[data-skill-notice]");
+  expect(notices).toHaveLength(1);
+  expect(notices[0]?.textContent).toBe(t("skillLib.skipped", { p0: "code-review", p1: t("skillLib.invalidPackage") }));
+  expect(bubble.compareDocumentPosition(notices[0]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});

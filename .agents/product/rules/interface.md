@@ -7,6 +7,11 @@ Layout, controls, menus, floating surfaces, the sidebar, navigation, colours, wo
 | ID | Date | Rule | Check | Severity | Evidence |
 | --- | --- | --- | --- | --- | --- |
 | R-UI-176 | 2026-11-21 | A toast never repeats a result already visible where the owner acted. Creation, deletion, successful sign-in and other visible state changes use their own rows or controls as feedback. A toast can report an unseen result or a failure, or offer recovery such as Undo. A new toast key needs a reason in the allowlist. | vitest, look | hard | app/src/main/toast-allowlist.test.ts::toast messages use only the allowlisted keys and existing message producers; member-delete; room-delete; quick-cleared; automations-delete-own; skill-library-imported |
+## Links in an owner message
+
+| ID | Date | Rule | Check | Gate | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-LINK-02 | 2026-11-21 | An owner message shows an enabled skill's slash name and each safe HTTP or HTTPS address in the app link colour, readable on every member colour. The browser opens addresses through the shared link opener. A shared skill link opens its entry in Settings > Team skills. Unknown slash names remain plain text. | vitest, look | hard | app/src/main/timeline.test.ts::owner skill and URL links preserve literal words and a skipped skill is one quiet notice; owner-skill-links; owner-skill-open |
 
 ## Local command completion
 

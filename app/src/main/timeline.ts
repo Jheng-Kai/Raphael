@@ -34,7 +34,7 @@ import { messageExpandHTML } from "./message-preview";
 import { TYPED, VOICE, delegatedTurn, exchangeTurn, hasDetail, highlightHTML, sourceOf, type TurnPart } from "./conversation";
 import { receivedLineHTML } from "./exchange-line";
 import { isBotRename, isSettledDraftTurn, settledDraftHTML } from "./member-draft";
-import { fileLinkStamp, linkedText, messageHTML, replyContentHTML, type KnownFiles } from "./message-content";
+import { fileLinkStamp, linkedText, messageHTML, ownerTextHTML, replyContentHTML, type KnownFiles } from "./message-content";
 import type { MentionTarget } from "./mention-text";
 import { quoteHTML } from "./message-quote";
 import { mediaPicture, mediaVideo } from "./picture-message";
@@ -647,6 +647,7 @@ export interface TurnLook {
   activityLabel?: string;
   /** The words being looked for, marked wherever they are; blank for none. */
   query?: string;
+  skills?: ReadonlyMap<string, number>;
   /** The name of member `id` (0 is Raphael), for the lines of colleague events. */
   memberName?: (id: number) => string;
   /** The small face of member `id` on those lines (Raphael's bare emblem for 0), at `size` px where the line wants another. */
@@ -1154,7 +1155,7 @@ function publicEventsHTML(turn: AgentTurn, conversation: boolean, place: "inline
     if (message.kind !== "event") { groups.push({kind: "break", lines: [], names: new Map(), seq: message.seq}); continue; }
     let event: {type?: string; action?: string; id?: number; name?: string; date?: string; member_id?: number} = {};
     try { event = JSON.parse(message.text); } catch { /* Historical events remain readable without a guessed target. */ }
-    if (event?.type === "action") continue;
+    if (event?.type === "action" || event?.type === "skill_unavailable") continue;
     // Older CLI failures wrote the final sentence as an event too. Keep one public sentence.
     if (plainLine(message.text) === plainLine(turn.text) || turn.messages?.some(reply => reply.kind === "reply" && plainLine(reply.text) === plainLine(message.text))) continue;
     const known = ["routine", "calendar"].includes(event?.type ?? "") && ["created", "updated", "deleted"].includes(event?.action ?? "") && typeof event.name === "string" && Number.isSafeInteger(event.id) && event.id! > 0;
@@ -1216,6 +1217,25 @@ export function standingPresence(turns: readonly AgentTurn[], look: Pick<TurnLoo
   return bare;
 }
 
+const skillReasons = {
+  archive: "skillLib.invalidPackage", size: "skillLib.tooLarge", not_found: "skillLib.noSkill",
+  skill: "skillLib.invalidDocument", source: "skillLib.unsupported",
+} as const;
+
+function skillNoticesHTML(turn: AgentTurn): string {
+  const names = new Set<string>();
+  return (turn.messages ?? []).map(message => {
+    if (message.kind !== "event") return "";
+    try {
+      const { type, name, reason } = JSON.parse(message.text);
+      if (type !== "skill_unavailable" || typeof name !== "string" || names.has(name)) return "";
+      names.add(name);
+      const key = Object.prototype.hasOwnProperty.call(skillReasons, reason) ? skillReasons[reason as keyof typeof skillReasons] : "skillLib.failed";
+      return `<p class="sys owner-skill-notice" data-skill-notice role="status">${esc(t("skillLib.skipped", { p0: name, p1: t(key) }))}</p>`;
+    } catch { return ""; }
+  }).join("");
+}
+
 /** One question and its answer, with what was done in between. */
 export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: boolean, look: TurnLook): string {
   const id = esc(turn.id);
@@ -1274,14 +1294,14 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
       : asked
       ? `<div class="me">` +
         `<div class="chat-message owner-message${state.expandedMessages.has(`${id}:question`) ? " is-expanded" : ""}" data-message="question" data-expandable="true">` +
-        withReactions(bubbleHTML(said ? messageHTML(turn.question.trim(), query, false, look.mentions) : "", turn.attachments, turn.quote, messageExpandHTML(turn.question, state.expandedMessages.has(`${id}:question`)), queued ? queuedActionsHTML() : ""), turn.reactions?.owner) +
+        withReactions(bubbleHTML(said ? ownerTextHTML(turn.question.trim(), query, look.mentions ?? [], look.skills) : "", turn.attachments, turn.quote, messageExpandHTML(turn.question, state.expandedMessages.has(`${id}:question`)), queued ? queuedActionsHTML() : ""), turn.reactions?.owner) +
         // The read-only earlier version has Copy. The current message's menu decides whether Edit is available.
         (earlierVersion(turn) ? messageActionsHTML(turn.created_at_ms, false, undefined, false)
           : messageActionsHTML(turn.created_at_ms, false, !queued && !secretCancel && cancellable ? "cancel" : "own")) +
         versionPagerHTML(turn) + `</div>` +
         `</div>`
       : "") +
-    turnEventsHTML(turn, look) + mailHandedLinesHTML(turn, look);
+    skillNoticesHTML(turn) + turnEventsHTML(turn, look) + mailHandedLinesHTML(turn, look);
   if (part?.owner === "question") return head ? line(" is-owner-only", head) : "";
   if (!ends) {
     // A stretch before an owner message or exchange that joined the work: what the work said in it, and nothing that ends the turn.
@@ -1320,7 +1340,7 @@ export const dayHTML = (label: string): string => `<li class="day"><span>${esc(l
 export function pendingTurnHTML(question: string | null, _source: string, look: TurnLook, files: readonly TurnAttachment[] = [], request?: { id?: string; time: number; quote?: MessageQuote }, nowMs = Date.now(), expanded = false, showPresence = true, tail?: { progress?: string; words?: boolean }): string {
   void nowMs;
   const words =
-    question === null ? `<span class="shimmer">${esc(t("agent.hearing"))}</span>` : question.trim() === "" ? "" : messageHTML(question.trim(), "", false, look.mentions);
+    question === null ? `<span class="shimmer">${esc(t("agent.hearing"))}</span>` : question.trim() === "" ? "" : ownerTextHTML(question.trim(), "", look.mentions ?? [], look.skills);
   return (
     `<li class="tn is-pending is-owner-only"${request?.id ? ` data-session="${esc(request.id)}"` : ""}>` +
     `<div class="me"><div class="chat-message owner-message${expanded ? " is-expanded" : ""}" data-message="question" data-expandable="true">${bubbleHTML(words, files, request?.quote, messageExpandHTML(question ?? "", expanded))}${request?.id ? messageActionsHTML(request.time, false, "cancel") : ""}</div></div>` +

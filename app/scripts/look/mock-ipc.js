@@ -13,6 +13,13 @@ export function installMock(fixture, config = {}, target = window) {
       google: { redirect: "http://127.0.0.1", scopes: ["https://www.googleapis.com/auth/gmail.modify", "https://www.googleapis.com/auth/calendar.events"], configured: false } }];
     return turn;
   }
+  if (variant.ownerSkillLinks) {
+    data.chatMetadataSample.question = "/code-review https://example.com/changes /不存在";
+    data.skillLibrary.push({ key: "pack:owner-links", name: "程式碼審閱工具", kind: "pack", source: "https://github.com/example/reviews",
+      description: "", version: "", enabled: true, access: "all", updatable: true,
+      skills: [{ id: 715, name: "code-review", description: "", enabled: true },
+        { id: 716, name: "outline", description: "", enabled: true }] });
+  }
   if (variant.skillPackages) {
     // A library longer than the tab: the way back from a package's page must land where the list was left.
     const kits = ["寫作工具", "資料分析", "客服回覆", "行銷素材", "財務報表", "招募流程", "產品規格", "設計檢查"];
@@ -59,6 +66,7 @@ export function installMock(fixture, config = {}, target = window) {
       turn.attachments = variant.ownerFile ? [shots[0], { id: `${'d'.repeat(32)}.pdf`, name: '研究摘要.pdf', mime: 'application/pdf', size: 182_000 }, ...shots.slice(1)] : shots;
     }
     // R-UI-163: the member is still thinking about the owner's message and has sent no bubble for it, so 編輯 takes it into the composer.
+    if (variant.ownerSkillLinks) turn.messages.push({ seq: 1, kind: "event", at_ms: data.now, text: JSON.stringify({ type: "skill_unavailable", name: "code-review", reason: "archive" }) });
     if (variant.ownerThinking) Object.assign(turn, { status: 'running', prefix: '', text: '', messages: [], reactions: {} });
     // The owner's message was edited after its member answered it: the history's turn is its second version, the first is kept
     // beside it for `agent.history.version` (the core's `agent_turn_versions`).
@@ -1683,6 +1691,9 @@ export function installMock(fixture, config = {}, target = window) {
       }
       case "members.delete": if (Object.keys(p).some(key => key !== "id")) throw new Error("Invalid params: members.delete takes only the member's id"); data.members =data.members.filter(item => item.id !== p.id); if (p.id === data.primaryId) data.primaryId = 0; notify("MembersChanged", { member_id: p.id }); return { deleted: true };
       case "members.skills.list": {
+        if (variant.ownerSkillLinks && p.member_id === 1) return {
+          skills: [{ id: 715, name: "code-review", slash_name: "code-review", enabled: true, shared: true }], sets: [], library: [],
+        };
         if (p.marketplace) {
           const marketplace = structuredClone(data.skillMarketplaceCatalog);
           if (!marketplace || p.marketplace !== marketplace.repo) throw new Error("Invalid params: unknown synthetic marketplace");

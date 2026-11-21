@@ -137,6 +137,27 @@ export function linkedText(text: string): string {
   return out + esc(text.slice(from));
 }
 
+/** Owner messages keep their literal URLs and the slash names offered by the member. */
+export function ownerTextHTML(text: string, query: string, mentions: readonly MentionTarget[], skills?: ReadonlyMap<string, number>): string {
+  const tokens = /https?:\/\/|(?<!\S)\/\S+/gi;
+  const words = (plain: string): string => mentionsHTML(plain, mentions, value => highlightHTML(value, query));
+  let html = "", from = 0;
+  for (let match = tokens.exec(text); match; match = tokens.exec(text)) {
+    const start = match.index;
+    const raw = /^https?:/i.test(match[0]) ? bareUrl(text.slice(start)) : match[0];
+    const url = /^https?:/i.test(raw) ? messageUrl(raw) : null;
+    const id = raw.startsWith("/") ? skills?.get(raw.slice(1).toLowerCase()) : undefined;
+    if (!url && id === undefined) continue;
+    html += words(text.slice(from, start));
+    const label = highlightHTML(raw, query);
+    html += url
+      ? `<a class="message-link" href="${esc(url)}" data-act="open-url" data-url="${esc(url)}" rel="noreferrer noopener">${label}</a>`
+      : `<a class="message-link" href="#skill-${id}" data-act="open-owner-skill" data-skill="${id}">${label}</a>`;
+    from = tokens.lastIndex = start + raw.length;
+  }
+  return html + words(text.slice(from));
+}
+
 /** An address only this machine or its network can open: no public page, so no title to read and no preview. */
 export function isLocalAddress(url: string): boolean {
   const host = new URL(url).hostname;

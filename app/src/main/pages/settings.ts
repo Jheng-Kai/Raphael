@@ -1275,6 +1275,8 @@ export function createSettings(app: AppContext): SettingsPage {
       }
     },
     async show(open?: PageArgument) {
+      const skillId = open?.startsWith("skill:") ? Number(open.slice(6)) : null;
+      if (skillId !== null) open = "skills";
       const repair = open?.startsWith("repair:") ? open.split(":").slice(1) : null;
       if (repair?.[0] === "computer") { app.closeSettings(); app.go("agent", "computer"); return; }
       if (repair) open = ({ search: "tools", read: "tools", vision: "tools", pdf: "tools", store: "connections", relogin: "connections" } as Record<string, SettingsPane>)[repair[0]] ?? repair[0] as SettingsPane;
@@ -1299,7 +1301,7 @@ export function createSettings(app: AppContext): SettingsPage {
       if (pane === "about") void checkUpdate();
       if (pane === "connections") void connections.load();
       if (pane === "safety") { void rules.load(); void vault.load(); }
-      if (pane === "skills") void skillLibrary.load();
+      if (pane === "skills") void skillLibrary.load(skillId);
       if (pane === "tools") void services.load();
       if (pane === "models") void loadProviders();
       // At once, whatever the tab: the allowances are current by the time they are reached.

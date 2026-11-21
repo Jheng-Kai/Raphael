@@ -201,7 +201,8 @@ test("message link chips use the safe opener with the full target, and no row of
   ] })] });
   api.core.mockResolvedValue(null); api.openExternalUrl.mockResolvedValue(undefined);
   const agent = mount(); await flush();
-  expect(document.querySelectorAll(".message-link.link-chip")).toHaveLength(3);
+  expect(document.querySelectorAll(".message-link.link-chip")).toHaveLength(2);
+  expect(document.querySelector(".owner-message .message-link")?.textContent).toBe(url);
   expect(document.querySelectorAll(".preview-card, .preview-cards")).toHaveLength(0);
   document.querySelector<HTMLAnchorElement>(".bubble a")!.click();
   expect(api.openExternalUrl).toHaveBeenLastCalledWith(url);

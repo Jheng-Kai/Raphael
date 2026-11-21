@@ -10,7 +10,7 @@ import re
 import stat
 from pathlib import Path
 
-from ..bots.homes import BotHomes, atomic
+from ..bots.homes import BotHomes, HomeError, atomic
 from .store import MemberError
 
 SHARED = -1
@@ -34,13 +34,14 @@ def linked(path):
     return path.is_symlink() or (hasattr(path, "is_junction") and path.is_junction())
 
 
-def package(folder):
-    """Take one bounded snapshot, rejecting links, devices and ambiguous paths."""
+def package(folder, *, installed=False):
+    """Take one bounded snapshot, copying only verified files and in-folder file aliases."""
     from .skill_sources import folder_snapshot
 
-    files = folder_snapshot(folder, byte_limit=MAX_PACKAGE_BYTES, entry_limit=MAX_PACKAGE_FILES).files
-    if "SKILL.md" not in files:
-        raise MemberError("source", "no SKILL.md in that folder")
+    try:
+        files = folder_snapshot(folder, installed=installed, skill_links=True).finish()
+    except OSError as error:
+        raise MemberError("not_found", "skill files are unavailable") from error
     return files
 
 
@@ -57,7 +58,10 @@ def walk(folder, remaining, *, strict=False):
                 remaining[0] -= 1
                 path = Path(entry.path)
                 if linked(path):
-                    if strict:
+                    if strict and path.is_symlink():
+                        info = path.lstat()
+                        files.append((path, info))
+                    elif strict:
                         raise MemberError("source", "linked skill packages are not supported")
                     continue
                 if entry.is_dir(follow_symlinks=False):
@@ -233,26 +237,33 @@ class SkillLibrary:
                 path.unlink(missing_ok=True)
         for name, data in files.items():
             atomic(self.homes.safe(folder / name), data)
-        atomic(metadata, json.dumps({**candidate, "files": list(files)}, ensure_ascii=False).encode())
+        atomic(metadata, json.dumps({**candidate, "files": list(files),
+               **({"skipped_links": files.skipped_links} if files.skipped_links else {})}, ensure_ascii=False).encode())
         self._mirror(member_id)
         return self._skill(member_id, skill["id"])
+
+    def package_info(self, member_id, identifier):
+        try:
+            path = self._path(member_id, identifier).parent / ".raphael-source.json"
+            info = json.loads(self.homes.safe(path).read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            return {}
+        return info if isinstance(info, dict) else {}
 
     def source_details(self, member_id, identifier):
         row = self.conn.execute("SELECT k.set_id,k.set_kind,s.name,s.version FROM member_skills k JOIN skill_sets s ON s.id=k.set_id WHERE k.id=?", (identifier,)).fetchone()
         if row:
             return {"set_id": row["set_id"], "set_kind": row["set_kind"], "plugin": row["name"], "plugin_version": row["version"]}
-        path = self._path(member_id, identifier).parent / ".raphael-source.json"
-        if not path.exists():
-            return {}
-        info = json.loads(self.homes.safe(path).read_text(encoding="utf-8"))
+        info = self.package_info(member_id, identifier)
+        skips = {"skipped_links": info["skipped_links"]} if info.get("skipped_links") else {}
         if "fingerprint" not in info:
-            return {}
+            return skips
         try:
             folder, root = location(self.skill_home, info["source"])
             changed = fingerprint(newest(folder, root)) != info["fingerprint"]
         except (OSError, MemberError):
             changed = None
-        return {"source_changed": changed, **({"plugin": info["plugin"]} if info.get("plugin") else {})}
+        return {"source_changed": changed, **skips, **({"plugin": info["plugin"]} if info.get("plugin") else {})}
 
     def skill_owner(self, member_id, identifier):
         row = self.conn.execute("SELECT member_id FROM member_skills WHERE id=?", (identifier,)).fetchone()
@@ -265,6 +276,15 @@ class SkillLibrary:
             raise MemberError("scope", "update or remove this skill through its plugin set")
 
     def native_skills(self, member_id):
-        return [{"name": s["slash_name"], "path": str(self._path(member_id, s["id"])),
-                 **({"plugin_root": str(self.plugin_root(s["set_id"]))} if s.get("set_id") else {})}
-                for s in self.skills(member_id) if s["enabled"]]
+        result = []
+        for skill in self.turn_skills(member_id, self.commands(member_id)):
+            entry = {"name": skill["slash_name"]}
+            try:
+                path = self._path(member_id, skill["id"])
+                if skill.get("set_id"):
+                    entry["plugin_root"] = str(self.plugin_root(skill["set_id"]))
+                entry["path"] = str(path)
+            except (HomeError, MemberError):
+                pass
+            result.append(entry)
+        return result

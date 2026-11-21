@@ -188,7 +188,7 @@ from ..brain.owner import owner_context
 from .cities import cities_in
 from .commands import COMMANDS, AppCatalog, run_command
 from .device import DeviceActions
-from .failure import AgentFailure, failure_kind, provider_of, turn_failure
+from .failure import AgentFailure, failure_kind, provider_of, skill_failure, skill_instruction, turn_failure
 from ..failures import Failure, Missing, classify
 from .gate import BUILTIN_SERVER, ToolGate
 from .history import VOICE, AgentHistory, Turn
@@ -555,6 +555,7 @@ class _Ask:
     management_pending: list[PlannedCall] = field(default_factory=list)
     management_screenings: list[Screening] = field(default_factory=list)
     memory_untrusted: bool = False
+    skill_notices: list[dict] = field(default_factory=list)
     # (tool key, argument digest) of each call made that changes something, in order.
     made: list[tuple[str, str]] = field(default_factory=list)
     # The apps whose connector cards this turn showed: it then waits for them and calls nothing else.
@@ -1392,10 +1393,14 @@ class AgentService:
         conversation_id = self._destination(member_id, conversation_id, source, quick=quick)
         original_text = None
         skill_loaded = False
+        skill_notices = []
         resolve = getattr(self._team, "resolve_slash", None)
         expand = getattr(self._team, "expand_command", None)
         if resolve is not None or expand is not None:
-            expanded, skill_loaded = resolve(member_id, text) if resolve is not None else (expand(member_id, text), False)
+            expanded, skill_loaded = (resolve(member_id, text, on_failure=lambda name, error:
+                skill_notices.append(skill_failure(name, error))) if resolve is not None else (expand(member_id, text), False))
+            if skill_notices:
+                expanded += "\n\n" + skill_instruction(skill_notices)
             if expanded != text:
                 original_text, text = text, expanded
         from .intents import checked as check_intent
@@ -1406,7 +1411,8 @@ class AgentService:
             intent=intent,
             started_at_ms=self._now_ms(),
             original_text=original_text,
-            memory_untrusted=skill_loaded,
+            memory_untrusted=skill_loaded or bool(skill_notices),
+            skill_notices=skill_notices,
             text=text,
             language=normalize_language(ui_language),
             attachments=list(attachments),
@@ -1521,6 +1527,7 @@ class AgentService:
                         return self._done(0, ask.language, "understood", "", silent=True)
                 payload = dict(session_id=ask.session_id, draft_text=ask.draft_text, text=ask.text, original_text=ask.original_text, language=ask.language,
                                source=ask.source, quick=ask.quick, quote=ask.quote, memory_untrusted=ask.memory_untrusted,
+                               skill_notices=ask.skill_notices,
                                attachments=[a.metadata() for a in ask.attachments])
                 row, _ = self._inbox.admit(ask, payload)
                 if ask.place and row['turn_id'] != old.id:
@@ -1631,7 +1638,8 @@ class AgentService:
         return _Ask(history_generation=generation, session_id=payload.get('session_id', row['request_id']), turn_id=row['turn_id'], text=payload['text'],
                     language=payload['language'], source=payload['source'], quick=payload.get('quick', False), speaker=speaker,
                     conversation_id=row['conversation_id'], original_text=payload.get('original_text'),
-                    memory_untrusted=payload.get('memory_untrusted', False), quote=payload.get('quote'), attachments=files)
+                    memory_untrusted=payload.get('memory_untrusted', False), skill_notices=payload.get('skill_notices', []),
+                    quote=payload.get('quote'), attachments=files)
 
     async def _drain(self, scope, row, waiter):
         first = True
@@ -2445,6 +2453,10 @@ class AgentService:
                 line = line[len(compose(prefix, "", None)) - 1:]
             if not last:
                 line = line[:-1]
+        if kind == "event" and line.startswith('{"type": "skill_unavailable",'):
+            if any(m["kind"] == kind and m["text"] == line
+                   for m in self._history.messages([ask.turn_id]).get(ask.turn_id, ())):
+                return
         self._write(lambda: self._history.add_message(ask.turn_id, kind, line))
         if kind in ("progress", "thinking"):
             self._mark_latency(ask, "first_step")
@@ -2899,6 +2911,7 @@ class AgentService:
                                    for turn in context.turns if turn.id is not None],
                     context_owner_words=owner_words(context.turns),
                     skills=getattr(self._team, "native_skills", lambda member: [])(ask.speaker.id),
+                    skill_notice=lambda notice: self._message(ask, "event", json.dumps(notice, ensure_ascii=False)),
                     attachments=ask.attachments, resume_session=not ask.nested,
                     rate_limit_waits=() if ask.quick else None,
                     conversation_id=ask.conversation_id, quota=self.quotas.record,
@@ -6899,6 +6912,9 @@ class AgentService:
                     scope=ask.scope, room_id=ask.room_id, thread_id=ask.thread_id, failure=failure,
                 )
                 ask.turn_id = turn_id
+            for notice in ask.skill_notices:
+                self._message(ask, "event", json.dumps(notice, ensure_ascii=False))
+            ask.skill_notices.clear()
             ask.recorded_cost = cost
             from ..brain.runs import save_metrics
             save_metrics(self._metrics_conn, "turn", turn_id, ask.started_at_ms,

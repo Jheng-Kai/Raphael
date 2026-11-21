@@ -2,6 +2,12 @@
 
 How a member answers: the core loop, replies, memory, models, CLI brains, the queue and handoffs. Part of [the product rules](../RULES.md); a rule's ID is unique across every file.
 
+## Continue when a skill cannot load
+
+| ID | Date | Rule | Check | Gate | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-SKILL-19 | 2026-11-21 | A named or assigned skill that cannot load is skipped. The member receives the skill name and reason and continues the turn without it. The window puts one localized notice per skill under the owner's message. The notice does not report a provider failure. Raphael's own package metadata is excluded from copies sent to CLI brains. | pytest, vitest | hard | core/tests/agent/test_turn_failure.py::test_a_broken_named_skill_leaves_one_notice_and_the_turn_answers; app/src/main/timeline.test.ts::owner skill and URL links preserve literal words and a skipped skill is one quiet notice |
+
 ## A colleague's exchange during work stands where it came, above the work's live line
 
 A member's live line 「正在電腦上執行 cd」 stood above 「與 X 的 2 則訊息」, a colleague's question that came while that work ran: the thread drew each turn whole, ordered by when it began, so what the work did after the question was left above it.
