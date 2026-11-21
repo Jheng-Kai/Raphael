@@ -32,9 +32,18 @@ import threading
 from pathlib import Path
 
 from raphael_core.stdio_server import claim_stdout, run_stdio
+from raphael_core.protocol import NEWER_DATABASE, RpcError
+from raphael_core.router import Router
 
 # Long enough for numpy to load from a cold disk; past this the core serves without it.
 LIBRARIES_TIMEOUT_S = 60.0
+
+
+class _NewerDatabaseRouter(Router):
+    """Keep the startup error on the normal RPC channel without building the application."""
+
+    async def call(self, method: str, params: dict | None = None) -> None:
+        raise RpcError(NEWER_DATABASE, "newer_database")
 
 
 def import_speech_libraries() -> None:
@@ -91,15 +100,23 @@ def main() -> None:
     preload = threading.Thread(target=import_speech_libraries, name="raphael-preload", daemon=True)
     preload.start()
     app_module = load_application()  # native libraries: only after the claim
+    from raphael_core.brain.db import NewerDatabaseError
+
     logging.info("Startup phase=app_import since_process_start_ms=%.1f", elapsed_ms())
 
     data_dir = os.environ.get("RAPHAEL_DATA_DIR")
     fake_audio = os.environ.get("RAPHAEL_FAKE_AUDIO")
-    app = app_module.build_app(
-        data_dir=Path(data_dir) if data_dir else None,
-        fake_audio=Path(fake_audio) if fake_audio else None,
-        fake_llm=os.environ.get("RAPHAEL_FAKE_LLM") == "1",
-    )
+    try:
+        app = app_module.build_app(
+            data_dir=Path(data_dir) if data_dir else None,
+            fake_audio=Path(fake_audio) if fake_audio else None,
+            fake_llm=os.environ.get("RAPHAEL_FAKE_LLM") == "1",
+        )
+    except NewerDatabaseError as error:
+        logging.error("%s", error)
+        preload.join(LIBRARIES_TIMEOUT_S)
+        run_stdio(_NewerDatabaseRouter(), output=protocol)
+        return
     # numpy hangs on Windows if it first loads while stdin is being read: see app.py.
     preload.join(LIBRARIES_TIMEOUT_S)
     app.wait_for_libraries(LIBRARIES_TIMEOUT_S)

@@ -455,6 +455,7 @@ export const vi = {
   "missing.hidden": "Hiện không đọc được các nhân vật và nhóm đã ẩn. Nếu vẫn thất bại, hãy khởi động lại Raphael.",
   "missing.routines": "Hiện không đọc được các việc định kỳ. Hãy mở lại phần chi tiết rồi thử lại.",
   "missing.startup": "Raphael chưa khởi động xong nên cài đặt không khả dụng. Đóng cửa sổ rồi khởi động lại; báo lỗi nếu vẫn xảy ra.",
+  "missing.newerDatabase": "Dữ liệu này được tạo bằng phiên bản Raphael mới hơn. Hãy cập nhật Raphael để mở dữ liệu.",
   "missing.composioGuide": "Lấy khóa dự án từ Settings > Project Settings > API Keys trên trang Composio rồi nhập và lưu bên dưới. Không dán vào cuộc trò chuyện.",
   "missing.learned": "Thông báo học từ vựng không khả dụng. Kiểm tra Đọc chính tả > Từ điển hoặc khởi động lại Raphael để khôi phục.",
   "missing.models": "Chưa nhận được danh sách mô hình của tài khoản. Tải lại; nếu thất bại, đăng nhập lại.",

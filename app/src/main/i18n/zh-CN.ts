@@ -455,6 +455,7 @@ export const zhCN = {
   "missing.hidden": "目前无法读取已隐藏的角色与群组；再试一次仍然失败时，请重新启动拉斐尔。",
   "missing.routines": "目前无法读取例行任务，请重新打开详细信息再试。",
   "missing.startup": "拉斐尔未能完成启动，目前无法打开设置，请关闭窗口后重新启动；仍失败时请回报问题。",
+  "missing.newerDatabase": "这份数据由较新版本的 Raphael 创建。请更新 Raphael 后再打开。",
   "missing.composioGuide": "请到 Composio 网站的「Settings › Project Settings › API Keys」取得项目密钥，在下方填入并保存。请勿贴在对话中。",
   "missing.learned": "词汇学习通知暂时无法显示，请到「听写 › 字典」确认结果，或重新启动拉斐尔恢复通知。",
   "missing.models": "尚未取得这个帐号的模型清单，请重新读取模型，仍然失败时重新登录。",

@@ -455,6 +455,7 @@ export const tr = {
   "missing.hidden": "Gizlenen karakterler ve gruplar şu anda okunamıyor. Yine başarısız olursa Raphael'i yeniden başlatın.",
   "missing.routines": "Rutinler şu anda okunamıyor. Ayrıntıları yeniden açıp tekrar deneyin.",
   "missing.startup": "Raphael başlatılamadığı için ayarlar kullanılamıyor. Pencereyi kapatıp yeniden başlatın; sürerse bildirin.",
+  "missing.newerDatabase": "Bu veriler Raphael’in daha yeni bir sürümüyle oluşturuldu. Verileri açmak için Raphael’i güncelleyin.",
   "missing.composioGuide": "Composio sitesindeki Settings > Project Settings > API Keys bölümünden proje anahtarı alın, aşağıya girip kaydedin. Görüşmeye yapıştırmayın.",
   "missing.learned": "Sözcük öğrenme bildirimleri kullanılamıyor. Dikte > Sözlük bölümünü kontrol edin veya bildirimleri geri getirmek için Raphael’i yeniden başlatın.",
   "missing.models": "Hesabın model listesi henüz gelmedi. Modelleri yeniden yükleyin; olmazsa yeniden oturum açın.",

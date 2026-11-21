@@ -7,8 +7,8 @@
 //! with Windows entry, the log, `device.json` and the database, and a development build moved the
 //! release's files about with the data migration of a newer version. A development build is
 //! therefore another app: its identifier, its folders and its start with Windows entry are its
-//! own. Only the speech models are shared, since they are large, are never changed once
-//! downloaded, and every build reads them the same way.
+//! own. Only the speech models are shared by default. An owner's test build can opt into the
+//! release identity at compile time, including its single-instance lock.
 
 use std::ffi::OsString;
 use std::path::{Component, Path, PathBuf};
@@ -34,7 +34,7 @@ pub const RELEASE: Identity = Identity {
     autostart_name: "Raphael",
 };
 
-/// A build with debug assertions: `tauri dev`, `cargo build`, `tauri build --debug`.
+/// The default for a build with debug assertions.
 pub const DEVELOPMENT: Identity = Identity {
     identifier_suffix: ".dev",
     folder: "Raphael Dev",
@@ -43,10 +43,14 @@ pub const DEVELOPMENT: Identity = Identity {
 
 /// The identity of this build.
 pub const fn current() -> &'static Identity {
-    if cfg!(debug_assertions) {
-        &DEVELOPMENT
-    } else {
+    for_build(cfg!(debug_assertions), option_env!("RAPHAEL_IDENTITY"))
+}
+
+const fn for_build(debug: bool, requested: Option<&str>) -> &'static Identity {
+    if !debug || matches!(requested, Some(value) if matches!(value.as_bytes(), b"release")) {
         &RELEASE
+    } else {
+        &DEVELOPMENT
     }
 }
 
@@ -221,8 +225,12 @@ mod tests {
     }
 
     #[test]
-    fn this_build_is_a_development_build_in_tests_and_a_release_otherwise() {
-        assert_eq!(current() == &DEVELOPMENT, cfg!(debug_assertions));
+    fn only_an_explicit_release_request_changes_a_debug_builds_identity() {
+        assert_eq!(for_build(true, None), &DEVELOPMENT);
+        assert_eq!(for_build(true, Some("Release")), &DEVELOPMENT);
+        assert_eq!(for_build(true, Some("release")), &RELEASE);
+        assert_eq!(for_build(false, None), &RELEASE);
+        assert_eq!(for_build(false, Some("dev")), &RELEASE);
     }
 
     #[test]

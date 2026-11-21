@@ -223,7 +223,11 @@ watchChipRows(document.body);
       // Settings and Connect apps read ahead once the first view is shown and answered, one read at a time: the core
       // answers on one loop, so a read ahead at start-up keeps the owner waiting for the page in front of them. The time since launch plays no part: a slow core start used to let it pass.
       void optionalRead(() => settings.preload());
-    } catch {
+    } catch (err) {
+      if ((err instanceof Error ? err.message : err) === "[1007] newer_database") {
+        showStartupFailure("newer_database");
+        return;
+      }
       // The core can be restarting: keep asking, or the owner's face and name stay blank.
       setTimeout(() => void refreshOwner(), 1000);
     }
@@ -524,12 +528,24 @@ function showPages(): void {
   document.querySelector<HTMLElement>(".wbody")!.hidden = false;
 }
 
-mountWindowChrome();
-start().catch((err) => {
-  console.error("main: could not start", err);
+function showStartupFailure(requirement: "startup" | "newer_database"): void {
   firstViewShown();
   // Whatever went wrong, the window must not stay blank.
   document.getElementById("ob")!.hidden = true;
   showPages();
-  document.getElementById("main")?.insertAdjacentHTML("afterbegin", noticeHTML("startup", null));
+  const main = document.getElementById("main");
+  if (requirement === "newer_database") {
+    // The core cannot open this data. Keep the notice in view without the unusable conversation.
+    document.getElementById("nav")!.hidden = true;
+    main?.classList.add("startup-failed");
+    if (main) main.innerHTML = `<div class="page">${noticeHTML(requirement)}</div>`;
+    return;
+  }
+  main?.insertAdjacentHTML("afterbegin", noticeHTML(requirement));
+}
+
+mountWindowChrome();
+start().catch((err) => {
+  console.error("main: could not start", err);
+  showStartupFailure("startup");
 });

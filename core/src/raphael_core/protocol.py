@@ -24,6 +24,8 @@ NO_MICROPHONE = 1004
 NOT_FOUND = 1005
 # The cloud speech-to-text failed and there is no local model to fall back on.
 NO_LOCAL_MODEL = 1006
+# The installed core cannot use the database's newer schema.
+NEWER_DATABASE = 1007
 # The core refuses a model call or a tool call of a background task (it was cancelled, a limit was
 # reached, the model failed); `data` says which. Only the worker is ever answered this.
 WORKER_STOPPED = 1100

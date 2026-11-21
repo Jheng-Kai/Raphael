@@ -455,6 +455,7 @@ export const id = {
   "missing.hidden": "Karakter dan grup yang disembunyikan tidak bisa dibaca sekarang. Jika masih gagal, mulai ulang Raphael.",
   "missing.routines": "Rutinitas tidak bisa dibaca sekarang. Buka lagi detailnya lalu coba lagi.",
   "missing.startup": "Raphael gagal menyelesaikan startup sehingga pengaturan tidak tersedia. Tutup jendela dan mulai ulang; laporkan jika berlanjut.",
+  "missing.newerDatabase": "Data ini dibuat oleh versi Raphael yang lebih baru. Perbarui Raphael untuk membukanya.",
   "missing.composioGuide": "Dapatkan kunci proyek dari Settings > Project Settings > API Keys di situs Composio, lalu masukkan dan simpan di bawah. Jangan tempel di percakapan.",
   "missing.learned": "Notifikasi pembelajaran kosakata tidak tersedia. Periksa Dikte > Kamus atau mulai ulang Raphael untuk memulihkannya.",
   "missing.models": "Daftar model akun belum diterima. Muat ulang; jika gagal, login kembali.",

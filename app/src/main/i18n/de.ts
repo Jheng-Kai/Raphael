@@ -455,6 +455,7 @@ export const de = {
   "missing.hidden": "Ausgeblendete Charaktere und Gruppen können gerade nicht gelesen werden. Wenn es erneut fehlschlägt, starte Raphael neu.",
   "missing.routines": "Die Routinen können gerade nicht gelesen werden. Öffne die Details erneut und versuche es noch einmal.",
   "missing.startup": "Raphael konnte nicht vollständig starten, Einstellungen sind nicht verfügbar. Fenster schließen und neu starten; anhaltendes Problem melden.",
+  "missing.newerDatabase": "Diese Daten wurden mit einer neueren Version von Raphael erstellt. Aktualisiere Raphael, um sie zu öffnen.",
   "missing.composioGuide": "Projektschlüssel auf der Composio-Website unter Settings > Project Settings > API Keys holen, unten eingeben und speichern. Nicht in ein Gespräch einfügen.",
   "missing.learned": "Vokabellernhinweise nicht verfügbar. Diktat > Wörterbuch prüfen oder Raphael zum Wiederherstellen der Hinweise neu starten.",
   "missing.models": "Die Modellliste dieses Kontos ist noch nicht da. Neu laden; bei Fehler erneut anmelden.",

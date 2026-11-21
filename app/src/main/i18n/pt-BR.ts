@@ -455,6 +455,7 @@ export const ptBR = {
   "missing.hidden": "Não foi possível ler os personagens e grupos ocultos agora. Se falhar de novo, reinicie o Raphael.",
   "missing.routines": "Não foi possível ler as rotinas agora. Abra os detalhes de novo e tente outra vez.",
   "missing.startup": "O Raphael não terminou de iniciar e as configurações estão indisponíveis. Feche a janela e reinicie; relate se persistir.",
+  "missing.newerDatabase": "Estes dados foram criados por uma versão mais recente do Raphael. Atualize o Raphael para abri-los.",
   "missing.composioGuide": "Obtenha uma chave de projeto em Settings > Project Settings > API Keys no site Composio e insira e salve abaixo. Não cole em uma conversa.",
   "missing.learned": "Os avisos de vocabulário estão indisponíveis. Confira Ditado > Dicionário ou reinicie o Raphael para restaurá-los.",
   "missing.models": "A lista de modelos da conta ainda não chegou. Recarregue; se falhar, entre novamente.",

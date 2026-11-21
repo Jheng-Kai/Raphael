@@ -1,6 +1,9 @@
 import json
 import logging
 import sqlite3
+import sys
+from contextlib import closing
+from pathlib import Path
 
 import pytest
 
@@ -10,6 +13,37 @@ from raphael_core.brain.history import HistoryStore
 from raphael_core.brain.settings import SettingsStore
 
 from .conftest import item
+
+
+@pytest.mark.parametrize("extended_path", [False, pytest.param(True, marks=pytest.mark.skipif(
+    sys.platform != "win32", reason="Windows extended paths"
+))])
+def test_newer_database_is_refused_before_switching_to_wal(tmp_path, extended_path):
+    path = tmp_path / "newer.db"
+    with closing(sqlite3.connect(path)) as conn:
+        conn.execute(f"PRAGMA user_version = {db.LATEST_VERSION + 1}")
+        with pytest.raises(db.NewerDatabaseError):
+            db.migrate(conn)
+
+    original = path.read_bytes()
+    open_path = Path("\\\\?\\" + str(path)) if extended_path else path
+    with pytest.raises(db.NewerDatabaseError):
+        db.connect(open_path)
+    assert list(tmp_path.iterdir()) == [path]
+    assert path.read_bytes() == original
+
+
+def test_newer_committed_schema_in_wal_is_refused_without_touching_sidecars(tmp_path):
+    path = tmp_path / "newer.db"
+    with closing(sqlite3.connect(path)) as writer:
+        writer.execute("PRAGMA journal_mode=WAL")
+        writer.execute(f"PRAGMA user_version = {db.LATEST_VERSION + 1}")
+        original = {file.name: file.read_bytes() for file in tmp_path.iterdir()}
+        assert path.name + "-wal" in original
+        assert int.from_bytes(original[path.name][60:64], "big") <= db.LATEST_VERSION
+        with pytest.raises(db.NewerDatabaseError):
+            db.connect(path)
+        assert {file.name: file.read_bytes() for file in tmp_path.iterdir()} == original
 
 
 def test_startup_migration_logging_only_records_executed_steps(caplog, tmp_path):

@@ -19,6 +19,7 @@ const messages: Record<string, MissingKey> = {
   "hidden": "missing.hidden",
   "routines": "missing.routines",
   "startup": "missing.startup",
+  "newer_database": "missing.newerDatabase",
   "learned": "missing.learned",
   "models": "missing.models",
   "retired": "missing.retired",

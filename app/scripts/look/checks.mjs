@@ -2,6 +2,17 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.checkVisibility() && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (name === "start-newer-data") {
+    const panel = document.querySelector(".main.startup-failed");
+    const notice = panel?.querySelector('.missing-note[role="status"]');
+    require(visible(notice), "the startup notice is visible");
+    require(panel.getBoundingClientRect().width === panel.parentElement.getBoundingClientRect().width, "the startup notice has the main window's full grid width");
+    require(!visible(document.getElementById("nav")) && !panel.querySelector(".composer"), "the unusable sidebar and conversation are absent");
+    if (document.documentElement.lang === "zh-TW") {
+      require(notice.textContent === "這份資料由較新版的 Raphael 建立。請更新 Raphael 後再開啟。", "the notice explains the newer data and asks the owner to update");
+    }
+    return { check: name };
+  }
   // The providers' directory keeps its title and x at the top however far its list is scrolled (the way out is never lost).
   const directoryCloseStays = dialog => {
     const close = dialog.querySelector('[data-pv="close"]'), list = dialog.querySelector('.pv-scroll');

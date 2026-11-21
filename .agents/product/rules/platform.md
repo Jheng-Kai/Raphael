@@ -2,6 +2,12 @@
 
 Speed, start-up, the network and how the repository is worked. Part of [the product rules](../RULES.md); a rule's ID is unique across every file.
 
+## Shared release data
+
+| ID | Date | Rule | Check | Severity | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-START-08 | | An owner debug build compiled with `RAPHAEL_IDENTITY=release` uses the installed edition's identity, data and single-instance lock. Other debug builds default to the development identity. The core refuses a database whose committed SQLite user_version is newer than its latest migration before changing the database or its sidecars. The startup notice tells the owner to update in the window's locale. | cargo, pytest, look | hard | app/src-tauri/src/identity.rs::only_an_explicit_release_request_changes_a_debug_builds_identity; core/tests/brain/test_db.py::test_newer_database_is_refused_before_switching_to_wal; core/tests/brain/test_db.py::test_newer_committed_schema_in_wal_is_refused_without_touching_sidecars; core/tests/test_main_startup.py::test_newer_database_returns_a_startup_error_on_the_normal_rpc_channel; start-newer-data |
+
 ## Long busy conversation input
 
 | ID | Date | Rule | Check | Severity | Evidence |

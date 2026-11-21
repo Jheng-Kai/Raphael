@@ -455,6 +455,7 @@ export const ko = {
   "missing.hidden": "숨긴 캐릭터와 그룹을 지금 읽을 수 없습니다. 다시 시도해도 실패하면 Raphael을 다시 시작하세요.",
   "missing.routines": "지금 정기 작업을 읽을 수 없습니다. 세부 정보를 다시 열고 다시 시도하세요.",
   "missing.startup": "Raphael을 시작하지 못해 설정을 사용할 수 없습니다. 창을 닫고 재시작하세요. 계속되면 문제를 보고하세요.",
+  "missing.newerDatabase": "이 데이터는 더 최신 버전의 Raphael에서 생성되었습니다. Raphael을 업데이트한 후 열어 주세요.",
   "missing.composioGuide": "Composio 웹사이트의 Settings > Project Settings > API Keys에서 프로젝트 키를 받아 아래에 입력하고 저장하세요. 대화에 붙여넣지 마세요.",
   "missing.learned": "어휘 학습 알림을 사용할 수 없습니다. 받아쓰기 > 사전을 확인하거나 Raphael을 재시작하여 알림을 복구하세요.",
   "missing.models": "이 계정의 모델 목록이 아직 도착하지 않았습니다. 모델을 다시 불러오고 실패하면 다시 로그인하세요.",

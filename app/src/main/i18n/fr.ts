@@ -455,6 +455,7 @@ export const fr = {
   "missing.hidden": "Impossible de lire les personnages et groupes masqués pour le moment. Si l’échec persiste, redémarrez Raphael.",
   "missing.routines": "Impossible de lire les routines pour le moment. Rouvrez les détails et réessayez.",
   "missing.startup": "Raphael n’a pas terminé son démarrage ; les réglages sont indisponibles. Fermez la fenêtre et redémarrez ; signalez le problème s’il persiste.",
+  "missing.newerDatabase": "Ces données ont été créées avec une version plus récente de Raphael. Mettez Raphael à jour pour les ouvrir.",
   "missing.composioGuide": "Obtenez une clé de projet dans Settings > Project Settings > API Keys sur le site Composio, puis saisissez-la et enregistrez-la ci-dessous. Ne la collez pas dans une conversation.",
   "missing.learned": "Les avis d’apprentissage du vocabulaire sont indisponibles. Vérifiez Dictée > Dictionnaire ou redémarrez Raphael pour les restaurer.",
   "missing.models": "La liste des modèles du compte n’est pas arrivée. Rechargez-la ; en cas d’échec, reconnectez-vous.",

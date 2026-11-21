@@ -89,10 +89,23 @@ windows (3 different); every check behind the terminal wall ran and passed.
 ## Where the app's data lives
 
 R-COMP-PLACE-01, R-CLI-12, R-MEM-15. Every kind of data the app writes, where it goes, and what bounds it. `<F>` is the
-identity's folder name: `Raphael` for the release, `Raphael Dev` for a development build (app/src-tauri/src/identity.rs
-`RELEASE`/`DEVELOPMENT`; the shell sets `RAPHAEL_DATA_DIR` for a development build, `data_env`). On macOS `%APPDATA%\<F>`
+identity's folder name: `Raphael` for the installed edition and debug builds compiled with `RAPHAEL_IDENTITY=release`,
+`Raphael Dev` for other debug builds (`app/src-tauri/src/identity.rs`). The selected identity sets the single-instance
+lock, webview folders and startup entry. The shell sets `RAPHAEL_DATA_DIR` for the development identity when the caller
+has not supplied one. On macOS `%APPDATA%\<F>`
 and `%LOCALAPPDATA%\<F>` are both `~/Library/Application Support/<F>`, so `paths.machine_dir(base)` is the data folder
 itself and nothing moves. Sizes are the ones read on the owner's PC when the layout changed (folder listings only).
+
+R-START-08: an owner test build and the installed edition open the same data and only one can run at a time. A newer
+committed SQLite schema, including one in the WAL, is refused before the original database or its sidecars are changed.
+The `start-newer-data` look scene opens the main window with a core returning the schema error and checks the localized
+startup notice.
+
+```powershell
+npm run look -- start-newer-data --theme both --width 1120,720,1920x1080
+```
+The image tag and Windows credential targets are shared. Docker container ownership hashes the roaming data root; on a
+one-time folder move, replace stale containers while preserving the moved bind-mounted workspaces.
 
 | Data | Where | Chosen in code | Size then | How it grows | What bounds it |
 | --- | --- | --- | --- | --- | --- |
@@ -114,7 +127,7 @@ itself and nothing moves. Sizes are the ones read on the owner's PC when the lay
 | Members' Codex homes (their own `CODEX_HOME`, with Codex's records) | `~\.raphael\codex-brains\<sha256 of the workspace>` | `agent/cli/drivers.py` `codex_home` | 1,945 MB, 192 homes | one per conversation workspace | nothing |
 | Claude Code's records of the members' runs | `~\.claude\projects\<folder named after the working folder>` | Claude Code; the names come from `workspace_root` and `process.PRIVATE_PREFIX` | 1,225 folders: 336 of member workspaces (1,000 sessions), 822 of the model listing's temporary folders (an empty `memory` each), the rest the owner's own; none older than 19 days | a folder per working folder, a file per session | R-CLI-12, with cleanup deferred until both builds' databases can be read |
 | The CLIs' own homes `~\.codex`, `~\.gemini` | the owner's | the CLIs | not measured | | not Raphael's |
-| Swap backups `backup-<time>` | `%APPDATA%\Raphael Dev` | the owner's swap script, outside the repository | 3 x 190 MB | per swap | three kept |
+| Swap backups `backup-<time>` | `%APPDATA%\Raphael` | the owner's swap script, outside the repository | 3 x 190 MB | per swap | three kept |
 | Look and judge output | `app\.look` in the checkout, never in a user's data | `app/scripts/look` | | per run | git-ignored |
 
 Layout. Roaming (`%APPDATA%\<F>`) keeps the database and the small settings. Everything large or belonging to this PC

@@ -1358,6 +1358,7 @@ export function installMock(fixture, config = {}, target = window) {
     requestAnimationFrame(poll);
   };
   async function core(method, p = {}) {
+    if (variant.newerDatabase) throw "[1007] newer_database";
     // Settings reads the hidden list as it opens, before the list's section is drawn; the sidebar keeps the roster it already read.
     switch (method) {
       // Team skills (skill-library.ts, members/service.py skills.library.*).
