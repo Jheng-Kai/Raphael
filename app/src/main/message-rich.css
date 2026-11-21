@@ -31,12 +31,27 @@
 .rich-note { margin: 0; padding: var(--sp-2) var(--sp-3); color: var(--text-3); font-size: var(--fs-xs); }
 .diagram-view { padding: var(--sp-4); overflow-x: auto; overflow-y: auto; text-align: center; }
 .diagram-view > .diagram-canvas { display: block; max-width: 100%; height: auto; margin: auto; }
+/* A drawn chart opens larger when it is pressed (R-UI-172): the pointer, and one grey step laid over the whole chart under it,
+   say so. The step is a veil over the drawing, not a new ground, so the chart's nodes keep their contrast in both themes. */
+.message-diagram[data-diagram-state="rendered"] > .diagram-view { position: relative; cursor: pointer; }
+.message-diagram[data-diagram-state="rendered"] > .diagram-view:hover::after { content: ""; position: absolute; inset: 0; background: color-mix(in srgb, var(--text) 5%, transparent); pointer-events: none; }
+:root[data-keys] .message-diagram > .diagram-view:focus-visible { outline-offset: -2px; }
 .rich-image-body { padding: var(--sp-3); }
 .rich-image-open { display: block; padding: 0; width: 100%; border: 0; background: transparent; cursor: zoom-in; }
 .rich-image-open img { display: block; max-width: 100%; max-height: 420px; margin: auto; object-fit: contain; }
 .mb-dialog.rich-view-dialog { width: min(1200px, calc(100vw - 48px)); max-width: calc(100vw - 48px); }
 .rich-view-dialog .mb-dlg-body { max-height: 75vh; overflow-x: auto; overflow-y: auto; }
-.rich-view-dialog .diagram-view > .diagram-canvas { width: 100%; max-width: none; min-width: min(700px, 100%); }
+/* The larger diagram (diagram-zoom.ts): a stage the chart is fitted into, zoomed and dragged in, and one quiet line under it.
+   The chart is drawn at each size (its width and height), placed by a translation; nothing in the stage scrolls or is selected. */
+.diagram-dialog .mb-dlg-body { display: flex; flex-direction: column; gap: var(--sp-2); max-height: none; overflow: hidden; }
+.diagram-tools { display: flex; flex: none; gap: var(--sp-2); margin-inline-end: var(--sp-2); }
+/* The stage's ground is the conversation's panel the chart was drawn on (--diagram-ground, message-rich.ts), not the dialog's. */
+.diagram-stage { position: relative; flex: none; height: min(64vh, 720px); min-height: 200px; overflow: hidden; border-radius: var(--r-md); background: var(--diagram-ground, var(--panel)); cursor: grab; touch-action: none; user-select: none; }
+.diagram-stage[data-dragging] { cursor: grabbing; }
+:root[data-keys] .diagram-stage:focus-visible { outline-offset: -2px; }
+.diagram-pan { position: absolute; top: 0; left: 0; transform-origin: 0 0; }
+.diagram-pan > svg { display: block; max-width: none; }
+.diagram-hint { margin: 0; color: var(--text-3); font-size: var(--fs-xs); text-align: center; }
 .rich-view-dialog img { display: block; max-width: 100%; max-height: 70vh; margin: auto; object-fit: contain; }
 .mermaid-staging { position: fixed; inset: 0 auto auto 0; width: 1000px; visibility: hidden; pointer-events: none; }
 .message-text h1, .message-text h2, .message-text h3, .message-text h4, .message-text h5, .message-text h6 { margin: .6em 0 .3em; font-size: var(--fs-md); line-height: 1.5; font-weight: var(--weight-semibold); }

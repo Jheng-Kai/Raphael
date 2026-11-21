@@ -2,7 +2,8 @@ import { describeError } from "./format";
 import { t } from "./i18n";
 import { openDialog } from "./member-dialogs";
 import { messageUrl, tablePlainText } from "./message-content";
-import { copyButton, esc, toaster } from "./ui";
+import { copyButton, esc, iconButton, toaster } from "./ui";
+import { type DiagramZoom, mountDiagramZoom } from "./diagram-zoom";
 import "./message-rich.css";
 import { mountShimmers } from './shimmer';
 import { repaintView, SETTLE_MS } from "./reading-place";
@@ -265,7 +266,12 @@ export function mountRichContent(root: HTMLElement): void {
                 block.querySelector<HTMLElement>(".rich-note")!.hidden = true;
                 block.querySelector<HTMLButtonElement>('[data-rich-act="expand"]')!.hidden = false;
                 block.dataset.diagramState = "rendered";
-              } else block.dataset.diagramState = "source";
+                // The drawn chart is one control that opens it larger (R-UI-172): pressed, or Enter or Space on it.
+                view.dataset.richAct = "open-diagram"; view.tabIndex = 0; view.setAttribute("role", "button"); view.setAttribute("aria-label", t("chat.diagramOpen"));
+              } else {
+                block.dataset.diagramState = "source";
+                delete view.dataset.richAct; view.removeAttribute("tabindex"); view.removeAttribute("role"); view.removeAttribute("aria-label");
+              }
             });
           }).catch(() => { if (block.isConnected) block.dataset.diagramState = "source"; });
         } else if (language && !block.dataset.query && !states.has(block)) {
@@ -294,6 +300,17 @@ export function mountRichContent(root: HTMLElement): void {
     preserveRichScroll(root, () => body.replaceChildren(button));
     if (image.complete && image.naturalWidth) settle();
   }
+  // Where the button went down on a drawn chart: a press that moved (a drag, words being selected) does not open it.
+  let pressed: { x: number; y: number } | null = null;
+  root.addEventListener("pointerdown", event => {
+    pressed = (event.target as Element).closest?.('[data-rich-act="open-diagram"]') ? { x: event.clientX, y: event.clientY } : null;
+  }, true);
+  root.addEventListener("keydown", event => {
+    const target = event.target as HTMLElement;
+    if ((event.key !== "Enter" && event.key !== " ") || event.repeat || event.isComposing || !target.matches?.('[data-rich-act="open-diagram"]')) return;
+    event.preventDefault();
+    showDiagram(target.innerHTML, colorsOf(root).panel);
+  });
   root.addEventListener("click", event => {
     const target = (event.target as Element).closest<HTMLElement>("[data-rich-act]");
     if (!target || !root.contains(target)) return;
@@ -301,6 +318,14 @@ export function mountRichContent(root: HTMLElement): void {
     const block = target.closest<HTMLElement>(".rich-block")!;
     const source = block.dataset.source ?? "";
     switch (target.dataset.richAct) {
+      case "open-diagram": {
+        const moved = pressed !== null && Math.hypot(event.clientX - pressed.x, event.clientY - pressed.y) > PRESS_SLOP_PX;
+        const selection = getSelection();
+        const selecting = !!selection && !selection.isCollapsed && !!selection.anchorNode && block.contains(selection.anchorNode);
+        pressed = null;
+        if (!moved && !selecting) showDiagram(target.innerHTML, colorsOf(root).panel);
+        break;
+      }
       case "copy-source": void copyButton(target, source).catch(error => toaster.info(describeError(error))); break;
       case "copy-table": void copyButton(target, tablePlainText(source)).catch(error => toaster.info(describeError(error))); break;
       case "view-source": {
@@ -322,7 +347,7 @@ export function mountRichContent(root: HTMLElement): void {
         const image = block.querySelector("img")!;
         showLarge(image.alt, `<img src="${esc(image.src)}" alt="${esc(image.alt)}" referrerpolicy="no-referrer">`); break;
       }
-      case "expand": showLarge(t("chat.diagram"), `<div class="diagram-view">${uniqueSVG(block.querySelector(".diagram-view")!.innerHTML)}</div>`); break;
+      case "expand": showDiagram(block.querySelector(".diagram-view")!.innerHTML, colorsOf(root).panel); break;
     }
   }, true);
   const newContent = new Set<HTMLElement>();
@@ -362,6 +387,32 @@ export function mountRichContent(root: HTMLElement): void {
 }
 
 function showLarge(title: string, body: string): void {
-  // A chart or a diagram, larger: its × closes it, with no 「關閉」 under it.
+  // A picture, larger: its × closes it, with no 「關閉」 under it.
   openDialog({ title, body, cls: "rich-view-dialog", actions: {}, onAct(_act, _target, dialog) { dialog.close(); } });
+}
+
+/** A press that moved less than this (px) between going down and coming up is a press, not a drag. */
+const PRESS_SLOP_PX = 4;
+
+/**
+ * A diagram, larger (R-UI-172): fitted to the view, zoomed by the wheel, a pinch or the head's − and +, dragged with any mouse
+ * button, put back by a double press or the head's reset, and one quiet line under it says so. Its × and Escape close it.
+ * `ground` is the conversation's panel the chart was drawn on: a dialog's own panel is lighter (the floating surface), and on
+ * it the dark theme's nodes sank into the ground and the light theme's label boxes stood out.
+ */
+function showDiagram(svg: string, ground: string): void {
+  const hint = `diagram-hint-${++instance}`;
+  let zoom: DiagramZoom | undefined;
+  const dialog = openDialog({
+    title: t("chat.diagram"), cls: "rich-view-dialog diagram-dialog", actions: {},
+    tools: `<div class="diagram-tools">${iconButton("minus", t("chat.diagramZoomOut"), ' data-dlg="zoom-out"')}${iconButton("plus", t("chat.diagramZoomIn"), ' data-dlg="zoom-in"')}${iconButton("expand", t("chat.diagramZoomReset"), ' data-dlg="zoom-reset"')}</div>`,
+    body: `<div class="diagram-stage" tabindex="0" role="group" aria-label="${esc(t("chat.diagram"))}" aria-describedby="${hint}"><div class="diagram-pan">${uniqueSVG(svg)}</div></div>` +
+      `<p class="diagram-hint" id="${hint}">${esc(t("chat.diagramHint"))}</p>`,
+    onAct(act, _target, dialog) { if (!zoom?.act(act)) dialog.close(); },
+    onClose() { zoom?.stop(); },
+  });
+  const stage = dialog.el.querySelector<HTMLElement>(".diagram-stage")!;
+  if (ground) stage.style.setProperty("--diagram-ground", ground);
+  zoom = mountDiagramZoom(stage, dialog.el);
+  stage.focus({ preventScroll: true });
 }

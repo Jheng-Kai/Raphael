@@ -1938,6 +1938,27 @@ conversation's whole column, as wide as the composer, and a table's columns take
 npm run look -- rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-invalid rich-streaming rich-sequence rich-line-breaks rich-class rich-state rich-er rich-architecture rich-wide-table reply-split-bubbles conversation-chief-up conversation-member-up conversation-room-up long-owner long-owner-expanded long-room-messages chat --theme both --width 1120,720,1920x1080
 ```
 
+A diagram opens larger from its whole chart, not only the header's expand icon (R-UI-172): the drawn chart under the header is
+one control (`role="button"`, 放大檢視圖表, one Tab stop once drawn) that a press, Enter or Space opens; the header's copy,
+source and expand keep their own actions, and a press that moved or selected words opens nothing (message-rich.ts). Under the
+pointer the chart shows the pointer and one grey step laid over it (a `::after` veil of `--text` at 5%, so the nodes keep
+their contrast). The larger view (`showDiagram`, diagram-zoom.ts) is the shared dialog with `.diagram-dialog`: −, + and reset
+are head icon buttons before the × (`tools` of `openDialog`), the stage's ground is the conversation's panel the chart was
+drawn on (`--diagram-ground`; the dialog's own panel sank the dark nodes), it fits the chart in its middle (air of 24 px, at most
+twice its own size), the wheel or a pinch zooms about the pointer from 25% to 400% of the fit (always up to twice the chart's
+own size), any mouse button drags it with no menu and keeps 48 px of it in view, a double press, reset or 0 fits it again,
+and the arrows and + - work from the keyboard. The chart is redrawn at each size (its width and height), never scaled as a
+picture. One line under the stage (`.diagram-hint`, `chat.diagramHint`) says how to use it in the window's language. Esc and ×
+close it as before. `rich-diagram-hover` measures the pointer and the veil, `rich-diagram-press` and `rich-diagram-key` open
+it by a press and by Enter and check the fit, the head's controls beside the × and the hint's one line, and
+`rich-diagram-zoomed` zooms with the wheel, drags with the left and the right button and checks the zoom, the move and that no
+menu opened. Unit tests: message-rich.test.ts (the press, the keys, a moved press) and diagram-zoom.test.ts (fit, limits,
+wheel, pan, reset, the dialog's head and hint). The fixture cannot prove a real trackpad's pinch; it is unverified there.
+
+```powershell
+npm run look -- rich-diagram rich-expand rich-diagram-hover rich-diagram-press rich-diagram-key rich-diagram-zoomed rich-source rich-line-breaks rich-sequence rich-invalid rich-streaming --theme both --width 1120,720,1920x1080
+```
+
 ## Small core regressions
 
 The mention menu, chips, mirror and room recipients accept both ASCII `@` and full-width
