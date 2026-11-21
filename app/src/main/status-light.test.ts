@@ -62,18 +62,19 @@ test("a press lists the members at work, the ones waiting for the owner first, a
   expect(rows.map(row => row.dataset.value)).toEqual(["3", "1"]);
   expect(rows.every(row => row.querySelector(".av"))).toBe(true);
   rows[1]!.click();
-  expect(open).toHaveBeenCalledWith(1);
+  expect(open).toHaveBeenCalledWith(1, null);
 });
 
-test("finished work the owner has not opened is listed last under 完成, work that went wrong waits with the others, each row with its dot", async () => {
-  const { button } = mount(() => people([], { 1: "done", 2: "failed", 3: "message" }));
+test("finished work the owner has not opened is listed before 工作中 under 完成, work that went wrong waits with the others, each row with its dot", async () => {
+  const { button } = mount(() => [...people([], { 1: "done", 2: "failed" }), ...people([], { 3: "message" }).filter(member => member.id === 3).map(member => ({ ...member, id: 4 }))]);
+  setSlimeState(3, "working");
   await flush();
   expect(button.dataset.level).toBe("needs");
   button.click();
   const rows = [...document.querySelectorAll<HTMLElement>(".menu-choice")];
-  expect(rows.map(row => row.dataset.value)).toEqual(["2", "1", "3"]);
-  expect(rows.map(row => row.querySelector<HTMLElement>(".status-row-dot")?.dataset.kind)).toEqual(["failed", "done", "done"]);
-  expect([...document.querySelectorAll(".menu-head")].map(head => head.textContent)).toEqual(["等你", "完成"]);
+  expect(rows.map(row => row.dataset.value)).toEqual(["2", "1", "4", "3"]);
+  expect(rows.map(row => row.querySelector<HTMLElement>(".status-row-dot")?.dataset.kind)).toEqual(["failed", "done", "done", "busy"]);
+  expect([...document.querySelectorAll(".menu-head")].map(head => head.textContent)).toEqual(["等你", "完成", "工作中"]);
 });
 
 test("with only finished work left the label names who finished", async () => {
@@ -89,25 +90,60 @@ test("the title pill draws no dot of its own, and its arrow hides while the deta
   expect(css).toContain('.page-agent[data-det="open"] .btn.conversation-trigger:is(:hover, :focus-visible) .mb-pill-go { opacity: 0; }');
 });
 
-test("a small dot on the icon tells of news in the list: the most urgent colour, none for work under way, gone once the list is opened", async () => {
+test("opening the status menu keeps the dot until every finished conversation is opened", async () => {
+  let roster = people([], { 1: "done", 2: "done" });
+  const { button, light } = mount(() => roster, vi.fn(id => {
+    roster = roster.map(member => member.id === id ? { ...member, unread: false } : member);
+    light.draw();
+  }));
+  button.click();
+  expect(button.dataset.dot).toBe("done");
+  expect(document.querySelectorAll('.status-row-dot[data-kind="done"]')).toHaveLength(2);
+  document.querySelector<HTMLElement>('.menu-choice[data-value="1"]')!.click();
+  await flush();
+  expect(button.dataset.dot).toBe("done");
+  button.click();
+  expect(document.querySelectorAll('.status-row-dot[data-kind="done"]')).toHaveLength(1);
+  document.querySelector<HTMLElement>('.menu-choice[data-value="2"]')!.click();
+  await flush();
+  expect(button.dataset.dot).toBeUndefined();
+  roster = people([], { 1: "done" });
+  light.draw(); await flush();
+  expect(button.dataset.dot).toBe("done");
+});
+
+test("waiting cards keep their dot until their conversation opens and a new card lights it again", async () => {
+  let roster = people([3], { 2: "failed" }).map(member => member.id === 3 ? {
+    ...member, main_conversation_id: 30, waiting_cards: [{ id: "first", conversation_id: 31 }],
+  } : member);
+  const { button, light } = mount(() => roster);
+  expect(button.dataset.dot).toBe("needs");
+  light.opened(3, 30);
+  await flush();
+  expect(button.dataset.dot).toBe("needs");
+  light.opened(3, 31);
+  await flush();
+  expect(button.dataset.dot).toBe("failed");
+  expect(button.dataset.level).toBe("needs");
+  roster = roster.map(member => member.id === 3 ? {
+    ...member, waiting_cards: [...member.waiting_cards!, { id: "second", conversation_id: 31 }],
+  } : member);
+  light.draw(); await flush();
+  expect(button.dataset.dot).toBe("needs");
+  light.opened(3, 31);
+  roster = roster.map(member => ({ ...member, unread: false }));
+  await flush();
+  expect(button.dataset.dot).toBeUndefined();
+});
+
+test("work under way never lights the status icon", async () => {
   let roster = people();
   const { button, light } = mount(() => roster);
   expect(button.dataset.dot).toBeUndefined();
   setSlimeState(1, "working");
   await flush();
-  expect(button.dataset.dot).toBeUndefined(); // work under way asks nothing of the owner
-  roster = people([], { 2: "done" });
-  light.draw(); await flush();
-  expect(button.dataset.dot).toBe("done");
-  roster = people([3], { 2: "failed" });
-  light.draw(); await flush();
-  expect(button.dataset.dot).toBe("needs"); // waiting comes before failed, failed before finished
-  button.click(); await flush();
   expect(button.dataset.dot).toBeUndefined();
-  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
-  // Something new after the list was opened brings the dot back, in its own colour: m1 stops working and has finished.
-  setSlimeState(1, "idle");
-  roster = people([3], { 2: "failed", 1: "done" });
+  roster = people([], { 1: "done" });
   light.draw(); await flush();
-  expect(button.dataset.dot).toBe("done");
+  expect(button.dataset.dot).toBeUndefined();
 });

@@ -4,7 +4,7 @@ import { visibilityGate, windowVisible } from "./window-visibility";
 import { noticeHTML } from "./missing";
 import * as api from "./api";
 import { getLocale, onLocaleChange, t } from "./i18n";
-import { esc, ico, iconButton, btn, patchHTML } from "./ui";
+import { esc, ico, backButton as roundBackButton, iconButton, btn, patchHTML } from "./ui";
 import { openActions } from "./member-column";
 import { FILE_MAX_BYTES, fileMime, storeUpload } from "./attachments";
 import "./desktop-viewer.css";
@@ -79,7 +79,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   // from beside the window buttons. Everything about the computer sits in one foot directly under the screen and
   // as wide as it: one quiet line of state above the pill, and a demonstration's actions beside the pill. The
   // skill review and the file changes take the screen's own place, so the foot never moves.
-  panel.innerHTML = `<div class="desktop-location-header"></div><div class="desktop-takeover-bar" hidden>${iconButton("left", t("members.panelBack"), ' data-desktop="back" hidden')}${iconButton("shrink", t("desktop.collapse"), ' data-desktop="collapse" hidden')}</div><div class="desktop-shell">` +
+  panel.innerHTML = `<div class="desktop-location-header"></div><div class="desktop-takeover-bar" hidden>${roundBackButton(t("members.panelBack"), ' data-desktop="back" hidden')}${iconButton("shrink", t("desktop.collapse"), ' data-desktop="collapse" hidden')}</div><div class="desktop-shell">` +
     `<div class="desktop-screen"><img class="desktop-wallpaper" alt=""><img class="desktop-last" alt="" hidden><div class="desktop-placeholder"></div>${btn("", "sm", ' data-desktop="retry" hidden')}` +
     `<iframe referrerpolicy="no-referrer" sandbox="allow-scripts allow-same-origin" hidden></iframe>` +
     `<button type="button" class="btn desktop-open" data-desktop="enlarge" hidden><span class="desktop-open-pill">${ico("open")}<span></span></span></button></div><p class="desktop-caption" role="status" hidden></p><div class="desktop-review" hidden></div>` +

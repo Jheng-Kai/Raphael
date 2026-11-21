@@ -23,7 +23,7 @@ import { serviceIconOf } from "./service-icons";
 import { entryIcon } from "./service-mark";
 export { entryIcon, iconHTML } from "./service-mark";
 import type { AuditEntry, ConnectionGroup, ConnectionTool, MainEvent, NewConnection, StoreService, Words } from "./types";
-import { DISCONNECT_CONFIRM_MS, type Choice, actionRow, btn, closeMenu, esc, fieldHTML, ico, iconBtn, iconButton, openPopover, row, sel, st, tg, toaster } from "./ui";
+import { DISCONNECT_CONFIRM_MS, type Choice, actionRow, btn, closeMenu, esc, fieldHTML, ico, iconBtn, backButton, iconButton, openPopover, row, sel, st, tg, toaster } from "./ui";
 
 /** How long the next sign-in waits for the one it cancelled to give its account back before it gives up beginning. */
 const LOGIN_STOP_MS = 600_000;
@@ -573,11 +573,8 @@ export const connectionsAddHTML = (): string =>
   `<span>${esc(t("conn.addMenu"))}</span>${ico("down")}</button>`;
 
 /** A bare chevron at the top left: back from an app's page or from the list of the connected apps. */
-const backHTML = (): string => iconButton("left", t("conn.back"), ' data-conn="back" data-k="cs-back" data-nav-back', "cs-back");
+const backHTML = (): string => backButton(t("conn.back"), ' data-conn="back" data-k="cs-back"', "cs-back");
 /** The connected list's title is its way back: the chevron and the title are one button. */
-const backTitleHTML = (title: string): string =>
-  btn(`${ico("left")}<span>${esc(title)}</span>`, "cs-back cs-back-title", ` data-conn="back" data-k="cs-back" data-nav-back title="${esc(t("conn.back"))}"`);
-
 // ---------- the connected apps: one list ----------
 
 /** The app switch reflects only the app's enabled flag; tool exclusions stay independent. */
@@ -902,7 +899,7 @@ export function connectionsHTML(v: ConnectionsView, heading = ""): string {
   const target = openTarget(v);
   if (target) return `<div class="cs cs-page">${quietHeading(heading)}${appPageHTML(target.entry, target.group, v)}</div>` + key;
   if (v.screen === "connected" && Array.isArray(v.groups) && v.groups.length) {
-    return `<div class="cs cs-connected"><div class="cs-top"><h2 class="cs-top-t">${backTitleHTML(t("conn.tab.installed"))}</h2></div>${quietHeading(heading)}` +
+    return `<div class="cs cs-connected"><div class="cs-top">${backHTML()}<h2 class="cs-top-t">${esc(t("conn.tab.installed"))}</h2></div>${quietHeading(heading)}` +
       `<div class="cs-body" data-cs-body>${installedHTML(v)}</div></div>` + key;
   }
   // The connected apps could not be read: the chip that would open them says so instead, with the way to read them again.

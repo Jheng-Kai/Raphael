@@ -28,7 +28,7 @@ import { connectedApps, toolOn, toolsAfterToggle, type ToolChoices } from "./mem
 import { skillOriginLabel } from "./skill-source";
 import { slimeColorOf } from "./slime";
 import type { AppContext, BrainSettings, LibraryRef, Member, MemberCommand, MemberPatch, MemberSkill, MembersList } from "./types";
-import { type IconName, actionRow, btn, closeMenu, esc, ico, iconBtn, iconButton, openConfirmMenu, openPopover, patchHTML, tg, toaster } from "./ui";
+import { type IconName, actionRow, btn, closeMenu, esc, ico, iconBtn, backButton as roundBackButton, iconButton, openConfirmMenu, openPopover, patchHTML, tg, toaster } from "./ui";
 
 export interface MemberSettingsHost {
   app: AppContext;
@@ -95,7 +95,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
   el.dataset.memberSettings = "";
   // The way back stays at the page's top left, on the cover and over a view's heading.
   el.innerHTML =
-    `<div class="ms-bar">${iconButton("left", t("chooser.back"), ' data-ms="back" data-k="ms-back" data-nav-back', "ms-back")}</div>` +
+    `<div class="ms-bar">${roundBackButton(t("chooser.back"), ' data-ms="back" data-k="ms-back"', "ms-back")}</div>` +
     `<div class="ms-scroll"><div class="ms-cover"></div><div class="ms-body"><div class="ms-id"></div><div class="ms-main"></div></div></div>`;
   const backButton = el.querySelector<HTMLElement>('[data-ms="back"]')!;
   const scroll = el.querySelector<HTMLElement>(".ms-scroll")!;

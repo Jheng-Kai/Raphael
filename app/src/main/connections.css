@@ -112,21 +112,9 @@
 .cs-sec-head { padding-inline: var(--sp-2); }
 .cs-card .btn.cs-main:is(:hover, :active):not(:disabled), .cs-linked .btn.cs-main:is(:hover, :active):not(:disabled) { background: transparent; }
 
-/* An app's page: a bare back chevron at the top left (the dialog's own ✕ is at the other corner), the mark on a white tile with the name beside
-   it and what can be done at the right, a paragraph on the app, then bordered cards of what is known of it. */
-/* The back chevron is the dialog ✕'s own control: 36 px, round and bare, its glyph 18 px, so it is as easy to hit and stands on the ✕'s line
-   (a 26 px one could not be hit). Its margin puts the glyph, not the hit area, on the content's left edge. */
-.cs .btn.icon.cs-back { flex: none; width: 36px; min-width: 36px; height: 36px; min-height: 36px; margin: 0 0 var(--sp-1) -9px; padding: 0; border-radius: var(--r-pill); }
-.cs .btn.icon.cs-back .i { width: 18px; height: 18px; }
+.cs-back { margin: 0 0 var(--sp-1) -9px; }
 .cs-connected > .cs-top { margin-bottom: var(--sp-4); }
-.cs-connected > .cs-top > .btn.icon.cs-back { margin: 0 0 0 -9px; }
-/* The connected list's chevron and title are one button, its hover fill under both; the glyph stays on the content's edge. */
-/* Drawn as the 「N 個已連結 >」 chip it came from: no fill, its words brighten under the pointer, a quiet chevron. */
-.cs .btn.cs-back-title { display: inline-flex; align-items: center; gap: var(--sp-2); max-width: 100%; height: var(--h-ctl); margin: 0; padding: 0 var(--sp-2) 0 0; border: 0; border-radius: var(--r-pill); background: transparent; color: var(--text-2); font: inherit; }
-.cs .btn.cs-back-title:is(:hover, :active):not(:disabled) { background: transparent; color: var(--text); }
-.cs .btn.cs-back-title .i { flex: none; width: 18px; height: 18px; color: var(--text-3); }
-.cs .btn.cs-back-title:hover .i { color: var(--text); }
-.cs .btn.cs-back-title > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cs-connected > .cs-top > .cs-back { margin-block: 0; }
 .cs-head { display: flex; align-items: center; gap: var(--sp-3); }
 .cs-head h2.big { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .cs-join { display: flex; align-items: center; gap: var(--sp-2); flex: none; }

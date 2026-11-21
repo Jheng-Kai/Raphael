@@ -71,7 +71,7 @@ test("a connected tool its service will refuse for a while says why and when it 
 test("queued owner bubbles contain withdraw and send now, with no queued words or live presence", () => {
   setLocale("en");
   document.body.innerHTML = turnHTML(turn(91, { status: "queued", text: "", messages: [], model: null }), emptyTimelineState(), false, LOOK);
-  expect([...document.querySelectorAll<HTMLButtonElement>(".bubble .queued-actions button")].map(button => button.dataset.act)).toEqual(["cancel-message", "send-now"]);
+  expect([...document.querySelectorAll<HTMLButtonElement>(".bubble + .queued-actions button")].map(button => button.dataset.act)).toEqual(["cancel-message", "send-now"]);
   expect(document.body.textContent).not.toContain("Queued");
   expect(document.querySelector('button[data-act="more-message"][data-owner-act="cancel"]')).toBeNull();
   expect(document.querySelector('[data-owner-act="edit"],.live-presence,.work-section')).toBeNull();

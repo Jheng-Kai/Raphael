@@ -105,8 +105,8 @@ const connectedRowScenes = [
     ...linked, ...pressRows,
     click(`${NOTION} [role="switch"]`), click(`${NOTION} [role="switch"]`), hover(".cs-linked:nth-child(2) .cs-main"), check("connected-rows"),
   ]),
-  scene("connect-apps-back-title", "The connected list's chevron and title are one button under the pointer", [...linked, hover(".cs-back-title"), check("connected-back-title")]),
-  scene("connect-apps-back-title-press", "A press on the connected list's title goes back to the one view", [...linked, pressAt(".cs-back-title span", 0.5, 0.5, ".cs-card")]),
+  scene("connect-apps-back-title", "The connected list uses the shared round back button beside its title", [...linked, hover(".cs-back"), check("connected-back-title")]),
+  scene("connect-apps-back-title-press", "A press on the round back button returns to the app catalogue", [...linked, pressAt(".cs-back", 0.5, 0.5, ".cs-card")]),
   scene("connect-app-from-row", "The app's page opened from a row of the connected list is the page the main view's row opens, with the larger back chevron on the ✕'s line", [
     ...linked, pressAt(`${NOTION} .ds`, 0.5, 0.5, ".cs-page .cs-head"), check("connect-app-from-row"), check("connect-back"),
   ]),

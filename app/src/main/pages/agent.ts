@@ -72,7 +72,7 @@ import { ReplyPacing } from "../reply-pacing";
 import { avatarHTML, currentAvatar, onAvatarChange } from "../avatar";
 import "../background-questions.css";
 import type { BackgroundQuestions } from "../background-questions";
-import { RAPHAEL_ID, faceHTML, memberPlaceholder } from "../members";
+import { RAPHAEL_ID, faceHTML, memberPlaceholder, unreadFromIn } from "../members";
 import { createMembers } from "../members-shell";
 import { createDraftPanel, hasDrafts } from "../member-draft";
 import { mountBackgroundQuestions } from "../background-mount";
@@ -89,7 +89,7 @@ import { mountMailActions } from "../mail-actions";
 import { answerOwnerPage, mountOwnerQuestions, questionWaits } from "../owner-questions";
 import { mountPendingQuestions } from "../pending-questions";
 import { approvalCopy, permissionFor } from "../permission-card";
-import { memberAccent, memberColor, memberSwitch, ownerBubble } from "../owner-bubble";
+import { memberAccent, memberColor, memberSwitch, ownerBubble, ownerBubbleLink } from "../owner-bubble";
 import { openPeerChat, type PeerChatView } from "../peer-chat";
 import { exchangeView } from "../exchange-line";
 import { dayLabel, describeError } from "../format";
@@ -319,6 +319,7 @@ export function createAgent(app: AppContext, places?: {
   let composerBrain: ReturnType<typeof mountComposerBrain> | undefined;
   let composerFolder: ReturnType<typeof mountComposerFolder> | undefined;
   const chosenConversations = new Map<number, number>();
+  let unreadStatusVisit: number | undefined;
   const members = createMembers({
     app,
     onOpenConversation: (member, conversation, turn) => openConversation(member, conversation, turn),
@@ -326,9 +327,13 @@ export function createAgent(app: AppContext, places?: {
     conversationOf: member => chosenConversations.get(member),
     visible: () => visible,
     onReadThread: member => {
+      if (unreadStatusVisit === member.id) {
+        unreadStatusVisit = undefined;
+        statusLight.opened(member.id, conversationId());
+      }
       if (unreadCaptured) return;
       unreadCaptured = true;
-      unreadFrom = member.unread_from ?? null;
+      unreadFrom = unreadFromIn(member, conversationId());
       if (loadedThread) {
         if (unreadFrom !== null) {
           render();
@@ -338,6 +343,7 @@ export function createAgent(app: AppContext, places?: {
       }
       holdOpening();
     },
+    onOpenThread: statusConversationOpened,
     focusHeader: () => conversationButton.focus({ preventScroll: true }),
     onDetailsChange: open => { conversationButton.setAttribute("aria-expanded", String(open)); queueMicrotask(() => open && visible && !roomPane.active ? desktop.show() : desktop.sync()); },
     onSelect: (_id, sameThread) => {
@@ -348,6 +354,7 @@ export function createAgent(app: AppContext, places?: {
       roomPane.close(); app.go("agent"); void load(false); focusComposer();
     },
     onUpdate: () => {
+      statusLight.draw();
       composerBrain?.draw();
       composerFolder?.draw();
       drawComposer();
@@ -393,7 +400,14 @@ export function createAgent(app: AppContext, places?: {
   conversationButton.append(members.pill, caption);
   head.append(conversationButton);
   el.querySelector(".mb-head-c")!.append(head);
-  mountStatusLight(statusButton, { roster: () => members.roster(), face: member => faceHTML(member, 22, { moving: true }), open: id => members.select(id) });
+  const statusLight = mountStatusLight(statusButton, {
+    roster: () => members.roster(),
+    face: member => faceHTML(member, 22, { moving: true }),
+    open: (member, conversation) => {
+      if (conversation === null) members.select(member);
+      else openConversation(member, conversation);
+    },
+  });
   const conversationCache = new Map<number, ConversationInfo[]>();
   let targetTurn: number | undefined;
   /** The turn opened for a page of the Library is not marked in the thread: the page is what the owner came for. */
@@ -403,6 +417,12 @@ export function createAgent(app: AppContext, places?: {
   let quotas: { provider: string; reset_at_ms: number | null }[] = [];
   let quotaTimer: ReturnType<typeof setTimeout> | undefined;
   const conversationId = (): number | undefined => chosenConversations.get(memberId());
+  function statusConversationOpened(): void {
+    if (!visible || roomPane.active || members.settings.isOpen() || pagesHost.shown()) return;
+    const member = members.current();
+    if (members.loaded()) statusLight.opened(member, conversationId());
+    else unreadStatusVisit = member;
+  }
   const belongs = (sent: Outgoing): boolean => sent.member === memberId() && sent.conversationId === conversationId();
   /** Where a typed question goes: its conversation, named as the quick one when it is (the core never defaults to it). */
   const destinationOf = (member: number, conversation: number | undefined): { conversationId?: number; destination?: "quick" } =>
@@ -479,10 +499,16 @@ export function createAgent(app: AppContext, places?: {
 
   function openConversation(member: number, id: number, turnId?: number, quiet = false, keepDetailsTab = false): void {
     const changed = memberId() !== member;
-    if (!changed && !roomPane.active && conversationId() === id && turnId === undefined) return;
+    if (!changed && !roomPane.active && conversationId() === id && turnId === undefined) {
+      members.select(member, keepDetailsTab);
+      return;
+    }
     chosenConversations.set(member, id); targetTurn = turnId; targetQuiet = quiet;
     if (changed) members.select(member, keepDetailsTab);
-    else { switchThread(); places?.changed(); }
+    else {
+      switchThread(); places?.changed();
+      if (!quiet) { statusConversationOpened(); members.readCurrent(); }
+    }
     drawConversation();
     window.dispatchEvent(new CustomEvent("conversation-opened", { detail: member }));
   }
@@ -831,6 +857,7 @@ export function createAgent(app: AppContext, places?: {
     const bubble = ownerBubble(color);
     memberChat.dataset.memberBubble = bubble.words;
     memberChat.style.setProperty("--member-bubble", bubble.fill);
+    memberChat.style.setProperty("--owner-bubble-link", ownerBubbleLink(bubble.fill));
     memberChat.style.setProperty("--member-accent", memberAccent(color));
     // The member's own places, its panel and its settings page, wear the same colour on a switch that is on (styles.css `.tg`).
     // Written only when it differs: a refresh that changes nothing touches nothing in the panel (agent-members.test.ts).
@@ -1341,7 +1368,7 @@ export function createAgent(app: AppContext, places?: {
   /** A visit begins: its boundary is the one of the roster already loaded, else of the one on its way (onReadThread). */
   function beginOpening(): void {
     const known = members.loaded();
-    unreadFrom = known ? members.member().unread_from ?? null : null;
+    unreadFrom = known ? unreadFromIn(members.member(), conversationId()) : null;
     unreadCaptured = known;
     openingThread = true;
     openingWindowTarget = undefined;
@@ -2043,7 +2070,7 @@ export function createAgent(app: AppContext, places?: {
    */
   function switchThread(): void {
     turnWindow.reset(); openingWindowTarget = undefined; renderedTurns.clear(); renderedThread = [];
-    unreadFrom = members.member().unread_from ?? null;
+    unreadFrom = unreadFromIn(members.member(), conversationId());
     unreadCaptured = true;
     openingThread = true;
     openedAt = Date.now();
@@ -3471,6 +3498,10 @@ export function createAgent(app: AppContext, places?: {
       dropResize?.observe(draftPanel.el);
       // The roster is read as the page comes on screen; while it stays there, the core's events keep it current.
       if (!wasVisible) void members.load();
+      if (settingsFor === null && (!wasVisible || leavingSettings)) {
+        statusConversationOpened();
+        if (leavingSettings) members.readCurrent();
+      }
       void readQuotas();
       // A draft goes into the field at once; the composer may then move (the empty page has it
       // under Raphael, the thread under the turns) or give way to a question, which takes the
@@ -3488,6 +3519,7 @@ export function createAgent(app: AppContext, places?: {
       if (settingsFor !== null && settingsFor === members.current()) { if (roomPane.active) roomPane.close(); members.openSettings(); }
     },
     hide() {
+      unreadStatusVisit = undefined;
       releasePointer();
       if (heldKey !== null) releaseKey();
       saveComposerDraft();

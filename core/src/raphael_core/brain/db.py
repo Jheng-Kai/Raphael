@@ -2373,6 +2373,26 @@ PRAGMA user_version = 93;
 COMMIT;
 """
 
+_MIGRATIONS[94] = """
+BEGIN;
+ALTER TABLE member_unread RENAME TO member_unread_previous;
+CREATE TABLE member_unread (
+    member_id INTEGER NOT NULL,
+    conversation_id INTEGER NOT NULL DEFAULT 0,
+    unread_from INTEGER,
+    PRIMARY KEY (member_id, conversation_id)
+);
+INSERT INTO member_unread (member_id, conversation_id, unread_from)
+SELECT m.member_id, coalesce(t.conversation_id, 0), m.unread_from
+FROM member_unread_previous m LEFT JOIN agent_turns t ON t.id = m.unread_from AND t.member_id = m.member_id;
+DROP TABLE member_unread_previous;
+CREATE TRIGGER clear_conversation_unread AFTER DELETE ON conversations BEGIN
+    DELETE FROM member_unread WHERE conversation_id = OLD.id;
+END;
+PRAGMA user_version = 94;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 

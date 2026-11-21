@@ -155,11 +155,11 @@ test("the key card's × retracts its own turn and restores the draft", async () 
   agent.hide();
 });
 
-test("Cancel inside a queued bubble withdraws that message", async () => {
+test("Cancel below a queued bubble withdraws that message", async () => {
   const agent = mount([turn(8, { status: "queued", text: "", question: "Queued draft" })]);
   await flush(); await pickMember(3);
   api.agentRetract.mockImplementation(async (session: string) => { rows = rows.filter(item => item.session_id !== session); });
-  $('.tn[data-id="8"] .bubble [data-act="cancel-message"]').click(); await flush();
+  $('.tn[data-id="8"] .queued-actions [data-act="cancel-message"]').click(); await flush();
   expect(api.agentRetract).toHaveBeenCalledExactlyOnceWith("s8", 3, 8);
   expect(document.querySelector('.tn[data-id="8"]')).toBeNull();
   expect(box().value).toBe("Queued draft");

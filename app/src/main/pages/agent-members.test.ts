@@ -398,6 +398,37 @@ test('hidden thread metadata waits until the thread is shown, and the header nam
   agent.hide();
 });
 
+test("the sidebar opens its member's waiting card without clearing Raphael's quick conversation", async () => {
+  const conversations = [
+    { id: 701, member_id: 0, is_default: 1, kind: "standard" },
+    { id: 702, member_id: 0, is_default: 0, kind: "quick" },
+    { id: 703, member_id: 3, is_default: 1, kind: "standard" },
+  ];
+  api.core.mockImplementation(async (method: string, params?: { member_id?: number }) => method === "conversations.list"
+    ? { conversations: conversations.filter(item => item.member_id === (params?.member_id ?? 0)) }
+    : { questions: [] });
+  const roster: MembersList = {
+    groups: [],
+    members: [
+      member(0, { main_conversation_id: 701, unread: true, unread_threads: [{ conversation_id: 702, from: 1, kind: "done" }] }),
+      member(3, { main_conversation_id: 703, unread_threads: [], waiting: true, waiting_cards: [{ id: "sample", conversation_id: 703 }] }),
+    ],
+  };
+  api.membersList.mockResolvedValue(roster);
+  const agent = mount(); await flush();
+  const status = $('.mb-head [data-act="status"]');
+  expect(status.dataset.dot).toBe("needs");
+  await pick(3);
+  expect(status.dataset.dot).toBe("done");
+  status.click();
+  expect(status.dataset.dot).toBe("done");
+  $('.menu-choice[data-value="0:702"]').click(); await flush();
+  expect(agent.currentChatPlace()).toEqual({ page: "member", member: 0, conversation: 702 });
+  expect(api.membersRead).toHaveBeenCalledWith(0, 702);
+  expect(status.dataset.dot).toBeUndefined();
+  agent.hide();
+});
+
 test("returning to an unchanged thread restores viewing once", async () => {
   const agent = mount(); await flush(); await pick(3);
   api.membersViewing.mockClear();

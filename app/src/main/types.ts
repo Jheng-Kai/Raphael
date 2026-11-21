@@ -1053,7 +1053,10 @@ export interface Member {
   unread_from?: number | null;
   /** What the unseen news is: a message, a task or routine that ended well, or work that went wrong (null: none). */
   unread_kind?: "message" | "done" | "failed" | null;
+  unread_threads?: { conversation_id: number | null; from: number | null; kind: NonNullable<Member["unread_kind"]> }[];
+  main_conversation_id?: number | null;
   waiting: boolean;
+  waiting_cards?: { id: string; conversation_id: number | null }[];
   activity?: string;
   activity_label?: string;
   preview: string;

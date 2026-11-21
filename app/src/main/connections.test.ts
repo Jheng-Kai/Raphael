@@ -557,12 +557,11 @@ describe("the connected apps", () => {
     const d = dom(html);
     expect(d.querySelectorAll(".cs.cs-connected")).toHaveLength(1);
     expect(d.querySelector(".cs-apps")).toBeNull();
-    // The chevron and the title are one button: its name is the title, its tooltip says where it goes.
-    const back = d.querySelector(".cs-top-t > button")!;
+    const back = d.querySelector(".cs-top > .back-button")!;
     expect(back.getAttribute("data-conn")).toBe("back");
     expect(back.getAttribute("title")).toBe("返回");
     expect(back.querySelector("svg.i")).not.toBeNull();
-    expect(d.querySelector(".cs-top > .btn.icon")).toBeNull();
+    expect(d.querySelector(".cs-top-t > button")).toBeNull();
     expect(d.querySelector(".cs-top-t")!.textContent).toBe("已連結");
     expect(d.querySelectorAll(".cs-body > .cs-grid")).toHaveLength(1);
     const [notion, files] = rows(html);
@@ -735,14 +734,9 @@ describe("a connected row and the back chevron", () => {
     expect(rule(".cs-sec-head")).toMatch(/padding-inline:\s*var\(--sp-2\)/);
   });
 
-  test("the back chevron is the dialog ✕'s own control: 36 px, round, bare, with an 18 px glyph", () => {
-    const body = rule(".cs .btn.icon.cs-back");
-    for (const property of ["width", "min-width", "height", "min-height"]) expect(body, property).toMatch(new RegExp(`[{;\\s]${property}:\\s*36px`));
-    expect(body).toMatch(/border-radius:\s*var\(--r-pill\)/);
-    expect(body).not.toMatch(/background|box-shadow|border:/);
-    expect(rule(".cs .btn.icon.cs-back .i")).toMatch(/width:\s*18px;\s*height:\s*18px/);
+  test("the connected list and app pages use the shared round back button", () => {
     // The list's title row and an app's page carry the same button, and the one view carries none.
-    for (const html of [connectedList(), groupPage("ab12"), appPage("linear")]) expect(dom(html).querySelectorAll(".cs-back")).toHaveLength(1);
+    for (const html of [connectedList(), groupPage("ab12"), appPage("linear")]) expect(dom(html).querySelectorAll(".cs-back.back-button[data-nav-back]")).toHaveLength(1);
     expect(dom(connectionsHTML(view())).querySelector(".cs-back")).toBeNull();
   });
 });

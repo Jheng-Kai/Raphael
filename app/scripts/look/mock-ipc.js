@@ -406,6 +406,10 @@ export function installMock(fixture, config = {}, target = window) {
       waiting: { waiting: true, activity: "blocked", activity_label: "等你回答", unread: true, unread_kind: "message" },
     };
     for (const [id, state] of Object.entries(variant.sidebarLights)) Object.assign(data.members.find(member => member.id === Number(id)), states[state]);
+    if (variant.statusThreads) for (const member of data.members) {
+      member.main_conversation_id = data.conversations.find(conversation => conversation.member_id === member.id && conversation.is_default)?.id ?? null;
+      member.unread_threads = member.unread ? [{ conversation_id: member.main_conversation_id, from: null, kind: member.unread_kind }] : [];
+    }
     // What the scene's check expects, said here by the owner's rule and not read back from the app: thinking is no light, a question is orange.
     data.expectedLights = { members: Object.fromEntries(data.members.map(member => [member.id, { thinking: null, message: "message", done: "done", failed: "failed", waiting: "waiting" }[variant.sidebarLights[member.id]] ?? null])), rooms: {} };
   }
@@ -1608,7 +1612,12 @@ export function installMock(fixture, config = {}, target = window) {
       case "members.viewing": case "members.read": {
         if (variant.unreadDivider || variant.sidebarLights) {
           const member = data.members.find(member => member.id === p.id);
-          if (member) Object.assign(member, { unread: false, unread_from: null, unread_kind: null });
+          if (member?.unread_threads) {
+            const conversation = p.conversation_id ?? member.main_conversation_id;
+            member.unread_threads = member.unread_threads.filter(thread => thread.conversation_id !== conversation);
+            member.unread = member.unread_threads.length > 0;
+            member.unread_kind = member.unread_threads[0]?.kind ?? null;
+          } else if (member) Object.assign(member, { unread: false, unread_from: null, unread_kind: null });
         }
         return {};
       }

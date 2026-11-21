@@ -25,7 +25,7 @@ import { openConnectionSetup } from "../connection-setup";
 import { modelPickerHTML, mountModelPicker, type ModelPickerLook } from "../model-picker";
 import { createServices, servicesHTML as abilityRowsHTML } from "../services";
 import type { AppContext, BrainSettings, MainEvent, ModelCatalog, StoreService } from "../types";
-import { actionRow, closeMenu, esc, iconButton, openMenuOnArrow, toaster } from "../ui";
+import { actionRow, closeMenu, esc, backButton, iconButton, openMenuOnArrow, toaster } from "../ui";
 import { SERVICES_WAIT_MS, mergeServices, within } from "./helpers";
 import { type FlowState, initialState, isLast, reduce } from "./flow";
 import {
@@ -180,7 +180,7 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
     }
     const last = isLast(flow), label = last ? "onboarding.finish" : "onboarding.next";
     return `<div class="action-row ob-actions ob-pair">` +
-      iconButton("play", t("onboarding.back"), ' data-ob="back"', "ob-prev ob-tri") +
+      backButton(t("onboarding.back"), ' data-ob="back"', "ob-prev") +
       iconButton(last ? "check" : "play", t(label), next, `pri ob-go${last ? "" : " ob-tri"}`) + `</div>`;
   }
 

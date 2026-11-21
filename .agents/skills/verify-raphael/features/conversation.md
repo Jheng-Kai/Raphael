@@ -638,13 +638,23 @@ npm run look -- conversation-share chat search --theme both --width 1120,720,192
 
 The left of a member conversation's top row is the status list (status-light.ts, R-HEAD-01): one icon whose tooltip
 names who waits, works or finished. A press lists them in the shared menu with a coloured dot each: 等你 (waiting for the
-owner, or work that went wrong), 工作中, then 完成 (finished work not opened yet); picking one opens its conversation. It
+owner, or work that went wrong), 完成 (finished work not opened yet), then 工作中; picking one opens its conversation. It
 follows `slime-activity`, told by slime.ts whenever a member's live state changes, the roster's `waiting` and `unread`,
-and `conversation-opened`. Neither a member's nor a group's top row has a search button; Ctrl+F (⌘F) opens the search
+and the conversation's actual opening path. The menu leaves the header dot on while any conversation
+has unopened finished news or an unseen waiting card. It uses the most urgent unseen colour, with no dot
+for work under way. The sidebar, status list and other conversation entry points acknowledge only the
+conversation opened. Waiting cards retain their row until answered and a different card lights the icon
+again. Finished news uses the existing member_unread table, now keyed by member and conversation, so
+opening Raphael's main conversation keeps the quick conversation's news. The status-light-seen scene
+opens the menu with two finished conversations, then opens one through the menu and the other through
+the sidebar. It checks the row and header dots at each step.
+Neither a member's nor a group's top row has a search button; Ctrl+F (⌘F) opens the search
 bar. The title pill draws no dot, and its arrow shows on a hover only while the details panel is closed (R-HEAD-02).
 
 ```powershell
 npm run look -- status-light-idle status-light-list status-light-dot status-light-seen status-light-pill-open top-row-find top-row-room-find conversation-share --theme both --width 1120,720,1920x1080
+```
+
 ## A waiting card read out of sight
 
 A card that waits for the owner stays where it was born (card-float.ts, R-CARD-FLOAT-01). When the newest one is read
@@ -2568,8 +2578,7 @@ and CLI) and core/tests/test_e2e_steering.py (a real core over stdio, the fake L
 script of native_journeys.py).
 
 A message queued behind running work is either taken by the model at its next step or sent now. Both are built: the model takes a new message at its next step, and 「立即送出」 on a
-queued bubble (a small text button in sight, first in its action row, not in the ⋯ menu; no 「排隊中」 words stand beside
-it, the button alone says the message waits) interrupts the work now and adds the message as context. R-QUEUE-05:
+queued bubble (a quiet text button beside 取消, in a right-aligned row beneath the bubble; both controls are frameless at rest) interrupts the work now and adds the message as context. R-QUEUE-05:
 `agent.history.send_now {session_id, member_id, turn_id}` puts that inbox row first and ends the
 running work without the cancel memory (Codex `turn/interrupt`; a Claude Code or
 Antigravity child is ended and the next turn resumes its stored native session; an API loop's
