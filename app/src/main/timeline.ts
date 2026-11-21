@@ -1253,13 +1253,13 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
   const name = turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title");
   // Owner messages and exchanges that joined the work stand inside its line (threadItems): the turn's own words open its first stretch,
   // and only its last one holds what ends the turn.
-  const part = look.part, first = part?.from === undefined, ends = part?.until === undefined;
-  const settledCards = first ? permissionCardsHTML(turn, look.answerable, true, name) : "";
+  const part = look.part, first = part?.from === undefined && part?.owner !== "answer", ends = part?.until === undefined;
+  const settledCards = part?.from === undefined ? permissionCardsHTML(turn, look.answerable, true, name) : "";
   const queued = turn.status === "queued" && !earlierVersion(turn);
   const cancellable = live || turn.status === "confirm" || turn.task?.state === "waiting";
   const secretCancel = asked && !queued && !earlierVersion(turn) && !!turn.session_id &&
     !!turn.secrets?.some(card => secretNeedsInput(card) && (card.key || cancellable));
-  const line = (classes: string, body: string): string => `<li class="tn${classes}" data-id="${id}" data-status="${esc(turn.status)}"${live ? ' data-live="true"' : ""}` +
+  const line = (classes: string, body: string): string => `<li class="tn${classes}" data-id="${id}" data-status="${esc(turn.status)}"${live && part?.owner !== "question" ? ' data-live="true"' : ""}` +
     `${part?.after !== undefined ? ` data-after="${esc(part.after)}"` : ""}>${body}</li>`;
   const head = !first ? "" :
     (resumed ? resumedLineHTML(turn) + secretResumedLineHTML(turn) + computerResumedLineHTML(turn) : "") +
@@ -1282,6 +1282,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
         `</div>`
       : "") +
     turnEventsHTML(turn, look) + mailHandedLinesHTML(turn, look);
+  if (part?.owner === "question") return head ? line(" is-owner-only", head) : "";
   if (!ends) {
     // A stretch before an owner message or exchange that joined the work: what the work said in it, and nothing that ends the turn.
     const stretch = hasMsgs ? turnMessagesHTML(turn, state, query, regenerate, revealing, settledCards, "", waitingForOwner, turn.id === look.signinTurnId, part) : "";

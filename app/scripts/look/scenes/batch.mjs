@@ -41,6 +41,14 @@ const midWork = (done) => [
     ...done ? [{seq: 3, kind: "reply", text: "測試完了，三個頁面都能正常打開。", at_ms: 1792807200000}] : []] }),
   asked,
 ];
+const sendNowOrder = [
+  turn(1, { id: 2072, question: "請測試新網站的每一頁。", status: "confirm", text: "", messages: [
+    { seq: 1, kind: "reply", text: "我已經打開網站。", at_ms: 1792807156000 },
+    { seq: 2, kind: "reply", text: "我會實測整頁。", at_ms: 1792807287000 },
+  ], permissions: [{ id: "look-unapproved", source: "ask", kind: "tool", service: "GitHub", tool: "create_issue",
+    summary: "建立測試紀錄。", reason: null, digest: "look-unapproved", always: false, state: "pending", expires_at_ms: 1792807400000 }] }),
+  turn(1, { id: 2073, session_id: "look-send-now", created_at_ms: 1792807230000, question: "也請測試手機版。", status: "queued", text: "", messages: [] }),
+];
 export default [
   scene("owner-addition", "An owner addition appears immediately beside continuing work and Stop", [member(1), type('.cmp-input', "也請保留原始檔案。"), key("Enter"), wait('.tn[data-id="901"] .owner-message'), waitGone('.tn[data-id="901"] .ra-face'), wait('.composer[data-task-state="running"]')],
     {running: true, runningMember: 1, ownerAddition: true}),
@@ -58,8 +66,12 @@ export default [
     {running: "fresh", runningMember: 1, queuedOwner: true}),
   scene("composer-queued-withdraw", "Withdrawing one queued bubble keeps the running work and returns the words", [member(1), type('.cmp-input', "第二個範例請求"), key("Enter"), wait('.tn[data-id="901"] .queued-send-now'), click('.tn[data-id="901"] .bubble [data-act="cancel-message"]'), waitGone('.tn[data-id="901"]'), check("composer-queued-withdraw")],
     {running: "fresh", runningMember: 1, queuedOwner: true}),
-  scene("composer-queued-sendnow", "「立即送出」 on a queued bubble ends the running work as Stop does and starts that message, with nothing withdrawn", [member(1), type('.cmp-input', "第二個範例請求"), key("Enter"), wait('.tn[data-id="901"] .queued-send-now'), click('.tn[data-id="901"] [data-act="send-now"]'), waitGone('.tn[data-id="901"] .queued-send-now'), check("composer-queued-sendnow")],
+  scene("composer-queued-sendnow", "Send Now lets the queued message take over without withdrawing anything", [member(1), type('.cmp-input', "第二個範例請求"), key("Enter"), wait('.tn[data-id="901"] .queued-send-now'), click('.tn[data-id="901"] [data-act="send-now"]'), waitGone('.tn[data-id="901"] .queued-send-now'), check("composer-queued-sendnow")],
     {running: "fresh", runningMember: 1, queuedOwner: true}),
+  scene("owner-sendnow-order", "Send Now puts the owner's message above the earlier work's later words and its own answer below them", [
+    member(1), wait('.tn[data-id="2073"] .queued-send-now'), click('.tn[data-id="2073"] [data-act="send-now"]'),
+    wait('.tn[data-id="2072"][data-after="2073"] [data-reply]'), wait('.tn[data-id="2073"] [data-reply]'), check("owner-sendnow-order"),
+  ], { turns: sendNowOrder, sendNowAnswer: "手機版測試通過。" }),
   scene("composer-queued-sendnow-menu", "A queued bubble contains 取消 and 立即送出, with neither repeated in its menu", [member(1), type('.cmp-input', "第二個範例請求"), key("Enter"), wait('.tn[data-id="901"] .queued-send-now'), click('.tn[data-id="901"] [data-act="more-message"]'), wait('#app-popover [data-pick="copy"]'), check("composer-queued-sendnow-menu")],
     {running: "fresh", runningMember: 1, queuedOwner: true}),
   scene("composer-queued-stop", "Stop cancels the running turn and returns queued words after the existing draft", [member(1), type('.cmp-input', "第二個範例請求"), key("Enter"), wait('.tn[data-id="901"] .queued-send-now'), type('.cmp-input', "第三個範例請求"), key("Enter"), wait('.tn[data-id="902"] .queued-send-now'), type('.cmp-input', "目前草稿"), key("Escape"), key("Escape"), waitGone('.queued-send-now'), check("composer-queued-stop")],

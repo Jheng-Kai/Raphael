@@ -1819,17 +1819,22 @@ export function installMock(fixture, config = {}, target = window) {
         }
         return { stopped: true, ...(returned.length ? {returned} : {}) };
       }
-      // 「立即送出」: the core ends the work running in the conversation as Stop does (denied, its steps kept) and the queued message starts as its own turn.
+      // Send Now ends the current work with its public output intact and starts the queued message.
       case "agent.history.send_now": {
         const target = data.turns.find(turn => turn.id === p.turn_id && turn.session_id === p.session_id && (turn.member_id ?? 0) === (p.member_id ?? 0));
         if (!target || target.status !== "queued") throw new Error("send now must identify a queued message of this private conversation");
         const ended = data.turns.filter(turn => turn.member_id === target.member_id && turn.conversation_id === target.conversation_id && ["running", "confirm"].includes(turn.status));
         for (const turn of ended) {
           pendingReplies.get(turn.session_id)?.(); pendingReplies.delete(turn.session_id);
-          Object.assign(turn, { status: "denied", prefix: "了", text: "已取消。", messages: turn.messages.filter(message => message.kind !== "reply") });
+          turn.status = "superseded";
+          for (const card of turn.permissions ?? []) {
+            if (card.state === "pending") card.state = "cancelled";
+          }
           notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
         }
-        Object.assign(target, { status: "running" });
+        Object.assign(target, variant.sendNowAnswer
+          ? { status: "done", text: variant.sendNowAnswer }
+          : { status: "running" });
         notify("AgentTurn", { turn_id: target.id, member_id: target.member_id });
         return { sent: true, stopped: ended.length > 0 };
       }

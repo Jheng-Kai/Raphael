@@ -4023,6 +4023,30 @@ export function checkRendered(name, context = {}) {
     require(document.querySelector('.cmp-input').value === "", "the field was not given words back");
     return {check: name, status: bubble.dataset.status};
   }
+  if (name === "owner-sendnow-order") {
+    const thread = document.querySelector(".thread");
+    const nodes = [
+      thread.querySelector('.tn[data-id="2072"]:not([data-after]) [data-reply] .message-text'),
+      thread.querySelector('.tn[data-id="2073"] .owner-message .message-text'),
+      thread.querySelector('.tn[data-id="2072"][data-after="2073"] [data-reply] .message-text'),
+      thread.querySelector('.tn[data-id="2073"] [data-reply] .message-text'),
+    ];
+    const words = nodes.map(node => node?.textContent.trim());
+    require(words.join("|") === "我已經打開網站。|也請測試手機版。|我會實測整頁。|手機版測試通過。", `the public words are kept: ${words}`);
+    require(nodes.every((node, index) => visible(node) && (!index || node.getBoundingClientRect().top >= nodes[index - 1].getBoundingClientRect().bottom)),
+      "the earlier start, owner's bubble, earlier later words and new answer are visible in that order");
+    require(![...thread.querySelectorAll('[data-reply] .message-text')].some(reply => reply.textContent.trim() === "已取消。") &&
+      !thread.querySelector('.tn[data-status="cancelled"], .tn[data-status="denied"], .tn.is-latest-failure'),
+      "send now leaves no stopped reply or styling");
+    const permission = thread.querySelector('[data-permission-card="look-unapproved"][data-card-state="cancelled"]');
+    const status = permission?.querySelector(".card-status");
+    require(visible(permission) && visible(status) && status.textContent.trim() === "已取消" &&
+      !permission.querySelector(".card-actions, .card-close"),
+      "the closed permission shows its settled status without active controls");
+    const sent = window.__look.calls.filter(call => call.method === "agent.history.send_now");
+    require(sent.length === 1 && sent[0].params.turn_id === 2073, "the queued message takes over through Send Now");
+    return {check: name, words};
+  }
   if (name === "composer-queued" || name === "composer-queued-withdraw" || name === "composer-queued-stop" || name === "room-send-while-working") {
     const calls = window.__look.calls;
     if (name === "composer-queued") {

@@ -1094,7 +1094,10 @@ export function createAgent(app: AppContext, places?: {
         : { key: item.key, html: (() => {
           const turn = item.turn, waiting = placed.get(turn.id);
           // The edit is on its way and the history still has the message as it was, or has it no more: the edit stands in its place.
-          if (waiting && turn.session_id !== waiting.requestId) return pendingTurnHTML(waiting.text, TYPED, shape, waiting.files, { id: waiting.requestId, time: waiting.sentAt, quote: waiting.quote }, state.nowMs, state.expandedMessages.has(`pending:${waiting.requestId}:question`), !tail && turnLook.presenceTurnId === null, tailWords);
+          if (waiting && turn.session_id !== waiting.requestId) {
+            if (item.key !== `turn:${turn.id}`) return "";
+            return pendingTurnHTML(waiting.text, TYPED, shape, waiting.files, { id: waiting.requestId, time: waiting.sentAt, quote: waiting.quote }, state.nowMs, state.expandedMessages.has(`pending:${waiting.requestId}:question`), !tail && turnLook.presenceTurnId === null, tailWords);
+          }
           // An edited message is drawn as the version the owner chose to read (‹ ›), with what its member answered it with.
           const shown = shownTurn(turn);
           const view = shown === turn ? pacing.view(turn) : shown, task = turn.task?.id;
@@ -1107,7 +1110,7 @@ export function createAgent(app: AppContext, places?: {
             turnLook.presenceTurnId === turn.id, fileLinks(turn, state.files), live ? shape.activityLabel : "", live ? members.member().activity ?? "" : "", turn.permissions?.some(card => shape.answerable?.(card.id)), turn.id === latestFailedTurnId, turn.id === signinTurnId,
             item.together?.map(earlier => `${earlier.id}:${earlier.status}:${earlier.messages?.length ?? 0}`).join(",") ?? "",
             state.editingTurnId === turn.id ? "editing" : "", editing, shown.version ?? 0,
-            item.part ? `${item.part.from ?? ""}-${item.part.until ?? ""}` : ""],
+            item.part ? `${item.part.from ?? ""}-${item.part.until ?? ""}-${item.part.owner ?? ""}` : ""],
             () => turnHTML(view, state, details.has(turn.id), { ...turnLook, regenerateTurnId: turn.id, latestFailedTurnId, signinTurnId, exchangeTogether: item.together, part: item.part }));
         })(), turnId: item.turn.id },
     // A stretch of a turn with nothing in it yet (owner messages or exchanges that joined its work, threadItems) has no line.

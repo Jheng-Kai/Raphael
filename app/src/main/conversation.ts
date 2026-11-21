@@ -21,9 +21,14 @@ export const sourceOf = (turn: AgentTurn): string => turn.source || VOICE;
  * The stretch of a turn's messages one line draws when owner messages or a colleague's exchanges joined that turn's work
  * (`joinedWork`): from `from`, the moment the turn it follows (`after`) came, until `until`, the moment the next one did. A
  * line without `from` holds the turn's own question, one without `until` everything that ends the turn (its cards, its work,
- * its slime).
+ * its slime). An owner turn with its own answer can split its question from the rest without a time cutoff.
  */
-export interface TurnPart { from?: number; until?: number; after?: number }
+export interface TurnPart {
+  from?: number;
+  until?: number;
+  after?: number;
+  owner?: "question" | "answer";
+}
 
 /** One line of the thread: the heading of a day, a turn (or a stretch of it), or what one colleague asked in a row. */
 export type ThreadItem =
@@ -95,19 +100,32 @@ const working = (turn: AgentTurn): boolean => turn.status === "running" || turn.
  * never above it. Work still at work takes it even before saying anything more, unlike an owner message, because nothing
  * here waits on the work reading it: it only happened while the work ran. Work over before it came takes nothing of it.
  *
- * Queued words are answered as a turn of their own and nothing after them joins earlier work; neither an owner message nor
- * an exchange is work that something joins.
+ * An owner message answered as its own turn can also come during earlier work. Once it starts, its question stands before
+ * any later output of that work, and its own answer follows. A waiting bubble stays at the end of the thread.
  */
 function joinedWork(oldestFirst: readonly AgentTurn[]): Map<number, AgentTurn[]> {
   const joined = new Map<number, AgentTurn[]>();
   oldestFirst.forEach((turn, index) => {
     const exchange = exchangeTurn(turn);
-    if (turn.route !== "owner_input" && !exchange) return;
+    const ownAnswer = turn.route !== "owner_input" && !exchange;
+    if (ownAnswer && (turn.status === "queued" || !ownerTurn(turn) || turn.setup || sourceOf(turn) === "connector" ||
+      !(turn.question.trim() || turn.attachments?.length))) return;
     for (let earlier = index - 1; earlier >= 0; earlier--) {
       const work = oldestFirst[earlier]!;
       if (work.route === "owner_input" || exchangeTurn(work)) continue;
-      if (work.status === "queued") return;
-      if ((exchange && working(work)) || shownSince(work, turn)) { joined.set(work.id, [...joined.get(work.id) ?? [], turn]); return; }
+      if (work.status === "queued") {
+        if (ownAnswer) continue;
+        return;
+      }
+      const joins = ownAnswer
+        ? (work.member_id ?? 0) === (turn.member_id ?? 0) && work.conversation_id === turn.conversation_id &&
+          (stretchShows(work, { from: turn.created_at_ms + 1 }) ||
+            work.messages?.some(message => message.kind === "progress" && message.at_ms > turn.created_at_ms && message.text.trim()))
+        : (exchange && working(work)) || shownSince(work, turn);
+      if (joins) {
+        joined.set(work.id, [...joined.get(work.id) ?? [], turn]);
+        return;
+      }
     }
   });
   return joined;
@@ -167,6 +185,7 @@ export function threadItems(turns: readonly AgentTurn[], nowMs: number): ThreadI
       part: { ...(from === undefined ? {} : { from }), ...(until === undefined ? {} : { until }), after: turn.id } });
   };
   for (const turn of oldestFirst) {
+    if (turn.status === "queued") continue;
     dated(turn);
     // The same colleague again, right after its last exchange on the same day: one line 「與 X 的 4 則訊息」. A stretch of the
     // work this exchange joined that shows nothing between the two does not part them: it goes on under the one line.
@@ -181,12 +200,20 @@ export function threadItems(turns: readonly AgentTurn[], nowMs: number): ThreadI
       continue;
     }
     const inputs = joined.get(turn.id);
-    if (inputs) {
-      items.push({ kind: "turn", key: `turn:${turn.id}`, turn, part: { until: inputs[0]!.created_at_ms } });
-      continue;
+    const until = inputs?.[0]?.created_at_ms;
+    if (workOf.has(turn.id) && turn.route !== "owner_input" && !exchangeTurn(turn)) {
+      items.push({ kind: "turn", key: `turn:${turn.id}`, turn, part: { owner: "question" } });
+      stretchAfter(turn, turn.created_at_ms);
+      items.push({ kind: "turn", key: `turn:${turn.id}:answer`, turn, part: { owner: "answer", until } });
+    } else {
+      items.push({ kind: "turn", key: `turn:${turn.id}`, turn, part: until === undefined ? undefined : { until } });
+      stretchAfter(turn, turn.created_at_ms);
     }
+  }
+  for (const turn of oldestFirst) {
+    if (turn.status !== "queued") continue;
+    if (previous === null || turn.created_at_ms >= previous) dated(turn);
     items.push({ kind: "turn", key: `turn:${turn.id}`, turn });
-    stretchAfter(turn, turn.created_at_ms);
   }
   return items;
 }

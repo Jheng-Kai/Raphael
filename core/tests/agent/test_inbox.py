@@ -292,7 +292,9 @@ async def test_stop_keeps_a_request_that_was_answered_or_acted_on(make_rig, monk
             rig.history.add_steps(running["id"], [Step(kind="tool", tool="web_search", server="Raphael", outcome="ok", ms=10)])
         stopped = await rig.call("agent.history.stop", {"session_id": running["session_id"], "member_id": 0})
         assert "returned" not in stopped
-        assert rig.history.get(running["id"]) is not None
+        ended = next(t for t in await rig.turns() if t["id"] == running["id"])
+        assert ended["status"] == "cancelled"
+        assert "cancelled" in ended["messages"][-1]["text"].lower()
     finally:
         release.set()
         await asyncio.gather(first, return_exceptions=True)

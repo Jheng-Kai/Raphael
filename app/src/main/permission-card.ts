@@ -99,7 +99,8 @@ export function permissionCardHTML(card: PermissionCard, answerable = true, memb
     const value = card.message?.[key as keyof typeof labels];
     return value ? `<div class="card-field"><span>${esc(t(label))}</span><span>${esc(value)}</span></div>` : "";
   }).join("") + `<p class="card-body">${linkedText(card.message.body)}</p>` : "";
-  const details = `<div class="card-well">${!waiting ? `<p class="card-body">${esc(permissionStateText(card))}</p>` : ""}${card.message ? message : localCard(card) ? `<pre class="local-command">${esc(card.summary)}</pre>${card.reason ? `<p class="card-body">${esc(card.reason)}</p>` : ""}` : `<div class="card-field"><span>${esc(nameOf(card))}</span><span>${linkedText(card.summary)}</span></div>`}</div>`;
+  const outcome = !waiting ? `<p class="card-body">${esc(permissionStateText(card))}</p>` : "";
+  const details = `<div class="card-well">${outcome}${card.message ? message : localCard(card) ? `<pre class="local-command">${esc(card.summary)}</pre>${card.reason ? `<p class="card-body">${esc(card.reason)}</p>` : ""}` : `<div class="card-field"><span>${esc(nameOf(card))}</span><span>${linkedText(card.summary)}</span></div>`}</div>`;
   return cardHTML({
     title, mark: markOf(card),
     status: waiting ? "waiting" : card.state === "allowed" || card.state === "always" ? "done" : "ready",
@@ -115,7 +116,8 @@ export function permissionCardHTML(card: PermissionCard, answerable = true, memb
 
 /** The cards a turn shows, below what it said. `answerable` says whether the window can answer a question by its id now. */
 export function permissionCardsHTML(turn: AgentTurn, answerable: (id: string) => boolean = () => true, settled = false, memberName?: string): string {
-  return (turn.permissions ?? []).filter((card) => waitsForYes(card) !== settled).map((card) => permissionCardHTML(card, card.source === "run" || answerable(card.id), memberName)).join("");
+  return (turn.permissions ?? []).filter(card => waitsForYes(card) !== settled).map(card =>
+    permissionCardHTML(card, card.source === "run" || answerable(card.id), memberName)).join("");
 }
 
 /** Owner questions share the conversation card, with choices instead of permission controls. */

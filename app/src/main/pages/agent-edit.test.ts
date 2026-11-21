@@ -400,6 +400,25 @@ describe("the message being edited is gone from the conversation", () => {
   });
 });
 
+test("an edit of a split owner turn shows one pending bubble in the original message slot", async () => {
+  const message = turn(8, { question: "Also test mobile", text: "Mobile passed." });
+  const work = turn(7, { status: "superseded", text: "", messages: [
+    { seq: 1, kind: "reply", text: "I will test the whole page.", at_ms: message.created_at_ms + 100 },
+  ] });
+  api.agentAskText.mockReturnValue(new Promise(() => {}));
+  const agent = mount([message, work]); await flush(); await pickMember(3);
+  try {
+    expect(lines(8)).toBe(2);
+    await editMessage(8);
+    const input = $<HTMLTextAreaElement>("[data-edit-input]");
+    input.value = "Also test tablet"; input.dispatchEvent(new Event("input", { bubbles: true }));
+    $('[data-act="edit-send"]').click(); await flush();
+    expect(shown("Also test tablet")).toBe(1);
+    expect($(".thread").textContent?.indexOf("Also test tablet")).toBeLessThan($(".thread").textContent!.indexOf("I will test the whole page."));
+    expect($(".thread").textContent).not.toContain("Mobile passed.");
+  } finally { agent.hide(); }
+});
+
 describe("the actions of a message stand on the message, whatever it carries", () => {
   // The place beside the bubble is drawn by look (owner-picture-actions); what the page must give it is one actions block as the message's own
   // child, and the pictures and the bubble as the siblings the stylesheet anchors to.
