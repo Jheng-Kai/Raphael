@@ -334,9 +334,11 @@ export const membersSetCover = (id: number, file: WireAttachment): Promise<{ mem
 export const membersAvatarGenerate = (member_id: number, prompt: string): Promise<{ candidate: WireAttachment; model: string }> =>
   core("members.avatar_generate", { member_id, prompt });
 /** The owner read the thread of member `id`: it is no longer unread. */
-export const membersRead = (id: number): Promise<unknown> => core("members.read", { id });
+export const membersRead = (id: number, conversation?: number | null): Promise<unknown> =>
+  core("members.read", { id, ...(conversation !== undefined ? { conversation_id: conversation } : {}) });
 /** The thread on screen now (null for none): what arrives there is no news. */
-export const membersViewing = (id: number | null): Promise<unknown> => core("members.viewing", { id, tz: Intl.DateTimeFormat().resolvedOptions().timeZone });
+export const membersViewing = (id: number | null, conversation?: number | null): Promise<unknown> =>
+  core("members.viewing", { id, ...(conversation !== undefined ? { conversation_id: conversation } : {}), tz: Intl.DateTimeFormat().resolvedOptions().timeZone });
 /** Raphael's own tools a member may be given, by id, and the connections. */
 export const membersToolChoices = (): Promise<{ tools: string[]; connections: { id: string; name: string; enabled: boolean; logo?: string }[] }> =>
   core("members.tool_choices");

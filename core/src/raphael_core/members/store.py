@@ -860,18 +860,29 @@ class MemberStore:
         return {int(row[0]) for row in self._conn.execute("SELECT member_id FROM member_unread")}
 
     def unread_from(self) -> dict[int, int | None]:
-        return {int(row[0]): row[1] for row in self._conn.execute("SELECT member_id, unread_from FROM member_unread")}
+        return {row[0]: row[1] for row in self._conn.execute(
+            "SELECT member_id, min(unread_from) FROM member_unread GROUP BY member_id"
+        )}
 
-    def mark_unread(self, member_id: int, turn_id: int | None = None) -> None:
+    def unread_threads(self) -> list[tuple[int, int, int | None]]:
+        return [tuple(row) for row in self._conn.execute(
+            "SELECT member_id, conversation_id, unread_from FROM member_unread ORDER BY unread_from DESC, conversation_id"
+        )]
+
+    def mark_unread(self, member_id: int, turn_id: int | None = None, conversation_id: int = 0) -> bool:
         with self._conn:
-            self._conn.execute(
-                "INSERT OR IGNORE INTO member_unread (member_id, unread_from) VALUES (?, ?)", (member_id, turn_id)
+            cursor = self._conn.execute(
+                "INSERT OR IGNORE INTO member_unread (member_id, conversation_id, unread_from) VALUES (?, ?, ?)",
+                (member_id, conversation_id, turn_id),
             )
+        return cursor.rowcount > 0
 
-    def mark_read(self, member_id: int) -> bool:
+    def mark_read(self, member_id: int, conversation_id: int | None = None) -> bool:
         """Whether it had been unread."""
         with self._conn:
             cursor = self._conn.execute(
-                "DELETE FROM member_unread WHERE member_id = ?", (member_id,)
+                "DELETE FROM member_unread WHERE member_id = ? AND (? IS NULL OR conversation_id = ?"
+                " OR (conversation_id = 0 AND EXISTS (SELECT 1 FROM conversations WHERE id = ? AND kind = 'standard')))",
+                (member_id, conversation_id, conversation_id, conversation_id),
             )
         return cursor.rowcount > 0

@@ -35,11 +35,13 @@ async def test_raphael_is_first_in_the_list_in_the_language_asked(rig):
     listed = await rig.call("members.list", {"ui_language": "en"})
     assert listed["groups"] == []
     (raphael,) = listed["members"]
+    main = rig.conn.execute("SELECT id FROM conversations WHERE member_id=0 AND kind='standard'").fetchone()[0]
     assert raphael == {
         "blurb": "", "reply_style": "full",
         "notify": False, "ask_before_members": False, "pinned": False, "hidden": False, "draft_first": True,
         "id": 0, "name": "Raphael", "role": "", "personality": "", "instructions": "", "avatar": "", "group_id": None,
         "model": "", "tools": None, "position": -1, "created": 0, "unread": False, "unread_from": None,
+        "main_conversation_id": main, "unread_threads": [], "waiting_cards": [],
         "unread_kind": None, "waiting": False, "activity": "idle", "activity_label": "", "preview": "", "last_at": None, "profile_ready": False, "chief": True,
     }  # fmt: skip
     rig.language = "ja"
@@ -224,6 +226,36 @@ async def test_unread_from_keeps_the_first_unseen_turn_until_read(rig, conn):
     arrive(0, "voice")
     assert (await listed(0))["unread_from"] == first_chief
 
+
+
+async def test_reading_one_conversation_leaves_the_other_conversations_news(rig, conn):
+    from raphael_core.agent.conversations import Conversations
+
+    conversations = Conversations(conn)
+    main, quick = conversations.main(), conversations.quick()
+    history = AgentHistory(conn)
+
+    def arrive(conversation):
+        turn = history.add(session_id="sample", question="Question", route="answer", prefix="", text="Reply",
+                           status="done", source="app", member_id=0, conversation_id=conversation)
+        rig.service.turn_arrived(turn)
+        return turn
+
+    async def unread_threads():
+        return (await rig.call("members.list"))["members"][0]["unread_threads"]
+
+    first, second = arrive(main), arrive(quick)
+    assert await unread_threads() == [
+        {"conversation_id": quick, "from": second, "kind": "message"},
+        {"conversation_id": main, "from": first, "kind": "message"},
+    ]
+    await rig.call("members.viewing", {"id": 0, "conversation_id": main})
+    arrive(main)
+    assert await unread_threads() == [{"conversation_id": quick, "from": second, "kind": "message"}]
+    await rig.call("members.read", {"id": 0, "conversation_id": quick})
+    assert await unread_threads() == []
+    third = arrive(quick)
+    assert await unread_threads() == [{"conversation_id": quick, "from": third, "kind": "message"}]
 
 
 async def test_a_turn_in_a_thread_that_is_not_on_screen_is_unread_until_it_is_read(rig, conn):

@@ -10020,7 +10020,7 @@ export function checkRendered(name, context = {}) {
     return { check: name, moved: Math.round(window.__rowWheel - scroller.scrollTop) };
   }
   // The status light (status-light.ts) and the title pill beside it.
-  if (name === "status-light-idle" || name === "status-light-list" || name === "status-light-pill-open" || name === "status-light-seen" || name === "status-light-dot") {
+  if (["status-light-idle", "status-light-list", "status-light-pill-open", "status-light-seen", "status-light-remaining", "status-light-cleared", "status-light-dot"].includes(name)) {
     const light = document.querySelector('.mb-chat .mb-head [data-act="status"]'), head = document.querySelector(".mb-chat .mb-head");
     require(visible(light) && light.getBoundingClientRect().left - head.getBoundingClientRect().left < head.getBoundingClientRect().width / 4, "the status light stands at the header's left");
     require(!document.querySelector('.mb-head [data-act="search"], [data-room-search]'), "no search button is left in a top row");
@@ -10034,7 +10034,7 @@ export function checkRendered(name, context = {}) {
     }
     if (name === "status-light-list") {
       require(light.dataset.level === "needs", `a member waiting for the owner is the list's level (${light.dataset.level})`);
-      require(!drawn && light.dataset.dot === undefined, "the list is open, so what it shows is seen: the icon's dot is gone");
+      require(drawn && light.dataset.dot === "needs" && mark.backgroundColor === colour("--warn"), "opening the list keeps the warning dot for the unopened waiting conversation");
       const rows = [...document.querySelectorAll(".menu .menu-choice")];
       require(rows.map(row => row.dataset.value).join(",") === "2,3,1", "waiting comes first, finished next, working last");
       require([...document.querySelectorAll(".menu .menu-head")].map(head => head.textContent).join(",") === "等你,完成,工作中", "section headings follow the owner's priority");
@@ -10044,8 +10044,15 @@ export function checkRendered(name, context = {}) {
       require(dots.map(dot => dot?.dataset.kind).join(",") === "needs,done,busy" &&
         new Set(dots.map(dot => getComputedStyle(dot).backgroundColor)).size === 3, "each group keeps its own dot colour");
     }
-    if (name === "status-light-seen") {
-      require(!drawn && light.dataset.dot === undefined && light.dataset.level === "needs", "once the list was opened the dot is gone, though the member still waits");
+    if (name === "status-light-seen" || name === "status-light-remaining") {
+      const rows = [...document.querySelectorAll(".menu .menu-choice")];
+      const expected = name === "status-light-seen" ? "2,3" : "3";
+      require(rows.map(row => row.dataset.value).join(",") === expected && rows.every(row => row.querySelector('.status-row-dot[data-kind="done"]')), "only the unopened finished conversations have rows");
+      require(drawn && light.dataset.dot === "done" && mark.backgroundColor === colour("--ok"), "the open list keeps the icon's dot while any finished conversation is unopened");
+    }
+    if (name === "status-light-cleared") {
+      require(!drawn && light.dataset.dot === undefined && document.querySelectorAll(".menu .menu-choice").length === 0,
+        "opening the remaining conversation through the sidebar clears the icon and both finished rows");
     }
     if (name === "status-light-idle") require(light.dataset.level === "done" ? drawn && mark.backgroundColor === colour("--ok") : !drawn, `with nothing new the icon has no dot; finished work not yet seen has the success colour (${light.dataset.level} ${mark.backgroundColor})`);
     if (name === "status-light-dot") {

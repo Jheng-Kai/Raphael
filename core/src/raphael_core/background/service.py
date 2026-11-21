@@ -2542,8 +2542,18 @@ class BackgroundService:
 
     def waiting_members(self) -> set[int]:
         """The members a question waits in the thread of (0 is Raphael)."""
-        waiting = [*self.waiting_questions(), *self.owner_questions.pending()]
-        return {question["member_id"] for question in waiting if question.get("room_id") is None}
+        return {member for member, _, _ in self.waiting_member_cards()}
+
+    def waiting_member_cards(self) -> list[tuple[int, str, int | None]]:
+        """The private status list needs card identities and their conversation destinations."""
+        cards = []
+        for question in [*self.waiting_questions(), *self.owner_questions.pending()]:
+            if question.get("room_id") is not None:
+                continue
+            task = self._store.get(question["task_id"])
+            turn = self._history.get(task.turn_id) if task and task.turn_id else None
+            cards.append((question["member_id"], question["id"], turn.conversation_id if turn else None))
+        return cards
 
     async def _waiting_list(self, params: dict) -> dict:
         """Everyone who waits for the owner now, in order: what the app reminds of."""

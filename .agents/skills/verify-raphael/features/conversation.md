@@ -640,11 +640,21 @@ The left of a member conversation's top row is the status list (status-light.ts,
 names who waits, works or finished. A press lists them in the shared menu with a coloured dot each: 等你 (waiting for the
 owner, or work that went wrong), 完成 (finished work not opened yet), then 工作中; picking one opens its conversation. It
 follows `slime-activity`, told by slime.ts whenever a member's live state changes, the roster's `waiting` and `unread`,
-and `conversation-opened`. Neither a member's nor a group's top row has a search button; Ctrl+F (⌘F) opens the search
+and the conversation's actual opening path. The menu leaves the header dot on while any conversation
+has unopened finished news or an unseen waiting card. It uses the most urgent unseen colour, with no dot
+for work under way. The sidebar, status list and other conversation entry points acknowledge only the
+conversation opened. Waiting cards retain their row until answered and a different card lights the icon
+again. Finished news uses the existing member_unread table, now keyed by member and conversation, so
+opening Raphael's main conversation keeps the quick conversation's news. The status-light-seen scene
+opens the menu with two finished conversations, then opens one through the menu and the other through
+the sidebar. It checks the row and header dots at each step.
+Neither a member's nor a group's top row has a search button; Ctrl+F (⌘F) opens the search
 bar. The title pill draws no dot, and its arrow shows on a hover only while the details panel is closed (R-HEAD-02).
 
 ```powershell
 npm run look -- status-light-idle status-light-list status-light-dot status-light-seen status-light-pill-open top-row-find top-row-room-find conversation-share --theme both --width 1120,720,1920x1080
+```
+
 ## A waiting card read out of sight
 
 A card that waits for the owner stays where it was born (card-float.ts, R-CARD-FLOAT-01). When the newest one is read

@@ -23,9 +23,25 @@ import { findsName } from "./find-match";
  * whole row, so a reply that streams in or a worker that moves on does not draw them again (an update would flash).
  * Its face carries the rest of it (a long silence, a wait) in its own markup.
  */
-export function stableMember<T extends Partial<Member>>(member: T): Omit<T, "preview" | "last_at" | "unread" | "unread_from" | "unread_kind" | "waiting" | "activity" | "activity_label"> {
-  const { preview: _preview, last_at: _lastAt, unread: _unread, unread_from: _unreadFrom, unread_kind: _unreadKind, waiting: _waiting, activity: _activity, activity_label: _label, ...rest } = member;
+export function stableMember<T extends Partial<Member>>(member: T): Omit<T, "preview" | "last_at" | "unread" | "unread_from" | "unread_kind" | "waiting" | "activity" | "activity_label" | "unread_threads" | "waiting_cards" | "main_conversation_id"> {
+  const { preview: _preview, last_at: _lastAt, unread: _unread, unread_from: _unreadFrom, unread_kind: _unreadKind, waiting: _waiting, activity: _activity, activity_label: _label, unread_threads: _unreadThreads, waiting_cards: _waitingCards, main_conversation_id: _mainConversation, ...rest } = member;
   return rest;
+}
+
+export function unreadThreads(member: Member, conversation?: number): Member["unread_threads"] {
+  const current = conversation ?? member.main_conversation_id ?? null;
+  return member.unread_threads?.filter(thread => (thread.conversation_id ?? member.main_conversation_id ?? null) === current);
+}
+
+export function unreadFromIn(member: Member, conversation?: number): number | null {
+  const threads = unreadThreads(member, conversation);
+  return threads ? firstUnreadTurn(threads) : member.unread_from ?? null;
+}
+
+export function firstUnreadTurn(threads: NonNullable<Member["unread_threads"]>): number | null {
+  let first: number | null = null;
+  for (const { from } of threads) if (from !== null && (first === null || from < first)) first = from;
+  return first;
 }
 
 /** Raphael's id among the members: member 0 everywhere in the core's API. */

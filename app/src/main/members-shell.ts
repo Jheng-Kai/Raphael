@@ -45,7 +45,7 @@ import { openMemberCreator } from "./member-creator";
 import { openMemberStore } from "./member-store";
 import { previewTemplateFile } from "./member-templates";
 import { movedGroup, movedMember, withoutPlaces } from "./member-order";
-import { RAPHAEL_ID, faceHTML, isMemberNameTaken, memberOf, orderedMembers, memberRole, raphaelOf, stableMember } from "./members";
+import { RAPHAEL_ID, faceHTML, firstUnreadTurn, isMemberNameTaken, memberOf, orderedMembers, memberRole, raphaelOf, stableMember, unreadThreads } from "./members";
 import { memberColor, nameAccent } from "./owner-bubble";
 import { followSlimeRoster, setSlimeState } from "./slime";
 import { lightClass, lightName, lightOf, strongest } from "./sidebar-light";
@@ -70,6 +70,7 @@ export interface MembersHost {
   /** The list of members changed (a name or picture was updated). */
   onUpdate?(): void;
   onReadThread?(member: Member): void;
+  onOpenThread?(): void;
   /** Whether the page is on screen now (a thread read only then). */
   visible(): boolean;
   focusHeader?(): void;
@@ -118,6 +119,7 @@ export interface MembersShell {
   mentionTargets(): readonly MentionTarget[];
   /** Opens the thread of member `id`. */
   select(id: number, keepDetailsTab?: boolean): void;
+  readCurrent(): void;
   /** Reads the list (and what the column and the panel need with it) again. */
   load(): Promise<void>;
   /** Changes member `id` and reads the list again, as the settings page does; false (with a toast) when the core refused. */
@@ -149,6 +151,7 @@ export function createMembers(host: MembersHost): MembersShell {
   /** The part of the list that does not change with each word or step (members.ts `stableMember`). */
   let stableJSON = "";
   let viewing: number | null | undefined;
+  let viewingConversation: number | null | undefined;
   let refreshDue = 0;
   let refreshTimer: ReturnType<typeof setTimeout> | null = null;
   let open = typeof innerWidth === "number" ? innerWidth >= DETAILS_COLUMN_MIN_PX : true;
@@ -314,8 +317,7 @@ export function createMembers(host: MembersHost): MembersShell {
     if (mine !== loads) return;
     const json = JSON.stringify(read);
     if (json === listJSON) {
-      void readThread();
-      if (host.visible()) tellViewing(current);
+      readCurrent();
       return;
     }
     // Only where members and folders stand has changed (a move made here, saved and read back; or made by another way): the column
@@ -351,8 +353,7 @@ export function createMembers(host: MembersHost): MembersShell {
     drawAll(!settled || current !== openMember || faceKey(member()) !== panelFace);
     if (!first && !settled) details.refreshResources();
     host.onUpdate?.();
-    void readThread();
-    if (host.visible()) tellViewing(current);
+    readCurrent();
   }
 
   /** Takes `next` for the list when only the sidebar's order has changed: the column is patched, and its unchanged rows and faces stay. */
@@ -366,25 +367,43 @@ export function createMembers(host: MembersHost): MembersShell {
   /** The open thread is read: the core forgets that it was unread. */
   async function readThread(): Promise<void> {
     const m = member();
-    if (host.visible() && currentRoomId() === null) host.onReadThread?.(m);
-    if (!host.visible() || !m.unread) return;
-    if (list) list = { ...list, members: list.members.map((other) => (other.id === m.id ? { ...other, unread: false, unread_from: null, unread_kind: null } : other)) };
+    host.onReadThread?.(m);
+    const conversation = host.conversationOf?.(m.id);
+    const read = unreadThreads(m, conversation);
+    if (!(read ? read.length : m.unread)) return;
+    const remaining = m.unread_threads?.filter(thread => !read?.includes(thread));
+    const unreadKind = remaining?.find(thread => thread.kind === "failed")?.kind ??
+      remaining?.find(thread => thread.kind === "done")?.kind ?? remaining?.[0]?.kind ?? null;
+    if (list) list = { ...list, members: list.members.map(other => other.id === m.id ? {
+      ...other, unread: !!remaining?.length, unread_from: remaining ? firstUnreadTurn(remaining) : null, unread_kind: unreadKind,
+      ...(remaining ? { unread_threads: remaining } : {}),
+    } : other) };
     column.draw();
     // Raphael's thread is told read as every member's is: the core also clears it when the viewing is told, but that is
     // sent once per visit and only after a roster read succeeded, so its boundary could outlive the visit it was shown in.
     try {
-      await api.membersRead(m.id);
+      if (read) await api.membersRead(m.id, conversation ?? null);
+      else await api.membersRead(m.id);
     } catch {
       // it stays marked; the next list says so
     }
   }
 
+  function readCurrent(): void {
+    if (!host.visible() || currentRoomId() !== null || settings.isOpen()) return;
+    void readThread();
+    tellViewing(current);
+  }
+
   /** Tells the core which thread is on screen (null: none), so that what arrives there is no news. */
   function tellViewing(id: number | null): void {
-    if (viewing === id) return;
+    const m = member();
+    const conversation = id !== null && m.unread_threads ? (host.conversationOf?.(id) ?? m.main_conversation_id ?? null) : undefined;
+    if (viewing === id && viewingConversation === conversation) return;
     viewing = id;
+    viewingConversation = conversation;
     void Promise.resolve()
-      .then(() => api.membersViewing(id))
+      .then(() => conversation === undefined ? api.membersViewing(id) : api.membersViewing(id, conversation))
       .catch(() => {});
   }
 
@@ -408,7 +427,9 @@ export function createMembers(host: MembersHost): MembersShell {
     // Another member is switched to before the page shows (host.onSelect), so the page reads only its thread.
     if (id === current && !host.visible()) host.app.go("agent");
     if (id === current) {
-      if (currentRoomId() !== null) { host.onSelect(id, true); drawAll(); void readThread(); }
+      if (currentRoomId() !== null) { host.onSelect(id, true); drawAll(); }
+      host.onOpenThread?.();
+      readCurrent();
       // Reopening the same conversation preserves its details state.
       return;
     }
@@ -417,8 +438,8 @@ export function createMembers(host: MembersHost): MembersShell {
     host.onSelect(id);
     details.showMember(keepDetailsTab);
     drawAll();
-    if (host.visible()) tellViewing(id);
-    void readThread();
+    host.onOpenThread?.();
+    readCurrent();
   }
 
   let stopPanelTabs: (() => void) | undefined;
@@ -704,6 +725,7 @@ export function createMembers(host: MembersHost): MembersShell {
     colorOf: id => memberColor(memberOf(list, id) ?? { id }),
     member,
     select,
+    readCurrent,
     load,
     loaded: () => list !== null,
     show: () => column.draw(),

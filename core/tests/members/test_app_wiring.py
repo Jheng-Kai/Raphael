@@ -45,6 +45,19 @@ async def test_the_background_names_the_members_and_tells_which_threads_wait(mak
     assert app.background._notice("zh-TW", 0) == "有一件事等你處理。"
     assert app.members.name_of(member["id"] + 1) is None
     # A question the background waits on makes that thread `waiting` in the member column.
-    monkeypatch.setattr(app.background, "waiting_questions", lambda: [{"member_id": member["id"]}])
-    listed = {m["id"]: m["waiting"] for m in (await app.call("members.list", {}))["members"]}
-    assert listed == {0: False, member["id"]: True}
+    member_id = member["id"]
+    await app.call("agent.ask", {
+        "session_id": "s1", "text": "Check progress", "ui_language": "en", "source": "app", "member_id": member_id,
+    })
+    (turn,) = (await app.call("agent.history.list", {"member_id": member_id}))["turns"]
+    tasks = app.background._store
+    task_id = tasks.create(session_id="s1", language="en", text="Check progress", member_id=member_id)
+    tasks.attach_turn(task_id, turn["id"])
+    monkeypatch.setattr(app.background, "waiting_questions", lambda: [
+        {"id": "progress-question", "task_id": task_id, "member_id": member_id},
+    ])
+    listed = {m["id"]: m for m in (await app.call("members.list", {}))["members"]}
+    assert {id_: m["waiting"] for id_, m in listed.items()} == {0: False, member_id: True}
+    main = listed[member_id]["main_conversation_id"]
+    assert main is not None
+    assert listed[member_id]["waiting_cards"] == [{"id": "progress-question", "conversation_id": main}]
