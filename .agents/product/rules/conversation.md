@@ -2,6 +2,14 @@
 
 How a member answers: the core loop, replies, memory, models, CLI brains, the queue and handoffs. Part of [the product rules](../RULES.md); a rule's ID is unique across every file.
 
+## An allowed pairing ends with its member saying so
+
+The owner allowed a Telegram pairing and then could not find the member's last words: the card stood last, its reply above it.
+
+| ID | Date | Rule | Check | Severity | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-PAIR-LINE-01 | | Once the owner allows a messaging pairing, its member says so in the same conversation under the card, in the words the chat itself is sent (`paired`), so the newest words stand last; a refused or expired pairing adds no line. | pytest | hard | core/tests/test_pairing_language.py::test_an_allowed_pairing_ends_with_its_member_saying_so_under_the_card; core/tests/test_pairing_language.py::test_a_refused_pairing_adds_no_line |
+
 ## What a member says on a reaction is only the words in its envelope
 
 After a thumbs-down a member's reply showed the instruction it was given and a note to itself before its question (#292).
