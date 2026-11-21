@@ -616,9 +616,9 @@ def test_the_old_browser_fixture_writes_what_an_earlier_layer_kept_in_a_real_she
     workspace = tmp_path / "workspace"
     (workspace / ".browser-profiles").mkdir(parents=True)
     (workspace / ".browser-profiles" / acceptance.DROPPED_MARK).write_text("", encoding="utf-8")
-    command = acceptance.OLD_BROWSER_FIXTURE.replace(acceptance.PROFILES, (workspace / ".browser-profiles").as_posix())
+    command = acceptance.OLD_BROWSER_FIXTURE.replace(acceptance.PROFILES, ".browser-profiles")
     assert acceptance.PROFILES not in command
-    done = subprocess.run([shell, "-c", command], capture_output=True, text=True, timeout=10)
+    done = subprocess.run([shell, "-c", command], cwd=workspace, capture_output=True, encoding="utf-8", timeout=10)
     assert done.returncode == 0, done.stderr
     for relative in acceptance.OLD_BROWSER_FILES:
         assert (workspace / ".browser-profiles" / relative).read_text(encoding="utf-8") == "old"

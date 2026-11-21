@@ -441,7 +441,7 @@ export const ja = {
   "common.cancelAgain": "もう一度押すとキャンセル",
   "handoff.forwarded": "{p0} に引き継ぎました",
   "handoff.queued": "待機中", "handoff.running": "実行中", "handoff.waiting": "結果待ち",
-  "card.connect": "接続", "card.reconnect": "再接続", "card.retry": "再試行", "card.cancel": "キャンセル",
+  "card.connect": "接続", "card.reconnect": "再接続", "card.retry": "再試行",
   "card.openConnections": "接続設定を開く",
   "card.expiredAuth": "認証の期限が切れました",
   "card.authorizing": "ブラウザでのサインインを待っています", "card.connected": "接続済み · ツール {p0} 個",

@@ -583,7 +583,7 @@ export const id = {
   "handoff.withheld": "Akses dicabut",
   "card.connect": "Hubungkan",
   "card.reconnect": "Hubungkan ulang",
-  "card.cancel": "Batal",
+ 
   "common.cancel": "Batal",
   "local.cancel": "Batal",
   "conn.cancel": "Batal",

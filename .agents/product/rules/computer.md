@@ -2,6 +2,14 @@
 
 Each member's computer: its engine, image, screen, viewer, hold and takeover, and teaching on it. Part of [the product rules](../RULES.md); a rule's ID is unique across every file.
 
+## A stale browser lock cannot prevent the seat browser from starting
+
+The Windows workspace mount can leave Chromium's old Singleton links unreadable from inside the computer.
+
+| ID | Date | Rule | Check | Severity | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-PC-LOCK-01 | | The guest names each stale browser lock it cannot remove after checking that the profile is idle. The local host unlinks only the reported startup entries in that profile without following links, then retries the seat launcher once. A live profile's locks are left alone. | pytest | hard | core/tests/computer/test_seat_browser.py::test_an_unreadable_stale_lock_is_named_and_the_other_locks_are_still_cleared; core/tests/computer/test_seat_browser.py::test_the_seat_browser_retries_after_host_cleanup_only_on_a_stale_lock_verdict |
+
 ## The first call after a wake is waited for; "your computer" is the member's
 
 | ID | Date | Rule | Check | Severity | Evidence |

@@ -58,10 +58,11 @@ HANDBACK_WAIT_MS = round(RunLimits().handback_s * 1000)
 
 # The only moves a card's state makes.
 MOVES: dict[str, tuple[str, ...]] = {
-    "control": ("returning", "stopped", "expired", "failed"),
+    "control": ("returning", "stopped", "cancelled", "expired", "failed"),
     "returning": ("control", "done", "stopped", "failed"),
     "done": (),
     "stopped": (),
+    "cancelled": (),
     "expired": (),
     "failed": (),
 }
@@ -181,6 +182,8 @@ class HandbackCards:
     back or stops the run; `resume`, set by the agent, carries on the task of a turn once its run ended
     after the owner's turn, and answers how it went."""
 
+    waiting_states = ("control",)
+
     def __init__(self, conn: sqlite3.Connection, computer: ComputerRuns, *,
                  notify: Callable[[str, dict], None] | None = None, now_ms: Callable[[], int] = wall_clock_ms,
                  wait_ms: int = HANDBACK_WAIT_MS, permissions: "PermissionCards | None" = None) -> None:
@@ -251,6 +254,15 @@ class HandbackCards:
         self._changed(moved)
         return {"card": moved.view(), "stopped": True}
 
+    def close(self, card: HandbackCard, *, error: str = "") -> HandbackCard | None:
+        if card.state not in self.waiting_states:
+            return None
+        moved = self.store.move(card.id, "cancelled", error=error)
+        if moved is not None:
+            self._computer.stop_run(card.run_id, "owner")
+            self._changed(moved)
+        return moved
+
     # --- following the run ------------------------------------------------------------------------
 
     async def _follow(self, run: ComputerRun, card: HandbackCard, hand_over: str) -> None:
@@ -305,6 +317,8 @@ class HandbackCards:
         if self._permissions is not None:
             # A question the run was waiting on when it ended is not waited on any more.
             self._permissions.settle(card.turn_id, "expired" if final.kind == "expired" else "cancelled")
+        if card.state == "cancelled":
+            return
         if final.kind == "stopped":
             moved = self.store.move(card.id, "stopped")
         elif final.kind == "expired":

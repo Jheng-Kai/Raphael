@@ -455,7 +455,7 @@ def test_disconnected_window_listing_joins_geometry_and_class_without_losing_tit
 
 
 async def test_launcher_uses_only_the_seat_rectangle_and_checks_its_output(seat_tools, caplog):
-    from raphael_core.computer.seat_browser import LAUNCH
+    from raphael_core.computer.seat_browser import LAUNCH, RECOVER_STALE_LOCKS
 
     _, vm, _ = seat_tools
     caplog.set_level("INFO", logger=module.__name__)
@@ -463,7 +463,7 @@ async def test_launcher_uses_only_the_seat_rectangle_and_checks_its_output(seat_
     assert await vm.seat_browser(vm.target(2)) == dict(pid=99, window_id=301)
     args = vm.run_for.call_args.args[1]
     assert args[:4] == ["exec", "-i", "-u", "cua"]
-    assert args[-7:] == ["/usr/bin/python3", "-", "raphael-seat-browser", "1280", "0", "1280", "900"]
+    assert args[-8:] == ["/usr/bin/python3", "-", RECOVER_STALE_LOCKS, "raphael-seat-browser", "1280", "0", "1280", "900"]
     assert vm.run_for.call_args.kwargs["input"] == LAUNCH.encode("utf-8")
     for result in (module.Result(1, "", "browser exited: failed to create SingletonLock"),
                    module.Result(0, "pid=0 window_id=301"), module.Result(0, "unrecognized")):

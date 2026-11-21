@@ -8,7 +8,7 @@
 // it in the core's words. The question itself is the one the window already holds (the shell keeps it, `source`
 // "ask"), or the card's own door for a task that went on after the computer was given back (`source` "run").
 
-import { cardDisclosureHTML, cardHTML, cardPromptText } from "./card";
+import { cardDisclosureHTML, cardHTML, cardPromptText, waitingCloseHTML } from "./card";
 import { composioText, isComposioTool } from "./composio-result";
 import { getLocale, t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
@@ -68,10 +68,16 @@ const markOf = (card: PermissionCard): string => {
 function actionHTML(card: PermissionCard, answerable: boolean): string {
   if (!waitsForYes(card)) return "";
   const on = (act: string): string => ` data-act="${act}" data-card="${esc(card.id)}" data-source="${esc(card.source)}"${answerable ? "" : " disabled"}`;
+  // Declining is the card's × (`denyCloseHTML`), never a button of its own beside 允許.
   return btn(esc(t(card.kind === "local_command" ? "local.allow" : "perm.once")), "sm pri", on("perm-once")) +
     (card.always ? btn(esc(t("perm.always")), "sm", on("perm-always")) : "") +
-    btn(esc(t(localCard(card) ? card.kind === "local_access" ? "local.deny" : "local.skip" : "perm.deny")), "sm", on("perm-deny")) +
     (card.kind === "local_access" ? btn(esc(t("local.never")), "sm card-quiet", on("perm-never")) : "");
+}
+
+/** The × of a permission card that waits: it declines, with the words the deny button had as its name. */
+function denyCloseHTML(card: PermissionCard, answerable: boolean): string {
+  const label = t(localCard(card) ? card.kind === "local_access" ? "local.deny" : "local.skip" : "perm.deny");
+  return waitingCloseHTML(` data-act="perm-deny" data-card="${esc(card.id)}" data-source="${esc(card.source)}"${answerable ? "" : " disabled"}`, label);
 }
 
 /**
@@ -102,6 +108,7 @@ export function permissionCardHTML(card: PermissionCard, answerable = true, memb
     // A command that waits is shown itself, not behind a disclosure: the owner allows what they can read. Once answered it folds away with the rest.
     content: waiting && localCard(card) ? details : !waiting || card.message || !body?.includes(card.summary) ? cardDisclosureHTML(card.id, details) : "",
     actions: actionHTML(card, answerable), cls: "permission-card",
+    ...(waiting ? { close: denyCloseHTML(card, answerable), statusInHeading: true } : {}),
     attrs: ` data-permission-card="${esc(card.id)}" data-card-state="${esc(card.state)}" data-source="${esc(card.source)}" data-kind="${esc(card.kind)}" data-digest="${esc(card.digest)}"`,
   });
 }

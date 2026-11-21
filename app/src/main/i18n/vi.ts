@@ -583,7 +583,7 @@ export const vi = {
   "handoff.withheld": "Đã thu hồi quyền truy cập",
   "card.connect": "Kết nối",
   "card.reconnect": "Kết nối lại",
-  "card.cancel": "Hủy",
+ 
   "common.cancel": "Hủy",
   "local.cancel": "Hủy",
   "conn.cancel": "Hủy",

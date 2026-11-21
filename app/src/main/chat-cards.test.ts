@@ -25,8 +25,10 @@ describe("cards a member shows in its conversation for the panel's buttons", () 
     const host = dom(chatCardsHTML(turn({ pairings: [pairing()] })));
     expect(host.querySelector(".code")!.textContent).toBe("SL7Q2K");
     const buttons = [...host.querySelectorAll<HTMLButtonElement>(".card-actions button")];
-    expect(buttons.map((button) => button.dataset.act)).toEqual(["pairing-allow", "pairing-deny"]);
+    expect(buttons.map((button) => button.dataset.act)).toEqual(["pairing-allow"]);
     expect(buttons[0].classList.contains("pri")).toBe(true);
+    // Declining is the × at the card's top right.
+    expect(host.querySelector<HTMLButtonElement>(".card-head .card-close")!.dataset.act).toBe("pairing-deny");
     api.core.mockResolvedValue({ card: pairing({ state: "approved" }) });
     expect(chatCardAction(buttons[0])).toBe(true);
     await Promise.resolve();

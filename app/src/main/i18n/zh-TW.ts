@@ -448,7 +448,7 @@ export const zhTW = {
   "handoff.unreadableArtifact": "檔案在，但無法開啟",
   "handoff.cancelled": "已停止",
   "handoff.done": "已完成", "handoff.failed": "未完成", "handoff.withheld": "權限已撤回",
-  "card.connect": "連結", "card.reconnect": "重新連結", "card.retry": "再試一次", "card.cancel": "取消",
+  "card.connect": "連結", "card.reconnect": "重新連結", "card.retry": "再試一次",
   "card.openConnections": "開啟連接設定",
   "card.expiredAuth": "授權已過期",
   "card.authorizing": "等你在瀏覽器登入", "card.connected": "已連結 · {p0} 個工具",

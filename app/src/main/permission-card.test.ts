@@ -15,7 +15,7 @@ test("payment approval shows merchant, amount and card label without expanding d
   // The merchant's address is a link like any other in words read whole (R-LINK-01).
   expect(html).toContain(`<p class="card-body cc-state">${linkedText(summary)}</p>`);
   expect(linkedText(summary)).toContain('data-url="https://shop.example/" rel="noreferrer noopener">https://shop.example</a>');
-  expect(actions(html)).toEqual(["perm-once", "perm-deny"]);
+  expect(actions(html)).toEqual(["perm-deny", "perm-once"]);
   expect(html).not.toContain('class="card-detail"');
 });
 
@@ -79,12 +79,12 @@ test("local command consent names the member, preserves exact code and offers fo
   expect(html).toContain("允許大家在你的電腦執行指令？");
   expect(html).toContain("&lt;cpu&gt;");
   expect(html).toContain("<pre");
-  expect(actions(html)).toEqual(["perm-once", "perm-always", "perm-deny", "perm-never"]);
+  expect(actions(html)).toEqual(["perm-deny", "perm-once", "perm-always", "perm-never"]);
 });
 
 test("later local commands have Allow and Skip without a standing-approval button", () => {
   const html = permissionCardHTML(card({ kind: "local_command" as PermissionCard["kind"], service: "Alex", always: false, tool: "local_exec", summary: "Get-Process" }));
-  expect(actions(html)).toEqual(["perm-once", "perm-deny"]);
+  expect(actions(html)).toEqual(["perm-deny", "perm-once"]);
   expect(html).toContain("略過");
 });
 
@@ -142,22 +142,22 @@ const visible = (html: string): string => html.replace(/<[^>]+>/g, " ").replace(
 const actions = (html: string): string[] => [...html.matchAll(/<button[^>]*?data-act="([^"]+)"/g)].map((match) => match[1]);
 
 describe("a permission card", () => {
-  test("says the exact action in plain words and offers 允許一次, 一律允許 and 拒絕, the primary first", () => {
+  test("says the exact action in plain words and offers 允許一次 and 一律允許, the primary first, and 拒絕 as its ×", () => {
     const html = permissionCardHTML(card());
-    expect(visible(html)).toBe("拉斐爾想要使用 Gmail 需要你允許 顯示內容 Gmail 是否讓「Gmail」執行「send_email」（to: a@example.com）？ 允許一次 一律允許 拒絕");
-    expect(actions(html)).toEqual(["perm-once", "perm-always", "perm-deny"]);
-    // Real framed buttons, the primary first, each naming its card and who answers it.
-    expect(html).toContain('class="btn sm" data-act="perm-deny" data-card="q1" data-source="ask"');
+    expect(visible(html)).toBe("拉斐爾想要使用 Gmail 需要你允許 顯示內容 Gmail 是否讓「Gmail」執行「send_email」（to: a@example.com）？ 允許一次 一律允許");
+    expect(actions(html)).toEqual(["perm-deny", "perm-once", "perm-always"]);
+    // Real framed buttons, the primary first, each naming its card and who answers it; declining is the × at the top right.
+    const head = html.slice(0, html.indexOf("</header>"));
+    expect(head).toContain('class="btn icon row card-close" aria-label="拒絕" title="拒絕" data-act="perm-deny" data-card="q1" data-source="ask"');
     expect(html).toContain('class="btn sm pri" data-act="perm-once" data-card="q1" data-source="ask"');
     expect(html.indexOf("perm-once")).toBeLessThan(html.indexOf("perm-always"));
-    expect(html.indexOf("perm-always")).toBeLessThan(html.indexOf("perm-deny"));
     expect(html).not.toContain(" disabled");
     expect(html).toContain('data-card-state="pending"');
   });
 
   test("offers no 一律允許 where it cannot take effect, and says which rule had the question asked", () => {
     const html = permissionCardHTML(card({ always: false, reason: "此操作符合安全規則「寄信前先問」。" }));
-    expect(actions(html)).toEqual(["perm-once", "perm-deny"]);
+    expect(actions(html)).toEqual(["perm-deny", "perm-once"]);
     expect(visible(html)).toContain("此操作符合安全規則「寄信前先問」。");
     expect(visible(html)).not.toContain("一律允許");
   });
@@ -196,9 +196,9 @@ describe("a permission card", () => {
 
   test("speaks only the window's language", () => {
     setLocale("en");
-    expect(visible(permissionCardHTML(card({ summary: "Allow Gmail to run send_email?" })))).toBe("Raphael wants to use Gmail Approval needed Show details Gmail Allow Gmail to run send_email? Allow once Always allow Deny");
+    expect(visible(permissionCardHTML(card({ summary: "Allow Gmail to run send_email?" })))).toBe("Raphael wants to use Gmail Approval needed Show details Gmail Allow Gmail to run send_email? Allow once Always allow");
     setLocale("ja");
-    expect(visible(permissionCardHTML(card({ summary: "Gmail に send_email を実行させますか？" })))).toBe("ラファエル が Gmail を使用しようとしています 承認が必要 内容を表示 Gmail Gmail に send_email を実行させますか？ 今回だけ許可 常に許可 拒否");
+    expect(visible(permissionCardHTML(card({ summary: "Gmail に send_email を実行させますか？" })))).toBe("ラファエル が Gmail を使用しようとしています 承認が必要 内容を表示 Gmail Gmail に send_email を実行させますか？ 今回だけ許可 常に許可");
     expect(visible(permissionCardHTML(card({ state: "denied" })))).toContain("拒否しました。実行していません");
   });
 

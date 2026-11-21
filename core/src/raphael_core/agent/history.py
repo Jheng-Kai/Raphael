@@ -490,11 +490,11 @@ class AgentHistory:
                 if turn:
                     self._index(turn_id, turn.question, turn.text, turn.detail)
 
-    def _with_messages(self, turns: list[Turn]) -> list[Turn]:
+    def _with_messages(self, turns: list[Turn], *, omit_cards: Iterable[str] = ()) -> list[Turn]:
         saved = self.messages(turn.id for turn in turns if turn.id is not None)
         from .reactions import private_reactions
         from .card_context import card_outcomes
-        outcomes = card_outcomes(self._conn, (turn.id for turn in turns), self._now_ms())
+        outcomes = card_outcomes(self._conn, (turn.id for turn in turns), self._now_ms(), omit_cards=omit_cards)
         asked = self.asked_from(turn.id for turn in turns if turn.id is not None)
         for turn in turns:
             turn.card_outcomes = outcomes.get(turn.id, [])
@@ -695,7 +695,7 @@ class AgentHistory:
 
     def after(
         self, turn_id: int, *, limit: int | None = None, member_id: int = 0,
-        conversation_id: int | None = None, exchanges: bool = False,
+        conversation_id: int | None = None, exchanges: bool = False, omit_cards: Iterable[str] = (),
     ) -> list[Turn]:
         """The turns of the thread of `member_id` made after the turn `turn_id`, whatever their
         status, oldest first; with a `limit`, only the newest that many of them. `exchanges` as
@@ -707,14 +707,14 @@ class AgentHistory:
             rows = self._conn.execute(
                 f"SELECT {_COLUMNS} FROM agent_turns WHERE {where} ORDER BY id", params,
             ).fetchall()
-            return self._with_messages([_to_turn(row) for row in rows])
+            return self._with_messages([_to_turn(row) for row in rows], omit_cards=omit_cards)
         if limit <= 0:
             return []
         rows = self._conn.execute(
             f"SELECT {_COLUMNS} FROM agent_turns WHERE {where} ORDER BY id DESC LIMIT ?",
             [*params, limit],
         ).fetchall()
-        return self._with_messages([_to_turn(row) for row in reversed(rows)])
+        return self._with_messages([_to_turn(row) for row in reversed(rows)], omit_cards=omit_cards)
 
     def last_id(self) -> int:
         """The id of the latest turn of any thread; 0 when there is none."""

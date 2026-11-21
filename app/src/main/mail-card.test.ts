@@ -93,10 +93,12 @@ describe("an email card", () => {
     expect(host.querySelector("[data-mail-card]")!.getAttribute("data-digest")).toBe(draft().digest);
   });
 
-  test("asks whether a colleague may send it with a choice card: 不用 then the primary 可以", () => {
+  test("asks whether a colleague may send it with a choice card: the primary 可以, 不用 its ×", () => {
     const html = mailCardHTML(draft({ offer: { member_id: 2, name: "焦媽媽" } }), LOOK);
-    expect(visible(html)).toContain("這封回信可以交給焦媽媽寄嗎？ 等你回答 可以 不用");
-    expect(actions(html).slice(-2)).toEqual(["mail-handover-yes", "mail-handover-no"]);
+    expect(visible(html)).toContain("這封回信可以交給焦媽媽寄嗎？ 等你回答 可以");
+    expect(actions(html).slice(-2)).toEqual(["mail-handover-no", "mail-handover-yes"]);
+    const no = new DOMParser().parseFromString(html, "text/html").querySelector<HTMLButtonElement>(".card-head .card-close[data-act=\"mail-handover-no\"]")!;
+    expect(no.getAttribute("aria-label")).toBe("不用");
     expect(html).not.toContain('data-face="2"');
     expect(html).toContain('class="btn sm pri" data-act="mail-handover-yes"');
     // The choice is the question's and nothing else: it carries no field and no send.
@@ -153,7 +155,7 @@ describe("an email card", () => {
 
   test("speaks only the window's language", () => {
     setLocale("en");
-    expect(visible(mailCardHTML(draft({ cc: "copy@example.invalid", offer: { member_id: 2, name: "Jiao" } })))).toContain("Email draft Ready to send From Gmail To Cc Subject 您好， 週四下午三點可以開會。 Send Discard Can Jiao send this reply? Waiting for your answer Yes No");
+    expect(visible(mailCardHTML(draft({ cc: "copy@example.invalid", offer: { member_id: 2, name: "Jiao" } })))).toContain("Email draft Ready to send From Gmail To Cc Subject 您好， 週四下午三點可以開會。 Send Discard Can Jiao send this reply? Waiting for your answer Yes");
     setLocale("ja");
     expect(visible(mailCardHTML(draft({ cc: "copy@example.invalid" })))).toContain("メールの下書き 送信できます 差出人 Gmail 宛先 Cc 件名 您好， 週四下午三點可以開會。 送信 破棄");
   });

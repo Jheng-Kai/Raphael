@@ -12,11 +12,15 @@ from raphael_core.agent import service as agent_service
 from raphael_core.agent.harness_tools import HarnessToolError
 from raphael_core.agent.ledger import Ledger
 from raphael_core.agent.service import RESUMED, TYPED, _Ask
+from raphael_core.background.tasks import TaskStore
+from raphael_core.connectors.apps import SERVER_APPS
 from raphael_core.connectors.composio import KEY
 from raphael_core.evaluate.guardian import Budget
 from raphael_core.evaluate.guardian_driver import RpcDriver
 from raphael_core.evaluate.secret_fixture import SERVER_NAME, SecretServer
 from raphael_core.integrations.config import ServerConfig
+from raphael_core.management import OWNER_ONLY
+from raphael_core.protocol import INVALID_PARAMS, RpcError
 
 from test_guardian import FakeBrains
 from test_guardian_scenarios import FakeClient
@@ -38,6 +42,74 @@ def ask_of(driver, **fields):
 
 def rows(driver, table):
     return driver.app._conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+
+
+@pytest.mark.parametrize("kind, initial", [
+    ("connect", "pending"), ("connect", "failed"), ("connect", "authorizing"),
+    ("secret", "pending"), ("secret", "failed"), ("handback", "control"),
+])
+async def test_the_owner_closes_a_waiting_card_and_its_question_without_resuming_the_card(driver, monkeypatch, kind, initial):
+    app = driver.app
+    ask = ask_of(driver)
+    common = dict(turn_id=ask.turn_id, member_id=0, conversation_id=None, language="en")
+    stopped = []
+    if kind == "connect":
+        cards = app.cards
+        card = cards.show(**common, app=SERVER_APPS["n8n"])
+        if initial == "failed":
+            cards.store.move(card.id, "authorizing")
+            cards.store.move(card.id, "failed", error="interrupted")
+        if initial == "authorizing":
+            started = asyncio.Event()
+
+            async def sign_in(*_):
+                started.set()
+                try:
+                    await asyncio.Future()
+                finally:
+                    stopped.append(card.id)
+
+            monkeypatch.setattr(cards, "ready_tools", lambda _: [])
+            monkeypatch.setattr(cards, "_connect_server", sign_in)
+            await app.call("integrations.card_connect", {"id": card.id})
+            await asyncio.wait_for(started.wait(), 3)
+    elif kind == "secret":
+        cards = app.secret_cards
+        card = cards.store.open(**common, server_id="DEMO_KEY", name="Demo", kind="key", secret="key")
+        if initial == "failed":
+            cards.store.move(card.id, "failed", error="invalid")
+    else:
+        cards = app.handbacks
+        card = cards.store.open(**common, run_id="example-run", reason="sign_in", app="Browser")
+        monkeypatch.setattr(cards._computer, "stop_run", lambda run_id, _: stopped.append(run_id))
+
+    tasks = TaskStore(app._conn)
+    task_id = tasks.create(session_id="waiting-task", language="en", text="Wait for the card", member_id=0)
+    tasks.attach_turn(task_id, ask.turn_id)
+    questions = app.background.owner_questions
+    question = questions.open(tasks.get(task_id), "connect_app", {}, card.id)
+    unrelated = tasks.create(session_id="other-task", language="en", text="Other question", member_id=0)
+    tasks.attach_turn(unrelated, ask.turn_id)
+    other_question = questions.open(tasks.get(unrelated), "connect_app", {}, "other-card")
+    changes = []
+    monkeypatch.setattr(cards, "_notify", lambda method, params: changes.append((method, params)))
+
+    async def unexpected_resume(*_):
+        pytest.fail("Closing the card resumed its original turn")
+
+    monkeypatch.setattr(cards, "resume", unexpected_resume)
+    assert "integrations.card_close" in OWNER_ONLY
+    assert await app.call("integrations.card_close", {"id": card.id}) == {"closed": True}
+    await cards.idle()
+    assert cards.store.get(card.id).state == "cancelled"
+    assert changes == [("agent.turn", {"turn_id": ask.turn_id, "member_id": 0})]
+    assert questions.get(question["id"])["result"] == {"state": "cancelled"}
+    assert questions.get(other_question["id"])["result"] is None
+    assert stopped == ([card.id] if initial == "authorizing" else ["example-run"] if kind == "handback" else [])
+    assert await app.call("integrations.card_close", {"id": card.id}) == {"closed": False}
+    with pytest.raises(RpcError) as error:
+        await app.call("integrations.card_close", {"id": "unknown"})
+    assert error.value.code == INVALID_PARAMS
 
 
 @pytest.mark.parametrize("fields", [{"scope": "room"}, {"scope": "exchange"}, {"quick": True},
