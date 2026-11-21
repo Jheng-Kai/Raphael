@@ -55,6 +55,7 @@ class DataFloor:
     def __init__(self, conn=None, *, environ=None, core_root=None):
         self.conn = conn
         self.environ = os.environ if environ is None else environ
+        self.work_file = None
         package = Path(__file__).resolve().parents[1]
         self.core_root = core_root or (package.parent.parent if package.parent.name == "src" else package)
 
@@ -171,6 +172,8 @@ class DataFloor:
         """Return read, write, or None. Only explicit read operations can request consent."""
         if not isinstance(arguments, Mapping):
             return None
+        if self.work_file is not None and self.work_file(tool, arguments):
+            return None  # The host computer verifies the canonical path again at dispatch.
         if tool == "cli_permission":
             details = arguments.get("details")
             arguments = details if isinstance(details, Mapping) else arguments

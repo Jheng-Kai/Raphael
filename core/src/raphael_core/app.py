@@ -949,6 +949,10 @@ class App(Router):
         self.tool_hub.logins = self.login_vault
         from .computer.local_tools import LocalTools
         self.vm_tools = self.tool_hub
+        if self.vm.enabled:
+            from .computer.host_computer import HostComputerTools
+            from .computer.vm_tools import BROWSER_OPEN
+            self.vm_tools.host_computer = HostComputerTools(self.vm, self._conn, BROWSER_OPEN)
         self.tool_hub = LocalTools(self.tool_hub, self._conn, enabled=not fake_llm or os.environ.get("RAPHAEL_TEST_NATIVE_LOCAL") == "1")
         from .services.generation import Generation
         from .services.generation_tools import GenerationTools
@@ -967,6 +971,8 @@ class App(Router):
             conn=self._conn,
             safety=SafetyGuard(self.safety_rules, SafetyJudge(self.client)),
         )
+        if self.vm_tools.host_computer is not None:
+            self.gate.data_floor.work_file = self.vm_tools.host_computer.work_file
         # The app's own calendar, which the window, every member and every task change.
         self.calendar = OwnCalendar(self._conn, notify=self.notify)
         self.calendar.register(self)
@@ -1017,6 +1023,14 @@ class App(Router):
             connections=self.integrations.connections,
             vault=self.vault,
         )
+        if not fake_llm:
+            self.vm.member_computer_mode = lambda member: self.members.computer_preference(member, "computer_mode")
+            self.vm_tools.desktop_allowed = lambda member: self.members.computer_preference(member, "desktop_control")
+        self.members.computer_mode_busy = self.vm_tools.mode_busy
+        if self.vm_tools.host_computer is not None:
+            self.vm_tools.host_computer.cards = self.handbacks
+            host = self.vm_tools.host_computer
+            self.vm.host_work_busy = lambda: bool(host.active or host.browser.downloads or host.browser.transfers)
         self.members.use_event_tools(self.gate)
         self.members.register(self)
         from .computer.teaching import Teaching

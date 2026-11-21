@@ -385,6 +385,8 @@ class DesktopViewer:
             except ValueError:
                 raise invalid_params("Invalid SSH config alias") from None
         target = self.target(params)
+        if self.vm.member_computer_mode(params.get("member_id", 0)) == "host":
+            return {"state": "absent", "control": "member", "ready": False, "error": "host_browser"}
         if params.get("start_docker") is True:
             # Only an explicit owner-window press may start this PC's engine.
             if target.remote or params.get("host") != target.remote:
@@ -417,6 +419,8 @@ class DesktopViewer:
             return await self._open(params)
 
     def target_current(self, target, member):
+        if self.vm.member_computer_mode(member) == "host":
+            return False
         if not target.container:
             return True
         return (self.member_exists(member) and self.vm.target(member) == target
@@ -436,6 +440,8 @@ class DesktopViewer:
 
     async def _open(self, params):
         target = self.target(params)
+        if self.vm.member_computer_mode(params.get("member_id", 0)) == "host":
+            raise invalid_params("This computer uses Raphael's Chrome")
         if self.closing:
             raise invalid_params("desktop viewer closed")
         if len(self.sessions) >= 8:

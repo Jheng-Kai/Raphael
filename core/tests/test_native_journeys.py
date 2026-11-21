@@ -35,7 +35,7 @@ def test_computer_signin_fixture_is_private_to_each_journey_member(tmp_path, mon
     monkeypatch.delenv("RAPHAEL_TEST_NATIVE", raising=False)
     with pytest.raises(RuntimeError):
         vm_signin_fixture(tmp_path, 1)
-    assert not (tmp_path / "vm-homes").exists()
+    assert not (tmp_path / "members").exists()
     monkeypatch.setenv("RAPHAEL_TEST_NATIVE", "1")
     from raphael_core.brain.db import connect
     from raphael_core.brain.settings import SettingsStore

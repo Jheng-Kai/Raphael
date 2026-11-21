@@ -1,6 +1,16 @@
 import type { Messages } from "./zh-TW";
 
 export const zhCN = {
+  "memberComputer.mode": "电脑",
+  "memberComputer.host": "这台电脑",
+  "memberComputer.docker": "隔离电脑（Docker）",
+  "memberComputer.hostHint": "使用 Raphael 在这台电脑上的 Chrome，你可以登录公司内网。",
+  "memberComputer.dockerHint": "在 Docker 的隔离环境中工作。",
+  "memberComputer.desktopControl": "操作桌面",
+  "memberComputer.showTab": "打开 Chrome 标签页",
+  "memberComputer.setup": "请帮我设置隔离电脑（Docker）。",
+  "memberComputer.certificate": "请在 {p0} 选择或确认凭证。",
+  "memberComputer.verification": "请在 {p0} 输入验证码。",
   "conn.connecting": "连接中…",
   "agent.thinking": "思考中…",
   "agent.cmd.volumeMute": "静音",

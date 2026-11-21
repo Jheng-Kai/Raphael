@@ -22,11 +22,14 @@ const api = vi.hoisted(() => ({
   settingsSet: vi.fn(),
   avatarPick: vi.fn(),
   pickOutputFolder: vi.fn(),
+  desktopStatus: vi.fn(),
+  agentAskText: vi.fn(),
 }));
 vi.mock("./api", () => api);
 
 import { createMemberSettings, type MemberSettings } from "./member-settings";
 import { setLocale, t } from "./i18n";
+import { resetAsks } from "./chat-ask";
 
 const member = (id: number, more: Partial<Member> = {}): Member => ({
   id, name: `成員${id}`, role: "", instructions: "", avatar: "", group_id: null, model: "", tools: null, position: id, created: 0, unread: false, waiting: false, preview: "", last_at: null, ...more,
@@ -71,7 +74,25 @@ const cat = (id: string): Promise<void> => press(`[data-ms="cat"][data-cat="${id
 const kinds = (): string[] => [...page.el.querySelectorAll<HTMLElement>('.ms-nav [data-ms="cat"]')].map((b) => b.dataset.cat!);
 const sections = (): string[] => [...page.el.querySelectorAll<HTMLElement>(".ms-section[data-k]")].map((s) => s.dataset.k!);
 
+test("each computer setting saves separately and a missing Docker opens setup in the same conversation", async () => {
+  api.desktopStatus.mockResolvedValue({ error: "docker_missing" });
+  api.agentAskText.mockResolvedValue(undefined);
+  await open();
+  await cat("computer");
+  expect($('[data-ms="computer-mode"]').textContent).toContain(t("memberComputer.host"));
+  expect($('[data-ms="desktop-control"]').getAttribute("aria-checked")).toBe("false");
+  await press('[data-ms="desktop-control"]');
+  expect(host.update).toHaveBeenLastCalledWith(3, { desktop_control: true });
+  await press('[data-ms="computer-mode"]');
+  document.querySelector<HTMLElement>('[role="menuitemradio"][data-value="docker"]')!.click();
+  await flush();
+  expect(host.update).toHaveBeenLastCalledWith(3, { computer_mode: "docker" });
+  expect(host.back).toHaveBeenCalledOnce();
+  expect(api.agentAskText).toHaveBeenCalledWith(t("memberComputer.setup"), [], 3, { intent: "setup-docker" });
+});
+
 beforeEach(() => {
+  resetAsks();
   document.body.innerHTML = "";
   setLocale("zh-TW");
   current = 3;
@@ -105,7 +126,7 @@ describe("the page of a member", () => {
     expect($<HTMLInputElement>("#ms-name").value).toBe("日文老師");
     expect($<HTMLInputElement>("#ms-role").value).toBe("N2 嚴格版");
     // The kinds stand in a column on the left, in the owner's order; the first is shown, and only it.
-    expect(kinds()).toEqual(["tools", "skills", "soul", "notify"]);
+    expect(kinds()).toEqual(["tools", "computer", "skills", "soul", "notify"]);
     expect($('[data-cat="tools"]').getAttribute("aria-current")).toBe("page");
     await cat("soul");
     expect(sections()).toEqual(["ms-personality", "ms-instructions"]);
@@ -157,7 +178,7 @@ describe("the page of a member", () => {
     expect(page.el.querySelector("#ms-name, #ms-role")).toBeNull();
     expect($(".ms-name").textContent).toBe("拉斐爾");
     expect(page.el.style.getPropertyValue("--ms-tint")).toBe("var(--raphael-color)");
-    expect(kinds()).toEqual(["tools", "skills", "soul", "notify"]);
+    expect(kinds()).toEqual(["tools", "computer", "skills", "soul", "notify"]);
     expect(api.membersToolChoices).toHaveBeenCalled();
     expect(api.membersSkillsList).toHaveBeenCalledWith(0);
     expect(api.membersCommandsList).toHaveBeenCalledWith(0);
@@ -385,7 +406,7 @@ describe("the page of a member", () => {
     expect(name.selectionStart).toBe(2);
   });
 
-  test("the draft switch stands under the apps in 工具 and writes draft_first, Raphael's too", async () => {
+test("the draft switch stands under the apps in 工具 and writes draft_first, Raphael's too", async () => {
     await open();
     await cat("tools");
     const draft = $('[data-k="ms-draft"] [data-ms="draft"]');

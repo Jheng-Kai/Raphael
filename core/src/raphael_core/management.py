@@ -419,6 +419,8 @@ OWNER_ONLY_SETTINGS = {
     "chatgpt.registrations.v1": "Internal provider registration state, never model-editable.",
     **dict.fromkeys(("action_mode", "local_commands_mode", "local_commands_seen", "worker_cost_cap_usd", "monthly_limit_usd"),
                    "Permission, local command authority and spending limits are owner-only."),
+    **dict.fromkeys(("raphael_computer_mode", "raphael_desktop_control"),
+                   "Which computer a member uses and whether it may drive the owner's desktop are the owner's choice."),
     **dict.fromkeys(("computer_vm_mode", "computer_ssh_alias", "computer_vm_idle_minutes", "routine_webhook_port", "disconnected_clis", "owner_photo"),
                    "Device, login, webhook or native avatar state belongs to the owner."),
     **dict.fromkeys(("stt_engine", "stt_local_model"),

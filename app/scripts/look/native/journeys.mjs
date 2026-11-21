@@ -761,7 +761,7 @@ export async function drive(name, context) {
         else if (/\.(html|js|md)$/i.test(row)) found.push({ path, bytes: info.size });
       }
     };
-    walk(join(result.data, "vm-shared")); walk(join(result.data, "vm-homes"));
+    walk(join(result.data, "team")); walk(join(result.data, "members"));
     mission.files = found.slice(0, 40);
     if (!done) throw new Error("The mission did not finish in 90 minutes");
     if (!mission.tasks.some(task => task.member === 0 && task.state === "done")) throw new Error("Raphael never went on from what came back");

@@ -64,6 +64,8 @@ def test_the_defaults_are_the_documented_ones():
         "raphael_draft_first": True,
         "raphael_tools": None,
         "raphael_notify": False,
+        "raphael_computer_mode": "host",
+        "raphael_desktop_control": False,
         "first_bot_profile": {},
         "owner_name": "",
         "owner_about": "",

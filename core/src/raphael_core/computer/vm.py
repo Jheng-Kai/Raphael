@@ -81,7 +81,8 @@ _MAY_START_ENGINE = ContextVar("computer_may_start_engine", default=False)
 DOCKER_LOOKUP_S = 30.0
 _docker_cli = None
 # The folders of this PC the computers bind: each member's own home, and the team folder every computer shares.
-HOMES, TEAM = "vm-homes", "vm-shared"
+HOMES, TEAM = "members", "team"
+LEGACY_FOLDERS = {HOMES: "vm-homes", TEAM: "vm-shared"}
 # The states `docker ps` gives a container that runs nothing: only such a computer may lose the folder it binds.
 STOPPED_STATES = ("created", "exited", "dead")
 
@@ -444,6 +445,8 @@ class LocalVm:
         self.machine = self.root if machine_dir is None else Path(machine_dir).resolve()
         self.homes, self.team = self.placed(HOMES), self.placed(TEAM)
         self.relocation = None
+        self.member_computer_mode = lambda member: "docker"
+        self.host_work_busy = lambda: False
         self.enabled = enabled
         self.settings, self.run, self.clock = settings, runner or Docker(), clock
         self.last_activity, self.active, self.held = {}, {}, set()
@@ -864,8 +867,10 @@ class LocalVm:
         """Where one of the computers' folders is: in the machine-local folder once it is there, and in the data
         directory while an install made before still keeps it there (`relocate`). A folder of that name that something
         made again in the data directory after the move is never used and never merged: the moved one is the members'."""
-        moved, earlier = self.machine / name, self.root / name
-        return moved if os.path.lexists(moved) or not os.path.lexists(earlier) else earlier
+        destination = self.machine / name
+        legacy = LEGACY_FOLDERS[name]
+        candidates = (destination, self.machine / legacy, self.root / name, self.root / legacy)
+        return next((path for path in candidates if os.path.lexists(path)), destination)
 
     def relocate_soon(self):
         """Start the move of the computers' folders (`relocate`) once for this core; every start of a computer waits for it."""
@@ -901,33 +906,29 @@ class LocalVm:
         """Move the computers' folders of an install made before they lived in the machine-local folder, once.
 
         Each folder is renamed on its own volume: nothing is copied and nothing is deleted. It happens only while no
-        computer of this app runs or is being prepared and no carry helper is there, and only when this PC's engine
-        answers, since only the engine can say so. Every stopped computer of this app that binds a folder being moved
+        computer of this app runs or is being prepared and no carry helper is there. If Docker is installed, its
+        engine must answer before moving a folder. Every stopped computer of this app that binds a folder being moved
         is removed first, as an image upgrade removes it: its next start makes it again on the new place and its
         workspace goes on in its folder, so no computer is ever left bound to a folder that is gone. A move that
         cannot happen now is tried again at the next start. Returns what happened (`moved`, `nothing` or the reason it
         waits)."""
-        if self.machine == self.root:
-            return "nothing"
-        for name in (HOMES, TEAM):
-            if os.path.lexists(self.machine / name) and os.path.lexists(self.root / name):
-                logger.warning("A computer folder of the earlier place was left where it was, beside the one in use")
-        moves = [(self.root / name, self.machine / name) for name in (HOMES, TEAM)
-                 if os.path.lexists(self.root / name) and not os.path.lexists(self.machine / name)]
+        moves = [(self.placed(name), self.machine / name) for name in (HOMES, TEAM)
+                 if self.placed(name) != self.machine / name]
         if not moves:
             return "nothing"
         if not self.enabled:
             return self._waits("disabled")
         async with self.capacity_lock:
-            if (any(not task.done() for task in self.preparing.values()) or any(self.active.values()) or self.held
+            if (self.host_work_busy() or any(not task.done() for task in self.preparing.values()) or any(self.active.values()) or self.held
                     or self.maintenance or any(not task.done() for task, _ in self.carry_tasks.values())):
                 return self._waits("busy")
             probe = self.target_for("", "shared")
-            if not await self._answers(probe):
+            if await self._answers(probe):
+                reason = await self._release_folders([earlier for earlier, _ in moves], probe)
+                if reason:
+                    return self._waits(reason)
+            elif await self.local_installed():
                 return self._waits("engine")
-            reason = await self._release_folders([earlier for earlier, _ in moves], probe)
-            if reason:
-                return self._waits(reason)
             moved = 0
             try:
                 for earlier, destination in moves:
@@ -1011,6 +1012,11 @@ class LocalVm:
     def _waits(reason):
         logger.info("The computers' folders stay in the data folder until a later start (%s)", reason)
         return reason
+
+    def uses_host(self, member):
+        """The stored choice stays Docker when it is temporarily unavailable on this PC."""
+        return (self.member_computer_mode(member) == "host"
+                or bool(not self.remote and self.desktop and not self.desktop.installed()))
 
     @property
     def mode(self):

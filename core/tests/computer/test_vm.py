@@ -590,7 +590,7 @@ def test_targets_are_isolated_by_default_and_can_explicitly_share(conn, tmp_path
     assert vm.target(0) != vm.target(17)
     assert vm.target(0).unit == vm.target(17).unit == 'shared'
     assert vm.target(0).workspace == vm.target(17).workspace
-    assert vm.target("../../escape").workspace.parent == tmp_path / "vm-homes"
+    assert vm.target("../../escape").workspace.parent == tmp_path / "members"
 
 
 @pytest.mark.parametrize("value", [4, 1441, True, 5.0])

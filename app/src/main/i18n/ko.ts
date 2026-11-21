@@ -1,6 +1,16 @@
 import type { Messages } from "./zh-TW";
 
 export const ko = {
+  "memberComputer.mode": "컴퓨터",
+  "memberComputer.host": "이 컴퓨터",
+  "memberComputer.docker": "격리된 컴퓨터(Docker)",
+  "memberComputer.hostHint": "이 컴퓨터의 Raphael 전용 Chrome으로 사내망에 로그인할 수 있습니다.",
+  "memberComputer.dockerHint": "격리된 Docker 환경에서 작업합니다.",
+  "memberComputer.desktopControl": "데스크톱 조작",
+  "memberComputer.showTab": "Chrome 탭 보기",
+  "memberComputer.setup": "격리된 컴퓨터(Docker)를 설정하도록 도와주세요.",
+  "memberComputer.certificate": "{p0}에서 인증서를 선택하거나 확인하세요.",
+  "memberComputer.verification": "{p0}에 인증 코드를 입력하세요.",
   "conn.connecting": "연결 중…",
   "agent.thinking": "생각 중…",
   "agent.cmd.volumeMute": "음소거",

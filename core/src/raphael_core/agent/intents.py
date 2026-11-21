@@ -2,7 +2,7 @@
 
 from ..protocol import invalid_params
 
-INTENTS = ("setup-telegram", "setup-slack", "setup-discord", "share-template", "settings")
+INTENTS = ("setup-telegram", "setup-slack", "setup-discord", "setup-docker", "share-template", "settings")
 _CONNECT_APP = "connect-app:"
 
 
@@ -41,6 +41,11 @@ def instruction(intent):
         return ("\n\n<panel_intent_step>The owner pressed Share on your panel. Call share_template now with a short description "
                 "(one or two sentences, the owner's language) of what you do for people, written for strangers: "
                 "no names, private facts, keys, internal URLs or customer data. Then one short sentence.</panel_intent_step>")
+    if intent == "setup-docker":
+        return ("\n\n<panel_intent_step>The owner selected the isolated Docker computer and Docker is missing. "
+                "Read self_check's setup facts. Explain how to install Docker Desktop on this operating system "
+                "with its official download link and ask the owner to open it once after installation. "
+                "Work can continue in Raphael's Chrome until Docker is installed.</panel_intent_step>")
     platform = intent.removeprefix("setup-")
     name = {"telegram": "Telegram", "slack": "Slack", "discord": "Discord"}[platform]
     return (f"\n\n<panel_intent_step>The owner pressed Set up for {name} on your panel. Call connect_messaging with platform {platform} now. "

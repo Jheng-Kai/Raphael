@@ -1,6 +1,16 @@
 import type { Messages } from "./zh-TW";
 
 export const tr = {
+  "memberComputer.mode": "Bilgisayar",
+  "memberComputer.host": "Bu bilgisayar",
+  "memberComputer.docker": "Yalıtılmış bilgisayar (Docker)",
+  "memberComputer.hostHint": "İntranette oturum açabilmeniz için bu bilgisayardaki Raphael’e ait Chrome’u kullanır.",
+  "memberComputer.dockerHint": "Yalıtılmış bir Docker ortamında çalışır.",
+  "memberComputer.desktopControl": "Masaüstünü kontrol et",
+  "memberComputer.showTab": "Chrome sekmesini göster",
+  "memberComputer.setup": "Yalıtılmış bilgisayarı (Docker) kurmama yardım et.",
+  "memberComputer.certificate": "{p0} içinde sertifikayı seçin veya onaylayın.",
+  "memberComputer.verification": "{p0} içinde doğrulama kodunu girin.",
   "conn.connecting": "Bağlanıyor…",
   "agent.thinking": "Düşünüyor…",
   "agent.cmd.volumeMute": "Mikrofonu kapat",

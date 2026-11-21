@@ -12,17 +12,19 @@ from .base import ChannelError
 
 
 class GatewaySocket:
-    def __init__(self, host="gateway.discord.gg"):
-        self.host = host
+    def __init__(self, host="gateway.discord.gg", *, port=443, path="/?v=10&encoding=json", tls=True, message_limit=2_000_000):
+        self.host, self.port, self.path, self.tls = host, port, path, tls
+        self.message_limit = message_limit
         self.writer = None
         self.lock = asyncio.Lock()
 
     async def __aenter__(self):
         try:
             async with asyncio.timeout(15):
-                self.reader, self.writer = await asyncio.open_connection(self.host, 443, ssl=ssl.create_default_context())
+                self.reader, self.writer = await asyncio.open_connection(
+                    self.host, self.port, ssl=ssl.create_default_context() if self.tls else None)
                 key = base64.b64encode(secrets.token_bytes(16)).decode()
-                self.writer.write((f"GET /?v=10&encoding=json HTTP/1.1\r\nHost: {self.host}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: {key}\r\n\r\n").encode())
+                self.writer.write((f"GET {self.path} HTTP/1.1\r\nHost: {self.host}:{self.port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: {key}\r\n\r\n").encode())
                 await self.writer.drain()
                 response = await self.reader.readuntil(b"\r\n\r\n")
                 expected = base64.b64encode(hashlib.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode()).digest())
@@ -60,7 +62,7 @@ class GatewaySocket:
                 raise ChannelError("network")
             if length in (126, 127):
                 length = int.from_bytes(await self.reader.readexactly(2 if length == 126 else 8), "big")
-            if length > 2_000_000 or len(fragments) + length > 2_000_000:
+            if len(fragments) + length > self.message_limit:
                 raise ChannelError("network")
             payload = await self.reader.readexactly(length)
             if opcode == 8:

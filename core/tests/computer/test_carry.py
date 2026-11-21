@@ -640,8 +640,8 @@ async def test_carry_failure_never_prevents_browser_and_per_bot_does_nothing(tmp
     assert carry_work.await_count == 1
 
 
-@pytest.mark.parametrize('remote', ['', 'test-host'])
-async def test_discovery_reads_only_this_owners_home_namespace(tmp_path, monkeypatch, remote):
+@pytest.mark.parametrize(('remote', 'local_folder'), [('', 'members'), ('', 'vm-homes'), ('', None), ('test-host', None)])
+async def test_discovery_reads_only_this_owners_home_namespace(tmp_path, monkeypatch, remote, local_folder):
     machine = vm.LocalVm(tmp_path, runner=Runtime())
     key = machine.key_for(remote, 1)
     if remote:
@@ -650,14 +650,19 @@ async def test_discovery_reads_only_this_owners_home_namespace(tmp_path, monkeyp
             prefix + key + '-workspace', prefix + 'shared-workspace',
             'raphael-computer-foreign-' + 'b' * 16 + '-workspace', prefix + 'bad-workspace'])))
         monkeypatch.setattr(machine, 'run_for', run_for)
-    else:
-        root = tmp_path / 'vm-homes'
+    elif local_folder is not None:
+        root = tmp_path / local_folder
         for folder in (key, 'shared', 'not-a-key'):
             (root / folder).mkdir(parents=True)
     result = await carry.candidates(machine, machine.shared_target(remote, 1, 1))
+    if not remote and local_folder is None:
+        assert result == []
+        return
     assert [(source.key, source.remote) for source, name in result] == [(key, remote)]
     if remote:
         assert run_for.call_args.args[1] == ['volume', 'ls', '--filter', 'name=^' + prefix, '--format', '{{.Name}}']
+    else:
+        assert result[0][0].workspace == root / key
 
 
 async def test_cancelled_carry_releases_source_lifecycle_lock(tmp_path, monkeypatch):

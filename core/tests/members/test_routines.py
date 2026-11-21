@@ -15,31 +15,32 @@ HOUR = 3_600_000
 async def test_routine_after_fold_appends_to_the_same_main_with_existing_turns(tmp_path, monkeypatch):
     from raphael_core.agent.conversations import Conversations
     from raphael_core.brain import db
-    from raphael_core.members.store import MemberStore
     from .conftest import Rig
 
     with monkeypatch.context() as old:
         old.setattr(db, "LATEST_VERSION", 67)
         connection = db.connect(tmp_path / "routine-fold.db")
-    member = MemberStore(connection).create_member(name="Researcher")
-    main = Conversations(connection).main(member.id)
-    extra = connection.execute("INSERT INTO conversations(member_id,title,created_at_ms,updated_at_ms) VALUES(?,'Old',1,2)", (member.id,)).lastrowid
+    member_id = connection.execute(
+        "INSERT INTO members(name,position,created_at_ms) VALUES('Researcher',0,1)"
+    ).lastrowid
+    main = Conversations(connection).main(member_id)
+    extra = connection.execute("INSERT INTO conversations(member_id,title,created_at_ms,updated_at_ms) VALUES(?,'Old',1,2)", (member_id,)).lastrowid
     history = AgentHistory(connection)
     with connection:
         previous = connection.execute(
             "INSERT INTO agent_turns(created_at_ms,session_id,question,route,source,prefix,text,status,member_id,conversation_id)"
             " VALUES(1,'previous-routine','Previous routine','routine','routine','','Saved report','done',?,?)",
-            (member.id, extra),
+            (member_id, extra),
         ).lastrowid
         history._index(previous, "Previous routine", "Saved report", None)
     connection.commit()
     db.migrate(connection)
     rig = Rig(connection, tmp_path)
     try:
-        routine = await make(rig, member_id=member.id, schedule={"kind": "every", "hours": 2})
+        routine = await make(rig, member_id=member_id, schedule={"kind": "every", "hours": 2})
         rig.wall.now += 2 * HOUR
         assert rig.service.tick() == [routine["id"]]
-        turns = history.list(member_id=member.id)
+        turns = history.list(member_id=member_id)
         assert len(turns) == 2 and {t.conversation_id for t in turns} == {main}
         assert history.get(previous).text == "Saved report"
     finally:

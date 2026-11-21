@@ -1,5 +1,12 @@
 # Settings and appearance
 
+## Per-member computer choice
+
+The Computer section of member settings uses the shared dropdown and switch for This
+computer, Isolated computer (Docker) and desktop control. See [Member computer](member-computer.md#this-computer-mode)
+for R-COMP-HOST-01 through R-COMP-HOST-06 and the selected look command.
+
+
 ## Interface locale coverage
 
 The language data exposes native and English names for fifteen LTR interface locales: zh-TW, en, ja,

@@ -74,7 +74,7 @@ async def test_remote_attachment_reads_guest_bytes_without_local_workspace(tmp_p
     vm = LocalVm(tmp_path, settings=settings, runner=runtime)
     target = vm.target(1)
     assert await vm.read_file(target, "/home/cua/workspace/hello.txt", limit=100) == b"hello"
-    assert not (tmp_path / "vm-homes").exists()
+    assert not (tmp_path / "members").exists()
 
 
 def test_remote_compatible_checks_volume_names_without_resolving_local_paths(tmp_path, conn):

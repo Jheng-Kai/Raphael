@@ -1,6 +1,16 @@
 import type { Messages } from "./zh-TW";
 
 export const de = {
+  "memberComputer.mode": "Computer",
+  "memberComputer.host": "Dieser Computer",
+  "memberComputer.docker": "Isolierter Computer (Docker)",
+  "memberComputer.hostHint": "Verwendet Raphaels Chrome auf diesem Computer, damit du dich im Intranet anmelden kannst.",
+  "memberComputer.dockerHint": "Arbeitet in einer isolierten Docker-Umgebung.",
+  "memberComputer.desktopControl": "Desktop steuern",
+  "memberComputer.showTab": "Chrome-Tab anzeigen",
+  "memberComputer.setup": "Hilf mir, den isolierten Computer (Docker) einzurichten.",
+  "memberComputer.certificate": "Wähle oder bestätige das Zertifikat in {p0}.",
+  "memberComputer.verification": "Gib den Bestätigungscode in {p0} ein.",
   "conn.connecting": "Verbindung wird hergestellt…",
   "agent.thinking": "Denkt nach…",
   "agent.cmd.volumeMute": "Stummschalten",

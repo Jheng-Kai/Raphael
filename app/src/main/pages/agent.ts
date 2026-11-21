@@ -2778,7 +2778,10 @@ export function createAgent(app: AppContext, places?: {
     for (const button of buttons) button.disabled = true;
     try {
       if (act.dataset.act === "card-takeover") { desktop.takeover(); for (const button of buttons) button.disabled = false; return; }
-      if (act.dataset.act === "card-resume") await api.cardResume(id);
+      if (act.dataset.act === "card-browser-focus") {
+        await api.core("integrations.card_focus_browser", { id });
+        for (const button of buttons) button.disabled = false;
+      } else if (act.dataset.act === "card-resume") await api.cardResume(id);
       else if (act.dataset.act === "card-done") await api.cardDone(id);
       else await api.cardStop(id);
     } catch (err) {
@@ -3055,6 +3058,7 @@ export function createAgent(app: AppContext, places?: {
         break;
       case "card-resume":
       case "card-takeover":
+      case "card-browser-focus":
       case "card-done":
       case "card-stop":
         void taskCardAction(act);

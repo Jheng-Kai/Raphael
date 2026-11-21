@@ -96,14 +96,15 @@ def test_the_one_shared_list_becomes_every_members_own_with_the_output_folder_fi
     with monkeypatch.context() as old:
         old.setattr(db, "LATEST_VERSION", 87)
         conn = db.connect(path)
-    from raphael_core.members.store import MemberStore
-    MemberStore(conn).create_member(name="Sample", role="Helper")
+    # Seed the schema of v87 before the current member store can read the row.
+    conn.execute("INSERT INTO members (name, role, position, created_at_ms) VALUES ('Sample', 'Helper', 0, 1)")
     conn.execute("INSERT INTO settings (key, value) VALUES ('owner_output_folder', ?), ('owner_write_folders', ?)",
                  (json.dumps(str(tmp_path / "out")), json.dumps([str(tmp_path / "proj"), str(tmp_path / "out")])))
     conn.commit()
     conn.close()
     conn = db.connect(path)
-    member = conn.execute("SELECT id FROM members").fetchone()[0]
+    member, mode, desktop_control = conn.execute("SELECT id, computer_mode, desktop_control FROM members").fetchone()
+    assert (mode, desktop_control) == ("host", 0)
     folders = SettingsStore(conn).get("member_write_folders")
     assert folders == {"0": [str(tmp_path / "out"), str(tmp_path / "proj")], str(member): [str(tmp_path / "out"), str(tmp_path / "proj")]}
     assert conn.execute("SELECT 1 FROM settings WHERE key='owner_write_folders'").fetchone() is None
