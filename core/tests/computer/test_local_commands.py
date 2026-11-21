@@ -287,13 +287,19 @@ REAL_SHELL_GUARD = 120
 @pytest.fixture
 def command_tree(tmp_path):
     script = tmp_path / "tree.py"
+    descendant = tmp_path / "descendant.py"
     marker = tmp_path / "pids.json"
+    descendant.write_text("""import sys, time
+
+time.sleep(.4)
+print("descendant stderr", file=sys.stderr, flush=True)
+time.sleep(20)
+""", encoding="utf-8")
     script.write_text("""import json, os, subprocess, sys, time
 from pathlib import Path
 
 child = subprocess.Popen(
-    [sys.executable, "-c",
-     "import sys, time; time.sleep(.4); print('descendant stderr', file=sys.stderr, flush=True); time.sleep(20)"],
+    [sys.executable, "-I", "descendant.py"],
     stdout=sys.stdout, stderr=sys.stderr,
 )
 marker = Path("pids.json")
@@ -307,11 +313,13 @@ if sys.argv[1] == "sleep":
 """, encoding="utf-8")
 
     def command(mode):
+        # CI installs the test virtualenv under core, a protected root. The fixture only needs the standard library.
+        python = sys._base_executable
         if sys.platform == "win32":
-            python = sys.executable.replace("'", "''")
+            python = python.replace("'", "''")
             # A parameter block uses the runner path without PowerShell's per-statement output pipeline.
-            return f"param(); & '{python}' tree.py {mode}; exit $LASTEXITCODE"
-        return f"{shlex.quote(sys.executable)} tree.py {mode}"
+            return f"param(); & '{python}' -I tree.py {mode}; exit $LASTEXITCODE"
+        return f"{shlex.quote(python)} -I tree.py {mode}"
 
     try:
         yield command, marker
