@@ -234,7 +234,7 @@ DEFINITIONS[ASK_OWNER] = definition(
           "required": ["label"], "additionalProperties": False}]}},
      "multiple": {"type": "boolean"}, "skip": {"type": "boolean"}, "free_text": {"type": "boolean"}}, ["question"])
 
-DEFINITIONS["connections_list"] = definition("List the current connected apps, custom MCP servers and their individual tool names and enabled states. Read this before manage_connection; ids are exact, never guessed.")
+DEFINITIONS["connections_list"] = definition("List connected apps and custom MCP servers, their tool names and enabled states, and connected account IDs, aliases and display names when available. Read this before manage_connection; use exact IDs.")
 DEFINITIONS["manage_connection"] = definition(
     "Turn a connected app or one tool on/off, disconnect, or reconnect it from this conversation. Use the exact connection id and tool name from connections_list. The shared gate asks before a change unless the owner allowed everything. Reconnect shows the existing sign-in card; stop this turn and wait for the original task to resume. Revocation applies immediately to running tasks too.",
     {"connection": {"type": "string"}, "operation": {"type": "string", "enum": ["enable", "disable", "tool_enable", "tool_disable", "disconnect", "reconnect"]}, "tool": {"type": "string"}}, ["connection", "operation"])

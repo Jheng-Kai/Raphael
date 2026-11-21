@@ -2,6 +2,12 @@
 
 Connected apps and accounts, the store, skills, shared templates and the cards that set them up. Part of [the product rules](../RULES.md); a rule's ID is unique across every file.
 
+## Choosing a connected account
+
+| ID | Date | Rule | Check | Severity | Evidence |
+|---|---|---|---|---|---|
+| R-ACCT-05 | 2026-11-21 | Composio sessions support multiple accounts per toolkit and require explicit selection when several are active. The member's tool list shows account IDs with provider display names or aliases. Each batch item selects its account with `account`, Gmail uses `user_id: "me"`, and reading both mailboxes makes one item per account and identifies any account that failed. Connect apps displays each account's provider identity in its own row and removes only the selected account when another is connected. | pytest, vitest | hard | core/tests/test_connectors.py::test_composio_creates_and_upgrades_sessions_with_explicit_account_selection; core/tests/test_connectors.py::test_composio_lists_and_routes_two_gmail_accounts; app/src/main/connections.test.ts::two Gmail addresses have separate rows and removal targets only the selected account |
+
 ## A limit stops only what would harm the app
 
 A plugin with more than 40 skills was refused, and the shell cut its download after a few seconds.
