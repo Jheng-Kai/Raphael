@@ -166,3 +166,22 @@ def test_invalid_reset_metadata_cannot_become_public_text_or_invalid_json(conn, 
     turn_id = history.add(session_id="sample", question="Synthetic", route="answer", prefix="", text="Failed", status="error",
         failure={"kind": "usage_limit", "provider": "chatgpt", "resets_at": reset})
     assert history.get(turn_id).failure["resets_at"] is None
+
+
+async def test_a_broken_named_skill_leaves_one_notice_and_the_turn_answers(make_rig, client, tmp_path):
+    from raphael_core.members.service import MembersService
+
+    rig = make_rig()
+    members = MembersService(rig.conn, tmp_path, background=rig.service._background)
+    rig.service._team = members
+    package = (await members._packages_import({"text": "---\nname: code-review\ndescription: Review code\n---\nReview."}))["package"]
+    skill = package["skills"][0]
+    members.capabilities._path(0, skill["id"]).unlink()
+    client.chats = [chat(json.dumps({"prefix": "Answer", "text": "Synthetic answer.", "detail": ""}))]
+    await typed(rig, "/code-review Summarize the project")
+    [turn] = await rig.turns()
+    assert turn["status"] == "done" and turn["failure"] is None
+    assert turn["question"] == "/code-review Summarize the project"
+    assert [json.loads(message["text"]) for message in turn["messages"] if message["kind"] == "event"] == [
+        {"type": "skill_unavailable", "name": "code-review", "reason": "not_found"}
+    ]

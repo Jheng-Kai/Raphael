@@ -2,6 +2,12 @@
 
 Layout, controls, menus, floating surfaces, the sidebar, navigation, colours, words on screen and the guide. Part of [the product rules](../RULES.md); a rule's ID is unique across every file.
 
+## Links in an owner message
+
+| ID | Date | Rule | Check | Gate | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-LINK-02 | 2026-11-21 | An owner message shows an enabled skill's slash name and each safe HTTP or HTTPS address in the app link colour, readable on every member colour. The browser opens addresses through the shared link opener. A shared skill link opens its entry in Settings > Team skills. Unknown slash names remain plain text. | vitest, look | hard | app/src/main/timeline.test.ts::owner skill and URL links preserve literal words and a skipped skill is one quiet notice; owner-skill-links; owner-skill-open |
+
 ## Local command completion
 
 | ID | Date | Rule | Check | Severity | Evidence |

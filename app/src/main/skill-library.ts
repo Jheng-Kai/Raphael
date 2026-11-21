@@ -40,7 +40,7 @@ export const emptySkillLibraryView = (): SkillLibraryView => ({
  *  words; any other is the plain failure. */
 const CAUSES = {
   archive: "skillLib.badArchive", file: "skillLib.badArchive", size: "skillLib.tooLarge", not_found: "skillLib.noSkill",
-  name: "skillLib.badName", source: "skillLib.unsupported", unsupported: "skillLib.unsupported",
+  name: "skillLib.badName", skill: "skillLib.invalidDocument", source: "skillLib.unsupported", unsupported: "skillLib.unsupported",
 } as const satisfies Record<string, MessageKey>;
 /** The largest file read here: the core's own package limit (MAX_PACKAGE_BYTES). */
 const MAX_FILE = 32 * 1024 * 1024;
@@ -75,7 +75,7 @@ function packageHTML(p: LibraryPackage, v: SkillLibraryView): string {
   const name = count > 1
     ? `<button type="button" class="btn skl-open" data-skl="open" data-key="${esc(p.key)}">` +
       `${ico("right")}<span class="skl-name">${esc(p.name)}</span><span class="skl-count">${esc(t("skillLib.count", { count }))}</span></button>`
-    : `<div class="lbl skl-single"><div class="t">${esc(p.name)}</div>${about ? `<div class="d">${esc(about)}</div>` : ""}</div>`;
+    : `<div class="lbl skl-single" tabindex="-1" data-library-skill="${p.skills[0]?.id ?? ""}"><div class="t">${esc(p.name)}</div>${about ? `<div class="d">${esc(about)}</div>` : ""}</div>`;
   return `<div class="row skl-pack" data-skl-pack="${esc(p.key)}">${name}${controlsHTML(p, v)}</div>`;
 }
 
@@ -84,7 +84,7 @@ function packageHTML(p: LibraryPackage, v: SkillLibraryView): string {
  * where it came from, then its skills, each with its own switch (off while the package is).
  */
 function packagePageHTML(p: LibraryPackage, v: SkillLibraryView): string {
-  const skills = p.skills.map(skill => `<div class="row skl-skill">` +
+  const skills = p.skills.map(skill => `<div class="row skl-skill" tabindex="-1" data-library-skill="${skill.id}">` +
     `<div class="lbl"><div class="t">${esc(skill.name)}</div>${skill.description ? `<div class="d">${esc(skill.description)}</div>` : ""}</div>` +
     `<div class="ctl">${tg(skill.enabled, `${t("members.profile.enable")} ${skill.name}`, ` data-skl="skill" data-key="${esc(p.key)}" data-id="${skill.id}"${p.enabled ? "" : " disabled"}`)}</div></div>`).join("");
   const source = p.source ? `<p class="d skl-source">${esc(p.source)}${p.version ? ` · ${esc(p.version)}` : ""}</p>` : "";
@@ -146,7 +146,7 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
   let listScroll = 0;
   /** The members' faces by id, from the roster the rest of the window draws them from; without it a face is its id's own colour. */
   let faces = new Map<number, Face>();
-  const load = async (): Promise<void> => {
+  const load = async (skillId: number | null = null): Promise<void> => {
     const request = ++epoch;
     const roster = Promise.resolve().then(() => membersList()).then(list => list.members, () => null);
     try {
@@ -156,7 +156,14 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
       state.packages = result.packages; state.members = result.members; state.loaded = true; state.failed = false;
       if (team) faces = new Map(team.map(member => [member.id, member]));
     } catch { if (request === epoch) state.failed = true; }
-    if (request === epoch) redraw();
+    if (request !== epoch) return;
+    redraw();
+    if (skillId === null) return;
+    const selected = state.packages.find(pkg => pkg.skills.some(skill => skill.id === skillId));
+    if (hasPage(selected)) open(selected.key);
+    const row = root.querySelector<HTMLElement>(`[data-library-skill="${skillId}"]`);
+    row?.scrollIntoView({ block: "nearest" });
+    row?.focus({ preventScroll: true });
   };
   const byKey = (key: string): LibraryPackage | undefined => state.packages.find(p => p.key === key);
   /** A package as the core now has it, in its place in the list. */

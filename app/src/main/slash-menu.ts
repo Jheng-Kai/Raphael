@@ -9,11 +9,12 @@ import { closeMenu, matchingChoices, menuIsOpenFor, openMenu, placeMenu, type Ch
 import { findsName } from "./find-match";
 import { slashTrigger, type SlashTrigger } from "./completion-trigger";
 
-export interface SlashMenuOptions { memberId(): number; scope?: object }
+export interface SlashMenuOptions { memberId(): number; scope?: object; changed?(): void }
 export interface SlashMenu {
   refresh(fromEvent?: boolean): Promise<void>;
   /** The member's skills or commands may have changed: they are read again when the menu is next wanted (at once if it is open). */
   invalidate(): void;
+  skills(): readonly MemberSkill[];
   destroy(): void;
 }
 /** The / the caret stands in the name of, wherever it begins a word (the @ menu's rule: the words before the caret decide). */
@@ -65,8 +66,13 @@ export function mountSlashMenu(input: HTMLTextAreaElement | HTMLInputElement, op
     try {
       const [commandAnswer, skillAnswer] = await Promise.all(fromEvent ? [eventRead(`members.commands.list:${memberId}`,()=>membersCommandsList(memberId),options.scope ?? input),eventRead(`members.skills.list:${memberId}`,()=>membersSkillsList(memberId),options.scope ?? input)] : [membersCommandsList(memberId), membersSkillsList(memberId)]);
       if (!alive || mine !== generation || memberId !== options.memberId()) return;
+      const previousSkills = skills;
       commands = commandAnswer.commands; skills = skillAnswer.skills;
+      const stamp = (known: MemberSkill[]) => JSON.stringify(known.map(skill => [skill.id, skill.enabled, skill.slash_name ?? skill.name]));
+      const nextSkills = skillAnswer.skills;
+      const changed = loadedFor !== memberId || stamp(previousSkills) !== stamp(nextSkills);
       loadedFor = memberId; draw();
+      if (changed) options.changed?.();
     } catch { if (mine === generation) { loadedFor = null; close(); } }
   }
   const onInput = (event?: Event): void => {
@@ -80,6 +86,7 @@ export function mountSlashMenu(input: HTMLTextAreaElement | HTMLInputElement, op
   input.addEventListener("blur", onBlur);
   return {
     refresh,
+    skills: () => loadedFor === options.memberId() ? skills : [],
     invalidate() {
       // Nothing is read for a menu that is closed: a busy team announces its members many times a second.
       if (alive && menuIsOpenFor(input) && document.querySelector("#app-popover.slash-menu")) void refresh(true);

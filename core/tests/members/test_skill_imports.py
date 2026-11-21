@@ -1,5 +1,9 @@
 """Skill sources and downloads are constrained to bounded Markdown data."""
 
+import io
+import stat
+import zipfile
+
 import httpx
 import pytest
 
@@ -31,7 +35,7 @@ async def test_imported_document_is_private_toggleable_and_deleted(rig, monkeypa
     text = "---\nname: writing\ndescription: Clear writing\n---\nFull body"
 
     async def download(source):
-        return [(source, text)]
+        return [(source, {"SKILL.md": text.encode()})]
 
     monkeypatch.setattr("raphael_core.members.service.download_skills", download)
     skill = (await rig.call("members.skills.import", {"member_id": one, "source": "owner/repo"}))["skill"]
@@ -63,31 +67,40 @@ async def test_downloader_refuses_oversize_redirects_and_binary_data(monkeypatch
         await download_skill("owner/repo")
 
 
-async def test_repository_collection_fetches_only_markdown_and_skips_symlinks(monkeypatch):
+@pytest.mark.parametrize("source", ["https://github.com/owner/repo",
+                                    "https://github.com/owner/repo/blob/develop/skills/write/SKILL.md",
+                                    "https://skills.sh/owner/repo/write"])
+async def test_remote_import_loads_the_selected_snapshot_and_ignores_root_link(monkeypatch, source):
     from raphael_core.members.capabilities import download_skills
 
     real_client = httpx.AsyncClient
-    requested = []
+    data = io.BytesIO()
+    with zipfile.ZipFile(data, "w") as archive:
+        archive.writestr("repo-develop/skills/write/SKILL.md", "---\nname: writing\ndescription: Clear writing\n---\nBody")
+        archive.writestr("repo-develop/skills/write/guide.txt", "Guide")
+        invalid = zipfile.ZipInfo("repo-develop/AGENTS.md")
+        invalid.external_attr = (stat.S_IFLNK | 0o777) << 16
+        archive.writestr(invalid, "elsewhere")
 
     def handle(request):
-        requested.append(str(request.url))
-        path = request.url.path
-        if path.endswith("/main/SKILL.md") or path.endswith("/master/SKILL.md"):
-            return httpx.Response(404)
         if request.url.host == "api.github.com":
-            if "/git/trees/" not in path:
-                return httpx.Response(200, json={"default_branch": "develop"})
-            return httpx.Response(200, json={"tree": [
-                {"path": "skills/write/SKILL.md", "type": "blob", "mode": "100644"},
-                {"path": "skills/read/SKILL.md", "type": "blob", "mode": "100644"},
-                {"path": "skills/linked/SKILL.md", "type": "blob", "mode": "120000"},
-                {"path": "scripts/install.sh", "type": "blob", "mode": "100755"},
-            ]})
-        return httpx.Response(200, text="---\nname: " + path.split("/")[-2] + "\ndescription: A skill\n---\nText")
+            return httpx.Response(200, json={"default_branch": "develop"})
+        assert request.url.host == "codeload.github.com"
+        assert request.url.path == "/owner/repo/zip/develop"
+        return httpx.Response(200, content=data.getvalue())
 
     monkeypatch.setattr("raphael_core.members.capabilities.httpx.AsyncClient",
                         lambda **kwargs: real_client(**kwargs, transport=httpx.MockTransport(handle)))
-    skills = await download_skills("owner/repo")
-    assert len(skills) == 2
-    assert all("install.sh" not in url and "linked" not in url for url in requested)
-    assert all(url.endswith("SKILL.md") for url, text in skills)
+    [(url, files)] = await download_skills(source)
+    assert url == "https://github.com/owner/repo/blob/develop/skills/write/SKILL.md"
+    assert files["guide.txt"] == b"Guide" and "AGENTS.md" not in files
+
+
+def test_skills_sh_selection_falls_back_to_the_repository_root():
+    from raphael_core.members.skill_sources import read_archive
+
+    data = io.BytesIO()
+    with zipfile.ZipFile(data, "w") as archive:
+        archive.writestr("repo-main/SKILL.md", "Root skill")
+    [files] = read_archive("repo.zip", data.getvalue(), repository=True, wanted="write")
+    assert files.folder == "" and files["SKILL.md"] == b"Root skill"

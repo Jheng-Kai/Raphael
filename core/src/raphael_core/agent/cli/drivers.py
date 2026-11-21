@@ -199,7 +199,6 @@ class Driver:
         self._diagnostic_secrets = [token]
         try:
             await files.secure()
-            prompt_file = files.write("system.txt", system)
             mcp = {"mcpServers": {"raphael": {"type": "http", "url": endpoint,
                                               "headers": {"Authorization": f"Bearer {token}"}}}}
             self.computer_endpoint = computer_endpoint
@@ -211,16 +210,30 @@ class Driver:
             environ = dict(os.environ if self.environ is None else self.environ)
             child_cwd = cwd or str(files.path)
             # Only Raphael's enabled packages enter native discovery. No plugin hooks/config are copied.
+            loaded_skills = []
             skill_paths = []
             if skills and structured is None:
                 from ...members.skill_library import package
+                from ...members.store import MemberError
+                from ..failure import skill_failure, skill_instruction
+
+                skipped = []
                 plugin = files.path / "raphael-skills"
                 manifest = plugin / ".claude-plugin/plugin.json"
                 manifest.parent.mkdir(parents=True)
                 manifest.write_text(json.dumps({"name": "raphael-skills", "version": "1.0.0"}), encoding="utf-8")
                 for index, skill in enumerate(skills):
                     folder = plugin / "skills" / f"skill-{index}"
-                    for relative, data in package(Path(skill["path"]).parent).items():
+                    try:
+                        if "path" not in skill:
+                            raise MemberError("archive", "invalid skill package")
+                        snapshot = package(Path(skill["path"]).parent, installed=True)
+                    except MemberError as error:
+                        notice = skill_failure(skill["name"], error)
+                        skipped.append(notice)
+                        yield Event("skill_unavailable", data=notice)
+                        continue
+                    for relative, data in snapshot.items():
                         if relative == "SKILL.md":
                             # Native expansion must not execute command substitutions outside our approval path.
                             data = data.replace(b"!`", b"\\!`")
@@ -230,6 +243,10 @@ class Driver:
                         target.parent.mkdir(parents=True, exist_ok=True)
                         target.write_bytes(data)
                     skill_paths.append(str(folder / "SKILL.md"))
+                    loaded_skills.append(skill)
+                if skipped:
+                    system += "\n\n" + skill_instruction(skipped)
+            prompt_file = files.write("system.txt", system)
             if self.name == "claude":
                 command += ["-p", "--output-format", "stream-json", "--input-format", "stream-json", "--verbose",
                             "--setting-sources", "",
@@ -297,7 +314,7 @@ class Driver:
                 raise ValueError("unknown_cli")
             if self.name == "codex":
                 self.native_skills = [{"type": "skill", "name": skill["name"], "path": path}
-                                      for skill, path in zip(skills, skill_paths)]
+                                      for skill, path in zip(loaded_skills, skill_paths)]
                 environ["RAPHAEL_MCP_TOKEN"] = token
             elif self.name == "gemini":
                 environ["USERPROFILE"] = environ["HOME"] = str(home)

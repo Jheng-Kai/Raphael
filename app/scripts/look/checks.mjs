@@ -2,6 +2,24 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.checkVisibility() && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (name === "owner-skill-links") {
+    const turn = document.querySelector('.tn[data-id="8201"]');
+    const bubble = turn?.querySelector(".owner-message .bubble");
+    const links = [...(bubble?.querySelectorAll(".message-link") ?? [])];
+    require(links.length === 2 && links.every(visible), "only the known slash name and URL are links");
+    require(links[0].textContent === "/code-review" && links[1].textContent === "https://example.com/changes", "the links keep their written words");
+    const blue = getComputedStyle(links[1]).color;
+    require(links.every(link => getComputedStyle(link).color === blue && blue !== getComputedStyle(bubble).color), "both links share the link colour");
+    const notice = turn.querySelector("[data-skill-notice]");
+    require(visible(notice) && bubble.getBoundingClientRect().bottom <= notice.getBoundingClientRect().top,
+      "the skipped skill is shown below the owner bubble");
+    require(!turn.querySelector(".turn-signin"), "no brain repair action appears for the skipped skill");
+    return { check: name };
+  }
+  if (name === "owner-skill-open") {
+    require(document.activeElement?.matches('.skl-page [data-library-skill="715"]'), "the skill inside its Team skills package has focus");
+    return { check: name };
+  }
   if (name === "start-newer-data") {
     const panel = document.querySelector(".main.startup-failed");
     const notice = panel?.querySelector('.missing-note[role="status"]');

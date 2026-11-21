@@ -261,7 +261,7 @@ class CliLoop:
                  rate_limit_waits=None, structured=None, alive=lambda waiting=0.0: None, skills=(), no_tools=False, reply=None, only=(),
                  owner_text=None, resume_user=None, context_sections=None, context_turns=(), context_summary="",
                  context_summary_through=0, context_owner_words=(), turn_id=None, tool_conversation=(), steps=(),
-                 acted=None, stall_s=None, tool_s=None, updates=None, owner_language=None):
+                 acted=None, stall_s=None, tool_s=None, updates=None, owner_language=None, skill_notice=None):
         self.brains, self.sessions, self.member_id, self.model = brains, sessions, member_id, model
         # The language of the owner's own words (never the interface's): what the member says while it works is shown only
         # in it. None when the words say nothing yet, and then nothing is held back for its language.
@@ -289,6 +289,7 @@ class CliLoop:
         # What the model last said before a tool call (a first greeting's words, which a tool call would otherwise make progress).
         self.last_speech = ""
         self.skills = skills
+        self.skill_notice = skill_notice
         # The waits before running a rate-limited request again: None waits as for a turn someone is reading
         # (RATE_LIMIT_WAITS_S), () never waits.
         self.rate_limit_waits = rate_limit_waits
@@ -1232,6 +1233,8 @@ class CliLoop:
                     if self.resume_session:
                         guard = {} if self._session_generation is None else {"generation": self._session_generation}
                         self.sessions.put(self.member_id, self.model, event.text, self.conversation_id, **guard)
+                elif event.kind == "skill_unavailable" and self.skill_notice is not None:
+                    self.skill_notice(event.data)
                 elif event.kind == "context_reset":
                     self._context_state = {}
                     self._submitted_user = self._fresh_user()

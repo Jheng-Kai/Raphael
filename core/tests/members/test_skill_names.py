@@ -41,7 +41,7 @@ async def test_every_import_writer_normalizes_new_non_slugs(rig, tmp_path, monke
     text = DOCUMENT.replace("research-summary", name)
     if path == "remote":
         async def download(source):
-            return [(source, text)]
+            return [(source, {"SKILL.md": text.encode()})]
         monkeypatch.setattr("raphael_core.members.service.download_skills", download)
         await rig.call("members.skills.import", {"member_id": 0, "source": "owner/repo"})
     elif path == "local":
@@ -65,7 +65,7 @@ async def test_every_import_writer_normalizes_new_non_slugs(rig, tmp_path, monke
 async def test_a_third_party_skill_longer_than_48_characters_imports_with_its_own_name(rig, monkeypatch, name):
     """Issue 234: two of 36 skills from one GitHub source failed on a 48-character cap the slug no longer has."""
     async def download(source):
-        return [(source, DOCUMENT.replace("research-summary", name))]
+        return [(source, {"SKILL.md": DOCUMENT.replace("research-summary", name).encode()})]
     monkeypatch.setattr("raphael_core.members.service.download_skills", download)
     await rig.call("members.skills.import", {"member_id": 0, "source": "backnotprop/pstack"})
     assert [skill["name"] for skill in rig.service.capabilities.skills(0)] == [name]

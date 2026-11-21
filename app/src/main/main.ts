@@ -45,7 +45,7 @@ import { sizeFieldsByScript } from "../shared/field-sizing";
 import { installWindowZoom } from "./window-zoom";
 import { stopOffscreenSlimes } from "./slime-offscreen";
 import { watchChipRows } from "./chip-scroll";
-import type { PageArgument, AppContext, DeviceSettings, MainEvent, MainPageId, Page, PageId, SettingsPane } from "./types";
+import type { PageArgument, AppContext, DeviceSettings, MainEvent, MainPageId, Page, PageId } from "./types";
 import { Undoable } from "./undo";
 import { Cleared } from "./cleared";
 import { leave, toaster } from "./ui";
@@ -357,7 +357,7 @@ watchChipRows(document.body);
    */
   function go(id: PageId, arg?: PageArgument): void {
     navigation.visit(() => {
-      if (id === "settings") openSettings(arg?.startsWith("draft:") ? undefined : (arg as SettingsPane | undefined));
+      if (id === "settings") openSettings(arg?.startsWith("draft:") ? undefined : arg);
       else showPage(id, id === "automations" || arg?.startsWith("draft:") || id === "agent" && (arg === "computer" || arg === "raphael" || arg?.startsWith("member-settings:")) ? arg : undefined);
     });
     notePlace();
@@ -385,7 +385,7 @@ watchChipRows(document.body);
 
   function openSettings(pane?: PageArgument): void {
     if (settingsOpen) {
-      if (pane?.startsWith("repair:")) void settings.show(pane);
+      if (pane?.startsWith("repair:") || pane?.startsWith("skill:")) void settings.show(pane);
       return;
     }
     settingsOpen = true;
