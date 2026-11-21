@@ -1562,12 +1562,12 @@ describe("a member's thread", () => {
     mount();
     await flush();
     await pick(4);
-    const line = $<HTMLButtonElement>('.exchange-event[data-exchange="42"]');
+    const line = $<HTMLElement>('.exchange-event[data-exchange="42"]');
     expect(line.textContent!.replace(/\s+/g, " ").trim()).toBe("與 拉斐爾 的 2 則訊息");
     // Neither the owner's bubble nor the answer stands in the thread: both are read in the conversation view.
     expect(document.querySelector('.tn[data-id="42"] .me')).toBeNull();
     expect(document.querySelector('.tn[data-id="42"]')!.textContent).not.toContain("下午兩點以後");
-    line.click();
+    line.querySelector<HTMLElement>(".event-count")!.click();
     await flush();
     const view = $<HTMLElement>(".peer-chat");
     expect(view.querySelector(".peer-pill")!.getAttribute("aria-label")).toContain("⇄");

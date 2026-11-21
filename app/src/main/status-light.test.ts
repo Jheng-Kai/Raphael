@@ -88,3 +88,26 @@ test("the title pill draws no dot of its own, and its arrow hides while the deta
   expect(css).not.toContain("is-computer-active");
   expect(css).toContain('.page-agent[data-det="open"] .btn.conversation-trigger:is(:hover, :focus-visible) .mb-pill-go { opacity: 0; }');
 });
+
+test("a small dot on the icon tells of news in the list: the most urgent colour, none for work under way, gone once the list is opened", async () => {
+  let roster = people();
+  const { button, light } = mount(() => roster);
+  expect(button.dataset.dot).toBeUndefined();
+  setSlimeState(1, "working");
+  await flush();
+  expect(button.dataset.dot).toBeUndefined(); // work under way asks nothing of the owner
+  roster = people([], { 2: "done" });
+  light.draw(); await flush();
+  expect(button.dataset.dot).toBe("done");
+  roster = people([3], { 2: "failed" });
+  light.draw(); await flush();
+  expect(button.dataset.dot).toBe("needs"); // waiting comes before failed, failed before finished
+  button.click(); await flush();
+  expect(button.dataset.dot).toBeUndefined();
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+  // Something new after the list was opened brings the dot back, in its own colour: m1 stops working and has finished.
+  setSlimeState(1, "idle");
+  roster = people([3], { 2: "failed", 1: "done" });
+  light.draw(); await flush();
+  expect(button.dataset.dot).toBe("done");
+});

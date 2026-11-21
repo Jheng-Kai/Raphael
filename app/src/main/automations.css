@@ -117,6 +117,11 @@
 /* 「與 X 的 2 則訊息」 is a button that reads as the other centred lines; their conversation opens from it (peer-chat.ts). */
 .page-agent .btn.handoff-event { display: flex; justify-content: center; width: 100%; max-width: 100%; height: auto; min-width: 0; white-space: normal; text-align: center; overflow-wrap: anywhere; }
 .page-agent .btn.handoff-event > .event-line { min-width: 0; max-width: 100%; }
+/* A line of messages between members is words; only its count (「2 則訊息」) is a button, its words underlined under the pointer. */
+div.handoff-event { display: flex; justify-content: center; min-width: 0; text-align: center; overflow-wrap: anywhere; }
+div.handoff-event > .event-line { min-width: 0; max-width: 100%; }
+.btn.event-count { display: inline; min-height: 0; height: auto; padding: 0; border: 0; border-radius: 0; background: transparent; font: inherit; line-height: inherit; color: inherit; white-space: normal; cursor: pointer; }
+.btn.event-count:hover:not(:disabled), .btn.event-count:active:not(:disabled) { background: transparent; color: var(--text-2); text-decoration: underline; text-underline-offset: 2px; }
 .handoff-event > summary { cursor: pointer; list-style: none; }
 .handoff-event > summary::-webkit-details-marker { display: none; }
 .handoff-detail { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); width: fit-content; max-width: min(calc(560px + 160 * var(--pa-u)), 100%); margin: var(--sp-2) auto 0; padding: calc(10px + 4 * var(--pa-u)) calc(12px + 6 * var(--pa-u)); border-radius: var(--r-lg); background: var(--surface-2); font-size: var(--pa-fs-d); line-height: 1.6; color: var(--text-2); overflow-wrap: anywhere; }

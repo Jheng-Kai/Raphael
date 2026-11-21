@@ -5800,7 +5800,11 @@ export function checkRendered(name, context = {}) {
     require(groups.length === (name === "handoff-group-room" ? 3 : 1), "only consecutive exchanges fold together");
     for (const group of groups) {
       const line = group.querySelector('.event-line'), box = line.getBoundingClientRect(), column = line.closest('.ra-col').getBoundingClientRect();
-      require(group.matches('button[data-act="peer-chat"]'), "the exchanges' line is a button that opens their conversation");
+      // The line is words; only its count is a button that opens their conversation (a press beside it opens nothing).
+      const count = group.querySelector('button.event-count[data-act="peer-chat"]');
+      require(!group.matches('button, [data-act]') && group.querySelectorAll('button').length === 1 && count && /則訊息$/.test(count.textContent.trim()), `only the count of the exchanges' line is a button (${count?.textContent})`);
+      const press = document.elementFromPoint(box.left + 2, box.top + box.height / 2);
+      require(!press?.closest('[data-act]'), "a press at the line's start, on its words, reaches no button");
       require(Math.abs(box.left + box.width / 2 - column.left - column.width / 2) < 2, "exchange group is centred");
       require(box.left >= column.left - 1 && box.right <= column.right + 1, "names stay inside the conversation column");
       require(!line.querySelector('.i'), "no disclosure chevron");
@@ -9594,24 +9598,36 @@ export function checkRendered(name, context = {}) {
     return { check: name, moved: Math.round(window.__rowWheel - scroller.scrollTop) };
   }
   // The status light (status-light.ts) and the title pill beside it.
-  if (name === "status-light-idle" || name === "status-light-list" || name === "status-light-pill-open") {
+  if (name === "status-light-idle" || name === "status-light-list" || name === "status-light-pill-open" || name === "status-light-seen" || name === "status-light-dot") {
     const light = document.querySelector('.mb-chat .mb-head [data-act="status"]'), head = document.querySelector(".mb-chat .mb-head");
     require(visible(light) && light.getBoundingClientRect().left - head.getBoundingClientRect().left < head.getBoundingClientRect().width / 4, "the status light stands at the header's left");
     require(!document.querySelector('.mb-head [data-act="search"], [data-room-search]'), "no search button is left in a top row");
     const pill = document.querySelector(".conversation-trigger .mb-pill");
     require(getComputedStyle(pill, "::after").content === "none" || getComputedStyle(pill, "::after").content === "normal", "the title pill draws no dot of its own");
-    require(light.querySelector("svg") && !light.querySelector(".status-dot"), "the header shows the list's icon, no dot");
+    require(light.querySelector("svg") && !light.querySelector(".status-dot"), "the header shows the list's icon");
+    const mark = getComputedStyle(light, "::after"), drawn = mark.content !== "none" && mark.content !== "normal";
+    const colour = token => { const probe = document.createElement("i"); probe.style.color = `var(${token})`; light.append(probe); const out = getComputedStyle(probe).color; probe.remove(); return out; };
     if (name === "status-light-idle") {
       require(["idle", "done"].includes(light.dataset.level) && light.getAttribute("aria-label") && !light.textContent.trim(), `with nothing waiting or working the list says so (or who finished), named and wordless (${light.dataset.level})`);
     }
     if (name === "status-light-list") {
-      require(light.dataset.level === "needs", `a member waiting for the owner turns the light to its warning colour (${light.dataset.level})`);
+      require(light.dataset.level === "needs", `a member waiting for the owner is the list's level (${light.dataset.level})`);
+      require(!drawn && light.dataset.dot === undefined, "the list is open, so what it shows is seen: the icon's dot is gone");
       const rows = [...document.querySelectorAll(".menu .menu-choice")];
       require(rows.length === 2 && rows[0].dataset.value === "2" && rows[1].dataset.value === "1", `the waiting member comes first, then the working one (${rows.map(row => row.dataset.value)})`);
       require(rows.every(row => row.querySelector(".mlead .av, .mlead svg")), "each row has the member's face");
       require(!document.querySelector(".menu .ck svg"), "nothing in the list is checked");
       const dots = rows.map(row => row.querySelector(".status-row-dot"));
       require(dots[0]?.dataset.kind === "needs" && dots[1]?.dataset.kind === "busy" && getComputedStyle(dots[0]).backgroundColor !== getComputedStyle(dots[1]).backgroundColor, "each row has its own coloured dot, waiting unlike working");
+    }
+    if (name === "status-light-seen") {
+      require(!drawn && light.dataset.dot === undefined && light.dataset.level === "needs", "once the list was opened the dot is gone, though the member still waits");
+    }
+    if (name === "status-light-idle") require(light.dataset.level === "done" ? drawn && mark.backgroundColor === colour("--ok") : !drawn, `with nothing new the icon has no dot; finished work not yet seen has the success colour (${light.dataset.level} ${mark.backgroundColor})`);
+    if (name === "status-light-dot") {
+      require(drawn && light.dataset.dot === "needs" && mark.backgroundColor === colour("--warn"), `before the list is opened the icon has a dot in the warning colour (${light.dataset.dot} ${mark.backgroundColor})`);
+      const box = light.getBoundingClientRect();
+      require(parseFloat(mark.width) <= 6 && parseFloat(mark.left) > box.width / 2 && parseFloat(mark.top) < box.height / 2, `the dot is small, at the icon's top right (${mark.width} at ${mark.left}, ${mark.top})`);
     }
     if (name === "status-light-pill-open") {
       require(document.querySelector(".page-agent")?.dataset.det === "open", "the details panel is open");
@@ -10501,7 +10517,7 @@ export function checkRendered(name, context = {}) {
   if (name === "peer-chat-closed") {
     const line = document.querySelector('[data-handoff="61"]');
     require(!document.querySelector('.peer-chat') && !document.querySelector('.mb-chat[data-peer-open]'), "Close chat removes the conversation");
-    require(visible(document.querySelector('.mb-chat:not([hidden]) .composer')) && document.activeElement === line, "the thread, its composer and the focus on the line come back");
+    require(visible(document.querySelector('.mb-chat:not([hidden]) .composer')) && document.activeElement === line.querySelector('.event-count'), "the thread, its composer and the focus on the line's count come back");
     return { check: name };
   }
   if (name === "bot-ask-centred" || name === "bot-ask-expanded") {
@@ -10523,9 +10539,12 @@ export function checkRendered(name, context = {}) {
     // same line the asker's side shows; it opens the two members' conversation, never a box under it.
     // Two exchanges with the same colleague in a row are that one line, its count covering both.
     const lines = [...document.querySelectorAll('.exchange-event')].filter(visible);
+    const countOf = line => line.querySelector('button.event-count[data-act="peer-chat"]');
     require(lines.length === 1, `the colleague's two exchanges are one line (${lines.length})`);
     const event = lines[0], words = event.textContent.trim();
-    require(event.matches('button[data-act="peer-chat"]'), "the line is a button that opens their conversation");
+    require(!event.matches('button, [data-act]') && countOf(event) && event.querySelectorAll('button').length === 1, "only the line's count is a button that opens their conversation");
+    const count = countOf(event), hit = count.getBoundingClientRect(), whole = event.getBoundingClientRect();
+    require(hit.width < whole.width / 2 && /則訊息$/.test(count.textContent.trim()), `the count is the only part to press, not the line's width (${Math.round(hit.width)} of ${Math.round(whole.width)})`);
     require(/^與 小森 的 \d+ 則訊息/.test(words), `the line names the colleague and counts the messages: ${words}`);
     require(visible(event.querySelector('.av')), "the line carries the asker's face");
     require(document.querySelector('.tn[data-id="2"]').getBoundingClientRect().bottom <= event.getBoundingClientRect().top, "it sits where it came, after the member's own earlier turn");

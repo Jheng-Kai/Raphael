@@ -18,16 +18,20 @@ const dom = (html: string): HTMLElement => { const el = document.createElement("
 test.each(["zh-TW", "en", "ja"])("%s counts the messages and names unique people in localized list order", locale => {
   setLocale(locale);
   const el = dom(draw([task(1, 1), task(2, 1), task(3, 2), task(4, 3), task(5, 4)]));
-  const line = el.querySelector<HTMLButtonElement>("button[data-handoff-group][data-act='peer-chat']")!;
-  expect(line).not.toBeNull();
-  expect(line.textContent).toContain("5");
+  // The line is words; only its count opens the conversation, so a press beside it opens nothing.
+  const line = el.querySelector<HTMLElement>("[data-handoff-group]")!;
+  expect(line.tagName).not.toBe("BUTTON");
+  expect(line.hasAttribute("data-act")).toBe(false);
+  const count = line.querySelector<HTMLButtonElement>("button.event-count[data-act='peer-chat']")!;
+  expect(count.textContent).toBe(t("handoff.count", { p0: 5 }));
+  expect(line.querySelectorAll("button")).toHaveLength(1);
   expect(line.querySelectorAll(".event-person")).toHaveLength(3);
   expect(line.textContent?.match(/Person 1/g)).toHaveLength(1);
   expect(line.textContent).not.toContain("Person 4");
   expect(line.querySelector(".event-state")).toBeNull();
   const list = new Intl.ListFormat(locale, { style: "long", type: "conjunction" }).format(["Person 1", "Person 2", "Person 3", t("handoff.groupOthers", { p0: 1 })]);
   expect(line.textContent).toContain(list);
-  expect(line.dataset.peerKeys).toBe("1 2 3 4 5");
+  expect(count.dataset.peerKeys).toBe("1 2 3 4 5");
   // The line is the whole record in the thread: what was said opens in the conversation between members.
   expect(el.querySelector(".handoff-detail, details")).toBeNull();
 });
@@ -47,7 +51,8 @@ test("Latin names before a Chinese join have a CSS gap without changing localize
   const el = dom(draw([task(1), task(2), task(3), task(4)]));
   const last = el.querySelectorAll("[data-handoff-group] .event-person")[2]!;
   expect(last.classList.contains("is-word-gap")).toBe(true);
-  expect(last.nextSibling?.textContent).toBe("和其他 1 位 的 4 則訊息");
+  expect(last.nextSibling?.textContent).toBe("和其他 1 位 的 ");
+  expect(last.nextSibling?.nextSibling?.textContent).toBe("4 則訊息");
 });
 
 test("one exchange counts both sides in one line and keeps its own state while unfinished", () => {
@@ -72,7 +77,7 @@ test("shared diff keeps the same line node as new work arrives", () => {
   const owner = thread.querySelector('.me'), answer = thread.querySelector('.ra');
   tasks[0] = { ...tasks[0], result: "Updated result" }; tasks.push(task(3)); update();
   expect(thread.querySelector("[data-handoff-group]")).toBe(line);
-  expect(line.dataset.peerKeys).toBe("1 2 3");
+  expect(line.querySelector<HTMLElement>(".event-count")!.dataset.peerKeys).toBe("1 2 3");
   expect(line.textContent).toContain("3");
   expect(thread.querySelector('.me')).toBe(owner);
   expect(thread.querySelector('.ra')).toBe(answer);
