@@ -119,6 +119,12 @@ export default [
   scene("dictation-language-variant-hover", "A written form is the settings rows' dropdown: no box or fill at rest or under the pointer, only its words brighten, its row lit behind it", [...settings("dictation"), click('[data-k="languages"]'), wait('.lang-panel [data-variant-menu="zh"]'), hover('.lang-panel [data-variant-menu="zh"]'), check("language-variant-hover")]),
   scene("dictation-language-variant-focus", "Tab from 中文 reaches its written form's dropdown, which draws the app's keyboard ring with no fill", [...settings("dictation"), click('[data-k="languages"]'), wait('.lang-panel [data-variant-menu="zh"]'), key('Tab'), check("language-variant-focus")]),
   scene("dictation-language-variants", "A written form's dropdown opens the forms of its language beside the picker, never under it", [...settings("dictation"), click('[data-k="languages"]'), wait('.lang-panel [data-variant-menu="zh"]'), click('.lang-panel [data-variant-menu="zh"]'), wait('.lang-variant-menu [data-variant="zh-TW"]')]),
+  scene("dictation-language-untick", "Pressing the checked 中文 row with its written forms open unticks it and updates the picker and Settings together", [
+    ...settings("dictation"), click('[data-k="languages"]'),
+    wait('.lang-panel [data-language="zh"][aria-pressed="true"]'), wait('.lang-panel [data-language="en"][aria-pressed="true"]'),
+    click('.lang-panel [data-variant-menu="zh"]'), wait('.lang-variant-menu [data-variant="zh-TW"][aria-checked="true"]'),
+    click('.lang-panel [data-language="zh"]'), check("language-untick"),
+  ]),
   scene("dictation-language-variants-toggle", "Pressing the dropdown again folds the written forms away and leaves the picker open", [...settings("dictation"), click('[data-k="languages"]'), wait('.lang-panel [data-variant-menu="zh"]'), click('.lang-panel [data-variant-menu="zh"]'), wait('.lang-variant-menu [data-variant="zh-TW"]'), click('.lang-panel [data-variant-menu="zh"]'), waitGone('.lang-variant-menu'), check("language-variants-toggle")]),
   scene("appearance-menu", "One shared theme dropdown without a preview gallery", [...settings("appearance"), click('[data-k="appearance"]'), wait('.menu [data-value="dark"]'), check("appearance-settings")]),
   scene("appearance-keyboard", "Theme choices retain visible keyboard focus in every palette", [...settings("appearance"), click('[data-k="appearance"]'), key('Tab'), {...key('Tab'),shift:true}, key('ArrowDown'), check('appearance-settings'), check('appearance-focus')]),

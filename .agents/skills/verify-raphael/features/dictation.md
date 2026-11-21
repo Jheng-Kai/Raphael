@@ -94,7 +94,7 @@ What proves it: `tests/brain/test_cleanup.py`, `test_dictation_finish.py`, `test
 and `tests/test_packaging.py` from core/.
 
 ```powershell
-npm run look -- dictation-languages dictation-language-variant-hover dictation-language-variant-focus dictation-language-variants dictation-language-variants-toggle --theme both --width 1120,720,1920x1080
+npm run look -- dictation-languages dictation-language-variant-hover dictation-language-variant-focus dictation-language-variants dictation-language-variants-toggle dictation-language-untick --theme both --width 1120,720,1920x1080
 ```
 
 `dictation-languages` hovers 中文's row and checks that every dropdown stands on its lit row with no fill or frame;
@@ -102,6 +102,9 @@ npm run look -- dictation-languages dictation-language-variant-hover dictation-l
 the pointer, is written as 聽寫方式's dropdown at rest, brightens to the colour of 你說的語言's open dropdown, has the same
 chevron, and never covers the language's name; `dictation-language-variant-focus` presses Tab from 中文 and checks that its
 dropdown draws the app's ring (a 2 px outline 2 px outside, no inset frame or fill), whole inside the list.
+`dictation-language-untick` presses the checked Chinese row with its Taiwan written forms submenu open. It checks that
+the submenu closes, the row is unchecked and its dropdown shows the default form, the count falls to one, and English
+stays checked with its written form and is the only language in the Settings summary.
 
 ## Changing the shortcuts: one 編輯, one dialog (R-KEYS-EDIT-01)
 

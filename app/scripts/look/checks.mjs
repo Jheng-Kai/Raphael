@@ -4617,6 +4617,26 @@ export function checkRendered(name, context = {}) {
     require(document.querySelector('.lang-panel [data-variant-menu="zh"]').getAttribute('aria-expanded') === "false", "the chip says its forms are closed");
     return {check: name};
   }
+  if (name === "language-untick") {
+    // R-UI-175: pressing the language with its submenu open redraws the picker and Settings together.
+    const panel = document.querySelector('.lang-panel');
+    require(visible(panel), "the picker stays open after unticking 中文");
+    const chinese = panel.querySelector('[data-language="zh"]');
+    const english = panel.querySelector('[data-language="en"]');
+    require(visible(chinese) && chinese.getAttribute("aria-pressed") === "false" && !chinese.querySelector('.ck svg'), "中文 is unticked visually and in its pressed state");
+    require(!document.querySelector('.lang-variant-menu'), "the written-form submenu is closed");
+    // R-UI-165: the collapsed control stays on a language with several forms so a form can still be picked.
+    const chineseForm = chinese.closest('.lang-row').querySelector('[data-variant-menu="zh"]');
+    require(visible(chineseForm) && chineseForm.getAttribute("aria-expanded") === "false"
+      && chineseForm.querySelector('span')?.textContent === "繁體中文（台灣）", "中文 keeps its default written form on the collapsed control");
+    require(panel.querySelector('.lang-count')?.textContent === "已選 1／5", "the picker says one language is selected");
+    require(visible(english) && english.getAttribute("aria-pressed") === "true" && visible(english.querySelector('.ck svg')), "English stays ticked");
+    const englishForm = english.closest('.lang-row').querySelector('[data-variant-menu="en"]');
+    require(visible(englishForm) && englishForm.querySelector('span')?.textContent === "English (United States)", "English keeps its written form");
+    const summary = document.querySelector('.modal-scrim [data-k="languages"] span');
+    require(visible(summary) && summary.textContent === "English (United States)", "the Settings row names only English (United States)");
+    return {check: name};
+  }
   if (name === "desktop-frame") {
     const shell = document.querySelector('.desktop-shell');
     const inline = document.querySelector('[data-card-desktop-screen] iframe:not([hidden]), [data-card-screen] iframe:not([hidden])');
@@ -10539,7 +10559,7 @@ export function checkRendered(name, context = {}) {
         require(rows.size <= 3 && rows.size < kinds.length, `a narrow page's kinds are pills that wrap, not a tall list (${rows.size} rows)`);
       }
       for (const item of kinds) require(item.querySelector("span").scrollWidth <= item.querySelector("span").clientWidth + 1, `${item.dataset.cat} shows its whole name`);
-      const expected = { soul: ["ms-personality", "ms-instructions"], skills: ["ms-skills", "ms-commands"], tools: ["ms-tools", "ms-draft", "ms-folders"], notify: ["ms-notify"] }[category];
+      const expected = { soul: ["ms-personality", "ms-instructions"], skills: ["ms-skills", "ms-library", "ms-commands"], tools: ["ms-tools", "ms-draft", "ms-folders"], notify: ["ms-notify"] }[category];
       const sections = [...pane.querySelectorAll(".ms-section[data-k]")].filter(visible).map(section => section.dataset.k);
       require(sections.join() === expected.join(), `${category} shows ${expected.join()} (${sections.join()})`);
       for (const section of pane.querySelectorAll(".ms-section[data-k]")) {
@@ -10552,8 +10572,8 @@ export function checkRendered(name, context = {}) {
         if (head?.querySelector("h2")) require(head.querySelector("h2").getBoundingClientRect().left > list.getBoundingClientRect().left, `${section.dataset.k}: the name starts inside the list's edge`);
         require(list.scrollHeight <= list.clientHeight + 1 && getComputedStyle(list).overflowY === "visible", `${section.dataset.k} does not scroll inside`);
       }
-      // No word-buttons where an icon says it: edits, adds and menus are icons, the rest are rows or switches.
-      const words = [...pane.querySelectorAll(".ms-section button.btn, .ms-id button.btn")].filter(button => visible(button) && !button.matches(".icon, .ms-open, .mb-face-edit, .ms-add .btn.sm, [data-missing-repair]"));
+      // Edits, adds and menus use icons; the Team skills section has a labelled button to open the library.
+      const words = [...pane.querySelectorAll(".ms-section button.btn, .ms-id button.btn")].filter(button => visible(button) && !button.matches('.icon, .ms-open, .mb-face-edit, .ms-add .btn.sm, [data-missing-repair], [data-k="ms-library"] [data-ms="open-library"]'));
       require(words.length === 0, `no text buttons: ${words.map(button => button.textContent.trim()).join("|")}`);
       require(![...pane.querySelectorAll("button")].some(button => visible(button) && /^(編輯|Edit|編集)$/.test(button.textContent.trim())), "no 編輯 button");
       for (const edit of pane.querySelectorAll('[data-ms="edit"]')) require(visible(edit.querySelector("svg.i")), "a long field ends in its pencil");

@@ -6,7 +6,7 @@ Layout, controls, menus, floating surfaces, the sidebar, navigation, colours, wo
 
 | ID | Date | Rule | Check | Severity | Evidence |
 | --- | --- | --- | --- | --- | --- |
-| R-UI-175 | | Pressing a language row in 你說的語言 keeps the picker open and immediately updates the check, `aria-pressed`, the written form, the selected count and the Settings summary together. A written-form submenu closes before its anchor is redrawn. | vitest | hard | app/src/main/pages/settings-providers.test.ts::pressing a spoken language redraws the picker and Settings row with the variants submenu open: %s |
+| R-UI-175 | | Pressing a language row in 你說的語言 keeps the picker open and immediately updates the check, `aria-pressed`, the written form, the selected count and the Settings summary together. A written-form submenu closes before its anchor is redrawn. | vitest, look | hard | app/src/main/pages/settings-providers.test.ts::pressing a spoken language redraws the picker and Settings row with the variants submenu open: %s; dictation-language-untick |
 
 ## Choosing people shows their faces, and a choice is never a box on the left
 
