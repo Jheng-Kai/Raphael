@@ -354,6 +354,25 @@ test("a live turn renders public replies while unfinished work receipts stay out
   expect(html).not.toContain("Google Calendar");
 });
 
+test("a live turn broken by a turn that came while it worked keeps its live line and later words in the stretch after it", () => {
+  const work = turn(1, { status: "running", text: "", messages: [
+    { seq: 1, kind: "reply", text: "Before the exchange", at_ms: T0 + 1_000 },
+    { seq: 2, kind: "progress", text: "Running cd on the computer", at_ms: T0 + 4_000 },
+    { seq: 3, kind: "reply", text: "After the exchange", at_ms: T0 + 5_000 },
+  ] });
+  const before = turnHTML(work, emptyTimelineState(), false, { ...LOOK, part: { until: T0 + 3_000 } });
+  const after = turnHTML(work, emptyTimelineState(), false, { ...LOOK, part: { from: T0 + 3_000, after: 2 } });
+  expect(visible(before)).toContain("Before the exchange");
+  expect(visible(before)).not.toContain("After the exchange");
+  expect(before).toContain("owner-message");
+  expect(before).not.toContain('class="live-presence"');
+  expect(visible(after)).toContain("After the exchange");
+  expect(visible(after)).not.toContain("Before the exchange");
+  expect(after).not.toContain("owner-message");
+  expect(after).toContain('data-tooltip="Running cd on the computer"');
+  expect(after).toContain('data-after="2"');
+});
+
 test("an old turn without messages still renders its answer once", () => {
   const html = turnHTML(turn(1), emptyTimelineState(), false, { face: () => "" });
   expect(html.match(/class="ans"/g)).toHaveLength(1);

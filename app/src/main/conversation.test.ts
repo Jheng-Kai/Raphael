@@ -156,6 +156,93 @@ describe("one thread", () => {
     expect(lines([{ ...task, messages: [said(1, 1)] }, asked, message]).map(([key]) => key)).toEqual(["turn:1", "turn:2", "turn:3"]);
   });
 
+  describe("a colleague's exchange that came while the member worked stands inside that work, where it came", () => {
+    const start = at("2026-10-20T09:00:00+08:00");
+    const min = (minutes: number) => start + minutes * 60_000;
+    const said = (seq: number, minutes: number, kind: "reply" | "progress" | "event" = "reply") => ({ seq, kind, text: `Said ${seq}`, at_ms: min(minutes) });
+    const work = (more: Partial<AgentTurn> = {}) => turn(1, "2026-10-20T09:00:00+08:00", { status: "running", messages: [said(1, 1)], ...more });
+    const exchange = (id: number, minutes: number, more: Partial<AgentTurn> = {}) =>
+      turn(id, "2026-10-20T09:00:00+08:00", { created_at_ms: min(minutes), source: "member", scope: "exchange", route: "exchange", peer_id: 2, ...more });
+    const lines = (turns: AgentTurn[]) => threadItems(turns, now).flatMap(item => item.kind === "turn"
+      ? [[item.key, item.part ?? null, (item.together ?? []).map(earlier => earlier.id)]] : []);
+
+    test("running work: what it said before stays above the exchange line, and the rest of it, its live line, below", () => {
+      expect(lines([exchange(2, 3), work({ messages: [said(1, 1), said(2, 4, "progress")] })])).toEqual([
+        ["turn:1", { until: min(3) }, []],
+        ["turn:2", null, []],
+        ["turn:1:after:2", { from: min(3), after: 2 }, []],
+      ]);
+      // Work waiting at a card or a background task under way is at work too.
+      expect(lines([work({ status: "confirm" }), exchange(2, 3)]).map(([key]) => key)).toEqual(["turn:1", "turn:2", "turn:1:after:2"]);
+      expect(lines([work({ status: "done", task: { id: 7, state: "running", started_at_ms: start, finished_at_ms: null } as AgentTurn["task"] }), exchange(2, 3)])
+        .map(([key]) => key)).toEqual(["turn:1", "turn:2", "turn:1:after:2"]);
+    });
+
+    test("finished work: the reply it gave after the exchange stays under the exchange line", () => {
+      expect(lines([work({ status: "done", messages: [said(1, 1), said(2, 6)] }), exchange(2, 3)])).toEqual([
+        ["turn:1", { until: min(3) }, []],
+        ["turn:2", null, []],
+        ["turn:1:after:2", { from: min(3), after: 2 }, []],
+      ]);
+      // Work that was over before the colleague wrote takes nothing of it: the exchange stands under the whole line.
+      expect(lines([work({ status: "done", messages: [said(1, 1), said(2, 2)] }), exchange(2, 3)])).toEqual([["turn:1", null, []], ["turn:2", null, []]]);
+    });
+
+    test("two exchanges with the same colleague are one line while the work says nothing between them, and two when it does", () => {
+      expect(lines([work({ messages: [said(1, 1), said(2, 4, "progress")] }), exchange(2, 3), exchange(3, 5)])).toEqual([
+        ["turn:1", { until: min(3) }, []],
+        ["turn:3", null, [2]],
+        ["turn:1:after:3", { from: min(3), after: 3 }, []],
+      ]);
+      expect(lines([work({ messages: [said(1, 1), said(2, 4)] }), exchange(2, 3), exchange(3, 5)])).toEqual([
+        ["turn:1", { until: min(3) }, []],
+        ["turn:2", null, []],
+        ["turn:1:after:2", { from: min(3), until: min(5), after: 2 }, []],
+        ["turn:3", null, []],
+        ["turn:1:after:3", { from: min(5), after: 3 }, []],
+      ]);
+      // A hand-off just before the work it started, the work showing nothing yet, and the colleague's next question: one line,
+      // the work going on under it.
+      const handed = work({ question: "", route: "worker", source: "worker", peer_id: 2, member_id: 5, messages: [said(1, 4, "event")] });
+      expect(lines([exchange(2, -1, { status: "running", text: "" }), handed, exchange(3, 3)])).toEqual([
+        ["turn:3", null, [2]],
+        ["turn:1:after:3", { after: 3 }, []],
+      ]);
+    });
+
+    test("an exchange before any work stands where it came, and the work after it is one line", () => {
+      expect(lines([exchange(2, -5), work()])).toEqual([["turn:2", null, []], ["turn:1", null, []]]);
+    });
+
+    test("owner messages and an exchange in the same work each stand at their own moment inside it", () => {
+      const input = (id: number, minutes: number) => turn(id, "2026-10-20T09:00:00+08:00", { created_at_ms: min(minutes), route: "owner_input", text: "", source: "app" });
+      const busy = work({ messages: [said(1, 1), said(2, 3), said(3, 6), said(4, 8)] });
+      expect(lines([busy, input(2, 2), exchange(3, 5), input(4, 7)])).toEqual([
+        ["turn:1", { until: min(2) }, []],
+        ["turn:2", null, []],
+        ["turn:1:after:2", { from: min(2), until: min(5), after: 2 }, []],
+        ["turn:3", null, []],
+        ["turn:1:after:3", { from: min(5), until: min(7), after: 3 }, []],
+        ["turn:4", null, []],
+        ["turn:1:after:4", { from: min(7), after: 4 }, []],
+      ]);
+      // A message the work has said nothing after yet still stays below every line, the exchange's stretch included.
+      expect(lines([work(), exchange(3, 5), input(4, 7)]).map(([key]) => key)).toEqual(["turn:1", "turn:3", "turn:1:after:3", "turn:4"]);
+    });
+
+    test("older work still under way takes the exchange past finished turns, and queued words keep the exchange out of it", () => {
+      const between = turn(2, "2026-10-20T09:02:00+08:00", { messages: [said(1, 2.5)] });
+      expect(lines([work(), between, exchange(3, 4)])).toEqual([
+        ["turn:1", { until: min(4) }, []],
+        ["turn:2", null, []],
+        ["turn:3", null, []],
+        ["turn:1:after:3", { from: min(4), after: 3 }, []],
+      ]);
+      const queued = turn(2, "2026-10-20T09:02:00+08:00", { status: "queued", route: "answer", text: "", source: "app" });
+      expect(lines([work(), queued, exchange(3, 4)]).map(([key]) => key)).toEqual(["turn:1", "turn:2", "turn:3"]);
+    });
+  });
+
   test("a turn from a core that keeps no source is a spoken one", () => {
     const old = { ...turn(1, "2026-10-20T09:00:00+08:00") };
     delete old.source;

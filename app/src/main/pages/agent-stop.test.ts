@@ -324,6 +324,31 @@ test("a message sent while the work runs stands where it was sent and the reply 
  expect(thread().split(reply)).toHaveLength(2);
 });
 
+test("a colleague's exchange that came while the member worked stands above its live line, and above its reply once done", async () => {
+ const start = Date.now();
+ const said = (seq: number, kind: TurnMessage["kind"], text: string, after: number): TurnMessage => ({ seq, kind, text, at_ms: start + after });
+ const before = [said(1, "reply", "Checking the site first.", 1000)];
+ const asked = live({ id: 12, session_id: "exchange-12", route: "exchange", scope: "exchange", source: "member", peer_id: 3, status: "done",
+  question: "Any findings yet?", text: "Two so far.", created_at_ms: start + 3000 });
+ const isAbove = (upper: Element, lower: Element) => !!(upper.compareDocumentPosition(lower) & Node.DOCUMENT_POSITION_FOLLOWING);
+ turns = [live({ question: "Test the website", messages: [...before, said(2, "progress", "Running cd on the computer", 4000)] }), asked];
+ mount(); await flush();
+ const presence = $(".thread .live-presence"), line = $('.thread [data-exchange="12"]');
+ expect(document.querySelectorAll(".thread .live-presence")).toHaveLength(1);
+ expect(presence.textContent).toContain("Running cd on the computer");
+ expect(isAbove(line, presence), "the exchange line stands above the work's live line").toBe(true);
+ expect(isAbove($('.tn[data-id="11"]:not([data-after])'), line), "what the work said before stays above it").toBe(true);
+ expect($('.tn[data-id="11"]:not([data-after])').textContent).toContain("Checking the site first.");
+ // Finished, the reply the work gave after the exchange stays under the exchange line.
+ const reply = "The site passes every check.";
+ turns = [live({ question: "Test the website", status: "done", text: reply, messages: [...before, said(3, "reply", reply, 9000)] }), asked];
+ await refresh({ type: "AgentTurn", turn_id: 11, member_id: 0 });
+ await vi.advanceTimersByTimeAsync(5000); await flush();
+ const last = [...document.querySelectorAll(".thread > li")].pop()!;
+ expect(last.matches('.tn[data-id="11"][data-after="12"]') && last.textContent?.includes(reply)).toBe(true);
+ expect(isAbove($('.thread [data-exchange="12"]'), last)).toBe(true);
+});
+
 test("messages before the first announcement share one presence below the newest bubble", async () => {
  api.agentAskText.mockReturnValue(new Promise(() => {}));
  mount(); await flush();

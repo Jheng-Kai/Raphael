@@ -4030,6 +4030,30 @@ export function checkRendered(name, context = {}) {
     require(presence.every(node => node.getBoundingClientRect().top >= bubble.bottom), "the working slime stays under the message");
     return {check:name,lines:lines.length};
   }
+  if (name === "exchange-mid-work" || name === "exchange-mid-work-answered") {
+    // The work's start and what it said before the colleague wrote, the exchange line, then the work going on under it as the
+    // last line: its live line while it runs, the answer it gave after the exchange once it is over.
+    const lines = [...document.querySelectorAll('.thread > li.tn')];
+    const started = lines.findIndex(line => line.matches('[data-id="802"]:not([data-after])'));
+    const exchange = lines.findIndex(line => line.matches('[data-id="812"]') && line.querySelector('.exchange-event'));
+    const after = lines.findIndex(line => line.matches('[data-id="802"][data-after="812"]'));
+    require(started >= 0 && exchange === started + 1 && after === exchange + 1 && after === lines.length - 1,
+      `the work's start, the exchange, then the work going on last: ${[started, exchange, after, lines.length]}`);
+    require(lines[started].querySelector('.owner-message') && lines[started].textContent.includes("資料夾"), "the question and what the work said before stay above the exchange");
+    const line = lines[exchange].querySelector('.exchange-event');
+    require(visible(line) && line.textContent.includes("小森"), "the exchange line names the colleague");
+    const presence = [...document.querySelectorAll('.thread .live-presence')].filter(visible);
+    if (name === "exchange-mid-work") {
+      require(presence.length === 1 && lines[after].contains(presence[0]) && presence[0].getBoundingClientRect().top >= line.getBoundingClientRect().bottom,
+        `one live line, under the exchange line: ${presence.length}`);
+      require(presence[0].textContent.includes("cd"), "the live line says what the work does now");
+    } else {
+      const reply = [...lines[after].querySelectorAll('.chat-message[data-reply]')].find(node => node.textContent.includes("測試完了"));
+      require(!presence.length && visible(reply) && reply.getBoundingClientRect().top >= line.getBoundingClientRect().bottom, "the answer stands under the exchange line");
+      require(![...lines[started].querySelectorAll('.chat-message[data-reply]')].some(node => node.textContent.includes("測試完了")), "nothing said after the exchange is left above it");
+    }
+    return {check:name,lines:lines.length};
+  }
   if (name === "link-chips") {
     // As inline source chips: each link once, in the words, with no row of cards under the reply.
     const reply = [...document.querySelectorAll('.thread .chat-message[data-reply]')].filter(visible).at(-1);

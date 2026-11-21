@@ -35,7 +35,7 @@ export function mountConversationFind(o: { button?: HTMLElement; bar: HTMLElemen
   function position(scroll = false): void {
     if (results) {
       const target = results[resultIndex];
-      // A turn that owner messages joined is drawn in several lines (`turn:<id>:after:<message>`, conversation.ts threadItems).
+      // A turn that owner messages or exchanges joined is drawn in several lines (`turn:<id>:after:<turn>`, conversation.ts threadItems).
       const matching = target ? marks.filter(mark => mark.closest<HTMLElement>("[data-key]")?.dataset.key?.replace(/:after:\d+$/, "") === target.key) : [];
       index = matching.length ? marks.indexOf(matching[Math.min(target!.occurrence, matching.length - 1)]!) : -1;
     }
