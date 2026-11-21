@@ -3,6 +3,7 @@
 import asyncio
 import base64
 from collections import Counter
+from dataclasses import replace
 import inspect
 import json
 import logging
@@ -12,7 +13,7 @@ import unicodedata
 
 from . import carry_runtime
 from .checkpoints import EXCLUDED
-from .vm import VmError, exec_args
+from .vm import HOMES, VmError, exec_args
 
 logger = logging.getLogger(__name__)
 RECORD = '.raphael-carried.json'
@@ -169,10 +170,17 @@ async def candidates(vm, target):
                 keys.add(match[1])
     else:
         root = vm.homes
+        if not root.exists() and not root.is_symlink():
+            root = vm.placed(HOMES)
         if root.is_symlink():
             raise VmError('outside_workspace')
-        keys.update(path.name for path in root.iterdir() if re.fullmatch(r'[0-9a-f]{16}', path.name)
-                    and path.is_dir() and not path.is_symlink())
+        try:
+            keys.update(path.name for path in root.iterdir() if re.fullmatch(r'[0-9a-f]{16}', path.name)
+                        and path.is_dir() and not path.is_symlink())
+        except FileNotFoundError:
+            return []
+        return [(replace(vm.target_for('', key), workspace=root / key), names.get(key, 'member-' + key))
+                for key in sorted(keys)]
     return [(vm.target_for(host, key), names.get(key, 'member-' + key)) for key in sorted(keys)
             if re.fullmatch(r'[0-9a-f]{16}', key)]
 
