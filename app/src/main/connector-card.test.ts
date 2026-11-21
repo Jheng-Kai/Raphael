@@ -71,7 +71,8 @@ describe("a connector card", () => {
   });
 
   test("says where the sign-in stands, with the real tool count and a reconnect for an expired grant", () => {
-    expect(visible(connectorCardHTML(card({ state: "authorizing" })))).toContain(t("card.authorizing"));
+    // Said once, in the pill beside the title.
+    expect(visible(connectorCardHTML(card({ state: "authorizing" }))).split(t("card.authorizing")).length).toBe(2);
     expect(visible(connectorCardHTML(card({ state: "connected", tool_count: 2 })))).toContain("已連結 · 2 個工具");
     const expired = connectorCardHTML(card({ reconnect: true }));
     expect(visible(expired)).toContain("授權已過期");

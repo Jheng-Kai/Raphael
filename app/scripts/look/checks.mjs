@@ -10637,7 +10637,7 @@ export function checkRendered(name, context = {}) {
     const card = document.querySelector('[data-connector="card-google"]');
     require(visible(card) && card.classList.contains("connector-card"), "the Google card is visible");
     require(card.getBoundingClientRect().width <= 481 && card.scrollWidth <= card.clientWidth + 1, "the card fits its column");
-    const state = card.querySelector('.cc-state')?.textContent.trim() ?? "", footer = [...card.querySelectorAll('footer button')].filter(visible);
+    const state = (card.querySelector('.cc-state') ?? card.querySelector('[data-card-status-text]'))?.textContent.trim() ?? "", footer = [...card.querySelectorAll('footer button')].filter(visible);
     const sent = calls.filter(call => call.method === "integrations.card_connect");
     require(!document.body.textContent.includes(secret), "the secret is on no page text");
     require(!JSON.stringify(calls.filter(call => call.method !== "integrations.card_connect")).includes(secret), "no call but the card's own carries the secret");
@@ -10710,7 +10710,7 @@ export function checkRendered(name, context = {}) {
       const inside = button.getBoundingClientRect();
       require(inside.left >= box.left && inside.right <= box.right && inside.bottom <= box.bottom, "R-UI-25: the action is inside its card");
     }
-    const status = card.querySelector('.cc-state'), said = status?.textContent.trim() ?? "", app = card.querySelector('.cc-name').textContent;
+    const status = card.querySelector('.cc-state') ?? card.querySelector('[data-card-status-text]'), said = status?.textContent.trim() ?? "", app = card.querySelector('.cc-name').textContent;
     const expected = {
       "connector-card": ["pending", "", "連結", true],
       "connector-slack": ["pending", "", "連結", true],

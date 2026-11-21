@@ -147,7 +147,8 @@ export function connectorCardHTML(card: ConnectorCard, waiting?: OwnerQuestion):
     status: connected ? "done" : card.state === "failed" ? "failed" : card.state === "expired" || card.state === "cancelled" ? "ready" : "waiting",
     statusText: connected ? t("cards.connected") : card.state === "authorizing" ? t("card.authorizing") : asking && card.state === "pending" ? cardPromptText("key") : card.state === "pending" ? cardPromptText("connect") : card.state === "expired" ? t("cards.expired") : card.state === "cancelled" ? t(card.error === "skipped" ? "ownerQuestion.left" : "cards.cancelled") : undefined,
     // Closed by its × or left behind when the owner wrote again, a card is its title and pill alone: no form, no button.
-    body: closed ? undefined : state || t("cards.connectWhy"),
+    // A sign-in under way says so in its pill beside the title; the same words again under it would only repeat it.
+    body: closed || card.state === "authorizing" ? undefined : state || t("cards.connectWhy"),
     content: closed ? "" : note + reason + (asksGoogleClient(card) ? googleSetupHTML(card) : asksMore(card) && ["pending", "failed"].includes(card.state) ? setupSlotHTML(card) : ""),
     actions: connected ? btn(`${ico("check")}${esc(t("cards.connected"))}`, "sm", " disabled") : closed ? "" : actionHTML(card),
     // Every card that waits closes with its ×; closing it in the core also answers background work waiting on it.
