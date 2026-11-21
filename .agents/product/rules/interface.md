@@ -2,6 +2,12 @@
 
 Layout, controls, menus, floating surfaces, the sidebar, navigation, colours, words on screen and the guide. Part of [the product rules](../RULES.md); a rule's ID is unique across every file.
 
+## Local command completion
+
+| ID | Date | Rule | Check | Severity | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-PC-07 | | A local command on Windows or macOS, including a background job, completes when its shell exits. Capture stdout and stderr for up to one more second, then return the shell's exit code and keep its surviving descendants running. Timeout or cancellation terminates the command's process tree. A real timeout returns partial output with `timed_out: true` and a null exit code. | pytest | hard | core/tests/computer/test_local_commands.py::test_an_exited_local_command_leaves_its_pipe_holding_descendant_running; core/tests/computer/test_local_commands.py::test_a_local_command_timeout_kills_its_tree |
+
 ## Refreshing the spoken-language picker
 
 | ID | Date | Rule | Check | Severity | Evidence |

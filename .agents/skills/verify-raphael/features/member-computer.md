@@ -1685,6 +1685,13 @@ Settings has no control for the mode. Where no card can be shown (a phone, an ex
 only under 全部允許; a room's speaking turn has its speaking tools alone, as before. Every prompt says commands may run hidden on the owner's PC with the owner's approval and that work to be
 seen is done on the member's own computer (`agent/capabilities.py`, `persona._SHARED_CONTRACT`).
 
+On Windows and macOS, a local command finishes when its shell exits (R-PC-07). Its bounded
+stdout and stderr buffers drain for up to one second, even if a descendant still holds a pipe open. The command
+returns the shell's exit code and leaves surviving descendants running. A timeout or stop terminates the process
+tree. A timed-out command has a null exit code and retains partial output. A background job follows the same
+rules because it uses the same host executor. The real-shell cases in `core/tests/computer/test_local_commands.py`
+exercise both paths with a descendant that inherits the output handles.
+
 The safety net (R-PC-06): outside a quick question a command whose purpose is to show something on the owner's screen
 (Start-Process, saps, start, cmd /c start, explorer, Invoke-Item, ii, rundll32 url.dll, Process.Start, a URL, a shortcut
 or a document typed as the command, a windowed program, `open` on a Mac) is refused in every mode without a card, and the

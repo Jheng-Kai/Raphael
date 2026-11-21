@@ -4,9 +4,12 @@ import asyncio
 import sys
 import json
 import os
+import shlex
+import signal
 from unittest.mock import AsyncMock
 
 import pytest
+from agent.test_cli_brains import alive
 
 from raphael_core.agent.gate import ToolGate
 from raphael_core.agent.policy import Action, Confirmations, Tier
@@ -281,6 +284,106 @@ def test_output_retains_head_and_tail_with_bounded_memory():
 REAL_SHELL_GUARD = 120
 
 
+@pytest.fixture
+def command_tree(tmp_path):
+    script = tmp_path / "tree.py"
+    marker = tmp_path / "pids.json"
+    script.write_text("""import json, os, subprocess, sys, time
+from pathlib import Path
+
+child = subprocess.Popen(
+    [sys.executable, "-c",
+     "import sys, time; time.sleep(.4); print('descendant stderr', file=sys.stderr, flush=True); time.sleep(20)"],
+    stdout=sys.stdout, stderr=sys.stderr,
+)
+marker = Path("pids.json")
+pending = marker.with_suffix(".tmp")
+pending.write_text(json.dumps([os.getpid(), child.pid]))
+pending.replace(marker)
+print("tree stdout", flush=True)
+print("tree stderr", file=sys.stderr, flush=True)
+if sys.argv[1] == "sleep":
+    time.sleep(20)
+""", encoding="utf-8")
+
+    def command(mode):
+        if sys.platform == "win32":
+            python = sys.executable.replace("'", "''")
+            # A parameter block uses the runner path without PowerShell's per-statement output pipeline.
+            return f"param(); & '{python}' tree.py {mode}; exit $LASTEXITCODE"
+        return f"{shlex.quote(sys.executable)} tree.py {mode}"
+
+    try:
+        yield command, marker
+    finally:
+        if marker.exists():
+            for pid in json.loads(marker.read_text()):
+                if alive(pid):
+                    try:
+                        os.kill(pid, signal.SIGTERM)
+                    except ProcessLookupError:
+                        pass
+
+
+async def run_command_tree(hub, command, folder, *, background, timeout):
+    result = await hub.call("mcp:local/local_exec", {
+        "command": command, "cwd": str(folder), "background": background, "timeout_seconds": timeout,
+    }, approver="user")
+    if not background:
+        assert result.ok or result.kind == "timeout", result
+        return json.loads(result.text)
+    assert result.ok, result
+    job_id = json.loads(result.text)["job_id"]
+    async with asyncio.timeout(timeout + 5):
+        while True:
+            result = await hub.call("mcp:local/local_job", {"job_id": job_id}, approver="user")
+            assert result.ok, result
+            data = json.loads(result.text)
+            if data["state"] != "running":
+                assert data["state"] == "done", data
+                return data
+            await asyncio.sleep(.05)
+
+
+@pytest.mark.skipif(sys.platform not in ("win32", "darwin"), reason="Windows and macOS local commands")
+@pytest.mark.parametrize("background", [False, True], ids=["foreground", "background"])
+async def test_an_exited_local_command_leaves_its_pipe_holding_descendant_running(local, command_tree, background):
+    hub, _, _ = local
+    hub.host = LocalHost()
+    command, marker = command_tree
+    start = asyncio.get_running_loop().time()
+    try:
+        data = await run_command_tree(hub, command("exit"), marker.parent, background=background, timeout=12)
+        assert data["exit_code"] == 0 and data["timed_out"] is False, data
+        assert asyncio.get_running_loop().time() - start < 6
+        assert "tree stdout" in data["stdout"] and "tree stderr" in data["stderr"], data
+        assert "descendant stderr" in data["stderr"], data
+        parent, descendant = json.loads(marker.read_text())
+        assert not alive(parent) and alive(descendant)
+    finally:
+        await hub.aclose()
+
+
+@pytest.mark.skipif(sys.platform not in ("win32", "darwin"), reason="Windows and macOS local commands")
+@pytest.mark.parametrize("background", [False, True], ids=["foreground", "background"])
+async def test_a_local_command_timeout_kills_its_tree(local, command_tree, background):
+    hub, _, _ = local
+    hub.host = LocalHost()
+    command, marker = command_tree
+    try:
+        data = await run_command_tree(hub, command("sleep"), marker.parent, background=background, timeout=5)
+        assert data["exit_code"] is None and data["timed_out"] is True, data
+        assert "tree stdout" in data["stdout"] and "tree stderr" in data["stderr"], data
+        if not background:
+            assert data["error"] == "timeout" and "timed out and was stopped" in data["message"], data
+        parent, descendant = json.loads(marker.read_text())
+        async with asyncio.timeout(3):
+            while alive(parent) or alive(descendant):
+                await asyncio.sleep(.05)
+    finally:
+        await hub.aclose()
+
+
 @pytest.mark.skipif(os.name != "nt", reason="Windows PowerShell adapter")
 async def test_real_powershell_readonly_output_nonzero_and_closed_stdin():
     result = await LocalHost().execute("Write-Output 'harmless-readonly-測試'; exit 7", timeout_seconds=REAL_SHELL_GUARD)
@@ -338,6 +441,8 @@ async def test_adapter_filters_environment_and_kills_on_timeout_and_cancel(monke
         async def kill(self):
             self.killed = True
             self.process.returncode = kill_code
+        def close_pipes(self):
+            pass
     monkeypatch.setattr(local_host, 'CommandChild', FakeChild)
     monkeypatch.setattr(local_host, 'PLATFORM', platform)
     monkeypatch.setenv('LOCAL_TEST_API_KEY', 'synthetic')
