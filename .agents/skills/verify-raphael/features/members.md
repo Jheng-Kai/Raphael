@@ -471,8 +471,10 @@ Core evidence: tests/members/test_admin_proposals.py covers both fake API and
 sequential HTTP MCP paths, edits, the turn going on after the yes with the real IDs, the
 automatic mode creating at once, a safety rule that asks, cancellation, expiry, resend,
 atomic rollback, target scope, current safety, saved first Bot identity and replay.
-Guardian S01 runs the production loops for both fake brains. Browser IPC fixtures
-prove rendered interactions only; live brains and native persistence remain separate.
+Guardian S01 runs the production loops for both fake brains. Its team comparison checks the
+roster configuration as drafts open, wait and are cancelled. Unread threads and waiting cards
+continue to feed the status light. Browser IPC fixtures prove rendered interactions only;
+live brains and native persistence remain separate.
 
 ## Right click is the ⋯ (R-UI-44)
 

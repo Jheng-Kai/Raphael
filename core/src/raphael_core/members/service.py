@@ -153,6 +153,12 @@ _SOURCE_LABEL = {"github": "GitHub", "notion": "Notion"}
 _COLON = with_ui_words({"zh-TW": "：", "en": ": ", "ja": "："})
 _ASCII_WORD = re.compile(r"[A-Za-z0-9 ._-]+")
 
+# Live fields on members.list rows, including per-conversation status-light inputs.
+ROSTER_ACTIVITY_FIELDS = (
+    "waiting", "waiting_cards", "unread", "unread_from", "unread_kind", "unread_threads",
+    "preview", "last_at", "activity", "activity_label",
+)
+
 
 def unread_kind(turns: Sequence[tuple]) -> str:
     """What the unseen news of a thread is, from its unseen turns as `(status, source, routine, task)`:

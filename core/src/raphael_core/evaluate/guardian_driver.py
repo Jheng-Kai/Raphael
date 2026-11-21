@@ -24,6 +24,7 @@ from ..brain.settings import SettingsStore
 from ..integrations.client import CallOutcome, McpConnector, McpFailure
 from ..integrations.config import ServerConfig, ToolRecord, fingerprint
 from ..integrations.vault import secret_name
+from ..members.service import ROSTER_ACTIVITY_FIELDS
 from ..memory.store import told_stamp
 from ..worker.loop import Stop
 from .desktop_fixture import DesktopFixture
@@ -355,8 +356,9 @@ class RpcDriver:
 
             async def team_state():
                 roster = await self.app.call("members.list", {})
+                # Drafts and replies change the conversation status before any team edit is applied.
                 for member in roster["members"]:
-                    for field in ("waiting", "unread", "unread_from", "unread_kind", "preview", "last_at", "activity", "activity_label"):
+                    for field in ROSTER_ACTIVITY_FIELDS:
                         member.pop(field, None)
                 return roster
 
