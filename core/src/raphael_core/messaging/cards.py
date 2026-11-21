@@ -7,6 +7,7 @@ from ..agent.history import AgentHistory
 from ..clock import wall_clock_ms
 from ..protocol import invalid_params
 from .core import session_target
+from .words import words
 
 LINKS = {"telegram": "https://t.me/BotFather", "slack": "https://api.slack.com/apps", "discord": "https://discord.com/developers/applications"}
 NAMES = {"telegram": "Telegram", "slack": "Slack", "discord": "Discord"}
@@ -115,10 +116,23 @@ class MessagingCards:
             if approve:
                 result = await self.service._approve(row["account"], {"code": row["code"]})
                 self.finish(identifier, "approved" if result["approved"] else "expired")
+                if result["approved"]:
+                    self._say_paired(row)
             else:
                 await self.service._reject(row["account"], {"code": row["code"]})
                 self.finish(identifier, "rejected")
         return {"card": self.view(self.conn.execute("SELECT * FROM messaging_pairing_cards WHERE id=?", (identifier,)).fetchone())}
+
+    def _say_paired(self, row):
+        """Once the owner allows a pairing, its member says so in the conversation, under the card: the newest words stand
+        last, never the card the owner just answered (R-PAIR-LINE-01). The words are the ones the chat itself is sent."""
+        card_turn = self.history.get(row["turn_id"])
+        language = self.service._language()
+        turn_id = self.history.add(session_id="paired-" + row["id"], question="", route="answer", prefix="",
+                                   text=words(language, "paired"), status="done", source="messaging",
+                                   member_id=row["member_id"],
+                                   conversation_id=getattr(card_turn, "conversation_id", None) if card_turn else None)
+        self._changed(turn_id)
 
     @staticmethod
     def view(row):
