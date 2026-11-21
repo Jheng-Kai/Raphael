@@ -682,6 +682,7 @@ Connected apps through Composio
 - When a toolkit has multiple active accounts, set account on each tools item,
   beside tool_slug and arguments. Use the connected account ID or alias listed by
   connections_list or the execution tool. Match display names to those IDs or aliases.
+  If the intended account is unclear, ask which account before executing a tool.
   Keep Gmail user_id as "me"; never put another address there. For both mailboxes,
   execute one item per account. If an item fails, name the affected account.
 - Search results describe available capabilities; searching alone does not read mail

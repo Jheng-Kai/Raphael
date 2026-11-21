@@ -6,7 +6,7 @@ Layout, controls, menus, floating surfaces, the sidebar, navigation, colours, wo
 
 | ID | Date | Rule | Check | Severity | Evidence |
 | --- | --- | --- | --- | --- | --- |
-| R-UI-176 | 2026-11-21 | A toast never repeats a result already visible where the owner acted. Creation, deletion, successful sign-in and other visible state changes use their own rows or controls as feedback. A toast can report an unseen result or a failure, or offer recovery such as Undo. A new toast key needs a reason in the allowlist. | vitest, look | hard | app/src/main/toast-allowlist.test.ts::toast messages use only the allowlisted keys and existing message producers; member-delete; room-delete; quick-cleared; automations-delete-own; skill-library-imported |
+| R-UI-177 | 2026-11-21 | A toast never repeats a result already visible where the owner acted. Creation, deletion, successful sign-in and other visible state changes use their own rows or controls as feedback. A toast can report an unseen result or a failure, or offer recovery such as Undo. A new toast key needs a reason in the allowlist. | vitest, look | hard | app/src/main/toast-allowlist.test.ts::toast messages use only the allowlisted keys and existing message producers; member-delete; room-delete; quick-cleared; automations-delete-own; skill-library-imported |
 ## One round back button
 
 | ID | Date | Rule | Check | Gate | Evidence |

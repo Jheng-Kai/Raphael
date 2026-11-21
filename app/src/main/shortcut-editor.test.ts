@@ -106,7 +106,7 @@ test("the shell's refusal is said in the dialog, which stays open with nothing s
   expect(el.querySelector<HTMLButtonElement>('[data-dlg="save"]')!.disabled).toBe(false);
 });
 
-test("Esc drops a recording first, then closes the dialog with nothing saved; 取消 does too", async () => {
+test("Esc stops recording before it closes the dialog and Cancel discards edits", async () => {
   const { app, saved, el } = open();
   button(el, "dictation_keys").click();
   await flush();
@@ -124,7 +124,7 @@ test("Esc drops a recording first, then closes the dialog with nothing saved; �
   expect(saved).not.toHaveBeenCalled();
 });
 
-test("a combination another shortcut has, or one that is no good, is said and kept out; trading keys saves in one patch", async () => {
+test("duplicate and invalid shortcuts are refused and reassigned keys save in one patch", async () => {
   const { app, el } = open();
   await record(el, "tidy_keys", "AltRight", "Space");
   expect(el.querySelector(".kd-error")?.textContent).toBe("這組按鍵已經是「問拉斐爾」的快捷鍵");
