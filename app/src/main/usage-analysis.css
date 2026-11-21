@@ -33,7 +33,7 @@
 .ua-x > span:last-child { justify-self: end; }
 
 /* The legend: a short bar of the line's colour, its name and what it adds up to. */
-.ua-legend { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: var(--sp-3) var(--sp-4); margin: 0; padding: var(--sp-1) 0 0; list-style: none; }
+.ua-legend { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-3) var(--sp-4); margin: 0; padding: var(--sp-1) 0 0; list-style: none; }
 .ua-legend > li { display: grid; grid-template-columns: 3px minmax(0, 1fr); column-gap: var(--sp-2); align-items: center; min-width: 0; }
 .ua-legend > li > i { grid-row: 1 / span 2; align-self: stretch; border-radius: var(--mark-radius); background: var(--c); }
 .ua-lname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-xs); color: var(--text-2); }
@@ -73,5 +73,4 @@
 .usage-cap .sel { width: 100%; max-width: 100%; justify-content: space-between; padding: 0 var(--sp-2) 0 var(--sp-3); border: 1px solid var(--btn-edge); background: var(--btn); }
 .usage-cap .sel > span { flex: 1; min-width: 0; text-align: left; }
 .usage-cap .field { width: 100%; }
-.usage-cap .cap-note { margin: 0; font-size: var(--fs-2xs); line-height: 1.55; color: var(--text-2); text-wrap: pretty; }
 .usage-cap .cap-error { margin: 0; font-size: var(--fs-2xs); color: var(--err); }

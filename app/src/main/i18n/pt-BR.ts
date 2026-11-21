@@ -2197,9 +2197,9 @@ export const ptBR = {
   "usage.limitUsed": "Limite {p0}, {p1}% usado",
   "usage.noCap": "Sem limite",
   "usage.setCap": "Definir limite",
-  "usage.capNoteOn": "No limite, as respostas pagas param; as assinaturas continuam.",
-  "usage.capNoteOff": "Sem limite, tudo continua funcionando, custe o que custar.",
-  "usage.plansNote": "Os limites de cada assinatura: ao esgotar, é preciso esperar que sejam renovados.",
+ 
+ 
+ 
   "usage.fiveHour": "Limite de 5 horas",
   "usage.weekly": "Limite semanal",
   "usage.resetsIn": "Renova em {p0}",
@@ -2214,7 +2214,7 @@ export const ptBR = {
   "usage.keyUsed": "{p0} usado neste mês, limite {p1}",
   "usage.keyUsedOnly": "{p0} usado neste mês",
   "usage.costTitle": "Gastos",
-  "usage.costNote": "Quanto cada dia custou e com o quê. O uso de assinaturas não entra aqui.",
+ 
   "usage.range": "Período",
   "usage.days7": "7 dias",
   "usage.days30": "30 dias",
@@ -2227,7 +2227,7 @@ export const ptBR = {
   "usage.costChart": "Gasto por dia",
   "usage.noSpend": "Nada foi gasto neste período.",
   "usage.whoTitle": "Quem gastou mais",
-  "usage.whoNote": "As respostas, o gasto e o modelo mais usado de cada um neste período.",
+ 
   "usage.colName": "Nome",
   "usage.colReplies": "Respostas",
   "usage.colCost": "Gasto",
@@ -2235,13 +2235,13 @@ export const ptBR = {
   "usage.more": "Mostrar mais",
   "usage.noReplies": "Ninguém respondeu neste período.",
   "usage.toolsTitle": "Uso de ferramentas",
-  "usage.toolsNote": "Quais ferramentas foram usadas neste período e quantas vezes.",
+ 
   "usage.toolCalls": "Chamadas de ferramentas",
   "usage.calls": "{p0} chamadas",
   "usage.toolsChart": "Chamadas de ferramentas por dia",
   "usage.noTools": "Nenhuma ferramenta foi usada neste período.",
   "usage.messagesTitle": "Mensagens",
-  "usage.messagesNote": "Quantas respostas foram enviadas neste período.",
+ 
   "usage.messages": "{p0} mensagens",
   "usage.messagesGroup": "Agrupar mensagens",
   "usage.messagesChart": "Mensagens por dia",

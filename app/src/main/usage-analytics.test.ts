@@ -136,7 +136,7 @@ it("each window is named, says how long until it resets and what is left over it
   expect(chatgpt.querySelector(".run-who")!.textContent).toBe("owner@example.test");
   expect(chatgpt.querySelector(".run-unreadable [data-run-act=\"chatgpt-usage\"]")!.textContent).toBe("管理用量");
   // The section says what these limits are.
-  expect(host.querySelector(".run-allowance > header")!.textContent).toBe("方案額度訂閱方案自己的上限，用完要等它重設。");
+  expect(host.querySelector(".run-allowance > header")!.textContent).toBe("方案額度");
   view.destroy();
 });
 

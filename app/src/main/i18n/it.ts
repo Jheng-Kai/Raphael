@@ -2197,9 +2197,9 @@ export const it = {
   "usage.limitUsed": "Limite {p0}, {p1}% usato",
   "usage.noCap": "Nessun limite",
   "usage.setCap": "Imposta un limite",
-  "usage.capNoteOn": "Al limite, le risposte a pagamento si fermano; gli abbonamenti continuano.",
-  "usage.capNoteOff": "Senza limite, tutto continua a funzionare qualunque sia il costo.",
-  "usage.plansNote": "I limiti propri di ogni abbonamento: esauriti, bisogna attendere il ripristino.",
+ 
+ 
+ 
   "usage.fiveHour": "Limite di 5 ore",
   "usage.weekly": "Limite settimanale",
   "usage.resetsIn": "Si ripristina tra {p0}",
@@ -2214,7 +2214,7 @@ export const it = {
   "usage.keyUsed": "{p0} usato questo mese, limite {p1}",
   "usage.keyUsedOnly": "{p0} usato questo mese",
   "usage.costTitle": "Spese",
-  "usage.costNote": "Quanto è costato ogni giorno e per cosa. L’uso degli abbonamenti non è incluso.",
+ 
   "usage.range": "Periodo",
   "usage.days7": "7 giorni",
   "usage.days30": "30 giorni",
@@ -2227,7 +2227,7 @@ export const it = {
   "usage.costChart": "Spesa al giorno",
   "usage.noSpend": "Nessuna spesa in questo periodo.",
   "usage.whoTitle": "Chi ha speso di più",
-  "usage.whoNote": "Risposte, spesa e modello più usato di ciascuno in questo periodo.",
+ 
   "usage.colName": "Nome",
   "usage.colReplies": "Risposte",
   "usage.colCost": "Spesa",
@@ -2235,13 +2235,13 @@ export const it = {
   "usage.more": "Mostra altro",
   "usage.noReplies": "Nessuno ha risposto in questo periodo.",
   "usage.toolsTitle": "Uso degli strumenti",
-  "usage.toolsNote": "Quali strumenti sono stati usati in questo periodo e quante volte.",
+ 
   "usage.toolCalls": "Chiamate agli strumenti",
   "usage.calls": "{p0} chiamate",
   "usage.toolsChart": "Chiamate agli strumenti al giorno",
   "usage.noTools": "Nessuno strumento usato in questo periodo.",
   "usage.messagesTitle": "Messaggi",
-  "usage.messagesNote": "Quante risposte sono state inviate in questo periodo.",
+ 
   "usage.messages": "{p0} messaggi",
   "usage.messagesGroup": "Raggruppa messaggi",
   "usage.messagesChart": "Messaggi al giorno",

@@ -87,8 +87,8 @@ const labelled = (n: number, i: number): boolean => i === n - 1 || (n <= 7 ? i =
 /** The colour slot of a line: the chart colours in order (styles.css --chart-1…), 其他 in a quiet grey. */
 const slot = (series: UsageSeries, i: number): string => (series.key === "__other__" ? "other" : String(i + 1));
 
-const heading = (title: string, note: string, controls = ""): string =>
-  `<h2>${esc(title)}</h2><p class="ua-note">${esc(note)}</p>` + (controls ? `<div class="ua-controls">${controls}</div>` : "");
+const heading = (title: string, controls = ""): string =>
+  `<h2>${esc(title)}</h2>` + (controls ? `<div class="ua-controls">${controls}</div>` : "");
 const emptyLine = (text: string): string => `<p class="ua-line">${esc(text)}</p>`;
 
 /** The legend under a chart: each line's colour, its name and what it adds up to. */
@@ -182,7 +182,7 @@ export function usageAnalysisHTML(v: UsageAnalysisView, names: UsageAnalysisName
   ], v.range, { label: t("usage.range"), kind: "filter" });
   const spent = data !== null && data.cost_by[v.group].total > 0;
   const cost = `<section class="sgroup ua" data-ua-section="cost">` +
-    heading(t("usage.costTitle"), t("usage.costNote"), range + (spent ? sel(COST_GROUPS(), v.group, t("usage.groupBy"), ' data-k="ua-group"') : "")) +
+    heading(t("usage.costTitle"), range + (spent ? sel(COST_GROUPS(), v.group, t("usage.groupBy"), ' data-k="ua-group"') : "")) +
     (v.data === null ? `<p class="ua-line" role="status">${esc(t("usage.loading"))}</p>` : v.data === "failed" ? emptyLine(t("usage.failed")) : spent ? costHTML(v, v.data, names) : emptyLine(t("usage.noSpend"))) +
     `</section>`;
   if (data === null) return cost;
@@ -191,9 +191,9 @@ export function usageAnalysisHTML(v: UsageAnalysisView, names: UsageAnalysisName
     { id: "source", label: t("usage.bySource"), attrs: ' data-ua-messages="source"' },
   ], v.messages, { label: t("usage.messagesGroup"), kind: "filter" });
   return cost +
-    `<section class="sgroup ua" data-ua-section="people">${heading(t("usage.whoTitle"), t("usage.whoNote"))}${peopleHTML(v, data, names)}</section>` +
-    `<section class="sgroup ua" data-ua-section="tools">${heading(t("usage.toolsTitle"), t("usage.toolsNote"))}${toolsHTML(data, names)}</section>` +
-    `<section class="sgroup ua" data-ua-section="messages">${heading(t("usage.messagesTitle"), t("usage.messagesNote"), data.messages_by.model.total || data.messages_by.source.total ? sources : "")}${messagesHTML(v, data, names)}</section>`;
+    `<section class="sgroup ua" data-ua-section="people">${heading(t("usage.whoTitle"))}${peopleHTML(v, data, names)}</section>` +
+    `<section class="sgroup ua" data-ua-section="tools">${heading(t("usage.toolsTitle"))}${toolsHTML(data, names)}</section>` +
+    `<section class="sgroup ua" data-ua-section="messages">${heading(t("usage.messagesTitle"), data.messages_by.model.total || data.messages_by.source.total ? sources : "")}${messagesHTML(v, data, names)}</section>`;
 }
 
 export interface UsageAnalysisApi {

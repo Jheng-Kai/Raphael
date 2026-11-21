@@ -2197,9 +2197,9 @@ export const es = {
   "usage.limitUsed": "Límite {p0}, {p1}% usado",
   "usage.noCap": "Sin límite",
   "usage.setCap": "Poner un límite",
-  "usage.capNoteOn": "Al llegar al límite, las respuestas de pago se detienen; las suscripciones siguen.",
-  "usage.capNoteOff": "Sin límite, todo sigue funcionando cueste lo que cueste.",
-  "usage.plansNote": "Los límites propios de cada suscripción: al agotarlos, hay que esperar a que se renueven.",
+ 
+ 
+ 
   "usage.fiveHour": "Límite de 5 horas",
   "usage.weekly": "Límite semanal",
   "usage.resetsIn": "Se renueva en {p0}",
@@ -2214,7 +2214,7 @@ export const es = {
   "usage.keyUsed": "{p0} usado este mes, límite {p1}",
   "usage.keyUsedOnly": "{p0} usado este mes",
   "usage.costTitle": "Gastos",
-  "usage.costNote": "Cuánto costó cada día y en qué. El uso de suscripciones no cuenta aquí.",
+ 
   "usage.range": "Período",
   "usage.days7": "7 días",
   "usage.days30": "30 días",
@@ -2227,7 +2227,7 @@ export const es = {
   "usage.costChart": "Gasto por día",
   "usage.noSpend": "No hubo gastos en este período.",
   "usage.whoTitle": "Quién gastó más",
-  "usage.whoNote": "Las respuestas, el gasto y el modelo más usado de cada uno en este período.",
+ 
   "usage.colName": "Nombre",
   "usage.colReplies": "Respuestas",
   "usage.colCost": "Gasto",
@@ -2235,13 +2235,13 @@ export const es = {
   "usage.more": "Mostrar más",
   "usage.noReplies": "Nadie respondió en este período.",
   "usage.toolsTitle": "Uso de herramientas",
-  "usage.toolsNote": "Qué herramientas se usaron en este período y cuántas veces.",
+ 
   "usage.toolCalls": "Llamadas a herramientas",
   "usage.calls": "{p0} llamadas",
   "usage.toolsChart": "Llamadas a herramientas por día",
   "usage.noTools": "No se usaron herramientas en este período.",
   "usage.messagesTitle": "Mensajes",
-  "usage.messagesNote": "Cuántas respuestas se enviaron en este período.",
+ 
   "usage.messages": "{p0} mensajes",
   "usage.messagesGroup": "Agrupar mensajes",
   "usage.messagesChart": "Mensajes por día",

@@ -2012,9 +2012,9 @@ export const en = {
   "usage.limitUsed": "Limit {p0}, {p1}% used",
   "usage.noCap": "No limit",
   "usage.setCap": "Set a limit",
-  "usage.capNoteOn": "At the limit, paid replies stop; subscriptions carry on.",
-  "usage.capNoteOff": "With no limit, everything keeps working whatever it costs.",
-  "usage.plansNote": "Each subscription's own limits: once used up, wait for them to reset.",
+ 
+ 
+ 
   "usage.fiveHour": "5-hour limit",
   "usage.weekly": "Weekly limit",
   "usage.resetsIn": "Resets in {p0}",
@@ -2029,7 +2029,7 @@ export const en = {
   "usage.keyUsed": "{p0} used this month, limit {p1}",
   "usage.keyUsedOnly": "{p0} used this month",
   "usage.costTitle": "Spending",
-  "usage.costNote": "What each day cost and what it went on. Subscription usage is not counted here.",
+ 
   "usage.range": "Period",
   "usage.days7": "7 days",
   "usage.days30": "30 days",
@@ -2042,7 +2042,7 @@ export const en = {
   "usage.costChart": "Spending per day",
   "usage.noSpend": "Nothing was spent in this period.",
   "usage.whoTitle": "Who spent most",
-  "usage.whoNote": "Each one's replies, spending and most used model in this period.",
+ 
   "usage.colName": "Name",
   "usage.colReplies": "Replies",
   "usage.colCost": "Spent",
@@ -2050,13 +2050,13 @@ export const en = {
   "usage.more": "Show more",
   "usage.noReplies": "No one replied in this period.",
   "usage.toolsTitle": "Tool use",
-  "usage.toolsNote": "Which tools were used in this period, and how often.",
+ 
   "usage.toolCalls": "Tool calls",
   "usage.calls": "{p0} calls",
   "usage.toolsChart": "Tool calls per day",
   "usage.noTools": "No tools were used in this period.",
   "usage.messagesTitle": "Messages",
-  "usage.messagesNote": "How many replies were sent in this period.",
+ 
   "usage.messages": "{p0} messages",
   "usage.messagesGroup": "Group messages by",
   "usage.messagesChart": "Messages per day",

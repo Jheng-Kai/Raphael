@@ -2197,9 +2197,9 @@ export const ru = {
   "usage.limitUsed": "Лимит {p0}, использовано {p1}%",
   "usage.noCap": "Без лимита",
   "usage.setCap": "Задать лимит",
-  "usage.capNoteOn": "При достижении лимита платные ответы останавливаются, подписки работают как обычно.",
-  "usage.capNoteOff": "Без лимита всё работает как обычно, сколько бы это ни стоило.",
-  "usage.plansNote": "Собственные лимиты подписок: когда они исчерпаны, нужно ждать сброса.",
+ 
+ 
+ 
   "usage.fiveHour": "Лимит на 5 часов",
   "usage.weekly": "Недельный лимит",
   "usage.resetsIn": "Сброс через {p0}",
@@ -2214,7 +2214,7 @@ export const ru = {
   "usage.keyUsed": "В этом месяце {p0}, лимит {p1}",
   "usage.keyUsedOnly": "В этом месяце {p0}",
   "usage.costTitle": "Расходы",
-  "usage.costNote": "Сколько стоил каждый день и на что ушли деньги. Подписки здесь не учитываются.",
+ 
   "usage.range": "Период",
   "usage.days7": "7 дней",
   "usage.days30": "30 дней",
@@ -2227,7 +2227,7 @@ export const ru = {
   "usage.costChart": "Расходы по дням",
   "usage.noSpend": "За этот период расходов нет.",
   "usage.whoTitle": "Кто потратил больше",
-  "usage.whoNote": "Ответы, расходы и самая используемая модель каждого за этот период.",
+ 
   "usage.colName": "Имя",
   "usage.colReplies": "Ответы",
   "usage.colCost": "Расходы",
@@ -2235,13 +2235,13 @@ export const ru = {
   "usage.more": "Показать ещё",
   "usage.noReplies": "За этот период ответов нет.",
   "usage.toolsTitle": "Использование инструментов",
-  "usage.toolsNote": "Какие инструменты использовались за этот период и сколько раз.",
+ 
   "usage.toolCalls": "Вызовы инструментов",
   "usage.calls": "{p0} вызовов",
   "usage.toolsChart": "Вызовы инструментов по дням",
   "usage.noTools": "За этот период инструменты не использовались.",
   "usage.messagesTitle": "Сообщения",
-  "usage.messagesNote": "Сколько ответов отправлено за этот период.",
+ 
   "usage.messages": "{p0} сообщ.",
   "usage.messagesGroup": "Группировка сообщений",
   "usage.messagesChart": "Сообщения по дням",

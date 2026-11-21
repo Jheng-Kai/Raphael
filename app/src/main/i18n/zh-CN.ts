@@ -2197,9 +2197,9 @@ export const zhCN = {
   "usage.limitUsed": "上限 {p0}，已用 {p1}%",
   "usage.noCap": "不设上限",
   "usage.setCap": "设上限",
-  "usage.capNoteOn": "到了上限，要付费的回复会先停下来；订阅方案照常。",
-  "usage.capNoteOff": "不设上限时，花多少都照常工作。",
-  "usage.plansNote": "订阅方案自己的上限，用完要等它重置。",
+ 
+ 
+ 
   "usage.fiveHour": "5 小时额度",
   "usage.weekly": "每周额度",
   "usage.resetsIn": "{p0}后重置",
@@ -2214,7 +2214,7 @@ export const zhCN = {
   "usage.keyUsed": "本月已用 {p0}，上限 {p1}",
   "usage.keyUsedOnly": "本月已用 {p0}",
   "usage.costTitle": "花费记录",
-  "usage.costNote": "每天花了多少、花在哪里。订阅方案的用量不算在这里。",
+ 
   "usage.range": "期间",
   "usage.days7": "7 天",
   "usage.days30": "30 天",
@@ -2227,7 +2227,7 @@ export const zhCN = {
   "usage.costChart": "每天的花费",
   "usage.noSpend": "这段时间没有花费。",
   "usage.whoTitle": "谁花最多",
-  "usage.whoNote": "这段时间每一位的回复次数、花费和最常用的模型。",
+ 
   "usage.colName": "名字",
   "usage.colReplies": "回复",
   "usage.colCost": "花费",
@@ -2235,13 +2235,13 @@ export const zhCN = {
   "usage.more": "显示更多",
   "usage.noReplies": "这段时间没有人回复。",
   "usage.toolsTitle": "工具使用",
-  "usage.toolsNote": "这段时间大家用了哪些工具、用了几次。",
+ 
   "usage.toolCalls": "工具调用",
   "usage.calls": "{p0} 次",
   "usage.toolsChart": "每天的工具调用次数",
   "usage.noTools": "这段时间没有用到工具。",
   "usage.messagesTitle": "消息",
-  "usage.messagesNote": "这段时间回了多少条消息。",
+ 
   "usage.messages": "{p0} 条",
   "usage.messagesGroup": "消息分类",
   "usage.messagesChart": "每天的消息数",

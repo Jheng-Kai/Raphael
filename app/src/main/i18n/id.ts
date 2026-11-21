@@ -2197,9 +2197,9 @@ export const id = {
   "usage.limitUsed": "Batas {p0}, terpakai {p1}%",
   "usage.noCap": "Tanpa batas",
   "usage.setCap": "Atur batas",
-  "usage.capNoteOn": "Saat batas tercapai, balasan berbayar berhenti; langganan tetap berjalan.",
-  "usage.capNoteOff": "Tanpa batas, semuanya tetap berjalan berapa pun biayanya.",
-  "usage.plansNote": "Batas milik setiap langganan: setelah habis, tunggu sampai diatur ulang.",
+ 
+ 
+ 
   "usage.fiveHour": "Batas 5 jam",
   "usage.weekly": "Batas mingguan",
   "usage.resetsIn": "Diatur ulang dalam {p0}",
@@ -2214,7 +2214,7 @@ export const id = {
   "usage.keyUsed": "Terpakai {p0} bulan ini, batas {p1}",
   "usage.keyUsedOnly": "Terpakai {p0} bulan ini",
   "usage.costTitle": "Pengeluaran",
-  "usage.costNote": "Berapa biaya tiap hari dan untuk apa. Pemakaian langganan tidak dihitung di sini.",
+ 
   "usage.range": "Periode",
   "usage.days7": "7 hari",
   "usage.days30": "30 hari",
@@ -2227,7 +2227,7 @@ export const id = {
   "usage.costChart": "Pengeluaran per hari",
   "usage.noSpend": "Tidak ada pengeluaran pada periode ini.",
   "usage.whoTitle": "Siapa yang paling banyak",
-  "usage.whoNote": "Balasan, pengeluaran, dan model yang paling sering dipakai masing-masing pada periode ini.",
+ 
   "usage.colName": "Nama",
   "usage.colReplies": "Balasan",
   "usage.colCost": "Biaya",
@@ -2235,13 +2235,13 @@ export const id = {
   "usage.more": "Tampilkan lainnya",
   "usage.noReplies": "Tidak ada yang membalas pada periode ini.",
   "usage.toolsTitle": "Penggunaan alat",
-  "usage.toolsNote": "Alat apa saja yang dipakai pada periode ini dan berapa kali.",
+ 
   "usage.toolCalls": "Panggilan alat",
   "usage.calls": "{p0} panggilan",
   "usage.toolsChart": "Panggilan alat per hari",
   "usage.noTools": "Tidak ada alat yang dipakai pada periode ini.",
   "usage.messagesTitle": "Pesan",
-  "usage.messagesNote": "Berapa balasan yang dikirim pada periode ini.",
+ 
   "usage.messages": "{p0} pesan",
   "usage.messagesGroup": "Kelompokkan pesan",
   "usage.messagesChart": "Pesan per hari",

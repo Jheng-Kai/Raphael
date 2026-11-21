@@ -2011,9 +2011,9 @@ export const zhTW = {
   "usage.limitUsed": "上限 {p0}，已用 {p1}%",
   "usage.noCap": "不設上限",
   "usage.setCap": "設上限",
-  "usage.capNoteOn": "到了上限，要付費的回覆會先停下來；訂閱方案照常。",
-  "usage.capNoteOff": "不設上限時，花多少都照常工作。",
-  "usage.plansNote": "訂閱方案自己的上限，用完要等它重設。",
+ 
+ 
+ 
   "usage.fiveHour": "5 小時額度",
   "usage.weekly": "每週額度",
   "usage.resetsIn": "{p0}後重設",
@@ -2028,7 +2028,7 @@ export const zhTW = {
   "usage.keyUsed": "本月已用 {p0}，上限 {p1}",
   "usage.keyUsedOnly": "本月已用 {p0}",
   "usage.costTitle": "花費紀錄",
-  "usage.costNote": "每天花了多少、花在哪裡。訂閱方案的用量不算在這裡。",
+ 
   "usage.range": "期間",
   "usage.days7": "7 天",
   "usage.days30": "30 天",
@@ -2041,7 +2041,7 @@ export const zhTW = {
   "usage.costChart": "每天的花費",
   "usage.noSpend": "這段時間沒有花費。",
   "usage.whoTitle": "誰花最多",
-  "usage.whoNote": "這段時間每一位的回覆次數、花費和最常用的模型。",
+ 
   "usage.colName": "名字",
   "usage.colReplies": "回覆",
   "usage.colCost": "花費",
@@ -2049,13 +2049,13 @@ export const zhTW = {
   "usage.more": "顯示更多",
   "usage.noReplies": "這段時間沒有人回覆。",
   "usage.toolsTitle": "工具使用",
-  "usage.toolsNote": "這段時間大家用了哪些工具、用了幾次。",
+ 
   "usage.toolCalls": "工具呼叫",
   "usage.calls": "{p0} 次",
   "usage.toolsChart": "每天的工具呼叫次數",
   "usage.noTools": "這段時間沒有用到工具。",
   "usage.messagesTitle": "訊息",
-  "usage.messagesNote": "這段時間回了多少則訊息。",
+ 
   "usage.messages": "{p0} 則",
   "usage.messagesGroup": "訊息分類",
   "usage.messagesChart": "每天的訊息數",

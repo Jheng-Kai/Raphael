@@ -2197,9 +2197,9 @@ export const vi = {
   "usage.limitUsed": "Giới hạn {p0}, đã dùng {p1}%",
   "usage.noCap": "Không giới hạn",
   "usage.setCap": "Đặt giới hạn",
-  "usage.capNoteOn": "Khi chạm giới hạn, các câu trả lời trả phí sẽ dừng; gói đăng ký vẫn dùng bình thường.",
-  "usage.capNoteOff": "Không giới hạn thì mọi thứ vẫn chạy bình thường dù tốn bao nhiêu.",
-  "usage.plansNote": "Giới hạn riêng của từng gói đăng ký: dùng hết thì phải chờ đặt lại.",
+ 
+ 
+ 
   "usage.fiveHour": "Hạn mức 5 giờ",
   "usage.weekly": "Hạn mức hằng tuần",
   "usage.resetsIn": "Đặt lại sau {p0}",
@@ -2214,7 +2214,7 @@ export const vi = {
   "usage.keyUsed": "Tháng này đã dùng {p0}, giới hạn {p1}",
   "usage.keyUsedOnly": "Tháng này đã dùng {p0}",
   "usage.costTitle": "Chi tiêu",
-  "usage.costNote": "Mỗi ngày tốn bao nhiêu và tốn vào việc gì. Mức dùng gói đăng ký không tính ở đây.",
+ 
   "usage.range": "Khoảng thời gian",
   "usage.days7": "7 ngày",
   "usage.days30": "30 ngày",
@@ -2227,7 +2227,7 @@ export const vi = {
   "usage.costChart": "Chi tiêu mỗi ngày",
   "usage.noSpend": "Không có chi tiêu trong khoảng này.",
   "usage.whoTitle": "Ai chi nhiều nhất",
-  "usage.whoNote": "Số lần trả lời, chi tiêu và mô hình dùng nhiều nhất của từng người trong khoảng này.",
+ 
   "usage.colName": "Tên",
   "usage.colReplies": "Trả lời",
   "usage.colCost": "Chi tiêu",
@@ -2235,13 +2235,13 @@ export const vi = {
   "usage.more": "Hiện thêm",
   "usage.noReplies": "Không ai trả lời trong khoảng này.",
   "usage.toolsTitle": "Dùng công cụ",
-  "usage.toolsNote": "Những công cụ đã dùng trong khoảng này và bao nhiêu lần.",
+ 
   "usage.toolCalls": "Lượt gọi công cụ",
   "usage.calls": "{p0} lượt",
   "usage.toolsChart": "Lượt gọi công cụ mỗi ngày",
   "usage.noTools": "Không dùng công cụ nào trong khoảng này.",
   "usage.messagesTitle": "Tin nhắn",
-  "usage.messagesNote": "Số câu trả lời đã gửi trong khoảng này.",
+ 
   "usage.messages": "{p0} tin",
   "usage.messagesGroup": "Phân loại tin nhắn",
   "usage.messagesChart": "Tin nhắn mỗi ngày",

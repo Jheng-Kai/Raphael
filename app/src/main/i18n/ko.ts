@@ -2197,9 +2197,9 @@ export const ko = {
   "usage.limitUsed": "한도 {p0}, {p1}% 사용",
   "usage.noCap": "한도 없음",
   "usage.setCap": "한도 설정",
-  "usage.capNoteOn": "한도에 도달하면 유료 답장은 멈춥니다. 구독은 그대로 사용할 수 있습니다.",
-  "usage.capNoteOff": "한도가 없으면 비용과 관계없이 계속 작동합니다.",
-  "usage.plansNote": "구독 자체의 한도입니다. 다 쓰면 초기화될 때까지 기다려야 합니다.",
+ 
+ 
+ 
   "usage.fiveHour": "5시간 한도",
   "usage.weekly": "주간 한도",
   "usage.resetsIn": "{p0} 후 초기화",
@@ -2214,7 +2214,7 @@ export const ko = {
   "usage.keyUsed": "이번 달 {p0} 사용, 한도 {p1}",
   "usage.keyUsedOnly": "이번 달 {p0} 사용",
   "usage.costTitle": "지출 기록",
-  "usage.costNote": "매일 얼마를 어디에 썼는지 보여 줍니다. 구독 사용량은 포함하지 않습니다.",
+ 
   "usage.range": "기간",
   "usage.days7": "7일",
   "usage.days30": "30일",
@@ -2227,7 +2227,7 @@ export const ko = {
   "usage.costChart": "일별 지출",
   "usage.noSpend": "이 기간에는 지출이 없습니다.",
   "usage.whoTitle": "누가 가장 많이 썼나",
-  "usage.whoNote": "이 기간 각자의 답장 수, 지출, 가장 많이 쓴 모델입니다.",
+ 
   "usage.colName": "이름",
   "usage.colReplies": "답장",
   "usage.colCost": "지출",
@@ -2235,13 +2235,13 @@ export const ko = {
   "usage.more": "더 보기",
   "usage.noReplies": "이 기간에는 답장이 없습니다.",
   "usage.toolsTitle": "도구 사용",
-  "usage.toolsNote": "이 기간에 어떤 도구를 몇 번 썼는지 보여 줍니다.",
+ 
   "usage.toolCalls": "도구 호출",
   "usage.calls": "{p0}회",
   "usage.toolsChart": "일별 도구 호출",
   "usage.noTools": "이 기간에는 사용한 도구가 없습니다.",
   "usage.messagesTitle": "메시지",
-  "usage.messagesNote": "이 기간에 보낸 답장 수입니다.",
+ 
   "usage.messages": "{p0}개",
   "usage.messagesGroup": "메시지 분류",
   "usage.messagesChart": "일별 메시지 수",

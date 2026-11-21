@@ -1,5 +1,5 @@
 // The monthly limit (Settings › 用量 › 概覽, the gear on 這個月's card): a small popover with 不設上限 or 設上限 as a dropdown,
-// the amount in US$ when there is one, and a line of what the limit does. A change goes to the core at once, with no save
+// the amount in US$ when there is one. A change goes to the core at once, with no save
 // button: 不設上限 stores null, an amount is stored when it is typed (Enter, leaving the field, or closing the popover).
 // The popover stays open over a redraw of the page, on the gear drawn again in its place (`follow`).
 
@@ -22,8 +22,7 @@ export function usageCapHTML(o: { mode: CapMode; draft: string; invalid: boolean
   return `<h3>${esc(t("common.monthlyLimit"))}</h3>` +
     sel(CAP_MODES(), o.mode, t("common.monthlyLimit"), ' data-k="usage-cap-mode"') +
     (o.mode === "set" ? fieldHTML("", o.draft, { id: "limit-input", pre: "US$", num: true, label: t("common.monthlyLimit"), invalid: o.invalid }) : "") +
-    (o.invalid ? `<p class="cap-error" role="alert">${esc(t("common.limitInvalid"))}</p>` : "") +
-    `<p class="cap-note">${esc(t(o.mode === "set" ? "usage.capNoteOn" : "usage.capNoteOff"))}</p>`;
+    (o.invalid ? `<p class="cap-error" role="alert">${esc(t("common.limitInvalid"))}</p>` : "");
 }
 
 export interface UsageCap {
@@ -64,6 +63,11 @@ export function createUsageCap(o: { limit(): number | null; save(limit: number |
   function show(anchor: HTMLElement, focus: "choice" | "field" | null): void {
     panel = openPopover(anchor, usageCapHTML({ mode, draft, invalid }), {
       className: "menu usage-cap", role: "dialog", label: t("common.monthlyLimit"),
+      // Under the whole spend card, at the gear's right: the limit line and its bar stay in sight while it changes.
+      anchorRect: () => {
+        const gear = anchor.getBoundingClientRect(), card = anchor.closest(".spend-card")?.getBoundingClientRect();
+        return card ? new DOMRect(gear.left, card.top, gear.width, card.height) : gear;
+      },
       onClose: () => {
         if (moving) return;
         // Escape or a press outside: what was typed is the owner's choice all the same.

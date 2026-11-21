@@ -2197,9 +2197,9 @@ export const tr = {
   "usage.limitUsed": "Limit {p0}, %{p1} kullanıldı",
   "usage.noCap": "Limit yok",
   "usage.setCap": "Limit belirle",
-  "usage.capNoteOn": "Limite ulaşınca ücretli yanıtlar durur; abonelikler devam eder.",
-  "usage.capNoteOff": "Limit yokken maliyet ne olursa olsun her şey çalışmaya devam eder.",
-  "usage.plansNote": "Her aboneliğin kendi limitleri: bitince sıfırlanmasını beklemek gerekir.",
+ 
+ 
+ 
   "usage.fiveHour": "5 saatlik limit",
   "usage.weekly": "Haftalık limit",
   "usage.resetsIn": "{p0} sonra sıfırlanır",
@@ -2214,7 +2214,7 @@ export const tr = {
   "usage.keyUsed": "Bu ay {p0} kullanıldı, limit {p1}",
   "usage.keyUsedOnly": "Bu ay {p0} kullanıldı",
   "usage.costTitle": "Harcamalar",
-  "usage.costNote": "Her günün maliyeti ve neye harcandığı. Abonelik kullanımı burada sayılmaz.",
+ 
   "usage.range": "Dönem",
   "usage.days7": "7 gün",
   "usage.days30": "30 gün",
@@ -2227,7 +2227,7 @@ export const tr = {
   "usage.costChart": "Günlük harcama",
   "usage.noSpend": "Bu dönemde harcama yok.",
   "usage.whoTitle": "En çok kim harcadı",
-  "usage.whoNote": "Bu dönemde herkesin yanıt sayısı, harcaması ve en çok kullandığı model.",
+ 
   "usage.colName": "Ad",
   "usage.colReplies": "Yanıt",
   "usage.colCost": "Harcama",
@@ -2235,13 +2235,13 @@ export const tr = {
   "usage.more": "Daha fazla göster",
   "usage.noReplies": "Bu dönemde kimse yanıt vermedi.",
   "usage.toolsTitle": "Araç kullanımı",
-  "usage.toolsNote": "Bu dönemde hangi araçların kaç kez kullanıldığı.",
+ 
   "usage.toolCalls": "Araç çağrıları",
   "usage.calls": "{p0} çağrı",
   "usage.toolsChart": "Günlük araç çağrıları",
   "usage.noTools": "Bu dönemde araç kullanılmadı.",
   "usage.messagesTitle": "Mesajlar",
-  "usage.messagesNote": "Bu dönemde kaç yanıt gönderildi.",
+ 
   "usage.messages": "{p0} mesaj",
   "usage.messagesGroup": "Mesaj gruplama",
   "usage.messagesChart": "Günlük mesajlar",

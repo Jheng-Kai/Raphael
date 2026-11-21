@@ -2197,9 +2197,9 @@ export const fr = {
   "usage.limitUsed": "Limite {p0}, {p1} % utilisé",
   "usage.noCap": "Aucune limite",
   "usage.setCap": "Définir une limite",
-  "usage.capNoteOn": "À la limite, les réponses payantes s’arrêtent ; les abonnements continuent.",
-  "usage.capNoteOff": "Sans limite, tout continue de fonctionner, quel qu’en soit le coût.",
-  "usage.plansNote": "Les limites propres à chaque abonnement : une fois épuisées, il faut attendre leur renouvellement.",
+ 
+ 
+ 
   "usage.fiveHour": "Limite de 5 heures",
   "usage.weekly": "Limite hebdomadaire",
   "usage.resetsIn": "Renouvellement dans {p0}",
@@ -2214,7 +2214,7 @@ export const fr = {
   "usage.keyUsed": "{p0} utilisé ce mois-ci, limite {p1}",
   "usage.keyUsedOnly": "{p0} utilisé ce mois-ci",
   "usage.costTitle": "Dépenses",
-  "usage.costNote": "Ce que chaque jour a coûté et à quoi. L’usage des abonnements n’est pas compté ici.",
+ 
   "usage.range": "Période",
   "usage.days7": "7 jours",
   "usage.days30": "30 jours",
@@ -2227,7 +2227,7 @@ export const fr = {
   "usage.costChart": "Dépenses par jour",
   "usage.noSpend": "Aucune dépense sur cette période.",
   "usage.whoTitle": "Qui a le plus dépensé",
-  "usage.whoNote": "Les réponses, les dépenses et le modèle le plus utilisé de chacun sur cette période.",
+ 
   "usage.colName": "Nom",
   "usage.colReplies": "Réponses",
   "usage.colCost": "Dépensé",
@@ -2235,13 +2235,13 @@ export const fr = {
   "usage.more": "Afficher plus",
   "usage.noReplies": "Personne n’a répondu sur cette période.",
   "usage.toolsTitle": "Utilisation des outils",
-  "usage.toolsNote": "Quels outils ont servi sur cette période, et combien de fois.",
+ 
   "usage.toolCalls": "Appels d’outils",
   "usage.calls": "{p0} appels",
   "usage.toolsChart": "Appels d’outils par jour",
   "usage.noTools": "Aucun outil utilisé sur cette période.",
   "usage.messagesTitle": "Messages",
-  "usage.messagesNote": "Combien de réponses ont été envoyées sur cette période.",
+ 
   "usage.messages": "{p0} messages",
   "usage.messagesGroup": "Regrouper les messages",
   "usage.messagesChart": "Messages par jour",

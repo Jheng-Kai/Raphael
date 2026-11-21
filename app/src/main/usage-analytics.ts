@@ -130,7 +130,7 @@ export function mountUsageAnalytics(host: HTMLElement, api: UsageAnalyticsApi): 
     root.setAttribute("aria-busy", String(busy));
     root.setAttribute("aria-label", t("runs.allowance"));
     // No refresh of its own: Settings reads this again each time it opens, unseen (settings.ts `refreshInBackground`).
-    patchHTML(root, `<header><h2 tabindex="-1">${t("runs.allowance")}</h2><p class="ua-note">${esc(t("usage.plansNote"))}</p></header>${cards}`);
+    patchHTML(root, `<header><h2 tabindex="-1">${t("runs.allowance")}</h2></header>${cards}`);
     if (focused) root.querySelector<HTMLElement>(`[data-run-act="${focused}"]`)?.focus({ preventScroll: true });
   }
 

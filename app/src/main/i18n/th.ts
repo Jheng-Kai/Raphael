@@ -2197,9 +2197,9 @@ export const th = {
   "usage.limitUsed": "วงเงิน {p0} ใช้ไป {p1}%",
   "usage.noCap": "ไม่จำกัด",
   "usage.setCap": "ตั้งวงเงิน",
-  "usage.capNoteOn": "เมื่อถึงวงเงิน คำตอบที่มีค่าใช้จ่ายจะหยุด แพ็กเกจสมาชิกยังใช้ได้ตามปกติ",
-  "usage.capNoteOff": "เมื่อไม่จำกัด ทุกอย่างทำงานตามปกติไม่ว่าจะใช้เท่าไร",
-  "usage.plansNote": "วงเงินของแพ็กเกจสมาชิกเอง ใช้หมดแล้วต้องรอรีเซ็ต",
+ 
+ 
+ 
   "usage.fiveHour": "วงเงิน 5 ชั่วโมง",
   "usage.weekly": "วงเงินรายสัปดาห์",
   "usage.resetsIn": "รีเซ็ตในอีก {p0}",
@@ -2214,7 +2214,7 @@ export const th = {
   "usage.keyUsed": "เดือนนี้ใช้ไป {p0} วงเงิน {p1}",
   "usage.keyUsedOnly": "เดือนนี้ใช้ไป {p0}",
   "usage.costTitle": "บันทึกค่าใช้จ่าย",
-  "usage.costNote": "แต่ละวันใช้ไปเท่าไรและใช้กับอะไร ไม่รวมการใช้แพ็กเกจสมาชิก",
+ 
   "usage.range": "ช่วงเวลา",
   "usage.days7": "7 วัน",
   "usage.days30": "30 วัน",
@@ -2227,7 +2227,7 @@ export const th = {
   "usage.costChart": "ค่าใช้จ่ายรายวัน",
   "usage.noSpend": "ไม่มีค่าใช้จ่ายในช่วงนี้",
   "usage.whoTitle": "ใครใช้มากที่สุด",
-  "usage.whoNote": "จำนวนครั้งที่ตอบ ค่าใช้จ่าย และโมเดลที่ใช้บ่อยที่สุดของแต่ละคนในช่วงนี้",
+ 
   "usage.colName": "ชื่อ",
   "usage.colReplies": "การตอบ",
   "usage.colCost": "ค่าใช้จ่าย",
@@ -2235,13 +2235,13 @@ export const th = {
   "usage.more": "แสดงเพิ่มเติม",
   "usage.noReplies": "ไม่มีใครตอบในช่วงนี้",
   "usage.toolsTitle": "การใช้เครื่องมือ",
-  "usage.toolsNote": "เครื่องมือที่ใช้ในช่วงนี้และจำนวนครั้ง",
+ 
   "usage.toolCalls": "การเรียกใช้เครื่องมือ",
   "usage.calls": "{p0} ครั้ง",
   "usage.toolsChart": "การเรียกใช้เครื่องมือรายวัน",
   "usage.noTools": "ไม่มีการใช้เครื่องมือในช่วงนี้",
   "usage.messagesTitle": "ข้อความ",
-  "usage.messagesNote": "จำนวนคำตอบที่ส่งในช่วงนี้",
+ 
   "usage.messages": "{p0} ข้อความ",
   "usage.messagesGroup": "จัดกลุ่มข้อความ",
   "usage.messagesChart": "ข้อความรายวัน",

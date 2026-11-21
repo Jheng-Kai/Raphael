@@ -2197,9 +2197,9 @@ export const de = {
   "usage.limitUsed": "Limit {p0}, {p1} % genutzt",
   "usage.noCap": "Kein Limit",
   "usage.setCap": "Limit festlegen",
-  "usage.capNoteOn": "Am Limit stoppen kostenpflichtige Antworten; Abos laufen weiter.",
-  "usage.capNoteOff": "Ohne Limit läuft alles weiter, egal was es kostet.",
-  "usage.plansNote": "Die eigenen Limits jedes Abos: Sind sie aufgebraucht, heißt es warten, bis sie zurückgesetzt werden.",
+ 
+ 
+ 
   "usage.fiveHour": "5-Stunden-Limit",
   "usage.weekly": "Wochenlimit",
   "usage.resetsIn": "Zurückgesetzt in {p0}",
@@ -2214,7 +2214,7 @@ export const de = {
   "usage.keyUsed": "Diesen Monat {p0} genutzt, Limit {p1}",
   "usage.keyUsedOnly": "Diesen Monat {p0} genutzt",
   "usage.costTitle": "Ausgaben",
-  "usage.costNote": "Was jeder Tag gekostet hat und wofür. Abo-Nutzung zählt hier nicht.",
+ 
   "usage.range": "Zeitraum",
   "usage.days7": "7 Tage",
   "usage.days30": "30 Tage",
@@ -2227,7 +2227,7 @@ export const de = {
   "usage.costChart": "Ausgaben pro Tag",
   "usage.noSpend": "In diesem Zeitraum wurde nichts ausgegeben.",
   "usage.whoTitle": "Wer am meisten ausgab",
-  "usage.whoNote": "Antworten, Ausgaben und meistgenutztes Modell jedes Einzelnen in diesem Zeitraum.",
+ 
   "usage.colName": "Name",
   "usage.colReplies": "Antworten",
   "usage.colCost": "Ausgaben",
@@ -2235,13 +2235,13 @@ export const de = {
   "usage.more": "Mehr anzeigen",
   "usage.noReplies": "In diesem Zeitraum hat niemand geantwortet.",
   "usage.toolsTitle": "Werkzeugnutzung",
-  "usage.toolsNote": "Welche Werkzeuge in diesem Zeitraum wie oft genutzt wurden.",
+ 
   "usage.toolCalls": "Werkzeugaufrufe",
   "usage.calls": "{p0} Aufrufe",
   "usage.toolsChart": "Werkzeugaufrufe pro Tag",
   "usage.noTools": "In diesem Zeitraum wurden keine Werkzeuge genutzt.",
   "usage.messagesTitle": "Nachrichten",
-  "usage.messagesNote": "Wie viele Antworten in diesem Zeitraum gesendet wurden.",
+ 
   "usage.messages": "{p0} Nachrichten",
   "usage.messagesGroup": "Nachrichten gruppieren",
   "usage.messagesChart": "Nachrichten pro Tag",

@@ -2012,9 +2012,9 @@ export const ja = {
   "usage.limitUsed": "上限 {p0}、{p1}% 使用",
   "usage.noCap": "上限なし",
   "usage.setCap": "上限を設定",
-  "usage.capNoteOn": "上限に達すると、有料の返信は止まります。サブスクリプションはそのまま使えます。",
-  "usage.capNoteOff": "上限がないと、金額にかかわらずそのまま動きます。",
-  "usage.plansNote": "サブスクリプション自体の上限です。使い切るとリセットまで待ちます。",
+ 
+ 
+ 
   "usage.fiveHour": "5 時間枠",
   "usage.weekly": "週間枠",
   "usage.resetsIn": "{p0}後にリセット",
@@ -2029,7 +2029,7 @@ export const ja = {
   "usage.keyUsed": "今月 {p0} 使用、上限 {p1}",
   "usage.keyUsedOnly": "今月 {p0} 使用",
   "usage.costTitle": "支出の記録",
-  "usage.costNote": "毎日いくら、何に使ったか。サブスクリプションの利用は含みません。",
+ 
   "usage.range": "期間",
   "usage.days7": "7 日",
   "usage.days30": "30 日",
@@ -2042,7 +2042,7 @@ export const ja = {
   "usage.costChart": "1 日ごとの支出",
   "usage.noSpend": "この期間の支出はありません。",
   "usage.whoTitle": "支出が多い順",
-  "usage.whoNote": "この期間のそれぞれの返信回数、支出、よく使ったモデル。",
+ 
   "usage.colName": "名前",
   "usage.colReplies": "返信",
   "usage.colCost": "支出",
@@ -2050,13 +2050,13 @@ export const ja = {
   "usage.more": "さらに表示",
   "usage.noReplies": "この期間の返信はありません。",
   "usage.toolsTitle": "ツールの利用",
-  "usage.toolsNote": "この期間に使われたツールと回数。",
+ 
   "usage.toolCalls": "ツール呼び出し",
   "usage.calls": "{p0} 回",
   "usage.toolsChart": "1 日ごとのツール呼び出し",
   "usage.noTools": "この期間に使われたツールはありません。",
   "usage.messagesTitle": "メッセージ",
-  "usage.messagesNote": "この期間に返したメッセージの数。",
+ 
   "usage.messages": "{p0} 件",
   "usage.messagesGroup": "メッセージの分類",
   "usage.messagesChart": "1 日ごとのメッセージ数",
