@@ -1015,9 +1015,9 @@ test("a question nobody replaced is let go when its time and a little more are u
   expect(confirm).not.toHaveBeenCalled();
 });
 
-test("a question that does not say how long it waits waits 30 s", () => {
+test("a question that does not say how long it waits waits 10 minutes, as the shell does (R-LIMIT-02)", () => {
   asked({ timeout_ms: Number.NaN });
-  vi.advanceTimersByTime(30_000 + 1500 - 833 - 1);
+  vi.advanceTimersByTime(600_000 + 1500 - 833 - 1);
   expect(view.log).toEqual([]);
   vi.advanceTimersByTime(1);
   expect(view.log).toContain("ask-hide");

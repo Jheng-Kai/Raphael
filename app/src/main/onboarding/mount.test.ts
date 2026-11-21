@@ -335,7 +335,8 @@ describe("step 2: the services", () => {
       await vi.advanceTimersByTimeAsync(100);
       await opened;
       expect(root.querySelector("#ob-conn .spin")).not.toBeNull();
-      await vi.advanceTimersByTimeAsync(15_000);
+      // It waits as long as the core would (SERVICES_WAIT_MS, R-LIMIT-02), then offers another try.
+      await vi.advanceTimersByTimeAsync(600_000);
       expect(root.querySelector('[data-ob="conn-reload"]')).not.toBeNull();
       root.querySelector<HTMLElement>('[data-ob="conn-reload"]')!.click();
       await vi.advanceTimersByTimeAsync(100);

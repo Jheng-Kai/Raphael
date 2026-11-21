@@ -10085,7 +10085,7 @@ export function checkRendered(name, context = {}) {
         require(rows.size <= 3 && rows.size < kinds.length, `a narrow page's kinds are pills that wrap, not a tall list (${rows.size} rows)`);
       }
       for (const item of kinds) require(item.querySelector("span").scrollWidth <= item.querySelector("span").clientWidth + 1, `${item.dataset.cat} shows its whole name`);
-      const expected = { soul: ["ms-personality", "ms-instructions"], skills: ["ms-skills", "ms-commands"], tools: ["ms-tools", "ms-draft"], notify: ["ms-notify"] }[category];
+      const expected = { soul: ["ms-personality", "ms-instructions"], skills: ["ms-skills", "ms-commands"], tools: ["ms-tools", "ms-draft", "ms-folders"], notify: ["ms-notify"] }[category];
       const sections = [...pane.querySelectorAll(".ms-section[data-k]")].filter(visible).map(section => section.dataset.k);
       require(sections.join() === expected.join(), `${category} shows ${expected.join()} (${sections.join()})`);
       for (const section of pane.querySelectorAll(".ms-section[data-k]")) {
@@ -10093,7 +10093,8 @@ export function checkRendered(name, context = {}) {
         require(visible(list) && getComputedStyle(list).backgroundColor !== "rgba(0, 0, 0, 0)", `${section.dataset.k} is a tinted list`);
         // A kind with one section needs no name over it: the column says it.
         if (expected.length > 1 && category !== "tools") require(visible(head) && head.querySelector("h2").textContent.trim(), `${section.dataset.k} has its name over the list`);
-        else require(!head || !head.querySelector("h2"), `${section.dataset.k} does not repeat the kind's name`);
+        // A section of its own subject (the folders under 工具, with its + in its head) has its own name, never the kind's.
+        else require(!head?.querySelector("h2") || head.querySelector("h2").textContent.trim() !== pane.querySelector(`.ms-nav [data-cat="${category}"] span`)?.textContent.trim(), `${section.dataset.k} does not repeat the kind's name`);
         if (head?.querySelector("h2")) require(head.querySelector("h2").getBoundingClientRect().left > list.getBoundingClientRect().left, `${section.dataset.k}: the name starts inside the list's edge`);
         require(list.scrollHeight <= list.clientHeight + 1 && getComputedStyle(list).overflowY === "visible", `${section.dataset.k} does not scroll inside`);
       }
