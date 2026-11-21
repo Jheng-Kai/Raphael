@@ -8,9 +8,17 @@ export const NAME = "\u0000";
 
 export interface EventPerson { name: string; face: string }
 
-/** Indexed slots let localized list punctuation stay attached to its own words. */
-export function eventPeopleHTML(words: string, people: readonly EventPerson[], state = ""): string {
-  const parts = words.split(/(\u0000\d+\u0000)/g).map((part, index, parts) => {
+/** Pass as the count's value to `t()`: `eventPeopleHTML` puts the button that opens what the line counts in its place. */
+export const COUNT = "\u0000c\u0000";
+
+/** The part of a line that opens what it counts (「2 則訊息」): its words and the attributes the code reads on it. */
+export interface EventCount { words: string; attrs: string }
+
+/** Indexed slots let localized list punctuation stay attached to its own words. Only `count`, where `COUNT` stands, is a
+ *  button: the rest of the line is words, so a press beside them opens nothing. */
+export function eventPeopleHTML(words: string, people: readonly EventPerson[], state = "", count?: EventCount): string {
+  const parts = words.split(/(\u0000(?:\d+|c)\u0000)/g).map((part, index, parts) => {
+    if (part === COUNT) return count ? `<button type="button" class="btn event-count"${count.attrs}>${esc(count.words)}</button>` : "";
     const slot = /^\u0000(\d+)\u0000$/.exec(part);
     if (!slot) return esc(part);
     const person = people[Number(slot[1])];

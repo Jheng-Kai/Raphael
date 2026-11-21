@@ -1,5 +1,7 @@
 // The status list at the left of a conversation's top row: one icon, and a press lists who waits for the owner, who
 // works and who finished work the owner has not seen yet, each with a coloured dot. Picking one opens its conversation.
+// News the owner has not opened the list for puts a small dot on the icon, the colour of its most urgent row (waiting,
+// then failed, then finished); work under way adds none, and opening the list clears it until something new comes.
 
 import { t } from "./i18n";
 import type { Member } from "./types";
@@ -38,8 +40,16 @@ export function mountStatusLight(button: HTMLElement, o: {
       .sort((a, b) => ORDER[a.kind] - ORDER[b.kind]);
   }
 
+  /** What the owner has seen in the list: each member and kind it showed when it was last opened (`id:kind`). */
+  let seen = new Set<string>();
+  const news = (people: readonly Shown[]): Shown[] => people.filter(entry => entry.kind !== "busy");
+  const seenKey = (entry: Shown): string => `${entry.member.id}:${entry.kind}`;
+
   function draw(): void {
     const people = shown();
+    // The list is sorted most urgent first, so the first unseen row gives the dot its colour.
+    const dot = news(people).find(entry => !seen.has(seenKey(entry)))?.kind ?? "";
+    if ((button.dataset.dot ?? "") !== dot) { if (dot) button.dataset.dot = dot; else delete button.dataset.dot; }
     const needs = people.filter(entry => entry.kind === "needs" || entry.kind === "failed");
     const busy = people.filter(entry => entry.kind === "busy");
     const done = people.filter(entry => entry.kind === "done");
@@ -68,6 +78,8 @@ export function mountStatusLight(button: HTMLElement, o: {
   const GROUP = { needs: "status.groupNeeds", failed: "status.groupNeeds", busy: "status.groupBusy", done: "status.groupDone" } as const;
   button.addEventListener("click", () => {
     const people = shown();
+    seen = new Set(news(people).map(seenKey));
+    draw();
     openMenu(button, people.map(({ member, kind }) => ({
       value: String(member.id),
       label: member.name,

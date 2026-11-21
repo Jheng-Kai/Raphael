@@ -490,7 +490,7 @@ test("a hand-off line names its assignee and opens their conversation with the r
  const line=document.querySelector<HTMLElement>('[data-handoff="42"]')!;
  // The room takes nobody's side: the line names both members of the exchange.
  expect(line.textContent).toBe(`2 messages between ${t("agent.title")} and Alice`);
- line.click();
+ line.querySelector<HTMLElement>('.event-count')!.click();
  const chat=view.el.querySelector<HTMLElement>(':scope > .peer-chat')!;
  expect(chat.getAttribute('aria-label')).toBe(`${t("agent.title")} ⇄ Alice`);
  expect([...chat.querySelectorAll('.peer-line')].map(row=>row.querySelector('.peer-who')!.textContent)).toEqual([t("agent.title"),'Alice']);
@@ -510,7 +510,7 @@ test("a member's own work is its own line that opens its conversation, and each 
   {...base,task_id:43,work_turn_id:63,member_id:2,member_name:'Bob',from_member_id:0,state:'done',request:'Check the second source.',result:'Bob, done.'},
   {...base,task_id:44,work_turn_id:64,member_id:2,member_name:'Bob',from_member_id:0,state:'done',request:'And the third.',result:'Done too.'}]});
  const view=await pane();
- const lines=[...view.el.querySelectorAll<HTMLElement>('.handoff-row > button')];
+ const lines=[...view.el.querySelectorAll<HTMLElement>('.handoff-row > .handoff-event')];
  expect(lines.map(line=>line.textContent)).toEqual([`Alice's private workRunning`,`1 message between ${t("agent.title")} and AliceRunning`,`4 messages between ${t("agent.title")} and Bob`]);
  expect(lines[0]!.dataset.act).toBeUndefined();
  const opened=vi.fn();window.addEventListener('raphael:open-member',opened);
@@ -519,7 +519,7 @@ test("a member's own work is its own line that opens its conversation, and each 
   expect(opened.mock.calls[0][0].detail).toEqual({memberId:1,turnId:61});
   expect(view.el.querySelector('.peer-chat')).toBeNull();
  } finally { window.removeEventListener('raphael:open-member',opened); }
- lines[2]!.click();
+ lines[2]!.querySelector<HTMLElement>('.event-count')!.click();
  const chat=view.el.querySelector<HTMLElement>(':scope > .peer-chat')!;
  expect(chat.getAttribute('aria-label')).toBe(`${t("agent.title")} ⇄ Bob`);
  expect([...chat.querySelectorAll('.peer-line .message-text')].map(text=>text.textContent)).toEqual(['Check the second source.','Bob, done.','And the third.','Done too.']);

@@ -1,7 +1,8 @@
 // What a colleague said to a member, in that member's own chat: one centred line 「與 X 的 2 則訊息」, the same line the
-// asker's side shows (handoff-line.ts). It opens the two members' conversation in place of the thread (peer-chat.ts),
-// never an inline box under the line: what was asked and what the member answered are read there.
-import { eventPeopleHTML } from "./event-line";
+// asker's side shows (handoff-line.ts). Its count, 「2 則訊息」, opens the two members' conversation in place of the thread
+// (peer-chat.ts), never an inline box under the line: what was asked and what the member answered are read there.
+import { COUNT, eventPeopleHTML } from "./event-line";
+import { peerCountLink } from "./handoff-line";
 import { t } from "./i18n";
 import { peerCount, peerKey, peerStateWords } from "./peer-chat";
 import type { TurnLook } from "./timeline";
@@ -30,6 +31,6 @@ export function receivedLineHTML(turn: AgentTurn, look: TurnLook): string {
   const count = peerCount(views);
   const state = view.state === "done" ? "" : peerStateWords(view);
   const keys = [...new Set(views.map(peerKey))].join(" ");
-  return `<button type="button" class="btn event-open handoff-event exchange-event" data-act="peer-chat" data-exchange="${esc(turn.id)}" data-state="${esc(view.state)}" data-peer-keys="${esc(keys)}">` +
-    eventPeopleHTML(t(count === 1 ? "handoff.groupOne" : "handoff.group", { p0: count, p1: "\u00000\u0000" }), [person], state) + `</button>`;
+  return `<div class="handoff-event exchange-event" data-exchange="${esc(turn.id)}" data-state="${esc(view.state)}">` +
+    eventPeopleHTML(t("handoff.group", { p0: COUNT, p1: "\u00000\u0000" }), [person], state, peerCountLink(count, keys)) + `</div>`;
 }

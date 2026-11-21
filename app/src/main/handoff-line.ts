@@ -1,4 +1,4 @@
-import { eventLineHTML, eventPeopleHTML, NAME, type EventPerson } from "./event-line";
+import { COUNT, eventLineHTML, eventPeopleHTML, NAME, type EventPerson } from "./event-line";
 import { getLocale, t } from "./i18n";
 import { ownWork, peerCount, peerKey, peerStateWords } from "./peer-chat";
 import type { HandoffView } from "./types";
@@ -14,17 +14,20 @@ function linesState(tasks: readonly HandoffView[]): string {
   return tasks.some(task => ["queued", "running", "waiting"].includes(task.state)) ? t("handoff.groupActive") : "";
 }
 
-/** The attributes the code reads on a line that opens the conversation `tasks` count (peer-chat.ts). */
-function peerAttrs(tasks: readonly HandoffView[]): string {
+/** What the thread knows a line by (thread-diff.ts): the line itself carries it. */
+function lineAttrs(tasks: readonly HandoffView[]): string {
   const key = peerKey(tasks[0]!);
-  return ` data-act="peer-chat" data-handoff-group="${key}"` + (tasks.length === 1 ? ` data-handoff="${key}" data-state="${esc(tasks[0]!.state)}"` : "") +
-    ` data-peer-keys="${tasks.map(peerKey).join(" ")}"`;
+  return ` data-handoff-group="${key}"` + (tasks.length === 1 ? ` data-handoff="${key}" data-state="${esc(tasks[0]!.state)}"` : "");
 }
+
+/** The count that opens the conversation `tasks` count (peer-chat.ts): 「2 則訊息」, the one part of the line to press. */
+export const peerCountLink = (count: number, keys: string): { words: string; attrs: string } =>
+  ({ words: t(count === 1 ? "handoff.countOne" : "handoff.count", { p0: count }), attrs: ` data-act="peer-chat" data-peer-keys="${esc(keys)}"` });
 
 /**
  * What a turn sent colleagues, in one line: 「與 X 的 2 則訊息」 (the colleagues' faces and names, three at most and
- * a count of the others), and the state while one is unfinished. It is a button: the conversation it counts opens in
- * place of the thread (peer-chat.ts). Task numbers, or the colleague's record for a question with no task, stay in
+ * a count of the others), and the state while one is unfinished. Only its count, 「2 則訊息」, is a button: the
+ * conversation it counts opens in place of the thread (peer-chat.ts), and a press anywhere else on the line opens nothing. Task numbers, or the colleague's record for a question with no task, stay in
  * `data-handoff-group` and `data-handoff` for the code; the owner never reads them. Work the member handed to itself is
  * not a message to anyone: it goes on in this same conversation, so it has no line here.
  */
@@ -38,8 +41,8 @@ export function handoffGroupHTML(all: readonly HandoffLine[]): string {
   const names = new Intl.ListFormat(getLocale(), { style: "long", type: "conjunction" }).format(slots);
   const tasks = lines.map(line => line.task);
   const count = peerCount(tasks);
-  return `<button type="button" class="btn event-open handoff-event"${peerAttrs(tasks)}>` +
-    eventPeopleHTML(t(count === 1 ? "handoff.groupOne" : "handoff.group", { p0: count, p1: names }), people, linesState(tasks)) + `</button>`;
+  return `<div class="handoff-event"${lineAttrs(tasks)}>` +
+    eventPeopleHTML(t("handoff.group", { p0: COUNT, p1: names }), people, linesState(tasks), peerCountLink(count, tasks.map(peerKey).join(" "))) + `</div>`;
 }
 
 /** Which line of a group chat a hand-off joins: one per pair of members in a row, and each piece of own work alone. */
@@ -63,6 +66,6 @@ export function roomHandoffHTML(tasks: readonly HandoffView[], person: (id: numb
   const people = [person(first.from_member_id, ""), person(first.member_id, first.member_name)];
   const names = new Intl.ListFormat(getLocale(), { style: "long", type: "conjunction" }).format(people.map((_, i) => `\u0000${i}\u0000`));
   const count = peerCount(tasks);
-  return `<button type="button" class="btn event-open handoff-event"${peerAttrs(tasks)}>` +
-    eventPeopleHTML(t(count === 1 ? "handoff.betweenOne" : "handoff.between", { p0: count, p1: names }), people, linesState(tasks)) + `</button>`;
+  return `<div class="handoff-event"${lineAttrs(tasks)}>` +
+    eventPeopleHTML(t("handoff.between", { p0: COUNT, p1: names }), people, linesState(tasks), peerCountLink(count, tasks.map(peerKey).join(" "))) + `</div>`;
 }
