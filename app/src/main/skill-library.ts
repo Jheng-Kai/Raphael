@@ -174,7 +174,6 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
     try {
       const { package: made } = await core<{ package: LibraryPackage }>("skills.library.import", params);
       state.pasting = false;
-      toaster.info(t("skillLib.imported", { p0: made.name }));
       await load();
       // A package of several opens on its page, so whom it is for can be chosen at once: a large set reaches nobody until then.
       state.busy = false;
@@ -253,7 +252,7 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
       { id: "delete", label: t("skillLib.remove"), icon: "trash", ask: t("skillLib.removeAsk") },
     ], picked => {
       if (picked === "refresh") void core<{ package: LibraryPackage }>("skills.library.update", { key, refresh: true })
-        .then(result => { replace(result.package); toaster.info(t("skillLib.updated", { p0: result.package.name })); redraw(); })
+        .then(result => { replace(result.package); redraw(); })
         .catch(error => toaster.info(failureText(error)));
       else void core("skills.library.delete", { key })
         .then(() => {

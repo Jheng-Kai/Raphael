@@ -71,7 +71,8 @@ npm run look -- profile appearance dictation tools safety models about settings-
 
 ## Signed updates
 
-Time zone and output folder keep their regrouped owner rows; updates stay in About.
+Time zone and output folder keep their regrouped owner rows. Updates are available in About and the sidebar.
+A newer database also offers an update directly from its startup notice.
 
 ```powershell
 npm run look -- about-no-updater-key update-found update-ready update-auto settings-owner about --theme both --width 1120,720,1920x1080
@@ -92,15 +93,16 @@ maps to a quiet About row with the current app version, localized release-page g
 one shared button. It opens https://github.com/Jheng-Kai/Raphael/releases through the existing
 open_external_url boundary. No unavailable check/install/automatic controls or error notice
 appear. The native check returns before contacting the feed; the release-page action makes
-no update request. The configured-key UI remains unchanged. about-no-updater-key checks the
-real settings entry, native opener boundary and absence of another update check.
-A newer version shows escaped notes
-and Download and restart. Auto update is off by default; opt-in downloads in the background,
-then installs only after ten minutes of native idle and a complete idle roster on either platform. On a Mac the
-updater replaces the app bundle and the shell requests a restart. The signed
-artifact must include the manifest's version. One startup receipt reports the installed
-version when the main page is visible; hidden startup retains the receipt. Unknown state,
-missing core, active or waiting members prevent installation.
+no update request. about-no-updater-key checks the real settings entry, native opener boundary and
+absence of another update check.
+A newer version shows escaped notes and an install action. Background checking is on by default and
+checks and downloads hourly. An owner's press authorizes installation. It proceeds with an idle roster;
+active or waiting members defer the request until idle, and a second press cancels. An unknown roster
+defers installation. A core that refused a newer database starts no members, so that startup screen can
+install on request. The startup screen shows checking and downloading in the primary button, and reports
+a current version or unavailable updater in one line. On a Mac the updater replaces the app bundle and
+the shell requests a restart. The signed artifact must include the manifest's version. One startup receipt
+reports the installed version when the main page is visible; hidden startup retains the receipt.
 
 Selected look for the release-page fallback: about, about-no-updater-key, update-found,
 update-ready and update-auto; zh-TW, both themes, 1120,720,1920x1080. Inspect every contact
@@ -113,7 +115,7 @@ profile, chat, attachment-limits and attachment-too-large;
 zh-TW, both themes, 1120,720,1920x1080. Compare About's update actions and switch with
 General's existing controls.
 Judge must use this same run and external references. Fake fixtures do not prove real
-GitHub releases, OS idle time, native asset ranges, upgrade restart or one-shot persistence.
+GitHub releases, native asset ranges, upgrade restart or one-shot persistence.
 
 Targeted checks: updates, attachment-stream, settings-view, agent-attach,
 chat-composer, attachment-media, architecture and catalog Vitest; memory service

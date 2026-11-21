@@ -562,7 +562,6 @@ export function createServices(host: ServicesHost): ServicesPanel {
     redraw();
     try {
       await api.servicesSetKey(service, key);
-      toaster.info(t("services.keySaved"));
     } catch (err) {
       toaster.info(describeError(err));
     }
@@ -576,7 +575,6 @@ export function createServices(host: ServicesHost): ServicesPanel {
     redraw();
     try {
       await api.servicesClearKey(service);
-      toaster.info(t("services.keyRemoved", { p0: serviceName(service) }));
     } catch (err) {
       toaster.info(describeError(err));
     }
@@ -598,7 +596,6 @@ export function createServices(host: ServicesHost): ServicesPanel {
     await host.changeSetting("searxng_url", url);
     busy = null;
     await load();
-    if (url !== "") toaster.info(t("services.urlSaved"));
   }
 
   // ----- the page's events -----

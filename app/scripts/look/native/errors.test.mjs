@@ -13,8 +13,8 @@ describe("native document error capture", () => {
     try { expect(wrongLanguage("en", []).map(issue => issue.id)).toEqual(["outside", "stale"]); }
     finally { geometry.mockRestore(); visibility.mockRestore(); }
   });
-  it("accepts explicit successful history-clearing notices and rejects clearing errors", () => {
-    for (const text of ['Cleared the history of “Quick questions”', '已清除「快速提問」的紀錄', '「クイック質問」の履歴を消去しました']) expect(toastError(text)).toBe(false);
+  it("flags echo toasts and allows background model assignments", () => {
+    for (const text of ['Cleared the history of “Quick questions”', '已清除「快速提問」的紀錄', '「クイック質問」の履歴を消去しました']) expect(toastError(text)).toBe(true);
     for (const text of ['Could not clear history', '已清除「快速提問」的紀錄失敗', 'Cleared the history of “Quick questions” failed']) expect(toastError(text)).toBe(true);
     for (const text of ['Connected Claude Code. Empty features now use its recommended models.', '已連上 Claude Code，空著的功能用它的推薦模型填好了', 'Claude Code を接続しました。空いていた機能におすすめのモデルを設定しました。']) expect(toastError(text)).toBe(false);
     expect(toastError('已連上 Claude Code，但模型無法使用')).toBe(true);
@@ -61,7 +61,7 @@ describe("native document error capture", () => {
     const rejection = new Event("unhandledrejection");
     Object.defineProperty(rejection, "reason", { value: new Error("native rejection") });
     window.dispatchEvent(rejection);
-    document.body.innerHTML = '<div class="toast">Cannot set properties of null</div><div class="toast">Deleted test conversation</div><div class="toast">已建立「NativeSource」</div><div class="toast">Created NativeTarget</div><div class="toast">「NativeTarget」を作成しました</div>';
+    document.body.innerHTML = '<div class="toast">Cannot set properties of null</div><div class="toast">Connected Claude Code. Empty features now use its recommended models.</div>';
     await vi.waitFor(() => expect(errors).toHaveLength(2));
     expect(errors.map(error => error.kind)).toEqual(["unhandledrejection", "toast"]);
     expect(errors[1].message).toContain("Cannot set");

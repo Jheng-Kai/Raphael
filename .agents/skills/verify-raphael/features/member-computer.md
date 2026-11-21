@@ -98,8 +98,9 @@ itself and nothing moves. Sizes are the ones read on the owner's PC when the lay
 
 R-START-08: an owner test build and the installed edition open the same data and only one can run at a time. A newer
 committed SQLite schema, including one in the WAL, is refused before the original database or its sidecars are changed.
-The `start-newer-data` look scene opens the main window with a core returning the schema error and checks the localized
-startup notice.
+The `start-newer-data` look scene opens the main window with a core returning the schema error. It checks
+the centered notice and its single primary action, presses Update, and checks that the result stays in the
+window. Window tests cover checking, downloading and an unavailable updater.
 
 ```powershell
 npm run look -- start-newer-data --theme both --width 1120,720,1920x1080

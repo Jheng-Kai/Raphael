@@ -1863,7 +1863,7 @@ describe("what the dialog does", () => {
     expect(c.view().login).toBeNull();
   });
 
-  test("signs in to an app of the view with its 連結, and a card that was pressed reports in a toast", async () => {
+  test("signs in from the visible app card without a success toast", async () => {
     let finish!: (value: { connected: boolean; error?: string }) => void;
     api.integrationsConnect.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
     const c = createConnections(host);
@@ -1875,7 +1875,7 @@ describe("what the dialog does", () => {
     expect(api.integrationsConnect).toHaveBeenCalledTimes(1);
     finish({ connected: true }); await settle();
     expect(c.view().login).toBeNull();
-    expect(lastToast()).toBe("已連接 Linear");
+    expect(toaster.info).not.toHaveBeenCalled();
     expect(c.view().screen).toBe("apps");
   });
 
@@ -1893,13 +1893,13 @@ describe("what the dialog does", () => {
     c.click(button("join", { id: "linear" }));
     await settle();
     expect(c.view().open).toEqual({ kind: "app", id: "linear" });
-    expect(c.view().dialogNotice).toEqual({ text: "已連接 Linear", kind: "ok" });
+    expect(c.view().dialogNotice).toBeNull();
     expect(toaster.info).not.toHaveBeenCalled();
     const d = dom(connectionsHTML(c.view()));
     expect(d.querySelector(".cs-join .cs-state")).not.toBeNull();
     expect(d.querySelector(".cs-join [role=switch]")).not.toBeNull();
     expect(d.querySelector(".cs-join .cs-connect")).toBeNull();
-    expect(d.querySelector("[data-cs-notice]")!.textContent).toContain("已連接 Linear");
+    expect(d.querySelector("[data-cs-notice]")).toBeNull();
   });
 
   test("a login that fails says why on the app's page, with no toast; from a row it is a toast, and a cancelled one says nothing", async () => {
@@ -2171,7 +2171,7 @@ describe("what the dialog does", () => {
     expect(api.integrationsRefresh).toHaveBeenCalledWith("ab12");
   });
 
-  test("disconnects only on the second press, and tells where else the access can be taken away", async () => {
+  test("disconnects on the second press without a toast after successful revocation", async () => {
     vi.useFakeTimers();
     try {
       const c = createConnections(host);
@@ -2189,10 +2189,22 @@ describe("what the dialog does", () => {
       expect(api.integrationsDisconnect).toHaveBeenCalledTimes(1);
       expect(api.integrationsDisconnect).toHaveBeenCalledWith("ab12");
       expect(c.view().open).toBeNull();
-      expect(lastToast()).toContain("Notion 自己的設定");
+      expect(toaster.info).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  test("says where to revoke access if it was not revoked by the provider", async () => {
+    api.toolsetsList.mockResolvedValue({ groups: [{ ...notes, auth: "oauth" }, custom] });
+    api.integrationsDisconnect.mockResolvedValue({ removed: true, revoked: false });
+    const c = createConnections(host);
+    await c.load();
+    c.click(button("open", { id: "ab12" }));
+    c.click(button("disconnect", { id: "ab12" }));
+    c.click(button("disconnect", { id: "ab12" }));
+    await settle();
+    expect(toaster.info).toHaveBeenCalledExactlyOnceWith(t("conn.revokeInApp", { p0: "Notion" }));
   });
 
   test("a service whose login ran out signs in again from its page, which stays open", async () => {
@@ -2205,7 +2217,7 @@ describe("what the dialog does", () => {
     expect(api.integrationsConnect).toHaveBeenCalledWith({ id: "ab12" });
     await settle();
     expect(c.view().open).toEqual({ kind: "group", id: "ab12" });
-    expect(c.view().dialogNotice).toEqual({ text: "已重新登入 Notion", kind: "ok" });
+    expect(c.view().dialogNotice).toBeNull();
     expect(toaster.info).not.toHaveBeenCalled();
   });
 

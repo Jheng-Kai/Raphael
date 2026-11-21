@@ -15,7 +15,7 @@ export function withStandingChecks(scenes) {
     ...(["automations-calendar", "dictation-overview", "chat"].includes(original.name) ? [check("sidebar-shell")] : []),
     ...(original.name === "raphael-details" ? [check("details-quick-once")] : []),
     ...(original.name === "connector-reconnected" ? [check("conversation-scroll-edge")] : []),
-    ...(["quick-cleared", "conversation-delete-main", "member-delete"].includes(original.name) ? [check("toast-clearance")] : []),
+    ...(["conversation-delete-main"].includes(original.name) ? [check("toast-clearance")] : []),
     ...(original.name === "member-conversation-sections" ? [check("details-alignment")] : []),
     ...(["details", "raphael-details", "details-routines"].includes(original.name) ? [check("details-sheet")] : []),
     ...(["profile", "dictation", "appearance", "skins", "models", "usage"].includes(original.name) ? [check("settings-concise")] : []),

@@ -1716,7 +1716,7 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     await click(page, "#app-popover [data-confirm-item]");
     await click(page, "#app-popover [data-confirm-item]");
     await until(list => !list.some(row => row.id === added.id), "the deletion");
-    await wait(page, ".toast");
+    await page.waitForFunction(selector => !document.querySelector(selector), {}, memberEvent);
     await capture("deleted");
     result.assertions = { owner_event: made.id, member_event: added.id, added_by: added.added_by, moved: moved.start_ms !== made.start_ms, resized: resized.end_ms !== moved.end_ms };
     result.stored = { calendar_events: await events() };

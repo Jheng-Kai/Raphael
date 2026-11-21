@@ -344,7 +344,6 @@ export function createMembers(host: MembersHost): MembersShell {
     if (current !== RAPHAEL_ID && !ids.has(current)) {
       current = RAPHAEL_ID;
       host.onSelect(current);
-      toaster.info(t("common.deleted"));
       details.showMember();
     }
     // The panel's face is a picture of what the member is (asleep, waiting) and the words for it: those move it too.
@@ -523,7 +522,6 @@ export function createMembers(host: MembersHost): MembersShell {
       return null;
     }
     const id = answer.member.id;
-    toaster.info(t("members.created", { p0: made.name }));
     await load();
     select(id);
     // the routine the core offers goes in only with the owner's 加入, once the maker is gone

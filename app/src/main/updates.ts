@@ -3,6 +3,13 @@ import { t } from "./i18n";
 import { linkedText } from "./message-content";
 import { btn, esc, row, tg, toaster } from "./ui";
 
+export const UPDATE_STATUS_MS = 2000;
+
+export function updateErrorText(error: string): string {
+  return t(error === "not_configured" ? "update.unavailable" : error === "version" ? "update.versionError"
+    : error === "verification" ? "update.signatureError" : "update.feedError");
+}
+
 export function updateHTML(view: api.UpdateView | null, automatic: boolean, currentVersion = ""): string {
   if (view?.state === "error" && view.error === "not_configured") {
     return `<section class="sgroup" data-updates><h2>${esc(t("update.title"))}</h2><div class="slist">` +
@@ -12,11 +19,16 @@ export function updateHTML(view: api.UpdateView | null, automatic: boolean, curr
   const state = view?.state ?? "idle";
   const busy = ["checking", "downloading", "installing"].includes(state);
   const available = !!view?.version;
+  const waiting = state === "waiting";
+  const action = waiting ? "cancel" : available ? "install" : "check";
+  const description = state === "error" ? updateErrorText(view?.error ?? "") : t(waiting ? "update.waiting"
+    : state === "ready" ? "update.ready" : state === "downloading" ? "update.downloading"
+    : state === "checking" ? "update.checking" : available ? "update.available" : "update.current");
+  const label = t(waiting ? "update.cancel" : available ? state === "ready" ? "update.restart" : "update.install" : "update.check");
   // No heading over the row that already says 應用程式更新.
   return `<section class="sgroup" data-updates aria-label="${esc(t("update.title"))}"><div class="slist">` +
     row(available ? t("update.found", {p0:view!.version}) : t("update.title"),
-      state === "error" ? t(view?.error === "busy" ? "update.busy" : view?.error === "version" ? "update.versionError" : view?.error === "verification" ? "update.signatureError" : "update.feedError") : t(state === "ready" ? "update.ready" : state === "downloading" ? "update.downloading" : state === "checking" ? "update.checking" : available ? "update.available" : "update.current"),
-      btn(t(available ? state === "ready" ? "update.restart" : "update.install" : "update.check"), "", ` data-act="${available ? "update-install" : "update-check"}"${busy ? " disabled" : ""}`)) +
+      description, btn(label, "", ` data-act="update-${action}"${busy ? " disabled" : ""}`)) +
     row(t("update.auto"), t("update.autoHelp"), tg(automatic, t("update.auto"), ' data-k="auto-update"')) + `</div>` +
     (view?.notes ? `<p class="note update-notes">${linkedText(view.notes)}</p>` : "") + `</section>`;
 }
@@ -31,5 +43,5 @@ export async function installedUpdateNotice(): Promise<void> {
     document.addEventListener("visibilitychange", visible);
     return;
   }
-  try { const status = await api.updateControl("status"); if (status.installed) toaster.info(t("update.installed", {p0:status.installed})); } catch { /* A page can start before native services are ready. */ }
+  try { const status = await api.updateControl("receipt"); if (status.installed) toaster.info(t("update.installed", {p0:status.installed})); } catch { /* A page can start before native services are ready. */ }
 }

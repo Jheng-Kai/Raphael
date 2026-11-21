@@ -2,14 +2,27 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.checkVisibility() && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
-  if (name === "start-newer-data") {
+  if (name === "start-newer-data" || name === "start-newer-data-current") {
     const panel = document.querySelector(".main.startup-failed");
     const notice = panel?.querySelector('.missing-note[role="status"]');
     require(visible(notice), "the startup notice is visible");
     require(panel.getBoundingClientRect().width === panel.parentElement.getBoundingClientRect().width, "the startup notice has the main window's full grid width");
     require(!visible(document.getElementById("nav")) && !panel.querySelector(".composer"), "the unusable sidebar and conversation are absent");
+    const button = panel.querySelector("button.btn.pri[data-startup-update]");
+    const group = panel.querySelector(".startup-update");
+    require(visible(button) && !button.disabled && !group.querySelector("a") && group.querySelectorAll("button").length === 1, "one primary action offers an update");
+    const frame = panel.getBoundingClientRect(), line = notice.getBoundingClientRect();
+    require(Math.abs(line.left + line.width / 2 - (frame.left + frame.width / 2)) < 1, "the startup notice is centered horizontally");
+    require(Math.abs(line.top + line.height / 2 - (frame.top + frame.height / 2)) < 100, "the startup notice is centered vertically with its action");
+    if (name === "start-newer-data-current") {
+      require(window.__look.calls.filter(call => call.command === "update_control" && call.action === "install").length === 1, "one owner press asks the native updater");
+      require(visible(group.querySelector(".startup-update-result")) && !document.querySelector(".toast"), "the result stays on the startup screen");
+    }
     if (document.documentElement.lang === "zh-TW") {
       require(notice.textContent === "這份資料由較新版的 Raphael 建立。請更新 Raphael 後再開啟。", "the notice explains the newer data and asks the owner to update");
+    }
+    if (name === "start-newer-data-current" && document.documentElement.lang === "zh-TW") {
+      require(group.querySelector(".startup-update-result").textContent === "目前沒有可用更新。", "the result explains that there is no update");
     }
     return { check: name };
   }
@@ -586,7 +599,7 @@ export function checkRendered(name, context = {}) {
     if (name === 'skill-library-imported') {
       require(visible(document.querySelector('.skl-import #skl-source')) && !document.querySelector('#skl-text'), 'the card is back to the link');
       require(rowOf('pack:13')?.querySelector('.skl-single .d')?.textContent === '依日期整理行程與訂位' && accessOf('pack:13') === '整個團隊', 'the new skill is a row of its own, its words under its name, for the whole team');
-      require(document.querySelector('.toast')?.textContent.includes('已匯入「旅行行程」'), 'the owner is told it was imported');
+      require(!document.querySelector('.toast'), 'the new package is the only success feedback');
       const call = window.__look.calls.find(c => c.method === 'skills.library.import');
       require(call && call.params.text.includes('name: travel') && !('source' in call.params), 'the text went to the core as text');
     }
@@ -912,7 +925,7 @@ export function checkRendered(name, context = {}) {
     require(section.textContent.includes("改善更新安裝"), "release notes remain readable");
     require(visible(section.querySelector('[data-act="update-install"]')), "a framed install action is visible");
     if (name === "app-update-ready") require(section.textContent.includes("更新已驗證"), "verified state is explicit");
-    require(section.querySelector('[data-k="auto-update"]').getAttribute("aria-checked") === (name === "app-update-auto" ? "true" : "false"), "auto updates are opt-in");
+    require(section.querySelector('[data-k="auto-update"]').getAttribute("aria-checked") === (name === "app-update-auto" ? "true" : "false"), "the switch reflects whether background checks are enabled");
     return {check:name};
   }
   if (name === 'desktop-updating') {
@@ -5606,7 +5619,7 @@ export function checkRendered(name, context = {}) {
     require(!document.querySelector('[data-cancel-armed]'),"the armed state ends with cancellation");return {check:name};
   }
   if(name === "deleted-view") {
-    require(visible(document.querySelector('.toast')),"a localized success notice is shown");
+    require(!document.querySelector(".toast"), "the closed view is the success feedback");
     require(![...document.querySelectorAll('.au-room-pane, .au-routine-dialog')].some(el=>visible(el)&&!el.closest('[hidden]')),"the deleted object's view is closed");
     require(!document.body.textContent.includes('not found'),"deletion never lands on a missing object");return {check:name};
   }
@@ -5840,6 +5853,7 @@ export function checkRendered(name, context = {}) {
     if (name === "quick-cleared") {
       require(window.__look.calls.filter(call => call.method === "conversations.clear" && call.params.id === 4).length === 1, "history is cleared exactly once");
       require(window.__look.data.conversations.some(c => c.id === 4 && c.kind === "quick"), "the quick identity remains");
+      require(!document.querySelector(".toast"), "the empty conversation is the success feedback");
     }
     return { check: name };
   }
@@ -6098,7 +6112,7 @@ export function checkRendered(name, context = {}) {
       require(document.querySelector('.mb-pill-t')?.textContent === window.__look.data.members.find(item => item.id === 0)?.name, "deleting the selected member returns to Raphael");
     const asked = window.__look.calls.filter(call => call.method === "members.delete");
     require(asked.length === 1 && JSON.stringify(asked[0].params) === '{"id":2}', "the core is asked once to delete that member, and nothing else is sent with it");    require(!window.__look.data.members.some(item => item.id === 2) && !document.querySelector('[data-member="2"]'), "the member is gone from the team and the list");
-    require(document.querySelector(".toast")?.textContent.includes("已刪除「小森」"), "a notice names who was deleted");
+    require(!document.querySelector(".toast"), "the removed row is the success feedback");
     return { check: name };
   }
   if (name === "slime-one-working") {
@@ -7014,7 +7028,7 @@ export function checkRendered(name, context = {}) {
   if (name === "calendar-deleted") {
     require(window.__look.calls.some(item => item.method === "calendar.delete" && item.params.id === 1), "the core is told");
     require(!document.querySelector('[data-entry="own:1"]') && !document.querySelector('.au-pop-detail'), "the event and its detail are gone");
-    require(/牙醫回診/.test(document.querySelector('.toast')?.textContent ?? ""), "the shared notice names it");
+    require(!document.querySelector(".toast"), "the removed event is the success feedback");
     return { check: name };
   }
   if (name === "calendar-moved" || name === "calendar-resized") {

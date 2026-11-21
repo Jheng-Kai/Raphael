@@ -139,7 +139,7 @@ describe("main window translations", () => {
 
   test("keeps user data containing placeholders literal", () => {
     setLocale("en");
-    expect(t("dictionary.022", { p0: "{p0}<script>" })).toContain("{p0}<script>");
+    expect(t("update.found", { p0: "{p0}<script>" })).toContain("{p0}<script>");
   });
 
   test("keeps an existing error translated through repeated locale changes", () => {
@@ -156,7 +156,7 @@ describe("main window translations", () => {
     const error = "Raphael's core is not running";
     const errorMessage = translatedMessage(t("dictionary.021", { p0: () => describeError(error) }));
     const word = t("format.010");
-    const userMessage = translatedMessage(t("dictionary.022", { p0: word }));
+    const userMessage = translatedMessage(t("update.found", { p0: word }));
     for (const locale of ["en", "ja"] as const) {
       setLocale(locale);
       expect(errorMessage()).toContain(t("format.010"));

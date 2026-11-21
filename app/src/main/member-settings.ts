@@ -510,7 +510,6 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     skillBusy = true; draw();
     try {
       await api.core("members.skills.update", { member_id: host.member().id, id, text: current.text, expected_hash: current.revision });
-      toaster.info(t("mem.saved"));
       skillBusy = false; back(); await reloadSkills();
     } catch (error) { skillBusy = false; toaster.info(describeError(error)); draw(); }
   }

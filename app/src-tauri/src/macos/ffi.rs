@@ -189,8 +189,6 @@ pub const kCGEventOtherMouseUp: CGEventType = 26;
 pub const kCGEventOtherMouseDragged: CGEventType = 27;
 pub const kCGEventTapDisabledByTimeout: CGEventType = 0xFFFF_FFFE;
 pub const kCGEventTapDisabledByUserInput: CGEventType = 0xFFFF_FFFF;
-/// `kCGAnyInputEventType`: any kind of input, for the idle time.
-pub const kCGAnyInputEventType: CGEventType = 0xFFFF_FFFF;
 
 pub const kCGMouseButtonLeft: u32 = 0;
 
@@ -237,7 +235,6 @@ unsafe extern "C" {
     pub static kCGWindowIsOnscreen: CFStringRef;
 
     pub fn CGEventSourceCreate(state_id: i32) -> CGEventSourceRef;
-    pub fn CGEventSourceSecondsSinceLastEventType(state_id: i32, event_type: CGEventType) -> f64;
     pub fn CGEventSourceFlagsState(state_id: i32) -> CGEventFlags;
     pub fn CGEventSourceKeyState(state_id: i32, key: CGKeyCode) -> bool;
     pub fn CGEventSourceSetUserData(source: CGEventSourceRef, user_data: i64);

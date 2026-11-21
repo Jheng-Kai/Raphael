@@ -2490,7 +2490,7 @@ export function installMock(fixture, config = {}, target = window) {
       if (command === "update_control") {
         if (variant.appUpdate === "not_configured") return { state: "error", version: "", notes: "", error: "not_configured" };
         const sample = data.appUpdateSample;
-        return { state: variant.appUpdate === "ready" || data.device.auto_update ? "ready" : variant.appUpdate ? "found" : "idle", version: variant.appUpdate ? sample.version : "", notes: variant.appUpdate ? sample.notes : "", error: "" };
+        return { state: variant.appUpdate === "ready" || (variant.appUpdate && data.device.auto_update) ? "ready" : variant.appUpdate ? "found" : "idle", version: variant.appUpdate ? sample.version : "", notes: variant.appUpdate ? sample.notes : "", error: "" };
       }
       // The shell grants a stored id it can serve and answers with the id; the page asks for http://raphael-media.localhost/<id>
       // (convertFileSrc below), which the runner answers from storedFile with the native protocol's headers (media_protocol.rs).

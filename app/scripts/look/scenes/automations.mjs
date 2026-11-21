@@ -112,7 +112,7 @@ export default [
   scene("automations-detail-routine", "A routine is read here, says whose it is and opens to read", [...routineDetail, check("calendar-detail-read")]),
   scene("automations-detail-google", "A Google event is read here and says where it comes from", [...auto, click('.au-calendar-event[data-au="entry"]'), wait(".au-pop-detail"), check("calendar-detail-read")]),
   scene("automations-edit-own", "Edit opens the same form with the event in it", [...auto, click(ownChip), wait(".au-pop-detail"), click('[data-pop="edit"]'), wait(".au-pop-editor"), check("calendar-editor")]),
-  scene("automations-delete-own", "Delete waits in the ⋯, asks once more and returns to the calendar", [...auto, click(ownChip), wait(".au-pop-detail"), click('[data-pop="more"]'), wait("#app-popover"), click("#app-popover [data-confirm-item]"), click("#app-popover [data-confirm-item]"), wait(".toast"), check("calendar-deleted")]),
+  scene("automations-delete-own", "Delete waits in the ⋯, asks once more and returns to the calendar", [...auto, click(ownChip), wait(".au-pop-detail"), click('[data-pop="more"]'), wait("#app-popover"), click("#app-popover [data-confirm-item]"), click("#app-popover [data-confirm-item]"), waitGone('[data-entry="own:1"]'), check("calendar-deleted")]),
   scene("automations-right-click", "A right click on an own event opens the same menu at the pointer", [...auto, wait(ownChip), rightClick(ownChip), wait("#app-popover")]),
   scene("automations-move", "Dragging an own event moves it", [...auto, wait(ownChip), { action: "pointer-drag", selector: ownChip, dx: 0, dy: 54, y: 0.3 }, check("calendar-moved")]),
   scene("automations-resize", "Dragging its edge changes when it ends", [...auto, wait(ownChip), { action: "pointer-drag", selector: '[data-wrap="own:1"] .au-event-edge', dx: 0, dy: 54 }, check("calendar-resized")]),
@@ -148,6 +148,6 @@ export default [
   scene("room-thinking", "One speaking row for queued member replies", [room(1), wait(".au-room-thinking"), check("room-thinking")], { roomThinking: true }),
   scene("room-stop", "Two Escapes stop the room through the shared composer slot", [room(1), wait('.au-room-pane .composer[data-task-state="running"] .cmp-voice'), key("Escape"),check("cancel-armed"),key("Escape"), check("room-stop")], { roomThinking: true }),
   scene("room-row-menu", "Room row actions, with header actions on compact screens", [{ action: "room-row-menu", id: 1 }, check("room-row-menu")]),
-  ...["rename", "members", "delete"].map(action => scene(`room-${action}`, `Room ${action} dialog`, [room(1), click("[data-room-menu]"), click(`[data-pick="${action}"]`), ...(action === "delete" ? [check("delete-confirmation"),click('.mb-confirm [data-dlg="delete"]'),wait(".toast"),check("deleted-view")] : [])])),
+  ...["rename", "members", "delete"].map(action => scene(`room-${action}`, `Room ${action} dialog`, [room(1), click("[data-room-menu]"), click(`[data-pick="${action}"]`), ...(action === "delete" ? [check("delete-confirmation"),click('.mb-confirm [data-dlg="delete"]'),waitGone(".mb-confirm"), waitGone(".au-room-pane:not([hidden])"), check("deleted-view")] : [])])),
   scene("room-hover", "Room answer toolbar", [room(1), hover(".au-room-thread .ra .chat-message")]),
 ];

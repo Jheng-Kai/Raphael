@@ -239,7 +239,7 @@ function roomActions(anchor: HTMLElement, room: Room, saved: () => void = () => 
       if (name) { await api.roomsUpdate(room.id, { name }); changed(); saved(); }
     }).catch(error => toaster.info(describeError(error)));
     else void confirmDelete(room.name).then(async yes => {
-      if (yes) { await api.roomsDelete(room.id); knownRooms?.delete(room.id); window.dispatchEvent(new CustomEvent("room-deleted",{detail:room.id})); deleted(); changed(); toaster.info(t("members.deleted",{p0:room.name})); }
+      if (yes) { await api.roomsDelete(room.id); knownRooms?.delete(room.id); window.dispatchEvent(new CustomEvent("room-deleted",{detail:room.id})); deleted(); changed(); }
     }).catch(error => toaster.info(describeError(error)));
   });
 }

@@ -50,7 +50,7 @@ import { Undoable } from "./undo";
 import { Cleared } from "./cleared";
 import { leave, toaster } from "./ui";
 import { firstViewShown, holdOptionalReads, optionalRead } from "./startup-reads";
-import { bindMissing, missingHTML, noticeHTML } from "./missing";
+import { bindMissing, missingHTML, mountNewerDataUpdate, noticeHTML } from "./missing";
 import { warnQuota } from "./quota-warning";
 import { warnKeychainRefused } from "./keychain-refused";
 import { followDeviceLogin } from "./device-login";
@@ -537,8 +537,10 @@ function showStartupFailure(requirement: "startup" | "newer_database"): void {
   if (requirement === "newer_database") {
     // The core cannot open this data. Keep the notice in view without the unusable conversation.
     document.getElementById("nav")!.hidden = true;
-    main?.classList.add("startup-failed");
-    if (main) main.innerHTML = `<div class="page">${noticeHTML(requirement)}</div>`;
+    if (main && !main.classList.contains("startup-failed")) {
+      main.classList.add("startup-failed");
+      mountNewerDataUpdate(main);
+    }
     return;
   }
   main?.insertAdjacentHTML("afterbegin", noticeHTML(requirement));

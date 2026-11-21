@@ -444,7 +444,7 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
   async function setUpService(id: string): Promise<void> {
     const entry = Array.isArray(services) ? services.find((s) => s.id === id) : undefined;
     if (!entry || waitingService || (entry.needs !== "key" && entry.needs !== "own_app")) return;
-    const done = await openConnectionSetup({ slug: entry.id, name: entry.name, needs: entry.needs }, {
+    await openConnectionSetup({ slug: entry.id, name: entry.name, needs: entry.needs }, {
       connect: async (fields) => {
         try {
           const result = await api.connectorsConnect(entry.id, fields);
@@ -455,7 +455,6 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
         }
       },
     });
-    if (done) toaster.info(t("conn.connected", { p0: entry.name }));
     if (!destroyed && flow.step === "services") repaintBody();
   }
 
@@ -482,7 +481,6 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
       const result = await api.integrationsAdd({ name: form.name, transport: "http", url, headers: token ? [{ name: form.header, value: `${form.prefix}${token}` }] : [] });
       added(entry.id, result.server.id);
       serverEntry = null;
-      toaster.info(t("conn.connected", { p0: entry.name }));
     } catch (err) {
       serverEntry = { ...serverEntry!, busy: false };
       serverError = () => describeError(err);
@@ -500,7 +498,6 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
     try {
       await api.connectorsSetKey(typed);
       composio = { configured: true, entering: false, busy: false, error: null };
-      toaster.info(t("common.keySaved"));
       if (!destroyed) await loadServices();
       return;
     } catch (error) {

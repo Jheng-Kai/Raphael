@@ -336,7 +336,7 @@ export default [
     check("member-delete-ask"), check("delete-confirmation")]),
   scene("member-delete","A member is deleted from its ⋯ menu after the confirmation: its row leaves and a notice says so", [
     member(2), { action: "member-column", collapsed: false }, click('.mb-col [data-member-more="2"]'), click('#app-popover [data-pick="delete"]'), wait(".mb-dialog"),
-    click('.mb-dialog [data-dlg="delete"]'), waitGone('.mb-col [data-member="2"]'), wait(".toast"), check("member-deleted")]),
+    click('.mb-dialog [data-dlg="delete"]'), waitGone('.mb-col [data-member="2"]'), check("member-deleted")]),
   // The panel's close is one of the window edges' soft round buttons (R-UI-16), so it has a surface.
   scene("details", "Title opens member details", [...details, click('.mb-det-head'), check("details-pointer-focus")]),
   scene("raphael-details", "Title opens Raphael details", [{ action: "open-details" }, check("member-details")]),

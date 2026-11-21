@@ -688,7 +688,7 @@ describe("what the section does", () => {
     await flush();
     expect(host.querySelector('[data-svc-line="brave"]')!.textContent).toBe("移除已設定");
     expect(host.innerHTML).not.toContain("BSA-typed-key");
-    expect(toaster.info).toHaveBeenCalledWith("已存進 Windows 認證管理員");
+    expect(toaster.info).not.toHaveBeenCalled();
     expect(titleOf(host)).toBe("Brave"); // it stays on the page of the service
   });
 
@@ -727,7 +727,7 @@ describe("what the section does", () => {
     await flush();
     expect(api.servicesClearKey).toHaveBeenCalledWith("brave");
     expect(host.querySelector(`#${keyInputId("brave")}`)).not.toBeNull();
-    expect(toaster.info).toHaveBeenCalledWith("已移除 Brave 的金鑰");
+    expect(toaster.info).not.toHaveBeenCalled();
   });
 
   test("SearXNG's address is saved with settings.set, and only an http(s) one", async () => {

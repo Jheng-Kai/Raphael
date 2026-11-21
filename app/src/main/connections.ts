@@ -1245,9 +1245,13 @@ export function createConnections(host: ConnectionsHost): Connections {
     const group = groupById(id);
     void act(id, async () => {
       if (group?.source) await api.connectorsDisconnect(id);
-      else await api.integrationsDisconnect(id);
+      else {
+        const result = await api.integrationsDisconnect(id);
+        if (result.removed && !result.revoked && group && group.auth !== "none") {
+          toaster.info(t("conn.revokeInApp", { p0: group.name }));
+        }
+      }
       if (open && (open.id === id || openedGroup()?.id === id)) open = null;
-      if (group) notify(t(group.auth !== "none" ? "conn.disconnectedLogin" : "conn.disconnected", { p0: group.name }));
     });
   }
 
@@ -1344,7 +1348,7 @@ export function createConnections(host: ConnectionsHost): Connections {
     login = null;
     if (result.connected) {
       loginError = null;
-      if (!fromDialog || open === fromDialog || !dialogOpen()) notify(t(again ? "conn.relogged" : "conn.connected", { p0: name }));
+      if (!host.visible() && !dialogOpen()) toaster.info(t(again ? "conn.relogged" : "conn.connected", { p0: name }));
     } else if (result.error !== "cancelled") {
       // Closing or replacing a page discards its pending failure as well as its visible one.
       if (!fromDialog || open === fromDialog) loginError = { target: key, kind: result.error ?? "error" };
@@ -1396,7 +1400,6 @@ export function createConnections(host: ConnectionsHost): Connections {
       else await api.integrationsAdd(request);
       form = null; // the values were sent to the core's vault: nothing of them stays here
       screen = "connected";
-      notify(t("conn.connected", { p0: request.name }));
       await load();
       return;
     } catch (err) {
@@ -1533,7 +1536,6 @@ export function createConnections(host: ConnectionsHost): Connections {
         if (groupById(id)?.source) { void loadTools(id); break; }
         void act(id, async () => {
           await api.integrationsRefresh(id);
-          notify(t("conn.refreshed"));
         });
         break;
       case "disconnect":

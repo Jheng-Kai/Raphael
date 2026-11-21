@@ -155,7 +155,6 @@ export function createDictionary(app: AppContext): DictionaryPage {
       toaster.info(t("dictionary.021", { p0: () => describeError(err) }));
       return false;
     }
-    toaster.info(t("dictionary.022", { p0: word }));
     void load();
     return true;
   }
@@ -217,10 +216,9 @@ export function createDictionary(app: AppContext): DictionaryPage {
     const { words } = staged;
     importing = true;
     try {
-      const { added } = await api.dictionaryImport(words);
+      await api.dictionaryImport(words);
       staged = null;
       renderImport();
-      toaster.info(t("dictionary.028", { p0: added }));
       void load();
     } catch (err) {
       toaster.info(importError(err));

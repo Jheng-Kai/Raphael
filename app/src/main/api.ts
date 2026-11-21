@@ -657,8 +657,8 @@ export const openAttachment = (id: string): Promise<void> => invoke("open_attach
  */
 export const attachmentSource = async (id: string): Promise<string> => convertFileSrc(await invoke<string>("attachment_source", { id }), "raphael-media");
 
-export interface UpdateView { state: "idle" | "checking" | "found" | "downloading" | "ready" | "installing" | "error"; version: string; notes: string; error: string; installed?: string; }
-export const updateControl = (action: "status" | "check" | "install"): Promise<UpdateView> => invoke("update_control", { action });
+export interface UpdateView { state: "idle" | "checking" | "found" | "downloading" | "ready" | "waiting" | "installing" | "error"; version: string; notes: string; error: string; installed?: string; }
+export const updateControl = (action: "status" | "receipt" | "check" | "install" | "cancel"): Promise<UpdateView> => invoke("update_control", { action });
 export const openTeamFile = (path: string): Promise<void> => invoke("open_team_file", { path });
 /** Opens a file a member delivered, by the handle its Library gave (`members.library_file`, checked by the core). */
 export const openLibraryFile = (memberId: number, id: string): Promise<void> => invoke("open_library_file", { memberId, id });

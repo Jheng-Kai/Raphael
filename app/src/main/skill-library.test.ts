@@ -196,7 +196,7 @@ test("the importer sends a link, pasted text or a file to the core and opens the
   expect(api.core).toHaveBeenCalledWith("skills.library.import", { source: "owner/slides" });
   // A package of several opens on its page, so whom it is for can be chosen at once.
   expect(root.querySelector('.skl-page[data-skl-page="pack:9"]')).not.toBeNull();
-  expect(info).toHaveBeenCalledWith("已匯入「簡報工具」");
+  expect(info).not.toHaveBeenCalled();
   press(root, '[data-skl="back"]');
   expect(root.querySelector<HTMLInputElement>("#skl-source")!.value).toBe("");
   // Pasted text takes the link's place, and the same 匯入 sends it.

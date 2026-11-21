@@ -72,7 +72,7 @@ it.each([
   expect(toaster.info).not.toHaveBeenCalled();
 });
 
-it("clears the failure immediately on retry and reports success on the page", async () => {
+it("clears the failure immediately on retry and leaves the connected account as feedback", async () => {
   api.connectorsConnect.mockResolvedValueOnce({ connected: false, error: "denied" });
   const { root, control, click } = await mount();
   click("open"); click("relogin");
@@ -83,7 +83,9 @@ it("clears the failure immediately on retry and reports success on the page", as
   expect(root.querySelector('.cs-page .note[role="alert"]')).toBeNull();
   expect(control.view().loginError).toBeNull();
   finish({ connected: true });
-  await vi.waitFor(() => expect(root.querySelector('.cs-page [role="status"][data-cs-notice]')?.textContent).toBe("已重新登入 Notion"));
+  await vi.waitFor(() => expect(control.view().login).toBeNull());
+  expect(root.querySelector(".cs-page .cs-acct")).not.toBeNull();
+  expect(root.querySelector("[data-cs-notice]")).toBeNull();
   expect(control.view().loginError).toBeNull();
   expect(toaster.info).not.toHaveBeenCalled();
 });
