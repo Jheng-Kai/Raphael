@@ -1,14 +1,16 @@
-/* 編輯快捷鍵 (shortcut-editor.ts): the app's compact dialog with a row per shortcut, its name at the left and its keys on
-   a button at the right that records new ones; Esc, which stays, has its keys where the others' end. */
+/* 編輯快捷鍵 (shortcut-editor.ts): the app's compact dialog whose rows are the shortcut lists' own (`.row.row-shortcut`): the
+   name at the left, the key caps at the right with no frame and no fill, and a pencil after them on every shortcut that can
+   be changed. While one records, the words that ask for the keys stand where its caps were, frameless too. */
 .mb-dialog.kd-dialog { width: min(440px, 100%); }
 .kd-list { display: grid; grid-template-columns: minmax(0, 1fr); }
-.kd-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); min-height: 44px; }
-.kd-name { min-width: 0; color: var(--text); overflow-wrap: anywhere; }
-/* An outlined box, so that the key caps (filled with the control colour) stand out in it as they do in the lists. */
-.mb-dialog .btn.kd-rec { flex: none; justify-content: flex-end; min-width: 200px; max-width: 65%; min-height: var(--h-field); padding: 0 var(--sp-2); border-color: var(--btn-edge); background: transparent; }
-.mb-dialog .btn.kd-rec:hover:not(:disabled) { background: var(--hover); }
-.mb-dialog .btn.kd-rec[data-recording] { border-color: var(--accent); }
-.kd-rec > .caps, .kd-esc { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--sp-1); min-width: 0; }
-/* Esc's caps end where the buttons' do, inside their frame and padding. */
-.kd-esc { padding-right: calc(var(--sp-2) + 1px); }
+/* As tall as the rows of Settings' list behind it, the names in the list's colour rather than the dialog's quieter words. */
+.kd-list > .row { min-height: 52px; }
+.kd-list > .row > .lbl > .t { color: var(--text); overflow-wrap: anywhere; }
+.kd-list > .row > .ctl { flex: 0 1 auto; min-width: 0; }
+.kd-list .caps { flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
+/* The pencil is a row's icon button (ui.ts iconBtn) with the row's 16 px icon, not the dialog's larger button and icon. */
+.kd-dialog .btn.icon.row { flex: none; width: var(--h-ctl-sm); min-height: var(--h-ctl-sm); }
+.kd-dialog .btn.icon.row .i { width: 16px; height: 16px; }
+/* Esc has no pencil: its caps end where the others' do, the pencils standing in a column of their own. */
+.kd-fixed > .ctl { padding-right: calc(var(--h-ctl-sm) + var(--sp-2)); }
 .kd-error { margin: var(--sp-2) 0 0; color: var(--err); font-size: var(--fs-sm); }

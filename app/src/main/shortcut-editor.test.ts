@@ -33,7 +33,8 @@ function open(refuse?: string) {
 }
 
 const button = (el: HTMLElement, field: string): HTMLButtonElement => el.querySelector<HTMLButtonElement>(`[data-dlg="record"][data-field="${field}"]`)!;
-const capsOf = (el: HTMLElement, field: string): string[] => [...button(el, field).querySelectorAll("kbd")].map((cap) => cap.textContent ?? "");
+const rowOf = (el: HTMLElement, field: string): HTMLElement => el.querySelector<HTMLElement>(`.kd-row[data-kd-row="${field}"]`)!;
+const capsOf = (el: HTMLElement, field: string): string[] => [...rowOf(el, field).querySelectorAll(".caps kbd")].map((cap) => cap.textContent ?? "");
 /** Presses the keys in order, then lets them go in reverse, as a person does. */
 function chord(...codes: string[]): void {
   const target = document.activeElement ?? document.body;
@@ -47,17 +48,23 @@ async function record(el: HTMLElement, field: string, ...codes: string[]): Promi
   await flush();
 }
 
-test("lists all five shortcuts in the order of use, every one but Esc on a button that records new keys", () => {
+test("lists all five shortcuts in the order of use as the lists' rows, every one but Esc with a pencil that records new keys", () => {
   const { el } = open();
   expect(el.getAttribute("role")).toBe("dialog");
   expect(el.querySelector("h2")?.textContent).toBe("編輯快捷鍵");
-  expect([...el.querySelectorAll(".kd-name")].map((name) => name.textContent)).toEqual(["聽寫", "問拉斐爾", "整理選取文字", "貼上上一次", "取消"]);
-  expect([...el.querySelectorAll<HTMLElement>('[data-dlg="record"]')].map((b) => b.dataset.field)).toEqual(["dictation_keys", "agent_keys", "tidy_keys", "paste_last_keys"]);
+  const rows = [...el.querySelectorAll<HTMLElement>(".kd-list > .row")];
+  expect(rows.map((line) => line.querySelector(".lbl .t")?.textContent)).toEqual(["聽寫", "問拉斐爾", "整理選取文字", "貼上上一次", "取消"]);
+  // The rows of the read-only lists (`row-shortcut`): the caps stand in the row itself, never on a framed button.
+  expect(rows.every((line) => line.matches(".row.row-shortcut") && line.querySelector(".ctl > .caps"))).toBe(true);
+  expect(el.querySelector(".kd-list .btn:not(.icon), .kd-list .caps button")).toBeNull();
+  const pencils = [...el.querySelectorAll<HTMLElement>('[data-dlg="record"]')];
+  expect(pencils.map((b) => b.dataset.field)).toEqual(["dictation_keys", "agent_keys", "tidy_keys", "paste_last_keys"]);
+  expect(pencils.every((b) => b.matches(".ctl > .caps + .btn.icon.row") && b.querySelector("svg.i") && b.textContent === "")).toBe(true);
   // 貼上上一次 can be changed like the others; Esc cancels and stays.
   expect(capsOf(el, "paste_last_keys")).toEqual(["右 Alt", "V"]);
   expect(button(el, "paste_last_keys").getAttribute("aria-label")).toBe("變更「貼上上一次」的按鍵");
   expect(el.querySelector(".kd-fixed button")).toBeNull();
-  expect(el.querySelector(".kd-fixed kbd")?.textContent).toBe("Esc");
+  expect(el.querySelector(".kd-fixed .caps kbd")?.textContent).toBe("Esc");
   expect([...el.querySelectorAll(".mb-dlg-act .btn")].map((b) => b.textContent)).toEqual(["取消", "儲存"]);
 });
 
@@ -66,12 +73,16 @@ test("a recorded key waits in the dialog, and 儲存 sends what changed through 
   button(el, "paste_last_keys").click();
   await flush();
   expect(api.hotkeysPause).toHaveBeenLastCalledWith(true);
-  expect(button(el, "paste_last_keys").textContent).toContain("按下新的按鍵");
+  // The caps give way to the words that ask for the keys, in the row itself; the pencil stays where it was.
+  expect(rowOf(el, "paste_last_keys").hasAttribute("data-recording")).toBe(true);
+  expect(rowOf(el, "paste_last_keys").querySelector(".caps")?.textContent).toContain("按下新的按鍵");
+  expect(rowOf(el, "paste_last_keys").querySelector(".caps kbd")).toBeNull();
+  expect(button(el, "paste_last_keys").isConnected).toBe(true);
   chord("ControlRight", "F8");
   await flush();
   expect(api.hotkeysPause).toHaveBeenLastCalledWith(false);
   expect(capsOf(el, "paste_last_keys").slice(-1)).toEqual(["F8"]);
-  expect(button(el, "paste_last_keys").hasAttribute("data-recording")).toBe(false);
+  expect(rowOf(el, "paste_last_keys").hasAttribute("data-recording")).toBe(false);
   expect(app.setDevice).not.toHaveBeenCalled();
   el.querySelector<HTMLElement>('[data-dlg="save"]')!.click();
   await flush();

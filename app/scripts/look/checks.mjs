@@ -9138,40 +9138,64 @@ export function checkRendered(name, context = {}) {
     return { check: name, keys: caps.join(" + ") };
   }
   if (name === "settings-keys-dialog" || name === "dictation-keys-dialog" || name === "settings-keys-recording") {
-    // 編輯快捷鍵 (R-KEYS-EDIT-01): the app's compact dialog; every shortcut in the order of use, all but Esc on a button that records.
+    // 編輯快捷鍵 (R-KEYS-EDIT-01): the app's compact dialog whose rows are the shortcut lists' own, with no frame anywhere; every
+    // shortcut in the order of use, all but Esc with a pencil after its caps that records new keys.
     const dialog = document.querySelector('.mb-dialog.kd-dialog');
     require(visible(dialog) && dialog.getAttribute('role') === 'dialog' && dialog.querySelector('.mb-dlg-head h2')?.textContent.trim() === '編輯快捷鍵', "the dialog is open, named 編輯快捷鍵");
-    const rows = [...dialog.querySelectorAll('.kd-row')];
-    require(rows.map(row => row.querySelector('.kd-name').textContent.trim()).join('、') === '聽寫、問拉斐爾、整理選取文字、貼上上一次、取消', `the five shortcuts in the order of use (${rows.map(row => row.textContent.trim()).join(' | ')})`);
-    const buttons = [...dialog.querySelectorAll('[data-dlg="record"]')];
-    require(buttons.map(b => b.dataset.field).join() === 'dictation_keys,agent_keys,tidy_keys,paste_last_keys' && buttons.every(b => visible(b) && b.getAttribute('aria-label')), "each but Esc has its keys on a named button, 貼上上一次 too");
-    require(!rows.at(-1).querySelector('button') && rows.at(-1).querySelector('kbd')?.textContent.trim() === 'Esc', "Esc stays as it is");
+    const rows = [...dialog.querySelectorAll('.kd-list > .row')];
+    require(rows.map(row => row.querySelector('.lbl .t').textContent.trim()).join('、') === '聽寫、問拉斐爾、整理選取文字、貼上上一次、取消', `the five shortcuts in the order of use (${rows.map(row => row.textContent.trim()).join(' | ')})`);
+    require(rows.every(row => row.matches('.row.row-shortcut') && row.querySelector(':scope > .ctl > .caps')), "every row is a row of the shortcut lists, its caps in the row itself");
+    // No boxes: nothing in the rows but the key caps has a border or a fill at rest (the pencils' focus ring is an outline).
+    const clear = colour => colour === 'transparent' || /rgba\([^)]*,\s*0\)$/.test(colour) || /\/\s*0\)$/.test(colour);
+    for (const part of dialog.querySelectorAll('.kd-list *')) {
+      if (part.closest('kbd') || part instanceof SVGElement) continue;
+      const style = getComputedStyle(part);
+      const edged = ['Top', 'Right', 'Bottom', 'Left'].some(side => parseFloat(style[`border${side}Width`]) > 0 && !clear(style[`border${side}Color`]));
+      require(!edged && clear(style.backgroundColor), `no frame or field in the rows (${part.tagName.toLowerCase()}.${[...part.classList].join('.')}: border ${style.borderTopWidth} ${style.borderTopColor}, fill ${style.backgroundColor})`);
+    }
+    const pencils = [...dialog.querySelectorAll('[data-dlg="record"]')];
+    require(pencils.map(b => b.dataset.field).join() === 'dictation_keys,agent_keys,tidy_keys,paste_last_keys' && pencils.every(b => visible(b) && b.getAttribute('aria-label') && b.matches('.btn.icon.row') && b.querySelector('svg.i') && !b.textContent.trim()), "each but Esc has a named pencil, 貼上上一次 too");
+    require(!rows.at(-1).querySelector('button') && rows.at(-1).querySelector('.caps kbd')?.textContent.trim() === 'Esc', "Esc stays as it is, with no pencil");
     const frame = dialog.getBoundingClientRect();
     require(frame.left >= 0 && frame.right <= innerWidth && frame.top >= 0 && frame.bottom <= innerHeight, "the dialog fits the window");
-    const rights = buttons.map(b => b.getBoundingClientRect().right);
-    require(rights.every(right => Math.abs(right - rights[0]) < 1) && rights.every(right => right <= frame.right - 8), "the buttons end on one edge inside the dialog");
-    for (const b of buttons) {
+    const rights = pencils.map(b => b.getBoundingClientRect().right);
+    require(rights.every(right => Math.abs(right - rights[0]) < 1) && rights.every(right => right <= frame.right - 8), "the pencils stand in one column inside the dialog");
+    for (const b of pencils) {
       const box = b.getBoundingClientRect(), row = b.closest('.kd-row').getBoundingClientRect();
-      require(box.height >= 30 - 0.5 && box.top >= row.top - 0.5 && box.bottom <= row.bottom + 0.5, `a key button stands in its row (${Math.round(box.height)} px)`);
-      require(b.scrollWidth <= b.clientWidth + 1, "what a key button shows fits it");
+      require([22, 26, 28, 30].includes(Math.round(box.width)) && Math.abs(box.width - box.height) < 1 && box.top >= row.top - 0.5 && box.bottom <= row.bottom + 0.5, `a pencil is a row's icon button, standing in its row (${Math.round(box.width)} x ${Math.round(box.height)} px)`);
+      const icon = b.querySelector('svg.i').getBoundingClientRect();
+      require(Math.round(icon.width) === 16 && Math.round(icon.height) === 16, `its pencil is the rows' 16 px icon (${Math.round(icon.width)} px)`);
     }
-    const escCap = rows.at(-1).querySelector('kbd').getBoundingClientRect(), lastCap = buttons[0].querySelector('kbd')?.getBoundingClientRect();
-    if (lastCap) require(Math.abs(escCap.right - lastCap.right) < 2, `Esc's key ends where the others' do (${Math.round(escCap.right)} against ${Math.round(lastCap.right)})`);
-    for (const label of dialog.querySelectorAll('.kd-name')) require(label.scrollWidth <= label.clientWidth + 1, "every name is whole");
+    const capsRight = row => row.querySelector('.caps').getBoundingClientRect().right;
+    require(rows.every(row => Math.abs(capsRight(row) - capsRight(rows[0])) < 1.5), `every row's caps end on one edge, Esc's too (${rows.map(row => Math.round(capsRight(row))).join(', ')})`);
+    require(pencils.every(b => b.getBoundingClientRect().left >= capsRight(b.closest('.kd-row')) - 0.5), "the pencils come after the caps");
+    require(rows.every(row => Math.abs(row.getBoundingClientRect().height - rows[0].getBoundingClientRect().height) < 1 && row.getBoundingClientRect().height >= 48), "every row is as tall as the others");
+    for (const label of dialog.querySelectorAll('.kd-list .lbl .t')) require(label.scrollWidth <= label.clientWidth + 1, "every name is whole");
+    // The rows read like the list behind: the same height, name and caps (Settings' list is under the dialog).
+    const behind = document.querySelector('.modal-scrim [data-row="tidy-hotkey"]');
+    if (behind) {
+      const listName = getComputedStyle(behind.querySelector('.lbl .t')), rowName = getComputedStyle(rows[2].querySelector('.lbl .t'));
+      require(Math.abs(behind.getBoundingClientRect().height - rows[2].getBoundingClientRect().height) < 1, `a row is as tall as the list's (${Math.round(rows[2].getBoundingClientRect().height)} against ${Math.round(behind.getBoundingClientRect().height)})`);
+      require(rowName.fontSize === listName.fontSize && rowName.color === listName.color && rowName.fontWeight === listName.fontWeight, `a name is written as the list's (${rowName.fontSize} ${rowName.color} against ${listName.fontSize} ${listName.color})`);
+      const cap = getComputedStyle(rows[0].querySelector('kbd')), listCap = getComputedStyle(behind.querySelector('kbd'));
+      require(cap.height === listCap.height && cap.fontSize === listCap.fontSize && cap.backgroundColor === listCap.backgroundColor, "the key caps are the list's");
+    }
     require([...dialog.querySelectorAll('.mb-dlg-act .btn')].map(b => b.textContent.trim()).join() === '取消,儲存', "取消 then 儲存 at the foot");
     require(document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, "the page does not scroll sideways");
     // The app writes other device settings of its own as it opens; only a write of shortcut keys is the dialog's.
     const saves = window.__look.calls.filter(call => call.command === 'device_settings_set' && Object.keys(call.patch ?? {}).some(field => field.endsWith('_keys')));
     if (name === "settings-keys-dialog") {
-      const caps = [...dialog.querySelector('[data-field="paste_last_keys"]').querySelectorAll('kbd')].map(cap => cap.textContent.trim());
+      const caps = [...dialog.querySelectorAll('[data-kd-row="paste_last_keys"] .caps kbd')].map(cap => cap.textContent.trim());
       require(caps.at(-1) === 'F8' && caps.length === 2, `the keys just recorded for 貼上上一次 wait in the dialog (${caps.join(' + ')})`);
       require(saves.length === 0, "nothing is saved before 儲存");
       require([...document.querySelectorAll('.modal-scrim [data-row="paste-hotkey"] kbd')].at(-1)?.textContent.trim() === 'V', "the list behind still shows the keys in force");
     }
     if (name === "settings-keys-recording") {
-      const recording = dialog.querySelector('[data-recording]'), hint = recording?.querySelector('.rec-hint');
-      require(recording?.dataset.field === 'tidy_keys' && visible(hint) && hint.textContent.includes('Esc'), "the tidy key's button says to press the new keys, and Esc to cancel");
-      require(document.activeElement === recording, "the focus stays on the button being recorded");
+      const recording = dialog.querySelector('[data-recording]'), hint = recording?.querySelector('.caps .rec-hint');
+      require(recording?.dataset.kdRow === 'tidy_keys' && visible(hint) && hint.textContent.includes('Esc') && !recording.querySelector('kbd'), "the tidy key's caps give way to the words that ask for the new keys, and Esc to cancel");
+      const words = hint.getBoundingClientRect(), pencil = recording.querySelector('[data-dlg="record"]');
+      require(words.left >= recording.querySelector('.lbl .t').getBoundingClientRect().right && words.right <= pencil.getBoundingClientRect().left + 0.5 && words.bottom <= recording.getBoundingClientRect().bottom, "the words stand where the caps were, whole, before the pencil");
+      require(document.activeElement === pencil && visible(pencil), "the focus stays on the pencil of the row being recorded");
     }
     return { check: name, saves: saves.length };
   }

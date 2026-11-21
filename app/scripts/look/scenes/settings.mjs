@@ -44,8 +44,8 @@ export default [
   // R-TIDY-01, R-KEYS-EDIT-01: the key that tidies the selected text is listed with the other shortcuts, Right Alt+T by default, and changed
   // with them in the one 編輯 dialog.
   scene("settings-tidy-key", "The 聽寫 tab lists every shortcut read-only in the order of use, 整理選取文字 third with its key, as wide as the others, and one 編輯 at the section's top right", [...settings("dictation"), wait('.modal-scrim [data-row="tidy-hotkey"]'), check("settings-tidy-key")]),
-  scene("settings-keys-dialog", "編輯 opens one dialog with all five shortcuts in the order of use, 貼上上一次 too; a key recorded waits in it until 儲存", [...pasteRecorded, check("settings-keys-dialog")]),
-  scene("settings-keys-recording", "A shortcut being recorded says to press the new keys, and Esc to cancel, inside its own button", [
+  scene("settings-keys-dialog", "編輯 opens one dialog whose rows are the list's, with no frame: all five shortcuts in the order of use, a pencil after the caps of each but Esc, 貼上上一次 too; a key recorded waits in it until 儲存", [...pasteRecorded, check("settings-keys-dialog")]),
+  scene("settings-keys-recording", "The pencil of a shortcut puts the words that ask for the new keys, and Esc to cancel, where its caps were, still with no frame", [
     ...keysDialog, click('.kd-dialog [data-field="tidy_keys"]'), wait(".kd-dialog [data-recording] .rec-hint"), check("settings-keys-recording")]),
   scene("settings-keys-saved", "儲存 sends the new keys through the device settings, closes the dialog, and the list shows them", [
     ...pasteRecorded, click('.kd-dialog [data-dlg="save"]'), waitGone(".kd-dialog"), check("settings-keys-saved")]),

@@ -31,7 +31,7 @@ Settings has flat tabs: 一般, 工具, 團隊技能庫, 安全, 模型, 用量,
 memory loading, and an old link or saved pane named `memory` opens 一般. There is no import from other assistants
 either; the memory lives in Raphael's data folder, and
 moving to another PC means keeping that folder. 一般 keeps 關於你, 外觀, 拉斐爾 and 啟動, with no memory. 關於's Help is
-an outward-arrow icon and the license a chevron; the shortcuts' and the OpenRouter key's 「變更」 is a pencil. This
+an outward-arrow icon and the license a chevron; the OpenRouter key's 「變更」 is a pencil, as is each shortcut's in the 編輯快捷鍵 dialog ([Dictation](dictation.md)). This
 supersedes the notes below that place memory and its import in General.
 
 ```powershell
