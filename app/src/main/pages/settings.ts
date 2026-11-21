@@ -484,7 +484,7 @@ export function createSettings(app: AppContext): SettingsPage {
 
   // ---------- the tabs ----------
 
-  /** The list on the left: the six tabs, flat. */
+  /** The flat list of Settings tabs. */
   function paintNav(): void {
     // A tab chosen with Enter is drawn anew here: the keyboard stays on it, and Esc still closes.
     repaintKeepingFocus(navList, document.activeElement, () => { navList.innerHTML = paneListHTML(); });
@@ -630,6 +630,8 @@ export function createSettings(app: AppContext): SettingsPage {
       toaster.info(result.reason);
       return;
     }
+    // The picker can redraw once it is the active popover, and its new rows replace the submenu's anchor.
+    closeSubmenus();
     if (brain) brain = { ...brain, languages: result.languages };
     paintLanguages();
     try {
@@ -1098,6 +1100,15 @@ export function createSettings(app: AppContext): SettingsPage {
     const input = e.target as HTMLInputElement;
     providers.input(input);
     void (connections.input(input) || rules.input(input));
+  });
+  navList.addEventListener("keydown", (e) => {
+    if (e.defaultPrevented || e.isComposing || e.altKey || e.ctrlKey || e.metaKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+    const tabs = Array.from(navList.querySelectorAll<HTMLElement>("[data-pane]"));
+    const index = tabs.indexOf(e.target as HTMLElement);
+    if (index < 0) return;
+    e.preventDefault();
+    const step = e.key === "ArrowDown" ? 1 : -1;
+    tabs[(index + step + tabs.length) % tabs.length].focus();
   });
   el.addEventListener("keydown", (e) => {
     const tab = (e.target as Element).closest<HTMLElement>("[data-usage-tab]");

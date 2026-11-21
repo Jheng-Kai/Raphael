@@ -1,4 +1,4 @@
-// 團隊技能庫, a tab of Settings (#280): every shared skill, in packages. A plugin set, or the skills of one import (a
+// Team skills is the Settings tab for shared skill packages. A plugin set, or the skills of one import (a
 // repository, an archive, a folder) are one package; a skill imported alone is a package of one. Each package is for the
 // whole team or for the characters chosen, as a private key is (vault.ts); a large one reaches nobody until the owner
 // chooses. A package of several opens on a page of its own in the tab (its name with a back arrow, who may use it, its

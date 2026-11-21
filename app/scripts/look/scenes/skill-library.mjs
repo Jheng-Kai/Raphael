@@ -1,4 +1,4 @@
-// 團隊技能庫 (skill-library.ts), a tab of Settings: packages, who may use each, and the importer (#280, #249).
+// Team skills in Settings: packages, who may use each, and the importer.
 import { scene, click, type, wait, waitGone, settings, scroll, key, check } from "./steps.mjs";
 import { memberSettingsPage } from "./member-settings.mjs";
 
@@ -20,6 +20,6 @@ export default [
     click('[data-skl="import-go"]'), wait('.skl-pack[data-skl-pack="pack:13"]'), check("skill-library-imported")]),
   scene("skill-library-import-failed", "A source with no SKILL.md says so in the importer and keeps it open", [
     ...importing, type("#skl-source", "nothing/here"), click('[data-skl="import-go"]'), wait(".skl-error"), check("skill-library-import-failed")]),
-  scene("member-skills-library", "A character's skills list what the team library gives it, read-only, with the way to the library", [
+  scene("member-skills-library", "A member's skills show assigned packages under From Team skills, with a button to open Team skills", [
     ...memberSettingsPage, click('.ms-pane .ms-nav [data-cat="skills"]'), wait('.ms-pane [data-k="ms-library"]'), check("member-skills-library")], { memberSettings: true }),
 ];

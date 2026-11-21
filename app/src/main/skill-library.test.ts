@@ -42,6 +42,7 @@ const accessOf = (root: ParentNode, key: string) => root.querySelector(`.skl-pac
 
 test("one row per package says who may use it, and its name opens its skills on a page of its own", async () => {
   const { root } = await setup();
+  expect(root.querySelector(".skl")?.getAttribute("aria-label")).toBe("團隊技能");
   expect(root.querySelectorAll(".skl-pack")).toHaveLength(3);
   expect(root.querySelector('.skl-pack[data-skl-pack="set:1"] .skl-count')?.textContent).toBe("3 個技能");
   expect(root.querySelector('.skl-pack[data-skl-pack="skill:3"] .skl-count, .skl-pack[data-skl-pack="skill:3"] [data-skl="open"]')).toBeNull();
@@ -224,7 +225,7 @@ test("a cause the core names leads its message and is said in words", async () =
   expect(failureText(new Error("[-32602] Invalid params: not_found: no SKILL.md found in the package"))).toBe("裡面找不到 SKILL.md。");
   expect(failureText(new Error("[-32602] Invalid params: archive: invalid skill package"))).toBe("這個壓縮檔打不開，或裡面有不允許的檔案。");
   expect(failureText(new Error("[-32602] Invalid params: size: skill package exceeds the size or entry limit"))).toBe("檔案太大了。");
-  expect(failureText(new Error("[-32602] Invalid params: taken: a skill named travel already exists"))).toBe("技能庫已經有「travel」了。");
+  expect(failureText(new Error("[-32602] Invalid params: taken: a skill named travel already exists"))).toBe("團隊技能中已有「travel」。");
   expect(failureText(new Error("the core is not running"))).toBe("沒有成功，請再試一次。");
   const { root } = await setup(method => { if (method === "skills.library.import") throw new Error("[-32602] Invalid params: not_found: no SKILL.md found"); return {}; });
   root.querySelector<HTMLInputElement>("#skl-source")!.value = "nothing/here";

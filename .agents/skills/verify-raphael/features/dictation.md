@@ -62,12 +62,13 @@ Option (the `AltRight` binding: one key code, named by `keys.ts` and `mac-catalo
 
 ## The spoken languages: one row each, written forms beside the picker; cleanup in no one language
 
-Settings > Dictation > 你說的語言 opens one picker with every language on one row (checked or not, up to five). A chosen
+Settings > Dictation > 你說的語言 opens one picker with every language on one row (checked or not, up to five). A
 language with several written forms (中文: 台灣、香港、簡體、粵語; English; Español) ends its row with a dropdown naming the form
-in use (`data-variant-menu`). It is the settings rows' own dropdown (`.sel`, the rule of settings-polish.css): its value and a
+in use or the default form when unchecked (`data-variant-menu`). It is the settings rows' own dropdown (`.sel`, the rule of settings-polish.css): its value and a
 chevron with no box, fill or pill, at rest or under the pointer, where only its words brighten, as the card's 你說的語言 and
 聽寫方式 do; it keeps the app's keyboard ring rather than a menu item's. The dropdown, or Right on it, opens the forms in a
-submenu beside the picker (`placement: "beside"`, `variantMenuHTML`), so the list never grows or jumps. A pick closes only the submenu (`closeSubmenus`) and keeps the picker open.
+submenu beside the picker (`placement: "beside"`, `variantMenuHTML`), so the list never grows or jumps. A pick closes the submenu (`closeSubmenus`) and keeps the picker open.
+Pressing a language row updates its check, the form, the selected count and the Settings summary together (R-UI-175).
 The core rules are unchanged: one form per language, the order is the priority.
 
 The dropdown's accessible name is one translated string (`languages.variantsOf`, the language and the form in use) and it

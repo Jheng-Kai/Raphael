@@ -1360,7 +1360,7 @@ export function installMock(fixture, config = {}, target = window) {
   async function core(method, p = {}) {
     // Settings reads the hidden list as it opens, before the list's section is drawn; the sidebar keeps the roster it already read.
     switch (method) {
-      // The team skill library (skill-library.ts, members/service.py skills.library.*).
+      // Team skills (skill-library.ts, members/service.py skills.library.*).
       case "skills.library.list": return { packages: data.skillLibrary, members: data.members.filter(m => m.id !== 0).map(m => ({ id: m.id, name: m.name })) };
       case "skills.library.update": {
         const pack = data.skillLibrary.find(item => item.key === p.key);

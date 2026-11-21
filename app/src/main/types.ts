@@ -1424,6 +1424,6 @@ export interface McpPreview { candidates: McpCandidate[]; rejected: number }
 export interface McpTest { ok: boolean; tools: string[]; error?: string }
 /** Member-owned resources; command templates expand only in the core. */
 export interface MemberSkill { set_id?: number; set_kind?: "skill" | "command"; plugin_version?: string; shared?: boolean; source_changed?: boolean | null; id: number; name: string; description: string; enabled: boolean; source: string; plugin?: string; slash_name?: string; provenance?: "learned" | "imported" | "owner"; revision?: string; learned_at?: string | null; updated_at?: string | null }
-/** A package of the team skill library given to a member (members.skills.list `library`): its key, name and how many skills it holds. */
+/** A Team skills package assigned to a member (members.skills.list `library`): its key, name and skill count. */
 export interface LibraryRef { key: string; name: string; skills: number }
 export interface MemberCommand { id: number; name: string; description: string; template: string }

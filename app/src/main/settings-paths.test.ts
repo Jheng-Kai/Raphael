@@ -33,11 +33,6 @@ export function settingsTree(locale: Locale): Branch {
   const media = [m["settings.quickModel"], m["settings.035"], m["settings.031"], m["media.image"], m["media.video"]];
   return under(
     [m["settings.paneGeneral"], branch(m["settings.ownerSection"], m["skin.title"], m["settings.067"], m["settings.059"], m["agent.title"], m["zone.title"], m["output.folder"])],
-    [m["settings.paneTools"], under([m["services.title"], under(
-      [m["services.search"], branch("SearXNG")], [m["services.read"], branch()], [m["services.vision"], branch()], [m["services.pdf"], branch()],
-    )])],
-    [m["settings.paneSkills"], branch()],
-    [m["settings.paneSafety"], branch(m["vault.title"], m["rules.title"])],
     // 模型 holds the models in use, the subscription accounts and the providers; a model row is named from 模型 too.
     [m["providers.title"], under(
       [m["models.used"], branch(...media)],
@@ -47,6 +42,10 @@ export function settingsTree(locale: Locale): Branch {
     )],
     // 用量 has its two views: 概覽 (this month and the allowances) and 分析.
     [m["models.usage"], branch(m["usage.overview"], m["usage.analysis"])],
+    [m["settings.paneTools"], under([m["services.title"], under(
+      [m["services.search"], branch("SearXNG")], [m["services.read"], branch()], [m["services.vision"], branch()], [m["services.pdf"], branch()],
+    )])],
+    [m["settings.paneSkills"], branch()],
     [m["settings.paneDictation"], under(
       [m["home.shortcuts"], branch()],
       [m["settings.groupStart"], branch()],
@@ -55,6 +54,7 @@ export function settingsTree(locale: Locale): Branch {
       [m["transcription.title"], branch()],
       [m["common.microphone"], branch()],
     )],
+    [m["settings.paneSafety"], branch(m["vault.title"], m["rules.title"])],
     [m["common.about"], branch()],
   );
 }

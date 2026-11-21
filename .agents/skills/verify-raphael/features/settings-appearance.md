@@ -26,7 +26,7 @@ npm run look -- overlay-locale-ko overlay-locale-th overlay-locale-de --theme bo
 
 ## Memory has no tab, and About's controls are icons
 
-Settings has flat tabs: 一般, 工具, 團隊技能庫, 安全, 模型, 用量, 聽寫與快捷鍵 and 關於. No memory is shown anywhere
+Settings has flat tabs: 一般, 模型, 用量, 工具, 團隊技能, 聽寫與快捷鍵, 安全 and 關於. No memory is shown anywhere
 (R-MEM-10, see [Members](members.md#no-memory-on-screen)), so there is no memory tab, no memory list and no
 memory loading, and an old link or saved pane named `memory` opens 一般. There is no import from other assistants
 either; the memory lives in Raphael's data folder, and
@@ -45,7 +45,8 @@ core/tests/memory, the members management suites and architecture/test_boundarie
 
 ## The eight tabs (R-UI-115)
 
-Settings has eight flat tabs: 一般, 工具, 團隊技能庫, 安全, 模型, 用量 (R-USE-01, see [Usage](usage.md)), 聽寫與快捷鍵 and 關於. There are no
+Settings has eight flat tabs: 一般, 模型, 用量 (R-USE-01, see [Usage](usage.md)), 工具, 團隊技能, 聽寫與快捷鍵, 安全 and 關於.
+Up and Down move focus through the list in that order. There are no
 group names, no search box and no line under a tab's name. Each tab is its name, then sections: a small name
 over one rounded card (`--panel`) of rows with no lines between them, the name left and the control right.
 一般 holds, in order: 關於你 (the owner's picture, name and about me), 外觀 (theme and language), 拉斐爾 (the
@@ -54,9 +55,9 @@ sets them up in its conversation. Older links land on 一般: `appearance` scrol
 `messaging` and `memory` open 一般 as it is. 連結應用程式 stays a dialog of its own from the sidebar (R-UI-111).
 This supersedes the About-you grouping and the search notes below.
 
-## 團隊技能庫 (R-SKILL-17)
+## 團隊技能 (R-SKILL-17)
 
-The tab lists the shared skills in packages (skill-library.ts): a row per package with its count, who may use it, its switch and ⋯ (also on a right click). Pressing a package of several (its name, count or chevron) opens it on a page of its own in the tab, in the list's place: the back arrow and its name, its dropdown, switch and ⋯ as on its row, where it came from, then its skills, each with a switch. The back arrow, Esc or a step back return to the list scrolled where it was left, the focus on that row; nothing folds open in the list, and a skill alone keeps its one row. A new package of several opens its page at once. The importer is the tab's first card, with no line above it: a link or owner/repo (or pasted SKILL.md in its place), a picked or dropped file, a folder from the system's dialog (the output folder's picker), and one 匯入. Who may use a package is the vault's choice (整個團隊 or the characters ticked). Its menu leads each row with who it names, a character's 20 px face from the roster and, for 整個團隊, the team's own picture (its first four faces in one square, Raphael first, as the sidebar draws the team); a ticked row's check stands at its right edge, never at the left (R-UI-174, `skill-library-access`). A character's skills page shows the packages given to it read-only under 來自團隊技能庫, with a button to this tab. The core is `skills.library.*` (R-SKILL-15, R-SKILL-16); the shell lets those four methods through `core_call`.
+The tab lists the shared skills in packages (skill-library.ts): a row per package with its count, who may use it, its switch and ⋯ (also on a right click). Pressing a package of several (its name, count or chevron) opens it on a page of its own in the tab, in the list's place: the back arrow and its name, its dropdown, switch and ⋯ as on its row, where it came from, then its skills, each with a switch. The back arrow, Esc or a step back return to the list scrolled where it was left, the focus on that row; nothing folds open in the list, and a skill alone keeps its one row. A new package of several opens its page at once. The importer is the tab's first card, with no line above it: a link or owner/repo (or pasted SKILL.md in its place), a picked or dropped file, a folder from the system's dialog (the output folder's picker), and one 匯入. Who may use a package is the vault's choice (整個團隊 or the characters ticked). Its menu leads each row with who it names, a character's 20 px face from the roster and, for 整個團隊, the team's own picture (its first four faces in one square, Raphael first, as the sidebar draws the team); a ticked row's check stands at its right edge, never at the left (R-UI-174, `skill-library-access`). A character's skills page shows the packages given to it read-only under 來自團隊技能, with an 開啟團隊技能 button to this tab. The core is `skills.library.*` (R-SKILL-15, R-SKILL-16); the shell lets those four methods through `core_call`.
 
 ```powershell
 npm run look -- skill-library skill-library-open skill-library-back skill-library-access skill-library-import skill-library-imported skill-library-import-failed member-skills-library --theme both --width 1120,720,1920x1080
@@ -66,7 +67,7 @@ npm run look -- skill-library skill-library-open skill-library-back skill-librar
 npm run look -- profile appearance dictation tools safety models about settings-owner appearance-menu work-messaging-setup --theme both --width 1120,720,1920x1080
 ```
 
-`settings-shell` refuses group names, the search and a line under a tab's name on every settings scene.
+`settings-shell` checks the pane order and refuses group names, the search and a line under a tab's name on every settings scene.
 
 ## Signed updates
 

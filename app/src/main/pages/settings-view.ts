@@ -8,9 +8,8 @@
 // line under a row's name only where the setting would otherwise be set wrong. Each tab opens with
 // its name, then its rows in a few named sections, each a rounded card.
 //
-// The tabs sit flat on the left: 一般 (account, appearance, the bot's timezone and folder, messaging),
-// 工具, 團隊技能庫, 安全, 模型, 用量 (概覽 and 分析), 聽寫與快捷鍵 and 關於. No group names, no search, no line under a tab's
-// name. No tab shows memory; the core keeps it.
+// The tabs sit flat on the left, with no group names, no search and no line under a tab's name.
+// No tab shows memory; the core keeps it.
 
 
 import { LOCALES, getLocale, t } from "../i18n";
@@ -75,19 +74,17 @@ export const RETENTIONS: Choice[] = [1, 7, 30, 365, KEEP_FOREVER_DAYS].map((days
 const PRICES_LOADING = () => t("settings.026");
 
 /**
- * The tabs on the left of the panel, flat and in order: appearance and messaging
- * are sections of 一般 now, and 連結應用程式 is no tab.
+ * General comes first, then Models (the setup needed before chatting) and Usage (spending).
+ * Next are what members can do (Tools and Team skills), Dictation, Safety (vault and rules), and About.
  */
 export const PANES: { id: SettingsPane; icon: IconName; title: () => string }[] = [
   { id: "general", icon: "gear", title: () => t("settings.paneGeneral") },
+  { id: "models", icon: "bot", title: () => t("providers.title") },
+  { id: "usage", icon: "gauge", title: () => t("models.usage") },
   { id: "tools", icon: "steps", title: () => t("settings.paneTools") },
   { id: "skills", icon: "sparkle", title: () => t("settings.paneSkills") },
-  { id: "safety", icon: "lock", title: () => t("settings.paneSafety") },
-  { id: "models", icon: "bot", title: () => t("providers.title") },
-  // What was spent and what each subscription has left, and the charts of a period: a tab of its own, after the models.
-  { id: "usage", icon: "gauge", title: () => t("models.usage") },
-  // Dictation and its keys are not what most people come here for: under the models and the usage.
   { id: "dictation", icon: "mic", title: () => t("settings.paneDictation") },
+  { id: "safety", icon: "lock", title: () => t("settings.paneSafety") },
   { id: "about", icon: "info", title: () => t("common.about") },
   // Not a tab: the sidebar's 連結應用程式 opens it as a dialog of its own, its only way in (R-UI-111).
   { id: "connections", icon: "plug", title: () => t("nav.apps") },
@@ -145,7 +142,7 @@ export interface SettingsView {
   /** The shared safety rules, in Safety (none: not drawn). */
   rules?: RulesView;
   vault?: VaultView;
-  /** 團隊技能庫: the shared skills in packages, and who may use each (none: not drawn yet). */
+  /** Team skills: the shared skills in packages, and who may use each (none: not drawn yet). */
   skillLibrary?: SkillLibraryView;
   /** Shared services, in Tools: who searches, reads pages and PDFs, and looks at images (none: not drawn). */
   services?: ServicesView;
@@ -493,7 +490,7 @@ function toolsHTML(v: SettingsView): string {
   return headingHTML(v) + coreNote(v) + (v.services ? servicesHTML(v.services, modelPickerHTML(visionPickerLook(v)), v.brain, (id) => modelDisplayName(catalogOf(v), id)) : "");
 }
 
-/** 團隊技能庫: every shared skill in its package, and who may use each (skill-library.ts). */
+/** Team skills: every shared skill in its package, and who may use each (skill-library.ts). */
 function skillsHTML(v: SettingsView): string {
   return headingHTML(v) + coreNote(v) + skillLibraryHTML(v.skillLibrary ?? emptySkillLibraryView());
 }

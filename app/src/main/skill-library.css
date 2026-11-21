@@ -1,4 +1,4 @@
-/* 團隊技能庫 (skill-library.ts): one row per package in Settings' list; a package of several opens on a page of its own. */
+/* Team skills (skill-library.ts): one row per package in Settings' list; a package of several opens on a page of its own. */
 .skl-import { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); margin-bottom: var(--sp-4); padding: var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--panel); }
 .skl-import-alt { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); }
 .skl-link { display: flex; align-items: center; gap: var(--sp-2); }

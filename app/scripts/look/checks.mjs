@@ -488,13 +488,14 @@ export function checkRendered(name, context = {}) {
     return { check: name, positions };
   }
   if (name.startsWith('skill-library') || name === 'member-skills-library') {
-    // 團隊技能庫 (skill-library.ts, #280): packages with who may use each; the importer (#249); a character's read-only list.
+    // Team skills (skill-library.ts): packages with access controls, an importer and a member's read-only list.
     const rowOf = key => document.querySelector(`.skl-pack[data-skl-pack="${key}"]`);
     const accessOf = key => rowOf(key)?.querySelector('.skl-access span')?.textContent.trim();
     // A package's page stands in the list's place (R-SKILL-17): it has no importer of its own.
     const onPage = name === 'skill-library-open' || name === 'skill-library-page-top';
     if (name !== 'member-skills-library' && !onPage) {
       const pane = document.querySelector('.modal-scrim .skl');
+      require(pane?.getAttribute('aria-label') === '團隊技能', 'the Settings section names Team skills');
       require(visible(pane) && pane.querySelectorAll('[data-skl="import-go"]').length === 1 && pane.firstElementChild?.matches('.skl-import'), 'the importer is the first card of the tab, with one 匯入');
       require(!pane.querySelector('.skl-head, .skl-drop-hint') && !pane.previousElementSibling?.matches?.('p'), 'nothing is written between the tab name and its first card');
       const box = pane.getBoundingClientRect();
@@ -586,6 +587,8 @@ export function checkRendered(name, context = {}) {
     }
     if (name === 'member-skills-library') {
       const lib = document.querySelector('.ms-pane [data-k="ms-library"]');
+      require(lib.querySelector('.ms-head h2')?.textContent.trim() === '來自團隊技能', 'the member section names Team skills');
+      require(lib.querySelector('[data-ms="open-library"]')?.textContent.trim() === '開啟團隊技能', 'the button names Team skills');
       const names = [...lib.querySelectorAll('.ms-lib-row .ms-label')].map(el => el.textContent.trim());
       require(names.join('、') === '研究工具、會議紀錄', `the packages given to 小晴 are listed, and pstack, given to nobody, is not (${names.join('、')})`);
       require(!lib.querySelector('.tg, [data-ms="skill-toggle"]') && visible(lib.querySelector('.ms-head [data-ms="open-library"]')), 'read-only here, in a section of its own whose head has the way to the library');
@@ -9130,8 +9133,9 @@ export function checkRendered(name, context = {}) {
     // The settings: flat tabs, no group names, no search and no line under a tab's name.
     const scrim = modal.closest('.modal-scrim');
     if (!scrim.hasAttribute('data-standalone')) {
-      // Eight since 用量 left 模型與用量 for a tab of its own (R-USE-01); memory is not shown anywhere.
-      require(scrim.querySelectorAll('.modal-nav [data-pane]').length === 8 && !scrim.querySelector('.nav-group, #set-search, [data-pane="memory"]'), "eight tabs sit flat, with no group names and no search");
+      const panes = [...scrim.querySelectorAll('.modal-nav [data-pane]')].map(tab => tab.dataset.pane);
+      require(panes.join(' ') === 'general models usage tools skills dictation safety about', 'the eight tabs follow the Settings order');
+      require(!scrim.querySelector('.nav-group, #set-search'), "the tabs sit flat, with no group names and no search");
       require(!scrim.querySelector('.set-purpose'), "a tab is its name alone, with no line under it");
     }
     return { check: name, radius: getComputedStyle(modal).borderTopLeftRadius };

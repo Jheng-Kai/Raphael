@@ -54,7 +54,7 @@ async function mount(open: SettingsPane = "models") {
 }
 function create() {
   page = createSettings({
-    device: () => ({ dictation_keys: ["AltRight"], agent_keys: ["AltRight+Space"], ui_language: "en", dictation_mode: "hold" }),
+    device: () => ({ dictation_keys: ["AltRight"], agent_keys: ["AltRight+Space"], ui_language: "en", dictation_mode: "hold", microphone: null }),
     onEvent: (handler: (event: MainEvent) => void) => { listeners.add(handler); return () => { listeners.delete(handler); }; },
     refreshDevice: async () => {}, undo: { begin: vi.fn() },
     go, closeSettings, cleared: new Cleared(),
@@ -620,6 +620,56 @@ test("the shared tabs support arrow keys, and Settings has no search", async () 
   document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true }));
   expect((document.activeElement as HTMLElement).dataset.usageTab).toBe("overview");
   expect(page.el.querySelector("#set-search")).toBeNull();
+});
+
+test("the Settings list follows its pane order with the up and down arrows", async () => {
+  await mount("general");
+  page.el.querySelector<HTMLElement>('[data-pane="general"]')!.focus();
+  const press = (key: string) => document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+  for (const pane of ["models", "usage", "tools", "skills", "dictation", "safety", "about"]) {
+    press("ArrowDown");
+    expect((document.activeElement as HTMLElement).dataset.pane).toBe(pane);
+  }
+  press("ArrowUp");
+  expect((document.activeElement as HTMLElement).dataset.pane).toBe("safety");
+  expect(page.pane()).toBe("general");
+});
+
+test.each([false, true])("pressing a spoken language redraws the picker and Settings row with the variants submenu open: %s", async (variantsOpen) => {
+  setLocale("zh-TW");
+  api.settingsGet.mockResolvedValue({ settings: { languages: ["zh-HK", "en-US"] } });
+  api.languagesList.mockResolvedValue({ groups: [
+    { id: "zh", name: "Chinese", variants: [{ id: "zh-TW", name: "Taiwan" }, { id: "zh-HK", name: "Hong Kong" }] },
+    { id: "en", name: "English", variants: [{ id: "en-US", name: "English (United States)" }, { id: "en-GB", name: "English (United Kingdom)" }] },
+  ] });
+  await mount("dictation");
+  click('[data-k="languages"]');
+  await flush();
+  const language = '.lang-panel [data-language="zh"]';
+  const variant = '.lang-panel [data-variant-menu="zh"]';
+  const expectPicker = (pressed: boolean, count: number, form: string, summary: string) => {
+    expect(document.querySelector('[data-k="languages"] span')?.textContent).toBe(summary);
+    expect(document.querySelector(language)?.getAttribute("aria-pressed")).toBe(String(pressed));
+    expect(!!document.querySelector(`${language} .ck svg`)).toBe(pressed);
+    expect(document.querySelector(".lang-panel .lang-count")?.textContent).toBe(`已選 ${count}／5`);
+    expect(document.querySelector(`${variant} span`)?.textContent).toBe(form);
+  };
+  expectPicker(true, 2, "繁體中文（香港）", "繁體中文（香港）、English (United States)");
+  if (variantsOpen) {
+    click(variant);
+    expect(document.querySelector('.lang-variant-menu [data-variant="zh-HK"][aria-checked="true"]')).not.toBeNull();
+  }
+  document.querySelector<HTMLElement>(language)!.focus();
+  click(language);
+  expectPicker(false, 1, "繁體中文（台灣）", "English (United States)");
+  expect(document.querySelector('.lang-variant-menu')).toBeNull();
+  expect(document.activeElement).toBe(document.querySelector(language));
+  expect(api.settingsSet).toHaveBeenLastCalledWith("languages", ["en-US"]);
+  await flush();
+  click(language);
+  expectPicker(true, 2, "繁體中文（台灣）", "English (United States)、繁體中文（台灣）");
+  expect(api.settingsSet).toHaveBeenLastCalledWith("languages", ["en-US", "zh-TW"]);
+  await flush();
 });
 
 test("opening on the allowances waits for their first reading, other tabs never do, and leaving during it keeps the reading off the page", async () => {

@@ -51,7 +51,9 @@ describe("real app entry with the shared look fixture", () => {
     await vi.waitFor(() => expect(document.querySelector('.modal-scrim [data-pane="general"]')).not.toBeNull());
     // 連結應用程式 is no tab: the sidebar opens it as a dialog of its own (R-UI-111).
     // Appearance is a section of 一般; 用量 is a tab of its own after 模型.
-    for (const pane of ["general", "dictation", "tools", "safety", "models", "usage", "about"]) {
+    const panes = ["general", "models", "usage", "tools", "skills", "dictation", "safety", "about"];
+    expect([...document.querySelectorAll('.modal-scrim [data-pane]')].map(tab => tab.dataset.pane)).toEqual(panes);
+    for (const pane of panes) {
       document.querySelector(`.modal-scrim [data-pane="${pane}"]`).click();
       await vi.waitFor(() => expect(document.querySelector(`.modal-scrim [data-pane="${pane}"][aria-current="page"]`), pane).not.toBeNull());
     }

@@ -291,7 +291,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     if (element.matches('button.btn')) {
       // Navigation cards, list choices and disclosures are not text action buttons; an event line
       // that opens its room navigates like the sidebar's room rows, and so does the count of a line of messages between
-      // members (「2 則訊息」), the words that open their conversation, and a package's name in 團隊技能庫, which opens its page.
+      // members (「2 則訊息」), the words that open their conversation, and a package's name in Team skills, which opens its page.
       // Pending question rows reveal their card.
       // Keep this inventory explicit: ordinary action buttons never opt out by an attribute.
       const navigation = element.matches('.pending-questions > .pending-question, .conversation-trigger, .conversation-open, .mb-panel-row, .mb-panel-back, .ms-open, .mb-det .mb-rt, .mb-chat-choice, .mc-source, .room-row, .cs-open, .cs-main, .skl-open, .cs-back-title, .cs-have, .cs-viewall, .au-room-row > .btn:first-child, .event-open, .event-count, .menu-reactions .reaction, .reaction-bar .reaction, .ho-row, .ho-stat, .lib-row, .tpr-row, .au-edit, .cal-chip, .cal-more, .au-day-num, .au-date-nav > .au-today, .steps-sum, .task-sum, .desktop-panel .desktop-screen > .btn.desktop-open') || element.closest('.mb-col, .au-month-grid, .au-drag-members, .au-segment, .mc-segments') || element.hasAttribute('aria-expanded') || element.matches('.conversation-card > .card-actions > .card-quiet');

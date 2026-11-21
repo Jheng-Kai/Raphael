@@ -216,14 +216,13 @@ const described = (html: string): string[] =>
   html.split(/(?=<div class="row[ "])/).filter((r) => r.includes('<div class="d">')).map((r) => /<div class="t">(.*?)<\/div>/.exec(r)![1]);
 
 describe("the tabs", () => {
-  test("are the eight: General, Tools, Team skill library, Safety, Models, Usage, Dictation and About, in each language", () => {
-    // 用量 is a tab of its own right after 模型 (it was a view of 模型與用量), with a gauge as the account menu's 用量 has.
-    expect(IDS).toEqual(["general", "tools", "skills", "safety", "models", "usage", "dictation", "about", "connections"]);
+  test("are ordered General, Models, Usage, Tools, Team skills, Dictation, Safety and About", () => {
+    expect(IDS).toEqual(["general", "models", "usage", "tools", "skills", "dictation", "safety", "about", "connections"]);
     expect(PANES.find((p) => p.id === "usage")!.icon).toBe("gauge");
     const titles = {
-      "zh-TW": ["一般", "工具", "團隊技能庫", "安全", "模型", "用量", "聽寫與快捷鍵", "關於", "連結應用程式"],
-      en: ["General", "Tools", "Team skill library", "Safety", "Models", "Usage", "Dictation & shortcuts", "About", "Connect apps"],
-      ja: ["一般", "ツール", "チームのスキルライブラリ", "安全", "モデル", "使用量", "音声入力とショートカット", "アプリ情報", "アプリを連携"],
+      "zh-TW": ["一般", "模型", "用量", "工具", "團隊技能", "聽寫與快捷鍵", "安全", "關於", "連結應用程式"],
+      en: ["General", "Models", "Usage", "Tools", "Team skills", "Dictation & shortcuts", "Safety", "About", "Connect apps"],
+      ja: ["一般", "モデル", "使用量", "ツール", "チームのスキル", "音声入力とショートカット", "安全", "アプリ情報", "アプリを連携"],
     };
     for (const locale of LOCALES) {
       setLocale(locale);
@@ -234,7 +233,7 @@ describe("the tabs", () => {
   test("sit flat: no group names and no search", () => {
     const list = paneListHTML();
     // 連結應用程式 is no tab: the sidebar opens it as a dialog of its own (R-UI-111).
-    expect([...list.matchAll(/data-pane="(\w+)"/g)].map((m) => m[1])).toEqual(["general", "tools", "skills", "safety", "models", "usage", "dictation", "about"]);
+    expect([...list.matchAll(/data-pane="(\w+)"/g)].map((m) => m[1])).toEqual(["general", "models", "usage", "tools", "skills", "dictation", "safety", "about"]);
     expect(list).not.toContain("nav-group");
     expect(list).not.toContain("set-search");
   });
