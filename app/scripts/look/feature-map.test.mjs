@@ -13,13 +13,13 @@ const names = ["navigation", "conversation", "members", "automations", "team-and
 
 function expectIndexedNotes(index, files) {
   const linked = [...new Set([...index.matchAll(/\]\((?:\.\/)?([\w.-]+\.md)(?:#[^\s)]*)?\)/g)].map(([, file]) => file))];
-  expect(files.filter(file => file !== "README.md").sort()).toEqual(linked.filter(file => file !== "README.md").sort());
+  expect(files.filter(file => file.endsWith(".md") && file !== "README.md").sort()).toEqual(linked.filter(file => file !== "README.md").sort());
 }
 
 describe("maintained verification feature map", () => {
-  it("accepts new notes linked from the index without extending the required names", () => {
+  it("accepts new notes linked from the index and ignores non-Markdown files", () => {
     expectIndexedNotes("[Navigation](navigation.md) [Future](./future-note.md#checks) [Again](future-note.md)",
-      ["README.md", "navigation.md", "future-note.md"]);
+      ["README.md", "navigation.md", "future-note.md", "future-note.md.orig"]);
   });
   it("rejects notes absent from the index and index links without a note", () => {
     expect(() => expectIndexedNotes("[Navigation](navigation.md)", ["README.md", "navigation.md", "unlinked.md"])).toThrow();
