@@ -1110,7 +1110,7 @@ export function createAgent(app: AppContext, places?: {
             item.part ? `${item.part.from ?? ""}-${item.part.until ?? ""}` : ""],
             () => turnHTML(view, state, details.has(turn.id), { ...turnLook, regenerateTurnId: turn.id, latestFailedTurnId, signinTurnId, exchangeTogether: item.together, part: item.part }));
         })(), turnId: item.turn.id },
-    // A stretch of a turn with nothing in it yet (owner messages that joined its work, threadItems) has no line.
+    // A stretch of a turn with nothing in it yet (owner messages or exchanges that joined its work, threadItems) has no line.
     ).filter(line => line.html !== "");
     renderedTurns.retain(new Set(out.map(line => line.key)));
     const boundary = unreadFrom;
@@ -1929,7 +1929,7 @@ export function createAgent(app: AppContext, places?: {
     revealWork: id => {
       state.thinkingOpen.set(id, true);
       // Search opens this body in place; acknowledge that state without replacing its marks or face. The body is in the
-      // turn's last line: owner messages that joined its work break it into several (threadItems).
+      // turn's last line: owner messages or exchanges that joined its work break it into several (threadItems).
       const shown = lines().filter(line => line.turnId === id), drawn = thread.querySelectorAll(`.tn[data-id="${id}"]`);
       const line = shown[shown.length - 1], node = drawn[drawn.length - 1];
       if (line && node) drawnHTML.set(node, threadLineIdentity(line.html));
