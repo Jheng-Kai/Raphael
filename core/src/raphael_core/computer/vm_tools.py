@@ -789,13 +789,10 @@ class VmTools:
                 return PluginResult(False, "blocked")
             progress, language = _NOTE.get()
             announce = _NOTICE.get() or progress
-            def browser_opened():
-                if announce:
-                    from .host_computer import CHROME_OPENED
-                    announce(CHROME_OPENED.get(language, CHROME_OPENED["en"]))
+            # Opening the browser is not news: the Computer tab shows the page, and the member says what it did.
             result = await self.host_computer.call(
                 key, arguments, member=member, scope=scope, turn_id=turn_id, conversation_id=conversation_id, private=private,
-                approver=approver, language=language, announce=browser_opened, explain=announce)
+                approver=approver, language=language, announce=None, explain=announce)
             if self.audit:
                 _, tool = self.host_computer.routes[key]
                 self.audit.add(server="computer", tool=tool.name, tier=tool.tier.name, approver=approver,

@@ -337,22 +337,3 @@ OWNER_STEPS = with_ui_words({
         "certificate": "「コンピューター」パネルで証明書を選択してください。",
     },
 })
-
-
-CHROME_OPENED = {
-    "zh-TW": "已開啟 Raphael 的 Chrome。",
-    "en": "I opened Raphael’s Chrome.",
-    "ja": "Raphael 専用の Chrome を開きました。",
-    "zh-CN": "已打开 Raphael 的 Chrome。",
-    "ko": "Raphael 전용 Chrome을 열었습니다.",
-    "es": "Abrí el Chrome de Raphael.",
-    "fr": "J’ai ouvert le Chrome de Raphael.",
-    "de": "Ich habe Raphaels Chrome geöffnet.",
-    "pt-BR": "Abri o Chrome do Raphael.",
-    "it": "Ho aperto il Chrome di Raphael.",
-    "ru": "Я открыл Chrome Рафаэля.",
-    "vi": "Tôi đã mở Chrome của Raphael.",
-    "th": "เปิด Chrome ของ Raphael แล้ว",
-    "id": "Saya membuka Chrome milik Raphael.",
-    "tr": "Raphael’in Chrome’unu açtım."
-}
