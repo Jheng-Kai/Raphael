@@ -119,14 +119,15 @@ async def test_the_calls_a_turn_could_not_ask_about_are_steps_that_were_not_made
     ]
 
 
-async def test_the_app_is_told_when_a_turn_is_written_and_when_it_is_answered(
+async def test_the_app_is_told_when_a_turn_is_written_waits_for_approval_and_is_answered(
     rig, plugins, client, calls, heard
 ):
     asked = await ask_for_note(rig, plugins, client, "T2")
-    assert heard == [("agent.turn", {"turn_id": asked["turn_id"], "member_id": 0, "failure": None})]
+    notice = ("agent.turn", {"turn_id": asked["turn_id"], "member_id": 0, "failure": None})
+    assert heard == [notice, notice]
     client.replies.append(spoken("了", "記下了。"))
     await rig.confirm(asked["confirm"]["id"], True)
-    assert heard[-1] == ("agent.turn", {"turn_id": asked["turn_id"], "member_id": 0, "failure": None}) and len(heard) == 2
+    assert heard == [notice, notice, notice]
 
 
 async def test_clearing_the_history_takes_the_steps_too(rig, client, conn):

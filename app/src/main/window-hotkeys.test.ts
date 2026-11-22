@@ -177,10 +177,10 @@ describe("focused-window hotkeys", () => {
     expect(reduceHotkey(space.state, key("AltRight", "keyup"), custom).preventDefault).toBe(true);
   });
 
-  test("Right Alt+Space asks Raphael, after Right Alt went down, as the hook reports it", () => {
+  test("Right Alt+Space identifies the shared prefix when Space is released first", () => {
     const withAgent = { ...defaults, agent_keys: ["AltRight+Space"] };
     const alt = reduceHotkey(emptyHotkeyState(), key("AltRight"), withAgent);
-    expect(alt.actions).toEqual(["dictation_down"]);
+    expect(alt.actions).toEqual(["dictation_prefix_down"]);
     const space = reduceHotkey(alt.state, key("Space"), withAgent);
     expect(space.actions).toEqual(["agent_down"]);
     expect(space.preventDefault).toBe(true);
@@ -190,7 +190,7 @@ describe("focused-window hotkeys", () => {
     expect(spaceUp.actions).toEqual(["agent_up"]);
     expect(spaceUp.preventDefault).toBe(true);
     const altUp = reduceHotkey(spaceUp.state, key("AltRight", "keyup"), withAgent);
-    expect(altUp.actions).toEqual(["dictation_up"]);
+    expect(altUp.actions).toEqual(["dictation_prefix_up"]);
   });
 
   test("letting go of Right Alt first also ends the question once", () => {
@@ -198,7 +198,7 @@ describe("focused-window hotkeys", () => {
     const alt = reduceHotkey(emptyHotkeyState(), key("AltRight"), withAgent);
     const space = reduceHotkey(alt.state, key("Space"), withAgent);
     const altUp = reduceHotkey(space.state, key("AltRight", "keyup"), withAgent);
-    expect(altUp.actions).toEqual(["dictation_up", "agent_up"]);
+    expect(altUp.actions).toEqual(["dictation_prefix_up", "agent_up"]);
     expect(reduceHotkey(altUp.state, key("Space", "keyup"), withAgent).actions).toEqual([]);
   });
 
@@ -208,13 +208,13 @@ describe("focused-window hotkeys", () => {
     expect(space.actions).toEqual([]);
     expect(space.preventDefault).toBe(false);
     const alt = reduceHotkey(space.state, key("AltRight"), withAgent);
-    expect(alt.actions).toEqual(["dictation_down", "agent_down"]);
+    expect(alt.actions).toEqual(["dictation_prefix_down", "agent_down"]);
     expect(alt.preventDefault).toBe(true);
     // the page saw the Space go down, so it sees it come up; that release ends the question
     const spaceUp = reduceHotkey(alt.state, key("Space", "keyup"), withAgent);
     expect(spaceUp.actions).toEqual(["agent_up"]);
     expect(spaceUp.preventDefault).toBe(false);
-    expect(reduceHotkey(spaceUp.state, key("AltRight", "keyup"), withAgent).actions).toEqual(["dictation_up"]);
+    expect(reduceHotkey(spaceUp.state, key("AltRight", "keyup"), withAgent).actions).toEqual(["dictation_prefix_up"]);
   });
 
   test("Space alone, and a window without a question key, do not ask Raphael", () => {

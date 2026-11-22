@@ -1377,16 +1377,19 @@ formal request naming the quick one. The quick model and effort answer quick tur
 turns keep no native session, and each turn records the model that actually answered (Raphael's
 face tooltip). A request replaces only the YES/NO questions waiting in its own conversation, so
 quick use leaves a formal approval waiting and adds no formal rows. A spoken answer with public
-progress has no reply message: the thread shows its text after the work line. A quick question is the one
+progress has no reply message: the thread shows its text after the work line. Once speech recognition returns words,
+the core records the spoken question as running and announces it with `agent.turn`. The quick conversation replaces
+the recognition placeholder with the question and its live presence while the answer is pending (R-AG-06). A quick question is the one
 turn that reaches the owner's own screen (R-PC-01): the fast router, the commands to open, lock or
 copy and the desktop run are its alone, and a spoken or typed turn of a formal conversation goes to the
 narrated harness with none of them; the hidden local commands are every turn's, with the card (R-PC-02).
 
 ```powershell
-npm run look -- quick-question-result quick-formal-isolation quick-stop quick-model-selection --theme both --width 1120,720,1920x1080
+npm run look -- composer-stop-voice quick-question-result quick-formal-isolation quick-stop quick-model-selection --theme both --width 1120,720,1920x1080
 ```
 
-`quick-question-result` announces an Alt+Space answer through the native `AgentTurn` event while
+`composer-stop-voice` opens quick during recognition, announces a running turn, and checks the question, live presence,
+and disappearance of the recognition placeholder. `quick-question-result` announces an Alt+Space answer through the native `AgentTurn` event while
 the quick conversation is open and checks its answer and quick model. `quick-formal-isolation`
 sends one formal and one quick question through the real composer and checks the destination
 each names at the native boundary and that neither thread shows the other. `quick-stop` presses

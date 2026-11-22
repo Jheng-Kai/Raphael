@@ -35,6 +35,9 @@ use handy_keys::{Hotkey, HotkeyId, HotkeyManager, HotkeyState, Key, Modifiers};
 use serde::Deserialize;
 use tokio::sync::mpsc::UnboundedSender;
 
+use crate::device_settings::DictationMode;
+use crate::dictation::ModeCell;
+
 /// How long [`HotkeyService::update_bindings`] waits for the hotkey thread to answer.
 const REPLY_TIMEOUT: Duration = Duration::from_secs(2);
 const NOT_RUNNING: &str = "the hotkey service is not running";
@@ -46,9 +49,7 @@ pub enum HotkeyEvent {
     DictationDown,
     /// A dictation key came up.
     DictationUp,
-    /// An agent key (the one that asks Raphael) went down. One per press. Right Alt+Space reports
-    /// `DictationDown` first, whichever key went down first: a Space pressed just before Right Alt
-    /// is reported again after it (see the hook's patch notes).
+    /// An agent key (the one that asks Raphael) went down. One per press.
     AgentDown,
     /// A composer fixes both the recipient and the conversation before recording starts.
     ConversationDown {
@@ -56,8 +57,7 @@ pub enum HotkeyEvent {
         conversation: u64,
         quick: bool,
     },
-    /// An agent key came up. Releasing the modifier of the combination first reports it too, and
-    /// it may come before or after the `DictationUp` of the same modifier.
+    /// An agent key came up. Releasing either key of the combination reports it.
     AgentUp,
     /// A confirmed UI Stop, independent of global Escape registration.
     Cancel,
@@ -65,12 +65,9 @@ pub enum HotkeyEvent {
     CancelKey,
     /// Other physical input disarms that gesture without retaining any input text.
     CancelReset,
-    /// A paste-last key went down. Right Alt+V reports `DictationDown` first, because Right Alt
-    /// went down first.
+    /// A paste-last key went down.
     PasteLast,
-    /// A tidy key went down: tidy the text that is selected in the focused window. Right Alt+T
-    /// reports `DictationDown` first, because Right Alt went down first, exactly as Right Alt+V
-    /// does; the controller drops that fresh recording the same way.
+    /// A tidy key went down: tidy the text that is selected in the focused window.
     Tidy,
 }
 
@@ -79,7 +76,10 @@ pub enum HotkeyEvent {
 #[serde(rename_all = "snake_case")]
 pub enum WindowHotkey {
     DictationDown,
+    DictationPrefixDown,
     DictationUp,
+    DictationPrefixUp,
+    DictationBlur,
     AgentDown,
     AgentUp,
     PasteLast,
@@ -92,8 +92,10 @@ pub enum WindowHotkey {
 impl From<WindowHotkey> for HotkeyEvent {
     fn from(kind: WindowHotkey) -> Self {
         match kind {
-            WindowHotkey::DictationDown => Self::DictationDown,
-            WindowHotkey::DictationUp => Self::DictationUp,
+            WindowHotkey::DictationDown | WindowHotkey::DictationPrefixDown => Self::DictationDown,
+            WindowHotkey::DictationUp
+            | WindowHotkey::DictationPrefixUp
+            | WindowHotkey::DictationBlur => Self::DictationUp,
             WindowHotkey::AgentDown => Self::AgentDown,
             WindowHotkey::AgentUp => Self::AgentUp,
             WindowHotkey::PasteLast => Self::PasteLast,
@@ -257,11 +259,12 @@ impl HotkeyService {
     pub fn start(
         bindings: &Bindings,
         events: UnboundedSender<HotkeyEvent>,
+        mode: ModeCell,
     ) -> Result<Self, String> {
         let wanted = Wanted::from_bindings(bindings)?;
         #[cfg(debug_assertions)]
         if crate::native_journey() {
-            return Self::start_with(WindowOnlyBackend::default(), wanted, events);
+            return Self::start_with(WindowOnlyBackend::default(), wanted, events, mode);
         }
         // macOS lets an app watch and swallow keys only once the person has allowed it under
         // Accessibility. Until then the service runs and waits: macOS shows its own question, the
@@ -269,7 +272,7 @@ impl HotkeyService {
         #[cfg(target_os = "macos")]
         if !handy_keys::check_accessibility() {
             crate::macos::permissions::accessibility(true);
-            let service = Self::start_with(late::LateManager::default(), wanted, events)?;
+            let service = Self::start_with(late::LateManager::default(), wanted, events, mode)?;
             log::info!("global hotkeys wait for the accessibility permission: {bindings:?}");
             return Ok(service);
         }
@@ -277,7 +280,7 @@ impl HotkeyService {
         // them.
         let manager = HotkeyManager::new_with_blocking()
             .map_err(|err| format!("could not install the keyboard hook: {err}"))?;
-        let service = Self::start_with(manager, wanted, events)?;
+        let service = Self::start_with(manager, wanted, events, mode)?;
         log::info!("global hotkeys are on: {bindings:?}");
         Ok(service)
     }
@@ -286,11 +289,12 @@ impl HotkeyService {
         backend: B,
         wanted: Wanted,
         events: UnboundedSender<HotkeyEvent>,
+        mode: ModeCell,
     ) -> Result<Self, String>
     where
         B: Backend + Send + 'static,
     {
-        let mut worker = Worker::new(backend, wanted, events);
+        let mut worker = Worker::new(backend, wanted, events, mode);
         worker.sync()?;
         let output = worker.events.clone();
         let (commands, inbox) = mpsc::channel();
@@ -702,6 +706,11 @@ struct Registration<Id> {
     role: Role,
 }
 
+enum DictationPrefix {
+    Pending,
+    Consumed,
+}
+
 /// The body of the hotkey thread.
 struct Worker<B: Backend> {
     backend: B,
@@ -712,11 +721,18 @@ struct Worker<B: Backend> {
     paused: bool,
     registered: Vec<Registration<B::Id>>,
     duplicates: DuplicateGate,
+    mode: ModeCell,
+    dictation_prefix: Option<DictationPrefix>,
 }
 
 impl<B: Backend> Worker<B> {
     /// Nothing is registered until the first [`sync`](Self::sync).
-    fn new(backend: B, wanted: Wanted, events: UnboundedSender<HotkeyEvent>) -> Self {
+    fn new(
+        backend: B,
+        wanted: Wanted,
+        events: UnboundedSender<HotkeyEvent>,
+        mode: ModeCell,
+    ) -> Self {
         Self {
             backend,
             events,
@@ -725,6 +741,8 @@ impl<B: Backend> Worker<B> {
             paused: false,
             registered: Vec::new(),
             duplicates: DuplicateGate::default(),
+            mode,
+            dictation_prefix: None,
         }
     }
 
@@ -754,13 +772,15 @@ impl<B: Backend> Worker<B> {
                 quick,
             } => {
                 if !self.paused {
-                    self.forward(
+                    self.key_edge(
                         HotkeyEvent::ConversationDown {
                             member,
                             conversation,
                             quick,
                         },
                         EventSource::Window,
+                        false,
+                        false,
                     );
                 }
             }
@@ -770,10 +790,25 @@ impl<B: Backend> Worker<B> {
                 if self.paused {
                     return;
                 }
-                self.forward(event, EventSource::Window);
+                self.key_edge(
+                    event,
+                    EventSource::Window,
+                    matches!(
+                        kind,
+                        WindowHotkey::DictationPrefixDown
+                            | WindowHotkey::DictationPrefixUp
+                            | WindowHotkey::DictationBlur
+                    ),
+                    matches!(kind, WindowHotkey::DictationBlur),
+                );
             }
             Command::Update { wanted, reply } => {
                 let previous = std::mem::replace(&mut self.wanted, wanted);
+                if previous.dictation != self.wanted.dictation
+                    || previous.agent != self.wanted.agent
+                {
+                    self.dictation_prefix = None;
+                }
                 let result = self.sync();
                 if let Err(err) = &result {
                     log::error!("could not apply the new hotkey bindings: {err}");
@@ -790,6 +825,9 @@ impl<B: Backend> Worker<B> {
             }
             Command::SetPaused(paused) => {
                 self.paused = paused;
+                if paused {
+                    self.dictation_prefix = None;
+                }
                 self.sync_logged();
             }
             Command::Wake | Command::Shutdown => {}
@@ -800,6 +838,9 @@ impl<B: Backend> Worker<B> {
     fn pump(&mut self) {
         while let Some(reset) = self.backend.take_cancel_input() {
             if self.cancel_enabled && !self.paused {
+                if !reset && self.dictation_prefix.is_some() {
+                    self.dictation_prefix = Some(DictationPrefix::Consumed);
+                }
                 let _ = self.events.send(if reset {
                     HotkeyEvent::CancelReset
                 } else {
@@ -809,33 +850,73 @@ impl<B: Backend> Worker<B> {
         }
         while let Some((id, state)) = self.backend.try_recv() {
             // An event can outlive its key: one queued just before the key was unregistered.
-            let Some(role) = self.registered.iter().find(|r| r.id == id).map(|r| r.role) else {
+            let Some(registration) = self.registered.iter().find(|r| r.id == id) else {
                 continue;
             };
-            if let Some(event) = translate(role, state) {
+            if let Some(event) = translate(registration.role, state) {
                 if event == HotkeyEvent::Cancel && self.backend.uses_cancel_input_stream() {
                     continue;
                 }
-                self.forward(
+                let key = registration.hotkey;
+                let prefix =
+                    registration.role == Role::Dictation
+                        && key.key.is_none()
+                        && self.wanted.agent.iter().any(|agent| {
+                            agent.key.is_some() && key.modifiers.matches(agent.modifiers)
+                        });
+                self.key_edge(
                     if event == HotkeyEvent::Cancel {
                         HotkeyEvent::CancelKey
                     } else {
                         event
                     },
                     EventSource::Hook,
+                    prefix,
+                    false,
                 );
             }
         }
     }
 
-    fn forward(&mut self, event: HotkeyEvent, source: EventSource) {
-        if self.duplicates.accept(event, source, Instant::now()) {
-            log::debug!("hotkey event: {event:?} source={source:?}");
-            // A closed channel is noticed by `run`.
-            let _ = self.events.send(event);
-        } else {
+    fn key_edge(&mut self, event: HotkeyEvent, source: EventSource, prefix: bool, blur: bool) {
+        if !self.duplicates.accept(event, source, Instant::now()) {
             log::debug!("hotkey duplicate ignored: {event:?} source={source:?}");
+            return;
         }
+        match event {
+            HotkeyEvent::DictationDown if prefix && self.mode.get() == DictationMode::Toggle => {
+                // A toggle can wait until release to tell a standalone tap from a chord.
+                self.dictation_prefix = Some(DictationPrefix::Pending);
+                return;
+            }
+            HotkeyEvent::DictationUp if prefix => {
+                if let Some(prefix) = self.dictation_prefix.take() {
+                    if matches!(prefix, DictationPrefix::Consumed)
+                        || blur
+                        || self.mode.get() != DictationMode::Toggle
+                    {
+                        return;
+                    }
+                    self.report(HotkeyEvent::DictationDown, source);
+                }
+            }
+            HotkeyEvent::AgentDown
+            | HotkeyEvent::PasteLast
+            | HotkeyEvent::Tidy
+            | HotkeyEvent::Cancel
+            | HotkeyEvent::CancelKey
+                if self.dictation_prefix.is_some() =>
+            {
+                self.dictation_prefix = Some(DictationPrefix::Consumed);
+            }
+            _ => {}
+        }
+        self.report(event, source);
+    }
+
+    fn report(&self, event: HotkeyEvent, source: EventSource) {
+        log::debug!("hotkey event: {event:?} source={source:?}");
+        let _ = self.events.send(event);
     }
 
     /// The keys that should be registered right now.
@@ -926,6 +1007,7 @@ mod tests {
             WindowOnlyBackend::default(),
             Wanted::from_bindings(&Bindings::default()).unwrap(),
             events,
+            ModeCell::default(),
         )
         .unwrap();
         service.window_hotkey(WindowHotkey::AgentDown).unwrap();
@@ -1438,7 +1520,10 @@ mod tests {
     ) -> (Worker<FakeBackend>, UnboundedReceiver<HotkeyEvent>) {
         let (events, rx) = unbounded_channel();
         let wanted = Wanted::from_bindings(b).unwrap();
-        (Worker::new(fake.clone(), wanted, events), rx)
+        (
+            Worker::new(fake.clone(), wanted, events, ModeCell::default()),
+            rx,
+        )
     }
 
     fn pause(w: &mut Worker<FakeBackend>, paused: bool) {
@@ -1563,10 +1648,11 @@ mod tests {
     fn window_keys_are_deduplicated_against_queued_hook_events() {
         let fake = FakeBackend::default();
         let (mut w, mut rx) = worker(&fake, &Bindings::default());
+        w.mode.set(DictationMode::Hold);
         w.sync().unwrap();
         w.handle(Command::SetCancel(true));
         for (binding, kind) in [
-            ("AltRight", WindowHotkey::DictationDown),
+            ("AltRight", WindowHotkey::DictationPrefixDown),
             ("AltRight+V", WindowHotkey::PasteLast),
             ("AltRight+T", WindowHotkey::Tidy),
             ("AltRight+Space", WindowHotkey::AgentDown),
@@ -1576,7 +1662,7 @@ mod tests {
             assert_eq!(drain(&mut rx).len(), 1, "duplicate {kind:?}");
         }
         fake.release("AltRight");
-        w.handle(Command::WindowHotkey(WindowHotkey::DictationUp));
+        w.handle(Command::WindowHotkey(WindowHotkey::DictationPrefixUp));
         assert_eq!(drain(&mut rx), vec![HotkeyEvent::DictationUp]);
         fake.release("AltRight+Space");
         w.handle(Command::WindowHotkey(WindowHotkey::AgentUp));
@@ -1616,10 +1702,16 @@ mod tests {
         let fake = FakeBackend::default();
         let (mut w, mut rx) = worker(&fake, &Bindings::default());
         w.sync().unwrap();
-        w.handle(Command::WindowHotkey(WindowHotkey::DictationDown));
+        w.handle(Command::WindowHotkey(WindowHotkey::DictationPrefixDown));
         fake.press("AltRight");
         w.pump();
-        assert_eq!(drain(&mut rx), vec![HotkeyEvent::DictationDown]);
+        assert!(drain(&mut rx).is_empty());
+        fake.release("AltRight");
+        w.handle(Command::WindowHotkey(WindowHotkey::DictationPrefixUp));
+        assert_eq!(
+            drain(&mut rx),
+            vec![HotkeyEvent::DictationDown, HotkeyEvent::DictationUp]
+        );
     }
 
     #[test]
@@ -1825,7 +1917,7 @@ mod tests {
         w.sync().unwrap();
         w.handle(Command::SetCancel(true));
 
-        // Right Alt+V: Right Alt goes down first, so the dictation key reports before paste-last.
+        // Paste-last consumes the shared modifier in toggle mode.
         fake.press("AltRight");
         fake.press("AltRight+V");
         fake.release("AltRight+V");
@@ -1838,9 +1930,7 @@ mod tests {
         assert_eq!(
             drain(&mut rx),
             vec![
-                HotkeyEvent::DictationDown,
                 HotkeyEvent::PasteLast,
-                HotkeyEvent::DictationUp,
                 HotkeyEvent::CancelKey,
                 HotkeyEvent::CancelKey,
             ]
@@ -1854,23 +1944,13 @@ mod tests {
         w.sync().unwrap();
         w.handle(Command::SetCancel(true));
 
-        // Right Alt+T: Right Alt goes down first, so the dictation key reports before the tidy
-        // key, as it does for Right Alt+V. The controller drops the recording that began (see
-        // `right_alt_and_t_drop_the_dictation_that_the_right_alt_started`), and the release of
-        // the Right Alt that follows ends nothing: the tidy key has no release of its own.
+        // Tidy consumes the shared modifier in toggle mode, just as paste-last does.
         fake.press("AltRight");
         fake.press("AltRight+T");
         fake.release("AltRight+T");
         fake.release("AltRight");
         w.pump();
-        assert_eq!(
-            drain(&mut rx),
-            vec![
-                HotkeyEvent::DictationDown,
-                HotkeyEvent::Tidy,
-                HotkeyEvent::DictationUp,
-            ]
-        );
+        assert_eq!(drain(&mut rx), vec![HotkeyEvent::Tidy]);
 
         // The key is the chord: neither T nor Right Alt+Space (a different key) reports it.
         assert!(!fake.registered().contains(&hk("T")));
@@ -1955,26 +2035,10 @@ mod tests {
     }
 
     #[test]
-    fn right_alt_and_space_report_the_dictation_key_first_and_both_edges() {
+    fn the_hook_reports_only_quick_ask_in_either_release_order() {
         let fake = FakeBackend::default();
         let (mut w, mut rx) = worker(&fake, &Bindings::default());
         w.sync().unwrap();
-
-        // Space released first, then Right Alt.
-        fake.press("AltRight");
-        fake.press("AltRight+Space");
-        fake.release("AltRight+Space");
-        fake.release("AltRight");
-        w.pump();
-        assert_eq!(
-            drain(&mut rx),
-            vec![
-                HotkeyEvent::DictationDown,
-                HotkeyEvent::AgentDown,
-                HotkeyEvent::AgentUp,
-                HotkeyEvent::DictationUp,
-            ]
-        );
 
         // Right Alt released first: handy-keys releases both keys in no fixed order.
         for released in [
@@ -1987,15 +2051,41 @@ mod tests {
                 fake.release(binding);
             }
             w.pump();
-            let events = drain(&mut rx);
             assert_eq!(
-                events[..2],
-                [HotkeyEvent::DictationDown, HotkeyEvent::AgentDown]
+                drain(&mut rx),
+                vec![HotkeyEvent::AgentDown, HotkeyEvent::AgentUp],
             );
-            let mut edges = events[2..].to_vec();
-            edges.sort_by_key(|event| format!("{event:?}"));
-            assert_eq!(edges, [HotkeyEvent::AgentUp, HotkeyEvent::DictationUp]);
         }
+    }
+
+    #[test]
+    fn the_window_reports_only_quick_ask_in_either_release_order() {
+        use WindowHotkey::{
+            AgentDown, AgentUp, DictationBlur, DictationPrefixDown, DictationPrefixUp,
+        };
+
+        let fake = FakeBackend::default();
+        let (mut w, mut rx) = worker(&fake, &Bindings::default());
+        for released in [[AgentUp, DictationPrefixUp], [DictationPrefixUp, AgentUp]] {
+            for kind in [DictationPrefixDown, AgentDown].into_iter().chain(released) {
+                w.handle(Command::WindowHotkey(kind));
+            }
+            assert_eq!(
+                drain(&mut rx),
+                vec![HotkeyEvent::AgentDown, HotkeyEvent::AgentUp]
+            );
+        }
+        w.handle(Command::WindowHotkey(DictationPrefixDown));
+        assert!(drain(&mut rx).is_empty());
+        w.handle(Command::WindowHotkey(DictationPrefixUp));
+        assert_eq!(
+            drain(&mut rx),
+            vec![HotkeyEvent::DictationDown, HotkeyEvent::DictationUp]
+        );
+
+        w.handle(Command::WindowHotkey(DictationPrefixDown));
+        w.handle(Command::WindowHotkey(DictationBlur));
+        assert!(drain(&mut rx).is_empty());
     }
 
     #[test]
@@ -2044,6 +2134,7 @@ mod tests {
         thread::sleep(Duration::from_millis(80));
         assert_eq!(fake.0.lock().unwrap().polls, polls);
         fake.press("AltRight");
+        fake.release("AltRight");
         assert_eq!(next_event(&mut rx), HotkeyEvent::DictationDown);
         drop(svc);
     }
@@ -2075,7 +2166,7 @@ mod tests {
         let (events, rx) = unbounded_channel();
         let wanted = Wanted::from_bindings(b).unwrap();
         (
-            HotkeyService::start_with(fake.clone(), wanted, events).unwrap(),
+            HotkeyService::start_with(fake.clone(), wanted, events, ModeCell::default()).unwrap(),
             rx,
         )
     }
@@ -2108,8 +2199,8 @@ mod tests {
         );
 
         fake.press("AltRight");
-        assert_eq!(next_event(&mut rx), HotkeyEvent::DictationDown);
         fake.release("AltRight");
+        assert_eq!(next_event(&mut rx), HotkeyEvent::DictationDown);
         assert_eq!(next_event(&mut rx), HotkeyEvent::DictationUp);
         drop(svc);
     }
@@ -2252,7 +2343,7 @@ mod tests {
         fake.refuse("AltRight+V");
         let (events, _rx) = unbounded_channel();
         let wanted = Wanted::from_bindings(&Bindings::default()).unwrap();
-        let err = HotkeyService::start_with(fake.clone(), wanted, events)
+        let err = HotkeyService::start_with(fake.clone(), wanted, events, ModeCell::default())
             .err()
             .unwrap();
         assert!(err.contains("could not register"), "{err}");
@@ -2304,7 +2395,7 @@ mod tests {
     #[test]
     fn starting_with_a_bad_binding_installs_no_hook() {
         let (events, _rx) = unbounded_channel();
-        let err = HotkeyService::start(&bindings(&["Nope"], &[]), events)
+        let err = HotkeyService::start(&bindings(&["Nope"], &[]), events, ModeCell::default())
             .err()
             .unwrap();
         assert!(err.contains("Nope"), "{err}");

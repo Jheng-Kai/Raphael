@@ -53,6 +53,10 @@ impl HoldTap {
         Self::default()
     }
 
+    pub fn is_held(&self) -> bool {
+        matches!(self.state, State::Held)
+    }
+
     /// The dictation key went down. `mode` is the mode in force now; it decides what this press
     /// means only if it begins a dictation, and a dictation that is under way keeps its own.
     pub fn on_down(&mut self, mode: DictationMode) -> Action {

@@ -1105,7 +1105,11 @@ export function installMock(fixture, config = {}, target = window) {
     data.turns = [base];
   }
   const state = { data, calls: [], errors: [], urls: [], sent: [], exported: null, channel: null, emit(event) {
-    if (event.type === "AgentTurn" && arrivals.has(event.turn_id)) { data.turns.push(arrivals.get(event.turn_id)); arrivals.delete(event.turn_id); }
+    if (event.type === "AgentTurn" && arrivals.has(event.turn_id)) {
+      const turn = arrivals.get(event.turn_id);
+      data.turns.push({ ...turn, created_at_ms: turn.created_at_ms ?? Date.now() });
+      arrivals.delete(event.turn_id);
+    }
     state.channel?.onmessage(event);
   } };
   let maximized = false;

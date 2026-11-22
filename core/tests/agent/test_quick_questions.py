@@ -351,6 +351,66 @@ async def test_a_quick_confirmation_continues_in_the_quick_conversation(make_rig
     assert rig.history.list(conversation_id=formal) == []
 
 
+async def test_a_spoken_quick_question_is_announced_before_the_router_returns(make_rig, client):
+    notices = []
+    rig = make_rig(notify=lambda method, params: notices.append((method, params)))
+    quick = rig.service.conversations.quick()
+    routing, release = asyncio.Event(), asyncio.Event()
+
+    async def slow_route(**kwargs):
+        routing.set()
+        await release.wait()
+        return decision("unclear")
+
+    client.decisions.append(slow_route)
+    client.chats.append(answered("Bring an umbrella."))
+    request = asyncio.create_task(rig.call(
+        "agent.ask", asking(session="quick-transcript", text="Will it rain?", destination="quick"),
+    ))
+    try:
+        await asyncio.wait_for(routing.wait(), 5)
+        [pending] = rig.history.list(conversation_id=quick)
+        assert (pending.question, pending.status, pending.text) == ("Will it rain?", "running", "")
+        assert ("agent.turn", {"turn_id": pending.id, "member_id": 0, "failure": None}) in notices
+        assert not request.done()
+    finally:
+        release.set()
+        reply = await asyncio.wait_for(request, 5)
+    [finished] = rig.history.list(conversation_id=quick)
+    assert finished.id == pending.id == reply["turn_id"]
+    assert (finished.status, finished.text) == ("done", "Bring an umbrella.")
+
+
+async def test_editing_a_quick_transcript_during_routing_keeps_its_place(make_rig, client):
+    rig = make_rig()
+    quick = rig.service.conversations.quick()
+    routing, release = asyncio.Event(), asyncio.Event()
+
+    async def slow_route(**kwargs):
+        routing.set()
+        await release.wait()
+        return decision("unclear")
+
+    client.decisions.append(slow_route)
+    request = asyncio.create_task(rig.call(
+        "agent.ask", asking(session="spoken", text="Will it hail?", destination="quick"),
+    ))
+    try:
+        await asyncio.wait_for(routing.wait(), 5)
+        [pending] = rig.history.list(conversation_id=quick)
+        client.chats.append(answered("Bring an umbrella."))
+        await asyncio.wait_for(rig.call("agent.ask", {
+            "session_id": "corrected", "text": "Will it rain?", "ui_language": "en",
+            "source": "app", "destination": "quick", "replace_turn_id": pending.id,
+        }), 5)
+    finally:
+        release.set()
+        await asyncio.wait_for(request, 5)
+    [finished] = rig.history.list(conversation_id=quick)
+    assert finished.id == pending.id
+    assert (finished.question, finished.status, finished.text) == ("Will it rain?", "done", "Bring an umbrella.")
+
+
 async def test_stop_ends_a_quick_question_in_its_place_and_its_late_answer_writes_nothing(make_rig, client):
     rig = make_rig()
     formal = rig.service.conversations.main()

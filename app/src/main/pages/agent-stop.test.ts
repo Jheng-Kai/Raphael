@@ -78,6 +78,27 @@ test("while work runs the field sends message after message and stops nothing", 
   expectStop();
 });
 
+test("a quick voice turn replaces recognition with the transcript while the answer is pending", async () => {
+  mount("toggle"); await flush(); await choose(0, 4);
+  emit({ type: "Dictation", phase: "listening", agent: true, member_id: 0 });
+  emit({ type: "Dictation", phase: "processing", agent: true, member_id: 0 });
+  expect(document.querySelector('[data-key="hearing"]')).not.toBeNull();
+  expectStop("ack");
+
+  const question = "Will it rain tomorrow?";
+  turns = [live({ source: "voice", question, conversation_id: 4 })];
+  await refresh({ type: "AgentTurn", turn_id: 11, member_id: 0 });
+  expect(document.querySelector('[data-key="hearing"]')).toBeNull();
+  expect($('.tn[data-id="11"] .me').textContent).toContain(question);
+  expect(document.querySelector('.tn[data-id="11"] .live-presence')).not.toBeNull();
+  expect(document.querySelector('.tn[data-id="11"] [data-reply]')).toBeNull();
+  expectStop();
+
+  turns = [{ ...turns[0]!, status: "done", text: "Bring an umbrella." }];
+  await refresh({ type: "AgentTurn", turn_id: 11, member_id: 0 });
+  expect($('.tn[data-id="11"] .ra [data-reply]').textContent).toContain("Bring an umbrella.");
+});
+
 test.each([[0, 1], [3, 31]])("the composer voice press stays in member %s conversation %s through navigation", async (member, conversation) => {
   mount(); await flush(); await choose(member, conversation);
   const button = $(".cmp-voice");
