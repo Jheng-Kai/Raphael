@@ -2,7 +2,7 @@ import chat from "./chat.mjs";
 import questions from "./owner-questions.mjs";
 import mcp from "./mcp-proposals.mjs";
 import pages from "./pages.mjs";
-import { scene, check, click, key, member, scroll, type, wait } from "./steps.mjs";
+import { scene, check, click, key, member, scroll, type, wait, waitGone } from "./steps.mjs";
 
 const source = [...chat, ...questions, ...mcp, ...pages];
 const alias = (name, original) => ({...source.find(scene => scene.name === original), name});
@@ -38,11 +38,15 @@ export default [
   scene('desktop-host-takeover', 'Take control opens the host browser in the existing large viewer',
     [...hostTake, wait('[data-desktop="return"]:not([hidden])'), {action:'desktop-owner-typing'}, check('desktop-host-frame')], hostCard),
   scene('desktop-host-handback', 'Done returns the host browser tab from the same viewer',
-    [...hostTake, click('[data-desktop="return"]'), wait('[data-computer-card="card-pc"][data-card-state="done"]')], hostCard),
+    [...hostTake, click('[data-desktop="return"]'), waitGone('[data-computer-card="card-pc"]'), check('host-handoff-returned')], hostCard),
+  scene('desktop-host-skip-idle', 'Skipping a Chrome sign-in removes the card and leaves the Computer tab idle',
+    [member(1), wait('[data-computer-card="card-pc"]'), click('[data-computer-card="card-pc"] [data-act="card-stop"]'),
+      waitGone('[data-computer-card="card-pc"]'), {action:'open-computer'}, wait('.desktop-panel:not([hidden])[data-desktop-state="idle"]'),
+      check('computer-panel-quiet'), check('host-handoff-skipped')], hostCard),
   // R-PANEL-09: a sign-in is no work for a small picture. The card's screen and its 接手 carry the same stream into the larger view,
   // where the owner's input reaches it and the pill's 我完成了 gives the request back once.
   scene('card-computer-takeover','A click on the card screen takes the same stream into the larger view under the owner hands without reconnecting', [...entry,click('[data-card-desktop-screen] button'),wait('.desktop-panel[data-expanded][data-interactive="true"] .desktop-screen iframe'),{action:'desktop-owner-typing'},check('computer-takeover-owner')],computer),
-  scene('card-computer-handback','Done in the larger view pill hands back the same nonce once and the card settles', [...entry,click('[data-card-desktop="take"].pri'),wait('.desktop-panel[data-expanded][data-interactive="true"]'),click('[data-desktop="return"]'),wait('.computer-card[data-desktop-settled="handed_back"]'),check('computer-takeover-done')],computer),
+  scene('card-computer-handback','Done in the larger view pill hands back the same nonce once and removes the card', [...entry,click('[data-card-desktop="take"].pri'),wait('.desktop-panel[data-expanded][data-interactive="true"]'),click('[data-desktop="return"]'),waitGone('.computer-card'),check('computer-takeover-done')],computer),
   scene('card-send-failed','A failed message returns to the composer with a local retry', [member(1),type('.cmp-input','Please review the project note.'),click('.cmp-send'),wait('.composer-failure [data-card-retry]'),check('card-send-failed')],{cardSendFailure:true}),
   scene('card-send-retry','Retry delivers the restored words once more', [member(1),type('.cmp-input','Please review the project note.'),click('.cmp-send'),wait('[data-card-retry]'),click('[data-card-retry]'),wait('.cmp-input'),check('card-send-retry')],{cardSendFailure:true}),
   scene('card-mail-failed','Failed mail retains its editable version', [member(1),wait('[data-mail-card]'),click('[data-act="mail-send"]'),wait('[data-mail-state="failed"]'),check('card-mail-failed')],{mailDraft:'draft',cardMailFailure:true}),

@@ -10,23 +10,21 @@ const maintenanceWords = {
   repair: ['desktop.repair', 'desktop.repairHint'], reset: ['desktop.reset', 'desktop.resetHint'],
 } as const;
 
-export function mountComputerLifecycle(holder: HTMLElement, panel: HTMLElement, member: () => number,
+export function mountComputerLifecycle(holder: HTMLElement, member: () => number,
   read: () => DesktopState | undefined, perform: (action: ComputerMaintenance, captured: DesktopState) => Promise<void>): { draw(show: boolean): void } {
   holder.innerHTML = iconButton('more', t('chat.more'), ' data-computer-menu aria-haspopup="menu" aria-expanded="false"');
   const button = holder.querySelector<HTMLButtonElement>('[data-computer-menu]')!;
-  const fail = (): void => { const error = panel.querySelector<HTMLElement>('.desktop-error')!; error.textContent = t('desktop.maintenanceFailed'); error.hidden = false; };
   function menu(): void {
     const captured = read(); if (!captured || button.hidden) return;
     const owner = member();
-    const reportFailure = (): void => { if (owner === member()) fail(); };
     const run = (action: ComputerMaintenance): void => {
       closeMenu();
       if (owner !== member()) return;
-      if (action !== 'reset') { void perform(action, captured).catch(reportFailure); return; }
+      if (action !== 'reset') { void perform(action, captured); return; }
       openDialog({ title: t('desktop.resetConfirm'), cls: 'mb-confirm', describedByBody: true,
         body: `<p>${esc(t('desktop.resetHint'))}</p><p>${esc(t(captured.mode === 'shared' ? 'desktop.shared' : 'desktop.perMember'))}</p>`,
         actions: { secondary: btn(esc(t('common.cancel')), '', ' data-dlg="cancel"'), primary: { label: esc(t('desktop.reset')), attrs: ' data-dlg="reset"' } },
-        onAct(action, _target, dialog) { dialog.close(); if (action === 'reset' && owner === member()) void perform('reset', captured).catch(reportFailure); } });
+        onAct(action, _target, dialog) { dialog.close(); if (action === 'reset' && owner === member()) void perform('reset', captured); } });
     };
     openMenu(button, [], '', () => {}, t(captured.mode === 'shared' ? 'desktop.shared' : 'desktop.perMember'), [
       { label: t('desktop.wait'), desc: t('desktop.waitHint'), run() { closeMenu(); } },
@@ -36,7 +34,7 @@ export function mountComputerLifecycle(holder: HTMLElement, panel: HTMLElement, 
         run() {
           closeMenu();
           openMenu(button, [5,15,60,0].map(value => ({value:String(value),label:t(value === 0 ? 'desktop.neverSleep' : 'desktop.sleepMinutes',{p0:value})})), String(captured.idle_minutes ?? 15), value => {
-            void api.settingsSet('computer_vm_idle_minutes', Number(value)).then(() => { if (owner === member() && read()) read()!.idle_minutes = Number(value); }).catch(fail);
+            void api.settingsSet('computer_vm_idle_minutes', Number(value)).then(() => { if (owner === member() && read()) read()!.idle_minutes = Number(value); }).catch(() => {});
           }, t('desktop.sleepAfter'));
         } },
     ]);

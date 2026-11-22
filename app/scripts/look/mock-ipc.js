@@ -1497,7 +1497,10 @@ export function installMock(fixture, config = {}, target = window) {
         const host = data.desktop?.transport === "host";
         return { session, url: `${location.origin}/scripts/look/fixtures/${host ? "host.html" : "desktop.html"}?seat=${p.member_id ?? 0}${variant.seatMarks ? "&mark=1" : ""}${host ? "&transport=host" : ""}` };
       }
-      case "computer.viewer_renew": return { ...data.desktop, ...(teaching ? {teaching} : {}), control: desktopSessions.get(p.session)?.held ? "owner" : "member" };
+      case "computer.viewer_renew": {
+        if (!desktopSessions.has(p.session)) throw new Error("desktop viewer expired");
+        return { ...data.desktop, ...(teaching ? {teaching} : {}), control: desktopSessions.get(p.session)?.held ? "owner" : "member" };
+      }
       case "computer.teach": {
         const session = desktopSessions.get(p.session);
         if (p.action === 'start') {
@@ -2310,6 +2313,10 @@ export function installMock(fixture, config = {}, target = window) {
         if (!card) throw new Error(`Fixture card not found: ${p.id}`);
         if (!["control", "returning"].includes(card.state)) return { card: copy(card), stopped: false };
         Object.assign(card, { state: "stopped", note: null });
+        if (data.desktop?.host_request?.id === card.id) {
+          data.desktop = {transport:"host",state:"absent",ready:false,control:"member"};
+          desktopSessions.clear();
+        }
         notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
         return { card: copy(card), stopped: true };
       }

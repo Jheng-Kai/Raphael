@@ -1069,6 +1069,7 @@ class App(Router):
             owner_language=lambda: configured_language(data_dir),
         )
         self.agent.register(self)
+        self.desktop_viewer.problem_note = self.agent.computer_view_problem
         self.register("integrations.card_close", self.agent.close_waiting_card)
         self.rooms.turn_view = lambda turn: self.agent._turn_views([turn])[0]
         from .native_journeys import bot_homes_brain

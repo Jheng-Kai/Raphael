@@ -1538,6 +1538,16 @@ class AgentService:
         steer = getattr(self._background, "steer", None)
         return bool(steer is not None and await steer(*scope, text))
 
+    async def computer_view_problem(self, member, conversation, transport, problem):
+        recovery = ("Check whether your Chrome tab still exists and reopen it if needed." if transport == "host" else
+                    "Check the virtual machine and recover it if needed, preserving the workspace.")
+        return await self._steer_scope(
+            (member, conversation),
+            f"[Internal note from the app, not from the owner or an approval. "
+            f"The Computer panel could not {problem}. {recovery} "
+            "Continue the current task if possible. If you cannot recover, tell the owner in your own words.]",
+        )
+
     async def _queue_ask(self, ask):
         scope = (ask.speaker.id, ask.conversation_id)
         lock = self._admissions.setdefault(scope, asyncio.Lock())
@@ -2351,6 +2361,9 @@ class AgentService:
             run.turn_id = reply["turn_id"]
             return _Silent(reply) if final.status in _UNSPOKEN else reply
         prefix = _prefix(ask.language, final.which)
+        if final.status in ("cancelled", "denied", "expired", "error") and self._has_computer_handoff(ask, run.turn_id):
+            self._update_run_turn(run, steps, prefix="", text="", status=final.status)
+            return _Silent({"status": "done", "turn_id": run.turn_id, "prefix": "", "text": ""})
         self._update_run_turn(
             run, steps, prefix=prefix, text=final.text, status=final.status, detail=final.detail
         )
@@ -6832,6 +6845,15 @@ class AgentService:
             text = classify(kind, record=False).sentence(RAPHAEL_NAMES[ask.language], ask.language) if kind in ("context_overflow", "payload_too_large", "content_policy") else phrase(ask.language, kind)
         return self._finish(ask, route, "negative", text, ledger, status="error", failure=failure)
 
+    def _has_computer_handoff(self, ask, turn_id):
+        if not turn_id:
+            return False
+        if self._handbacks is not None and self._handbacks.cards_of(turn_id):
+            return True
+        work = getattr(getattr(self._plugins, "vm", None), "work", None)
+        return work is not None and any(item["turn_id"] == turn_id and item["request_id"]
+                                        for item in work.views(ask.speaker.id, ask.conversation_id))
+
     def _finish(
         self,
         ask: _Ask,
@@ -6855,12 +6877,15 @@ class AgentService:
             saved = [message["text"] for message in self._history.messages([ask.turn_id]).get(ask.turn_id, [])
                      if message["kind"] == "reply"]
             text = "\n\n".join(saved or ask.replies) or text
+        if status == "cancelled" and self._has_computer_handoff(ask, ask.turn_id):
+            # Keep the member's existing replies and add no cancellation bubble for a handoff.
+            prefix, text = "", ""
         turn_id = self._record(ask, route, prefix, text, status, detail, ledger, failure=failure)
         if status != "confirm":
             self._close_turn_browser(turn_id, keep_page=status == "done")
         replies = []
         if (ask.source != VOICE or not ask.speaker.is_raphael) and status != "confirm":
-            replies = ask.replies or ([text] if status != "superseded" else [])
+            replies = ask.replies or ([text] if text and status != "superseded" else [])
             from .answers import pending_replies
             saved = [item["text"] for item in self._history.messages([turn_id]).get(turn_id, []) if item["kind"] == "reply"]
             pending = pending_replies(saved, replies)
@@ -6931,7 +6956,7 @@ class AgentService:
                      if message['kind'] == 'reply'] if ask.turn_id else []
             said = '\n\n'.join(saved or ask.replies)
             if said and said != text:
-                text = said + '\n\n' + text
+                text = '\n\n'.join(filter(None, (said, text)))
         if ask.exchange_speakers is not None:
             text = "\n\n".join(ask.replies) if ask.replies and status != 'cancelled' else text
             ask.exchange_answer = relayed_answer(ask.exchange_speakers[1], text, ask.exchange_owner_sources)

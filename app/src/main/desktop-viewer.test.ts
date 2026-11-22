@@ -129,7 +129,7 @@ test('a teaching trial cannot send into another conversation while handback is p
 function message(state: string, extra = {}): void { window.dispatchEvent(new MessageEvent('message', {source:frame().contentWindow, origin:'http://127.0.0.1:5000', data:{type:'raphael-desktop', state, ...extra}})); }
 beforeEach(() => {
   vi.useFakeTimers(); vi.resetAllMocks(); setLocale('zh-TW'); member=1; panelOpen=false;
-  api.settingsGet.mockResolvedValue({settings:{computer_ssh_alias:""}});
+  api.core.mockResolvedValue({}); api.settingsGet.mockResolvedValue({settings:{computer_ssh_alias:""}});
   api.desktopStatus.mockResolvedValue(running); api.desktopRenew.mockResolvedValue(running); api.desktopClose.mockResolvedValue({});
   api.desktopOpen.mockResolvedValue({session:'one',url:'http://127.0.0.1:5000/one/vnc.html'});
   api.ownerClipboardSequence.mockResolvedValue(null); api.desktopClipboard.mockResolvedValue({put:true});
@@ -370,7 +370,7 @@ test('the screen on the sign-in card takes control as its 接手 does', async ()
   expect(api.desktopControl).toHaveBeenCalledWith('one',true,'nonce');
 });
 
-test('a lease the screen never confirms is not called control: 正在接手, then a failure under the screen and watching again', async () => {
+test('a lease the screen never confirms is not called control: 正在接手, then watching again without a panel error', async () => {
   api.desktopStatus.mockResolvedValue({...running,works:[work]});
   api.desktopControl.mockResolvedValueOnce({...running,control:'owner',works:[work]}).mockResolvedValueOnce({...running,works:[work]});
   mounted.show(); await flush(); message('connected');
@@ -385,8 +385,8 @@ test('a lease the screen never confirms is not called control: 正在接手, the
   // Given back without the request id: a failed take is not 我完成了.
   expect(api.desktopControl.mock.calls.filter(([,held])=>!held)).toEqual([['one',false]]);
   expect(label()).toBe('觀看中'); expect(document.documentElement.hasAttribute('data-desktop-watch')).toBe(true);
-  expect(panel().querySelector('.desktop-error')!.textContent).toBe(t('desktop.takeFailed'));
-  expect(panel().querySelector<HTMLElement>('.desktop-error')!.hidden).toBe(false);
+  expect(panel().querySelector<HTMLElement>('.desktop-notice')!.hidden).toBe(true);
+  expect(api.core).toHaveBeenCalledWith('computer.viewer_status', expect.objectContaining({viewer_problem:'pass control through the viewer'}));
   // Back with the member, Take control offers one more try.
   api.desktopRenew.mockResolvedValue({...running,works:[work]});
   await vi.advanceTimersByTimeAsync(10_000); await flush();
@@ -433,7 +433,7 @@ test('a take the core is still deciding reads 正在接手…, and one it refuse
   refuse(new Error('desktop busy')); await flush();
   expect(label()).toBe(t('desktop.watching'));
   expect(take().hidden).toBe(false); expect(take().disabled).toBe(false); expect(handback().hidden).toBe(true);
-  expect(panel().querySelector<HTMLElement>('.desktop-error')!.hidden).toBe(false);
+  expect(panel().querySelector<HTMLElement>('.desktop-notice')!.hidden).toBe(true);
   api.desktopControl.mockResolvedValue({ ...running, control:'owner' });
   take().click(); await flush();
   expect(api.desktopControl).toHaveBeenLastCalledWith('one', true); expect(label()).toBe(t('desktop.taking'));
@@ -546,7 +546,7 @@ test("the larger view keeps the review and one foot inside the screen's shell, a
   const shell = panel().querySelector('.desktop-shell')!, foot = shell.querySelector(':scope > .desktop-foot')!;
   // R-PANEL-08: the screen, the boxes that take its place and the foot are one column; nothing of the computer sits outside it.
   expect([...shell.children].map(child => child.className)).toEqual(['desktop-screen', 'desktop-caption', 'desktop-review', 'desktop-foot']);
-  expect([...foot.querySelectorAll(':scope > .desktop-notes > *')].map(child => child.className)).toEqual(['desktop-request', 'desktop-error', 'desktop-recording', 'desktop-teach-missing', 'desktop-try']);
+  expect([...foot.querySelectorAll(':scope > .desktop-notes > *')].map(child => child.className)).toEqual(['desktop-request', 'desktop-notice', 'desktop-recording', 'desktop-teach-missing', 'desktop-try']);
   expect(foot.querySelector(':scope > .desktop-bar > .desktop-dock [data-desktop="menu"]')).not.toBeNull();
   expect(foot.querySelector(':scope > .desktop-bar > .desktop-actions [data-desktop="teach"]')).not.toBeNull();
   api.desktopTeach.mockResolvedValueOnce({id:'demo',state:'recording',text:''});
@@ -689,7 +689,12 @@ test.each([
   expect(take().hidden).toBe(true); expect(panel().querySelector<HTMLButtonElement>('[data-desktop="retry"]')!.hidden).toBe(true);
   // The cover is there unless the computer is already getting ready; nothing started before the press.
   expect(enlarge().hidden).toBe(press === 'none');
-  expect(api.desktopOpen).not.toHaveBeenCalled(); expect(api.core).not.toHaveBeenCalled();
+  expect(api.desktopOpen).not.toHaveBeenCalled();
+  if (snapshot.error === 'remote_unavailable') {
+    expect(api.core).toHaveBeenCalledExactlyOnceWith('computer.viewer_status',
+      expect.objectContaining({viewer_problem:'show the screen'}));
+    api.core.mockClear();
+  } else expect(api.core).not.toHaveBeenCalled();
   // A hidden cover cannot be pressed, so a computer that is getting ready is simply left alone.
   if (!enlarge().hidden) enlarge().click();
   await flush();
@@ -720,7 +725,7 @@ test('navigation closes a late session without showing another member screen',as
 test('foreign messages and failed acquisition never enable input',async()=>{
   panelOpen=true;mounted.show();await flush();message('connected');api.desktopControl.mockRejectedValue(new Error('busy'));take().click();await flush();
   window.dispatchEvent(new MessageEvent('message',{origin:'http://foreign.test',data:{type:'raphael-desktop',state:'interactive',held:true}}));
-  expect(frame().style.pointerEvents).toBe('none');expect(host.querySelector('.desktop-error')!.textContent).toContain('請稍後再試');
+  expect(frame().style.pointerEvents).toBe('none');expect(panel().querySelector<HTMLElement>('.desktop-notice')!.hidden).toBe(true);
 });
 test('disconnection closes the lease without completing the pending request',async()=>{
   panelOpen=true;mounted.show();await flush();message('connected');message('disconnected');await flush();
@@ -747,7 +752,7 @@ test.each(['building','preparing','starting'] as const)('an update says so in on
   expect(panel().hasAttribute('data-desktop-update')).toBe(true); expect(panel().dataset.desktopState).toBe(state);
   expect(caption.closest('.desktop-screen')).toBeNull(); expectBareScreen(panel());
   expect(panel().querySelector<HTMLElement>('.computer-lifecycle-state')!.hidden).toBe(true);
-  expect(panel().querySelector<HTMLElement>('.desktop-error')!.hidden).toBe(true);
+  expect(panel().querySelector<HTMLElement>('.desktop-notice')!.hidden).toBe(true);
   expect(shownText(panel())).not.toContain('#12'); expect(enlarge().hidden).toBe(true); expect(api.desktopOpen).not.toHaveBeenCalled();
   // An unchanged renewal writes nothing, the line included.
   const observer=new MutationObserver(()=>{}); observer.observe(host,{subtree:true,childList:true,attributes:true,characterData:true});
@@ -767,7 +772,7 @@ test('a maintenance press while the computer is being updated answers with the u
   panelOpen=true;api.desktopStatus.mockResolvedValue(updating);api.desktopMaintain.mockResolvedValue(updating);mounted.show();await flush();
   menuPick(1);await flush();
   expect(api.desktopMaintain).toHaveBeenCalledExactlyOnceWith(1,'restart',updating,false);
-  expect(panel().querySelector<HTMLElement>('.desktop-error')!.hidden).toBe(true);
+  expect(panel().querySelector<HTMLElement>('.desktop-notice')!.hidden).toBe(true);
   expect(panel().querySelector<HTMLElement>('.desktop-caption')!.textContent).toBe(t('desktop.updateLine'));
   expect(panel().dataset.desktopState).toBe('building'); expect(api.desktopOpen).not.toHaveBeenCalled();
 });
@@ -895,7 +900,7 @@ test('waiting control streams inline without opening the panel, and card takeove
  api.desktopControl.mockResolvedValue({...running,works:[{...work,state:'running'}]});
  host.querySelector<HTMLButtonElement>('[data-card-desktop="return"]')!.click(); await flush();
  expect(api.desktopControl).toHaveBeenLastCalledWith('one',false,'nonce'); expect(api.desktopClose).toHaveBeenCalledWith('one');
- expect(host.querySelector('.computer-card[data-desktop-settled="handed_back"]')).not.toBeNull();expect(host.querySelector('.computer-card .card-status')).toBeNull();
+ expect(host.querySelector('.computer-card')).toBeNull();
 });
 
 test('card takeover carries the inline frame into the larger view and handback closes the lease',async()=>{
@@ -1057,6 +1062,9 @@ test('an absent remote host never offers a local Docker download', async () => {
   expectBare(); expect(panel().querySelector('.desktop-placeholder')!.textContent).not.toContain('studio-mini');
   expect(computerChoice().textContent).toContain("studio-mini");
   expect(api.desktopOpen).not.toHaveBeenCalled();
+  expect(api.core).toHaveBeenCalledExactlyOnceWith('computer.viewer_status',
+    expect.objectContaining({viewer_problem:'show the screen'}));
+  api.core.mockClear();
   // The press only tries the remote stream again; nothing local is downloaded or started for it.
   enlarge().click(); await flush();
   expect(api.desktopOpen).toHaveBeenCalledTimes(1); expect(api.core).not.toHaveBeenCalled();
@@ -1077,8 +1085,8 @@ test('Docker recovery waits for one press on the screen, uses the local host and
   enlarge().click(); enlarge().click(); await flush();
   expect(api.core).toHaveBeenCalledExactlyOnceWith('computer.viewer_status',{member_id:1,start_docker:true,host:''});
   expect(api.desktopOpen).not.toHaveBeenCalled();
-  expect(panel().querySelector('.desktop-error')?.textContent).toBe(t('desktop.dockerReady'));
-  expect(panel().querySelector('.desktop-error')?.getAttribute('role')).toBe('status');
+  expect(panel().querySelector('.desktop-notice')?.textContent).toBe(t('desktop.dockerReady'));
+  expect(panel().querySelector('.desktop-notice')?.getAttribute('role')).toBe('status');
 });
 
 test('new computer work opens Computer while an initial idle read leaves Details alone', async () => {
@@ -1099,7 +1107,7 @@ test('an engine recovery reply cannot update another member after navigation', a
   member = 2; api.desktopStatus.mockResolvedValue({state:'stopped',ready:false,control:'member'}); mounted.refresh(); await flush();
   expect(enlarge().disabled).toBe(false); expect(enlarge().hasAttribute('data-asleep')).toBe(true);
   resolve(running); await flush();
-  expect(panel().querySelector('.desktop-error')?.textContent).not.toBe(t('desktop.dockerReady'));
+  expect(panel().querySelector('.desktop-notice')?.textContent).not.toBe(t('desktop.dockerReady'));
   expect(api.desktopOpen).not.toHaveBeenCalled();
 });
 
@@ -1358,13 +1366,13 @@ test("files the page passes on go to the computer's team folder, and one quiet l
   expect(api.core).toHaveBeenCalledWith('attachments.upload', expect.objectContaining({ action: 'begin', name: 'notes.txt', size: 5 }));
   expect(api.desktopPutFile).toHaveBeenCalledTimes(1);
   expect(api.desktopPutFile).toHaveBeenCalledWith('one', 'stored-1', 'notes.txt');
-  const line = panel().querySelector<HTMLElement>('.desktop-error')!;
+  const line = panel().querySelector<HTMLElement>('.desktop-notice')!;
   expect(line.hidden).toBe(false);
   expect(line.getAttribute('role')).toBe('status');
   expect(line.textContent).toBe(t('desktop.filePlaced', { p0: 'notes (2).txt' }));
 });
 
-test('a file dropped while only watching goes in too, and a file over the limit or one that fails says so', async () => {
+test('a file dropped while only watching goes in too, and an oversized file or a transfer failure leaves the panel quiet', async () => {
   panelOpen = true; mounted.show(); await flush(); wire(); message('connected'); await flush(); uploads();
   const screenBox = panel().querySelector<HTMLElement>('.desktop-screen')!;
   const drop = (files: File[]): Event => {
@@ -1380,11 +1388,11 @@ test('a file dropped while only watching goes in too, and a file over the limit 
   api.desktopPutFile.mockClear();
   drop([huge]); await flush();
   expect(api.desktopPutFile).not.toHaveBeenCalled();
-  expect(panel().querySelector('.desktop-error')!.textContent).toBe(t('desktop.fileTooLarge', { p0: 'huge.mp4' }));
+  expect(panel().querySelector<HTMLElement>('.desktop-notice')!.hidden).toBe(true);
   api.desktopPutFile.mockRejectedValue(new Error('engine'));
   drop([new File(['a'], 'a.txt')]); await flush();
-  expect(panel().querySelector('.desktop-error')!.textContent).toBe(t('desktop.fileFailed', { p0: 'a.txt' }));
-  expect(panel().querySelector('.desktop-error')!.getAttribute('role')).toBe('alert');
+  expect(panel().querySelector<HTMLElement>('.desktop-notice')!.hidden).toBe(true);
+  expect(api.core).toHaveBeenCalledWith('computer.viewer_status', expect.objectContaining({viewer_problem:'send a file to the virtual machine'}));
 });
 
 test("the computer's menu offers to send a file, with its own icon", async () => {
@@ -1394,4 +1402,35 @@ test("the computer's menu offers to send a file, with its own icon", async () =>
   expect(item?.textContent).toContain(t('desktop.sendFile'));
   const icons = [...document.querySelectorAll('#app-popover [data-pick] svg')].map(node => node.innerHTML);
   expect(new Set(icons).size).toBe(icons.length);
+});
+
+test('a host tab closed while its panel is opening returns quietly to idle (R-COMP-PANEL-QUIET-01)', async () => {
+  panelOpen = true;
+  api.desktopStatus
+    .mockResolvedValueOnce({...running, transport:'host', target:'closed-tab'})
+    .mockResolvedValue({state:'absent', ready:false, control:'member', transport:'host'});
+  api.desktopOpen.mockRejectedValueOnce(new Error('desktop unavailable'));
+  mounted.show();
+  await flush();
+  expect(panel().dataset.desktopState).toBe('idle');
+  expect(panel().querySelector('[data-computer-state-text]')?.textContent).toBe(t('memberComputer.idle'));
+  expect(enlarge().hidden).toBe(true);
+  expectBareScreen(panel());
+  expect(panel().querySelector('[role="alert"], iframe')).toBeNull();
+  await vi.advanceTimersByTimeAsync(10_000);
+  expect(api.desktopOpen).toHaveBeenCalledTimes(1);
+});
+
+test('a failed VM screen retains the wallpaper and reports the problem for the member (R-COMP-PANEL-QUIET-01)', async () => {
+  panelOpen = true;
+  api.desktopStatus.mockResolvedValue({state:'unavailable', ready:false, control:'member', transport:'docker',
+    target:'member-seat', error:'viewer_unreachable'});
+  mounted.show();
+  await flush();
+  expectBareScreen(panel());
+  expect(panel().querySelector('[role="alert"]')).toBeNull();
+  expect(panel().querySelector('[data-computer-state-text]')?.textContent).toBe(t('memberComputer.idle'));
+  expect(api.core).toHaveBeenCalledExactlyOnceWith('computer.viewer_status', {
+    member_id:1, conversation_id:11, viewer_problem:'show the screen', observed_transport:'docker', observed_target:'member-seat',
+  });
 });

@@ -76,8 +76,7 @@ iframe[data-desktop-stream][hidden] { display: block !important; position: absol
 .card-computer-screen > .desktop-last { object-fit: cover; }
 .desktop-message, .desktop-placeholder .missing-note, .desktop-preparation { padding: var(--sp-3) var(--sp-4); border-radius: var(--r-lg); background: color-mix(in srgb, var(--desktop-frame-bg) 82%, transparent); }
 .desktop-placeholder .missing-note, .desktop-placeholder > [data-act="docker-download"] { --btn: var(--desktop-frame-bg); --hover: color-mix(in srgb, var(--desktop-frame-text) 10%, var(--desktop-frame-bg)); --pressed: color-mix(in srgb, var(--desktop-frame-text) 18%, var(--desktop-frame-bg)); }
-.desktop-error { margin: 0; color: var(--err); }
-.desktop-error[role="status"] { color: var(--text-2); }
+.desktop-notice { margin: 0; color: var(--text-2); }
 /* A slim pill, the face beside its one stage; a percent or the first-build note
    takes the next line. */
 .desktop-preparation { width: fit-content; max-width: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: var(--sp-2); row-gap: var(--sp-1); padding: 6px var(--sp-3) 6px 6px; border-radius: var(--r-pill); }

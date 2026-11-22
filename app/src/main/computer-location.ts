@@ -39,12 +39,12 @@ export function computerLocationHTML(alias: string, invalid = false, error = "",
 }
 
 export function mountComputerLocation(changed: () => void) {
-  let alias = "", draft = "", loaded = false, saving = false, invalid = false, saveError = "", hostError = false;
+  let alias = "", draft = "", loaded = false, saving = false, invalid = false, saveError = "";
   let panel: HTMLElement | null = null, epoch = 0;
   let health: api.ComputerHostHealth | undefined, checking = false, healthEpoch = 0;
   const draw = (): void => {
     if (panel) {
-      patchHTML(panel, computerLocationHTML(draft, invalid, saveError || (hostError && alias ? t("desktop.locationHostError") : ""), health, checking));
+      patchHTML(panel, computerLocationHTML(draft, invalid, saveError, health, checking));
       placeMenu();
     }
   };
@@ -53,7 +53,7 @@ export function mountComputerLocation(changed: () => void) {
     saving = true; saveError = ""; health = undefined; healthEpoch++; checking = false; draw();
     try {
       alias = (await api.settingsSet("computer_ssh_alias", value)).settings.computer_ssh_alias ?? "";
-      draft = alias; loaded = true; hostError = false; changed();
+      draft = alias; loaded = true; changed();
       return true;
     } catch { saveError = t("desktop.locationSaveError"); }
     finally { saving = false; draw(); }
@@ -62,7 +62,7 @@ export function mountComputerLocation(changed: () => void) {
   const open = (anchor: HTMLElement, onSaved?: () => void): void => {
     if (panel) { closeMenu(); return; }
     draft = alias; invalid = false; saveError = ""; health = undefined; healthEpoch++; checking = false;
-    panel = openPopover(anchor, computerLocationHTML(draft, false, hostError && alias ? t("desktop.locationHostError") : ""), {
+    panel = openPopover(anchor, computerLocationHTML(draft), {
       className: "menu computer-location-popover", role: "dialog", label: t("desktop.host"),
       onClose: () => { panel = null; draw(); },
     });
@@ -119,7 +119,6 @@ export function mountComputerLocation(changed: () => void) {
         alias = result.settings.computer_ssh_alias ?? ""; draft = alias; loaded = true; draw();
       } catch { if (mine === epoch && !saving && !panel) { loaded = false; draw(); } }
     },
-    status(error: boolean): void { if (hostError !== error) { hostError = error; draw(); } },
     hide(): void { epoch++; if (panel) closeMenu(); },
     alias: () => alias,
     ready: () => loaded,

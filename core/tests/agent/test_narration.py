@@ -7,6 +7,7 @@ import pytest
 
 from raphael_core.brain.openrouter import ChatToolCall, ChatTurn
 from raphael_core.agent.actions import is_action
+from raphael_core.computer.handback import HandbackCards
 from .conftest import decision
 from .test_service import make_rig  # noqa: F401
 from .test_plugins import plugins, calls  # noqa: F401
@@ -26,6 +27,43 @@ async def typed(rig, text="Check the time", member_id=0):
     rig.typed_count = getattr(rig, "typed_count", 0) + 1
     session = "live" if rig.typed_count == 1 else f"live-{rig.typed_count}"
     return await rig.call("agent.ask", {"session_id": session, "text": text, "ui_language": "en", "source": "app", "member_id": member_id})
+
+
+async def test_a_viewer_note_and_cancelled_handoff_add_no_chat_messages(make_rig, client, conn):
+    cards = HandbackCards(conn, None)
+    rig = make_rig(handbacks=cards)
+    ready = asyncio.Event()
+    asked = "Open the sign-in page."
+    spoken = "The sign-in page is open."
+
+    async def pause(**_kwargs):
+        ready.set()
+        await asyncio.Future()
+
+    client.chats = [chat(spoken, ("local_time", {})), pause]
+    task = asyncio.create_task(typed(rig, asked))
+    try:
+        await asyncio.wait_for(ready.wait(), 5)
+        [(scope, loop)] = rig.service._owner_loops.items()
+        member, conversation = scope
+        turn_id = loop.owner_turn_id
+        card = cards.store.open(turn_id=turn_id, member_id=member, conversation_id=conversation,
+                                run_id="browser:test", reason="sign_in", app="Chrome", language="en")
+        assert not await rig.service.computer_view_problem(member, conversation + 1, "host", "show the screen")
+        assert await rig.service.computer_view_problem(member, conversation, "host", "show the screen")
+        [note] = loop.owner_input.drain()
+        assert "Internal note from the app" in note["content"] and "reopen it" in note["content"]
+        cards.store.move(card.id, "cancelled")
+        await rig.call("agent.cancel", {"session_id": "live"})
+        await asyncio.wait_for(task, 5)
+        [turn] = await rig.turns()
+        assert turn["status"] == "cancelled" and turn["question"] == asked
+        assert all(message["kind"] != "reply" for message in turn["messages"])
+        assert any(spoken in message["text"] for message in turn["messages"])
+    finally:
+        if not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
 
 
 async def test_tool_narration_is_progress_and_only_final_is_a_reply(make_rig, client):

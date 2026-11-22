@@ -1,7 +1,7 @@
 import { missingHTML, missingRepairHTML, missingText, type Missing } from "./missing";
 import { fileKind, sentFileHTML } from "./attachments";
 import { videoPlayerHTML } from "./media-player";
-import { computerCardsHTML, computerResumedLineHTML } from "./computer-card";
+import { computerCardsHTML } from "./computer-card";
 import { connectorCardsHTML, resumedLineHTML } from "./connector-card";
 import { NAME, eventLineHTML, eventPeopleHTML } from "./event-line";
 import { handoffGroupHTML } from "./handoff-line";
@@ -1282,7 +1282,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
   const line = (classes: string, body: string): string => `<li class="tn${classes}" data-id="${id}" data-status="${esc(turn.status)}"${live && part?.owner !== "question" ? ' data-live="true"' : ""}` +
     `${part?.after !== undefined ? ` data-after="${esc(part.after)}"` : ""}>${body}</li>`;
   const head = !first ? "" :
-    (resumed ? resumedLineHTML(turn) + secretResumedLineHTML(turn) + computerResumedLineHTML(turn) : "") +
+    (resumed ? resumedLineHTML(turn) + secretResumedLineHTML(turn) : "") +
     // A brief another member handed over says who from, in place of the owner's bubble.
     (delegatedTurn(turn) && turn.question.trim() ? receivedLineHTML(turn, look) : "") +
     // The message the composer holds for editing is not drawn: it is taken back into the composer, and returns if the edit is given up.

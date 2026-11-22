@@ -8,6 +8,7 @@ import re
 import secrets
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 from contextlib import suppress
@@ -16,9 +17,12 @@ from pathlib import Path
 from urllib.parse import urlsplit
 from weakref import WeakValueDictionary
 
+import httpx
+
 from ..messaging.channels.base import ChannelError
 from ..messaging.channels.socket import GatewaySocket
 from ..paths import owner_only_directory
+from .host_desktop import DesktopChrome
 from .host_view import Screencast
 
 logger = logging.getLogger(__name__)
@@ -164,6 +168,7 @@ class Tab:
     conversation: int | None = None
     turn_id: int | None = None
     finished: bool = False
+    disconnected: bool = False
     cast: Screencast | None = field(default=None, repr=False)
     closed: asyncio.Event = field(default_factory=asyncio.Event, repr=False)
 
@@ -227,9 +232,9 @@ class HostBrowser:
             pass
         raise BrowserError("browser_url")
 
-    async def _connect(self):
+    async def _connect(self, endpoint=None):
         try:
-            port, path = (self.profile / "DevToolsActivePort").read_text(encoding="ascii").splitlines()
+            port, path = endpoint or (self.profile / "DevToolsActivePort").read_text(encoding="ascii").splitlines()
             if not 0 < int(port) < 65536 or not re.fullmatch(r"/devtools/browser/[0-9a-f-]{36}", path):
                 return None
             socket = GatewaySocket("127.0.0.1", port=int(port), path=path, tls=False, message_limit=24_000_000)
@@ -237,6 +242,45 @@ class HostBrowser:
         except (OSError, EOFError, ValueError, ChannelError, TimeoutError):
             return None
         return DevTools(socket, self._event)
+
+    async def _connect_started(self, client, port):
+        try:
+            version = await client.get(f"http://127.0.0.1:{port}/json/version")
+            version.raise_for_status()
+            path = urlsplit(version.json()["webSocketDebuggerUrl"]).path
+        except (httpx.HTTPError, ValueError, KeyError, TypeError):
+            return None
+        cdp = await self._connect((port, path))
+        if cdp is None:
+            return None
+        accepted = False
+        try:
+            listing = await cdp.call("Target.getTargets")
+            if any(info["url"] == self.startup_url for info in listing["targetInfos"]):
+                (self.profile / "DevToolsActivePort").write_text(f"{port}\n{path}\n", encoding="ascii")
+                accepted = True
+                return cdp
+        except (BrowserError, OSError):
+            pass
+        finally:
+            if not accepted:
+                await cdp.close()
+        return None
+
+    @staticmethod
+    async def _startup_page(reader, writer):
+        try:
+            # An unused Chrome preconnection must not hold up shutdown of the marker server.
+            async with asyncio.timeout(2):
+                await reader.readuntil(b"\r\n\r\n")
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            await writer.drain()
+        except (OSError, asyncio.IncompleteReadError, asyncio.LimitOverrunError):
+            pass
+        finally:
+            writer.close()
+            with suppress(OSError):
+                await writer.wait_closed()
 
     async def start(self):
         """Called under lock. Returns whether a new Chrome process was started."""
@@ -266,24 +310,35 @@ class HostBrowser:
                 while (previous := await self._connect()) is not None:
                     await previous.close()
                     await asyncio.sleep(0.1)
+        marker = await asyncio.start_server(self._startup_page, "127.0.0.1", 0)
         try:
-            self.startup_url = f"about:blank#raphael-{secrets.token_hex(16)}"
-            launch = {"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {"start_new_session": True}
-            self.process = await asyncio.create_subprocess_exec(
+            self.startup_url = f"http://127.0.0.1:{marker.sockets[0].getsockname()[1]}/{secrets.token_hex(16)}"
+            # Chrome treats port zero as an automation launch. Select a loopback
+            # port ourselves and verify the startup page before trusting it.
+            with socket.socket() as listener:
+                listener.bind(("127.0.0.1", 0))
+                port = listener.getsockname()[1]
+            argv = [
                 str(executable), f"--user-data-dir={self.profile}", "--remote-debugging-address=127.0.0.1",
-                "--remote-debugging-port=0", "--no-first-run", "--no-default-browser-check",
+                f"--remote-debugging-port={port}", "--no-first-run", "--no-default-browser-check",
                 "--disable-background-mode", "--disable-background-networking", "--disable-session-crashed-bubble",
-                # Headed off-screen coordinates cannot prevent window managers from activating
-                # Chrome or listing it on the taskbar. Headless keeps Chrome off the desktop.
-                "--headless=new", "--window-size=1280,900", "--disable-backgrounding-occluded-windows",
-                "--disable-renderer-backgrounding", self.startup_url, stdin=asyncio.subprocess.DEVNULL,
-                stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL, **launch)
+                "--window-size=1280,900", "--disable-backgrounding-occluded-windows",
+                "--disable-renderer-backgrounding", "--disable-background-timer-throttling",
+            ]
+            if os.name == "nt":
+                self.process = DesktopChrome([*argv, self.startup_url])
+            else:
+                self.process = await asyncio.create_subprocess_exec(
+                    *argv, "--window-position=-32000,-32000", self.startup_url, stdin=asyncio.subprocess.DEVNULL,
+                    stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL, start_new_session=True)
             self.process_tree = ChromeProcessTree(self.process)
-            async with asyncio.timeout(20):
+            if isinstance(self.process, DesktopChrome):
+                self.process.resume()
+            async with asyncio.timeout(20), httpx.AsyncClient(trust_env=False, timeout=1) as client:
                 while self.cdp is None:
                     if self.process.returncode is not None:
                         raise BrowserError("chrome_start_failed")
-                    self.cdp = await self._connect()
+                    self.cdp = await self._connect_started(client, port)
                     if self.cdp is None:
                         await asyncio.sleep(0.15)
             await self.cdp.call("Browser.setDownloadBehavior",
@@ -293,11 +348,15 @@ class HostBrowser:
         except BaseException:
             await self._stop()
             raise
+        finally:
+            marker.close()
+            await marker.wait_closed()
 
     def _event(self, method, params, session):
         if method == "Browser.disconnected":
             if self.cdp is not None and self.cdp.reader is asyncio.current_task():
                 for tab in list(self.tabs.values()):
+                    tab.disconnected = True
                     self._forget_tab(tab)
         elif method == "Page.screencastFrame":
             task = asyncio.create_task(self._ack_frame(self.cdp, session, params["sessionId"]))
@@ -412,9 +471,11 @@ class HostBrowser:
     async def new_tab(self, scope, member, workspace, conversation=None):
         target = await self._take_startup_target()
         if target is None:
-            # A tab in its own headless window keeps a compositor surface even
+            # A tab in its own window keeps a compositor surface even
             # when a peer member opens another tab.
-            target = (await self.cdp.call("Target.createTarget", {"url": "about:blank", "newWindow": True}))["targetId"]
+            bounds = {"left": -32000, "top": -32000} if os.name != "nt" else {}
+            target = (await self.cdp.call("Target.createTarget", {"url": "about:blank", "newWindow": True,
+                                                                "background": True, **bounds}))["targetId"]
         self.owned_targets[target] = scope
         tab = None
         try:
@@ -502,7 +563,7 @@ class HostBrowser:
                     if owned():
                         await asyncio.sleep(0.05)
         except (BrowserError, OSError, TimeoutError):
-            # Closing the last headless window can end CDP before the next query.
+            # Closing the last window can end CDP before the next query.
             # Unconfirmed targets stay tracked while a peer still uses Chrome.
             if self.cdp is cdp and cdp.reader.done():
                 self.owned_targets.clear()
@@ -544,7 +605,20 @@ class HostBrowser:
                         await cdp.close()
         finally:
             if tree is not None:
-                await tree.close()
+                try:
+                    await tree.close()
+                finally:
+                    if isinstance(process, DesktopChrome):
+                        process.close()
+            elif isinstance(process, DesktopChrome):
+                # Job assignment failed before the suspended Chrome could spawn.
+                try:
+                    if process.returncode is None:
+                        process.kill()
+                    with suppress(TimeoutError):
+                        await asyncio.wait_for(process.wait(), 2)
+                finally:
+                    process.close()
             elif process is not None and process.returncode is None:
                 # A failed job assignment must not leave an unowned Chrome tree.
                 if os.name == "nt":
