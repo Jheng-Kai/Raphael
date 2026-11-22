@@ -61,10 +61,10 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
   // Back at the first step does nothing: one stray press must not drop a new person into an app nobody set up (R-NAV-02).
   bindNavLayer(root, () => {}, {
     active: () => !destroyed,
-    step: direction => finishing || steps.step(direction, step => {
-      flow = { ...flow, step };
-      render();
-    }),
+    step: direction => {
+      if (!finishing) steps.step(direction, step => { flow = { ...flow, step }; render(); });
+      return true;
+    },
   });
   let finishing = false;
   let destroyed = false;

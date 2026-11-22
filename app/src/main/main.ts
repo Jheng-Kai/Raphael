@@ -22,9 +22,9 @@ import { DeviceState } from "./device";
 import { resumeModels } from "./models";
 import { mountOnboarding } from "./onboarding";
 import { fitGuideWindow, releaseGuideWindow } from "./guide-window";
-import { Navigation, type NavStep, type Place } from "./nav-history";
+import { clearLayerForward, setLayerPlace, type NavStep } from "./nav-history";
 import { PlaceHistory, stepPlace, type MainPlace } from "./place-history";
-import { frameNavigation, hasOpenLayer, stepOpenLayer, stepSideLayer } from "./dismissals";
+import { frameNavigation, hasOpenLayer, stepOpenLayer } from "./dismissals";
 import { installNavInput, installNavNotes } from "./nav-input";
 import { createSidebar } from "./sidebar";
 import { setOwnerProfile } from "./owner-avatar";
@@ -191,8 +191,9 @@ async function start(): Promise<void> {
   const placeHistory = new PlaceHistory();
   let stepping = false;
   const dictation = createDictation(ctx, { overview, history, dictionary }, tab => {
-    navigation.visit(() => { dictation.setTab(tab); main.scrollTop = 0; });
-    notePlace();
+    clearLayerForward();
+    dictation.setTab(tab);
+    main.scrollTop = 0;
   });
   const agent = createAgent(ctx, {
     changed: notePlace,
@@ -260,107 +261,47 @@ watchChipRows(document.body);
     void api.agentPageShown(shown).catch(() => {});
   }
 
-  /**
-   * Where the window is: the page and what it shows inside (the conversation, an open page, a member's settings and the
-   * view in them), the settings panel and the view in its tab if it is open over it, and the day the history shows. Null
-   * before the first page.
-   */
-  function where(): Place | null {
-    if (!current) return null;
-    const place: Place = { page: current };
-    if (settingsOpen) {
-      place.pane = settings.pane();
-      const inside = settings.navView();
-      if (inside) place.paneView = inside;
-    }
-    if (current === "dictation") place.tab = dictation.tab();
-    const view = current === "agent" ? agent.navView() : "";
-    if (view) place.view = view;
-    const day = current === "dictation" && dictation.tab() === "history" ? history.day() : null;
-    if (day !== null) place.day = day;
-    return place;
-  }
-
-  /** Keyboard shortcuts can retrace the views within each page and layer. */
-  const navigation = new Navigation({
-    inGuide: () => !guide.hidden,
-    stepLayer: stepOpenLayer,
-    sameLayer(here, next) {
-      // Member settings tabs and subpages belong to the same conversation and member.
-      const member = here.view?.split(">s:")[0];
-      return here.page === "agent" && next.page === "agent" && !next.pane && !!member && !!here.view?.includes(">s:")
-        && !!next.view?.startsWith(member + ">s:");
-    },
-    where,
-    show(place) {
-      const here = where();
-      // Back from the settings panel, or within a page, only changes what is over or inside it: the page is on screen already.
-      if (!here || here.page !== place.page || here.tab !== place.tab || here.day !== place.day) {
-        if (place.page === "dictation" && place.tab) dictation.setTab(place.tab, false);
-        if (place.tab === "history" || place.page === "history") history.setDay(place.day ?? null);
-        showPage(place.page);
-      }
-      if (place.page === "agent") agent.showNavView(place.view ?? "");
-      if (place.pane !== undefined) {
-        openSettings(place.pane);
-        settings.showNavView(place.pane, place.paneView ?? "");
-      } else closeSettings();
-      tellAgentPage();
-    },
-  });
   function notePlace(): void {
     if (stepping || !current || !guide.hidden) return;
-    const place: MainPlace = current === "agent" ? agent.currentChatPlace()
-      : current === "dictation" ? { page: current, tab: dictation.tab() } : { page: current };
-    placeHistory.arrive(place);
+    const place: MainPlace = current === "agent" ? agent.currentChatPlace() : { page: current };
+    if (placeHistory.arrive(place)) clearLayerForward();
+    setLayerPlace(placeHistory.currentVisit());
   }
 
-  function keyboardStep(direction: NavStep): void {
-    stepping = true;
-    try { navigation.step(direction); }
-    finally { stepping = false; }
-    notePlace();
-  }
-
-  function sideStep(direction: NavStep): void {
-    if (!guide.hidden) { keyboardStep(direction); return; }
+  function step(direction: NavStep): void {
     notePlace();
     stepping = true;
     try {
       stepPlace(direction, placeHistory, {
-        layer: stepSideLayer,
+        layer: direction => stepOpenLayer(direction) || !guide.hidden,
+        leave: () => current === "agent" && agent.keepNavigationPlace(),
         exists: place => place.page === "member" || place.page === "room" ? agent.chatPlaceExists(place) : true,
         show(place) {
+          setLayerPlace(placeHistory.currentVisit());
           if (place.page === "member" || place.page === "room") {
             agent.showChatPlace(place);
             if (current !== "agent") showPage("agent");
-          } else {
-            if (place.page === "dictation") dictation.setTab(place.tab, false);
-            showPage(place.page);
-          }
+          } else showPage(place.page);
         },
       });
     } finally { stepping = false; }
   }
 
-  installNavInput(window, keyboardStep, hasOpenLayer, sideStep);
+  installNavInput(window, step, hasOpenLayer);
   window.addEventListener("message", event => {
     const direction = frameNavigation(event);
-    if (!direction) return;
-    if (event.data.input === "side") sideStep(direction);
-    else keyboardStep(direction);
+    if (direction) step(direction);
   });
-  installNavNotes(window, (back) => navigation.heard(back));
+  installNavNotes(window, clearLayerForward);
 
   /**
    * Goes to a page, or opens the settings panel over the one on screen (at the tab `arg` names, if
    * any). The 拉斐爾 page is handed a draft for its composer the same way.
    */
   function go(id: PageId, arg?: PageArgument): void {
-    navigation.visit(() => {
-      if (id === "settings") openSettings(arg?.startsWith("draft:") ? undefined : arg);
-      else showPage(id, id === "automations" || arg?.startsWith("draft:") || id === "agent" && (arg === "computer" || arg === "raphael" || arg?.startsWith("member-settings:")) ? arg : undefined);
-    });
+    clearLayerForward();
+    if (id === "settings") openSettings(arg?.startsWith("draft:") ? undefined : arg);
+    else showPage(id, id === "automations" || arg?.startsWith("draft:") || id === "agent" && (arg === "computer" || arg === "raphael" || arg?.startsWith("member-settings:")) ? arg : undefined);
     notePlace();
   }
 

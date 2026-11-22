@@ -10578,7 +10578,7 @@ export function checkRendered(name, context = {}) {
   }
   if (name === "nav-maker-draft") {
     const nameField = document.querySelector(".cr-dialog #mb-new-name");
-    require(visible(nameField) && nameField.value === "Robin", "the draft name is restored when the maker is opened again");
+    require(visible(nameField) && nameField.value === "Robin", "Back leaves the draft name in the maker");
     return { check: name };
   }
   if (name.startsWith("nav-ms-")) {

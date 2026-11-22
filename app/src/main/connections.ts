@@ -6,7 +6,8 @@
 // and how many are on, its information, and removal in the overflow menu. Existing custom MCP setup and device reauthentication stay available.
 // Secrets go directly to the core vault and never enter the render snapshot.
 
-import { bindNavLayer, keepEditedField, LayerViews } from "./nav-layers";
+import { rememberLayerBack } from "./nav-history";
+import { bindNavLayer, keepEditedField } from "./nav-layers";
 import { noticeHTML } from "./missing";
 import * as api from "./api";
 import { type InventoryView, appOf, connectedCount, isConnected, whyNot } from "./apps-inventory";
@@ -959,6 +960,7 @@ export interface Connections {
   /** The panel is closed or leaves the dialog: drop what must not stay (an unsent form, a pending disconnect). */
   reset(): void;
   /** The view on screen in words the way back keeps: the connected list (`connected`) and an app's page over it (`group:github`). */
+  restoreList(): () => void;
   navView(): string;
   /** Shows the view `navView` named; an app that is gone leaves the list it was in. */
   showNavView(key: string): void;
@@ -993,6 +995,7 @@ export function createConnections(host: ConnectionsHost): Connections {
   let login: Login | null = null;
   let loginError: ConnectionsView["loginError"] = null;
   let dialogNotice: ConnectionsView["dialogNotice"] = null;
+  let formParent: OpenApp | null = null;
   let form: ConnectionForm | null = null;
   let originalForm = "";
   let loads = 0;
@@ -1019,8 +1022,10 @@ export function createConnections(host: ConnectionsHost): Connections {
     // The key's dialog is the one that stands over the page; a press outside it closes it.
     if (keyOpen && !stopOutside && typeof document !== "undefined") {
       const root = host.root ?? document.querySelector("#cs-dialog")?.parentElement?.parentElement;
-      if (root) stopOutside = registerDismissal(() => root.querySelector<HTMLElement>("#cs-dialog"), closeDialog, undefined, undefined, undefined,
-        panel => keyBusy || keepEditedField(panel));
+      if (root) stopOutside = registerDismissal(() => root.querySelector<HTMLElement>("#cs-dialog"), closeDialog, undefined, undefined, {
+        step: direction => keyBusy || direction === "back" && keepEditedField(root.querySelector("#cs-dialog")!),
+        restore: () => () => { keyOpen = true; redraw(); focusOn("#cs-dialog"); },
+      });
     } else if (!keyOpen) { stopOutside?.(); stopOutside = null; }
   };
 
@@ -1195,6 +1200,7 @@ export function createConnections(host: ConnectionsHost): Connections {
   function editServer(id: string): void {
     const group = groupById(id);
     if (!group || group.catalog_id) return;
+    formParent = open;
     open = null;
     form = { ...emptyForm(), id, type: group.transport, name: group.name, command: group.command, args: group.args.join("\n"), url: group.url, limit: group.result_size_limit ?? 8000,
       pairLines: (group.transport === "stdio" ? group.env : group.headers).map(name => `${name}=`).join("\n") };
@@ -1208,7 +1214,11 @@ export function createConnections(host: ConnectionsHost): Connections {
   function backFromForm(): void {
     if (!form || form.busy) return;
     if (formValues(form) !== originalForm) { focusOn('[data-conn="form-cancel"]'); return; }
-    if (!views.step("back", showNavView)) { form = null; redraw(); }
+    const key = navView(), parent = formParent;
+    rememberLayerBack(() => {
+      form = null;
+      if (parent) openPage(parent); else redraw();
+    }, () => showNavView(key));
   }
 
   /** The key's dialog closes, and the focus goes back to what opened it. */
@@ -1222,6 +1232,12 @@ export function createConnections(host: ConnectionsHost): Connections {
 
   /** Steps back: from an app's page to the view it was opened from, or from the list of the connected apps to the one view. */
   function back(): void {
+    if (confirming !== null) return;
+    const key = navView();
+    if (key) rememberLayerBack(backToParent, () => showNavView(key));
+  }
+
+  function backToParent(): void {
     clearTimeout(confirmTimer);
     confirming = null;
     loginError = null;
@@ -1233,7 +1249,6 @@ export function createConnections(host: ConnectionsHost): Connections {
       auditOpen = false;
     } else if (screen === "connected") screen = "apps";
     else return;
-    views.step("back", () => {});
     redraw();
     // The focus returns to the row (or the chip) that was pressed.
     if (from) focusOn(`[data-k="${from.kind === "group" ? "cs-open" : "cs-store"}:${typeof CSS !== "undefined" ? CSS.escape(from.id) : from.id}"]`);
@@ -1682,9 +1697,9 @@ export function createConnections(host: ConnectionsHost): Connections {
     if (e.key === "Escape" && panel && !isTopLayer(panel)) return false;
     // Escape steps back (the key's dialog, then an app's page, then the list of the connected apps); once there is nothing to step back
     // from it is the settings' own, and closes the dialog.
-    if (e.key === "Escape" && !e.defaultPrevented && (keyOpen || open || screen === "connected")) {
+    if (e.key === "Escape" && !e.defaultPrevented && (keyOpen || form || open || screen === "connected")) {
       e.preventDefault();
-      if (keyOpen) closeDialog(); else back();
+      if (keyOpen) closeDialog(); else if (form) backFromForm(); else back();
       return true;
     }
     const el = e.target as HTMLElement | null;
@@ -1704,18 +1719,12 @@ export function createConnections(host: ConnectionsHost): Connections {
   }
 
   /** Fits the row of chips to the width the dialog has now. */
-  let views = new LayerViews("");
   function painted(): void {
     const panel = typeof document !== "undefined" ? (host.root ?? document).querySelector<HTMLElement>(".cs") : null;
-    if (panel) {
-      views.visit(navView());
-      bindNavLayer(panel, () => {}, {
-        active: direction => !!form?.busy || (direction ? views.canStep(direction) : views.canStep("back") || views.canStep("forward")),
-        step: direction => !!form?.busy || views.step(direction, showNavView),
-        side: () => !!form || !!open || screen === "connected",
-        sideBack: () => { if (form) backFromForm(); else back(); },
-      });
-    }
+    if (panel) bindNavLayer(panel, () => { if (form) backFromForm(); else back(); }, {
+      active: () => !!form || !!open || screen === "connected",
+      step: () => !!form?.busy || confirming !== null,
+    });
     const row = typeof document !== "undefined" ? (host.root ?? document).querySelector<HTMLElement>("[data-cs-chips]") : null;
     if (row) fitChips(row);
   }
@@ -1748,6 +1757,7 @@ export function createConnections(host: ConnectionsHost): Connections {
           pick: (value) => {
             if (value === "paste" || value === "import") { openMcpImport(value === "import", () => void load()); return; }
             if (value !== "custom" || form?.busy) return;
+            formParent = open;
             open = null;
             form = emptyForm();
             originalForm = formValues(form);
@@ -1790,7 +1800,6 @@ export function createConnections(host: ConnectionsHost): Connections {
     auditOpen = false;
     search = "";
     screen = "apps";
-    views = new LayerViews("");
     loginError = null;
     dialogNotice = null;
     drawn = null; // whatever stands on the page is not this view's: the next reading draws
@@ -1815,7 +1824,7 @@ export function createConnections(host: ConnectionsHost): Connections {
       const id = editor.slice(5);
       if (form && (form.id ?? "") === id) return;
       if (id && groupById(id)) { editServer(id); return; }
-      if (!id) { open = null; form = emptyForm(); originalForm = formValues(form); redraw(); focusOn("#conn-name"); return; }
+      if (!id) { formParent = open; open = null; form = emptyForm(); originalForm = formValues(form); redraw(); focusOn("#conn-name"); return; }
     }
     form = null;
     const wanted: OpenApp | null = page && (page[1] === "app" ? entryById(page[2]) : groupById(page[2])) ? { kind: page[1] as OpenApp["kind"], id: page[2] } : null;
@@ -1833,5 +1842,13 @@ export function createConnections(host: ConnectionsHost): Connections {
     void signIn({ id }, group.name, true);
   }
 
-  return { view, load, click, input, key, menuFor, painted, scrolled, followEvent, reset, navView, showNavView, relogin };
+  function restoreList(): () => void {
+    const chosen = { screen, category, search, shown, recommendedAll };
+    return () => {
+      ({ screen, category, search, shown, recommendedAll } = chosen);
+      redraw();
+    };
+  }
+
+  return { view, load, click, input, key, menuFor, painted, scrolled, followEvent, reset, restoreList, navView, showNavView, relogin };
 }

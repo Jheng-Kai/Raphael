@@ -7,7 +7,8 @@
 // Raphael listens) has no switch: it is simply on. Learning from corrections asks the cleanup
 // model, so it is a device setting (`auto_learn`), off until the owner turns it on.
 
-import { bindLayerCancels, bindNavLayer, keepEditedField } from "../nav-layers";
+import { clearLayerForward, type NavStep } from "../nav-history";
+import { closeLayerBack, bindLayerCancels, bindNavLayer, keepEditedField } from "../nav-layers";
 import { openTimezoneMenu } from "../timezones";
 import { knownCatalog, rememberCatalog } from "../brain-lists";
 import { getLocale, isUiLocale, onLocaleChange, t } from "../i18n";
@@ -470,9 +471,9 @@ export function createSettings(app: AppContext): SettingsPage {
       slot.replaceWith(usageHost);
       if (usageFocus?.isConnected) usageFocus.focus({ preventScroll: true });
     }
-    bindLayerCancels(body, '[data-vault="cancel"], [data-act="key-cancel"]', { secret: true });
+    bindLayerCancels(body, '[data-vault="cancel"], [data-act="key-cancel"]');
     const ruleField = body.querySelector<HTMLElement>("#rule-edit");
-    if (ruleField) bindNavLayer(ruleField, rules.cancelEdit, { sideBack: () => ruleField.focus() });
+    if (ruleField) bindNavLayer(ruleField, rules.cancelEdit, { step: direction => { if (direction === "back") ruleField.focus(); return true; } });
     // Before the focus goes back by `data-k`, which the pickers' buttons have too.
     mountPickers();
     for (const [key, value] of ownerDrafts) {
@@ -557,6 +558,7 @@ export function createSettings(app: AppContext): SettingsPage {
   /** Goes to 用量's other view; 分析 reads its period again, showing what it last read until the answer comes. */
   function switchUsageTab(next: UsageTab): void {
     if (next === usageTab) return;
+    clearLayerForward();
     closeMenu();
     usageTab = next;
     render();
@@ -1084,7 +1086,7 @@ export function createSettings(app: AppContext): SettingsPage {
         void copyButton(target.closest<HTMLElement>('[data-act="copy-code"]')!, target.closest('.message-code')?.querySelector('code')?.textContent ?? '').catch(error => toaster.info(describeError(error)));
         break;
       case "close":
-        app.closeSettings();
+        backSettings();
         break;
       case "mic-ask": {
         // The owner's own press: macOS asks, once, and the meter opens when they allow it.
@@ -1133,7 +1135,7 @@ export function createSettings(app: AppContext): SettingsPage {
   });
   el.addEventListener("keydown", (e) => {
     const tab = (e.target as Element).closest<HTMLElement>("[data-usage-tab]");
-    if (tab && ["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) {
+    if (!e.altKey && !e.ctrlKey && !e.metaKey && tab && ["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) {
       e.preventDefault();
       switchUsageTab(e.key === "Home" ? "overview" : e.key === "End" ? "analysis" : usageTab === "overview" ? "analysis" : "overview");
       return;
@@ -1147,7 +1149,7 @@ export function createSettings(app: AppContext): SettingsPage {
     if (openMenuOnArrow(e)) return;
     if (e.key === "Escape" && isTopLayer(el.querySelector(".modal")) && !e.defaultPrevented) {
       e.preventDefault();
-      app.closeSettings();
+      backSettings();
     } else if (e.key === "Tab") {
       const selector = "button:not([disabled]):not([tabindex='-1']), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex='0']";
       const active = document.activeElement as HTMLElement | null;
@@ -1233,6 +1235,25 @@ export function createSettings(app: AppContext): SettingsPage {
     };
   }
 
+  const settingsNavigation = {
+    step(direction: NavStep): boolean {
+      const panel = el.querySelector<HTMLElement>(".modal")!;
+      return direction === "back" && keepEditedField(panel, 'input:not([type="search"]):not(#conn-search), textarea, select');
+    },
+    restore() {
+      const tab = pane, usage = usageTab;
+      const restoreConnections = tab === "connections" ? connections.restoreList() : undefined;
+      return () => {
+        app.go("settings", tab);
+        if (tab === "usage") switchUsageTab(usage);
+        restoreConnections?.();
+      };
+    },
+  };
+  function backSettings(): void {
+    if (!settingsNavigation.step("back")) closeLayerBack(() => app.closeSettings(), settingsNavigation);
+  }
+
   return {
     id: "settings",
     el,
@@ -1277,9 +1298,7 @@ export function createSettings(app: AppContext): SettingsPage {
       if (repair) open = ({ search: "tools", read: "tools", vision: "tools", pdf: "tools", store: "connections", relogin: "connections" } as Record<string, SettingsPane>)[repair[0]] ?? repair[0] as SettingsPane;
       visible = true;
       stopOutside();
-      stopOutside = registerDismissal(el.querySelector<HTMLElement>(".modal")!, () => app.closeSettings(), undefined, undefined,
-        (_direction, withinSettings) => withinSettings(),
-        panel => keepEditedField(panel, 'input:not([type="search"]):not(#conn-search), textarea, select'));
+      stopOutside = registerDismissal(el.querySelector<HTMLElement>(".modal")!, () => app.closeSettings(), undefined, undefined, settingsNavigation);
       cliBrains.start();
       document.addEventListener("keydown", settingsKey);
       const mine = ++loads;

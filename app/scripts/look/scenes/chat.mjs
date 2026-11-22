@@ -260,7 +260,7 @@ export default [
   // The composer's + menu (R-UI-166): files, the folder, slash commands, then apps and skills as submenus of switches that are the member's settings.
   scene("nav-layer-plus", "Back closes the apps submenu and leaves the composer menu open", [
     ...plusOpen, click('#app-popover [data-plus="apps"]'), wait('#app-submenu [data-app]'),
-    sideButton("back"), waitGone("#app-submenu"), wait("#app-popover.composer-plus"), check("composer-plus-menu"),
+    sideButton("back"), waitGone("#app-submenu"), sideButton("forward"), waitGone("#app-submenu"), wait("#app-popover.composer-plus"), check("composer-plus-menu"),
   ], plusFixture),
   scene("composer-plus-menu", "The composer's + opens one menu: files with its shortcut, the folder, slash commands, then apps and skills with chevrons, each row with its own icon", [...plusOpen, check("composer-plus-menu")], plusFixture),
   scene("composer-plus-apps", "應用程式 opens beside its row: browse, manage, a line, then every connected app with its own mark and a switch in the member's colour", [...plusOpen, click('#app-popover [data-plus="apps"]'), wait('#app-submenu [data-app]'), check("composer-plus-apps")], plusFixture),
@@ -321,10 +321,11 @@ export default [
   scene("empty", "Conversation without turns", [], { turns: [] }),
   // 新增角色 is one small dialog over the dimmed window: the slime, the name, the shared picker, 取消 and 建立.
   scene("member-maker", "新增角色 is a small centred dialog: the large slime, the name under it, the tabbed picker, 取消 and a 建立 that waits for a name", [...makerOpen, check("member-maker")]),
-  scene("nav-layer-maker", "Mouse Back dismisses the member maker and keeps its name for the next opening", [
+  scene("nav-layer-maker", "Back keeps an unsaved member name, then closes the clean maker. Forward restores its avatar tab", [
     ...makerOpen, type("#mb-new-name", "Robin"), click('.cr-dialog [data-slime-tab="characters"]'),
-    wait('.cr-dialog [data-slime-tab="characters"][aria-selected="true"]'), sideButton("back"), waitGone(".cr-dialog"),
-    sideButton("forward"), check("member-maker-closed"), ...makerOpen, check("nav-maker-draft"),
+    wait('.cr-dialog [data-slime-tab="characters"][aria-selected="true"]'), sideButton("back"), check("nav-maker-draft"),
+    type("#mb-new-name", ""), sideButton("back"), waitGone(".cr-dialog"),
+    sideButton("forward"), wait('.cr-dialog [data-slime-tab="characters"][aria-selected="true"]'),
   ]),
   scene("member-maker-chosen", "A tab moves nothing, a slime changes the large one, a name makes 建立 pressable", [...makerOpen, check("member-maker-box"), click('.cr-dialog [data-slime-tab="characters"]'), check("member-maker-tab"), click('.cr-dialog [data-slime-character="horn-lavender"]'), type("#mb-new-name", "小葵"), check("member-maker-chosen")]),
   scene("member-maker-made", "建立 opens the member, which speaks first and asks what it is for", [...makerOpen, ...makerGoggles, click('.cr-dialog [data-dlg="create"]'), waitGone(".cr-dialog"), { action: "wait-text", selector: ".page-agent .ra-body", text: "小綠" }, check("member-maker-made")]),
@@ -371,9 +372,10 @@ export default [
   scene("room-long-link", "A group's composer treats a long link the same", [room(1), linked("#room-message"), wait(".au-room-pane .composer .cmp-mirror .url-chip"), check("composer-url-chip"), key("Enter"), wait(".au-room-message .message-link"), check("room-link-sent")]),
   scene("room-composer-files", "An image pasted or dropped into a group comes to its composer with its picture", [...twoPictures, check("room-composer-files")]),
   scene("room-composer-drop-sign", "Dragging a file over a group shows the same sign as a conversation, above the composer", [room(1), dropFile(".au-room-pane .ra-stage", "dropped.png", { hold: true }), wait(".au-room-pane .attachment-drop:not([hidden])"), check("room-drop-sign")]),
-  scene("nav-layer-picture", "Back puts away the picture and leaves both drafts in the same group composer", [
+  scene("nav-layer-picture", "Back puts away the picture and leaves the drafts in the same group. Forward restores the picture", [
     ...twoPictures, click(".au-room-pane .composer .cmp-pic"), wait(".media-lightbox .lb-img"),
     sideButton("back"), waitGone(".media-lightbox"), wait(".au-room-pane .composer .cmp-chip + .cmp-chip"),
+    sideButton("forward"), wait(".media-lightbox .lb-img"),
   ]),
   scene("room-draft-picture-opened", "A picture waiting on the composer opens large when its thumbnail is pressed", [...twoPictures, click(".au-room-pane .composer .cmp-pic"), wait(".media-lightbox .lb-img"), check("room-picture-opened")]),
   scene("room-files-sent", "A picture sent to a group shows in its message and opens large", [...twoPictures, key("Enter"), wait('.au-room-message .attachment-picture img[src^="http://raphael-media.localhost/"]'), check("room-files-sent"), check("owner-pictures-row"), click(".au-room-message .attachment-picture"), wait(".media-lightbox .lb-img"), check("room-picture-opened")]),

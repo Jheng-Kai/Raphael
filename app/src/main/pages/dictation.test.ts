@@ -3,7 +3,6 @@ import { afterEach, expect, test, vi } from "vitest";
 vi.mock("../api", () => ({ statusGet: vi.fn(async () => ({ openrouter: { state: "ok" }, spend: { month_usd: 0, limit_usd: 10 } })) }));
 import { createDictation } from "./dictation";
 import { resolvePage, START_PAGE } from "../navigation-pages";
-import { samePage } from "../nav-history";
 import type { AppContext, Page } from "../types";
 
 afterEach(() => { localStorage.clear(); document.body.replaceChildren(); });
@@ -15,7 +14,6 @@ test("the app starts on Raphael's conversation and no page is named home", () =>
 test("dictation deep links select their tab", () => {
   expect(resolvePage("history")).toEqual({ page: "dictation", tab: "history" });
   expect(resolvePage("dictionary")).toEqual({ page: "dictation", tab: "dictionary" });
-  expect(samePage({ page: "dictation", tab: "overview" }, { page: "dictation", tab: "history" })).toBe(false);
 });
 test("dictation mounts the existing pages, hides inactive tabs and opens on its overview each time", () => {
   const make = (id: Page["id"]): Page => ({ id, el: document.createElement("section"), show: vi.fn(), hide: vi.fn() });

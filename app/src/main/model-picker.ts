@@ -1,5 +1,4 @@
 // A two-phase model chooser shared by settings, services and member details.
-import { bindLayerSteps, LayerViews } from "./nav-layers";
 import * as api from "./api";
 import { noticeHTML } from "./missing";
 import "./model-picker.css";
@@ -834,7 +833,6 @@ class MountedPicker implements ModelPicker {
   private o: ModelPickerOptions;
   private dialog: Dialog | null = null;
   private source = "";
-  private sourceViews = new LayerViews("");
   private draft = "";
   private effort = "";
   private query = "";
@@ -857,7 +855,6 @@ class MountedPicker implements ModelPicker {
       const previous = opened;
       this.source = previous.source; this.draft = previous.draft; this.effort = previous.effort;
       this.query = previous.query; this.sort = previous.sort; this.maker = previous.maker; this.localDraft = previous.localDraft;
-      this.sourceViews = previous.sourceViews;
       previous.close(); this.show();
     }
   }
@@ -879,12 +876,10 @@ class MountedPicker implements ModelPicker {
     // A choice whose provider is not listed (turned off, no key) opens on the first source listed.
     if (!this.sources().some((source) => source.id === this.source)) this.source = this.sources()[0]?.id ?? this.source;
     this.query = query; this.maker = ""; this.sort = "name";
-    this.sourceViews = new LayerViews(this.source);
     this.show();
   }
   close(): void { this.dialog?.close(); }
   private selectSource(source: string): void {
-    this.sourceViews.visit(source);
     this.source = source;
     this.query = ""; this.maker = ""; this.confirm = null;
     this.paint();
@@ -911,10 +906,13 @@ class MountedPicker implements ModelPicker {
           if (this.o.onCliAction) this.o.onCliAction(id);
         }
       },
+      navigationRestore: () => {
+        const source = this.source;
+        return () => { if (this.button.isConnected) { this.open(); this.selectSource(source); } };
+      },
       onClose: () => { this.dialog = null; if (opened === this) opened = null; this.paintButton(); if (this.button.isConnected) this.button.focus({ preventScroll: true }); },
     });
     opened = this;
-    bindLayerSteps(this.dialog.el, this.sourceViews, source => this.selectSource(source));
     this.dialog.el.querySelector(".mb-dlg-head h2")?.insertAdjacentHTML("afterend", `<span class="mc-slot">${esc(t("chooser.slot", { name: this.o.label }))}</span>`);
     this.dialog.el.addEventListener("click", (event) => this.click(event));
     this.dialog.el.addEventListener("input", (event) => {

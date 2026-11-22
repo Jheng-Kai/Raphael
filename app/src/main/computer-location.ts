@@ -69,6 +69,18 @@ export function mountComputerLocation(host: HTMLElement, changed: () => void) {
     remote = !!alias; draft = alias; invalid = false; saveError = ""; health = undefined; healthEpoch++; checking = false;
     panel = openPopover(control.querySelector<HTMLElement>("button")!, computerLocationHTML(remote, draft, false, false, hostError && alias ? t("desktop.locationHostError") : ""), {
       className: "menu computer-location-popover", role: "dialog", label: t("desktop.host"),
+      navigation: {
+        step(direction) {
+          const input = panel?.querySelector<HTMLInputElement>("#computer-ssh-alias");
+          if (saving) return true;
+          if (direction === "back" && input && (input.value !== alias || !alias)) {
+            input.focus({ preventScroll: true });
+            return true;
+          }
+          return false;
+        },
+        restore: () => () => { if (control.isConnected && !control.closest("[hidden], [inert]")) open(); },
+      },
       onClose: () => { panel = null; draw(); },
     });
     panel.addEventListener("click", event => {

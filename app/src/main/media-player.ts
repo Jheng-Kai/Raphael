@@ -246,6 +246,7 @@ function openFull(player: HTMLElement): void {
   const card = openLightbox(player.querySelector<HTMLElement>('[data-mp-act="full"]') ?? player, name,
     videoPlayerHTML(` src="${esc(src)}"`, name, "", true), {
       cls: "lb-video",
+      reopen: () => { if (player.isConnected) openFull(player); },
       onClose: () => {
         if (!large) return;
         const playOn = !large.paused;

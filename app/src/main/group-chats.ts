@@ -570,14 +570,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
       measureAllMessages();
     }
     else if(act==="stop"&&room&&!stopping){stopping=true;const id=room.id;draw();void api.roomStop(id).then(()=>refresh()).catch(error=>toaster.info(describeError(error))).finally(()=>{stopping=false;if(opened)draw();});}
-    else if(act==="thread" && roomId && !sideOpening){
-      sideOpening = true;
-      const current = roomId, message = Number(target.dataset.message);
-      closeSideThread?.(); closeSideThread = undefined;
-      void openRoomThread(el, _app, current, message, list, () => { if (opened) void refresh(); }).then(close => {
-        if (!opened || current !== roomId) close(); else closeSideThread = close;
-      }).catch(error => toaster.info(describeError(error))).finally(() => { sideOpening = false; });
-    }
+    else if(act==="thread") openSideThread(Number(target.dataset.message));
     else if(act==="reply"){replyTo=messages.find(m=>m.id===Number(target.dataset.message));draw();composer.input.focus();}
     else if(act==="jump-reply") void (async () => {
       const id = Number(target.dataset.message), current = roomId;
@@ -600,6 +593,17 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     else if(act==="team-file-open")void api.openTeamFile(target.dataset.path??"").catch(()=>toaster.info(t("agent.fileUnavailable")));
     else if(act==="older") void loadRoomEarlier().then(() => { if (messages[0] && roomWindow.focus(`message:${messages[0].id}`)) draw(); });
   });
+  function openSideThread(message: number): void {
+    if (!roomId || sideOpening) return;
+    sideOpening = true;
+    const current = roomId;
+    closeSideThread?.(); closeSideThread = undefined;
+    void openRoomThread(el, _app, current, message, list, () => { if (opened) void refresh(); }, () => {
+      if (opened && current === roomId) openSideThread(message);
+    }).then(close => {
+      if (!opened || current !== roomId) close(); else closeSideThread = close;
+    }).catch(error => toaster.info(describeError(error))).finally(() => { sideOpening = false; });
+  }
   window.addEventListener("room-deleted",event=>{forgetRoomDraft((event as CustomEvent<number>).detail);});
   const listener=(event?: MainEvent):void=>{
     if (!opened || !el.isConnected) return;
@@ -613,10 +617,15 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   };listeners.add(listener);onLocaleChange(()=>{if(opened)draw();});
   onAvatarChange(()=>{if(opened && el.isConnected)draw();});
   return {el,close,refresh,
+    keepNavigationPlace(): boolean {
+      if (questionWaits(messages.flatMap(message => message.turn ? [message.turn] : []),
+        pendingQuestions?.room === roomId ? pendingQuestions?.questions ?? [] : [])) return true;
+      if (!replyTo && !composer.input.value && !composer.el.querySelector(".cmp-chip")) return false;
+      composer.input.focus({ preventScroll: true });
+      return true;
+    },
     /** Ctrl+F opens the room's search bar: no button in its top row any more. */
     find:()=>finder.open(),
-    /** The page open in the room's thread place, for the way back (nav-history.ts), and how a step opens or puts one away. */
-    page:()=>pagesHost.shown(),showPage:(id:string,title:string)=>void pagesHost.show(id,title,()=>{}),closePage:()=>pagesHost.close(),
     async open(id:number){
     closeSideThread?.(); closeSideThread = undefined;
     if (meetingPanel?.isConnected) closeMenu();

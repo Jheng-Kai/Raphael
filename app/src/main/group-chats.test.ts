@@ -8,7 +8,7 @@ vi.mock("./api",()=>api);
 import { configureRooms, openNewGroupChat, openGroupChat, openRoomsMenu, createRoomsSection, createRoomPane, clearRoomSelection } from "./group-chats";
 import { getLocale, setLocale, t } from "./i18n";
 import { setAvatar } from './avatar';
-import { stepSideLayer } from "./dismissals";
+import { stepOpenLayer } from "./dismissals";
 import { installNavInput } from "./nav-input";
 
 test('an avatar repaint uses the loaded room and roster without IPC reads', async () => {
@@ -149,7 +149,7 @@ test("room drafts retain files and quotes in memory and words across a new pane"
  expect(next.el.querySelector('.cmp-chip')).toBeNull();next.close();
 });
 
-test("mouse Back keeps the side thread's draft and returns to the same room when it is empty", async () => {
+test("mouse Back keeps the side thread's draft and Forward reopens a clean side thread", async () => {
   api.roomMessages.mockResolvedValue({ messages: [{ id: 12, member_id: 1, text: "Parent message", created: 1, status: "done" }] });
   const view = await pane();
   api.core.mockResolvedValueOnce({ thread_id: 4 });
@@ -159,7 +159,7 @@ test("mouse Back keeps the side thread's draft and returns to the same room when
   await vi.waitFor(() => expect(view.el.querySelector(".room-side-thread")).not.toBeNull());
   await flush();
   const back = () => window.dispatchEvent(new MouseEvent("mousedown", { button: 3, cancelable: true }));
-  const stop = installNavInput(window, vi.fn(), undefined, stepSideLayer);
+  const stop = installNavInput(window, stepOpenLayer);
   try {
     const input = view.el.querySelector<HTMLTextAreaElement>(".room-side-thread textarea")!;
     input.value = "Unsent side reply";
@@ -170,6 +170,9 @@ test("mouse Back keeps the side thread's draft and returns to the same room when
     back();
     expect(view.el.querySelector(".room-side-thread")).toBeNull();
     expect(view.el.querySelector('[data-room-message="12"]')).not.toBeNull();
+    api.core.mockResolvedValueOnce({ thread_id: 4 });
+    window.dispatchEvent(new MouseEvent("mousedown", { button: 4, cancelable: true }));
+    await vi.waitFor(() => expect(view.el.querySelector(".room-side-thread")).not.toBeNull());
   } finally { stop(); view.close(); }
 });
 

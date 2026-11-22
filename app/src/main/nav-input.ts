@@ -1,8 +1,4 @@
-// The mouse's side buttons and Alt+Left / Alt+Right (⌘[ / ⌘] on a Mac) as back and forward in the main
-// window. Place history handles the mouse and view history handles the keyboard. This file keeps WebView2
-// from acting on them: it would go back or forward in its own history, which holds no page of ours.
-// It also hears every other press and key, so the history can see each view the person goes into.
-
+// Both mouse side buttons and the platform's navigation chords use the same app step.
 import type { NavStep } from "./nav-history";
 import { IS_MAC } from "../shared/platform";
 
@@ -89,37 +85,16 @@ export function reduceNavKey(previous: NavKeyState, event: NavKeyInput, mac = IS
 /** The window's own ways back are marked with this attribute so the keyboard history can retrace them. */
 export const NAV_BACK_ATTR = "data-nav-back";
 
-/** Whether a key may take the window elsewhere. A letter typed into a field never does, nor a modifier on its own. */
-export function keyMayMove(event: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "altKey" | "isComposing">): boolean {
-  if (event.isComposing || ["Shift", "Control", "Alt", "Meta", "AltGraph", "CapsLock", "Process"].includes(event.key)) return false;
-  return event.key.length !== 1 || event.ctrlKey || event.metaKey || event.altKey;
-}
-
-/**
- * Tells `heard` of each press and key that may take the window somewhere, before the page acts on it, and whether it is
- * one of the window's own ways back (an element marked `data-nav-back`, or Escape). The side buttons and Alt+Left /
- * Alt+Right are steps themselves (`installNavInput`), not moves to note. Returns how to stop listening.
- */
-export function installNavNotes(target: EventTarget, heard: (back: boolean) => void): () => void {
-  const press = (raw: Event): void => {
-    const event = raw as MouseEvent;
-    if (stepOfButton(event.button) !== null) return;
-    const on = event.target instanceof Element ? event.target : null;
-    heard(!!on?.closest(`[${NAV_BACK_ATTR}]`));
+/** A new selection forks navigation. Text input and keyboard activation count as well as a click. */
+export function installNavNotes(target: EventTarget, choose: () => void): () => void {
+  const press = (event: Event): void => {
+    if (event instanceof MouseEvent && stepOfButton(event.button) !== null) return;
+    if (event.target instanceof Element && event.target.closest(`[${NAV_BACK_ATTR}]`)) return;
+    choose();
   };
-  const key = (raw: Event): void => {
-    const event = raw as KeyboardEvent;
-    if (!keyMayMove(event)) return;
-    if (event.altKey && (event.code === "ArrowLeft" || event.code === "ArrowRight")) return;
-    heard(event.key === "Escape");
-  };
-  const first = { capture: true };
-  target.addEventListener("click", press, first);
-  target.addEventListener("keydown", key, first);
-  return () => {
-    target.removeEventListener("click", press, first);
-    target.removeEventListener("keydown", key, first);
-  };
+  const events = ["click", "input", "change", "contextmenu", "drop"];
+  for (const type of events) target.addEventListener(type, press, true);
+  return () => { for (const type of events) target.removeEventListener(type, press, true); };
 }
 
 /**
@@ -127,8 +102,7 @@ export function installNavNotes(target: EventTarget, heard: (back: boolean) => v
  * press and decides whether there is anywhere to go. Returns how to stop listening.
  */
 export function installNavInput(
-  target: EventTarget, step: (direction: NavStep) => void, layerOwnsKeys: () => boolean = () => false,
-  sideStep = step,
+  target: EventTarget, step: (direction: NavStep) => void, layerOwnsKeys: () => boolean = () => false
 ): () => void {
   let state = emptyNavKeyState();
   const mouse = (raw: Event): void => {
@@ -141,10 +115,11 @@ export function installNavInput(
     event.preventDefault();
     // The step comes with the press, as it does with the keys: a release that began in another
     // program is no request.
-    if (event.type === "mousedown") sideStep(direction);
+    if (event.type === "mousedown") step(direction);
   };
   const key = (raw: Event): void => {
     const event = raw as KeyboardEvent;
+    if (event.isComposing || event.keyCode === 229) return;
     const result = reduceNavKey(state, {
       code: event.code, type: event.type as NavKeyInput["type"], repeat: event.repeat,
       altKey: event.altKey, ctrlKey: event.ctrlKey, shiftKey: event.shiftKey, metaKey: event.metaKey,
@@ -166,7 +141,6 @@ export function installNavInput(
   const buttonEvents = ["pointerdown", "pointerup", "mousedown", "mouseup", "auxclick"];
   const layerKey = (raw: Event): void => {
     const event = raw as KeyboardEvent;
-    if (event.isComposing || event.keyCode === 229) return;
     const alt = event.code === "AltLeft" || event.code === "AltRight";
     const chord = event.type === "keydown" && (event.altKey || event.metaKey)
       && ["ArrowLeft", "ArrowRight", "BracketLeft", "BracketRight"].includes(event.code);

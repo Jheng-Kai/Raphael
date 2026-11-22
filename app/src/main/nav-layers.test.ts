@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { frameNavigation, stepSideLayer } from "./dismissals";
-import { bindLayerCancels, bindNavFrame, bindNavLayer, stepInlineLayer } from "./nav-layers";
+import { clearLayerForward } from "./nav-history";
+import { frameNavigation, stepOpenLayer } from "./dismissals";
+import { bindLayerCancels, bindNavFrame, bindNavLayer } from "./nav-layers";
 import { openEventEditor } from "./calendar-popover";
 import { mountConversationFind } from "./conversation-find";
 import { openMediaLightbox } from "./media-lightbox";
@@ -10,7 +11,7 @@ import { confirmDelete, openDialog } from "./member-dialogs";
 import { navInputs, pressLayer } from "./test-support/nav-layer-input";
 import { closeMenu, openPopover } from "./ui";
 
-afterEach(() => { closeMenu(); document.body.replaceChildren(); });
+afterEach(() => { clearLayerForward(); closeMenu(); document.body.replaceChildren(); });
 
 test("a focused frame can navigate only its own topmost viewer", () => {
   const viewer = document.createElement("div"), frame = document.createElement("iframe");
@@ -27,7 +28,7 @@ test("a focused frame can navigate only its own topmost viewer", () => {
   expect(step(window)).toBeUndefined();
   expect(step(frame.contentWindow, "https://example.invalid")).toBeUndefined();
   expect(step(frame.contentWindow, "null", "side")).toBe("back");
-  bindNavLayer(viewer, vi.fn(), { side: () => false });
+  bindNavLayer(viewer, vi.fn(), { active: () => false });
   expect(step(frame.contentWindow, "null", "side")).toBeUndefined();
   const dialog = openDialog({ title: "Question", body: "", actions: {}, onAct() {} });
   frame.focus();
@@ -35,7 +36,7 @@ test("a focused frame can navigate only its own topmost viewer", () => {
   dialog.close();
 });
 
-test("back never throws away typed words: an edited editor only takes the focus, an untouched one cancels", () => {
+test("back never throws away typed words: an edited editor takes focus, an untouched one yields", () => {
   const section = document.createElement("section");
   section.innerHTML = '<textarea>Original</textarea><button type="button" data-cancel>Cancel</button>';
   document.body.append(section);
@@ -44,12 +45,12 @@ test("back never throws away typed words: an edited editor only takes the focus,
   bindLayerCancels(section, "[data-cancel]");
   const field = section.querySelector("textarea")!;
   field.value = "Typed instructions";
-  expect(stepInlineLayer(document, "back", () => false)).toBe(true);
+  expect(stepOpenLayer("back")).toBe(true);
   expect(cancel).not.toHaveBeenCalled();
   expect(document.activeElement).toBe(field);
   field.value = "Original";
-  stepInlineLayer(document, "back", () => false);
-  expect(cancel).toHaveBeenCalledOnce();
+  expect(stepOpenLayer("back")).toBe(false);
+  expect(cancel).not.toHaveBeenCalled();
 });
 
 test("mouse Back focuses an edited inline field and closes the dialog once the field is unchanged", () => {
@@ -62,27 +63,16 @@ test("mouse Back focuses an edited inline field and closes the dialog once the f
   try {
     field.value = "Typed instructions";
     cancelButton.focus();
-    expect(stepSideLayer("back")).toBe(true);
+    expect(stepOpenLayer("back")).toBe(true);
     expect(dialog.el.isConnected).toBe(true);
     expect(document.activeElement).toBe(field);
     expect(field.value).toBe("Typed instructions");
 
     field.value = "Original";
-    expect(stepSideLayer("back")).toBe(true);
+    expect(stepOpenLayer("back")).toBe(true);
     expect(dialog.el.isConnected).toBe(false);
     expect(cancel).not.toHaveBeenCalled();
   } finally { dialog.close(); }
-});
-
-test("forward goes on through a layer that is itself a place, and stops at a dialog", () => {
-  const page = document.createElement("div");
-  document.body.append(page);
-  bindNavLayer(page, vi.fn(), { place: true });
-  expect(stepInlineLayer(document, "forward", () => false)).toBe(false);
-  const dialog = document.createElement("div");
-  page.append(dialog);
-  bindNavLayer(dialog, vi.fn());
-  expect(stepInlineLayer(document, "forward", () => false)).toBe(true);
 });
 
 test("a child layer is on top of its parent whatever order they were bound in and wherever an unrelated layer stands", () => {
@@ -93,9 +83,9 @@ test("a child layer is on top of its parent whatever order they were bound in an
   bindNavLayer(other, () => closed.push("other"));
   bindNavLayer(parent, () => closed.push("parent"));
   document.body.append(parent, other);
-  stepInlineLayer(document, "back", () => false);
+  stepOpenLayer("back");
   document.body.replaceChildren(other, parent);
-  stepInlineLayer(document, "back", () => false);
+  stepOpenLayer("back");
   // The parent bound last yields to its child; the unrelated layer bound after the child is on top of it either way.
   expect(closed).toEqual(["other", "other"]);
 });
@@ -114,8 +104,7 @@ describe.each(navInputs)("%s layer navigation", input => {
     expect(document.querySelector("#app-submenu")).toBeNull();
     expect(document.activeElement).toBe(apps);
     pressLayer(input, "forward");
-    expect(document.querySelector("#app-submenu")).not.toBeNull();
-    pressLayer(input);
+    expect(document.querySelector("#app-submenu")).toBeNull();
     pressLayer(input);
     expect(menu.isConnected).toBe(false);
     expect(document.activeElement).toBe(opener);
@@ -123,11 +112,13 @@ describe.each(navInputs)("%s layer navigation", input => {
     expect(dialog.el.isConnected).toBe(false);
   });
 
-  test("back cancels a delete question and never confirms it", async () => {
+  test("navigation leaves a delete question awaiting its visible answer", async () => {
     const answer = confirmDelete("Robin");
     pressLayer(input, "forward");
     expect(document.querySelector(".mb-delete")).not.toBeNull();
     pressLayer(input);
+    expect(document.querySelector(".mb-delete")).not.toBeNull();
+    document.querySelector<HTMLButtonElement>('.mb-delete [data-dlg="cancel"]')!.click();
     expect(await answer).toBe(false);
   });
 
@@ -142,31 +133,37 @@ describe.each(navInputs)("%s layer navigation", input => {
     expect(document.activeElement).toBe(picture);
   });
 
-  test("a dirty calendar editor follows its explicit cancel path", () => {
+  test("a dirty calendar editor keeps its unsaved title", () => {
     const panel = openEventEditor({ left: 0, right: 0, top: 0 },
       { start: Date.now(), end: Date.now() + 3600000, title: "", notes: "", allDay: false }, { onSaved: vi.fn() });
     panel.el.querySelector<HTMLInputElement>("#cal-title")!.value = "Draft";
     pressLayer(input, "forward");
     expect(panel.el.isConnected).toBe(true);
     pressLayer(input);
-    expect(panel.el.isConnected).toBe(false);
+    expect(panel.el.isConnected).toBe(true);
+    expect(panel.el.querySelector<HTMLInputElement>("#cal-title")?.value).toBe("Draft");
+    panel.close();
   });
 
-  test("the member maker retraces avatar tabs and keeps the name", () => {
+  test("Back keeps the member name and Forward restores the clean maker on its avatar tab", () => {
     const dialog = openMemberCreator({ taken: [], groupId: null, create: vi.fn() });
     const name = dialog.el.querySelector<HTMLInputElement>("#mb-new-name")!;
     name.value = "Robin";
     const characters = dialog.el.querySelector<HTMLButtonElement>('[data-slime-tab="characters"]')!;
     characters.click();
     characters.focus();
-    pressLayer(input);
-    expect(dialog.el.querySelector('[data-slime-tab="colors"]')?.getAttribute("aria-selected")).toBe("true");
-    expect(name.value).toBe("Robin");
-    pressLayer(input, "forward");
-    expect(characters.getAttribute("aria-selected")).toBe("true");
-    pressLayer(input);
-    pressLayer(input);
-    expect(dialog.el.isConnected).toBe(false);
+    try {
+      pressLayer(input);
+      expect(dialog.el.isConnected).toBe(true);
+      expect(name.value).toBe("Robin");
+      expect(document.activeElement).toBe(name);
+      name.value = "";
+      pressLayer(input);
+      expect(dialog.el.isConnected).toBe(false);
+      pressLayer(input, "forward");
+      expect(dialog.el.isConnected).toBe(true);
+      expect(characters.getAttribute("aria-selected")).toBe("true");
+    } finally { dialog.close(); }
   });
 
   test("conversation search closes even after focus has left its field", () => {

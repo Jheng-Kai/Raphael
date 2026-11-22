@@ -11,6 +11,7 @@
 // owner gives the member about how to be and what to do, so each is one quiet row of its words, whole, with a pencil: a press
 // turns the row into a field in place. A skill opens in a view of its own; no row has a text button where
 // an icon says it.
+import { rememberLayerBack } from "./nav-history";
 import { bindNavLayer } from "./nav-layers";
 import "./member-panel.css";
 import "./member-settings.css";
@@ -42,6 +43,7 @@ export interface MemberSettingsHost {
   refreshList(): void;
   /** The arrow and Escape: back to the member's conversation. */
   back(): void;
+  reopen?(): void;
 }
 
 export interface MemberSettings {
@@ -341,7 +343,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     return Math.max(0, img.naturalHeight * scale - box.height);
   }
 
-  bindNavLayer(cover, () => endReposition(false), { active: () => reposition !== null, sideBack: goBack });
+  bindNavLayer(cover, goBack, { active: () => reposition !== null });
 
   function endReposition(save: boolean): void {
     const moved = reposition;
@@ -529,8 +531,16 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
       if (adding && source) { el.querySelector<HTMLElement>("#ms-skill-source")?.focus(); return; }
       // Editable profile fields save on blur, including when the back arrow is pressed.
       if (document.activeElement instanceof HTMLElement && el.contains(document.activeElement)) document.activeElement.blur();
-      host.back();
-    } else back();
+      const tab = category;
+      rememberLayerBack(host.back, () => { host.reopen?.(); category = tab; draw(); });
+    } else {
+      const current = view;
+      const draft = { ...command };
+      rememberLayerBack(back, () => {
+        if (current.kind === "skill") void openSkill(current.id);
+        if (current.kind === "command") { command = draft; view = current; draw(); scroll.scrollTop = 0; }
+      });
+    }
   }
 
   async function openSkill(id: number): Promise<void> {
@@ -745,13 +755,6 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
       cancelField(target as HTMLInputElement | HTMLTextAreaElement);
     }
   });
-  el.addEventListener("focusin", event => {
-    const field = event.target;
-    if (field instanceof HTMLElement && field.matches("#ms-name, #ms-role, textarea[data-field]")) {
-      bindNavLayer(field, () => cancelField(field as HTMLInputElement | HTMLTextAreaElement),
-        { active: () => document.activeElement === field, side: () => false });
-    }
-  });
   el.addEventListener("focusout", (event) => {
     const target = event.target as HTMLElement;
     if (target instanceof HTMLInputElement && (target.id === "ms-name" || target.id === "ms-role") || target instanceof HTMLTextAreaElement && target.dataset.field) void saveField(target as HTMLInputElement | HTMLTextAreaElement);
@@ -765,7 +768,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     event.preventDefault();
     // A move of the cover is left first, the picture back where it was.
     if (reposition) endReposition(false);
-    else if (view.kind === "main") host.back(); else back();
+    else goBack();
   });
   onLocaleChange(draw);
   scroll.addEventListener("scroll", () => { el.toggleAttribute("data-scrolled", scroll.scrollTop > 8); }, { passive: true });
@@ -777,8 +780,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
       if (!el.hidden) { draw(); return; }
       el.hidden = false;
       el.closest(".page-agent")?.setAttribute("data-member-settings-open", "");
-      bindNavLayer(el, () => view.kind === "main" ? host.back() : back(),
-        { step: (_direction, withinLayer) => withinLayer(), place: true, sideBack: goBack });
+      bindNavLayer(el, goBack);
       view = { kind: "main" }; category = CATEGORIES[0].id; editing.clear(); saving.clear(); adding = false; source = ""; skillText = null; skillBusy = false;
       skills = "loading"; commands = "loading"; toolChoices = "loading"; reposition = null; delete cover.dataset.repositioning;
       drawn = ""; drawnFor = null;

@@ -1,5 +1,6 @@
 import * as api from "./api";
 import { createChatComposer } from "./chat-composer";
+import { rememberLayerBack } from "./nav-history";
 import { bindNavLayer } from "./nav-layers";
 import { describeError } from "./format";
 import { getLocale, t } from "./i18n";
@@ -10,7 +11,7 @@ import { patchThread } from "./thread-diff";
 import { conversationCardsHTML, messageActionsHTML, filesHTML, pictureActionsHTML } from "./timeline";
 import { copyPicture, pictureIdAt } from "./picture-message";
 import { mountConversationCardActions } from "./conversation-card-actions";
-import { mountOwnerQuestions } from "./owner-questions";
+import { mountOwnerQuestions, questionWaits } from "./owner-questions";
 import { createBackgroundQuestions } from "./background-questions";
 import { carryTyped } from "./secret-card";
 import { carryMail } from "./mail-card";
@@ -20,7 +21,7 @@ import type { AppContext, MembersList, RoomMessage } from "./types";
 import { copyButton, esc, headerCloseButton, toaster } from "./ui";
 
 /** One side thread, carried by the existing room worker and composer. */
-export async function openRoomThread(host: HTMLElement, app: AppContext, roomId: number, messageId: number, people: MembersList, changed: () => void): Promise<() => void> {
+export async function openRoomThread(host: HTMLElement, app: AppContext, roomId: number, messageId: number, people: MembersList, changed: () => void, reopen?: () => void): Promise<() => void> {
   const opener = document.activeElement;
   const result = await api.core<{ thread_id: number }>("rooms.thread_open", { room_id: roomId, message_id: messageId });
   const pane = document.createElement("aside"); pane.className = "room-side-thread"; pane.setAttribute("aria-label", t("rooms.thread"));
@@ -97,13 +98,17 @@ export async function openRoomThread(host: HTMLElement, app: AppContext, roomId:
   const unsubscribe = app.onEvent(event => { if (event.type === "WorkerChanged" || (event.type === "RoomsChanged" && event.room_id === roomId) || (event.type === "AgentTurn" && messages.some(message => message.turn_id === event.turn_id))) void refresh().catch(error => toaster.info(describeError(error))); });
   const close = (): void => { if (!alive) return; alive = false; generation++; unsubscribe(); unmount(); questions.reset(); composer.stopVoice(); media.reset(); pane.remove(); host.classList.remove("has-side-thread"); changed(); };
   bindNavLayer(pane, () => {
+    if (questions.questions().length || questionWaits(messages.flatMap(message => message.turn ? [message.turn] : []))) return;
     const draft = composer.snapshot();
-    if (draft.text || draft.pageId || composer.el.querySelector(".cmp-chip")) {
+    if (pending || draft.text || draft.pageId || composer.el.querySelector(".cmp-chip")) {
       composer.input.focus();
       return;
     }
-    close();
-    if (opener instanceof HTMLElement && host.contains(opener)) opener.focus({ preventScroll: true });
+    const leave = (): void => {
+      close();
+      if (opener instanceof HTMLElement && host.contains(opener)) opener.focus({ preventScroll: true });
+    };
+    if (reopen) rememberLayerBack(leave, reopen); else leave();
   });
   pane.querySelector("[data-thread-close]")!.addEventListener("click", close);
   try { await refresh(); composer.input.focus(); } catch (error) { close(); throw error; }

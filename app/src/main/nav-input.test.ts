@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, test, vi } from "vitest";
-import { emptyNavKeyState, installNavInput, installNavNotes, keyMayMove, reduceNavKey, stepOfButton, type NavKeyInput } from "./nav-input";
+import { emptyNavKeyState, installNavInput, installNavNotes, reduceNavKey, stepOfButton, type NavKeyInput } from "./nav-input";
 import { installWindowHotkeys } from "./window-hotkeys";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(), Channel: class {} }));
@@ -209,6 +209,14 @@ describe("the keys on the window", () => {
     expect(steps).toEqual([]);
   });
 
+  test("the arrow stays with an active input method", () => {
+    const { target, steps } = setup();
+    fire(target, "keydown", keyInit("AltLeft", { altKey: true }));
+    const arrow = fire(target, "keydown", keyInit("ArrowLeft", { altKey: true, isComposing: true }));
+    expect(arrow.defaultPrevented).toBe(false);
+    expect(steps).toEqual([]);
+  });
+
   test("a key that a listener before it took is not a step", () => {
     const target = new EventTarget();
     const steps: string[] = [];
@@ -221,48 +229,20 @@ describe("the keys on the window", () => {
 
 });
 
-describe("the presses that may lead into another view", () => {
-  function listen() {
-    const target = document.createElement("div");
-    document.body.append(target);
-    const heard: boolean[] = [];
-    const stop = installNavNotes(target, (back) => heard.push(back));
-    return { target, heard, stop };
-  }
-
-  test("a click is heard, and on one of the window's own ways back it is a step back", () => {
-    const { target, heard, stop } = listen();
-    target.innerHTML = '<button class="go">Tools</button><button data-nav-back><span class="i"></span></button>';
+test("a new selection or edit clears layer Forward while a marked Back arrow keeps it", () => {
+  const target = document.createElement("div");
+  target.innerHTML = '<button class="go">Tools</button><button data-nav-back><span class="i"></span></button><input>';
+  document.body.append(target);
+  const choose = vi.fn();
+  const stop = installNavNotes(target, choose);
+  try {
     target.querySelector<HTMLElement>(".go")!.click();
     target.querySelector<HTMLElement>(".i")!.click();
-    expect(heard).toEqual([false, true]);
-    stop(); target.remove();
-  });
-
-  test("Escape is a way back; Enter, Tab and Ctrl shortcuts may move; letters typed and lone modifiers do not", () => {
-    const { target, heard, stop } = listen();
-    const press = (init: KeyboardEventInit) => target.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, ...init }));
-    press({ key: "Escape" });
-    press({ key: "Enter" });
-    press({ key: "1", ctrlKey: true });
-    press({ key: "a" });
-    press({ key: "Shift" });
-    press({ key: "ArrowLeft", code: "ArrowLeft", altKey: true });
-    expect(heard).toEqual([true, false, false]);
-    expect(keyMayMove({ key: "a", ctrlKey: false, metaKey: false, altKey: false, isComposing: true })).toBe(false);
-    stop(); target.remove();
-  });
-
-  test("the side buttons are steps of their own, not presses to note", () => {
-    const { target, heard, stop } = listen();
+    target.querySelector("input")!.dispatchEvent(new Event("input", { bubbles: true }));
     target.dispatchEvent(new MouseEvent("click", { bubbles: true, button: 3 }));
     target.dispatchEvent(new MouseEvent("click", { bubbles: true, button: 4 }));
-    expect(heard).toEqual([]);
-    stop();
-    target.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    expect(heard).toEqual([]);
-    target.remove();
-  });
+    expect(choose).toHaveBeenCalledTimes(2);
+  } finally { stop(); target.remove(); }
 });
 
 test("stopping the listeners hands the buttons and keys back", () => {

@@ -118,7 +118,9 @@ export function bindActionMode(button: HTMLElement): void {
     if (menu?.isConnected) { closeMenu(); return; }
     const title = esc(t("chat.beforeAct"));
     menu = openPopover(button, `<div class="cb-card cb-modes"><header class="cb-head"><h3><span>${title}</span></h3></header><div class="cb-list" role="radiogroup" aria-label="${title}">${rows()}</div></div>`,
-      { className: "menu cb-menu", role: "dialog", label: t("chat.beforeAct"), placement: "start", onClose: () => { menu = null; } });
+      { className: "menu cb-menu", role: "dialog", label: t("chat.beforeAct"), placement: "start",
+      navigation: { restore: () => () => { if (button.isConnected && !button.closest("[hidden], [inert]")) button.click(); } },
+      onClose: () => { menu = null; } });
     menu.addEventListener("click", picked => {
       const row = (picked.target as Element).closest<HTMLElement>("[data-mode]");
       if (!row) return;

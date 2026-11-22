@@ -29,7 +29,7 @@ export function mountComputerLifecycle(_host: HTMLElement, panel: HTMLElement, m
       closeMenu();
       if (owner !== member()) return;
       if (action !== 'reset') { void perform(action, captured).catch(reportFailure); return; }
-      openDialog({ title: t('desktop.resetConfirm'), cls: 'mb-confirm', describedByBody: true,
+      openDialog({ title: t('desktop.resetConfirm'), cls: 'mb-confirm', blockNavigation: true, describedByBody: true,
         body: `<p>${esc(t('desktop.resetHint'))}</p><p>${esc(t(captured.mode === 'shared' ? 'desktop.shared' : 'desktop.perMember'))}</p>`,
         actions: { secondary: btn(esc(t('common.cancel')), '', ' data-dlg="cancel"'), primary: { label: esc(t('desktop.reset')), attrs: ' data-dlg="reset"' } },
         onAct(action, _target, dialog) { dialog.close(); if (action === 'reset' && owner === member()) void perform('reset', captured).catch(reportFailure); } });

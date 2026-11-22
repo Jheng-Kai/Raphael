@@ -87,7 +87,9 @@ export function mountComposerFolder(button: HTMLElement, member: () => number, h
   button.addEventListener("click", event => {
     event.stopPropagation();
     if (menu?.isConnected) { closeMenu(); return; }
-    menu = openPopover(button, cardHTML(), { className: "menu cb-menu", role: "dialog", label: t("memberSettings.folders"), placement: "start", onClose: () => { menu = null; } });
+    menu = openPopover(button, cardHTML(), { className: "menu cb-menu", role: "dialog", label: t("memberSettings.folders"), placement: "start",
+      navigation: { restore: () => () => { if (button.isConnected && !button.closest("[hidden], [inert]")) button.click(); } },
+      onClose: () => { menu = null; } });
     menu.addEventListener("click", picked => {
       const target = picked.target as Element, row = target.closest<HTMLElement>("[data-folder]"), act = target.closest<HTMLElement>("[data-folder-act]")?.dataset.folderAct;
       const list = mine(), folders = listedFolders(list, output);

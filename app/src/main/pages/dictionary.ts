@@ -175,7 +175,10 @@ export function createDictionary(app: AppContext): DictionaryPage {
     addBox.hidden = !open;
     newButton.setAttribute("aria-expanded", String(open));
     if (open) {
-      bindNavLayer(addBox, () => showAdd(false), { sideBack: () => wordInput.value ? wordInput.focus() : showAdd(false) });
+      bindNavLayer(addBox, () => showAdd(false), {
+        step: () => { if (!wordInput.value) return false; wordInput.focus(); return true; },
+        restore: () => () => showAdd(true),
+      });
       wordInput.focus();
     }
     else newButton.focus();
@@ -186,7 +189,7 @@ export function createDictionary(app: AppContext): DictionaryPage {
   function renderImport(): void {
     importBox.hidden = staged === null;
     if (!staged) return;
-    bindNavLayer(importBox, cancelImport);
+    bindNavLayer(importBox, cancelImport, { step: () => true });
     const fresh = staged.words.length - staged.known;
     importMessage.textContent = staged.known > 0 ? t("dictionary.026", { p0: fresh, p1: staged.known }) : t("dictionary.027", { p0: fresh });
   }

@@ -27,13 +27,14 @@ const keysDialog = [...settings("dictation"), click('.modal-scrim [data-act="key
 const pasteRecorded = [...keysDialog, click('.kd-dialog [data-field="paste_last_keys"]'), wait(".kd-dialog [data-recording]"),
   { action: "key", key: "F8", ctrl: true }, waitGone(".kd-dialog [data-recording]")];
 export default [
-  scene("nav-layer-settings", "Back from Usage's analysis returns to its overview inside the same Settings dialog", [
-    ...analysis, navKey("back"), wait('.modal [data-usage-tab="overview"][aria-selected="true"]'), wait('.modal [data-row="raphael-spend"]'),
+  scene("nav-layer-settings", "Back closes Settings from Usage analysis and Forward restores analysis", [
+    ...analysis, navKey("back"), check("nav-settings-closed"),
+    navKey("forward"), wait('.modal [data-usage-tab="analysis"][aria-selected="true"]'),
   ]),
-  scene("nav-side-settings", "Mouse Back closes Settings in one step and Forward leaves the conversation in view", [
+  scene("nav-side-settings", "Mouse Back closes Settings in one step and Forward restores Tools", [
     member(1), member(2), check("nav-conversation-2"), ...settings("tools"), check("nav-settings-tools"),
     sideButton("back"), waitGone('.modal-scrim[data-page="settings"]:not([hidden])'), check("nav-side-settings-closed"),
-    sideButton("forward"), check("nav-side-settings-closed"),
+    sideButton("forward"), check("nav-settings-tools"),
   ]),
 
 
