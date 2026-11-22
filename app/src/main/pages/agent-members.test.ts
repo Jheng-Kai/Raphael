@@ -1930,13 +1930,14 @@ test("a same-length reply edit still refreshes without serializing the full hist
 
 test("computer search navigation leaves a room and restores the computer landing panel", async () => {
   api.settingsGet.mockResolvedValue({settings:{computer_ssh_alias:""}});
+  api.desktopStatus.mockResolvedValue({transport:"idle", state:"absent", ready:false, control:"member"});
   const agent = mount(); await flush();
   window.dispatchEvent(new CustomEvent("raphael:open-room", {detail:{roomId:1}})); await flush();
   agent.show("computer"); await flush();
   expect(agent.el.querySelector<HTMLElement>(".au-room-pane")!.hidden).toBe(true);
   expect(agent.el.querySelector<HTMLElement>(".mb-det")!.hidden).toBe(false);
   expect(agent.el.querySelector<HTMLElement>(".mb-det")!.dataset.detailsTab).toBe("computer");
-  expect(agent.el.querySelector(".mb-det [data-computer-location]")).not.toBeNull();
+  expect(agent.el.querySelector(".mb-det [data-computer-choice]")).not.toBeNull();
   agent.el.querySelector<HTMLButtonElement>('[data-det="gear"]')!.click();
   agent.show("computer"); await flush();
   expect(agent.el.querySelector<HTMLElement>(".mb-det")!.dataset.detailsTab).toBe("computer");

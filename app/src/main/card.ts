@@ -104,8 +104,8 @@ export function cardFailure(card: Element | null, retry: () => void, dismiss?: (
   const prior = status?.outerHTML;
   // 重試 below what went wrong; putting it away is the × at the card's top right, not a 「關閉」 beside 重試.
   const head = card.querySelector<HTMLElement>(":scope > .card-head");
-  // A card drawn as failed already has its × (cardHTML's failedClose): that one puts it away too, never a second beside it.
-  let dismissButton = head?.querySelector<HTMLElement>("[data-card-dismiss], [data-card-failed-close]") ?? null;
+  // Keep the existing close action, including a waiting card that stops work.
+  let dismissButton = head?.querySelector<HTMLElement>(".card-close") ?? null;
   const added = !dismissButton;
   const clear = (): void => { failure!.remove(); if (added) dismissButton?.remove(); original.forEach(footer => { footer.hidden = false; }); if (prior) { const pill = card.querySelector(".card-status"); if (pill) pill.outerHTML = prior; } };
   // A card drawn as failed already says how in its status (「未能傳送」): that word stays.

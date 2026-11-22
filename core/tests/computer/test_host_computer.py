@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import json
 import os
 from pathlib import Path
@@ -12,34 +13,101 @@ from raphael_core.computer.host_browser import BrowserError, HostBrowser, Tab, c
 from raphael_core.computer import host_page
 from raphael_core.computer.host_computer import HostComputerTools
 from raphael_core.computer.vm import LocalVm
-from raphael_core.computer.vm_tools import BROWSER_OPEN
+from raphael_core.computer.vm_tools import BROWSER_OPEN, COMPUTER_STATUS_KEY, VmTools
 from raphael_core.brain.settings import SettingsStore
-from raphael_core.members.store import MemberError, MemberStore
+from raphael_core.members.store import MemberStore
 
 
-def test_computer_preferences_are_per_member_and_opt_in(conn):
+def test_desktop_permission_is_per_member_and_opt_in(conn):
     store = MemberStore(conn)
     first = store.create_member(name="First")
     second = store.create_member(name="Second")
-    assert first.computer_mode == second.computer_mode == "host"
     assert first.desktop_control is second.desktop_control is False
-    store.update_member(first.id, computer_mode="docker", desktop_control=True)
-    assert store.member(first.id).computer_mode == "docker"
+    store.update_member(first.id, desktop_control=True)
     assert store.member(first.id).desktop_control is True
-    assert store.member(second.id).computer_mode == "host"
-    with pytest.raises(MemberError):
-        store.update_member(first.id, computer_mode="other")
+    assert store.member(second.id).desktop_control is False
 
 
-def test_docker_falls_back_without_changing_the_choice(tmp_path):
-    machine = LocalVm(tmp_path)
-    machine.member_computer_mode = lambda member: "docker" if member == 2 else "host"
-    machine.desktop = SimpleNamespace(installed=lambda: False)
-    assert machine.uses_host(2)
-    assert machine.member_computer_mode(2) == "docker"
-    machine.desktop = SimpleNamespace(installed=lambda: True)
-    assert not machine.uses_host(2)
-    assert machine.uses_host(1)
+@pytest.mark.parametrize("installed", [False, True])
+async def test_both_tools_are_offered_with_read_only_status(tmp_path, conn, monkeypatch, installed):
+    vm = LocalVm(tmp_path, settings=SettingsStore(conn))
+    vm.desktop = SimpleNamespace(installed=lambda: installed)
+    vm.real_transport = False
+    probes = []
+
+    async def available(target=None):
+        probes.append("info")
+        return True
+
+    async def unexpected(*args, **kwargs):
+        pytest.fail("Listing computer tools or reading status must not take a Docker seat or start it")
+
+    monkeypatch.setattr(vm, "available", available)
+    monkeypatch.setattr(vm, "seat", unexpected)
+    monkeypatch.setattr(vm, "start", unexpected)
+    monkeypatch.setattr("raphael_core.computer.host_browser.chrome_executable", lambda: "chrome")
+    tools = VmTools(SimpleNamespace(offered=lambda: []), vm, attachments=None)
+    tools.host_computer = HostComputerTools(vm, conn, BROWSER_OPEN)
+    await tools.prepare(1)
+    offered = tools.offered_for(1)
+    assert any(tool.name == "vm_exec" for tool in offered)
+    assert {tool.alias_group for tool in offered if tool.name == "browser_open"} == {None, "computer_chrome"}
+    assert tools.active_transport(1, 2) is None
+    result = await tools.call(COMPUTER_STATUS_KEY, {}, approver="auto")
+    assert result.ok
+    assert json.loads(result.text) == {
+        "docker": {"installed": installed, "running": installed, "sign_ins": "Docker browser profile"},
+        "host_chrome": {"available": True, "sign_ins": "Shared Raphael Chrome profile"},
+    }
+    assert probes == (["info"] if installed else [])
+    if not installed:
+        docker_open = next(tool.key for tool in offered if tool.name == "browser_open" and tool.alias_group is None)
+        assert (await tools.call(docker_open, {"url": "https://example.invalid"}, approver="auto")).kind == "docker_missing"
+
+
+async def test_two_members_do_not_wait_for_the_same_chrome_action_lock(tmp_path, conn, monkeypatch):
+    tools = HostComputerTools(LocalVm(tmp_path, settings=SettingsStore(conn)), conn, BROWSER_OPEN)
+    entered, finish = asyncio.Event(), asyncio.Event()
+
+    async def dispatch(name, arguments, approver, member, work, conversation, announce):
+        if member == 1:
+            entered.set()
+            await finish.wait()
+        return {"member": member}, [], None
+
+    monkeypatch.setattr(tools, "browser_call", dispatch)
+
+    async def open_page(member):
+        key = next(tool.key for tool in tools.offered(member) if tool.name == "browser_open")
+        return await tools.call(key, {"url": "https://example.invalid"}, member=member, scope=("turn", member, 2),
+                                turn_id=member, conversation_id=2, private=True, approver="auto", language="en", announce=None)
+
+    first = asyncio.create_task(open_page(1))
+    try:
+        await asyncio.wait_for(entered.wait(), 1)
+        second = await asyncio.wait_for(open_page(2), 1)
+        assert second.ok and json.loads(second.text) == {"member": 2}
+        assert not first.done()
+    finally:
+        finish.set()
+        await first
+    assert first.result().ok
+
+
+@pytest.mark.parametrize("mode", ["shared", "per-bot"])
+async def test_host_files_use_the_same_local_workspace_and_team_as_docker(tmp_path, conn, mode):
+    settings = SettingsStore(conn)
+    settings.set("computer_vm_mode", mode)
+    vm = LocalVm(tmp_path, settings=settings)
+    tools = HostComputerTools(vm, conn, BROWSER_OPEN)
+    target = vm.target(2)
+    assert tools.folders(2) == (vm.member_workspace(target), target.shared)
+    assert tools.folders(1)[0] != tools.folders(2)[0]
+    assert tools.folders(1)[1] == tools.folders(2)[1]
+    if mode == "shared":
+        assert vm.member_workspace(target).relative_to(target.workspace).parts == ("members", target.key)
+        routes = VmTools(SimpleNamespace(), vm, attachments=None)
+        assert routes.member_file_path(target, "doc.txt") == vm.guest_workspace(target) + "/doc.txt"
 
 
 async def test_host_writes_use_work_roots_and_need_an_explicit_yes_elsewhere(tmp_path, conn):
@@ -71,23 +139,19 @@ async def test_certificate_handoff_keeps_the_origin_and_tab_for_an_existing_priv
     tab = SimpleNamespace(handoff=False)
     seen = []
 
-    async def dispatch(name, arguments, approver, member, work, announce):
+    async def dispatch(name, arguments, approver, member, work, conversation, announce):
         assert name == "request_takeover" and work == ("task", 5)
         return {"owner_needed": arguments["reason"]}, [], tab
 
-    async def focus(active):
-        assert active is tab and tab.handoff
-
     async def wait(**context):
         seen.append((context["turn_id"], context["conversation_id"], context["reason"]))
-        await context["focus"]()
+        assert context["tab"] is tab and tab.handoff
 
     async def snapshot(browser, active, arguments):
         assert active is tab and not tab.handoff
         return {"tab_id": "original"}, []
 
     monkeypatch.setattr(tools, "browser_call", dispatch)
-    monkeypatch.setattr(tools.browser, "focus", focus)
     monkeypatch.setattr(host_page, "snapshot", snapshot)
     tools.cards = SimpleNamespace(wait_for_browser=wait)
     result = await tools.call(key, {"reason": "certificate"}, member=1, scope=("task", 5), turn_id=2,
@@ -153,13 +217,16 @@ async def test_first_work_reuses_only_the_marked_chrome_startup_page(tmp_path):
     first = await browser.new_tab(("one",), 1, tmp_path)
     second = await browser.new_tab(("two",), 2, tmp_path)
     assert (first.target, second.target) == ("startup", "new")
-    assert created == [{"url": "about:blank", "background": True}]
+    assert created == [{"url": "about:blank", "newWindow": True}]
     assert "owner" not in browser.owned_targets
 
 
 async def serve(reader, writer):
     try:
-        request = await reader.readuntil(b"\r\n\r\n")
+        try:
+            request = await reader.readuntil(b"\r\n\r\n")
+        except (asyncio.IncompleteReadError, ConnectionError):
+            return  # Chrome's preconnect, closed without a request
         path = request.split(b" ")[1]
         if path == b"/login":
             content = b'<form><label>Password<input type="password" value="hidden-test-value"></label></form>'
@@ -175,7 +242,8 @@ async def serve(reader, writer):
         await writer.drain()
     finally:
         writer.close()
-        await writer.wait_closed()
+        with contextlib.suppress(ConnectionError):
+            await writer.wait_closed()
 
 
 # A hosted runner has Chrome but no desktop session, where it cannot finish starting: this is a native check, run locally.
@@ -184,7 +252,7 @@ async def test_chrome_has_scoped_tabs_page_input_private_forms_and_downloads(tmp
     server = await asyncio.start_server(serve, "127.0.0.1", 0)
     url = f"http://127.0.0.1:{server.sockets[0].getsockname()[1]}"
     root = tmp_path.resolve()
-    browser = HostBrowser(root / "browser", headless=True, idle_seconds=0.05)
+    browser = HostBrowser(root / "browser", idle_seconds=0.05)
     async with server:
         try:
             assert await browser.start()

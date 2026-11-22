@@ -25,15 +25,6 @@
 /* No words over a computer that is not showing its screen: the press starts it, with no label. */
 .desktop-panel:is([data-desktop-state="stopped"], [data-desktop-state="unavailable"]) .btn.desktop-open .desktop-open-pill { display: none; }
 @media (prefers-reduced-motion: reduce) { .desktop-open-pill { transition: none; } }
-.computer-lifecycle { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); min-width: 0; width: 100%; }
-.computer-lifecycle-state { display: flex; align-items: center; gap: var(--sp-2); color: var(--text-2); font-size: var(--fs-sm); }
-.desktop-location-header .computer-lifecycle-state { white-space: nowrap; }
-.mb-det-head:has(.computer-lifecycle) { flex-wrap: wrap; }
-.mb-det-head .mb-det-fill:has(+ .computer-lifecycle) { display: none; }
-.mb-det-head .computer-lifecycle { display: contents; }
-.mb-det-head .computer-lifecycle-state:not(:empty) { flex-basis: 100%; }
-.computer-lifecycle-state:empty { display: none; }
-.computer-lifecycle-location { min-width: 0; margin-left: auto; }
 .desktop-screen, [data-card-desktop-screen], [data-card-screen] { --text: var(--desktop-frame-text); --text-2: var(--desktop-frame-text); --text-3: color-mix(in srgb, var(--desktop-frame-text) 70%, transparent); --panel: var(--desktop-frame-bg); --content: var(--desktop-frame-bg); }
 .desktop-takeover-bar { display: contents; }
 .desktop-takeover-bar[hidden] { display: none; }
@@ -166,14 +157,28 @@ iframe[data-desktop-stream][hidden] { display: block !important; position: absol
 :is(.desktop-mode, .desktop-actions) .btn.sm:is([data-desktop="return"], [data-desktop="discard-teach"]):active:not(:disabled) { background: color-mix(in srgb, var(--text) 22%, var(--surface-2)); }
 :is(.desktop-mode, .desktop-actions) .btn.sm:disabled { border-color: color-mix(in srgb, var(--text) 40%, var(--content)); background: color-mix(in srgb, var(--text) 40%, var(--content)); }
 
-.desktop-location-header { display: flex; justify-content: flex-end; min-width: 0; }
-.computer-location { min-width: 0; }
-.computer-location .btn { max-width: 100%; }
-/* Beside the state word and the ⋯ the location is a quiet button: words and a chevron, with no frame and no
-   fill, not even under the pointer. Keyboard focus keeps its ring. */
-.desktop-location-header .computer-location .btn, .desktop-location-header .computer-location .btn:is(:hover, :active, [aria-expanded="true"]):not(:disabled) { border-color: transparent; background: transparent; }
-.computer-location .btn > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.desktop-takeover-bar .computer-location { flex: 0 1 auto; }
+.desktop-location-header { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); min-width: 0; }
+.desktop-choice-row { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
+.desktop-computer-choice { min-width: 0; }
+.desktop-computer-choice .sel { max-width: min(100%, 260px); padding-inline-start: var(--sp-2); }
+.desktop-computer-choice .sel, .desktop-computer-choice .sel:is(:hover, :active, [aria-expanded="true"]):not(:disabled) { border-color: transparent; background: transparent; }
+.computer-lifecycle-state { min-width: 0; color: var(--text-2); font-size: var(--fs-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.desktop-docker-setup { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-1) var(--sp-2); margin: 0; padding-inline: var(--sp-2); color: var(--text-2); font-size: var(--fs-sm); }
+.btn.desktop-docker-help { min-height: 0; padding: 0; border: 0; background: transparent; color: var(--link); font: inherit; text-align: start; white-space: normal; }
+.btn.desktop-docker-help:is(:hover, :active):not(:disabled) { background: transparent; text-decoration: underline; text-underline-offset: 3px; }
+.desktop-settings { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
+.desktop-panel[data-expanded] .desktop-settings { display: none; }
+.desktop-permission { flex: 1; min-width: 0; }
+.desktop-permission:empty { display: none; }
+.desktop-permission-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); width: 100%; min-height: var(--h-field); padding: var(--sp-1) var(--sp-2); border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text); font: inherit; text-align: start; }
+.desktop-permission-row:hover:not(:disabled) { background: var(--hover); }
+.desktop-permission-row:active:not(:disabled) { background: var(--pressed); }
+.desktop-permission-row[aria-checked="true"] .tg { background: var(--member-switch, var(--accent)); border-color: var(--member-accent, var(--accent)); }
+.desktop-permission-row[aria-checked="true"] .tg::after { transform: translateX(16px); background: var(--member-knob, var(--on-accent)); }
+.desktop-permission-row:hover:not(:disabled)[aria-checked="true"] .tg { filter: brightness(0.9); }
+:root[data-theme="dark"] .desktop-permission-row:hover:not(:disabled)[aria-checked="true"] .tg { filter: brightness(1.12); }
+.desktop-permission-row:hover:not(:disabled)[aria-checked="false"] .tg { border-color: var(--text-2); }
+.desktop-permission-row:hover:not(:disabled)[aria-checked="false"] .tg::after { background: var(--text); }
 .menu.computer-location-popover { width: min(380px, calc(100vw - var(--sp-4))); padding: var(--sp-3); }
 .menu.computer-location-popover .slist { --slist-pad: 0px; padding-inline: 0; }
 /* The repair command's copy button is a code block control, not a menu row. */
@@ -181,9 +186,7 @@ iframe[data-desktop-stream][hidden] { display: block !important; position: absol
 .menu.computer-location-popover .row { flex-direction: column; align-items: stretch; min-height: 0; gap: var(--sp-2); padding-block: var(--sp-2); }
 .menu.computer-location-popover .row > .lbl { flex: none; min-width: 0; }
 .menu.computer-location-popover .row > .ctl { width: 100%; margin-left: 0; justify-content: flex-start; }
-.menu.computer-location-popover .field, .menu.computer-location-popover .ctl .sel { width: 100%; max-width: 100%; min-width: 0; }
-.menu.computer-location-popover .sel { justify-content: space-between; padding: 0 var(--sp-2) 0 var(--sp-3); border: 1px solid var(--btn-edge); background: var(--btn); text-align: left; }
-.menu.computer-location-popover .sel > span { flex: 1; min-width: 0; text-align: left; }
+.menu.computer-location-popover .field { width: 100%; max-width: 100%; min-width: 0; }
 .menu.computer-location-popover > .btn { border: 1px solid var(--btn-edge); background: var(--btn); }
 .computer-location-purpose, .computer-location-error { margin: var(--sp-2) 0; font-size: var(--fs-sm); line-height: 1.5; overflow-wrap: anywhere; white-space: normal; }
 .computer-location-purpose { color: var(--text-3); }

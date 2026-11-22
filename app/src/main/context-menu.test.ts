@@ -17,12 +17,12 @@ const picks = (): string[] => [...document.querySelectorAll<HTMLElement>("#app-p
 const popover = (): HTMLElement | null => document.querySelector<HTMLElement>("#app-popover");
 
 test('the member computer header overflow has the same right-click entry', () => {
-  const header = document.createElement('div'); header.className = 'desktop-location-header';
-  header.innerHTML = `<span>Computer</span>${iconButton('more','More',' data-computer-menu')}`;
-  document.body.append(header);
-  const button = header.querySelector<HTMLButtonElement>('[data-computer-menu]')!;
-  expect(overflowAt(header.querySelector('span'))?.button).toBe(button);
-  expect(uncoveredOverflows(header)).toEqual([]);
+  const panel = document.createElement('section'); panel.className = 'desktop-panel';
+  panel.innerHTML = `<header>Computer</header><div class="desktop-settings">${iconButton('more','More',' data-computer-menu')}</div>`;
+  document.body.append(panel);
+  const button = panel.querySelector<HTMLButtonElement>('[data-computer-menu]')!;
+  expect(overflowAt(panel.querySelector('header'))?.button).toBe(button);
+  expect(uncoveredOverflows(panel)).toEqual([]);
 });
 
 const press = (target: Element, x: number, y: number): void => {

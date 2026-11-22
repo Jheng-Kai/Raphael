@@ -1,10 +1,9 @@
-"""A viewer connection its other end reset is one quiet line, not an asyncio ERROR with a traceback.
-
-Six tracebacks `Exception in callback _ProactorBasePipeTransport._call_connection_lost` ... `ConnectionResetError:
-[WinError 10054]` in two days, each a few seconds before the viewer loaded vnc.html again through the relay: the
-connection was over already, and the relay closing its end raised inside asyncio's own callback."""
+"""A reset during a Proactor close still releases the relay socket and detaches it from the server."""
 
 import logging
+import socket
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 from raphael_core.computer.viewer_relay import ViewerRelay, quiet_reset
 
@@ -17,18 +16,32 @@ class Loop:
         self.defaulted.append(context)
 
 
-class Handle:
-    def __repr__(self):
-        return "<Handle _ProactorBasePipeTransport._call_connection_lost(None)>"
+class _ProactorBasePipeTransport:
+    def __init__(self, sock, server):
+        self._sock = sock
+        self._server = server
+        self._called_connection_lost = False
+
+    def _call_connection_lost(self):
+        raise AssertionError("The protocol was already notified before shutdown failed")
 
 
 def test_a_reset_in_the_transports_own_close_is_one_line_and_anything_else_goes_to_asyncio(caplog):
     caplog.set_level(logging.INFO)
     loop = Loop()
-    quiet_reset(loop, {"message": "Exception in callback", "exception": ConnectionResetError(10054, "reset"), "handle": Handle()})
-    assert loop.defaulted == []
-    assert "reset by its other end" in caplog.text
-    other = {"message": "Exception in callback", "exception": ValueError("ours"), "handle": Handle()}
+    server = Mock()
+    with socket.socket() as sock:
+        transport = _ProactorBasePipeTransport(sock, server)
+        handle = SimpleNamespace(_callback=transport._call_connection_lost)
+        reset = {"message": "Exception in callback", "exception": ConnectionResetError(10054, "reset"), "handle": handle}
+        quiet_reset(loop, reset)
+        assert sock.fileno() == -1
+        assert transport._sock is None and transport._server is None
+        assert transport._called_connection_lost
+        server._detach.assert_called_once_with()
+        assert loop.defaulted == []
+        assert "reset by its other end" in caplog.text
+    other = {"message": "Exception in callback", "exception": ValueError("ours"), "handle": handle}
     quiet_reset(loop, other)
     elsewhere = {"message": "Task exception was never retrieved", "exception": ConnectionResetError(10054, "reset")}
     quiet_reset(loop, elsewhere)
@@ -36,8 +49,6 @@ def test_a_reset_in_the_transports_own_close_is_one_line_and_anything_else_goes_
 
 
 async def test_the_relay_loop_has_the_handler():
-    # A reset on loopback did not raise in this test's own sockets (tried with and without a pending read), so the
-    # handler is proven on the context asyncio hands it above, and here only to be the relay loop's.
     async def prepare(*_):
         return {"code": 404}
     relay = ViewerRelay(prepare, None, None, lambda *_: None, None, None)

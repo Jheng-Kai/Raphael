@@ -4,19 +4,20 @@ import type { DesktopState } from "./desktop-viewer";
 import { t } from "./i18n";
 import { esc, ico } from "./ui";
 import { btn, patchHTML } from "./ui";
-import { cardDisclosureHTML, cardHTML, cardPromptText, waitingCloseHTML } from "./card";
+import { cardDisclosureHTML, cardHTML, cardPromptText, failedClose, waitingCloseHTML } from "./card";
 
 export interface DesktopWork {
   id: string;
   turn_id: number;
   state: "running" | "waiting_control" | "returning" | "done" | "stopped" | "expired";
   tool: string;
-  reason: "" | "sign_in" | "password" | "two_factor" | "captcha" | "payment" | "other";
+  reason: "" | "sign_in" | "password" | "two_factor" | "captcha" | "payment" | "certificate" | "other";
   request_id?: string;
 }
 
 export function desktopWorkText(work: DesktopWork): string {
   if (work.state === "waiting_control") {
+    if (work.reason === "certificate") return t("memberComputer.certificate", { p0: "Chrome" });
     const reasons = { sign_in: "desktop.need.sign_in", password: "desktop.need.password", two_factor: "desktop.need.two_factor",
       captcha: "desktop.need.captcha", payment: "desktop.need.payment", other: "desktop.need.other" } as const;
     return t(reasons[work.reason || "other"]);
@@ -35,7 +36,7 @@ export function desktopWorkText(work: DesktopWork): string {
  *  conversation's own presence line says. The member's work stopped after the owner was asked only when the owner skipped it. */
 export function settledCardHTML(work: DesktopWork): string {
   const skipped = work.state === "stopped" || work.state === "expired";
-  return cardHTML({ title: t("card.pcTitle"), status: "done", hideStatus: true, body: t(skipped ? "desktop.skipped" : "desktop.handedBack"),
+  return cardHTML({ title: t("card.pcTitle"), status: "done", hideStatus: true, close: failedClose(), body: t(skipped ? "desktop.skipped" : "desktop.handedBack"),
     content: cardDisclosureHTML(`computer-${work.id}`, `<p class="card-body">${esc(t(skipped ? "desktop.ended" : "desktop.handedBackDetail"))}</p>`),
     cls: "computer-card", attrs: ` data-desktop-work="${esc(work.id)}" data-work-state="${work.state}" data-desktop-settled="${skipped ? "skipped" : "handed_back"}"`,
   });

@@ -377,6 +377,13 @@ export function createAgent(app: AppContext, places?: {
     openPanel: () => members.computer(), panelVisible: () => members.detailsOpen() && members.details.dataset.detailsTab === 'computer',
     changed: () => { if (visible && !scroller.hidden) drawThread(); },
     trySkill: text => sendFromPage(text),
+    chooseComputer: transport => {
+      const member = members.current();
+      return api.agentAskText(t("memberComputer.switchWork", { p0: t(transport === "host" ? "memberComputer.host" : "memberComputer.docker") }),
+        [], member, { ...destinationOf(member, conversationId()), requestId: crypto.randomUUID() });
+    },
+    desktopControl: () => members.member().desktop_control ?? false,
+    setDesktopControl: allowed => members.update(members.current(), { desktop_control: allowed }),
     stop: turnId => { const turn = turns.find(turn => turn.id === turnId); return turn?.task ? api.workerCancel(turn.task.id) : turn?.session_id ? api.agentStop(turn.session_id, memberId()) : Promise.resolve(); },
   });
   members.details.addEventListener('member-panel-tab', () => { if (visible && !roomPane.active) desktop.show(); desktop.sync(); });
@@ -2778,14 +2785,13 @@ export function createAgent(app: AppContext, places?: {
     for (const button of buttons) button.disabled = true;
     try {
       if (act.dataset.act === "card-takeover") { desktop.takeover(); for (const button of buttons) button.disabled = false; return; }
-      if (act.dataset.act === "card-browser-focus") {
-        await api.core("integrations.card_focus_browser", { id });
-        for (const button of buttons) button.disabled = false;
-      } else if (act.dataset.act === "card-resume") await api.cardResume(id);
+      if (act.dataset.act === "card-resume") await api.cardResume(id);
       else if (act.dataset.act === "card-done") await api.cardDone(id);
       else await api.cardStop(id);
     } catch (err) {
-      cardFailure(act.closest(".conversation-card"), () => { void taskCardAction(act); });
+      const card = act.closest(".conversation-card");
+      const message = card?.classList.contains("computer-card") ? t(act.dataset.act === "card-stop" ? "memberComputer.stopFailed" : "memberComputer.returnFailed") : undefined;
+      cardFailure(card, () => { void taskCardAction(act); }, undefined, message);
       for (const button of buttons) button.disabled = false;
     }
   }
@@ -3058,7 +3064,6 @@ export function createAgent(app: AppContext, places?: {
         break;
       case "card-resume":
       case "card-takeover":
-      case "card-browser-focus":
       case "card-done":
       case "card-stop":
         void taskCardAction(act);

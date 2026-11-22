@@ -1024,12 +1024,14 @@ class App(Router):
             vault=self.vault,
         )
         if not fake_llm:
-            self.vm.member_computer_mode = lambda member: self.members.computer_preference(member, "computer_mode")
             self.vm_tools.desktop_allowed = lambda member: self.members.computer_preference(member, "desktop_control")
-        self.members.computer_mode_busy = self.vm_tools.mode_busy
         if self.vm_tools.host_computer is not None:
             self.vm_tools.host_computer.cards = self.handbacks
             host = self.vm_tools.host_computer
+            self.desktop_viewer.active_transport = self.vm_tools.active_transport
+            self.desktop_viewer.host_browser = host.browser
+            self.desktop_viewer.handbacks = self.handbacks
+            self.handbacks.release_browser = self.desktop_viewer.finish_browser_card
             self.vm.host_work_busy = lambda: bool(host.active or host.browser.downloads or host.browser.transfers)
         self.members.use_event_tools(self.gate)
         self.members.register(self)

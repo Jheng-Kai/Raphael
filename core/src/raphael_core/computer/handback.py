@@ -195,15 +195,15 @@ class HandbackCards:
         self.resume: Callable[[int, ComputerReport], Awaitable[object]] | None = None
         self._tasks: set[asyncio.Task] = set()
         self._browser = {}
+        self.release_browser = None
         self._wait_ms = wait_ms
 
     def register(self, router) -> None:
         router.register("integrations.card_done", self._done)
         router.register("integrations.card_stop", self._stop)
-        router.register("integrations.card_focus_browser", self._focus_browser)
 
-    async def wait_for_browser(self, *, turn_id, member_id, conversation_id, language, reason, focus):
-        """Wait in the original call, keeping only a callback to its exact tab."""
+    async def wait_for_browser(self, *, turn_id, member_id, conversation_id, language, reason, tab):
+        """Wait in the original call with its exact tab."""
         from .host_browser import BrowserError
 
         if not turn_id:
@@ -212,12 +212,15 @@ class HandbackCards:
         returned = asyncio.get_running_loop().create_future()
         card = self.store.open(turn_id=turn_id, member_id=member_id, conversation_id=conversation_id,
                                run_id=run_id, reason=reason, app="Chrome", language=language)
-        self._browser[run_id] = (returned, focus)
+        self._browser[run_id] = (returned, tab, card)
         self._changed(card)
+        closed = asyncio.create_task(tab.closed.wait())
         try:
-            await focus()
             async with asyncio.timeout(self._wait_ms / 1000):
-                if not await returned:
+                await asyncio.wait((returned, closed), return_when=asyncio.FIRST_COMPLETED)
+                if tab.closed.is_set():
+                    raise BrowserError("browser_tab_changed")
+                if not returned.result():
                     raise BrowserError("browser_handback_stopped")
             if moved := self.store.move(card.id, "done"):
                 self._changed(moved)
@@ -234,14 +237,12 @@ class HandbackCards:
             raise
         finally:
             self._browser.pop(run_id, None)
+            closed.cancel()
+            await asyncio.gather(closed, return_exceptions=True)
 
-    async def _focus_browser(self, params: dict) -> dict:
-        card = self._card(params)
-        waiting = self._browser.get(card.run_id)
-        if card.state != "control" or waiting is None or waiting[0].done():
-            return {"focused": False}
-        await waiting[1]()
-        return {"focused": True}
+    def browser_request(self, member, conversation):
+        return next(((tab, card) for future, tab, card in self._browser.values()
+                     if not future.done() and card.member_id == member and card.conversation_id == conversation), (None, None))
 
     def _return_browser(self, run_id, accepted):
         if waiting := self._browser.get(run_id):
@@ -283,6 +284,11 @@ class HandbackCards:
         """The owner says they are done: the run is in charge again, once. Answers at once; the run
         looks again and carries on by itself."""
         card = self._card(params)
+        if self.release_browser and card.run_id.startswith("browser:"):
+            return await self.release_browser(card)
+        return self.finish(card)
+
+    def finish(self, card: HandbackCard) -> dict:
         if card.state != "control":
             return {"card": card.view(), "done": False}
         moved = self.store.move(card.id, "returning")
@@ -301,6 +307,11 @@ class HandbackCards:
     async def _stop(self, params: dict) -> dict:
         """The owner stops the run for good: it never resumes."""
         card = self._card(params)
+        if self.release_browser and card.run_id.startswith("browser:"):
+            return await self.release_browser(card, stop=True)
+        return self.stop(card)
+
+    def stop(self, card: HandbackCard) -> dict:
         moved = self.store.move(card.id, "stopped") if card.state in ("control", "returning") else None
         if moved is None:
             return {"card": card.view(), "stopped": False}

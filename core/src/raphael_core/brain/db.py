@@ -2401,6 +2401,14 @@ PRAGMA user_version = 95;
 COMMIT;
 """
 
+_MIGRATIONS[96] = """
+BEGIN;
+ALTER TABLE members DROP COLUMN computer_mode;
+DELETE FROM settings WHERE key = 'raphael_computer_mode';
+PRAGMA user_version = 96;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 

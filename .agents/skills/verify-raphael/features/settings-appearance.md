@@ -141,8 +141,8 @@ No private key belongs in source.
 General keeps the owner profile, weather city and output folder
 together in About you. Tools and Safety retain their shared scope; legacy agent
 links resolve to Tools.
-Computer search opens that member's panel. Host checks and copyable repair
-commands use the location popover, never the retired settings pane.
+Computer search opens that member's panel. The virtual machine dropdown opens
+the SSH editor, with host checks and copyable repair commands.
 
 ```powershell
 npm run look -- desktop-host-local desktop-host-error settings-owner --theme both --width 1120,720,1920x1080
@@ -382,15 +382,12 @@ unchanged. Every member's draft
 preference switch is the first row inside the same grouped resource card as
 Skills and Commands.
 
-The computer panel header owns one compact shared location control, also available
-in its empty state. It shows Local or the saved SSH alias, uses the shared popover,
-select, field and buttons, saves only `computer_ssh_alias`, and rejects invalid
-aliases before storage. Its words describe current state; there is no invented
-host check RPC. Remote current-state errors remain inside the popover. A local
-absent runtime retains one Docker download action there. Settings searches for
-computer location or remote return one result that closes Settings and opens the
-computer panel. No host is started or checked by opening the popover, and an
-existing viewer stream is not replaced by changing the setting.
+The computer tab has one dropdown that includes Local and the saved SSH alias for
+Docker. The SSH editor saves `computer_ssh_alias` and rejects invalid aliases
+before storage. It shows remote connection errors contextually and checks the host
+on an explicit press. When a local Docker installation is missing, the Docker
+choice offers the existing ask-Raphael action. Settings searches for computer
+location or remote close Settings and open the computer panel.
 
 Selected scenes (synthetic zh-TW, both themes, 1120,720,1920x1080):
 profile, settings-owner, appearance, dictation, tools, safety,
@@ -402,8 +399,8 @@ desktop-host-local,
 desktop-host-remote, desktop-host-invalid, desktop-host-error, desktop-install,
 desktop-panel, desktop-viewer, desktop-absent, panel-no-computer.
 
-Compare General/Tools/Safety rows with Appearance, the location select/input with
-General's city and Appearance's select, the grouped draft row across both members,
+Compare General/Tools/Safety rows with Appearance, the SSH input with General's
+city and the computer dropdown with Appearance's select, the grouped draft row across both members,
 and the computer panel header in the landing and expanded viewer. Inspect all
 contact sheets and relevant full-size panes/popovers at matching sizes/themes.
 Focused tests: settings-view.test.ts, settings-providers.test.ts,
@@ -420,17 +417,15 @@ Completed work detail also preserves the existing missing-service notice and rep
 button from persisted steps, including turns with action events. The missing-search
 and missing-search-repair scenes cover the real work section and shared Tools form.
 The language audit treats typed synthetic values as owner data while continuing to
-reject untranslated control labels. The desktop-absent browser assertion also
-requires at least 4.5:1 text contrast for the Docker download button. The button
-uses the same existing desktop-frame surface tokens as its neighbouring notices.
+reject untranslated control labels. The missing Docker scene verifies that the
+setup action stays plain text under the pointer.
 
-The location popover uses one shared inset and stacked, full-width controls. Its
-scope is stated once; the header alone names the saved host. Every desktop-host-*
-scene runs host-settings-layout, checking each wrapped text line and control edge
-within 1px, matching select/field widths, and left-aligned trigger text. Keep the
-same standard field/select padding inside those controls. No status note repeats
-the host, and host errors remain contextual. The follow-up matrix is the four host
-scenes plus desktop-panel, both themes at 1120,720,1920x1080.
+The SSH editor uses one shared inset and a full-width field. Its scope is stated
+once. The desktop-host-remote, desktop-host-invalid and desktop-host-error scenes
+run host-settings-layout, checking that the visible text and the field share a
+left edge within 1px. The desktop-host-local scene checks the current entry in
+the computer dropdown. Run the four host scenes plus desktop-panel in both themes
+at 1120,720,1920x1080.
 
 
 ## Shared owner vault
