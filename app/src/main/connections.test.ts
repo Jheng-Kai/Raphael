@@ -574,7 +574,8 @@ describe("the connected apps", () => {
     expect(main.querySelector(".ds")!.textContent).toBe("Notion的一句話");
     expect(main.querySelector(".logo-mono")).not.toBeNull();
     expect(notion!.innerHTML).toMatch(/class="tg" role="switch" aria-checked="true" aria-label="開啟 Notion" data-conn="enable" data-id="ab12"/);
-    expect(notion!.querySelectorAll("button")).toHaveLength(2);
+    expect(notion!.matches('[data-row="connected-app"]')).toBe(true);
+    expect([...notion!.children]).toEqual([main, notion!.querySelector(".tg")]);
     // A server of the user's own: where it is reached, and the generic app mark.
     expect(files!.textContent).toContain("npx");
     expect(files!.querySelector(".mono.md svg.logo-generic")).not.toBeNull();

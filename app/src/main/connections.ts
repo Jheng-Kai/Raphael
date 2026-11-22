@@ -587,7 +587,7 @@ function itemHTML(g: ConnectionGroup, v: ConnectionsView): string {
   const busy = v.busy.has(g.id) || v.login?.target === g.id;
   const id = esc(g.id);
   return (
-    `<div class="cs-linked" data-conn="open" data-id="${id}">` +
+    `<div class="cs-linked" data-row="connected-app" data-conn="open" data-id="${id}">` +
     btn(
       `${tileHTML(groupIcon(g, v, "md"))}<span class="tx"><span class="nm">${esc(g.name)}</span><span class="ds">${lineOf(g, v)}</span></span>`,
       "cs-main",

@@ -130,6 +130,27 @@ describe("rendered look checks", () => {
       expect(violations()).toEqual([]);
     } finally { browser.happyDOM.abort(); }
   });
+  it("keeps switch ordering within each row of a multi-column grid", () => {
+    const browser = new Window();
+    const { document: doc } = browser;
+    doc.body.innerHTML = '<div style="display:grid"><div data-row="app" style="display:flex"><button>App one</button><button class="tg" role="switch"></button></div><div data-row="app" style="display:flex"><button>App two</button><button class="tg" role="switch"></button></div></div>';
+    const rect = (left, width) => ({ left, right: left + width, top: 8, bottom: 44, width, height: 36 });
+    for (const node of doc.querySelectorAll("*")) node.getBoundingClientRect = () => rect(0, 720);
+    const [first, firstSwitch, second, secondSwitch] = doc.querySelectorAll("button");
+    first.getBoundingClientRect = () => rect(10, 220);
+    firstSwitch.getBoundingClientRect = () => rect(238, 38);
+    second.getBoundingClientRect = () => rect(370, 270);
+    secondSwitch.getBoundingClientRect = () => rect(648, 38);
+    const violations = () => auditDocument(doc, { width: 720, height: 480 }).productRules.filter(item => item.rule === "R-UI-178");
+    try {
+      expect(violations()).toEqual([]);
+      const more = doc.createElement("button");
+      more.textContent = "Options";
+      more.getBoundingClientRect = () => rect(284, 36);
+      firstSwitch.after(more);
+      expect(violations()).toHaveLength(1);
+    } finally { browser.happyDOM.abort(); }
+  });
   it("rejects an unframed or misaligned header close and a bare close glyph", () => {
     const browser = new Window();
     const { document: doc } = browser;
@@ -155,6 +176,11 @@ describe("rendered look checks", () => {
       expect(violations().map(item => item.reason)).toContain("The header close and back differ in size, frame or vertical centre");
       close.style.boxShadow = back.style.boxShadow;
       back.remove();
+      const cardTitle = doc.createElement("b");
+      cardTitle.className = "card-title";
+      cardTitle.textContent = "Title";
+      cardTitle.getBoundingClientRect = () => rect(60, 16, 100, 24);
+      doc.querySelector("h2").replaceWith(cardTitle);
       expect(violations()).toEqual([]);
       top = 12;
       expect(violations().map(item => item.reason)).toContain("The header close does not share the title's vertical centre");

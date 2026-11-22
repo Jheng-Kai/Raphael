@@ -8525,7 +8525,7 @@ export function checkRendered(name, context = {}) {
     require(f.width >= 80 && f.width <= 110 && Math.abs((f.left + f.right) / 2 - cx) <= 2, `the slime is large (${Math.round(f.width)} px), in the middle`);
     const n = nameField.getBoundingClientRect();
     require(n.top - faceBox.getBoundingClientRect().bottom <= 16, `the name field is directly under the slime (${Math.round(n.top - faceBox.getBoundingClientRect().bottom)} px)`);
-    require(getComputedStyle(nameField).textAlign === "center" && nameField.placeholder === "名字" && nameField.maxLength === 16, "centred text, a placeholder in the window's language, the member name length");
+    require(getComputedStyle(nameField).textAlign === "center" && nameField.placeholder === "名字" && (nameField.maxLength === -1 || nameField.maxLength >= 100), "centred text, a placeholder in the window's language, and no cut shorter than the core's 100-character name");
     require(Math.abs(n.left - (bodyBox.left + pad)) <= 1 && Math.abs(n.right - (bodyBox.right - pad)) <= 1, "the name field fills the body's inner width");
     require(dialog.querySelectorAll("input, textarea").length === 1 && !dialog.querySelector('img, input[type="file"], [data-dlg="templates"], [data-tab], [data-pick]'), "it asks only for a name: no template button, no store tab, no pictures");
     // The tabs fill the dialog's inner width: nothing blank at their right, six slimes across.

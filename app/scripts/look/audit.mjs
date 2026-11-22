@@ -529,6 +529,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
   }
   // R-UI-178: measure visible controls, including when CSS reorders the markup. A switch drawn inside a menu button
   // belongs to that button. A control in a different vertical row or clipped out of view cannot compete with the switch.
+  // A named row bounds its control group, even when a grid places another row beside it.
   const shown = element => visible(element) && onScreen(element);
   const centreY = box => box.top + box.height / 2;
   const centreX = box => box.left + box.width / 2;
@@ -562,7 +563,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
   };
   for (const header of doc.querySelectorAll(headerSelector)) {
     if (!shown(header)) continue;
-    const title = [...header.querySelectorAll('h1, h2, h3, [role="heading"]')].find(shown);
+    const title = [...header.querySelectorAll('h1, h2, h3, [role="heading"], .card-title')].find(shown);
     const back = [...header.querySelectorAll(".back-button")].find(shown);
     const controls = [...header.querySelectorAll('button, [role="button"], a[href]')].filter(shown);
     const closes = controls.filter(control => control.matches(".close-button") || /^[×✕✖✗]$/.test(control.textContent.trim())

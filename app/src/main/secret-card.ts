@@ -7,7 +7,7 @@
 // read when Save is pressed and emptied at once, and a card drawn again takes the characters from the old
 // field to the new one (`carryTyped`) so that a redraw does not cost what the owner was typing.
 
-import { cardCloseHTML, cardDisclosureHTML, cardHTML, cardPromptText, waitingOwnerQuestion } from "./card";
+import { cardCloseHTML, cardDisclosureHTML, cardHTML, cardPromptText, waitingCloseHTML, waitingOwnerQuestion } from "./card";
 import { NAME, eventLineHTML } from "./event-line";
 import { t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
@@ -16,7 +16,7 @@ import { SERVICE_ICONS, type MonoIconId, brandStyle, hasLogo, serviceIconOf, ser
 import { appLogo } from "./app-logos";
 import { entryMark, genericMark } from "./service-mark";
 import type { AgentTurn, OwnerQuestion, SecretCard } from "./types";
-import { btn, esc, ico, iconBtn } from "./ui";
+import { btn, esc, ico } from "./ui";
 
 const FAILURES: Record<string, MessageKey> = {
   invalid: "card.keyInvalid",
@@ -120,7 +120,7 @@ export function secretCardHTML(card: SecretCard, canCancelTurn = false, waiting?
   if (card.state === "cancelled" && card.error === "skipped") return cardHTML({ title: card.name, mark: card.key ? undefined : connectionMarkHTML(card.name),
     status: "ready", statusText: t("ownerQuestion.left"), cls: `secret-card${card.key ? " key-card" : ""}`,
     attrs: ` data-secret-card="${esc(card.id)}" data-card-state="cancelled" data-card-error="skipped"` });
-  const close = canCancelTurn && secretNeedsInput(card) ? iconBtn("x", t("common.cancel"), ' data-act="cancel-secret-turn"', "card-close")
+  const close = canCancelTurn && secretNeedsInput(card) ? waitingCloseHTML(' data-act="cancel-secret-turn"')
     : waiting || secretNeedsInput(card) ? cardCloseHTML(card.id) : undefined;
   if (card.platform) return botCardHTML(card as SecretCard & { platform: "telegram" | "slack" | "discord" }, close);
   if (card.key) return keyCardHTML(card, close);
