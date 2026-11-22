@@ -247,7 +247,7 @@ function inline(text: string, query: string, markdown: boolean, urls: Set<string
           if (html) { flush(); out += html; at = end; continue; }
           if (isAttachmentLink(target)) { flush(); out += attachmentLinkHTML(target, label, files, query); at = end; continue; }
           // A file on a computer has no address to open: its words, then its path, which is what the owner can use, never the
-          // markdown around them (a member wrote [今天的課](<D:\...\lesson.html>), 2026-11-22).
+          // markdown around them, as in [今天的課](<D:\...\lesson.html>).
           if (/^(?:\/|[A-Za-z]:[\\/])/.test(target)) {
             flush();
             const said = label.trim(), base = target.slice(Math.max(target.lastIndexOf("/"), target.lastIndexOf("\\")) + 1);

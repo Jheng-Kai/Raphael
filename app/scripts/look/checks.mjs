@@ -653,7 +653,7 @@ export function checkRendered(name, context = {}) {
       require(text.scrollWidth <= text.clientWidth + 1 && text.getBoundingClientRect().height > description.getBoundingClientRect().height, 'the description wraps within the popover');
     }
     if (name === 'skill-library-row-lit') {
-      // The lit row once stood as a smaller rounded box inside its card (owner, 2026-11-22).
+      // The lit row is the card itself, never a smaller rounded box inside it.
       const row = document.querySelector('.skl-list > .skl-pack[data-skl-pack="set:1"]'), card = row.parentElement;
       const fill = getComputedStyle(row).backgroundColor, r = row.getBoundingClientRect(), c = card.getBoundingClientRect();
       require(!/rgba\(0, 0, 0, 0\)|transparent/.test(fill), `the row is lit (${fill})`);
@@ -679,7 +679,7 @@ export function checkRendered(name, context = {}) {
           Math.abs(description.getBoundingClientRect().height - parseFloat(style.lineHeight)) <= 1, 'each description takes one line and ends in an ellipsis when needed');
       }
       require(descriptions[0].scrollWidth > descriptions[0].clientWidth, 'the long description is truncated');
-      // At 720 the settings' × once covered the title row's ⋯ (2026-11-22).
+      // At 720 the settings' × must not cover the title row's ⋯.
       const close = document.querySelector('.modal-scrim .modal-x')?.getBoundingClientRect();
       const headMore = document.querySelector('.skl-page-head [data-skl="more"]')?.getBoundingClientRect();
       require(close && headMore && (headMore.right <= close.left || headMore.top >= close.bottom || headMore.bottom <= close.top), "the title row's ⋯ stays clear of the settings' ×");
@@ -2515,7 +2515,7 @@ export function checkRendered(name, context = {}) {
       if (name === 'completion-arrows') require(last.classList.contains('is-active') && input.getAttribute('aria-activedescendant') === last.id && document.activeElement === input, 'the arrow key carried the highlight to the last row and the focus stayed in the field');
     } else {
       require(rows.every(row => row.querySelector('.mdesc')?.textContent), 'commands and skills have descriptions');
-      // A long description once wrapped to four lines here (owner, 2026-11-22): one line, cut with an ellipsis.
+      // A long description takes one line, cut with an ellipsis, never several.
       require(rows.every(row => { const d = row.querySelector('.mdesc'), s = getComputedStyle(d); return s.whiteSpace === 'nowrap' && s.textOverflow === 'ellipsis' && d.getBoundingClientRect().height <= parseFloat(s.lineHeight) + 1; }), 'each description takes one line');
       if (name === 'completion-slash' || name === 'completion-clash') require(heads.join('|') === '指令|技能', 'commands and skills have separate headings');
       if (name === 'completion-plugin') require(heads.join('|') === '技能' && menu.querySelector('.msource')?.textContent === 'Field Notes', 'the plugin is quiet small print, never a section');
