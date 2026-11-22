@@ -26,6 +26,9 @@
 //! (key-ups sent with `SendInput`, the Ctrl+V chord) can not produce a `DictationDown`,
 //! `DictationUp` or `PasteLast`, and the keys it sends are never swallowed.
 
+#[cfg(windows)]
+mod system_menu;
+
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::thread::{self, JoinHandle};
@@ -226,6 +229,8 @@ pub struct HotkeyService {
     commands: Sender<Command>,
     thread: Option<JoinHandle<()>>,
     closed: tauri::async_runtime::JoinHandle<()>,
+    #[cfg(windows)]
+    system_menu: Arc<system_menu::Guard>,
 }
 
 /// Tells the main window that macOS has not given Accessibility, with the button that opens its
@@ -296,6 +301,8 @@ impl HotkeyService {
     {
         let mut worker = Worker::new(backend, wanted, events, mode);
         worker.sync()?;
+        #[cfg(windows)]
+        let system_menu = Arc::clone(&worker.system_menu);
         let output = worker.events.clone();
         let (commands, inbox) = mpsc::channel();
         let wake = commands.clone();
@@ -315,7 +322,15 @@ impl HotkeyService {
             commands,
             thread: Some(thread),
             closed,
+            #[cfg(windows)]
+            system_menu,
         })
+    }
+
+    /// Install on the UI thread that created the window.
+    #[cfg(windows)]
+    pub fn guard_system_menu(&self, window: &tauri::WebviewWindow) {
+        self.system_menu.install(window);
     }
 
     /// Replaces the dictation, paste-last and agent keys. Nothing changes if a binding is invalid
@@ -723,6 +738,8 @@ struct Worker<B: Backend> {
     duplicates: DuplicateGate,
     mode: ModeCell,
     dictation_prefix: Option<DictationPrefix>,
+    #[cfg(windows)]
+    system_menu: Arc<system_menu::Guard>,
 }
 
 impl<B: Backend> Worker<B> {
@@ -736,6 +753,8 @@ impl<B: Backend> Worker<B> {
         Self {
             backend,
             events,
+            #[cfg(windows)]
+            system_menu: Arc::new(system_menu::Guard::new(&wanted.agent)),
             wanted,
             cancel_enabled: false,
             paused: false,
@@ -815,6 +834,10 @@ impl<B: Backend> Worker<B> {
                     // Go back to what worked before.
                     self.wanted = previous;
                     self.sync_logged();
+                }
+                #[cfg(windows)]
+                if result.is_ok() {
+                    self.system_menu.update(&self.wanted.agent);
                 }
                 // The caller may have given up waiting.
                 let _ = reply.send(result);

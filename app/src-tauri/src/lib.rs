@@ -386,6 +386,10 @@ pub fn run() {
                     dictation_mode.clone(),
                 ) {
                     Ok(service) => {
+                        #[cfg(windows)]
+                        for window in app.webview_windows().values() {
+                            service.guard_system_menu(window);
+                        }
                         app.manage(std::sync::Arc::new(service));
                         Some(hotkey_event_rx)
                     }
