@@ -25,6 +25,12 @@ export default class RFB extends EventTarget {
     // The computer's default picture at the fixture hour, chosen as wallpaper.py chooses it (R-UI-92).
     this.wallpaper.src = `/wallpapers/${hour >= 6 && hour < 18 ? 'day' : 'night'}.jpg`;
     this.canvas.addEventListener('mousemove', () => { if (!this.viewOnly) window.__desktopAcceptedInputs = (window.__desktopAcceptedInputs ?? 0) + 1; });
+    for (const [type, name] of [['mousedown', 'mousePressed'], ['mouseup', 'mouseReleased']]) {
+      this.canvas.addEventListener(type, () => { if (!this.viewOnly) (window.__desktopPointerEvents ??= []).push(name); });
+    }
+    this.canvas.addEventListener('wheel', event => {
+      if (!this.viewOnly) window.__desktopWheelDelta = event.deltaY;
+    });
     target.append(this.canvas);
     this.observer = new ResizeObserver(() => this.draw());
     this.observer.observe(target);

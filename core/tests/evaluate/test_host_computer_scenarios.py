@@ -142,6 +142,58 @@ async def test_member_checks_tabs_and_uses_the_page_the_owner_opened(tmp_path, m
         await driver.aclose()
 
 
+async def test_member_says_it_is_waiting_when_the_owner_holds_chrome(tmp_path, monkeypatch):
+    question = "Click the preview button."
+    answer = "I'm waiting for you to finish using the computer. I can continue once you hand control back."
+    clicked = []
+
+    class Client(FakeClient):
+        async def chat_tools(self, **kwargs):
+            replies = [message for message in kwargs["messages"] if message["role"] == "tool"]
+            if replies:
+                content = str(replies[-1]["content"])
+                assert "waiting_for_owner" in content and "Nothing was done." in content
+                self.turns = iter([(answer, [])])
+            else:
+                names = [tool["function"]["name"] for tool in kwargs["tools"]]
+                click = next(name for name in names if name.endswith("__click"))
+                self.turns = iter([("", [(click, {"x": 40, "y": 36})])])
+            return await super().chat_tools(**kwargs)
+
+    async def click(browser, tab, name, arguments, approver):
+        assert name == "click"
+        clicked.append((tab.id, arguments))
+        return {"status": "delivered"}
+
+    driver = RpcDriver(tmp_path, "fake/model", Client([]), Budget(8))
+    app = driver.app
+    app.vm.enabled = True
+    host = app.vm_tools.host_computer = HostComputerTools(app.vm, app._conn, BROWSER_OPEN)
+    member = app.members.store.create_member(name="Browser member").id
+    reader = asyncio.get_running_loop().create_future()
+    host.browser.cdp = SimpleNamespace(reader=reader)
+    tab = Tab("page", "target", "cdp", member, tmp_path)
+    host.browser.tabs[tab.id] = tab
+    host.browser.select(tab)
+    host.browser.held[member] = tab
+    monkeypatch.setattr(host_page, "viewport_action", click)
+    try:
+        waiting = await driver.ask(question, member=member)
+        assert waiting["status"] == "confirm"
+        result = await driver.confirm(waiting, True)
+        assert result["text"] == answer and not clicked
+        assert [trace["outcome"] for trace in driver.traces] == ["ok"]
+        host.browser.held.pop(member)
+        data, _, _, _ = await host.browser_call("click", {"x": 40, "y": 36}, "auto", member,
+                                                (("turn", member, 10), 42), 10, None)
+        assert data == {"status": "delivered"}
+        assert clicked == [("page", {"x": 40, "y": 36})]
+    finally:
+        reader.cancel()
+        host.browser.cdp = None
+        await driver.aclose()
+
+
 @pytest.mark.parametrize("installed", [True, False])
 async def test_installing_a_package_on_chrome_suggests_the_vm_and_waits_for_the_owner(tmp_path, monkeypatch, installed):
     question = "Install this npm package and run it."

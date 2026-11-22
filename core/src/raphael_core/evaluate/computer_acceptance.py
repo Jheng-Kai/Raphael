@@ -2435,28 +2435,23 @@ class Acceptance:
                         await asyncio.sleep(.01)
                     await viewer.control({**opened, "held": True})
                     refused = await tool(first, "list_windows", {}, allow_refusal=True)
-                    require(refused.kind == "owner_holds_control", f"Expected own hold refusal, observed {refused.kind}")
-                    old_wait = hub.busy_wait_s
-                    hub.busy_wait_s = .2
-                    try:
-                        args = {key: terminals[second][key] for key in ("pid", "window_id")}
-                        refused = await tool(second, "press_key", {**args, "key": "Return"}, allow_refusal=True)
-                        require(refused.kind == "computer_busy", f"Expected peer native input busy, observed {refused.kind}")
-                        await rows(second)
-                        if browsers_ok:
-                            await tool(second, "get_browser_state", active_tab(pages[second]))
-                            before = len([call for call in calls if call[1] == "browser_click"])
-                            refused = await tool(second, "browser_click", {**active_tab(pages[second]), "x": 20, "y": 20,
-                                                  "delivery_mode": "foreground"}, allow_refusal=True)
-                            require(refused.kind == "computer_busy", f"Expected held foreground browser click busy, observed {refused}")
-                            require(before == len([call for call in calls if call[1] == "browser_click"]), "Held foreground browser click reached driver")
-                            await tool(second, "browser_navigate", {**active_tab(pages[second]), "url": "about:blank#owner-held"})
-                    finally:
-                        hub.busy_wait_s = old_wait
+                    require(refused.ok and refused.kind == "waiting_for_owner", f"Expected own hold notice, observed {refused.kind}")
+                    args = {key: terminals[second][key] for key in ("pid", "window_id")}
+                    refused = await tool(second, "press_key", {**args, "key": "Return"}, allow_refusal=True)
+                    require(refused.ok and refused.kind == "waiting_for_owner", f"Expected peer native input notice, observed {refused.kind}")
+                    await rows(second)
+                    if browsers_ok:
+                        await tool(second, "get_browser_state", active_tab(pages[second]))
+                        before = len([call for call in calls if call[1] == "browser_click"])
+                        refused = await tool(second, "browser_click", {**active_tab(pages[second]), "x": 20, "y": 20,
+                                              "delivery_mode": "foreground"}, allow_refusal=True)
+                        require(refused.ok and refused.kind == "waiting_for_owner", f"Expected held foreground browser click notice, observed {refused.kind}")
+                        require(before == len([call for call in calls if call[1] == "browser_click"]), "Held foreground browser click reached driver")
+                        await tool(second, "browser_navigate", {**active_tab(pages[second]), "url": "about:blank#owner-held"})
                     await viewer.control({**opened, "held": False})
                     await tool(second, "press_key", {**args, "key": "Return"})
-                    return ("Takeover during peer vm_exec; own calls refused, peer native waits/busy, peer window lists continue, handback restores native"
-                            + ("; foreground browser click waits/busy before dispatch while page read/navigation continue" if browsers_ok else "; browser hold checks skipped"))
+                    return ("Takeover during peer vm_exec; blocked tools report the owner hold, peer window lists continue, handback restores native input"
+                            + ("; foreground browser click reports the hold while page read/navigation continue" if browsers_ok else "; browser hold checks skipped"))
                 finally:
                     await command
                     await viewer.close(opened)

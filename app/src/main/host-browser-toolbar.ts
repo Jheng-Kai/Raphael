@@ -77,7 +77,7 @@ export function mountHostBrowserToolbar(screen: HTMLElement, send: (action: Host
       return `<div class="host-browser-tab" data-k="browser-${esc(tab.id)}"${tab.id === shown.id ? " data-shown" : ""}>` +
         btn(`<span class="host-browser-favicon">${favicon}</span><span class="host-browser-tab-title">${name}</span>`,
           "host-browser-tab-button", ` data-browser-action="select" data-browser-tab="${esc(tab.id)}" aria-pressed="${tab.id === shown.id}" aria-label="${name}"`) +
-        control("x", t("browser.closeTab"), "close", !owned, tab.id) + '</div>';
+        control("x", t("browser.closeTab"), "close", false, tab.id) + '</div>';
     }).join(""));
     patchHTML(add, control("plus", t("browser.newTab"), "new", !owned));
     patchHTML(history, control("arrowLeft", t("browser.back"), "back", !owned || !next!.back) +

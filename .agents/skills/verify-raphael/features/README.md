@@ -679,8 +679,9 @@ live proof. Never run the owner probe or borrow another application's credential
 ## Host browser tabs and popups
 
 [Member computer](member-computer.md#host-browser-toolbar) maps the Computer panel
-and enlarged viewer for watch-only selection, takeover, address navigation and
-scoped popup following. It names the local Chrome test and the affected look scenes
+and enlarged viewer for watch-only selection and close, address navigation and scoped
+popup following. [Owner control in either size](member-computer.md#owner-control-in-either-size)
+maps first input, collapse, handback, the member's waiting reply and the selected scenes. It names the local Chrome test and the affected look scenes
 in both themes at 1120,720,1920x1080.
 
 ## Member computer hosts

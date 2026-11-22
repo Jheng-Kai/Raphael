@@ -15,7 +15,7 @@ from .browser_tabs import BROWSER_TABS
 from .file_tools import Refused, _refusal
 from .host_browser import BrowserError, HostBrowser
 from .owner_files import OwnerFiles, OwnerFileTools, READS, WRITES, DEFINITIONS, kept_place, place
-from .takeover import REASONS, TAKEOVER, TAKEOVER_REASON_REQUIRED, takeover_detail
+from .takeover import REASONS, TAKEOVER, TAKEOVER_REASON_REQUIRED, owner_waiting_result, takeover_detail
 from .vm import VmError
 from .vm_catalog import offline_catalog
 
@@ -58,7 +58,6 @@ WORDS = {
     "browser_page_changed": "The page changed after the last read. Read it again for current controls.",
     "browser_action_refused": "Chrome could not perform this action on the selected page element.",
     "browser_field_refused": "Chrome could not type into or select a value in that field.",
-    "owner_holds_control": "The owner has control of this Chrome tab. Wait for them to finish.",
     "bad_path": "The requested work file path is invalid.",
     "browser_navigation_waiting": "Chrome is still waiting for this page. If a native certificate or key prompt is blocking it, use request_takeover with reason: certificate.",
     "browser_owner_approval_required": "The owner must approve the exact outward action before it can run.",
@@ -271,9 +270,12 @@ class HostComputerTools:
                     data["status"] = "owner_step_still_needed"
                 else:
                     data["status"] = "owner_finished"
-            return PluginResult(True, text=json.dumps(data, ensure_ascii=False), blocks=blocks)
+            return PluginResult(True, "tab_closed" if data.get("status") == "tab_closed" else None,
+                                text=json.dumps(data, ensure_ascii=False), blocks=blocks)
         except (BrowserError, VmError) as error:
             code = str(error)
+            if code == "owner_holds_control":
+                return owner_waiting_result()
             return PluginResult(False, code, WORDS.get(code, f"Raphael Chrome could not run {name} ({code})."))
         except (OSError, RuntimeError, KeyError, TimeoutError):
             place_name = "the work folder" if name in READS | WRITES else "the Chrome tab"
@@ -287,15 +289,19 @@ class HostComputerTools:
 
     async def browser_call(self, name, arguments, approver, member, work, conversation, announce, *, can_hand_back=False):
         browser = self.browser
+        if member in browser.held:
+            raise BrowserError("owner_holds_control")
         if name != "browser_open":
             await browser.restart_if_disconnected()
         if not (arguments.get("target_id") or arguments.get("tab_id")):
             await browser.wait_popups(member)
         if name == "browser_tabs":
-            if identifier := arguments.get("show") or arguments.get("close"):
+            identifier = arguments.get("show") or arguments.get("close")
+            closed = identifier is not None and identifier not in browser.tabs and browser.owner_closed.get(identifier) == member
+            if identifier and not closed:
                 tab = browser.tab(member, identifier)
                 async with browser.action_lock(tab):
-                    if browser.member_blocked(tab):
+                    if member in browser.held or browser.member_blocked(tab):
                         raise BrowserError("owner_holds_control")
                     if "close" in arguments:
                         await browser.close_tab(tab)
@@ -307,9 +313,19 @@ class HostComputerTools:
             current = browser.selected(member)
             tabs = [{"tab_id": tab.id, "title": tab.title, "url": tab.url, "shown": tab is current}
                     for tab in browser.member_tabs(member) if browser.live(tab)]
-            return {"tabs": tabs}, [], None, None
+            if current is not None:
+                browser.owner_closed_current.pop(member, None)
+            return {"tabs": tabs, **({"status": "tab_closed"} if closed else {})}, [], None, None
         scope, turn_id = work
-        if name == "browser_open":
+        ids = {arguments[key] for key in ("target_id", "tab_id") if key in arguments}
+        identifier = next(iter(ids)) if len(ids) == 1 else None
+        closed = identifier is not None and identifier not in browser.tabs and browser.owner_closed.get(identifier) == member
+        recovering = name != "browser_open" and (closed or not ids and member in browser.owner_closed_current)
+        if recovering:
+            tab = browser.selected(member)
+            if tab is None:
+                tab, _ = await browser.open_tab(member, self.folders(member)[0], conversation)
+        elif name == "browser_open":
             if scope[0] == "turn" and not turn_id:
                 raise BrowserError("private_conversation_required")
             await self.vm.settled()
@@ -318,12 +334,21 @@ class HostComputerTools:
         else:
             tab = browser.tab(member, arguments.get("target_id"), arguments.get("tab_id"))
         async with browser.action_lock(tab):
-            if browser.member_blocked(tab):
+            if member in browser.held or browser.member_blocked(tab):
                 raise BrowserError("owner_holds_control")
             if name == "browser_open" and tab.work != work and announce:
                 announce()
             tab.work, tab.turn_id, tab.conversation, tab.finished = work, turn_id, conversation, False
+            if recovering:
+                data, blocks = await host_page.snapshot(browser, tab, {})
+                browser.owner_closed_current.pop(member, None)
+                data.update(status="tab_closed",
+                            note="The owner closed the previous tab. Use the current tab below or open the page again. "
+                                 "The requested action was not performed. Read the page before using a ref or coordinates.")
+                return data, blocks, tab, None
             data, blocks = await self.page_call(browser, tab, name, arguments, approver)
+            if name == "browser_open":
+                browser.owner_closed_current.pop(member, None)
             # Reading a private page describes the owner step without asking for control.
             reason = data.get("owner_needed") if name in INPUT_ACTIONS | {"request_takeover"} else None
             if reason:

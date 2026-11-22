@@ -31,7 +31,8 @@
 .desktop-screen > [data-desktop="retry"] { --btn: var(--desktop-frame-bg); --btn-edge: color-mix(in srgb, var(--desktop-frame-text) 30%, var(--desktop-frame-bg)); --hover: color-mix(in srgb, var(--desktop-frame-text) 10%, var(--desktop-frame-bg)); --pressed: color-mix(in srgb, var(--desktop-frame-text) 18%, var(--desktop-frame-bg)); --hover-edge: var(--desktop-frame-text); --focus: var(--desktop-frame-text); position: absolute; left: 50%; bottom: var(--sp-3); transform: translateX(-50%); }
 /* The small preview keeps only a notice under its screen: the rest of the foot belongs to the larger view. */
 .desktop-panel:not([data-expanded]) :is(.desktop-foot, .desktop-notes) { display: contents; }
-.desktop-panel:not([data-expanded]) :is(.desktop-bar, .desktop-teach-missing, .desktop-recording, .desktop-request, .desktop-review, .desktop-try) { display: none; }
+.desktop-panel:not([data-expanded]) :is(.desktop-teach-missing, .desktop-recording, .desktop-request, .desktop-review, .desktop-try, .desktop-actions),
+.desktop-panel:not([data-expanded], [data-live]) .desktop-bar { display: none; }
 .desktop-panel[data-expanded] .desktop-actions > :is([data-desktop="take"], [data-desktop="revoke"]) { display: none; }
 .desktop-panel[data-expanded]:not([data-teaching]) .desktop-actions > [data-desktop="teach"] { display: none; }
 .desktop-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); padding: 0 var(--sp-1) var(--sp-2); }
@@ -195,7 +196,9 @@ iframe[data-desktop-stream][hidden] { display: block !important; position: absol
 .window-chrome > .btn.icon[data-desktop="collapse"]:active:not(:disabled) { background: var(--pressed); }
 .window-chrome > .back-button { align-self: center; }
 .desktop-dock { display: none; }
-.desktop-panel[data-expanded] .desktop-dock { grid-column: 2; display: flex; align-items: center; gap: var(--sp-2); }
+.desktop-panel:is([data-expanded], [data-live]) .desktop-dock { grid-column: 2; display: flex; align-items: center; gap: var(--sp-2); }
+.desktop-dock > [data-desktop="enlarge"] .desktop-open-pill { padding: 0; background: transparent; color: inherit; opacity: 1; }
+.desktop-dock > [data-desktop="enlarge"] .desktop-open-pill > span { display: none; }
 .desktop-mode, .desktop-panel[data-expanded] .desktop-actions { display: flex; align-items: center; gap: var(--sp-1); height: 36px; padding: 0 4px 0 12px; border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--surface-2); }
 .desktop-panel[data-expanded] .desktop-actions { grid-column: 3; justify-self: start; flex-wrap: wrap; justify-content: flex-start; height: auto; min-height: 36px; max-width: 100%; box-sizing: border-box; padding: 6px 4px; row-gap: 6px; }
 /* No demonstration, or nothing of it to press (its review is open): no second pill. */

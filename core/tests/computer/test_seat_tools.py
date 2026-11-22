@@ -342,7 +342,7 @@ async def test_peer_native_wait_preserves_its_existing_connection_and_bound_page
     vm.hold(first, True)
     try:
         result = await call(hub, 2, "click", dict(pid=20, window_id=20, x=5, y=6))
-        assert result.kind == "computer_busy"
+        assert result.kind == "waiting_for_owner"
         assert hub.connections.get(second.key) == connection and connection[0].alive
         assert (await call(hub, 2, "get_browser_state", dict(target_id="own-target", tab_id="tab"))).ok
     finally:
@@ -1142,7 +1142,7 @@ async def test_owner_hold_blocks_foreground_page_input_but_navigation_continues(
     vm.hold(vm.target(1), True)
     try:
         result = await call(hub, 2, name, dict(target_id="own-target", tab_id="tab", delivery_mode="foreground", **args))
-        assert result.kind == "computer_busy" and all(sent != name for sent, _ in client.calls)
+        assert result.kind == "waiting_for_owner" and all(sent != name for sent, _ in client.calls)
         assert (await call(hub, 2, "browser_navigate", dict(target_id="own-target", tab_id="tab", url="about:blank"))).ok
         assert (await call(hub, 2, "browser_dialog", dict(target_id="own-target", tab_id="tab", action="inspect"))).ok
     finally:

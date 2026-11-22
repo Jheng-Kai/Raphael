@@ -8,6 +8,12 @@ const hostTabs = {running:"fresh", runningMember:1, hostTabs:"many", desktop:{tr
 const hostEntry = [member(1), wait('.desktop-screen[data-host-browser] iframe:not([hidden])')];
 const hostExpand = [...hostEntry, click('[data-desktop="enlarge"]'), wait('.desktop-panel[data-expanded] .host-browser-toolbar:not([hidden])')];
 const take = [...entry, click('[data-desktop="enlarge"]'), click('[data-desktop="take"]'), wait('.desktop-panel[data-interactive="true"][data-control-latency-ms]')];
+const pressScreen = {action:'desktop-owner-press'};
+const ownerPanel = [pressScreen, {action:'desktop-owner-typing'}, check('desktop-owner-small')];
+const firstInput = input => [click('[data-desktop="return"]'), wait('.desktop-mode-label[data-mode="watching"]'),
+  {action:'desktop-owner-first-input', input}];
+const ownerShrink = [pressScreen, wait('[data-desktop="collapse"]:not([hidden])'),
+  click('[data-desktop="collapse"]'), wait('.desktop-panel:not([data-expanded])[data-interactive="true"]'), ...ownerPanel];
 const teachComputer = () => ({desktop:{state:'running',ready:true,control:'member'}});
 const teaching = [member(1),{action:'open-details'},wait('.desktop-screen iframe:not([hidden])'),click('[data-desktop="enlarge"]'),click('[data-desktop="take"]'),wait('.desktop-panel[data-interactive="true"]'),click('[data-desktop="menu"]'),click('#app-popover [data-pick="teach"]'),wait('.desktop-recording:not([hidden])')];
 const draft = [...teaching,click('[data-desktop="teach"]'),wait('.desktop-review #mp-skill-text')];
@@ -80,9 +86,13 @@ export default [
     [...hostExpand, click('[data-desktop="take"]'),wait('.desktop-panel[data-expanded][data-interactive="true"] iframe[src*="transport=host"]'),check("desktop-host-frame")],
     {running:"fresh",runningMember:1,desktop:{transport:"host",target:"chrome-tab",state:"running",ready:true,control:"member",
       works:[{id:"chrome-tab",turn_id:2,transport:"host",state:"running",tool:"browser_open",reason:""}]}}),
-  scene("desktop-host-tabs-panel", "The narrow Computer panel shows the member's tabs while watching and opens a different tab without taking control",
+  scene("desktop-host-owner-panel", "The first press takes the host Chrome lease in the Computer panel", [...hostEntry, ...ownerPanel, check("desktop-host-tabs-control"), check("desktop-host-frame")], hostTabs),
+  scene("desktop-host-owner-shrink", "Folding Chrome keeps the same input lease and its editable toolbar", [...hostExpand, ...ownerShrink, check("desktop-host-tabs-control"), check("desktop-host-frame")], hostTabs),
+  scene("desktop-host-tabs-panel", "The owner selects and closes a tab while watching without taking control",
     [...hostEntry, click('[data-browser-action="select"][data-browser-tab="agenda"]'),
-      wait('[data-browser-tab="agenda"][aria-pressed="true"]'), check("desktop-host-frame"), check("desktop-host-tabs-watch"), check("desktop-host-tabs-many")], hostTabs),
+      wait('[data-browser-tab="agenda"][aria-pressed="true"]'), check("desktop-host-tabs-many"),
+      click('[data-browser-action="close"][data-browser-tab="agenda"]'), waitGone('[data-browser-tab="agenda"]'),
+      check("desktop-host-frame"), check("desktop-host-tabs-watch")], hostTabs),
   scene("desktop-host-tabs-expanded", "The larger watching view keeps the crowded tab strip inside the frame",
     [...hostExpand, check("desktop-host-frame"), check("desktop-host-tabs-watch"), check("desktop-host-tabs-many")], hostTabs),
   scene("desktop-host-tabs-control", "Take control enables the address field and Chrome actions",
@@ -113,6 +123,9 @@ export default [
   scene("desktop-viewer", "Open the existing stream large without a new dialog or session", [...entry,click('[data-desktop="enlarge"]'),wait('.desktop-panel[data-expanded]'),{action:"settle-motion"},check("desktop-viewer"),check("desktop-frame")],computer()),
   scene("desktop-viewer-night", "The larger view at night streams the computer with its dark default picture", [...entry,click('[data-desktop="enlarge"]'),wait('.desktop-panel[data-expanded]'),{action:"settle-motion"},check("desktop-viewer"),check("desktop-frame")],{...computer(),desktopHour:22}),
   scene("desktop-owner", "A screen click acquires the lease immediately without a reconnect", [...take,check("desktop-owner"),check("desktop-frame")],computer()),
+  scene("desktop-owner-panel", "A press, a key or a wheel gesture takes the VM lease in the Computer panel",
+    [...entry, ...ownerPanel, ...firstInput('key'), ...firstInput('wheel'), check("desktop-frame")], computer()),
+  scene("desktop-owner-shrink", "Folding the VM keeps the same input lease in the Computer panel", [...entry, click('[data-desktop="enlarge"]'), ...ownerShrink, check("desktop-frame")], computer()),
   scene("desktop-send-file-menu", "The held computer's ⋯ offers 傳送檔案到電腦 beside teaching, each with its own icon", [...take,click('[data-desktop="menu"]'),wait('#app-popover [data-pick="send-file"]'),check("desktop-send-file-menu")],computer()),
   scene("desktop-file-dropped", "A file dropped on the screen while watching goes into the team folder and one quiet line says where", [...entry,{action:'desktop-drop-file'},wait('.desktop-panel .desktop-notice[role="status"]:not([hidden])'),check("desktop-file-dropped")],computer()),
   scene("desktop-handback", "Stop hands the computer back, the view keeps watching, and folding back restores the conversation", [...take,click('[data-desktop="return"]'),wait('.desktop-panel[data-expanded] .desktop-mode-label[data-mode="watching"]'),click('[data-desktop="collapse"]'),wait('.page-agent:not(:has(.desktop-panel[data-expanded])) .composer'),check("desktop-handback")],computer()),

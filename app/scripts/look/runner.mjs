@@ -232,12 +232,20 @@ export async function run(options) {
               const { action, tab, url: address } = JSON.parse(request.postData());
               if (action === "select" || action === "navigate") host.model.shown = tab;
               if (action === "navigate") host.model.tabs = host.model.tabs.map(row => row.id === tab ? { ...row, url: address } : row);
+              if (action === "close") {
+                host.model.tabs = host.model.tabs.filter(row => row.id !== tab);
+                if (host.model.shown === tab) host.model.shown = host.model.tabs[0]?.id;
+              }
               (result.hostActions ??= []).push({ action, tab });
               writeHostFrame(host, hostImages);
               void request.respond({ status: 204 }).catch(() => {});
             } else void request.respond({ status: 200, contentType: "application/json", body: JSON.stringify(host.model) }).catch(() => {});
           } else if (url === origin + "/scripts/look/fixtures/host-input") {
-            void request.frame().evaluate(() => { window.__desktopAcceptedKeys = (window.__desktopAcceptedKeys ?? 0) + 1; })
+            const { type } = JSON.parse(request.postData());
+            void request.frame().evaluate(kind => {
+              if (kind === 'mousePressed' || kind === 'mouseReleased') (window.__desktopPointerEvents ??= []).push(kind);
+              if (kind === 'keyDown') window.__desktopAcceptedKeys = (window.__desktopAcceptedKeys ?? 0) + 1;
+            }, type)
               .then(() => request.respond({ status:204 })).catch(() => {});
           } else if (desktopResponse && new URL(url).pathname.endsWith('/control')) {
             void request.frame().evaluate(() => window.__desktopAcceptedInputs ?? 0).then(input_sequence => request.respond({ status:200, contentType:'application/json', body:JSON.stringify({held:!scene.fixture?.desktopUnconfirmed,input_sequence}) })).catch(() => {});

@@ -26,7 +26,8 @@ from .owner_transfer import CLIPBOARD_MAX, clipboard_text, hand_over, safe_name
 from .viewer_relay import Policy, ViewerRelay
 from .host_view import HostInputGate
 from .host_page import navigate as navigate_host_page
-from .host_view_script import SCRIPT as HOST_SCRIPT
+from .host_view_script import SCRIPT as HOST_VIEW
+from .viewer_input import INPUT_TAKEOVER, VM_INPUT
 from ..paths import local_storage_root
 
 LEASE_SECONDS = 15
@@ -189,7 +190,8 @@ addEventListener('pagehide', () => {snapshot(); clearInterval(framesTimer); fram
 document.documentElement.classList.remove('noVNC_loading');
 connect();
 setInterval(() => { if (!rfb) connect(); }, 2000);
-''' + b"window.raphaelOwnsInput = () => !!rfb && !rfb.viewOnly;\n" + FRAME_NAVIGATION.encode()
+''' + b"window.raphaelOwnsInput = () => !!rfb && !rfb.viewOnly;\n" + FRAME_NAVIGATION.encode() + INPUT_TAKEOVER + VM_INPUT
+HOST_SCRIPT = FRAME_NAVIGATION.encode() + INPUT_TAKEOVER + HOST_VIEW
 
 
 def embedded_page(content):
@@ -230,6 +232,7 @@ class Session:
     # copy that leaves it as it was (Ctrl+C in a terminal) does not replace what the owner has on their PC.
     clipboard: str | None = field(default=None, repr=False)
     host_tab: object = field(default=None, repr=False)
+    host_watched_tab: object = field(default=None, repr=False)
     host_gate: HostInputGate | None = field(default=None, repr=False)
     host_epoch: int = 0
 
@@ -510,10 +513,11 @@ class DesktopViewer:
         tab, card = self.host_selection(member, conversation)
         running = tab is not None and self.host_browser.live(tab)
         owner = self.sessions.get(self.owners.get(f"host:{member}"))
+        target = owner.host_tab.view if owner is not None and (owner is session or owner.conversation_id == conversation) else tab.view if running else None
         return {"transport": "host", "state": "running" if running else "absent", "ready": running,
                 "control": "owner" if owner and (owner is session or session is None and owner.conversation_id == conversation) else "member",
                 "preview_allowed": owner is None and card is None,
-                **({"target": tab.view} if running else {}),
+                **({"target": target} if running else {}),
                 **({"works": [{"id": tab.id, "turn_id": tab.turn_id, "transport": "host",
                                                 "state": "done" if tab.finished else "running", "tool": "browser_open",
                                                 "reason": ""}]} if running and tab.turn_id and tab.conversation == conversation else {}),
@@ -824,14 +828,19 @@ class DesktopViewer:
         return state
 
     def host_current(self, session):
-        tab, card = self.host_selection(session.member_id, session.conversation_id)
+        tab = self.host_selected(session)
+        _, card = self.host_selection(session.member_id, session.conversation_id)
         selected = self.active_transport(session.member_id, session.conversation_id) if self.active_transport else None
         return (selected in (None, "host") and self.member_exists(session.member_id)
                 and tab is not None and tab.member == session.member_id and self.host_browser.live(tab)
                 and not (session.preview and (card or session.owner_key in self.owners)))
 
     def host_selected(self, session):
-        return self.host_selection(session.member_id, session.conversation_id)[0]
+        tab, card = self.host_selection(session.member_id, session.conversation_id)
+        watched = session.host_watched_tab
+        if card is None and watched is not None and self.host_browser.live(watched):
+            return watched
+        return tab
 
     def host_input_allowed(self, token, session):
         return (self.sessions.get(token) is session and not session.preview and bool(session.sockets)
@@ -1247,12 +1256,20 @@ class DesktopViewer:
         tab = browser.tabs.get(identifier) if isinstance(identifier, str) else None
         if shown is None or tab is None or not tab.ready or tab.member != session.member_id:
             return False
-        if action == "select" and not self.host_input_allowed(token, session):
-            if tab.member in browser.held or tab.member in browser.handback:
+        owned = self.host_input_allowed(token, session)
+        if not owned:
+            if session.preview or tab.member in browser.held or tab.member in browser.handback:
                 return False
-            browser.select(tab)
-            return True
-        if not self.host_input_allowed(token, session):
+            if action == "select":
+                session.host_watched_tab = tab
+                browser.notify_view()
+                return True
+            if action == "close":
+                async with browser.action_lock(tab):
+                    if tab.member in browser.held or tab.member in browser.handback:
+                        return False
+                    await browser.close_tab(tab, by_owner=True)
+                return True
             return False
         async with browser.action_lock(tab):
             if (not self.host_input_allowed(token, session) or not browser.live(tab)
@@ -1265,16 +1282,18 @@ class DesktopViewer:
                         return False
                     await session.host_gate.release()
                     await browser.activate(tab)
+                    session.host_watched_tab = tab
                     browser.held[tab.member] = self.host_selected(session)
                 elif action == "close":
                     if session.host_gate.tab is tab:
                         await session.host_gate.release()
-                    await browser.close_tab(tab)
+                    await browser.close_tab(tab, by_owner=True)
                 elif action == "new":
                     await session.host_gate.release()
                     new_tab = await browser.new_tab(tab.member, tab.workspace, session.conversation_id, previous=tab)
                     async with browser.action_lock(new_tab):
                         await browser.activate(new_tab)
+                        session.host_watched_tab = new_tab
                         browser.held[tab.member] = new_tab
                 elif action == "navigate" and isinstance(event.get("url"), str) and len(event["url"]) <= 8192:
                     await navigate_host_page(browser, tab, event["url"].strip())

@@ -15,6 +15,7 @@ READS = {"get_window_state", "get_browser_state", "get_desktop_state", "verify_s
 # to read that page again before answering, every "open this page and tell me" turn was started again and said its
 # answer twice (seen with real members).
 OPENED = {"browser_open"}
+NON_ACTION_RESULTS = ("waiting_for_owner", "tab_closed")
 CHANGES = {"click", "double_click", "right_click", "type_text", "press_key", "hotkey", "scroll", "drag",
            "launch_app", "bring_to_front", "clipboard_write", "browser_open", "browser_navigate", "browser_click",
            "browser_type", "browser_select", "browser_pointer", "browser_dialog", "browser_set_input_files", "fill_login", "fill_contact", "fill_card"}
@@ -60,10 +61,21 @@ class ComputerVerification:
                 name, args = calls[message['tool_call_id']]
                 content = str(message.get('content', ''))
                 header = content.split('\n', 1)[0]
-                self.after(name, args, header.startswith('<tool_result ') and ' status="ok"' in header)
+                ok = header.startswith('<tool_result ') and ' status="ok"' in header
+                kind = None
+                if ok:
+                    try:
+                        data = json.loads(content.split("\n", 1)[1].split("\n</tool_result>", 1)[0])
+                    except (ValueError, IndexError):
+                        data = None
+                    if isinstance(data, dict):
+                        kind = data.get("status")
+                self.after(name, args, ok, kind)
 
     def after(self, name, arguments, ok, kind=None):
         if not re.search(r"(?:computer[^/:]*[/_:]|computer__)", name):
+            return
+        if kind in NON_ACTION_RESULTS:
             return
         verb = re.split(r"/|__", name)[-1]
         if verb == "run_steps":

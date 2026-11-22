@@ -175,6 +175,9 @@ function pointer(event, type) {
         input.focus({ preventScroll: true });
         canvas.setPointerCapture(event.pointerId);
     }
+    sendPointer(event, type, x, y);
+}
+function sendPointer(event, type, x, y) {
     const count = event.detail || 1;
     const delta = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? viewport.height : 1;
     void dispatch({ type, x: x * viewport.width, y: y * viewport.height, modifiers: modifiers(event),
@@ -230,5 +233,12 @@ window.addEventListener('message', event => {
 });
 document.addEventListener('visibilitychange', () => document.hidden ? stop() : void watch());
 window.addEventListener('pagehide', stop);
+window.raphaelOwnsInput = () => interactive;
+bindViewerInput(['pointerdown', 'pointermove', 'pointerup', 'pointercancel'], () => canvas,
+    window.raphaelOwnsInput, (_canvas, event, x, y) => {
+        if (event.type === 'pointercancel') { void dispatch({ type: 'release' }); return; }
+        const type = { pointerdown: 'mousePressed', pointermove: 'mouseMoved', pointerup: 'mouseReleased', wheel: 'mouseWheel' }[event.type];
+        sendPointer(event, type, x, y);
+    }, () => viewport?.target);
 void watch();
 """

@@ -339,7 +339,7 @@ async def test_file_history_refuses_while_the_owner_holds_control(computer):
     target = hub.vm.target(0)
     hub.vm.held.add(target.key)
     result = await use(hub, "file_history", action="list")
-    assert result.kind == "owner_holds_control"
+    assert result.ok and result.kind == "waiting_for_owner"
 
 
 # --- a whole file is not cut at a command's length ------------------------------------------------------------------

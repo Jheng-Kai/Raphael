@@ -4,10 +4,12 @@ Work retains the short owner-facing handoff reason and its state. It holds no
 screen or owner input. A core restart drops the waiting coroutine.
 """
 import asyncio
+import json
 import secrets
 from dataclasses import dataclass, field
 from collections.abc import Callable
 
+from ..agent.plugins import PluginResult
 from .vm import VmError
 
 REASONS = ("sign_in", "password", "two_factor", "captcha", "payment", "other")
@@ -23,6 +25,14 @@ TAKEOVER = {
 }
 
 TAKEOVER_REASON_REQUIRED = "Give the reason the owner must take over and describe the owner-only step when using other."
+
+
+def owner_waiting_result():
+    return PluginResult(True, "waiting_for_owner", json.dumps({
+        "status": "waiting_for_owner",
+        "note": "The owner is using the computer right now. Nothing was done. Tell the owner plainly that you are "
+                "waiting for them to finish. Do other work if possible, or try again once they hand control back.",
+    }))
 
 
 def takeover_detail(arguments):
