@@ -181,6 +181,7 @@ async function run(options) {
         await drive(journey.name, { page, result, capture, artifacts: journeyDir, learnedPage: async () => (await browser.pages()).find(page => /\/learned\.html/.test(page.url())), windows: () => database("windows", String(owned.pid)), computerOffset: () => database("vm-offset"), computerSignin: member => database("vm-signin", String(member)), computerWindows: () => database("vm-windows"), snapshot: () => database("snapshot"), nativeLog: () => readFile(join(data, "logs/raphael.log"), "utf8").catch(() => ""), homes: () => database("homes"), memoryHome: member => database("memory-home", String(member)), threadQuery: (member, conversation) => database("thread", String(member), String(conversation)), rpc, audioMs, phrases, catalogApp: process.env.RAPHAEL_NATIVE_APP || "slack",
           typingBaseline: process.env.RAPHAEL_NATIVE_TYPING_BASELINE === "1",
           windowAction: action => database("window-action", String(owned.pid), action),
+          cursor: (...point) => database("cursor", ...point.map(String)),
           modelRequests: async () => (await readFile(join(data, "model-requests.jsonl"), "utf8")).trim().split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line)) });
         await capture("final");
       } catch (error) {

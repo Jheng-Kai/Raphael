@@ -82,6 +82,7 @@ elif operation == "windows":
     import ctypes
     from ctypes import wintypes as w
     user, gdi = ctypes.windll.user32, ctypes.windll.gdi32
+    user.SetProcessDpiAwarenessContext(w.HANDLE(-4))
     user.GetForegroundWindow.restype = w.HWND
     user.GetWindowTextW.argtypes = [w.HWND, w.LPWSTR, ctypes.c_int]
     user.GetWindowLongW.argtypes = [w.HWND, ctypes.c_int]
@@ -120,6 +121,16 @@ elif operation == "windows":
         return True
     user.EnumWindows(visit, 0)
     print(json.dumps({"foreground": user.GetForegroundWindow(), "workArea": [monitor.work.left, monitor.work.top, monitor.work.right, monitor.work.bottom], "windows": windows}))
+elif operation == "cursor":
+    import ctypes
+    from ctypes import wintypes as w
+    user = ctypes.windll.user32
+    if len(sys.argv) > 3 and not user.SetPhysicalCursorPos(int(sys.argv[3]), int(sys.argv[4])):
+        raise ctypes.WinError()
+    point = w.POINT()
+    if not user.GetPhysicalCursorPos(ctypes.byref(point)):
+        raise ctypes.WinError()
+    print(json.dumps([point.x, point.y]))
 elif operation == "voice-models":
     from raphael_core.device.models import REGISTRY
 

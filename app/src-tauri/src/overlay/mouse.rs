@@ -33,7 +33,7 @@ impl ControlRect {
             && self.height > 0.0
     }
 
-    fn contains(&self, x: f64, y: f64) -> bool {
+    pub(crate) fn contains(&self, x: f64, y: f64) -> bool {
         self.valid()
             && x >= self.x
             && y >= self.y
@@ -241,7 +241,7 @@ impl Mouse {
     }
 }
 
-fn cursor_position(window: &WebviewWindow) -> Option<PhysicalPosition<f64>> {
+pub(crate) fn cursor_position(window: &WebviewWindow) -> Option<PhysicalPosition<f64>> {
     #[cfg(windows)]
     {
         use windows::Win32::{Foundation::POINT, UI::WindowsAndMessaging::GetCursorPos};

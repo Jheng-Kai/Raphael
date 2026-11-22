@@ -333,7 +333,7 @@ pub struct Learner<C: CoreApi, O: OverlayApi, P: FieldProbe> {
     core: Arc<C>,
     overlay: Arc<O>,
     probe: Arc<P>,
-    /// Goes up when a dictation starts: a watch stops when it changes, and its notice is left out.
+    /// Goes up when a dictation starts and stops the previous field watch.
     generation: Arc<AtomicU64>,
     /// Serializes accepting a delivery with cancellation, so stale continuations cannot cancel newer ones.
     latest_delivery: Mutex<u64>,
@@ -401,12 +401,11 @@ impl<C: CoreApi, O: OverlayApi, P: FieldProbe> Learner<C, O, P> {
         let core = self.core.clone();
         let overlay = self.overlay.clone();
         let probe = self.probe.clone();
-        let generation = self.generation.clone();
         // Even a paste-last action replaces an older watch.
-        let started = generation.fetch_add(1, Ordering::SeqCst) + 1;
+        let started = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
         let scope = WatchScope {
             deadline,
-            generation: generation.clone(),
+            generation: self.generation.clone(),
             started,
             #[cfg(windows)]
             input: receipt.input,
@@ -472,15 +471,12 @@ impl<C: CoreApi, O: OverlayApi, P: FieldProbe> Learner<C, O, P> {
             if words.is_empty() {
                 return;
             }
-            if generation.load(Ordering::SeqCst) != started {
-                log::info!("learn: a new dictation is under way; no notice");
-                return;
-            }
+            let language = language.get();
             overlay.learned_batch(
-                &notices::learned(&words, &language.get()),
+                &notices::learned(&words, &language),
                 &words,
                 undo.as_deref(),
-                &language.get(),
+                &language,
             );
         }))
     }
@@ -514,6 +510,7 @@ impl<C: CoreApi, O: OverlayApi, P: FieldProbe> AfterPaste for Learner<C, O, P> {
 async fn learn<C: CoreApi>(core: &C, revision: &Revision) -> (Vec<String>, Option<String>) {
     let params = json!({
         "undoable": true,
+        "hold_undo": true,
         "revision": { "pasted": revision.pasted, "sent": revision.sent },
     });
     match core.call("dictionary.learn", params).await {
@@ -985,7 +982,9 @@ mod tests {
         run(&learner, &target("LINE.exe")).await;
         assert_eq!(
             core.calls("dictionary.learn"),
-            [json!({"undoable": true, "revision": {"pasted": PASTED, "sent": fixed()}})]
+            [
+                json!({"undoable": true, "hold_undo": true, "revision": {"pasted": PASTED, "sent": fixed()}})
+            ]
         );
         assert_eq!(
             *overlay.0.lock().unwrap(),
@@ -1165,7 +1164,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_new_dictation_ends_the_watch_and_keeps_the_notice_out_of_its_way() {
+    async fn a_new_dictation_ends_the_watch_and_the_saved_batch_is_reported_once() {
         let core = Core::default().on("dictionary.learn", json!({"learned": ["手提電話"]}));
         let probe = FakeProbe::reading(vec![
             text(PASTED),
@@ -1181,7 +1180,8 @@ mod tests {
             1,
             "what was corrected is learned"
         );
-        assert!(overlay.0.lock().unwrap().is_empty());
+        assert_eq!(overlay.1.load(Ordering::SeqCst), 1);
+        assert_eq!(overlay.0.lock().unwrap().len(), 1);
     }
 
     #[tokio::test]

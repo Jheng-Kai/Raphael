@@ -19,43 +19,62 @@ test.each([
   ["ja", "「Composio、HiKari」を辞書に追加しました。", "取り消す"],
 ])("the %s pill names one batch and Undo removes that batch once without taking focus", async (language, text, label) => {
   const input = document.createElement("input"); document.body.append(input); input.focus();
-  learnedPill(root, actions).show({ words: ["Composio", "HiKari"], token: "batch-1", language });
+  const pill = learnedPill(root, actions);
+  pill.show({ revision: 1, words: ["Composio", "HiKari"], can_undo: true, language });
   expect(document.activeElement).toBe(input);
   expect(root.querySelector(".learned-text")!.textContent).toBe(text);
   const undo = root.querySelector<HTMLButtonElement>("button")!;
   expect(undo.textContent).toBe(label);
   undo.click(); undo.click(); await Promise.resolve();
-  expect(actions.finish).toHaveBeenCalledExactlyOnceWith("batch-1", true);
+  expect(actions.finish).toHaveBeenCalledExactlyOnceWith(1);
+  expect(root.hidden).toBe(false);
+  pill.dismiss(1);
   vi.advanceTimersByTime(180);
   expect(root.hidden).toBe(true);
 });
 
-test("ten seconds without interaction fades; hovering keeps the pill open", () => {
-  learnedPill(root, actions).show({ words: ["Composio"], token: "batch-1", language: "en" });
-  vi.advanceTimersByTime(9900);
+test("the page leaves the pill visible through a native hover pause and fades on expiry", async () => {
+  const pill = learnedPill(root, actions);
+  vi.spyOn(root, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 300, 48));
+  pill.show({ revision: 1, words: ["Composio"], can_undo: true, language: "en" });
+  await vi.waitFor(() => expect(actions.layout).toHaveBeenCalledExactlyOnceWith(1, 300, 48));
+
+  // The OS can see the pointer over the caption while the webview is click-through.
+  // During that pause the native channel withholds dismissal, even past ten seconds.
+  vi.advanceTimersByTime(30_000);
+  expect(root.hidden).toBe(false);
   expect(root.classList.contains("is-leaving")).toBe(false);
-  root.dispatchEvent(new MouseEvent("mouseenter"));
-  vi.advanceTimersByTime(20_000);
-  expect(root.hidden).toBe(false); expect(actions.finish).not.toHaveBeenCalled();
-  root.dispatchEvent(new MouseEvent("mouseleave"));
-  vi.advanceTimersByTime(9900);
-  expect(root.classList.contains("is-leaving")).toBe(false);
-  vi.advanceTimersByTime(100);
+  expect(root.querySelector("button")!.disabled).toBe(false);
+  expect(actions.finish).not.toHaveBeenCalled();
+
+  pill.dismiss(1);
+  vi.advanceTimersByTime(179);
+  expect(root.hidden).toBe(false);
   expect(root.classList.contains("is-leaving")).toBe(true);
-  expect(actions.finish).toHaveBeenCalledWith("batch-1", false);
-  vi.advanceTimersByTime(180); expect(root.hidden).toBe(true);
+  vi.advanceTimersByTime(1);
+  expect(root.hidden).toBe(true);
 });
 
-test("a late Undo result cannot close the next learned batch", async () => {
-  let finish!: () => void;
-  actions.finish.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve; }));
+test("a replay or late dismissal cannot repaint or close the next learned batch", async () => {
   const pill = learnedPill(root, actions);
-  pill.show({ words: ["Composio"], token: "first", language: "en" });
-  root.querySelector<HTMLButtonElement>("button")!.click();
-  pill.show({ words: ["HiKari"], token: "second", language: "en" });
-  finish(); await Promise.resolve(); vi.advanceTimersByTime(200);
+  const first = { revision: 1, words: ["Composio"], can_undo: true, language: "en" };
+  expect(pill.show(first)).toBe(true);
+  expect(pill.show(first)).toBe(false);
+  pill.dismiss(1);
+  pill.show({ revision: 3, words: ["HiKari"], can_undo: true, language: "en" });
+  expect(pill.show(first)).toBe(false);
+  pill.dismiss(1);
+  await Promise.resolve();
+  vi.advanceTimersByTime(200);
   expect(root.hidden).toBe(false);
   expect(root.textContent).toContain("HiKari");
+});
+
+test("an unsupported language still shows the saved words", () => {
+  const pill = learnedPill(root, actions);
+  pill.show({ revision: 1, words: ["Composio"], can_undo: true, language: "unsupported" });
+  expect(root.hidden).toBe(false);
+  expect(root.textContent).toContain("Composio");
 });
 
 test("the learned page names no phrase of any language as its title", () => {

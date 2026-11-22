@@ -1,9 +1,11 @@
 //! A content-sized, passive notification window. The ordinary overlay stays click-through.
 use crate::core_process::{CoreApi, CoreProcess};
+use crate::overlay::mouse::{ControlRect, Windows, cursor_position};
 use serde::Serialize;
 use serde_json::{Value, json};
-use std::sync::{Mutex, PoisonError};
-use std::time::Duration;
+use std::collections::VecDeque;
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::time::{Duration, Instant};
 use tauri::{
     AppHandle, Manager, PhysicalPosition, PhysicalSize, Webview, WebviewUrl, WebviewWindowBuilder,
     ipc::Channel,
@@ -12,22 +14,156 @@ use tauri::{
 const LABEL: &str = "learned";
 /// The page fades its pill out in this long (`learned.css`, a little over it); the window goes after that, never before.
 const FADE: Duration = Duration::from_millis(220);
-#[derive(Clone, Serialize)]
-pub struct Notice {
+const CURSOR_POLL: Duration = Duration::from_millis(30);
+
+fn display_time(word_count: usize) -> Duration {
+    Duration::from_secs(10 + 2 * word_count.saturating_sub(1) as u64)
+}
+
+struct Countdown {
+    remaining: Duration,
+    running_since: Option<Instant>,
+}
+
+impl Countdown {
+    fn new(word_count: usize, now: Instant) -> Self {
+        Self {
+            remaining: display_time(word_count),
+            running_since: Some(now),
+        }
+    }
+
+    fn update(&mut self, now: Instant, paused: bool) -> bool {
+        if let Some(since) = self.running_since {
+            self.remaining = self.remaining.saturating_sub(now - since);
+        }
+        self.running_since = (!paused).then_some(now);
+        self.remaining.is_zero() && !paused
+    }
+}
+
+struct Batch {
     words: Vec<String>,
-    token: String,
+    token: Option<String>,
     language: String,
     theme: String,
-    revision: u64,
 }
+
+struct Active {
+    batch: Batch,
+    revision: u64,
+    countdown: Option<Countdown>,
+    hover_bounds: Option<ControlRect>,
+    undoing: bool,
+    leaving: bool,
+}
+
+#[derive(Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum Event {
+    Show {
+        revision: u64,
+        words: Vec<String>,
+        can_undo: bool,
+        language: String,
+        theme: String,
+    },
+    Dismiss {
+        revision: u64,
+    },
+}
+
+impl Active {
+    fn event(&self) -> Event {
+        if self.leaving {
+            return Event::Dismiss {
+                revision: self.revision,
+            };
+        }
+        Event::Show {
+            revision: self.revision,
+            words: self.batch.words.clone(),
+            can_undo: self.batch.token.is_some(),
+            language: self.batch.language.clone(),
+            theme: self.batch.theme.clone(),
+        }
+    }
+}
+
 #[derive(Default)]
-struct State {
-    current: Mutex<Option<Notice>>,
-    channel: Mutex<Option<Channel<Notice>>>,
+struct Queue {
+    pending: VecDeque<Batch>,
+    current: Option<Active>,
+    channel: Option<Channel<Event>>,
+}
+
+impl Queue {
+    fn advance(&mut self, next_revision: impl FnOnce() -> u64) -> bool {
+        if self.channel.is_none() || self.current.is_some() {
+            return false;
+        }
+        let Some(batch) = self.pending.pop_front() else {
+            return false;
+        };
+        self.current = Some(Active {
+            batch,
+            revision: next_revision(),
+            countdown: None,
+            hover_bounds: None,
+            undoing: false,
+            leaving: false,
+        });
+        true
+    }
+
+    fn active(&mut self, revision: u64) -> Option<&mut Active> {
+        self.current
+            .as_mut()
+            .filter(|active| active.revision == revision && !active.leaving)
+    }
+
+    fn send_current(&mut self) -> Result<(), String> {
+        if let (Some(channel), Some(active)) = (&self.channel, &self.current)
+            && let Err(error) = channel.send(active.event())
+        {
+            self.channel = None;
+            return Err(error.to_string());
+        }
+        Ok(())
+    }
+}
+
+#[derive(Default)]
+pub(crate) struct State(Mutex<Queue>);
+
+fn queue(app: &AppHandle) -> MutexGuard<'_, Queue> {
+    app.state::<State>()
+        .inner()
+        .0
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+}
+
+fn send_current(queue: &mut Queue) -> Result<(), String> {
+    queue.send_current().inspect_err(|error| {
+        log::warn!("could not send learned pill event: {error}");
+        crate::commands::tell_main_window(crate::commands::MainEvent::SetupMissing {
+            missing: json!({"resource": "dictionary", "requirement": "learned", "state": "broken", "repair": null}),
+        });
+    })
+}
+
+/// Keep a saved batch until both the window and its subscriber are ready.
+fn advance(app: &AppHandle, queue: &mut Queue) -> Result<(), String> {
+    if let Some(mouse) = app.state::<Windows>().get(LABEL)
+        && queue.advance(|| mouse.clear())
+    {
+        send_current(queue)?;
+    }
+    Ok(())
 }
 
 pub fn start(app: &AppHandle) -> tauri::Result<()> {
-    app.manage(State::default());
     // The window is there only while a notice is: it is made hidden and shown by the layout of a notice, and it goes
     // when the notice does (R-LEARN-WIN-02). Its title is empty: whatever a system painted of it would be a word the
     // owner never chose, in English under a Chinese interface.
@@ -48,8 +184,8 @@ pub fn start(app: &AppHandle) -> tauri::Result<()> {
     window.set_ignore_cursor_events(true)?;
     crate::webview_power::low_memory(&window, true);
     crate::overlay::apply_passive_style(&window);
-    app.state::<crate::overlay::mouse::Windows>()
-        .register(&window);
+    app.state::<Windows>().register(&window);
+    let _ = advance(app, &mut queue(app));
     Ok(())
 }
 
@@ -57,12 +193,6 @@ pub fn publish(app: &AppHandle, words: &[String], undo: Option<&str>, language: 
     if words.is_empty() {
         return;
     }
-    let Some(state) = app.try_state::<State>() else {
-        return;
-    };
-    let Some(mouse) = app.state::<crate::overlay::mouse::Windows>().get(LABEL) else {
-        return;
-    };
     let theme = app
         .get_webview_window(crate::MAIN_WINDOW)
         .and_then(|w| w.theme().ok())
@@ -75,28 +205,14 @@ pub fn publish(app: &AppHandle, words: &[String], undo: Option<&str>, language: 
             .to_owned()
         })
         .unwrap_or_else(|| "light".to_owned());
-    let mut current = state.current.lock().unwrap_or_else(PoisonError::into_inner);
-    let revision = mouse.clear();
-    let notice = Notice {
-        revision,
+    let mut queue = queue(app);
+    queue.pending.push_back(Batch {
         words: words.to_vec(),
-        token: undo.unwrap_or_default().to_owned(),
+        token: undo.filter(|token| !token.is_empty()).map(str::to_owned),
         language: language.to_owned(),
         theme,
-    };
-    *current = Some(notice.clone());
-    drop(current);
-    let delivered = state
-        .channel
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .as_ref()
-        .is_some_and(|channel| channel.send(notice).is_ok());
-    if !delivered {
-        crate::commands::tell_main_window(crate::commands::MainEvent::SetupMissing {
-            missing: json!({"resource": "dictionary", "requirement": "learned", "state": "broken", "repair": null}),
-        });
-    }
+    });
+    let _ = advance(app, &mut queue);
 }
 
 /// Only bounded dictation evidence reaches the core, as the same revision external-app learning sends.
@@ -131,33 +247,25 @@ pub fn composer_params(params: Value) -> Result<Value, String> {
         }
         previous = after;
     }
-    Ok(json!({"undoable": true, "revision": {"pasted": first, "sent": previous}}))
+    Ok(
+        json!({"undoable": true, "hold_undo": true, "revision": {"pasted": first, "sent": previous}}),
+    )
 }
 
 #[tauri::command]
 pub fn learned_subscribe(
     app: AppHandle,
     webview: Webview,
-    channel: Channel<Notice>,
+    channel: Channel<Event>,
 ) -> Result<(), String> {
     crate::commands::ensure_caller(webview.label(), LABEL)?;
-    let state = app.state::<State>();
-    let mut subscriber = state.channel.lock().unwrap_or_else(PoisonError::into_inner);
-    *subscriber = Some(channel.clone());
-    if let Some(notice) = state
-        .current
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .as_ref()
-    {
-        channel.send(notice.clone()).map_err(|e| {
-            crate::commands::tell_main_window(crate::commands::MainEvent::SetupMissing {
-                missing: json!({"resource": "dictionary", "requirement": "learned", "state": "broken", "repair": null}),
-            });
-            e.to_string()
-        })?;
+    let mut queue = queue(&app);
+    queue.channel = Some(channel);
+    if queue.current.is_some() {
+        send_current(&mut queue)
+    } else {
+        advance(&app, &mut queue)
     }
-    Ok(())
 }
 
 /// The pill stands this far above the taskbar, in logical pixels.
@@ -176,7 +284,7 @@ fn place(work: crate::overlay::Rect, w: u32, h: u32, scale: f64) -> PhysicalPosi
 pub fn learned_layout(
     app: AppHandle,
     webview: Webview,
-    token: String,
+    revision: u64,
     width: f64,
     height: f64,
 ) -> Result<(), String> {
@@ -188,14 +296,7 @@ pub fn learned_layout(
     {
         return Err("invalid learned pill bounds".into());
     }
-    let state = app.state::<State>();
-    if !state
-        .current
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .as_ref()
-        .is_some_and(|n| n.token == token)
-    {
+    if queue(&app).active(revision).is_none() {
         return Ok(());
     }
     let window = app
@@ -206,7 +307,7 @@ pub fn learned_layout(
         .ok_or("no monitor")?;
     let work = crate::overlay::Rect::from(monitor.work_area());
     let scale = monitor.scale_factor();
-    let bounds = crate::overlay::mouse::ControlRect {
+    let bounds = ControlRect {
         x: 0.0,
         y: 0.0,
         width,
@@ -218,31 +319,45 @@ pub fn learned_layout(
     window
         .set_size(PhysicalSize::new(w, h))
         .map_err(|e| e.to_string())?;
-    window
-        .set_position(place(work, w, h, scale))
-        .map_err(|e| e.to_string())?;
+    let position = place(work, w, h, scale);
+    window.set_position(position).map_err(|e| e.to_string())?;
     crate::overlay::apply_passive_style(&window);
     round_region(&window, w, h);
-    reveal(&window);
-    Ok(())
+
+    let handle = window.clone();
+    window
+        .run_on_main_thread(move || {
+            let mut queue = queue(&app);
+            let Some(active) = queue.active(revision) else {
+                return;
+            };
+            active.hover_bounds = Some(ControlRect {
+                x: f64::from(position.x),
+                y: f64::from(position.y),
+                width: f64::from(w),
+                height: f64::from(h),
+            });
+            reveal(&handle);
+            if active.countdown.is_none() {
+                active.countdown = Some(Countdown::new(active.batch.words.len(), Instant::now()));
+                drop(queue);
+                watch_pointer(app, handle, revision);
+            }
+        })
+        .map_err(|e| e.to_string())
 }
 
-/// Show the window without activating it: the owner is typing somewhere else.
+/// Show the window on its owning thread without activating it.
 fn reveal(window: &tauri::WebviewWindow) {
     #[cfg(windows)]
     {
         use windows::Win32::UI::WindowsAndMessaging::{SW_SHOWNOACTIVATE, ShowWindow};
-        let Ok(hwnd) = window.hwnd() else {
-            return;
-        };
-        let hwnd = hwnd.0 as isize;
-        let _ = window.run_on_main_thread(move || unsafe {
-            // SAFETY: this runs on the owning window thread; the handle is that of a live window.
-            let _ = ShowWindow(
-                windows::Win32::Foundation::HWND(hwnd as *mut _),
-                SW_SHOWNOACTIVATE,
-            );
-        });
+        if let Ok(hwnd) = window.hwnd() {
+            // SAFETY: this runs on the owning thread with a live window handle.
+            unsafe {
+                let _ = ShowWindow(windows::Win32::Foundation::HWND(hwnd.0), SW_SHOWNOACTIVATE);
+            }
+        }
     }
     #[cfg(not(windows))]
     {
@@ -250,60 +365,104 @@ fn reveal(window: &tauri::WebviewWindow) {
     }
 }
 
-/// Take the window away once the page has faded its pill, unless a new notice came meanwhile. A window with nothing
-/// to say is not on the screen at all: no bar, no title, nothing to click through (after Undo, a
-/// pale bar with the English title stayed).
-fn leave(app: &AppHandle) {
+/// Read the cursor independently of hit testing so the caption stays click-through.
+fn watch_pointer(app: AppHandle, window: tauri::WebviewWindow, revision: u64) {
+    tauri::async_runtime::spawn(async move {
+        loop {
+            let point = cursor_position(&window);
+            {
+                let mut queue = queue(&app);
+                let Some(active) = queue.active(revision) else {
+                    return;
+                };
+                let over_pill = point.is_some_and(|point| {
+                    active
+                        .hover_bounds
+                        .as_ref()
+                        .is_some_and(|rect| rect.contains(point.x, point.y))
+                });
+                let expired = active.countdown.as_mut().is_some_and(|countdown| {
+                    countdown.update(Instant::now(), over_pill || active.undoing)
+                });
+                if expired {
+                    dismiss(&app, &mut queue, revision, false);
+                    return;
+                }
+            }
+            tokio::time::sleep(CURSOR_POLL).await;
+        }
+    });
+}
+
+/// Clear hit testing immediately, then hide and advance only after the page has faded out.
+fn dismiss(app: &AppHandle, state: &mut Queue, revision: u64, undone: bool) {
+    let Some(active) = state.active(revision) else {
+        return;
+    };
+    active.leaving = true;
+    let discard = if undone {
+        None
+    } else {
+        active.batch.token.take()
+    };
+    if let Some(mouse) = app.state::<Windows>().get(LABEL) {
+        mouse.clear();
+    }
+    let _ = send_current(state);
+
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(FADE).await;
-        let idle = app
-            .state::<State>()
-            .current
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .is_none();
-        if !idle {
-            return;
-        }
-        if let Some(window) = app.get_webview_window(LABEL) {
-            let _ = window.hide();
+        let handle = app.clone();
+        let _ = app.run_on_main_thread(move || {
+            let mut queue = queue(&handle);
+            if let Some(window) = handle.get_webview_window(LABEL) {
+                let _ = window.hide();
+            }
+            queue.current = None;
+            let _ = advance(&handle, &mut queue);
+        });
+        if let Some(token) = discard {
+            let core = app.state::<Arc<CoreProcess>>();
+            if let Err(error) = core
+                .call("dictionary.undo", json!({"token": token, "discard": true}))
+                .await
+            {
+                log::warn!("could not release learned Undo: {error}");
+            }
         }
     });
 }
 
 #[tauri::command]
-pub async fn learned_finish(
-    app: AppHandle,
-    webview: Webview,
-    token: String,
-    undo: bool,
-) -> Result<(), String> {
+pub async fn learned_finish(app: AppHandle, webview: Webview, revision: u64) -> Result<(), String> {
     crate::commands::ensure_caller(webview.label(), LABEL)?;
-    {
-        let state = app.state::<State>();
-        let current = state.current.lock().unwrap_or_else(PoisonError::into_inner);
-        if !current.as_ref().is_some_and(|n| n.token == token) {
+    let token = {
+        let mut queue = queue(&app);
+        let Some(active) = queue.active(revision).filter(|active| !active.undoing) else {
             return Ok(());
+        };
+        let Some(token) = active.batch.token.clone() else {
+            return Ok(());
+        };
+        active.undoing = true;
+        token
+    };
+    let core = app.state::<Arc<CoreProcess>>();
+    let result = core.call("dictionary.undo", json!({"token": token})).await;
+    let mut queue = queue(&app);
+    match result {
+        Ok(_) => {
+            dismiss(&app, &mut queue, revision, true);
+            Ok(())
+        }
+        Err(error) => {
+            if let Some(active) = queue.active(revision) {
+                active.undoing = false;
+            }
+            Err(error.to_string())
         }
     }
-    if undo && !token.is_empty() {
-        let core = app.state::<std::sync::Arc<CoreProcess>>();
-        core.call("dictionary.undo", json!({"token": token}))
-            .await
-            .map_err(|e| e.to_string())?;
-    }
-    let state = app.state::<State>();
-    let mut current = state.current.lock().unwrap_or_else(PoisonError::into_inner);
-    if current.as_ref().is_some_and(|n| n.token == token) {
-        *current = None;
-        if let Some(mouse) = app.state::<crate::overlay::mouse::Windows>().get(LABEL) {
-            mouse.clear();
-        }
-        drop(current);
-        leave(&app);
-    }
-    Ok(())
 }
 
 fn foreground_monitor(app: &AppHandle) -> Option<tauri::Monitor> {
@@ -443,21 +602,111 @@ mod tests {
         let layout = production.split("pub fn learned_layout(").nth(1).unwrap();
         let layout = layout.split("\n}\n").next().unwrap();
         assert!(
-            layout.find("round_region(").unwrap() < layout.find("reveal(&window)").unwrap(),
+            layout.find("round_region(").unwrap() < layout.find("reveal(&handle)").unwrap(),
             "it is shown only after it is sized, placed and shaped"
         );
-        let finish = production
-            .split("pub async fn learned_finish(")
-            .nth(1)
-            .unwrap();
-        let finish = finish.split("\n}\n").next().unwrap();
+        let dismiss = production.split("fn dismiss(").nth(1).unwrap();
+        let dismiss = dismiss.split("\n}\n").next().unwrap();
         assert!(
-            finish.find("*current = None").unwrap() < finish.find("leave(&app)").unwrap(),
-            "Undo, a timeout and a click all end the notice and then take its window away"
+            dismiss.find("sleep(FADE)").unwrap() < dismiss.find(".hide()").unwrap()
+                && dismiss.find(".hide()").unwrap() < dismiss.find("advance(").unwrap(),
+            "the window hides after the fade and before the next notice"
         );
-        let leave = production.split("fn leave(").nth(1).unwrap();
-        let leave = leave.split("\n}\n").next().unwrap();
-        assert!(leave.contains("FADE") && leave.contains("is_none()") && leave.contains(".hide()"));
+    }
+
+    #[test]
+    fn more_words_get_more_time_and_hover_preserves_the_remainder() {
+        assert_eq!(display_time(1), Duration::from_secs(10));
+        assert_eq!(display_time(2), Duration::from_secs(12));
+        assert_eq!(display_time(3), Duration::from_secs(14));
+        let start = Instant::now();
+        let at = |seconds| start + Duration::from_secs(seconds);
+        let mut countdown = Countdown::new(1, start);
+        assert!(!countdown.update(at(3), true));
+        assert!(!countdown.update(at(30), true));
+        assert!(!countdown.update(at(31), false));
+        assert!(!countdown.update(at(37), false));
+        assert!(countdown.update(at(38), false));
+    }
+
+    #[test]
+    fn batches_wait_for_a_subscriber_and_keep_their_own_full_time() {
+        let batch = |word: &str| Batch {
+            words: vec![word.to_owned()],
+            token: Some(word.to_owned()),
+            language: "en".to_owned(),
+            theme: "dark".to_owned(),
+        };
+        let mut queue = Queue::default();
+        queue.pending.push_back(batch("first"));
+        assert!(!queue.advance(|| panic!("no subscriber")));
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let received = events.clone();
+        queue.channel = Some(Channel::new(move |body| {
+            if let tauri::ipc::InvokeResponseBody::Json(json) = body {
+                received
+                    .lock()
+                    .unwrap()
+                    .push(serde_json::from_str::<Value>(&json).unwrap());
+            }
+            Ok(())
+        }));
+        assert!(queue.advance(|| 1));
+        queue.send_current().unwrap();
+        queue.pending.push_back(batch("second"));
+        assert!(!queue.advance(|| panic!("the first batch is still showing")));
+        let now = Instant::now();
+        let first = queue.active(1).unwrap();
+        first.countdown = Some(Countdown::new(1, now));
+        let countdown = first.countdown.as_mut().unwrap();
+        assert!(!countdown.update(now + Duration::from_millis(9_999), false));
+        assert!(countdown.update(now + Duration::from_secs(10), false));
+        first.leaving = true;
+        queue.send_current().unwrap();
+        assert!(!queue.advance(|| panic!("the first batch is still fading")));
+        queue.current = None;
+        assert!(queue.advance(|| 2));
+        queue.send_current().unwrap();
+        assert!(queue.active(1).is_none());
+        assert!(
+            queue.active(2).unwrap().countdown.is_none(),
+            "no time has elapsed before layout"
+        );
+        let events = events.lock().unwrap();
+        assert_eq!(events.len(), 3);
+        assert_eq!(events[0]["words"], json!(["first"]));
+        assert_eq!(events[1], json!({"type": "dismiss", "revision": 1}));
+        assert_eq!(events[2]["words"], json!(["second"]));
+    }
+
+    #[test]
+    fn a_failed_delivery_keeps_the_saved_notice_for_the_next_subscriber() {
+        let mut queue = Queue {
+            channel: Some(Channel::new(|_| {
+                Err(tauri::Error::AssetNotFound("learned.html".into()))
+            })),
+            ..Queue::default()
+        };
+        queue.pending.push_back(Batch {
+            words: vec!["Composio".to_owned()],
+            token: Some("batch".to_owned()),
+            language: "en".to_owned(),
+            theme: "light".to_owned(),
+        });
+        assert!(queue.advance(|| 1));
+        assert!(queue.send_current().is_err());
+        assert!(queue.channel.is_none());
+        let delivered = Arc::new(Mutex::new(Vec::new()));
+        let received = delivered.clone();
+        queue.channel = Some(Channel::new(move |body| {
+            received.lock().unwrap().push(body);
+            Ok(())
+        }));
+        queue.send_current().unwrap();
+        assert_eq!(delivered.lock().unwrap().len(), 1);
+        let notice = queue.active(1).unwrap();
+        assert_eq!(notice.batch.words, ["Composio"]);
+        assert!(notice.countdown.is_none());
     }
 
     #[test]
@@ -467,11 +716,11 @@ mod tests {
         let after = middle.replace("Cloude", "Claude");
         assert_eq!(
             composer_params(json!({"edits": [{"before": before, "after": middle}]})).unwrap(),
-            json!({"undoable": true, "revision": {"pasted": before, "sent": middle}})
+            json!({"undoable": true, "hold_undo": true, "revision": {"pasted": before, "sent": middle}})
         );
         assert_eq!(
             composer_params(json!({"edits": [{"before": before, "after": middle}, {"before": middle, "after": after}]})).unwrap(),
-            json!({"undoable": true, "revision": {"pasted": before, "sent": after}})
+            json!({"undoable": true, "hold_undo": true, "revision": {"pasted": before, "sent": after}})
         );
         assert!(composer_params(json!({"edits": [{"before": before, "after": middle}, {"before": before, "after": after}]})).is_err());
         assert!(composer_params(json!({"edits": []})).is_err());

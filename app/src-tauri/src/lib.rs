@@ -557,6 +557,7 @@ pub fn startup_plugins_for_tests<R: Runtime>(
 fn early_state<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
     builder
         .manage(overlay::mouse::Windows::default())
+        .manage(learned::State::default())
         // A stored attachment under a stable, cacheable URL for the main window (media_protocol.rs).
         .manage(media_protocol::MediaGrants::default())
         .manage(updates::Updates::default())
@@ -696,6 +697,7 @@ mod early_state_tests {
             .expect("the mock app builds");
         assert!(app.try_state::<updates::Updates>().is_some());
         assert!(app.try_state::<overlay::mouse::Windows>().is_some());
+        assert!(app.try_state::<learned::State>().is_some());
         assert!(app.try_state::<media_protocol::MediaGrants>().is_some());
     }
 }

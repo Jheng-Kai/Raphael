@@ -3342,8 +3342,8 @@ mod app {
     use crate::paste::SystemPaster;
     use crate::rpc::Notification;
 
-    /// The overlay, if it could be created. Without it dictation works, unseen.
-    struct MaybeOverlay(Option<Arc<Overlay>>);
+    /// The ordinary overlay may be unavailable. Learned batches have their own window.
+    struct MaybeOverlay(Option<Arc<Overlay>>, AppHandle);
 
     impl OverlayApi for MaybeOverlay {
         fn cancel_key(&self, reset: bool) {
@@ -3395,8 +3395,9 @@ mod app {
             }
         }
         fn learned_batch(&self, text: &str, words: &[String], undo: Option<&str>, language: &str) {
-            if let Some(overlay) = &self.0 {
-                overlay.learned_batch(text, words, undo, language);
+            match &self.0 {
+                Some(overlay) => overlay.learned_batch(text, words, undo, language),
+                None => crate::learned::publish(&self.1, words, undo, language),
             }
         }
         fn say(&self, prefix: &str, text: &str) {
@@ -3490,7 +3491,7 @@ mod app {
         let background_notifications = core.as_ref().map(|core| core.subscribe());
         let announce_notifications = core.as_ref().map(|core| core.subscribe());
         let announce_core = core.clone();
-        let overlay = Arc::new(MaybeOverlay(overlay));
+        let overlay = Arc::new(MaybeOverlay(overlay, app.clone()));
         let controller = match core {
             Some(core) => {
                 // Learns from the user's corrections after a paste (`learn`).
@@ -6943,7 +6944,7 @@ mod tests {
         assert_eq!(c.core().count("dictionary.learn"), 1);
         assert_eq!(
             c.core().call_params("dictionary.learn"),
-            json!({"undoable": true, "revision": {"pasted": pasted, "sent": fixed}})
+            json!({"undoable": true, "hold_undo": true, "revision": {"pasted": pasted, "sent": fixed}})
         );
         assert_eq!(
             probe.reads(),
