@@ -346,7 +346,7 @@ export function createAutomationsPage(app: AppContext): Page {
     const own = entry.kind === "own";
     openEventDetail(rect, entry, {
       runStatus: entry.run ? runStatus(entry.run.status) : undefined,
-      onEdit: own ? () => openEditor(rect, { id: entry.eventId, title: entry.title, start: entry.start, end: entry.end, allDay: entry.allDay, notes: entry.notes ?? "" }) : undefined,
+      onEdit: own ? () => openEditor(rect, { id: entry.eventId, title: entry.title, start: entry.start, end: entry.end, allDay: entry.allDay, notes: entry.notes ?? "" }, () => openDetail(chip, entry)) : undefined,
       onMore: own ? button => askToDelete(button, entry) : undefined,
       onOpenRoutine: entry.routine ? () => edit(entry.routine) : undefined,
       onRun: run => { if (run.turn_id && entry.member) openMemberThread(app, entry.member.id, run.turn_id); },
@@ -363,8 +363,10 @@ export function createAutomationsPage(app: AppContext): Page {
       },
     });
   }
-  function openEditor(rect: Pick<DOMRect, "left" | "right" | "top">, value: EventDraft): void {
+  function openEditor(rect: Pick<DOMRect, "left" | "right" | "top">, value: EventDraft, parent?: () => void): void {
     openEventEditor(rect, value, {
+      parent,
+      reopen: () => { if (value.id) openEditor(rect, value, parent); else startCreate(null, value); },
       onChange(next) { if (!next.id) { draft = next; draw(); } },
       onTitle(title) {
         if (draft) draft = { ...draft, title };

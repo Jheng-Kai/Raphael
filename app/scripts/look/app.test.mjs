@@ -132,8 +132,11 @@ describe("real app entry with the shared look fixture", () => {
     expect(document.documentElement.dataset.windowModal).toBeUndefined();
     expect(selected()).toBe("2");
     press(4);
-    expect(document.documentElement.dataset.windowModal).toBeUndefined();
+    expect(document.documentElement.dataset.windowModal).toBe("true");
+    expect(document.querySelector('.modal-scrim [data-pane="about"]')?.getAttribute("aria-current")).toBe("page");
     expect(selected()).toBe("2");
+    press(3);
+    expect(document.documentElement.dataset.windowModal).toBeUndefined();
     press(3);
     expect(selected()).toBe("1");
     press(4);

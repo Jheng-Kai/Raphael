@@ -10,7 +10,7 @@ export const closeMediaLightbox = (): void => { closing?.(); };
  * The lightbox: `body` as large as the window allows, its × inside it on the photo scrim, closed by the ×, Escape or a press
  * outside, the focus back on `origin`. `onClose` runs once as it closes. Returns the card.
  */
-export function openLightbox(origin: HTMLElement, label: string, body: string, options: { cls?: string; onClose?: () => void } = {}): HTMLElement {
+export function openLightbox(origin: HTMLElement, label: string, body: string, options: { cls?: string; onClose?: () => void; reopen?: () => void } = {}): HTMLElement {
   closing?.();
   const scrim = document.createElement("div");
   scrim.className = "mb-scrim media-lightbox";
@@ -42,7 +42,9 @@ export function openLightbox(origin: HTMLElement, label: string, body: string, o
   document.addEventListener("keydown", onKey, true);
   document.body.append(scrim);
   closing = close;
-  stopOutside = registerDismissal(card, close);
+  stopOutside = registerDismissal(card, close, undefined, undefined, {
+    restore: () => options.reopen ?? (options.onClose ? undefined : () => { if (origin.isConnected) openLightbox(origin, label, body, options); }),
+  });
   scrim.querySelector<HTMLElement>('[data-lb="close"]')?.focus();
   return card;
 }

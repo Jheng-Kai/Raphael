@@ -1,4 +1,4 @@
-import { bindNavFrame, bindNavLayer } from "./nav-layers";
+import { bindNavFrame, bindNavLayer, keepEditedField } from "./nav-layers";
 import { visibilityGate, windowVisible } from "./window-visibility";
 /** One persistent noVNC stream shared by the card, preview and takeover. */
 import { noticeHTML } from "./missing";
@@ -645,17 +645,10 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     panel.toggleAttribute('data-expanded', on);
     // Back does what Escape does: it folds the view while the owner only watches. While the owner holds the controls it does
     // nothing here (inside the screen the computer has the side buttons): ending control is the pill's own button.
-    if (on) bindNavLayer(panel, () => {
-      if (!changing && watching) collapseWatch();
-    }, {
+    if (on) bindNavLayer(panel, collapseWatch, {
       active: () => panel.hasAttribute('data-expanded'),
-      step: direction => {
-        if (direction !== 'forward' || !skillEditor || !review.hidden) return false;
-        review.hidden = false;
-        draw();
-        review.querySelector('textarea')?.focus();
-        return true;
-      },
+      step: () => changing || !watching || state?.control === 'owner',
+      restore: () => () => enlarge.click(),
     });
     document.documentElement.toggleAttribute('data-desktop-expanded', on);
     draw();
@@ -823,7 +816,15 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     { id: 'teach', label: teach.textContent ?? t('teach.start'), icon: 'steps' },
     { id: 'send-file', label: t('desktop.sendFile'), icon: 'attach' },
   ], id => { if (id === 'send-file') picker.click(); else teach.click(); }));
-  bindNavLayer(review, () => backButton.click());
+  bindNavLayer(review, () => backButton.click(), {
+    step: () => state?.control === 'owner' || keepEditedField(review),
+    restore: () => () => {
+      if (!skillEditor) return;
+      review.hidden = false;
+      draw();
+      review.querySelector('textarea')?.focus();
+    },
+  });
   backButton.addEventListener('click', () => {
     review.hidden = true;
     draw();

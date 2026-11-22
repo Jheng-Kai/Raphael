@@ -74,9 +74,10 @@ const ownerList = [...linked, check("owner-list")];
 const refreshed = { action: "emit", events: [{ type: "ConnectionsChanged" }], wait: 400 };
 const ownerRowScenes = [
   scene("connectors-slack-detail", "Slack's page puts Back, its title and Close on one line", slackDetail),
-  scene("nav-side-slack", "Mouse Back leaves Slack's page for Connectors, then closes Connectors over the same conversation", [
+  scene("nav-side-slack", "Back goes from Slack to Connectors and the conversation. Forward restores Connectors and Slack", [
     member(1), member(2), ...slackDetail, sideButton("back"), wait(".cs-apps"), sideButton("back"),
     waitGone('.modal-scrim[data-page="settings"]:not([hidden])'), check("nav-side-settings-closed"),
+    sideButton("forward"), wait('.modal-scrim:not([hidden]) .cs-apps'), sideButton("forward"), wait(PAGE), check("connectors-slack-detail"),
   ]),
   scene("connected-owner-rows", "The owner's list of seven, no heading: a real press on the line, the name, the mark, the empty end and the top edge of every row opens that app's page", [
     ...ownerList, ...everyPart, check("owner-list"),

@@ -1,5 +1,6 @@
 // Settings > Models: provider metadata is public; credentials live only in the input until sent.
-import { keepEditedField, LayerViews } from "./nav-layers";
+import { rememberLayerBack } from "./nav-history";
+import { keepEditedField } from "./nav-layers";
 import * as api from "./api";
 import { isTopLayer, registerDismissal } from "./dismissals";
 import { t } from "./i18n";
@@ -174,7 +175,6 @@ export function providersAddHTML(v: ProvidersView, lead = ""): string {
 export interface ProvidersHost { root: HTMLElement; visible(): boolean; redraw(): void; }
 export function createProviders(host: ProvidersHost) {
   let state = emptyProvidersView();
-  let views: LayerViews<string> | undefined;
   let stopOutside: (() => void) | null = null;
   let loads = 0;
   let modelLoads = 0;
@@ -225,17 +225,24 @@ export function createProviders(host: ProvidersHost) {
     const scroll = host.root.querySelector(".pv-body")?.scrollTop;
     const selection = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement ? [active.selectionStart, active.selectionEnd] : null;
     host.redraw();
-    const key = navView();
     if ((state.open || state.adding) && !stopOutside) {
-      views = new LayerViews(state.open?.id ? key : "pv:dir");
       stopOutside = registerDismissal(() => host.root.querySelector<HTMLElement>("#pv-dialog"), close, () => !state.busy, undefined,
-        direction => state.busy || views!.step(direction, showNavView),
-        panel => {
-          if (state.open && !state.open.id) { backToDirectory(panel); return true; }
-          return state.busy || keepEditedField(panel, ".pv-field input, .pv-field textarea") || !!state.dirty;
+        {
+          step: direction => {
+            if (state.busy || state.confirming) return true;
+            if (direction !== "back") return false;
+            const panel = host.root.querySelector("#pv-dialog")!;
+            if (keepEditedField(panel, ".pv-field input, .pv-field textarea") || state.dirty) return true;
+            if (!state.open || state.open.id) return false;
+            backToDirectory(panel);
+            return true;
+          },
+          restore: () => {
+            const key = navView(), role = state.role;
+            return () => { if (key === "pv:dir") directory(role); else showNavView(key); };
+          },
         });
     } else if (!state.open && !state.adding) { stopOutside?.(); stopOutside = null; }
-    if (state.open || state.adding) views?.visit(key);
     for (const input of host.root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('.pv-field input:not([type="file"]), .pv-field textarea')) {
       if (drafts.has(input.id)) input.value = drafts.get(input.id)!;
       if (active?.id === input.id) { input.focus(); if (selection) input.setSelectionRange(selection[0], selection[1]); }
@@ -287,7 +294,8 @@ export function createProviders(host: ProvidersHost) {
   }
   function backToDirectory(panel: ParentNode): void {
     if (state.busy || keepEditedField(panel, ".pv-field input, .pv-field textarea") || state.dirty) return;
-    if (!views?.step("back", showNavView)) directory();
+    const key = navView();
+    rememberLayerBack(() => directory(), () => showNavView(key));
   }
   async function remove() {
     const open = state.open;

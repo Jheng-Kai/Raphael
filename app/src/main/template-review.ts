@@ -3,7 +3,8 @@
 // 例行工作 (each routine opening its content and trigger) and 整合 (the apps it needs). Every field of a raphael-member is
 // shown here and no other (template-contract.test.ts); a template carries no memory. A page has a
 // back arrow and its title in the dialog's head; the dialog's own buttons stay at its foot.
-import { bindLayerSteps, LayerViews } from "./nav-layers";
+import { rememberLayerBack } from "./nav-history";
+import { bindNavLayer } from "./nav-layers";
 import { t } from "./i18n";
 import type { Dialog } from "./member-dialogs";
 import { linkedText } from "./message-content";
@@ -87,10 +88,8 @@ export function mountTemplateReview(dialog: Dialog, template: MemberTemplate, o:
   const head = dialog.el.querySelector<HTMLElement>(".mb-dlg-head")!, title = head.querySelector("h2")!, body = dialog.el.querySelector<HTMLElement>(".mb-dlg-body")!;
   dialog.el.classList.add("tpr");
   let page: ReviewPage = { kind: "main" };
-  const views = new LayerViews<ReviewPage>(page);
   const show = (next: ReviewPage, focus = false): void => {
     page = next;
-    views.visit(page);
     const { title: words, body: html } = reviewPageHTML(template, page, o);
     dialog.el.dataset.page = page.kind;
     title.textContent = words;
@@ -100,8 +99,11 @@ export function mountTemplateReview(dialog: Dialog, template: MemberTemplate, o:
     body.scrollTop = 0;
     if (focus) (head.querySelector<HTMLElement>("[data-tpl-back]") ?? body.querySelector<HTMLElement>("[data-tpl-go]"))?.focus();
   };
-  const back = () => views.step("back", previous => show(previous, true));
-  bindLayerSteps(body, views, next => show(next, true), back);
+  const back = (): void => {
+    const opened = page;
+    if (opened.kind !== "main") rememberLayerBack(() => show({ kind: "main" }, true), () => show(opened, true));
+  };
+  bindNavLayer(body, back, { active: () => page.kind !== "main" });
   dialog.el.addEventListener("click", (event) => {
     const target = event.target as Element;
     if (target.closest("[data-tpl-back]")) { back(); return; }

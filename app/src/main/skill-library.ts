@@ -14,7 +14,8 @@ import type { MessageKey } from "./i18n/zh-TW";
 import { isTopLayer } from "./dismissals";
 import { openActions } from "./member-column";
 import { faceHTML, groupFacesHTML, RAPHAEL_ID } from "./members";
-import { bindNavLayer } from "./nav-layers";
+import { rememberLayerBack } from "./nav-history";
+import { bindNavLayer, keepEditedField } from "./nav-layers";
 import { backButton, btn, closeMenu, esc, fieldHTML, ico, iconBtn, openPopover, tg, toaster } from "./ui";
 import "./skill-library.css";
 
@@ -236,7 +237,7 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
     root.querySelector<HTMLElement>('[data-skl="back"]')?.focus({ preventScroll: true });
   };
   /** Back to the list, where it was left, with the focus on the package's row. */
-  const back = (): void => {
+  const backToList = (): void => {
     const key = state.page;
     if (!key) return;
     closeMenu();
@@ -245,6 +246,11 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
     const box = scroller();
     if (box) box.scrollTop = listScroll;
     root.querySelector<HTMLElement>(`[data-skl="open"][data-key="${CSS.escape(key)}"]`)?.focus({ preventScroll: true });
+  };
+  const back = (): void => {
+    const key = state.page;
+    if (!key) return;
+    rememberLayerBack(backToList, () => { if (hasPage(byKey(key))) open(key); });
   };
   const bringFile = async (file: File): Promise<void> => {
     if (file.size > MAX_FILE) { state.error = t("skillLib.tooLarge"); redraw(); return; }
@@ -292,6 +298,14 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
   const showDetails = (anchor: HTMLElement, name: string, description: string): void => {
     const details = openPopover(anchor, `<div class="skl-details"><strong>${esc(name)}</strong><p>${esc(description)}</p></div>`, {
       className: "menu", role: "dialog", label: t("card.details"),
+      navigation: { restore: () => {
+        const { skl, key, id } = anchor.dataset;
+        return () => {
+          const trigger = anchor.isConnected ? anchor : [...root.querySelectorAll<HTMLElement>("[data-skl]")].find(el =>
+            el.dataset.skl === skl && el.dataset.key === key && el.dataset.id === id);
+          if (trigger) showDetails(trigger, name, description);
+        };
+      } },
     });
     details.focus({ preventScroll: true });
   };
@@ -309,7 +323,7 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
         .then(() => {
           state.packages = state.packages.filter(other => other.key !== key);
           // Deleted from its own page: the list comes back, where it was left.
-          if (state.page === key) back(); else redraw();
+          if (state.page === key) backToList(); else redraw();
         })
         .catch(error => toaster.info(failureText(error)));
     });
@@ -392,7 +406,7 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
     /** After each drawing: a package's page is a step of its own, so a step back (a side button, Alt+Left) returns to the list. */
     painted(): void {
       const page = root.querySelector<HTMLElement>(".skl-page");
-      if (page) bindNavLayer(page, back);
+      if (page) bindNavLayer(page, back, { step: direction => state.busy || direction === "back" && keepEditedField(page) });
     },
     reset: (): void => { epoch++; state.pasting = false; state.error = ""; state.page = null; },
   };

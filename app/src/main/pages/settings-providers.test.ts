@@ -4,8 +4,8 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { AppContext, MainEvent, ModelCatalog, SettingsPane } from "../types";
 import { setLocale, t } from "../i18n";
 import { createHotkeyRecording } from "../hotkey-recording";
-import { Navigation } from "../nav-history";
-import { hasOpenLayer, stepOpenLayer, stepSideLayer } from "../dismissals";
+import { clearLayerForward } from "../nav-history";
+import { stepOpenLayer } from "../dismissals";
 import { installNavInput } from "../nav-input";
 import { navInputs, pressLayer, sendNavInput } from "../test-support/nav-layer-input";
 import { Cleared } from "../cleared";
@@ -46,8 +46,10 @@ const flush = async () => { for (let i = 0; i < 40; i++) await Promise.resolve()
 const listeners = new Set<(event: MainEvent) => void>();
 const send = (event: MainEvent) => { for (const listener of listeners) listener(event); };
 let page: ReturnType<typeof createSettings>;
-const closeSettings = vi.fn();
-const go = vi.fn();
+const closeSettings = vi.fn(() => { page.hide(); page.el.hidden = true; });
+const go = vi.fn((id: string, pane: SettingsPane) => {
+  if (id === "settings") { page.el.hidden = false; void page.show(pane); }
+});
 async function mount(open: SettingsPane = "models") {
   create();
   await page.show(open); await flush();
@@ -65,8 +67,8 @@ const click = (selector: string) => { const button = document.querySelector<HTML
 
 function withMouseBack(check: (back: () => void) => void): void {
   const underlying = vi.fn();
-  const stop = installNavInput(window, vi.fn(), undefined, direction => {
-    if (!stepSideLayer(direction)) underlying();
+  const stop = installNavInput(window, direction => {
+    if (!stepOpenLayer(direction)) underlying();
   });
   try {
     check(() => sendNavInput("mouse", "back"));
@@ -74,7 +76,7 @@ function withMouseBack(check: (back: () => void) => void): void {
   } finally { stop(); }
 }
 
-test("mouse Back returns from Slack to Connectors and then closes Settings", async () => {
+test("mouse Back and Forward retrace Slack, Connectors and the conversation", async () => {
   const description = { "zh-TW": "Slack", en: "Slack", ja: "Slack" };
   api.integrationsCatalog.mockResolvedValue({ services: [{
     id: "slack", name: "Slack", publisher: "Slack", icon: "slack", category: "messaging", auth: "oauth",
@@ -90,13 +92,18 @@ test("mouse Back returns from Slack to Connectors and then closes Settings", asy
     expect(closeSettings).not.toHaveBeenCalled();
     back();
     expect(closeSettings).toHaveBeenCalledOnce();
+    sendNavInput("mouse", "forward");
+    expect(page.el.hidden).toBe(false);
+    expect(page.el.querySelector(".cs-apps")).not.toBeNull();
+    sendNavInput("mouse", "forward");
+    expect(page.el.querySelector("#cs-page-title")?.textContent).toBe("Slack");
   });
 });
 
 test("mouse Back closes a plugin menu, then returns to the team skill list, then closes Settings", async () => {
   api.core.mockResolvedValue({ members: [], packages: [{
     key: "set:1", name: "Example plugin", kind: "plugin", source: "", description: "", version: "",
-    enabled: true, access: "all", updatable: false, skills: [{ id: 1, name: "example", description: "", enabled: true }],
+    enabled: true, access: "all", updatable: false, skills: [{ id: 1, name: "example", description: "Skill notes", enabled: true }],
   }] });
   await mount("skills");
   click('[data-skl="open"][data-key="set:1"]');
@@ -110,12 +117,24 @@ test("mouse Back closes a plugin menu, then returns to the team skill list, then
     back();
     expect(document.querySelector("#app-popover")).toBeNull();
     expect(page.el.querySelector(".skl-page")).not.toBeNull();
+    click('[data-skl="skill-more"]');
+    click('#app-popover [data-pick="details"]');
+    expect(document.querySelector(".skl-details")?.textContent).toContain("Skill notes");
+    back();
+    expect(document.querySelector(".skl-details")).toBeNull();
+    expect(page.el.querySelector(".skl-page")).not.toBeNull();
     back();
     expect(page.el.querySelector(".skl-page")).toBeNull();
     expect(page.el.querySelector('[data-skl="open"][data-key="set:1"]')).toBe(document.activeElement);
     expect(closeSettings).not.toHaveBeenCalled();
     back();
     expect(closeSettings).toHaveBeenCalledOnce();
+    sendNavInput("mouse", "forward");
+    expect(page.pane()).toBe("skills");
+    sendNavInput("mouse", "forward");
+    expect(page.el.querySelector(".skl-page")).not.toBeNull();
+    sendNavInput("mouse", "forward");
+    expect(document.querySelector(".skl-details")?.textContent).toContain("Skill notes");
   });
 });
 
@@ -153,7 +172,7 @@ test.each(navInputs)("navigation in the key recorder never records a navigation 
   expect(recorded).not.toHaveBeenCalled();
 });
 
-test.each(navInputs)("back clears a private vault draft and leaves Settings open with %s", async input => {
+test.each(navInputs)("Back protects a private vault draft and leaves Settings open with %s", async input => {
   await mount("safety");
   click('[data-vault="new"]');
   click('#app-popover [data-value="contact"]');
@@ -162,33 +181,30 @@ test.each(navInputs)("back clears a private vault draft and leaves Settings open
   pressLayer(input, "forward");
   expect(field.value).toBe("unsaved");
   pressLayer(input);
-  expect(field.value).toBe("");
+  expect(field.value).toBe("unsaved");
+  expect(document.activeElement).toBe(field);
+  click('[data-vault="cancel"]');
   expect(page.el.querySelector(".vault-editor")).toBeNull();
   expect(closeSettings).not.toHaveBeenCalled();
 });
 
-test.each(navInputs)("Settings retraces Usage's overview and analysis before closing with %s", async input => {
+test.each(navInputs)("Back closes Settings and Forward restores the selected Usage tab with %s", async input => {
   await mount("usage");
-  const navigation = new Navigation({
-    where: () => ({ page: "agent", pane: page.pane(), paneView: page.navView() }),
-    inGuide: () => false,
-    stepLayer: stepOpenLayer,
-    show(place) { expect(place.pane).toBe("usage"); page.showNavView(place.pane!, place.paneView!); },
-  });
-  const stop = installNavInput(window, direction => navigation.step(direction), hasOpenLayer);
-  try {
-    navigation.note();
-    click('[data-usage-tab="analysis"]');
-    sendNavInput(input, "back");
-    expect(page.navView()).toBe("overview");
-    sendNavInput(input, "forward");
-    expect(page.navView()).toBe("analysis");
-    sendNavInput(input, "forward");
-    expect(closeSettings).not.toHaveBeenCalled();
-    sendNavInput(input, "back");
-    sendNavInput(input, "back");
-    expect(closeSettings).toHaveBeenCalledOnce();
-  } finally { stop(); }
+  click('[data-usage-tab="analysis"]');
+  pressLayer(input, "back");
+  expect(page.el.hidden).toBe(true);
+  pressLayer(input, "forward");
+  expect(page.el.hidden).toBe(false);
+  expect(page.el.querySelector('[data-usage-tab="analysis"]')?.getAttribute("aria-selected")).toBe("true");
+});
+
+test.each(navInputs)("Back closes Settings from Models selected after General with %s", async input => {
+  await mount("general");
+  click('[data-pane="models"]');
+  pressLayer(input, "back");
+  expect(page.el.hidden).toBe(true);
+  pressLayer(input, "forward");
+  expect(page.pane()).toBe("models");
 });
 
 test("opening Settings and navigating back to Models starts at the top and a redraw preserves its position", async () => {
@@ -246,6 +262,8 @@ test("快速提問 picks its effort inside the model list, as the answer model d
 
 beforeEach(() => {
   vi.restoreAllMocks(); vi.resetAllMocks(); listeners.clear(); setLocale("en");
+  closeSettings.mockImplementation(() => { page.hide(); page.el.hidden = true; });
+  go.mockImplementation((id, pane) => { if (id === "settings") { page.el.hidden = false; void page.show(pane); } });
   api.integrationsCatalog.mockRejectedValue(new Error("offline"));
   api.core.mockImplementation(async method => method === "memory.get" ? {text:"",revision:0} : method === "safety.rules.list" ? {rules:[]} : {});
   api.settingsGet.mockResolvedValue({ settings: { stt_engine: "cloud" } });
@@ -268,7 +286,7 @@ beforeEach(() => {
   api.membersList.mockRejectedValue(new Error("offline"));
   api.settingsSet.mockImplementation(async (key: string, value: string) => ({ settings: { stt_engine: "cloud", [key]: value } }));
 });
-afterEach(() => { page?.hide(); document.body.innerHTML = ""; setLocale("zh-TW"); });
+afterEach(() => { clearLayerForward(); page?.hide(); document.body.innerHTML = ""; setLocale("zh-TW"); });
 
 /** A week of `usage.analytics`, as the core answers it (brain/usage.py). */
 const DAYS = ["2026-11-15", "2026-11-16", "2026-11-17", "2026-11-18", "2026-11-19", "2026-11-20", "2026-11-21"];

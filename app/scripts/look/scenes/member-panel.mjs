@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { scene, member, click, wait, check, key, hover } from './steps.mjs';
+import { scene, member, click, wait, check, key, hover, sideButton } from './steps.mjs';
 
 const fixture = JSON.parse(readFileSync(join(import.meta.dirname, '../fixture.json'), 'utf8'));
 /** The fixture's members with member `id` as the slime `avatar` (a yellow or a white-ish one, for the colour on its switches). */
@@ -10,6 +10,12 @@ const details = [member(1), {action:'open-details'}, wait('.mb-det[data-details-
 const computer = (phase = 'unavailable') => [...details, click('.mb-tabs [data-tab="computer"]'), wait(`.desktop-panel:not([hidden])[data-desktop-state="${phase}"]`)];
 const state = (value, extra = {}) => ({desktop:{state:value,ready:value==='running',control:'member',host:'',target:'synthetic-member',...extra}});
 export default [
+  scene('nav-side-panel', 'Back closes the opened Computer panel and Forward restores its tab', [
+    ...details, click('.mb-det [data-det="close"]'), wait('.conversation-trigger[aria-expanded="false"]'),
+    { action: 'open-details' }, click('.mb-tabs [data-tab="computer"]'), wait('.mb-det[data-details-tab="computer"]'),
+    sideButton('back'), wait('.conversation-trigger[aria-expanded="false"]'), check('nav-conversation-1'),
+    sideButton('forward'), wait('.conversation-trigger[aria-expanded="true"]'), wait('.mb-det[data-details-tab="computer"]:not([hidden])'),
+  ]),
   scene('member-panel-details', 'Details opens first with the routines and no list of past work', [...details,wait('.mb-rts .mb-rt'),check('member-panel-details')]),
   scene('member-panel-details-empty', 'Details keeps one-line empty sections', [...details,check('member-panel-details-empty')], {routineEmpty:true}),
   // The computer lives in the third tab only, for every member, Raphael included:

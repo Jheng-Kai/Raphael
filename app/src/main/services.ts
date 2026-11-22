@@ -3,7 +3,8 @@
 // services.set_key and never retained in view state. The core returns configuration status only.
 // servicesHTML draws snapshots; createServices owns actions.
 
-import { keepEditedField, LayerViews } from "./nav-layers";
+import { rememberLayerBack } from "./nav-history";
+import { keepEditedField } from "./nav-layers";
 import { noticeHTML } from "./missing";
 import * as api from "./api";
 import { isTopLayer, registerDismissal } from "./dismissals";
@@ -404,7 +405,6 @@ export function createServices(host: ServicesHost): ServicesPanel {
   let loads = 0;
   /** The dialog is on its way out (140 ms): a second close waits for the first. */
   let closing = false;
-  let views: LayerViews<string | null> | undefined;
   let stopOutside: (() => void) | null = null;
 
   const redraw = (): void => {
@@ -412,18 +412,23 @@ export function createServices(host: ServicesHost): ServicesPanel {
     if (open && !stopOutside && typeof document !== "undefined") {
       const root = host.root ?? document.querySelector("#svc-dialog")?.parentElement?.parentElement;
       if (root) {
-        views = new LayerViews<string | null>(null);
         stopOutside = registerDismissal(() => closing ? null : root.querySelector<HTMLElement>("#svc-dialog"), closeDialog, undefined, undefined,
-          direction => views!.step(direction, service => service ? showService(service) : showList()),
-          panel => {
-            if (busy !== null || keepEditedField(panel)) return true;
-            if (!open?.service) return false;
-            backToList();
-            return true;
+          {
+            step: direction => {
+              if (busy !== null) return true;
+              if (direction !== "back") return false;
+              if (keepEditedField(root.querySelector("#svc-dialog")!)) return true;
+              if (!open?.service) return false;
+              backToList();
+              return true;
+            },
+            restore: () => {
+              const key = navView();
+              return () => showNavView(key);
+            },
           });
       }
     } else if (!open) { stopOutside?.(); stopOutside = null; }
-    if (open) views?.visit(open.service);
   };
   const view = (): ServicesView => ({ status, busy, open, slide });
   const current = (): ServicesStatus | null => (typeof status === "object" ? status : null);
@@ -499,7 +504,8 @@ export function createServices(host: ServicesHost): ServicesPanel {
   }
 
   function backToList(): void {
-    if (!views?.step("back", service => service ? showService(service) : showList())) showList();
+    const service = open?.service;
+    if (service) rememberLayerBack(showList, () => showService(service));
   }
 
   // ----- the switch and 「使用」 -----

@@ -2,6 +2,7 @@
 // the owner changes about a member lives on the member settings page (member-settings.ts), which the gear opens in the
 // main area where the conversation is.
 
+import { clearLayerForward } from "./nav-history";
 import { noticeHTML } from "./missing";
 import "./messaging.css";
 import { openRoutineView } from "./routine-view";
@@ -105,6 +106,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     workTimer = setTimeout(() => { workTimer = undefined; if (!el.hidden) void loadWork(true); }, Math.min(1500, Math.max(0, workSince + 5000 - now)));
   }
   function select(page: DetailsTab): void {
+    if (tab !== page) clearLayerForward();
     tab = page; draw();
     el.dispatchEvent(new CustomEvent('member-panel-tab', {bubbles:true}));
     if (page !== 'computer') void loadWork();

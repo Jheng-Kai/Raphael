@@ -13,8 +13,11 @@ export default [
   scene("skill-library-open", "The round back and close share the plugin title row. Access, ⋯ and the switch sit below it, followed by left-aligned skill rows.", [...opened, check("skill-library-open")]),
   scene("skill-library-skill-details", "Right-clicking a skill row opens its overflow, whose Details action reveals the full description", [
     ...opened, rightClick('.skl-page [data-library-skill="101"]'), click('[data-pick="details"]'), wait(".skl-details"), check("skill-library-skill-details")]),
-  scene("nav-side-plugin", "Mouse Back returns from a plugin to Team skills and restores focus to its row", [
-    ...opened, sideButton("back"), waitGone(".skl-page"), check("nav-side-plugin"),
+  scene("nav-side-plugin", "Back returns from a skill to its plugin, Team skills and the conversation. Forward restores all three", [
+    ...opened, rightClick('.skl-page [data-library-skill="101"]'), click('[data-pick="details"]'), wait(".skl-details"),
+    sideButton("back"), waitGone(".skl-details"), wait(".skl-page"),
+    sideButton("back"), waitGone(".skl-page"), check("nav-side-plugin"), sideButton("back"), check("nav-settings-closed"),
+    sideButton("forward"), wait(".skl-pack"), sideButton("forward"), wait(".skl-page"), sideButton("forward"), wait(".skl-details"),
   ]),
   scene("skill-library-refresh", "A package shows progress on its own page while its update is pending", [
     ...opened, check("skill-library-open"), click('[data-skl="more"][data-key="set:1"]'), click('[data-pick="refresh"]'),

@@ -13,6 +13,7 @@ import { selectSlimeTab, slimeKeys, slimePickerHTML as slimeTabsPickerHTML } fro
 import { onLocaleChange, t } from "./i18n";
 import "./member-profile.css";
 import { isTopLayer, registerDismissal } from "./dismissals";
+import type { NavStep } from "./nav-history";
 import { keepEditedField } from "./nav-layers";
 import {
   GROUP_NAME_MAX,
@@ -53,6 +54,12 @@ export interface DialogOptions {
   cls?: string;
   /** No × in the head: the dialog is answered by its buttons, Escape and a press beside it (a question's compact box). */
   noClose?: boolean;
+  /** Confirmation and setup dialogs own their answer buttons. */
+  blockNavigation?: boolean;
+  navigationRestore?(): () => void;
+  /** Draft state held outside form controls. */
+  navigationDirty?(): boolean;
+  navigationSuspend?: boolean;
   /** Controls of what the dialog shows, as HTML, in its head before the × (a larger diagram's zoom); a `data-dlg` reaches onAct. */
   tools?: string;
 }
@@ -72,6 +79,7 @@ export function openDialog(o: DialogOptions): Dialog {
     (o.actions.primary || o.actions.secondary || o.actions.destructive ? actionRow({ ...o.actions, cls: "mb-dlg-act" }) : "") +
     `</div>`;
   let open = true;
+  const blocked = o.blockNavigation ?? o.noClose ?? false;
   const mayClose = (): boolean => !o.canClose || o.canClose();
   let stopOutside = (): void => {};
   let stopLocale = (): void => {};
@@ -82,8 +90,8 @@ export function openDialog(o: DialogOptions): Dialog {
       open = false;
       stopOutside();
       stopLocale();
-      closeMenu();
-      const keepFocus =
+      if (scrim.isConnected) closeMenu();
+      const keepFocus = !scrim.isConnected ||
         document.activeElement instanceof HTMLElement &&
         document.activeElement !== document.body &&
         !scrim.contains(document.activeElement);
@@ -137,13 +145,38 @@ export function openDialog(o: DialogOptions): Dialog {
       if (mayClose()) dialog.close();
     } else o.onAct(target.dataset.dlg ?? "", target, dialog);
   });
-  document.addEventListener("keydown", onKey, true);
-  document.body.append(scrim);
-  // Transient forms have a locale-specific snapshot; reopening rebuilds it from its source.
-  stopLocale = onLocaleChange(() => { if (mayClose()) dialog.close(); });
-  stopOutside = registerDismissal(dialog.el, () => dialog.close(), mayClose, undefined, undefined,
-    panel => keepEditedField(panel, 'input:not([type="search"]), textarea, select'));
-  (dialog.el.querySelector<HTMLElement>("input:not([type=file]), textarea") ?? dialog.el.querySelector<HTMLElement>('[data-dlg="cancel"]') ?? dialog.el.querySelector<HTMLElement>(".mb-dlg-act .btn"))?.focus();
+  // A clean dialog without close-side effects can return with its controls and listeners intact.
+  let backFocus: HTMLElement | null = null;
+  const detach = (): void => {
+    backFocus = dialog.el.contains(document.activeElement) ? document.activeElement as HTMLElement : null;
+    stopOutside();
+    stopLocale();
+    scrim.remove();
+    document.removeEventListener("keydown", onKey, true);
+    opener?.focus({ preventScroll: true });
+  };
+  const canResume = o.navigationSuspend || !o.onClosing && !o.onClose;
+  const navigation = {
+    back: canResume && !o.navigationRestore ? detach : undefined,
+    discard: canResume ? () => dialog.close() : undefined,
+    step: (direction: NavStep): boolean => blocked || !mayClose() || direction === "back" && (
+      !!o.navigationDirty?.() || keepEditedField(dialog.el, 'input:not([type="search"]), textarea, select')
+    ),
+    restore: () => {
+      if (o.navigationRestore) return o.navigationRestore();
+      if (canResume) return () => { if (open) attach(backFocus); };
+    },
+  };
+  function attach(focus: HTMLElement | null): void {
+    document.body.append(scrim);
+    document.addEventListener("keydown", onKey, true);
+    stopLocale = onLocaleChange(() => { if (mayClose()) dialog.close(); });
+    stopOutside = registerDismissal(dialog.el, () => dialog.close(), mayClose, undefined, navigation);
+    focus?.focus({ preventScroll: true });
+  }
+  attach(dialog.el.querySelector<HTMLElement>("input:not([type=file]), textarea")
+    ?? dialog.el.querySelector<HTMLElement>('[data-dlg="cancel"]')
+    ?? dialog.el.querySelector<HTMLElement>('.mb-dlg-act .btn'));
   return dialog;
 }
 
@@ -182,6 +215,7 @@ export function offerRoutine(offer: RoutineOffer): Promise<boolean> {
     openDialog({
       title: t("members.offerTitle"),
       cls: "mb-confirm mb-offer",
+      blockNavigation: true,
       body: `<div class="mb-offer-t"><b>${esc(offer.title)}</b>${routineSentenceHTML({schedule:offer.schedule})}</div>`,
       actions: { secondary: btn(esc(t("members.offerNo")), "", ' data-dlg="no"'), primary: { label: esc(t("members.offerYes")), attrs: ' data-dlg="yes"' } },
       onAct(act, _target, dialog) {
@@ -217,6 +251,7 @@ export function askGroupName(title: string, current = "", label = t("members.gro
         else dialog.close();
       },
       onEnter: save,
+      navigationSuspend: true,
       onClose: () => resolve(result),
     });
   });
@@ -279,6 +314,8 @@ export function editSources(group: MemberGroup): Promise<MemberSource[] | null> 
         } else dialog.close();
       },
       onEnter: add,
+      navigationSuspend: true,
+      navigationDirty: () => sources.length !== group.sources.length || sources.some((source, i) => source !== group.sources[i]),
       onClose: () => resolve(result),
     });
   });
@@ -368,14 +405,21 @@ export interface AvatarPickerOptions {
  * The small popover of a picture: the slimes and, for the owner and Raphael, also 「從電腦選…」. A member's face is a slime:
  * there is no picture drawn by an image model.
  */
-export function openAvatarPicker(anchor: HTMLElement, o: AvatarPickerOptions): void {
+export function openAvatarPicker(anchor: HTMLElement, o: AvatarPickerOptions, tab?: string): void {
   const actions = [...(o.onComputer ? [{ label: t("members.fromPc"), run: o.onComputer }] : []), ...(o.more ?? [])];
   const slimes = (o.slimes ? slimeTabsPickerHTML(o.current, esc) : "") +
     actions
       .map((action, i) => `<button type="button" role="menuitem" tabindex="-1" class="menu-action" data-pick="${i}"><span class="mt">${esc(action.label)}</span></button>`)
       .join("");
   let el: HTMLElement;
-  el = openPopover(anchor, slimes, { className: "menu mb-avpop", role: "menu", label: t("settings.avatar"), placement: "center", onKey: (e) => slimeKeys(el, e) });
+  el = openPopover(anchor, slimes, {
+    className: "menu mb-avpop", role: "menu", label: t("settings.avatar"), placement: "center", onKey: e => slimeKeys(el, e),
+    navigation: { restore: () => {
+      const selected = el.querySelector<HTMLElement>('[data-slime-tab][aria-selected="true"]')?.dataset.slimeTab;
+      return () => { if (anchor.isConnected) openAvatarPicker(anchor, o, selected); };
+    } },
+  });
+  if (tab) selectSlimeTab(el, tab);
   el.addEventListener("click", (e) => {
     const target = (e.target as Element).closest<HTMLElement>("button");
     if (!target) return;

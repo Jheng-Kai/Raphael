@@ -341,7 +341,7 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
     if (press === "none" || asking || live.refused) return;
     asking = true;
     openDialog({
-      title: t(title), body: `<p class="pg-ask-words">${esc(shown)}</p>`, cls: "mb-confirm pg-ask",
+      title: t(title), body: `<p class="pg-ask-words">${esc(shown)}</p>`, cls: "mb-confirm pg-ask", blockNavigation: true,
       actions: { secondary: btn(esc(t("common.cancel")), "", ' data-dlg="cancel"'), primary: { label: esc(t("page.askYes")), attrs: ' data-dlg="yes"' } },
       onAct(action, _target, dialog) {
         if (action === "yes") act(); else live.refused = true;
@@ -478,6 +478,7 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
     area.addEventListener("scroll", () => { live.reading = area.scrollTop; }, { passive: true });
     host.open({
       id: live.id, title, kind: "page", opener: card.querySelector<HTMLElement>(".pg-body"),
+      reopen: () => { void show(live.id, title, () => {}); },
       // A plugin's page works through its host, which a file does not have.
       action: live.opened?.source === "mcp" ? undefined : { icon: "fileDown", label: t("page.report.share"), run: () => { void share(live); } },
       leave() {
@@ -555,7 +556,10 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
     const host = view();
     waiting = id;
     host.watchClose(() => { if (waiting === id) waiting = null; done(); });
-    host.open({ id, title, kind: "page", leave() { /* the content that comes brings its own */ } });
+    host.open({
+      id, title, kind: "page", leave() { /* the content that comes brings its own */ },
+      reopen: () => { void show(id, title, () => {}); },
+    });
     const card = await cardFor(id);
     // The owner went back while it was read, or asked for another page.
     if (waiting !== id || host.shown()?.id !== id) return false;

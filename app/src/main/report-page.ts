@@ -739,7 +739,7 @@ export function mountReportView(pages: PageView, people: () => ReportPeople): Re
     // box, which shares a member (the two must not look alike).
     host.innerHTML = `<div class="rp-scroll" tabindex="-1"><article class="rp-doc">${reportHTML(opened.title, opened.report, people())}</article></div>`;
     if (!host.isConnected) pages.body.replaceChildren(host);
-    pages.open({ id, title: opened.title, kind: "report", opener, leave, action: { icon: "fileDown", label: t("page.report.share"), run: () => { void share(); } } });
+    pages.open({ id, title: opened.title, kind: "report", opener, leave, reopen: () => { void show(id, false); }, action: { icon: "fileDown", label: t("page.report.share"), run: () => { void share(); } } });
     layout(true);
     const page = scroller()!;
     page.scrollTop = place;

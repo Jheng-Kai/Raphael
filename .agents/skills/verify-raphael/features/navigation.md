@@ -94,20 +94,51 @@ and fails if `models.catalog` or `brains.cli` began while `members.list` or `roo
 overlapped, or if a first-view read was never asked for. The roster carries no pictures (`members.picture`, R-START-06): the look mock
 still inlines `avatar_url`, so the picture path is covered by vitest, not by look.
 
-## Keyboard navigation through views
+## Back and Forward
 
-R-NAV-03. Left Alt with an arrow or Command with a bracket retraces conversations, groups, pages, and views within Settings or member settings. An on-screen Back arrow and Escape share that history when they land on the preceding view. These scenes drive the platform's keyboard shortcuts.
+Mouse Back (XButton1), Mouse Forward (XButton2), left Alt+Left/Right and Command+[ / Command+] in the main window use R-NAV-03 and R-NAV-04. Place history retains fifty visits and skips deleted destinations. Each Back press closes the current menu, goes up one level, closes an opened layer at its root, or retraces a place. Forward reverses the Back steps of a layer from the place where it was left, until a new choice. Tabs and sections are not steps.
+
+| Surface | Back | Forward |
+| --- | --- | --- |
+| Member conversation, older conversation, group room | Previous retained conversation or room. An unanswered card or unsent composer draft keeps the current place. | Next retained place. The same guard applies. |
+| Calendar / Automations | Previous place. Day, week and month, date and mini calendar, and filter controls stay within Calendar. | Next place. |
+| Dictation | Previous place. Overview, History and Dictionary are sibling tabs. A date filter, search or pagination does not add a stop. | Next place, with the current Dictation tab. |
+| Settings | Close Settings over the current place from General, Models, Usage, Tools, Team skills, Dictation, Safety or About. | Reopen the selected Settings section. |
+| Settings ? Usage / Overview / Analysis, period and chart controls | Close Settings. The usage tabs and filters stay within the section. | Reopen Settings on the selected Usage tab. |
+| Connect apps / Connectors / categories, search, recommendations | Close Connectors over the same place. | Reopen its list and selected category. |
+| Connectors ? Connected apps ? app or server, including Slack; tools and audit disclosures | Return to the list that opened the app or server. From Connected apps return to Connectors. Disclosures stay within the app page. | Open the list or app or server that Back left. |
+| Connectors ? Add or edit server; Composio key | A clean editor returns to its source page or list. An unsaved or busy editor keeps its input. | Reopen the editor after a clean exit. |
+| Connection setup / device sign-in / CLI welcome | Keep the setup or sign-in and its own actions. | Keep the setup or sign-in and its own actions. |
+| Models ? provider directory ? provider setup; configured provider | A clean new provider goes to the directory. From the directory or a configured provider go to Models. Busy, dirty and confirmation states stay open. | Reopen the directory or provider setup that was left. |
+| Tools ? search, read, image or PDF service picker ? service setup | A clean setup goes to the service list. From the list go to Tools. A dirty or busy setup stays open. | Reopen the service list or selected setup. |
+| Team skills ? plugin ? skill details; standalone skill details | Close skill details to the plugin or list, then leave the plugin for Team skills, then close Settings. Import fields with unsaved text stay put. | Reopen Team skills, then plugin, then skill details in that order when each was closed. |
+| Member settings / Tools, Skills and Commands, Persona and Instructions, Notifications | Close member settings to the same conversation. Profile fields which save on blur use that save path. | Reopen member settings on the selected section. |
+| Member settings ? skill, command, cover repositioning or inline import | Return from a clean skill or command to its section. Exit an unchanged cover adjustment. Keep edits, a changed cover and a nonempty import field. | Reopen a skill or command that Back left. |
+| Member side panel / Details, Library, Computer; Library filters | Close an owner-opened panel to the same conversation. A column shown by default leaves Back to the place or a more specific layer. Tab and filter changes stay in the panel. | Reopen the panel on the same tab. |
+| Computer location / local or SSH host | Close the clean picker. Keep a changed SSH alias and let its normal save finish. | Reopen the location picker. |
+| Computer watch and teaching review | Return from a clean review or fold the enlarged watch view. Owner control and in-progress or dirty review keep their own actions. | Restore the review or enlarged watch view that was left. |
+| Group side thread | Close the clean thread to the room. Keep unsent content and pending questions. | Reopen the same side thread. |
+| Peer conversation, opened HTML/plugin page or report | Return to the surrounding conversation or room. | Reopen the same peer conversation, page or report if it is still available. |
+| Conversation Find and floating working card | Close Find or return the card to its original position. | Reopen Find or put the card back in its floating position. |
+| Conversation picture, picture draft and fullscreen video | Close the viewer. The place, draft chips and video playback position stay with their source. | Reopen the same viewer. |
+| Calendar event and rhythm detail | Close the detail to Calendar. | Reopen the detail. |
+| Calendar editor, routine details, routine template review | Return a clean editor to its source. Keep edited fields. A preview of a routine or template field returns to the review. The clean top-level review closes over its place. | Reopen the clean editor or review level. |
+| Member maker and avatar picker / slime tabs | Close the clean maker or the avatar picker. The maker keeps unsaved name and avatar changes. Tab choices stay within the picker. Photo crop keeps its edit controls. | Reopen on the selected tab. |
+| Model chooser / source tabs, filter, effort; composer model card ? sources ? models | Close the chooser from any source. From a composer model card inner page go to its parent, and from its root close it. | Reopen the chooser on its selected source or replay the composer model card levels. |
+| Primary contact or replacement, date, emoji, working folder and action mode pickers | Close the picker over its opener. | Reopen with its current selection, shown month or emoji search. |
+| Member store, template gallery and review / summary, profile, skills, routines, connections | Close a clean top-level dialog over its opener. A template detail goes to its review summary. | Reopen the preserved dialog or review detail with its controls. |
+| Member/group forms, shortcut editor, MCP import and Settings/vault/safety inline forms | Close a clean dismissible dialog. Keep edited fields or follow the existing cancellation and recording policy. | Reopen a clean reversible dialog. Recovery and recording controls keep their own actions. |
+| Confirmation dialogs, menu confirmations, dictionary import review and inline permission / yes-no cards | Keep the question open for its answer controls. | Keep the question open. |
+| Dictionary add word | Close the empty add form. Keep entered words in the form. | Reopen the empty add form. |
+| First-run and replayed setup guide / welcome, tools, services, abilities | Return to the previous step within the guide. At the first step stay there. | Advance only to a guide step just left. |
+| Transient menus and popovers | Dismiss the top menu or popover only, as Escape does. Includes account and usage submenu, member/group/sidebar context, composer + and its submenus, slash/mention, reaction bar, link preview, message quote control, dropdowns, actions, language/time zone and calendar tools. | While open, consume Forward. Dismissed transient menus are not destinations. |
+| Other sibling controls / library filters, categories, usage periods, emoji categories, room meeting views, calendar views | Use the containing surface's action. Changing the sibling adds no step. | Restore the containing surface where supported. |
+| Native file and OS dialogs, external browser, separate dictation / quick overlay windows | They own their own input. The main-window place history is not used. | They own their own input. |
+
+## Verification
 
 ```powershell
-npm run look -- nav-steps-member-settings nav-steps-skill-arrow nav-steps-settings nav-steps-conversations nav-layer-settings --theme both --width 1120,720,1920x1080
+npm run look -- nav-steps-member-settings nav-side-member-settings nav-steps-skill-arrow nav-steps-settings nav-steps-conversations nav-side-members nav-side-panel nav-layer-settings nav-side-settings nav-layer-plus nav-layer-picture nav-layer-maker nav-side-slack nav-side-plugin --theme both --width 1120,720,1920x1080
 ```
 
-## Mouse side buttons
-
-R-NAV-04. Mouse Back closes an open menu or popover first. In an inner page it follows the same parent as the page's Back button, including Settings, team skills, provider setup, the Details panel and a room's side thread. At the top level it closes only the current dialog or floating panel and leaves the place underneath visible. A back press keeps unsaved fields under the same policy as the visible Back control. At a docked Details root or in a conversation without a layer, Back and Forward retrace a member's conversation, a group room or a page such as the calendar. Without a previous place, Back leaves the current place visible. A new place switch discards the forward entries and deleted destinations are skipped. Forward leaves dismissed layers closed. The first-run guide keeps its own steps.
-
-```powershell
-npm run look -- nav-side-members nav-side-settings nav-layer-plus nav-layer-picture nav-layer-maker nav-side-slack nav-side-plugin --theme both --width 1120,720,1920x1080
-```
-
-The member scene checks the selected member and conversation header after each press and the details panel's open state and tab across both steps. The Settings scene checks that one Back closes Settings over the second member and Forward leaves that conversation visible. The other side-button scenes show the composer menu after its apps submenu closes, the group draft after its picture closes, and the member maker with its draft restored when reopened. The Slack scene follows Settings › Connectors › Slack, Back to Connectors, then Back to the same member. The plugin scene steps back from the plugin page to the team skill list.
+The scenes use the real main-window entry. Conversation checks keep the selected member and header in agreement. The member settings, side panel, maker, Settings and Usage scenes assert the selected sibling after Forward. The Slack and plugin scenes assert each nested level and the unchanged conversation beneath it. The composer menu checks one dismissal per Back; the picture journey keeps both group attachments. Native side buttons and macOS navigation chords remain separate acceptance.

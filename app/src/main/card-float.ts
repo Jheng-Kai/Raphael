@@ -110,7 +110,7 @@ export function mountCardFloat(o: { stage: HTMLElement; scroller: HTMLElement; t
     setTimeout(() => target.classList.remove("is-flash"), FLASH_MS);
   });
   // Escape puts a floating card back, as the window's other layers close (nav-layers.ts).
-  bindNavLayer(pill, () => { land(); openButton.focus({ preventScroll: true }); }, { active: () => !!place });
+  bindNavLayer(pill, () => { land(); openButton.focus({ preventScroll: true }); }, { active: () => !!place, restore: () => () => openButton.click() });
   // A window that changes size would leave a floating card where the column was: it lands, and the pill stays.
   window.addEventListener("resize", land);
 

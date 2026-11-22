@@ -3,6 +3,7 @@
 // the core wrote goes through `esc` first.
 
 import { onLocaleChange, t, translatedMessage } from "./i18n";
+import type { LayerNavigation } from "./nav-layers";
 import { pressWentThrough, pressWithoutOpener, registerDismissal } from "./dismissals";
 
 import { type Notifier, UNDO_MS } from "./undo";
@@ -398,7 +399,6 @@ interface MenuState {
   stopHover?: () => void;
   completion?: (choices: Choice[], pick: (value: string) => void, anchorRect?: () => DOMRect) => void;
   completionRect?: DOMRect;
-  reopen?: HTMLElement;
 }
 let menu: MenuState | null = null;
 let menuListening = false;
@@ -717,6 +717,7 @@ function listenForSubmenus(state: MenuState): void {
 }
 
 export interface PopoverOptions {
+  navigation?: LayerNavigation;
   /** Beside preserves its parent menu; start aligns text completions above their character; right stands on the anchor's right, ending where it ends; middle stands in the middle of the window, whatever the anchor. */
   placement?: "beside" | "start" | "above" | "center" | "right" | "middle";
   /** A live text/caret rectangle; the field remains the dismissal and focus anchor. */
@@ -749,7 +750,6 @@ export function openPopover(anchor: HTMLElement, html: string, o: PopoverOptions
   const rect = at ? pointRect(at) : (parentRect ? { top: rowRect.top, bottom: rowRect.bottom, height: rowRect.height,
     left: parentRect.left, right: parentRect.right, width: parentRect.width } as DOMRect : previous ?? rowRect);
   if (parent) {
-    parent.reopen = undefined;
     while (menu && menu !== parent) closeMenuLevel();
   }
   if (!parent) closeMenu();
@@ -772,16 +772,8 @@ export function openPopover(anchor: HTMLElement, html: string, o: PopoverOptions
     }
     : () => { const root = menuRootAnchor(); closeMenu(); if (!pressWentThrough()) root?.focus({ preventScroll: true }); };
   menu = { el, anchor, rect, parent, placement: at ? "pointer" : o.placement, anchorRect: at ? () => pointRect(at) : o.anchorRect, at,
-    stopOutside: registerDismissal(el, dismiss, undefined, parent?.el ?? anchor, direction => {
-      if (direction === "back" && parent) {
-        dismiss();
-        parent.reopen = anchor;
-        anchor.focus({ preventScroll: true });
-        return true;
-      }
-      if (direction === "forward" && menu?.reopen?.isConnected) menu.reopen.click();
-      return false;
-    }), onKey: o.onKey, onClose: o.onClose };
+    stopOutside: registerDismissal(el, dismiss, undefined, parent?.el ?? anchor,
+      o.navigation ?? { step: direction => direction === "forward" }), onKey: o.onKey, onClose: o.onClose };
   anchor.setAttribute("aria-expanded", "true");
   anchor.setAttribute("aria-controls", el.id);
   if (!o.deferPlacement) placeMenu();
@@ -799,7 +791,8 @@ export function openConfirmMenu(anchor: HTMLElement, o: { label: string; ask: st
   const el = openPopover(
     anchor,
     `<button type="button" role="menuitem" class="danger" tabindex="-1" data-confirm-item><span class="ck">${ico("trash")}</span><span class="mt">${esc(o.label)}</span></button>`,
-    { className: "menu mb-menu", role: "menu", label: anchor.getAttribute("aria-label") ?? undefined, onClose: () => clearTimeout(timer) },
+    { className: "menu mb-menu", role: "menu", label: anchor.getAttribute("aria-label") ?? undefined,
+      navigation: { step: direction => asking || direction === "forward" }, onClose: () => clearTimeout(timer) },
   );
   const item = el.querySelector<HTMLElement>("[data-confirm-item]")!;
   const say = (text: string): void => {

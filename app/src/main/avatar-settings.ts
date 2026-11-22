@@ -228,7 +228,7 @@ export function cropDialog(url: string): Promise<AvatarCrop | null> {
       scrim.querySelector('[data-act="crop-cancel"]')!.textContent = t("common.cancel");
       scrim.querySelector('[data-act="crop-done"]')!.textContent = t("settings.avatarDone");
     });
-    stopOutside = registerDismissal(scrim.querySelector<HTMLElement>(".av-crop")!, () => close(null));
+    stopOutside = registerDismissal(scrim.querySelector<HTMLElement>(".av-crop")!, () => close(null), undefined, undefined, { step: () => true });
     scrim.querySelector<HTMLElement>('[data-act="crop-done"]')!.focus();
   });
 }

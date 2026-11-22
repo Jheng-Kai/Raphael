@@ -191,7 +191,10 @@ export function openPeerChat(container: HTMLElement, trigger: HTMLElement, all: 
   paint();
   container.dataset.peerOpen = "";
   container.append(el);
-  bindNavLayer(el, close);
+  bindNavLayer(el, close, { restore: () => () => {
+    const opener = trigger.isConnected ? trigger : container.querySelector<HTMLElement>(`[data-peer-keys="${CSS.escape(keys)}"]`);
+    opener?.click();
+  } });
   document.addEventListener("keydown", key, true);
   const scroll = el.querySelector<HTMLElement>(".peer-scroll")!;
   const first = el.querySelector<HTMLElement>(`[data-peer-key="${CSS.escape(focus)}"]`);

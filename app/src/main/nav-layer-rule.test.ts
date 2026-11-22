@@ -10,11 +10,10 @@ const renderOwners: Record<string, [string, string]> = {
   "connections.ts:keyDialogHTML": ["cs-dialog", "registerDismissal"],
 };
 
-const registration = /\b(?:registerDismissal|bindNavLayer|bindLayerSteps|openPopover|openDialog)\s*\(/;
+const registration = /\b(?:registerDismissal|bindNavLayer|openPopover|openDialog)\s*\(/;
 // Escape also occurs in key decoding, history observation, focus routing and recording. These
 // functions do not create a dismissible layer. Full-page navigation uses the named page view.
 const keyOwners: Record<string, RegExp> = {
-  "nav-input.ts:key": /heard\(event\.key === "Escape"\)/,
   "window-hotkeys.ts:handle": /voiceCapture/,
   "safety-rules.ts:key": /cancelEdit\(\)/,
   "ui.ts:listenForMenuEvents": /registerDismissal\(el, dismiss/,
