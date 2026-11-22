@@ -749,7 +749,7 @@ export function installMock(fixture, config = {}, target = window) {
   }
   if (variant.computerCard) {
     const turn = structuredClone(data.computerTurns[variant.computerCard]);
-    if (variant.browserHandback) Object.assign(turn.computers[0], { browser: true, app: "Chrome" });
+    if (variant.browserHandback) Object.assign(turn.computers[0], { browser: true, app: "Chrome", note: variant.desktop.host_request.detail });
     data.turns.push(turn);
   }
   if (variant.composioResults) {
@@ -1464,6 +1464,11 @@ export function installMock(fixture, config = {}, target = window) {
         if (p.start_docker) data.desktop = {state:'stopped',ready:false,control:'member',host:'',target:'synthetic-member'};
         return p.check_host ? {host:p.alias,ok:false,checks:[{kind:'ssh',ok:true},{kind:'docker_path',ok:false,command:`ssh ${p.alias} "echo 'export PATH=/usr/local/bin:/opt/homebrew/bin:/Applications/Docker.app/Contents/Resources/bin:/usr/bin:/bin:/usr/sbin:/sbin' >> ~/.zshenv"`}]} : data.desktop ?? { state: "absent", ready: false, control: "member" };
       }
+      case "agent.computer_choice": {
+        if (p.member_id !== 1) throw new Error("Computer choice must go to the active member");
+        if (!variant.dockerMissing) data.desktop = {...data.desktop, transport: p.transport};
+        return {};
+      }
       case "computer.viewer_open": {
         if (variant.desktopStarts) data.desktop = { ...data.desktop, state: "running", ready: true };
         const session = `look-desktop-${++desktopSequence}`;
@@ -1471,7 +1476,8 @@ export function installMock(fixture, config = {}, target = window) {
         // Which seat a session is for, so a scene can tell one member's screen from another's (R-COMP-SWITCH-01): the
         // fixture's RFB page reads `seat`, and paints that seat's colour band when the scene asks (`seatMarks`).
         (state.sessionLog ??= []).push({ session, member: p.member_id });
-        return { session, url: `${location.origin}/scripts/look/fixtures/desktop.html?seat=${p.member_id ?? 0}${variant.seatMarks ? "&mark=1" : ""}${data.desktop?.transport === "host" ? "&transport=host" : ""}` };
+        const host = data.desktop?.transport === "host";
+        return { session, url: `${location.origin}/scripts/look/fixtures/${host ? "host.html" : "desktop.html"}?seat=${p.member_id ?? 0}${variant.seatMarks ? "&mark=1" : ""}${host ? "&transport=host" : ""}` };
       }
       case "computer.viewer_renew": return { ...data.desktop, ...(teaching ? {teaching} : {}), control: desktopSessions.get(p.session)?.held ? "owner" : "member" };
       case "computer.teach": {
@@ -2464,11 +2470,6 @@ export function installMock(fixture, config = {}, target = window) {
         return null;
       }
       if (command === "agent_ask_text") {
-        if (variant.computerChoice && args.text.includes("Docker")) {
-          if (args.memberId !== 1) throw new Error("Computer choice must go to the active member");
-          if (!variant.dockerMissing) data.desktop = {...data.desktop, transport:"docker"};
-          return null;
-        }
         if (variant.cardSendFailure && !variant.cardSendRetried) { variant.cardSendRetried = true; throw new Error("Synthetic send unavailable"); }
         if (variant.ownerAddition || variant.queuedOwner) {
           const active = data.turns.find(turn => turn.status === "running" && turn.member_id === args.memberId);

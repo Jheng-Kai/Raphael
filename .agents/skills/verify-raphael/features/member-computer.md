@@ -4,34 +4,37 @@
 
 R-COMP-CHOICE-01, R-COMP-CHOICE-02 and R-COMP-HOST-02 through R-COMP-HOST-06.
 The member receives both tool catalogs and a read-only computer status tool. The
-Computer tab streams the member's current tool. Its single dropdown sends the
-owner's choice into the current conversation and includes local and SSH locations
-when Docker is selected. A quiet status sits beside the dropdown. Missing Docker
-shows one line and a plain text action to ask Raphael, only with Docker chosen.
-The switch row under the screen is the opt-in to operate the owner's actual
-desktop. Its label and switch light as one control (R-UI-157). Docker maintenance
-remains available below the screen and by right-clicking the header.
+Computer tab streams the member's current tool. Its dropdown quietly steers the
+next step with an app note and includes Docker's local and SSH locations. A
+quiet status sits beside it. With Docker selected, a missing installation shows
+one line and a plain text action. Docker maintenance is available below the
+screen and by right-clicking the header. Only the owner's Alt+Space quick ask can
+operate the owner's actual desktop.
 
 Raphael Chrome runs headlessly with one shared profile in the machine-local data
 folder. Each turn or task owns its tabs and its action lock. Local Docker and
 Chrome share the member workspace and the team folder. Their browser profiles
 keep site sign-ins separately. Docker on another host uses its own volumes.
 
-The computer panel holds the same viewer lease and takeover controls for both
-transports. The private Chrome card keeps its exact tab, and only Done resumes
-its call. Each computer card has one close button. The last watcher leaving
-stops the screencast. Shutdown closes remaining relay connections and the profile
-process tree.
+Opening a page shows its live thumbnail in the conversation and opens the
+Computer tab on the same page. Both frames use the same rounded 1280 × 900
+aspect and the page fills it. The member tells the owner where to watch.
+A private takeover card shows the reason for an owner-only step such as sign-in
+or verification. Done disables input and resumes the original call on the same
+tab. Each computer card has one close button. The last watcher leaving stops the
+screencast. Shutdown closes relay connections and the profile process tree.
 
 Run from `app/`:
 ```sh
-npm run look -- member-settings desktop-computer-choice desktop-computer-choice-missing desktop-computer-choice-docker desktop-panel desktop-host-panel desktop-host-takeover desktop-host-handback --theme both --width 1120,720,1920x1080
+npm run look -- member-settings desktop-computer-choice desktop-computer-choice-missing desktop-computer-choice-docker desktop-panel desktop-host-live-card desktop-host-panel desktop-host-takeover desktop-host-handback --theme both --width 1120,720,1920x1080
 ```
 
 Inspect the member settings navigation, the single dropdown with its local and SSH
-entries, the lit permission row, the Chrome-to-Docker switch, the text action with
-Docker missing, and the private card's takeover and Done flow. The Look fixture exercises IPC and
-layout. Run `test_native_headless_chrome_frames_and_owner_input` and
+entries, quiet Chrome-to-Docker switching, the Docker setup text, the full-frame
+Chrome page in the live card and panel, and the private takeover and Done flow.
+Look uses the production canvas with fixture frames. Run
+`test_native_chrome_sign_in_handback_releases_input_and_resumes_same_tab`,
+`test_native_headless_chrome_frames_and_owner_input` and
 `test_chrome_has_scoped_tabs_page_input_private_forms_and_downloads` locally with CI
 unset. These native tests use isolated profiles and local pages. Headless Chrome
 has no desktop window or taskbar entry. Google Accounts can reject automated
@@ -1160,7 +1163,7 @@ Inspect every contact sheet and full-size computer state at light 720/dark 1120 
 ## Settings and lifecycle merge
 
 The computer tab header pairs its dropdown with a short state word. Maintenance
-lives below the preview, beside the desktop permission row when available. The
+lives below the preview. The
 computer dropdown opens the SSH editor with its explicit host check and copyable
 repairs from the existing viewer_status owner RPC.
 

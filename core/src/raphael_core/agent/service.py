@@ -986,6 +986,7 @@ class AgentService:
         self._inflight_members: dict[str, int] = {}
         self._inflight_scopes: dict[str, tuple[int, int | None]] = {}
         self._owner_loops = {}
+        self._computer_choices = {}
         from .inbox import AgentInbox
         self._inbox = AgentInbox(conn, self._history, now_ms)
         self._inbox.recover()
@@ -1060,6 +1061,7 @@ class AgentService:
         """Put the six methods of the assistant on `router`."""
         methods = {
             "agent.ask": self._ask,
+            "agent.computer_choice": self._computer_choice,
             "agent.confirm": self._confirm,
             "agent.cancel": self._cancel,
             "agent.history.list": self._history_list,
@@ -1479,16 +1481,35 @@ class AgentService:
 
     async def _join_running_work(self, ask):
         """A quick question or a messaging app's message said while its conversation works goes to that work."""
-        scope = (ask.speaker.id, ask.conversation_id)
+        return await self._steer_scope((ask.speaker.id, ask.conversation_id), ask.text)
+
+    async def _computer_choice(self, params):
+        member = params.get("member_id")
+        transport = params.get("transport")
+        if type(member) is not int or member < 0 or transport not in ("host", "docker"):
+            raise invalid_params("invalid computer choice")
+        conversation = self.conversations.destination(member, params.get("conversation_id"), quick=False)
+        scope = (member, conversation)
+        computer = "Raphael Chrome on this computer" if transport == "host" else "the isolated Docker computer"
+        note = (f"<app_note>The owner selected {computer} in the Computer panel for this work. "
+                "Use it for the next computer action. Continue the task without replying to this app note.</app_note>")
+        self._computer_choices.pop(scope, None)
+        if not await self._steer_scope(scope, note):
+            self._computer_choices[scope] = note
+            if len(self._computer_choices) > 128:
+                self._computer_choices.pop(next(iter(self._computer_choices)))
+        return {"chosen": True}
+
+    async def _steer_scope(self, scope, text):
         active = self._owner_loops.get(scope)
         if active and (origin := self._history.get(active.owner_turn_id)) is not None and origin.status not in ("running", "confirm"):
             self._owner_loops.pop(scope, None)
             active = None
         if active and not active.owner_input.closed:
-            if await active.steer(ask.text) if isinstance(active, CliLoop) else active.owner_input.add(ask.text):
+            if await active.steer(text) if isinstance(active, CliLoop) else active.owner_input.add(text):
                 return True
         steer = getattr(self._background, "steer", None)
-        return bool(steer is not None and await steer(ask.speaker.id, ask.conversation_id, ask.text))
+        return bool(steer is not None and await steer(*scope, text))
 
     async def _queue_ask(self, ask):
         scope = (ask.speaker.id, ask.conversation_id)
@@ -2142,7 +2163,7 @@ class AgentService:
         language = ask.language
         if not self._owner_screen(ask):
             return self._finish(ask, "operate", "negative", phrase(language, "computer_away"), ledger)
-        if self._computer is None or not getattr(self._plugins, "desktop_allowed", lambda member: True)(ask.speaker.id):
+        if self._computer is None:
             return self._finish(
                 ask, "operate", "negative", phrase(language, "computer_unavailable"), ledger
             )
@@ -2550,6 +2571,8 @@ class AgentService:
             native_base = user
             # Native history already holds this conversation; memory changes travel separately below.
             native_turn = build_user_message(**{**message_args, "context": [], "summary": ""}) if brain_ref(settings.model) else None
+            if not ask.nested and (note := self._computer_choices.pop((ask.speaker.id, ask.conversation_id), None)):
+                user += "\n\n" + note
             native_sections = {}
             if ask.exchange_speakers is not None:
                 user += "\n\nA colleague, another of the owner's assistants, asks you this for the owner. " + CONSULTED
@@ -6804,7 +6827,7 @@ class AgentService:
             text = "\n\n".join(saved or ask.replies) or text
         turn_id = self._record(ask, route, prefix, text, status, detail, ledger, failure=failure)
         if status != "confirm":
-            self._close_turn_browser(turn_id)
+            self._close_turn_browser(turn_id, keep_page=status == "done")
         replies = []
         if (ask.source != VOICE or not ask.speaker.is_raphael) and status != "confirm":
             replies = ask.replies or ([text] if status != "superseded" else [])
@@ -6820,10 +6843,10 @@ class AgentService:
             result["messages"] = list(replies)
         return result
 
-    def _close_turn_browser(self, turn_id):
+    def _close_turn_browser(self, turn_id, *, keep_page=False):
         close = getattr(self._plugins, "close_turn_browser", None)
         if turn_id and close is not None:
-            close(turn_id)
+            close(turn_id, keep_page=keep_page)
 
     @staticmethod
     def _done(turn_id: int, language: str, which: str, text: str, *, silent: bool = False) -> dict:

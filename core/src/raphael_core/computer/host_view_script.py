@@ -125,7 +125,7 @@ const modifiers = event => Number(event.altKey) + 2 * Number(event.ctrlKey)
 function pointer(event, type) {
     if (!interactive || !viewport) return;
     const rect = canvas.getBoundingClientRect();
-    const scale = Math.min(rect.width / canvas.width, rect.height / canvas.height);
+    const scale = Math.max(rect.width / canvas.width, rect.height / canvas.height);
     const x = (event.clientX - rect.left - (rect.width - canvas.width * scale) / 2) / (canvas.width * scale);
     const y = (event.clientY - rect.top - (rect.height - canvas.height * scale) / 2) / (canvas.height * scale);
     if (!canvas.hasPointerCapture(event.pointerId) && (x < 0 || x > 1 || y < 0 || y > 1)) return;

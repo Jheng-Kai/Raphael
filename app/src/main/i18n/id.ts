@@ -1,12 +1,10 @@
 import type { Messages } from "./zh-TW";
 
 export const id = {
-  "memberComputer.switchWork": "Gunakan {p0} untuk melanjutkan pekerjaan ini.",
   "memberComputer.switchFailed": "Pilihan komputer tidak dapat dikirim kepada anggota.",
   "memberComputer.stopFailed": "Tugas komputer tidak dapat dihentikan.",
   "memberComputer.returnFailed": "Kendali komputer tidak dapat dikembalikan kepada anggota.",
   "memberComputer.takeFailed": "Kendali komputer tidak dapat diambil.",
-  "memberComputer.permissionFailed": "Izin kendali desktop tidak dapat diperbarui.",
   "memberComputer.dockerRequired": "Docker perlu dipasang dahulu",
   "memberComputer.setupHelp": "Minta bantuan Raphael",
   "memberComputer.mode": "Komputer",
@@ -14,7 +12,6 @@ export const id = {
   "memberComputer.docker": "Mesin virtual (Docker)",
   "memberComputer.dockerLocation": "Mesin virtual ({p0})",
   "memberComputer.idle": "Siaga",
-  "memberComputer.desktopControl": "Kendalikan desktop",
   "memberComputer.setup": "Bantu saya menyiapkan komputer terisolasi (Docker).",
   "memberComputer.certificate": "Pilih atau konfirmasi sertifikat di {p0}.",
   "memberComputer.verification": "Masukkan kode verifikasi di {p0}.",

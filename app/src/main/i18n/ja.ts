@@ -5,12 +5,10 @@ import { missingJa } from "./missing-catalogs";
 import type { Messages } from './zh-TW';
 
 export const ja = {
-  "memberComputer.switchWork": "この作業は{p0}で続けてください。",
   "memberComputer.switchFailed": "コンピューターの選択をメンバーに送れませんでした。",
   "memberComputer.stopFailed": "コンピューターでの作業を停止できませんでした。",
   "memberComputer.returnFailed": "操作をメンバーに返せませんでした。",
   "memberComputer.takeFailed": "コンピューターの操作を引き継げませんでした。",
-  "memberComputer.permissionFailed": "デスクトップの操作権限を更新できませんでした。",
   "memberComputer.dockerRequired": "Docker が未導入",
   "memberComputer.setupHelp": "Raphael に頼む",
   "memberComputer.mode": "コンピューター",
@@ -18,7 +16,6 @@ export const ja = {
   "memberComputer.docker": "仮想マシン（Docker）",
   "memberComputer.dockerLocation": "仮想マシン（{p0}）",
   "memberComputer.idle": "待機中",
-  "memberComputer.desktopControl": "デスクトップを操作する",
   "memberComputer.setup": "分離されたコンピューター（Docker）の設定を手伝ってください。",
   "memberComputer.certificate": "{p0} で証明書を選択または確認してください。",
   "memberComputer.verification": "{p0} に確認コードを入力してください。",

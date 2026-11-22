@@ -103,8 +103,7 @@ def test_the_one_shared_list_becomes_every_members_own_with_the_output_folder_fi
     conn.commit()
     conn.close()
     conn = db.connect(path)
-    member, desktop_control = conn.execute("SELECT id, desktop_control FROM members").fetchone()
-    assert desktop_control == 0
+    member = conn.execute("SELECT id FROM members").fetchone()[0]
     folders = SettingsStore(conn).get("member_write_folders")
     assert folders == {"0": [str(tmp_path / "out"), str(tmp_path / "proj")], str(member): [str(tmp_path / "out"), str(tmp_path / "proj")]}
     assert conn.execute("SELECT 1 FROM settings WHERE key='owner_write_folders'").fetchone() is None

@@ -142,7 +142,7 @@ export const keychainAskAgain = (): Promise<{ refused: boolean }> => core("keych
 
 export const desktopStatus = (member_id: number, conversation_id?: number, transport?: "host" | "docker"): Promise<DesktopState> => core("computer.viewer_status", { member_id, conversation_id, transport });
 export const desktopWallpaper = (): Promise<{ image?: string }> => core("computer.wallpaper");
-export const desktopOpen = (member_id: number, options?: { conversation_id?: number; preview?: boolean }): Promise<DesktopSession> => core("computer.viewer_open", { member_id, ...options });
+export const desktopOpen = (member_id: number, options?: { conversation_id?: number; preview?: boolean; transport?: "host"; target_id?: string }): Promise<DesktopSession> => core("computer.viewer_open", { member_id, ...options });
 export const desktopRenew = (session: string): Promise<DesktopState> => core("computer.viewer_renew", { session });
 export const desktopControl = (session: string, held: boolean, takeover?: string): Promise<DesktopState> => core("computer.viewer_control", { session, held, takeover });
 export const desktopClose = (session: string): Promise<unknown> => core("computer.viewer_close", { session });

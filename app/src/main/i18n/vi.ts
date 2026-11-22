@@ -1,12 +1,10 @@
 import type { Messages } from "./zh-TW";
 
 export const vi = {
-  "memberComputer.switchWork": "Dùng {p0} để tiếp tục công việc hiện tại.",
   "memberComputer.switchFailed": "Không gửi được lựa chọn máy tính cho thành viên.",
   "memberComputer.stopFailed": "Không dừng được tác vụ trên máy tính.",
   "memberComputer.returnFailed": "Không trả được quyền điều khiển máy tính cho thành viên.",
   "memberComputer.takeFailed": "Không giành được quyền điều khiển máy tính.",
-  "memberComputer.permissionFailed": "Không cập nhật được quyền điều khiển màn hình.",
   "memberComputer.dockerRequired": "Cần cài đặt Docker trước",
   "memberComputer.setupHelp": "Nhờ Raphael hỗ trợ cài đặt",
   "memberComputer.mode": "Máy tính",
@@ -14,7 +12,6 @@ export const vi = {
   "memberComputer.docker": "Máy ảo (Docker)",
   "memberComputer.dockerLocation": "Máy ảo ({p0})",
   "memberComputer.idle": "Đang chờ",
-  "memberComputer.desktopControl": "Điều khiển màn hình",
   "memberComputer.setup": "Hãy giúp tôi thiết lập máy tính cách ly (Docker).",
   "memberComputer.certificate": "Chọn hoặc xác nhận chứng chỉ trong {p0}.",
   "memberComputer.verification": "Nhập mã xác minh trong {p0}.",

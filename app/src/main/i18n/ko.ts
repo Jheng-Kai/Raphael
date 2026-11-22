@@ -1,12 +1,10 @@
 import type { Messages } from "./zh-TW";
 
 export const ko = {
-  "memberComputer.switchWork": "현재 작업을 {p0}에서 계속해 주세요.",
   "memberComputer.switchFailed": "컴퓨터 선택을 멤버에게 전달하지 못했습니다.",
   "memberComputer.stopFailed": "컴퓨터 작업을 중지하지 못했습니다.",
   "memberComputer.returnFailed": "컴퓨터 제어를 멤버에게 돌려주지 못했습니다.",
   "memberComputer.takeFailed": "컴퓨터 제어를 가져오지 못했습니다.",
-  "memberComputer.permissionFailed": "데스크톱 제어 권한을 변경하지 못했습니다.",
   "memberComputer.dockerRequired": "Docker를 먼저 설치해야 합니다",
   "memberComputer.setupHelp": "Raphael에게 설치 도움 요청",
   "memberComputer.mode": "컴퓨터",
@@ -14,7 +12,6 @@ export const ko = {
   "memberComputer.docker": "가상 머신(Docker)",
   "memberComputer.dockerLocation": "가상 머신({p0})",
   "memberComputer.idle": "대기 중",
-  "memberComputer.desktopControl": "데스크톱 조작",
   "memberComputer.setup": "격리된 컴퓨터(Docker)를 설정하도록 도와주세요.",
   "memberComputer.certificate": "{p0}에서 인증서를 선택하거나 확인하세요.",
   "memberComputer.verification": "{p0}에 인증 코드를 입력하세요.",

@@ -1,12 +1,10 @@
 import type { Messages } from "./zh-TW";
 
 export const ru = {
-  "memberComputer.switchWork": "Продолжи текущую работу на {p0}.",
   "memberComputer.switchFailed": "Не удалось передать участнику выбор компьютера.",
   "memberComputer.stopFailed": "Не удалось остановить задачу на компьютере.",
   "memberComputer.returnFailed": "Не удалось вернуть участнику управление компьютером.",
   "memberComputer.takeFailed": "Не удалось взять управление компьютером.",
-  "memberComputer.permissionFailed": "Не удалось изменить разрешение на управление рабочим столом.",
   "memberComputer.dockerRequired": "Сначала установите Docker",
   "memberComputer.setupHelp": "Попросить Raphael помочь",
   "memberComputer.mode": "Компьютер",
@@ -14,7 +12,6 @@ export const ru = {
   "memberComputer.docker": "Виртуальная машина (Docker)",
   "memberComputer.dockerLocation": "Виртуальная машина ({p0})",
   "memberComputer.idle": "Ожидание",
-  "memberComputer.desktopControl": "Управлять рабочим столом",
   "memberComputer.setup": "Помоги мне настроить изолированный компьютер (Docker).",
   "memberComputer.certificate": "Выберите или подтвердите сертификат в {p0}.",
   "memberComputer.verification": "Введите код подтверждения в {p0}.",

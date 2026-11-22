@@ -1157,10 +1157,8 @@ export function checkRendered(name, context = {}) {
     require(visible(header), 'the member panel header is visible');
     const panel = header.closest('.desktop-panel'), row = header.querySelector('.desktop-choice-row');
     const dropdown = row.querySelector('[data-computer-choice]'), status = row.querySelector('.computer-lifecycle-state');
-    const permission = panel.querySelector('[data-desktop-permission][role="switch"]');
     require(visible(dropdown) && header.querySelectorAll('button[aria-haspopup]').length === 1, 'the header has one computer dropdown');
     require(row.querySelectorAll('button').length === 1 && visible(document.querySelector('[data-det="gear"]')) && visible(document.querySelector('[data-det="close"]')), 'only the dropdown is in the header row, with gear and close still available on the panel');
-    require(visible(permission) && permission.getBoundingClientRect().top >= panel.querySelector('.desktop-screen').getBoundingClientRect().bottom - 1, 'the desktop permission has its own row under the screen');
     const bounds = header.getBoundingClientRect(), choice = dropdown.getBoundingClientRect();
     require(choice.left >= bounds.left - 1 && choice.right <= bounds.right + 1, 'the dropdown stays inside the header');
     if (visible(status)) {
@@ -1182,17 +1180,9 @@ export function checkRendered(name, context = {}) {
       require(dropdown.textContent === '虛擬機（studio-mini）' && visible(local) && local.textContent.includes('虛擬機（本機）') && visible(remote) && remote.getAttribute('aria-checked') === 'true', 'the one menu shows the local and selected SSH locations');
     } else if (name === 'desktop-computer-choice') {
       require(dropdown.textContent === '虛擬機（本機）' && window.__look.calls.some(call => call.method === 'computer.viewer_close'), 'the choice follows the member to Docker and closes the host stream');
+      require(window.__look.calls.filter(call => call.method === 'agent.computer_choice').length === 1 && !window.__look.calls.some(call => call.command === 'agent_ask_text'), 'the choice is a quiet notification, not an owner message');
     }
     return { check: name, choice: dropdown.textContent, status: shownText(status) };
-  }
-  if (name === 'desktop-permission-row-lit') {
-    const row = document.querySelector('[data-desktop-permission][role="switch"]'), track = row?.querySelector('.tg');
-    require(visible(row) && row.matches(':hover') && row.textContent === '操作桌面' && !row.querySelector('button'), 'the owner permission row is one switch and the pointer is on it');
-    const fill = getComputedStyle(row).backgroundColor;
-    require(fill === tokenColour(row, '--hover') && fill !== 'rgba(0, 0, 0, 0)', 'the whole permission row uses the hover fill');
-    const box = row.getBoundingClientRect(), knob = track.getBoundingClientRect();
-    require(track.getAttribute('aria-hidden') === 'true' && knob.left > box.left && knob.right <= box.right && knob.top >= box.top && knob.bottom <= box.bottom, 'the switch is drawn inside the lit row');
-    return { check: name, fill };
   }
   if (name.startsWith('computer-maintenance-')) {
     const calls = window.__look.calls.filter(call => call.method === 'computer.lifecycle');
@@ -4675,7 +4665,7 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name === "member-settings-no-computer") {
-    require(!document.querySelector('.ms-pane [data-cat="computer"], .ms-pane [data-desktop-permission]'), 'computer controls live on the Computer tab');
+    require(!document.querySelector('.ms-pane [data-cat="computer"]'), 'computer controls live on the Computer tab');
     return;
   }
   if (name === "host-panel-collapsed") {
@@ -4801,6 +4791,22 @@ export function checkRendered(name, context = {}) {
     const summary = document.querySelector('.modal-scrim [data-k="languages"] span');
     require(visible(summary) && summary.textContent === "English (United States)", "the Settings row names only English (United States)");
     return {check: name};
+  }
+  if (name === "desktop-host-thumbnail" || name === "desktop-host-frame") {
+    const thumb = document.querySelector('[data-card-host-screen] .desktop-last');
+    const frame = document.querySelector('.desktop-screen iframe[src*="transport=host"]');
+    const image = name === "desktop-host-thumbnail" ? thumb : frame?.contentDocument?.querySelector('canvas');
+    require(visible(image), 'the Chrome page is painted');
+    const box = image.getBoundingClientRect();
+    const win = image.ownerDocument.defaultView;
+    require(win.getComputedStyle(image).objectFit === 'cover' && Math.abs(box.width / box.height - 1280 / 900) <= 0.015, 'the page fills the desktop aspect ratio');
+    if (image === thumb) {
+      require(thumb.naturalWidth === 1280 && thumb.naturalHeight === 900 && visible(thumb.parentElement.querySelector('[data-card-desktop="watch"]')), 'the thumbnail opens the page for watching');
+    } else {
+      require(image.width === 1280 && image.height === 900 && Math.abs(box.width - win.innerWidth) <= 1 && Math.abs(box.height - win.innerHeight) <= 1, 'the canvas fills the iframe edge to edge');
+      require(!visible(frame.closest('.desktop-panel').querySelector('.desktop-error')), 'the panel has the same working page');
+    }
+    return {check:name, width:box.width, height:box.height};
   }
   if (name === "desktop-frame") {
     const shell = document.querySelector('.desktop-shell');

@@ -15,18 +15,6 @@ from raphael_core.computer.host_computer import HostComputerTools
 from raphael_core.computer.vm import LocalVm
 from raphael_core.computer.vm_tools import BROWSER_OPEN, COMPUTER_STATUS_KEY, VmTools
 from raphael_core.brain.settings import SettingsStore
-from raphael_core.members.store import MemberStore
-
-
-def test_desktop_permission_is_per_member_and_opt_in(conn):
-    store = MemberStore(conn)
-    first = store.create_member(name="First")
-    second = store.create_member(name="Second")
-    assert first.desktop_control is second.desktop_control is False
-    store.update_member(first.id, desktop_control=True)
-    assert store.member(first.id).desktop_control is True
-    assert store.member(second.id).desktop_control is False
-
 
 @pytest.mark.parametrize("installed", [False, True])
 async def test_both_tools_are_offered_with_read_only_status(tmp_path, conn, monkeypatch, installed):
@@ -69,7 +57,7 @@ async def test_two_members_do_not_wait_for_the_same_chrome_action_lock(tmp_path,
     tools = HostComputerTools(LocalVm(tmp_path, settings=SettingsStore(conn)), conn, BROWSER_OPEN)
     entered, finish = asyncio.Event(), asyncio.Event()
 
-    async def dispatch(name, arguments, approver, member, work, conversation, announce):
+    async def dispatch(name, arguments, approver, member, work, conversation, announce, *, turn_id=None):
         if member == 1:
             entered.set()
             await finish.wait()
@@ -138,8 +126,9 @@ async def test_certificate_handoff_keeps_the_origin_and_tab_for_an_existing_priv
     key = next(tool.key for tool in tools.offered(1) if tool.name == "request_takeover")
     tab = SimpleNamespace(handoff=False)
     seen = []
+    explanations = []
 
-    async def dispatch(name, arguments, approver, member, work, conversation, announce):
+    async def dispatch(name, arguments, approver, member, work, conversation, announce, *, turn_id=None):
         assert name == "request_takeover" and work == ("task", 5)
         return {"owner_needed": arguments["reason"]}, [], tab
 
@@ -155,9 +144,40 @@ async def test_certificate_handoff_keeps_the_origin_and_tab_for_an_existing_priv
     monkeypatch.setattr(host_page, "snapshot", snapshot)
     tools.cards = SimpleNamespace(wait_for_browser=wait)
     result = await tools.call(key, {"reason": "certificate"}, member=1, scope=("task", 5), turn_id=2,
-                              conversation_id=3, private=True, approver="auto", language="en", announce=None)
+                              conversation_id=3, private=True, approver="auto", language="en", announce=None,
+                              explain=explanations.append)
     assert seen == [(2, 3, "certificate")]
+    assert explanations == ["Please select your certificate in the Computer panel."]
     assert result.ok and json.loads(result.text) == {"tab_id": "original", "status": "owner_finished"}
+
+
+@pytest.mark.parametrize("arguments", [{}, {"reason": "other"}, {"reason": "other", "detail": " \n "}])
+async def test_requests_without_an_owner_step_never_open_a_takeover(tmp_path, conn, arguments):
+    tools = HostComputerTools(LocalVm(tmp_path, settings=SettingsStore(conn)), conn, BROWSER_OPEN)
+    key = next(tool.key for tool in tools.offered(1) if tool.name == "request_takeover")
+    result = await tools.call(key, arguments, member=1, scope=("turn", 1, 3), turn_id=2,
+                              conversation_id=3, private=True, approver="auto", language="en", announce=None)
+    assert not result.ok and result.kind == "takeover_reason_required"
+    assert not tools.browser.tabs
+
+
+async def test_showing_a_sign_in_page_does_not_request_control(tmp_path, conn, monkeypatch):
+    tools = HostComputerTools(LocalVm(tmp_path, settings=SettingsStore(conn)), conn, BROWSER_OPEN)
+    key = next(tool.key for tool in tools.offered(1) if tool.name == "browser_open")
+    tab = SimpleNamespace(handoff=False)
+
+    async def dispatch(name, arguments, approver, member, work, conversation, announce, *, turn_id=None):
+        return {"tab_id": "original", "owner_needed": "sign_in"}, [], tab
+
+    async def wait(**context):
+        pytest.fail("Opening a page for viewing must not request control")
+
+    monkeypatch.setattr(tools, "browser_call", dispatch)
+    tools.cards = SimpleNamespace(wait_for_browser=wait)
+    result = await tools.call(key, {"url": "https://example.invalid/login"}, member=1, scope=("turn", 1, 3),
+                              turn_id=2, conversation_id=3, private=True, approver="auto", language="en", announce=None)
+    assert result.ok and json.loads(result.text) == {"tab_id": "original", "owner_needed": "sign_in"}
+    assert not tab.handoff
 
 
 async def test_scope_close_waits_for_all_owned_targets_even_after_a_session_detaches(tmp_path):
@@ -208,7 +228,7 @@ async def test_first_work_reuses_only_the_marked_chrome_startup_page(tmp_path):
             return {"targetId": "new"}
         if method == "Target.attachToTarget":
             return {"sessionId": params["targetId"]}
-        if method == "Page.enable":
+        if method in ("Page.enable", "Emulation.setDeviceMetricsOverride"):
             return {}
         assert method == "Page.getFrameTree"
         return {"frameTree": {"frame": {"id": session}}}

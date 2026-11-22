@@ -1785,7 +1785,8 @@ class BackgroundService:
             finally:
                 close_browser = getattr(self._gate.plugins, "close_task_browser", None)
                 if close_browser is not None:
-                    await close_browser(task.id)
+                    current = self._store.get(task.id)
+                    await close_browser(task.id, keep_page=current is not None and current.state == "done")
 
     async def _execute_scoped(self, task: Task, files: Sequence[Attachment] = ()) -> None:
         language = task.language

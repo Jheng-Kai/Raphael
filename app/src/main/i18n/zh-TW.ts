@@ -4,12 +4,10 @@ import { reviewZh } from "./review-catalogs";
 import { missingZh } from "./missing-catalogs";
 // Traditional Chinese is the source catalogue. Placeholders are interpolated by t().
 export const zhTW = {
-  "memberComputer.switchWork": "請用{p0}繼續這項工作。",
   "memberComputer.switchFailed": "無法把電腦選擇傳給成員。",
   "memberComputer.stopFailed": "無法停止這項電腦工作。",
   "memberComputer.returnFailed": "無法將電腦控制權交還給成員。",
   "memberComputer.takeFailed": "無法取得電腦控制權。",
-  "memberComputer.permissionFailed": "無法更新操作桌面的權限。",
   "memberComputer.dockerRequired": "尚未安裝 Docker",
   "memberComputer.setupHelp": "請 Raphael 安裝",
   "memberComputer.mode": "電腦",
@@ -17,7 +15,6 @@ export const zhTW = {
   "memberComputer.docker": "虛擬機（Docker）",
   "memberComputer.dockerLocation": "虛擬機（{p0}）",
   "memberComputer.idle": "待命",
-  "memberComputer.desktopControl": "操作桌面",
   "memberComputer.setup": "請幫我設定隔離電腦（Docker）。",
   "memberComputer.certificate": "請在 {p0} 選擇或確認憑證。",
   "memberComputer.verification": "請在 {p0} 輸入驗證碼。",

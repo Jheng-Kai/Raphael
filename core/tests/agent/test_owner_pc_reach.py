@@ -27,6 +27,45 @@ from .test_local_commands import local_hub
 from .test_narration import chat, typed
 from .test_service import make_rig  # noqa: F401
 
+
+async def test_switching_a_computer_steers_running_work_without_a_chat_turn(make_rig, client, conn):
+    import asyncio
+
+    rig = rig_with_pc(make_rig, conn)
+    conversation = rig.service.conversations.main()
+    started, release = asyncio.Event(), asyncio.Event()
+
+    async def opening(**kwargs):
+        started.set()
+        await release.wait()
+        return chat("Looking.", ("local_time", {}))
+
+    client.chats = [opening, chat('{"text":"Done."}')]
+    turn = asyncio.create_task(typed(rig, "Check the time"))
+    try:
+        await asyncio.wait_for(started.wait(), 5)
+        before = conn.execute("SELECT COUNT(*) FROM agent_turns").fetchone()[0]
+        selected = await rig.call("agent.computer_choice", {"member_id": 0, "conversation_id": conversation, "transport": "host"})
+        assert selected == {"chosen": True}
+        assert conn.execute("SELECT COUNT(*) FROM agent_turns").fetchone()[0] == before
+    finally:
+        release.set()
+        await asyncio.wait_for(turn, 5)
+    notes = [m["content"] for m in client.chat_calls[-1]["messages"] if "<app_note>" in str(m.get("content"))]
+    assert len(notes) == 1 and "Continue the task without replying" in notes[0]
+    assert conn.execute("SELECT COUNT(*) FROM agent_turns").fetchone()[0] == before
+
+
+@pytest.mark.parametrize("interactive", [True, False])
+def test_a_member_snapshot_never_exposes_desktop_tools_in_api_cli_or_background(conn, interactive):
+    from raphael_core.agent.speaker import Speaker
+
+    hub, _ = local_hub(conn)
+    snapshot = take_snapshot(hub, speaker=Speaker(id=4), interactive=interactive, max_tier=Tier.T3, owner_screen=False)
+    assert not PC_TOOLS.intersection(names(snapshot.definitions))
+    assert not PC_TOOLS.intersection(snapshot.catalog())
+    assert {"local__local_exec", "local__local_job"} <= snapshot.listed()
+
 # What shows things on the owner's screen or drives it: the run on the desktop and the fixed commands.
 PC_TOOLS = {"computer", *COMMANDS}
 # The hidden commands on the owner's PC, every turn's and task's with the card.

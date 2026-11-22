@@ -40,7 +40,7 @@ UNWATCHED_STATUS_S = 10
 READABLE = frozenset(".html .htm .pdf .png .jpg .jpeg .gif .webp .svg .txt .md .csv .json .mp3 .wav .m4a .mp4 .webm .docx .xlsx .pptx".split())
 HOST_PAGE = b"""<!doctype html><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; connect-src 'self'; img-src data:; style-src 'unsafe-inline'">
-<style>html,body{margin:0;height:100%;background:#000}canvas{width:100%;height:100%;object-fit:contain;display:block;touch-action:none}
+<style>html,body{margin:0;height:100%;background:#000}canvas{width:100%;height:100%;object-fit:cover;display:block;touch-action:none}
 textarea{position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none}</style>
 <canvas></canvas><textarea aria-label="Browser input"></textarea><script src="host.js" defer></script>"""
 BOOTSTRAP = b'''let RFB, rfb, connecting = false, closed = false, controlAt = 0, revision = 0, framesTimer = null;
@@ -458,7 +458,8 @@ class DesktopViewer:
             return "host"
         if any(work["state"] == "waiting_control" for work in self.vm.work.views(member, conversation)):
             return "docker"
-        return self.active_transport(member, conversation) or requested
+        active = self.active_transport(member, conversation)
+        return active or ("host" if self.host_selection(member, conversation)[0] is not None else requested)
 
     def host_selection(self, member, conversation):
         if self.host_browser is None:
@@ -476,8 +477,12 @@ class DesktopViewer:
         return {"transport": "host", "state": "running" if running else "absent", "ready": running,
                 "control": "owner" if owner and (owner is session or session is None and owner.conversation_id == conversation) else "member",
                 "preview_allowed": owner is None and card is None,
+                **({"target": tab.id, "works": [{"id": tab.id, "turn_id": tab.turn_id, "transport": "host",
+                                                "state": "done" if tab.finished else "running", "tool": "browser_open",
+                                                "reason": ""}]} if running and tab.turn_id else {}),
                 **({"host_request": {"id": card.id, "request_id": card.id, "turn_id": card.turn_id,
-                                     "state": "waiting_control", "tool": "get_browser_state", "reason": card.reason}} if card else {})}
+                                     "state": "waiting_control", "tool": "get_browser_state", "reason": card.reason,
+                                     "detail": card.note}} if card else {})}
 
     def target_current(self, target, member):
         if not target.container:
@@ -506,6 +511,8 @@ class DesktopViewer:
         target = self.target(params)
         member, conversation = params.get("member_id", 0), params.get("conversation_id")
         transport = self.transport(params)
+        if params.get("transport") == "host" and transport != "host":
+            raise invalid_params("browser tab changed")
         if transport is None:
             raise invalid_params("no computer is in use")
         host = transport == "host"
@@ -518,6 +525,8 @@ class DesktopViewer:
             raise invalid_params("preview must be a boolean")
         if host and (tab is None or not self.host_browser.live(tab) or params.get("preview") and pending):
             raise invalid_params("desktop unavailable")
+        if host and params.get("target_id") not in (None, tab.id):
+            raise invalid_params("browser tab changed")
         if not host and not params.get("preview"):
             try:
                 target = await self.vm.seat(params.get("member_id", 0))
@@ -597,6 +606,8 @@ class DesktopViewer:
 
     async def renew(self, params):
         token, session = self.session(params)
+        if session.host_tab is not None and not self.host_current(session):
+            return await self.status({"member_id": session.member_id, "conversation_id": session.conversation_id})
         if self.active_transport is not None and self.owners.get(session.owner_key) != token:
             lookup = {"member_id": session.member_id, "conversation_id": session.conversation_id,
                       "transport": session.transport_hint}
@@ -811,12 +822,15 @@ class DesktopViewer:
             finally:
                 if self.owners.get(session.owner_key) != token:
                     browser.held.discard(work)
-        elif self.owners.get(session.owner_key) == token:
-            await self.release_host(token, session)
+        else:
+            owner = self.owners.get(session.owner_key)
+            if owner == token:
+                await self.release_host(token, session)
+            elif request is not None and owner is not None:
+                raise invalid_params("desktop control required")
+            # The tab and request still match after a watch socket reload or disconnect.
             if request is not None:
                 self.handbacks.finish(card)
-        elif request is not None:
-            raise invalid_params("desktop control required")
         session.expires = self.vm.clock() + LEASE_SECONDS
         self.publish_session(token)
         return self.host_state(member, conversation, session)

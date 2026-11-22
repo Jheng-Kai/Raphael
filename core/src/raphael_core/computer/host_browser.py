@@ -162,6 +162,8 @@ class Tab:
     frames: set = field(default_factory=set)
     handoff: bool = False
     conversation: int | None = None
+    turn_id: int | None = None
+    finished: bool = False
     cast: Screencast | None = field(default=None, repr=False)
     closed: asyncio.Event = field(default_factory=asyncio.Event, repr=False)
 
@@ -400,7 +402,7 @@ class HostBrowser:
         try:
             async with self.lock:
                 started = await self.start()
-            if new or not any(tab.scope == scope for tab in self.tabs.values()):
+            if new or not any(tab.scope == scope and not tab.finished for tab in self.tabs.values()):
                 return await self.new_tab(scope, member, workspace, conversation), started
             return self.tab(scope), started
         finally:
@@ -422,6 +424,9 @@ class HostBrowser:
             tab.cast = Screencast(self, tab)
             self.tabs[tab.id] = tab
             await self.command(tab, "Page.enable")
+            await self.command(tab, "Emulation.setDeviceMetricsOverride", {
+                "width": 1280, "height": 900, "deviceScaleFactor": 1, "mobile": False,
+            })
             tree = await self.command(tab, "Page.getFrameTree")
             tab.frames.add(tree["frameTree"]["frame"]["id"])
         except BaseException:
@@ -430,6 +435,9 @@ class HostBrowser:
             await self._close_targets(lambda: {target} & self.owned_targets.keys())
             raise
         self.select(tab)
+        for scope in {other.scope for other in self.tabs.values()
+                      if other.finished and other.scope != tab.scope and other.member == member and other.conversation == conversation}:
+            await self.close_scope(scope)
         return tab
 
     def select(self, tab):
@@ -444,20 +452,27 @@ class HostBrowser:
     def tab(self, scope, *identifiers):
         ids = {identifier for identifier in identifiers if identifier is not None}
         selected = ids or {self.current.get(scope)}
-        matches = [tab for tab in self.tabs.values() if tab.scope == scope and (selected == {tab.id} or not ids)]
+        matches = [tab for tab in self.tabs.values() if tab.scope == scope and not tab.finished and (selected == {tab.id} or not ids)]
         if not matches:
             raise BrowserError("browser_tab_required")
         tab = next((tab for tab in matches if tab.id in selected), matches[-1])
         self.select(tab)
         return tab
 
-    async def close_scope(self, scope):
+    async def close_scope(self, scope, *, keep_page=False):
         async with self.work_lock(scope):
-            self.current.pop(scope, None)
+            keep = self.tabs.get(self.current.get(scope)) if keep_page else None
+            if keep is not None and (keep.handoff or self.viewing_tab(keep.member, keep.conversation) is not keep):
+                keep = None
+            if keep is not None:
+                keep.finished = True
+            else:
+                self.current.pop(scope, None)
             for tab in list(self.tabs.values()):
-                if tab.scope == scope:
+                if tab.scope == scope and tab is not keep:
                     self._forget_tab(tab)
-            await self._close_targets(lambda: {target for target, owner in self.owned_targets.items() if owner == scope})
+            await self._close_targets(lambda: {target for target, owner in self.owned_targets.items()
+                                               if owner == scope and (keep is None or target != keep.target)})
             self._schedule_idle()
 
     async def _close_targets(self, owned):
@@ -496,14 +511,14 @@ class HostBrowser:
         if self.idle is not None:
             self.idle.cancel()
             self.idle = None
-        if not self.opening and not self.tabs and not self.downloads and self.cdp is not None:
+        if not self.opening and all(tab.finished for tab in self.tabs.values()) and not self.downloads and self.cdp is not None:
             self.idle = asyncio.create_task(self._idle())
 
     async def _idle(self):
         reader = getattr(self.cdp, "reader", None)
         await asyncio.sleep(0 if reader is not None and reader.done() else self.idle_seconds)
         async with self.lock:
-            if not self.opening and not self.tabs and not self.downloads:
+            if not self.opening and all(tab.finished for tab in self.tabs.values()) and not self.downloads:
                 self.idle = None
                 await self._stop()
 

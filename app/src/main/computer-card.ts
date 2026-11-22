@@ -34,7 +34,7 @@ const windowOf = (card: ComputerCard): string => card.app || t("card.pcTitle");
 /** What the card says of where the owner's turn stands. */
 export function computerStateText(card: ComputerCard): string {
   switch (card.state) {
-    case "control": return reasonText(card.reason, windowOf(card));
+    case "control": return card.browser && card.note && card.note !== "still" ? card.note : reasonText(card.reason, windowOf(card));
     case "returning": return plain("card.pcReturning");
     case "done": return plain("card.pcFinished");
     case "expired": return plain("card.expired");

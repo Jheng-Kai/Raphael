@@ -1,12 +1,10 @@
 import type { Messages } from "./zh-TW";
 
 export const zhCN = {
-  "memberComputer.switchWork": "请用{p0}继续这项工作。",
   "memberComputer.switchFailed": "无法把电脑选择发送给成员。",
   "memberComputer.stopFailed": "无法停止这项电脑任务。",
   "memberComputer.returnFailed": "无法将电脑控制权交还给成员。",
   "memberComputer.takeFailed": "无法取得电脑控制权。",
-  "memberComputer.permissionFailed": "无法更新操作桌面的权限。",
   "memberComputer.dockerRequired": "尚未安装 Docker",
   "memberComputer.setupHelp": "请 Raphael 安装",
   "memberComputer.mode": "电脑",
@@ -14,7 +12,6 @@ export const zhCN = {
   "memberComputer.docker": "虚拟机（Docker）",
   "memberComputer.dockerLocation": "虚拟机（{p0}）",
   "memberComputer.idle": "待命",
-  "memberComputer.desktopControl": "操作桌面",
   "memberComputer.setup": "请帮我设置隔离电脑（Docker）。",
   "memberComputer.certificate": "请在 {p0} 选择或确认凭证。",
   "memberComputer.verification": "请在 {p0} 输入验证码。",

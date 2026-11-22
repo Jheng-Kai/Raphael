@@ -1,12 +1,10 @@
 import type { Messages } from "./zh-TW";
 
 export const fr = {
-  "memberComputer.switchWork": "Continue la tâche en cours avec {p0}.",
   "memberComputer.switchFailed": "Impossible de transmettre le choix au membre.",
   "memberComputer.stopFailed": "Impossible d’arrêter la tâche sur l’ordinateur.",
   "memberComputer.returnFailed": "Impossible de rendre le contrôle au membre.",
   "memberComputer.takeFailed": "Impossible de prendre le contrôle de l’ordinateur.",
-  "memberComputer.permissionFailed": "Impossible de modifier l’autorisation de contrôler le bureau.",
   "memberComputer.dockerRequired": "Docker doit être installé",
   "memberComputer.setupHelp": "Demander de l’aide à Raphael",
   "memberComputer.mode": "Ordinateur",
@@ -14,7 +12,6 @@ export const fr = {
   "memberComputer.docker": "Machine virtuelle (Docker)",
   "memberComputer.dockerLocation": "Machine virtuelle ({p0})",
   "memberComputer.idle": "En veille",
-  "memberComputer.desktopControl": "Contrôler le bureau",
   "memberComputer.setup": "Aide-moi à configurer l’ordinateur isolé (Docker).",
   "memberComputer.certificate": "Sélectionnez ou confirmez le certificat dans {p0}.",
   "memberComputer.verification": "Saisis le code de vérification dans {p0}.",

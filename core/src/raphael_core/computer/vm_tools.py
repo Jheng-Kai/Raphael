@@ -32,7 +32,7 @@ from .vm_bridge import CuaBridge
 from .owner_files import KEPT_WORDS, MAC_PRIVATE, kept_place, place as owner_place
 from .owner_transfer import REMOTE_FILE_MAX, hand_over, safe_name
 from .vm_catalog import DRIVER_TOOLS, FRESH_READS, NATIVE_INPUT_TOOLS, NOTICES, PAGE_TOOLS, READS, SCREEN_READS, SHARED_ARGUMENTS, BROWSER_APPS, definition as driver_definition, offline_catalog, shared_argument_paths, shared_native_input
-from .takeover import TAKEOVER
+from .takeover import TAKEOVER, TAKEOVER_REASON_REQUIRED, takeover_detail
 from .browser_tabs import BLANK, BROWSER_TABS, NEW_TAB, new_tab_of, rows as tab_rows, shown_tab
 from . import seat_launch
 from . import seat_view
@@ -352,7 +352,6 @@ class VmTools:
         self.conn = conn
         self.host_computer = None
         self.computer_activity = {}
-        self.desktop_allowed = lambda member: True
         self.catalogs, self.tools, self.routes, self.locks, self.actions = {}, {}, {}, {}, {}
         self.schemas = {}
         self.problem = None
@@ -785,7 +784,7 @@ class VmTools:
                     announce(CHROME_OPENED.get(language, CHROME_OPENED["en"]))
             result = await self.host_computer.call(
                 key, arguments, member=member, scope=scope, turn_id=turn_id, conversation_id=conversation_id, private=private,
-                approver=approver, language=language, announce=browser_opened)
+                approver=approver, language=language, announce=browser_opened, explain=announce)
             if self.audit:
                 _, tool = self.host_computer.routes[key]
                 self.audit.add(server="computer", tool=tool.name, tier=tool.tier.name, approver=approver,
@@ -1048,6 +1047,8 @@ class VmTools:
                 result = PluginResult(False, "owner_holds_control", self.vm.owner_note(target))
                 return result
             if "session" in arguments or not Draft202012Validator(self.schemas[key]).is_valid(arguments):
+                if tool.name == "request_takeover" and not arguments.get("reason"):
+                    return PluginResult(False, "takeover_reason_required", TAKEOVER_REASON_REQUIRED)
                 result = PluginResult(False, "bad_arguments")
                 return result
             if tool.name == "vault_entries":
@@ -1084,10 +1085,13 @@ class VmTools:
             if work and work.check_required and tool.name not in FRESH_READS | {"list_windows"}:
                 return PluginResult(False, "desktop_check_required")
             if tool.name == "request_takeover":
+                detail = takeover_detail(arguments)
+                if detail is None:
+                    return PluginResult(False, "takeover_reason_required", TAKEOVER_REASON_REQUIRED)
                 # Never over input that is already running at the screen (a long command in the workspace is none).
                 if self.vm.input_busy(target) or self.vm.native_busy(target):
                     return self._busy(target, None, 0.0)
-                data = await self.vm.work.request(work, arguments["reason"])
+                data = await self.vm.work.request(work, arguments["reason"], detail)
                 if arguments["reason"] == "payment" and target.key in self.payment_holds:
                     self.payment_holds.discard(target.key)
                     if self.conn is not None:
@@ -2145,15 +2149,15 @@ class VmTools:
         if held is not None:
             await held[0].__aexit__(None, None, None)
 
-    async def close_task_browser(self, task_id):
+    async def close_task_browser(self, task_id, *, keep_page=False):
         self.forget_transport(("task", task_id))
         if self.host_computer is not None:
-            await self.host_computer.browser.close_scope(("task", task_id))
+            await self.host_computer.browser.close_scope(("task", task_id), keep_page=keep_page)
 
-    def close_turn_browser(self, turn_id):
+    def close_turn_browser(self, turn_id, *, keep_page=False):
         self.forget_transport(("turn", turn_id))
         if self.host_computer is not None:
-            self.host_computer.close_turn(turn_id)
+            self.host_computer.close_turn(turn_id, keep_page=keep_page)
 
     async def aclose(self):
         if self.host_computer is not None:

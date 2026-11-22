@@ -5,12 +5,10 @@ import { missingEn } from "./missing-catalogs";
 import type { Messages } from './zh-TW';
 
 export const en = {
-  "memberComputer.switchWork": "Use {p0} for the current work.",
   "memberComputer.switchFailed": "Could not send the computer choice to the member.",
   "memberComputer.stopFailed": "Could not stop the computer task.",
   "memberComputer.returnFailed": "Could not return computer control to the member.",
   "memberComputer.takeFailed": "Could not take control of the computer.",
-  "memberComputer.permissionFailed": "Could not update desktop control permission.",
   "memberComputer.dockerRequired": "No Docker yet",
   "memberComputer.setupHelp": "Ask Raphael",
   "memberComputer.mode": "Computer",
@@ -18,7 +16,6 @@ export const en = {
   "memberComputer.docker": "Virtual machine (Docker)",
   "memberComputer.dockerLocation": "Virtual machine ({p0})",
   "memberComputer.idle": "Idle",
-  "memberComputer.desktopControl": "Operate the desktop",
   "memberComputer.setup": "Help me set up the isolated computer (Docker).",
   "memberComputer.certificate": "Choose or confirm the certificate in {p0}.",
   "memberComputer.verification": "Enter the verification code in {p0}.",

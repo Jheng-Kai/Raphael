@@ -25,7 +25,7 @@
 /* No words over a computer that is not showing its screen: the press starts it, with no label. */
 .desktop-panel:is([data-desktop-state="stopped"], [data-desktop-state="unavailable"]) .btn.desktop-open .desktop-open-pill { display: none; }
 @media (prefers-reduced-motion: reduce) { .desktop-open-pill { transition: none; } }
-.desktop-screen, [data-card-desktop-screen], [data-card-screen] { --text: var(--desktop-frame-text); --text-2: var(--desktop-frame-text); --text-3: color-mix(in srgb, var(--desktop-frame-text) 70%, transparent); --panel: var(--desktop-frame-bg); --content: var(--desktop-frame-bg); }
+.desktop-screen, [data-card-desktop-screen], [data-card-screen], [data-card-host-screen] { --text: var(--desktop-frame-text); --text-2: var(--desktop-frame-text); --text-3: color-mix(in srgb, var(--desktop-frame-text) 70%, transparent); --panel: var(--desktop-frame-bg); --content: var(--desktop-frame-bg); }
 .desktop-takeover-bar { display: contents; }
 .desktop-takeover-bar[hidden] { display: none; }
 .desktop-screen > [data-desktop="retry"] { --btn: var(--desktop-frame-bg); --btn-edge: color-mix(in srgb, var(--desktop-frame-text) 30%, var(--desktop-frame-bg)); --hover: color-mix(in srgb, var(--desktop-frame-text) 10%, var(--desktop-frame-bg)); --pressed: color-mix(in srgb, var(--desktop-frame-text) 18%, var(--desktop-frame-bg)); --hover-edge: var(--desktop-frame-text); --focus: var(--desktop-frame-text); position: absolute; left: 50%; bottom: var(--sp-3); transform: translateX(-50%); }
@@ -72,7 +72,8 @@ iframe[data-desktop-stream][hidden] { display: block !important; position: absol
    dark bars stand beside it. Every other card stays
    at most 480 px (R-CARD-01). */
 .page-agent .conversation-card.computer-card:is([data-work-state="waiting_control"], [data-card-state="control"]) { width: 100%; max-width: none; }
-.conversation-card .card-computer-screen:is([data-card-desktop-screen], [data-card-screen]) { aspect-ratio: 1280 / 900; background: var(--desktop-frame-bg); }
+.conversation-card .card-computer-screen:is([data-card-desktop-screen], [data-card-screen], [data-card-host-screen]) { aspect-ratio: 1280 / 900; background: var(--desktop-frame-bg); }
+.card-computer-screen > .desktop-last { object-fit: cover; }
 .desktop-message, .desktop-placeholder .missing-note, .desktop-preparation { padding: var(--sp-3) var(--sp-4); border-radius: var(--r-lg); background: color-mix(in srgb, var(--desktop-frame-bg) 82%, transparent); }
 .desktop-placeholder .missing-note, .desktop-placeholder > [data-act="docker-download"] { --btn: var(--desktop-frame-bg); --hover: color-mix(in srgb, var(--desktop-frame-text) 10%, var(--desktop-frame-bg)); --pressed: color-mix(in srgb, var(--desktop-frame-text) 18%, var(--desktop-frame-bg)); }
 .desktop-error { margin: 0; color: var(--err); }
@@ -168,17 +169,6 @@ iframe[data-desktop-stream][hidden] { display: block !important; position: absol
 .btn.desktop-docker-help:is(:hover, :active):not(:disabled) { background: transparent; text-decoration: underline; text-underline-offset: 3px; }
 .desktop-settings { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
 .desktop-panel[data-expanded] .desktop-settings { display: none; }
-.desktop-permission { flex: 1; min-width: 0; }
-.desktop-permission:empty { display: none; }
-.desktop-permission-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); width: 100%; min-height: var(--h-field); padding: var(--sp-1) var(--sp-2); border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text); font: inherit; text-align: start; }
-.desktop-permission-row:hover:not(:disabled) { background: var(--hover); }
-.desktop-permission-row:active:not(:disabled) { background: var(--pressed); }
-.desktop-permission-row[aria-checked="true"] .tg { background: var(--member-switch, var(--accent)); border-color: var(--member-accent, var(--accent)); }
-.desktop-permission-row[aria-checked="true"] .tg::after { transform: translateX(16px); background: var(--member-knob, var(--on-accent)); }
-.desktop-permission-row:hover:not(:disabled)[aria-checked="true"] .tg { filter: brightness(0.9); }
-:root[data-theme="dark"] .desktop-permission-row:hover:not(:disabled)[aria-checked="true"] .tg { filter: brightness(1.12); }
-.desktop-permission-row:hover:not(:disabled)[aria-checked="false"] .tg { border-color: var(--text-2); }
-.desktop-permission-row:hover:not(:disabled)[aria-checked="false"] .tg::after { background: var(--text); }
 .menu.computer-location-popover { width: min(380px, calc(100vw - var(--sp-4))); padding: var(--sp-3); }
 .menu.computer-location-popover .slist { --slist-pad: 0px; padding-inline: 0; }
 /* The repair command's copy button is a code block control, not a menu row. */

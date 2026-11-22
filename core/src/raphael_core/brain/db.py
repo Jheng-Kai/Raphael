@@ -2409,6 +2409,15 @@ PRAGMA user_version = 96;
 COMMIT;
 """
 
+_MIGRATIONS[97] = """
+BEGIN;
+ALTER TABLE members DROP COLUMN desktop_control;
+DELETE FROM settings WHERE key = 'raphael_desktop_control';
+PRAGMA user_version = 97;
+COMMIT;
+"""
+
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 

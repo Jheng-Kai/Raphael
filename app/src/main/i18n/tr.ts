@@ -1,12 +1,10 @@
 import type { Messages } from "./zh-TW";
 
 export const tr = {
-  "memberComputer.switchWork": "Mevcut işe {p0} ile devam et.",
   "memberComputer.switchFailed": "Bilgisayar seçimi üyeye gönderilemedi.",
   "memberComputer.stopFailed": "Bilgisayardaki görev durdurulamadı.",
   "memberComputer.returnFailed": "Bilgisayarın denetimi üyeye geri verilemedi.",
   "memberComputer.takeFailed": "Bilgisayarın denetimi alınamadı.",
-  "memberComputer.permissionFailed": "Masaüstü denetimi izni güncellenemedi.",
   "memberComputer.dockerRequired": "Önce Docker kurulmalı",
   "memberComputer.setupHelp": "Raphael’den kurulum yardımı iste",
   "memberComputer.mode": "Bilgisayar",
@@ -14,7 +12,6 @@ export const tr = {
   "memberComputer.docker": "Sanal makine (Docker)",
   "memberComputer.dockerLocation": "Sanal makine ({p0})",
   "memberComputer.idle": "Boşta",
-  "memberComputer.desktopControl": "Masaüstünü kontrol et",
   "memberComputer.setup": "Yalıtılmış bilgisayarı (Docker) kurmama yardım et.",
   "memberComputer.certificate": "{p0} içinde sertifikayı seçin veya onaylayın.",
   "memberComputer.verification": "{p0} içinde doğrulama kodunu girin.",

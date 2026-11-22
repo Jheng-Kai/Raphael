@@ -59,3 +59,4 @@ coverage/
 # Keep the signed synthetic package even when local excludes hide research folders.
 !/core/tests/fixtures/member-catalog/packages/research/
 /app/.test-cache/
+/.pt/

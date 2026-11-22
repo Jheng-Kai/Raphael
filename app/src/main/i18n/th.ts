@@ -1,12 +1,10 @@
 import type { Messages } from "./zh-TW";
 
 export const th = {
-  "memberComputer.switchWork": "ใช้ {p0} ทำงานปัจจุบันต่อ",
   "memberComputer.switchFailed": "ส่งตัวเลือกคอมพิวเตอร์ให้สมาชิกไม่ได้",
   "memberComputer.stopFailed": "หยุดงานบนคอมพิวเตอร์ไม่ได้",
   "memberComputer.returnFailed": "คืนการควบคุมคอมพิวเตอร์ให้สมาชิกไม่ได้",
   "memberComputer.takeFailed": "เข้าควบคุมคอมพิวเตอร์ไม่ได้",
-  "memberComputer.permissionFailed": "เปลี่ยนสิทธิ์ควบคุมเดสก์ท็อปไม่ได้",
   "memberComputer.dockerRequired": "ต้องติดตั้ง Docker ก่อน",
   "memberComputer.setupHelp": "ขอให้ Raphael ช่วยติดตั้ง",
   "memberComputer.mode": "คอมพิวเตอร์",
@@ -14,7 +12,6 @@ export const th = {
   "memberComputer.docker": "เครื่องเสมือน (Docker)",
   "memberComputer.dockerLocation": "เครื่องเสมือน ({p0})",
   "memberComputer.idle": "รอทำงาน",
-  "memberComputer.desktopControl": "ควบคุมเดสก์ท็อป",
   "memberComputer.setup": "ช่วยตั้งค่าคอมพิวเตอร์แยก (Docker) ให้ฉันหน่อย",
   "memberComputer.certificate": "เลือกหรือยืนยันใบรับรองใน {p0}",
   "memberComputer.verification": "ป้อนรหัสยืนยันใน {p0}",

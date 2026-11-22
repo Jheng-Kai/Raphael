@@ -129,18 +129,18 @@ class HandbackStore:
                          " WHERE state IN ('control','returning')", (now_ms(),))
 
     def open(self, *, turn_id: int, member_id: int, conversation_id: int | None, run_id: str, reason: str, app: str,
-             language: str, done: Iterable[tuple[str, str]] = ()) -> HandbackCard:
+             language: str, done: Iterable[tuple[str, str]] = (), note: str = "") -> HandbackCard:
         """A new card for the next hand-over of the turn's run."""
         now = self._now_ms()
         card_id = secrets.token_hex(8)
         with self._conn:
             self._conn.execute(
                 "INSERT INTO handback_cards (id, turn_id, seq, member_id, conversation_id, run_id, reason, app, language,"
-                " state, done, created_at_ms, updated_at_ms, expires_at_ms)"
+                " state, note, done, created_at_ms, updated_at_ms, expires_at_ms)"
                 " VALUES (?, ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM handback_cards WHERE turn_id=?), ?, ?, ?, ?, ?, ?,"
-                " 'control', ?, ?, ?, ?)",
+                " 'control', ?, ?, ?, ?, ?)",
                 (card_id, turn_id, turn_id, member_id, conversation_id, run_id, reason, app, language,
-                 json.dumps(sorted(set(done))), now, now, now + self._wait_ms))
+                 note, json.dumps(sorted(set(done))), now, now, now + self._wait_ms))
         return self.get(card_id)  # type: ignore[return-value]
 
     def expire_due(self) -> None:
@@ -202,7 +202,7 @@ class HandbackCards:
         router.register("integrations.card_done", self._done)
         router.register("integrations.card_stop", self._stop)
 
-    async def wait_for_browser(self, *, turn_id, member_id, conversation_id, language, reason, tab):
+    async def wait_for_browser(self, *, turn_id, member_id, conversation_id, language, reason, tab, detail=""):
         """Wait in the original call with its exact tab."""
         from .host_browser import BrowserError
 
@@ -211,7 +211,7 @@ class HandbackCards:
         run_id = "browser:" + secrets.token_hex(12)
         returned = asyncio.get_running_loop().create_future()
         card = self.store.open(turn_id=turn_id, member_id=member_id, conversation_id=conversation_id,
-                               run_id=run_id, reason=reason, app="Chrome", language=language)
+                               run_id=run_id, reason=reason, app="Chrome", language=language, note=detail)
         self._browser[run_id] = (returned, tab, card)
         self._changed(card)
         closed = asyncio.create_task(tab.closed.wait())

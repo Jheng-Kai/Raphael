@@ -377,13 +377,7 @@ export function createAgent(app: AppContext, places?: {
     openPanel: () => members.computer(), panelVisible: () => members.detailsOpen() && members.details.dataset.detailsTab === 'computer',
     changed: () => { if (visible && !scroller.hidden) drawThread(); },
     trySkill: text => sendFromPage(text),
-    chooseComputer: transport => {
-      const member = members.current();
-      return api.agentAskText(t("memberComputer.switchWork", { p0: t(transport === "host" ? "memberComputer.host" : "memberComputer.docker") }),
-        [], member, { ...destinationOf(member, conversationId()), requestId: crypto.randomUUID() });
-    },
-    desktopControl: () => members.member().desktop_control ?? false,
-    setDesktopControl: allowed => members.update(members.current(), { desktop_control: allowed }),
+    chooseComputer: transport => api.core("agent.computer_choice", { member_id: members.current(), conversation_id: conversationId(), transport }),
     stop: turnId => { const turn = turns.find(turn => turn.id === turnId); return turn?.task ? api.workerCancel(turn.task.id) : turn?.session_id ? api.agentStop(turn.session_id, memberId()) : Promise.resolve(); },
   });
   members.details.addEventListener('member-panel-tab', () => { if (visible && !roomPane.active) desktop.show(); desktop.sync(); });
@@ -3277,7 +3271,7 @@ export function createAgent(app: AppContext, places?: {
         if (!loaded && visible && !roomPane.active && renderedPage!==pageStamp()) render();
         scheduleRefresh(loaded ? 0 : 1000+REFRESH_DELAY_MS);
       }
-      else if (event.type === "AgentTurn" && (event.member_id ?? RAPHAEL_ID) === memberId()) { dirtyTurnIds.add(event.turn_id); scheduleRefresh(); }
+      else if (event.type === "AgentTurn" && (event.member_id ?? RAPHAEL_ID) === memberId()) { desktop.refreshStatus(); dirtyTurnIds.add(event.turn_id); scheduleRefresh(); }
       // Loaded running work changes history; activity and turn events own the roster's state and preview.
       if (event.type !== "WorkerChanged" || event.state !== "running" || !hasWorkerTask(turns, event.task_id)) members.changed(event.type === "WorkerChanged" ? 1000 : undefined);
     }

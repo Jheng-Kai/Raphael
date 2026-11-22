@@ -1,5 +1,4 @@
-/** A member working at its computer shows in the conversation as its short messages and its quiet step label, nothing more. Only what the owner must act on is drawn here: the card of a handoff (a sign-in, a
- *  password, a payment) with the live stream, and that card folded once it is settled. */
+/** The live Chrome card and the Docker handoff card, rendered in their work's turn. */
 import type { DesktopState } from "./desktop-viewer";
 import { t } from "./i18n";
 import { esc, ico } from "./ui";
@@ -12,11 +11,14 @@ export interface DesktopWork {
   state: "running" | "waiting_control" | "returning" | "done" | "stopped" | "expired";
   tool: string;
   reason: "" | "sign_in" | "password" | "two_factor" | "captcha" | "payment" | "certificate" | "other";
+  transport?: "host";
+  detail?: string;
   request_id?: string;
 }
 
 export function desktopWorkText(work: DesktopWork): string {
   if (work.state === "waiting_control") {
+    if (work.detail) return work.detail;
     if (work.reason === "certificate") return t("memberComputer.certificate", { p0: "Chrome" });
     const reasons = { sign_in: "desktop.need.sign_in", password: "desktop.need.password", two_factor: "desktop.need.two_factor",
       captcha: "desktop.need.captcha", payment: "desktop.need.payment", other: "desktop.need.other" } as const;
@@ -55,6 +57,11 @@ export function mountDesktopTimeline(host: HTMLElement): { update(state: Desktop
         content: `<div class="card-computer-screen" data-card-desktop-screen><button type="button" class="btn" data-card-desktop="take" aria-label="${esc(t("cards.takeover"))}">${ico("monitor")}</button></div>`,
         actions: btn(esc(t("cards.takeover")), "sm pri", ' data-card-desktop="take"') + btn(esc(t("desktop.done")), "sm", ' data-card-desktop="return"'),
         close: waitingCloseHTML(' data-card-desktop="skip"', t("cards.skip")), statusInHeading: true,
+        cls: "computer-card", attrs: ` data-desktop-work="${esc(work.id)}" data-work-state="${work.state}"`,
+      }) : work.transport === "host" && !state.host_request ? cardHTML({
+        title: t("memberComputer.host"), status: work.state === "done" ? "done" : "ready",
+        statusText: desktopWorkText(work), close: failedClose(),
+        content: `<div class="card-computer-screen" data-card-host-screen><button type="button" class="btn desktop-open" data-card-desktop="watch" aria-label="${esc(t("desktop.open"))}"><span class="desktop-open-pill">${ico("open")}</span></button></div>`,
         cls: "computer-card", attrs: ` data-desktop-work="${esc(work.id)}" data-work-state="${work.state}"`,
       }) : (asked.has(work.id) || !!work.request_id) ? settledCardHTML(work) : "";
       if (rendered.get(slot) === html) continue;

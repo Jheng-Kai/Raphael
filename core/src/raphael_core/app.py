@@ -1023,8 +1023,6 @@ class App(Router):
             connections=self.integrations.connections,
             vault=self.vault,
         )
-        if not fake_llm:
-            self.vm_tools.desktop_allowed = lambda member: self.members.computer_preference(member, "desktop_control")
         if self.vm_tools.host_computer is not None:
             self.vm_tools.host_computer.cards = self.handbacks
             host = self.vm_tools.host_computer

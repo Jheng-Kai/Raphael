@@ -1,12 +1,10 @@
 import type { Messages } from "./zh-TW";
 
 export const it = {
-  "memberComputer.switchWork": "Continua il lavoro in corso con {p0}.",
   "memberComputer.switchFailed": "Impossibile inviare la scelta al membro.",
   "memberComputer.stopFailed": "Impossibile interrompere l’attività sul computer.",
   "memberComputer.returnFailed": "Impossibile restituire il controllo al membro.",
   "memberComputer.takeFailed": "Impossibile prendere il controllo del computer.",
-  "memberComputer.permissionFailed": "Impossibile aggiornare l’autorizzazione a controllare il desktop.",
   "memberComputer.dockerRequired": "Prima installa Docker",
   "memberComputer.setupHelp": "Chiedi aiuto a Raphael",
   "memberComputer.mode": "Computer",
@@ -14,7 +12,6 @@ export const it = {
   "memberComputer.docker": "Macchina virtuale (Docker)",
   "memberComputer.dockerLocation": "Macchina virtuale ({p0})",
   "memberComputer.idle": "In attesa",
-  "memberComputer.desktopControl": "Controlla il desktop",
   "memberComputer.setup": "Aiutami a configurare il computer isolato (Docker).",
   "memberComputer.certificate": "Seleziona o conferma il certificato in {p0}.",
   "memberComputer.verification": "Inserisci il codice di verifica in {p0}.",

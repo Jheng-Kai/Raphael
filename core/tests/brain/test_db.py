@@ -435,7 +435,7 @@ SCHEMA_V27 = {
         "stop_requested INTEGER NOT NULL DEFAULT 0", "wrapup_sent INTEGER NOT NULL DEFAULT 0", "reason TEXT NOT NULL DEFAULT ''",
     ],
 }
-LATEST = 96
+LATEST = 97
 
 
 def test_v59_existing_tasks_default_to_no_artifact_and_keep_their_reports(monkeypatch, tmp_path):
@@ -766,22 +766,24 @@ SCHEMA_V94 = {**SCHEMA_V92, "member_unread": [
 ]}
 
 
-SCHEMA_V96 = {**SCHEMA_V94, "members": [*SCHEMA_V94["members"], "desktop_control INTEGER NOT NULL DEFAULT 0"]}
+SCHEMA_V97 = SCHEMA_V94
 
-PENDING_UPGRADES = (63, 64, *range(67, 97))
+PENDING_UPGRADES = (63, 64, *range(67, 98))
 
 
-def test_drop_computer_mode_preserves_desktop_permission(monkeypatch, tmp_path):
+def test_upgrade_removes_obsolete_computer_preferences(monkeypatch, tmp_path):
     with monkeypatch.context() as old:
         old.setattr(db, "LATEST_VERSION", 95)
         conn = db.connect(tmp_path / "mode.db")
     with conn:
         conn.execute("INSERT INTO members (name, role, position, created_at_ms, computer_mode, desktop_control) "
                      "VALUES ('Member', 'Helper', 0, 1, 'docker', 1)")
-        conn.execute("INSERT INTO settings (key,value) VALUES ('raphael_computer_mode', ?)", ('"docker"',))
+        conn.execute("INSERT INTO settings (key,value) VALUES ('raphael_computer_mode', ?), ('raphael_desktop_control', 'true')", ('"docker"',))
     db.migrate(conn)
     assert "computer_mode" not in {row[1] for row in conn.execute("PRAGMA table_info(members)")}
-    assert conn.execute("SELECT desktop_control FROM members").fetchone()[0] == 1
+    assert "desktop_control" not in {row[1] for row in conn.execute("PRAGMA table_info(members)")}
+    assert conn.execute("SELECT name FROM members").fetchone()[0] == "Member"
+    assert conn.execute("SELECT value FROM settings WHERE key='raphael_desktop_control'").fetchone() is None
     assert conn.execute("SELECT value FROM settings WHERE key='raphael_computer_mode'").fetchone() is None
 
 
@@ -810,7 +812,7 @@ def test_latest_upgrade_runs_only_pending_migrations_and_preserves_vault_entries
     db.migrate(conn)
     assert steps == expected_steps
     assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
-    for table, columns in SCHEMA_V96.items():
+    for table, columns in SCHEMA_V97.items():
         if table != "agent_turns_fts":
             assert describe_columns(conn, table) == columns
     entry = conn.execute("SELECT kind,label,hint,origin,members,credential FROM vault_entries WHERE id='legacy-login'").fetchone()
@@ -1001,7 +1003,7 @@ def test_connect_creates_the_latest_schema(conn):
         "one_standard_conversation",
     } <= schema_names(conn, "index")
     assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
-    for table, columns in SCHEMA_V96.items():
+    for table, columns in SCHEMA_V97.items():
         if table != "agent_turns_fts":
             assert describe_columns(conn, table) == columns
     assert [c["name"] for c in conn.execute("PRAGMA table_info(agent_turns_fts)")] == [
