@@ -3,11 +3,13 @@
 Import is a bounded file copy. It never loads plugin configuration or runs code.
 """
 
+import asyncio
 import hashlib
 import json
 import os
 import re
 import stat
+from contextlib import suppress
 from pathlib import Path
 
 from ..bots.homes import BotHomes, HomeError, atomic
@@ -23,6 +25,18 @@ MAX_DISCOVERY_DEPTH = 12
 class SkillHomes(BotHomes):
     def home(self, member_id):
         return self.root / "shared" if member_id == SHARED else super().home(member_id)
+
+
+async def stage_files(write, *args, discard):
+    """A cancelled caller cannot publish staged files, even if the writer is still running."""
+    worker = asyncio.create_task(asyncio.to_thread(write, *args))
+    try:
+        return await asyncio.shield(worker)
+    except asyncio.CancelledError:
+        with suppress(Exception):
+            staged = await worker
+            await asyncio.to_thread(discard, staged)
+        raise
 
 
 def roots(home):
@@ -202,15 +216,15 @@ class SkillLibrary:
                 break
         return sorted(result.values(), key=lambda item: item["source"])
 
-    def import_local(self, member_id, source):
+    def _local_candidate(self, source, skills):
         folder, root = location(self.skill_home, source)
         folder = newest(folder, root)
         files = package(folder)
         if any(name.casefold() == ".raphael-source.json" for name in files):
             raise MemberError("source", "reserved skill metadata filename")
-        text = files.pop("SKILL.md").decode("utf-8-sig")
+        text = files["SKILL.md"].decode("utf-8-sig")
         previous = None
-        for skill in self.owned_skills(member_id):
+        for skill in skills:
             if skill["source"].startswith("local:"):
                 try:
                     old_folder, old_root = location(self.skill_home, skill["source"])
@@ -220,8 +234,30 @@ class SkillLibrary:
                     previous = skill
                     break
         from .capabilities import skill_metadata
-        skill_metadata(text, writing=True, previous_name=previous["name"] if previous else None)
+        skill_metadata(text, writing=True, previous_name=previous["name"].rsplit(":", 1)[-1] if previous else None)
         candidate = describe(folder, root, document=text.encode("utf-8"))
+        return candidate, files, previous, text
+
+    def _local_import_snapshot(self, source, skills, root):
+        try:
+            folder, _ = location(self.skill_home, source)
+        except MemberError:
+            return None
+        if not (folder / "SKILL.md").is_file():
+            return None
+        candidate, files, previous, _ = self._local_candidate(source, skills)
+        preserved = {}
+        if previous:
+            folder = self.homes.safe(root / str(previous["id"]))
+            old = self._package_info_at(folder / "SKILL.md")
+            if folder.is_dir():
+                preserved = {path: data for path, data in package(folder, installed=True).items()
+                             if path != "SKILL.md" and path not in old.get("files", [])}
+        return files, {"metadata": candidate, "previous": previous, "preserved": preserved}
+
+    def import_local(self, member_id, source):
+        candidate, files, previous, text = self._local_candidate(source, self.owned_skills(member_id))
+        files.pop("SKILL.md")
         skill = (self.rewrite_skill(member_id, previous["id"], text) if previous else
                  self.keep_skill(member_id, candidate["source"], text))
         if previous:
@@ -243,18 +279,18 @@ class SkillLibrary:
         return self._skill(member_id, skill["id"])
 
     def package_info(self, member_id, identifier):
+        return self._package_info_at(self._path(member_id, identifier))
+
+    def _package_info_at(self, path):
         try:
-            path = self._path(member_id, identifier).parent / ".raphael-source.json"
-            info = json.loads(self.homes.safe(path).read_text(encoding="utf-8"))
+            metadata = self.homes.safe(path.parent / ".raphael-source.json")
+            info = json.loads(metadata.read_text(encoding="utf-8"))
         except (ValueError, OSError):
             return {}
         return info if isinstance(info, dict) else {}
 
-    def source_details(self, member_id, identifier):
-        row = self.conn.execute("SELECT k.set_id,k.set_kind,s.name,s.version FROM member_skills k JOIN skill_sets s ON s.id=k.set_id WHERE k.id=?", (identifier,)).fetchone()
-        if row:
-            return {"set_id": row["set_id"], "set_kind": row["set_kind"], "plugin": row["name"], "plugin_version": row["version"]}
-        info = self.package_info(member_id, identifier)
+    def source_details(self, path):
+        info = self._package_info_at(path)
         skips = {"skipped_links": info["skipped_links"]} if info.get("skipped_links") else {}
         if "fingerprint" not in info:
             return skips
@@ -276,15 +312,28 @@ class SkillLibrary:
             raise MemberError("scope", "update or remove this skill through its plugin set")
 
     def native_skills(self, member_id):
+        return self._native_skill_paths(self._native_skill_inputs(member_id))
+
+    async def native_skills_async(self, member_id):
+        while True:
+            revision = self.skill_revision()
+            skills = await asyncio.to_thread(self._native_skill_paths, self._native_skill_inputs(member_id))
+            if revision == self.skill_revision():
+                return skills
+
+    def _native_skill_inputs(self, member_id):
+        skills = [skill for skill in self.skills(member_id, details=False) if skill["enabled"]]
+        return self._skill_detail_inputs(skills, member_id)
+
+    def _native_skill_paths(self, inputs):
         result = []
-        for skill in self.turn_skills(member_id, self.commands(member_id)):
+        for _, skill, path, plugin in inputs:
             entry = {"name": skill["slash_name"]}
             try:
-                path = self._path(member_id, skill["id"])
-                if skill.get("set_id"):
-                    entry["plugin_root"] = str(self.plugin_root(skill["set_id"]))
-                entry["path"] = str(path)
-            except (HomeError, MemberError):
+                entry["path"] = str(self.homes.safe(path))
+                if plugin:
+                    entry["plugin_root"] = str(self.homes.safe(plugin["root"]))
+            except (HomeError, OSError):
                 pass
             result.append(entry)
         return result

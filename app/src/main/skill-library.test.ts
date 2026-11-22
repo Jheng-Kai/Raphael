@@ -40,6 +40,27 @@ const press = (root: ParentNode, selector: string) => root.querySelector<HTMLEle
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
 const accessOf = (root: ParentNode, key: string) => root.querySelector(`.skl-pack[data-skl-pack="${key}"] .skl-access span`)?.textContent;
 
+test.each([true, false])("update progress stays visible until the package RPC completes (success: %s)", async success => {
+  let finish: (value: { package: LibraryPackage }) => void = () => {};
+  let fail: (error: Error) => void = () => {};
+  const pending = new Promise<{ package: LibraryPackage }>((resolve, reject) => { finish = resolve; fail = reject; });
+  const { root } = await setup(() => pending);
+  press(root, '[data-skl="open"][data-key="set:1"]');
+  press(root, '[data-skl="more"][data-key="set:1"]');
+  press(document, '[data-pick="refresh"]');
+  expect(api.core).toHaveBeenCalledWith("skills.library.update", { key: "set:1", refresh: true });
+  expect(root.querySelector('[role="status"].skl-refresh-status')).not.toBeNull();
+  expect(root.querySelector<HTMLButtonElement>('[data-skl="skill"]')?.disabled).toBe(true);
+  press(root, '[data-skl="back"]');
+  expect(root.querySelector('[data-skl-pack="set:1"] .skl-refresh-status')).not.toBeNull();
+  expect(root.querySelector<HTMLButtonElement>('[data-skl-pack="pack:2"] [data-skl="more"]')?.disabled).toBe(false);
+  if (success) finish({ package: { ...packages()[0], name: "Updated package" } });
+  else fail(new Error("update failed"));
+  await settle();
+  expect(root.querySelector(".skl-refresh-status")).toBeNull();
+  expect(root.querySelector('[data-skl-pack="set:1"] .skl-name')?.textContent).toBe(success ? "Updated package" : "pstack");
+});
+
 test("one row per package says who may use it, and its name opens its skills on a page of its own", async () => {
   const { root } = await setup();
   expect(root.querySelector(".skl")?.getAttribute("aria-label")).toBe("團隊技能");

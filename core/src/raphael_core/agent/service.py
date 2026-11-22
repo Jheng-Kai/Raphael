@@ -274,6 +274,7 @@ from .team import (
     asks_to_create_member,
     handoff_refused,
     names_raphael,
+    native_skills_for,
     roster_prompt,
     team_tool,
     team_tools_for,
@@ -1391,18 +1392,29 @@ class AgentService:
         if speaker is None:
             raise invalid_params("there is no such member")
         conversation_id = self._destination(member_id, conversation_id, source, quick=quick)
+        # A typed request is about the page the owner had open when it arrived.
+        viewing = self.pages.viewed_by(speaker.id, conversation_id) if source == TYPED and not quick else None
         original_text = None
         skill_loaded = False
         skill_notices = []
+        resolve_async = getattr(self._team, "resolve_slash_async", None)
         resolve = getattr(self._team, "resolve_slash", None)
         expand = getattr(self._team, "expand_command", None)
-        if resolve is not None or expand is not None:
-            expanded, skill_loaded = (resolve(member_id, text, on_failure=lambda name, error:
-                skill_notices.append(skill_failure(name, error))) if resolve is not None else (expand(member_id, text), False))
-            if skill_notices:
-                expanded += "\n\n" + skill_instruction(skill_notices)
-            if expanded != text:
-                original_text, text = text, expanded
+
+        def on_skill_failure(name, error):
+            skill_notices.append(skill_failure(name, error))
+
+        expanded = text
+        if resolve_async is not None:
+            expanded, skill_loaded = await resolve_async(member_id, text, on_failure=on_skill_failure)
+        elif resolve is not None:
+            expanded, skill_loaded = resolve(member_id, text, on_failure=on_skill_failure)
+        elif expand is not None:
+            expanded = expand(member_id, text)
+        if skill_notices:
+            expanded += "\n\n" + skill_instruction(skill_notices)
+        if expanded != text:
+            original_text, text = text, expanded
         from .intents import checked as check_intent
         intent = check_intent(intent, member_id)
         ask = _Ask(
@@ -1417,6 +1429,7 @@ class AgentService:
             language=normalize_language(ui_language),
             attachments=list(attachments),
             quote=quote,
+            viewing=viewing,
             speaker=speaker,
             conversation_id=conversation_id,
             quick=quick,
@@ -1434,9 +1447,6 @@ class AgentService:
             if not isinstance(source, str) or not _SOURCE.fullmatch(source):
                 raise invalid_params("source must be a short lower-case word")
             ask.source = source
-        if ask.source == TYPED and not quick:
-            # Read now, not when the model runs: a request that waits behind another is still about the page that was open.
-            ask.viewing = self.pages.viewed_by(speaker.id, conversation_id)
         if ask.source in {"telegram", "slack", "discord", RESUMED} and (configured := self._owner_language()):
             ask.language = normalize_language(configured)
         if len(ask.attachments) > MAX_ATTACHMENTS:
@@ -2910,7 +2920,7 @@ class AgentService:
                     context_turns=[(turn.id, turn_text(turn, detail=turn.route == "discuss"))
                                    for turn in context.turns if turn.id is not None],
                     context_owner_words=owner_words(context.turns),
-                    skills=getattr(self._team, "native_skills", lambda member: [])(ask.speaker.id),
+                    skills=await native_skills_for(self._team, ask.speaker.id),
                     skill_notice=lambda notice: self._message(ask, "event", json.dumps(notice, ensure_ascii=False)),
                     attachments=ask.attachments, resume_session=not ask.nested,
                     rate_limit_waits=() if ask.quick else None,
@@ -4936,22 +4946,28 @@ class AgentService:
         if name in ("skills_list", "skill_manage"):
             try:
                 if name == "skills_list":
-                    return ToolResult(name, True, {"skills": team.capabilities.skills(speaker.id)}, untrusted=True)
+                    load = getattr(team.capabilities, "detailed_skills", None)
+                    skills = await load(speaker.id) if load else team.capabilities.skills(speaker.id)
+                    return ToolResult(name, True, {"skills": skills}, untrusted=True)
                 skill = team.learn_skill(speaker.id, dict(arguments), source_turn_id)
                 return ToolResult(name, True, {"skill": skill})
             except (ValueError, OSError) as exc:
                 return ToolResult(name, False, None, "bad_arguments", instruction=str(exc))
         if name == SKILL_READ and arguments.get("reference") is not None:
+            load = getattr(team, "skill_file_async", None)
             file = getattr(team, "skill_file", None)
             try:
-                text = file(speaker.id, arguments.get("name"), arguments.get("reference")) if file else None
+                args = speaker.id, arguments.get("name"), arguments.get("reference")
+                text = await load(*args) if load else (file(*args) if file else None)
             except MemberError as error:
                 return ToolResult(name, False, None, error.kind if error.kind in ("not_found", "unreadable") else "bad_arguments", instruction=str(error))
             return ToolResult(name, text is not None, {"text": text} if text is not None else None,
                               None if text is not None else "not_found", untrusted=True)
         if name == SKILL_READ:
+            load = getattr(team, "skill_read_async", None)
             read = getattr(team, "skill_read", None)
-            text = None if read is None else read(speaker.id, arguments.get("name"))
+            args = speaker.id, arguments.get("name")
+            text = await load(*args) if load else (read(*args) if read else None)
             return ToolResult(name, text is not None, {"text": text} if text is not None else None,
                               None if text is not None else "not_found", untrusted=True)
         if name == CREATE_MEMBER:

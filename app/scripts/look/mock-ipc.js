@@ -1408,6 +1408,7 @@ export function installMock(fixture, config = {}, target = window) {
       case "skills.library.update": {
         const pack = data.skillLibrary.find(item => item.key === p.key);
         if (!pack) throw new Error("Invalid params: unknown package");
+        if (p.refresh && variant.skillRefreshPending) return new Promise(() => {});
         if ("enabled" in p) pack.enabled = p.enabled;
         if ("access" in p) pack.access = p.access;
         if (p.skill) pack.skills.find(skill => skill.id === p.skill.id).enabled = p.skill.enabled;

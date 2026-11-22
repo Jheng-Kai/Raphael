@@ -54,8 +54,7 @@ STALL_SAMPLE_S = 1.5
 class _StallSampler:
     """Names the code that holds the event loop when it stops answering.
 
-    The lag warning only says how long the loop was blocked; a 22-second stall on the owner's PC
-    (2026-11-22) left no trace of what blocked it. The loop beats on every lag tick; a watcher
+    The lag warning only says how long the loop was blocked. The loop beats on every lag tick; a watcher
     thread sees a missed beat and logs the loop thread's stack once per stall (file, line, function
     and source text only, never local values, so no secret reaches the log).
     """

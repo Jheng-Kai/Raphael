@@ -2,7 +2,6 @@
 
 import json
 import re
-from contextlib import nullcontext
 from datetime import datetime, timedelta
 
 from ..bots.homes import HomeError, digest
@@ -86,32 +85,56 @@ class GrowingSkills:
         if self.new_skills_in_window(member_id) >= NEW_SKILL_CAP:
             raise HomeError("a new skill was already learned in the last day; update an existing skill, or wait")
 
-    def skill_details(self, member_id, skill):
-        path = self._path(member_id, skill["id"])
+    def _read_skill_details(self, inputs, *, tolerate_missing=False):
+        mirrors, journals = {}, {}
+        result = []
+        for member_id, skill, path, plugin in inputs:
+            try:
+                result.append(self._skill_details(member_id, skill, path, plugin, mirrors, journals))
+            except (ValueError, OSError):
+                if not tolerate_missing:
+                    raise
+                # Discovery still knows a skill by its saved name when its files cannot be read.
+                result.append(skill)
+        return result
+
+    def _skill_details(self, member_id, skill, path, plugin_details, mirrors, journals):
+        path = self.homes.safe(path)
         relative = f"skills/{skill['id']}/SKILL.md"
-        state = self.homes.safe(self.homes.state(member_id) / "skills.json")
-        previous = next((s for s in json.loads(state.read_text(encoding="utf-8")) if s["id"] == skill["id"]), {}) if state.exists() else {}
-        revision = digest(path.read_bytes()) if path.exists() else None
+        if member_id not in mirrors:
+            state = self.homes.safe(self.homes.state(member_id) / "skills.json")
+            mirrors[member_id] = {s["id"]: s for s in json.loads(state.read_text(encoding="utf-8"))} if state.exists() else {}
+        previous = mirrors[member_id].get(skill["id"], {})
+        data = path.read_bytes() if path.exists() else None
+        revision = digest(data)
         updated = previous.get("updated_at")
-        if revision != previous.get("revision") or not updated:
-            # Normal reads use the mirror; do not load every memory/skill body in the journal.
-            folder = self.homes.safe(self.homes.state(member_id) / "journal")
-            for journal in sorted(folder.glob("*.json"), reverse=True):
-                entry = json.loads(self.homes.safe(journal).read_text(encoding="utf-8"))
-                if entry.get("path") == relative and entry.get("applied"):
-                    updated = datetime.strptime(entry["id"].split("-")[0], "%Y%m%dT%H%M%S%f").isoformat()
-                    break
+        if plugin_details is None and (revision != previous.get("revision") or not updated):
+            if member_id not in journals:
+                folder = self.homes.safe(self.homes.state(member_id) / "journal")
+                journals[member_id] = iter(sorted(folder.glob("*.json"), reverse=True)), {}
+            unread, latest = journals[member_id]
+            if relative not in latest:
+                for journal in unread:
+                    entry = json.loads(self.homes.safe(journal).read_text(encoding="utf-8"))
+                    entry_path = entry.get("path")
+                    if entry.get("applied") and isinstance(entry_path, str) and entry_path.startswith("skills/"):
+                        latest.setdefault(entry_path, entry["id"])
+                        if entry_path == relative:
+                            break
+            stamp = latest.get(relative)
+            if stamp:
+                updated = datetime.strptime(stamp.split("-")[0], "%Y%m%dT%H%M%S%f").isoformat()
         provenance = previous.get("provenance") or (skill["source"] if skill["source"] in ("learned", "owner") else "imported")
-        with path.open(encoding="utf-8") if path.exists() else nullcontext(None) as document:
-            metadata = document.read(4096) if document else ""
-            plugin = skill_plugin(metadata, skill["source"])
+        metadata = (data or b"").decode("utf-8")[:4096]
+        plugin = skill_plugin(metadata, skill["source"])
         name = skill["name"]
         if plugin and name.casefold().startswith(plugin.casefold() + ":"):
             name = name[len(plugin) + 1:]
+        source = {key: value for key, value in plugin_details.items() if key != "root"} if plugin_details else self.source_details(path)
         return {**skill, "name": name, **({"plugin": plugin} if plugin else {}), "provenance": provenance,
                 "revision": revision,
                 "learned_at": previous.get("learned_at") or (updated if provenance == "learned" else None),
-                "updated_at": updated, **self.source_details(member_id, skill["id"])}
+                "updated_at": updated, **source}
 
     def validate_skill(self, member_id, args):
         """Bot writes always validate the structure and use optimistic document revisions."""
@@ -174,7 +197,9 @@ class GrowingSkills:
         return self._skill(member_id, skill["id"])
 
     def reference_hashes(self, member_id, identifier):
-        folder = self._path(member_id, identifier).parent / "references"
-        owner = self.skill_owner(member_id, identifier)
+        return self._file_reference_hashes(self.skill_owner(member_id, identifier), self._path(member_id, identifier))
+
+    def _file_reference_hashes(self, owner, path):
+        folder = self.homes.safe(path).parent / "references"
         return {str(path.relative_to(self.homes.home(owner))).replace("\\", "/"): digest(self.homes.safe(path).read_bytes())
                 for path in sorted(folder.rglob("*")) if path.is_file()}

@@ -2,6 +2,13 @@
 
 Speed, start-up, the network and how the repository is worked. Part of [the product rules](../RULES.md); a rule's ID is unique across every file.
 
+## Core responsiveness while loading skills
+
+| ID | Date | Rule | Check | Severity | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-PERF-23 | 2026-11-22 | Team roster prompts use stored skill metadata with no document or journal reads. Repeated prompts reuse each member's list until a skill, package, grant, switch or command changes. A sweep of 60 members with 58 plugin skills has a one-second median regression ceiling. Viewing a member or changing its unread state does not open member files. | pytest | hard | core/tests/members/test_skill_performance.py::test_owner_sized_roster_uses_no_skill_files; core/tests/members/test_skill_performance.py::test_cached_skill_names_follow_all_skill_and_package_writes; core/tests/members/test_skill_performance.py::test_member_viewing_and_unread_changes_do_not_open_skill_paths |
+| R-PERF-24 | 2026-11-22 | Package imports and refreshes stage files off the event loop, then check for concurrent changes before publication. An unrelated member-list RPC answers within 100 ms during a blocked writer. The package shows update progress while the RPC is pending. | pytest, vitest, look | hard | core/tests/members/test_skill_performance.py::test_install_writer_leaves_unrelated_rpc_under_100ms; core/tests/members/test_skill_performance.py::test_refresh_rechecks_package_after_worker_writes; app/src/main/skill-library.test.ts; skill-library-open |
+
 ## Composer input and completion
 
 | ID | Date | Rule | Check | Severity | Evidence |

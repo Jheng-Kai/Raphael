@@ -119,7 +119,7 @@ from ..agent.policy import UNATTENDED_WAIT_S, Action, Approval, Confirmations, O
 from ..agent.safety import asked_with
 from ..agent.speaker import MAX_DEPTH, RAPHAEL, RAPHAEL_NAMES, Speaker
 from ..agent.steps import REFUSED_REASONS, step_view as _step_view
-from ..agent.team import CONSULTED, Team, handoff_refused, team_tools_for, roster_prompt
+from ..agent.team import CONSULTED, Team, handoff_refused, native_skills_for, team_tools_for, roster_prompt
 from ..agent.tools import ToolResult, Tools, without_internal_ids
 from ..brain.catalog import CatalogEntry, context_window
 from ..brain.model_ref import CLI_NAMES
@@ -1959,13 +1959,22 @@ class BackgroundService:
             run.restore_continuation(recovered.get("run_state", {}))
             run.reopen()
         expand = getattr(self._team, "expand_command", None)
+        resolve_async = getattr(self._team, "resolve_slash_async", None)
         resolve = getattr(self._team, "resolve_slash", None)
         from ..agent.failure import skill_failure, skill_instruction
 
         notices = []
-        request, skill_loaded = resolve(speaker.id, task.text,
-            on_failure=lambda name, error: notices.append(skill_failure(name, error))) if resolve is not None else (
-            expand(speaker.id, task.text) if expand is not None else task.text, False)
+
+        def on_skill_failure(name, error):
+            notices.append(skill_failure(name, error))
+
+        request, skill_loaded = task.text, False
+        if resolve_async is not None:
+            request, skill_loaded = await resolve_async(speaker.id, task.text, on_failure=on_skill_failure)
+        elif resolve is not None:
+            request, skill_loaded = resolve(speaker.id, task.text, on_failure=on_skill_failure)
+        elif expand is not None:
+            request = expand(speaker.id, task.text)
         if notices:
             request += "\n\n" + skill_instruction(notices)
             for notice in notices:
@@ -2034,7 +2043,7 @@ class BackgroundService:
                        'Pass their complete answers to the owner when they answer the request; you may add one line of your own. Never replace the result with a recap; do not ask them again.')
         spec = {
             "task_id": task.id,
-            "skills": getattr(self._team, "native_skills", lambda member: [])(task.member_id),
+            "skills": await native_skills_for(self._team, task.member_id) if room_cli else [],
             "system": system,
             "user": user,
             "tools": run.snapshot.definitions,

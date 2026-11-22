@@ -1,5 +1,6 @@
 """Team library packages, access and transactional document replacement."""
 
+import asyncio
 import json
 import shutil
 import tempfile
@@ -10,7 +11,7 @@ from pathlib import Path
 
 from ..bots.homes import atomic, redact_secrets
 from .capabilities import MAX_SKILL_BYTES, skill_metadata, skill_urls
-from .skill_library import SHARED
+from .skill_library import SHARED, stage_files
 from .skill_sources import validate_files
 from .skills import skill_plugin, stored_skill_name
 from .store import MemberError
@@ -49,24 +50,35 @@ class SkillPackages:
             raise MemberError("not_found", "no such skill package")
         return row
 
-    def view(self, key):
+    def _view_inputs(self, key):
         row = self.row(key)
         skills = [{"id": s["id"], "name": s["name"].rsplit(":", 1)[-1], "description": s["description"],
                    "enabled": bool(s["enabled"])} for s in self.conn.execute(
                        "SELECT * FROM member_skills WHERE package_key=? ORDER BY id", (key,))]
+        plugin = self.conn.execute("SELECT * FROM skill_sets WHERE id=?", (key[4:],)).fetchone() if key.startswith("set:") else None
+        return row, skills, plugin
+
+    def view(self, key):
+        return self._view(*self._view_inputs(key))
+
+    async def view_async(self, key):
+        return await asyncio.to_thread(self._view, *self._view_inputs(key))
+
+    def _view(self, row, skills, plugin):
+        key = row["key"]
         name, source = row["name"], row["source"]
         skipped_links = {}
         plugin_manifest = False
-        for skill in skills:
-            if not key.startswith("set:"):
-                info = self.cap.package_info(SHARED, skill["id"])
+        if plugin is None:
+            home = self.cap.homes.home(SHARED)
+            for skill in skills:
+                info = self.cap._package_info_at(home / "skills" / str(skill["id"]) / "SKILL.md")
                 plugin_manifest |= info.get("plugin_manifest") is True
                 if info.get("skipped_links"):
                     skipped_links[str(skill["id"])] = info["skipped_links"]
         version = description = ""
         updatable = refetchable(row["origin"], source)
-        if key.startswith("set:"):
-            plugin = self.conn.execute("SELECT * FROM skill_sets WHERE id=?", (key[4:],)).fetchone()
+        if plugin is not None:
             name, version, source, description = (plugin[k] for k in ("name", "version", "source", "description"))
             updatable = bool(json.loads(plugin["metadata"]).get("marketplace")) or refetchable("source", source)
             kind = "plugin"
@@ -82,7 +94,16 @@ class SkillPackages:
                 **({"skipped_links": skipped_links} if skipped_links else {})}
 
     def list(self):
-        packages = [self.view(r[0]) for r in self.conn.execute("SELECT key FROM skill_packages")]
+        return self._list_views(self._list_inputs())
+
+    async def list_async(self):
+        return await asyncio.to_thread(self._list_views, self._list_inputs())
+
+    def _list_inputs(self):
+        return [self._view_inputs(r[0]) for r in self.conn.execute("SELECT key FROM skill_packages")]
+
+    def _list_views(self, inputs):
+        packages = [self._view(*row) for row in inputs]
         return sorted(packages, key=lambda p: p["name"].casefold())
 
     def for_member(self, member_id):
@@ -93,8 +114,18 @@ class SkillPackages:
             "GROUP BY p.key ORDER BY name COLLATE NOCASE", ('"all"', member_id))
         return [dict(row) for row in rows]
 
-    def install(self, member, documents, source, origin, label, *, access=None, name=None, key=None, required_skill=None):
-        """Publish a validated snapshot in one SQL transaction, restoring old folders on failure."""
+    def apply_changes(self, key, *, access=None, enabled=None, skill=None):
+        if access is not None:
+            self.conn.execute("UPDATE skill_packages SET access=? WHERE key=?", (json.dumps(access), key))
+        if enabled is not None:
+            self.conn.execute("UPDATE skill_packages SET enabled=? WHERE key=?", (enabled, key))
+        if skill:
+            self.conn.execute("UPDATE member_skills SET enabled=? WHERE id=? AND package_key=?",
+                              (skill["enabled"], skill["id"], key))
+
+    async def install(self, member, documents, source, origin, label, *, access=None, name=None, key=None,
+                      required_skill=None, local=None, enabled=None, skill=None, skill_switches=None):
+        """Write a complete snapshot before publishing its folders and rows."""
         self.cap.check(member)
         if access is not None:
             self.validate_access(access)
@@ -103,8 +134,12 @@ class SkillPackages:
             self.row(key)
             old = {r["name"].casefold(): r for r in self.conn.execute(
                 "SELECT id,name FROM member_skills WHERE package_key=?", (key,))}
+        elif local and local.get("previous"):
+            previous = local["previous"]
+            old[previous["name"].casefold()] = previous
         taken = {r[0].casefold() for r in self.conn.execute(
-            "SELECT name FROM member_skills WHERE member_id=? AND (? IS NULL OR package_key IS NOT ?)", (member, key, key))}
+            "SELECT name FROM member_skills WHERE member_id=? AND (? IS NULL OR package_key IS NOT ?) AND id IS NOT ?",
+            (member, key, key, local["previous"]["id"] if local and local.get("previous") else None))}
         from .skill_names import unique_skill_name
 
         prepared = []
@@ -128,6 +163,8 @@ class SkillPackages:
                 previous = stored_skill_name(slug, skill_plugin(text, skill_source)).casefold()
                 if previous in old:
                     previous_slug = old[previous]["name"].rsplit(":", 1)[-1]
+                elif local:
+                    previous_slug = local["previous"]["name"].rsplit(":", 1)[-1]
             slug, desc = skill_metadata(text, writing=True, previous_name=previous_slug)
             stored = stored_skill_name(slug, skill_plugin(text, skill_source))
             if stored.casefold() in taken:
@@ -138,48 +175,91 @@ class SkillPackages:
                 slug = unique_skill_name(slug, {name[len(prefix):] for name in taken if name.startswith(prefix)})
                 stored = stored_skill_name(slug, plugin)
             taken.add(stored.casefold())
-            prepared.append((stored, desc, skill_source, validate_files({**files, "SKILL.md": text.encode()}), skipped_links))
+            metadata = {"source": source, "origin": origin, "files": [p for p in files if p != "SKILL.md"]}
+            if plugin_manifest:
+                metadata["plugin_manifest"] = True
+            if local:
+                metadata.update(local["metadata"])
+            if skipped_links:
+                metadata["skipped_links"] = skipped_links
+            if origin in ("template", "copy"):
+                metadata = None
+            prepared.append((stored, desc, skill_source, validate_files({**files, "SKILL.md": text.encode()}), metadata))
         if required_skill is not None and not any(
                 old[name.casefold()]["id"] == required_skill for name, *_ in prepared if name.casefold() in old):
             raise MemberError("not_found", "the refreshed package no longer has that skill")
         if not prepared:
             raise MemberError("not_found", "no SKILL.md found")
-        root = self.cap.homes.safe(self.cap.homes.home(member) / "skills")
-        root.mkdir(parents=True, exist_ok=True)
-        ids = []
-        with tempfile.TemporaryDirectory(dir=root) as temp, ExitStack() as rollback, self.conn:
-            if member == SHARED and key is None:
-                key = "pack:" + uuid.uuid4().hex
-                default = "all" if len(prepared) == 1 else []
-                self.conn.execute("INSERT INTO skill_packages(key,name,source,origin,access) VALUES (?,?,?,?,?)",
-                                  (key, name or (prepared[0][0].rsplit(":", 1)[-1] if len(prepared) == 1 else label), source, origin,
-                                   json.dumps(default if access is None else access)))
-            for stored, desc, skill_source, files, skipped_links in prepared:
-                existing = old.pop(stored.casefold(), None)
-                if existing:
-                    identifier = existing["id"]
-                    self.conn.execute("UPDATE member_skills SET description=?,source=? WHERE id=?", (desc, skill_source, identifier))
-                else:
-                    identifier = self.conn.execute(
-                        "INSERT INTO member_skills(member_id,name,description,source,package_key) VALUES (?,?,?,?,?)",
-                        (member, stored, desc, skill_source, key)).lastrowid
-                ids.append(identifier)
-                target = self.cap.homes.safe(root / str(identifier))
-                self._backup(target, temp, rollback)
-                rollback.callback(shutil.rmtree, target, True)
+        revision = self.cap.skill_revision()
+        root = self.cap.homes.home(member) / "skills"
+        temp = await stage_files(self._write, root, prepared, local, discard=shutil.rmtree)
+        try:
+            self.cap.check(member)
+            if self.cap.skill_revision() != revision:
+                raise MemberError("not_found", "the skill library changed during import")
+            if access is not None:
+                self.validate_access(access)
+            key, ids = self._publish(member, source, origin, label, access, name, key, old, prepared, root, temp, local,
+                                     enabled, skill, skill_switches)
+        finally:
+            await asyncio.to_thread(shutil.rmtree, temp)
+        stamp = datetime.now().isoformat()
+        await self.cap._mirror_async(member, {i: {"updated_at": stamp} for i in ids})
+        return key, ids
+
+    def _write(self, root, prepared, local):
+        temp = self._make_staging(root)
+        try:
+            for index, (_, _, _, files, metadata) in enumerate(prepared):
+                folder = temp / str(index)
+                if local:
+                    for path, data in local["preserved"].items():
+                        if path not in files:
+                            atomic(self.cap.homes.safe(folder / path), data)
                 for path, data in files.items():
-                    atomic(self.cap.homes.safe(target / path), data)
-                metadata = {"source": source, "origin": origin, "files": [p for p in files if p != "SKILL.md"]}
-                if plugin_manifest:
-                    metadata["plugin_manifest"] = True
-                if skipped_links:
-                    metadata["skipped_links"] = skipped_links
-                atomic(target / ".raphael-source.json", json.dumps(metadata).encode())
-            for row in old.values():
-                self._backup(self.cap.homes.safe(root / str(row["id"])), temp, rollback)
-                self.conn.execute("DELETE FROM member_skills WHERE id=?", (row["id"],))
-            stamp = datetime.now().isoformat()
-            self._commit(member, rollback, {i: {"updated_at": stamp} for i in ids})
+                    atomic(self.cap.homes.safe(folder / path), data)
+                if metadata is not None:
+                    atomic(self.cap.homes.safe(folder / ".raphael-source.json"), json.dumps(metadata).encode())
+            return temp
+        except BaseException:
+            shutil.rmtree(temp)
+            raise
+
+    def _publish(self, member, source, origin, label, access, name, key, old, prepared, root, temp, local,
+                 enabled, skill, skill_switches):
+        ids = []
+        with ExitStack() as rollback:
+            with self.conn:
+                if member == SHARED and key is None:
+                    key = "pack:" + uuid.uuid4().hex
+                    default = "all" if len(prepared) == 1 else []
+                    self.conn.execute("INSERT INTO skill_packages(key,name,source,origin,access) VALUES (?,?,?,?,?)",
+                                      (key, name or (prepared[0][0].rsplit(":", 1)[-1] if len(prepared) == 1 else label), source, origin,
+                                       json.dumps(default if access is None else access)))
+                for index, (stored, desc, skill_source, _, _) in enumerate(prepared):
+                    existing = old.pop(stored.casefold(), None)
+                    if local and old:
+                        existing = old.popitem()[1]
+                    if existing:
+                        identifier = existing["id"]
+                        self.conn.execute("UPDATE member_skills SET name=?,description=?,source=? WHERE id=?",
+                                          (stored, desc, skill_source, identifier))
+                    else:
+                        active = skill_switches[index] if skill_switches is not None else member == SHARED or enabled is not False
+                        identifier = self.conn.execute(
+                            "INSERT INTO member_skills(member_id,name,description,source,package_key,enabled) VALUES (?,?,?,?,?,?)",
+                            (member, stored, desc, skill_source, key, active)).lastrowid
+                    ids.append(identifier)
+                    target = self.cap.homes.safe(root / str(identifier))
+                    self._backup(target, temp, rollback)
+                    staged = temp / str(index)
+                    staged.rename(target)
+                    rollback.callback(target.rename, staged)
+                for row in old.values():
+                    self._backup(self.cap.homes.safe(root / str(row["id"])), temp, rollback)
+                    self.conn.execute("DELETE FROM member_skills WHERE id=?", (row["id"],))
+                if key is not None:
+                    self.apply_changes(key, access=access, enabled=enabled, skill=skill)
             rollback.pop_all()
         return key, ids
 
@@ -195,28 +275,51 @@ class SkillPackages:
     @staticmethod
     def _backup(target, temp, rollback):
         if target.exists():
-            backup = Path(temp) / target.name
+            backup = Path(temp) / ("old-" + target.name)
             target.rename(backup)
             rollback.callback(backup.rename, target)
 
     def delete(self, key):
-        package = self.view(key)
-        home = self.cap.homes.home(SHARED)
-        plugin = key.startswith("set:")
-        if plugin:
-            identifier = int(key[4:])
-            folders = [self.cap.plugin_root(identifier)]
-            root = self.cap.homes.safe(home / "skill-sets")
-        else:
-            root = self.cap.homes.safe(home / "skills")
-            folders = [self.cap.homes.safe(root / str(skill["id"])) for skill in package["skills"]]
+        root, folders, identifier = self._delete_inputs(key)
+        root = self.cap.homes.safe(root)
         root.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=root) as temp, ExitStack() as rollback, self.conn:
-            for folder in folders:
-                self._backup(folder, temp, rollback)
-            self.conn.execute("DELETE FROM member_skills WHERE package_key=?", (key,))
-            if plugin:
-                self.conn.execute("DELETE FROM skill_sets WHERE id=?", (identifier,))
-            self.conn.execute("DELETE FROM skill_packages WHERE key=?", (key,))
+            self._delete_folders(key, identifier, folders, temp, rollback)
             self._commit(SHARED, rollback)
             rollback.pop_all()
+
+    async def delete_async(self, key):
+        root, folders, identifier = self._delete_inputs(key)
+        revision = self.cap.skill_revision()
+        temp = await stage_files(self._make_staging, root, discard=shutil.rmtree)
+        try:
+            if self.cap.skill_revision() != revision:
+                raise MemberError("not_found", "the skill library changed during removal")
+            with ExitStack() as rollback:
+                with self.conn:
+                    self._delete_folders(key, identifier, folders, temp, rollback)
+                rollback.pop_all()
+        finally:
+            await asyncio.to_thread(shutil.rmtree, temp)
+        await self.cap._mirror_async(SHARED)
+
+    def _make_staging(self, root):
+        root = self.cap.homes.safe(root)
+        root.mkdir(parents=True, exist_ok=True)
+        return Path(tempfile.mkdtemp(prefix="pack-", dir=root))
+
+    def _delete_inputs(self, key):
+        _, skills, plugin = self._view_inputs(key)
+        home = self.cap.homes.home(SHARED)
+        if plugin:
+            return home / "skill-sets", [home / plugin["folder"]], plugin["id"]
+        root = home / "skills"
+        return root, [root / str(skill["id"]) for skill in skills], None
+
+    def _delete_folders(self, key, identifier, folders, temp, rollback):
+        for folder in folders:
+            self._backup(self.cap.homes.safe(folder), temp, rollback)
+        self.conn.execute("DELETE FROM member_skills WHERE package_key=?", (key,))
+        if identifier is not None:
+            self.conn.execute("DELETE FROM skill_sets WHERE id=?", (identifier,))
+        self.conn.execute("DELETE FROM skill_packages WHERE key=?", (key,))
