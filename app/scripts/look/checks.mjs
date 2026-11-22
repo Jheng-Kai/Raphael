@@ -652,6 +652,14 @@ export function checkRendered(name, context = {}) {
       require(visible(details) && text?.textContent === description?.textContent && !document.querySelector('.skl-page'), 'the overflow reveals the full description on the list');
       require(text.scrollWidth <= text.clientWidth + 1 && text.getBoundingClientRect().height > description.getBoundingClientRect().height, 'the description wraps within the popover');
     }
+    if (name === 'skill-library-row-lit') {
+      // The lit row once stood as a smaller rounded box inside its card (owner, 2026-11-22).
+      const row = document.querySelector('.skl-list > .skl-pack[data-skl-pack="set:1"]'), card = row.parentElement;
+      const fill = getComputedStyle(row).backgroundColor, r = row.getBoundingClientRect(), c = card.getBoundingClientRect();
+      require(!/rgba\(0, 0, 0, 0\)|transparent/.test(fill), `the row is lit (${fill})`);
+      require(Math.abs(r.left - c.left) <= 1.5 && Math.abs(r.right - c.right) <= 1.5 && Math.abs(r.top - c.top) <= 1.5, "the lit row is the card's full width from its top edge");
+      require(getComputedStyle(row).borderTopLeftRadius === getComputedStyle(card).borderTopLeftRadius, "the lit row has the card's corners");
+    }
     if (name === 'skill-library-open') {
       const skills = [...document.querySelectorAll('.skl-page .skl-skills .skl-skill')];
       require(skills.length === 7 && skills.every(row => visible(row.querySelector('.tg[role="switch"]'))), `the seven skills of pstack are listed on its page, each with its own switch (${skills.length})`);

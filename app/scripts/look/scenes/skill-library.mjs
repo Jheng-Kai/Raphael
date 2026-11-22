@@ -1,5 +1,5 @@
 // Team skills in Settings: packages, who may use each, and the importer.
-import { scene, click, type, wait, waitGone, settings, scroll, focus, key, check } from "./steps.mjs";
+import { scene, click, type, wait, waitGone, settings, scroll, focus, key, check, hover } from "./steps.mjs";
 import { memberSettingsPage } from "./member-settings.mjs";
 
 const list = [...settings("skills"), wait(".skl-pack")];
@@ -7,6 +7,7 @@ const opened = [...list, click('[data-skl="open"][data-key="set:1"]'), wait('.sk
 const importing = [...list, wait("#skl-source")];
 export default [
   scene("skill-library", "Plugins and standalone skills have separate sections and equal rows", [...list, check("skill-library")]),
+  scene("skill-library-row-lit", "A plugin's row under the pointer is lit across its whole card, corners and all", [...list, hover('[data-skl="open"][data-key="set:1"]'), check("skill-library-row-lit")]),
   scene("skill-library-details", "The overflow opens the full description of a standalone skill", [
     ...list, click('[data-skl="more"][data-key="skill:3"]'), click('[data-pick="details"]'), wait(".skl-details"), check("skill-library-details")]),
   scene("skill-library-open", "The plugin name and round back button lead the page, with controls on their right. The source, description and equal one-line skill rows align with the back button.", [...opened, check("skill-library-open")]),
