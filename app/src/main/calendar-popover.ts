@@ -10,7 +10,7 @@ import { linkedText } from "./message-content";
 import { ownerFaceHTML } from "./owner-avatar";
 import { dateKey, localDay, openDatePicker } from "./schedule-picker";
 import type { RoutineRun } from "./types";
-import { actionRow, btn, closeMenu, esc, ico, iconButton, openMenu, sel, tg, toaster, type Choice } from "./ui";
+import { actionRow, btn, closeMenu, esc, headerCloseButton, ico, iconButton, openMenu, sel, tg, toaster, type Choice } from "./ui";
 
 /** An event as the editor holds it. No id: one that is being made. */
 export interface EventDraft { id?: number; title: string; start: number; end: number; allDay: boolean; notes: string }
@@ -234,11 +234,11 @@ export function openEventDetail(rect: Pick<DOMRect, "left" | "right" | "top">, e
     return btn(ico(icon)+`<time>${esc(formatClock(r.at))}</time>`,"sm",` data-rhythm-time="${r.at}" data-status="${status}" aria-label="${esc(formatClock(r.at)+" · "+label)}"${r.run?.turn_id ? "" : " disabled"}`);
   }).join("")}</div><p class="au-pop-time">${esc(t("auto.nextRun"))} · ${entry.routine?.next_run ? esc(whenDay(entry.routine.next_run)+" · "+formatClock(entry.routine.next_run)) : esc(t("auto.notYet"))}</p>` : "";
   panel.el.innerHTML =
-    `<header class="au-pop-tools">` +
+    `<header class="au-pop-tools"><h2>${esc(entry.title)}</h2>` +
     (o.onEdit ? iconButton("pencil", t("cal.edit"), ' data-pop="edit"') : "") +
     (o.onMore ? iconButton("more", t("members.more", { p0: entry.title }), ' data-pop="more" aria-haspopup="menu" aria-expanded="false"') : "") +
-    iconButton("x", t("common.close"), ' data-pop="close"') + `</header>` +
-    `<h2>${esc(entry.title)}</h2>${entry.rhythm && entry.routine ? "" : `<p class="au-pop-time">${esc(when)}</p>`}` +
+    headerCloseButton(t("common.close"), ' data-pop="close"') + `</header>` +
+    `${entry.rhythm && entry.routine ? "" : `<p class="au-pop-time">${esc(when)}</p>`}` +
     // Notes are read whole here, so an address in them is a link (the editor's field keeps them as words to type in).
     (entry.notes ? `<p class="au-pop-notes">${linkedText(entry.notes)}</p>` : "") +
     `<p class="au-pop-from">${from}</p>` +

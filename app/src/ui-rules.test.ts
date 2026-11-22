@@ -184,7 +184,6 @@ describe("buttons", () => {
         `styles.css: :is(.page-agent .mb-det-head, .page-agent .mb-head .ra-tools, .page-agent .mb-head .mb-head-l, .page-agent .mb-head .room-picker, .mb-dlg-head, .cs-dlg-head, .lb-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock, .ms-bar, .ms-cover) .btn.icon${state}`,
         `styles.css: .page-agent .cmp-bar .btn.cmp-attach${state}`,
       ]),
-      "styles.css: .btn.icon.modal-x:hover:not(:disabled)", "styles.css: .btn.icon.modal-x:active:not(:disabled)",
       // The larger view's collapse control keeps the window strip's hover (R-COMP-PERF-07).
       'desktop-viewer.css: .window-chrome > .btn.icon[data-desktop="collapse"]:is(:hover, :active):not(:disabled)',
       'desktop-viewer.css: .window-chrome > .btn.icon[data-desktop="collapse"]:active:not(:disabled)',
@@ -193,7 +192,7 @@ describe("buttons", () => {
       // The guide's foot: a step's two round buttons (the way back and the way on, a triangle in each) are filled circles
       // in every state.
       "styles.css: .ob-foot .ob-pair .btn.icon.ob-go:hover:not(:disabled)", "styles.css: .ob-foot .ob-pair .btn.icon.ob-go:active:not(:disabled)",
-      "styles.css: .btn.icon.back-button:hover:not(:disabled)", "styles.css: .btn.icon.back-button:active:not(:disabled)",
+      "styles.css: .btn.icon:is(.back-button, .close-button):hover:not(:disabled)", "styles.css: .btn.icon:is(.back-button, .close-button):active:not(:disabled)",
       // R-UI-50: the contextual latest action floats over messages and needs an opaque surface.
       "agent.css: .page-agent .btn.conversation-latest:hover:not(:disabled)",
       "conversations.css: .peer-chat > .btn.peer-latest:hover:not(:disabled)",

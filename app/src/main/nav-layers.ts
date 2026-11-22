@@ -37,6 +37,7 @@ interface InlineLayer {
   step?: LayerStep;
   /** Overrides eligibility for a mouse side press, for surfaces that also have keyboard history. */
   side?: () => boolean;
+  sideBack?: () => void;
   /** The layer is itself a place of the view history (a page, a member's settings, the Details column): forward with no
    *  inner step goes on through the history instead of stopping at it. */
   place: boolean;
@@ -47,10 +48,23 @@ let order = 0;
 
 /** An inline surface that owns navigation but keeps its existing outside-click policy. */
 export function bindNavLayer(el: HTMLElement, back: () => void, options: {
-  active?: (direction?: NavStep) => boolean; step?: LayerStep; place?: boolean; side?: () => boolean;
+  active?: (direction?: NavStep) => boolean; step?: LayerStep; place?: boolean; side?: () => boolean; sideBack?: () => void;
 } = {}): void {
   el.dataset.navLayer = "";
-  inline.set(el, { order: ++order, back, active: options.active ?? (() => true), step: options.step, place: options.place ?? false, side: options.side });
+  inline.set(el, { order: ++order, back, active: options.active ?? (() => true), step: options.step, place: options.place ?? false, side: options.side, sideBack: options.sideBack });
+}
+
+/** Keep unsaved input in its editor until the owner uses the editor's own save or cancel control. */
+export function keepEditedField(root: ParentNode, selector = "input, textarea, select"): boolean {
+  for (const field of root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(selector)) {
+    if (field.disabled || field.closest("[hidden], [inert]")) continue;
+    const changed = field instanceof HTMLSelectElement ? [...field.options].some((option, i) =>
+      option.selected !== (option.defaultSelected || i === 0 && !field.multiple && ![...field.options].some(item => item.defaultSelected)))
+      : field instanceof HTMLInputElement && (field.type === "checkbox" || field.type === "radio")
+        ? field.checked !== field.defaultChecked : field.value !== field.defaultValue;
+    if (changed) { field.focus({ preventScroll: true }); return true; }
+  }
+  return false;
 }
 
 /**
@@ -77,9 +91,10 @@ export function bindLayerCancels(root: HTMLElement, selector: string, options: {
 }
 
 /** Delegate a tab or subpage at the edge of its history back to the enclosing layer. */
-export function bindLayerSteps<T>(el: HTMLElement, views: LayerViews<T>, show: (view: T) => void): void {
+export function bindLayerSteps<T>(el: HTMLElement, views: LayerViews<T>, show: (view: T) => void, sideBack?: () => void): void {
   bindNavLayer(el, () => {}, {
-    side: () => false,
+    side: () => !!sideBack && views.canStep("back"),
+    sideBack,
     active: direction => direction ? views.canStep(direction) : views.canStep("back") || views.canStep("forward"),
     step: direction => views.step(direction, show),
   });
@@ -137,6 +152,6 @@ export function stepInlineLayer(scope: ParentNode, direction: NavStep, withinLay
 export function stepInlineSideLayer(scope: ParentNode, direction: NavStep): boolean {
   const layer = topInline(scope, direction, true);
   if (!layer) return false;
-  if (direction === "back") layer.back();
+  if (direction === "back") (layer.sideBack ?? layer.back)();
   return true;
 }

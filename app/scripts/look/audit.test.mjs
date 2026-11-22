@@ -108,6 +108,67 @@ describe("rendered look checks", () => {
     // The row lit as one, the switch on its fill: what Connect Apps and the member settings page do.
     expect(run(".row:hover { background: #ededed; } .row > .btn.open:hover { background: transparent; }")).toHaveLength(0);
   });
+  it("rejects a visible control to the right of a switch", () => {
+    const browser = new Window();
+    const { document: doc } = browser;
+    doc.body.innerHTML = '<div class="row"><div class="ctl"><button class="tg" role="switch"></button><button aria-label="Options"></button></div></div>';
+    const [toggle, other] = doc.querySelectorAll("button");
+    const rect = (left, top, width, height) => ({ left, right: left + width, top, bottom: top + height, width, height });
+    for (const node of doc.querySelectorAll("*")) node.getBoundingClientRect = () => rect(0, 0, 400, 100);
+    toggle.getBoundingClientRect = () => rect(160, 10, 40, 28);
+    let otherBox = rect(210, 6, 36, 36);
+    other.getBoundingClientRect = () => otherBox;
+    const violations = () => auditDocument(doc, { width: 720, height: 480 }).productRules.filter(item => item.rule === "R-UI-178");
+    try {
+      expect(violations()).toHaveLength(1);
+      other.hidden = true;
+      expect(violations()).toEqual([]);
+      other.hidden = false;
+      otherBox = rect(210, 48, 36, 36);
+      expect(violations()).toEqual([]);
+      otherBox = rect(110, 6, 36, 36);
+      expect(violations()).toEqual([]);
+    } finally { browser.happyDOM.abort(); }
+  });
+  it("rejects an unframed or misaligned header close and a bare close glyph", () => {
+    const browser = new Window();
+    const { document: doc } = browser;
+    doc.body.innerHTML = '<div role="dialog"><header><button class="back-button"></button><h2>Title</h2><button class="close-button"><svg></svg></button></header></div>';
+    const rect = (left, top, width, height) => ({ left, right: left + width, top, bottom: top + height, width, height });
+    for (const node of doc.querySelectorAll("*")) node.getBoundingClientRect = () => rect(0, 0, 400, 100);
+    const [back, close] = doc.querySelectorAll("button");
+    for (const button of [back, close]) {
+      button.style.boxShadow = "inset 0 0 0 1px rgb(0, 0, 0)";
+      button.style.borderTopLeftRadius = "999px";
+    }
+    back.getBoundingClientRect = () => rect(10, 10, 36, 36);
+    doc.querySelector("h2").getBoundingClientRect = () => rect(60, 16, 100, 24);
+    let top = 11;
+    close.getBoundingClientRect = () => rect(350, top, 36, 36);
+    const violations = () => auditDocument(doc, { width: 720, height: 480 }).productRules.filter(item => item.rule === "R-UI-179");
+    try {
+      expect(violations()).toEqual([]);
+      top = 12;
+      expect(violations().map(item => item.reason)).toContain("The header close and back differ in size, frame or vertical centre");
+      top = 10;
+      close.style.boxShadow = "inset 0 0 0 2px rgb(0, 0, 0)";
+      expect(violations().map(item => item.reason)).toContain("The header close and back differ in size, frame or vertical centre");
+      close.style.boxShadow = back.style.boxShadow;
+      back.remove();
+      expect(violations()).toEqual([]);
+      top = 12;
+      expect(violations().map(item => item.reason)).toContain("The header close does not share the title's vertical centre");
+      top = 10;
+      close.style.boxShadow = "none";
+      expect(violations().map(item => item.reason)).toContain("The header close is missing its shared round button or frame");
+      close.remove();
+      const glyph = doc.createElement("span");
+      glyph.textContent = "×";
+      glyph.getBoundingClientRect = () => rect(350, 10, 36, 36);
+      doc.querySelector("header").append(glyph);
+      expect(violations().map(item => item.reason)).toContain("A bare close glyph stands in a dialog header");
+    } finally { browser.happyDOM.abort(); }
+  });
   it("accepts the complete 1Password brand while still rejecting an untranslated Password label", () => {
     const window = new Window();
     window.document.body.innerHTML = '<p>從 1Password 匯入</p><label>Password</label>';

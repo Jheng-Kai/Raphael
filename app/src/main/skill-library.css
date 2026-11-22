@@ -34,14 +34,15 @@
 
 /* A package's page, in the list's place: the back arrow (as an app's page of 連接 has it), the name and the count, its
    controls as on its row, where it came from, then its skills on one card of Settings' rows. */
-.row.skl-page-head { gap: var(--sp-2); min-height: var(--h-row); padding: 0; flex-wrap: nowrap; }
+.sgroup.skl-page { margin-top: 0; }
+.skl-page-head { display: flex; align-items: center; gap: var(--sp-2); min-height: 36px; }
 .skl-back { margin-inline-start: -9px; }
-.skl-page-name { min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 var(--fs-lg)/1.3 var(--display); color: var(--text); }
-/* Its controls end where its skills' switches do, and its dropdown is its words and chevron, as on its row. */
-.row.skl-page-head { padding-right: var(--sp-4); }
-.skl-page-head > .ctl { margin-left: auto; }
-.modal-body .skl-page-head .ctl .sel { width: auto; max-width: 100%; justify-content: flex-end; gap: var(--sp-1); padding-inline: var(--sp-2); border-color: transparent; background-color: transparent; color: var(--text-2); }
-.modal-body .skl-page-head .ctl .sel:hover:not(:disabled), .modal-body .skl-page-head .ctl .sel[aria-expanded="true"] { border-color: transparent; background-color: transparent; color: var(--text); }
+.skl-page-name { flex: 1; min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 var(--fs-lg)/1.3 var(--display); color: var(--text); }
+/* The package controls end where its skills' switches do. */
+.skl-page-actions { display: flex; justify-content: flex-end; padding-right: var(--sp-4); margin-top: var(--sp-2); }
+.skl-page-actions > .ctl { display: flex; align-items: center; gap: var(--sp-2); }
+.modal-body .skl-page-actions .ctl .sel { width: auto; max-width: 100%; justify-content: flex-end; gap: var(--sp-1); padding-inline: var(--sp-2); border-color: transparent; background-color: transparent; color: var(--text-2); }
+.modal-body .skl-page-actions .ctl .sel:hover:not(:disabled), .modal-body .skl-page-actions .ctl .sel[aria-expanded="true"] { border-color: transparent; background-color: transparent; color: var(--text); }
 .skl-source, .skl-about { margin: var(--sp-1) 0 var(--sp-3); padding-left: calc(36px - 9px + var(--sp-2)); color: var(--text-3); font-size: var(--fs-sm); overflow-wrap: anywhere; }
 .slist.skl-skills > .row { flex-wrap: nowrap; }
 .slist.skl-skills > .row > .lbl { min-width: 0; }

@@ -5,7 +5,7 @@ import type { AppContext, MainEvent, ModelCatalog, SettingsPane } from "../types
 import { setLocale, t } from "../i18n";
 import { createHotkeyRecording } from "../hotkey-recording";
 import { Navigation } from "../nav-history";
-import { hasOpenLayer, stepOpenLayer } from "../dismissals";
+import { hasOpenLayer, stepOpenLayer, stepSideLayer } from "../dismissals";
 import { installNavInput } from "../nav-input";
 import { navInputs, pressLayer, sendNavInput } from "../test-support/nav-layer-input";
 import { Cleared } from "../cleared";
@@ -23,7 +23,7 @@ const api = vi.hoisted(() => ({
   // The read-ahead after start-up also reads 連接 (connections.ts load); here that core does not answer it.
   toolsetsList: vi.fn(async () => { throw new Error("offline"); }), connectorsStatus: vi.fn(async () => { throw new Error("offline"); }),
   integrationsAudit: vi.fn(async () => { throw new Error("offline"); }), integrationsInventory: vi.fn(async () => { throw new Error("offline"); }),
-  integrationsCatalog: vi.fn(async () => { throw new Error("offline"); }),
+  integrationsCatalog: vi.fn(),
 }));
 vi.mock("../api", () => api);
 vi.mock("@tauri-apps/api/app", () => ({ getVersion: async () => "test" }));
@@ -62,6 +62,81 @@ function create() {
   document.body.append(page.el); page.el.hidden = false;
 }
 const click = (selector: string) => { const button = document.querySelector<HTMLButtonElement>(selector); expect(button, selector).not.toBeNull(); button!.click(); };
+
+function withMouseBack(check: (back: () => void) => void): void {
+  const underlying = vi.fn();
+  const stop = installNavInput(window, vi.fn(), undefined, direction => {
+    if (!stepSideLayer(direction)) underlying();
+  });
+  try {
+    check(() => sendNavInput("mouse", "back"));
+    expect(underlying).not.toHaveBeenCalled();
+  } finally { stop(); }
+}
+
+test("mouse Back returns from Slack to Connectors and then closes Settings", async () => {
+  const description = { "zh-TW": "Slack", en: "Slack", ja: "Slack" };
+  api.integrationsCatalog.mockResolvedValue({ services: [{
+    id: "slack", name: "Slack", publisher: "Slack", icon: "slack", category: "messaging", auth: "oauth",
+    summary: description, about: description, examples: {}, server_id: null,
+  }] });
+  await mount("connections");
+  click('.cs-card [data-conn="open-store"][data-id="slack"]');
+  expect(page.el.querySelector("#cs-page-title")?.textContent).toBe("Slack");
+  withMouseBack(back => {
+    back();
+    expect(page.el.querySelector(".cs-apps")).not.toBeNull();
+    expect(document.activeElement?.getAttribute("data-k")).toBe("cs-store:slack");
+    expect(closeSettings).not.toHaveBeenCalled();
+    back();
+    expect(closeSettings).toHaveBeenCalledOnce();
+  });
+});
+
+test("mouse Back closes a plugin menu, then returns to the team skill list, then closes Settings", async () => {
+  api.core.mockResolvedValue({ members: [], packages: [{
+    key: "set:1", name: "Example plugin", kind: "plugin", source: "", description: "", version: "",
+    enabled: true, access: "all", updatable: false, skills: [{ id: 1, name: "example", description: "", enabled: true }],
+  }] });
+  await mount("skills");
+  click('[data-skl="open"][data-key="set:1"]');
+  const header = page.el.querySelector(".skl-page header")!;
+  expect(header.querySelector('#set-title')?.textContent).toBe("Example plugin");
+  expect(header.querySelector('.close-button')).not.toBeNull();
+  expect(page.el.querySelectorAll('.close-button')).toHaveLength(1);
+  click('.skl-page [data-skl="access"]');
+  expect(document.querySelector("#app-popover")).not.toBeNull();
+  withMouseBack(back => {
+    back();
+    expect(document.querySelector("#app-popover")).toBeNull();
+    expect(page.el.querySelector(".skl-page")).not.toBeNull();
+    back();
+    expect(page.el.querySelector(".skl-page")).toBeNull();
+    expect(page.el.querySelector('[data-skl="open"][data-key="set:1"]')).toBe(document.activeElement);
+    expect(closeSettings).not.toHaveBeenCalled();
+    back();
+    expect(closeSettings).toHaveBeenCalledOnce();
+  });
+});
+
+test("mouse Back keeps an unsaved connector form and its visible Cancel can discard it", async () => {
+  await mount("connections");
+  click('[data-k="conn-add"]');
+  click('#app-popover [data-value="custom"]');
+  const field = page.el.querySelector<HTMLInputElement>("#conn-name")!;
+  field.value = "Draft";
+  field.dispatchEvent(new Event("input", { bubbles: true }));
+  withMouseBack(back => {
+    back();
+    expect(field.isConnected).toBe(true);
+    expect(field.value).toBe("Draft");
+    expect(closeSettings).not.toHaveBeenCalled();
+    click('[data-conn="form-cancel"]');
+    expect(page.el.querySelector(".cs-apps")).not.toBeNull();
+    back();
+    expect(closeSettings).toHaveBeenCalledOnce();
+  });
+});
 
 test.each(navInputs)("navigation in the key recorder never records a navigation chord with %s", async input => {
   const recorded = vi.fn(), ended = vi.fn(), cell = document.createElement("button");
@@ -171,6 +246,7 @@ test("快速提問 picks its effort inside the model list, as the answer model d
 
 beforeEach(() => {
   vi.restoreAllMocks(); vi.resetAllMocks(); listeners.clear(); setLocale("en");
+  api.integrationsCatalog.mockRejectedValue(new Error("offline"));
   api.core.mockImplementation(async method => method === "memory.get" ? {text:"",revision:0} : method === "safety.rules.list" ? {rules:[]} : {});
   api.settingsGet.mockResolvedValue({ settings: { stt_engine: "cloud" } });
   api.secretsStatus.mockResolvedValue({ has_key: true });
@@ -444,10 +520,12 @@ test("Models contains no spending and Usage mounts its allowances once, plainly,
   const node = page.el.querySelector(".usage-analytics")!;
   // This month's spending leads in a card, then the allowances, and nothing else is on the page.
   expect(spend.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  // No refresh button anywhere on the tab, and nothing beside its name: opening Settings reads it all.
+  // Opening Settings reads the usage data. The header's only button is Close.
   expect(node.querySelector("button.icon")).toBeNull();
-  expect(page.el.querySelector('[data-act="models-refresh"], .set-head, .models-refresh')).toBeNull();
-  expect(page.el.querySelector(".set-content > h1")?.nextElementSibling?.classList.contains("usage-page")).toBe(true);
+  expect(page.el.querySelector('[data-act="models-refresh"], .models-refresh')).toBeNull();
+  const header = page.el.querySelector(".set-content > .set-head")!;
+  expect(Array.from(header.querySelectorAll("button")).map(button => button.dataset.act)).toEqual(["close"]);
+  expect(header.nextElementSibling?.classList.contains("usage-page")).toBe(true);
   // 概覽 has no chart: the charts of a period are 分析's.
   expect(page.el.querySelector(".ua-card, .ua-chart, .run-tiles, .run-bill, [data-ua-range], .foot")).toBeNull();
   setLocale("ja"); await flush();

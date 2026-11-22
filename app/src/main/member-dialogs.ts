@@ -13,6 +13,7 @@ import { selectSlimeTab, slimeKeys, slimePickerHTML as slimeTabsPickerHTML } fro
 import { onLocaleChange, t } from "./i18n";
 import "./member-profile.css";
 import { isTopLayer, registerDismissal } from "./dismissals";
+import { keepEditedField } from "./nav-layers";
 import {
   GROUP_NAME_MAX,
   cleanName,
@@ -21,7 +22,7 @@ import {
   sourceLabel,
 } from "./members";
 import type { MemberGroup, MemberSource, RoutineOffer, WireAttachment } from "./types";
-import { type ActionRowOptions, actionRow, btn, closeMenu, esc, ico, iconButton, openPopover, toaster } from "./ui";
+import { type ActionRowOptions, actionRow, btn, closeMenu, esc, ico, headerCloseButton, openPopover, toaster } from "./ui";
 
 // ---------- the dialog ----------
 
@@ -65,7 +66,7 @@ export function openDialog(o: DialogOptions): Dialog {
   const id = `mb-dlg-${Math.random().toString(36).slice(2, 8)}`;
   scrim.innerHTML =
     `<div class="mb-dialog${o.cls ? ` ${o.cls}` : ""}" role="dialog" aria-modal="true" aria-labelledby="${id}"${o.describedByBody ? ` aria-describedby="${id}-body"` : ""}>` +
-    `<div class="mb-dlg-head"><h2 id="${id}">${esc(o.title)}</h2>${o.tools ?? ""}${o.noClose ? "" : iconButton("x", t("common.close"), ' data-dlg="close"')}</div>` +
+    `<div class="mb-dlg-head"><h2 id="${id}">${esc(o.title)}</h2>${o.tools ?? ""}${o.noClose ? "" : headerCloseButton(t("common.close"), ' data-dlg="close"')}</div>` +
     `<div class="mb-dlg-body" id="${id}-body">${o.body}</div>` +
     // A dialog that only shows something has no footer: its × closes it.
     (o.actions.primary || o.actions.secondary || o.actions.destructive ? actionRow({ ...o.actions, cls: "mb-dlg-act" }) : "") +
@@ -140,7 +141,8 @@ export function openDialog(o: DialogOptions): Dialog {
   document.body.append(scrim);
   // Transient forms have a locale-specific snapshot; reopening rebuilds it from its source.
   stopLocale = onLocaleChange(() => { if (mayClose()) dialog.close(); });
-  stopOutside = registerDismissal(dialog.el, () => dialog.close(), mayClose);
+  stopOutside = registerDismissal(dialog.el, () => dialog.close(), mayClose, undefined, undefined,
+    panel => keepEditedField(panel, 'input:not([type="search"]), textarea, select'));
   (dialog.el.querySelector<HTMLElement>("input:not([type=file]), textarea") ?? dialog.el.querySelector<HTMLElement>('[data-dlg="cancel"]') ?? dialog.el.querySelector<HTMLElement>(".mb-dlg-act .btn"))?.focus();
   return dialog;
 }

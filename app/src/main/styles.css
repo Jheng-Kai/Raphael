@@ -526,10 +526,6 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .modal-scrim[data-standalone] .modal-nav { display: none; }
 /* Its title, chip and search stand at the top of the dialog, with the apps scrolling under them to its lower edge. */
 .modal-scrim[data-standalone] .modal-body { padding: var(--sp-5) var(--sp-6) 0; }
-.modal-scrim[data-standalone] .modal-x { top: var(--sp-5); right: var(--sp-5); }
-/* Its ✕ is bare: no fill and no ring, only its colour changes. */
-.modal-scrim[data-standalone] .btn.icon.modal-x { background: transparent; box-shadow: none; }
-.modal-scrim[data-standalone] .btn.icon.modal-x:hover:not(:disabled), .modal-scrim[data-standalone] .btn.icon.modal-x:active:not(:disabled) { background: transparent; color: var(--text); }
 .modal-nav .nav { min-height: 34px; padding: var(--sp-1) var(--sp-2); }
 /* Six tabs, flat: no group names and no search. */
 .set-list { display: flex; flex-direction: column; gap: var(--sp-1); min-height: 0; }
@@ -557,7 +553,7 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .modal-body h1 { font: 500 var(--fs-h1)/1.3 var(--display); margin: 0; letter-spacing: -0.015em; padding-right: var(--sp-5); }
 .modal-body h1:focus { outline: none; }
 .modal-body .core-note { margin-top: var(--sp-4); }
-.modal-x { position: absolute; top: 12px; right: 12px; }
+.set-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); min-height: 36px; }
 /* A group of settings: a short name, then its rows on one card with hairlines between them. */
 .sgroup { margin-top: var(--sp-5); }
 /* A section whose one control is a button named for what it does: no row repeating its name. */
@@ -991,12 +987,12 @@ button.ob-tile:hover:not(:disabled) .ob-get { background: var(--pressed); }
    pointer. Small actions beside a message or inside a bar stay bare icons; the sidebar's search and plus
    are the same buttons (sidebar.css). So are the member page's way back and its cover's change icon, which stand on a
    picture and need the solid surface in every state. */
-:is(.page-agent .mb-det-head, .page-agent .mb-head .ra-tools, .page-agent .mb-head .mb-head-l, .page-agent .mb-head .room-picker, .mb-dlg-head, .cs-dlg-head, .lb-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock, .ms-bar, .ms-cover) .btn.icon, .btn.icon.modal-x, .page-agent .cmp-bar .btn.cmp-attach { flex: none; width: 36px; min-width: 36px; height: 36px; min-height: 36px; padding: 0; border-color: transparent; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--edge-rim); color: var(--text-2); }
+:is(.page-agent .mb-det-head, .page-agent .mb-head .ra-tools, .page-agent .mb-head .mb-head-l, .page-agent .mb-head .room-picker, .mb-dlg-head, .cs-dlg-head, .lb-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock, .ms-bar, .ms-cover) .btn.icon, .page-agent .cmp-bar .btn.cmp-attach { flex: none; width: 36px; min-width: 36px; height: 36px; min-height: 36px; padding: 0; border-color: transparent; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--edge-rim); color: var(--text-2); }
 /* The composer's + stands inside the composer, whose edge it shares: a fill, no rim of its own. */
 .page-agent .cmp-bar .btn.cmp-attach { width: 32px; min-width: 32px; height: 32px; min-height: 32px; box-shadow: none; }
-:is(.page-agent .mb-det-head, .page-agent .mb-head .ra-tools, .page-agent .mb-head .mb-head-l, .page-agent .mb-head .room-picker, .mb-dlg-head, .cs-dlg-head, .lb-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock, .ms-bar, .ms-cover) .btn.icon:is(:hover, [aria-expanded="true"]):not(:disabled), .btn.icon.modal-x:hover:not(:disabled), .page-agent .cmp-bar .btn.cmp-attach:is(:hover, [aria-expanded="true"]):not(:disabled) { border-color: transparent; background: var(--hover); color: var(--text); }
-:is(.page-agent .mb-det-head, .page-agent .mb-head .ra-tools, .page-agent .mb-head .mb-head-l, .page-agent .mb-head .room-picker, .mb-dlg-head, .cs-dlg-head, .lb-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock, .ms-bar, .ms-cover) .btn.icon:active:not(:disabled), .btn.icon.modal-x:active:not(:disabled), .page-agent .cmp-bar .btn.cmp-attach:active:not(:disabled) { background: var(--pressed); color: var(--text); }
-:is(.page-agent .mb-det-head, .page-agent .mb-head .ra-tools, .page-agent .mb-head .mb-head-l, .page-agent .mb-head .room-picker, .mb-dlg-head, .cs-dlg-head, .lb-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock, .ms-bar, .ms-cover) .btn.icon .i, .btn.icon.modal-x .i, .page-agent .cmp-bar .btn.cmp-attach .i { width: 18px; height: 18px; }
+:is(.page-agent .mb-det-head, .page-agent .mb-head .ra-tools, .page-agent .mb-head .mb-head-l, .page-agent .mb-head .room-picker, .mb-dlg-head, .cs-dlg-head, .lb-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock, .ms-bar, .ms-cover) .btn.icon:is(:hover, [aria-expanded="true"]):not(:disabled), .page-agent .cmp-bar .btn.cmp-attach:is(:hover, [aria-expanded="true"]):not(:disabled) { border-color: transparent; background: var(--hover); color: var(--text); }
+:is(.page-agent .mb-det-head, .page-agent .mb-head .ra-tools, .page-agent .mb-head .mb-head-l, .page-agent .mb-head .room-picker, .mb-dlg-head, .cs-dlg-head, .lb-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock, .ms-bar, .ms-cover) .btn.icon:active:not(:disabled), .page-agent .cmp-bar .btn.cmp-attach:active:not(:disabled) { background: var(--pressed); color: var(--text); }
+:is(.page-agent .mb-det-head, .page-agent .mb-head .ra-tools, .page-agent .mb-head .mb-head-l, .page-agent .mb-head .room-picker, .mb-dlg-head, .cs-dlg-head, .lb-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock, .ms-bar, .ms-cover) .btn.icon .i, .page-agent .cmp-bar .btn.cmp-attach .i { width: 18px; height: 18px; }
 :where(:root[data-keys]) .btn.icon:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 :where(:root[data-keys]) .cmp-attach:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 :where(:root[data-keys]) .cmp-voice:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
@@ -1009,8 +1005,9 @@ button.ob-tile:hover:not(:disabled) .ob-get { background: var(--pressed); }
 .window-controls .window-button:focus-visible { outline-offset: -3px; }
 
 /* The member page's round navigation control, shared by every back button. */
-.btn.icon.back-button { flex: none; width: 36px; min-width: 36px; height: 36px; min-height: 36px; padding: 0; border-color: transparent; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--edge-rim); color: var(--text-2); }
-.btn.icon.back-button:hover:not(:disabled) { background: var(--hover); color: var(--text); }
-.btn.icon.back-button:active:not(:disabled) { background: var(--pressed); color: var(--text); }
-.btn.icon.back-button .i { width: 18px; height: 18px; }
-:root[data-keys] .btn.icon.back-button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.btn.icon.close-button, .btn.icon.back-button { flex: none; width: 36px; min-width: 36px; height: 36px; min-height: 36px; padding: 0; border-color: transparent; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--edge-rim); color: var(--text-2); }
+.btn.icon:is(.back-button, .close-button):hover:not(:disabled) { background: var(--hover); color: var(--text); }
+.btn.icon:is(.back-button, .close-button):active:not(:disabled) { background: var(--pressed); color: var(--text); }
+.btn.icon:is(.back-button, .close-button) .i { width: 18px; height: 18px; }
+:root[data-keys] .btn.icon.back-button:focus-visible,
+:root[data-keys] .btn.icon.close-button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }

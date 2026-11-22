@@ -7,7 +7,7 @@
 // Raphael listens) has no switch: it is simply on. Learning from corrections asks the cleanup
 // model, so it is a device setting (`auto_learn`), off until the owner turns it on.
 
-import { bindLayerCancels, bindNavLayer } from "../nav-layers";
+import { bindLayerCancels, bindNavLayer, keepEditedField } from "../nav-layers";
 import { openTimezoneMenu } from "../timezones";
 import { knownCatalog, rememberCatalog } from "../brain-lists";
 import { getLocale, isUiLocale, onLocaleChange, t } from "../i18n";
@@ -57,7 +57,6 @@ import {
   closeSubmenus,
   copyButton,
   esc,
-  iconBtn,
   menuIsOpenFor,
   openMenu,
   openMenuOnArrow,
@@ -179,7 +178,6 @@ export function createSettings(app: AppContext): SettingsPage {
     `<div class="set-list"></div>` +
     `</nav>` +
     `<div class="modal-body"></div>` +
-    `${iconBtn("x", t("common.close"), ' data-act="close" data-nav-back', "modal-x")}` +
     `</div>`;
   const body = el.querySelector<HTMLElement>(".modal-body")!;
   const navList = el.querySelector<HTMLElement>(".set-list")!;
@@ -474,7 +472,7 @@ export function createSettings(app: AppContext): SettingsPage {
     }
     bindLayerCancels(body, '[data-vault="cancel"], [data-act="key-cancel"]', { secret: true });
     const ruleField = body.querySelector<HTMLElement>("#rule-edit");
-    if (ruleField) bindNavLayer(ruleField, rules.cancelEdit);
+    if (ruleField) bindNavLayer(ruleField, rules.cancelEdit, { sideBack: () => ruleField.focus() });
     // Before the focus goes back by `data-k`, which the pickers' buttons have too.
     mountPickers();
     for (const [key, value] of ownerDrafts) {
@@ -569,9 +567,6 @@ export function createSettings(app: AppContext): SettingsPage {
 
   onLocaleChange(() => {
     translateNav();
-    const close = el.querySelector('[data-act="close"]')!;
-    close.setAttribute("aria-label", t("common.close"));
-    close.setAttribute("title", t("common.close"));
     if (visible) render();
   });
 
@@ -1283,7 +1278,8 @@ export function createSettings(app: AppContext): SettingsPage {
       visible = true;
       stopOutside();
       stopOutside = registerDismissal(el.querySelector<HTMLElement>(".modal")!, () => app.closeSettings(), undefined, undefined,
-        (_direction, withinSettings) => withinSettings());
+        (_direction, withinSettings) => withinSettings(),
+        panel => keepEditedField(panel, 'input:not([type="search"]):not(#conn-search), textarea, select'));
       cliBrains.start();
       document.addEventListener("keydown", settingsKey);
       const mine = ++loads;

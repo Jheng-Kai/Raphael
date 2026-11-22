@@ -447,12 +447,14 @@ export function createMembers(host: MembersHost): MembersShell {
     const noteTab = (): void => trail.visit(details.el.dataset.detailsTab as DetailsTab);
     details.el.addEventListener("member-panel-tab", noteTab);
     stopPanelTabs = () => details.el.removeEventListener("member-panel-tab", noteTab);
+    const floating = () => currentRoomId() === null && getComputedStyle(details.el).position === "absolute";
     bindNavLayer(details.el, () => setDetails(false), {
       // A column beside the conversation (wide windows) is part of the page however it was opened: back closes it only where
       // it stands over the conversation, and walks its tabs either way.
       active: () => open && (innerWidth < DETAILS_COLUMN_MIN_PX || trail.canStep("back") || trail.canStep("forward")),
       step: direction => trail.step(direction, details.select),
-      side: () => open && currentRoomId() === null && getComputedStyle(details.el).position === "absolute",
+      side: () => open && currentRoomId() === null && (trail.canStep("back") || floating()),
+      sideBack: () => { if (!trail.step("back", details.select)) setDetails(false); },
       place: true,
     });
   }

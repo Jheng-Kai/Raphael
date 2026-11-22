@@ -64,8 +64,8 @@ test("one row per package says who may use it, and its name opens its skills on 
   expect(document.activeElement).toBe(page.querySelector('[data-skl="back"]'));
   // Its access, switch and ⋯ as on its row.
   expect(accessOf(root, "pack:2")).toBe("小晴、小森");
-  expect(page.querySelector('.skl-page-head [data-skl="toggle"][data-key="pack:2"]')).not.toBeNull();
-  expect(page.querySelector('.skl-page-head [data-skl="more"][data-key="pack:2"]')).not.toBeNull();
+  expect(page.querySelector('.skl-page-actions [data-skl="toggle"][data-key="pack:2"]')).not.toBeNull();
+  expect(page.querySelector('.skl-page-actions [data-skl="more"][data-key="pack:2"]')).not.toBeNull();
   const rows = [...page.querySelectorAll(".skl-skill")];
   expect(rows.map(row => row.querySelector(".t")?.textContent)).toEqual(["來源核對", "每週摘要"]);
   expect(rows[1].querySelector(".tg")?.getAttribute("aria-checked")).toBe("false");
@@ -122,7 +122,7 @@ test("the back arrow and Esc return to the list where it was left, with the focu
 test("a package deleted from its own page leaves for the list, and a reset starts on the list", async () => {
   const { root, library } = await setup(() => ({ deleted: true }));
   press(root, '[data-skl="open"][data-key="set:1"]');
-  press(root, '.skl-page-head [data-skl="more"][data-key="set:1"]');
+  press(root, '.skl-page-actions [data-skl="more"][data-key="set:1"]');
   // 刪除 asks in its own place: the second press deletes.
   const remove = () => document.querySelector<HTMLElement>('[data-pick="delete"]')!;
   remove().click();

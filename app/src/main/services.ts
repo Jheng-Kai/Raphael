@@ -3,7 +3,7 @@
 // services.set_key and never retained in view state. The core returns configuration status only.
 // servicesHTML draws snapshots; createServices owns actions.
 
-import { LayerViews } from "./nav-layers";
+import { keepEditedField, LayerViews } from "./nav-layers";
 import { noticeHTML } from "./missing";
 import * as api from "./api";
 import { isTopLayer, registerDismissal } from "./dismissals";
@@ -13,7 +13,7 @@ import { t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
 import type { ServiceIconId } from "./service-icons";
 import type { BrainSettings, ServiceOption, ServicesStatus } from "./types";
-import { type IconName, actionRow, btn, esc, fieldHTML, ico, backButton, iconButton, leave, st, tg, toaster } from "./ui";
+import { type IconName, actionRow, btn, esc, fieldHTML, ico, backButton, headerCloseButton, leave, st, tg, toaster } from "./ui";
 
 /** The capabilities, in the order of the list. */
 export const CAPABILITIES = [
@@ -213,7 +213,7 @@ export function canTurnOn(kind: Capability, status: ServicesStatus | null, brain
 const capIcon = (icon: IconName, size = ""): string => `<span class="ic svc-ic${size ? " " + size : ""}" aria-hidden="true">${ico(icon)}</span>`;
 
 /** The dialog's close button, the same in both of its views. */
-const closeButton = (): string => iconButton("x", t("common.close"), ' data-svc="close" data-k="svc-close" data-nav-back');
+const closeButton = (): string => headerCloseButton(t("common.close"), ' data-svc="close" data-k="svc-close" data-nav-back');
 
 /** One row of the list, the same markup as 「連接」: the name opens the capability's dialog, the switch is its own. */
 function itemHTML(entry: (typeof CAPABILITIES)[number], v: ServicesView, brain: BrainSettings | null, names: ModelNames): string {
@@ -229,8 +229,8 @@ function itemHTML(entry: (typeof CAPABILITIES)[number], v: ServicesView, brain: 
       "cs-open",
       ` data-svc="open" data-id="${id}" data-k="svc-open:${id}" aria-haspopup="dialog"`,
     ) +
-    tg(on, t("services.switch", { p0: name }), ` data-svc="toggle" data-id="${id}" data-k="svc-toggle:${id}"${status && v.busy === null ? "" : " disabled"}`) +
-    `<span class="chev" aria-hidden="true">${ico("right")}</span></div>`
+    `<span class="chev" aria-hidden="true">${ico("right")}</span>` +
+    tg(on, t("services.switch", { p0: name }), ` data-svc="toggle" data-id="${id}" data-k="svc-toggle:${id}"${status && v.busy === null ? "" : " disabled"}`) + `</div>`
   );
 }
 
@@ -272,10 +272,8 @@ function listViewHTML(entry: (typeof CAPABILITIES)[number], v: ServicesView, bra
   const name = entry.label();
   const on = isOn(entry.kind, status, brain);
   const head =
-    `<div class="cs-dlg-head">${capIcon(entry.icon, "xl")}<h2 class="cs-dlg-name" id="svc-dlg-title">${esc(name)}</h2><span class="sp"></span>` +
-    tg(on, t("services.switch", { p0: name }), ` data-svc="toggle" data-id="${entry.kind}" data-k="svc-dlg-toggle"${status && v.busy === null ? "" : " disabled"}`) +
-    closeButton() +
-    `</div>`;
+    `<div class="cs-dlg-head">${capIcon(entry.icon, "xl")}<h2 class="cs-dlg-name" id="svc-dlg-title">${esc(name)}</h2><span class="sp"></span>${closeButton()}</div>` +
+    `<div class="svc-switch-row">${tg(on, t("services.switch", { p0: name }), ` data-svc="toggle" data-id="${entry.kind}" data-k="svc-dlg-toggle"${status && v.busy === null ? "" : " disabled"}`)}</div>`;
   if (!status) {
     const body = v.status === "failed" ? `<div class="alert core-note" role="alert">${st("err", t("services.loadFailed"))}</div>` : `<p class="settings-loading" role="status">${esc(t("conn.loading"))}</p>`;
     return head + body;
@@ -416,7 +414,13 @@ export function createServices(host: ServicesHost): ServicesPanel {
       if (root) {
         views = new LayerViews<string | null>(null);
         stopOutside = registerDismissal(() => closing ? null : root.querySelector<HTMLElement>("#svc-dialog"), closeDialog, undefined, undefined,
-          direction => views!.step(direction, service => service ? showService(service) : showList()));
+          direction => views!.step(direction, service => service ? showService(service) : showList()),
+          panel => {
+            if (busy !== null || keepEditedField(panel)) return true;
+            if (!open?.service) return false;
+            backToList();
+            return true;
+          });
       }
     } else if (!open) { stopOutside?.(); stopOutside = null; }
     if (open) views?.visit(open.service);
@@ -492,6 +496,10 @@ export function createServices(host: ServicesHost): ServicesPanel {
     open = { kind: open.kind, service: null };
     move("out");
     if (from) focusOn(`[data-k="svc-svc:${typeof CSS !== "undefined" ? CSS.escape(from) : from}"]`);
+  }
+
+  function backToList(): void {
+    if (!views?.step("back", service => service ? showService(service) : showList())) showList();
   }
 
   // ----- the switch and 「使用」 -----
@@ -622,7 +630,7 @@ export function createServices(host: ServicesHost): ServicesPanel {
         showService(service);
         return true;
       case "back":
-        if (!views?.step("back", service => service ? showService(service) : showList())) showList();
+        if (busy === null && !keepEditedField(button.closest("#svc-dialog")!)) backToList();
         return true;
       case "use":
         void use(service);

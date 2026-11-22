@@ -1,5 +1,5 @@
 // Team skills in Settings: packages, who may use each, and the importer.
-import { scene, click, type, wait, waitGone, settings, scroll, focus, key, check } from "./steps.mjs";
+import { scene, click, type, wait, waitGone, settings, scroll, focus, key, check, sideButton } from "./steps.mjs";
 import { memberSettingsPage } from "./member-settings.mjs";
 
 const list = [...settings("skills"), wait(".skl-pack")];
@@ -10,6 +10,9 @@ export default [
   scene("skill-library-details", "The overflow opens the full description of a standalone skill", [
     ...list, click('[data-skl="more"][data-key="skill:3"]'), click('[data-pick="details"]'), wait(".skl-details"), check("skill-library-details")]),
   scene("skill-library-open", "Pressing a package's row opens it on a page of its own in the tab: the back arrow and its name, who may use it, its switch and ⋯, then its skills, each with its own switch", [...opened, check("skill-library-open")]),
+  scene("nav-side-plugin", "Mouse Back returns from a plugin to Team skills and restores focus to its row", [
+    ...opened, sideButton("back"), waitGone(".skl-page"), check("nav-side-plugin"),
+  ]),
   scene("skill-library-back", "Enter opens a package low in a long library, and Esc returns to the list where it was left, the focus on that package's row", [
     ...list, scroll('[data-skl-pack="pack:37"]'), focus('[data-skl="open"][data-key="pack:37"]'), key("Enter"), wait('.skl-page[data-skl-page="pack:37"]'), check("skill-library-page-top"),
     key("Escape"), waitGone(".skl-page"), check("skill-library-back")], { skillPackages: true }),

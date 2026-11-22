@@ -37,7 +37,7 @@ import { pricingNote } from "../pricing";
 import { type HotkeyField, SHORTCUTS, shortcutCaps } from "../hotkey-recording";
 import type { AudioDevices, BrainSettings, DeviceSettings, LocalModel, ModelCatalog, ModelRole, SettingsPane, Status } from "../types";
 import { micRow } from "../setup-rows";
-import { type Choice, type IconName, btn, esc, ico, iconBtn, note, row, sel, st, tabs, tg } from "../ui";
+import { type Choice, type IconName, btn, esc, headerCloseButton, ico, iconBtn, note, row, sel, st, tabs, tg } from "../ui";
 
 /** The models the core reads when none is chosen (brain/settings.py), shown while it does not answer. */
 const DEFAULT_MODELS = { cleanup: "openai/gpt-6-luna", answer: "openai/gpt-6-luna", stt: "elevenlabs/scribe-v2" } as const;
@@ -402,6 +402,9 @@ const microphoneNote = (v: SettingsView): string =>
 export const headingHTML = (v: SettingsView): string =>
   `<h1 id="set-title" tabindex="-1">${esc(paneTitle(v.pane))}</h1>`;
 
+const settingsCloseHTML = (): string => headerCloseButton(t("common.close"), ' data-act="close" data-k="settings-close" data-nav-back', "modal-x");
+const settingsHeaderHTML = (v: SettingsView): string => `<header class="set-head">${headingHTML(v)}${settingsCloseHTML()}</header>`;
+
 /** What the tabs that need the core say when it does not answer. */
 const coreNote = (v: SettingsView): string => (v.brain === null ? `<div class="alert core-note">${st("err", t("settings.052"))}</div>` : "");
 
@@ -426,7 +429,7 @@ function outputFolderRow(v: SettingsView): string {
  */
 function generalHTML(v: SettingsView): string {
   return (
-    headingHTML(v) +
+    settingsHeaderHTML(v) +
     coreNote(v) + `<section class="sgroup set-account"><h2>${esc(t("settings.ownerSection"))}</h2>` + ownerProfileHTML(v.brain) + `</section>` +
     `<div class="appearance-settings">` + section(t("skin.title"), [
       row(t("settings.067"), "", sel(APPEARANCES, v.device.appearance, t("settings.067"), ' data-k="appearance"')),
@@ -449,7 +452,7 @@ function generalHTML(v: SettingsView): string {
 function dictationHTML(v: SettingsView): string {
   const d = v.device;
   return (
-    headingHTML(v) +
+    settingsHeaderHTML(v) +
     coreNote(v) +
     accessibilityNote(v) +
     microphoneNote(v) +
@@ -487,22 +490,22 @@ function dictationHTML(v: SettingsView): string {
  */
 /** Services shared by every member. */
 function toolsHTML(v: SettingsView): string {
-  return headingHTML(v) + coreNote(v) + (v.services ? servicesHTML(v.services, modelPickerHTML(visionPickerLook(v)), v.brain, (id) => modelDisplayName(catalogOf(v), id)) : "");
+  return settingsHeaderHTML(v) + coreNote(v) + (v.services ? servicesHTML(v.services, modelPickerHTML(visionPickerLook(v)), v.brain, (id) => modelDisplayName(catalogOf(v), id)) : "");
 }
 
 /** Team skills: every shared skill in its package, and who may use each (skill-library.ts). */
 function skillsHTML(v: SettingsView): string {
-  return headingHTML(v) + coreNote(v) + skillLibraryHTML(v.skillLibrary ?? emptySkillLibraryView());
+  return skillLibraryHTML(v.skillLibrary ?? emptySkillLibraryView(), settingsHeaderHTML(v) + coreNote(v), settingsCloseHTML());
 }
 
 /** Shared safety rules and local command permissions. */
 function safetyHTML(v: SettingsView): string {
-  return headingHTML(v) + coreNote(v) + vaultHTML(v.vault ?? emptyVaultView()) + (v.rules ? rulesHTML(v.rules) : "");
+  return settingsHeaderHTML(v) + coreNote(v) + vaultHTML(v.vault ?? emptyVaultView()) + (v.rules ? rulesHTML(v.rules) : "");
 }
 
 /** 連接: the services Raphael is connected to and the store that adds them; 「新增」 stands on the row of the two views. */
 function connectionsTabHTML(v: SettingsView): string {
-  return connectionsHTML(v.connections, headingHTML(v));
+  return connectionsHTML(v.connections, headingHTML(v), settingsCloseHTML());
 }
 
 /** The dictation history's retention: the choices, with the one in force too if it is none of them. */
@@ -520,7 +523,7 @@ export const retentionOf = (v: SettingsView): string => String(v.brain?.history_
  */
 function modelsHTML(v: SettingsView): string {
   const providers = v.providers ?? emptyProvidersView();
-  return headingHTML(v) + coreNote(v) + `<div class="models-page">` +
+  return settingsHeaderHTML(v) + coreNote(v) + `<div class="models-page">` +
     section(t("models.used"), [quickRow(v), ...MODEL_ROWS.slice(1).map(r => modelRow(v, r))], v.catalog === "failed" ? priceSpan(v, "note") : "") +
     cliBrainsHTML(v.cliBrains ?? emptyCliBrainsView()) + providersHTML(providers) + providersAddHTML(providers, cliDirectoryHTML(v.cliBrains ?? emptyCliBrainsView(), providers.role)) +
     `</div>`;
@@ -539,7 +542,7 @@ function usageHTML(v: SettingsView): string {
   const selected = v.usageTab ?? "overview";
   const content = selected === "overview" ? spendCardHTML(v) + `<div data-usage-host></div>`
     : v.analysis ? usageAnalysisHTML(v.analysis, { model: (id) => modelDisplayName(catalogOf(v), id) }) : "";
-  return headingHTML(v) + coreNote(v) + `<div class="usage-page">` +
+  return settingsHeaderHTML(v) + coreNote(v) + `<div class="usage-page">` +
     tabs(USAGE_TABS.map((id) => ({
       id, label: id === "overview" ? t("usage.overview") : t("usage.analysis"),
       attrs: ` id="usage-tab-${id}" data-usage-tab="${id}" data-k="usage-tab:${id}" aria-controls="usage-panel-${id}" tabindex="${id === selected ? 0 : -1}"`,
@@ -550,7 +553,7 @@ function usageHTML(v: SettingsView): string {
 /** 關於: the version, the license and the fan-project statement. */
 function aboutHTML(v: SettingsView): string {
   return (
-    headingHTML(v) +
+    settingsHeaderHTML(v) +
     `<div class="about-brand">${brandIcon("about-icon")}<span class="about-name">Raphael</span></div>` +
     `<div class="slist about">` +
     row(t("settings.078"), "", `<span class="val num">${esc(v.version)}</span>`) +
@@ -596,7 +599,7 @@ export function paneHTML(v: SettingsView): string {
 
 /** A tab whose settings are still being read: its name and purpose, and the shape of what is to come. */
 export function loadingHTML(v: SettingsView): string {
-  return headingHTML(v) +
+  return settingsHeaderHTML(v) +
     `<p class="settings-loading" role="status">${esc(t("settings.loading"))}</p>` +
     `<div class="settings-skeleton" aria-hidden="true">${Array.from({ length: 3 }, () =>
       `<div class="skeleton-section"><i class="skeleton-heading"></i><div class="skeleton-card"><div class="skeleton-row"><i></i><i></i></div><div class="skeleton-row"><i></i><i></i></div></div></div>`).join("")}</div>`;

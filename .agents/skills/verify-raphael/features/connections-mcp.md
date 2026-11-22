@@ -40,7 +40,7 @@ row, the 推薦 section under a list of the connected, and the dialog of a conne
 recommended apps are in one place, not split into 已連結 and a store: the connected ones on top, recommendations under them, then the
 categories (全部, 溝通, 生產力, 開發 and so on), with no count of what the catalogue holds (R-APPS-01, R-APPS-02, R-FLOAT-01).
 
-- The dialog is one view: the title at the left and, at the right, a quiet chip with the marks of up to four connected apps and
+- The dialog is one view: the title at the left and, before the round close, a quiet chip with the marks of up to four connected apps and
   「N 個已連結」 (N is the core's count; with nothing connected the chip is not there; with no number to give it says only 「已連結」);
   a search 「搜尋應用程式」 over the whole catalog with 新增 beside it; one row of chips (全部, the first five categories, 更多 with the
   rest; a chip that does not fit moves into 更多, the row never wraps or scrolls); then, under 全部, 為你推薦 and a section of six apps for each
@@ -49,7 +49,7 @@ categories (全部, 溝通, 生產力, 開發 and so on), with no count of what 
 - A row is the app's mark on a white 40 px tile, its name, and 「連結」 (a round button filled `--float-ctl`) or 「✓ 已連結」. The row opens
   the app's page; 「連結」 runs the existing flow (sign-in, key form, the conversation for n8n, own Google and developer apps).
 - The chip opens the list of the connected apps in the same dialog (rows with tile, name, line and switch; 應用程式 and 尚未連結
-  headings as before), behind a back chevron. Esc steps back from an app's page, then from that list, then closes.
+  headings as before), behind a back chevron. Mouse Back and Esc step back from an app's page, then from that list, then close the dialog at its root.
 - A connected row is pressable: the mark, the name, the line and the gap open the app's page (the page the main view's row opens),
   the switch only turns the app on or off; a row under the pointer has the pointer and `--float-hover` clear of its words, in the main view's rows too (scene `connect-apps-row-hover`). The back chevron (the
   list's title row and every app's page) uses the shared 36 px back button with an 18 px glyph, on the ✕'s line and beside the separate title in the connected list. Scenes
@@ -62,8 +62,7 @@ categories (全部, 溝通, 生產力, 開發 and so on), with no count of what 
   (`pressThrough`). A page that draws itself again from under a press loses it, so `load()` draws only when the reading changes what the dialog drew (`drawn`).
 - 「✓ 已連結」 of a main-view row is pressable (the row opens the app's page from anywhere but 連結): `connected-owner-state-press`, check `app-state-press`.
   On an app's own page it stays words: its destination would be the page itself.
-- An app's page replaces the view (no title row; the shared round back button and the dialog's ✕): the mark on a 56 px white tile with the name,
-  and at the right 「連結」 (white, round) or, when connected, 「✓ 已連結」 with its switch and ⋯; a paragraph; accounts; for a connected app
+- An app's page replaces the view. The shared round back and close buttons, the mark on a 56 px white tile and the name share the header centre line. Below it is 「連結」 (white, round) or, when connected, 「✓ 已連結」 with its ⋯ before its rightmost switch; a paragraph; accounts; for a connected app
   a 工具 card (kind switches, the folded tool list); a 資訊 card (提供者, 類別, 登入方式, 伺服器, 工具) of 38 px rows; the latest actions and
   the 試用, sign-in and refresh buttons. After a sign-in from a page the page stays and shows the connected state.
 - The colour rule for everything that floats (R-FLOAT-01, with the dialog layer `--dialog` of R-FLOAT-03): `--float`, `--float-edge`, `--float-ctl`, `--float-hover`, `--float-sel`,
@@ -75,7 +74,7 @@ categories (全部, 溝通, 生產力, 開發 and so on), with no count of what 
   `connections-delete`, `connect-apps-more`).
 
 ```powershell
-npm run look -- connect-apps connect-apps-scrolled connect-apps-category connect-apps-more connect-apps-search connect-apps-connected connect-app-oauth connect-app-key connect-app-connected connect-apps-connected-rows connect-app-from-row connect-apps-row-hover connected-owner-rows connected-owner-rows-loaded connected-owner-rows-late connected-owner-rows-failed connected-owner-rows-straddled connected-owner-state-press --theme both --width 1120,720,1920x1080
+npm run look -- connect-apps connect-apps-scrolled connect-apps-category connect-apps-more connect-apps-search connect-apps-connected connect-app-oauth connect-app-key connect-app-connected connectors-slack-detail connect-apps-connected-rows connect-app-from-row connect-apps-row-hover connected-owner-rows connected-owner-rows-loaded connected-owner-rows-late connected-owner-rows-failed connected-owner-rows-straddled connected-owner-state-press --theme both --width 1120,720,1920x1080
 npm run look -- member-delete-ask context-menu-member composer-model-small composer-model-sources member-maker automations-detail-own automations-create-slot appearance-menu model-choices-answer profile connections-add-menu server-menu connections-delete --theme both --width 1120,720,1920x1080
 ```
 

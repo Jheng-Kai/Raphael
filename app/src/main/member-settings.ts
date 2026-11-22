@@ -121,7 +121,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
   let toolChoices: Loaded<ToolChoices> = "loading";
   /** The owner's folders for members (R-PC-05): each member's own, and the output folder a member with none writes to. */
   let folders: Loaded<{ own: Record<string, string[]>; output: string }> = "loading";
-  let skillText: { id: number; skill: MemberSkill; text: string; revision?: string } | "loading" | null = null;
+  let skillText: { id: number; skill: MemberSkill; text: string; original: string; revision?: string } | "loading" | null = null;
   let skillBusy = false;
   let command: { id: number | null; name: string; description: string; template: string } = { id: null, name: "", description: "", template: "" };
   let source = "";
@@ -342,7 +342,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     return Math.max(0, img.naturalHeight * scale - box.height);
   }
 
-  bindNavLayer(cover, () => endReposition(false), { active: () => reposition !== null });
+  bindNavLayer(cover, () => endReposition(false), { active: () => reposition !== null, sideBack: goBack });
 
   function endReposition(save: boolean): void {
     const moved = reposition;
@@ -509,6 +509,31 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
   }
   const back = (): void => { view = { kind: "main" }; draw(); scroll.scrollTop = 0; };
 
+  function goBack(): void {
+    if (reposition) {
+      if (reposition.at === reposition.from) endReposition(false);
+      else cover.querySelector<HTMLElement>('[data-ms="cover-save"]')?.focus();
+      return;
+    }
+    if (view.kind === "skill" && skillText && skillText !== "loading" && (skillBusy || skillText.text !== skillText.original)) {
+      el.querySelector<HTMLElement>("#ms-skill-text")?.focus();
+      return;
+    }
+    if (view.kind === "command") {
+      const saved = Array.isArray(commands) ? commands.find(item => item.id === command.id) : undefined;
+      const fields = { name: "#ms-command-name", description: "#ms-command-description", template: "#ms-command-template" } as const;
+      for (const key of ["name", "description", "template"] as const) {
+        if (command[key] !== (saved?.[key] ?? "")) { el.querySelector<HTMLElement>(fields[key])?.focus(); return; }
+      }
+    }
+    if (view.kind === "main") {
+      if (adding && source) { el.querySelector<HTMLElement>("#ms-skill-source")?.focus(); return; }
+      // Editable profile fields save on blur, including when the back arrow is pressed.
+      if (document.activeElement instanceof HTMLElement && el.contains(document.activeElement)) document.activeElement.blur();
+      host.back();
+    } else back();
+  }
+
   async function openSkill(id: number): Promise<void> {
     const memberId = host.member().id;
     view = { kind: "skill", id }; skillText = "loading"; draw(); scroll.scrollTop = 0;
@@ -517,7 +542,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
       if (view.kind !== "skill" || view.id !== id || memberId !== host.member().id) return;
       // The list knows whose the skill is (shared, from the library); the read adds its text and its revision.
       const known = Array.isArray(skills) ? skills.find(item => item.id === id) : undefined;
-      skillText = { id, skill: { ...known, ...answer.skill }, text: answer.text, revision: answer.skill?.revision ?? undefined };
+      skillText = { id, skill: { ...known, ...answer.skill }, text: answer.text, original: answer.text, revision: answer.skill?.revision ?? undefined };
     } catch (error) { toaster.info(describeError(error)); back(); return; }
     draw();
   }
@@ -606,7 +631,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     if (!act || (act as HTMLButtonElement).disabled) return;
     const member = host.member();
     switch (act.dataset.ms) {
-      case "back": if (view.kind === "main") host.back(); else back(); break;
+      case "back": goBack(); break;
       case "avatar": openMemberAvatarMenu(act, member, host.update); break;
       case "edit": {
         const field = act.dataset.field as Field;
@@ -725,7 +750,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     const field = event.target;
     if (field instanceof HTMLElement && field.matches("#ms-name, #ms-role, textarea[data-field]")) {
       bindNavLayer(field, () => cancelField(field as HTMLInputElement | HTMLTextAreaElement),
-        { active: () => document.activeElement === field });
+        { active: () => document.activeElement === field, side: () => false });
     }
   });
   el.addEventListener("focusout", (event) => {
@@ -753,7 +778,8 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
       if (!el.hidden) { draw(); return; }
       el.hidden = false;
       el.closest(".page-agent")?.setAttribute("data-member-settings-open", "");
-      bindNavLayer(el, () => view.kind === "main" ? host.back() : back(), { step: (_direction, withinLayer) => withinLayer(), place: true });
+      bindNavLayer(el, () => view.kind === "main" ? host.back() : back(),
+        { step: (_direction, withinLayer) => withinLayer(), place: true, sideBack: goBack });
       view = { kind: "main" }; category = CATEGORIES[0].id; editing.clear(); saving.clear(); adding = false; source = ""; skillText = null; skillBusy = false;
       skills = "loading"; commands = "loading"; toolChoices = "loading"; reposition = null; delete cover.dataset.repositioning;
       drawn = ""; drawnFor = null;

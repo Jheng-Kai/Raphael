@@ -767,7 +767,7 @@ describe("the page of a connected app", () => {
     const title = head.querySelector("h2.big")!;
     expect(title.textContent).toBe("Notion");
     expect(title.id).toBe("cs-page-title");
-    const join = head.querySelector(".cs-join")!;
+    const join = head.parentElement!.querySelector(".cs-join")!;
     expect(join.querySelector(".cs-state")!.textContent).toBe("已連結");
     const toggle = join.querySelector<HTMLElement>('[role="switch"]')!;
     expect(toggle.getAttribute("aria-checked")).toBe("true");
@@ -775,6 +775,7 @@ describe("the page of a connected app", () => {
     expect(toggle.dataset).toMatchObject({ conn: "enable", id: "ab12", k: "cs-dlg-enable" });
     const menu = join.querySelector<HTMLElement>('[data-conn="server-menu"]')!;
     expect(menu.dataset.id).toBe("ab12");
+    expect(join.lastElementChild).toBe(toggle);
     expect(menu.getAttribute("aria-haspopup")).toBe("menu");
     expect(menu.getAttribute("aria-label")).toBeTruthy();
     expect(menu.getAttribute("title")).toBe(menu.getAttribute("aria-label"));
