@@ -1026,7 +1026,7 @@ class App(Router):
         if self.vm_tools.host_computer is not None:
             self.vm_tools.host_computer.cards = self.handbacks
             host = self.vm_tools.host_computer
-            self.desktop_viewer.active_transport = self.vm_tools.active_transport
+            self.desktop_viewer.active_transport = lambda member, _: self.vm_tools.computer_mode(member)
             self.desktop_viewer.host_browser = host.browser
             self.desktop_viewer.handbacks = self.handbacks
             self.handbacks.release_browser = self.desktop_viewer.finish_browser_card
@@ -1090,6 +1090,8 @@ class App(Router):
                 return self.agent.computer_scope_busy(*scope[1:])
             return scope[0] == "async" and not scope[1].done()
         self.vm_tools.scope_busy = computer_scope_busy
+        self.vm_tools.suggestions.notify = self.notify
+        self.vm_tools.suggestions.resume = self.agent.resume_on_vm
         self.home = HomeOverview(self._conn, self, self.members, calendar_events=ConnectedCalendar(self, self.connectors, notify=self.notify))
         self.home.register()
         self.calendar.shown, self.calendar.zone, self.calendar.google_state = self.home.between, self.home.zone, self.home.google_state

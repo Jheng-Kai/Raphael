@@ -435,7 +435,7 @@ SCHEMA_V27 = {
         "stop_requested INTEGER NOT NULL DEFAULT 0", "wrapup_sent INTEGER NOT NULL DEFAULT 0", "reason TEXT NOT NULL DEFAULT ''",
     ],
 }
-LATEST = 97
+LATEST = 98
 
 
 def test_v59_existing_tasks_default_to_no_artifact_and_keep_their_reports(monkeypatch, tmp_path):
@@ -766,12 +766,14 @@ SCHEMA_V94 = {**SCHEMA_V92, "member_unread": [
 ]}
 
 
-SCHEMA_V97 = SCHEMA_V94
+SCHEMA_V98 = {**SCHEMA_V94, "members": [*SCHEMA_V94["members"], "computer_mode TEXT NOT NULL DEFAULT 'host'"],
+    "computer_suggestions": ["turn_id INTEGER PK", "member_id INTEGER NOT NULL", "reason TEXT NOT NULL", "language TEXT NOT NULL",
+                             "state TEXT NOT NULL DEFAULT 'pending'", "installed INTEGER NOT NULL"]}
 
-PENDING_UPGRADES = (63, 64, *range(67, 98))
+PENDING_UPGRADES = (63, 64, *range(67, 99))
 
 
-def test_upgrade_removes_obsolete_computer_preferences(monkeypatch, tmp_path):
+def test_upgrade_preserves_computer_choice_and_removes_desktop_control(monkeypatch, tmp_path):
     with monkeypatch.context() as old:
         old.setattr(db, "LATEST_VERSION", 95)
         conn = db.connect(tmp_path / "mode.db")
@@ -780,11 +782,21 @@ def test_upgrade_removes_obsolete_computer_preferences(monkeypatch, tmp_path):
                      "VALUES ('Member', 'Helper', 0, 1, 'docker', 1)")
         conn.execute("INSERT INTO settings (key,value) VALUES ('raphael_computer_mode', ?), ('raphael_desktop_control', 'true')", ('"docker"',))
     db.migrate(conn)
-    assert "computer_mode" not in {row[1] for row in conn.execute("PRAGMA table_info(members)")}
     assert "desktop_control" not in {row[1] for row in conn.execute("PRAGMA table_info(members)")}
-    assert conn.execute("SELECT name FROM members").fetchone()[0] == "Member"
+    assert tuple(conn.execute("SELECT name,computer_mode FROM members").fetchone()) == ("Member", "docker")
     assert conn.execute("SELECT value FROM settings WHERE key='raphael_desktop_control'").fetchone() is None
-    assert conn.execute("SELECT value FROM settings WHERE key='raphael_computer_mode'").fetchone() is None
+    assert conn.execute("SELECT value FROM settings WHERE key='raphael_computer_mode'").fetchone()[0] == '"docker"'
+
+
+def test_upgrade_defaults_to_chrome_if_a_previous_build_removed_the_choice(monkeypatch, tmp_path):
+    with monkeypatch.context() as old:
+        old.setattr(db, "LATEST_VERSION", 97)
+        conn = db.connect(tmp_path / "mode-v97.db")
+    with conn:
+        conn.execute("ALTER TABLE members DROP COLUMN computer_mode")
+        conn.execute("INSERT INTO members (name, role, position, created_at_ms) VALUES ('Member','Helper',0,1)")
+    db.migrate(conn)
+    assert conn.execute("SELECT computer_mode FROM members").fetchone()[0] == "host"
 
 
 @pytest.mark.parametrize("start_version, expected_steps", [
@@ -812,7 +824,7 @@ def test_latest_upgrade_runs_only_pending_migrations_and_preserves_vault_entries
     db.migrate(conn)
     assert steps == expected_steps
     assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
-    for table, columns in SCHEMA_V97.items():
+    for table, columns in SCHEMA_V98.items():
         if table != "agent_turns_fts":
             assert describe_columns(conn, table) == columns
     entry = conn.execute("SELECT kind,label,hint,origin,members,credential FROM vault_entries WHERE id='legacy-login'").fetchone()
@@ -982,7 +994,7 @@ def describe_columns(conn, table):
 
 
 def test_connect_creates_the_latest_schema(conn):
-    assert schema_names(conn, "table") == set(SCHEMA_V94) | FTS_SHADOWS | SEQUENCE
+    assert schema_names(conn, "table") == set(SCHEMA_V98) | FTS_SHADOWS | SEQUENCE
     assert {
         "history_created",
         "agent_turns_created",
@@ -1003,7 +1015,7 @@ def test_connect_creates_the_latest_schema(conn):
         "one_standard_conversation",
     } <= schema_names(conn, "index")
     assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
-    for table, columns in SCHEMA_V97.items():
+    for table, columns in SCHEMA_V98.items():
         if table != "agent_turns_fts":
             assert describe_columns(conn, table) == columns
     assert [c["name"] for c in conn.execute("PRAGMA table_info(agent_turns_fts)")] == [

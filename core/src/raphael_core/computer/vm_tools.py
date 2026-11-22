@@ -33,6 +33,7 @@ from .owner_files import KEPT_WORDS, MAC_PRIVATE, kept_place, place as owner_pla
 from .owner_transfer import REMOTE_FILE_MAX, hand_over, safe_name
 from .vm_catalog import DRIVER_TOOLS, FRESH_READS, NATIVE_INPUT_TOOLS, NOTICES, PAGE_TOOLS, READS, SCREEN_READS, SHARED_ARGUMENTS, BROWSER_APPS, definition as driver_definition, offline_catalog, shared_argument_paths, shared_native_input
 from .takeover import TAKEOVER, TAKEOVER_REASON_REQUIRED, takeover_detail
+from .suggestions import ComputerSuggestions, SUGGEST_COMPUTER, SUGGEST_COMPUTER_KEY
 from .browser_tabs import BLANK, BROWSER_TABS, NEW_TAB, new_tab_of, rows as tab_rows, shown_tab
 from . import seat_launch
 from . import seat_view
@@ -208,12 +209,7 @@ def vm_scope(owner, *, turn_id=0, private=False, task=None, progress=None, notic
 COMPUTER_STATUS_KEY = tool_key("computer", "computer_status")
 COMPUTER_STATUS = PluginTool(
     COMPUTER_STATUS_KEY, "computer", "computer_status",
-    "Check whether Raphael Chrome is available and whether Docker is installed and running, without starting either. "
-    "Choose for the current task: Raphael Chrome browses in the background and shares one profile among members. "
-    "Docker runs Linux programs and has its own browser profile and sign-ins. A site signed in on one may need "
-    "signing in on the other. If one cannot sign in, lacks permission or is unavailable, try the other when suitable. "
-    "Help install Docker only when the work needs it or the owner asks to use it. Respect the owner's choice for "
-    "the current work. Both can use the member workspace and team folder on this computer.",
+    "Check your assigned computer's availability without launching it.",
     {"type": "object", "properties": {}, "additionalProperties": False}, Tier.T0, pinned=True, whole=True,
 )
 
@@ -351,7 +347,7 @@ class VmTools:
         self.audit = AuditLog(conn) if conn is not None else None
         self.conn = conn
         self.host_computer = None
-        self.computer_activity = {}
+        self.suggestions = ComputerSuggestions(conn, self) if conn is not None else None
         self.catalogs, self.tools, self.routes, self.locks, self.actions = {}, {}, {}, {}, {}
         self.schemas = {}
         self.problem = None
@@ -530,7 +526,7 @@ class VmTools:
         return getattr(self.delegate, name)
 
     async def prepare(self, member_id=0):
-        if not self.vm.enabled:
+        if not self.vm.enabled or self.host_computer is not None and self.computer_mode(member_id) == "host":
             return
         target = self.vm.target(member_id)
         # Listing tools must not allocate a seat or start Docker. The first Docker call claims a seat.
@@ -646,42 +642,48 @@ class VmTools:
         self.refreshes[target.key] = asyncio.create_task(refresh())
 
     def offered_for(self, member_id):
+        offered = self.delegate.offered()
+        if not self.vm.enabled:
+            return offered
+        if self.host_computer is not None:
+            offered = [*offered, COMPUTER_STATUS]
+            if self.computer_mode(member_id) == "host":
+                return [*offered, *self.host_computer.offered(member_id), *([SUGGEST_COMPUTER] if self.suggestions else [])]
         target = self.vm.target(member_id)
-        native = [self.tools[key] for key in self.catalogs.get(target.key, []) if self.routes[key] == target] if self.vm.enabled else []
-        host = [COMPUTER_STATUS, *self.host_computer.offered(member_id)] if self.vm.enabled and self.host_computer else []
-        return [*self.delegate.offered(), *native, *host]
+        return [*offered, *(self.tools[key] for key in self.catalogs.get(target.key, []) if self.routes[key] == target)]
 
-    def active_transport(self, member, conversation):
-        for (active_member, active_conversation, _work), transport in reversed(self.computer_activity.items()):
-            if active_member == member and active_conversation in (conversation, None):
-                return transport
-        return None
+    @property
+    def enforces_computer_choice(self):
+        return self.vm.enabled and self.host_computer is not None
 
-    def record_transport(self, member, conversation, work, transport):
-        if work is None:
-            return
-        key = (member, conversation, work)
-        self.computer_activity.pop(key, None)
-        self.computer_activity[key] = transport
+    def computer_mode(self, member):
+        if member == 0 and self.vm.settings is not None:
+            return self.vm.settings.get("raphael_computer_mode")
+        row = self.conn.execute("SELECT computer_mode FROM members WHERE id=?", (member,)).fetchone() if self.conn else None
+        return row[0] if row else "host"
 
-    def forget_transport(self, work):
-        for key in tuple(self.computer_activity):
-            if key[2] == work:
-                self.computer_activity.pop(key)
+    def member_exists(self, member):
+        return member == 0 or self.conn is not None and self.conn.execute("SELECT 1 FROM members WHERE id=?", (member,)).fetchone() is not None
 
-    async def computer_status(self, arguments):
+    def set_computer_mode(self, member, mode):
+        if member == 0:
+            self.conn.execute("INSERT INTO settings (key,value) VALUES ('raphael_computer_mode', ?) "
+                              "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (json.dumps(mode),))
+        else:
+            self.conn.execute("UPDATE members SET computer_mode=? WHERE id=?", (mode, member))
+
+    async def computer_status(self, arguments, member):
         from .host_browser import chrome_executable
         if arguments:
             return PluginResult(False, "bad_arguments")
+        if self.computer_mode(member) == "host":
+            return PluginResult(True, text=json.dumps({"computer": "host", "available": chrome_executable() is not None}))
         installed = await self.vm.installed()
         try:
             running = installed and await self.vm.available()
         except (VmError, OSError, TimeoutError):
             running = False
-        return PluginResult(True, text=json.dumps({
-            "docker": {"installed": installed, "running": running, "sign_ins": "Docker browser profile"},
-            "host_chrome": {"available": chrome_executable() is not None, "sign_ins": "Shared Raphael Chrome profile"},
-        }))
+        return PluginResult(True, text=json.dumps({"computer": "docker", "installed": installed, "running": running}))
 
     def detached_busy(self, target):
         now = time.monotonic()
@@ -707,7 +709,7 @@ class VmTools:
         return key in self.tools
 
     def tier_of(self, key):
-        if self.host_computer and key == COMPUTER_STATUS_KEY:
+        if self.host_computer and key in (COMPUTER_STATUS_KEY, SUGGEST_COMPUTER_KEY):
             return COMPUTER_STATUS.tier if self.vm.enabled else None
         if self.host_computer and key in self.host_computer.routes:
             _, tool = self.host_computer.routes[key]
@@ -722,11 +724,11 @@ class VmTools:
         if self.host_computer and key in self.host_computer.routes:
             return self.host_computer.tier_for_call(key, arguments) if self.tier_of(key) is not None else None
         # The hub knows nothing about computer tools, so it must not be asked about them.
-        return self.tier_of(key) if key == COMPUTER_STATUS_KEY or self.is_computer_tool(key) else self.delegate.tier_for_call(key, arguments)
+        return self.tier_of(key) if key in (COMPUTER_STATUS_KEY, SUGGEST_COMPUTER_KEY) or self.is_computer_tool(key) else self.delegate.tier_for_call(key, arguments)
 
     def kind_of(self, server, name):
         if server == "computer":
-            return "read" if name in READS or name in FILE_READS or name in ("attach_file", "vault_entries", "computer_status") else "write"
+            return "read" if name in READS or name in FILE_READS or name in ("attach_file", "vault_entries", "computer_status", "suggest_computer") else "write"
         return self.delegate.kind_of(server, name)
 
     def kind_for_call(self, server, name, arguments):
@@ -744,7 +746,7 @@ class VmTools:
             self.audit.add(server="computer", tool=tool.name, tier=tool.tier.name, approver="none", outcome=outcome, task_id=task_id)
         elif key in self.tools:
             self._audit(key, outcome, "none", task_id)
-        elif key != COMPUTER_STATUS_KEY:
+        elif key not in (COMPUTER_STATUS_KEY, SUGGEST_COMPUTER_KEY):
             self.delegate.record_unrun(key, outcome=outcome, task_id=task_id)
 
     def private_task_origin(self, task_id):
@@ -754,7 +756,7 @@ class VmTools:
 
     async def call(self, key, arguments, *, approver, task_id=None, pool=None):
         host_key = self.host_computer is not None and key in self.host_computer.routes
-        if not host_key and key != COMPUTER_STATUS_KEY and not self.is_computer_tool(key):
+        if not host_key and key not in (COMPUTER_STATUS_KEY, SUGGEST_COMPUTER_KEY) and not self.is_computer_tool(key):
             return await self.delegate.call(key, arguments, approver=approver, task_id=task_id, pool=pool)
         scope = _SCOPE.get()
         member = scope[1] if scope and scope[0] == "turn" else 0
@@ -763,19 +765,28 @@ class VmTools:
             if row:
                 member = row[0]
         if key == COMPUTER_STATUS_KEY:
-            return await self.computer_status(arguments) if self.vm.enabled and approver != "none" else PluginResult(False, "blocked")
+            return await self.computer_status(arguments, member) if self.vm.enabled and approver != "none" else PluginResult(False, "blocked")
         turn_id, private, _ = _TURN.get()
+        if self.host_computer is not None:
+            chosen = self.computer_mode(member)
+            if chosen != ("host" if host_key or key == SUGGEST_COMPUTER_KEY else "docker"):
+                return PluginResult(False, "computer_changed", "The owner selected a different computer. Use only its tools on the next turn.")
+        if key == SUGGEST_COMPUTER_KEY:
+            if not self.vm.enabled or self.host_computer is None or self.suggestions is None or approver == "none":
+                return PluginResult(False, "blocked")
+            if task_id or not private or not turn_id or not scope or scope[0] != "turn":
+                return PluginResult(False, "vm_required", "Report why the VM is required and stop. A suggestion card is only available in a private app conversation.")
+            if not Draft202012Validator(SUGGEST_COMPUTER.schema).is_valid(arguments) or not (reason := " ".join(arguments["reason"].split())):
+                return PluginResult(False, "bad_arguments")
+            return await self.suggestions.show(turn_id, member, reason, _NOTE.get()[1])
         conversation_id = scope[2] if scope and scope[0] == "turn" else None
         if task_id and self.conn is not None:
             origin = self.private_task_origin(task_id)
             if origin is not None:
                 turn_id, conversation_id, private = origin["turn_id"], origin["conversation_id"], True
-        work = ("task", task_id) if task_id else scope if scope and scope[0] == "task" else ("turn", turn_id) if turn_id else None
         if host_key:
             if not self.vm.enabled:
                 return PluginResult(False, "blocked")
-            if self.host_computer.browser_tool(key) and self.host_computer.routes[key][0] == member and approver != "none":
-                self.record_transport(member, conversation_id, work, "host")
             progress, language = _NOTE.get()
             announce = _NOTICE.get() or progress
             def browser_opened():
@@ -792,16 +803,14 @@ class VmTools:
             return result
         if self.host_computer is not None and self.tier_of(key) is not None and approver != "none":
             if not await self.vm.installed():
-                return PluginResult(False, "docker_missing", "Docker is not installed. Use Raphael Chrome if it can do "
-                                    "the work. When Docker is required or explicitly requested, read self_check for the official setup link.")
+                return PluginResult(False, "docker_missing", "The selected virtual machine cannot start because Docker is not installed. Tell the owner so plainly.")
             if self.routes[key] == self.vm.target(member):
                 # Re-publish the same tool keys with the newly assigned seat.
                 if self.routes[key].container and not self.routes[key].screen:
                     try:
                         self._catalog(await self.vm.seat(member), offline_catalog())
                     except VmError as error:
-                        return PluginResult(False, str(error), "No isolated Docker screen is free. Try Raphael Chrome if suitable.")
-                self.record_transport(member, conversation_id, work, "docker")
+                        return PluginResult(False, str(error), "No virtual machine screen is free.")
         picture_target = self.routes.get(key, self.vm.target(member))
         private_before = picture_target.key in self.payment_holds or any(
             page[0] == picture_target.key for page in self.private_pages)
@@ -2150,16 +2159,16 @@ class VmTools:
             await held[0].__aexit__(None, None, None)
 
     async def close_task_browser(self, task_id, *, keep_page=False):
-        self.forget_transport(("task", task_id))
         if self.host_computer is not None:
             await self.host_computer.browser.close_scope(("task", task_id), keep_page=keep_page)
 
     def close_turn_browser(self, turn_id, *, keep_page=False):
-        self.forget_transport(("turn", turn_id))
         if self.host_computer is not None:
             self.host_computer.close_turn(turn_id, keep_page=keep_page)
 
     async def aclose(self):
+        if self.suggestions is not None:
+            await self.suggestions.aclose()
         if self.host_computer is not None:
             await self.host_computer.aclose()
         for task in list(self.refreshes.values()):

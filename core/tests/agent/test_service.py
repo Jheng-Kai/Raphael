@@ -38,6 +38,7 @@ METHODS = [
     "agent.ask",
     "agent.cancel",
     "agent.computer_choice",
+    "agent.computer_suggestion",
     "agent.confirm",
     "agent.history.clear",
     "agent.history.delete",

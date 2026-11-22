@@ -454,12 +454,14 @@ class DesktopViewer:
         if params.get("start_docker") is True or self.active_transport is None:
             return requested or "docker"
         member, conversation = params.get("member_id", 0), params.get("conversation_id")
+        selected = self.active_transport(member, conversation)
+        if selected:
+            return selected
         if self.host_selection(member, conversation)[1] is not None:
             return "host"
         if any(work["state"] == "waiting_control" for work in self.vm.work.views(member, conversation)):
             return "docker"
-        active = self.active_transport(member, conversation)
-        return active or ("host" if self.host_selection(member, conversation)[0] is not None else requested)
+        return "host" if self.host_selection(member, conversation)[0] is not None else requested
 
     def host_selection(self, member, conversation):
         if self.host_browser is None:
@@ -774,7 +776,8 @@ class DesktopViewer:
 
     def host_current(self, session):
         tab, card = self.host_selection(session.member_id, session.conversation_id)
-        return (self.member_exists(session.member_id) and self.host_browser.live(session.host_tab)
+        selected = self.active_transport(session.member_id, session.conversation_id) if self.active_transport else None
+        return (selected in (None, "host") and self.member_exists(session.member_id) and self.host_browser.live(session.host_tab)
                 and tab is session.host_tab and not (session.preview and (card or session.owner_key in self.owners)))
 
     def host_input_allowed(self, token, session):

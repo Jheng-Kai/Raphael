@@ -17,7 +17,7 @@ from raphael_core.computer.vm_tools import BROWSER_OPEN, COMPUTER_STATUS_KEY, Vm
 from raphael_core.brain.settings import SettingsStore
 
 @pytest.mark.parametrize("installed", [False, True])
-async def test_both_tools_are_offered_with_read_only_status(tmp_path, conn, monkeypatch, installed):
+async def test_only_the_assigned_computer_is_offered_with_read_only_status(tmp_path, conn, monkeypatch, installed):
     vm = LocalVm(tmp_path, settings=SettingsStore(conn))
     vm.desktop = SimpleNamespace(installed=lambda: installed)
     vm.real_transport = False
@@ -34,23 +34,30 @@ async def test_both_tools_are_offered_with_read_only_status(tmp_path, conn, monk
     monkeypatch.setattr(vm, "seat", unexpected)
     monkeypatch.setattr(vm, "start", unexpected)
     monkeypatch.setattr("raphael_core.computer.host_browser.chrome_executable", lambda: "chrome")
-    tools = VmTools(SimpleNamespace(offered=lambda: []), vm, attachments=None)
+    tools = VmTools(SimpleNamespace(offered=lambda: []), vm, attachments=None, conn=conn)
     tools.host_computer = HostComputerTools(vm, conn, BROWSER_OPEN)
-    await tools.prepare(1)
-    offered = tools.offered_for(1)
+    await tools.prepare(0)
+    offered = tools.offered_for(0)
+    assert not any(tool.name == "vm_exec" for tool in offered)
+    host_open = next(tool.key for tool in offered if tool.name == "browser_open")
+    result = await tools.call(COMPUTER_STATUS_KEY, {}, approver="auto")
+    assert result.ok and json.loads(result.text) == {"computer": "host", "available": True}
+    assert not probes
+    with conn:
+        tools.set_computer_mode(0, "docker")
+    await tools.prepare(0)
+    offered = tools.offered_for(0)
     assert any(tool.name == "vm_exec" for tool in offered)
-    assert {tool.alias_group for tool in offered if tool.name == "browser_open"} == {None, "computer_chrome"}
-    assert tools.active_transport(1, 2) is None
+    assert all(tool.name != "suggest_computer" and tool.key != host_open for tool in offered)
+    assert (await tools.call(host_open, {"url": "https://example.invalid"}, approver="auto")).kind == "computer_changed"
     result = await tools.call(COMPUTER_STATUS_KEY, {}, approver="auto")
     assert result.ok
-    assert json.loads(result.text) == {
-        "docker": {"installed": installed, "running": installed, "sign_ins": "Docker browser profile"},
-        "host_chrome": {"available": True, "sign_ins": "Shared Raphael Chrome profile"},
-    }
+    assert json.loads(result.text) == {"computer": "docker", "installed": installed, "running": installed}
     assert probes == (["info"] if installed else [])
     if not installed:
         docker_open = next(tool.key for tool in offered if tool.name == "browser_open" and tool.alias_group is None)
-        assert (await tools.call(docker_open, {"url": "https://example.invalid"}, approver="auto")).kind == "docker_missing"
+        result = await tools.call(docker_open, {"url": "https://example.invalid"}, approver="auto")
+        assert result.kind == "docker_missing" and "Chrome" not in result.text
 
 
 async def test_two_members_do_not_wait_for_the_same_chrome_action_lock(tmp_path, conn, monkeypatch):

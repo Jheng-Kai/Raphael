@@ -41,6 +41,7 @@ DEFAULTS: dict[str, Any] = {
     "first_bot_profile": {},
     "chief_pinned": False,
     "raphael_draft_first": True,
+    "raphael_computer_mode": "host",
     "raphael_tools": None,
     "raphael_notify": False,
     "owner_name": "",
@@ -159,6 +160,7 @@ URL_MAX_CHARS = 300
 # What one background task may cost, as the settings page offers it.
 _CHOICES: dict[str, tuple[Any, ...]] = {
     "computer_vm_mode": ("shared", "per-bot"),
+    "raphael_computer_mode": ("host", "docker"),
     "local_commands_mode": ("ask", "always", "never"),
     "action_mode": ("ask", "direct", "plan", "bypass"),
     "stt_engine": STT_ENGINES,

@@ -2,6 +2,13 @@
 export function installMock(fixture, config = {}, target = window) {
   const data = structuredClone(fixture);
   const variant = config.fixture ?? {};
+  if (variant.computerSuggestion) {
+    const turn = data.turns.find(turn => turn.id === 2);
+    const reason = "安裝套件需要執行終端機指令。";
+    Object.assign(turn, { question: "請安裝並執行這個套件。", text: reason, status: "done",
+      computer_suggestion: { reason, installed: variant.computerSuggestion === "installed", state: "pending" },
+      messages: [{ seq: 1, kind: "reply", text: reason, at_ms: turn.created_at_ms + 500 }] });
+  }
   if (variant.typingPerformance) {
     const conversation = data.conversations.find(item => item.member_id === 0 && item.is_default);
     const base = data.turns.find(turn => turn.conversation_id === conversation.id);
@@ -1466,7 +1473,18 @@ export function installMock(fixture, config = {}, target = window) {
       }
       case "agent.computer_choice": {
         if (p.member_id !== 1) throw new Error("Computer choice must go to the active member");
-        if (!variant.dockerMissing) data.desktop = {...data.desktop, transport: p.transport};
+        if (p.transport === "docker" && variant.computerChoice) data.desktop = variant.dockerMissing
+          ? {transport:"docker",state:"absent",ready:false,control:"member",error:"docker_missing"}
+          : {transport:"docker",state:"stopped",ready:false,control:"member"};
+        else data.desktop = {...data.desktop, transport: p.transport};
+        return {transport: p.transport};
+      }
+      case "agent.computer_suggestion": {
+        const turn = data.turns.find(turn => turn.id === p.turn_id);
+        if (p.action === "dismiss") delete turn.computer_suggestion;
+        else if (!turn.computer_suggestion.installed) return {setup: true};
+        else turn.computer_suggestion.state = "switched";
+        notify("AgentTurn", { turn_id: p.turn_id, member_id: turn.member_id });
         return {};
       }
       case "computer.viewer_open": {

@@ -133,6 +133,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
       draw();
       void checkDocker();
       if (!local || actual() !== "docker") await options.chooseComputer(transport);
+      if (here()) { clearTimeout(timer); void poll(); }
     } catch {
       if (here()) {
         requested = before;
@@ -274,7 +275,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     const fallback = defaultWallpaper(Date.now());
     const signature = JSON.stringify([visible, options.panelVisible(), member(), state, requested?.transport, requested?.status, choosing, connected, interactive, changing, opening, stalled, suspended, demonstration, skillName, teachingBusy, drafting, !!skillEditor, review.hidden, panel.hasAttribute('data-expanded'), options.name(), face.replace(/--slime-(?:delay|since):[^;"\s]+;?| data-slime-mounted="[\d.]+"/g, ""), getLocale(), location.ready(), location.alias(), session, lastFrames.get(member()), fallback, wallpaperKnown, !!ownWallpaper]);
     if (signature === drawn && inline === drawnInline) return;
-    drawn = signature; drawnInline = inline;
+    drawn = signature; drawnInline = inline ?? null;
     paint(panel, "hidden", !visible || !state);
     // The computer carries no words, face or buttons until its screen is up, and nothing is written over it. The one line
     // under it is an update of its image, which can take minutes (R-COMP-UPDATE-01): a state, never a notice or a toast.

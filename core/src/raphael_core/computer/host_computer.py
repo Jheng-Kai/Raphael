@@ -10,6 +10,7 @@ from jsonschema import Draft202012Validator
 from ..agent.data_floor import DataFloor, WRITE_REFUSAL
 from ..agent.plugins import PluginResult, PluginTool, tool_key
 from ..agent.policy import Tier
+from ..ui_words import with_ui_words
 from . import host_page
 from .browser_tabs import BROWSER_TABS
 from .file_tools import Refused, _refusal
@@ -33,12 +34,12 @@ HOST_TAKEOVER = {**TAKEOVER["parameters"], "properties": {
     "target_id": {"type": "string"}, "tab_id": {"type": "string"},
 }}
 HOST_CONTRACT = ("Raphael Chrome runs on this computer in the background. Its shared profile keeps members' sign-ins, "
-                 "separately from Docker. It can browse and use work files. Use Docker for Linux programs. ")
+                 "separately from Docker. It can browse and use work files. ")
 WORDS = {
-    "chrome_missing": "Raphael Chrome is unavailable because Google Chrome is not installed. Try Docker if suitable.",
-    "chrome_start_failed": "Raphael Chrome could not start. Try the isolated computer if it can do the work.",
+    "chrome_missing": "Raphael Chrome is unavailable because Google Chrome is not installed.",
+    "chrome_start_failed": "Raphael Chrome could not start.",
     "chrome_profile": "Raphael Chrome could not open its shared profile.",
-    "chrome_disconnected": "Raphael Chrome disconnected. Open the page again or try the isolated computer.",
+    "chrome_disconnected": "Raphael Chrome disconnected. Open the page again if the request still needs it.",
     "chrome_command_failed": "Chrome rejected the browser command. Read the tab again before retrying.",
     "browser_url": "Chrome can only open a valid HTTP or HTTPS page, except its own control address.",
     "browser_navigation_failed": "Chrome could not load the requested page.",
@@ -97,9 +98,6 @@ class HostComputerTools:
                 tools.append(tool)
             self.catalog[member] = tools
         return self.catalog[member]
-
-    def browser_tool(self, key):
-        return self.routes[key][1].name not in READS | WRITES | {"browser_tabs"}
 
     @staticmethod
     def base_tier(name):
@@ -313,7 +311,7 @@ DEFINITION_WORDS = {
 }
 
 
-OWNER_STEPS = {
+OWNER_STEPS = with_ui_words({
     "en": {
         "sign_in": "Please sign in on this page in the Computer panel.",
         "password": "Please enter your password on the page in the Computer panel.",
@@ -330,7 +328,15 @@ OWNER_STEPS = {
         "payment": "請在「電腦」側欄確認並完成付款。",
         "certificate": "請在「電腦」側欄選擇憑證。",
     },
-}
+    "ja": {
+        "sign_in": "「コンピューター」パネルで、このページにログインしてください。",
+        "password": "「コンピューター」パネルで、ページにパスワードを入力してください。",
+        "two_factor": "「コンピューター」パネルで認証を完了してください。",
+        "captcha": "「コンピューター」パネルで、ロボットではないことを確認してください。",
+        "payment": "「コンピューター」パネルで内容を確認し、支払いを完了してください。",
+        "certificate": "「コンピューター」パネルで証明書を選択してください。",
+    },
+})
 
 
 CHROME_OPENED = {

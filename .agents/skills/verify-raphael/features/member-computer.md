@@ -1,15 +1,22 @@
 # Member computer (Phases A and B)
 
-## Choosing a computer for the current work
+## Assigning a computer to a member
 
-R-COMP-CHOICE-01, R-COMP-CHOICE-02 and R-COMP-HOST-02 through R-COMP-HOST-06.
-The member receives both tool catalogs and a read-only computer status tool. The
-Computer tab streams the member's current tool. Its dropdown quietly steers the
-next step with an app note and includes Docker's local and SSH locations. A
-quiet status sits beside it. With Docker selected, a missing installation shows
-one line and a plain text action. Docker maintenance is available below the
-screen and by right-clicking the header. Only the owner's Alt+Space quick ask can
-operate the owner's actual desktop.
+R-COMP-CHOICE-01 through R-COMP-CHOICE-03 and R-COMP-HOST-02 through R-COMP-HOST-06.
+The owner assigns the member's computer in the Computer tab. Its one dropdown
+saves the choice without posting in chat, with the local and SSH Docker locations
+in the same menu. New members use Raphael Chrome. The member receives its assigned
+computer's tools and a read-only status tool. A failed startup is reported in the
+conversation. Switching the preference leaves an idle VM asleep. Only the owner's
+Alt+Space quick ask can operate the owner's actual desktop.
+
+Chrome can open web pages and use workspace files. When a private request needs
+a shell, installation, a desktop app or a long-running process, the member says
+why and offers a virtual machine once. The card's full-width action switches the
+member and continues the original request. When Docker is missing, the action
+asks Raphael for setup in its conversation. The decision stays with the owner.
+Background work reports that it needs a VM and stops. Task installs use the VM.
+Local commands keep their existing approval flow for other owner-PC work.
 
 Raphael Chrome runs headlessly with one shared profile in the machine-local data
 folder. Each turn or task owns its tabs and its action lock. Local Docker and
@@ -26,11 +33,11 @@ screencast. Shutdown closes relay connections and the profile process tree.
 
 Run from `app/`:
 ```sh
-npm run look -- member-settings desktop-computer-choice desktop-computer-choice-missing desktop-computer-choice-docker desktop-panel desktop-host-live-card desktop-host-panel desktop-host-takeover desktop-host-handback --theme both --width 1120,720,1920x1080
+npm run look -- member-settings desktop-computer-choice desktop-computer-choice-missing desktop-computer-choice-docker desktop-computer-suggestion-installed desktop-computer-suggestion-missing desktop-panel desktop-host-live-card desktop-host-panel desktop-host-takeover desktop-host-handback --theme both --width 1120,720,1920x1080
 ```
 
 Inspect the member settings navigation, the single dropdown with its local and SSH
-entries, quiet Chrome-to-Docker switching, the Docker setup text, the full-frame
+entries, quiet saved switching, both suggestion actions and their hover row, the full-frame
 Chrome page in the live card and panel, and the private takeover and Done flow.
 Look uses the production canvas with fixture frames. Run
 `test_native_chrome_sign_in_handback_releases_input_and_resumes_same_tab`,

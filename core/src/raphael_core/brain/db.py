@@ -2403,8 +2403,6 @@ COMMIT;
 
 _MIGRATIONS[96] = """
 BEGIN;
-ALTER TABLE members DROP COLUMN computer_mode;
-DELETE FROM settings WHERE key = 'raphael_computer_mode';
 PRAGMA user_version = 96;
 COMMIT;
 """
@@ -2416,6 +2414,30 @@ DELETE FROM settings WHERE key = 'raphael_desktop_control';
 PRAGMA user_version = 97;
 COMMIT;
 """
+
+
+def _restore_computer_choice(conn):
+    # Some builds already applied the original v96, which discarded both preferences.
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(members)")}
+    add = ("ALTER TABLE members ADD COLUMN computer_mode TEXT NOT NULL DEFAULT 'host' "
+           "CHECK (computer_mode IN ('host', 'docker'));") if "computer_mode" not in columns else ""
+    conn.executescript(f"""
+BEGIN;
+{add}
+CREATE TABLE computer_suggestions (
+    turn_id INTEGER PRIMARY KEY REFERENCES agent_turns(id) ON DELETE CASCADE,
+    member_id INTEGER NOT NULL,
+    reason TEXT NOT NULL,
+    language TEXT NOT NULL,
+    state TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending', 'dismissed', 'switched')),
+    installed INTEGER NOT NULL CHECK (installed IN (0, 1))
+);
+PRAGMA user_version = 98;
+COMMIT;
+""")
+
+
+_MIGRATIONS[98] = _restore_computer_choice
 
 
 LATEST_VERSION = max(_MIGRATIONS)

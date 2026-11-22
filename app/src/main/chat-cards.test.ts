@@ -20,6 +20,21 @@ const turn = (over: Partial<AgentTurn>): AgentTurn => ({ id: 1, ...over }) as Ag
 
 beforeEach(() => { document.body.innerHTML = ""; vi.clearAllMocks(); api.openLink.mockResolvedValue(undefined); });
 
+test.each([true, false])("a virtual-machine suggestion has one close button and the appropriate action (Docker installed: %s)", async (installed) => {
+  const host = dom(chatCardsHTML(turn({ computer_suggestion: { reason: "The package needs a shell.", installed, state: "pending" } })));
+  expect(host.querySelectorAll(".card-close")).toHaveLength(1);
+  expect(host.querySelector(".card-title")!.textContent).toBe(t("memberComputer.suggestionTitle"));
+  expect(host.querySelector(".card-body")!.textContent).toBe("The package needs a shell.");
+  const action = host.querySelector<HTMLButtonElement>(".computer-suggestion-action")!;
+  expect(action.textContent).toBe(t(installed ? "memberComputer.suggestionSwitch" : "memberComputer.suggestionInstall"));
+  const handoff = vi.fn();
+  api.core.mockResolvedValue(installed ? {} : { setup: true });
+  expect(chatCardAction(action, handoff)).toBe(true);
+  await Promise.resolve();
+  expect(api.core).toHaveBeenCalledExactlyOnceWith("agent.computer_suggestion", { turn_id: 1, action: installed ? "switch" : "setup" });
+  expect(handoff).toHaveBeenCalledTimes(installed ? 0 : 1);
+});
+
 describe("cards a member shows in its conversation for the panel's buttons", () => {
   test("a pairing request shows its code with Allow first, and answers through the core", async () => {
     const host = dom(chatCardsHTML(turn({ pairings: [pairing()] })));

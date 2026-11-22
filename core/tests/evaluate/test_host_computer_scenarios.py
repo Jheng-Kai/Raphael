@@ -42,7 +42,7 @@ async def test_showing_youtube_opens_the_live_host_panel_without_a_link_or_takeo
     app.vm.enabled = True
     host = app.vm_tools.host_computer = HostComputerTools(app.vm, app._conn, BROWSER_OPEN)
     host.cards = app.handbacks
-    app.desktop_viewer.active_transport = app.vm_tools.active_transport
+    app.desktop_viewer.active_transport = lambda member, _: app.vm_tools.computer_mode(member)
     app.desktop_viewer.host_browser = host.browser
     member = app.members.store.create_member(name="Browser member")
     opened = []
@@ -76,7 +76,85 @@ async def test_showing_youtube_opens_the_live_host_panel_without_a_link_or_takeo
         assert state["works"][0]["turn_id"] == tab.turn_id
         assert "host_request" not in state
         assert not app._conn.execute("SELECT 1 FROM handback_cards").fetchone()
+        assert not app._conn.execute("SELECT 1 FROM computer_suggestions").fetchone()
     finally:
         reader.cancel()
         host.browser.cdp = None
+        await driver.aclose()
+
+
+@pytest.mark.parametrize("installed", [True, False])
+async def test_installing_a_package_on_chrome_suggests_the_vm_and_waits_for_the_owner(tmp_path, monkeypatch, installed):
+    question = "Install this npm package and run it."
+    reason = "Installing and running an npm package requires a shell."
+    offers = []
+
+    class Client(FakeClient):
+        async def chat_tools(self, **kwargs):
+            definitions = {tool["function"]["name"] for tool in kwargs["tools"]}
+            offers.append(definitions)
+            if "computer__vm_exec" in definitions:
+                assert "computer__suggest_computer" not in definitions
+                assert "The owner switched this member to the virtual machine" in str(kwargs["messages"])
+                assert question in str(kwargs["messages"])
+                self.turns = iter([("I can continue in the virtual machine.", [])])
+            elif any(message["role"] == "tool" for message in kwargs["messages"]):
+                self.turns = iter([(reason, [])])
+            else:
+                assert "computer__suggest_computer" in definitions
+                self.turns = iter([("", [("computer__suggest_computer", {"reason": reason})])])
+            return await super().chat_tools(**kwargs)
+
+    async def docker_installed():
+        return installed
+
+    async def never_start(*args, **kwargs):
+        pytest.fail("Displaying a suggestion or choosing a VM must not start it")
+
+    driver = RpcDriver(tmp_path, "fake/model", Client([]), Budget(8))
+    app = driver.app
+    app.vm.enabled = True
+    app.vm_tools.host_computer = HostComputerTools(app.vm, app._conn, BROWSER_OPEN)
+    monkeypatch.setattr(app.vm, "installed", docker_installed)
+    monkeypatch.setattr(app.vm, "start", never_start)
+    member = app.members.store.create_member(name="Browser member")
+    try:
+        original = await driver.ask(question, member=member.id)
+        turn_id = original["turn_id"]
+        assert original["text"] == reason and app.vm_tools.computer_mode(member.id) == "host"
+        assert [(trace["name"], trace["outcome"]) for trace in driver.traces] == [("mcp:computer/suggest_computer", "ok")]
+        assert app.vm_tools.suggestions.views([turn_id])[turn_id] == {"reason": reason, "installed": installed, "state": "pending"}
+        action = await app.call("agent.computer_suggestion", {"turn_id": turn_id, "action": "switch" if installed else "setup"})
+        if not installed:
+            assert action == {"setup": True}
+            assert app.vm_tools.computer_mode(member.id) == "host" and not app.vm_tools.suggestions.tasks
+        else:
+            assert action == {}
+            await asyncio.wait_for(asyncio.gather(*app.vm_tools.suggestions.tasks), 5)
+            assert app.vm_tools.computer_mode(member.id) == "docker"
+            continued = app._conn.execute("SELECT question,text FROM agent_turns WHERE source_turn_id=?", (turn_id,)).fetchall()
+            assert [tuple(row) for row in continued] == [(question, "I can continue in the virtual machine.")]
+            assert await app.call("agent.computer_suggestion", {"turn_id": turn_id, "action": "switch"}) == {}
+            assert not app.vm_tools.suggestions.tasks
+            assert "computer__vm_exec" in offers[-1]
+        assert await app.call("agent.computer_suggestion", {"turn_id": turn_id, "action": "dismiss"}) == {}
+        assert not app.vm_tools.suggestions.views([turn_id])
+    finally:
+        await driver.aclose()
+
+
+@pytest.mark.parametrize("command", ["npm install example", "python -m pip install openai-whisper", "ollama pull whisper"])
+async def test_a_task_cannot_install_software_through_the_owners_local_commands(tmp_path, command):
+    from raphael_core.agent.plugins import tool_key
+    from raphael_core.computer.local_tools import LocalTools
+
+    driver = RpcDriver(tmp_path, "fake/model", FakeClient([]), Budget(8))
+    try:
+        app = driver.app
+        app.vm.enabled = True
+        app.vm_tools.host_computer = HostComputerTools(app.vm, app._conn, BROWSER_OPEN)
+        local = LocalTools(app.vm_tools, app._conn)
+        result = await local.call(tool_key("local", "local_exec"), {"command": command}, approver="user")
+        assert not result.ok and result.kind == "assigned_computer_required"
+    finally:
         await driver.aclose()

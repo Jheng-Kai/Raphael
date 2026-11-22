@@ -28,32 +28,21 @@ from .test_narration import chat, typed
 from .test_service import make_rig  # noqa: F401
 
 
-async def test_switching_a_computer_steers_running_work_without_a_chat_turn(make_rig, client, conn):
-    import asyncio
+async def test_switching_a_computer_saves_the_members_preference_without_a_chat_turn(make_rig, client, conn, tmp_path):
+    from raphael_core.computer.vm import LocalVm
+    from raphael_core.computer.vm_tools import VmTools
 
     rig = rig_with_pc(make_rig, conn)
-    conversation = rig.service.conversations.main()
-    started, release = asyncio.Event(), asyncio.Event()
-
-    async def opening(**kwargs):
-        started.set()
-        await release.wait()
-        return chat("Looking.", ("local_time", {}))
-
-    client.chats = [opening, chat('{"text":"Done."}')]
-    turn = asyncio.create_task(typed(rig, "Check the time"))
-    try:
-        await asyncio.wait_for(started.wait(), 5)
-        before = conn.execute("SELECT COUNT(*) FROM agent_turns").fetchone()[0]
-        selected = await rig.call("agent.computer_choice", {"member_id": 0, "conversation_id": conversation, "transport": "host"})
-        assert selected == {"chosen": True}
-        assert conn.execute("SELECT COUNT(*) FROM agent_turns").fetchone()[0] == before
-    finally:
-        release.set()
-        await asyncio.wait_for(turn, 5)
-    notes = [m["content"] for m in client.chat_calls[-1]["messages"] if "<app_note>" in str(m.get("content"))]
-    assert len(notes) == 1 and "Continue the task without replying" in notes[0]
+    hub = VmTools(rig.service._plugins, LocalVm(tmp_path, settings=SettingsStore(conn)), attachments=None, conn=conn)
+    rig.service._plugins = hub
+    with conn:
+        member = conn.execute("INSERT INTO members (name,role,position,created_at_ms) VALUES ('Member','',0,1)").lastrowid
+    assert hub.computer_mode(member) == hub.computer_mode(0) == "host"
+    before = conn.execute("SELECT COUNT(*) FROM agent_turns").fetchone()[0]
+    assert await rig.call("agent.computer_choice", {"member_id": member, "transport": "docker"}) == {"transport": "docker"}
+    assert hub.computer_mode(member) == "docker" and hub.computer_mode(0) == "host"
     assert conn.execute("SELECT COUNT(*) FROM agent_turns").fetchone()[0] == before
+    assert not client.chat_calls
 
 
 @pytest.mark.parametrize("interactive", [True, False])

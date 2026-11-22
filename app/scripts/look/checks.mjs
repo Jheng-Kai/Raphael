@@ -1174,15 +1174,25 @@ export function checkRendered(name, context = {}) {
       require(dropdown.textContent === '虛擬機（本機）' && visible(setup) && explanation.textContent === '尚未安裝 Docker' && help.textContent === '請 Raphael 安裝', 'a missing Docker has one explanation and one ask action');
       require(setup.querySelectorAll('button').length === 1 && help.matches(':hover') && style.backgroundColor === 'rgba(0, 0, 0, 0)' && style.borderTopWidth === '0px', 'the action remains plain text under the pointer');
       require(Math.abs(explanation.getBoundingClientRect().bottom - help.getBoundingClientRect().bottom) <= 3 && help.getBoundingClientRect().right <= bounds.right + 1, 'the Docker explanation and action fit on one line');
-      require(panel.querySelector('iframe[src*="transport=host"]'), 'the running Chrome remains in the panel');
+      require(!panel.querySelector('iframe[src]'), 'the unavailable virtual machine has no stream');
     } else if (name === 'desktop-computer-choice-docker') {
       const local = document.querySelector('.menu [data-value="docker-local"]'), remote = document.querySelector('.menu [data-value="docker-remote"]');
       require(dropdown.textContent === '虛擬機（studio-mini）' && visible(local) && local.textContent.includes('虛擬機（本機）') && visible(remote) && remote.getAttribute('aria-checked') === 'true', 'the one menu shows the local and selected SSH locations');
     } else if (name === 'desktop-computer-choice') {
       require(dropdown.textContent === '虛擬機（本機）' && window.__look.calls.some(call => call.method === 'computer.viewer_close'), 'the choice follows the member to Docker and closes the host stream');
-      require(window.__look.calls.filter(call => call.method === 'agent.computer_choice').length === 1 && !window.__look.calls.some(call => call.command === 'agent_ask_text'), 'the choice is a quiet notification, not an owner message');
+      require(window.__look.calls.filter(call => call.method === 'agent.computer_choice').length === 1 && !window.__look.calls.some(call => call.command === 'agent_ask_text'), 'saving the choice creates no conversation message');
+      require(!panel.querySelector('iframe[src]'), 'saving the choice leaves a stopped virtual machine asleep');
     }
     return { check: name, choice: dropdown.textContent, status: shownText(status) };
+  }
+  if (name.startsWith('computer-suggestion-')) {
+    const card = document.querySelector('.computer-suggestion-card'), button = card.querySelector('.computer-suggestion-action');
+    const style = getComputedStyle(button), footer = button.parentElement.getBoundingClientRect();
+    require(card.querySelector('.card-title').textContent === '這件事需要虛擬機' && card.querySelector('.card-body').textContent.includes('終端機'), 'the card names the step that needs the virtual machine');
+    require(card.querySelectorAll('.card-close').length === 1 && card.querySelectorAll('.card-actions button').length === 1, 'one close and one action');
+    require(shownText(button) === (name.endsWith('installed') ? '改用虛擬機' : '請 Raphael 協助安裝'), 'the action matches Docker availability');
+    require(button.matches(':hover') && style.backgroundColor !== 'rgba(0, 0, 0, 0)' && Math.abs(button.getBoundingClientRect().width - footer.width) <= 1, 'the whole action row lights up');
+    return { check: name, action: shownText(button) };
   }
   if (name.startsWith('computer-maintenance-')) {
     const calls = window.__look.calls.filter(call => call.method === 'computer.lifecycle');

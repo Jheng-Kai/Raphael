@@ -377,7 +377,7 @@ export function createAgent(app: AppContext, places?: {
     openPanel: () => members.computer(), panelVisible: () => members.detailsOpen() && members.details.dataset.detailsTab === 'computer',
     changed: () => { if (visible && !scroller.hidden) drawThread(); },
     trySkill: text => sendFromPage(text),
-    chooseComputer: transport => api.core("agent.computer_choice", { member_id: members.current(), conversation_id: conversationId(), transport }),
+    chooseComputer: transport => api.core("agent.computer_choice", { member_id: members.current(), transport }),
     stop: turnId => { const turn = turns.find(turn => turn.id === turnId); return turn?.task ? api.workerCancel(turn.task.id) : turn?.session_id ? api.agentStop(turn.session_id, memberId()) : Promise.resolve(); },
   });
   members.details.addEventListener('member-panel-tab', () => { if (visible && !roomPane.active) desktop.show(); desktop.sync(); });
@@ -3051,7 +3051,10 @@ export function createAgent(app: AppContext, places?: {
       case "template-share":
       case "template-copy-link":
       case "template-unshare":
-        chatCardAction(act);
+      case "computer-suggestion-switch":
+      case "computer-suggestion-setup":
+      case "computer-suggestion-dismiss":
+        chatCardAction(act, () => { app.go("agent", "raphael"); askInChat(RAPHAEL_ID, "setup-docker"); });
         break;
       case "card-save":
         void secretSave(act);
