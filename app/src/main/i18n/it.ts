@@ -814,6 +814,7 @@ export const it = {
   "chooser.title": "Scegli modello",
   "chooser.slot": "Per: {name}",
   "chooser.subscriptions": "Abbonamenti",
+  "chooser.chatgptDrawingUnavailable": "L’accesso con ChatGPT non supporta ancora la generazione di immagini. Puoi usare Codex.",
   "chooser.api": "API",
   "chooser.local": "Ospitato in proprio",
   "chooser.sources": "Collega un’altra fonte",

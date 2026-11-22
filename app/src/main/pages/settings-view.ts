@@ -272,6 +272,7 @@ export function modelPickerLook(v: SettingsView, role: ModelRole | "image" | "vi
     providers: v.providers?.providers,
     clis: role === "answer" ? v.cliBrains?.clis : undefined,
     ...(role === "answer" ? { chatgpt: v.cliBrains?.chatgpt ?? null, chatgptError: v.cliBrains?.chatgptError ?? "" } : {}),
+    ...(role === "image" ? { chatgpt: v.cliBrains?.chatgpt ?? null } : {}),
     loading: v.catalog === "loading",
     favorites: v.brain?.model_favorites?.[media ? "answer" : role as ModelRole] ?? [],
     ...(media ? { lead: { id: "", name: t("media.unset"), source: "" } } : {}),

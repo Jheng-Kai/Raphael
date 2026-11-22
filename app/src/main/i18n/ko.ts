@@ -814,6 +814,7 @@ export const ko = {
   "chooser.title": "모델 선택",
   "chooser.slot": "용도: {name}",
   "chooser.subscriptions": "구독",
+  "chooser.chatgptDrawingUnavailable": "ChatGPT 로그인은 현재 이미지 생성을 지원하지 않습니다. Codex를 사용할 수 있습니다.",
   "chooser.api": "API",
   "chooser.local": "자체 호스팅",
   "chooser.sources": "다른 소스 연결",

@@ -814,6 +814,7 @@ export const zhCN = {
   "chooser.title": "选择模型",
   "chooser.slot": "用于：{name}",
   "chooser.subscriptions": "订阅",
+  "chooser.chatgptDrawingUnavailable": "ChatGPT 登录目前不支持画图，可用 Codex",
   "chooser.api": "API",
   "chooser.local": "自架",
   "chooser.sources": "连接其他来源",

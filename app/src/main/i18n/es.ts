@@ -814,6 +814,7 @@ export const es = {
   "chooser.title": "Elegir un modelo",
   "chooser.slot": "Para: {name}",
   "chooser.subscriptions": "Suscripciones",
+  "chooser.chatgptDrawingUnavailable": "El inicio de sesión con ChatGPT aún no permite generar imágenes. Puedes usar Codex.",
   "chooser.api": "API",
   "chooser.local": "Alojamiento propio",
   "chooser.sources": "Conectar otra fuente",

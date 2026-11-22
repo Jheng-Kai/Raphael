@@ -565,8 +565,11 @@ const localName = (model: CatalogModel): CatalogModel => {
 };
 
 function pickerModels(o: ModelPickerLook): CatalogModel[] {
+  // Sign in with ChatGPT does not support hosted image generation on its plan route.
+  // https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations
   const models = o.catalog ? modelsFor(o.catalog, o.role).filter((m) =>
-    !m.id.startsWith("cli:") && o.providers?.find((p) => p.id === connectionId(m))?.enabled !== false).map(localName) : [];
+    !m.id.startsWith("cli:") && (o.role !== "image" || connectionId(m) !== "chatgpt") &&
+    o.providers?.find((p) => p.id === connectionId(m))?.enabled !== false).map(localName) : [];
   return [...models, ...(o.role === "answer" ? cliModels(o.clis ?? []).map(localName) : [])];
 }
 
@@ -577,7 +580,7 @@ export function chooserSources(o: ModelPickerLook): ChooserSource[] {
     cli: o.clis?.find((c) => c.id === known.id), models: models.filter((m) => connectionId(m) === `cli:${known.id}`),
   })) : [];
   const planModels = models.filter((m) => connectionId(m) === "chatgpt");
-  if (o.chatgpt !== undefined || planModels.length) sources.unshift({ id: "chatgpt", name: "ChatGPT", kind: "openai", group: "subscriptions", account: o.chatgpt, models: planModels });
+  if (o.role !== "image" && (o.chatgpt !== undefined || planModels.length)) sources.unshift({ id: "chatgpt", name: "ChatGPT", kind: "openai", group: "subscriptions", account: o.chatgpt, models: planModels });
   for (const provider of o.providers ?? []) {
     if (provider.enabled && provider.id !== "chatgpt") sources.push({ id: provider.id, name: provider.name, kind: provider.kind,
       group: isLocal(provider.kind) ? "local" : "api", models: models.filter((m) => connectionId(m) === provider.id) });
@@ -947,10 +950,12 @@ class MountedPicker implements ModelPicker {
     const savedSource = savedModel ? connectionId(savedModel) : saved.startsWith("cli:") ? saved.split(":").slice(0, 2).join(":") : "";
     const rail = (["subscriptions", "api", "local"] as const).map((group) => {
       const items = sources.filter((source) => source.group === group);
-      return !items.length ? "" : `<section><h3>${esc(t(groupKeys[group]))}</h3>` + items.map((source) => {
+      const note = group === "subscriptions" && this.o.role === "image" && this.o.chatgpt?.signed_in
+        ? `<p class="mc-source-note">${esc(t("chooser.chatgptDrawingUnavailable"))}</p>` : "";
+      return !items.length && !note ? "" : `<section><h3>${esc(t(groupKeys[group]))}</h3>` + items.map((source) => {
         const status = sourceStatus(source, this.o);
         return `<button type="button" class="btn mc-source" data-source="${esc(source.id)}" aria-pressed="${this.source === source.id}">${sourceMark(source)}<span><strong>${esc(source.name)}</strong><small>${esc(status)}</small></span>${source.id === (this.o.local?.active ? "local-speech" : savedSource) ? '<i class="mc-current" aria-hidden="true"></i>' : ""}</button>`;
-      }).join("") + `</section>`;
+      }).join("") + note + `</section>`;
     }).join("");
     const inherit = this.o.lead ? `<button type="button" class="btn mc-inherit" data-model="${esc(this.o.lead.id)}" aria-pressed="${this.draft === this.o.lead.id}">${esc(this.o.lead.name)}</button>` : "";
     // Drawing again must not scroll the sources under the pointer that just chose one.

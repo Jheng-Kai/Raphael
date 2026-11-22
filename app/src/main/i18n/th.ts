@@ -814,6 +814,7 @@ export const th = {
   "chooser.title": "เลือกโมเดล",
   "chooser.slot": "สำหรับ: {name}",
   "chooser.subscriptions": "การสมัครสมาชิก",
+  "chooser.chatgptDrawingUnavailable": "การเข้าสู่ระบบด้วย ChatGPT ยังไม่รองรับการสร้างภาพ คุณใช้ Codex ได้",
   "chooser.api": "API",
   "chooser.local": "โฮสต์เอง",
   "chooser.sources": "เชื่อมต่อแหล่งอื่น",
