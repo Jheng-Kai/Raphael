@@ -174,7 +174,10 @@ export function createDictionary(app: AppContext): DictionaryPage {
   function showAdd(open: boolean): void {
     addBox.hidden = !open;
     newButton.setAttribute("aria-expanded", String(open));
-    if (open) { bindNavLayer(addBox, () => showAdd(false)); wordInput.focus(); }
+    if (open) {
+      bindNavLayer(addBox, () => showAdd(false), { sideBack: () => wordInput.value ? wordInput.focus() : showAdd(false) });
+      wordInput.focus();
+    }
     else newButton.focus();
   }
 

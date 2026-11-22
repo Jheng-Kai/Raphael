@@ -45,6 +45,7 @@ vi.mock("../api", () => api);
 
 import { Cleared } from "../cleared";
 import { createAgent } from "./agent";
+import { openDialog } from "../member-dialogs";
 import { openGroupChat } from "../group-chats";
 import { closeMenu } from "../ui";
 import { resetAsks } from "../chat-ask";
@@ -127,15 +128,50 @@ test.each(["relative", "absolute"])("mouse Back leaves the docked details panel 
     panel.style.position = position;
     $('[data-det="tab"][data-tab="library"]').click();
     sendNavInput("mouse", "back");
+    expect(agent.currentChatPlace()).toEqual(second);
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    expect(panel.dataset.detailsTab).toBe("details");
+    sendNavInput("mouse", "back");
     if (position === "absolute") {
       expect(agent.currentChatPlace()).toEqual(second);
       expect(trigger.getAttribute("aria-expanded")).toBe("false");
       sendNavInput("mouse", "back");
     } else {
       expect(trigger.getAttribute("aria-expanded")).toBe("true");
-      expect(panel.dataset.detailsTab).toBe("library");
+      expect(panel.dataset.detailsTab).toBe("details");
     }
     expect(agent.currentChatPlace()).toEqual(first);
+  } finally { stop(); agent.hide(); }
+});
+
+test("mouse Back closes the dialog over the current member before walking conversation history", async () => {
+  const history = new PlaceHistory();
+  const agent = mount("hold", history);
+  const stop = installNavInput(window, vi.fn(), undefined, direction => stepPlace(direction, history, {
+    layer: stepSideLayer,
+    exists: place => place.page === "member" && agent.chatPlaceExists(place),
+    show: place => { if (place.page === "member") agent.showChatPlace(place); },
+  }));
+  try {
+    await flush();
+    await pick(3);
+    const first = agent.currentChatPlace();
+    await pick(4);
+    const current = agent.currentChatPlace();
+    const dialog = openDialog({ title: "Review", body: '<textarea></textarea>', actions: {}, onAct() {} });
+    try {
+      const field = dialog.el.querySelector("textarea")!;
+      field.value = "Keep these words";
+      sendNavInput("mouse", "back");
+      expect(dialog.el.isConnected).toBe(true);
+      expect(field.value).toBe("Keep these words");
+      field.value = "";
+      sendNavInput("mouse", "back");
+      expect(dialog.el.isConnected).toBe(false);
+      expect(agent.currentChatPlace()).toEqual(current);
+      sendNavInput("mouse", "back");
+      expect(agent.currentChatPlace()).toEqual(first);
+    } finally { dialog.close(); }
   } finally { stop(); agent.hide(); }
 });
 

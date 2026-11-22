@@ -100,10 +100,11 @@ export function mountTemplateReview(dialog: Dialog, template: MemberTemplate, o:
     body.scrollTop = 0;
     if (focus) (head.querySelector<HTMLElement>("[data-tpl-back]") ?? body.querySelector<HTMLElement>("[data-tpl-go]"))?.focus();
   };
-  bindLayerSteps(body, views, next => show(next, true));
+  const back = () => views.step("back", previous => show(previous, true));
+  bindLayerSteps(body, views, next => show(next, true), back);
   dialog.el.addEventListener("click", (event) => {
     const target = event.target as Element;
-    if (target.closest("[data-tpl-back]")) { views.step("back", previous => show(previous, true)); return; }
+    if (target.closest("[data-tpl-back]")) { back(); return; }
     const go = target.closest<HTMLElement>("[data-tpl-go]");
     if (go?.dataset.tplGo) show(pageOf(go.dataset.tplGo), true);
   });

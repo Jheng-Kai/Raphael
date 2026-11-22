@@ -48,7 +48,7 @@ test("a question head has no pill and puts its close after the heading", () => {
   document.body.innerHTML = ownerQuestionHTML(question);
   const head = document.querySelector(".card-head")!;
   expect(head.querySelector(".card-status")).toBeNull();
-  expect(head.lastElementChild?.matches('[data-owner-answer="cancel"]')).toBe(true);
+  expect(head.lastElementChild?.matches('button.close-button[data-owner-answer="cancel"]')).toBe(true);
   expect(head.querySelector('.card-heading [data-owner-answer="cancel"]')).toBeNull();
 });
 
@@ -95,7 +95,7 @@ test("a failed card can be closed locally without changing the saved action", ()
   const card = document.querySelector<HTMLElement>(".conversation-card")!;
   // The × at its top right, with no 「關閉」 text button in its footer.
   const close = card.querySelector<HTMLButtonElement>(".card-head [data-card-failed-close]");
-  expect(close).not.toBeNull();
+  expect(close?.classList.contains("close-button")).toBe(true);
   expect(close!.textContent).toBe("");
   expect(card.querySelector("footer [data-card-failed-close]")).toBeNull();
   close!.click();

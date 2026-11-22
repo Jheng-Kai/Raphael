@@ -10,7 +10,7 @@
 .modal-body .cs-vh > h1 { padding: 0; font-size: 0; line-height: 0; }
 
 /* The top row: the title at the left; at the right a quiet chip with the marks of up to four connected apps and how many, clear of the dialog's ✕ */
-.cs-top { display: flex; align-items: center; gap: var(--sp-3); min-height: 36px; padding-right: 40px; }
+.cs-top { display: flex; align-items: center; gap: var(--sp-3); min-height: 36px; }
 .cs-top > h1 { flex: 1; min-width: 0; margin: 0; padding: 0; font: 500 var(--fs-lg)/1.3 var(--display); letter-spacing: 0; }
 .cs-top-t { flex: 1; min-width: 0; font: 500 var(--fs-lg)/1.3 var(--display); }
 .btn.cs-have { display: inline-flex; flex: none; align-items: center; gap: var(--sp-2); height: var(--h-ctl); padding: 0 var(--sp-1) 0 var(--sp-2); border: 0; border-radius: var(--r-pill); background: transparent; color: var(--text-2); font-size: var(--fs-sm); cursor: pointer; }
@@ -112,12 +112,12 @@
 .cs-sec-head { padding-inline: var(--sp-2); }
 .cs-card .btn.cs-main:is(:hover, :active):not(:disabled), .cs-linked .btn.cs-main:is(:hover, :active):not(:disabled) { background: transparent; }
 
-.cs-back { margin: 0 0 var(--sp-1) -9px; }
+.cs-back { margin-inline-start: -9px; }
 .cs-connected > .cs-top { margin-bottom: var(--sp-4); }
 .cs-connected > .cs-top > .cs-back { margin-block: 0; }
 .cs-head { display: flex; align-items: center; gap: var(--sp-3); }
 .cs-head h2.big { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.cs-join { display: flex; align-items: center; gap: var(--sp-2); flex: none; }
+.cs-join, .svc-switch-row { display: flex; justify-content: flex-end; align-items: center; gap: var(--sp-2); margin-top: var(--sp-2); }
 .cs-wait { font-size: var(--fs-sm); color: var(--accent-text); }
 .cs-desc { margin: var(--sp-4) 0 0; font-size: var(--fs-sm); line-height: 1.6; color: var(--text-2); text-wrap: pretty; }
 .cs-needs { margin: var(--sp-3) 0 0; font-size: var(--fs-sm); line-height: 1.55; color: var(--text-2); text-wrap: pretty; }
@@ -179,7 +179,7 @@
 .cs-accts > .btn { margin: var(--sp-2) var(--sp-3); justify-self: start; }
 .cs-sec > .cs-box, .cs-sec > .note { margin-top: 0; }
 .cs-page .cs-sec { margin-top: var(--sp-5); }
-.cs-page .cs-head + .cs-desc + .cs-sec { margin-top: var(--sp-5); }
+.cs-page .cs-summary + .cs-desc + .cs-sec { margin-top: var(--sp-5); }
 
 /* A notice that something waits for the user */
 .ca-alert { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-3); border-radius: var(--r-lg); background: var(--warn-soft); border: 1px solid var(--warn-edge); font-size: var(--fs-sm); }
@@ -198,7 +198,6 @@
 .cs-dialog > .action-row.is-sticky { bottom: calc(var(--sp-4) * -1); margin-bottom: calc(var(--sp-4) * -1); padding-bottom: calc(var(--sp-3) + var(--sp-4)); }
 .cs-dlg-head { display: flex; align-items: center; gap: var(--sp-2); }
 .cs-dlg-head .sp { flex: 1; }
-.cs-dlg-head .tg { margin-right: var(--sp-1); }
 .cs-dlg-head.sub .cs-dlg-name { flex: 1; min-width: 0; font-size: var(--fs-md); }
 .cs-dlg-name { margin: 0; font: 500 var(--fs-lg)/1.3 var(--display); overflow-wrap: anywhere; }
 .cs-dialog em.num { margin-left: var(--sp-1); font-style: normal; font-weight: 500; color: var(--text-3); }
@@ -275,7 +274,7 @@
 .modal-body:has(.cs-form) { display:flex; flex-direction:column; overflow:hidden; }
 .modal-body:has(.cs-form) > .set-content { display:flex; flex-direction:column; flex:1; min-height:0; }
 .cs-form { display:flex; flex-direction:column; flex:1; min-height:0; }
-.cs-form > h2,.cs-form > .cd-help { flex:none; }
+.cs-form > .cs-top,.cs-form > .cd-help { flex:none; }
 .cs-form > .trust { flex:none; margin-top:var(--sp-3); margin-right:var(--sp-2); }
 /* Header, fields and footer reserve the same 8px scrollbar gutter inside their shared measure. */
 .cs-form .add-grid { overflow-y:auto; min-height:0; padding:0 0 var(--sp-6); scroll-padding-block:var(--sp-4); scrollbar-gutter:stable; scrollbar-width:auto; scrollbar-color:auto; }

@@ -54,15 +54,15 @@ export function accessText(access: Access, members: LibraryMember[]): string {
   return names.length <= 2 ? names.join("、") : t("skillLib.people", { count: names.length });
 }
 
-/** A package's controls, the same on its row and on its page: who may use it, its switch and its ⋯. */
+/** A package's controls, the same on its row and on its page: who may use it, its ⋯ and its switch. */
 function controlsHTML(p: LibraryPackage, v: SkillLibraryView): string {
   const busy = v.refreshing.has(p.key) ? " disabled" : "";
   return `<div class="ctl">` +
     (busy ? `<span class="d skl-refresh-status" role="status">${esc(t("desktop.updating"))}</span>` : "") +
     `<button type="button" class="sel skl-access" data-skl="access" data-key="${esc(p.key)}" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(t("vault.access"))}"${busy}>` +
     `<span>${esc(accessText(p.access, v.members))}</span>${ico("down")}</button>` +
-    tg(p.enabled, `${t("members.profile.enable")} ${p.name}`, ` data-skl="toggle" data-key="${esc(p.key)}"${busy}`) +
     iconBtn("more", t("members.more", { p0: p.name }), ` data-skl="more" data-key="${esc(p.key)}" aria-haspopup="menu" aria-expanded="false"${busy}`) +
+    tg(p.enabled, `${t("members.profile.enable")} ${p.name}`, ` data-skl="toggle" data-key="${esc(p.key)}"${busy}`) +
     `</div>`;
 }
 
@@ -99,7 +99,7 @@ function pluginSkillHTML(p: LibraryPackage, skill: LibrarySkill, v: SkillLibrary
     ? iconBtn("more", t("members.more", { p0: skill.name }), ` data-skl="skill-more"${attrs} aria-haspopup="menu" aria-expanded="false"`)
     : "";
   const label = `<div class="skl-single">${libraryLabelHTML(skill.name, skill.description)}</div>`;
-  return libraryRowHTML("skl-skill", `tabindex="-1" data-library-skill="${skill.id}"`, label, `<div class="ctl">${toggle}${more}</div>`);
+  return libraryRowHTML("skl-skill", `tabindex="-1" data-library-skill="${skill.id}"`, label, `<div class="ctl">${more}${toggle}</div>`);
 }
 
 function packageSectionHTML(kind: "plugins" | "skills", packages: LibraryPackage[], v: SkillLibraryView): string {
@@ -110,18 +110,18 @@ function packageSectionHTML(kind: "plugins" | "skills", packages: LibraryPackage
 }
 
 /**
- * A package's page, in the list's place: the back arrow and its name, who may use it, its switch and its ⋯ as on its row,
+ * A package's page, in the list's place: the back arrow and its name, then who may use it, its ⋯ and its switch,
  * where it came from, then its skills, each with its own switch (off while the package is).
  */
-function packagePageHTML(p: LibraryPackage, v: SkillLibraryView, notice: string): string {
+function packagePageHTML(p: LibraryPackage, v: SkillLibraryView, headerClose: string, notice: string): string {
   const skills = p.skills.map(skill => pluginSkillHTML(p, skill, v)).join("");
   const source = p.source ? `<p class="d skl-source">${esc(p.source)}${p.version ? ` · ${esc(p.version)}` : ""}</p>` : "";
   return `<section class="skl skl-page" data-skl-page="${esc(p.key)}" aria-labelledby="set-title">` +
-    `<header class="row skl-page-head skl-pack" data-skl-pack="${esc(p.key)}">` +
+    `<div class="skl-pack" data-skl-pack="${esc(p.key)}"><header class="set-head skl-page-head"><div class="skl-page-title">` +
     backButton(t("chooser.back"), ' data-skl="back" data-k="skl-back"') +
     `<h1 class="skl-page-name" id="set-title" tabindex="-1">${esc(p.name)}</h1>` +
-    `<span class="skl-count">${esc(t("skillLib.count", { count: p.skills.length }))}</span>` +
-    controlsHTML(p, v) + `</header>` + notice + source +
+    `<span class="skl-count">${esc(t("skillLib.count", { count: p.skills.length }))}</span></div>` + headerClose +
+    `</header><div class="skl-page-actions">` + controlsHTML(p, v) + `</div></div>` + notice + source +
     (p.description ? `<p class="d skl-about">${esc(p.description)}</p>` : "") +
     `<div class="slist skl-skills">${skills}</div></section>`;
 }
@@ -141,15 +141,16 @@ function importHTML(v: SkillLibraryView): string {
     `</div>${input}<p class="d skl-import-hint">${esc(t("skillLib.importHint"))}</p>${v.error ? `<p class="skl-error" role="alert">${esc(v.error)}</p>` : ""}<input type="file" id="skl-file" accept="${ACCEPT}" hidden></div>`;
 }
 
-export function skillLibraryHTML(v: SkillLibraryView, listHeading = "", notice = ""): string {
+export function skillLibraryHTML(v: SkillLibraryView, { listHeader = "", pageClose = "", notice = "" }:
+  { listHeader?: string; pageClose?: string; notice?: string } = {}): string {
   const page = v.page ? v.packages.find(p => p.key === v.page) : undefined;
-  if (hasPage(page)) return packagePageHTML(page, v, notice);
+  if (hasPage(page)) return packagePageHTML(page, v, pageClose, notice);
   const list = v.failed ? `<p class="d skl-empty" role="alert">${esc(t("skillLib.loadFailed"))}</p>`
     : !v.loaded ? `<p class="d skl-empty">${esc(t("vault.busy"))}</p>`
     : v.packages.length ? packageSectionHTML("plugins", v.packages.filter(isPlugin), v) +
       packageSectionHTML("skills", v.packages.filter(p => !isPlugin(p)), v)
     : `<p class="d skl-empty">${esc(t("skillLib.empty"))}</p>`;
-  return listHeading + notice + `<section class="sgroup skl" aria-label="${esc(t("settings.paneSkills"))}">` +
+  return listHeader + notice + `<section class="sgroup skl" aria-label="${esc(t("settings.paneSkills"))}">` +
     importHTML(v) + list + `</section>`;
 }
 

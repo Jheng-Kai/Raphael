@@ -19,6 +19,7 @@ import { frameStep, hasInlineLayer, stepInlineLayer, stepInlineSideLayer, type L
 
 interface Layer {
   step?: LayerStep;
+  sideBack?(panel: HTMLElement): boolean;
   panel(): HTMLElement | null;
   close(): void;
   canClose(): boolean;
@@ -344,11 +345,11 @@ function listen(): void {
 /** Register a panel, or a getter when rendering replaces its DOM; dispose with its close/reset. */
 export function registerDismissal(
   panel: HTMLElement | (() => HTMLElement | null), close: () => void,
-  canClose: () => boolean = () => true, anchor?: HTMLElement, step?: LayerStep,
+  canClose: () => boolean = () => true, anchor?: HTMLElement, step?: LayerStep, sideBack?: Layer["sideBack"],
 ): () => void {
   listen();
   // Whatever opens a panel is its opener: the control the last click activated, nothing when the panel came without one (a key, a timer).
-  const layer: Layer = { panel: typeof panel === "function" ? panel : () => panel, close, canClose, anchor, step, opener: openerNow() };
+  const layer: Layer = { panel: typeof panel === "function" ? panel : () => panel, close, canClose, anchor, step, sideBack, opener: openerNow() };
   layers.push(layer);
   return () => {
     const index = layers.indexOf(layer);
@@ -376,7 +377,7 @@ export function stepSideLayer(direction: NavStep): boolean {
   const current = top(true);
   if (stepInlineSideLayer(current?.panel ?? document, direction)) return true;
   if (!current) return false;
-  if (direction === "back" && current.layer.canClose()) current.layer.close();
+  if (direction === "back" && !current.layer.sideBack?.(current.panel) && current.layer.canClose()) current.layer.close();
   return true;
 }
 

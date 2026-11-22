@@ -1,5 +1,6 @@
 import * as api from "./api";
 import { createChatComposer } from "./chat-composer";
+import { bindNavLayer } from "./nav-layers";
 import { describeError } from "./format";
 import { getLocale, t } from "./i18n";
 import { messageHTML, replyContentHTML } from "./message-content";
@@ -16,13 +17,14 @@ import { carryMail } from "./mail-card";
 import { faceHTML } from "./members";
 import { mountMessageMetadata, reactionControlHTML, withReactions } from "./message-metadata";
 import type { AppContext, MembersList, RoomMessage } from "./types";
-import { copyButton, esc, iconButton, toaster } from "./ui";
+import { copyButton, esc, headerCloseButton, toaster } from "./ui";
 
 /** One side thread, carried by the existing room worker and composer. */
 export async function openRoomThread(host: HTMLElement, app: AppContext, roomId: number, messageId: number, people: MembersList, changed: () => void): Promise<() => void> {
+  const opener = document.activeElement;
   const result = await api.core<{ thread_id: number }>("rooms.thread_open", { room_id: roomId, message_id: messageId });
   const pane = document.createElement("aside"); pane.className = "room-side-thread"; pane.setAttribute("aria-label", t("rooms.thread"));
-  pane.innerHTML = `<header data-window-drag><b>${esc(t("rooms.thread"))}</b>${iconButton("x", t("common.close"), ' data-thread-close')}</header><div class="room-side-scroll"><div class="room-thread-origin"></div><ol class="thread"></ol></div><div class="room-thread-dock"></div>`;
+  pane.innerHTML = `<header data-window-drag><b role="heading" aria-level="2">${esc(t("rooms.thread"))}</b>${headerCloseButton(t("common.close"), ' data-thread-close')}</header><div class="room-side-scroll"><div class="room-thread-origin"></div><ol class="thread"></ol></div><div class="room-thread-dock"></div>`;
   host.append(pane); host.classList.add("has-side-thread");
   let alive = true, generation = 0, messages: RoomMessage[] = [], pending: string | undefined;
   const thread = pane.querySelector<HTMLElement>("ol")!, origin = pane.querySelector<HTMLElement>(".room-thread-origin")!;
@@ -94,6 +96,15 @@ export async function openRoomThread(host: HTMLElement, app: AppContext, roomId:
   });
   const unsubscribe = app.onEvent(event => { if (event.type === "WorkerChanged" || (event.type === "RoomsChanged" && event.room_id === roomId) || (event.type === "AgentTurn" && messages.some(message => message.turn_id === event.turn_id))) void refresh().catch(error => toaster.info(describeError(error))); });
   const close = (): void => { if (!alive) return; alive = false; generation++; unsubscribe(); unmount(); questions.reset(); composer.stopVoice(); media.reset(); pane.remove(); host.classList.remove("has-side-thread"); changed(); };
+  bindNavLayer(pane, () => {
+    const draft = composer.snapshot();
+    if (draft.text || draft.pageId || composer.el.querySelector(".cmp-chip")) {
+      composer.input.focus();
+      return;
+    }
+    close();
+    if (opener instanceof HTMLElement && host.contains(opener)) opener.focus({ preventScroll: true });
+  });
   pane.querySelector("[data-thread-close]")!.addEventListener("click", close);
   try { await refresh(); composer.input.focus(); } catch (error) { close(); throw error; }
   return close;

@@ -8,6 +8,8 @@ vi.mock("./api",()=>api);
 import { configureRooms, openNewGroupChat, openGroupChat, openRoomsMenu, createRoomsSection, createRoomPane, clearRoomSelection } from "./group-chats";
 import { getLocale, setLocale, t } from "./i18n";
 import { setAvatar } from './avatar';
+import { stepSideLayer } from "./dismissals";
+import { installNavInput } from "./nav-input";
 
 test('an avatar repaint uses the loaded room and roster without IPC reads', async () => {
   const section=createRoomsSection();document.body.append(section);await flush();
@@ -145,6 +147,30 @@ test("room drafts retain files and quotes in memory and words across a new pane"
  view.close();view.el.remove();
  const next=await pane();expect(next.el.querySelector<HTMLTextAreaElement>('#room-message')!.value).toBe('Unsent room words');
  expect(next.el.querySelector('.cmp-chip')).toBeNull();next.close();
+});
+
+test("mouse Back keeps the side thread's draft and returns to the same room when it is empty", async () => {
+  api.roomMessages.mockResolvedValue({ messages: [{ id: 12, member_id: 1, text: "Parent message", created: 1, status: "done" }] });
+  const view = await pane();
+  api.core.mockResolvedValueOnce({ thread_id: 4 });
+  const opener = view.el.querySelector<HTMLButtonElement>('[data-room-act="thread"]')!;
+  opener.focus();
+  opener.click();
+  await vi.waitFor(() => expect(view.el.querySelector(".room-side-thread")).not.toBeNull());
+  await flush();
+  const back = () => window.dispatchEvent(new MouseEvent("mousedown", { button: 3, cancelable: true }));
+  const stop = installNavInput(window, vi.fn(), undefined, stepSideLayer);
+  try {
+    const input = view.el.querySelector<HTMLTextAreaElement>(".room-side-thread textarea")!;
+    input.value = "Unsent side reply";
+    back();
+    expect(input.isConnected).toBe(true);
+    expect(input.value).toBe("Unsent side reply");
+    input.value = "";
+    back();
+    expect(view.el.querySelector(".room-side-thread")).toBeNull();
+    expect(view.el.querySelector('[data-room-message="12"]')).not.toBeNull();
+  } finally { stop(); view.close(); }
 });
 
 test("a deleted room drops its stored words and reply target", async () => {

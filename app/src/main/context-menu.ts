@@ -34,7 +34,7 @@ export const OVERFLOW_ROWS: readonly OverflowRow[] = [
   { more: '[data-skl="skill-more"]', row: ".skl-skill" },
   { more: '[data-act="word-menu"]', row: ".wrow" },
   { more: '[data-act="history-menu"]', row: ".hrow" },
-  { more: '[data-conn="server-menu"]', row: ".cs-page .cs-head" },
+  { more: '[data-conn="server-menu"]', row: ".cs-page .cs-summary" },
   { more: '[data-conn="account-menu"]', row: ".cs-acct" },
   { more: "[data-cli-menu]", row: ".cli-card" },
   { more: "[data-chatgpt-menu]", row: "[data-chatgpt-card]" },

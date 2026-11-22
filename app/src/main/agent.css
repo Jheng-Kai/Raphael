@@ -429,7 +429,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 /* Only the picture, as large as the window allows; its close button sits inside it on the photo scrim. */
 .media-lightbox .lb-card { position: relative; max-width: 100%; max-height: 100%; overflow: hidden; border-radius: var(--r-lg); background: var(--surface-2); box-shadow: var(--pop); }
 .media-lightbox .lb-img { display: block; min-width: 160px; min-height: 120px; max-width: min(1400px, calc(100vw - 2 * var(--sp-4))); max-height: calc(100vh - var(--window-controls-height) - 3 * var(--sp-4)); object-fit: contain; }
-.media-lightbox .lb-card > .btn.icon.lb-close { position: absolute; top: var(--sp-2); right: var(--sp-2); z-index: 1; width: 32px; min-height: 32px; border-radius: var(--r-pill); background: var(--photo-dim); color: var(--photo-mark); }
+.media-lightbox .lb-card > .btn.icon.lb-close { position: absolute; top: var(--sp-2); right: var(--sp-2); z-index: 1; }
 .tn mark { background: var(--selection); color: var(--on-selection); border-radius: var(--r-sm); padding: 0 var(--sp-1); }
 .tn-detail { padding: var(--sp-2) var(--sp-3); border-radius: var(--r-lg); background: var(--surface-2); font-size: var(--pa-fs-d); line-height: 1.75; color: var(--text-2); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
 .tn-foot { display: flex; align-items: center; }

@@ -28,7 +28,6 @@ npm run look -- member-switch member-switch-yellow member-switch-white member-sw
 ## Member settings page
 
 Computer shows the mode dropdown and the desktop control switch as two rows.
-The `member-computer-host` and `member-computer-docker` scenes check the selected mode and the two-row layout.
 
 A member's settings are a page of their own, where the conversation is (R-PANEL-05).
 The panel keeps Details / Library / Computer and its bots; its head is the gear on the left and the

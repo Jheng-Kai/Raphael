@@ -569,19 +569,7 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, positions };
   }
-  if (name === 'member-computer-host' || name === 'member-computer-docker') {
-    const list = document.querySelector('.ms-pane [data-k="ms-computer"] .ms-list');
-    const mode = list?.querySelector('[data-k="ms-computer-mode"]');
-    const control = list?.querySelector('[data-k="ms-desktop-control"]');
-    const expected = name === 'member-computer-host' ? '這台電腦' : '隔離電腦（Docker）';
-    require(visible(mode) && mode.matches('.sel[aria-haspopup="menu"]') && mode.textContent.trim() === expected, 'the dropdown shows the selected computer mode');
-    require(visible(control) && control.matches('[role="switch"][aria-checked="false"][aria-label="操作桌面"]'), 'desktop control starts off');
-    const rows = [...list.children];
-    require(rows.length === 2 && rows[0].matches('.ms-row') && rows[0].contains(mode) &&
-      rows[1].matches('.ms-row') && rows[1].contains(control) && !list.querySelector('.ms-empty, p'), 'only the two control rows are shown');
-    return { check: name };
-  }
-  if (name.startsWith('skill-library') || name === 'member-skills-library') {
+  if (name.startsWith('skill-library') || name === 'member-skills-library' || name === 'nav-side-plugin') {
     // Team skills (skill-library.ts): packages with access controls, an importer and a member's read-only list.
     const rowOf = key => document.querySelector(`.skl-pack[data-skl-pack="${key}"]`);
     const accessOf = key => rowOf(key)?.querySelector('.skl-access span')?.textContent.trim();
@@ -590,6 +578,9 @@ export function checkRendered(name, context = {}) {
     if (name !== 'member-skills-library' && !onPage) {
       const pane = document.querySelector('.modal-scrim .skl');
       require(pane?.getAttribute('aria-label') === '團隊技能', 'the Settings section names Team skills');
+      const head = pane.closest('.set-content').querySelector('.set-head');
+      require(head.querySelector('h1#set-title')?.textContent.trim() === '團隊技能' &&
+        visible(head.querySelector('.close-button')), 'the list keeps its Team skills title and shared close');
       require(visible(pane) && pane.querySelectorAll('[data-skl="import-go"]').length === 1 && pane.firstElementChild?.matches('.skl-import'), 'the importer is the first card of the tab, with one 匯入');
       require(!pane.querySelector('.skl-head, .skl-drop-hint') && !pane.previousElementSibling?.matches?.('p'), 'nothing is written between the tab name and its first card');
       const box = pane.getBoundingClientRect();
@@ -629,22 +620,38 @@ export function checkRendered(name, context = {}) {
       require(document.activeElement === back, 'the focus is on the back arrow');
       const title = head.querySelector('h1.skl-page-name');
       require(title?.textContent.trim().length > 0 && title.scrollWidth <= title.clientWidth + 1, "the package's name is whole");
-      require(visible(head.querySelector('.skl-access')) && visible(head.querySelector('.tg[role="switch"]')) && visible(head.querySelector('[data-skl="more"]')), 'who may use it, its switch and its ⋯ stand as on its row');
+      const close = head.querySelector('.close-button'), actionsRow = page.querySelector('.skl-page-actions');
+      const actions = actionsRow.querySelector('.ctl'), access = actions.querySelector('.skl-access');
+      const more = actions.querySelector('[data-skl="more"]'), toggle = actions.querySelector('.tg[role="switch"]');
+      const count = head.querySelector('.skl-count');
+      require(visible(close) && page.querySelectorAll('.close-button').length === 1, 'one shared close stands beside the package title');
+      require([access, more, toggle].every(visible) && access.nextElementSibling === more && more.nextElementSibling === toggle &&
+        actions.lastElementChild === toggle && head.nextElementSibling === actionsRow, 'access, ⋯ and the rightmost switch are on their own row under the title');
       const content = page.closest('.set-content');
       const headings = [...content.querySelectorAll('h1')];
-      require(content.firstElementChild === page && page.firstElementChild === head && headings.length === 1 && headings[0] === title,
+      require(content.firstElementChild === page && page.firstElementChild.firstElementChild === head &&
+        headings.length === 1 && headings[0] === title && title.id === 'set-title',
         'the plugin name is the page title with no section title above it');
       const start = content.getBoundingClientRect(), arrow = back.getBoundingClientRect(), titleBox = title.getBoundingClientRect();
-      const center = box => (box.top + box.bottom) / 2;
-      require(Math.abs(arrow.left - start.left) <= 1 && Math.abs(center(arrow) - center(titleBox)) <= 1 &&
-        Math.abs(arrow.top - start.top) <= 1 && Math.abs(titleBox.left - arrow.right - parseFloat(getComputedStyle(head).columnGap)) <= 1,
-        'the shared back button and title share the top-left row');
-      const controls = head.querySelector('.ctl').getBoundingClientRect();
-      // The row's right padding is the room it leaves for the settings' × in a narrow window.
-      const room = parseFloat(getComputedStyle(head).paddingRight) || 0;
-      require(Math.abs(center(arrow) - center(controls)) <= 1 && Math.abs(controls.right - (start.right - room)) <= 1, 'package controls stay on the title row at its right edge');
+      const closeBox = close.getBoundingClientRect(), countBox = count.getBoundingClientRect(), controls = actions.getBoundingClientRect();
+      const centre = box => (box.top + box.bottom) / 2;
+      const gap = parseFloat(getComputedStyle(title.parentElement).columnGap) || 0;
+      require(visible(count) && title.nextElementSibling === count &&
+        Math.abs(arrow.left - start.left) <= 1 && Math.abs(arrow.top - start.top) <= 1 &&
+        Math.abs(titleBox.left - arrow.right - gap) <= 1 && Math.abs(closeBox.right - start.right) <= 1 &&
+        [titleBox, countBox, closeBox].every(part => Math.abs(centre(arrow) - centre(part)) <= 1),
+        'the back button, title and count start at the top left and share a centre line with the close at the right edge');
+      const room = parseFloat(getComputedStyle(actionsRow).paddingInlineEnd) || 0;
+      require(controls.left >= start.left - 1 && Math.abs(controls.right - (start.right - room)) <= 1 &&
+        controls.top >= head.getBoundingClientRect().bottom - 1, 'the controls fit on the right below the title and clear the close');
+      const actionBoxes = [access, more, toggle].map(control => control.getBoundingClientRect());
+      require(actionBoxes[0].right <= actionBoxes[1].left && actionBoxes[1].right <= actionBoxes[2].left,
+        'access and ⋯ are visibly left of the switch');
       require(document.querySelector('.modal-scrim .modal-body').scrollTop === 0, 'the page opens at its top');
       require(document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, 'the window does not scroll sideways');
+    }
+    if (name === 'nav-side-plugin') {
+      require(!document.querySelector('.skl-page') && document.activeElement === rowOf('set:1')?.querySelector('.skl-open'), "Mouse Back returns to Team skills with focus on the plugin's row");
     }
     if (name === 'skill-library-details') {
       const description = rowOf('skill:3')?.querySelector('.skl-description');
@@ -665,6 +672,8 @@ export function checkRendered(name, context = {}) {
       require(skills.length === 7 && skills.every(row => visible(row.querySelector('.tg[role="switch"]'))), `the seven skills of pstack are listed on its page, each with its own switch (${skills.length})`);
       require(document.querySelector('.skl-page-name')?.textContent.trim() === 'pstack' && accessOf('set:1') === '還沒給任何人', 'the page names pstack and who may use it');
       require(document.querySelector('.skl-page .skl-source')?.textContent.includes('jheng-kai/pstack'), 'where it came from is said once');
+      const count = document.querySelector('.skl-page-head .skl-count');
+      require(count?.textContent.trim() === '7 個技能', 'the title gives the number of skills');
       const left = document.querySelector('.skl-page [data-skl="back"]').getBoundingClientRect().left;
       for (const selector of ['.skl-source', '.skl-about', '.skl-skills', '.skl-skill']) {
         const part = document.querySelector(`.skl-page ${selector}`);
@@ -679,10 +688,12 @@ export function checkRendered(name, context = {}) {
           Math.abs(description.getBoundingClientRect().height - parseFloat(style.lineHeight)) <= 1, 'each description takes one line and ends in an ellipsis when needed');
       }
       require(descriptions[0].scrollWidth > descriptions[0].clientWidth, 'the long description is truncated');
-      // At 720 the settings' × must not cover the title row's ⋯.
-      const close = document.querySelector('.modal-scrim .modal-x')?.getBoundingClientRect();
-      const headMore = document.querySelector('.skl-page-head [data-skl="more"]')?.getBoundingClientRect();
-      require(close && headMore && (headMore.right <= close.left || headMore.top >= close.bottom || headMore.bottom <= close.top), "the title row's ⋯ stays clear of the settings' ×");
+      for (const row of skills) {
+        const label = row.querySelector('.skl-label'), more = row.querySelector('[data-skl="skill-more"]'), toggle = row.querySelector('.tg');
+        require(Math.abs(label.getBoundingClientRect().left - left) <= 1, 'each skill name and description align with the back button');
+        require(visible(more) && more.nextElementSibling === toggle &&
+          more.getBoundingClientRect().right <= toggle.getBoundingClientRect().left, 'each skill puts ⋯ left of its switch');
+      }
     }
     if (name === 'skill-library-skill-details') {
       const description = document.querySelector('.skl-page [data-library-skill="101"] .skl-description');
@@ -5793,12 +5804,8 @@ export function checkRendered(name, context = {}) {
     const rows=[...host.querySelectorAll('.cs, .cs-list, .slist, .cs-toolbar, .cs-head')].filter(el=>visible(el)&&!el.closest('[hidden]'));
     require(rows.length>0,"settings has measurable content");
     for(const row of rows) require(Math.abs(row.getBoundingClientRect().right-right)<2,`settings content shares one right edge: ${row.className}`);
-    const close=document.querySelector('.modal-x')?.getBoundingClientRect();
-    for(const action of host.querySelectorAll('.set-head > button, .set-head > .sel')) {
-      const box=action.getBoundingClientRect();
-      require(Math.abs(box.right-right)<2,"settings header actions share the content right edge");
-      require(!close || box.right<=close.left || box.left>=close.right || box.bottom<=close.top || box.top>=close.bottom,"settings header actions clear the modal Close button");
-    }
+    const close=host.querySelector('.modal-x');
+    require(visible(close) && Math.abs(close.getBoundingClientRect().right-right)<2,"settings Close shares the content right edge");
     return {check:name,right,rows:rows.length};
   }
   if (name === "cancel-armed" || name === "cancel-cleared") {
@@ -8630,7 +8637,7 @@ export function checkRendered(name, context = {}) {
     require(f.width >= 80 && f.width <= 110 && Math.abs((f.left + f.right) / 2 - cx) <= 2, `the slime is large (${Math.round(f.width)} px), in the middle`);
     const n = nameField.getBoundingClientRect();
     require(n.top - faceBox.getBoundingClientRect().bottom <= 16, `the name field is directly under the slime (${Math.round(n.top - faceBox.getBoundingClientRect().bottom)} px)`);
-    require(getComputedStyle(nameField).textAlign === "center" && nameField.placeholder === "名字" && nameField.maxLength === 16, "centred text, a placeholder in the window's language, the member name length");
+    require(getComputedStyle(nameField).textAlign === "center" && nameField.placeholder === "名字" && (nameField.maxLength === -1 || nameField.maxLength >= 100), "centred text, a placeholder in the window's language, and no cut shorter than the core's 100-character name");
     require(Math.abs(n.left - (bodyBox.left + pad)) <= 1 && Math.abs(n.right - (bodyBox.right - pad)) <= 1, "the name field fills the body's inner width");
     require(dialog.querySelectorAll("input, textarea").length === 1 && !dialog.querySelector('img, input[type="file"], [data-dlg="templates"], [data-tab], [data-pick]'), "it asks only for a name: no template button, no store tab, no pictures");
     // The tabs fill the dialog's inner width: nothing blank at their right, six slimes across.
@@ -9072,6 +9079,11 @@ export function checkRendered(name, context = {}) {
     require(back.getBoundingClientRect().left - edge <= 40, "the chevron stands at the top left");
     return { check: name, rows: rows.length };
   }
+  if (name === "connectors-slack-detail") {
+    const title = connectModal()?.querySelector('.cs-page .cs-head h2');
+    require(visible(title) && title.textContent.trim() === 'Slack', "Slack's detail page is open");
+    return { check: name };
+  }
   if (name === "connect-back") {
     const modal = connectModal(), back = modal.querySelector('.cs-back'), close = modal.querySelector('.modal-x'), content = modal.querySelector('.cs');
     require(visible(back) && visible(close) && back.matches('button[data-conn="back"]'), "the back chevron and the dialog's ✕ are both real buttons on screen");
@@ -9088,7 +9100,7 @@ export function checkRendered(name, context = {}) {
   if (name === "connect-app-from-row") {
     const modal = connectModal(), page = modal.querySelector('.cs-page');
     require(visible(page) && page.querySelector('h2.big')?.textContent === 'Notion', "a press on a connected row opened that app's page");
-    require(visible(page.querySelector('.cs-head .cs-state')) && visible(page.querySelector('.cs-tools')), "the page is the one the main view's row opens: its connected state and its tools");
+    require(visible(page.querySelector('.cs-join .cs-state')) && visible(page.querySelector('.cs-tools')), "the page is the one the main view's row opens: its connected state and its tools");
     return { check: name };
   }
   if (name === "connected-rows") {
@@ -9157,16 +9169,16 @@ export function checkRendered(name, context = {}) {
   }
   if (name === "connect-app-oauth" || name === "connect-app-key" || name === "connect-app-connected") {
     const modal = connectModal(), page = modal.querySelector('.cs-page'), back = page.querySelector('[data-conn="back"]'), close = modal.querySelector('.modal-x');
-    require(visible(page) && !page.querySelector('.cs-top') && visible(back) && back.tagName === 'BUTTON', "an app's page has a bare back chevron and no title row");
+    require(visible(page) && visible(back) && back.tagName === 'BUTTON', "an app's page has a round back button");
     require(page.querySelector('.cs-vh')?.getBoundingClientRect().width <= 2, "the dialog's title is for a screen reader only");
-    require(visible(close) && close.getBoundingClientRect().top < page.querySelector('.cs-head').getBoundingClientRect().top, "the dialog's bare ✕ stands at the top right");
+    require(visible(close) && close.parentElement === back.parentElement, "the dialog's round close stands on the app's title row");
     const head = page.querySelector('.cs-head'), tile = head.querySelector('.cs-tile.lg'), tileBox = tile.getBoundingClientRect(), nameNode = head.querySelector('h2.big');
     require(Math.round(tileBox.width) === 56 && Math.round(tileBox.height) === 56 && getComputedStyle(tile).backgroundColor === 'rgb(255, 255, 255)', "the mark is on a white rounded tile of 56 px");
     require(nameNode.getBoundingClientRect().left > tileBox.right && Math.abs((nameNode.getBoundingClientRect().top + nameNode.getBoundingClientRect().bottom) - (tileBox.top + tileBox.bottom)) <= 4, "the name is beside the tile");
-    const join = head.querySelector('[data-conn="join"]'), state = head.querySelector('.cs-state');
+    const actions = page.querySelector('.cs-join'), join = actions.querySelector('[data-conn="join"]'), state = actions.querySelector('.cs-state');
     if (name === "connect-app-connected") {
       require(!join && visible(state) && state.textContent.includes('已連結'), "a connected app shows its connected state in the place of 連結");
-      require(visible(head.querySelector('[data-k="cs-dlg-enable"]')) && visible(head.querySelector('[data-conn="server-menu"]')), "with its switch and its ⋯ in that same place");
+      require(visible(actions.querySelector('[data-k="cs-dlg-enable"]')) && actions.lastElementChild?.matches('[data-k="cs-dlg-enable"]') && visible(actions.querySelector('[data-conn="server-menu"]')), "with its switch and its ⋯ in that same place");
       require([...page.querySelectorAll('h3')].some(node => node.textContent === '工具') && visible(page.querySelector('.cs-tools')), "its tools are in a bordered card under 工具");
     } else {
       require(join && join.className.includes('pri') && join.textContent.trim() === '連結' && getComputedStyle(join).backgroundColor === colourOf('backgroundColor', '--accent'), "a white round 連結 button (the primary)");
@@ -10498,11 +10510,11 @@ export function checkRendered(name, context = {}) {
       const [r, g, b] = getComputedStyle(bar).backgroundColor.match(/[\d.]+/g).map(Number);
       require(Math.max(r, g, b) - Math.min(r, g, b) > 60, `the bar is a member's colour, not black or white: rgb(${r}, ${g}, ${b})`);
     }
-    // No refresh anywhere: opening Settings reads the allowances (`usage-open-*`), so nothing stands beside the tab's name.
-    const heading = document.querySelector('.set-content > #set-title'), page = heading?.parentElement, first = page?.querySelector('.usage-page');
-    require(heading && first, "the tab's name stands alone above its views");
-    const beside = [...page.children].slice(0, [...page.children].indexOf(first)).filter(child => child !== heading);
-    require(!document.querySelector('[data-act="models-refresh"], .models-refresh, .set-head') && beside.every(child => !child.matches('button') && !child.querySelector('button')), "no refresh button or icon beside the tab's name");
+    // Opening Settings reads the allowances (`usage-open-*`). The header's only action is Close.
+    const heading = document.querySelector('.set-content > .set-head > #set-title'), header = heading?.parentElement, page = header?.parentElement;
+    require(heading && header.nextElementSibling?.matches('.usage-page'), "the title row stands above its views");
+    const actions = [...header.querySelectorAll('button')];
+    require(actions.length === 1 && actions[0].matches('.close-button'), "Close is the header's only action");
     const refreshes = [...page.querySelectorAll('button')].filter(button => visible(button) && /refresh|reload|重新整理|重新讀取|更新/i.test(`${button.getAttribute('aria-label') ?? ''} ${button.textContent} ${button.dataset.act ?? ''} ${button.dataset.runAct ?? ''}`));
     require(refreshes.length === 0, `no button on the tab refreshes anything (${refreshes.map(button => button.getAttribute('aria-label') || button.textContent.trim()).join(', ')})`);
     const cards = [...panel.querySelectorAll('.run-subscription')].filter(visible), allowance = panel.querySelector('.run-allowance');

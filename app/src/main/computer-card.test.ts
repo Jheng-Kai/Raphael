@@ -38,7 +38,7 @@ describe("a computer card", () => {
     expect(actions(html)).toEqual(["card-stop", "card-takeover", "card-takeover", "card-done"]);
     // Real framed buttons; skipping is the × at the top right, never a button in the footer. No 開啟電腦 step on the owner's own computer.
     const head = html.slice(0, html.indexOf("</header>"));
-    expect(head).toContain('class="btn icon row card-close" aria-label="略過" title="略過" data-act="card-stop" data-card="p1"');
+    expect(head).toContain('class="btn icon close-button card-close" aria-label="略過" title="略過" data-act="card-stop" data-card="p1"');
     expect(html).not.toContain(">略過</button>");
     expect(html).toContain('class="btn sm pri" data-act="card-takeover" data-card="p1"');
     expect(html).not.toContain("開啟電腦");

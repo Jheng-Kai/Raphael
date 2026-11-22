@@ -16,7 +16,7 @@ import { linkedText } from "./message-content";
 import { connectionMarkHTML } from "./secret-card";
 import { serviceIconOf } from "./service-icons";
 import type { AgentTurn, OwnerQuestion, PermissionCard } from "./types";
-import { btn, esc, ico, iconBtn } from "./ui";
+import { btn, esc, ico } from "./ui";
 
 const plain = (key: MessageKey): string => (t as (key: MessageKey) => string)(key);
 
@@ -180,7 +180,7 @@ export function ownerQuestionHTML(question: OwnerQuestion): string {
     content: waiting ? waitingForm(question, id, multiple) : line !== null
       ? `<div class="card-well question-answer">${btn(`<span class="question-answer-text">${esc(line)}</span>${ico("check")}`, "question-answer-line", ' data-owner-line aria-expanded="false"')}</div>` : "",
     actions: waiting && multiple ? btn(esc(t("ownerQuestion.submit")), "sm pri", ' data-owner-answer="choices" disabled') : "",
-    close: waiting ? iconBtn("x", t("common.close"), ' data-owner-answer="cancel"') : "", cls: "permission-card owner-question",
+    close: waiting ? waitingCloseHTML(' data-owner-answer="cancel"', t("common.close")) : "", cls: "permission-card owner-question",
     attrs: ` data-owner-question="${id}" data-owner-turn="${question.turn_id}" data-owner-kind="${esc(question.kind)}" data-owner-page="${esc(question.kind === "show_page" ? question.card_id : "")}" data-card-state="${question.state}"${multiple ? ' data-owner-multiple="true"' : ""} tabindex="0"`,
   });
 }

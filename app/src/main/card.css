@@ -6,6 +6,7 @@
 }
 .conversation-card[hidden] { display: none; }
 .card-head { display: flex; align-items: start; gap: 8px; min-width: 0; }
+.card-head:has(> .close-button) { align-items: center; }
 .card-heading { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
 .card-heading > .mono { width: 22px; height: 22px; flex: 0 0 22px; }
 .card-title { font-size: var(--fs-sm); font-weight: var(--weight-semibold); overflow-wrap: anywhere; }
