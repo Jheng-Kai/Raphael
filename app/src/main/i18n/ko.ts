@@ -1,6 +1,14 @@
 import type { Messages } from "./zh-TW";
 
 export const ko = {
+  "browser.tabs": "브라우저 탭",
+  "browser.newTab": "새 탭",
+  "browser.closeTab": "탭 닫기",
+  "browser.back": "뒤로",
+  "browser.forward": "앞으로",
+  "browser.reload": "새로고침",
+  "browser.address": "주소",
+  "browser.navigationFailed": "이 페이지를 열 수 없습니다.",
   "memberComputer.switchFailed": "컴퓨터 선택을 멤버에게 전달하지 못했습니다.",
   "memberComputer.stopFailed": "컴퓨터 작업을 중지하지 못했습니다.",
   "memberComputer.returnFailed": "컴퓨터 제어를 멤버에게 돌려주지 못했습니다.",

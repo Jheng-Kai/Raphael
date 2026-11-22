@@ -1,6 +1,14 @@
 import type { Messages } from "./zh-TW";
 
 export const it = {
+  "browser.tabs": "Schede del browser",
+  "browser.newTab": "Nuova scheda",
+  "browser.closeTab": "Chiudi scheda",
+  "browser.back": "Indietro",
+  "browser.forward": "Avanti",
+  "browser.reload": "Ricarica",
+  "browser.address": "Indirizzo",
+  "browser.navigationFailed": "Impossibile aprire questa pagina.",
   "memberComputer.switchFailed": "Impossibile inviare la scelta al membro.",
   "memberComputer.stopFailed": "Impossibile interrompere l’attività sul computer.",
   "memberComputer.returnFailed": "Impossibile restituire il controllo al membro.",

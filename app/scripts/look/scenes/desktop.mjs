@@ -3,6 +3,10 @@ const computer = (state = "running") => ({ running:"fresh", runningMember:1, des
   {id:"private-computer-task",request_id:state === "waiting_control" ? "private-takeover-request" : "",turn_id:2,state,tool:"get_desktop_state",reason:state === "waiting_control" ? "sign_in" : ""},
 ]} });
 const entry = [member(1), {action:"open-details"}, wait('.desktop-panel:not([hidden])'), wait('.desktop-panel[data-desktop-state="member"]'), wait('.desktop-screen iframe:not([hidden])')];
+const hostTabs = {running:"fresh", runningMember:1, hostTabs:"many", desktop:{transport:"host", target:"chrome-tab",
+  state:"running", ready:true, control:"member", works:[{id:"chrome-tab",turn_id:2,transport:"host",state:"running",tool:"browser_open",reason:""}]}};
+const hostEntry = [member(1), wait('.desktop-screen[data-host-browser] iframe:not([hidden])')];
+const hostExpand = [...hostEntry, click('[data-desktop="enlarge"]'), wait('.desktop-panel[data-expanded] .host-browser-toolbar:not([hidden])')];
 const take = [...entry, click('[data-desktop="enlarge"]'), click('[data-desktop="take"]'), wait('.desktop-panel[data-interactive="true"][data-control-latency-ms]')];
 const teachComputer = () => ({desktop:{state:'running',ready:true,control:'member'}});
 const teaching = [member(1),{action:'open-details'},wait('.desktop-screen iframe:not([hidden])'),click('[data-desktop="enlarge"]'),click('[data-desktop="take"]'),wait('.desktop-panel[data-interactive="true"]'),click('[data-desktop="menu"]'),click('#app-popover [data-pick="teach"]'),wait('.desktop-recording:not([hidden])')];
@@ -73,10 +77,18 @@ export default [
   scene("desktop-collapse", "Close the preview while leaving the conversation in place", [...entry,{action:'close-details'},check("host-panel-collapsed")],computer()),
   scene("desktop-panel", "One live computer in the existing member side panel with only a system event in chat", [...entry,check("computer-panel"),check("desktop-frame")],computer()),
   scene("desktop-host-panel", "The owner takes this computer's Chrome from the Computer tab at any time, as on the virtual machine",
-    [member(1),wait('.desktop-screen iframe[src*="transport=host"]:not([hidden])'),click('[data-desktop="enlarge"]'),
-      click('[data-desktop="take"]'),wait('.desktop-panel[data-expanded][data-interactive="true"] iframe[src*="transport=host"]'),check("desktop-host-frame")],
+    [...hostExpand, click('[data-desktop="take"]'),wait('.desktop-panel[data-expanded][data-interactive="true"] iframe[src*="transport=host"]'),check("desktop-host-frame")],
     {running:"fresh",runningMember:1,desktop:{transport:"host",target:"chrome-tab",state:"running",ready:true,control:"member",
       works:[{id:"chrome-tab",turn_id:2,transport:"host",state:"running",tool:"browser_open",reason:""}]}}),
+  scene("desktop-host-tabs-panel", "The narrow Computer panel shows the member's tabs while watching and opens a different tab without taking control",
+    [...hostEntry, click('[data-browser-action="select"][data-browser-tab="agenda"]'),
+      wait('[data-browser-tab="agenda"][aria-pressed="true"]'), check("desktop-host-frame"), check("desktop-host-tabs-watch"), check("desktop-host-tabs-many")], hostTabs),
+  scene("desktop-host-tabs-expanded", "The larger watching view keeps the crowded tab strip inside the frame",
+    [...hostExpand, check("desktop-host-frame"), check("desktop-host-tabs-watch"), check("desktop-host-tabs-many")], hostTabs),
+  scene("desktop-host-tabs-control", "Take control enables the address field and Chrome actions",
+    [...hostExpand, click('[data-desktop="take"]'), wait('.host-browser-address:not([hidden])'),
+      type('.host-browser-address', 'https://videos.example.invalid/library/saved'), key('Enter'),
+      check("desktop-host-frame"), check("desktop-host-tabs-control")], hostTabs),
   scene("desktop-computer-choice", "Save the member's computer without starting the virtual machine",
     [...entry, check("desktop-computer-choice-host"), click("[data-computer-choice]"), click('.menu [data-value="docker"]'),
       wait('.desktop-panel[data-desktop-state="stopped"]'), check("desktop-computer-choice")],

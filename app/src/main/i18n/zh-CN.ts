@@ -1,6 +1,14 @@
 import type { Messages } from "./zh-TW";
 
 export const zhCN = {
+  "browser.tabs": "浏览器标签页",
+  "browser.newTab": "新建标签页",
+  "browser.closeTab": "关闭标签页",
+  "browser.back": "上一页",
+  "browser.forward": "下一页",
+  "browser.reload": "重新加载",
+  "browser.address": "网址",
+  "browser.navigationFailed": "无法打开此网页。",
   "memberComputer.switchFailed": "无法把电脑选择发送给成员。",
   "memberComputer.stopFailed": "无法停止这项电脑任务。",
   "memberComputer.returnFailed": "无法将电脑控制权交还给成员。",

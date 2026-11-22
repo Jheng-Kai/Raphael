@@ -1,6 +1,14 @@
 import type { Messages } from "./zh-TW";
 
 export const id = {
+  "browser.tabs": "Tab browser",
+  "browser.newTab": "Tab baru",
+  "browser.closeTab": "Tutup tab",
+  "browser.back": "Kembali",
+  "browser.forward": "Maju",
+  "browser.reload": "Muat ulang",
+  "browser.address": "Alamat",
+  "browser.navigationFailed": "Halaman ini tidak dapat dibuka.",
   "memberComputer.switchFailed": "Pilihan komputer tidak dapat dikirim kepada anggota.",
   "memberComputer.stopFailed": "Tugas komputer tidak dapat dihentikan.",
   "memberComputer.returnFailed": "Kendali komputer tidak dapat dikembalikan kepada anggota.",

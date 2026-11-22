@@ -13,7 +13,7 @@ from raphael_core.computer.host_browser import BrowserError, HostBrowser, Tab, c
 from raphael_core.computer import host_page
 from raphael_core.computer.host_computer import HostComputerTools
 from raphael_core.computer.vm import LocalVm
-from raphael_core.computer.vm_tools import BROWSER_OPEN, COMPUTER_STATUS_KEY, VmTools
+from raphael_core.computer.vm_tools import BROWSER_OPEN, COMPUTER_STATUS_KEY, VmTools, vm_scope
 from raphael_core.brain.settings import SettingsStore
 
 @pytest.mark.parametrize("installed", [False, True])
@@ -133,7 +133,6 @@ async def test_certificate_handoff_keeps_the_origin_and_tab_for_an_existing_priv
     key = next(tool.key for tool in tools.offered(1) if tool.name == "request_takeover")
     tab = SimpleNamespace(handoff=False)
     seen = []
-    explanations = []
 
     async def dispatch(name, arguments, approver, member, work, conversation, announce, *, turn_id=None):
         assert name == "request_takeover" and work == ("task", 5)
@@ -151,11 +150,46 @@ async def test_certificate_handoff_keeps_the_origin_and_tab_for_an_existing_priv
     monkeypatch.setattr(host_page, "snapshot", snapshot)
     tools.cards = SimpleNamespace(wait_for_browser=wait)
     result = await tools.call(key, {"reason": "certificate"}, member=1, scope=("task", 5), turn_id=2,
-                              conversation_id=3, private=True, approver="auto", language="en", announce=None,
-                              explain=explanations.append)
+                              conversation_id=3, private=True, approver="auto", language="en", announce=None)
     assert seen == [(2, 3, "certificate")]
-    assert explanations == ["Please select your certificate in the Computer panel."]
     assert result.ok and json.loads(result.text) == {"tab_id": "original", "status": "owner_finished"}
+
+
+@pytest.mark.parametrize(("tool", "reason", "detail"), [
+    ("browser_click", "two_factor", ""),
+    ("request_takeover", "sign_in", "Sign in on the page."),
+])
+async def test_host_handoff_keeps_its_reason_on_the_waiting_card_without_chat(
+    tmp_path, conn, monkeypatch, tool, reason, detail,
+):
+    vm = LocalVm(tmp_path, settings=SettingsStore(conn))
+    hub = VmTools(SimpleNamespace(offered=lambda: []), vm, attachments=None, conn=conn)
+    host = hub.host_computer = HostComputerTools(vm, conn, BROWSER_OPEN)
+    key = next(offer.key for offer in host.offered(1) if offer.name == tool)
+    tab = SimpleNamespace(handoff=False)
+    progress, notices, waiting = [], [], []
+
+    async def dispatch(*args, **kwargs):
+        return {"owner_needed": reason, "detail": detail}, [], tab
+
+    async def wait(**card):
+        assert tab.handoff and card["tab"] is tab
+        waiting.append((card["reason"], card["detail"]))
+        assert progress == notices == []
+
+    async def snapshot(*args):
+        return {"tab_id": "original"}, []
+
+    monkeypatch.setattr(host, "browser_call", dispatch)
+    monkeypatch.setattr(host_page, "snapshot", snapshot)
+    host.cards = SimpleNamespace(wait_for_browser=wait)
+    arguments = ({"reason": reason, "detail": detail} if tool == "request_takeover"
+                 else {"target_id": "original", "tab_id": "original", "ref": "p0123abcd:0"})
+    with vm_scope(("turn", 1, 3), private=True, turn_id=2, language="zh-TW",
+                  notice=notices.append, progress=progress.append):
+        result = await hub.call(key, arguments, approver="auto")
+    assert result.ok and waiting == [(reason, detail)]
+    assert progress == notices == []
 
 
 @pytest.mark.parametrize("arguments", [{}, {"reason": "other"}, {"reason": "other", "detail": " \n "}])
@@ -206,6 +240,8 @@ async def test_scope_close_waits_for_all_owned_targets_even_after_a_session_deta
             assert target not in closing
             closing[target] = polls + 1
             return {"success": True}
+        if method == "Target.attachToTarget":
+            raise BrowserError("chrome_command_failed")
         assert method == "Target.getTargets"
         polls += 1
         targets.difference_update(target for target, deadline in closing.items() if deadline < polls)
@@ -260,6 +296,13 @@ async def serve(reader, writer):
             content = b'<form><label>Password<input type="password" value="hidden-test-value"></label></form>'
         elif path == b"/download":
             content = b"download contents"
+        elif path == b"/opener":
+            content = (b'<title>Work page</title><button id="open-popup" onclick="window.open(\'/popup\',\'_blank\','
+                       b'\'popup,width=280,height=250\')">Open sign-in</button>'
+                       b'<a id="open-tab" href="/popup" target="_blank">Open verification</a>')
+        elif path == b"/popup":
+            content = (b'<title>Sign-in</title><label>Code<input id="name"></label>'
+                       b'<button id="done" onclick="window.close()">Done</button>')
         else:
             content = (b'<title>Intranet test</title><label for="name">Project name</label><input id="name">'
                        b'<button onclick="document.querySelector(\'output\').textContent=document.querySelector(\'#name\').value">Preview</button><output></output>')

@@ -1,6 +1,14 @@
 import type { Messages } from "./zh-TW";
 
 export const de = {
+  "browser.tabs": "Browser-Tabs",
+  "browser.newTab": "Neuer Tab",
+  "browser.closeTab": "Tab schließen",
+  "browser.back": "Zurück",
+  "browser.forward": "Vorwärts",
+  "browser.reload": "Neu laden",
+  "browser.address": "Adresse",
+  "browser.navigationFailed": "Diese Seite konnte nicht geöffnet werden.",
   "memberComputer.switchFailed": "Die Computerauswahl konnte nicht an das Mitglied gesendet werden.",
   "memberComputer.stopFailed": "Die Computeraufgabe konnte nicht gestoppt werden.",
   "memberComputer.returnFailed": "Die Computersteuerung konnte dem Mitglied nicht zurückgegeben werden.",

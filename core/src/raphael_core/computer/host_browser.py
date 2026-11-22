@@ -27,6 +27,20 @@ from .host_view import Screencast
 
 logger = logging.getLogger(__name__)
 
+FAVICON = """(async () => {
+    const link = [...document.querySelectorAll('link[rel~="icon"]')].at(-1);
+    const url = new URL(link?.href || "/favicon.ico", location.href);
+    if (!["http:", "https:", "data:"].includes(url.protocol)) return "";
+    const image = new Image();
+    image.crossOrigin = "anonymous";
+    image.src = url.href;
+    await image.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 24;
+    canvas.getContext("2d").drawImage(image, 0, 0, 24, 24);
+    return canvas.toDataURL("image/png");
+})()"""
+
 
 class BrowserError(ValueError):
     pass
@@ -171,6 +185,18 @@ class Tab:
     disconnected: bool = False
     cast: Screencast | None = field(default=None, repr=False)
     closed: asyncio.Event = field(default_factory=asyncio.Event, repr=False)
+    view_id: str = ""
+    opener: str | None = None
+    title: str = ""
+    url: str = "about:blank"
+    favicon: str = ""
+    ready: bool = True
+    main_frame: str = ""
+    viewport: tuple = (0, 0)
+
+    @property
+    def view(self):
+        return self.view_id or self.id
 
 
 class HostBrowser:
@@ -190,6 +216,19 @@ class HostBrowser:
         self.transfers = {}
         self.held = set()
         self.acknowledgements = set()
+        self.popups = {}
+        self.icons = {}
+        self.changed = asyncio.Event()
+
+    def notify_view(self):
+        self.changed.set()
+        self.changed = asyncio.Event()
+
+    def scope_tabs(self, scope):
+        return [tab for tab in self.tabs.values() if tab.scope == scope and tab.ready]
+
+    def selected(self, scope):
+        return self.tabs.get(self.current.get(scope))
 
     def work_lock(self, scope):
         lock = self.work_locks.get(scope)
@@ -208,12 +247,18 @@ class HostBrowser:
     def _forget_tab(self, tab):
         self.tabs.pop(tab.id, None)
         tab.closed.set()
+        if task := self.icons.pop(tab.id, None):
+            task.cancel()
         if tab.cast is not None:
             tab.cast.close()
         if self.current.get(tab.scope) == tab.id:
             self.current.pop(tab.scope)
-            if previous := next((other for other in reversed(self.tabs.values()) if other.scope == tab.scope), None):
+            previous = self.tabs.get(tab.opener)
+            if previous is None:
+                previous = next(iter(reversed(self.scope_tabs(tab.scope))), None)
+            if previous is not None:
                 self.select(previous)
+        self.notify_view()
 
     def busy(self, member):
         if member in self.transfers.values():
@@ -368,8 +413,8 @@ class HostBrowser:
                     break
         elif method in ("Target.targetCreated", "Target.targetInfoChanged"):
             info = params["targetInfo"]
-            if info["type"] == "page" and (owner := self.owned_targets.get(info.get("openerId"))) is not None:
-                self.owned_targets.setdefault(info["targetId"], owner)
+            if info["type"] == "page":
+                self._page_target(info)
         elif method in ("Target.detachedFromTarget", "Target.targetDestroyed"):
             # Losing the session does not destroy the target. Keep its owner for cleanup.
             for tab in list(self.tabs.values()):
@@ -383,6 +428,17 @@ class HostBrowser:
                 if tab.session == session:
                     tab.refs.clear()
                     tab.frames.add(params["frame"]["id"])
+                    if "parentId" not in params["frame"]:
+                        tab.main_frame = params["frame"]["id"]
+                        self._update_page(tab, url=params["frame"]["url"])
+        elif method in ("Page.loadEventFired", "Page.navigatedWithinDocument"):
+            for tab in self.tabs.values():
+                if tab.session == session:
+                    if method == "Page.navigatedWithinDocument" and params["frameId"] == tab.main_frame:
+                        self._update_page(tab, url=params["url"])
+                    if method == "Page.loadEventFired":
+                        self._refresh_icon(tab)
+                    break
         elif method == "Page.frameDetached":
             for tab in self.tabs.values():
                 if tab.session == session:
@@ -403,6 +459,81 @@ class HostBrowser:
                 self.transfers[task] = member
                 task.add_done_callback(self.transfers.pop)
             self._schedule_idle()
+
+    def _page_target(self, info):
+        target = info["targetId"]
+        for tab in self.tabs.values():
+            if tab.target == target:
+                self._update_page(tab, title=info.get("title"), url=info.get("url"))
+                return
+        opener = info.get("openerId")
+        if target in self.owned_targets or (scope := self.owned_targets.get(opener)) is None:
+            return
+        self.owned_targets[target] = scope
+        parent = next((tab for tab in self.tabs.values() if tab.target == opener), None)
+        pending = self.popups.get(opener)
+        if parent or pending:
+            task = asyncio.create_task(self._adopt_popup(self.cdp, info, scope, parent, pending))
+            self.popups[target] = task
+            task.add_done_callback(lambda _: self._popup_finished(target))
+
+    def _popup_finished(self, target):
+        self.popups.pop(target, None)
+        self.notify_view()
+
+    async def wait_scope_closed(self, scope):
+        while self.selected(scope) or any(self.owned_targets.get(target) == scope for target in self.popups):
+            await self.changed.wait()
+
+    async def _adopt_popup(self, cdp, info, scope, parent, pending):
+        target = info["targetId"]
+        if pending is not None:
+            parent = await asyncio.shield(pending)
+        if parent is None or self.cdp is not cdp or self.owned_targets.get(target) != scope:
+            return None
+        try:
+            async with asyncio.timeout(5):
+                tab = await self._attach_tab(target, scope, parent.member, parent.workspace, parent.conversation,
+                                             info=info, opener=parent)
+        except (BrowserError, OSError, TimeoutError, KeyError):
+            return None
+        if self.owned_targets.get(target) != scope or self.cdp is not cdp:
+            self._forget_tab(tab)
+            return None
+        self.select(tab)
+        return tab
+
+    async def wait_popups(self, scope):
+        pending = [task for target, task in self.popups.items() if self.owned_targets.get(target) == scope]
+        if pending:
+            await asyncio.gather(*(asyncio.shield(task) for task in pending))
+
+    def _update_page(self, tab, *, title=None, url=None):
+        if title is not None:
+            tab.title = title[:512]
+        if url and url != tab.url:
+            tab.url = url
+            tab.favicon = ""
+            if task := self.icons.pop(tab.id, None):
+                task.cancel()
+
+    def _refresh_icon(self, tab):
+        if not tab.url.startswith(("https://", "http://")) or tab.id in self.icons:
+            return
+        task = self.icons[tab.id] = asyncio.create_task(self._read_icon(tab))
+        task.add_done_callback(lambda done: self.icons.pop(tab.id, None) if self.icons.get(tab.id) is done else None)
+
+    async def _read_icon(self, tab):
+        # Read the site's icon in Chrome, under the page's own origin and CORS policy.
+        from . import host_page
+
+        try:
+            async with asyncio.timeout(2):
+                icon, _ = await host_page.evaluate(self, tab, FAVICON, await_promise=True)
+                if isinstance(icon, str) and len(icon) < 8192 and icon.startswith("data:image/png;base64,"):
+                    tab.favicon = icon
+        except (BrowserError, OSError, TimeoutError, KeyError):
+            pass
 
     @staticmethod
     async def _ack_frame(cdp, session, frame):
@@ -468,7 +599,7 @@ class HostBrowser:
             self.opening -= 1
             self._schedule_idle()
 
-    async def new_tab(self, scope, member, workspace, conversation=None):
+    async def new_tab(self, scope, member, workspace, conversation=None, *, previous=None):
         target = await self._take_startup_target()
         if target is None:
             # A tab in its own window keeps a compositor surface even
@@ -477,22 +608,9 @@ class HostBrowser:
             target = (await self.cdp.call("Target.createTarget", {"url": "about:blank", "newWindow": True,
                                                                 "background": True, **bounds}))["targetId"]
         self.owned_targets[target] = scope
-        tab = None
         try:
-            session = (await self.cdp.call("Target.attachToTarget", {"targetId": target, "flatten": True}))["sessionId"]
-            tab = Tab(secrets.token_urlsafe(18), target, session, scope, member, workspace)
-            tab.conversation = conversation
-            tab.cast = Screencast(self, tab)
-            self.tabs[tab.id] = tab
-            await self.command(tab, "Page.enable")
-            await self.command(tab, "Emulation.setDeviceMetricsOverride", {
-                "width": 1280, "height": 900, "deviceScaleFactor": 1, "mobile": False,
-            })
-            tree = await self.command(tab, "Page.getFrameTree")
-            tab.frames.add(tree["frameTree"]["frame"]["id"])
+            tab = await self._attach_tab(target, scope, member, workspace, conversation, previous=previous)
         except BaseException:
-            if tab is not None:
-                self._forget_tab(tab)
             await self._close_targets(lambda: {target} & self.owned_targets.keys())
             raise
         self.select(tab)
@@ -501,9 +619,55 @@ class HostBrowser:
             await self.close_scope(scope)
         return tab
 
+    async def _attach_tab(self, target, scope, member, workspace, conversation, *, info=None, opener=None, previous=None):
+        session = (await self.cdp.call("Target.attachToTarget", {"targetId": target, "flatten": True}))["sessionId"]
+        if self.owned_targets.get(target) != scope:
+            raise BrowserError("browser_tab_changed")
+        inherited = opener or previous
+        finished = bool(inherited and inherited.finished)
+        previous = inherited or self.selected(scope)
+        tab = Tab(secrets.token_urlsafe(18), target, session, scope, member, workspace, conversation=conversation,
+                  turn_id=previous.turn_id if previous else None, finished=finished, ready=False,
+                  view_id=previous.view if previous else "", opener=opener.id if opener else None)
+        tab.cast = Screencast(self, tab)
+        self.tabs[tab.id] = tab
+        if info:
+            self._update_page(tab, title=info.get("title"), url=info.get("url"))
+        try:
+            await self.command(tab, "Page.enable")
+            await self.resize(tab, 1280, 900)
+            tree = await self.command(tab, "Page.getFrameTree")
+            frame = tree["frameTree"]["frame"]
+            tab.main_frame = frame["id"]
+            tab.frames.add(tab.main_frame)
+            tab.ready = True
+            self._refresh_icon(tab)
+            return tab
+        except BaseException:
+            self._forget_tab(tab)
+            raise
+
+    async def resize(self, tab, width, height):
+        async with tab.cast.lock:
+            if tab.viewport != (width, height):
+                await self.command(tab, "Emulation.setDeviceMetricsOverride", {
+                    "width": width, "height": height, "deviceScaleFactor": 1, "mobile": False,
+                })
+                tab.viewport = (width, height)
+
+    async def activate(self, tab):
+        if not self.live(tab):
+            raise BrowserError("browser_tab_changed")
+        await self.command(tab, "Page.bringToFront")
+        if not self.live(tab):
+            raise BrowserError("browser_tab_changed")
+        self.select(tab)
+
     def select(self, tab):
-        self.current.pop(tab.scope, None)
+        previous = self.current.pop(tab.scope, None)
         self.current[tab.scope] = tab.id
+        if previous != tab.id:
+            self.notify_view()
 
     async def command(self, tab, method, params=None):
         if self.tabs.get(tab.id) is not tab:
@@ -513,7 +677,7 @@ class HostBrowser:
     def tab(self, scope, *identifiers):
         ids = {identifier for identifier in identifiers if identifier is not None}
         selected = ids or {self.current.get(scope)}
-        matches = [tab for tab in self.tabs.values() if tab.scope == scope and not tab.finished and (selected == {tab.id} or not ids)]
+        matches = [tab for tab in self.scope_tabs(scope) if not tab.finished and (selected == {tab.id} or not ids)]
         if not matches:
             raise BrowserError("browser_tab_required")
         tab = next((tab for tab in matches if tab.id in selected), matches[-1])
@@ -522,6 +686,7 @@ class HostBrowser:
 
     async def close_scope(self, scope, *, keep_page=False):
         async with self.work_lock(scope):
+            await self.wait_popups(scope)
             keep = self.tabs.get(self.current.get(scope)) if keep_page else None
             if keep is not None and (keep.handoff or self.viewing_tab(keep.member, keep.conversation) is not keep):
                 keep = None
@@ -572,14 +737,14 @@ class HostBrowser:
         if self.idle is not None:
             self.idle.cancel()
             self.idle = None
-        if not self.opening and all(tab.finished for tab in self.tabs.values()) and not self.downloads and self.cdp is not None:
+        if not self.opening and not self.held and all(tab.finished for tab in self.tabs.values()) and not self.downloads and self.cdp is not None:
             self.idle = asyncio.create_task(self._idle())
 
     async def _idle(self):
         reader = getattr(self.cdp, "reader", None)
         await asyncio.sleep(0 if reader is not None and reader.done() else self.idle_seconds)
         async with self.lock:
-            if not self.opening and all(tab.finished for tab in self.tabs.values()) and not self.downloads:
+            if not self.opening and not self.held and all(tab.finished for tab in self.tabs.values()) and not self.downloads:
                 self.idle = None
                 await self._stop()
 
@@ -587,6 +752,10 @@ class HostBrowser:
         cdp, process, tree = self.cdp, self.process, self.process_tree
         self.cdp = self.process = None
         self.process_tree = None
+        background = [*self.popups.values(), *self.icons.values()]
+        for task in background:
+            task.cancel()
+        await asyncio.gather(*background, return_exceptions=True)
         for tab in list(self.tabs.values()):
             self._forget_tab(tab)
         self.owned_targets.clear()

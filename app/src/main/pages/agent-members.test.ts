@@ -39,7 +39,7 @@ const api = vi.hoisted(() => ({ statusGet: vi.fn(async () => ({ openrouter: { st
   core: vi.fn(),
   roomsList: vi.fn(),
   roomMessages: vi.fn(),
-  desktopStatus: vi.fn(), desktopOpen: vi.fn(), desktopRenew: vi.fn(), desktopClose: vi.fn(),
+  desktopStatus: vi.fn(), desktopOpen: vi.fn(), desktopRenew: vi.fn(), desktopClose: vi.fn(), desktopControl: vi.fn(),
 }));
 vi.mock("../api", () => api);
 
@@ -111,6 +111,56 @@ const pick = async (id: number) => {
   $(`.mb-col [data-member="${id}"]`).click();
   await flush();
 };
+
+test.each(["owner", "watching"])("outside presses in the conversation, sidebar and panel header preserve the enlarged computer (%s)", async mode => {
+  const running = { state: "running", ready: true, control: "member", transport: "host", target: "tab" };
+  api.desktopStatus.mockResolvedValue(running);
+  api.desktopOpen.mockResolvedValue({ session: "outside", url: "http://127.0.0.1:5000/outside" });
+  api.desktopRenew.mockResolvedValue(running);
+  api.desktopControl.mockResolvedValue({ ...running, control: "owner" });
+  const agent = mount();
+  try {
+    await flush();
+    await pick(3);
+    const trigger = $(".conversation-trigger");
+    if (trigger.getAttribute("aria-expanded") !== "true") trigger.click();
+    $('[data-det="tab"][data-tab="computer"]').click();
+    await flush();
+    const frame = $<HTMLIFrameElement>(".desktop-screen iframe");
+    const signal = (state: string, held = false) => window.dispatchEvent(new MessageEvent("message", {
+      source: frame.contentWindow, origin: "http://127.0.0.1:5000", data: { type: "raphael-desktop", state, held },
+    }));
+    signal("connected");
+    $('[data-desktop="enlarge"]').click();
+    if (mode === "owner") {
+      $('[data-desktop="take"]').click();
+      await flush();
+      signal("interactive", true);
+    }
+    const closeCount = api.desktopClose.mock.calls.length;
+    // In the floating layout the scrim receives a press over the conversation.
+    for (const selector of [".mb-det-scrim", ".composer", ".mb-col", ".conversation-trigger"]) {
+      const target = $(selector);
+      target.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
+      target.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, button: 0 }));
+      target.click();
+      await flush();
+      expect(api.desktopClose.mock.calls.slice(closeCount), selector).toEqual([]);
+      expect($(".desktop-panel").hasAttribute("data-expanded"), selector).toBe(true);
+      expect($(".desktop-screen iframe"), selector).toBe(frame);
+      expect($(".desktop-panel").dataset.interactive, selector).toBe(String(mode === "owner"));
+    }
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    if (mode === "owner") {
+      api.desktopControl.mockResolvedValue(running);
+      $('[data-desktop="return"]').click();
+      await flush();
+    }
+    $('[data-desktop="collapse"]').click();
+  } finally {
+    agent.hide();
+  }
+});
 
 test.each(navInputs)("Back closes the open Computer panel and Forward restores its tab with %s", async input => {
   const agent = mount();

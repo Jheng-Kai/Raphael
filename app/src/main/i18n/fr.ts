@@ -1,6 +1,14 @@
 import type { Messages } from "./zh-TW";
 
 export const fr = {
+  "browser.tabs": "Onglets du navigateur",
+  "browser.newTab": "Nouvel onglet",
+  "browser.closeTab": "Fermer l’onglet",
+  "browser.back": "Précédent",
+  "browser.forward": "Suivant",
+  "browser.reload": "Actualiser",
+  "browser.address": "Adresse",
+  "browser.navigationFailed": "Impossible d’ouvrir cette page.",
   "memberComputer.switchFailed": "Impossible de transmettre le choix au membre.",
   "memberComputer.stopFailed": "Impossible d’arrêter la tâche sur l’ordinateur.",
   "memberComputer.returnFailed": "Impossible de rendre le contrôle au membre.",

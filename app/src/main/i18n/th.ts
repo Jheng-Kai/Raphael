@@ -1,6 +1,14 @@
 import type { Messages } from "./zh-TW";
 
 export const th = {
+  "browser.tabs": "แท็บเบราว์เซอร์",
+  "browser.newTab": "แท็บใหม่",
+  "browser.closeTab": "ปิดแท็บ",
+  "browser.back": "ย้อนกลับ",
+  "browser.forward": "ไปข้างหน้า",
+  "browser.reload": "โหลดใหม่",
+  "browser.address": "ที่อยู่",
+  "browser.navigationFailed": "เปิดหน้านี้ไม่ได้",
   "memberComputer.switchFailed": "ส่งตัวเลือกคอมพิวเตอร์ให้สมาชิกไม่ได้",
   "memberComputer.stopFailed": "หยุดงานบนคอมพิวเตอร์ไม่ได้",
   "memberComputer.returnFailed": "คืนการควบคุมคอมพิวเตอร์ให้สมาชิกไม่ได้",

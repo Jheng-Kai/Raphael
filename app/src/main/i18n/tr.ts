@@ -1,6 +1,14 @@
 import type { Messages } from "./zh-TW";
 
 export const tr = {
+  "browser.tabs": "Tarayıcı sekmeleri",
+  "browser.newTab": "Yeni sekme",
+  "browser.closeTab": "Sekmeyi kapat",
+  "browser.back": "Geri",
+  "browser.forward": "İleri",
+  "browser.reload": "Yenile",
+  "browser.address": "Adres",
+  "browser.navigationFailed": "Bu sayfa açılamadı.",
   "memberComputer.switchFailed": "Bilgisayar seçimi üyeye gönderilemedi.",
   "memberComputer.stopFailed": "Bilgisayardaki görev durdurulamadı.",
   "memberComputer.returnFailed": "Bilgisayarın denetimi üyeye geri verilemedi.",

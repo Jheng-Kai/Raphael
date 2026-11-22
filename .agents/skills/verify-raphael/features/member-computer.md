@@ -24,11 +24,13 @@ focus on the owner's desktop. Each turn or task owns its tabs and action lock.
 Local Docker and Chrome share the member workspace and team folder while retaining
 separate site sign-ins. Docker on another host uses its own volumes.
 
-Opening a page opens the Computer tab on that same page. The page fills the rounded
-1280 × 900 frame. A takeover card appears only while a member waits for the owner for
-an owner-only step. Done releases input and resumes the original call on that tab.
+Opening a page opens the Computer tab on that same page. The page fills the frame
+under the [host browser toolbar](#host-browser-toolbar). A takeover card appears only while a member waits for the owner for
+an owner-only step. The reason stays on the card, while the thread shows the member's own words.
+Done releases input and resumes the original call on the scope's current tab.
 Done, Skip and other request endings remove the card from the conversation.
-An idle browser and an unavailable VM keep their wallpaper without panel errors.
+A visible Computer tab reconnects when a stream or lease ends or the active target changes.
+An idle browser and an unavailable VM with no live target keep their wallpaper without panel errors.
 An unexpected failure reaches the active member as an internal note. Missing Docker
 keeps the action to ask Raphael for setup.
 The last watcher leaving stops the screencast. Shutdown closes relay connections
@@ -49,6 +51,40 @@ being false, changing 1280 × 900 frames away from the input desktop, private in
 handback of the same tab, downloads and shutdown. The owner checks actual Google
 sign-in. Native Chrome and OS prompts, including certificate pickers, sit outside the
 page screencast.
+
+## Host browser toolbar
+
+R-COMP-HOST-07 and R-UI-178. The Computer panel and enlarged view share the tab strip
+and address row. Select a tab while watching and the member's tab stays selected in
+Chrome. Take control to change the real selection, open or close a tab, or navigate.
+The member's tools use the same turn or task tab list after handback. The member's
+Chrome viewport stays at 1280×900 during watch, takeover and handback. The page
+keeps that aspect edge to edge below the toolbar and in the sign-in card preview.
+The enlarged view fits the entire frame, including the toolbar, in the window.
+
+A Chrome target with a scoped opener inherits that scope. The view follows the new
+tab or popup, including a small sign-in window, and returns to the live opener on
+close. The same viewer lease stays in place. Input names the tab whose frame it came
+from. An active handback remains answerable after an OAuth popup closes if its work
+still has a live page.
+
+Run from `app/`:
+
+```sh
+npm run look -- desktop-host-tabs-panel desktop-host-tabs-expanded desktop-host-tabs-control desktop-host-tabs-popup desktop-host-no-card desktop-host-panel desktop-host-card desktop-host-takeover desktop-host-handback desktop-viewer --theme both --width 1120,720,1920x1080
+```
+
+Inspect the compact favicon strip, the horizontally scrolled strip, the selected tab,
+the address in both modes, the popup, the card preview and the outer edges of the
+canvas. The frame checks allow 1% deviation from the 1280:900 page aspect. Compare the
+round controls against the other Computer viewer's controls at the same theme and
+width. The look fixture exercises the app's real toolbar and canvas.
+
+Run `test_host_computer.py` and `test_host_viewer.py` locally with CI unset. The
+native popup test opens a small window and a blank-target link from a loopback page,
+checks the fixed 1280×900 frames and owner input, and returns to the opener after each close.
+The native handback test verifies Done and the resumed member tool. Provider sign-in
+requires the owner's own Google or Notion session.
 
 ## Recovering the seat browser after an unreadable stale lock
 
@@ -563,6 +599,12 @@ npm run look -- computer-member-switch desktop-panel desktop-return-stopped pane
 `seatMarks`, the fixture paints that seat's colour band), the owner goes to the calendar, opens member 2 in the sidebar, and
 the Computer tab streams seat 2: one iframe, seat 2's page and colour, no frame of seat 1 anywhere, member 1's session
 closed and never renewed after member 2 opened, member 2's own status read. Native, not run: two real running seats.
+
+The enlarged view keeps its own connected frame and lease while the owner visits a different member or page.
+Returning restores that conversation's view and input ownership. The Vitest checks drive the drawer's scrim,
+conversation, sidebar and header, then verify member switching, background renewal, lease loss and target replacement.
+`desktop-host-takeover` presses the title bar while Chrome is under the owner's control and checks
+that the same document, open count and close count are preserved.
 
 ## The disk notice names the disk that is full
 

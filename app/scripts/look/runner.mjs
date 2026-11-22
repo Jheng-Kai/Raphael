@@ -86,6 +86,12 @@ export function browserPath() {
   return found;
 }
 
+function writeHostFrame(host, images) {
+  const target = host.model.shown, image = images[target === "popup" ? 1 : 0];
+  const frame = JSON.stringify({ target, image, width: 1280, height: 900 }) + "\n";
+  for (const response of host.responses) response.write(frame);
+}
+
 export async function run(options) {
   const cpuSlowdown = Number(process.env.LOOK_CPU_SLOWDOWN ?? 1);
   if (!Number.isFinite(cpuSlowdown) || cpuSlowdown < 1) throw new Error("LOOK_CPU_SLOWDOWN must be a finite number >= 1");
@@ -108,7 +114,7 @@ export async function run(options) {
     report.executablePath = executablePath;
     const { createServer } = await import(pathToFileURL(requireFromApp.resolve("vite")).href);
     const fixture = JSON.parse(await readFile(join(import.meta.dirname, "fixture.json"), "utf8"));
-    let desktopResponses = {}, hostFeed;
+    let desktopResponses = {}, hostFeed, hostFixture, hostImages;
     if (needsDesktopFixture(options.selected)) {
       // Render the production bridge shell/bootstrap, replacing only remote RFB.
       const python = corePython();
@@ -143,13 +149,16 @@ export async function run(options) {
     const latinFor = (scene, locale) => sceneLatinNames(scene, locale, fixture);
     const namespaces = [...new Set([...translations.matchAll(/"([a-z][A-Za-z0-9]*)\.[^"\n]+"\s*:/g)].map(match => match[1]))];
     if (options.selected.some(scene => scene.fixture?.desktop?.transport === "host")) {
-      const photo = await readFile(join(import.meta.dirname, "fixtures/host-page.jpg"));
-      const frame = JSON.stringify({ image: photo.toString("base64"), width: 1280, height: 900 }) + "\n";
+      const images = await Promise.all(["host-page.jpg", "host-popup.jpg"].map(name => readFile(join(import.meta.dirname, "fixtures", name))));
+      hostImages = images.map(image => image.toString("base64"));
       hostFeed = { name: "look-host-frames", configureServer(server) {
         server.middlewares.use("/scripts/look/fixtures/host-frames", (_request, response) => {
           response.writeHead(200, { "Content-Type": "application/x-ndjson" });
           // The real canvas keeps reading until its viewer closes.
-          response.write(frame);
+          const current = hostFixture;
+          current.responses.add(response);
+          response.on("close", () => current.responses.delete(response));
+          writeHostFrame(current, hostImages);
         });
       } };
     }
@@ -165,6 +174,13 @@ export async function run(options) {
     report.browser = await browser.version();
     for (const scene of options.selected) for (const theme of options.themes) for (const width of options.widths) {
       const page = await browser.newPage();
+      const hostTabs = scene.fixture?.hostTabs;
+      const host = hostFixture = {
+        model: { shown: hostTabs === "popup" ? "popup" : "library", back: hostTabs === "popup", forward: false,
+          tabs: fixture.hostBrowserTabs.filter(tab => hostTabs === "many" ? tab.id !== "popup" : tab.id === "library" ||
+            tab.id === "agenda" || hostTabs === "popup" && tab.id === "popup") },
+        responses: new Set(),
+      };
       const runtimeErrors = [];
       let profiler;
       const result = { scene: scene.name, theme, width, height: options.heights[width] ?? 900, locale: options.locale, runtimeErrors, image: null, failed: true };
@@ -211,7 +227,16 @@ export async function run(options) {
           }
           const disposition = requestDisposition(url, origin);
           const desktopResponse = url.startsWith(origin + "/") && desktopResponses[new URL(url).pathname];
-          if (url === origin + "/scripts/look/fixtures/host-input") {
+          if (url === origin + "/scripts/look/fixtures/host-browser") {
+            if (request.method() === "POST") {
+              const { action, tab, url: address } = JSON.parse(request.postData());
+              if (action === "select" || action === "navigate") host.model.shown = tab;
+              if (action === "navigate") host.model.tabs = host.model.tabs.map(row => row.id === tab ? { ...row, url: address } : row);
+              (result.hostActions ??= []).push({ action, tab });
+              writeHostFrame(host, hostImages);
+              void request.respond({ status: 204 }).catch(() => {});
+            } else void request.respond({ status: 200, contentType: "application/json", body: JSON.stringify(host.model) }).catch(() => {});
+          } else if (url === origin + "/scripts/look/fixtures/host-input") {
             void request.frame().evaluate(() => { window.__desktopAcceptedKeys = (window.__desktopAcceptedKeys ?? 0) + 1; })
               .then(() => request.respond({ status:204 })).catch(() => {});
           } else if (desktopResponse && new URL(url).pathname.endsWith('/control')) {

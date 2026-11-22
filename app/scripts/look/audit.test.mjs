@@ -1082,6 +1082,11 @@ describe("rendered look checks", () => {
     const { audit } = productAudit('<button class="btn" style="border: none">Save</button><button class="btn icon" style="border: 1px solid red">X</button><button class="btn" style="border: 1px solid red">Cancel</button><p class="desktop-docker-setup">尚未安裝 Docker <button class="btn desktop-docker-help" data-docker-help style="border: none">請 Raphael 安裝</button></p>');
     expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-18', 'R-UI-18']);
   });
+  it("allows frameless host browser tabs inside the tab strip", () => {
+    const { audit } = productAudit('<div class="host-browser-strip"><button class="btn host-browser-tab-button" style="border:0">Library</button></div>' +
+      '<button class="btn host-browser-tab-button" style="border:0">Save</button>');
+    expect(audit().productRules.filter(item => item.rule === 'R-UI-18').map(item => item.text)).toEqual(['Save']);
+  });
   it("allows a quiet routine inspection link only inside its reply origin", () => {
     const { audit } = productAudit('<div class="chat-message"><div class="routine-origin"><button class="btn routine-run-link" data-act="open-routine" style="border:0">Sample routine</button></div></div><button class="btn routine-run-link" data-act="open-routine" style="border:0">Save</button>');
     expect(audit().productRules.filter(item => item.rule === 'R-UI-18').map(item => item.text)).toEqual(['Save']);

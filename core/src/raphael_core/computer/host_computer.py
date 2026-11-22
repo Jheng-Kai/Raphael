@@ -10,7 +10,6 @@ from jsonschema import Draft202012Validator
 from ..agent.data_floor import DataFloor, WRITE_REFUSAL
 from ..agent.plugins import PluginResult, PluginTool, tool_key
 from ..agent.policy import Tier
-from ..ui_words import with_ui_words
 from . import host_page
 from .browser_tabs import BROWSER_TABS
 from .file_tools import Refused, _refusal
@@ -196,8 +195,7 @@ class HostComputerTools:
         files = OwnerFiles(self.files.reads, scope)
         return await getattr(files, name)(args)
 
-    async def call(self, key, arguments, *, member, scope, turn_id, conversation_id, private, approver, language, announce,
-                   explain=None):
+    async def call(self, key, arguments, *, member, scope, turn_id, conversation_id, private, approver, language, announce):
         owner, tool = self.routes[key]
         if owner != member or scope is None:
             return PluginResult(False, "computer_changed")
@@ -231,15 +229,13 @@ class HostComputerTools:
                     raise BrowserError("private_conversation_required")
                 try:
                     detail = data.get("detail", "")
-                    if explain:
-                        words = OWNER_STEPS.get(language, OWNER_STEPS["en"])
-                        explain(detail or words[reason])
                     await self.cards.wait_for_browser(turn_id=turn_id, member_id=member, conversation_id=conversation_id,
-                                                      language=language, reason=reason, tab=tab, detail=detail)
+                                                      language=language, reason=reason, tab=tab, detail=detail, browser=browser)
                 finally:
                     tab.handoff = False
                 async with browser.work_lock(work):
-                    data, blocks = await host_page.snapshot(browser, tab, {})
+                    await browser.wait_popups(work)
+                    data, blocks = await host_page.snapshot(browser, browser.selected(work) or tab, {})
                 if data.get("owner_needed"):
                     data["status"] = "owner_step_still_needed"
                 else:
@@ -260,15 +256,13 @@ class HostComputerTools:
 
     async def browser_call(self, name, arguments, approver, member, work, conversation, announce, *, turn_id=None):
         browser = self.browser
+        await browser.wait_popups(work)
         if name == "browser_tabs":
             if arguments.get("show"):
                 raise BrowserError("browser_background_only")
-            tabs = []
-            if browser.cdp is not None and browser.tabs:
-                listing = await browser.cdp.call("Target.getTargets")
-                owned = {tab.target: tab.id for tab in browser.tabs.values() if tab.scope == work}
-                tabs = [{"tab_id": owned[row["targetId"]], "title": row["title"], "url": row["url"], "shown": None}
-                        for row in listing["targetInfos"] if row["targetId"] in owned]
+            current = browser.selected(work)
+            tabs = [{"tab_id": tab.id, "title": tab.title, "url": tab.url, "shown": tab is current}
+                    for tab in browser.scope_tabs(work) if browser.live(tab) and not tab.finished]
             return {"tabs": tabs}, [], None
         if name == "browser_open":
             if isinstance(work[0], tuple) and not work[1]:
@@ -308,51 +302,4 @@ DEFINITION_WORDS = {
     "edit_file": "Edit a file you read in this turn. Relative paths start in your work folder; team:/ selects the team folder.",
     "glob": "List files under a folder by glob pattern. The default is your work folder; team:/ selects the team folder.",
     "grep": "Search files by regular expression. The default is your work folder; team:/ selects the team folder.",
-}
-
-
-OWNER_STEPS = with_ui_words({
-    "en": {
-        "sign_in": "Please sign in on this page in the Computer panel.",
-        "password": "Please enter your password on the page in the Computer panel.",
-        "two_factor": "Please complete the verification in the Computer panel.",
-        "captcha": "Please complete the human verification in the Computer panel.",
-        "payment": "Please review and complete the payment in the Computer panel.",
-        "certificate": "Please select your certificate in the Computer panel.",
-    },
-    "zh-TW": {
-        "sign_in": "請在「電腦」側欄的頁面登入。",
-        "password": "請在「電腦」側欄的頁面輸入密碼。",
-        "two_factor": "請在「電腦」側欄完成驗證。",
-        "captcha": "請在「電腦」側欄完成人機驗證。",
-        "payment": "請在「電腦」側欄確認並完成付款。",
-        "certificate": "請在「電腦」側欄選擇憑證。",
-    },
-    "ja": {
-        "sign_in": "「コンピューター」パネルで、このページにログインしてください。",
-        "password": "「コンピューター」パネルで、ページにパスワードを入力してください。",
-        "two_factor": "「コンピューター」パネルで認証を完了してください。",
-        "captcha": "「コンピューター」パネルで、ロボットではないことを確認してください。",
-        "payment": "「コンピューター」パネルで内容を確認し、支払いを完了してください。",
-        "certificate": "「コンピューター」パネルで証明書を選択してください。",
-    },
-})
-
-
-CHROME_OPENED = {
-    "zh-TW": "已開啟 Raphael 的 Chrome。",
-    "en": "I opened Raphael’s Chrome.",
-    "ja": "Raphael 専用の Chrome を開きました。",
-    "zh-CN": "已打开 Raphael 的 Chrome。",
-    "ko": "Raphael 전용 Chrome을 열었습니다.",
-    "es": "Abrí el Chrome de Raphael.",
-    "fr": "J’ai ouvert le Chrome de Raphael.",
-    "de": "Ich habe Raphaels Chrome geöffnet.",
-    "pt-BR": "Abri o Chrome do Raphael.",
-    "it": "Ho aperto il Chrome di Raphael.",
-    "ru": "Я открыл Chrome Рафаэля.",
-    "vi": "Tôi đã mở Chrome của Raphael.",
-    "th": "เปิด Chrome ของ Raphael แล้ว",
-    "id": "Saya membuka Chrome milik Raphael.",
-    "tr": "Raphael’in Chrome’unu açtım."
 }

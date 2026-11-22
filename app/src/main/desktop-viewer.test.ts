@@ -136,7 +136,7 @@ beforeEach(() => {
   host=document.createElement('aside'); host.innerHTML='<div class="mb-det-scroll"></div><ol><li data-desktop-slot="42"></li></ol>'; document.body.append(host);
   mounted=mountDesktopViewer(host,()=>member,{timeline:host.querySelector('ol')!,conversation:()=>11,name:()=>"小晴",face:()=>faceHTML({id:member,name:'Sample'},22),openPanel:()=>{panelOpen=true;},closePanel:()=>{panelOpen=false;},panelVisible:()=>panelOpen,trySkill:trySent,changed:waitChanged,chooseComputer});
 });
-afterEach(async()=>{mounted.hide();resetAsks();await flush();document.body.replaceChildren();vi.useRealTimers();});
+afterEach(async()=>{mounted.hide(true);resetAsks();await flush();document.body.replaceChildren();vi.useRealTimers();});
 
 test("interjects the computer choice and follows the member to the newly active transport", async () => {
   const hostState: DesktopState = {...running, transport:"host"};
@@ -956,9 +956,11 @@ test('an unchanged status renewal makes no DOM writes',async()=>{
  observer.disconnect();
 });
 
-test('an unchanged stopped renewal touches nothing after a running stream stops',async()=>{
+test('an unchanged stopped status touches nothing after a running stream stops',async()=>{
  panelOpen=true; mounted.show(); await flush(); message('connected');
- api.desktopRenew.mockResolvedValue({state:'stopped',ready:false,control:'member'});
+ const stopped = {state:'stopped',ready:false,control:'member'};
+ api.desktopRenew.mockResolvedValue(stopped);
+ api.desktopStatus.mockResolvedValue(stopped);
  await vi.advanceTimersByTimeAsync(2000); await flush();
  const writes: MutationRecord[]=[]; const observer=new MutationObserver(records=>writes.push(...records)); observer.observe(host,{subtree:true,childList:true,attributes:true,characterData:true});
  await vi.advanceTimersByTimeAsync(2000); await flush();
@@ -1209,6 +1211,80 @@ test("a seat's frame draws its line inside and takes no room, so the 1280:900 pi
   expect(screen).toContain("box-shadow: inset 0 0 0 1px var(--line)");
   expect(css("card.css")).toMatch(/\.card-computer-screen \{[^}]*box-shadow: inset 0 0 0 1px var\(--edge\)/);
   expect(css("card.css")).not.toMatch(/\.card-computer-screen \{[^}]*border: 1px/);
+});
+
+test('switching members keeps the same live session and owner control on return', async () => {
+  const first = {...running, transport:'host', target:'first-tab'} as const;
+  const held = {...first, control:'owner'} as const;
+  const second = {...running, transport:'host', target:'second-tab'} as const;
+  panelOpen = true;
+  api.desktopStatus.mockImplementation(async id => id === 1 ? first : second);
+  api.desktopOpen.mockResolvedValueOnce({session:'first', url:'http://127.0.0.1:5000/first'})
+    .mockResolvedValue({session:'second', url:'http://127.0.0.1:5000/second'});
+  api.desktopRenew.mockImplementation(async session => session === 'first' ? held : second);
+  api.desktopControl.mockResolvedValue(held);
+  mounted.show(); await flush(); message('connected');
+  await takeOver(); message('interactive', {held:true});
+  const original = frame();
+
+  member = 2; mounted.refresh(); await flush();
+  expect(api.desktopClose).not.toHaveBeenCalledWith('first');
+  expect(original.hidden).toBe(true);
+  expect(original.isConnected).toBe(true);
+  expect(panel().querySelector('iframe[src*="/second"]')).not.toBeNull();
+  await vi.advanceTimersByTimeAsync(16_000);
+  expect(api.desktopRenew).toHaveBeenCalledWith('first');
+  expect(api.desktopClose).not.toHaveBeenCalledWith('first');
+
+  member = 1; mounted.refresh(); await flush();
+  expect(panel().querySelector('iframe:not([hidden])')).toBe(original);
+  expect(panel().dataset.interactive).toBe('true');
+  expect(panel().hasAttribute('data-expanded')).toBe(true);
+  expect(api.desktopControl).toHaveBeenCalledExactlyOnceWith('first',true);
+  expect(api.desktopOpen.mock.calls.filter(([id]) => id === 1)).toHaveLength(1);
+
+  mounted.hide();
+  await vi.advanceTimersByTimeAsync(16_000);
+  expect(api.desktopClose).not.toHaveBeenCalledWith('first');
+  mounted.show(); await flush();
+  expect(panel().querySelector('iframe:not([hidden])')).toBe(original);
+  expect(panel().dataset.interactive).toBe('true');
+});
+
+test.each(['host', 'docker'] as const)('a visible %s panel reconnects after its viewer lease has closed', async transport => {
+  const snapshot = {...running, transport, target:'live-target'};
+  panelOpen = true;
+  api.desktopStatus.mockResolvedValue(snapshot);
+  api.desktopRenew.mockRejectedValueOnce(new Error('desktop session expired')).mockResolvedValue(snapshot);
+  api.desktopOpen
+    .mockResolvedValueOnce({session:'one', url:'http://127.0.0.1:5000/one'})
+    .mockRejectedValueOnce(new Error('stale viewer'))
+    .mockResolvedValueOnce({session:'reopened', url:'http://127.0.0.1:5000/reopened'});
+  mounted.show(); await flush(); message('connected');
+  await vi.advanceTimersByTimeAsync(16_000);
+  expect(api.desktopClose).toHaveBeenCalledWith('one');
+  expect(frame().getAttribute('src')).toContain('/reopened');
+  expect(panel().querySelector<HTMLImageElement>('.desktop-wallpaper')!.hidden).toBe(true);
+  message('connected');
+  expect(frame().hidden).toBe(false);
+});
+
+test.each(['host', 'docker'] as const)('a visible %s panel follows a replacement target after renewal', async transport => {
+  const first = {...running, transport, target:'first-target'};
+  const replacement = {...first, target:'new-target'};
+  panelOpen = true;
+  api.desktopStatus.mockResolvedValue(first);
+  api.desktopRenew.mockResolvedValue(replacement);
+  api.desktopOpen
+    .mockResolvedValueOnce({session:'one', url:'http://127.0.0.1:5000/one'})
+    .mockResolvedValueOnce({session:'replacement', url:'http://127.0.0.1:5000/replacement'});
+  mounted.show(); await flush(); message('connected');
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(api.desktopClose).toHaveBeenCalledWith('one');
+  expect(frame().getAttribute('src')).toContain('/replacement');
+  if (transport === 'host') expect(api.desktopOpen).toHaveBeenLastCalledWith(1, {conversation_id:11, transport, target_id:'new-target'});
+  message('connected');
+  expect(frame().hidden).toBe(false);
 });
 
 test("another member opened while the page was away never shows the previous member's screen", async () => {

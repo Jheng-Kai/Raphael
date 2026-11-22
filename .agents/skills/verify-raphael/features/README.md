@@ -676,6 +676,13 @@ No UI/look/judge scope applies. Real sign-in, OS vault/browser, plan inference a
 live tool round trips require separately authorized acceptance; fake HTTP is not
 live proof. Never run the owner probe or borrow another application's credentials.
 
+## Host browser tabs and popups
+
+[Member computer](member-computer.md#host-browser-toolbar) maps the Computer panel
+and enlarged viewer for watch-only selection, takeover, address navigation and
+scoped popup following. It names the local Chrome test and the affected look scenes
+in both themes at 1120,720,1920x1080.
+
 ## Member computer hosts
 
 [Member computer](member-computer.md) maps the per-member default, shared team

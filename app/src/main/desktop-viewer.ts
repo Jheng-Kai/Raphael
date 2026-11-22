@@ -8,6 +8,7 @@ import { esc, ico, backButton as roundBackButton, iconButton, btn, patchHTML, se
 import { openActions } from "./member-column";
 import { FILE_MAX_BYTES, fileMime, storeUpload } from "./attachments";
 import "./desktop-viewer.css";
+import { mountHostBrowserToolbar, type HostBrowserModel } from "./host-browser-toolbar";
 import { mountDesktopTimeline, desktopWorkText, type DesktopWork } from "./desktop-timeline";
 import { mountMemberResources } from "./member-profile-resources";
 import { cardFailure } from "./card";
@@ -77,7 +78,7 @@ export function preparationHTML(state: DesktopState, face = ""): string {
 }
 
 export function mountDesktopViewer(host: HTMLElement, member: () => number,
-  options: { timeline: HTMLElement; conversation: () => number | undefined; name: () => string; face?(): string; closePanel?(): void; openPanel(): void; panelVisible(): boolean; status?(active: boolean): void; changed?(): void; stop?(turnId: number): Promise<unknown>; trySkill?(text: string): void; chooseComputer?(transport: ComputerTransport): Promise<void> }): { show(): void; hide(close?: boolean): void; refresh(): void; refreshStatus(): void; sync(): void; carry(before: Element): void; takeover(): void; watch(): void; waitingForOwner(turnId: number): boolean } {
+  options: { timeline: HTMLElement; conversation: () => number | undefined; name: () => string; face?(): string; closePanel?(): void; openPanel(): void; panelVisible(): boolean; status?(active: boolean): void; changed?(): void; stop?(turnId: number): Promise<unknown>; trySkill?(text: string): void; chooseComputer?(transport: ComputerTransport): Promise<void> }): { show(): void; hide(closePreview?: boolean): void; refresh(): void; refreshStatus(): void; sync(): void; carry(before: Element): void; takeover(): void; watch(): void; expanded(): boolean; waitingForOwner(turnId: number): boolean } {
   const panel = document.createElement("section");
   panel.className = "desktop-panel"; panel.id = 'member-computer-panel'; panel.setAttribute('role', 'tabpanel'); panel.setAttribute('aria-labelledby', 'member-tab-computer'); panel.hidden = true;
   // The preview is one button that opens the larger view; the larger view fills the window and folds back
@@ -162,10 +163,21 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   setup.addEventListener("click", event => {
     if (selected() === "docker" && (event.target as Element).closest("[data-docker-help]")) askInChat(member(), "setup-docker");
   });
-  const frame = panel.querySelector<HTMLIFrameElement>('iframe')!;
-  bindNavFrame(frame, panel);
-  frame.dataset.desktopStream = "";
-  frame.remove();
+  const frameTemplate = panel.querySelector<HTMLIFrameElement>('iframe')!;
+  frameTemplate.remove();
+  function newFrame(): HTMLIFrameElement {
+    const screen = frameTemplate.cloneNode() as HTMLIFrameElement;
+    screen.dataset.desktopStream = "";
+    bindNavFrame(screen, panel);
+    return screen;
+  }
+  let frame = newFrame();
+  let browserModel: HostBrowserModel | undefined;
+  const browserToolbar = mountHostBrowserToolbar(panel.querySelector(".desktop-screen")!, (action, id) => {
+    if (session && state?.transport === "host") {
+      frame.contentWindow?.postMessage({ type: "raphael-desktop-browser-action", action, id }, new URL(session.url).origin);
+    }
+  });
   const tabBar = host.querySelector('.mb-tabs');
   if (tabBar) tabBar.after(panel); else (host.querySelector('.mb-det-scroll') ?? host).prepend(panel);
   const take = panel.querySelector<HTMLButtonElement>('[data-desktop="take"]')!;
@@ -214,8 +226,8 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   let drawn = "", drawnInline: Element | null = null, suspended = false, returnPanelOpen = false;
   let returnedRequests: string[] = [];
   let state: DesktopState | undefined, session: DesktopSession | undefined;
-  /** The member `state` was read for: a panel that comes back after the sidebar switched members must not wear the old member's. */
-  let stateMember: number | undefined;
+  /** Status and the stream are each tied to the conversation that asked for them. */
+  let stateMember: number | undefined, stateConversation: number | undefined;
   let maintenance: { member: number; phase: NonNullable<DesktopState['lifecycle']> } | undefined;
   const lifecycle = mountComputerLifecycle(panel.querySelector<HTMLElement>(".computer-lifecycle")!, member, () => state, async (action, captured) => {
     const id = member();
@@ -234,7 +246,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   let connected = false, interactive = false, changing = false, loading = false, opening = false, takeOnConnect = false, waking = false;
   /** A stream that has not connected this long is said to be out of reach, with a retry. */
   const STALL_MS = 20_000;
-  let stalled = false, everConnected = false, stallTimer: ReturnType<typeof setTimeout> | undefined;
+  let stalled = false, everConnected = false, retryAt = 0, stallTimer: ReturnType<typeof setTimeout> | undefined;
   /** A lease the screen has not confirmed (its `interactive` answer) this long was not taken: say so and go back to watching. */
   const TAKE_MS = 6_000;
   let takeTimer: ReturnType<typeof setTimeout> | undefined;
@@ -257,7 +269,20 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   const waitingRequests = (): string[] => waiting().map(work => work.request_id || work.id);
   const inlineSelector = "[data-card-desktop-screen], [data-card-screen]";
   const inlineScreen = () => [...options.timeline.querySelectorAll<HTMLElement>(inlineSelector)].find(screen => !screen.closest('[hidden]'));
-  const active = (): boolean => visible && (options.panelVisible() || !!inlineScreen());
+  type KeptView = {
+    member: number; conversation: number | undefined; session: DesktopSession; frame: HTMLIFrameElement; state: DesktopState;
+    connected: boolean; interactive: boolean; changing: boolean; watching: boolean; returnPanelOpen: boolean;
+    renewing: boolean;
+  };
+  const keptViews = new Set<KeptView>();
+  let keptTimer: ReturnType<typeof setInterval> | undefined;
+  const keptFor = (opened: DesktopSession) => [...keptViews].find(view => view.session === opened);
+  const keptForPlace = () => [...keptViews].find(view => view.member === member() && view.conversation === options.conversation());
+  const visibleTarget = (): boolean => visible && options.panelVisible() && state?.state === 'running' && !!state.target;
+  const sameTarget = (a: DesktopState, b: DesktopState): boolean =>
+    (a.transport ?? 'docker') === (b.transport ?? 'docker') && (a.host ?? '') === (b.host ?? '')
+    && (a.target === b.target || a.transport !== 'host' && (!a.target || !b.target));
+  const active = (): boolean => visible && (options.panelVisible() || panel.hasAttribute('data-expanded') || !!inlineScreen());
   const send = (held: boolean, pointer?: { x:number; y:number }): void => { if (session) frame.contentWindow?.postMessage({ type:"raphael-desktop-control", held, pointer }, new URL(session.url).origin); };
   // The live view draws its screen to a picture only while this panel shows one (the stream then plays in a chat
   // card): a picture every few seconds is work a view that is watched live does not need.
@@ -366,9 +391,12 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
       if (wallpaperKnown && image.getAttribute('src') !== source) image.setAttribute('src', source);
       image.toggleAttribute('data-own', !!ownWallpaper);
     };
-    paintWallpaper(panel.querySelector<HTMLImageElement>('.desktop-wallpaper')!);
+    const wallpaper = panel.querySelector<HTMLImageElement>('.desktop-wallpaper')!;
+    paintWallpaper(wallpaper);
+    paint(wallpaper, 'hidden', visibleTarget() && !connected);
     // The small picture is a card in the conversation; the larger view and the Computer tab are the stream itself.
     const hostView = state?.transport === "host";
+    browserToolbar.draw(hostView && running && connected ? browserModel : undefined, interactive && !watching && !changing);
     askFrames(!!running && connected && !!inline && !expanded && !owner && (hostView || !pending()));
     const preview = lastFrames.get(member());
     const picture = running && !stalled && (!connected || !hostView && inline && !expanded) ? preview : undefined;
@@ -403,20 +431,88 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
       else destination.prepend(frame);
     }
   }
-  function closeStream(): void {
-    clearTimeout(lingering); clearTimeout(stallTimer); clearTimeout(takeTimer); stalled = false;
-    opening = false; paint(notice, "hidden", true);
+  function closeLease(opened: DesktopSession): void {
+    closePending = closePending.then(() => api.desktopClose(opened.session)).catch(() => {});
+  }
+  function closeStream(keepExpanded = false): void {
+    clearTimeout(lingering); clearTimeout(stallTimer); clearTimeout(takeTimer); stalled = false; retryAt = 0;
+    opening = changing = false; paint(notice, "hidden", true);
     if (state?.transport === 'host' && streamMember !== undefined) lastFrames.delete(streamMember);
     generation++; takeOnConnect = false; watching = false; send(false); framesOn = false; frame.remove(); frame.removeAttribute('src'); connected = interactive = false;
     const previous = session; session = undefined;
-    if (previous) closePending = closePending.then(() => api.desktopClose(previous.session)).catch(() => {});
-    panel.removeAttribute('data-expanded'); document.documentElement.removeAttribute('data-desktop-expanded');
-    document.documentElement.removeAttribute('data-desktop-watch'); placeStripButtons(false);
+    browserModel = undefined;
+    browserToolbar.draw(undefined, false);
+    if (previous) closeLease(previous);
+    if (keepExpanded && panel.hasAttribute('data-expanded')) {
+      watching = true;
+      document.documentElement.setAttribute('data-desktop-watch', '');
+    } else {
+      panel.removeAttribute('data-expanded'); document.documentElement.removeAttribute('data-desktop-expanded');
+      document.documentElement.removeAttribute('data-desktop-watch'); placeStripButtons(false);
+    }
   }
-  /** Out of sight: the stream lingers, unless the owner holds the controls, which end with the view. */
-  function leave(): void {
+  function forgetKept(view: KeptView, close: boolean): void {
+    keptViews.delete(view);
+    if (!keptViews.size) { clearInterval(keptTimer); keptTimer = undefined; }
+    if (close) { view.frame.remove(); closeLease(view.session); }
+  }
+  function renewKept(): void {
+    if (!host.isConnected) { for (const view of keptViews) forgetKept(view, true); return; }
+    if (!windowVisible()) return;
+    for (const view of keptViews) {
+      if (view.renewing || view.changing) continue;
+      view.renewing = true;
+      void api.desktopRenew(view.session.session).then(next => {
+        if (!keptViews.has(view)) return;
+        if (next.state !== 'running' || !sameTarget(view.state, next)) { forgetKept(view, true); return; }
+        view.state = next;
+        if (next.control !== 'owner') { view.interactive = false; view.watching = true; }
+      }).catch(() => { if (keptViews.has(view)) forgetKept(view, true); })
+        .finally(() => { view.renewing = false; });
+    }
+  }
+  /** The frame stays connected to its document so a hidden view keeps its authenticated socket. */
+  function keepStream(): boolean {
+    if (!session || !state || streamMember === undefined || !panel.hasAttribute('data-expanded')) return false;
+    parkFrame();
+    frame.blur();
+    frame.hidden = frame.inert = true;
+    frame.style.pointerEvents = 'none';
+    const view = {member:streamMember, conversation:streamConversation, session, frame, state,
+      connected, interactive, changing, watching, returnPanelOpen, renewing:false};
+    keptViews.add(view);
+    keptTimer ??= setInterval(renewKept, 5000);
+    frame = newFrame();
+    session = undefined;
+    closeStream();
+    renewKept();
+    return true;
+  }
+  function restoreStream(): boolean {
+    const view = keptForPlace();
+    if (!view || !visible) return false;
+    forgetKept(view, false);
+    ({frame, session, state, connected, interactive, changing, watching, returnPanelOpen} = view);
+    frame.inert = false;
+    streamMember = stateMember = view.member;
+    streamConversation = stateConversation = view.conversation;
+    everConnected = connected;
+    if (!changing && state.control !== 'owner') watching = true;
+    demonstration = state.teaching;
+    timeline.update(state);
+    document.documentElement.toggleAttribute('data-desktop-watch', watching);
+    expand(true, false);
+    if (connected && state.control === 'owner' && !watching && !changing) send(true);
+    if (state.transport === "host") frame.contentWindow?.postMessage({ type: "raphael-desktop-browser-refresh" }, new URL(session.url).origin);
+    // The member selector finishes drawing its default tab in the same turn.
+    queueMicrotask(() => { if (visible && session === view.session && !options.panelVisible()) options.openPanel(); });
+    return true;
+  }
+  /** A plain preview can go away; the enlarged view owns its stream until explicitly folded or returned. */
+  function leave(closePreview = false): void {
+    if (keepStream()) return;
+    if (closePreview || panel.hasAttribute('data-expanded') || session && state?.transport === 'host') { closeStream(); return; }
     if (!session) return;
-    if (state?.control === "owner" || state?.transport === 'host') { closeStream(); return; }
     clearTimeout(lingering);
     lingering = setTimeout(closeStream, LINGER_MS);
   }
@@ -487,7 +583,15 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     void sendFiles([...event.dataTransfer.files]);
   });
   function message(event: MessageEvent): void {
-    if (!session || event.source !== frame.contentWindow || event.origin !== new URL(session.url).origin) return;
+    if (!session || event.source !== frame.contentWindow || event.origin !== new URL(session.url).origin) {
+      if (event.data?.type !== 'raphael-desktop') return;
+      const kept = [...keptViews].find(view => event.source === view.frame.contentWindow && event.origin === new URL(view.session.url).origin);
+      if (!kept) return;
+      if (event.data.state === 'connected') kept.connected = true;
+      if (event.data.state === 'interactive') kept.interactive = event.data.held === true && kept.state.control === 'owner';
+      if (event.data.state === 'disconnected' || event.data.state === 'unreachable') forgetKept(kept, true);
+      return;
+    }
     if (event.data?.type === 'raphael-desktop-paste-request') { void answerPaste(event.data.id); return; }
     if (event.data?.type === 'raphael-desktop-copied') { void bringCopy(); return; }
     if (event.data?.type === 'raphael-desktop-files') {
@@ -496,6 +600,15 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
       return;
     }
     if (event.data?.type !== 'raphael-desktop') return;
+    if (event.data.state === "browser" && state?.transport === "host") {
+      browserModel = event.data.model;
+      browserToolbar.draw(connected ? browserModel : undefined, interactive && !watching && !changing);
+      return;
+    }
+    if (event.data.state === "browser-action") {
+      browserToolbar.result(event.data.id, event.data.ok === true);
+      return;
+    }
     if (event.data.state === 'frame') {
       if (state?.control === 'owner' || pending() && state?.transport !== 'host') return;
       if (typeof event.data.image === 'string' && event.data.image.startsWith('data:image/jpeg;base64,') && streamMember !== undefined && lastFrames.get(streamMember) !== event.data.image) { lastFrames.set(streamMember, event.data.image); draw(); }
@@ -517,9 +630,9 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
         // A stream that ends before it ever showed the screen, or says it cannot reach it, is out of reach: it waits for
         // a retry instead of reopening on every poll.
         const unreached = event.data.state === 'unreachable' || !everConnected;
-        interactive = false; closeStream(); if (state) state = { ...state, control:'member' };
+        interactive = false; closeStream(true); if (state) state = { ...state, control:'member' };
+        if (unreached) { stalled = true; retryAt = Date.now() + pollDelay; reportProblem("show the screen"); }
         if (state?.transport === 'host') void poll();
-        if (unreached) { stalled = true; reportProblem("show the screen"); }
       }
       // Only a fresh takeover click can acquire input after the new stream connects.
     }
@@ -528,7 +641,8 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   }
   window.addEventListener('message', message);
   async function openStream(): Promise<void> {
-    if (session || opening || suspended || stalled || maintenance?.member === member() || !active()) return;
+    if (session || keptForPlace() || opening || suspended || stalled && (!visibleTarget() || Date.now() < retryAt)
+      || maintenance?.member === member() || !active()) return;
     if (state?.transport === "host" && state.state !== "running" || state?.transport === "idle") return;
     opening = true;
     const current = generation, id = member(), conversation = options.conversation();
@@ -542,10 +656,16 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
       if (!here() || !active()) { await api.desktopClose(opened.session); return; }
       session = opened; streamMember = id; streamConversation = conversation;
       clearTimeout(stallTimer); stalled = false; everConnected = false;
-      stallTimer = setTimeout(() => { if (session === opened && !connected) { stalled = true; reportProblem("show the screen"); draw(); } }, STALL_MS);
+      stallTimer = setTimeout(() => {
+        if (session !== opened || connected) return;
+        if (visibleTarget()) closeStream(true);
+        stalled = true; retryAt = Date.now() + pollDelay;
+        reportProblem("show the screen"); draw();
+      }, STALL_MS);
     } catch {
       if (here()) {
-        takeOnConnect = false; stalled = observed?.transport === "host";
+        takeOnConnect = false; stalled = observed?.transport === "host" || visibleTarget();
+        retryAt = Date.now() + pollDelay;
         if (waking) { waking = false; if (state) state = { ...state, lifecycle: undefined }; }
         reportProblem("show the screen", observed);
         if (observed?.transport === "host") {
@@ -566,10 +686,9 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     else destination.prepend(frame);
   }
   function update(next: DesktopState): void {
-    if (state && ((state.transport ?? "docker") !== (next.transport ?? "docker")
-      || next.transport === "host" && next.target !== state.target)) {
+    if (state && !sameTarget(state, next)) {
       lastFrames.delete(member());
-      closeStream();
+      closeStream(next.state === 'running');
       opening = false;
       stalled = suspended = false;
     }
@@ -580,12 +699,15 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     if (beganWork) options.openPanel();
     const previousWaiting = waitingTurns();
     if (!next.host_request && !next.works?.some(work => work.state === "waiting_control")) parkFrame();
-    // The core found the screen out of reach (a remote host's forward failed): wait for a retry, not the next poll.
-    if (next.state === 'running' && next.error === 'viewer_unreachable' && !stalled) { closeStream(); stalled = true; }
+    // A refused stream needs a new lease, with a delay before retrying a visible target.
+    if (next.state === 'running' && next.error === 'viewer_unreachable' && !stalled) {
+      closeStream(true); stalled = true; retryAt = Date.now() + pollDelay;
+    }
+    if (session && next.state !== 'running') closeStream();
     // A status read taken before the wake press landed must not put the screen back to sleep.
     if (waking && next.state !== 'stopped' && next.state !== 'missing') waking = false;
     state = maintenance?.member === member() ? { ...next, lifecycle: maintenance.phase } : waking ? { ...next, lifecycle: 'waking' } : next;
-    stateMember = member();
+    stateMember = member(); stateConversation = options.conversation();
     if (next.error && !['docker_missing', 'docker_stopped', 'disabled'].includes(next.error) && !maintenance && !waking &&
         stateProblem !== next.error) reportProblem("show the screen", next);
     stateProblem = next.error;
@@ -601,10 +723,9 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     if (maintenance?.member !== member() && active() && next.state === 'running') void openStream();
     draw();
   }
-  /** R-COMP-SWITCH-01: the stream or the state on this panel belongs to another member than the one now open. A page that is
-   *  not on screen when the sidebar switches members is not refreshed (agent.ts switchThread), so the panel catches up as
-   *  it is shown or synced: the old stream is closed, never renewed or painted for the new member. */
-  const foreign = (): boolean => !!session && streamMember !== member() || stateMember !== undefined && stateMember !== member();
+  /** R-COMP-SWITCH-01: the old view may stay connected, but only its own conversation may paint it. */
+  const foreign = (): boolean => !!session && (streamMember !== member() || streamConversation !== options.conversation())
+    || stateMember !== undefined && (stateMember !== member() || stateConversation !== options.conversation());
   let pollDelay = 2000;
   let stateProblem: string | undefined;
   const pollGate = visibilityGate(() => { clearTimeout(timer); void poll(); }, () => host.isConnected && (visible || !!session));
@@ -620,7 +741,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
       // The core renews a connected lease from the authenticated socket and live work metadata.
       const next = opened ? await api.desktopRenew(opened.session).catch(async error => {
         if (!here()) throw error;
-        closeStream(); current = generation;
+        closeStream(true); current = generation;
         return api.desktopStatus(id, conversation);
       }) : await api.desktopStatus(id, conversation);
       if (here()) {
@@ -645,9 +766,13 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     interactive = false; send(false); draw();
     try {
       const next = request ? await api.desktopControl(opened.session, held, request) : await api.desktopControl(opened.session, held);
-      if (current !== generation || session !== opened) return false;
+      if (session !== opened) {
+        const kept = keptFor(opened);
+        if (kept) { kept.state = next; kept.watching = !held || next.control !== 'owner'; }
+        return false;
+      }
       update(next); send(held, pointer);
-      if (held) frame.focus({ preventScroll:true });
+      if (held && visible) frame.focus({ preventScroll:true });
       if (held && state?.control === 'owner' && !interactive) takeTimer = setTimeout(() => { if (session === opened && state?.control === 'owner' && !interactive) void takeFailed(opened); }, TAKE_MS);
       return true;
     } catch {
@@ -657,7 +782,11 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
         cardFailure(options.timeline.querySelector('.desktop-takeover-card, .computer-card'), () => { if (held) void control(true); else void handback(); }, undefined, t(held ? 'memberComputer.takeFailed' : 'memberComputer.returnFailed'));
       }
       return false;
-    } finally { changing = false; if (current === generation) draw(); }
+    } finally {
+      const kept = keptFor(opened);
+      if (kept) kept.changing = false;
+      if (session === opened) { changing = false; draw(); }
+    }
   }
   /** The core gave the lease but the screen never took the owner's input: give the lease back without counting it as
    *  done (no request id) and watch again, where Take control tries once more. */
@@ -674,8 +803,8 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     reportProblem("pass control through the viewer");
     draw();
   }
-  const expand = (on: boolean): void => {
-    if (on && !panel.hasAttribute('data-expanded')) { returnPanelOpen = options.panelVisible(); options.openPanel(); }
+  const expand = (on: boolean, openPanel = true): void => {
+    if (on && openPanel && !panel.hasAttribute('data-expanded')) { returnPanelOpen = options.panelVisible(); options.openPanel(); }
     panel.toggleAttribute('data-expanded', on);
     // Back does what Escape does: it folds the view while the owner only watches. While the owner holds the controls it does
     // nothing here (inside the screen the computer has the side buttons): ending control is the pill's own button.
@@ -864,18 +993,40 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   function refreshPanel(): void {
     // Back to the conversation whose stream is still open: nothing to reconnect.
     if (session && streamMember === member() && streamConversation === options.conversation()) { clearTimeout(lingering); draw(); return; }
-    closeStream(); requested = undefined; opening = false; notice.hidden = true; suspended = false; pollDelay = 2000; clearReview(); demonstration = undefined; skillName = ''; teachingBusy = drafting = waking = false; state = undefined; stateMember = undefined; stateProblem = undefined; timeline.clear(); clearTimeout(timer); draw(); if (visible) void poll();
+    if (!keepStream()) closeStream();
+    requested = undefined; opening = false; notice.hidden = true; suspended = false; pollDelay = 2000; clearReview(); demonstration = undefined; skillName = ''; teachingBusy = drafting = waking = false; state = undefined; stateMember = stateConversation = undefined; stateProblem = undefined; timeline.clear(); clearTimeout(timer);
+    if (!restoreStream()) draw();
+    if (visible) void poll();
   }
   return {
-    show() { if (foreign()) refreshPanel(); if (options.panelVisible()) void location.refresh().then(draw); visible = true; suspended = false; pollDelay = 2000; clearTimeout(lingering); clearTimeout(timer); readWallpaper(); void poll(); },
-    hide(close = false) { location.hide(); visible = false; if (close || panel.hasAttribute('data-expanded')) closeStream(); else leave(); timeline.clear(); draw(); },
+    show() {
+      visible = true;
+      if (foreign()) refreshPanel();
+      if (!session) restoreStream();
+      if (options.panelVisible()) void location.refresh().then(draw);
+      suspended = false; pollDelay = 2000; clearTimeout(lingering); clearTimeout(timer); readWallpaper(); draw(); void poll();
+    },
+    hide(closePreview = false) {
+      location.hide(); visible = false; leave(closePreview); timeline.clear(); draw();
+    },
     refresh: refreshPanel,
     refreshStatus: pollGate.run,
-    sync() { if (foreign()) refreshPanel(); if (!options.panelVisible()) location.hide(); timeline.sync(); if (!active() && session) leave(); else { clearTimeout(lingering); if (active() && state?.state === 'running') void openStream(); } draw(); },
+    sync() {
+      if (foreign()) refreshPanel();
+      if (!options.panelVisible()) {
+        location.hide();
+        if (panel.hasAttribute('data-expanded')) keepStream();
+      } else if (!session) restoreStream();
+      timeline.sync();
+      if (!active() && session) leave();
+      else { clearTimeout(lingering); if (active() && state?.state === 'running') void openStream(); }
+      draw();
+    },
     carry(before) { if (before.contains(frame)) parkFrame(); },
     takeover() { visible = true; acquire(); void poll(); },
     /** The panel's computer row was pressed: a sleeping or stopped computer is started, a running one opens in the larger view. */
     watch() { visible = true; enlarge.click(); },
+    expanded: () => panel.hasAttribute('data-expanded'),
     waitingForOwner: turnId => waiting().some(work => work.turn_id === turnId),
   };
 }

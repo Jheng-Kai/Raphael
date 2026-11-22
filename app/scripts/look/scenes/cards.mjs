@@ -11,8 +11,8 @@ const entry = [member(1),wait('[data-card-desktop-screen] iframe:not([hidden])')
 const hostCard = {computerCard: 'signin', browserHandback: true,
   desktop:{transport:'host',target:'chrome-tab',state:'running',ready:true,control:'member',
     host_request:{id:'card-pc',request_id:'card-pc',turn_id:140,state:'waiting_control',tool:'get_browser_state',reason:'sign_in',detail:'請登入範例帳戶。'}}};
-const hostTake = [member(1), wait('[data-computer-card="card-pc"] .desktop-last:not([hidden])'),
-  click('[data-computer-card="card-pc"] [data-act="card-takeover"].pri'),
+const hostCardPreview = [member(1), wait('[data-computer-card="card-pc"] .desktop-last:not([hidden])')];
+const hostTake = [...hostCardPreview, click('[data-computer-card="card-pc"] [data-act="card-takeover"].pri'),
   wait('.desktop-panel[data-expanded][data-interactive="true"] iframe[src*="transport=host"]')];
 export default [
   ...Object.entries({
@@ -32,11 +32,17 @@ export default [
   scene('card-question-key','A focused question takes B, while typing A stays in the answer field', [member(1),wait('[data-owner-question="owner-choice"]'),type('[data-owner-answer-input]','A'),check('card-question-typing'),click('[data-owner-question="owner-choice"] .card-title'),key('b'),wait('[data-card-state="answered"]'),check('card-question-key')],{ownerQuestion:'asked'}),
   scene('card-computer-waiting','The existing live stream sits inside the waiting card', [...entry,check('card-computer-inline')],computer),
   scene('desktop-host-no-card', 'Chrome work opens the Computer tab by itself and puts no card in the conversation',
-    [member(1), wait('.desktop-screen iframe[src*="transport=host"]:not([hidden])'), check('desktop-host-no-card'), check('desktop-host-frame')],
+    [member(1), wait('.desktop-screen[data-host-browser] iframe[src*="transport=host"]:not([hidden])'), check('desktop-host-no-card'), check('desktop-host-frame')],
     {running:"fresh",runningMember:1, desktop:{transport:"host",target:"chrome-tab",state:"running",ready:true,control:"member",
       works:[{id:"chrome-tab",turn_id:2,transport:"host",state:"running",tool:"browser_open",reason:""}]}}),
-  scene('desktop-host-takeover', 'Take control opens the host browser in the existing large viewer',
-    [...hostTake, wait('[data-desktop="return"]:not([hidden])'), {action:'desktop-owner-typing'}, check('desktop-host-frame')], hostCard),
+  scene('desktop-host-card', 'The Chrome sign-in card preserves the page aspect',
+    [...hostCardPreview, check('desktop-host-card-frame')], hostCard),
+  scene('desktop-host-takeover', 'Take control opens Chrome in the large viewer and a title bar press preserves the same page and owner input',
+    [...hostTake, wait('[data-desktop="return"]:not([hidden])'), check('desktop-stream'), click('.window-chrome [data-window-drag]'),
+      check('desktop-host-outside-press'), {action:'desktop-owner-typing'}, check('desktop-host-frame')], hostCard),
+  scene('desktop-host-tabs-popup', 'A sign-in popup is the selected tab and takes input in the enlarged view',
+    [...hostTake, wait('[data-browser-tab="popup"][aria-pressed="true"]'), {action:'desktop-owner-typing'},
+      check('desktop-host-frame'), check('desktop-host-tabs-control'), check('desktop-host-tabs-popup')], {...hostCard, hostTabs:'popup'}),
   scene('desktop-host-handback', 'Done returns the host browser tab from the same viewer',
     [...hostTake, click('[data-desktop="return"]'), waitGone('[data-computer-card="card-pc"]'), check('host-handoff-returned')], hostCard),
   scene('desktop-host-skip-idle', 'Skipping a Chrome sign-in removes the card and leaves the Computer tab idle',

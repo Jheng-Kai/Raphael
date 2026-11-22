@@ -4,6 +4,14 @@ import { reviewZh } from "./review-catalogs";
 import { missingZh } from "./missing-catalogs";
 // Traditional Chinese is the source catalogue. Placeholders are interpolated by t().
 export const zhTW = {
+  "browser.tabs": "瀏覽器分頁",
+  "browser.newTab": "新增分頁",
+  "browser.closeTab": "關閉分頁",
+  "browser.back": "上一頁",
+  "browser.forward": "下一頁",
+  "browser.reload": "重新載入",
+  "browser.address": "網址",
+  "browser.navigationFailed": "無法開啟這個網頁。",
   "memberComputer.switchFailed": "無法把電腦選擇傳給成員。",
   "memberComputer.stopFailed": "無法停止這項電腦工作。",
   "memberComputer.returnFailed": "無法將電腦控制權交還給成員。",

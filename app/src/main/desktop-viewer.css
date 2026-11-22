@@ -47,6 +47,59 @@
    2 px off 1280:900, the seat's picture fitted one side and the other showed a dark sliver. The running screen covers it. */
 .desktop-screen { position: relative; width: 100%; aspect-ratio: 1280 / 900; overflow: clip; background: var(--content); box-shadow: inset 0 0 0 1px var(--line); border-radius: var(--r-lg); }
 .desktop-screen iframe, [data-card-desktop-screen] iframe, [data-card-screen] iframe { position: relative; z-index: 1; display: block; width: 100%; height: 100%; border: 0; }
+/* The Chrome toolbar and canvas share the frame; the preview's enlarge button covers only the canvas. */
+.desktop-panel {
+  --host-browser-text: var(--text);
+  --host-browser-text-2: var(--text-2);
+  --host-browser-panel: var(--panel);
+}
+.desktop-screen[data-host-browser] { display: grid; grid-template-rows: auto auto; grid-template-columns: minmax(0, 1fr); aspect-ratio: auto; }
+.desktop-screen[data-host-browser]::before { content: ""; grid-area: 2 / 1; width: 100%; aspect-ratio: 1280 / 900; }
+.desktop-screen[data-host-browser] > :is(iframe, .desktop-open) { grid-area: 2 / 1; position: absolute; inset: 0; min-height: 0; }
+.host-browser-toolbar {
+  grid-area: 1 / 1; z-index: 2; min-width: 0; container-type: inline-size;
+  --text: var(--host-browser-text); --text-2: var(--host-browser-text-2);
+  --panel: var(--host-browser-panel);
+  background: var(--panel); color: var(--text); border-bottom: 1px solid var(--line);
+}
+.host-browser-tabs, .host-browser-address-row, .host-browser-history, .host-browser-tab, .host-browser-strip { display: flex; align-items: center; }
+.host-browser-tabs { gap: var(--sp-1); padding: var(--sp-1) var(--sp-2) 0; }
+.host-browser-strip {
+  flex: 0 1 auto; min-width: 0; gap: var(--sp-1); overflow-x: auto;
+  overscroll-behavior-x: contain; scrollbar-width: thin; padding: 3px;
+}
+.host-browser-tab {
+  flex: 0 0 auto; width: clamp(104px, 20cqi, 184px); min-width: 0;
+  border-radius: var(--r-sm); padding-inline: var(--sp-1);
+}
+.host-browser-tab[data-shown] { background: var(--selected); }
+.host-browser-tab:not([data-shown]):hover { background: var(--hover); }
+.host-browser-toolbar .btn.icon { flex: none; border-radius: var(--r-pill); }
+.host-browser-toolbar .btn.host-browser-tab-button {
+  display: flex; align-items: center; justify-content: flex-start; flex: 1 1 auto; gap: var(--sp-1);
+  width: auto; min-width: 0; padding-inline: var(--sp-1); color: var(--text);
+  min-height: var(--h-tab); border-radius: var(--r-sm); border-color: transparent; font-size: var(--fs-xs);
+  background: transparent;
+}
+.host-browser-toolbar .btn.host-browser-tab-button:is(:hover, :active):not(:disabled) { background: transparent; }
+.host-browser-tab[data-shown] .host-browser-tab-button { font-weight: var(--weight-medium); }
+.host-browser-tab-title, .host-browser-url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.host-browser-favicon { display: flex; align-items: center; justify-content: center; flex: none; width: 16px; height: 16px; color: var(--text-2); }
+.host-browser-favicon :is(img, svg) { width: 16px; height: 16px; }
+.host-browser-address-row { gap: var(--sp-1); padding: var(--sp-1) var(--sp-2) var(--sp-2); }
+.host-browser-url, .host-browser-address {
+  flex: 1; min-width: 0; height: var(--h-field); padding: 0 var(--sp-2);
+  border: 1px solid transparent; border-radius: var(--r-pill); font-size: var(--fs-xs);
+}
+.host-browser-url { line-height: calc(var(--h-field) - 2px); color: var(--text-2); }
+.host-browser-address { border-color: var(--line); background: var(--surface-2); color: var(--text); }
+.host-browser-address[aria-invalid] { border-color: var(--err); }
+.host-browser-error { margin: 0 var(--sp-2) var(--sp-2); color: var(--err); font-size: var(--fs-xs); }
+@container (max-width: 440px) {
+  .host-browser-tab { width: 56px; }
+  .host-browser-toolbar .btn.host-browser-tab-button { gap: 0; }
+  .host-browser-tab-title { width: 0; }
+}
 /* noVNC measures the viewport during connection. Give the waiting frame the
    screen's dimensions without displacing the placeholder. */
 iframe[data-desktop-stream][hidden] { display: block !important; position: absolute; inset: 0; visibility: hidden; }
@@ -59,7 +112,7 @@ iframe[data-desktop-stream][hidden] { display: block !important; position: absol
 .desktop-placeholder { position: relative; min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-3); padding: var(--sp-3); overflow-wrap: anywhere; text-align: center; color: var(--text-2); pointer-events: none; }
 .desktop-state-actions, .desktop-state-recovery { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--sp-2); }
 .desktop-state-actions .btn { --btn: var(--desktop-frame-bg); --btn-edge: color-mix(in srgb, var(--desktop-frame-text) 30%, var(--desktop-frame-bg)); --hover: color-mix(in srgb, var(--desktop-frame-text) 10%, var(--desktop-frame-bg)); --pressed: color-mix(in srgb, var(--desktop-frame-text) 18%, var(--desktop-frame-bg)); color: var(--desktop-frame-text); max-width: 100%; white-space: normal; }
-.desktop-panel:not([data-expanded]) .desktop-screen:has(.desktop-placeholder:not([hidden])) { display: flex; align-items: stretch; }
+.desktop-panel:not([data-expanded]) .desktop-screen:not([data-host-browser]):has(.desktop-placeholder:not([hidden])) { display: flex; align-items: stretch; }
 .desktop-panel:not([data-expanded]) .desktop-placeholder { width: 100%; }
 .desktop-placeholder > * { pointer-events: auto; }
 [data-card-desktop-screen] > .desktop-placeholder, [data-card-screen] > .desktop-placeholder { position: absolute; inset: 0; }
@@ -109,6 +162,10 @@ iframe[data-desktop-stream][hidden] { display: block !important; position: absol
 .desktop-panel[data-expanded]:has(.desktop-notes > :not([hidden])) .desktop-shell { --desktop-foot: 88px; }
 .desktop-panel[data-expanded] :is(.desktop-screen, .desktop-review, .desktop-foot) { width: min(100cqw, (100cqh - var(--desktop-foot)) * 1280 / 900); min-width: 0; }
 .desktop-panel[data-expanded] :is(.desktop-screen, .desktop-review) { grid-area: 1 / 1; height: auto; min-height: 0; aspect-ratio: 1280 / 900; }
+.desktop-panel[data-expanded] .desktop-screen[data-host-browser] {
+  width: min(100cqw, max(0px, (100cqh - var(--desktop-foot) - var(--host-browser-toolbar-height, 0px)) * 1280 / 900));
+  aspect-ratio: auto;
+}
 .desktop-panel[data-expanded] .desktop-caption { display: none; }
 .desktop-panel[data-expanded] .desktop-screen { box-shadow: none; border-radius: var(--r-md); background: var(--desktop-frame-bg); }
 /* The skill review and the file changes take the screen's place, in a quiet box of its size that scrolls on its own. */

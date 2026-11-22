@@ -1,6 +1,14 @@
 import type { Messages } from "./zh-TW";
 
 export const vi = {
+  "browser.tabs": "Thẻ trình duyệt",
+  "browser.newTab": "Thẻ mới",
+  "browser.closeTab": "Đóng thẻ",
+  "browser.back": "Quay lại",
+  "browser.forward": "Tiến tới",
+  "browser.reload": "Tải lại",
+  "browser.address": "Địa chỉ",
+  "browser.navigationFailed": "Không thể mở trang này.",
   "memberComputer.switchFailed": "Không gửi được lựa chọn máy tính cho thành viên.",
   "memberComputer.stopFailed": "Không dừng được tác vụ trên máy tính.",
   "memberComputer.returnFailed": "Không trả được quyền điều khiển máy tính cho thành viên.",
