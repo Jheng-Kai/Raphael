@@ -10,7 +10,7 @@ export default [
   scene("reply-split-bubbles", "Authored reply messages preserve lists and code in separate bubbles", [member(1), wait('.tn[data-id="2"] .ra .chat-message'), check("reply-split"), check("reply-full")], { splitReplies: true }),
   {
     ...scene("overlay-learned-pill", "One passive learned-word pill has a localized Undo for its complete batch", [hover('#learned-pill'), check("learned-pill")], {
-      learnedNotices: [{ words: ["Composio", "HiKari"], token: "synthetic-batch", language: "zh-TW" }],
+      learnedNotices: [{ words: ["Composio", "HiKari"], revision: 1, can_undo: true, language: "zh-TW" }],
     }),
     entry: "learned.html", ready: "#learned-pill:not([hidden])",
   },

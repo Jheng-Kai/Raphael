@@ -86,17 +86,16 @@ test("a slow report cannot overtake release, and pointer cancellation clears a h
   mouse.dispose();
 });
 
-test("the learned body and Undo report only their bounds, never the window margin", async () => {
+test("only Undo receives clicks in the learned window", async () => {
   document.body.innerHTML = '<div id="learned-pill"><button class="learned-undo">Undo</button></div>';
   const body = document.querySelector<HTMLElement>("#learned-pill")!, undo = document.querySelector<HTMLElement>("button")!;
-  body.style.pointerEvents = undo.style.pointerEvents = "auto";
-  vi.spyOn(body, "getBoundingClientRect").mockReturnValue(new DOMRect(50, 12, 300, 40));
+  undo.style.pointerEvents = "auto";
   vi.spyOn(undo, "getBoundingClientRect").mockReturnValue(new DOMRect(280, 20, 60, 24));
   const send = vi.fn().mockResolvedValue(undefined);
-  const mouse = reportMouseRegions(document.body, send, "#learned-pill, .learned-undo");
+  const mouse = reportMouseRegions(document.body, send, ".learned-undo");
   mouse.reset(4);
   await vi.waitFor(() => expect(send.mock.lastCall?.[0].rects).toEqual([
-    { x: 50, y: 12, width: 300, height: 40 }, { x: 280, y: 20, width: 60, height: 24 },
+    { x: 280, y: 20, width: 60, height: 24 },
   ]));
   body.hidden = true;
   await vi.waitFor(() => expect(send.mock.lastCall?.[0].rects).toEqual([]));

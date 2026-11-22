@@ -407,13 +407,17 @@ existing Escape handling.
 used for external editor corrections. Core owns final term acceptance and opaque,
 single-use batch Undo, including prior evidence restoration. A separate passive
 `learned.html` native window shows the learned batch and localized Undo at the active
-monitor's horizontal center, 16 px above its taskbar. It expires after five seconds
-without hover. Its window never has a title bar, not even in its style, whatever tao rewrites
-(R-LEARN-WIN-01, `overlay/frame.rs`). The window is there only while a notice is: it is made hidden and with an empty
-title, shown without activation once the notice is sized, placed and shaped, and hidden again 220 ms after the notice ends
-(Undo, expiry or a click) unless a new one came; no pale bar and no English title stays on a Chinese interface
-(R-LEARN-WIN-02, `learned.rs`). The ordinary overlay remains click-through. Fixture pill evidence
-does not establish native hit-testing, positioning, paste or persistence.
+monitor's horizontal center, 16 px above its taskbar. Every saved batch is queued once,
+including when a new dictation or quick answer is already underway. The native countdown
+starts at reveal and allows ten seconds for one word, plus two seconds per additional
+word. The shell pauses it anywhere over the pill and resumes the remaining time when
+the pointer leaves. Only Undo receives clicks. The core holds each batch's Undo token
+through the queue and hover, and releases it on expiry or Undo. The window is made
+hidden with an empty title (R-LEARN-WIN-01), shown without activation after layout,
+and hidden after the 220 ms fade interval before showing the next batch (R-LEARN-WIN-02).
+The ordinary overlay stays independent. Run the `overlay-learned-pill` scene in both
+themes at 1120,720,1920x1080. Native hit testing, positioning, paste and persistence
+are covered by separate native acceptance.
 
 `stable-click` records the clicked view control and persistent content above it,
 then rejects position/size changes over 1px after settling. Normal look clicks on
@@ -683,7 +687,7 @@ npm.cmd run native -- conversation-and-learned-pill voice-conversation locale-sw
 `conversation-and-learned-pill` uses the bundled debug shell, real Rust correction Tracker, core
 acceptance (the offline model's `native_learn_review` names the replaced words) and SQLite evidence. It checks owner
 expansion, conversation scrolling, two Escape presses for a pending fake answer, that nothing is learned while
-`auto_learn` is off, a complete learned batch once it is on, hover retention past the ten-second Undo window, exact
+`auto_learn` is off, a complete learned batch once it is on, retention while the real desktop pointer hovers over the click-through caption past the two-word countdown, exact
 batch/evidence Undo and expiry. Read-only Win32 inspection
 checks the learned window's NOACTIVATE style, that its window style has no title bar
 (R-LEARN-WIN-01: while shown, after Undo and after expiry), rounded click region, click-through
@@ -723,8 +727,9 @@ history. The words are still pasted, so nothing is lost, and the NOT_CLEANED not
 R-UI-70: the desktop overlay and learned notice start click-through. The real pages
 report visible physical client rectangles over the shell-only floating_controls IPC,
 allowlisted only for the calling overlay/learned window. The overlay reports the
-question card, question buttons, expansion button and Stop; the learned page reports
-its body and Undo. A 30 ms Tauri cursor-position poll exists only while bounds remain.
+question card, question buttons, expansion button and Stop. The learned page reports
+only Undo. While the pill is shown, a separate cursor-position poll tracks hover over
+the whole pill without changing its click regions.
 Scene changes/notice completion clear holds and invalidate late geometry by revision.
 UI-thread setters also reject obsolete queued changes, so a worker enable cannot
 run after an immediate hide and restore interception.

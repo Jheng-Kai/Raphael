@@ -1,56 +1,65 @@
 import { isUiLocale, setLocale, t } from "../main/i18n";
 
-export interface LearnedNotice { words: string[]; token: string; language: string; theme?: string; revision?: number }
+export interface LearnedNotice {
+  revision: number;
+  words: string[];
+  can_undo: boolean;
+  language: string;
+  theme?: string;
+}
+export type LearnedEvent = ({ type: "show" } & LearnedNotice) | { type: "dismiss"; revision: number };
 export interface LearnedActions {
-  layout(token: string, width: number, height: number): Promise<unknown>;
-  finish(token: string, undo: boolean): Promise<unknown>;
+  layout(revision: number, width: number, height: number): Promise<unknown>;
+  finish(revision: number): Promise<unknown>;
 }
 
-/** How long the pill, and its Undo, stays while the pointer is not on it: as long as every other Undo of the app (`main/undo.ts`). */
-export const LEARNED_UNDO_MS = 10_000;
-
-/** The pill has its own lifetime and never changes the dictation emblem or its subtitles. */
-export function learnedPill(root: HTMLElement, actions: LearnedActions): { show(notice: LearnedNotice): void } {
+/** The native window times the notice and observes hover even over click-through text. */
+export function learnedPill(root: HTMLElement, actions: LearnedActions) {
   const text = root.querySelector<HTMLElement>(".learned-text")!;
   const undo = root.querySelector<HTMLButtonElement>(".learned-undo")!;
-  let current: LearnedNotice | undefined, timer: ReturnType<typeof setTimeout> | undefined, leaving: ReturnType<typeof setTimeout> | undefined;
-  let hovered = false, generation = 0;
-  const close = (notice: LearnedNotice): void => {
-    if (current !== notice) return;
-    clearTimeout(timer);
-    root.classList.add("is-leaving");
-    leaving = setTimeout(() => { if (current === notice) { root.hidden = true; current = undefined; } }, 180);
-  };
-  const arm = (): void => {
-    clearTimeout(timer);
-    if (!current || hovered) return;
-    const notice = current;
-    timer = setTimeout(() => { close(notice); void actions.finish(notice.token, false).catch(() => {}); }, LEARNED_UNDO_MS);
-  };
-  root.addEventListener("mouseenter", () => { hovered = true; clearTimeout(timer); });
-  root.addEventListener("mouseleave", () => { hovered = false; arm(); });
+  let current: LearnedNotice | undefined;
+  let revision = 0;
+  let leaving: ReturnType<typeof setTimeout> | undefined;
+
   undo.addEventListener("click", () => {
     if (!current || undo.disabled) return;
-    const notice = current, epoch = generation;
-    clearTimeout(timer); undo.disabled = true;
-    void actions.finish(notice.token, true).then(() => close(notice)).catch(() => {
-      if (epoch === generation) { undo.disabled = false; arm(); }
+    const notice = current;
+    undo.disabled = true;
+    void actions.finish(notice.revision).catch(error => {
+      if (current === notice) undo.disabled = false;
+      console.warn("learned Undo failed", error);
     });
   });
-  return { show(notice) {
-    if (!notice.words.length || !isUiLocale(notice.language)) return;
-    generation++; clearTimeout(timer); clearTimeout(leaving);
-    current = notice; root.hidden = false; root.classList.remove("is-leaving");
-    setLocale(notice.language);
-    if (notice.theme === "light" || notice.theme === "dark") document.documentElement.dataset.theme = notice.theme;
-    root.querySelector<HTMLImageElement>("img")!.src = `/brand/app-emblem-${document.documentElement.dataset.theme === "dark" ? "dark" : "light"}-64.webp`;
-    text.textContent = t("dictionary.learned", { p0: notice.words.join(["zh-TW", "zh-CN", "ja"].includes(notice.language) ? "、" : ", ") });
-    undo.textContent = t("dictionary.undo"); undo.disabled = !notice.token;
-    void Promise.resolve(document.fonts?.ready).then(() => {
-      if (current !== notice) return;
-      const bounds = root.getBoundingClientRect();
-      return actions.layout(notice.token, Math.ceil(bounds.width), Math.ceil(bounds.height));
-    }).catch(() => {});
-    arm();
-  } };
+
+  return {
+    show(notice: LearnedNotice): boolean {
+      if (notice.revision <= revision || !notice.words.length) return false;
+      revision = notice.revision;
+      clearTimeout(leaving);
+      current = notice;
+      root.hidden = false;
+      root.classList.remove("is-leaving");
+      const language = isUiLocale(notice.language) ? notice.language : "zh-TW";
+      setLocale(language);
+      if (notice.theme === "light" || notice.theme === "dark") document.documentElement.dataset.theme = notice.theme;
+      root.querySelector<HTMLImageElement>("img")!.src = `/brand/app-emblem-${document.documentElement.dataset.theme === "dark" ? "dark" : "light"}-64.webp`;
+      text.textContent = t("dictionary.learned", { p0: notice.words.join(["zh-TW", "zh-CN", "ja"].includes(language) ? "、" : ", ") });
+      undo.textContent = t("dictionary.undo");
+      undo.disabled = !notice.can_undo;
+      void Promise.resolve(document.fonts?.ready).then(() => {
+        if (current !== notice) return;
+        const bounds = root.getBoundingClientRect();
+        return actions.layout(notice.revision, Math.ceil(bounds.width), Math.ceil(bounds.height));
+      }).catch(error => console.warn("learned pill could not be placed", error));
+      return true;
+    },
+
+    dismiss(endingRevision: number): void {
+      if (current?.revision !== endingRevision) return;
+      current = undefined;
+      undo.disabled = true;
+      root.classList.add("is-leaving");
+      leaving = setTimeout(() => { root.hidden = true; }, 180);
+    },
+  };
 }

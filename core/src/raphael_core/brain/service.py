@@ -783,7 +783,11 @@ class Brain:
         return found
 
     async def _dictionary_undo(self, params: dict) -> dict:
-        return {"undone": self._dictionary.undo_learning(_str(params, "token"))}
+        token = _str(params, "token")
+        if params.get("discard") is True:
+            self._dictionary.discard_learning_undo(token)
+            return {"undone": False}
+        return {"undone": self._dictionary.undo_learning(token)}
 
     async def _dictionary_learn(self, params: dict) -> dict:
         """What the user's edit of a pasted dictation teaches the dictionary. The app only asks
@@ -849,7 +853,7 @@ class Brain:
         )
         result: dict = {"learned": learned}
         if snapshots and params.get("undoable") is True:
-            result["undo"] = self._dictionary.remember_learning(snapshots)
+            result["undo"] = self._dictionary.remember_learning(snapshots, hold=params.get("hold_undo") is True)
         if rules:
             result["rules"] = rules
         if reverted:

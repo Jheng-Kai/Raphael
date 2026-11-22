@@ -303,6 +303,22 @@ def test_undo_learning_removes_only_its_batch_and_evidence_once(conn):
     assert d.undo_learning(token) is False
 
 
+def test_held_learning_undo_survives_the_transient_token_limits(conn, monkeypatch):
+    dictionary = DictionaryStore(conn)
+    monkeypatch.setattr("raphael_core.brain.dictionary.time.monotonic", lambda: 0)
+    before = dictionary.learning_snapshot("Composio")
+    dictionary.learn_pair("Composio", "Compose")
+    held = dictionary.remember_learning([before], hold=True)
+    transient = dictionary.remember_learning([before])
+    monkeypatch.setattr("raphael_core.brain.dictionary.time.monotonic", lambda: 601)
+    for _ in range(65):
+        dictionary.remember_learning([before])
+    assert not dictionary.undo_learning(transient)
+    assert dictionary.undo_learning(held)
+    assert not dictionary.undo_learning(held)
+    assert dictionary.list() == []
+
+
 def test_undo_restores_prior_evidence_and_preserves_later_edits(conn):
     d = DictionaryStore(conn)
     d.learn_pair("Composio", "Compose")

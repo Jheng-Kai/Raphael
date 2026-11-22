@@ -2035,6 +2035,19 @@ async def test_dictionary_undo_uses_an_opaque_batch_token(router, conn):
     assert await router.call("dictionary.undo", {"token": result["undo"]}) == {"undone": False}
 
 
+async def test_dictionary_undo_can_release_a_held_token_without_removing_the_batch(router):
+    result = await router.call("dictionary.learn", {
+        "corrections": [{"word": "Composio", "misheard": "Compose"}],
+        "undoable": True,
+        "hold_undo": True,
+    })
+    assert result["learned"] == ["Composio"]
+    token = result["undo"]
+    assert await router.call("dictionary.undo", {"token": token, "discard": True}) == {"undone": False}
+    assert await router.call("dictionary.undo", {"token": token}) == {"undone": False}
+    assert [entry["word"] for entry in (await router.call("dictionary.list", {}))["entries"]] == ["Composio"]
+
+
 # --- dictation.tidy: the tidy key (Right Alt+T) ---------------------------------------------------
 
 

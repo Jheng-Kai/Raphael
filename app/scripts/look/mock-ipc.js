@@ -2463,7 +2463,7 @@ export function installMock(fixture, config = {}, target = window) {
       }
       if (command === "learned_subscribe") {
         state.learnedChannel = args.channel;
-        for (const notice of variant.learnedNotices ?? []) args.channel.onmessage({ ...copy(notice), theme: config.theme ?? "light" });
+        for (const notice of variant.learnedNotices ?? []) args.channel.onmessage({ type: "show", ...copy(notice), theme: config.theme ?? "light" });
         return;
       }
       if (command === "learned_layout" || command === "learned_finish") return;
