@@ -46,7 +46,7 @@
 .modal-body .skl-page-actions .ctl .sel { width: auto; max-width: 100%; justify-content: flex-end; gap: var(--sp-1); padding-inline: var(--sp-2); border-color: transparent; background-color: transparent; color: var(--text-2); }
 .modal-body .skl-page-actions .ctl .sel:hover:not(:disabled), .modal-body .skl-page-actions .ctl .sel[aria-expanded="true"] { border-color: transparent; background-color: transparent; color: var(--text); }
 .skl-source, .skl-about { margin: 0 0 var(--sp-3); color: var(--text-3); font-size: var(--fs-sm); overflow-wrap: anywhere; }
-.modal-body .slist.skl-skills > .row.skl-entry { padding-inline: 0 var(--sp-4); }
+.modal-body .slist.skl-skills > .row.skl-entry { padding-inline: var(--sp-4); }
 
 .skl-access-menu { max-height: min(360px, calc(100vh - 16px)); }
 
