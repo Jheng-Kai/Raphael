@@ -12,6 +12,7 @@ export default [
   scene("recovered-member-reply", "A member's stored malformed reply keeps its later links, list and code", [member(1), ...recovered], { richReply: "brokenReply" }),
   scene("recovered-room-reply", "A room shows the words of a stored malformed reply", [room(1), ...recovered], { richReply: "brokenReply" }),
   scene("team-file-reply", "A file of the team folder is a real button in the reply", [wait('[data-act="team-file-open"]')], { richReply: "teamFile" }),
+  scene("reply-local-links", "Links written as [words](<D:\path>) or with a title read as words and a path, never raw markdown", [wait('.ra-scroll code')], { richReply: "localLinks" }),
   scene("rich-chief", "Chief reply has ordered rich cards outside text bubbles", [...ready, scroll(table)], { richReply: true }),
   scene("rich-member", "Member reply shares the same typed rich content", [member(1), ...ready, scroll(table)], { richReply: true }),
   scene("rich-room", "Group reply shares the same rich cards", [room(1), ...ready, scroll(table)], { richReply: true }),

@@ -4,8 +4,6 @@ export const tr = {
   "memberComputer.mode": "Bilgisayar",
   "memberComputer.host": "Bu bilgisayar",
   "memberComputer.docker": "Yalıtılmış bilgisayar (Docker)",
-  "memberComputer.hostHint": "İntranette oturum açabilmeniz için bu bilgisayardaki Raphael’e ait Chrome’u kullanır.",
-  "memberComputer.dockerHint": "Yalıtılmış bir Docker ortamında çalışır.",
   "memberComputer.desktopControl": "Masaüstünü kontrol et",
   "memberComputer.showTab": "Chrome sekmesini göster",
   "memberComputer.setup": "Yalıtılmış bilgisayarı (Docker) kurmama yardım et.",

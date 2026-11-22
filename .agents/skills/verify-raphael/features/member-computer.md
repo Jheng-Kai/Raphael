@@ -12,10 +12,10 @@ control is separately enabled per member.
 
 Run from `app/`:
 ```sh
-npm run look -- member-computer-host member-computer-docker card-browser-sign-in --theme both --width 1120,720,1920x1080
+npm run look -- card-browser-sign-in --theme both --width 1120,720,1920x1080
 ```
 
-Inspect both dropdown states and the sign-in card with its Chrome tab action and Done.
+Inspect the sign-in card with its Chrome tab action and Done. Member settings shows the mode dropdown and desktop control switch on separate rows.
 The fixture shows the controls only. Run the local-page Chrome test in
 `core/tests/computer/test_host_computer.py` for browser state, tab isolation,
 background input, downloads and idle close. Use an isolated native data directory for

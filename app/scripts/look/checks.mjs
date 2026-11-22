@@ -574,10 +574,13 @@ export function checkRendered(name, context = {}) {
     const rowOf = key => document.querySelector(`.skl-pack[data-skl-pack="${key}"]`);
     const accessOf = key => rowOf(key)?.querySelector('.skl-access span')?.textContent.trim();
     // A package's page stands in the list's place (R-SKILL-17): it has no importer of its own.
-    const onPage = name === 'skill-library-open' || name === 'skill-library-page-top';
+    const onPage = name === 'skill-library-open' || name === 'skill-library-page-top' || name === 'skill-library-skill-details';
     if (name !== 'member-skills-library' && !onPage) {
       const pane = document.querySelector('.modal-scrim .skl');
       require(pane?.getAttribute('aria-label') === '團隊技能', 'the Settings section names Team skills');
+      const head = pane.closest('.set-content').querySelector('.set-head');
+      require(head.querySelector('h1#set-title')?.textContent.trim() === '團隊技能' &&
+        visible(head.querySelector('.close-button')), 'the list keeps its Team skills title and shared close');
       require(visible(pane) && pane.querySelectorAll('[data-skl="import-go"]').length === 1 && pane.firstElementChild?.matches('.skl-import'), 'the importer is the first card of the tab, with one 匯入');
       require(!pane.querySelector('.skl-head, .skl-drop-hint') && !pane.previousElementSibling?.matches?.('p'), 'nothing is written between the tab name and its first card');
       const box = pane.getBoundingClientRect();
@@ -609,22 +612,41 @@ export function checkRendered(name, context = {}) {
       require(accessOf('set:1') === '還沒給任何人' && accessOf('pack:2') === '小晴、小森' && accessOf('skill:3') === '整個團隊', `who may use each is said on its row (${accessOf('set:1')} / ${accessOf('pack:2')} / ${accessOf('skill:3')})`);
       require(!rowOf('skill:3').querySelector('.skl-count, [data-skl="open"]') && rowOf('skill:3').querySelector('.skl-single .d')?.textContent.startsWith('把會議逐字稿整理成決議與待辦'), 'a skill alone is one row: its words under its name, nothing to open');
     }
-    if (onPage) {
+    if (onPage && name !== 'skill-library-skill-details') {
       const page = document.querySelector('.modal-scrim .skl-page'), head = page?.querySelector('.skl-page-head');
       require(visible(page) && !document.querySelector('.modal-scrim .skl-import, .modal-scrim .skl-list'), "the package's page takes the list's place: no importer, no other package");
       const back = head.querySelector('[data-skl="back"]');
       roundBack(back);
       require(document.activeElement === back, 'the focus is on the back arrow');
-      const title = head.querySelector('.skl-page-name');
+      const title = head.querySelector('h1.skl-page-name');
       require(title?.textContent.trim().length > 0 && title.scrollWidth <= title.clientWidth + 1, "the package's name is whole");
-      const close = head.querySelector('.close-button'), actions = page.querySelector('.skl-page-actions .ctl');
-      require(visible(close) && page.querySelectorAll('.close-button').length === 1, "the shared close stands beside the package title");
-      require(visible(actions.querySelector('.skl-access')) && visible(actions.querySelector('[data-skl="more"]')) && actions.lastElementChild?.matches('.tg[role="switch"]'), "access and ⋯ precede the switch under the title");
-      const box = page.getBoundingClientRect();
-      for (const part of [back, close, actions]) {
-        const r = part.getBoundingClientRect();
-        require(r.left >= box.left - 10 && r.right <= box.right + 1, `the head stays inside the tab (${Math.round(r.left)}-${Math.round(r.right)} in ${Math.round(box.left)}-${Math.round(box.right)})`);
-      }
+      const close = head.querySelector('.close-button'), actionsRow = page.querySelector('.skl-page-actions');
+      const actions = actionsRow.querySelector('.ctl'), access = actions.querySelector('.skl-access');
+      const more = actions.querySelector('[data-skl="more"]'), toggle = actions.querySelector('.tg[role="switch"]');
+      const count = head.querySelector('.skl-count');
+      require(visible(close) && page.querySelectorAll('.close-button').length === 1, 'one shared close stands beside the package title');
+      require([access, more, toggle].every(visible) && access.nextElementSibling === more && more.nextElementSibling === toggle &&
+        actions.lastElementChild === toggle && head.nextElementSibling === actionsRow, 'access, ⋯ and the rightmost switch are on their own row under the title');
+      const content = page.closest('.set-content');
+      const headings = [...content.querySelectorAll('h1')];
+      require(content.firstElementChild === page && page.firstElementChild.firstElementChild === head &&
+        headings.length === 1 && headings[0] === title && title.id === 'set-title',
+        'the plugin name is the page title with no section title above it');
+      const start = content.getBoundingClientRect(), arrow = back.getBoundingClientRect(), titleBox = title.getBoundingClientRect();
+      const closeBox = close.getBoundingClientRect(), countBox = count.getBoundingClientRect(), controls = actions.getBoundingClientRect();
+      const centre = box => (box.top + box.bottom) / 2;
+      const gap = parseFloat(getComputedStyle(title.parentElement).columnGap) || 0;
+      require(visible(count) && title.nextElementSibling === count &&
+        Math.abs(arrow.left - start.left) <= 1 && Math.abs(arrow.top - start.top) <= 1 &&
+        Math.abs(titleBox.left - arrow.right - gap) <= 1 && Math.abs(closeBox.right - start.right) <= 1 &&
+        [titleBox, countBox, closeBox].every(part => Math.abs(centre(arrow) - centre(part)) <= 1),
+        'the back button, title and count start at the top left and share a centre line with the close at the right edge');
+      const room = parseFloat(getComputedStyle(actionsRow).paddingInlineEnd) || 0;
+      require(controls.left >= start.left - 1 && Math.abs(controls.right - (start.right - room)) <= 1 &&
+        controls.top >= head.getBoundingClientRect().bottom - 1, 'the controls fit on the right below the title and clear the close');
+      const actionBoxes = [access, more, toggle].map(control => control.getBoundingClientRect());
+      require(actionBoxes[0].right <= actionBoxes[1].left && actionBoxes[1].right <= actionBoxes[2].left,
+        'access and ⋯ are visibly left of the switch');
       require(document.querySelector('.modal-scrim .modal-body').scrollTop === 0, 'the page opens at its top');
       require(document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, 'the window does not scroll sideways');
     }
@@ -637,11 +659,47 @@ export function checkRendered(name, context = {}) {
       require(visible(details) && text?.textContent === description?.textContent && !document.querySelector('.skl-page'), 'the overflow reveals the full description on the list');
       require(text.scrollWidth <= text.clientWidth + 1 && text.getBoundingClientRect().height > description.getBoundingClientRect().height, 'the description wraps within the popover');
     }
+    if (name === 'skill-library-row-lit') {
+      // The lit row is the card itself, never a smaller rounded box inside it.
+      const row = document.querySelector('.skl-list > .skl-pack[data-skl-pack="set:1"]'), card = row.parentElement;
+      const fill = getComputedStyle(row).backgroundColor, r = row.getBoundingClientRect(), c = card.getBoundingClientRect();
+      require(!/rgba\(0, 0, 0, 0\)|transparent/.test(fill), `the row is lit (${fill})`);
+      require(Math.abs(r.left - c.left) <= 1.5 && Math.abs(r.right - c.right) <= 1.5 && Math.abs(r.top - c.top) <= 1.5, "the lit row is the card's full width from its top edge");
+      require(getComputedStyle(row).borderTopLeftRadius === getComputedStyle(card).borderTopLeftRadius, "the lit row has the card's corners");
+    }
     if (name === 'skill-library-open') {
       const skills = [...document.querySelectorAll('.skl-page .skl-skills .skl-skill')];
       require(skills.length === 7 && skills.every(row => visible(row.querySelector('.tg[role="switch"]'))), `the seven skills of pstack are listed on its page, each with its own switch (${skills.length})`);
       require(document.querySelector('.skl-page-name')?.textContent.trim() === 'pstack' && accessOf('set:1') === '還沒給任何人', 'the page names pstack and who may use it');
       require(document.querySelector('.skl-page .skl-source')?.textContent.includes('jheng-kai/pstack'), 'where it came from is said once');
+      const count = document.querySelector('.skl-page-head .skl-count');
+      require(count?.textContent.trim() === '7 個技能', 'the title gives the number of skills');
+      const left = document.querySelector('.skl-page [data-skl="back"]').getBoundingClientRect().left;
+      for (const selector of ['.skl-source', '.skl-about', '.skl-skills', '.skl-skill']) {
+        const part = document.querySelector(`.skl-page ${selector}`);
+        require(visible(part) && Math.abs(part.getBoundingClientRect().left - left) <= 1, `${selector} lines up with the back button`);
+      }
+      require(skills.every(row => row.offsetHeight === skills[0].offsetHeight), 'every skill row has the same height');
+      const descriptions = skills.map(row => row.querySelector('.skl-description'));
+      for (const description of descriptions) {
+        require(visible(description), 'each fixture skill has a visible description');
+        const style = getComputedStyle(description);
+        require(style.whiteSpace === 'nowrap' && style.textOverflow === 'ellipsis' && style.overflowX === 'hidden' &&
+          Math.abs(description.getBoundingClientRect().height - parseFloat(style.lineHeight)) <= 1, 'each description takes one line and ends in an ellipsis when needed');
+      }
+      require(descriptions[0].scrollWidth > descriptions[0].clientWidth, 'the long description is truncated');
+      for (const row of skills) {
+        const label = row.querySelector('.skl-label'), more = row.querySelector('[data-skl="skill-more"]'), toggle = row.querySelector('.tg');
+        require(Math.abs(label.getBoundingClientRect().left - left) <= 1, 'each skill name and description align with the back button');
+        require(visible(more) && more.nextElementSibling === toggle &&
+          more.getBoundingClientRect().right <= toggle.getBoundingClientRect().left, 'each skill puts ⋯ left of its switch');
+      }
+    }
+    if (name === 'skill-library-skill-details') {
+      const description = document.querySelector('.skl-page [data-library-skill="101"] .skl-description');
+      const details = document.querySelector('.skl-details'), text = details?.querySelector('p');
+      require(visible(details) && text?.textContent === description?.textContent, 'the skill overflow reveals its full description');
+      require(text.getBoundingClientRect().height > description.getBoundingClientRect().height, 'the full description wraps');
     }
     if (name === 'skill-library-back') {
       const body = document.querySelector('.modal-scrim .modal-body'), opener = document.querySelector('[data-skl="open"][data-key="pack:37"]');
@@ -2468,6 +2526,8 @@ export function checkRendered(name, context = {}) {
       if (name === 'completion-arrows') require(last.classList.contains('is-active') && input.getAttribute('aria-activedescendant') === last.id && document.activeElement === input, 'the arrow key carried the highlight to the last row and the focus stayed in the field');
     } else {
       require(rows.every(row => row.querySelector('.mdesc')?.textContent), 'commands and skills have descriptions');
+      // A long description takes one line, cut with an ellipsis, never several.
+      require(rows.every(row => { const d = row.querySelector('.mdesc'), s = getComputedStyle(d); return s.whiteSpace === 'nowrap' && s.textOverflow === 'ellipsis' && d.getBoundingClientRect().height <= parseFloat(s.lineHeight) + 1; }), 'each description takes one line');
       if (name === 'completion-slash' || name === 'completion-clash') require(heads.join('|') === '指令|技能', 'commands and skills have separate headings');
       if (name === 'completion-plugin') require(heads.join('|') === '技能' && menu.querySelector('.msource')?.textContent === 'Field Notes', 'the plugin is quiet small print, never a section');
       if (name === 'completion-clash') require(values.join('|') === 'review|field-notes:review|desk-notes:review', 'clashes show qualified plugin names');

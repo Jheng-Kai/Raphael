@@ -495,7 +495,9 @@ function toolsHTML(v: SettingsView): string {
 
 /** Team skills: every shared skill in its package, and who may use each (skill-library.ts). */
 function skillsHTML(v: SettingsView): string {
-  return skillLibraryHTML(v.skillLibrary ?? emptySkillLibraryView(), settingsHeaderHTML(v) + coreNote(v), settingsCloseHTML());
+  return skillLibraryHTML(v.skillLibrary ?? emptySkillLibraryView(), {
+    listHeader: settingsHeaderHTML(v), pageClose: settingsCloseHTML(), notice: coreNote(v),
+  });
 }
 
 /** Shared safety rules and local command permissions. */

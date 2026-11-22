@@ -676,7 +676,8 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .completion-menu { contain: layout; overflow-anchor: none; }
 .completion-menu button.is-active { background: var(--hover); }
 .completion-menu button:hover:not(.is-active) { background: transparent; }
-.completion-menu.is-virtual .mdesc, .completion-menu.is-virtual .mtd .mt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A skill's or a command's description is one line in the / and @ menus, as on the settings' rows. */
+.completion-menu .mdesc, .completion-menu.is-virtual .mtd .mt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .menu .msource { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-xs); color: var(--text-3); }
 /* An item that does something rather than choose (「重新搜尋麥克風」), after a line under the choices. */
 .menu-sep { height: 1px; margin: var(--sp-1) var(--sp-1); background: var(--line); }

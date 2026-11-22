@@ -4,8 +4,6 @@ export const es = {
   "memberComputer.mode": "Equipo",
   "memberComputer.host": "Este equipo",
   "memberComputer.docker": "Equipo aislado (Docker)",
-  "memberComputer.hostHint": "Usa el Chrome de Raphael en este equipo para que puedas iniciar sesión en tu intranet.",
-  "memberComputer.dockerHint": "Trabaja en un entorno aislado de Docker.",
   "memberComputer.desktopControl": "Controlar el escritorio",
   "memberComputer.showTab": "Mostrar pestaña de Chrome",
   "memberComputer.setup": "Ayúdame a configurar el equipo aislado (Docker).",

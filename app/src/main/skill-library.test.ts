@@ -3,7 +3,7 @@ import { afterEach, expect, test, vi } from "vitest";
 const api = vi.hoisted(() => ({ core: vi.fn(), membersList: vi.fn(), pickOutputFolder: vi.fn() }));
 vi.mock("./api", () => api);
 import { createSkillLibrary, failureText, skillLibraryHTML, type LibraryPackage } from "./skill-library";
-import { closeMenu, toaster } from "./ui";
+import { closeMenu, headerCloseButton, toaster } from "./ui";
 import { navInputs, pressLayer } from "./test-support/nav-layer-input";
 
 const skill = (id: number, name: string, enabled = true) => ({ id, name, description: `${name} 的說明`, enabled });
@@ -32,7 +32,15 @@ async function setup(answer: (method: string, params: Record<string, unknown>) =
   const root = document.createElement("div");
   document.body.append(root);
   // As Settings draws it: the tab scrolls, and a drawing keeps where it was scrolled.
-  const library = createSkillLibrary(root, () => { const at = root.scrollTop; root.innerHTML = skillLibraryHTML(library.view()); root.scrollTop = at; library.painted(); }, () => root);
+  const library = createSkillLibrary(root, () => {
+    const at = root.scrollTop;
+    root.innerHTML = skillLibraryHTML(library.view(), {
+      listHeader: `<header class="set-head"><h1 id="set-title">團隊技能</h1>${headerCloseButton("Close")}</header>`,
+      pageClose: headerCloseButton("Close"),
+    });
+    root.scrollTop = at;
+    library.painted();
+  }, () => root);
   await library.load();
   return { root, library, state };
 }
@@ -42,6 +50,8 @@ const accessOf = (root: ParentNode, key: string) => root.querySelector(`.skl-pac
 
 test("one row per package says who may use it, and its name opens its skills on a page of its own", async () => {
   const { root } = await setup();
+  expect(root.querySelector("h1#set-title")?.textContent).toBe("團隊技能");
+  expect(root.querySelector(".set-head .close-button")).not.toBeNull();
   expect(root.querySelector(".skl")?.getAttribute("aria-label")).toBe("團隊技能");
   expect(root.querySelectorAll(".skl-pack")).toHaveLength(3);
   expect([...root.querySelectorAll(".skl-section > h2")].map(heading => heading.textContent)).toEqual(["外掛", "技能"]);
@@ -60,15 +70,24 @@ test("one row per package says who may use it, and its name opens its skills on 
   expect(page).not.toBeNull();
   expect(root.querySelector(".skl-import, .skl-list")).toBeNull();
   expect(root.querySelectorAll(".skl-pack")).toHaveLength(1);
-  expect(page.querySelector(".skl-page-name")?.textContent).toBe("研究工具");
+  expect([...root.querySelectorAll("h1")].map(heading => heading.textContent)).toEqual(["研究工具"]);
+  expect(page.querySelector(".skl-page-head h1#set-title")?.textContent).toBe("研究工具");
+  expect(page.querySelector(".skl-page-head .skl-count")?.textContent).toBe("2 個技能");
+  expect(page.querySelector(".skl-page-head .close-button")).not.toBeNull();
   expect(document.activeElement).toBe(page.querySelector('[data-skl="back"]'));
-  // Its access, switch and ⋯ as on its row.
   expect(accessOf(root, "pack:2")).toBe("小晴、小森");
-  expect(page.querySelector('.skl-page-actions [data-skl="toggle"][data-key="pack:2"]')).not.toBeNull();
-  expect(page.querySelector('.skl-page-actions [data-skl="more"][data-key="pack:2"]')).not.toBeNull();
+  const controls = [...page.querySelectorAll<HTMLElement>(".skl-page-actions .ctl > button")];
+  expect(controls.map(control => control.dataset.skl)).toEqual(["access", "more", "toggle"]);
+  expect(controls.every(control => control.dataset.key === "pack:2")).toBe(true);
   const rows = [...page.querySelectorAll(".skl-skill")];
   expect(rows.map(row => row.querySelector(".t")?.textContent)).toEqual(["來源核對", "每週摘要"]);
   expect(rows[1].querySelector(".tg")?.getAttribute("aria-checked")).toBe("false");
+  for (const row of rows)
+    expect([...row.querySelectorAll<HTMLElement>(".ctl > button")].map(control => control.dataset.skl)).toEqual(["skill-more", "skill"]);
+  press(root, '[data-skl="skill-more"][data-id="4"]');
+  press(document, '[data-pick="details"]');
+  expect(document.querySelector(".skl-details p")?.textContent).toBe("來源核對 的說明");
+  closeMenu();
   // A skill's own switch, and the package's.
   press(root, '[data-skl="skill"][data-id="5"]');
   expect(api.core).toHaveBeenCalledWith("skills.library.update", { key: "pack:2", skill: { id: 5, enabled: true } });

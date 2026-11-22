@@ -20,9 +20,18 @@ test("URLs stop at CJK punctuation, and a bare link is a chip that says its site
 test("a link to a file on a computer shows its path, not the markdown around it", () => {
   const el = document.createElement("div");
   el.innerHTML = messageHTML("檔案在 [index.html](/home/cua/team/office/index.html)，也可以用 [報告](C:\\Users\\me\\report.pdf)。", "", true);
-  expect(el.textContent).toBe("檔案在 index.html，也可以用 C:\\Users\\me\\report.pdf。");
+  expect(el.textContent).toBe("檔案在 index.html，也可以用 報告 C:\\Users\\me\\report.pdf。");
   expect(el.querySelectorAll("code")).toHaveLength(1);
   expect(el.querySelector("a")).toBeNull();
+});
+
+test("a link in <...> or with a title is read as CommonMark reads it, whatever model wrote it", () => {
+  const el = document.createElement("div");
+  el.innerHTML = messageHTML('[開啟新聞課](<D:\\Documentation\\bots\\raphael\\daily lesson.html>) 與 [範本](<D:\\x\\template.html> "範本")，來源 [NHK](https://www3.nhk.or.jp/news/ "NHK")。', "", true);
+  expect(el.textContent).toBe("開啟新聞課 D:\\Documentation\\bots\\raphael\\daily lesson.html 與 範本 D:\\x\\template.html，來源 NHK。");
+  expect(el.innerHTML).not.toContain("](");
+  expect([...el.querySelectorAll("code")].map(code => code.textContent)).toEqual(["D:\\Documentation\\bots\\raphael\\daily lesson.html", "D:\\x\\template.html"]);
+  expect(el.querySelector("a")!.dataset.url).toBe("https://www3.nhk.or.jp/news/");
 });
 
 test("a file in the team folder is a real button that opens it, however the reply wrote its path", () => {

@@ -1,5 +1,5 @@
 // Team skills in Settings: packages, who may use each, and the importer.
-import { scene, click, type, wait, waitGone, settings, scroll, focus, key, check, sideButton } from "./steps.mjs";
+import { scene, click, type, wait, waitGone, settings, scroll, focus, key, check, hover, rightClick, sideButton } from "./steps.mjs";
 import { memberSettingsPage } from "./member-settings.mjs";
 
 const list = [...settings("skills"), wait(".skl-pack")];
@@ -7,9 +7,12 @@ const opened = [...list, click('[data-skl="open"][data-key="set:1"]'), wait('.sk
 const importing = [...list, wait("#skl-source")];
 export default [
   scene("skill-library", "Plugins and standalone skills have separate sections and equal rows", [...list, check("skill-library")]),
+  scene("skill-library-row-lit", "A plugin's row under the pointer is lit across its whole card, corners and all", [...list, hover('[data-skl="open"][data-key="set:1"]'), check("skill-library-row-lit")]),
   scene("skill-library-details", "The overflow opens the full description of a standalone skill", [
     ...list, click('[data-skl="more"][data-key="skill:3"]'), click('[data-pick="details"]'), wait(".skl-details"), check("skill-library-details")]),
-  scene("skill-library-open", "Pressing a package's row opens it on a page of its own in the tab: the back arrow and its name, who may use it, its switch and ⋯, then its skills, each with its own switch", [...opened, check("skill-library-open")]),
+  scene("skill-library-open", "The round back and close share the plugin title row. Access, ⋯ and the switch sit below it, followed by left-aligned skill rows.", [...opened, check("skill-library-open")]),
+  scene("skill-library-skill-details", "Right-clicking a skill row opens its overflow, whose Details action reveals the full description", [
+    ...opened, rightClick('.skl-page [data-library-skill="101"]'), click('[data-pick="details"]'), wait(".skl-details"), check("skill-library-skill-details")]),
   scene("nav-side-plugin", "Mouse Back returns from a plugin to Team skills and restores focus to its row", [
     ...opened, sideButton("back"), waitGone(".skl-page"), check("nav-side-plugin"),
   ]),
