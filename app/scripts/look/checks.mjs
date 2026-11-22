@@ -3324,7 +3324,8 @@ export function checkRendered(name, context = {}) {
   }
   if (name === "appearance-settings") {
     const card = document.querySelector('.appearance-settings .slist');
-    require(visible(card) && card.getBoundingClientRect().width <= 640, "appearance keeps a narrow reading measure");
+    const body = card?.closest('.modal-body'), inner = body ? body.clientWidth - parseFloat(getComputedStyle(body).paddingLeft) - parseFloat(getComputedStyle(body).paddingRight) : 0;
+    require(visible(card) && Math.abs(card.getBoundingClientRect().width - inner) <= 1, "appearance fills its dialog up to the body's margin");
     require(card.querySelectorAll('.row').length === 2 && card.querySelectorAll('.sel').length === 2, "theme and language share the row/dropdown component");
     // A section of 一般, on a rounded card: the card holds the inner padding of its rows.
     const edge=card.getBoundingClientRect();
@@ -5901,6 +5902,8 @@ export function checkRendered(name, context = {}) {
       if (!visible(element) || element.closest('[hidden]')) continue;
       // Everything in the details panel is as wide as the panel; the panel's drag bounds keep it sane.
       if (element.closest('.mb-det')) continue;
+      // A settings pane fills its dialog, whose own page limit bounds it: no empty band beside the close button.
+      if (kind === 'reading' && element.closest('.modal-body')) continue;
       let scale = 1;
       const width = element.getBoundingClientRect().width / scale;
       measurements.push({ kind, class: element.className, width: Math.round(width * 100) / 100, max: limits[kind] });
