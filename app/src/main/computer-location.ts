@@ -74,7 +74,7 @@ export function mountComputerLocation(changed: () => void) {
           }
           return false;
         },
-        restore: () => () => { if (control.isConnected && !control.closest("[hidden], [inert]")) open(); },
+        restore: () => () => { if (anchor.isConnected && !anchor.closest("[hidden], [inert]")) open(anchor, onSaved); },
       },
       onClose: () => { panel = null; draw(); },
     });
