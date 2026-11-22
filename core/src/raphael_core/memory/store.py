@@ -344,7 +344,10 @@ class MemoryFile:
     def prompt_text(self) -> str:
         """The file as a turn reads it. A line that fails the scan (it reached the file by hand) is a
         note in the prompt alone: the file keeps it, for the owner to see and remove."""
-        text = ENTRY_DELIMITER.join(self._sanitized(entry) for entry in self.entries())
+        return self._prompt_text(self.entries())
+
+    def _prompt_text(self, entries: Sequence[str]) -> str:
+        text = ENTRY_DELIMITER.join(self._sanitized(entry) for entry in entries)
         if len(text) <= self.limit:
             return text
         omitted = len(text) - self.limit

@@ -64,8 +64,9 @@ _ANY = r"[^\s」』\"'”。，,]"
 # The value: three characters or more with a digit or a symbol in them (a word alone, such as the
 # "manager" of "password manager", is not taken for one).
 _SECRET_VALUE = re.compile(
-    rf"(?i)(?:{_SECRET_WORDS})(?:\s+(?:code|number|no\.?))?\s*"
-    rf"(?:是|為|为|は|:|：|=|\bis\b|\bwas\b)?\s*{_QUOTE}?\s*"
+    # These separators cannot start a value. Do not retry every split of a long whitespace run.
+    rf"(?i)(?:{_SECRET_WORDS})(?:\s++(?:code|number|no\.?))?\s*+"
+    rf"(?:是|為|为|は|:|：|=|\bis\b|\bwas\b)?\s*+{_QUOTE}?\s*+"
     rf"(?={_VALUE}*[\d!@#$%^&*]){_VALUE}{{3,}}"
 )
 # The words that say where or how a password is kept rather than what it is, after "is" or "was"
@@ -80,10 +81,10 @@ _NOT_A_VALUE = (
 # Chinese or Japanese sentence about a password ("パスワードは大切です") is not taken for one. A word that is followed by
 # no such mark ("password manager", "密碼管理器是 Bitwarden") is left alone.
 _SECRET_GIVEN = re.compile(
-    rf"(?i)(?:{_SECRET_WORDS})(?:\s+(?:code|number|no\.?))?\s*"
-    rf"(?:(?::|=)\s*{_QUOTE}?\s*{_ANY}"
-    rf"|\b(?:is|was)\b(?!\s+(?:{_NOT_A_VALUE})\b)\s*{_QUOTE}?\s*{_ANY}"
-    rf"|(?:是|為|为|は)\s*(?:{_QUOTE}\s*{_ANY}|[A-Za-z0-9!@#$%^&*_\-]))"
+    rf"(?i)(?:{_SECRET_WORDS})(?:\s++(?:code|number|no\.?))?\s*+"
+    rf"(?:(?::|=)\s*+{_QUOTE}?\s*+{_ANY}"
+    rf"|\b(?:is|was)\b(?!\s++(?:{_NOT_A_VALUE})\b)\s*+{_QUOTE}?\s*+{_ANY}"
+    rf"|(?:是|為|为|は)\s*+(?:{_QUOTE}\s*+{_ANY}|[A-Za-z0-9!@#$%^&*_\-]))"
 )
 # A key, a token or a secret that is given its value ("api_key: ...", "token=...", "金鑰是 ..."): the value is one run of
 # what keys are written in, eight characters or more, that is not a word (`_keylike`).

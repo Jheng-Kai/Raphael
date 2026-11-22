@@ -847,7 +847,10 @@ class App(Router):
 
         # The database is opened here, on the thread that runs the loop, and used there only.
         began = time.perf_counter()
-        self._conn = connect(paths.db_path(data_dir))
+        from .agent.history_index import EventIndexRepair
+        database = paths.db_path(data_dir)
+        self._conn = connect(database)
+        self._event_index = EventIndexRepair(database)
         logger.info("Startup phase=database elapsed_ms=%.1f", (time.perf_counter() - began) * 1000)
         began = time.perf_counter()
         try:
@@ -1008,7 +1011,8 @@ class App(Router):
         # Raphael's memory: the notes on this PC, the summary of the conversation, the reflection.
         memory_root = paths.memory_dir(data_dir) if memory_dir is None else memory_dir
         paths.owner_only_directory(memory_root)
-        self.memory = MemoryService(self._conn, memory_root, self.client, self.keys, notify=self.notify)
+        self.memory = MemoryService(self._conn, memory_root, self.client, self.keys, notify=self.notify,
+                                    event_index=self._event_index)
         self.memory.register(self)
         self.background.use_memory(self.memory)
         # The members of the owner's team, their pictures (in the local folder the memory is in,
@@ -1055,6 +1059,7 @@ class App(Router):
             notify=self._agent_notice,
             computer=self.computer,
             memory=self.memory,
+            event_index=self._event_index,
             services=self.services,
             attachment_store=self.attachment_store,
             team=self.members,
@@ -1204,10 +1209,11 @@ class App(Router):
     # --- start-up and shutdown ------------------------------------------------------------------
 
     def start(self) -> None:
-        """Begin loading the speech side and warming up what the first dictation would build."""
+        """Begin the speech warm-up and the one-time history index repair."""
         if self._threads:
             return
         self._select_saved_engine()
+        self._threads.append(self._event_index.start(self._closing.is_set))
         for target, name in ((self._prewarm, "prewarm"), (self._startup, "startup")):
             thread = threading.Thread(target=target, name=f"raphael-{name}", daemon=True)
             self._threads.append(thread)

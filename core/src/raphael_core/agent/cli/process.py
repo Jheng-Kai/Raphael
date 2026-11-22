@@ -42,11 +42,11 @@ class PrivateFiles:
         replaced a cancellation one run in fifteen and the files stayed)."""
         for _ in range(40):
             try:
-                self._directory.cleanup()
+                await asyncio.to_thread(self._directory.cleanup)
                 return
             except PermissionError:
                 await asyncio.sleep(.05)
-        shutil.rmtree(self.path, ignore_errors=True)
+        await asyncio.to_thread(shutil.rmtree, self.path, ignore_errors=True)
         logger.warning("Could not remove a CLI run's private files at once")
 
 

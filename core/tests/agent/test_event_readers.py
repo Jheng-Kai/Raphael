@@ -1,5 +1,7 @@
 """Structured receipts have one public reading, never their transport keys."""
 import json
+import threading
+from contextlib import closing
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -63,18 +65,46 @@ async def test_both_search_rpcs_find_receipt_titles_but_not_transport_keys(make_
     assert [turn["id"] for turn in (await rig.call(method, {"query": "orchard"}))["turns"]] == [turn_id]
 
 
-def test_saved_indexes_from_before_the_projection_are_repaired(conn):
+async def test_saved_receipt_indexes_are_repaired_once_off_the_loop(tmp_path, client, monkeypatch):
+    from raphael_core.agent.history_index import EventIndexRepair
+    from raphael_core.background.run import TaskRun
+    from raphael_core.brain.db import connect
+    from raphael_core.memory.service import MemberMemory, MemoryService
     from raphael_core.memory.terms import index_terms
-    history = AgentHistory(conn)
-    turn_id = history.add(session_id="sample", question="", route="answer", prefix="", text="", status="done")
-    raw = json.dumps({"type": "meeting", "room_id": 987654321, "name": "Sample orchard"})
-    history.add_message(turn_id, "event", raw)
-    terms = index_terms("", raw, "")
-    conn.execute("UPDATE agent_turns_fts SET pairs=?, chars=? WHERE rowid=?", (terms.pairs, terms.chars, turn_id))
-    conn.commit()
-    reopened = AgentHistory(conn)
-    assert reopened.search("987654321") == []
-    assert [turn.id for turn in reopened.search("orchard")] == [turn_id]
+
+    database = tmp_path / "history.sqlite"
+    loop_thread = threading.get_ident()
+    indexed = []
+    reindex = AgentHistory.reindex
+
+    def observed(history, turn_id):
+        assert threading.get_ident() != loop_thread
+        indexed.append(turn_id)
+        reindex(history, turn_id)
+
+    monkeypatch.setattr(AgentHistory, "reindex", observed)
+    with closing(connect(database)) as conn:
+        history = AgentHistory(conn)
+        turn_id = history.add(session_id="sample", question="", route="answer", prefix="", text="", status="done")
+        raw = json.dumps({"type": "meeting", "room_id": 987654321, "name": "Sample orchard"})
+        history.add_message(turn_id, "event", raw)
+        terms = index_terms("", raw, "")
+        with conn:
+            conn.execute("UPDATE agent_turns_fts SET pairs=?, chars=? WHERE rowid=?", (terms.pairs, terms.chars, turn_id))
+        assert [turn.id for turn in history.search("987654321")] == [turn_id]
+
+        repair = EventIndexRepair(database)
+        memory = MemoryService(conn, tmp_path / "memory", client, None, event_index=repair)
+        run = SimpleNamespace(_memory=MemberMemory(memory, 0))
+        repair.start(lambda: False)
+        hidden = await TaskRun._search_history(run, {"query": "987654321"})
+        found = await TaskRun._search_history(run, {"query": "orchard"})
+        assert hidden.ok and hidden.data["turns"] == []
+        assert found.ok and [result["turn"] for result in found.data["turns"]] == [turn_id]
+        reopened = EventIndexRepair(database)
+        reopened.start(lambda: False)
+        await reopened.wait()
+        assert indexed == [turn_id]
 
 
 @pytest.mark.parametrize("kind", ["routine", "calendar", "meeting", "skill_learned"])
