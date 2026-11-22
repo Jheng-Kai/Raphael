@@ -809,6 +809,7 @@ export const id = {
   "chooser.title": "Pilih model",
   "chooser.slot": "Untuk: {name}",
   "chooser.subscriptions": "Langganan",
+  "chooser.chatgptDrawingUnavailable": "Masuk dengan ChatGPT belum mendukung pembuatan gambar. Anda bisa menggunakan Codex.",
   "chooser.api": "API",
   "chooser.local": "Hosting sendiri",
   "chooser.sources": "Hubungkan sumber lain",

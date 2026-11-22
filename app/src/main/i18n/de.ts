@@ -809,6 +809,7 @@ export const de = {
   "chooser.title": "Modell wählen",
   "chooser.slot": "Für: {name}",
   "chooser.subscriptions": "Abonnements",
+  "chooser.chatgptDrawingUnavailable": "Die ChatGPT-Anmeldung unterstützt derzeit keine Bilderstellung. Dafür kannst du Codex verwenden.",
   "chooser.api": "API",
   "chooser.local": "Selbst gehostet",
   "chooser.sources": "Weitere Quelle verbinden",

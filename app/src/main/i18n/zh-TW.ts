@@ -518,6 +518,7 @@ export const zhTW = {
   "chooser.title": "選擇模型",
   "chooser.slot": "用於：{name}",
   "chooser.subscriptions": "訂閱",
+  "chooser.chatgptDrawingUnavailable": "ChatGPT 登入目前不支援畫圖，可用 Codex",
   "chooser.api": "API",
   "chooser.local": "自架",
   "chooser.sources": "連接其他來源",

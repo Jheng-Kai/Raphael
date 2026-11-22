@@ -2492,6 +2492,7 @@ export function checkRendered(name, context = {}) {
       // A known source wears its mark, never the plug of a source nobody drew.
       const openrouter = menu.querySelector('[data-source="openrouter"] > .mono');
       require(openrouter && /logo-(art|mono)/.test(openrouter.className) && !openrouter.querySelector('svg.i'), 'OpenRouter has its own mark in the source list');
+      require(!menu.querySelector('.mc-source-note'), 'the signed-out drawing picker shows no ChatGPT notice');
     } else if (name === 'media-models-codex') {
       const menu = document.querySelector('.model-chooser');
       const marks = {
@@ -2513,6 +2514,11 @@ export function checkRendered(name, context = {}) {
       // A subscription is not an API priced by the token: its own heading, a head that says it is included, no price on the row.
       const heading = source => source.closest('section').querySelector('h3').textContent.trim();
       require(heading(menu.querySelector('[data-source="codex"]')) !== heading(menu.querySelector('[data-source="openrouter"]')) && heading(menu.querySelector('[data-source="codex"]')) !== 'API', 'Codex stands under a heading of its own, not under API');
+      const subscription = menu.querySelector('[data-source="codex"]').closest('section');
+      require(subscription.nextElementSibling?.contains(menu.querySelector('[data-source="openrouter"]')), 'the subscription group stands above API');
+      const notes = menu.querySelectorAll('.mc-source-note');
+      require(notes.length === 1 && visible(notes[0]) && subscription.contains(notes[0]) && notes[0].textContent.trim() === 'ChatGPT 登入目前不支援畫圖，可用 Codex', 'the subscription group shows the signed-in ChatGPT limitation once');
+      require(!menu.querySelector('[data-source="chatgpt"], [data-model^="@chatgpt:"]'), 'ChatGPT sign-in offers no drawing source or model');
       require(!/按量計費|每百萬/.test(menu.querySelector('.mc-pane-head').textContent) && /訂閱/.test(menu.querySelector('.mc-pane-head p').textContent), 'the head says it is included in the subscription');
       const codexRow = menu.querySelector('.mc-row[data-model="@codex:gpt-image-2"]');
       require(!codexRow.querySelector('.mc-price') && !/價格未知/.test(codexRow.textContent), 'the row has no price');

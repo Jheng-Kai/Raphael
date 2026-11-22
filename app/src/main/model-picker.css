@@ -20,6 +20,7 @@
 .mc-inherit[aria-pressed="true"] { background: var(--float-hover); }
 .mc-rail section + section { margin-top: var(--sp-4); }
 .mc-rail h3 { margin: 0 var(--sp-3) var(--sp-1); color: var(--text-3); font-size: var(--fs-xs); font-weight: 500; }
+.mc-source-note { margin: 0 var(--sp-3); color: var(--text-3); font-size: var(--fs-xs); line-height: 1.5; }
 /* `.btn` is the button's base: these win over it whatever order the stylesheets load in. */
 .mc-rail .btn.mc-source { position: relative; display: flex; align-items: center; justify-content: flex-start; gap: var(--sp-2); padding: var(--sp-2) var(--sp-2); width: 100%; min-height: 52px; font-size: inherit; font-weight: 400; text-align: left; background: transparent; color: var(--text); border: 1px solid transparent; border-radius: var(--r-sm); box-shadow: none; }
 .mc-rail .btn.mc-source:hover:not(:disabled) { background: var(--hover); border-color: transparent; }

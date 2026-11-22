@@ -809,6 +809,7 @@ export const vi = {
   "chooser.title": "Chọn mô hình",
   "chooser.slot": "Cho: {name}",
   "chooser.subscriptions": "Gói đăng ký",
+  "chooser.chatgptDrawingUnavailable": "Đăng nhập bằng ChatGPT hiện chưa hỗ trợ tạo ảnh. Bạn có thể dùng Codex.",
   "chooser.api": "API",
   "chooser.local": "Tự lưu trữ",
   "chooser.sources": "Kết nối nguồn khác",

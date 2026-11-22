@@ -519,6 +519,7 @@ export const ja = {
   "chooser.title": "モデルを選択",
   "chooser.slot": "用途：{name}",
   "chooser.subscriptions": "サブスクリプション",
+  "chooser.chatgptDrawingUnavailable": "ChatGPT ログインでは現在、画像生成に対応していません。Codex を使えます。",
   "chooser.api": "API",
   "chooser.local": "セルフホスト",
   "chooser.sources": "接続先を追加",

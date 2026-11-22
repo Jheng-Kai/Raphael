@@ -809,6 +809,7 @@ export const fr = {
   "chooser.title": "Choisir un modèle",
   "chooser.slot": "Pour : {name}",
   "chooser.subscriptions": "Abonnements",
+  "chooser.chatgptDrawingUnavailable": "La connexion avec ChatGPT ne permet pas encore de générer des images. Vous pouvez utiliser Codex.",
   "chooser.api": "API",
   "chooser.local": "Auto-hébergé",
   "chooser.sources": "Connecter une autre source",

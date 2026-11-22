@@ -809,6 +809,7 @@ export const ru = {
   "chooser.title": "Выбрать модель",
   "chooser.slot": "Для: {name}",
   "chooser.subscriptions": "Подписки",
+  "chooser.chatgptDrawingUnavailable": "Вход через ChatGPT пока не позволяет создавать изображения. Можно использовать Codex.",
   "chooser.api": "API",
   "chooser.local": "Свой сервер",
   "chooser.sources": "Подключить другой источник",

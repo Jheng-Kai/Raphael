@@ -1004,9 +1004,9 @@ activity labels remain the fallback.
 ## Member media
 
 The shared image_generate/video_generate tools use only the owner's explicit image_model
-and video_model settings. Both default unset: discovery is not consent. These separate
-paid API models are independent of every member's conversational brain, including CLI
-subscriptions; changing a brain changes neither setting. The owner chooses in existing
+and video_model settings. Both default unset: discovery is not consent. These media models are
+independent of every member's conversational brain; changing a brain changes neither
+setting. The owner chooses in existing
 Settings > Models rows, with provider, per-image/per-request/token pricing when
 known and an explicit API-charge note. Image-only catalog entries remain selectable.
 No compatible discovered video model is shown as none available, never invented.
@@ -1036,9 +1036,11 @@ external design acceptance.
 
 `media-models-codex` (fixture `mediaCodex`) opens the drawing-model picker with the core's own Codex subscription model beside OpenRouter and asserts
 OpenAI's mark (R-UI-123) in the source list, the head of its models and its row, the same drawing in all three, no plug or robot, and 「Codex 訂閱」 said
-in the window's language; `media-models-menu` asserts OpenRouter's own mark in the same list. Other subscription tools (Claude Code, Antigravity) are
+in the window's language. With a signed-in ChatGPT account, the same scene checks one quiet note under Subscriptions, above API, with no ChatGPT drawing source.
+The ChatGPT plan's [OAuth route](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations) does not support the hosted image tool.
+`media-models-menu` asserts OpenRouter's own mark and the absence of the note while signed out. Other subscription tools (Claude Code, Antigravity) are
 covered by the unit case that every tool in `CLIS` resolves to its maker's mark under its id and its lowercased name; their sources appear in the
-answer picker only. Not covered: a live Codex login.
+answer picker only. Core tests cover the Windows launcher order and login-status diagnostics, including a ChatGPT login with no credential file. Live Codex drawing is a separate check.
 
 `price-parts` (R-MODEL-06) runs in `media-models-unset`, `media-models-set` and `media-models-menu` (and in `models`, `quick-model-menu` and `model-choices-*`):
 a price is parts joined by 「 · 」 and no part is broken across lines while a line of its row could hold it, measured from the client rects of each part's own

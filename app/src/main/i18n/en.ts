@@ -519,6 +519,7 @@ export const en = {
   "chooser.title": "Choose a model",
   "chooser.slot": "For: {name}",
   "chooser.subscriptions": "Subscriptions",
+  "chooser.chatgptDrawingUnavailable": "ChatGPT sign-in doesn’t support drawing yet. You can use Codex.",
   "chooser.api": "API",
   "chooser.local": "Self-hosted",
   "chooser.sources": "Connect another source",

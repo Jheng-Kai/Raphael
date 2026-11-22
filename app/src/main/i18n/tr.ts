@@ -809,6 +809,7 @@ export const tr = {
   "chooser.title": "Model seç",
   "chooser.slot": "Şunun için: {name}",
   "chooser.subscriptions": "Abonelikler",
+  "chooser.chatgptDrawingUnavailable": "ChatGPT ile oturum açma henüz görsel üretimini desteklemiyor. Codex’i kullanabilirsiniz.",
   "chooser.api": "API",
   "chooser.local": "Kendi sunucunuz",
   "chooser.sources": "Başka kaynak bağla",

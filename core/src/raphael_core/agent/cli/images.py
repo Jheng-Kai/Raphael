@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 import re
 from pathlib import Path
 
@@ -10,11 +11,13 @@ from ...services.attachments import Attachment, MAX_IMAGE_BYTES, sniff_ok
 from ...services.common import ServiceError
 from .discovery import CliBrains
 from .drivers import CODEX_ISOLATION, toml_value
+from .models import read_settings
 from .process import Child, PrivateFiles
 
 # The window reserves cli: references for its answer-only CLI catalog.
 REFERENCE = "@codex:gpt-image-2"
 NAME = "Codex (subscription)"
+logger = logging.getLogger(__name__)
 
 
 def environment(source):
@@ -31,22 +34,39 @@ class CodexImages:
     def __init__(self, *, brains=None, settings=None, child=Child, private=PrivateFiles):
         self.brains = brains if brains is not None else CliBrains(settings=settings)
         self.child, self.private = child, private
-        self._ready = False
+        self._status = None
+        self._probe_lock = asyncio.Lock()
         self._lock = asyncio.Lock()
 
     def choices(self):
-        if not self._ready or not self.brains.available("codex"):
+        if self._status != "ready" or self.brains.disconnected("codex"):
             return []
         return [{"reference": REFERENCE, "id": "gpt-image-2", "name": NAME, "provider": "codex",
                  "media": ["image"], "image_input": False, "generation_only": True,
                  "billing_source": "subscription"}]
 
+    def _home(self):
+        return Path(self.brains.environ.get("CODEX_HOME") or self.brains.home / ".codex")
+
     async def refresh(self):
-        """File existence alone also admits API-key logins; verify the CLI's authentication mode."""
-        self._ready = False
-        if not self.brains.available("codex"):
-            return False
-        child = self.child([*self.brains.command("codex"), "login", "status"],
+        """The CLI knows its login mode even when it keeps credentials outside auth.json."""
+        async with self._probe_lock:
+            status = await self._login_status()
+            if self.brains.disconnected("codex"):
+                status = "disconnected_in_settings"
+            if status != self._status:
+                self._status = status
+                if status != "ready":
+                    logger.info("Codex subscription drawing unavailable: %s", status)
+            return status == "ready"
+
+    async def _login_status(self):
+        if self.brains.disconnected("codex"):
+            return "disconnected_in_settings"
+        command = await asyncio.to_thread(self.brains.command, "codex")
+        if not command:
+            return "cli_missing"
+        child = self.child([*command, "login", "status"],
                            environ=environment(self.brains.environ))
         try:
             async with asyncio.timeout(15):
@@ -54,12 +74,20 @@ class CodexImages:
                 raw = await child.process.stdout.read(65536)
                 code = await child.process.wait()
                 await child._stderr
-                self._ready = code == 0 and b"chatgpt" in (raw + child.stderr_tail).lower()
-        except (TimeoutError, OSError, ValueError):
-            self._ready = False
+                lines = [line.strip() for line in (raw.lower() + b"\n" + child.stderr_tail.lower()).splitlines()]
+                if code == 0:
+                    if b"logged in using chatgpt" in lines:
+                        return "ready"
+                    if any(line.startswith((b"logged in using an api key", b"logged in using api key")) for line in lines):
+                        return "api_key_login"
+                    return "not_a_chatgpt_login"
+                return "signed_out" if b"not logged in" in lines else "login_status_failed"
+        except TimeoutError:
+            return "login_status_timeout"
+        except (OSError, ValueError):
+            return "cli_launch_failed"
         finally:
             await child.kill()
-        return self._ready
 
     async def generate(self, prompt, *, square=False, charge=None):
         # Serialize readiness and this turn; cancellation always owns its own child tree.
@@ -69,8 +97,12 @@ class CodexImages:
             private, child = self.private(), None
             try:
                 await private.secure()
+                auth_setting = "cli_auth_credentials_store"
                 overrides = {key: value for key, value in CODEX_ISOLATION.items()
-                             if not key.startswith("mcp_servers.")}
+                             if not key.startswith("mcp_servers.") and key != auth_setting}
+                config = await asyncio.to_thread(read_settings, self._home() / "config.toml", toml=True)
+                if config.get(auth_setting) in ("file", "keyring", "auto"):
+                    overrides[auth_setting] = config[auth_setting]
                 overrides.update({"features.image_generation": True, "features.code_mode": True,
                     "features.code_mode_host": True, "forced_login_method": "chatgpt",
                     "model_provider": "openai", "model_max_output_tokens": 1500,
@@ -125,11 +157,10 @@ class CodexImages:
                 if code != 0 or failed or not completed or thread is None:
                     raise ServiceError(failed if failed in ("auth_expired", "usage_limit", "rate_limit", "timeout", "network", "content_policy")
                                        else "bad_response", service="codex")
-                if not self.brains.available("codex"):
+                if self.brains.disconnected("codex"):
                     raise ServiceError("auth_expired", service="codex")
                 # Never follow model-written paths or scan another session's output.
-                home = Path(self.brains.environ.get("CODEX_HOME", self.brains.home / ".codex"))
-                root = home / "generated_images" / thread
+                root = self._home() / "generated_images" / thread
                 return await asyncio.to_thread(self._image, root)
             except TimeoutError:
                 raise ServiceError("timeout", service="codex") from None

@@ -809,6 +809,7 @@ export const ptBR = {
   "chooser.title": "Escolher modelo",
   "chooser.slot": "Para: {name}",
   "chooser.subscriptions": "Assinaturas",
+  "chooser.chatgptDrawingUnavailable": "Entrar com o ChatGPT ainda não permite gerar imagens. Você pode usar o Codex.",
   "chooser.api": "API",
   "chooser.local": "Hospedagem própria",
   "chooser.sources": "Conectar outra fonte",

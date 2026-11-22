@@ -94,6 +94,23 @@ test("a subscription's drawing model stands under the subscriptions with no pric
   expect(document.querySelector(".mc-pane")!.textContent).not.toContain("每百萬 token");
   expect(priceText(codex, "image")).toBe("訂閱");
 });
+test("a signed-in ChatGPT account has one drawing note and no selectable drawing model", () => {
+  const plan: CatalogModel = { ...model("@chatgpt:old-image", "chatgpt"), billing_source: "subscription" };
+  const router = model("test/image-api");
+  const slot = document.createElement("div"); document.body.append(slot);
+  const chatgpt = { signed_in: true, plan_scope_granted: true };
+  picker = mountModelPicker(slot, { role: "image", current: "", catalog: { ...catalog([]), image: [plan, router] }, label: "Image", chatgpt, onChoose: vi.fn() });
+  picker.open();
+  const sections = [...document.querySelectorAll(".mc-source-list section")];
+  expect(sections.map((section) => section.querySelector("h3")!.textContent)).toEqual(["訂閱", "API"]);
+  expect(sections[0].querySelectorAll(".mc-source-note")).toHaveLength(1);
+  expect(sections[0].querySelector(".mc-source-note")!.textContent).toBe("ChatGPT 登入目前不支援畫圖，可用 Codex");
+  expect(document.querySelector('[data-source="chatgpt"], [data-model="@chatgpt:old-image"]')).toBeNull();
+  expect(document.querySelector('[data-model="test/image-api"]')).not.toBeNull();
+  picker.update({ chatgpt: { ...chatgpt, signed_in: false } });
+  expect(document.querySelector(".mc-source-note")).toBeNull();
+});
+
 test("every subscription tool has its maker's mark wherever it stands as a source", async () => {
   const { providerMark } = await import("./provider-marks");
   const { CLIS } = await import("./cli-brains");
