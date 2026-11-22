@@ -439,8 +439,7 @@ comes from the same stored turn stream as the conversation, newest line only, in
 existing 14px caption position. No rotating placeholder status is sent. The API fast
 router remains available; CLI quick questions skip auxiliary routing and native session
 resume, consuming only the recent quick context and that conversation's own summary.
-Native acceptance must check stale-session rejection, foreground suppression and
-hotkey/transcript timing.
+Native acceptance checks stale-session rejection, overlay continuity while Raphael is in front, and hotkey/transcript timing.
 
 ```powershell
 npm run look -- overlay-step overlay-long-answer --theme both --width 1120,720,1920x1080
@@ -463,12 +462,16 @@ prove actual transcription speed.
 The global hook does not always hear the keyboard while the app's own window is in front, so everything the
 keys do must work through `window-hotkeys.ts` too (`source=Window` in the log). One Esc ends a recording or a
 dictation's transcription from there (R-VC-01). A question said into a conversation leaves the voice slot once
-its words are in (`hand_over`), so the dictation key works during the answer (R-VC-02). `npm run native --
+its words are in (`hand_over`), so the dictation key works during the answer (R-VC-02).
+In toggle mode the worker waits for release of a standalone Right Alt tap. A Right Alt+Space chord consumes that
+prefix and reports only the quick question from either source, with either release order. After a standalone Right Alt
+tap ends a quick recording, a new chord can start as soon as recognition finishes. The quick question keeps
+its listening overlay and greeting with Raphael in front as well as in another app (R-AG-05, R-AG-06). `npm run native --
 voice-keys` proves both with the real worker, the recognising light and a slow brain at high depth. A turn said
 into a conversation has the time a typed one has; only the overlay's quick question has `VOICE_TURN_TIMEOUT_S`.
 
 A question said to the overlay (Alt+Space) leaves the slot the same way, and the dictation key always wins (R-VC-03):
-pressed while the answer is worked on, asked a yes or no, or on the overlay, it dictates at once. The answer is held while
+a standalone dictation press can start a recording while an answer is pending, showing, or waiting for yes or no. The answer is held while
 a recording has the overlay and told again once the words are typed, for its ordinary time; a newer quick question
 replaces it. The shell's timing is proved by the `dictation.rs` tests named in R-VC-03; the one thing the corner shows
 is the answer arriving behind the dictation's 100 %, which `overlay-held-answer` replays on the real overlay page:

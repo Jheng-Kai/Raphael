@@ -1946,6 +1946,11 @@ class AgentService:
                 return self._failed(ask, "answer", failure_kind(exc), ledger)
         decision: RouteDecision | None = None
         failure = blocked
+        # The transcript is ready even when the fast router or its answer is still pending.
+        routing_turn_id = 0
+        if not ask.turn_id:
+            self._record(ask, "answer", "", "", "running", None, ledger)
+            routing_turn_id = ask.turn_id
         if blocked is None:
             try:
                 decision = await self._decider.classify(
@@ -1953,6 +1958,18 @@ class AgentService:
                     ledger, background_line(self._briefs(ask.speaker.id)),
                     context=self._before_run(ask.speaker, ask.conversation_id, source=ask.source, skipped=ask.skipped_cards),
                 )
+            except asyncio.CancelledError:
+                # A cancel during routing used to leave no turn. An edit cancels by turn ID and
+                # keeps the row so the replacement can take its place.
+                if routing_turn_id and self._was_cancelled(ask.session_id):
+                    try:
+                        self._history.delete(routing_turn_id)
+                    except sqlite3.Error as exc:
+                        logger.warning("Could not withdraw the cancelled transcript: %s", type(exc).__name__)
+                    else:
+                        ask.turn_id = 0
+                        self._turn_changed(routing_turn_id, ask.speaker.id)
+                raise
             except AgentFailure as error:
                 failure = error.kind
             except Exception as exc:  # a bug in the router must not become an RPC error
@@ -1970,7 +1987,6 @@ class AgentService:
         source = decision.source if decision is not None else "harness"
         try:
             if decision is None or decision.route == "unclear":
-                self._record(ask, "answer", "", "", "running", None, ledger)
                 return await self._narrated(ask, settings, ledger)
             result = await self._route(ask, decision, settings, ledger)
         except AgentFailure as error:

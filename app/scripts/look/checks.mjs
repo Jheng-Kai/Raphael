@@ -6440,6 +6440,13 @@ export function checkRendered(name, context = {}) {
     require(!document.querySelector('.tn[data-id="1"]'), "formal history stays out of quick questions");
     return { check: name, conversation: 4 };
   }
+  if (name === "quick-question-transcript") {
+    const turn = document.querySelector('.tn[data-id="91"]');
+    require(turn?.querySelector(".me")?.textContent.includes("明天早上要帶傘嗎"), "the recognized words replace the placeholder");
+    require(visible(turn.querySelector(".live-presence")), "live presence follows the recognized words");
+    require(!turn.querySelector("[data-reply]") && !document.querySelector('[data-key="hearing"]'), "there is no reply or recognition placeholder yet");
+    return { check: name, conversation: 4 };
+  }
   if (name === "quick-question-result") {
     const turn = document.querySelector('.tn[data-id="91"]');
     require(visible(turn) && turn.querySelector('.me')?.textContent.includes("明天早上要帶傘嗎"), "the Alt+Space question arrived in the open quick conversation");
