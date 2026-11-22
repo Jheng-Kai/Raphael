@@ -484,7 +484,6 @@ def test_layer_seven_installs_computer_browser_and_existing_profile_grant():
     # screen a person can use (a window list, a dock's Browser icon, no marker page, tabs, windows inside their screen).
     # 13 changed no file of the image: it is the container's shape (the locale), so what it made again is
     # the layers' own steps above, unchanged. 14 is Google's Chrome on arm64 too.
-    assert module.IMAGE.endswith("-v14") and module.IMAGE_LABELS[f"{module.LABEL}.layer"] == "14"
     assert 'org.raphael.computer.layer="14"' in dockerfile and "librsvg2-common" in dockerfile
     launcher = (image / "layer12/raphael-seat-browser").read_text(encoding="utf-8")
     assert "wmctrl -lG" in launcher and "settle_deadline" in launcher

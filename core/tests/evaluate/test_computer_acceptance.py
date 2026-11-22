@@ -254,7 +254,7 @@ async def test_layout_passes_posix_token_and_mark_paths_to_docker_on_windows(tmp
             return vm.Result(0, json.dumps([dict(pid=1, ppid=0, start="1", cmd="python3 /screens.py")]))
         if command == ["cat", "/proc/net/tcp"]:
             return vm.Result(0, "")
-        if command[-1] == "/panels":
+        if command == ["xfconf-query", "-c", "xfce4-panel", "-p", "/panels"]:
             return vm.Result(0, "1")
         if command[-1] == "/panels/panel-1/output-name":
             # A real one-screen computer has no such property: the layout check must not ask for it.
@@ -264,6 +264,21 @@ async def test_layout_passes_posix_token_and_mark_paths_to_docker_on_windows(tmp
     await run.layout(target)
     for path in ("/run/user/1000/raphael-vnc-tokens", "/dev/shm/raphael-screens.ready"):
         assert ["exec", "-u", "cua", "-e", "DISPLAY=:1", target.name, "cat", path] in run.runner.calls
+
+
+async def test_previous_layer_member_ids_do_not_reuse_the_shared_carry_source():
+    run = acceptance.Acceptance(FakeDocker())
+    allocated = {}
+
+    async def previous_layer(layer, first):
+        allocated[layer] = set(range(first, first + 3))
+
+    run.previous_layer = previous_layer
+    await run.previous()
+    assert list(allocated) == list(acceptance.OLD_IMAGES)
+    members = set().union(*allocated.values())
+    assert len(members) == 3 * len(allocated)
+    assert members.isdisjoint({9201, 9202, 9203})
 
 
 class MemoryDriver:
@@ -604,7 +619,10 @@ def test_previous_fixture_matches_release_shape_without_changing_vm(tmp_path, mo
     assert len(thirteenth) == len(with_locale) and "LANG=C.UTF-8" in thirteenth and "LC_ALL=C.UTF-8" in thirteenth
     assert [a for a, b in zip(thirteenth, with_locale) if a != b] == [f"{vm.LABEL}.layer=13", acceptance.OLD_IMAGES["13"]]
     assert acceptance.OLD_IMAGES["13"] == "raphael/cua-local-vm:driver-0.37.0-v13"
-    assert vm.IMAGE not in acceptance.OLD_IMAGES.values() and list(acceptance.OLD_IMAGES) == ["4", "5", "6", "7", "8", "9", "10", "11", "12", "13"]
+    fourteenth = acceptance.previous_args(target, machine.owner, "private", "14")
+    assert len(fourteenth) == len(with_locale)
+    assert [a for a, b in zip(fourteenth, with_locale) if a != b] == [f"{vm.LABEL}.layer=14", acceptance.OLD_IMAGES["14"]]
+    assert vm.IMAGE not in acceptance.OLD_IMAGES.values() and list(acceptance.OLD_IMAGES) == [str(i) for i in range(4, 15)]
 
 
 def test_the_old_browser_fixture_writes_what_an_earlier_layer_kept_in_a_real_shell(tmp_path):
@@ -638,12 +656,16 @@ CHROMIUMS = {"driver/main/Default/Cookies", "chromium/Default/Cookies"}
     ("arm64", OTHERS | {acceptance.DROPPED_MARK, "chromium/Default/Cookies"}, False),
     ("arm64", OTHERS, False),
     ("arm64", {"google-chrome/Default/Cookies", acceptance.DROPPED_MARK}, False),
+    ("arm64", OTHERS | CHROMIUMS | {acceptance.DROPPED_MARK}, False),
     ("amd64", OTHERS | CHROMIUMS, True),
     ("amd64", OTHERS | {"chromium/Default/Cookies"}, False),
     ("amd64", OTHERS | CHROMIUMS | {acceptance.DROPPED_MARK}, False),
 ])
-async def test_the_old_browser_data_check_wants_chromiums_profiles_gone_on_arm64_only(architecture, files, ok):
-    # R-COMP-READY-04: what an earlier layer's browsers kept, once its computer is made again on layer 14.
+@pytest.mark.parametrize("layer", ["13", "14"])
+async def test_the_old_browser_data_check_wants_chromiums_profiles_gone_on_arm64_only(architecture, files, ok, layer):
+    removed = architecture == "arm64" and layer == "13"
+    if architecture == "arm64" and not removed:
+        ok = files == OTHERS | CHROMIUMS | {acceptance.DROPPED_MARK}
     run = acceptance.Acceptance(FakeDocker())
     asked = []
 
@@ -658,11 +680,11 @@ async def test_the_old_browser_data_check_wants_chromiums_profiles_gone_on_arm64
         return "kept\n"
     run.text = text
     if ok:
-        detail = await run.old_browser_data(object())
-        assert ("removed once" in detail) == (architecture == "arm64")
+        detail = await run.old_browser_data(object(), layer)
+        assert ("removed once" in detail) == removed
     else:
         with pytest.raises(AssertionError):
-            await run.old_browser_data(object())
+            await run.old_browser_data(object(), layer)
     assert asked[0] == ["dpkg", "--print-architecture"]
 
 
@@ -689,6 +711,7 @@ def tiny_build(context, args, steps):
 class FakeDocker:
     def __init__(self, *, engine="linux", build_failure=False):
         self.engine, self.build_failure = engine, build_failure
+        self.image_env = dict(acceptance.IMAGE_ENV)
         self.calls, self.containers, self.images = [], {}, {}
         self.steps = set()
 
@@ -713,7 +736,8 @@ class FakeDocker:
             if args[-1] != str(acceptance.IMAGE_FOLDER):
                 self.images[tag], log = tiny_build(args[-1], args, self.steps)
                 return vm.Result(0, "", log)
-            self.images[tag] = {"Id": "new-image", "Config": {"Labels": vm.IMAGE_LABELS}}
+            self.images[tag] = {"Id": "new-image", "Config": {"Labels": vm.IMAGE_LABELS,
+                                                              "Env": [f"{key}={value}" for key, value in self.image_env.items()]}}
             return vm.Result(0)
         if args[:2] == ["image", "inspect"]:
             found = [{**self.images[name], "RepoTags": self.tagged(self.images[name]["Id"])} for name in args[2:] if name in self.images]
@@ -874,7 +898,7 @@ async def test_start_retries_slow_engine_once_after_pause(error, tmp_path, monke
     ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v7"],
     ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v6"],
     ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v5"],
-    ["image", "inspect", "raphael/cua-local-vm:driver-0.37.0-v14"],
+    ["image", "inspect", vm.IMAGE],
     ["ps", "-a", "--filter", "label=org.raphael.computer", "--format", "{{.ID}}"],
     ["container", "inspect", "someone-elses-container"],
     ["exec", "-u", "root", "ours", "true"],
@@ -979,6 +1003,23 @@ async def test_build_failure_still_removes_data_and_reports_observed_error(capsy
     assert not run.root.exists()
     output = capsys.readouterr().out
     assert "synthetic build failure" in output and "Removed data" in output
+
+
+@pytest.mark.parametrize("key,value,diagnosis", [
+    ("DBUS_SESSION_BUS_ADDRESS", None, "missing ['DBUS_SESSION_BUS_ADDRESS']"),
+    ("HOME", "/root", "incorrect ['HOME']"),
+])
+async def test_build_rejects_missing_or_incorrect_runtime_environment(key, value, diagnosis, capsys):
+    runner = FakeDocker()
+    if value is None:
+        del runner.image_env[key]
+    else:
+        runner.image_env[key] = value
+    run = acceptance.Acceptance(runner)
+    assert await run.run([1]) == 1
+    assert not any(args[0] == "run" for args in runner.calls)
+    assert not runner.images and not run.root.exists()
+    assert diagnosis in capsys.readouterr().out
 
 
 async def test_cancellation_cleans_own_resources_and_restores_image(monkeypatch):
@@ -1200,7 +1241,7 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
         guest = args[args.index(machine.shared_target("", 9201, 1).name) + 1:] if args[0] == "exec" else []
         if guest[:3] == ["sh", "-c", 'command -v "$1"']:
             return vm.Result(0, "/usr/bin/xfce4-terminal\n") if guest[4] == "xfce4-terminal" else vm.Result(1, "")
-        # This world is an arm64 computer of layer 14: the members' browser is Google's Chrome, as on amd64.
+        # The arm64 computer has Google Chrome, as on amd64.
         if guest[:2] == ["test", "-x"]:
             return vm.Result(0 if guest[2] == "/opt/google/chrome/chrome" else 1, "")
         if guest[:2] == ["test", "-e"] and guest[2].startswith("/usr/share/icons/"):
@@ -1227,8 +1268,6 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
             if not any(row["window_id"] == 556 for row in rows):
                 rows.append(window(556, 60, "Google-chrome"))
             return vm.Result(0, "")
-        if guest == ["/usr/lib/chromium/chromium", "--version"]:
-            return vm.Result(0, "Chromium 156.0.0.0\n")
         if guest[:1] == ["/opt/google/chrome/chrome"]:
             if "--version" in guest:
                 return vm.Result(0, "Google Chrome 157.0.0.0\n")
