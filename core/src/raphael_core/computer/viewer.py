@@ -42,7 +42,7 @@ UNWATCHED_STATUS_S = 10
 READABLE = frozenset(".html .htm .pdf .png .jpg .jpeg .gif .webp .svg .txt .md .csv .json .mp3 .wav .m4a .mp4 .webm .docx .xlsx .pptx".split())
 HOST_PAGE = b"""<!doctype html><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; connect-src 'self'; img-src data:; style-src 'unsafe-inline'">
-<style>html,body{margin:0;height:100%;background:#000}canvas{width:100%;height:100%;display:block;touch-action:none}
+<style>html,body{margin:0;height:100%;background:transparent;color-scheme:normal}canvas{width:100%;height:100%;display:block;touch-action:none}
 textarea{position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none}</style>
 <canvas></canvas><textarea aria-label="Browser input"></textarea><script src="host.js" defer></script>"""
 BOOTSTRAP = b'''let RFB, rfb, connecting = false, closed = false, controlAt = 0, revision = 0, framesTimer = null;
@@ -203,7 +203,7 @@ def embedded_page(content):
     return (f'<!doctype html><html><head><meta charset="utf-8">{notices}'
             '<meta name="viewport" content="width=device-width,initial-scale=1">'
             '<title>Raphael desktop</title><style>'
-            'html,body {height:100%;margin:0;overflow:hidden;background:#171717} '
+            'html,body {height:100%;margin:0;overflow:hidden;background:transparent;color-scheme:normal} '
             '#noVNC_container {width:100%;height:100%}'
             '</style><script type="module" src="bridge.js"></script></head>'
             '<body><div id="noVNC_container"></div></body></html>').encode()
@@ -232,7 +232,6 @@ class Session:
     host_tab: object = field(default=None, repr=False)
     host_gate: HostInputGate | None = field(default=None, repr=False)
     host_epoch: int = 0
-    host_watch: tuple[str, str] | None = None
 
     transport_hint: str | None = None
 
@@ -503,9 +502,9 @@ class DesktopViewer:
             return None, None
         if self.handbacks is not None:
             tab, card = self.handbacks.browser_request(member, conversation)
-            if tab is not None and (selected := self.host_browser.selected(tab.scope)) is not None:
-                return selected, card
-        return self.host_browser.viewing_tab(member, conversation), None
+            if tab is not None:
+                return self.host_browser.handback_tab(tab), card
+        return self.host_browser.selected(member), None
 
     def host_state(self, member, conversation, session=None):
         tab, card = self.host_selection(member, conversation)
@@ -517,7 +516,7 @@ class DesktopViewer:
                 **({"target": tab.view} if running else {}),
                 **({"works": [{"id": tab.id, "turn_id": tab.turn_id, "transport": "host",
                                                 "state": "done" if tab.finished else "running", "tool": "browser_open",
-                                                "reason": ""}]} if running and tab.turn_id else {}),
+                                                "reason": ""}]} if running and tab.turn_id and tab.conversation == conversation else {}),
                 **({"host_request": {"id": card.id, "request_id": card.id, "turn_id": card.turn_id,
                                      "state": "waiting_control", "tool": "get_browser_state", "reason": card.reason,
                                      "detail": card.note}} if card else {})}
@@ -828,18 +827,11 @@ class DesktopViewer:
         tab, card = self.host_selection(session.member_id, session.conversation_id)
         selected = self.active_transport(session.member_id, session.conversation_id) if self.active_transport else None
         return (selected in (None, "host") and self.member_exists(session.member_id)
-                and tab is not None and tab.scope == session.host_tab.scope and self.host_browser.live(tab)
+                and tab is not None and tab.member == session.member_id and self.host_browser.live(tab)
                 and not (session.preview and (card or session.owner_key in self.owners)))
 
     def host_selected(self, session):
-        browser = self.host_browser
-        tab = browser.selected(session.host_tab.scope)
-        if session.host_watch and tab and session.host_watch[0] == tab.id:
-            watched = browser.tabs.get(session.host_watch[1])
-            if watched and watched.scope == tab.scope:
-                return watched
-        session.host_watch = None
-        return tab
+        return self.host_selection(session.member_id, session.conversation_id)[0]
 
     def host_input_allowed(self, token, session):
         return (self.sessions.get(token) is session and not session.preview and bool(session.sockets)
@@ -854,8 +846,7 @@ class DesktopViewer:
             try:
                 await session.host_gate.release()
             finally:
-                self.host_browser.held.discard(session.host_tab.scope)
-                self.host_browser._schedule_idle()
+                self.host_browser.held.pop(session.member_id, None)
 
     async def control_host(self, token, session, held, request):
         member, conversation = session.member_id, session.conversation_id
@@ -867,30 +858,32 @@ class DesktopViewer:
                 raise invalid_params("desktop unavailable")
             # Block new member commands before waiting for the current browser call.
             browser = self.host_browser
-            work = session.host_tab.scope
-            browser.held.add(work)
+            tab = self.host_selected(session)
+            if tab is None:
+                raise invalid_params("desktop unavailable")
+            previous = self.owners.get(session.owner_key)
+            previous_hold = browser.held.get(member)
+            browser.held[member] = tab
             try:
                 async with asyncio.timeout(self.take_wait_s):
-                    async with browser.work_lock(work):
+                    async with tab.lock:
                         await self.check_session_target(token, session)
                         self.session({"session": token})
-                        if not session.sockets:
+                        if not session.sockets or self.host_selected(session) is not tab:
                             raise invalid_params("desktop unavailable")
-                        previous = self.owners.get(session.owner_key)
                         if previous not in (None, token):
                             await self.release_host(previous, self.sessions[previous])
-                        tab = self.host_selected(session)
-                        if session.host_watch:
-                            await browser.activate(tab)
-                            session.host_watch = None
-                        browser.held.add(work)
+                        browser.held[member] = tab
                         self.owners[session.owner_key] = token
                         if previous != token:
                             session.host_epoch += 1
                         session.input_at = self.vm.clock()
             finally:
                 if self.owners.get(session.owner_key) != token:
-                    browser.held.discard(work)
+                    if previous_hold is not None and self.owners.get(session.owner_key) == previous:
+                        browser.held[member] = previous_hold
+                    else:
+                        browser.held.pop(member, None)
         else:
             owner = self.owners.get(session.owner_key)
             if owner == token:
@@ -909,7 +902,7 @@ class DesktopViewer:
             token = self.owners.get(f"host:{card.member_id}")
             session = self.sessions.get(token)
             tab, pending = self.host_selection(card.member_id, card.conversation_id)
-            if session and tab and session.host_tab.scope == tab.scope and pending and pending.id == card.id:
+            if session and tab and session.member_id == tab.member and pending and pending.id == card.id:
                 await self.release_host(token, session)
             return self.handbacks.stop(card) if stop else self.handbacks.finish(card)
 
@@ -1001,7 +994,7 @@ class DesktopViewer:
 
     async def report_host_disconnect(self, session):
         tab = session.host_gate.tab
-        if tab.disconnected and not tab.finished:
+        if tab.disconnected and not tab.finished and tab.conversation == session.conversation_id:
             await self.note_problem(session.member_id, session.conversation_id, "host", "show the screen")
 
     async def release_if_idle(self, token, session):
@@ -1070,7 +1063,7 @@ class DesktopViewer:
                     async with asyncio.timeout(4):
                         next_queue = await tab.cast.watch()
                 except (ValueError, OSError, TimeoutError):
-                    if browser.selected(tab.scope) is not tab:
+                    if self.host_selected(session) is not tab:
                         continue
                     return None
                 if self.host_peers.get(identifier) is not peer:
@@ -1211,10 +1204,12 @@ class DesktopViewer:
                     if asset == "host-input" and self.host_input_allowed(token, session):
                         tab = self.host_selected(session)
                         if event.get("target") == tab.id:
-                            gate = await self.host_gate_for(token, session, tab)
-                            if await gate.dispatch(event):
-                                session.input_at = self.vm.clock()
-                                return {**reply, "code": 204}
+                            async with self.host_browser.action_lock(tab):
+                                if self.host_selected(session) is tab:
+                                    gate = await self.host_gate_for(token, session, tab)
+                                    if await gate.dispatch(event):
+                                        session.input_at = self.vm.clock()
+                                        return {**reply, "code": 204}
             except (ValueError, OSError, TimeoutError):
                 pass
         return {"code": 403}
@@ -1243,38 +1238,44 @@ class DesktopViewer:
         index = history.get("currentIndex", 0)
         return {"shown": tab.id, "back": index > 0, "forward": index + 1 < len(history.get("entries", [])),
                 "tabs": [{"id": other.id, "title": other.title, "url": other.url, "favicon": other.favicon}
-                         for other in browser.scope_tabs(tab.scope)]}
+                         for other in browser.member_tabs(tab.member)]}
 
     async def host_browser_action(self, token, session, event):
         browser = self.host_browser
         shown = self.host_selected(session)
         action, identifier = event.get("action"), event.get("tab")
         tab = browser.tabs.get(identifier) if isinstance(identifier, str) else None
-        if tab is None or not tab.ready or tab.scope != shown.scope:
+        if shown is None or tab is None or not tab.ready or tab.member != session.member_id:
             return False
         if action == "select" and not self.host_input_allowed(token, session):
-            current = browser.selected(tab.scope)
-            session.host_watch = (current.id, tab.id) if current is not tab else None
-            browser.notify_view()
+            if tab.member in browser.held or tab.member in browser.handback:
+                return False
+            browser.select(tab)
             return True
         if not self.host_input_allowed(token, session):
             return False
-        async with browser.work_lock(tab.scope):
+        async with browser.action_lock(tab):
             if (not self.host_input_allowed(token, session) or not browser.live(tab)
                     or action not in ("select", "close") and tab is not self.host_selected(session)):
                 return False
             async with asyncio.timeout(4):
                 if action == "select":
+                    handback = browser.handback.get(tab.member)
+                    if handback is not None and not browser.related_tabs(tab, handback):
+                        return False
                     await session.host_gate.release()
                     await browser.activate(tab)
+                    browser.held[tab.member] = self.host_selected(session)
                 elif action == "close":
                     if session.host_gate.tab is tab:
                         await session.host_gate.release()
-                    await browser.cdp.call("Target.closeTarget", {"targetId": tab.target})
+                    await browser.close_tab(tab)
                 elif action == "new":
                     await session.host_gate.release()
-                    new_tab = await browser.new_tab(tab.scope, tab.member, tab.workspace, tab.conversation, previous=tab)
-                    await browser.activate(new_tab)
+                    new_tab = await browser.new_tab(tab.member, tab.workspace, session.conversation_id, previous=tab)
+                    async with browser.action_lock(new_tab):
+                        await browser.activate(new_tab)
+                        browser.held[tab.member] = new_tab
                 elif action == "navigate" and isinstance(event.get("url"), str) and len(event["url"]) <= 8192:
                     await navigate_host_page(browser, tab, event["url"].strip())
                 elif action == "reload":

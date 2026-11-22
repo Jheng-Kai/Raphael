@@ -214,7 +214,7 @@ class HandbackCards:
                                run_id=run_id, reason=reason, app="Chrome", language=language, note=detail)
         self._browser[run_id] = (returned, tab, card)
         self._changed(card)
-        closed = asyncio.create_task(browser.wait_scope_closed(tab.scope) if browser else tab.closed.wait())
+        closed = asyncio.create_task(browser.wait_handback_closed(tab) if browser else tab.closed.wait())
         try:
             async with asyncio.timeout(self._wait_ms / 1000):
                 await asyncio.wait((returned, closed), return_when=asyncio.FIRST_COMPLETED)

@@ -85,11 +85,11 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   // from beside the window buttons. Everything about the computer sits in one foot directly under the screen and
   // as wide as it: one quiet line of state above the pill, and a demonstration's actions beside the pill. The
   // skill review and the file changes take the screen's own place, so the foot never moves.
-  panel.innerHTML = `<div class="desktop-location-header"><div class="desktop-choice-row"><div class="desktop-computer-choice"></div><span class="computer-lifecycle-state" role="status"></span></div><p class="desktop-docker-setup" hidden></p></div><div class="desktop-takeover-bar" hidden>${roundBackButton(t("members.panelBack"), ' data-desktop="back" hidden')}${iconButton("shrink", t("desktop.collapse"), ' data-desktop="collapse" hidden')}</div><div class="desktop-shell">` +
+  panel.innerHTML = `<div class="desktop-location-header"><div class="desktop-choice-row"><span class="computer-lifecycle-state" role="status"></span><div class="computer-lifecycle"></div><div class="desktop-computer-choice"></div></div><p class="desktop-docker-setup" hidden></p></div><div class="desktop-takeover-bar" hidden>${roundBackButton(t("members.panelBack"), ' data-desktop="back" hidden')}${iconButton("shrink", t("desktop.collapse"), ' data-desktop="collapse" hidden')}</div><div class="desktop-shell">` +
     `<div class="desktop-screen"><img class="desktop-wallpaper" alt=""><img class="desktop-last" alt="" hidden><div class="desktop-placeholder"></div>${btn("", "sm", ' data-desktop="retry" hidden')}` +
     `<iframe referrerpolicy="no-referrer" sandbox="allow-scripts allow-same-origin" hidden></iframe>` +
     `<button type="button" class="btn desktop-open" data-desktop="enlarge" hidden><span class="desktop-open-pill">${ico("open")}<span></span></span></button></div><p class="desktop-caption" role="status" hidden></p><div class="desktop-review" hidden></div>` +
-    `<div class="desktop-foot"><div class="desktop-settings"><div class="computer-lifecycle"></div></div><div class="desktop-notes"><p class="desktop-request" role="status" hidden></p><p class="desktop-notice" role="status" hidden></p><p class="desktop-recording" role="status" hidden></p><div class="desktop-teach-missing" hidden></div><div class="desktop-try" hidden><input class="mb-fin" data-teach-input maxlength="4000">${btn("", "sm", ' data-desktop="try-teach"')}</div></div>` +
+    `<div class="desktop-foot"><div class="desktop-notes"><p class="desktop-request" role="status" hidden></p><p class="desktop-notice" role="status" hidden></p><p class="desktop-recording" role="status" hidden></p><div class="desktop-teach-missing" hidden></div><div class="desktop-try" hidden><input class="mb-fin" data-teach-input maxlength="4000">${btn("", "sm", ' data-desktop="try-teach"')}</div></div>` +
     `<div class="desktop-bar"><div class="desktop-dock"><div class="desktop-mode"><span class="desktop-mode-label" role="status">${ico("eye")}<span></span></span>${btn("", "sm", ' data-desktop="take" hidden')}${btn("", "sm", ' data-desktop="return"')}</div>${iconButton("more", t("chat.more"), ' data-desktop="menu" aria-haspopup="menu" aria-expanded="false"')}</div>` +
     `<div class="desktop-actions">${btn("", "sm", ' data-desktop="discard-teach" hidden')}${btn("", "sm", ' data-desktop="teach"')}</div></div></div></div>`;
   const locationHeader = panel.querySelector<HTMLElement>(".desktop-location-header")!;
@@ -327,7 +327,8 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     const selectedState = requested?.status ?? (transport === actual() ? state : undefined);
     const statusText = transport === "idle" || !selectedState
       ? t("memberComputer.idle") : computerStateLabel(selectedState);
-    const showStatus = !!state?.transport || selectedState?.state === "running";
+    const showStatus = !!state?.transport
+      && (selectedState?.state !== "running" || !!selectedState.lifecycle || !!selectedState.error);
     paint(status, "hidden", !showStatus);
     patchHTML(status, showStatus ? `<span data-computer-state-text>${esc(statusText)}</span>` : "");
     const dockerMissing = transport === "docker" && selectedState?.error === "docker_missing";
@@ -431,10 +432,11 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
       else destination.prepend(frame);
     }
   }
-  function closeLease(opened: DesktopSession): void {
-    closePending = closePending.then(() => api.desktopClose(opened.session)).catch(() => {});
+  function closeLease(opened: DesktopSession, ordered = true): void {
+    const pending = (ordered ? closePending : Promise.resolve()).then(() => api.desktopClose(opened.session)).catch(() => {});
+    if (ordered) closePending = pending;
   }
-  function closeStream(keepExpanded = false): void {
+  function closeStream(keepExpanded = false, orderedClose = true): void {
     clearTimeout(lingering); clearTimeout(stallTimer); clearTimeout(takeTimer); stalled = false; retryAt = 0;
     opening = changing = false; paint(notice, "hidden", true);
     if (state?.transport === 'host' && streamMember !== undefined) lastFrames.delete(streamMember);
@@ -442,7 +444,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     const previous = session; session = undefined;
     browserModel = undefined;
     browserToolbar.draw(undefined, false);
-    if (previous) closeLease(previous);
+    if (previous) closeLease(previous, orderedClose);
     if (keepExpanded && panel.hasAttribute('data-expanded')) {
       watching = true;
       document.documentElement.setAttribute('data-desktop-watch', '');
@@ -511,8 +513,13 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   /** A plain preview can go away; the enlarged view owns its stream until explicitly folded or returned. */
   function leave(closePreview = false): void {
     if (keepStream()) return;
-    if (closePreview || panel.hasAttribute('data-expanded') || session && state?.transport === 'host') { closeStream(); return; }
+    if (closePreview || panel.hasAttribute('data-expanded')) { closeStream(); return; }
     if (!session) return;
+    if (state?.transport === 'host') {
+      // A watching Chrome lease owns no input. Its token can close while the same page opens in a new lease.
+      closeStream(false, state.control === 'owner' || interactive || changing);
+      return;
+    }
     clearTimeout(lingering);
     lingering = setTimeout(closeStream, LINGER_MS);
   }

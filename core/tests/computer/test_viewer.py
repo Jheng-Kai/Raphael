@@ -695,7 +695,7 @@ def test_library_embedding_omits_standalone_chrome_and_keeps_upstream_notices():
     assert "Copyright noVNC authors" in page
     assert "base.css" not in page and "control_bar" not in page and "app/ui.js" not in page
     assert 'src="bridge.js"' in page and 'id="noVNC_container"' in page
-    assert 'background:#171717' in page
+    assert 'background:transparent' in page
 
 
 async def test_private_connection_uses_the_current_validated_container_after_restart(viewer):

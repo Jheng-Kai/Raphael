@@ -1549,7 +1549,9 @@ export function installMock(fixture, config = {}, target = window) {
       }
       case "computer.viewer_close": {
         if (desktopSessions.get(p.session)?.held && data.desktop) data.desktop.control = "member";
-        desktopSessions.delete(p.session); return {};
+        desktopSessions.delete(p.session);
+        if (variant.desktopCloseDelay) await new Promise(resolve => setTimeout(resolve, variant.desktopCloseDelay));
+        return {};
       }
       // No look touches a clipboard: a paste is not handed over and a copy brings nothing.
       case "computer.viewer_clipboard": return p.action === "put" ? { put: false } : { copied: false };

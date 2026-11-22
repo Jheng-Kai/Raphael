@@ -1,6 +1,7 @@
 """Showing a browser page exercises the production tool and viewer selection."""
 
 import asyncio
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -47,8 +48,8 @@ async def test_showing_youtube_opens_the_live_host_panel_without_a_link_or_takeo
     member = app.members.store.create_member(name="Browser member")
     opened = []
 
-    async def open_tab(scope, member_id, workspace, conversation, *, new):
-        tab = Tab("page", "target", "cdp", scope, member_id, workspace, conversation=conversation)
+    async def open_tab(member_id, workspace, conversation, *, new):
+        tab = Tab("page", "target", "cdp", member_id, workspace, conversation=conversation)
         host.browser.tabs[tab.id] = tab
         host.browser.select(tab)
         return tab, True
@@ -77,6 +78,64 @@ async def test_showing_youtube_opens_the_live_host_panel_without_a_link_or_takeo
         assert "host_request" not in state
         assert not app._conn.execute("SELECT 1 FROM handback_cards").fetchone()
         assert not app._conn.execute("SELECT 1 FROM computer_suggestions").fetchone()
+    finally:
+        reader.cancel()
+        host.browser.cdp = None
+        await driver.aclose()
+
+
+async def test_member_checks_tabs_and_uses_the_page_the_owner_opened(tmp_path, monkeypatch):
+    question = "I opened the seller chat in a new tab. Read the latest reply there."
+    answer = "The seller says the parcel ships tomorrow."
+    calls = []
+
+    class Client(FakeClient):
+        async def chat_tools(self, **kwargs):
+            tools = {tool["function"]["name"]: tool["function"] for tool in kwargs["tools"]}
+            list_tabs = next(name for name in tools if name.endswith("__browser_tabs"))
+            read = next(name for name in tools if name.endswith("__get_browser_state"))
+            assert "including tabs the owner opened" in tools[list_tabs]["description"]
+            assert "check browser_tabs" in kwargs["messages"][0]["content"]
+            replies = [message for message in kwargs["messages"] if message["role"] == "tool"]
+            if not replies:
+                self.turns = iter([("", [(list_tabs, {})])])
+            elif len(replies) == 1:
+                assert "seller-chat" in str(replies[-1]["content"])
+                assert "other-member" not in str(replies[-1]["content"])
+                self.turns = iter([("", [(read, {"tab_id": "seller-chat"})])])
+            else:
+                assert "The parcel ships tomorrow." in str(replies[-1]["content"])
+                self.turns = iter([(answer, [])])
+            return await super().chat_tools(**kwargs)
+
+    driver = RpcDriver(tmp_path, "fake/model", Client([]), Budget(5))
+    app = driver.app
+    app.vm.enabled = True
+    host = app.vm_tools.host_computer = HostComputerTools(app.vm, app._conn, BROWSER_OPEN)
+    member = app.members.store.create_member(name="Browser member").id
+    peer = app.members.store.create_member(name="Other member").id
+    reader = asyncio.get_running_loop().create_future()
+    host.browser.cdp = SimpleNamespace(reader=reader)
+    for identifier, owner, title in (("product", member, "Product"), ("seller-chat", member, "Seller chat"),
+                                      ("other-member", peer, "Private tab")):
+        tab = Tab(identifier, f"target-{identifier}", f"session-{identifier}", owner, tmp_path, title=title)
+        host.browser.tabs[identifier] = tab
+        host.browser.owned_targets[tab.target] = owner
+        host.browser.select(tab)
+
+    async def snapshot(browser, tab, arguments):
+        calls.append(tab.id)
+        return {"tab_id": tab.id, "page": {"text": "The parcel ships tomorrow."}}, []
+
+    async def unexpected(*args, **kwargs):
+        pytest.fail("The member should reuse the owner's tab")
+
+    monkeypatch.setattr(host_page, "snapshot", snapshot)
+    monkeypatch.setattr(host.browser, "open_tab", unexpected)
+    try:
+        result = await driver.ask(question, member=member)
+        assert result["text"] == answer and calls == ["seller-chat"]
+        assert [trace["outcome"] for trace in driver.traces] == ["ok", "ok"]
     finally:
         reader.cancel()
         host.browser.cdp = None

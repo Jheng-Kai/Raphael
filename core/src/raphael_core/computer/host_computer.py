@@ -21,12 +21,22 @@ from .vm_catalog import offline_catalog
 
 
 BROWSER_TOOLS = {
-    "get_browser_state": "Read the current tab's text and accessibility references, optionally with a viewport screenshot.",
-    "browser_navigate": "Navigate the exact owned tab to an HTTP or HTTPS page.",
-    "browser_click": "Click a current accessibility reference in the background. Use a DOM event; native and coordinate input are unavailable.",
-    "browser_type": "Fill a current text field in the background. Never type passwords, verification codes, keys or payment details.",
-    "browser_select": "Choose an option in a native HTML select using its current accessibility reference.",
+    "get_browser_state": "Read the shown tab or a tab from browser_tabs. Request include_screenshot for viewport pixels.",
+    "browser_navigate": "Navigate the shown or named tab to an HTTP or HTTPS page.",
+    "browser_click": "Click a stable ref or use x,y from a screenshot when the page keeps changing. Verify the result.",
+    "browser_type": "Fill a field by its current ref. Never type passwords, verification codes, keys or payment details.",
+    "browser_select": "Choose an option in an HTML select by its current ref.",
 }
+VIEWPORT_TOOLS = {
+    "get_desktop_state": ("Capture the shown tab's 1280 × 900 page as a screenshot.", "", ""),
+    "click": ("Click at x,y from the shown tab's screenshot.", "x y button count modifier", "x y"),
+    "double_click": ("Double-click at x,y from the shown tab's screenshot.", "x y", "x y"),
+    "type_text": ("Type into the page's focused field. Leave credentials, codes and payment to the owner.", "text", "text"),
+    "press_key": ("Press a page key, optionally with modifiers.", "key modifiers", "key"),
+    "scroll": ("Scroll the page at x,y from the screenshot.", "x y direction amount by", "x y direction"),
+}
+PAGE_ACTIONS = {"browser_click", "browser_type", "browser_select"}
+INPUT_ACTIONS = (VIEWPORT_TOOLS.keys() - {"get_desktop_state"}) | PAGE_ACTIONS
 HOST_TAKEOVER = {**TAKEOVER["parameters"], "properties": {
     **TAKEOVER["parameters"]["properties"],
     "reason": {"type": "string", "enum": [*REASONS, "certificate"]},
@@ -42,8 +52,9 @@ WORDS = {
     "chrome_command_failed": "Chrome rejected the browser command. Read the tab again before retrying.",
     "browser_url": "Chrome can only open a valid HTTP or HTTPS page, except its own control address.",
     "browser_navigation_failed": "Chrome could not load the requested page.",
-    "browser_tab_required": "Open a Chrome page in this turn or task first.",
-    "browser_tab_changed": "The Chrome tab closed or changed. Open it again before continuing.",
+    "browser_tab_required": "Use browser_tabs for your current tabs, or open one if the list is empty.",
+    "browser_tab_changed": "The Chrome tab closed or changed. Use browser_tabs to find a live tab.",
+    "browser_tab_busy": "Another turn or task is using this tab. Try it again shortly or use another tab from browser_tabs.",
     "browser_page_changed": "The page changed after the last read. Read it again for current controls.",
     "browser_action_refused": "Chrome could not perform this action on the selected page element.",
     "browser_field_refused": "Chrome could not type into or select a value in that field.",
@@ -54,8 +65,9 @@ WORDS = {
     "browser_handback_stopped": "The owner stopped the handback. End this task without retrying the action.",
     "browser_handback_expired": "The owner did not return this tab in time. End this task without retrying the action.",
     "private_conversation_required": "Ask the owner to continue in the private conversation at this computer to take over the tab.",
-    "browser_current_ref_required": "Read the current tab and use a current accessibility reference. Coordinates are unavailable in this mode.",
-    "browser_dom_input_required": "Chrome requires DOM input to keep this tab in the background. Use input_route: dom_event.",
+    "browser_current_ref_required": "Read the tab again for current references or use screenshot coordinates for a click.",
+    "browser_dom_input_required": "Use screenshot coordinates for native page input or omit input_route for a ref click.",
+    "browser_coordinates": "Use x and y inside the current 1280 × 900 tab screenshot.",
     "browser_background_only": "The owner can watch this tab in the app's Computer panel.",
     "host_tool_unavailable": "This tool requires the isolated Docker computer. Use the browser or work folder on this computer.",
 }
@@ -68,19 +80,40 @@ class HostComputerTools:
         self.cards = None
         self.catalog, self.routes = {}, {}
         self.active = Counter()
-        self.cleanup = set()
         self.files = OwnerFileTools(vm.settings, DataFloor(conn))
         definitions = offline_catalog()
-        self.definitions = {
-            name: {**definitions[name], "description": description}
-            for name, description in BROWSER_TOOLS.items()
-        }
+        tab_id = {"type": "string", "description": "Tab ID from browser_tabs. Omit to use the shown tab."}
+        self.definitions = {}
+        for name, description in BROWSER_TOOLS.items():
+            definition = definitions[name]
+            self.definitions[name] = {"description": description, **{
+                key: {**definition[key],
+                      "properties": {arg: tab_id if arg in {"target_id", "tab_id"} else prop
+                                     for arg, prop in definition[key]["properties"].items()},
+                      "required": [arg for arg in definition[key].get("required", []) if arg not in {"target_id", "tab_id"}]}
+                for key in ("parameters", "validation")
+            }}
+        for name, (description, fields, required) in VIEWPORT_TOOLS.items():
+            source = definitions[name]["parameters"]["properties"]
+            properties = {field: {**source[field]} for field in fields.split()}
+            for field in properties.keys() & {"x", "y"}:
+                properties[field]["description"] = f"{field.upper()} in the 1280 × 900 Chrome page screenshot."
+            self.definitions[name] = {"description": description, "parameters": {
+                "type": "object", "properties": {**properties, "tab_id": tab_id}, "required": required.split(),
+                "additionalProperties": False,
+            }}
         self.definitions.update({
             "browser_open": {**open_definition, "description": "Open an HTTP or HTTPS URL in your own background Chrome tab. "
                              "The owner sees it in the app's Computer panel. When asked to show a page, open it and say where to look. "
-                             "Use new_tab to keep the current page. " + HOST_CONTRACT},
-            "browser_tabs": {**BROWSER_TABS, "description": "List only your current work's Chrome tabs. "
-                             "The owner watches the current page in the app's Computer panel."},
+                             "Check browser_tabs first. Use new_tab to keep the current page. " + HOST_CONTRACT},
+            "browser_tabs": {"description": "List your Chrome tabs across turns and tasks, including tabs the owner opened "
+                             "and popups. Check before opening a duplicate. The shown tab is the default. Pass show or close "
+                             "with a listed tab_id to select or close it.", "parameters": {
+                                 **BROWSER_TABS["parameters"], "properties": {
+                                     **BROWSER_TABS["parameters"]["properties"],
+                                     "close": {**BROWSER_TABS["parameters"]["properties"]["show"]},
+                                 }, "not": {"required": ["show", "close"]},
+                             }},
             "request_takeover": {"parameters": HOST_TAKEOVER, "description": TAKEOVER["description"] + " Use certificate for a certificate prompt."},
             **{name: {**DEFINITIONS[name], "description": DEFINITION_WORDS[name]} for name in READS | WRITES},
         })
@@ -100,7 +133,7 @@ class HostComputerTools:
 
     @staticmethod
     def base_tier(name):
-        return Tier.T2 if name in WRITES or name in ("browser_click", "browser_type", "browser_select") else Tier.T0
+        return Tier.T2 if name in WRITES or name in INPUT_ACTIONS else Tier.T0
 
     def local_target(self, member):
         return (self.vm.shared_target("", member, 0) if self.vm.mode == "shared" and not self.vm.remote
@@ -110,16 +143,16 @@ class HostComputerTools:
         target = self.local_target(member)
         return self.vm.member_workspace(target), target.shared
 
-    def close_turn(self, turn_id, *, keep_page=False):
-        for work in set(self.browser.owned_targets.values()):
-            if len(work) != 2 or not isinstance(work[0], tuple) or work[1] != turn_id:
+    def finish_work(self, *, turn_id=None, task_id=None):
+        for tab in self.browser.tabs.values():
+            if tab.work is None:
                 continue
-            task = asyncio.create_task(self.browser.close_scope(work, keep_page=keep_page))
-            self.cleanup.add(task)
-            task.add_done_callback(self.cleanup.discard)
+            scope, turn = tab.work
+            if (task_id is not None and scope == ("task", task_id)
+                    or turn_id is not None and scope[0] == "turn" and turn == turn_id):
+                tab.finished = True
 
     async def aclose(self):
-        await asyncio.gather(*self.cleanup, return_exceptions=True)
         await self.browser.aclose()
 
     def path(self, member, raw):
@@ -162,6 +195,8 @@ class HostComputerTools:
 
     def tier_for_call(self, key, arguments):
         member, tool = self.routes[key]
+        if tool.name == "browser_tabs" and "close" in arguments:
+            return Tier.T2
         if tool.name in WRITES:
             try:
                 path = self.path(member, arguments.get("path", ""))
@@ -213,29 +248,25 @@ class HostComputerTools:
         try:
             if name in READS | WRITES:
                 return await self.file_call(member, name, arguments, approver, scope)
-            work = (scope, turn_id) if scope[0] == "turn" else scope
+            work = (scope, turn_id)
             browser = self.browser
             can_hand_back = private and turn_id and conversation_id is not None and self.cards is not None
-            async with browser.work_lock(work):
-                if work in browser.held or any(tab.scope == work and tab.handoff for tab in browser.tabs.values()):
-                    raise BrowserError("owner_holds_control")
-                data, blocks, tab = await self.browser_call(name, arguments, approver, member, work, conversation_id, announce, turn_id=turn_id)
-                # A page read can report a private step without asking the owner to take over.
-                reason = data.get("owner_needed") if name in {"request_takeover", "browser_click", "browser_type", "browser_select"} else None
-                if reason and can_hand_back:
-                    tab.handoff = True
+            data, blocks, tab, reason = await self.browser_call(
+                name, arguments, approver, member, work, conversation_id, announce, can_hand_back=can_hand_back)
             if reason:
-                if not can_hand_back:
-                    raise BrowserError("private_conversation_required")
                 try:
                     detail = data.get("detail", "")
                     await self.cards.wait_for_browser(turn_id=turn_id, member_id=member, conversation_id=conversation_id,
                                                       language=language, reason=reason, tab=tab, detail=detail, browser=browser)
+                    await browser.wait_popups(member)
+                    returned = browser.handback_tab(tab)
+                    if returned is None:
+                        raise BrowserError("browser_tab_changed")
+                    async with browser.action_lock(returned):
+                        data, blocks = await host_page.snapshot(browser, returned, {})
                 finally:
-                    tab.handoff = False
-                async with browser.work_lock(work):
-                    await browser.wait_popups(work)
-                    data, blocks = await host_page.snapshot(browser, browser.selected(work) or tab, {})
+                    if browser.handback.get(member) is tab:
+                        browser.handback.pop(member)
                 if data.get("owner_needed"):
                     data["status"] = "owner_step_still_needed"
                 else:
@@ -254,46 +285,80 @@ class HostComputerTools:
             if not self.active[member]:
                 del self.active[member]
 
-    async def browser_call(self, name, arguments, approver, member, work, conversation, announce, *, turn_id=None):
+    async def browser_call(self, name, arguments, approver, member, work, conversation, announce, *, can_hand_back=False):
         browser = self.browser
-        await browser.wait_popups(work)
+        if name != "browser_open":
+            await browser.restart_if_disconnected()
+        if not (arguments.get("target_id") or arguments.get("tab_id")):
+            await browser.wait_popups(member)
         if name == "browser_tabs":
-            if arguments.get("show"):
-                raise BrowserError("browser_background_only")
-            current = browser.selected(work)
+            if identifier := arguments.get("show") or arguments.get("close"):
+                tab = browser.tab(member, identifier)
+                async with browser.action_lock(tab):
+                    if browser.member_blocked(tab):
+                        raise BrowserError("owner_holds_control")
+                    if "close" in arguments:
+                        await browser.close_tab(tab)
+                    else:
+                        current = browser.selected(member)
+                        if current is not None and browser.member_blocked(current):
+                            raise BrowserError("owner_holds_control")
+                        browser.select(tab)
+            current = browser.selected(member)
             tabs = [{"tab_id": tab.id, "title": tab.title, "url": tab.url, "shown": tab is current}
-                    for tab in browser.scope_tabs(work) if browser.live(tab) and not tab.finished]
-            return {"tabs": tabs}, [], None
+                    for tab in browser.member_tabs(member) if browser.live(tab)]
+            return {"tabs": tabs}, [], None, None
+        scope, turn_id = work
         if name == "browser_open":
-            if isinstance(work[0], tuple) and not work[1]:
+            if scope[0] == "turn" and not turn_id:
                 raise BrowserError("private_conversation_required")
             await self.vm.settled()
-            tab, _ = await browser.open_tab(work, member, self.folders(member)[0], conversation,
-                                                  new=bool(arguments.get("new_tab")))
-            first_page = tab.turn_id is None
-            tab.turn_id = turn_id
-            if first_page and announce:
-                announce()
+            tab, _ = await browser.open_tab(member, self.folders(member)[0], conversation,
+                                            new=bool(arguments.get("new_tab")))
         else:
-            tab = browser.tab(work, arguments.get("target_id"), arguments.get("tab_id"))
-        if tab.handoff:
-            raise BrowserError("owner_holds_control")
+            tab = browser.tab(member, arguments.get("target_id"), arguments.get("tab_id"))
+        async with browser.action_lock(tab):
+            if browser.member_blocked(tab):
+                raise BrowserError("owner_holds_control")
+            if name == "browser_open" and tab.work != work and announce:
+                announce()
+            tab.work, tab.turn_id, tab.conversation, tab.finished = work, turn_id, conversation, False
+            data, blocks = await self.page_call(browser, tab, name, arguments, approver)
+            # Reading a private page describes the owner step without asking for control.
+            reason = data.get("owner_needed") if name in INPUT_ACTIONS | {"request_takeover"} else None
+            if reason:
+                if not can_hand_back:
+                    raise BrowserError("private_conversation_required")
+                if member in browser.handback or member in browser.held:
+                    raise BrowserError("owner_holds_control")
+                browser.handback[member] = tab
+                browser.select(tab)
+        return data, blocks, tab, reason
+
+    @staticmethod
+    async def page_call(browser, tab, name, arguments, approver):
         if name == "request_takeover":
-            return {"owner_needed": arguments["reason"], "detail": takeover_detail(arguments)}, [], tab
+            return {"owner_needed": arguments["reason"], "detail": takeover_detail(arguments)}, []
         if name in ("browser_open", "browser_navigate"):
             try:
                 navigated = await host_page.navigate(browser, tab, arguments["url"])
             except BrowserError as error:
                 if str(error) != "browser_certificate_needed":
                     raise
-                return {"target_id": tab.id, "tab_id": tab.id, "owner_needed": "certificate"}, [], tab
+                return {"target_id": tab.id, "tab_id": tab.id, "owner_needed": "certificate"}, []
             if not navigated:
-                return {"status": "download_started", "target_id": tab.id, "tab_id": tab.id}, [], tab
-        if name in ("browser_click", "browser_type", "browser_select"):
-            return await host_page.act(browser, tab, name, arguments, approver), [], tab
+                return {"status": "download_started", "target_id": tab.id, "tab_id": tab.id}, []
+        if name == "browser_click" and ("x" in arguments or "y" in arguments):
+            return await host_page.viewport_action(browser, tab, "click", arguments, approver), []
+        if name in PAGE_ACTIONS:
+            return await host_page.act(browser, tab, name, arguments, approver)
+        if name == "get_desktop_state":
+            return await host_page.screenshot(browser, tab)
+        if name in VIEWPORT_TOOLS:
+            return await host_page.viewport_action(browser, tab, name, arguments, approver), []
         data, blocks = await host_page.snapshot(browser, tab, arguments)
         data["view"] = "The owner can see this page in the app's Computer panel."
-        return data, blocks, tab
+        return data, blocks
 
 
 DEFINITION_WORDS = {
