@@ -130,6 +130,23 @@ def _registered_windows_node():
     return None
 
 
+def _suffixes(environ):
+    if sys.platform != "win32":
+        return (".exe", ".cmd", ".ps1", "")
+    # npm also installs an extensionless POSIX script, which Windows cannot launch.
+    listed = environ.get("PATHEXT", "").lower().split(";")
+    return [suffix for suffix in dict.fromkeys((*listed, *WINDOWS_LAUNCHERS)) if suffix in WINDOWS_LAUNCHERS]
+
+
+def _path_candidates(executable, environ):
+    """The command's places on PATH, the one lookup discovery makes outside its own known folders."""
+    path_value = environ.get("PATH", "")
+    if sys.platform == "win32":
+        return [folder / (executable + suffix) for folder in _windows_path(path_value) for suffix in _suffixes(environ)]
+    found = shutil.which(executable, path=path_value)
+    return [Path(found)] if found else []
+
+
 def resolve_command(path, environ=None):
     path = Path(path).resolve()
     environ = os.environ if environ is None else environ
@@ -238,16 +255,8 @@ class CliBrains:
             local = Path(self.environ["LOCALAPPDATA"])
             roots.extend([local / "Microsoft" / "WinGet" / "Links", local / "Programs" / executable,
                           local / "Programs" / "Claude", local / "npm", local / "agy" / "bin"])
-        path_value = self.environ.get("PATH", "")
-        if sys.platform == "win32":
-            # npm also installs an extensionless POSIX script, which Windows cannot launch.
-            suffixes = self.environ.get("PATHEXT", "").lower().split(";")
-            suffixes = [suffix for suffix in dict.fromkeys((*suffixes, *WINDOWS_LAUNCHERS)) if suffix in WINDOWS_LAUNCHERS]
-            candidates = [root / (executable + suffix) for root in (*_windows_path(path_value), *roots) for suffix in suffixes]
-        else:
-            found = shutil.which(executable, path=path_value)
-            candidates = [Path(found)] if found else []
-            candidates.extend(root / (executable + suffix) for root in roots for suffix in (".exe", ".cmd", ".ps1", ""))
+        candidates = _path_candidates(executable, self.environ)
+        candidates.extend(root / (executable + suffix) for root in roots for suffix in _suffixes(self.environ))
         for path in candidates:
             if path.is_file():
                 try:
