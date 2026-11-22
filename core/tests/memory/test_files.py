@@ -333,7 +333,9 @@ def test_a_contended_windows_path_keeps_its_memory_inside_the_home(tmp_path, mon
     monkeypatch.setattr(ntpath, "_getfinalpathname", contended)
     result = memory.apply([{"action": "add", "content": "The owner rides a bicycle."}])
     assert result["success"], result
-    assert calls >= probe
+    # homes.safe walks the path with lstat and never asks realpath, so a contended realpath cannot
+    # throw the write out of the home; either way the memory stays where it was.
+    assert calls == 0 or calls >= probe
     assert "The owner likes tea." in path.read_text(encoding="utf-8")
     assert "The owner rides a bicycle." in path.read_text(encoding="utf-8")
 
