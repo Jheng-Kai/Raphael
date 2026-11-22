@@ -111,7 +111,6 @@ from .schedule import Schedule, first_eligible_slot, next_run
 from .covers import Covers, selection as cover_selection
 from .store import (
     ROUTINE_RUN_STATUS_SQL,
-    COMPUTER_FIELDS,
     PROFILE_FIELDS,
     Group,
     Member,
@@ -710,7 +709,7 @@ class MembersService:
         last = latest.get(member.id)
         activity, activity_label = self.activity.describe(member.id, waiting, tasks=tasks)
         view: dict[str, Any] = {
-            **{field: getattr(member, field) for field in (*PROFILE_FIELDS, *COMPUTER_FIELDS)},
+            **{field: getattr(member, field) for field in PROFILE_FIELDS},
             "id": member.id,
             "chief": self.store.is_chief(member.id),
             "name": member.name,
@@ -749,7 +748,6 @@ class MembersService:
         view: dict[str, Any] = {
             "blurb": "", "reply_style": "full",
             "notify": self._settings.get("raphael_notify"), "ask_before_members": False, "pinned": self._chief_pinned(), "hidden": False, "draft_first": self._settings.get("raphael_draft_first"),
-            "computer_mode": self._settings.get("raphael_computer_mode"), "desktop_control": self._settings.get("raphael_desktop_control"),
             "id": 0,
             "chief": self.store.is_chief(0),
             "name": RAPHAEL_NAMES[language],
@@ -1354,8 +1352,7 @@ class MembersService:
     def _update_raphael(self, params: dict, *, profile_fields=("personality", "instructions")) -> dict:
         from ..brain.settings import checked
 
-        preferences = {"tools": "raphael_tools", "notify": "raphael_notify", "draft_first": "raphael_draft_first",
-                       "computer_mode": "raphael_computer_mode", "desktop_control": "raphael_desktop_control"}
+        preferences = {"tools": "raphael_tools", "notify": "raphael_notify", "draft_first": "raphael_draft_first"}
         if set(params) - {"id", *profile_fields, *preferences, "cover", "cover_position"}:
             raise RpcError(INVALID_PARAMS, "This field is not editable for the first Bot", {"kind": "raphael"})
         cover = self._updated_cover(0, params)
@@ -1384,25 +1381,14 @@ class MembersService:
         self._changed()
         return {"member": self._raphael_view(self._language(), {}, set(), {})}
 
-    def computer_preference(self, member_id, field):
-        if member_id == 0:
-            return self._settings.get("raphael_" + field)
-        member = self.store.member(member_id)
-        return getattr(member, field) if member is not None else ("host" if field == "computer_mode" else False)
-
     async def _update(self, params: dict) -> dict:
-        if "computer_mode" in params and type(params.get("id")) is int:
-            member_id = params["id"]
-            if (params["computer_mode"] != self.computer_preference(member_id, "computer_mode")
-                    and getattr(self, "computer_mode_busy", lambda member: False)(member_id)):
-                raise invalid_params("Wait for the current computer work to finish before changing modes")
         if type(params.get("id")) is int and params["id"] == 0:
             return self._update_raphael(params)
         member_id = self._member_id(params)
         cover = self._updated_cover(member_id, params)
         fields = {
             name: params[name]
-            for name in ("name", "role", "personality", "instructions", "group_id", "avatar", "tools", "model", "position", *PROFILE_FIELDS, *COMPUTER_FIELDS)
+            for name in ("name", "role", "personality", "instructions", "group_id", "avatar", "tools", "model", "position", *PROFILE_FIELDS)
             if name in params
         }
         avatar = fields.get("avatar")

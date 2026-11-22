@@ -8,6 +8,12 @@ const source = [...chat, ...questions, ...mcp, ...pages];
 const alias = (name, original) => ({...source.find(scene => scene.name === original), name});
 const computer = {running:"fresh",runningMember:1,desktop:{state:"running",ready:true,control:"member",works:[{id:"private-computer-task",request_id:"private-takeover-request",turn_id:2,state:"waiting_control",tool:"get_desktop_state",reason:"sign_in"}]}};
 const entry = [member(1),wait('[data-card-desktop-screen] iframe:not([hidden])')];
+const hostCard = {computerCard: 'signin', browserHandback: true,
+  desktop:{transport:'host',target:'chrome-tab',state:'running',ready:true,control:'member',
+    host_request:{id:'card-pc',request_id:'card-pc',turn_id:140,state:'waiting_control',tool:'get_browser_state',reason:'sign_in',detail:'請登入範例帳戶。'}}};
+const hostTake = [member(1), wait('[data-computer-card="card-pc"] .desktop-last:not([hidden])'),
+  click('[data-computer-card="card-pc"] [data-act="card-takeover"].pri'),
+  wait('.desktop-panel[data-expanded][data-interactive="true"] iframe[src*="transport=host"]')];
 export default [
   ...Object.entries({
     "card-page-ready":"page-product", "card-page-failed":"page-gone", "card-background":"room-question-card",
@@ -25,9 +31,14 @@ export default [
   scene('card-login','Login credentials stay masked in the card',[member(1),wait('[data-login-user]'),type('[data-login-user]','reader@example.invalid'),type('[data-secret-input]','synthetic-password'),check('card-shell')],{loginCard:true}),
   scene('card-question-key','A focused question takes B, while typing A stays in the answer field', [member(1),wait('[data-owner-question="owner-choice"]'),type('[data-owner-answer-input]','A'),check('card-question-typing'),click('[data-owner-question="owner-choice"] .card-title'),key('b'),wait('[data-card-state="answered"]'),check('card-question-key')],{ownerQuestion:'asked'}),
   scene('card-computer-waiting','The existing live stream sits inside the waiting card', [...entry,check('card-computer-inline')],computer),
-  scene('card-browser-sign-in', 'Chrome sign-in uses the existing handback card with the exact tab action',
-    [member(1), wait('[data-computer-card="card-pc"] [data-act="card-browser-focus"]'), check('card-shell')],
-    {computerCard: 'signin', browserHandback: true}),
+  scene('desktop-host-live-card', 'The conversation shows the current Chrome page and a single close action',
+    [member(1), wait('[data-card-host-screen] .desktop-last:not([hidden])'), check('desktop-host-thumbnail')],
+    {running:"fresh",runningMember:1, desktop:{transport:"host",target:"chrome-tab",state:"running",ready:true,control:"member",
+      works:[{id:"chrome-tab",turn_id:2,transport:"host",state:"running",tool:"browser_open",reason:""}]}}),
+  scene('desktop-host-takeover', 'Take control opens the host browser in the existing large viewer',
+    [...hostTake, wait('[data-desktop="return"]:not([hidden])'), {action:'desktop-owner-typing'}, check('desktop-host-frame')], hostCard),
+  scene('desktop-host-handback', 'Done returns the host browser tab from the same viewer',
+    [...hostTake, click('[data-desktop="return"]'), wait('[data-computer-card="card-pc"][data-card-state="done"]')], hostCard),
   // R-PANEL-09: a sign-in is no work for a small picture. The card's screen and its 接手 carry the same stream into the larger view,
   // where the owner's input reaches it and the pill's 我完成了 gives the request back once.
   scene('card-computer-takeover','A click on the card screen takes the same stream into the larger view under the owner hands without reconnecting', [...entry,click('[data-card-desktop-screen] button'),wait('.desktop-panel[data-expanded][data-interactive="true"] .desktop-screen iframe'),{action:'desktop-owner-typing'},check('computer-takeover-owner')],computer),

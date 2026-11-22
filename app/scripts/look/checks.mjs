@@ -1016,7 +1016,7 @@ export function checkRendered(name, context = {}) {
       require(!panel.querySelector('[data-act="docker-download"]'), 'a missing installation draws no download button');
     } else if (name === 'member-panel-computer-remote') {
       require(!shownText(panel.querySelector('.desktop-screen')).includes('studio-mini'), 'a remote failure does not write the host on the screen');
-      require(visible(panel.querySelector('.desktop-location-header [data-computer-location]')), 'the location control still names where the computer lives');
+      require(visible(panel.querySelector('[data-computer-choice]')), 'the computer dropdown still names where the computer lives');
     } else if (name === 'member-panel-docker-start') {
       const calls = window.__look.calls.filter(call => call.params?.start_docker);
       require(calls.length === 1 && calls[0].params.host === '' && calls[0].params.member_id === 1, 'one explicit press starts only the captured local engine');
@@ -1025,7 +1025,7 @@ export function checkRendered(name, context = {}) {
     } else if (name === 'member-panel-remote-location') {
       require(visible(document.querySelector('.computer-location-popover')), 'recovery opens the existing location control');
     } else if (name === 'member-panel-location-hover') {
-      const button = panel.querySelector('.desktop-location-header [data-computer-location]'), style = getComputedStyle(button);
+      const button = panel.querySelector('[data-computer-choice]'), style = getComputedStyle(button);
       require(button.matches(':hover') && button.textContent.includes('mac-mini'), 'the pointer is on the location button');
       const clear = value => value === 'transparent' || /rgba\(\d+, \d+, \d+, 0\)/.test(value);
       require(clear(style.backgroundColor) && clear(style.borderTopColor), `the location shows no fill or frame under the pointer (${style.backgroundColor}, ${style.borderTopColor})`);
@@ -1043,8 +1043,7 @@ export function checkRendered(name, context = {}) {
     require(panel.dataset.desktopState === phase, `the panel keeps its state in data (${panel.dataset.desktopState} vs ${phase})`);
     requireBareScreen(screen);
     require(!visible(panel.querySelector('.computer-lifecycle-state')) && !visible(panel.querySelector('.desktop-caption')), 'neither the header nor a caption says the state in words');
-    const location = document.querySelector('.desktop-location-header [data-computer-location]');
-    require(visible(location), 'the location control stays on the header row');
+    require(visible(panel.querySelector('[data-computer-choice]')), 'the computer dropdown stays on the header row');
     const cover = panel.querySelector('[data-desktop="enlarge"]'), bounds = screen.getBoundingClientRect();
     if (['starting', 'building', 'preparing'].includes(phase)) require(!visible(cover), 'a computer that is getting ready is not pressable');
     else {
@@ -1205,25 +1204,47 @@ export function checkRendered(name, context = {}) {
     require(getComputedStyle(thread.querySelector('[data-id="8102"] .message-actions:has(.rerun)')).opacity === '1', 'latest failed action is visible without hover');
     return {check:name,...count};
   }
-  if (name === 'computer-header-layout') {
+  if (name === 'computer-header-layout' || name.startsWith('desktop-computer-choice')) {
     const header = document.querySelector('.desktop-location-header');
     require(visible(header), 'the member panel header is visible');
-    // The state word shows only once the computer runs; before that the header keeps location and overflow.
-    const running = ['member', 'owner', 'connecting'].includes(document.querySelector('.desktop-panel')?.dataset.desktopState);
-    const selectors = ['.computer-lifecycle-state', '[data-computer-location]', '[data-computer-menu]'];
-    require(!!visible(header.querySelector('.computer-lifecycle-state')) === running, 'the header names the state only while the computer runs');
-    const nodes = selectors.map(selector => header.querySelector(selector)).filter(node => visible(node) && (node.matches('button') || node.textContent.trim()));
-    require(nodes.length === (running ? 3 : 2) && visible(document.querySelector('[data-det="gear"]')) && visible(document.querySelector('[data-det="close"]')), 'computer controls stay in their tab while the gear and close remain available');
-    const bounds = header.getBoundingClientRect(), boxes = nodes.map(node => node.getBoundingClientRect());
-    for (let i = 0; i < boxes.length; i++) {
-      const box = boxes[i];
-      require(box.left >= bounds.left - 1 && box.right <= bounds.right + 1, 'every header control stays inside the panel');
-      if (!i) continue;
-      require(!!(nodes[i - 1].compareDocumentPosition(nodes[i]) & Node.DOCUMENT_POSITION_FOLLOWING), 'header order is state, location, overflow, gear, close');
-      const before = boxes[i - 1];
-      require(box.top >= before.bottom - 1 || box.left >= before.right - 1, 'header controls retain reading order without overlap');
+    const panel = header.closest('.desktop-panel'), row = header.querySelector('.desktop-choice-row');
+    const dropdown = row.querySelector('[data-computer-choice]'), status = row.querySelector('.computer-lifecycle-state');
+    require(visible(dropdown) && header.querySelectorAll('button[aria-haspopup]').length === 1, 'the header has one computer dropdown');
+    require(row.querySelectorAll('button').length === 1 && visible(document.querySelector('[data-det="gear"]')) && visible(document.querySelector('[data-det="close"]')), 'only the dropdown is in the header row, with gear and close still available on the panel');
+    const bounds = header.getBoundingClientRect(), choice = dropdown.getBoundingClientRect();
+    require(choice.left >= bounds.left - 1 && choice.right <= bounds.right + 1, 'the dropdown stays inside the header');
+    if (visible(status)) {
+      const word = status.getBoundingClientRect();
+      require(word.left >= choice.right - 1 && word.right <= bounds.right + 1 && word.top < choice.bottom && word.bottom > choice.top, 'the quiet state word is beside the choice on the same row');
     }
-    return {check:name, controls:nodes.map(node => node.getAttribute('data-det') || node.className || node.textContent)};
+    const setup = panel.querySelector('.desktop-docker-setup'), help = setup.querySelector('[data-docker-help]');
+    require(!panel.querySelector('[data-act="docker-download"]'), 'there is no Docker download button');
+    if (name === 'desktop-computer-choice-host') {
+      require(dropdown.textContent === '這台電腦' && !visible(setup) && !shownText(header).includes('Docker'), 'this computer never shows Docker installation words');
+    } else if (name === 'desktop-computer-choice-missing') {
+      const explanation = setup.querySelector('span'), style = getComputedStyle(help);
+      require(dropdown.textContent === '虛擬機（本機）' && visible(setup) && explanation.textContent === '尚未安裝 Docker' && help.textContent === '請 Raphael 安裝', 'a missing Docker has one explanation and one ask action');
+      require(setup.querySelectorAll('button').length === 1 && help.matches(':hover') && style.backgroundColor === 'rgba(0, 0, 0, 0)' && style.borderTopWidth === '0px', 'the action remains plain text under the pointer');
+      require(Math.abs(explanation.getBoundingClientRect().bottom - help.getBoundingClientRect().bottom) <= 3 && help.getBoundingClientRect().right <= bounds.right + 1, 'the Docker explanation and action fit on one line');
+      require(!panel.querySelector('iframe[src]'), 'the unavailable virtual machine has no stream');
+    } else if (name === 'desktop-computer-choice-docker') {
+      const local = document.querySelector('.menu [data-value="docker-local"]'), remote = document.querySelector('.menu [data-value="docker-remote"]');
+      require(dropdown.textContent === '虛擬機（studio-mini）' && visible(local) && local.textContent.includes('虛擬機（本機）') && visible(remote) && remote.getAttribute('aria-checked') === 'true', 'the one menu shows the local and selected SSH locations');
+    } else if (name === 'desktop-computer-choice') {
+      require(dropdown.textContent === '虛擬機（本機）' && window.__look.calls.some(call => call.method === 'computer.viewer_close'), 'the choice follows the member to Docker and closes the host stream');
+      require(window.__look.calls.filter(call => call.method === 'agent.computer_choice').length === 1 && !window.__look.calls.some(call => call.command === 'agent_ask_text'), 'saving the choice creates no conversation message');
+      require(!panel.querySelector('iframe[src]'), 'saving the choice leaves a stopped virtual machine asleep');
+    }
+    return { check: name, choice: dropdown.textContent, status: shownText(status) };
+  }
+  if (name.startsWith('computer-suggestion-')) {
+    const card = document.querySelector('.computer-suggestion-card'), button = card.querySelector('.computer-suggestion-action');
+    const style = getComputedStyle(button), footer = button.parentElement.getBoundingClientRect();
+    require(card.querySelector('.card-title').textContent === '這件事需要虛擬機' && card.querySelector('.card-body').textContent.includes('終端機'), 'the card names the step that needs the virtual machine');
+    require(card.querySelectorAll('.card-close').length === 1 && card.querySelectorAll('.card-actions button').length === 1, 'one close and one action');
+    require(shownText(button) === (name.endsWith('installed') ? '改用虛擬機' : '請 Raphael 協助安裝'), 'the action matches Docker availability');
+    require(button.matches(':hover') && style.backgroundColor !== 'rgba(0, 0, 0, 0)' && Math.abs(button.getBoundingClientRect().width - footer.width) <= 1, 'the whole action row lights up');
+    return { check: name, action: shownText(button) };
   }
   if (name.startsWith('computer-maintenance-')) {
     const calls = window.__look.calls.filter(call => call.method === 'computer.lifecycle');
@@ -1936,7 +1957,7 @@ export function checkRendered(name, context = {}) {
       else require(!trigger.getAttribute('aria-label').includes(' · ') && !trigger.title.includes(' · '), 'a member not at the computer has nothing added to its name, the shared computer running or not');
     } else if (name === 'level-panel' || name === 'level-off' || name === 'level-no-computer') {
       // Since the panel tabs the computer has its own tab, headed by its state and shared location control.
-      require(panel.dataset.detailsTab === 'computer' && visible(panel.querySelector('[data-computer-location]')), 'the computer tab keeps its state header and shared location control');
+      require(panel.dataset.detailsTab === 'computer' && visible(panel.querySelector('[data-computer-choice]')), 'the computer tab keeps its computer dropdown');
       require(!panel.querySelector('[data-tab="routines"], .mb-rt [role="switch"], [data-desktop="expand"]') && !visible(panel.querySelector('[data-desktop="collapse"]')), 'there is no routines page, row switch or visible collapse control');
       if (name !== 'level-no-computer') require(visible(desktop) && visible(desktop.querySelector('.desktop-screen')), 'the computer tab shows the screen');
       if (name === 'level-off') {
@@ -4570,7 +4591,7 @@ export function checkRendered(name, context = {}) {
       require(!panel.querySelector('[data-act="docker-download"]'),'absent Docker draws no download button');
       require(!shownText(panel).includes('Docker'),'absent Docker is not explained in words');
       require(visible(panel.querySelector('[data-desktop="enlarge"]')),'the whole screen is the press that tries again');
-      require(visible(document.querySelector('.desktop-location-header [data-computer-location]')),'the location control stays so the owner can choose another computer');
+      require(visible(panel.querySelector('[data-computer-choice]')),'the dropdown stays so the owner can choose another computer');
       require(!calls.some(call=>call.method==='computer.viewer_open'),'reading the missing state never starts a computer');
       return {check:name};
     }
@@ -4650,23 +4671,21 @@ export function checkRendered(name, context = {}) {
       const range = document.createRange(); range.selectNodeContents(element);
       return [...range.getClientRects()].filter(rect => rect.width > 0).map(rect => rect.left);
     });
-    const controls = [...panel.querySelectorAll('.sel, .field')].filter(visible).map(element => element.getBoundingClientRect());
+    const field = panel.querySelector('.field'), control = field.getBoundingClientRect();
     const left = panel.querySelector('.computer-location-purpose').getBoundingClientRect().left;
-    const trigger = panel.querySelector('.sel'), span = trigger.querySelector('span'), style = getComputedStyle(trigger);
-    const text = document.createRange(); text.selectNodeContents(span);
-    const textLeft = text.getBoundingClientRect().left, contentLeft = trigger.getBoundingClientRect().left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft);
-    const failures = [];
-    if (!lines.length || !controls.length || [...lines, ...controls.map(rect => rect.left)].some(x => Math.abs(x - left) > 1)) failures.push('all visible text lines and controls share one left edge within 1px');
-    if (controls.some(rect => Math.abs(rect.right - controls[0].right) > 1)) failures.push('the select and SSH field share their right edge within 1px');
-    if (getComputedStyle(span).textAlign !== 'left' || Math.abs(textLeft - contentLeft) > 1) failures.push('select trigger text is left-aligned inside its standard padding');
-    require(!failures.length, failures.join('; '));
-    return { check: name, left, lines, controls: controls.map(rect => ({ left: rect.left, right: rect.right })), textLeft, contentLeft };
+    require(visible(field) && lines.length && [...lines, control.left].every(x => Math.abs(x - left) <= 1), 'the text lines and SSH field share one left edge within 1px');
+    require(!panel.querySelector('.sel'), 'the SSH editor needs no second dropdown');
+    return { check: name, left, lines, field: { left: control.left, right: control.right } };
   }
-  if (name === "host-settings-local" || name === "host-settings-error") {
+  if (name === "host-settings-local") {
+    const current = document.querySelector('.menu [data-value="docker-local"][aria-checked="true"]');
+    require(visible(current) && current.textContent.includes('虛擬機（本機）') && !document.querySelector('.computer-location-popover'), 'the one menu names the local Docker host');
+    return {check:name};
+  }
+  if (name === "host-settings-error") {
     const panel = document.querySelector('.computer-location-popover');
     require(visible(panel) && panel.textContent.includes('每一位'), "the popover explains the shared scope");
-    if (name.endsWith('local')) require(!panel.querySelector('input') && document.querySelector('[data-computer-location]').textContent.includes('本機'), "the header names the local host without repeating it in the popover");
-    else require(panel.querySelector('input')?.value === 'studio-mini' && visible(panel.querySelector('[role="alert"]')), "remote failure stays in its host popover");
+    require(panel.querySelector('input')?.value === 'studio-mini' && visible(panel.querySelector('[role="alert"]')), "remote failure stays in its host popover");
     return {check:name};
   }
   if (name === "owner-about-typing" || name === "owner-about-rest") {
@@ -4706,8 +4725,12 @@ export function checkRendered(name, context = {}) {
     require(visible(input) && input.value === 'studio-mini', "remote alias stays in its field");
     require(window.__look.calls.some(call => call.method === 'settings.set' && call.params.key === 'computer_ssh_alias' && call.params.value === 'studio-mini'), "the alias is saved through the existing settings boundary");
     require(!document.querySelector('[data-act="docker-download"]'), "remote hosts never require local Docker Desktop");
-    require(visible(document.querySelector('[data-k="computer-host"]')), "the shared location dropdown stays available");
+    require(document.querySelector('[data-computer-choice]').textContent.includes('studio-mini'), "the computer choice names the saved SSH alias");
     return { check: name };
+  }
+  if (name === "member-settings-no-computer") {
+    require(!document.querySelector('.ms-pane [data-cat="computer"]'), 'computer controls live on the Computer tab');
+    return;
   }
   if (name === "host-panel-collapsed") {
     require(document.querySelector('.conversation-trigger')?.getAttribute('aria-expanded') === 'false', "closing the preview keeps its conversation");
@@ -4832,6 +4855,22 @@ export function checkRendered(name, context = {}) {
     const summary = document.querySelector('.modal-scrim [data-k="languages"] span');
     require(visible(summary) && summary.textContent === "English (United States)", "the Settings row names only English (United States)");
     return {check: name};
+  }
+  if (name === "desktop-host-thumbnail" || name === "desktop-host-frame") {
+    const thumb = document.querySelector('[data-card-host-screen] .desktop-last');
+    const frame = document.querySelector('.desktop-screen iframe[src*="transport=host"]');
+    const image = name === "desktop-host-thumbnail" ? thumb : frame?.contentDocument?.querySelector('canvas');
+    require(visible(image), 'the Chrome page is painted');
+    const box = image.getBoundingClientRect();
+    const win = image.ownerDocument.defaultView;
+    require(win.getComputedStyle(image).objectFit === 'cover' && Math.abs(box.width / box.height - 1280 / 900) <= 0.015, 'the page fills the desktop aspect ratio');
+    if (image === thumb) {
+      require(thumb.naturalWidth === 1280 && thumb.naturalHeight === 900 && visible(thumb.parentElement.querySelector('[data-card-desktop="watch"]')), 'the thumbnail opens the page for watching');
+    } else {
+      require(image.width === 1280 && image.height === 900 && Math.abs(box.width - win.innerWidth) <= 1 && Math.abs(box.height - win.innerHeight) <= 1, 'the canvas fills the iframe edge to edge');
+      require(!visible(frame.closest('.desktop-panel').querySelector('.desktop-error')), 'the panel has the same working page');
+    }
+    return {check:name, width:box.width, height:box.height};
   }
   if (name === "desktop-frame") {
     const shell = document.querySelector('.desktop-shell');

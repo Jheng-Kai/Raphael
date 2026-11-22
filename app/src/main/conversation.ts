@@ -38,7 +38,7 @@ export type ThreadItem =
 
 /** An exchange that is only its line: nothing waits for the owner under it. */
 const bareExchange = (turn: AgentTurn): boolean => exchangeTurn(turn) && turn.status !== "confirm" &&
-  !turn.permissions?.length && !turn.connectors?.length && !turn.secrets?.length && !turn.computers?.length;
+  !turn.permissions?.length && !turn.connectors?.length && !turn.secrets?.length && !turn.computers?.length && !turn.computer_suggestion;
 
 /** Whether a turn is a colleague's question or hand-off to this member, not the owner's own words. */
 export const exchangeTurn = (turn: AgentTurn): boolean =>
@@ -65,7 +65,7 @@ export function visibleTurn(turn: AgentTurn): boolean {
     turn.messages?.some(message => message.text.trim()) || turn.attachments?.length || turn.handoffs?.length ||
     turn.connectors?.length || turn.secrets?.length || turn.computers?.length || turn.permissions?.length || turn.drafts?.length || turn.pages?.length ||
     // A pairing code that came later is a turn with its card and no words; a template card too.
-    turn.pairings?.length || turn.templates?.length ||
+    turn.pairings?.length || turn.templates?.length || turn.computer_suggestion ||
     turn.status === "running" || turn.status === "confirm" || (turn.task && !stoppedQuietly(turn)) || turn.steps?.length);
 }
 

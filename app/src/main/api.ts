@@ -140,9 +140,9 @@ export const statusCheckOpenrouter = (): Promise<Status["openrouter"]> => core("
 /** After the owner refused the macOS Keychain: the next read that needs a key asks once more (R-PRIV-KEYCHAIN-01). */
 export const keychainAskAgain = (): Promise<{ refused: boolean }> => core("keychain.ask_again");
 
-export const desktopStatus = (member_id: number, conversation_id?: number): Promise<DesktopState> => core("computer.viewer_status", { member_id, conversation_id });
+export const desktopStatus = (member_id: number, conversation_id?: number, transport?: "host" | "docker"): Promise<DesktopState> => core("computer.viewer_status", { member_id, conversation_id, transport });
 export const desktopWallpaper = (): Promise<{ image?: string }> => core("computer.wallpaper");
-export const desktopOpen = (member_id: number, options?: { conversation_id?: number; preview?: boolean }): Promise<DesktopSession> => core("computer.viewer_open", { member_id, ...options });
+export const desktopOpen = (member_id: number, options?: { conversation_id?: number; preview?: boolean; transport?: "host"; target_id?: string }): Promise<DesktopSession> => core("computer.viewer_open", { member_id, ...options });
 export const desktopRenew = (session: string): Promise<DesktopState> => core("computer.viewer_renew", { session });
 export const desktopControl = (session: string, held: boolean, takeover?: string): Promise<DesktopState> => core("computer.viewer_control", { session, held, takeover });
 export const desktopClose = (session: string): Promise<unknown> => core("computer.viewer_close", { session });

@@ -43,6 +43,48 @@ _ROWS = {
         "ไม่ได้ตรวจหน้าจออีกครั้งหลังการเปลี่ยนแปลงล่าสุด จึงไม่นับว่าเสร็จ",
         "Layar tidak diperiksa lagi setelah perubahan terakhir, jadi ini belum dianggap selesai.",
         "Ekran son değişiklikten sonra kontrol edilmedi; bu yüzden bu tamamlanmış sayılmaz."),
+    "Please sign in on this page in the Computer panel.": (
+        "请在「电脑」侧栏的页面登录。", "컴퓨터 패널의 이 페이지에서 로그인해 주세요.",
+        "Inicia sesión en esta página desde el panel Ordenador.", "Connectez-vous sur cette page dans le panneau Ordinateur.",
+        "Melde dich auf dieser Seite im Computerbereich an.", "Entre nesta página pelo painel Computador.",
+        "Accedi a questa pagina nel pannello Computer.", "Войдите на этой странице в панели «Компьютер».",
+        "Hãy đăng nhập trên trang này trong bảng Máy tính.", "โปรดลงชื่อเข้าใช้ในหน้านี้บนแผงคอมพิวเตอร์",
+        "Silakan masuk di halaman ini pada panel Komputer.", "Bilgisayar panelindeki bu sayfada oturum açın."),
+    "Please enter your password on the page in the Computer panel.": (
+        "请在「电脑」侧栏的页面输入密码。", "컴퓨터 패널의 페이지에서 비밀번호를 입력해 주세요.",
+        "Introduce tu contraseña en la página del panel Ordenador.", "Saisissez votre mot de passe sur la page dans le panneau Ordinateur.",
+        "Gib dein Passwort auf der Seite im Computerbereich ein.", "Digite sua senha na página do painel Computador.",
+        "Inserisci la password nella pagina del pannello Computer.", "Введите пароль на странице в панели «Компьютер».",
+        "Hãy nhập mật khẩu trên trang trong bảng Máy tính.", "โปรดป้อนรหัสผ่านในหน้าบนแผงคอมพิวเตอร์",
+        "Masukkan kata sandi di halaman pada panel Komputer.", "Bilgisayar panelindeki sayfada parolanızı girin."),
+    "Please complete the verification in the Computer panel.": (
+        "请在「电脑」侧栏完成验证。", "컴퓨터 패널에서 인증을 완료해 주세요.",
+        "Completa la verificación en el panel Ordenador.", "Terminez la vérification dans le panneau Ordinateur.",
+        "Schließe die Bestätigung im Computerbereich ab.", "Conclua a verificação no painel Computador.",
+        "Completa la verifica nel pannello Computer.", "Завершите проверку в панели «Компьютер».",
+        "Hãy hoàn tất xác minh trong bảng Máy tính.", "โปรดยืนยันตัวตนให้เสร็จในแผงคอมพิวเตอร์",
+        "Selesaikan verifikasi di panel Komputer.", "Bilgisayar panelinde doğrulamayı tamamlayın."),
+    "Please complete the human verification in the Computer panel.": (
+        "请在「电脑」侧栏完成人机验证。", "컴퓨터 패널에서 로봇이 아님을 확인해 주세요.",
+        "Confirma que no eres un robot en el panel Ordenador.", "Confirmez que vous n’êtes pas un robot dans le panneau Ordinateur.",
+        "Bestätige im Computerbereich, dass du kein Roboter bist.", "Confirme que você não é um robô no painel Computador.",
+        "Conferma di non essere un robot nel pannello Computer.", "Подтвердите, что вы не робот, в панели «Компьютер».",
+        "Hãy xác nhận bạn không phải rô-bốt trong bảng Máy tính.", "โปรดยืนยันว่าคุณไม่ใช่หุ่นยนต์ในแผงคอมพิวเตอร์",
+        "Konfirmasikan bahwa Anda bukan robot di panel Komputer.", "Bilgisayar panelinde robot olmadığınızı doğrulayın."),
+    "Please review and complete the payment in the Computer panel.": (
+        "请在「电脑」侧栏确认并完成付款。", "컴퓨터 패널에서 결제 내용을 확인하고 결제를 완료해 주세요.",
+        "Revisa y completa el pago en el panel Ordenador.", "Vérifiez et effectuez le paiement dans le panneau Ordinateur.",
+        "Prüfe und bestätige die Zahlung im Computerbereich.", "Revise e conclua o pagamento no painel Computador.",
+        "Controlla e completa il pagamento nel pannello Computer.", "Проверьте данные и завершите оплату в панели «Компьютер».",
+        "Hãy kiểm tra và hoàn tất thanh toán trong bảng Máy tính.", "โปรดตรวจสอบและชำระเงินในแผงคอมพิวเตอร์",
+        "Periksa dan selesaikan pembayaran di panel Komputer.", "Bilgisayar panelinde ödemeyi inceleyip tamamlayın."),
+    "Please select your certificate in the Computer panel.": (
+        "请在「电脑」侧栏选择证书。", "컴퓨터 패널에서 인증서를 선택해 주세요.",
+        "Selecciona tu certificado en el panel Ordenador.", "Sélectionnez votre certificat dans le panneau Ordinateur.",
+        "Wähle dein Zertifikat im Computerbereich aus.", "Selecione seu certificado no painel Computador.",
+        "Seleziona il tuo certificato nel pannello Computer.", "Выберите сертификат в панели «Компьютер».",
+        "Hãy chọn chứng chỉ của bạn trong bảng Máy tính.", "โปรดเลือกใบรับรองของคุณในแผงคอมพิวเตอร์",
+        "Pilih sertifikat Anda di panel Komputer.", "Bilgisayar panelinde sertifikanızı seçin."),
 }
 
 COMPUTER_WORDS = {source: dict(zip(_ORDER, row, strict=True)) for source, row in _ROWS.items()}

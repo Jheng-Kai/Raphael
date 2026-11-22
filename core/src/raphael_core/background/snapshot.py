@@ -384,7 +384,7 @@ class Snapshot:
             self.refs.pop(alias)
         self.definitions[:] = [item for item in self.definitions if item["function"]["name"] not in listed]
         kept = [tool for tool in (self.pool.by_alias.values() if self.pool else []) if tool.server != "computer"]
-        computer = [tool for tool in plugins.offered_for(member_id) if tool.server == "computer"]
+        computer = [tool for tool in plugins.offered_for(member_id) if tool.server == "computer" and self.tool_allowed(tool.key)]
         self.pool = make_offer([*kept, *computer])
         self._list([alias for alias, tool in self.pool.by_alias.items()
                     if tool.server == "computer" and (alias in listed or not tool.deferred)])
@@ -463,7 +463,12 @@ def take_snapshot(
     the commands for this computer and the run on the owner's desktop (`computer`) are offered to no other turn, task or
     routine, and what those show on a screen the member's own computer shows. The hidden local commands
     (`computer.local_tools`) are every turn's and task's."""
-    snapshot = Snapshot({}, [], max_tier=max_tier, tool_allowed=speaker.uses_plugin, owner_screen=owner_screen)
+    from ..computer.suggestions import SUGGEST_COMPUTER_KEY
+
+    def tool_allowed(key):
+        return speaker.uses_plugin(key) and (key != SUGGEST_COMPUTER_KEY or interactive and not owner_screen)
+
+    snapshot = Snapshot({}, [], max_tier=max_tier, tool_allowed=tool_allowed, owner_screen=owner_screen)
 
     def own(name: str, tier: Tier, item: dict[str, Any], kind: str = BUILTIN) -> None:
         snapshot.refs[name] = ToolRef(kind, name, BUILTIN_SERVER, name, tier)
@@ -535,7 +540,7 @@ def take_snapshot(
                 tool
                 for tool in getattr(plugins, "offered_for", lambda member: plugins.offered())(speaker.id)
                 if (tool.tier <= max_tier or getattr(plugins, "is_computer_tool", lambda key: False)(tool.key))
-                and speaker.uses_plugin(tool.key)
+                and tool_allowed(tool.key)
             ]
         except Exception:  # a plugin that breaks leaves its tools out, not the task
             tools = []

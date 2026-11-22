@@ -2,6 +2,13 @@
 export function installMock(fixture, config = {}, target = window) {
   const data = structuredClone(fixture);
   const variant = config.fixture ?? {};
+  if (variant.computerSuggestion) {
+    const turn = data.turns.find(turn => turn.id === 2);
+    const reason = "安裝套件需要執行終端機指令。";
+    Object.assign(turn, { question: "請安裝並執行這個套件。", text: reason, status: "done",
+      computer_suggestion: { reason, installed: variant.computerSuggestion === "installed", state: "pending" },
+      messages: [{ seq: 1, kind: "reply", text: reason, at_ms: turn.created_at_ms + 500 }] });
+  }
   if (variant.typingPerformance) {
     const conversation = data.conversations.find(item => item.member_id === 0 && item.is_default);
     const base = data.turns.find(turn => turn.conversation_id === conversation.id);
@@ -166,7 +173,6 @@ export function installMock(fixture, config = {}, target = window) {
   }
   // The member settings page (member-settings.ts): two connections that are on.
   if (variant.memberSettings) {
-    if (variant.memberComputerMode) data.members.find(member => member.id === 1).computer_mode = variant.memberComputerMode;
     data.servers.forEach(server => { server.enabled = true; });
     data.servers.push({ ...structuredClone(data.servers[0]), id: "calendar", name: "行事曆" });
     // An app named as its connector is named, drawn with its own mark.
@@ -750,7 +756,7 @@ export function installMock(fixture, config = {}, target = window) {
   }
   if (variant.computerCard) {
     const turn = structuredClone(data.computerTurns[variant.computerCard]);
-    if (variant.browserHandback) Object.assign(turn.computers[0], { browser: true, app: "Chrome" });
+    if (variant.browserHandback) Object.assign(turn.computers[0], { browser: true, app: "Chrome", note: variant.desktop.host_request.detail });
     data.turns.push(turn);
   }
   if (variant.composioResults) {
@@ -1461,8 +1467,26 @@ export function installMock(fixture, config = {}, target = window) {
         return copy(data.desktop);
       }
       case "computer.viewer_status": {
+        if (p.transport === "docker" && variant.dockerMissing)
+          return {transport:"docker",state:"absent",ready:false,control:"member",error:"docker_missing"};
         if (p.start_docker) data.desktop = {state:'stopped',ready:false,control:'member',host:'',target:'synthetic-member'};
         return p.check_host ? {host:p.alias,ok:false,checks:[{kind:'ssh',ok:true},{kind:'docker_path',ok:false,command:`ssh ${p.alias} "echo 'export PATH=/usr/local/bin:/opt/homebrew/bin:/Applications/Docker.app/Contents/Resources/bin:/usr/bin:/bin:/usr/sbin:/sbin' >> ~/.zshenv"`}]} : data.desktop ?? { state: "absent", ready: false, control: "member" };
+      }
+      case "agent.computer_choice": {
+        if (p.member_id !== 1) throw new Error("Computer choice must go to the active member");
+        if (p.transport === "docker" && variant.computerChoice) data.desktop = variant.dockerMissing
+          ? {transport:"docker",state:"absent",ready:false,control:"member",error:"docker_missing"}
+          : {transport:"docker",state:"stopped",ready:false,control:"member"};
+        else data.desktop = {...data.desktop, transport: p.transport};
+        return {transport: p.transport};
+      }
+      case "agent.computer_suggestion": {
+        const turn = data.turns.find(turn => turn.id === p.turn_id);
+        if (p.action === "dismiss") delete turn.computer_suggestion;
+        else if (!turn.computer_suggestion.installed) return {setup: true};
+        else turn.computer_suggestion.state = "switched";
+        notify("AgentTurn", { turn_id: p.turn_id, member_id: turn.member_id });
+        return {};
       }
       case "computer.viewer_open": {
         if (variant.desktopStarts) data.desktop = { ...data.desktop, state: "running", ready: true };
@@ -1471,7 +1495,8 @@ export function installMock(fixture, config = {}, target = window) {
         // Which seat a session is for, so a scene can tell one member's screen from another's (R-COMP-SWITCH-01): the
         // fixture's RFB page reads `seat`, and paints that seat's colour band when the scene asks (`seatMarks`).
         (state.sessionLog ??= []).push({ session, member: p.member_id });
-        return { session, url: `${location.origin}/scripts/look/fixtures/desktop.html?seat=${p.member_id ?? 0}${variant.seatMarks ? "&mark=1" : ""}` };
+        const host = data.desktop?.transport === "host";
+        return { session, url: `${location.origin}/scripts/look/fixtures/${host ? "host.html" : "desktop.html"}?seat=${p.member_id ?? 0}${variant.seatMarks ? "&mark=1" : ""}${host ? "&transport=host" : ""}` };
       }
       case "computer.viewer_renew": return { ...data.desktop, ...(teaching ? {teaching} : {}), control: desktopSessions.get(p.session)?.held ? "owner" : "member" };
       case "computer.teach": {
@@ -1505,6 +1530,13 @@ export function installMock(fixture, config = {}, target = window) {
         if (!p.held && variant.releaseFails) throw new Error("desktop busy");
         session.held = p.held;
         data.desktop.control = p.held ? "owner" : "member";
+        if (!p.held && data.desktop.host_request?.request_id === p.takeover && p.takeover) {
+          const turn = data.turns.find(item => item.computers?.some(card => card.id === p.takeover));
+          const card = turn.computers.find(item => item.id === p.takeover);
+          card.state = "done";
+          delete data.desktop.host_request;
+          notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
+        }
         if (!p.held && p.takeover) for (const work of data.desktop.works ?? []) if (work.request_id === p.takeover) work.state = "running";
         return data.desktop;
       }

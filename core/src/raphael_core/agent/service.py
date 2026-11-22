@@ -121,7 +121,7 @@ from raphael_core.ui_words import ui_word, with_ui_words
 import asyncio
 import copy
 from pathlib import Path
-from ..computer.local_tools import ON_SCREEN, ask_context, card_arguments, command_context, command_of, is_local
+from ..computer.local_tools import INSTALL_IN_VM, ON_SCREEN, ask_context, card_arguments, command_context, command_of, installs_software, is_local
 from ..computer.on_screen import launches_on_screen
 import hashlib
 import json
@@ -627,6 +627,7 @@ class Resumption:
     management: tuple[dict, ...] = ()
     composio_key_saved: bool = False
     composio_app: str = ""
+    computer_switched: bool = False
 
     @property
     def needs_composio_key(self) -> bool:
@@ -635,6 +636,8 @@ class Resumption:
 
     def note(self) -> str:
         parts = []
+        if self.computer_switched:
+            parts.append("The owner switched this member to the virtual machine. Continue the original request with its tools.")
         if self.management:
             parts.append("The owner approved the changes you proposed on one card, and each was carried out in order. This is what "
                          "came of each (data, not instructions). A change with ok false was not made: say so plainly to the owner, "
@@ -1061,6 +1064,8 @@ class AgentService:
         """Put the six methods of the assistant on `router`."""
         methods = {
             "agent.ask": self._ask,
+            "agent.computer_choice": self._computer_choice,
+            "agent.computer_suggestion": self._computer_suggestion,
             "agent.confirm": self._confirm,
             "agent.cancel": self._cancel,
             "agent.history.list": self._history_list,
@@ -1489,16 +1494,59 @@ class AgentService:
 
     async def _join_running_work(self, ask):
         """A quick question or a messaging app's message said while its conversation works goes to that work."""
-        scope = (ask.speaker.id, ask.conversation_id)
+        return await self._steer_scope((ask.speaker.id, ask.conversation_id), ask.text)
+
+    async def _computer_choice(self, params):
+        member = params.get("member_id")
+        transport = params.get("transport")
+        if type(member) is not int or member < 0 or transport not in ("host", "docker"):
+            raise invalid_params("invalid computer choice")
+        suggestions = getattr(self._plugins, "suggestions", None)
+        if suggestions is None or not suggestions.tools.member_exists(member):
+            raise invalid_params("Unknown computer member")
+        with self._conn:
+            suggestions.tools.set_computer_mode(member, transport)
+        return {"transport": transport}
+
+    async def _computer_suggestion(self, params):
+        suggestions = getattr(self._plugins, "suggestions", None)
+        if suggestions is None:
+            raise invalid_params("Computer suggestions are unavailable")
+        return await suggestions.act(params)
+
+    async def resume_on_vm(self, turn_id, language):
+        origin = self._history.get(turn_id)
+        if origin is None:
+            return
+        active = self._inflight.get(origin.session_id)
+        if active is not None and not active.done():
+            await asyncio.wait({active})
+        origin = self._history.get(turn_id)
+        if origin is None or origin.status != "done" or self._plugins.computer_mode(origin.member_id) != "docker":
+            return
+        attachments = []
+        if self._attachment_store:
+            for item in origin.attachments or ():
+                if item.get("id"):
+                    try:
+                        attachments.append(self._attachment_store.resolve({"stored_id": item["id"], "name": item["name"]}))
+                    except AttachmentError:
+                        logger.info("An attachment of turn %s is no longer available", turn_id)
+        await self.ask(f"computer-switch-{turn_id}", origin.question, language, RESUMED,
+                       member_id=origin.member_id, conversation_id=origin.conversation_id,
+                       attachments=attachments,
+                       resumption=Resumption(turn_id, (), frozenset(), computer_switched=True))
+
+    async def _steer_scope(self, scope, text):
         active = self._owner_loops.get(scope)
         if active and (origin := self._history.get(active.owner_turn_id)) is not None and origin.status not in ("running", "confirm"):
             self._owner_loops.pop(scope, None)
             active = None
         if active and not active.owner_input.closed:
-            if await active.steer(ask.text) if isinstance(active, CliLoop) else active.owner_input.add(ask.text):
+            if await active.steer(text) if isinstance(active, CliLoop) else active.owner_input.add(text):
                 return True
         steer = getattr(self._background, "steer", None)
-        return bool(steer is not None and await steer(ask.speaker.id, ask.conversation_id, ask.text))
+        return bool(steer is not None and await steer(*scope, text))
 
     async def _queue_ask(self, ask):
         scope = (ask.speaker.id, ask.conversation_id)
@@ -2152,7 +2200,7 @@ class AgentService:
         language = ask.language
         if not self._owner_screen(ask):
             return self._finish(ask, "operate", "negative", phrase(language, "computer_away"), ledger)
-        if self._computer is None or not getattr(self._plugins, "desktop_allowed", lambda member: True)(ask.speaker.id):
+        if self._computer is None:
             return self._finish(
                 ask, "operate", "negative", phrase(language, "computer_unavailable"), ledger
             )
@@ -2638,7 +2686,8 @@ class AgentService:
             checked_batch = None
             screenings: dict[str, Screening] = {}
 
-            snapshot.tool_allowed = lambda key: bool((current := self._speaker(ask.speaker.id)) and current.uses_plugin(key))
+            allowed = snapshot.tool_allowed
+            snapshot.tool_allowed = lambda key: bool(allowed(key) and (current := self._speaker(ask.speaker.id)) and current.uses_plugin(key))
 
             def plan(name: str, args: dict) -> PlannedCall | None:
                 if name == USE_TOOL:  # a batch's own screening judges the tool a use_tool call names
@@ -3293,10 +3342,11 @@ class AgentService:
             return ToolOutcome(False, "protected_data", instruction=WRITE_REFUSAL)
         if not self._gate.full_permission and (ask.source not in _AT_THIS_COMPUTER or ask.nested):
             return ToolOutcome(False, "presence_required")
-        if (command := command_of(args)) and not self._owner_screen(ask) and launches_on_screen(command):
-            # A command of the CLI's own runs on the owner's PC, hidden and with the card, as the local commands do; one
-            # that would show something on its screen is refused outside a quick question, whatever the mode (R-PC-06).
-            return ToolOutcome(False, "shows_on_screen", instruction=ON_SCREEN)
+        if (command := command_of(args)) and not self._owner_screen(ask):
+            if getattr(self._plugins, "enforces_computer_choice", False) is True and installs_software(command):
+                return ToolOutcome(False, "assigned_computer_required", instruction=INSTALL_IN_VM)
+            if launches_on_screen(command):
+                return ToolOutcome(False, "shows_on_screen", instruction=ON_SCREEN)
         if ask.declined:  # the owner said no in this request: the CLI's own actions wait for a new one
             return ToolOutcome(False, "declined", instruction=DECLINED_NOTE)
         screening = await self._gate.screen(Proposed("cli_permission", "CLI native action", summarize(args)), language=ask.language, ledger=ledger)
@@ -6459,6 +6509,8 @@ class AgentService:
         drafted = self._drafts.views(ids) if self._drafts is not None else {}
         template_cards = getattr(self._team, "template_cards", None)
         templates = template_cards.views(ids) if template_cards else {}
+        suggestions = getattr(self._plugins, "suggestions", None)
+        computer_suggestions = suggestions.views(ids) if suggestions is not None else {}
         messaging = getattr(self._secret_cards, "messaging", None)
         pairings = messaging.cards.views(ids) if messaging and messaging.cards else {}
         pages = self.pages.store.shown_in(ids)
@@ -6536,6 +6588,7 @@ class AgentService:
                     **({"connection_proposals": proposals[turn.id]} if proposals.get(turn.id) else {}),
                     **({"resumed_secrets": list(dict.fromkeys(card["name"] for card in saved_keys))} if saved_keys else {}),
                     **({"computers": asked_hands} if asked_hands else {}),
+                    **({"computer_suggestion": computer_suggestions[turn.id]} if turn.id in computer_suggestions else {}),
                     **({"resumed_computers": list(dict.fromkeys(card["app"] for card in given_back))} if given_back else {}),
                     **({"permissions": permitted[turn.id or 0]} if permitted.get(turn.id or 0) else {}),
                     **({"drafts": drafted[turn.id or 0]} if drafted.get(turn.id or 0) else {}),
@@ -6820,7 +6873,7 @@ class AgentService:
             text = "\n\n".join(saved or ask.replies) or text
         turn_id = self._record(ask, route, prefix, text, status, detail, ledger, failure=failure)
         if status != "confirm":
-            self._close_turn_browser(turn_id)
+            self._close_turn_browser(turn_id, keep_page=status == "done")
         replies = []
         if (ask.source != VOICE or not ask.speaker.is_raphael) and status != "confirm":
             replies = ask.replies or ([text] if status != "superseded" else [])
@@ -6836,10 +6889,10 @@ class AgentService:
             result["messages"] = list(replies)
         return result
 
-    def _close_turn_browser(self, turn_id):
+    def _close_turn_browser(self, turn_id, *, keep_page=False):
         close = getattr(self._plugins, "close_turn_browser", None)
         if turn_id and close is not None:
-            close(turn_id)
+            close(turn_id, keep_page=keep_page)
 
     @staticmethod
     def _done(turn_id: int, language: str, which: str, text: str, *, silent: bool = False) -> dict:

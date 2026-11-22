@@ -43,31 +43,29 @@ describe("rendered look checks", () => {
     } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
   });
 
-  it("rejects split text edges, mismatched controls and centered location values", () => {
+  it("rejects split text edges and a second dropdown in the SSH editor", () => {
     const browser = new Window();
-    browser.document.body.innerHTML = '<div class="computer-location-popover"><p class="computer-location-purpose">Shared scope</p><div class="lbl"><div class="t">Computer location</div></div><button class="sel"><span>Local</span></button><label class="field"><input></label></div>';
-    let lineLeft = 100, fieldLeft = 100, fieldRight = 300, textInset = 13, textAlign = "left";
+    browser.document.body.innerHTML = '<div class="computer-location-popover"><p class="computer-location-purpose">Shared scope</p><div class="lbl"><div class="t">SSH alias</div></div><label class="field"><input></label></div>';
+    let lineLeft = 100, fieldLeft = 100;
     const rect = (left = 100, right = 300) => ({ left, right, width: right - left, height: 34 });
-    for (const element of browser.document.querySelectorAll("*")) { element.checkVisibility = () => true; element.getBoundingClientRect = () => element.matches('.field') ? rect(fieldLeft, fieldRight) : rect(); }
+    for (const element of browser.document.querySelectorAll("*")) { element.checkVisibility = () => true; element.getBoundingClientRect = () => element.matches('.field') ? rect(fieldLeft) : rect(); }
     browser.document.createRange = () => {
       let element;
-      return { selectNodeContents(node) { element = node; }, getClientRects: () => [rect(), rect(element.matches('.t') ? lineLeft : 100)], getBoundingClientRect: () => rect(100 + textInset) };
+      return { selectNodeContents(node) { element = node; }, getClientRects: () => [rect(), rect(element.matches('.t') ? lineLeft : 100)] };
     };
     vi.stubGlobal("document", browser.document);
-    vi.stubGlobal("getComputedStyle", () => ({ textAlign, borderLeftWidth: "1px", paddingLeft: "12px" }));
     try {
       expect(() => checkRendered("host-settings-layout")).not.toThrow();
       lineLeft = 118; expect(() => checkRendered("host-settings-layout")).toThrow("one left edge"); lineLeft = 100;
       fieldLeft = 102; expect(() => checkRendered("host-settings-layout")).toThrow("one left edge"); fieldLeft = 100;
-      fieldRight = 290; expect(() => checkRendered("host-settings-layout")).toThrow("right edge"); fieldRight = 300;
-      textAlign = "center"; expect(() => checkRendered("host-settings-layout")).toThrow("left-aligned"); textAlign = "left";
-      textInset = 50; expect(() => checkRendered("host-settings-layout")).toThrow("left-aligned");
+      browser.document.querySelector('.computer-location-popover').insertAdjacentHTML('beforeend', '<button class="sel">Local</button>');
+      expect(() => checkRendered("host-settings-layout")).toThrow("no second dropdown");
     } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
   });
   it("rejects words, a face or a recovery button drawn over an absent computer's wallpaper", () => {
     // An offline computer shows its wallpaper alone and the whole screen is the one press that starts it.
     const browser = new Window();
-    const markup = extra => `<header class="desktop-location-header"><button data-computer-location>This computer</button></header><section class="desktop-panel"><div class="desktop-screen"><img class="desktop-wallpaper"><div class="desktop-placeholder">${extra}</div><button data-desktop="enlarge"><span class="desktop-open-pill">Open</span></button></div></section>`;
+    const markup = extra => `<section class="desktop-panel"><header class="desktop-location-header"><button data-computer-choice>This computer</button></header><div class="desktop-screen"><img class="desktop-wallpaper"><div class="desktop-placeholder">${extra}</div><button data-desktop="enlarge"><span class="desktop-open-pill">Open</span></button></div></section>`;
     browser.__look = { calls: [] };
     const run = extra => {
       browser.document.body.innerHTML = markup(extra);
@@ -89,7 +87,7 @@ describe("rendered look checks", () => {
     } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
   });  it("accepts a typed host name as data while still rejecting untranslated controls", () => {
     const window = new Window();
-    window.document.body.innerHTML = '<button data-computer-location><span>studio-mini</span></button><button>Save</button>';
+    window.document.body.innerHTML = '<button data-computer-choice><span>虛擬機（studio-mini）</span></button><button>Save</button>';
     for (const element of window.document.querySelectorAll("*")) element.getBoundingClientRect = () => ({ x: 0, y: 0, left: 0, top: 0, right: 120, bottom: 32, width: 120, height: 32 });
     const scene = { fixture: {}, steps: [{ action: "type", selector: "#computer-ssh-alias", text: "studio-mini" }] };
     const result = auditDocument(window.document, { width: 1120, height: 900 }, [], sceneLatinNames(scene, "zh-TW", {}));
@@ -498,7 +496,7 @@ describe("rendered look checks", () => {
   });
   it("checks remote host settings without entering the computer panel contract", () => {
     const window = new Window();
-    window.document.body.innerHTML = '<input id="computer-ssh-alias" value="studio-mini"><button data-k="computer-host"></button>';
+    window.document.body.innerHTML = '<input id="computer-ssh-alias" value="studio-mini"><button data-computer-choice>虛擬機（studio-mini）</button>';
     for (const element of window.document.querySelectorAll('*')) element.getBoundingClientRect = () => ({ width: 100, height: 34 });
     window.__look = { calls: [{ method: 'settings.set', params: { key: 'computer_ssh_alias', value: 'studio-mini' } }] };
     vi.stubGlobal('document', window.document); vi.stubGlobal('window', window);
@@ -994,7 +992,7 @@ describe("rendered look checks", () => {
     expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-16', 'R-UI-18']);
   });
   it("checks text frames and bare icon borders", () => {
-    const { audit } = productAudit('<button class="btn" style="border: none">Save</button><button class="btn icon" style="border: 1px solid red">X</button><button class="btn" style="border: 1px solid red">Cancel</button>');
+    const { audit } = productAudit('<button class="btn" style="border: none">Save</button><button class="btn icon" style="border: 1px solid red">X</button><button class="btn" style="border: 1px solid red">Cancel</button><p class="desktop-docker-setup">尚未安裝 Docker <button class="btn desktop-docker-help" data-docker-help style="border: none">請 Raphael 安裝</button></p>');
     expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-18', 'R-UI-18']);
   });
   it("allows a quiet routine inspection link only inside its reply origin", () => {

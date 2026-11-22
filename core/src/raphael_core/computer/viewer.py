@@ -1,8 +1,9 @@
-"""Loopback noVNC bridge. Passwords live only in core and RFB memory.
+"""Loopback desktop viewer for Docker screens and host Chrome tabs.
 
 The container supplies noVNC's RFB library. Its UI-free library embedding uses
 Raphael's existing conversation controls instead of the standalone vnc.html UI.
-No new VM runtime, browser bundle, host-specific code or credential store.
+Host tabs use the same session and lease through a canvas page fed by CDP.
+Docker viewer passwords live only in core and RFB memory.
 """
 
 import asyncio
@@ -22,6 +23,8 @@ from ..protocol import invalid_params
 from .vm import OWNER_IDLE_S, SHARED, VmError
 from .owner_transfer import CLIPBOARD_MAX, clipboard_text, hand_over, safe_name
 from .viewer_relay import Policy, ViewerRelay
+from .host_view import HostInputGate
+from .host_view_script import SCRIPT as HOST_SCRIPT
 from ..paths import local_storage_root
 
 LEASE_SECONDS = 15
@@ -35,6 +38,11 @@ TAKE_WAIT_S = 10
 UNWATCHED_STATUS_S = 10
 # What the owner's press may open; anything else, such as a program a member wrote, is only shown in its folder.
 READABLE = frozenset(".html .htm .pdf .png .jpg .jpeg .gif .webp .svg .txt .md .csv .json .mp3 .wav .m4a .mp4 .webm .docx .xlsx .pptx".split())
+HOST_PAGE = b"""<!doctype html><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; connect-src 'self'; img-src data:; style-src 'unsafe-inline'">
+<style>html,body{margin:0;height:100%;background:#000}canvas{width:100%;height:100%;object-fit:cover;display:block;touch-action:none}
+textarea{position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none}</style>
+<canvas></canvas><textarea aria-label="Browser input"></textarea><script src="host.js" defer></script>"""
 BOOTSTRAP = b'''let RFB, rfb, connecting = false, closed = false, controlAt = 0, revision = 0, framesTimer = null;
 const screen = document.getElementById('noVNC_container');
 const tell = state => parent.postMessage({type:'raphael-desktop', state}, '*');
@@ -219,6 +227,15 @@ class Session:
     # What the computer's clipboard was last known to hold through this view (the owner's paste or copy), never logged: a
     # copy that leaves it as it was (Ctrl+C in a terminal) does not replace what the owner has on their PC.
     clipboard: str | None = field(default=None, repr=False)
+    host_tab: object = field(default=None, repr=False)
+    host_gate: HostInputGate | None = field(default=None, repr=False)
+    host_epoch: int = 0
+
+    transport_hint: str | None = None
+
+    @property
+    def owner_key(self):
+        return f"host:{self.member_id}" if self.host_tab is not None else self.target.key
 
 
 class DesktopViewer:
@@ -240,6 +257,10 @@ class DesktopViewer:
         self.task_artifact = lambda task, evidence: None
         self.open_lock = asyncio.Lock()
         self.take_wait_s = TAKE_WAIT_S
+        self.host_browser = self.handbacks = None
+        self.active_transport = None
+        self.host_peers = {}
+        self.host_cleanup = set()
 
     def register(self, router):
         for name, handler in (("status", self.status), ("open", self.open), ("renew", self.renew),
@@ -348,6 +369,8 @@ class DesktopViewer:
         await self.check_session_target(token, session)
         if session.preview:
             raise invalid_params("preview is read only")
+        if session.host_tab is not None:
+            raise invalid_params("file transfer requires an isolated computer")
         try:
             name = safe_name(params.get("name"))
             source = self.stored_path(params.get("stored_id")) if self.stored_path else None
@@ -385,8 +408,14 @@ class DesktopViewer:
             except ValueError:
                 raise invalid_params("Invalid SSH config alias") from None
         target = self.target(params)
-        if self.vm.member_computer_mode(params.get("member_id", 0)) == "host":
-            return {"state": "absent", "control": "member", "ready": False, "error": "host_browser"}
+        member = params.get("member_id", 0)
+        transport = self.transport(params)
+        if params.get("transport") == "docker":
+            transport = "docker"  # An explicit status probe for the setup control.
+        if transport == "host":
+            return self.host_state(member, params.get("conversation_id"))
+        if transport is None:
+            return {"transport": "idle", "state": "absent", "control": "member", "ready": False}
         if params.get("start_docker") is True:
             # Only an explicit owner-window press may start this PC's engine.
             if target.remote or params.get("host") != target.remote:
@@ -397,10 +426,10 @@ class DesktopViewer:
                 self.vm.preparation.pop(target.state_key, None)
             self.vm.changes += 1
         if not await self.vm.installed():
-            return {"state": "absent", "control": "member", "ready": False, "error": "disabled" if not self.vm.enabled else "docker_missing"}
+            return {"transport": "docker", "state": "absent", "control": "member", "ready": False, "error": "disabled" if not self.vm.enabled else "docker_missing"}
         state = await self.unwatched_status(target)
         works = self.vm.work.views(params.get("member_id", 0), params.get("conversation_id"))
-        return {**state, "host": target.remote, "target": target.key,
+        return {**state, "transport": "docker", "host": target.remote, "target": target.key,
                 "mode": target.container or "per-bot",
                 "idle_minutes": self.vm.settings.get("computer_vm_idle_minutes") if self.vm.settings else 15,
                 "lifecycle": self.vm.lifecycle.get(target.state_key),
@@ -418,9 +447,46 @@ class DesktopViewer:
         async with self.open_lock:
             return await self._open(params)
 
+    def transport(self, params):
+        requested = params.get("transport")
+        if requested not in (None, "host", "docker"):
+            raise invalid_params("invalid computer transport")
+        if params.get("start_docker") is True or self.active_transport is None:
+            return requested or "docker"
+        member, conversation = params.get("member_id", 0), params.get("conversation_id")
+        selected = self.active_transport(member, conversation)
+        if selected:
+            return selected
+        if self.host_selection(member, conversation)[1] is not None:
+            return "host"
+        if any(work["state"] == "waiting_control" for work in self.vm.work.views(member, conversation)):
+            return "docker"
+        return "host" if self.host_selection(member, conversation)[0] is not None else requested
+
+    def host_selection(self, member, conversation):
+        if self.host_browser is None:
+            return None, None
+        if self.handbacks is not None:
+            tab, card = self.handbacks.browser_request(member, conversation)
+            if tab is not None and self.host_browser.live(tab):
+                return tab, card
+        return self.host_browser.viewing_tab(member, conversation), None
+
+    def host_state(self, member, conversation, session=None):
+        tab, card = self.host_selection(member, conversation)
+        running = tab is not None and self.host_browser.live(tab)
+        owner = self.sessions.get(self.owners.get(f"host:{member}"))
+        return {"transport": "host", "state": "running" if running else "absent", "ready": running,
+                "control": "owner" if owner and (owner is session or session is None and owner.conversation_id == conversation) else "member",
+                "preview_allowed": owner is None and card is None,
+                **({"target": tab.id, "works": [{"id": tab.id, "turn_id": tab.turn_id, "transport": "host",
+                                                "state": "done" if tab.finished else "running", "tool": "browser_open",
+                                                "reason": ""}]} if running and tab.turn_id else {}),
+                **({"host_request": {"id": card.id, "request_id": card.id, "turn_id": card.turn_id,
+                                     "state": "waiting_control", "tool": "get_browser_state", "reason": card.reason,
+                                     "detail": card.note}} if card else {})}
+
     def target_current(self, target, member):
-        if self.vm.member_computer_mode(member) == "host":
-            return False
         if not target.container:
             return True
         return (self.member_exists(member) and self.vm.target(member) == target
@@ -431,24 +497,39 @@ class DesktopViewer:
             raise invalid_params("desktop seat changed")
 
     async def check_session_target(self, token, session):
-        if not self.target_current(session.target, session.member_id):
+        if session.host_tab is not None:
+            current = self.host_current(session)
+        else:
+            current = self.target_current(session.target, session.member_id)
+        if not current:
             # Revoke relay policy before any asynchronous cleanup. _control already holds control_lock.
             if self.relay:
                 self.relay.publish(token, None)
-            await self._close({"session": token})
+            if session.host_tab is None:
+                await self._close({"session": token})
             raise invalid_params("desktop seat changed")
 
     async def _open(self, params):
         target = self.target(params)
-        if self.vm.member_computer_mode(params.get("member_id", 0)) == "host":
-            raise invalid_params("This computer uses Raphael's Chrome")
+        member, conversation = params.get("member_id", 0), params.get("conversation_id")
+        transport = self.transport(params)
+        if params.get("transport") == "host" and transport != "host":
+            raise invalid_params("browser tab changed")
+        if transport is None:
+            raise invalid_params("no computer is in use")
+        host = transport == "host"
+        tab, pending = self.host_selection(member, conversation) if host else (None, None)
         if self.closing:
             raise invalid_params("desktop viewer closed")
         if len(self.sessions) >= 8:
             raise invalid_params("too many desktop viewers")
         if type(params.get("preview", False)) is not bool:
             raise invalid_params("preview must be a boolean")
-        if not params.get("preview"):
+        if host and (tab is None or not self.host_browser.live(tab) or params.get("preview") and pending):
+            raise invalid_params("desktop unavailable")
+        if host and params.get("target_id") not in (None, tab.id):
+            raise invalid_params("browser tab changed")
+        if not host and not params.get("preview"):
             try:
                 target = await self.vm.seat(params.get("member_id", 0))
             except VmError:
@@ -456,14 +537,22 @@ class DesktopViewer:
             self.check_open_target(target, params)
         if self.server is None:
             self.relay = ViewerRelay(self._prepare_request, self._register_peer, self._unregister_peer,
-                                     self._peer_failed, self._teach_input, embedded_page, self._teach_core_input)
+                                     self._peer_failed, self._teach_input, embedded_page, self._teach_core_input, self.host_frame)
             self.server = await self.relay.start()
             self.origin = f"http://127.0.0.1:{self.server.sockets[0].getsockname()[1]}"
             self.monitor = asyncio.create_task(self._monitor())
+        if not host:
             self.check_open_target(target, params)
         token = secrets.token_urlsafe(32)
         session = Session(target, self.vm.clock() + LEASE_SECONDS,
-            member_id=params.get("member_id", 0), conversation_id=params.get("conversation_id"), preview=params.get("preview", False))
+            member_id=member, conversation_id=conversation, preview=params.get("preview", False), host_tab=tab,
+            transport_hint=params.get("transport"))
+        if host:
+            await self.check_session_target(token, session)
+            session.host_gate = HostInputGate(self.host_browser, tab, lambda: self.host_input_allowed(token, session))
+            self.sessions[token] = session
+            self.publish_session(token)
+            return {"session": token, "url": f"{self.origin}/{token}/host.html"}
         if not params.get("preview"):
             state = await self.status_for(target)
             self.check_open_target(target, params)
@@ -519,8 +608,18 @@ class DesktopViewer:
 
     async def renew(self, params):
         token, session = self.session(params)
+        if session.host_tab is not None and not self.host_current(session):
+            return await self.status({"member_id": session.member_id, "conversation_id": session.conversation_id})
+        if self.active_transport is not None and self.owners.get(session.owner_key) != token:
+            lookup = {"member_id": session.member_id, "conversation_id": session.conversation_id,
+                      "transport": session.transport_hint}
+            if self.transport(lookup) != ("host" if session.host_tab is not None else "docker"):
+                return await self.status({**lookup, "transport": None})
         await self.check_session_target(token, session)
         session.expires = self.vm.clock() + LEASE_SECONDS
+        if session.host_tab is not None:
+            self.publish_session(token)
+            return self.host_state(session.member_id, session.conversation_id, session)
         if self.owners.get(session.target.key) == token:
             self.vm.hold(session.target, True)
         self.publish_session(token)
@@ -534,7 +633,7 @@ class DesktopViewer:
         state = await self.status_for(session.target) if read else {"state": "running", "ready": True}
         works = self.vm.work.views(session.member_id, session.conversation_id)
         token = self.owners.get(session.target.key)
-        return {**state, "host": session.target.remote, "target": session.target.key,
+        return {**state, "transport": "docker", "host": session.target.remote, "target": session.target.key,
                 "mode": session.target.container or "per-bot",
                 "idle_minutes": self.vm.settings.get("computer_vm_idle_minutes") if self.vm.settings else 15,
                 "lifecycle": self.vm.lifecycle.get(session.target.state_key),
@@ -600,13 +699,15 @@ class DesktopViewer:
         held = params.get("held")
         if type(held) is not bool:
             raise invalid_params("held must be a boolean")
+        if session.preview:
+            raise invalid_params("preview is read only")
+        if session.host_tab is not None:
+            return await self.control_host(token, session, held, params.get("takeover"))
         target = session.target
         owner = self.owners.get(target.key)
         pending = self.vm.work.pending(target)
         if not held and self.teaching and self.teaching.active(token):
             raise invalid_params("stop or discard the demonstration before handback")
-        if session.preview:
-            raise invalid_params("preview is read only")
         if pending and (pending.member_id != session.member_id or pending.conversation_id != session.conversation_id):
             raise invalid_params("private conversation required")
         if held:
@@ -673,11 +774,84 @@ class DesktopViewer:
         await self.check_session_target(token, session)
         return state
 
+    def host_current(self, session):
+        tab, card = self.host_selection(session.member_id, session.conversation_id)
+        selected = self.active_transport(session.member_id, session.conversation_id) if self.active_transport else None
+        return (selected in (None, "host") and self.member_exists(session.member_id) and self.host_browser.live(session.host_tab)
+                and tab is session.host_tab and not (session.preview and (card or session.owner_key in self.owners)))
+
+    def host_input_allowed(self, token, session):
+        return (self.sessions.get(token) is session and not session.preview and bool(session.sockets)
+                and self.owners.get(session.owner_key) == token and session.expires > self.vm.clock()
+                and self.host_current(session))
+
+    async def release_host(self, token, session):
+        if self.owners.get(session.owner_key) == token:
+            self.owners.pop(session.owner_key)
+            session.host_epoch += 1
+            self.publish_session(token)
+            try:
+                await session.host_gate.release()
+            finally:
+                self.host_browser.held.discard(session.host_tab.scope)
+
+    async def control_host(self, token, session, held, request):
+        member, conversation = session.member_id, session.conversation_id
+        _, card = self.host_selection(member, conversation)
+        if request is not None and (card is None or request != card.id):
+            raise invalid_params("desktop request changed")
+        if held:
+            if not session.sockets:
+                raise invalid_params("desktop unavailable")
+            # Block new member commands before waiting for the current browser call.
+            browser = self.host_browser
+            work = session.host_tab.scope
+            browser.held.add(work)
+            try:
+                async with asyncio.timeout(self.take_wait_s):
+                    async with browser.work_lock(work):
+                        await self.check_session_target(token, session)
+                        self.session({"session": token})
+                        if not session.sockets:
+                            raise invalid_params("desktop unavailable")
+                        previous = self.owners.get(session.owner_key)
+                        if previous not in (None, token):
+                            await self.release_host(previous, self.sessions[previous])
+                        browser.held.add(work)
+                        self.owners[session.owner_key] = token
+                        if previous != token:
+                            session.host_epoch += 1
+                        session.input_at = self.vm.clock()
+            finally:
+                if self.owners.get(session.owner_key) != token:
+                    browser.held.discard(work)
+        else:
+            owner = self.owners.get(session.owner_key)
+            if owner == token:
+                await self.release_host(token, session)
+            elif request is not None and owner is not None:
+                raise invalid_params("desktop control required")
+            # The tab and request still match after a watch socket reload or disconnect.
+            if request is not None:
+                self.handbacks.finish(card)
+        session.expires = self.vm.clock() + LEASE_SECONDS
+        self.publish_session(token)
+        return self.host_state(member, conversation, session)
+
+    async def finish_browser_card(self, card, *, stop=False):
+        async with self.control_lock:
+            token = self.owners.get(f"host:{card.member_id}")
+            session = self.sessions.get(token)
+            tab, pending = self.host_selection(card.member_id, card.conversation_id)
+            if session and session.host_tab is tab and pending and pending.id == card.id:
+                await self.release_host(token, session)
+            return self.handbacks.stop(card) if stop else self.handbacks.finish(card)
+
     async def disconnect_target(self, target, *, keep=None):
         # Invalidate handshakes that fetched their connection before this switch.
         tokens = []
         for token, session in self.sessions.items():
-            if session.target != target:
+            if session.host_tab is not None or session.target != target:
                 continue
             if session is not keep or not session.sockets:
                 session.revision += 1
@@ -697,6 +871,12 @@ class DesktopViewer:
         token = params.get("session")
         session = self.sessions.get(token) if isinstance(token, str) else None
         if session:
+            if session.host_tab is not None:
+                await self.release_host(token, session)
+                self.sessions.pop(token, None)
+                self.publish_session(token)
+                await self.relay.call(self.relay.close_tokens([token]))
+                return {}
             owned = self.owners.get(session.target.key) == token
             self.sessions.pop(token)
             if owned:
@@ -721,7 +901,7 @@ class DesktopViewer:
 
     async def close_seat(self, target):
         for token, session in list(self.sessions.items()):
-            if session.target == target:
+            if session.host_tab is None and session.target == target:
                 await self.close({"session": token})
 
     async def _monitor(self):
@@ -731,7 +911,14 @@ class DesktopViewer:
                 # One view that cannot be closed or ticked must not end the watch over every other: the monitor is
                 # the only thing that ends an expired view and its hold.
                 try:
-                    if session.expires <= self.vm.clock():
+                    if session.host_tab is not None:
+                        if session.expires <= self.vm.clock() or not self.host_current(session):
+                            await self.close({"session": token})
+                        elif (self.owners.get(session.owner_key) == token and self.vm.clock() - session.input_at >= OWNER_IDLE_S
+                              and self.host_selection(session.member_id, session.conversation_id)[1] is None):
+                            async with self.control_lock:
+                                await self.release_host(token, session)
+                    elif session.expires <= self.vm.clock():
                         await self.close({"session": token})
                     else:
                         if session.sockets:
@@ -769,9 +956,9 @@ class DesktopViewer:
         policy = None
         if session:
             policy = Policy(session.revision, time.monotonic() + max(0, session.expires - self.vm.clock()),
-                            not session.preview and self.owners.get(session.target.key) == token,
-                            self.teaching.relay_hook(token) if self.teaching else None,
-                            bool(self.teaching and session.target.container == "shared"
+                            not session.preview and self.owners.get(session.owner_key) == token,
+                            self.teaching.relay_hook(token) if self.teaching and session.host_tab is None else None,
+                            bool(session.host_tab is None and self.teaching and session.target.container == "shared"
                                  and (recording := self.teaching.active(token))
                                  and recording.state == "recording" and recording.relay_enabled))
         self.relay.publish(token, policy)
@@ -784,13 +971,45 @@ class DesktopViewer:
             await self.check_session_target(token, session)
         except Exception:
             return False
+        if session.host_tab is not None:
+            cast = session.host_tab.cast
+            try:
+                async with asyncio.timeout(4):
+                    queue = await cast.watch()
+            except (ValueError, OSError, TimeoutError):
+                return False
+            if self.sessions.get(token) is not session or session.expires <= self.vm.clock() or not self.host_current(session):
+                await cast.unwatch(queue)
+                return False
+            self.host_peers[identifier] = (token, session, cast, queue)
         session.sockets.add(identifier)
         return True
+
+    async def host_frame(self, identifier):
+        peer = self.host_peers.get(identifier)
+        if peer:
+            token, session, _, queue = peer
+            image = await queue.get()
+            if self.sessions.get(token) is session and self.host_current(session):
+                return image
+        return None
 
     def _unregister_peer(self, token, identifier):
         session = self.sessions.get(token)
         if session:
             session.sockets.discard(identifier)
+        if peer := self.host_peers.pop(identifier, None):
+            _, _, cast, queue = peer
+            task = asyncio.create_task(self.end_host_peer(token, session, cast, queue))
+            self.host_cleanup.add(task)
+            task.add_done_callback(self.host_cleanup.discard)
+
+    async def end_host_peer(self, token, session, cast, queue):
+        if session and not session.sockets and self.owners.get(session.owner_key) == token:
+            async with self.control_lock:
+                if not session.sockets:
+                    await self.release_host(token, session)
+        await cast.unwatch(queue)
 
     def _peer_failed(self, token, revision):
         session = self.sessions.get(token)
@@ -818,7 +1037,7 @@ class DesktopViewer:
         if self.relay:
             await self.relay.call(self.relay.flush_teaching(token))
 
-    async def _prepare_request(self, method, path, headers):
+    async def _prepare_request(self, method, path, headers, body=None):
         # Validation and VM resolution belong to the core loop; no writers cross it.
         parts = path.split("/", 2)
         token, asset = parts[1:] if len(parts) == 3 else ("", "")
@@ -828,10 +1047,14 @@ class DesktopViewer:
                 await self.check_session_target(token, session)
             except Exception:
                 return {"code": 403}
-        if (method != "GET" or headers.get("host") != self.origin.removeprefix("http://")
-                or not session or session.target.screen == 0 or session.expires <= self.vm.clock()
+        if (headers.get("host") != self.origin.removeprefix("http://")
+                or not session or session.expires <= self.vm.clock()
                 or headers.get("origin", self.origin) != self.origin
                 or not re.fullmatch(r"[A-Za-z0-9_./-]+", asset) or ".." in asset):
+            return {"code": 403}
+        if session.host_tab is not None:
+            return await self.prepare_host(token, session, method, asset, headers, body)
+        if method != "GET" or session.target.screen == 0:
             return {"code": 403}
         if asset == "bridge.js":
             return {"code": 200, "body": BOOTSTRAP, "type": "text/javascript", "token": token, "revision": session.revision}
@@ -858,6 +1081,32 @@ class DesktopViewer:
         return {"token": token, "revision": revision, "port": port, "asset": asset, "websocket": websocket,
                 "screen": session.target.screen}
 
+    async def prepare_host(self, token, session, method, asset, headers, body):
+        reply = {"token": token, "revision": session.revision}
+        if method == "GET":
+            if asset == "host.html":
+                return {**reply, "code": 200, "body": HOST_PAGE, "type": "text/html; charset=utf-8"}
+            if asset == "host.js":
+                return {**reply, "code": 200, "body": HOST_SCRIPT, "type": "text/javascript; charset=utf-8"}
+            if asset == "host-frames":
+                return {**reply, "host_stream": True}
+            if asset == "control":
+                return {**reply, "code": 200, "body": json.dumps({"held": self.host_input_allowed(token, session)}).encode(),
+                        "type": "application/json"}
+        elif method == "POST" and asset == "host-input" and headers.get("origin") == self.origin:
+            if not self.host_input_allowed(token, session):
+                return {"code": 403}
+            epoch = session.host_epoch
+            try:
+                event = json.loads(body)
+                async with self.control_lock:
+                    if epoch == session.host_epoch and await session.host_gate.dispatch(event):
+                        session.input_at = self.vm.clock()
+                        return {**reply, "code": 204}
+            except (ValueError, OSError, TimeoutError):
+                pass
+        return {"code": 403}
+
     async def aclose(self):
         self.closing = True
         async with self.open_lock:
@@ -871,4 +1120,11 @@ class DesktopViewer:
             await self.close({"session": token})
         if self.relay:
             await self.relay.aclose()
+        # A vanished Chrome may never answer stopScreencast. Give cleanup a
+        # short grace period without tying relay lifetime to that CDP reply.
+        if self.host_cleanup:
+            _, unfinished = await asyncio.wait(self.host_cleanup, timeout=0.35)
+            for task in unfinished:
+                task.cancel()
+            await asyncio.gather(*unfinished, return_exceptions=True)
         self.server = None

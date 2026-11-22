@@ -22,7 +22,7 @@ export const OVERFLOW_ROWS: readonly OverflowRow[] = [
   { more: "[data-room-more]", row: ".au-room-row" },
   { more: "[data-room-menu]", row: ".au-room-pane > .page-head" },
   { more: '[data-desktop="menu"]', row: ".desktop-dock" },
-  { more: '[data-computer-menu]', row: ".desktop-location-header" },
+  { more: '[data-computer-menu]', row: ".desktop-panel" },
   { more: '[data-res="skill-menu"]', row: ".mp-resource" },
   { more: '[data-res="command-menu"]', row: ".mp-resource" },
   { more: '[data-ms="folder-menu"]', row: ".ms-folder" },

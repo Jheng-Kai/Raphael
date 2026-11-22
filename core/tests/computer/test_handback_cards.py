@@ -66,21 +66,18 @@ def rig(conn, shell, make_run):
 
 
 @pytest.mark.parametrize("finish", ["done", "stop"])
-async def test_browser_handback_focuses_the_same_tab_and_only_resolves_once(rig, finish):
+async def test_browser_handback_keeps_the_same_tab_and_only_resolves_once(rig, finish):
     from raphael_core.computer.host_browser import BrowserError
 
-    focused = []
-
-    async def focus():
-        focused.append("original tab")
-
+    from types import SimpleNamespace
+    tab = SimpleNamespace(closed=asyncio.Event())
     waiting = asyncio.create_task(rig.cards.wait_for_browser(
-        turn_id=rig.turn, member_id=0, conversation_id=None, language="zh-TW", reason="sign_in", focus=focus))
+        turn_id=rig.turn, member_id=0, conversation_id=None, language="zh-TW", reason="sign_in", tab=tab))
     await asyncio.sleep(0)
     card, = rig.cards.cards_of(rig.turn)
-    assert card.view()["browser"] and focused == ["original tab"]
-    assert await rig.router.call("integrations.card_focus_browser", {"id": card.id}) == {"focused": True}
-    assert focused == ["original tab", "original tab"]
+    assert card.view()["browser"]
+    assert rig.cards.browser_request(0, None) == (tab, card)
+    assert rig.cards.browser_request(0, 1) == (None, None)
     if finish == "done":
         assert (await rig.done(card))["done"]
         assert not (await rig.done(card))["done"]

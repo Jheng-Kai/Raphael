@@ -42,10 +42,10 @@ def instruction(intent):
                 "(one or two sentences, the owner's language) of what you do for people, written for strangers: "
                 "no names, private facts, keys, internal URLs or customer data. Then one short sentence.</panel_intent_step>")
     if intent == "setup-docker":
-        return ("\n\n<panel_intent_step>The owner selected the isolated Docker computer and Docker is missing. "
+        return ("\n\n<panel_intent_step>The owner asked for help installing Docker for a virtual machine. "
                 "Read self_check's setup facts. Explain how to install Docker Desktop on this operating system "
                 "with its official download link and ask the owner to open it once after installation. "
-                "Work can continue in Raphael's Chrome until Docker is installed.</panel_intent_step>")
+                "After installation the owner can return to the Computer panel or suggestion card.</panel_intent_step>")
     platform = intent.removeprefix("setup-")
     name = {"telegram": "Telegram", "slack": "Slack", "discord": "Discord"}[platform]
     return (f"\n\n<panel_intent_step>The owner pressed Set up for {name} on your panel. Call connect_messaging with platform {platform} now. "

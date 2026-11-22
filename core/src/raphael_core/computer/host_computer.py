@@ -10,12 +10,13 @@ from jsonschema import Draft202012Validator
 from ..agent.data_floor import DataFloor, WRITE_REFUSAL
 from ..agent.plugins import PluginResult, PluginTool, tool_key
 from ..agent.policy import Tier
+from ..ui_words import with_ui_words
 from . import host_page
 from .browser_tabs import BROWSER_TABS
 from .file_tools import Refused, _refusal
 from .host_browser import BrowserError, HostBrowser
 from .owner_files import OwnerFiles, OwnerFileTools, READS, WRITES, DEFINITIONS, kept_place, place
-from .takeover import REASONS, TAKEOVER
+from .takeover import REASONS, TAKEOVER, TAKEOVER_REASON_REQUIRED, takeover_detail
 from .vm import VmError
 from .vm_catalog import offline_catalog
 
@@ -28,12 +29,27 @@ BROWSER_TOOLS = {
     "browser_select": "Choose an option in a native HTML select using its current accessibility reference.",
 }
 HOST_TAKEOVER = {**TAKEOVER["parameters"], "properties": {
+    **TAKEOVER["parameters"]["properties"],
     "reason": {"type": "string", "enum": [*REASONS, "certificate"]},
     "target_id": {"type": "string"}, "tab_id": {"type": "string"},
 }}
-HANDOFF = "In a private chat, request_takeover brings this tab forward for sign-in, certificates, verification codes or CAPTCHAs."
+HOST_CONTRACT = ("Raphael Chrome runs on this computer in the background. Its shared profile keeps members' sign-ins, "
+                 "separately from Docker. It can browse and use work files. ")
 WORDS = {
-    "chrome_missing": "Google Chrome is missing. Hand this to Raphael to help the owner install Chrome. No other profile was opened.",
+    "chrome_missing": "Raphael Chrome is unavailable because Google Chrome is not installed.",
+    "chrome_start_failed": "Raphael Chrome could not start.",
+    "chrome_profile": "Raphael Chrome could not open its shared profile.",
+    "chrome_disconnected": "Raphael Chrome disconnected. Open the page again if the request still needs it.",
+    "chrome_command_failed": "Chrome rejected the browser command. Read the tab again before retrying.",
+    "browser_url": "Chrome can only open a valid HTTP or HTTPS page, except its own control address.",
+    "browser_navigation_failed": "Chrome could not load the requested page.",
+    "browser_tab_required": "Open a Chrome page in this turn or task first.",
+    "browser_tab_changed": "The Chrome tab closed or changed. Open it again before continuing.",
+    "browser_page_changed": "The page changed after the last read. Read it again for current controls.",
+    "browser_action_refused": "Chrome could not perform this action on the selected page element.",
+    "browser_field_refused": "Chrome could not type into or select a value in that field.",
+    "owner_holds_control": "The owner has control of this Chrome tab. Wait for them to finish.",
+    "bad_path": "The requested work file path is invalid.",
     "browser_navigation_waiting": "Chrome is still waiting for this page. If a native certificate or key prompt is blocking it, use request_takeover with reason: certificate.",
     "browser_owner_approval_required": "The owner must approve the exact outward action before it can run.",
     "browser_handback_stopped": "The owner stopped the handback. End this task without retrying the action.",
@@ -41,7 +57,7 @@ WORDS = {
     "private_conversation_required": "Ask the owner to continue in the private conversation at this computer to take over the tab.",
     "browser_current_ref_required": "Read the current tab and use a current accessibility reference. Coordinates are unavailable in this mode.",
     "browser_dom_input_required": "Chrome requires DOM input to keep this tab in the background. Use input_route: dom_event.",
-    "browser_background_only": "The browser tool can only operate the tab in the background. Use request_takeover if the owner needs to see it.",
+    "browser_background_only": "The owner can watch this tab in the app's Computer panel.",
     "host_tool_unavailable": "This tool requires the isolated Docker computer. Use the browser or work folder on this computer.",
 }
 
@@ -57,15 +73,16 @@ class HostComputerTools:
         self.files = OwnerFileTools(vm.settings, DataFloor(conn))
         definitions = offline_catalog()
         self.definitions = {
-            name: {**definitions[name], "description": f"{description} {HANDOFF}"}
+            name: {**definitions[name], "description": description}
             for name, description in BROWSER_TOOLS.items()
         }
         self.definitions.update({
             "browser_open": {**open_definition, "description": "Open an HTTP or HTTPS URL in your own background Chrome tab. "
-                             "Use new_tab to keep the current page. " + HANDOFF},
-            "browser_tabs": {**BROWSER_TABS, "description": "List only your current work's Chrome tabs. The show option is "
-                             "reserved for owner takeover; tabs otherwise stay in the background."},
-            "request_takeover": {"parameters": HOST_TAKEOVER, "description": HANDOFF + " Wait for the owner to finish, then inspect the same tab again."},
+                             "The owner sees it in the app's Computer panel. When asked to show a page, open it and say where to look. "
+                             "Use new_tab to keep the current page. " + HOST_CONTRACT},
+            "browser_tabs": {**BROWSER_TABS, "description": "List only your current work's Chrome tabs. "
+                             "The owner watches the current page in the app's Computer panel."},
+            "request_takeover": {"parameters": HOST_TAKEOVER, "description": TAKEOVER["description"] + " Use certificate for a certificate prompt."},
             **{name: {**DEFINITIONS[name], "description": DEFINITION_WORDS[name]} for name in READS | WRITES},
         })
 
@@ -75,8 +92,8 @@ class HostComputerTools:
             tools = []
             for name, definition in self.definitions.items():
                 key = tool_key(keyspace, name)
-                tool = PluginTool(key, "computer", name, definition["description"], definition["parameters"],
-                                  self.base_tier(name), pinned=True, whole=True)
+                tool = PluginTool(key, "computer", name, "Raphael Chrome. " + definition["description"], definition["parameters"],
+                                  self.base_tier(name), pinned=True, whole=True, alias_group="computer_chrome")
                 self.routes[key] = (member, tool)
                 tools.append(tool)
             self.catalog[member] = tools
@@ -86,19 +103,19 @@ class HostComputerTools:
     def base_tier(name):
         return Tier.T2 if name in WRITES or name in ("browser_click", "browser_type", "browser_select") else Tier.T0
 
+    def local_target(self, member):
+        return (self.vm.shared_target("", member, 0) if self.vm.mode == "shared" and not self.vm.remote
+                else self.vm.target_for("", self.vm.key_for("", member)))
+
     def folders(self, member):
-        target = self.vm.target_for("", "shared" if self.vm.mode == "shared" and not self.vm.remote else self.vm.key_for("", member))
-        return target.workspace, target.shared
+        target = self.local_target(member)
+        return self.vm.member_workspace(target), target.shared
 
-    def download_folder(self, member):
-        workspace, _ = self.folders(member)
-        return workspace / "downloads" / self.vm.key_for("", member) if workspace.name == "shared" else workspace
-
-    def close_turn(self, turn_id):
+    def close_turn(self, turn_id, *, keep_page=False):
         for work in set(self.browser.owned_targets.values()):
             if len(work) != 2 or not isinstance(work[0], tuple) or work[1] != turn_id:
                 continue
-            task = asyncio.create_task(self.browser.close_scope(work))
+            task = asyncio.create_task(self.browser.close_scope(work, keep_page=keep_page))
             self.cleanup.add(task)
             task.add_done_callback(self.cleanup.discard)
 
@@ -111,7 +128,9 @@ class HostComputerTools:
         raw = raw.replace("\\", "/").strip()
         if not raw or "\x00" in raw:
             raise VmError("bad_path")
-        for alias, folder in (("/home/cua/workspace", workspace), ("/home/cua/team", team), ("team:", team)):
+        guest_workspace = self.vm.guest_workspace(self.local_target(member))
+        for alias, folder in ((guest_workspace, workspace), ("/home/cua/workspace", workspace),
+                              ("/home/cua/team", team), ("team:", team)):
             if raw == alias or raw.startswith(alias + "/"):
                 return (folder / raw[len(alias):].lstrip("/")).resolve()
         path = Path(raw)
@@ -177,14 +196,19 @@ class HostComputerTools:
         files = OwnerFiles(self.files.reads, scope)
         return await getattr(files, name)(args)
 
-    async def call(self, key, arguments, *, member, scope, turn_id, conversation_id, private, approver, language, announce):
+    async def call(self, key, arguments, *, member, scope, turn_id, conversation_id, private, approver, language, announce,
+                   explain=None):
         owner, tool = self.routes[key]
         if owner != member or scope is None:
             return PluginResult(False, "computer_changed")
         name = tool.name
         schema = self.definitions[name].get("validation", tool.schema)
         if not Draft202012Validator(schema).is_valid(arguments) or set(arguments) - set(schema.get("properties", {})):
+            if name == "request_takeover" and not arguments.get("reason"):
+                return PluginResult(False, "takeover_reason_required", TAKEOVER_REASON_REQUIRED)
             return PluginResult(False, "bad_arguments")
+        if name == "request_takeover" and takeover_detail(arguments) is None:
+            return PluginResult(False, "takeover_reason_required", TAKEOVER_REASON_REQUIRED)
         if approver == "none":
             return PluginResult(False, "approval_required")
         self.active[member] += 1
@@ -194,19 +218,27 @@ class HostComputerTools:
             work = (scope, turn_id) if scope[0] == "turn" else scope
             browser = self.browser
             can_hand_back = private and turn_id and conversation_id is not None and self.cards is not None
-            async with browser.lock:
-                data, blocks, tab = await self.browser_call(name, arguments, approver, member, work, announce)
-                if data.get("owner_needed") and can_hand_back:
+            async with browser.work_lock(work):
+                if work in browser.held or any(tab.scope == work and tab.handoff for tab in browser.tabs.values()):
+                    raise BrowserError("owner_holds_control")
+                data, blocks, tab = await self.browser_call(name, arguments, approver, member, work, conversation_id, announce, turn_id=turn_id)
+                # A page read can report a private step without asking the owner to take over.
+                reason = data.get("owner_needed") if name in {"request_takeover", "browser_click", "browser_type", "browser_select"} else None
+                if reason and can_hand_back:
                     tab.handoff = True
-            if reason := data.get("owner_needed"):
+            if reason:
                 if not can_hand_back:
                     raise BrowserError("private_conversation_required")
                 try:
+                    detail = data.get("detail", "")
+                    if explain:
+                        words = OWNER_STEPS.get(language, OWNER_STEPS["en"])
+                        explain(detail or words[reason])
                     await self.cards.wait_for_browser(turn_id=turn_id, member_id=member, conversation_id=conversation_id,
-                                                      language=language, reason=reason, focus=lambda: browser.focus(tab))
+                                                      language=language, reason=reason, tab=tab, detail=detail)
                 finally:
                     tab.handoff = False
-                async with browser.lock:
+                async with browser.work_lock(work):
                     data, blocks = await host_page.snapshot(browser, tab, {})
                 if data.get("owner_needed"):
                     data["status"] = "owner_step_still_needed"
@@ -215,9 +247,10 @@ class HostComputerTools:
             return PluginResult(True, text=json.dumps(data, ensure_ascii=False), blocks=blocks)
         except (BrowserError, VmError) as error:
             code = str(error)
-            return PluginResult(False, code, WORDS.get(code, "This operation could not be completed in this Chrome tab or work folder."))
+            return PluginResult(False, code, WORDS.get(code, f"Raphael Chrome could not run {name} ({code})."))
         except (OSError, RuntimeError, KeyError, TimeoutError):
-            return PluginResult(False, "host_computer_unavailable", "Chrome or the work folder is temporarily unavailable.")
+            place_name = "the work folder" if name in READS | WRITES else "the Chrome tab"
+            return PluginResult(False, "host_computer_unavailable", f"Could not complete {name} in {place_name}.")
         except Refused as error:
             return _refusal(error)
         finally:
@@ -225,7 +258,7 @@ class HostComputerTools:
             if not self.active[member]:
                 del self.active[member]
 
-    async def browser_call(self, name, arguments, approver, member, work, announce):
+    async def browser_call(self, name, arguments, approver, member, work, conversation, announce, *, turn_id=None):
         browser = self.browser
         if name == "browser_tabs":
             if arguments.get("show"):
@@ -241,34 +274,31 @@ class HostComputerTools:
             if isinstance(work[0], tuple) and not work[1]:
                 raise BrowserError("private_conversation_required")
             await self.vm.settled()
-            new_window = await browser.start()
-            if arguments.get("new_tab") or not any(tab.scope == work for tab in browser.tabs.values()):
-                try:
-                    tab = await browser.new_tab(work, member, self.download_folder(member))
-                finally:
-                    browser._schedule_idle()
-            else:
-                tab = browser.tab(work)
-            if new_window and announce:
+            tab, _ = await browser.open_tab(work, member, self.folders(member)[0], conversation,
+                                                  new=bool(arguments.get("new_tab")))
+            first_page = tab.turn_id is None
+            tab.turn_id = turn_id
+            if first_page and announce:
                 announce()
         else:
             tab = browser.tab(work, arguments.get("target_id"), arguments.get("tab_id"))
         if tab.handoff:
             raise BrowserError("owner_holds_control")
         if name == "request_takeover":
-            return {"owner_needed": arguments["reason"]}, [], tab
+            return {"owner_needed": arguments["reason"], "detail": takeover_detail(arguments)}, [], tab
         if name in ("browser_open", "browser_navigate"):
             try:
                 navigated = await host_page.navigate(browser, tab, arguments["url"])
             except BrowserError as error:
                 if str(error) != "browser_certificate_needed":
                     raise
-                return {"owner_needed": "certificate"}, [], tab
+                return {"target_id": tab.id, "tab_id": tab.id, "owner_needed": "certificate"}, [], tab
             if not navigated:
                 return {"status": "download_started", "target_id": tab.id, "tab_id": tab.id}, [], tab
         if name in ("browser_click", "browser_type", "browser_select"):
             return await host_page.act(browser, tab, name, arguments, approver), [], tab
         data, blocks = await host_page.snapshot(browser, tab, arguments)
+        data["view"] = "The owner can see this page in the app's Computer panel."
         return data, blocks, tab
 
 
@@ -279,6 +309,34 @@ DEFINITION_WORDS = {
     "glob": "List files under a folder by glob pattern. The default is your work folder; team:/ selects the team folder.",
     "grep": "Search files by regular expression. The default is your work folder; team:/ selects the team folder.",
 }
+
+
+OWNER_STEPS = with_ui_words({
+    "en": {
+        "sign_in": "Please sign in on this page in the Computer panel.",
+        "password": "Please enter your password on the page in the Computer panel.",
+        "two_factor": "Please complete the verification in the Computer panel.",
+        "captcha": "Please complete the human verification in the Computer panel.",
+        "payment": "Please review and complete the payment in the Computer panel.",
+        "certificate": "Please select your certificate in the Computer panel.",
+    },
+    "zh-TW": {
+        "sign_in": "請在「電腦」側欄的頁面登入。",
+        "password": "請在「電腦」側欄的頁面輸入密碼。",
+        "two_factor": "請在「電腦」側欄完成驗證。",
+        "captcha": "請在「電腦」側欄完成人機驗證。",
+        "payment": "請在「電腦」側欄確認並完成付款。",
+        "certificate": "請在「電腦」側欄選擇憑證。",
+    },
+    "ja": {
+        "sign_in": "「コンピューター」パネルで、このページにログインしてください。",
+        "password": "「コンピューター」パネルで、ページにパスワードを入力してください。",
+        "two_factor": "「コンピューター」パネルで認証を完了してください。",
+        "captcha": "「コンピューター」パネルで、ロボットではないことを確認してください。",
+        "payment": "「コンピューター」パネルで内容を確認し、支払いを完了してください。",
+        "certificate": "「コンピューター」パネルで証明書を選択してください。",
+    },
+})
 
 
 CHROME_OPENED = {

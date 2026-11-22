@@ -3,18 +3,25 @@ import { navInputs, pressLayer } from "./test-support/nav-layer-input";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-const api = vi.hoisted(() => ({ core:vi.fn(), settingsGet:vi.fn(), settingsSet:vi.fn(), desktopMaintain:vi.fn(), desktopWallpaper:vi.fn(), desktopTeach:vi.fn(), desktopStatus:vi.fn(), desktopOpen:vi.fn(), desktopRenew:vi.fn(), desktopControl:vi.fn(), desktopClose:vi.fn(), ownerClipboardText:vi.fn(), ownerClipboardSequence:vi.fn(), desktopClipboard:vi.fn(), desktopPutFile:vi.fn() }));
+const api = vi.hoisted(() => ({ core:vi.fn(), agentAskText:vi.fn(), settingsGet:vi.fn(), settingsSet:vi.fn(), desktopMaintain:vi.fn(), desktopWallpaper:vi.fn(), desktopTeach:vi.fn(), desktopStatus:vi.fn(), desktopOpen:vi.fn(), desktopRenew:vi.fn(), desktopControl:vi.fn(), desktopClose:vi.fn(), ownerClipboardText:vi.fn(), ownerClipboardSequence:vi.fn(), desktopClipboard:vi.fn(), desktopPutFile:vi.fn() }));
 vi.mock("./api", () => api);
 import { defaultWallpaper, mountDesktopViewer, preparationHTML, type DesktopState } from "./desktop-viewer";
 import { setLocale, t } from "./i18n";
 import { faceHTML } from "./members";
 import { computerStateText, computerUpdateLine } from './computer-state';
+import { resetAsks } from './chat-ask';
 const running: DesktopState = { state:"running", ready:true, control:"member" };
 const work = { id:"task", request_id:"nonce", turn_id:42, state:"waiting_control", reason:"sign_in", tool:"get_desktop_state" } as const;
 let host: HTMLElement, mounted: ReturnType<typeof mountDesktopViewer>, member = 1, panelOpen = false;
+const chooseComputer = vi.fn(async (_transport: "host" | "docker") => {});
 const flush = async (): Promise<void> => { for (let i=0; i<30; i++) await Promise.resolve(); };
 const panel = (): HTMLElement => host.querySelector('.desktop-panel')!;
 const frame = (): HTMLIFrameElement => host.querySelector('iframe')!;
+const computerChoice = (): HTMLButtonElement => panel().querySelector("[data-computer-choice]")!;
+const selectComputer = (value: string): void => {
+  computerChoice().click();
+  document.querySelector<HTMLButtonElement>(`[role="menuitemradio"][data-value="${value}"]`)!.click();
+};
 const take = (): HTMLButtonElement => host.querySelector('[data-desktop="take"]')!;
 const enlarge = (): HTMLButtonElement => host.querySelector('[data-desktop="enlarge"]')!;
 /** The preview opens the larger view, and Take control there acquires input. */
@@ -127,9 +134,130 @@ beforeEach(() => {
   api.desktopOpen.mockResolvedValue({session:'one',url:'http://127.0.0.1:5000/one/vnc.html'});
   api.ownerClipboardSequence.mockResolvedValue(null); api.desktopClipboard.mockResolvedValue({put:true});
   host=document.createElement('aside'); host.innerHTML='<div class="mb-det-scroll"></div><ol><li data-desktop-slot="42"></li></ol>'; document.body.append(host);
-  mounted=mountDesktopViewer(host,()=>member,{timeline:host.querySelector('ol')!,conversation:()=>11,name:()=>"小晴",face:()=>faceHTML({id:member,name:'Sample'},22),openPanel:()=>{panelOpen=true;},closePanel:()=>{panelOpen=false;},panelVisible:()=>panelOpen,trySkill:trySent,changed:waitChanged});
+  mounted=mountDesktopViewer(host,()=>member,{timeline:host.querySelector('ol')!,conversation:()=>11,name:()=>"小晴",face:()=>faceHTML({id:member,name:'Sample'},22),openPanel:()=>{panelOpen=true;},closePanel:()=>{panelOpen=false;},panelVisible:()=>panelOpen,trySkill:trySent,changed:waitChanged,chooseComputer});
 });
-afterEach(async()=>{mounted.hide();await flush();document.body.replaceChildren();vi.useRealTimers();});
+afterEach(async()=>{mounted.hide();resetAsks();await flush();document.body.replaceChildren();vi.useRealTimers();});
+
+test("interjects the computer choice and follows the member to the newly active transport", async () => {
+  const hostState: DesktopState = {...running, transport:"host"};
+  const dockerState: DesktopState = {...running, transport:"docker"};
+  panelOpen = true;
+  api.desktopStatus.mockResolvedValue(hostState);
+  api.desktopRenew.mockResolvedValue(hostState);
+  api.desktopOpen.mockResolvedValue({session:"chrome",url:"http://127.0.0.1:5000/chrome/host.html"});
+  mounted.show(); await flush(); message("connected");
+  selectComputer("docker");
+  await flush();
+  expect(chooseComputer).toHaveBeenLastCalledWith("docker");
+  expect(api.desktopStatus).toHaveBeenLastCalledWith(1, 11, "docker");
+  expect(api.desktopClose).not.toHaveBeenCalled();
+  api.desktopOpen.mockResolvedValue({session:"isolated",url:"http://127.0.0.1:5000/isolated/vnc.html"});
+  api.desktopRenew.mockResolvedValue(dockerState);
+  await vi.advanceTimersByTimeAsync(10_000); await flush();
+  expect(api.desktopClose).toHaveBeenCalledWith("chrome");
+  expect(frame().src).toContain("/isolated/vnc.html");
+  expect(computerChoice().textContent).toBe("虛擬機（本機）");
+  expect(panel().querySelector("[data-desktop-permission]")).toBeNull();
+});
+
+test("only a Docker choice shows the missing-Docker line and asks Raphael through the existing intent", async () => {
+  const hostState: DesktopState = {...running, transport:"host"};
+  const missing: DesktopState = {state:"absent", ready:false, control:"member", transport:"docker", error:"docker_missing"};
+  panelOpen = true;
+  api.desktopStatus.mockImplementation(async (_id, _conversation, transport) => transport === "docker" ? missing : hostState);
+  api.desktopRenew.mockResolvedValue(hostState);
+  api.desktopOpen.mockResolvedValue({session:"chrome",url:"http://127.0.0.1:5000/chrome/host.html"});
+  mounted.show(); await flush();
+  expect(computerChoice().textContent).toBe("這台電腦");
+  expect(panel().querySelector("[data-docker-help]")).toBeNull();
+  expect(panel().querySelectorAll(".desktop-location-header button[aria-haspopup]")).toHaveLength(1);
+  selectComputer("docker"); await flush();
+  expect(computerChoice().textContent).toBe("虛擬機（本機）");
+  expect(frame().src).toContain("/chrome/host.html");
+  const help = panel().querySelector<HTMLButtonElement>("[data-docker-help]")!;
+  expect(help.textContent).toBe("請 Raphael 安裝");
+  expect(help.parentElement!.textContent).toBe("尚未安裝 Docker 請 Raphael 安裝");
+  expect(panel().querySelector('[data-act="docker-download"]')).toBeNull();
+  help.click(); help.click(); await flush();
+  expect(api.agentAskText).toHaveBeenCalledExactlyOnceWith(t("memberComputer.setup"), [], 1, {intent:"setup-docker"});
+  selectComputer("host"); await flush();
+  expect(computerChoice().textContent).toBe("這台電腦");
+  expect(panel().querySelector("[data-docker-help]")).toBeNull();
+});
+
+test("the same Docker menu names its SSH host and can save the local location", async () => {
+  panelOpen = true;
+  api.desktopStatus.mockResolvedValue({...running, transport:"docker", host:"studio-mini"});
+  api.settingsGet.mockResolvedValue({settings:{computer_ssh_alias:"studio-mini"}});
+  api.settingsSet.mockResolvedValue({settings:{computer_ssh_alias:""}});
+  mounted.show(); await flush();
+  expect(computerChoice().textContent).toBe("虛擬機（studio-mini）");
+  computerChoice().click();
+  expect(document.querySelector('[data-value="docker-remote"][aria-checked="true"]')?.textContent).toContain("studio-mini");
+  document.querySelector<HTMLButtonElement>('[data-value="docker-local"]')!.click();
+  await flush();
+  expect(api.settingsSet).toHaveBeenCalledExactlyOnceWith("computer_ssh_alias", "");
+  expect(computerChoice().textContent).toBe("虛擬機（本機）");
+  expect(chooseComputer).not.toHaveBeenCalled();
+});
+
+test('the host sign-in card uses the canvas transport and returns its live request from the shared panel', async () => {
+  const hostState: DesktopState = {...running, transport:'host', host_request:work};
+  api.desktopStatus.mockResolvedValue(hostState);
+  api.desktopRenew.mockResolvedValue(hostState);
+  api.desktopOpen.mockResolvedValue({session:'one',url:'http://127.0.0.1:5000/one/host.html'});
+  host.querySelector('ol')!.insertAdjacentHTML('beforeend', '<div data-card-screen></div>');
+  mounted.show();
+  await flush();
+  expect(api.desktopOpen).toHaveBeenCalledWith(1, {conversation_id:11,transport:"host",target_id:undefined});
+  expect(frame().src).toBe('http://127.0.0.1:5000/one/host.html');
+  expect(frame().closest('.desktop-screen')).not.toBeNull();
+  message('connected');
+  api.desktopControl.mockResolvedValueOnce({...hostState,control:'owner'});
+  mounted.takeover();
+  await flush();
+  message('interactive', {held:true});
+  expect(panel().dataset.interactive).toBe('true');
+  expect(api.desktopControl).toHaveBeenLastCalledWith('one', true, 'nonce');
+  message('input-accepted');
+  message('input-accepted');
+  expect(panel().dataset.interactive).toBe('true');
+  expect(api.desktopClose).not.toHaveBeenCalled();
+  api.desktopControl.mockResolvedValueOnce({...running,transport:'host'});
+  handback().click();
+  await flush();
+  expect(api.desktopControl).toHaveBeenLastCalledWith('one', false, 'nonce');
+  expect(mounted.waitingForOwner(42)).toBe(false);
+  expect(api.desktopOpen).toHaveBeenCalledTimes(1);
+});
+
+test('the Chrome card and panel use one tab and the watch button never takes control', async () => {
+  const hostState: DesktopState = {
+    ...running, transport: 'host', target: 'page',
+    works: [{ ...work, id: 'page', transport: 'host', state: 'running', request_id: undefined, reason: '' }],
+  };
+  api.desktopStatus.mockResolvedValue(hostState);
+  api.desktopRenew.mockResolvedValue(hostState);
+  api.desktopOpen.mockResolvedValue({session:'one',url:'http://127.0.0.1:5000/one/host.html'});
+  mounted.show();
+  await flush();
+  message('connected');
+  const image = 'data:image/jpeg;base64,AAAA';
+  message('frame', {image});
+  const card = host.querySelector<HTMLElement>('[data-desktop-work="page"]')!;
+  expect(card.querySelector<HTMLImageElement>('.desktop-last')?.src).toBe(image);
+  expect(card.querySelectorAll('[data-card-failed-close]')).toHaveLength(1);
+  card.querySelector<HTMLButtonElement>('[data-card-desktop="watch"]')!.click();
+  await flush();
+  expect(panelOpen).toBe(true);
+  expect(frame().closest('.desktop-screen')).not.toBeNull();
+  expect(api.desktopOpen).toHaveBeenCalledExactlyOnceWith(1, {conversation_id:11,transport:'host',target_id:'page'});
+  expect(api.desktopControl).not.toHaveBeenCalled();
+  panelOpen = false;
+  card.querySelector<HTMLButtonElement>('[data-card-failed-close]')!.click();
+  await flush();
+  expect(api.desktopClose).toHaveBeenCalledExactlyOnceWith('one');
+});
 
 test.each(navInputs)("%s folds the watching view without changing control", async input => {
   panelOpen = true;
@@ -739,8 +867,7 @@ test('absent Docker keeps the panel with its wallpaper alone: no reason, no down
   expect(shownText(panel())).not.toContain(t('desktop.dockerMissing'));
   expect(panel().querySelector('[data-act="docker-download"]')).toBeNull();
   expect(panel().querySelector<HTMLButtonElement>('[data-desktop="retry"]')!.hidden).toBe(true);
-  // The location menu stays, so the owner can still choose another computer.
-  expect(panel().querySelector('[data-computer-location]')).not.toBeNull();
+  expect(computerChoice()).not.toBeNull();
   expect(enlarge().hidden).toBe(false);
   enlarge().click();await flush();expect(api.desktopOpen).toHaveBeenCalledTimes(1);
 });
@@ -839,9 +966,9 @@ test('the sleeping panel is the wallpaper alone: no caption, face or line, and t
  expect(panel().querySelector<HTMLButtonElement>('[data-desktop="collapse"]')!.hidden).toBe(true);
 });
 
-test('a member without a computer retains location controls without starting one',async()=>{
+test('a member without a computer retains the computer choice without starting one',async()=>{
  panelOpen=true; api.desktopStatus.mockResolvedValue({state:'missing',ready:false,control:'member'}); mounted.show(); await flush();
- expect(panel().hidden).toBe(false); expect(panel().querySelector("[data-computer-location]")).not.toBeNull(); expect(api.desktopOpen).not.toHaveBeenCalled();
+ expect(panel().hidden).toBe(false); expect(computerChoice()).not.toBeNull(); expect(api.desktopOpen).not.toHaveBeenCalled();
 });
 
 test('completing a sign-in request restores the compact conversation even when takeover began in its preview',async()=>{
@@ -923,7 +1050,7 @@ test('an absent remote host never offers a local Docker download', async () => {
   expect(panel().querySelector('[data-act="docker-download"]')).toBeNull();
   // The host name is no longer written on the screen; the location menu still names where the computer lives.
   expectBare(); expect(panel().querySelector('.desktop-placeholder')!.textContent).not.toContain('studio-mini');
-  expect(panel().querySelector('[data-computer-location]')).not.toBeNull();
+  expect(computerChoice().textContent).toContain("studio-mini");
   expect(api.desktopOpen).not.toHaveBeenCalled();
   // The press only tries the remote stream again; nothing local is downloaded or started for it.
   enlarge().click(); await flush();

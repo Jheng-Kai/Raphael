@@ -60,6 +60,17 @@ def safety_patterns(platform):
 
 
 _DANGEROUS, _SECRET, _OPAQUE = safety_patterns(sys.platform)
+_INSTALL = re.compile(
+    r"\b(?:npm|pnpm|pip3?|uv|winget|choco|scoop|brew|apt(?:-get)?|dnf|conda|poetry|gem|cargo)"
+    r"(?:\.exe|\.cmd)?\s+(?:pip\s+)?(?:install|add|i|ci)\b"
+    r"|\b(?:msiexec(?:\.exe)?\s+[/\-]i|Install-(?:Module|Package|Script)|ollama\s+pull"
+    r"|(?:huggingface-cli|hf)\s+download|snapshot_download\s*\()", re.I,
+)
+INSTALL_IN_VM = "Task installs belong in the virtual machine. If you use Raphael Chrome, explain the need for a VM."
+
+
+def installs_software(command):
+    return bool(_INSTALL.search(command))
 
 # Held to 400 characters: it is listed in every turn and task.
 EXEC_DESCRIPTION = (
@@ -232,7 +243,8 @@ class LocalTools:
         if not Draft202012Validator(schema).is_valid(arguments):
             return Tier.T0
         if (key.endswith("/local_job") or self.settings.get("local_commands_mode") == "never" or _SECRET.search(str(arguments))
-                or not _CONTEXT.get()[2] or shows_on_screen(key, arguments)):
+                or not _CONTEXT.get()[2] or shows_on_screen(key, arguments)
+                or self._task_install(arguments)):
             return Tier.T0
         return Tier.T2 if self.requires_approval(arguments) else Tier.T0
 
@@ -252,6 +264,10 @@ class LocalTools:
         else:
             self.delegate.record_unrun(key, outcome=outcome, task_id=task_id)
 
+    def _task_install(self, arguments):
+        return (getattr(self.delegate, "enforces_computer_choice", False) is True
+                and not _CONTEXT.get()[4] and installs_software(arguments.get("command", "")))
+
     async def call(self, key, arguments, *, approver, task_id=None, pool=None):
         if (name := owner_file_tool(key)) is not None:
             return await self._owner_file(key, name, arguments, approver=approver, task_id=task_id)
@@ -265,6 +281,8 @@ class LocalTools:
             schema = JOB_SCHEMA if key.endswith("/local_job") else EXEC_SCHEMA
             if key not in (tool_key("local", "local_exec"), tool_key("local", "local_job")) or not Draft202012Validator(schema).is_valid(arguments):
                 return PluginResult(False, "bad_arguments")
+            if self._task_install(arguments):
+                return PluginResult(False, "assigned_computer_required", INSTALL_IN_VM)
             if shows_on_screen(key, arguments):
                 # Whatever the permission mode, 全部允許 included: what is seen is shown on the member's own computer.
                 return PluginResult(False, "shows_on_screen", ON_SCREEN)

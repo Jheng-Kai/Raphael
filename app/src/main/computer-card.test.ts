@@ -1,6 +1,8 @@
+// @vitest-environment happy-dom
 import { afterEach, describe, expect, test } from "vitest";
 import { computerCardHTML, computerResumedLineHTML, computerStateText } from "./computer-card";
-import { setLocale } from "./i18n";
+import { cardFailure } from "./card";
+import { setLocale, t } from "./i18n";
 import { emptyTimelineState, turnHTML, type TurnLook } from "./timeline";
 import type { AgentTurn, ComputerCard } from "./types";
 
@@ -21,10 +23,10 @@ const visible = (html: string): string => html.replace(/<[^>]+>/g, " ").replace(
 const actions = (html: string): string[] => [...html.matchAll(/data-act="([^"]+)"/g)].map(match => match[1]);
 
 describe("a computer card", () => {
-  test("the Chrome handback opens the tab and reuses the same Done and Stop actions", () => {
+  test("the Chrome handback uses the same screen, Take control, Done and Stop actions", () => {
     const html = computerCardHTML(card({ browser: true }));
-    expect(actions(html)).toEqual(["card-stop", "card-done", "card-browser-focus"]);
-    expect(html).not.toContain("data-card-screen");
+    expect(actions(html)).toEqual(["card-stop", "card-takeover", "card-takeover", "card-done"]);
+    expect(html).toContain("data-card-screen");
     setLocale("en");
     expect(visible(computerCardHTML(card({ browser: true, reason: "certificate" }))))
       .toContain("Choose or confirm the certificate in Google Chrome.");
@@ -76,6 +78,19 @@ describe("a computer card", () => {
     // Closed by its ×, or left behind when the owner wrote again: a quiet pill, never 完成.
     expect(visible(computerCardHTML(card({ state: "cancelled" })))).toMatch(/^電腦 已取消/);
     expect(visible(computerCardHTML(card({ state: "cancelled", error: "skipped" })))).toMatch(/^電腦 未回答/);
+  });
+
+  test("every computer card has one close button, including after an action fails", () => {
+    const host = document.createElement("div");
+    for (const state of ["control", "returning", "done", "stopped", "expired", "failed", "cancelled"] as const) {
+      host.innerHTML = computerCardHTML(card({ state }));
+      const cardNode = host.firstElementChild!;
+      expect(cardNode.querySelectorAll(".card-head .card-close")).toHaveLength(1);
+      expect(cardFailure(cardNode, () => {}, undefined, t("memberComputer.returnFailed"))).toBe(true);
+      expect(cardNode.querySelectorAll(".card-head .card-close")).toHaveLength(1);
+      expect(cardNode.textContent).toContain(t("memberComputer.returnFailed"));
+      expect(cardNode.textContent).not.toContain(t("cards.retained"));
+    }
   });
 
   test("speaks only the window's language", () => {

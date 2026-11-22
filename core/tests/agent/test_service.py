@@ -37,6 +37,8 @@ LOCAL_NOW = datetime(2026, 10, 20, 14, 5, 9, tzinfo=timezone(timedelta(hours=8))
 METHODS = [
     "agent.ask",
     "agent.cancel",
+    "agent.computer_choice",
+    "agent.computer_suggestion",
     "agent.confirm",
     "agent.history.clear",
     "agent.history.delete",

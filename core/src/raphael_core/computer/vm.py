@@ -444,7 +444,6 @@ class LocalVm:
         self.machine = self.root if machine_dir is None else Path(machine_dir).resolve()
         self.homes, self.team = self.placed(HOMES), self.placed(TEAM)
         self.relocation = None
-        self.member_computer_mode = lambda member: "docker"
         self.host_work_busy = lambda: False
         self.enabled = enabled
         self.settings, self.run, self.clock = settings, runner or Docker(), clock
@@ -1011,11 +1010,6 @@ class LocalVm:
     def _waits(reason):
         logger.info("The computers' folders stay in the data folder until a later start (%s)", reason)
         return reason
-
-    def uses_host(self, member):
-        """The stored choice stays Docker when it is temporarily unavailable on this PC."""
-        return (self.member_computer_mode(member) == "host"
-                or bool(not self.remote and self.desktop and not self.desktop.installed()))
 
     @property
     def mode(self):
@@ -1892,7 +1886,14 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
         except ValueError:
             raise VmError("checkpoint_unavailable") from None
 
-    async def execute(self, target, command, timeout=60, *, background=False, keys=None):
+    def member_workspace(self, target):
+        # A shared Docker desktop mounts one workspace. Keep the member folders within that same mount.
+        return target.workspace / "members" / target.key if target.container == "shared" else target.workspace
+
+    def guest_workspace(self, target):
+        return f"{GUEST}/members/{target.key}" if target.container == "shared" else GUEST
+
+    async def execute(self, target, command, timeout=60, *, background=False, keys=None, member_workspace=False):
         """Run `command` in the workspace. In the foreground it is waited for, at most `FOREGROUND_S`, and ended then;
         in the background it is started detached and this returns at once with a job whose log and exit code the
         caller reads with later commands. A job is ended by its own timeout, at most `BACKGROUND_S`.
@@ -1907,14 +1908,16 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
         carried = {"env": keys, "redact": lambda text, values=tuple(keys.values()): _withheld(values, text)} if keys else {}
         if type(timeout) not in (int, float) or not math.isfinite(timeout) or not 0 < timeout <= (BACKGROUND_S if background else FOREGROUND_S):
             raise VmError("bad_arguments")
+        folder = self.guest_workspace(target) if member_workspace else GUEST
+        in_workspace = f"mkdir -p {folder} && cd {folder} && {command}" if folder != GUEST else f"cd {GUEST} && {command}"
         if background:
-            return await self._detached(target, command, timeout, keys)
+            return await self._detached(target, in_workspace, timeout, keys, folder=folder)
         # The guest timeout also ends the process when the host docker client is cancelled.
         token = secrets.token_hex(16)
         script = 'echo $$ > "$1"; shift; exec timeout --signal=TERM --kill-after=2 "$@"'
         pidfile = f"/tmp/raphael-exec-{token}.pid"
         shell = ["env", "-u", "DISPLAY", "sh", "-lc"] if target.container else ["sh", "-lc"]
-        args = exec_args(target, ["sh", "-c", script, "sh", pidfile, str(timeout), *shell, f"cd {GUEST} && {command}"], env=tuple(keys or ()))
+        args = exec_args(target, ["sh", "-c", script, "sh", pidfile, str(timeout), *shell, in_workspace], env=tuple(keys or ()))
         try:
             result = await self.run_for(target, args, timeout=timeout + 5, **carried)
             output = (result.stdout + result.stderr)[:MAX_OUTPUT]
@@ -1925,16 +1928,16 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
         finally:
             await asyncio.shield(self.run_for(target, exec_args(target, ["rm", "-f", pidfile])))
 
-    async def _detached(self, target, command, timeout, keys=None):
+    async def _detached(self, target, command, timeout, keys=None, *, folder):
         job = secrets.token_hex(6)
-        base = f"{GUEST}/.raphael-jobs/{job}"
+        base = f"{folder}/.raphael-jobs/{job}"
         shell = "env -u DISPLAY sh" if target.container else "sh"
         # Drain output beyond the cap so a chatty job never blocks or receives SIGPIPE at the limit.
         script = ('mkdir -p "$1" || exit; '
                   '{ { timeout --signal=TERM --kill-after=2 "$2" ' + shell + ' -lc "$3"; echo $? > "$5"; } 2>&1 '
                   '| { head -c "$6"; cat >/dev/null; }; } > "$4"')
-        args = exec_args(target, ["sh", "-c", script, "sh", f"{GUEST}/.raphael-jobs", str(timeout),
-                                  f"cd {GUEST} && {command}", f"{base}.log", f"{base}.exit", str(JOB_LOG_MAX)],
+        args = exec_args(target, ["sh", "-c", script, "sh", f"{folder}/.raphael-jobs", str(timeout),
+                                  command, f"{base}.log", f"{base}.exit", str(JOB_LOG_MAX)],
                          detached=True, env=tuple(keys or ()))
         result = await self.run_for(target, args, timeout=30, **({"env": keys} if keys else {}))
         if result.code:
