@@ -119,7 +119,7 @@ def shared_native_input(name, arguments):
 
 # Answers that report how things stand and are not a tool failing: a model told one decides what to do, and
 # nothing it did is evidence of work.
-NOTICES = ("computer_busy", "screen_changed")
+NOTICES = ("computer_busy", "screen_changed", "waiting_for_owner")
 
 # Everything else is excluded: updates/installs/configuration, recording/replay,
 # escalation, lifecycle, cosmetic cursor settings and redundant primitives. In

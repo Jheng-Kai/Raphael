@@ -1028,10 +1028,45 @@ export async function perform(page, step, evidenceDirectory) {
       });
       return {check:'desktop-drop-file', synthetic:true};
     }
+    case 'desktop-owner-press': {
+      const handle = await visible('.desktop-screen iframe:not([hidden])');
+      const frame = await handle.contentFrame();
+      const count = await frame.evaluate(() => window.__desktopPointerEvents?.length ?? 0);
+      await frame.click('canvas');
+      await page.waitForFunction(() => document.querySelector('.desktop-panel')?.dataset.interactive === 'true');
+      await frame.waitForFunction(at => {
+        const events = window.__desktopPointerEvents ?? [];
+        return events[at] === 'mousePressed' && events[at + 1] === 'mouseReleased';
+      }, {}, count);
+      await handle.dispose();
+      return {check:'desktop-owner-press', synthetic:true};
+    }
+    case 'desktop-owner-first-input': {
+      const handle = await visible('.desktop-screen iframe:not([hidden])');
+      const frame = await handle.contentFrame();
+      await frame.waitForFunction(() => !window.raphaelOwnsInput(), { timeout: 6000 });
+      if (step.input === 'key') {
+        const count = await frame.evaluate(() => window.__desktopAcceptedKeys ?? 0);
+        await frame.focus('canvas');
+        await page.keyboard.press('k');
+        await frame.waitForFunction(before => window.__desktopAcceptedKeys === before + 1, { timeout: 6000 }, count)
+          .catch(async () => { throw new Error('First key was not delivered: ' + JSON.stringify(await frame.evaluate(() => ({
+            keys:window.__desktopAcceptedKeys, active:document.activeElement?.tagName, held:window.raphaelOwnsInput(),
+            controls:parent.__look.calls.filter(call => call.method === 'computer.viewer_control').map(call => call.params.held),
+          })))); });
+      } else {
+        await frame.hover('canvas');
+        await page.mouse.wheel({ deltaY: 64 });
+        await frame.waitForFunction(() => window.__desktopWheelDelta === 64);
+      }
+      await page.waitForFunction(() => document.querySelector('.desktop-panel')?.dataset.interactive === 'true');
+      await handle.dispose();
+      return {check:'desktop-owner-first-input', input:step.input, synthetic:true};
+    }
     case 'desktop-owner-typing': {
       await page.waitForFunction(() => document.querySelector('.desktop-panel')?.dataset.interactive === 'true');
       // The stream the owner holds: the larger view a card's 接手 opens (R-PANEL-09), or the card's own screen.
-      const handle = await page.$('.desktop-panel[data-expanded] .desktop-screen iframe, [data-card-desktop-screen] iframe');
+      const handle = await page.$('.desktop-panel .desktop-screen iframe:not([hidden]), [data-card-desktop-screen] iframe');
       const frame = await handle.contentFrame();
       await frame.click('canvas');
       await page.keyboard.type('synthetic-owner-input');

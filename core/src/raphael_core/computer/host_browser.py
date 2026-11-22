@@ -211,6 +211,8 @@ class HostBrowser:
         self.owned_targets = {}
         self.startup_url = None
         self.current = {}
+        self.owner_closed = {}
+        self.owner_closed_current = {}
         self.transfers = {}
         self.held = {}
         self.handback = {}
@@ -715,12 +717,21 @@ class HostBrowser:
             raise BrowserError("browser_tab_required")
         return tab
 
-    async def close_tab(self, tab):
+    async def close_tab(self, tab, *, by_owner=False):
+        was_current = self.selected(tab.member) is tab
+        if by_owner:
+            self.owner_closed[tab.id] = tab.member
+            if len(self.owner_closed) > 512:
+                self.owner_closed.pop(next(iter(self.owner_closed)))
         await self._close_targets(lambda: {tab.target} & self.owned_targets.keys())
         if tab.target in self.owned_targets:
+            if by_owner:
+                self.owner_closed.pop(tab.id, None)
             raise BrowserError("chrome_command_failed")
         if self.tabs.get(tab.id) is tab:
             self._forget_tab(tab)
+        if by_owner and was_current:
+            self.owner_closed_current[tab.member] = tab.id
 
     async def _close_targets(self, owned):
         """Reconcile against Chrome after close; an accepted close is only a request."""

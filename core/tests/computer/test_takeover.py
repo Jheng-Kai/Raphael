@@ -77,8 +77,8 @@ async def test_private_takeover_blocks_every_tool_and_resumes_once_after_explici
                 # offered on a shared computer too; its work is a command in the computer, so a well-formed
                 # call must stop at the owner's hold like every other tool (an ill-formed one never gets there).
                 result = await call(ref.name, {"action": "list", "dataset": "sales"} if ref.name == "dataset" else None)
-                assert not result.ok
-                assert result.kind == ("blocked" if ref.name == "fill_card" else "owner_holds_control")
+                assert result.ok == (ref.name != "fill_card")
+                assert result.kind == ("blocked" if ref.name == "fill_card" else "waiting_for_owner")
         assert vm.run.calls == before
         wrong = await viewer.open({"member_id": 1, "conversation_id": 12})
         with pytest.raises(RpcError):
@@ -126,7 +126,7 @@ async def test_disconnect_timeout_and_stop_never_resume(rig, end):
     elif end == "timeout":
         result = await task
         assert not result.ok and result.kind == "takeover_expired"
-        assert (await call("vm_exec", {"command": "true"})).kind in ("owner_holds_control", "task_stopped")
+        assert (await call("vm_exec", {"command": "true"})).kind in ("waiting_for_owner", "task_stopped")
     task.cancel()
     await asyncio.gather(task, return_exceptions=True)
     assert vm.work.views(1, 11)[0]["state"] in ("stopped", "expired")

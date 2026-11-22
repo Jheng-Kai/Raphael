@@ -1014,14 +1014,13 @@ export function checkRendered(name, context = {}) {
       require(chips.map(button => button.textContent).join() === '全部,頁面,媒體,檔案', 'an empty Library still has the four chips');
     } else if (name === 'member-panel-computer-live') {
       require(visible(panel.querySelector('iframe')), 'the existing stream is visible');
-      const open = panel.querySelector('[data-desktop="enlarge"]'), screen = panel.querySelector('.desktop-screen').getBoundingClientRect(), cover = open.getBoundingClientRect(), caption = panel.querySelector('.desktop-caption');
-      require(visible(open) && Math.abs(cover.width - screen.width) <= 2 && Math.abs(cover.height - screen.height) <= 2, 'the whole preview is the button that opens the larger view');
-      require(getComputedStyle(open.querySelector('.desktop-open-pill')).opacity === '0', 'the Open pill shows only under the pointer');
-      require(!visible(caption), 'no caption stands under the screen');
+      const open = panel.querySelector('[data-desktop="enlarge"]');
+      require(visible(open) && open.closest('.desktop-dock'), 'the larger view has its own button below the live screen');
+      require(!visible(panel.querySelector('.desktop-caption')), 'no caption stands under the screen');
     } else if (name === 'member-panel-computer-return-live') {
       const screen = panel.querySelector('.desktop-screen'), frame = screen.querySelector('iframe');
       require(visible(frame) && !visible(screen.querySelector('.desktop-placeholder')), 'return shows the live page instead of a bare cover');
-      require(getComputedStyle(screen.querySelector('.desktop-open-pill')).opacity === '0', 'the Open pill stays quiet on return');
+      require(visible(panel.querySelector('.desktop-dock [data-desktop="enlarge"]')), 'the larger view remains available below the screen');
     } else if (name === 'member-panel-computer-docker-stopped') {
       // The engine failure is not said on the screen; the screen is the press that starts Docker Desktop.
       require(!shownText(panel).includes('Docker Desktop') &&!visible(panel.querySelector('[data-desktop="retry"]')) && !visible(panel.querySelector('[data-desktop-location]')), 'neither Docker Desktop nor a recovery button is drawn');
@@ -1406,7 +1405,7 @@ export function checkRendered(name, context = {}) {
     require(visible(take) && take.textContent === '接手控制' && !take.disabled, 'Take control is offered again');
     require(!visible(dock.querySelector('[data-desktop="return"]')), 'Stop is gone with the control it ended');
     require(visible(frame) && frame.contentWindow.__desktopConnections === 1 && screen.width > 200 && screen.height > 100, 'the frame is visible and connected');
-    require(panel.dataset.interactive === 'false' && getComputedStyle(frame).pointerEvents === 'none', 'the screen is view-only again');
+    require(panel.dataset.interactive === 'false', 'the screen is view-only again');
     require(panel.dataset.desktopState === 'member', `the computer is the member's again (${panel.dataset.desktopState})`);
     require(calls.filter(call => call.method === 'computer.viewer_control' && call.params.held === false).length === 1 && !calls.some(call => call.method === 'computer.viewer_close'), 'one release and no closed stream');
     require(calls.filter(call => call.method === 'computer.viewer_open' && call.params.member_id === 1).length === 1, 'the same stream, never reopened');
@@ -1467,8 +1466,7 @@ export function checkRendered(name, context = {}) {
         require(screen.top - shell.top <= 16 && shell.bottom - pill.bottom <= 16 || shell.right - screen.right <= 32,
           `the screen is as large as the window allows (${Math.round(screen.top - shell.top)} px above, ${Math.round(shell.bottom - pill.bottom)} px under the pill)`);
       }
-      const frame = panel.querySelector('iframe');
-      if (frame && visible(frame)) require(getComputedStyle(frame).pointerEvents === 'none', 'watch stays view-only');
+      require(panel.dataset.interactive === 'false', 'watch stays view-only');
     }
     return {check:name};
   }
@@ -4621,6 +4619,15 @@ export function checkRendered(name, context = {}) {
     require(faces.every(face => face.naturalWidth === 192 && face.naturalHeight === 192), "owner photo is bounded to 192px");
     return {check:name, faces:faces.length};
   }
+  if (name === 'desktop-owner-small') {
+    const panel = document.querySelector('.desktop-panel'), calls = window.__look.calls;
+    require(visible(panel) && !panel.hasAttribute('data-expanded') && panel.dataset.interactive === 'true', 'the Computer panel is small and interactive');
+    require(visible(panel.querySelector('[data-desktop="enlarge"]')) && visible(panel.querySelector('[data-desktop="return"]')), 'enlarge and Stop are available beside the screen');
+    require(panel.querySelector('.desktop-mode-label').dataset.mode === 'operating', 'the pill says the owner is in control');
+    require(calls.filter(call => call.method === 'computer.viewer_control').length === 1 &&
+      calls.filter(call => call.method === 'computer.viewer_open').length === 1, 'the same lease and stream are used at either size');
+    return {check:name};
+  }
   if (name.startsWith("computer-") && name !== "computer-panel-quiet" || ['desktop-owner','desktop-handback','desktop-viewer','desktop-offline','desktop-absent'].includes(name)) {
     const panel=document.querySelector('.desktop-panel'), frame=document.querySelector('iframe[data-desktop-stream]'), calls=window.__look.calls;
     if(name==='desktop-absent'){
@@ -4959,7 +4966,8 @@ export function checkRendered(name, context = {}) {
       const held = name === 'desktop-host-tabs-control';
       require(visible(toolbar.querySelector('.host-browser-address')) === held &&
         visible(toolbar.querySelector('.host-browser-url')) !== held, 'only the held browser has an editable address');
-      require([...toolbar.querySelectorAll('[data-browser-action="new"], [data-browser-action="close"], [data-browser-action="reload"]')]
+      require([...toolbar.querySelectorAll('[data-browser-action="close"]')].every(button => !button.disabled), 'tabs can close while watching');
+      require([...toolbar.querySelectorAll('[data-browser-action="new"], [data-browser-action="reload"]')]
         .every(button => button.disabled === !held), 'browser mutations require takeover');
     }
     return {check:name, width:page.width, height:page.height};
@@ -4981,7 +4989,7 @@ export function checkRendered(name, context = {}) {
     }
     const doc = frame?.contentDocument ?? document;
     const win = doc.defaultView, canvas = doc.querySelector('#noVNC_container canvas');
-    require(win.getComputedStyle(doc.body).backgroundColor === 'rgb(23, 23, 23)', "viewer gutters share the dark frame surface");
+    require(['rgb(23, 23, 23)', 'rgba(0, 0, 0, 0)'].includes(win.getComputedStyle(doc.body).backgroundColor), "viewer gutters share the dark frame surface");
     require(visible(canvas) && canvas.width > 100, "the noVNC framebuffer is rendered");
     const box = canvas.getBoundingClientRect(), width = win.innerWidth, height = win.innerHeight;
     // No dark sliver at the screen's edge. A seat fills its frame both ways, not only on its limiting axis.

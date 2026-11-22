@@ -19,6 +19,18 @@ from .vm_catalog import SCREEN_READS
 OWNER_HANDS = frozenset({"clipboard_write", "clipboard_read"})
 
 
+class OwnerHoldReply(dict):
+    def __init__(self, note):
+        super().__init__(content=[{"type": "text", "text": note}], isError=True)
+
+
+async def call_driver_tool(client, name, arguments, **options):
+    reply = await client.request("tools/call", {"name": name, "arguments": arguments}, **options)
+    if isinstance(reply, OwnerHoldReply):
+        raise VmError("owner_holds_control")
+    return reply
+
+
 def normalize_schema(value):
     if not isinstance(value, dict):
         return {"type": "object", "properties": {}}
@@ -124,7 +136,7 @@ class CuaBridge:
         if self.observation_command is not None and method not in ("initialize", "ping") and not observing:
             raise VmError("observation_only")
         if self.vm is not None and method == "tools/call" and self.target.key in self.vm.held and not (observing or owners):
-            return {"content": [{"type": "text", "text": self.vm.owner_note(self.target)}], "isError": True}
+            return OwnerHoldReply(self.vm.owner_note(self.target))
         self.sequence += 1
         identifier = self.sequence
         future = asyncio.get_running_loop().create_future()
@@ -136,7 +148,7 @@ class CuaBridge:
             async with asyncio.timeout(timeout):
                 async with self.lock:
                     if self.vm is not None and method == "tools/call" and self.target.key in self.vm.held and not (observing or owners):
-                        return {"content": [{"type": "text", "text": self.vm.owner_note(self.target)}], "isError": True}
+                        return OwnerHoldReply(self.vm.owner_note(self.target))
                     await self._write({"jsonrpc": "2.0", "id": identifier, "method": method, "params": params or {}})
                 if self.reader is None or self.reader.done():
                     self.reader = asyncio.create_task(self._read())

@@ -317,7 +317,11 @@ async def frame_for(lines, tab, size=None):
                 return frame
 
 
-async def test_host_browser_toolbar_follows_popups_without_replacing_the_lease(tmp_path):
+async def test_host_browser_toolbar_follows_popups_without_replacing_the_lease(tmp_path, monkeypatch):
+    async def snapshot(browser, tab, arguments):
+        return {"tab_id": tab.id}, []
+
+    monkeypatch.setattr("raphael_core.computer.host_page.snapshot", snapshot)
     viewer, browser = host_viewer(tmp_path)
     cdp = browser.cdp = Cdp(browser)
     opener = fake_tab(browser, 1, 10)
@@ -335,7 +339,6 @@ async def test_host_browser_toolbar_follows_popups_without_replacing_the_lease(t
 
             assert (await action("select", other)).status_code == 403
             assert (await action("new", opener)).status_code == 403
-            assert (await action("close", opener)).status_code == 403
             assert (await action("navigate", opener, url="https://example.test")).status_code == 403
             cdp.socket = SimpleNamespace(port=12345)
             browser._event("Target.targetCreated", {"targetInfo": {
@@ -356,7 +359,8 @@ async def test_host_browser_toolbar_follows_popups_without_replacing_the_lease(t
 
             assert (await action("select", opener)).status_code == 204
             await frame_for(lines, opener)
-            assert browser.selected(opener.member) is opener
+            assert browser.selected(opener.member) is popup
+            assert (await viewer.renew(first))["control"] == "member"
             assert not any(call[0] == "Page.bringToFront" for call in cdp.calls)
             assert (await action("select", popup)).status_code == 204
             await frame_for(lines, popup)
@@ -395,6 +399,17 @@ async def test_host_browser_toolbar_follows_popups_without_replacing_the_lease(t
                 SimpleNamespace(browser=browser), "browser_tabs", {}, "auto", 1, (("task", 7), 43), 10, None)
             assert [(row["tab_id"], row["shown"]) for row in tool_view["tabs"]] == [(opener.id, False), (new.id, True)]
             assert browser.tab(opener.member) is new and other.id in browser.tabs
+            assert (await action("close", new)).status_code == 204
+            await frame_for(lines, opener)
+            assert (await viewer.renew(first))["control"] == "member"
+            tool_view, _, _, _ = await HostComputerTools.browser_call(
+                SimpleNamespace(browser=browser), "browser_tabs", {}, "auto", 1, (("task", 7), 43), 10, None)
+            assert [(row["tab_id"], row["shown"]) for row in tool_view["tabs"]] == [(opener.id, True)]
+            recovery, _, tab, _ = await HostComputerTools.browser_call(
+                SimpleNamespace(browser=browser), "click", {"tab_id": new.id, "x": 10, "y": 10},
+                "auto", 1, (("task", 7), 43), 10, None)
+            assert recovery["status"] == "tab_closed" and tab is opener
+            assert not any(method == "Input.dispatchMouseEvent" for method, _, _ in cdp.calls)
     finally:
         await viewer.aclose()
         await browser.aclose()

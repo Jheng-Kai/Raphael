@@ -71,12 +71,34 @@ owner's tab after listing it. The owner checks actual Google
 sign-in. Native Chrome and OS prompts, including certificate pickers, sit outside the
 page screencast.
 
+## Owner control in either size
+
+R-COMP-OWNER-INPUT-01, R-PANEL-03 and R-NAV-04. A click, wheel gesture or key inside either
+live viewer takes control and is delivered after the lease is confirmed. Take control remains
+available in the pill. The panel uses the same pill below the screen, with a separate enlarge
+button. Collapse, Escape and Back fold the viewer while keeping the lease, iframe and input.
+The member gets a regular waiting result when its tool is blocked by the owner, explains why it
+is waiting in the conversation, and can act again once the owner releases control. Private
+sign-in and payment still use the existing card and wait for Done.
+
+From app:
+
+```powershell
+npm run look -- desktop-owner-panel desktop-owner-shrink desktop-host-owner-panel desktop-host-owner-shrink desktop-host-tabs-panel desktop-host-handback --theme both --width 1120,720,1920x1080
+```
+
+Compare the VM and host pill with the host handback pill at the same width and theme. The look
+fixtures check first click, key and wheel delivery and input after folding on the same lease. VM engine and native
+Chrome acceptance use their own gates. The evaluate scenario checks the member's waiting reply
+with a fake brain.
+
 ## Host browser toolbar
 
 R-COMP-HOST-07 and R-UI-178. The Computer panel and enlarged view share the tab strip
-and address row. Selecting a tab while watching also sets the member's default tab.
-Take control to open or close a tab, or navigate. The member's tools keep the same
-member-owned tab list after handback. The member's
+and address row. Selecting a tab while watching changes only the owner's view. Its close button
+removes the tab from the member's list. The member recovers to a current tab or opens a new one
+and reads it before retrying an action aimed at the closed tab. Take control to open a tab,
+navigate or type in the address field. The member's
 Chrome viewport stays at 1280×900 during watch, takeover and handback. The page
 keeps that aspect edge to edge below the toolbar and in the sign-in card preview.
 The enlarged view fits the entire frame, including the toolbar, in the window.

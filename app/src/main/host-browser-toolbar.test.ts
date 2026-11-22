@@ -28,12 +28,16 @@ it("shows the selected Chrome tab, allows watch-only selection and keeps the add
   expect(screen.querySelector(".host-browser-favicon img")?.getAttribute("src")).toBe(tabs[1].favicon);
   expect(screen.querySelector(".host-browser-url")?.textContent).toBe(tabs[1].url);
   expect(address.hidden).toBe(true);
-  for (const action of ["new", "close", "back", "forward", "reload"]) {
+  for (const action of ["new", "back", "forward", "reload"]) {
     expect(button(`[data-browser-action="${action}"]`).disabled).toBe(true);
   }
   button('[data-browser-tab="page"][data-browser-action="select"]').click();
   expect(send).toHaveBeenCalledOnce();
   expect(send.mock.calls[0][0]).toEqual({ action: "select", tab: "page" });
+  const close = button('[data-browser-tab="popup"][data-browser-action="close"]');
+  expect(close.disabled).toBe(false);
+  close.click();
+  expect(send).toHaveBeenLastCalledWith({ action: "close", tab: "popup" }, expect.any(Number));
   toolbar.draw(undefined, false);
   expect(screen.hasAttribute("data-host-browser")).toBe(false);
 });

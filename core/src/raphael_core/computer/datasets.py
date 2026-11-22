@@ -14,6 +14,7 @@ import secrets
 from pathlib import PurePosixPath
 
 from ..agent.plugins import PluginResult
+from .vm_catalog import NOTICES
 
 SCHEMA = {"type": "object", "properties": {
     "action": {"type": "string", "enum": ["import", "query", "chart", "list"]},
@@ -95,7 +96,7 @@ async def run_dataset(arguments, call, store=None, *, member_key=None):
                       "assert path.resolve().is_relative_to(root);"
                       f"path.open({'wb' if offset == 0 else 'ab'!r}).write(base64.b64decode({encoded!r}))")
             uploaded = await call('vm_exec', {'command':'python3 -c ' + shlex.quote(script), 'timeout_seconds':60})
-            if not uploaded.ok:
+            if not uploaded.ok or getattr(uploaded, "kind", None) in NOTICES:
                 return uploaded
             try:
                 if json.loads(uploaded.text).get('exit_code', 0) != 0:
@@ -103,7 +104,7 @@ async def run_dataset(arguments, call, store=None, *, member_key=None):
             except ValueError:
                 return PluginResult(False, 'protocol')
     result = await call("vm_exec", {"command": command, "timeout_seconds": 1800})
-    if not result.ok:
+    if not result.ok or getattr(result, "kind", None) in NOTICES:
         return result
     try:
         process = json.loads(result.text)

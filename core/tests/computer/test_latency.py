@@ -235,7 +235,10 @@ async def test_browser_open_stops_on_driver_error_or_new_owner_hold(desktop, tmp
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Driver)
     await hub.prepare()
     try:
-        assert not (await hub.call(tool(hub, "browser_open").key, {"url": "https://example.test"}, approver="auto")).ok
+        result = await hub.call(tool(hub, "browser_open").key, {"url": "https://example.test"}, approver="auto")
+        assert result.ok == hold
+        if hold:
+            assert result.kind == "waiting_for_owner"
         calls = [params for method, params in Driver.calls if method == "tools/call"]
         assert calls[-1]["name"] == ("browser_prepare" if hold else "browser_navigate")
     finally:

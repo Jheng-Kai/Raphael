@@ -164,6 +164,7 @@ from ..memory.store import MemorySnapshot
 from ..memory.growth import TOOLS as GROWTH_TOOLS, WRITE_TOOLS as GROWTH_WRITES
 from ..services.attachment_store import AttachmentStore
 from .attachment_inputs import earlier_files, text_context
+from ..worker.computer_verification import NON_ACTION_RESULTS
 from ..worker.guards import neutralize, wrap_untrusted
 from ..services.attachments import MAX_ATTACHMENTS, Attachment, AttachmentError, from_wire
 from ..services.file_reader import read_window
@@ -427,6 +428,8 @@ def _tool_result(call: PlannedCall, outcome: PluginResult) -> ToolResult:
     call itself have a kind only."""
     if outcome.ok:
         data = {"content": outcome.text, "cut_short": outcome.truncated}
+        if outcome.kind in NON_ACTION_RESULTS:
+            data["status"] = outcome.kind
         return ToolResult(_label(call), True, data, untrusted=True, blocks=outcome.blocks)
     if outcome.kind in SAID_WHOLE and outcome.text:
         # The core's own words (the shape that fits, `shape_problem`; a tool held, integrations/service.py): shown whole,
@@ -2553,7 +2556,9 @@ class AgentService:
     @staticmethod
     def _loop_result(result: ToolResult) -> ToolOutcome:
         # A call that failed has no data: its kind is what the model is shown, not a "null".
-        return ToolOutcome(result.ok, result.error, "" if result.data is None and not result.ok else json.dumps(result.shown, ensure_ascii=False),
+        status = (result.data or {}).get("status")
+        kind = status if result.ok and status in NON_ACTION_RESULTS else result.error
+        return ToolOutcome(result.ok, kind, "" if result.data is None and not result.ok else json.dumps(result.shown, ensure_ascii=False),
                            instruction=result.instruction or "", blocks=result.blocks or [])
 
     def _computer_result(self, loop: NarratedLoop, result: dict) -> ToolOutcome:

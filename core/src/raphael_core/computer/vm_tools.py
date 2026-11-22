@@ -28,11 +28,11 @@ from ..integrations.audit import AuditLog
 from ..services.attachments import Attachment, MAX_FILE_BYTES, sniff_ok
 from ..agent.data_floor import DataFloor
 from .vm import SHARED, VmError, engine_start_allowed
-from .vm_bridge import CuaBridge
+from .vm_bridge import CuaBridge, call_driver_tool
 from .owner_files import KEPT_WORDS, MAC_PRIVATE, kept_place, place as owner_place
 from .owner_transfer import REMOTE_FILE_MAX, hand_over, safe_name
 from .vm_catalog import DRIVER_TOOLS, FRESH_READS, NATIVE_INPUT_TOOLS, NOTICES, PAGE_TOOLS, READS, SCREEN_READS, SHARED_ARGUMENTS, BROWSER_APPS, definition as driver_definition, offline_catalog, shared_argument_paths, shared_native_input
-from .takeover import TAKEOVER, TAKEOVER_REASON_REQUIRED, takeover_detail
+from .takeover import TAKEOVER, TAKEOVER_REASON_REQUIRED, owner_waiting_result, takeover_detail
 from .suggestions import ComputerSuggestions, SUGGEST_COMPUTER, SUGGEST_COMPUTER_KEY
 from .browser_tabs import BLANK, BROWSER_TABS, NEW_TAB, new_tab_of, rows as tab_rows, shown_tab
 from . import seat_launch
@@ -794,7 +794,7 @@ class VmTools:
             if self.audit:
                 _, tool = self.host_computer.routes[key]
                 self.audit.add(server="computer", tool=tool.name, tier=tool.tier.name, approver=approver,
-                               outcome="ok" if result.ok else "blocked", task_id=task_id)
+                               outcome="ok" if result.ok and result.kind not in NOTICES else "blocked", task_id=task_id)
             return result
         if self.host_computer is not None and self.tier_of(key) is not None and approver != "none":
             if not await self.vm.installed():
@@ -811,7 +811,7 @@ class VmTools:
             page[0] == picture_target.key for page in self.private_pages)
         # Only a computer tool can picture a seat before the look that follows the call; the windows are not
         # listed for every other tool a member with a seat happens to call.
-        if key in self.tools:
+        if key in self.tools and picture_target.key not in self.vm.held:
             private_before = await self._shared_private_picture(picture_target) or private_before
         began = time.monotonic()
         repair_budget = _REPAIRS.set(set())
@@ -850,7 +850,7 @@ class VmTools:
                     result.kind = self.logins.redact(identifier, result.kind)
         # A picture read from a file is no picture of the screen: the private-page rules are about the screen.
         screen_picture = bool(result.blocks) and not (key in self.tools and self.tools[key].name in FILE_TOOLS)
-        if (reading and result.ok and (picture_target.container != "shared" or result.kind not in NOTICES)) or screen_picture:
+        if (reading and result.ok and result.kind not in NOTICES) or screen_picture:
             if picture_target != self.vm.target(member):
                 return PluginResult(False, "computer_changed")
             private_after = await self._private_picture(picture_target, arguments)
@@ -1048,7 +1048,7 @@ class VmTools:
             if self.tier_of(key) is None or approver == "none" or tool.tier >= Tier.T2 and approver != "user":
                 return result
             if target.key in self.vm.held:
-                result = PluginResult(False, "owner_holds_control", self.vm.owner_note(target))
+                result = owner_waiting_result()
                 return result
             if "session" in arguments or not Draft202012Validator(self.schemas[key]).is_valid(arguments):
                 if tool.name == "request_takeover" and not arguments.get("reason"):
@@ -1254,7 +1254,7 @@ class VmTools:
                         else:
                             data = await self._driver_call(target, client, tool.name, sent, own=True)
                     except (VmError, ConnectionError, TimeoutError) as error:
-                        if target.container and isinstance(error, VmError) and str(error) in ("computer_busy", "owner_holds_control", "computer_changed"):
+                        if isinstance(error, VmError) and str(error) in ("computer_busy", "owner_holds_control", "computer_changed"):
                             # Waiting for shared input is not a broken session: its bound pages must survive.
                             raise
                         self.vm.invalidate(target)
@@ -1324,6 +1324,9 @@ class VmTools:
             result = PluginResult(False, "timeout")
             return result
         except VmError as error:
+            if str(error) == "owner_holds_control":
+                result = owner_waiting_result()
+                return result
             self.vm.invalidate(target)
             if str(error) in ("seats_full", "computer_busy"):
                 return self._busy(target, None, self.busy_wait_s if str(error) == "computer_busy" else 0,
@@ -1337,7 +1340,7 @@ class VmTools:
                     note += " Its profile may have been locked. If the profile was idle, stale locks were cleared before this attempt."
                 note += " Try again, and tell the owner if it keeps failing."
             else:
-                note = self.vm.owner_note(target) if kind == "owner_holds_control" else ENGINE_FAILURES.get(kind, "")
+                note = ENGINE_FAILURES.get(kind, "")
             result = PluginResult(False, kind, note)
             return result
         except ConnectionError:
@@ -1443,7 +1446,7 @@ class VmTools:
     async def _run_steps(self, key, arguments, *, approver, task_id, pool):
         target = self.routes[key]
         if target.key in self.vm.held:
-            return PluginResult(False, "owner_holds_control", self.vm.owner_note(target))
+            return owner_waiting_result()
         if approver == "none" or self.step_gate is None:
             return PluginResult(False, "blocked")
         if not Draft202012Validator(RUN_STEPS["parameters"]).is_valid(arguments):
@@ -1467,6 +1470,11 @@ class VmTools:
                 result = PluginResult(False, "tool_changed")
             else:
                 result = await self.step_gate(child, step["arguments"], task_id=task_id, pool=pool)
+            if result.kind == "waiting_for_owner":
+                data = json.loads(result.text)
+                data.update(completed_steps=completed, action_not_performed=index)
+                result.text = json.dumps(data)
+                return result
             if not result.ok or result.kind in NOTICES:
                 return PluginResult(False, result.kind or "step_failed", json.dumps({
                     "failed_step": index, "completed_steps": completed, "observation_failed": index > len(arguments["steps"]),
@@ -1750,7 +1758,7 @@ class VmTools:
     async def _driver_call(self, target, client, name, arguments, *, remember=True, own=False):
         """`own` is the member's own tool call, as against a read or a fill the core makes for it."""
         if not target.container:
-            reply = await client.request("tools/call", {"name": name, "arguments": arguments})
+            reply = await call_driver_tool(client, name, arguments)
         elif shared_native_input(name, arguments):
             async with self._native_lock(target):
                 reply = await self._seat_driver_call(target, client, name, arguments, own=own)
@@ -1768,9 +1776,9 @@ class VmTools:
         began = time.monotonic()
         lock = self.native_actions.setdefault(target.state_key, asyncio.Lock())
         while True:
-            if target.key in self.vm.held:
+            if self.vm.unit_held(target):
                 raise VmError("owner_holds_control")
-            if not self.vm.unit_held(target) and not lock.locked():
+            if not lock.locked():
                 await lock.acquire()
                 break
             remaining = self.busy_wait_s - (time.monotonic() - began)
@@ -1826,8 +1834,8 @@ class VmTools:
         return observation
 
     async def _canvas_windows(self, client, session, filters=None, *, owner_observation=False):
-        reply = await client.request("tools/call", {"name": "list_windows", "arguments": {**(filters or {}), "session": session}},
-                                     **({"owner_observation": True} if owner_observation else {}))
+        reply = await call_driver_tool(client, "list_windows", {**(filters or {}), "session": session},
+                                       **({"owner_observation": True} if owner_observation else {}))
         try:
             return seat_view.canvas_windows(reply)
         except (ValueError, KeyError, TypeError):
@@ -1990,7 +1998,7 @@ class VmTools:
             return reply
         if name == "launch_app":
             return await self._seat_launch(target, client, session, args)
-        reply = await client.request("tools/call", {"name": name, "arguments": args})
+        reply = await call_driver_tool(client, name, args)
         if reply.get("isError"):
             return reply
         state = self._reply_state(reply)
@@ -2044,7 +2052,7 @@ class VmTools:
         if sent is None:
             tag, sent = None, args
         before = await self._canvas_windows(client, session)
-        reply = await client.request("tools/call", {"name": "launch_app", "arguments": sent})
+        reply = await call_driver_tool(client, "launch_app", sent)
         if tag is not None:
             reply = seat_launch.as_asked(reply, sent, args)
         # A refusal stands, in the member's words. The driver refuses when the process it started ended and no new
@@ -2133,8 +2141,8 @@ class VmTools:
                     raise VmError("computer_changed")
                 if target.key in self.vm.held and not owner_observation:
                     raise VmError("owner_holds_control")
-                reply = await client.request("tools/call", {"name": name, "arguments": {**arguments, "session": session}},
-                                             **({"owner_observation": True} if owner_observation else {}))
+                reply = await call_driver_tool(client, name, {**arguments, "session": session},
+                                               **({"owner_observation": True} if owner_observation else {}))
                 if reply.get("isError"):
                     raise VmError("driver_configuration_failed")
         except BaseException:
@@ -2188,6 +2196,8 @@ class VmTools:
         began = time.monotonic()
         said = False
         while (held := self._holder(target, owner)) is not None:
+            if target.key in self.vm.held:
+                return owner_waiting_result()
             waited = time.monotonic() - began
             if waited >= self.busy_wait_s:
                 return self._busy(target, held, waited)
@@ -2197,6 +2207,8 @@ class VmTools:
                 if progress is not None:
                     progress(WAITING_FOR.get(language, WAITING_FOR["en"]).format(who=self._name_of(held)))
             await asyncio.sleep(min(self.busy_poll_s, self.busy_wait_s - waited))
+        if target.key in self.vm.held:
+            return owner_waiting_result()
         previous = self.leases.get(target.key)
         if previous != owner:
             if previous is not None and owner[0] != "async":  # a call outside any turn or task has no picture to go stale
