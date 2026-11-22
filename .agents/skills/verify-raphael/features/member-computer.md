@@ -18,37 +18,37 @@ asks Raphael for setup in its conversation. The decision stays with the owner.
 Background work reports that it needs a VM and stops. Task installs use the VM.
 Local commands keep their existing approval flow for other owner-PC work.
 
-Raphael Chrome runs headlessly with one shared profile in the machine-local data
-folder. Each turn or task owns its tabs and its action lock. Local Docker and
-Chrome share the member workspace and the team folder. Their browser profiles
-keep site sign-ins separately. Docker on another host uses its own volumes.
+Raphael runs headed Google Chrome with one shared profile in the machine-local data folder.
+On Windows Chrome lives on a separate desktop with no Explorer taskbar and never takes
+focus on the owner's desktop. Each turn or task owns its tabs and action lock.
+Local Docker and Chrome share the member workspace and team folder while retaining
+separate site sign-ins. Docker on another host uses its own volumes.
 
-Opening a page shows its live thumbnail in the conversation and opens the
-Computer tab on the same page. Both frames use the same rounded 1280 × 900
-aspect and the page fills it. The member tells the owner where to watch.
-A private takeover card shows the reason for an owner-only step such as sign-in
-or verification. Done disables input and resumes the original call on the same
-tab. Each computer card has one close button. The last watcher leaving stops the
-screencast. Shutdown closes relay connections and the profile process tree.
+Opening a page opens the Computer tab on that same page. The page fills the rounded
+1280 × 900 frame. A takeover card appears only while a member waits for the owner for
+an owner-only step. Done releases input and resumes the original call on that tab.
+Done, Skip and other request endings remove the card from the conversation.
+An idle browser and an unavailable VM keep their wallpaper without panel errors.
+An unexpected failure reaches the active member as an internal note. Missing Docker
+keeps the action to ask Raphael for setup.
+The last watcher leaving stops the screencast. Shutdown closes relay connections
+and Chrome's profile process tree.
 
 Run from `app/`:
 ```sh
-npm run look -- member-settings desktop-computer-choice desktop-computer-choice-missing desktop-computer-choice-docker desktop-computer-suggestion-installed desktop-computer-suggestion-missing desktop-panel desktop-host-no-card desktop-host-panel desktop-host-takeover desktop-host-handback --theme both --width 1120,720,1920x1080
+npm run look -- member-settings desktop-computer-choice desktop-computer-choice-missing desktop-computer-choice-docker desktop-computer-suggestion-installed desktop-computer-suggestion-missing desktop-panel desktop-host-no-card desktop-host-panel desktop-host-takeover desktop-host-handback desktop-host-skip-idle desktop-quiet-vm --theme both --width 1120,720,1920x1080
 ```
 
-Inspect the member settings navigation, the single dropdown with its local and SSH
-entries, quiet saved switching, both suggestion actions and their hover row, Chrome work
-opening the Computer tab with no card in the conversation, taking that tab at any time, the
-full-frame page, and the private takeover and Done flow.
-Look uses the production canvas with fixture frames. Run
-`test_native_chrome_sign_in_handback_releases_input_and_resumes_same_tab`,
-`test_native_headless_chrome_frames_and_owner_input` and
-`test_chrome_has_scoped_tabs_page_input_private_forms_and_downloads` locally with CI
-unset. These native tests use isolated profiles and local pages. Headless Chrome
-has no desktop window or taskbar entry. Google Accounts can reject automated
-browsers ([Google Account Help](https://support.google.com/accounts/answer/7675428)).
-Native Chrome and OS prompts, including certificate pickers, are outside the page
-screencast.
+Inspect the local and SSH choices, saved switching, both suggestion actions, normal Chrome
+work opening the Computer tab without a card, the full-frame page, takeover and Done, and
+the idle panels after a skipped Chrome request or unavailable VM.
+Look uses the production canvas with fixture frames. Run `test_host_computer.py` and
+`test_host_viewer.py` locally with CI unset. Their native tests use Google Chrome,
+isolated profiles and local pages. They check the ordinary browser UA, `navigator.webdriver`
+being false, changing 1280 × 900 frames away from the input desktop, private input,
+handback of the same tab, downloads and shutdown. The owner checks actual Google
+sign-in. Native Chrome and OS prompts, including certificate pickers, sit outside the
+page screencast.
 
 ## Recovering the seat browser after an unreadable stale lock
 

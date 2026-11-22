@@ -258,6 +258,8 @@ class DesktopViewer:
         self.open_lock = asyncio.Lock()
         self.take_wait_s = TAKE_WAIT_S
         self.host_browser = self.handbacks = None
+        self.problem_note = None
+        self.recent_problems = {}
         self.active_transport = None
         self.host_peers = {}
         self.host_cleanup = set()
@@ -413,7 +415,9 @@ class DesktopViewer:
         if params.get("transport") == "docker":
             transport = "docker"  # An explicit status probe for the setup control.
         if transport == "host":
-            return self.host_state(member, params.get("conversation_id"))
+            state = self.host_state(member, params.get("conversation_id"))
+            await self.report_problem(params, state)
+            return state
         if transport is None:
             return {"transport": "idle", "state": "absent", "control": "member", "ready": False}
         if params.get("start_docker") is True:
@@ -428,6 +432,7 @@ class DesktopViewer:
         if not await self.vm.installed():
             return {"transport": "docker", "state": "absent", "control": "member", "ready": False, "error": "disabled" if not self.vm.enabled else "docker_missing"}
         state = await self.unwatched_status(target)
+        await self.report_problem(params, {**state, "transport": "docker", "target": target.key})
         works = self.vm.work.views(params.get("member_id", 0), params.get("conversation_id"))
         return {**state, "transport": "docker", "host": target.remote, "target": target.key,
                 "mode": target.container or "per-bot",
@@ -437,6 +442,32 @@ class DesktopViewer:
                 **self.woken(target, state.get("state")),
                 **({"works": works} if works else {}),
                 **(self.teaching.status(params.get("member_id", 0), params.get("conversation_id"), target) if self.teaching else {})}
+
+    async def report_problem(self, params, state):
+        problem = params.get("viewer_problem")
+        if (problem not in ("show the screen", "pass control through the viewer", "complete computer maintenance",
+                           "send a file to the virtual machine", "complete a demonstration")
+                or params.get("observed_transport") != state.get("transport")
+                or state.get("transport") == "host" and state["state"] == "absent"
+                or params.get("observed_target") not in (None, state.get("target"))):
+            return
+        await self.note_problem(params.get("member_id", 0), params.get("conversation_id"), state["transport"], problem)
+
+    async def note_problem(self, member, conversation, transport, problem):
+        if self.problem_note is None or type(conversation) is not int:
+            return
+        now = self.vm.clock()
+        self.recent_problems = {scope: at for scope, at in self.recent_problems.items() if now - at < 30}
+        key = (member, conversation, transport, problem)
+        if key in self.recent_problems:
+            return
+        self.recent_problems[key] = now
+        try:
+            if not await self.problem_note(member, conversation, transport, problem):
+                self.recent_problems.pop(key, None)
+        except Exception as error:
+            self.recent_problems.pop(key, None)
+            logging.getLogger(__name__).warning("Could not pass a viewer problem to the member (%s)", type(error).__name__)
 
     def woken(self, target, state):
         """Who woke the running computer and why, when a member's own tool did it (R-COMP-WAKE-01): the row of its panel says so."""
@@ -479,7 +510,8 @@ class DesktopViewer:
         return {"transport": "host", "state": "running" if running else "absent", "ready": running,
                 "control": "owner" if owner and (owner is session or session is None and owner.conversation_id == conversation) else "member",
                 "preview_allowed": owner is None and card is None,
-                **({"target": tab.id, "works": [{"id": tab.id, "turn_id": tab.turn_id, "transport": "host",
+                **({"target": tab.id} if running else {}),
+                **({"works": [{"id": tab.id, "turn_id": tab.turn_id, "transport": "host",
                                                 "state": "done" if tab.finished else "running", "tool": "browser_open",
                                                 "reason": ""}]} if running and tab.turn_id else {}),
                 **({"host_request": {"id": card.id, "request_id": card.id, "turn_id": card.turn_id,
@@ -609,6 +641,8 @@ class DesktopViewer:
     async def renew(self, params):
         token, session = self.session(params)
         if session.host_tab is not None and not self.host_current(session):
+            await self.close(params)
+            await self.report_host_disconnect(session)
             return await self.status({"member_id": session.member_id, "conversation_id": session.conversation_id})
         if self.active_transport is not None and self.owners.get(session.owner_key) != token:
             lookup = {"member_id": session.member_id, "conversation_id": session.conversation_id,
@@ -914,6 +948,7 @@ class DesktopViewer:
                     if session.host_tab is not None:
                         if session.expires <= self.vm.clock() or not self.host_current(session):
                             await self.close({"session": token})
+                            await self.report_host_disconnect(session)
                         elif (self.owners.get(session.owner_key) == token and self.vm.clock() - session.input_at >= OWNER_IDLE_S
                               and self.host_selection(session.member_id, session.conversation_id)[1] is None):
                             async with self.control_lock:
@@ -931,6 +966,10 @@ class DesktopViewer:
                     raise
                 except Exception as error:
                     logging.getLogger(__name__).warning("Desktop viewer upkeep failed (%s)", type(error).__name__)
+
+    async def report_host_disconnect(self, session):
+        if session.host_tab.disconnected and not session.host_tab.finished:
+            await self.note_problem(session.member_id, session.conversation_id, "host", "show the screen")
 
     async def release_if_idle(self, token, session):
         """The owner's hold ends by itself after OWNER_IDLE_S without their input; a sign-in request waiting for them and a

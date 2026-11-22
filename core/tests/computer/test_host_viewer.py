@@ -101,6 +101,37 @@ async def test_a_renewed_panel_follows_the_active_transport_for_its_conversation
         await viewer.aclose()
 
 
+async def test_closed_host_tab_renews_to_quiet_idle_without_a_recovery_note(tmp_path):
+    viewer, browser = host_viewer(tmp_path)
+    browser.cdp = Cdp(browser)
+    received = []
+
+    async def note(*args):
+        received.append(args)
+        return True
+
+    viewer.problem_note = note
+    params = {"member_id": 1, "conversation_id": 10}
+    report = {**params, "viewer_problem": "show the screen", "observed_transport": "host"}
+    try:
+        tab = fake_tab(browser, 1, 10)
+        opened = await viewer.open(params)
+        first = {**report, "observed_target": tab.id}
+        await viewer.status(first)
+        await viewer.status(first)
+        assert received == [(1, 10, "host", "show the screen")]
+        received.clear()
+
+        browser._event("Target.targetDestroyed", {"targetId": tab.target}, None)
+        idle = await viewer.renew(opened)
+        assert idle["transport"] == "host" and idle["state"] == "absent" and "error" not in idle
+        assert opened["session"] not in viewer.sessions
+        assert await viewer.status(first) == idle
+        assert received == []
+    finally:
+        await viewer.aclose()
+
+
 async def test_shutdown_aborts_open_host_stream_and_unparsed_connection(tmp_path):
     viewer, browser = host_viewer(tmp_path)
     cdp = browser.cdp = Cdp(browser)
@@ -354,7 +385,7 @@ async def test_native_chrome_sign_in_handback_releases_input_and_resumes_same_ta
 
 
 @pytest.mark.skipif(chrome_executable() is None or bool(os.environ.get("CI")), reason="Google Chrome is unavailable or this is CI")
-async def test_native_headless_chrome_frames_and_owner_input(tmp_path):
+async def test_native_chrome_frames_and_owner_input(tmp_path):
     viewer, browser = host_viewer(tmp_path.resolve())
     site = await asyncio.start_server(serve, "127.0.0.1", 0)
     async with site:
@@ -398,3 +429,77 @@ async def test_native_headless_chrome_frames_and_owner_input(tmp_path):
             finally:
                 await browser.aclose()
                 await asyncio.sleep(0.1)  # Chrome's connections to the test site end; their transports close
+
+
+def windows_on_desktop(pid, desktop=None):
+    import ctypes as c
+    from ctypes import wintypes as w
+
+    user = c.WinDLL("user32", use_last_error=True)
+    callback = c.WINFUNCTYPE(w.BOOL, w.HWND, w.LPARAM)
+    user.OpenInputDesktop.argtypes = [w.DWORD, w.BOOL, w.DWORD]
+    user.OpenInputDesktop.restype = w.HANDLE
+    user.CloseDesktop.argtypes = [w.HANDLE]
+    user.EnumDesktopWindows.argtypes = [w.HANDLE, callback, w.LPARAM]
+    user.GetWindowThreadProcessId.argtypes = [w.HWND, c.POINTER(w.DWORD)]
+    user.IsWindowVisible.argtypes = [w.HWND]
+    user.GetForegroundWindow.restype = w.HWND
+    visible = []
+
+    @callback
+    def visit(window, _):
+        owner = w.DWORD()
+        user.GetWindowThreadProcessId(window, c.byref(owner))
+        if owner.value == pid and user.IsWindowVisible(window):
+            visible.append(window)
+        return True
+
+    input_desktop = None if desktop else user.OpenInputDesktop(0, False, 0x0041)  # READOBJECTS | ENUMERATE
+    try:
+        assert desktop or input_desktop, c.get_last_error()
+        assert user.EnumDesktopWindows(desktop or input_desktop, visit, 0), c.get_last_error()
+    finally:
+        if input_desktop:
+            user.CloseDesktop(input_desktop)
+    return visible, user.GetForegroundWindow()
+
+
+@pytest.mark.skipif(chrome_executable() is None or bool(os.environ.get("CI")), reason="Google Chrome is unavailable or this is CI")
+async def test_native_headed_chrome_streams_off_the_owner_desktop(tmp_path):
+    viewer, browser = host_viewer(tmp_path.resolve())
+    site = await asyncio.start_server(serve, "127.0.0.1", 0)
+    async with site:
+        try:
+            tab, _ = await browser.open_tab(("turn", 1, 10), 1, tmp_path, 10)
+            url = f"http://127.0.0.1:{site.sockets[0].getsockname()[1]}"
+            assert await host_page.navigate(browser, tab, url)
+            proof = await browser.command(tab, "Runtime.evaluate", {
+                "expression": "({userAgent: navigator.userAgent, webdriver: navigator.webdriver})", "returnByValue": True,
+            })
+            assert "Headless" not in proof["result"]["value"]["userAgent"]
+            assert proof["result"]["value"]["webdriver"] is False
+            opened = await viewer.open({"member_id": 1, "conversation_id": 10})
+            base = opened["url"].removesuffix("host.html")
+            async with httpx.AsyncClient(trust_env=False, timeout=10) as client, host_frames(client, base) as lines:
+                first = json.loads(await anext(lines))
+                assert (first["width"], first["height"]) == (1280, 900)
+                assert base64.b64decode(first["image"]).startswith(b"\xff\xd8")
+                await browser.command(tab, "Runtime.evaluate", {"expression": "document.body.style.background = 'rgb(20,80,240)'"})
+                async with asyncio.timeout(5):
+                    while json.loads(await anext(lines))["image"] == first["image"]:
+                        pass
+                if os.name == "nt":
+                    pid = browser.process.pid
+                    private, _ = windows_on_desktop(pid, browser.process.desktop)
+                    interactive, foreground = windows_on_desktop(pid)
+                    assert private and not interactive and foreground not in private
+                else:
+                    bounds = (await browser.cdp.call("Browser.getWindowForTarget", {"targetId": tab.target}))["bounds"]
+                    assert bounds["left"] + bounds["width"] < 0 and bounds["top"] + bounds["height"] < 0
+                print(f"Chrome streamed changing 1280 x 900 frames away from the input desktop: {proof['result']['value']}")
+        finally:
+            try:
+                await viewer.aclose()
+            finally:
+                await browser.aclose()
+                await asyncio.sleep(0.1)

@@ -244,7 +244,8 @@ async def test_first_work_reuses_only_the_marked_chrome_startup_page(tmp_path):
     first = await browser.new_tab(("one",), 1, tmp_path)
     second = await browser.new_tab(("two",), 2, tmp_path)
     assert (first.target, second.target) == ("startup", "new")
-    assert created == [{"url": "about:blank", "newWindow": True}]
+    bounds = {"left": -32000, "top": -32000} if os.name != "nt" else {}
+    assert created == [{"url": "about:blank", "newWindow": True, "background": True, **bounds}]
     assert "owner" not in browser.owned_targets
 
 

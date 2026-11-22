@@ -32,9 +32,10 @@ test.each(["zh-TW", "en", "ja"] as const)("the %s popover keeps one scope line a
   document.body.innerHTML = computerLocationHTML("studio-mini");
   expect([...document.querySelectorAll("p")].map(note => note.textContent)).toEqual([t("desktop.sharedLocation")]);
   expect(document.querySelector('[role="status"]')).toBeNull();
-  document.body.innerHTML = computerLocationHTML("studio-mini", false, t("desktop.locationHostError"));
+  const error = "The host check failed.";
+  document.body.innerHTML = computerLocationHTML("studio-mini", false, error);
   expect(document.querySelectorAll("p")).toHaveLength(2);
-  expect(document.querySelector('[role="alert"]')!.textContent).toBe(t("desktop.locationHostError"));
+  expect(document.querySelector('[role="alert"]')!.textContent).toBe(error);
   expect(document.querySelector('.sel')).toBeNull();
 });
 
@@ -69,9 +70,9 @@ test("a save refusal keeps the last saved host and shows a value-free inline err
   expect(mounted.alias()).toBe("workstation");
 });
 
-test("a host status error is current state only and opening the popover starts no host check", async () => {
-  const { mounted } = await mount("studio-mini"); mounted.status(true);
-  expect(document.querySelector('[role="alert"]')).not.toBeNull();
+test("opening the popover starts no host check", async () => {
+  const { mounted } = await mount("studio-mini");
+  expect(document.querySelector('[role="alert"]')).toBeNull();
   expect(api.settingsSet).not.toHaveBeenCalled();
   expect(api.desktopHostCheck).not.toHaveBeenCalled();
   mounted.hide(); expect(document.querySelector('.computer-location-popover')).toBeNull();

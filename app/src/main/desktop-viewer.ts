@@ -88,7 +88,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     `<div class="desktop-screen"><img class="desktop-wallpaper" alt=""><img class="desktop-last" alt="" hidden><div class="desktop-placeholder"></div>${btn("", "sm", ' data-desktop="retry" hidden')}` +
     `<iframe referrerpolicy="no-referrer" sandbox="allow-scripts allow-same-origin" hidden></iframe>` +
     `<button type="button" class="btn desktop-open" data-desktop="enlarge" hidden><span class="desktop-open-pill">${ico("open")}<span></span></span></button></div><p class="desktop-caption" role="status" hidden></p><div class="desktop-review" hidden></div>` +
-    `<div class="desktop-foot"><div class="desktop-settings"><div class="computer-lifecycle"></div></div><div class="desktop-notes"><p class="desktop-request" role="status" hidden></p><p class="desktop-error" role="alert" hidden></p><p class="desktop-recording" role="status" hidden></p><div class="desktop-teach-missing" hidden></div><div class="desktop-try" hidden><input class="mb-fin" data-teach-input maxlength="4000">${btn("", "sm", ' data-desktop="try-teach"')}</div></div>` +
+    `<div class="desktop-foot"><div class="desktop-settings"><div class="computer-lifecycle"></div></div><div class="desktop-notes"><p class="desktop-request" role="status" hidden></p><p class="desktop-notice" role="status" hidden></p><p class="desktop-recording" role="status" hidden></p><div class="desktop-teach-missing" hidden></div><div class="desktop-try" hidden><input class="mb-fin" data-teach-input maxlength="4000">${btn("", "sm", ' data-desktop="try-teach"')}</div></div>` +
     `<div class="desktop-bar"><div class="desktop-dock"><div class="desktop-mode"><span class="desktop-mode-label" role="status">${ico("eye")}<span></span></span>${btn("", "sm", ' data-desktop="take" hidden')}${btn("", "sm", ' data-desktop="return"')}</div>${iconButton("more", t("chat.more"), ' data-desktop="menu" aria-haspopup="menu" aria-expanded="false"')}</div>` +
     `<div class="desktop-actions">${btn("", "sm", ' data-desktop="discard-teach" hidden')}${btn("", "sm", ' data-desktop="teach"')}</div></div></div></div>`;
   const locationHeader = panel.querySelector<HTMLElement>(".desktop-location-header")!;
@@ -137,7 +137,6 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     } catch {
       if (here()) {
         requested = before;
-        showNotice(t(local ? "desktop.locationSaveError" : "memberComputer.switchFailed"));
       }
     } finally {
       choosing = false;
@@ -193,8 +192,15 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
       takeoverBar.prepend(backButton, collapseButton);
     }
   }
-  const error = panel.querySelector<HTMLElement>('.desktop-error')!;
-  function showNotice(message: string, ready = false): void { error.textContent = message; error.setAttribute('role', ready ? 'status' : 'alert'); error.hidden = false; }
+  const notice = panel.querySelector<HTMLElement>('.desktop-notice')!;
+  function showNotice(message: string): void { notice.textContent = message; notice.hidden = false; }
+  function reportProblem(problem: string, observed = state): void {
+    if (!observed || observed.transport === 'idle') return;
+    void api.core('computer.viewer_status', {
+      member_id: member(), conversation_id: options.conversation(), viewer_problem: problem,
+      observed_transport: observed.transport ?? 'docker', observed_target: observed.target,
+    }).catch(() => {});
+  }
   const teach = panel.querySelector<HTMLButtonElement>('[data-desktop="teach"]')!;
   const discardTeach = panel.querySelector<HTMLButtonElement>('[data-desktop="discard-teach"]')!;
   const review = panel.querySelector<HTMLElement>('.desktop-review')!;
@@ -211,7 +217,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   /** The member `state` was read for: a panel that comes back after the sidebar switched members must not wear the old member's. */
   let stateMember: number | undefined;
   let maintenance: { member: number; phase: NonNullable<DesktopState['lifecycle']> } | undefined;
-  const lifecycle = mountComputerLifecycle(panel.querySelector<HTMLElement>(".computer-lifecycle")!, panel, member, () => state, async (action, captured) => {
+  const lifecycle = mountComputerLifecycle(panel.querySelector<HTMLElement>(".computer-lifecycle")!, member, () => state, async (action, captured) => {
     const id = member();
     const operation = { member: id, phase: (action === 'update' ? 'updating' : action === 'repair' ? 'repairing' : 'waking') as NonNullable<DesktopState['lifecycle']> };
     maintenance = operation;
@@ -221,6 +227,8 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     try {
       const next = await api.desktopMaintain(id, action, captured, action === 'reset');
       if (id === member() && current === generation) update(next);
+    } catch {
+      if (id === member() && current === generation) reportProblem("complete computer maintenance", captured);
     } finally { if (maintenance === operation) maintenance = undefined; if (id === member() && current === generation) { if (state) state = {...state, lifecycle: undefined}; draw(); if (state?.state === 'running' && active()) void openStream(); } }
   });
   let connected = false, interactive = false, changing = false, loading = false, opening = false, takeOnConnect = false, waking = false;
@@ -292,7 +300,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     paint(locationHeader, 'hidden', expanded);
     const transport = selected();
     const selectedState = requested?.status ?? (transport === actual() ? state : undefined);
-    const statusText = transport === "idle" || !selectedState || transport === "host" && selectedState.state === "absent"
+    const statusText = transport === "idle" || !selectedState
       ? t("memberComputer.idle") : computerStateLabel(selectedState);
     const showStatus = !!state?.transport || selectedState?.state === "running";
     paint(status, "hidden", !showStatus);
@@ -306,7 +314,6 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
         ` data-computer-choice data-k="computer-choice"${location.ready() ? " data-location-ready" : ""}${choosing || state?.control === "owner" ? " disabled" : ""}`));
     }
     lifecycle.draw(!expanded && transport === "docker");
-    location.status(transport === "docker" && !!selectedState?.error);
     placeStripButtons(expanded);
     attr(collapseButton, 'title', t('desktop.collapse')); attr(collapseButton, 'aria-label', t('desktop.collapse'));
     paint(collapseButton, 'hidden', !watching);
@@ -332,7 +339,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     paint(tryButton, "textContent", t("teach.try")); paint(tryInput, "placeholder", t("teach.input")); attr(tryInput, 'aria-label', t("teach.input"));
     paint(tryHost, "hidden", !skillName);
     const preparing = state && (!!state.lifecycle || ["starting", "building", "preparing"].includes(state.state));
-    const label = preparing ? state!.state as "starting" | "building" | "preparing" : !running ? state?.state === "stopped" || state?.state === "missing" ? "stopped" : "unavailable" : !connected && !suspended ? "connecting" : owner ? "owner" : "member";
+    const label = preparing ? state!.state as "starting" | "building" | "preparing" : !running ? state?.transport === "host" || state?.transport === "idle" ? "idle" : state?.state === "stopped" || state?.state === "missing" ? "stopped" : "unavailable" : !connected && !suspended ? "connecting" : owner ? "owner" : "member";
     paint(panel.dataset, "desktopState", label);
     paint(panel.dataset, "interactive", String(interactive));
     // The preview only opens the larger view; input is taken there, with Take control, or from a card (R-PANEL-03).
@@ -364,7 +371,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     const hostView = state?.transport === "host";
     askFrames(!!running && connected && !!inline && !expanded && !owner && (hostView || !pending()));
     const preview = lastFrames.get(member());
-    const picture = running && (!connected || !hostView && inline && !expanded) ? preview : undefined;
+    const picture = running && !stalled && (!connected || !hostView && inline && !expanded) ? preview : undefined;
     paint(last, "hidden", !picture);
     if (picture && last.src !== picture) paint(last, "src", picture);
     paint(placeholder, "hidden", (!!running && connected) || (!!picture && !stalled));
@@ -398,6 +405,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   }
   function closeStream(): void {
     clearTimeout(lingering); clearTimeout(stallTimer); clearTimeout(takeTimer); stalled = false;
+    opening = false; paint(notice, "hidden", true);
     if (state?.transport === 'host' && streamMember !== undefined) lastFrames.delete(streamMember);
     generation++; takeOnConnect = false; watching = false; send(false); framesOn = false; frame.remove(); frame.removeAttribute('src'); connected = interactive = false;
     const previous = session; session = undefined;
@@ -450,15 +458,16 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   async function sendFiles(files: readonly File[]): Promise<void> {
     const held = session;
     if (!held) return;
+    notice.hidden = true;
     for (const file of files) {
-      if (!file.size || file.size > FILE_MAX_BYTES) { showNotice(t(file.size ? 'desktop.fileTooLarge' : 'desktop.fileFailed', { p0: file.name })); continue; }
+      if (!file.size || file.size > FILE_MAX_BYTES) continue;
       try {
         const stored = await storeUpload(file, fileMime(file), () => session === held);
         if (!stored.stored_id) throw new Error('not stored');
         const placed = await api.desktopPutFile(held.session, stored.stored_id, file.name);
-        if (session === held) showNotice(t('desktop.filePlaced', { p0: placed.name }), true);
+        if (session === held) showNotice(t('desktop.filePlaced', { p0: placed.name }));
       } catch {
-        if (session === held) showNotice(t('desktop.fileFailed', { p0: file.name }));
+        if (session === held) reportProblem("send a file to the virtual machine");
       }
     }
   }
@@ -509,8 +518,8 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
         // a retry instead of reopening on every poll.
         const unreached = event.data.state === 'unreachable' || !everConnected;
         interactive = false; closeStream(); if (state) state = { ...state, control:'member' };
-        if (state?.transport === 'host' && !unreached) void poll();
-        if (unreached) stalled = true;
+        if (state?.transport === 'host') void poll();
+        if (unreached) { stalled = true; reportProblem("show the screen"); }
       }
       // Only a fresh takeover click can acquire input after the new stream connects.
     }
@@ -520,23 +529,35 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   window.addEventListener('message', message);
   async function openStream(): Promise<void> {
     if (session || opening || suspended || stalled || maintenance?.member === member() || !active()) return;
+    if (state?.transport === "host" && state.state !== "running" || state?.transport === "idle") return;
     opening = true;
-    const current = generation, id = member();
+    const current = generation, id = member(), conversation = options.conversation();
+    const observed = state;
+    const here = () => current === generation && id === member() && conversation === options.conversation();
     try {
       await closePending;
-      const opened = await api.desktopOpen(id, { conversation_id: options.conversation(),
-        ...(state?.transport === "host" ? { transport: "host", target_id: state.target } as const : {}) });
-      if (current !== generation || id !== member() || !active()) { await api.desktopClose(opened.session); return; }
-      session = opened; streamMember = id; streamConversation = options.conversation();
+      if (!here() || !active()) return;
+      const opened = await api.desktopOpen(id, { conversation_id: conversation,
+        ...(observed?.transport === "host" ? { transport: "host", target_id: observed.target } as const : {}) });
+      if (!here() || !active()) { await api.desktopClose(opened.session); return; }
+      session = opened; streamMember = id; streamConversation = conversation;
       clearTimeout(stallTimer); stalled = false; everConnected = false;
-      stallTimer = setTimeout(() => { if (session === opened && !connected) { stalled = true; draw(); } }, STALL_MS);
+      stallTimer = setTimeout(() => { if (session === opened && !connected) { stalled = true; reportProblem("show the screen"); draw(); } }, STALL_MS);
     } catch {
-      if (current === generation) {
-        takeOnConnect = false; showNotice(t('desktop.unavailable'));
+      if (here()) {
+        takeOnConnect = false; stalled = observed?.transport === "host";
         if (waking) { waking = false; if (state) state = { ...state, lifecycle: undefined }; }
+        reportProblem("show the screen", observed);
+        if (observed?.transport === "host") {
+          const latest = await api.desktopStatus(id, conversation).catch(() => undefined);
+          if (latest && here()) {
+            opening = false;
+            update(latest);
+          }
+        }
       }
     }
-    finally { opening = false; if (current === generation) draw(); }
+    finally { if (current === generation) { opening = false; draw(); } }
   }
   function parkFrame(): void {
     const destination = panel.querySelector<HTMLElement>('.desktop-screen')!;
@@ -565,6 +586,9 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     if (waking && next.state !== 'stopped' && next.state !== 'missing') waking = false;
     state = maintenance?.member === member() ? { ...next, lifecycle: maintenance.phase } : waking ? { ...next, lifecycle: 'waking' } : next;
     stateMember = member();
+    if (next.error && !['docker_missing', 'docker_stopped', 'disabled'].includes(next.error) && !maintenance && !waking &&
+        stateProblem !== next.error) reportProblem("show the screen", next);
+    stateProblem = next.error;
     if (pending() && next.transport !== "host") lastFrames.delete(member());
     // A lease the core no longer gives this view (handed back, idle, replaced) is not input: the screen goes view-only.
     if (interactive && state.control !== 'owner') { interactive = false; send(false); }
@@ -582,28 +606,39 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
    *  it is shown or synced: the old stream is closed, never renewed or painted for the new member. */
   const foreign = (): boolean => !!session && streamMember !== member() || stateMember !== undefined && stateMember !== member();
   let pollDelay = 2000;
+  let stateProblem: string | undefined;
   const pollGate = visibilityGate(() => { clearTimeout(timer); void poll(); }, () => host.isConnected && (visible || !!session));
   async function poll(): Promise<void> {
     if ((!visible && !session) || loading || (changing && session) || !windowVisible()) return;
     // A lingering stream of the member open before a switch is never renewed as the new member's.
     if (foreign()) { refreshPanel(); return; }
     loading = true;
-    const current = generation, id = member();
+    let current = generation;
+    const id = member(), conversation = options.conversation(), opened = session;
+    const here = () => (visible || session) && current === generation && id === member() && conversation === options.conversation();
     try {
       // The core renews a connected lease from the authenticated socket and live work metadata.
-      const next = session ? await api.desktopRenew(session.session) : await api.desktopStatus(id, options.conversation());
-      if ((visible || session) && current === generation && id === member()) {
+      const next = opened ? await api.desktopRenew(opened.session).catch(async error => {
+        if (!here()) throw error;
+        closeStream(); current = generation;
+        return api.desktopStatus(id, conversation);
+      }) : await api.desktopStatus(id, conversation);
+      if (here()) {
         pollDelay = JSON.stringify(next) === JSON.stringify(state) ? Math.min(10_000, pollDelay * 2) : 2000;
         update(next);
         void checkDocker();
       }
     } catch {
-      if (current === generation) { closeStream(); state = { state:'unavailable', ready:false, control:'member' }; draw(); }
+      if (here()) {
+        closeStream();
+        reportProblem("show the screen");
+        update({ transport: state?.transport, state: state?.transport === 'host' ? 'absent' : 'unavailable', ready:false, control:'member' });
+      }
     } finally { loading = false; if (visible || session) { clearTimeout(timer); timer = setTimeout(pollGate.run, pollDelay); } }
   }
   async function control(held: boolean, pointer?: { x:number; y:number }, answerRequest = true): Promise<boolean> {
     if (!session || changing || held && !connected) return false;
-    changing = true; error.hidden = true; clearTimeout(takeTimer);
+    changing = true; notice.hidden = true; clearTimeout(takeTimer);
     // A renewal started before this click must not overwrite the new lease state.
     const current = ++generation, opened = session, request = answerRequest ? pending()?.request_id : undefined;
     if (held) { clickedAt = performance.now(); delete panel.dataset.controlLatencyMs; delete panel.dataset.acceptedInputLatencyMs; }
@@ -618,14 +653,14 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     } catch {
       if (current === generation) {
         if (!held && state?.control === 'owner') send(true);
-        showNotice(t('desktop.busy'));
+        reportProblem("pass control through the viewer");
         cardFailure(options.timeline.querySelector('.desktop-takeover-card, .computer-card'), () => { if (held) void control(true); else void handback(); }, undefined, t(held ? 'memberComputer.takeFailed' : 'memberComputer.returnFailed'));
       }
       return false;
     } finally { changing = false; if (current === generation) draw(); }
   }
   /** The core gave the lease but the screen never took the owner's input: give the lease back without counting it as
-   *  done (no request id), say so under the screen, and watch again, where Take control tries once more. */
+   *  done (no request id) and watch again, where Take control tries once more. */
   async function takeFailed(opened: DesktopSession): Promise<void> {
     clearTimeout(takeTimer);
     const current = ++generation;
@@ -635,9 +670,8 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
       if (current === generation && session === opened) update(next);
     } catch { /* the next renewal says who holds it */ }
     if (current !== generation || session !== opened) return;
-    if (state) state = { ...state, control: 'member' };
     if (panel.hasAttribute('data-expanded')) { watching = true; document.documentElement.setAttribute('data-desktop-watch', ''); }
-    showNotice(t('desktop.takeFailed'));
+    reportProblem("pass control through the viewer");
     draw();
   }
   const expand = (on: boolean): void => {
@@ -714,7 +748,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     const action = demonstration ? ['recording','full'].includes(demonstration.state) ? 'stop' : demonstration.state === 'draft' ? 'read' : 'draft' : 'start';
     if (action === 'start' && !opened) return;
     const current = ++generation;
-    teachingBusy = true; drafting = action === 'stop' || action === 'draft'; error.hidden = true;
+    teachingBusy = true; drafting = action === 'stop' || action === 'draft'; notice.hidden = true;
     if (action === 'stop' && demonstration) { demonstration = {...demonstration,state:'stopped'}; interactive = false; send(false); if (state) state = {...state,control:'member'}; }
     draw();
     void (async () => {
@@ -727,7 +761,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
       } catch {
         if (current !== generation) return;
         if (action === 'stop' && demonstration) { demonstration = {...demonstration,state:'stopped'}; interactive = false; send(false); if (state) state = {...state,control:'member'}; }
-        showNotice(t('teach.failed'));
+        reportProblem("complete a demonstration");
       }
       finally { if (current === generation) { teachingBusy = drafting = false; draw(); } }
     })();
@@ -735,7 +769,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   discardTeach.addEventListener('click', () => {
     if (teachingBusy && !drafting) return;
     teachingBusy = true; drafting = false; draw();
-    void discardRecording().catch(() => { showNotice(t('teach.failed')); }).finally(() => { teachingBusy = false; draw(); });
+    void discardRecording().catch(() => { reportProblem("complete a demonstration"); }).finally(() => { teachingBusy = false; draw(); });
   });
   tryHost.querySelector('button')!.addEventListener('click', () => {
     const value = tryInput.value.trim();
@@ -788,9 +822,6 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   action.addEventListener('click', () => { void (pending() ? handback() : release()); });
   options.timeline.addEventListener('click', event => {
     const target = event.target as Element;
-    if (state?.transport === "host" && target.closest('[data-desktop-work] [data-card-failed-close]')) {
-      queueMicrotask(() => { if (!active()) leave(); draw(); });
-    }
     const button = target.closest<HTMLButtonElement>('[data-card-desktop]');
     if (!button || button.disabled) return;
     // A sign-in is no work for a small picture: the
@@ -808,8 +839,8 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     const id = member(), current = generation, capturedHost = state.host ?? '';
     opening = true; state = {...state, lifecycle:'waking'}; draw();
     void api.core<DesktopState>('computer.viewer_status', {member_id:id, start_docker:true, host:capturedHost})
-      .then(next => { if (id === member() && current === generation) { update(next); showNotice(t('desktop.dockerReady'), true); } })
-      .catch(() => { if (id === member() && current === generation) { if (state) state = {...state, lifecycle:undefined}; showNotice(t('desktop.dockerStartFailed')); } })
+      .then(next => { if (id === member() && current === generation) { update(next); showNotice(t('desktop.dockerReady')); } })
+      .catch(() => { if (id === member() && current === generation) { if (state) state = {...state, lifecycle:undefined}; reportProblem("show the screen"); } })
       .finally(() => { if (current === generation) { opening = false; draw(); } });
   });
   panel.querySelector('[data-desktop="menu"]')!.addEventListener('click', event => openActions(event.currentTarget as HTMLElement, [
@@ -833,7 +864,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   function refreshPanel(): void {
     // Back to the conversation whose stream is still open: nothing to reconnect.
     if (session && streamMember === member() && streamConversation === options.conversation()) { clearTimeout(lingering); draw(); return; }
-    closeStream(); requested = undefined; opening = false; error.hidden = true; error.setAttribute('role', 'alert'); suspended = false; pollDelay = 2000; clearReview(); demonstration = undefined; skillName = ''; teachingBusy = drafting = waking = false; state = undefined; stateMember = undefined; timeline.clear(); clearTimeout(timer); draw(); if (visible) void poll();
+    closeStream(); requested = undefined; opening = false; notice.hidden = true; suspended = false; pollDelay = 2000; clearReview(); demonstration = undefined; skillName = ''; teachingBusy = drafting = waking = false; state = undefined; stateMember = undefined; stateProblem = undefined; timeline.clear(); clearTimeout(timer); draw(); if (visible) void poll();
   }
   return {
     show() { if (foreign()) refreshPanel(); if (options.panelVisible()) void location.refresh().then(draw); visible = true; suspended = false; pollDelay = 2000; clearTimeout(lingering); clearTimeout(timer); readWallpaper(); void poll(); },

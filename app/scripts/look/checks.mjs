@@ -1031,8 +1031,8 @@ export function checkRendered(name, context = {}) {
     } else if (name === 'member-panel-docker-start') {
       const calls = window.__look.calls.filter(call => call.params?.start_docker);
       require(calls.length === 1 && calls[0].params.host === '' && calls[0].params.member_id === 1, 'one explicit press starts only the captured local engine');
-      require(panel.querySelector('.desktop-error').getAttribute('role') === 'status', 'engine readiness is a status notice');
-      require(panel.querySelector('.desktop-error').textContent === 'Docker Desktop 已準備好', 'engine readiness is reported beside its screen');
+      require(panel.querySelector('.desktop-notice').getAttribute('role') === 'status', 'engine readiness is a status notice');
+      require(panel.querySelector('.desktop-notice').textContent === 'Docker Desktop 已準備好', 'engine readiness is reported beside its screen');
     } else if (name === 'member-panel-remote-location') {
       require(visible(document.querySelector('.computer-location-popover')), 'recovery opens the existing location control');
     } else if (name === 'member-panel-location-hover') {
@@ -1083,7 +1083,7 @@ export function checkRendered(name, context = {}) {
     require(caption.getBoundingClientRect().right <= screen.getBoundingClientRect().right + 1 && caption.getBoundingClientRect().left >= screen.getBoundingClientRect().left - 1, 'the line is no wider than the screen');
     requireBareScreen(screen);
     require(!visible(panel.querySelector('[data-desktop="enlarge"]')), 'a computer being updated is not pressable');
-    require(!visible(panel.querySelector('.desktop-error')) && !visible(panel.querySelector('.computer-lifecycle-state')), 'no notice and no header word');
+    require(!visible(panel.querySelector('.desktop-notice')) && !visible(panel.querySelector('.computer-lifecycle-state')), 'no notice and no header word');
     return {check:name};
   }
   if (name === "app-attachment-count") {
@@ -1386,7 +1386,7 @@ export function checkRendered(name, context = {}) {
     require(panel.dataset.desktopState === 'member', `the computer is the member's again (${panel.dataset.desktopState})`);
     require(calls.filter(call => call.method === 'computer.viewer_control' && call.params.held === false).length === 1 && !calls.some(call => call.method === 'computer.viewer_close'), 'one release and no closed stream');
     require(calls.filter(call => call.method === 'computer.viewer_open' && call.params.member_id === 1).length === 1, 'the same stream, never reopened');
-    require(!visible(panel.querySelector('.desktop-error')), 'nothing is said about it');
+    require(!visible(panel.querySelector('.desktop-notice')), 'nothing is said about it');
     return {check: name};
   }
   // R-COMP-PREVIEW-01: a running computer's preview is its screen, never a black frame with only Open.
@@ -1432,7 +1432,7 @@ export function checkRendered(name, context = {}) {
         require(panel.dataset.desktopState === 'owner', `the core still keeps the lease of the earlier take-over (${panel.dataset.desktopState})`);
         require(calls.filter(call => call.method === 'computer.viewer_control' && call.params.held === true).length === 1
           && calls.filter(call => call.method === 'computer.viewer_control' && call.params.held === false).length === 1, 'one earlier take and one failed give-back');
-        require(visible(panel.querySelector('.desktop-error')), 'the failed take says so under the screen');
+        require(!visible(panel.querySelector('.desktop-notice')), 'the failed take leaves the panel quiet');
       }
       // The work is stopped from the conversation; the larger view has no Stop of its own.
       require(!panel.querySelector('[data-desktop="stop"]'), 'the larger view has no Stop of the work');
@@ -2898,8 +2898,8 @@ export function checkRendered(name, context = {}) {
       require(actions.includes('stop') && !actions.includes('save'), 'the draft is not saved automatically');
       require(editor.value.includes('Unsaved sample procedure') && !actions.includes('read'), 'Back preserves the unsaved editor without fetching over it');
     } else if (name === 'teach-failed') {
-      const notice = panel.querySelector('.desktop-error');
-      require(visible(notice) && notice.getAttribute('role') === 'alert' && notice.textContent.startsWith('示範未完成'), 'the failure is said in one line');
+      const notice = panel.querySelector('.desktop-notice');
+      require(!visible(notice), 'the failure adds no words under the screen');
       require(panel.querySelector('[data-desktop="teach"]').textContent === '審閱示範' && visible(panel.querySelector('[data-desktop="discard-teach"]')), 'review and discard stay offered');
       require(actions.includes('stop') && !actions.includes('save'), 'a failed draft publishes nothing');
     } else if (name === 'teach-discard') {
@@ -3095,9 +3095,6 @@ export function checkRendered(name, context = {}) {
       } else if (card.matches('[data-owner-question][data-card-state="answered"]') && card.querySelector('.question-answer-line')) {
         // An answered question is its title and one row: the check at the row's right says what a pill said.
         require(!pill && !card.querySelector(':scope > .card-head > .card-close'), 'an answered question has no pill and no ×');
-      } else if (card.matches('[data-desktop-settled]')) {
-        // A settled handoff is its title and one word of what the owner did (R-COMP-HANDOFF-01); a settled result carries no status pill (R-CARD-15).
-        require(!pill && card.querySelector('.card-body')?.textContent.trim(), 'a settled handoff has no pill and says what the owner did');
       } else if (card.matches('[data-member-template],[data-template-connection][data-connected="false"]')) {
         require(!pill, 'a template and its unconnected requests have no invented status');
       } else {
@@ -4600,7 +4597,7 @@ export function checkRendered(name, context = {}) {
     require(faces.every(face => face.naturalWidth === 192 && face.naturalHeight === 192), "owner photo is bounded to 192px");
     return {check:name, faces:faces.length};
   }
-  if (name.startsWith("computer-") || ['desktop-owner','desktop-handback','desktop-viewer','desktop-offline','desktop-absent'].includes(name)) {
+  if (name.startsWith("computer-") && name !== "computer-panel-quiet" || ['desktop-owner','desktop-handback','desktop-viewer','desktop-offline','desktop-absent'].includes(name)) {
     const panel=document.querySelector('.desktop-panel'), frame=document.querySelector('iframe[data-desktop-stream]'), calls=window.__look.calls;
     if(name==='desktop-absent'){
       // Absent Docker is a bare wallpaper: no reason, no download button; the screen is the press.
@@ -4619,7 +4616,7 @@ export function checkRendered(name, context = {}) {
     const events=document.querySelectorAll('[data-desktop-work]');
     // A member working at its computer adds nothing to the conversation; only a handoff the owner must act on is a card.
     if(name==='computer-panel')require(events.length===0&&!document.querySelector('.conversation-event-line [data-i="monitor"], [data-desktop-slot]:not(:empty)'),'a working computer draws no line or card in the conversation');
-    else if(name.startsWith('computer-'))require(events.length===1&&events[0].matches('.conversation-card')&&events[0].closest('.tn')?.dataset.id==='2','one work presentation belongs to the private turn');
+    else if(name.startsWith('computer-')&&name!=='computer-takeover-done')require(events.length===1&&events[0].matches('.conversation-card')&&events[0].closest('.tn')?.dataset.id==='2','one work presentation belongs to the private turn');
     if(name==='computer-takeover'){
       require(panel.querySelector('.desktop-request').textContent.includes('登入'),'request sits above the live screen');
       // R-PANEL-09: the handoff card is as wide as the
@@ -4641,13 +4638,8 @@ export function checkRendered(name, context = {}) {
     }
     if(name==='computer-takeover-done'){
       require(calls.filter(call=>call.method==='computer.viewer_control'&&!call.params.held&&call.params.takeover==='private-takeover-request').length===1,'one explicit handback with the current nonce');
-      // R-COMP-HANDOFF-01: the settled card says what the owner did, in one word of its own and no status pill, and its
-      // fold tells of the handoff, never of the work's live state (the conversation's presence line says that).
-      const settled=events[0];
-      require(settled.dataset.desktopSettled==='handed_back'&&!settled.querySelector('.card-status'),'the settled handoff card carries no status pill');
-      require(settled.querySelector('.card-body').textContent.trim()==='已交回','the settled handoff card says it was handed back');
-      const fold=settled.querySelector('.card-detail');
-      require(fold&&fold.textContent.trim()==='電腦已交還。'&&!/完成|正在使用電腦/.test(settled.textContent),'the fold tells of the handoff, not of the live state of the work or of a finish');
+      require(!events.length && !document.querySelector('.computer-card'), 'the computer handoff is gone');
+      require(!/已取消。|已交回|已略過/.test(document.querySelector('.tn[data-id="2"]').textContent), 'no app wording replaces it');
     }
     if(name==='computer-takeover-owner'||name==='desktop-owner'){
       require(panel.dataset.interactive==='true'&&getComputedStyle(frame).pointerEvents==='auto','click enables input in place');
@@ -4679,7 +4671,7 @@ export function checkRendered(name, context = {}) {
       if(['starting','building','preparing'].includes(panel.dataset.desktopState)) require(!visible(panel.querySelector('[data-desktop="enlarge"]')) && !panel.querySelector('progress, .desktop-preparation'), 'a computer that is getting ready is not pressable and writes no progress');
       else if (panel.dataset.desktopState === 'stopped') require(visible(panel.querySelector('[data-desktop="enlarge"][data-asleep]')), 'a sleeping screen wakes with a press on the screen itself');
       else require(visible(panel.querySelector('[data-desktop="enlarge"]')) && !panel.querySelector('[data-desktop="enlarge"]').hasAttribute('data-asleep'),'a failure is started again with a press on the screen itself');
-    }else require(visible(frame)||name==='computer-takeover-done','the active view streams the live screen or retains its settled card');
+    }else require(visible(frame)||name==='computer-takeover-done','the active view streams the live screen until handback');
     return {check:name};
   }
   if (name === "host-settings-layout") {
@@ -4786,7 +4778,7 @@ export function checkRendered(name, context = {}) {
     // A file dropped on the screen while only watching goes into the team folder, and one quiet line under it says where.
     const put = window.__look.calls.filter(call => call.method === "computer.viewer_put_file");
     require(put.length === 1 && put[0].params.name === "notes.txt" && put[0].params.stored_id, `one stored file is sent: ${JSON.stringify(put.map(call => call.params))}`);
-    const line = document.querySelector('.desktop-panel .desktop-error');
+    const line = document.querySelector('.desktop-panel .desktop-notice');
     require(visible(line) && line.getAttribute('role') === 'status', "the line is a quiet status, not an alert");
     require(line.textContent.trim() === "已放進電腦的 team 資料夾：notes.txt", `the line says where the file went: ${line.textContent}`);
     require(line.scrollWidth <= line.clientWidth + 1, "the line is not cut");
@@ -4887,7 +4879,7 @@ export function checkRendered(name, context = {}) {
     const win = image.ownerDocument.defaultView;
     require(win.getComputedStyle(image).objectFit === 'cover' && Math.abs(box.width / box.height - 1280 / 900) <= 0.015, 'the page fills the desktop aspect ratio');
     require(image.width === 1280 && image.height === 900 && Math.abs(box.width - win.innerWidth) <= 1 && Math.abs(box.height - win.innerHeight) <= 1, 'the canvas fills the iframe edge to edge');
-    require(!visible(frame.closest('.desktop-panel').querySelector('.desktop-error')), 'the panel has the same working page');
+    require(!visible(frame.closest('.desktop-panel').querySelector('.desktop-notice')), 'the panel has the same working page');
     return {check:name, width:box.width, height:box.height};
   }
   if (name === "desktop-frame") {
@@ -11491,6 +11483,36 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, app, state: card.dataset.cardState, words: said };
   }
+  if (name === "pc-handback" || name === "host-handoff-returned" || name === "host-handoff-skipped") {
+    const calls = window.__look.calls;
+    const turn = document.querySelector('.tn[data-id="140"]');
+    require(turn && !turn.querySelector('.computer-card') && !/已取消。|已交回|已略過/.test(turn.textContent), 'the handoff leaves no card or replacement words');
+    if (name === "pc-handback") {
+      const reply = document.querySelector('.tn[data-id="141"]');
+      require(reply && !reply.querySelector('.owner-message, [data-resumed]'), 'resumption adds neither an owner bubble nor an app line');
+      require([...reply.querySelectorAll('.message-text')].some(text => visible(text) && text.textContent.includes("YT-4F2A")), 'the member reply remains');
+      require(calls.filter(call => call.method === "integrations.card_done").length === 1, 'Done was pressed once');
+    } else if (name === "host-handoff-returned") {
+      require(calls.filter(call => call.method === "computer.viewer_control" && !call.params.held && call.params.takeover === "card-pc").length === 1, 'Chrome handback releases the exact request once');
+    } else {
+      require(calls.filter(call => call.method === "integrations.card_stop").length === 1, 'Skip ends the request once');
+    }
+    return {check:name};
+  }
+  if (name === "computer-panel-quiet") {
+    const panel = document.querySelector('.desktop-panel');
+    const words = shownText(panel);
+    const text = [...panel.querySelectorAll('*')].filter(node => visible(node) && [...node.childNodes].some(child => child.nodeType === 3 && child.textContent.trim()));
+    const isRed = value => {
+      const [r, g, b] = (value.match(/[\d.]+/g) ?? []).map(Number);
+      return r > 80 && r > g * 1.35 && r > b * 1.25;
+    };
+    require(visible(panel) && visible(panel.querySelector('.desktop-wallpaper')) && !visible(panel.querySelector('iframe')), 'the computer keeps its wallpaper with no live frame');
+    require(panel.querySelector('[data-computer-state-text]')?.textContent === '待命', 'the header says Idle');
+    require(!/無法|失敗|不可用|再試/.test(words) && !text.some(node => isRed(getComputedStyle(node).color)), 'the panel has no failure words or red text');
+    require(![...panel.querySelectorAll('[role="alert"]')].some(visible), 'the panel has no alert');
+    return {check:name};
+  }
   if (name.startsWith("secret-") || name.startsWith("pc-")) {
     // The cards of a key (secret-card.ts) and of the owner's turn at the computer (computer-card.ts) are connector cards with a
     // second row: all inside the reply column, below the reply that asked, with real framed buttons inside the card.
@@ -11557,20 +11579,7 @@ export function checkRendered(name, context = {}) {
         require(calls.filter(call => call.method === "integrations.card_done").length === 1 && !calls.some(call => call.method === "integrations.card_stop"), "我完成了 was pressed once, 停止 never");
         require(!document.querySelector('[data-resumed]'), "the task did not resume");
       }
-      if (name === "pc-handback") {
-        require(card.dataset.cardState === "done" && card.querySelector(".card-detail[hidden]")?.textContent.includes("已交還控制 · 工作已繼續") && visible(card.querySelector('.card-status.is-done')), `the card says control went back and the task continued: "${state}"`);
-        require(!card.querySelector("[data-act^=card-]"), "no action is left, and the owner no longer controls");
-        // The calm thread keeps one centred line for the resumption.
-        const line = eventLines(1).at(-1), resumed = document.querySelector('.tn[data-id="141"]');
-        require(line.textContent === "電腦 已交還控制，繼續原本的工作", `the resumed task opens with one line: ${line.textContent}`);
-        const markBox = line.querySelector('svg.i').getBoundingClientRect();
-        require(markBox.width <= 20 && markBox.height <= 20, `the line's icon is no larger than the other lines' (${markBox.width}x${markBox.height})`);
-        require(line.getBoundingClientRect().top >= box.bottom, "the resumed task comes after the card");
-        require(!resumed.querySelector('.owner-message'), "the owner's request is not repeated as a new bubble");
-        require([...resumed.querySelectorAll('.message-text')].some(text => visible(text) && text.textContent.includes("YT-4F2A")), "the resumed task's answer is shown");
-        require(calls.filter(call => call.method === "integrations.card_done").length === 1, "我完成了 was pressed once");
-        plainWords();
-      }
+
     }
     return { check: name, state: card.dataset.cardState, words: state };
   }

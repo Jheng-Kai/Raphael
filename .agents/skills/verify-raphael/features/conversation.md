@@ -1457,10 +1457,9 @@ with the hand-off line: it pauses and the turn shows 電腦 · 你正在控制 w
 watch on the owner's input are down) and asks the shell for no look, step or key, and the owner's own input ends
 nothing. 我完成了 (`integrations.card_done`) answers at once and gives the computer back, once: the run looks at the
 windows again, checks that the form is gone (once; when it is still there the card says 看起來還沒完成，請再試一次 and the
-computer stays the owner's), and carries on with the same task, repeating nothing. When the run ends the task
-resumes once in its thread, opening with 電腦 已交還控制，繼續原本的工作. 停止 (`integrations.card_stop`), Stop, a newer
+computer stays the owner's), and carries on with the same task, repeating nothing. When the run resumes in its thread, the card leaves and the member's messages remain. 停止 (`integrations.card_stop`), Stop, a newer
 computer task, the time (30 minutes) and closing end the run; a replayed 我完成了, the app closing or the core
-restarting (the card is 連線中斷) never resume it or give control back by themselves. Spoken, quick and room runs keep
+restarting (the stale card is gone) never resume it or give control back by themselves. Spoken, quick and room runs keep
 the hand-off line. A step that needs a yes after the owner gave the computer back asks in a permission card (below).
 
 ```powershell
@@ -3306,12 +3305,12 @@ stopped): the rules that made `.ans.progress` and the replies of a failed turn a
 The look check `message-text-colour` measures the real messages on screen and a message of each kind under a turn of each state drawn into
 the same thread, in both themes.
 
-A computer handoff the owner has settled folds to its title and one word naming what was done with the computer, 「已交回」 (or 「已略過」 when the owner skipped it
-and the work stopped), with no status pill, and its fold says 「電腦已交還。」 (or that the computer work stopped); never 「完成」
-and never the work's live state (R-COMP-HANDOFF-01, R-CARD-15). `computer-takeover-done` checks it after `card-computer-handback`.
+A computer handoff card exists only while the member waits for the owner. Done, Skip,
+expiry and other request endings remove it from the conversation. The remaining replies
+come from the member (R-COMP-HANDOFF-01, R-CARD-15).
 
 ```powershell
-npm run look -- message-text-colour chat card-computer-handback card-sheet --theme both --width 1120,720,1920x1080
+npm run look -- message-text-colour chat card-computer-handback chat-handback desktop-host-handback desktop-host-skip-idle card-sheet --theme both --width 1120,720,1920x1080
 ```
 
 ## The composer's row gives way, and its emblem stays sharp (R-UI-160, R-UI-161)
