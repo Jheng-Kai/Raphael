@@ -13,6 +13,9 @@ export default [
   scene("skill-library-open", "The plugin name and round back button lead the page, with controls on their right. The source, description and equal one-line skill rows align with the back button.", [...opened, check("skill-library-open")]),
   scene("skill-library-skill-details", "A plugin skill's overflow reveals the full description", [
     ...opened, click('[data-skl="skill-more"][data-id="101"]'), click('[data-pick="details"]'), wait(".skl-details"), check("skill-library-skill-details")]),
+  scene("skill-library-refresh", "A package shows progress on its own page while its update is pending", [
+    ...opened, check("skill-library-open"), click('[data-skl="more"][data-key="set:1"]'), click('[data-pick="refresh"]'),
+    wait('.skl-refresh-status[role="status"]')], { skillRefreshPending: true }),
   scene("skill-library-back", "Enter opens a package low in a long library, and Esc returns to the list where it was left, the focus on that package's row", [
     ...list, scroll('[data-skl-pack="pack:37"]'), focus('[data-skl="open"][data-key="pack:37"]'), key("Enter"), wait('.skl-page[data-skl-page="pack:37"]'), check("skill-library-page-top"),
     key("Escape"), waitGone(".skl-page"), check("skill-library-back")], { skillPackages: true }),

@@ -12,6 +12,7 @@ import json
 import os
 import re
 import secrets
+import stat
 import threading
 import time
 from collections.abc import Iterator
@@ -130,12 +131,23 @@ class BotHomes:
         return self.root / "bot-state" / self.home(member_id).name
 
     def safe(self, path: Path) -> Path:
-        if not _unprefixed(path.resolve()).is_relative_to(self.root):
+        normalized = _unprefixed(path)
+        if not normalized.is_relative_to(self.root):
             raise HomeError("path escapes data directory")
-        for parent in (path, *path.parents):
-            if _unprefixed(parent) == self.root:
+        parts = normalized.relative_to(self.root).parts
+        if ".." in parts or (os.name == "nt" and any(part.endswith((".", " ")) or ":" in part for part in parts)):
+            raise HomeError("invalid data directory path")
+        # Walk from the trusted root without following links, including Windows junctions.
+        # A previously checked directory can be replaced, so never cache this authorization.
+        parent = Path(path.anchor)
+        for part in path.parts[1:]:
+            parent /= part
+            try:
+                info = parent.lstat()
+            except (FileNotFoundError, NotADirectoryError):
                 break
-            if parent.is_symlink() or (hasattr(parent, "is_junction") and parent.is_junction()):
+            junction = os.name == "nt" and info.st_reparse_tag == stat.IO_REPARSE_TAG_MOUNT_POINT
+            if stat.S_ISLNK(info.st_mode) or junction:
                 raise HomeError("linked paths are not writable")
         return path
 

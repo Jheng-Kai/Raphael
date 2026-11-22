@@ -30,10 +30,10 @@ type Face = Parameters<typeof faceHTML>[0];
 export interface SkillLibraryView {
   packages: LibraryPackage[]; members: LibraryMember[]; loaded: boolean; failed: boolean;
   /** The package whose page is open in the list's place, or null for the list. */
-  page: string | null; pasting: boolean; busy: boolean; error: string;
+  page: string | null; pasting: boolean; busy: boolean; refreshing: Set<string>; error: string;
 }
 export const emptySkillLibraryView = (): SkillLibraryView => ({
-  packages: [], members: [], loaded: false, failed: false, page: null, pasting: false, busy: false, error: "",
+  packages: [], members: [], loaded: false, failed: false, page: null, pasting: false, busy: false, refreshing: new Set(), error: "",
 });
 
 /** The causes the core names (the `MemberError` kind that leads its message, members/service.py `_library_error`), in
@@ -56,11 +56,13 @@ export function accessText(access: Access, members: LibraryMember[]): string {
 
 /** A package's controls, the same on its row and on its page: who may use it, its switch and its ⋯. */
 function controlsHTML(p: LibraryPackage, v: SkillLibraryView): string {
+  const busy = v.refreshing.has(p.key) ? " disabled" : "";
   return `<div class="ctl">` +
-    `<button type="button" class="sel skl-access" data-skl="access" data-key="${esc(p.key)}" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(t("vault.access"))}">` +
+    (busy ? `<span class="d skl-refresh-status" role="status">${esc(t("desktop.updating"))}</span>` : "") +
+    `<button type="button" class="sel skl-access" data-skl="access" data-key="${esc(p.key)}" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(t("vault.access"))}"${busy}>` +
     `<span>${esc(accessText(p.access, v.members))}</span>${ico("down")}</button>` +
-    tg(p.enabled, `${t("members.profile.enable")} ${p.name}`, ` data-skl="toggle" data-key="${esc(p.key)}"`) +
-    iconBtn("more", t("members.more", { p0: p.name }), ` data-skl="more" data-key="${esc(p.key)}" aria-haspopup="menu" aria-expanded="false"`) +
+    tg(p.enabled, `${t("members.profile.enable")} ${p.name}`, ` data-skl="toggle" data-key="${esc(p.key)}"${busy}`) +
+    iconBtn("more", t("members.more", { p0: p.name }), ` data-skl="more" data-key="${esc(p.key)}" aria-haspopup="menu" aria-expanded="false"${busy}`) +
     `</div>`;
 }
 
@@ -90,9 +92,9 @@ function libraryRowHTML(className: string, attrs: string, label: string, control
   return `<div class="row skl-entry ${className}" ${attrs}>${label}${controls}</div>`;
 }
 
-function pluginSkillHTML(p: LibraryPackage, skill: LibrarySkill): string {
+function pluginSkillHTML(p: LibraryPackage, skill: LibrarySkill, v: SkillLibraryView): string {
   const attrs = ` data-key="${esc(p.key)}" data-id="${skill.id}"`;
-  const toggle = tg(skill.enabled, `${t("members.profile.enable")} ${skill.name}`, ` data-skl="skill"${attrs}${p.enabled ? "" : " disabled"}`);
+  const toggle = tg(skill.enabled, `${t("members.profile.enable")} ${skill.name}`, ` data-skl="skill"${attrs}${p.enabled && !v.refreshing.has(p.key) ? "" : " disabled"}`);
   const more = skill.description
     ? iconBtn("more", t("members.more", { p0: skill.name }), ` data-skl="skill-more"${attrs} aria-haspopup="menu" aria-expanded="false"`)
     : "";
@@ -112,7 +114,7 @@ function packageSectionHTML(kind: "plugins" | "skills", packages: LibraryPackage
  * where it came from, then its skills, each with its own switch (off while the package is).
  */
 function packagePageHTML(p: LibraryPackage, v: SkillLibraryView, notice: string): string {
-  const skills = p.skills.map(skill => pluginSkillHTML(p, skill)).join("");
+  const skills = p.skills.map(skill => pluginSkillHTML(p, skill, v)).join("");
   const source = p.source ? `<p class="d skl-source">${esc(p.source)}${p.version ? ` · ${esc(p.version)}` : ""}</p>` : "";
   return `<section class="skl skl-page" data-skl-page="${esc(p.key)}" aria-labelledby="set-title">` +
     `<header class="row skl-page-head skl-pack" data-skl-pack="${esc(p.key)}">` +
@@ -204,6 +206,13 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
     catch (error) { toaster.info(failureText(error)); await load(); return; }
     redraw();
   };
+  const refresh = async (key: string): Promise<void> => {
+    state.refreshing.add(key);
+    redraw();
+    try { replace((await core<{ package: LibraryPackage }>("skills.library.update", { key, refresh: true })).package); }
+    catch (error) { toaster.info(failureText(error)); }
+    finally { state.refreshing.delete(key); redraw(); }
+  };
   const bring = async (params: Record<string, unknown>): Promise<void> => {
     state.busy = true; state.error = ""; redraw();
     try {
@@ -294,9 +303,7 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
       { id: "delete", label: t("skillLib.remove"), icon: "trash", ask: t("skillLib.removeAsk") },
     ], picked => {
       if (picked === "details") showDetails(anchor, p.name, descriptionOf(p));
-      else if (picked === "refresh") void core<{ package: LibraryPackage }>("skills.library.update", { key, refresh: true })
-        .then(result => { replace(result.package); redraw(); })
-        .catch(error => toaster.info(failureText(error)));
+      else if (picked === "refresh") void refresh(key);
       else void core("skills.library.delete", { key })
         .then(() => {
           state.packages = state.packages.filter(other => other.key !== key);

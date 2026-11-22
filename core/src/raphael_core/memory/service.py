@@ -595,7 +595,7 @@ class MemoryService(Growth):
                 await asyncio.sleep(delay_ms / 1000)
                 continue
             try:
-                pruned = self.homes.prune_journals(now_ms / 1000)
+                pruned = await asyncio.to_thread(self.homes.prune_journals, now_ms / 1000)
                 self._set_state(_JOURNALS_PRUNED, self._now_ms())
                 if pruned:
                     logger.info("Removed %d memory revisions older than %d days", pruned, JOURNAL_KEEP_S // 86_400)

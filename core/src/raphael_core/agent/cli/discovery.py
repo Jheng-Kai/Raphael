@@ -372,10 +372,10 @@ class CliBrains:
 
     async def _one(self, name):
         command = await asyncio.to_thread(self.command, name)
-        logged_in = self.logged_in(name) if command else False
+        logged_in = await asyncio.to_thread(self.logged_in, name) if command else False
         disconnected = self.disconnected(name)
         available = cli_available(command, logged_in, disconnected)
-        models = self._known_models(name) if available else []
+        models = await asyncio.to_thread(self._known_models, name) if available else []
         item = {"id": name, "name": NAMES[name], "installed": bool(command),
                 "logged_in": logged_in, "disconnected": disconnected, "available": available,
                 "login_command": LOGIN[name], "models": models,
