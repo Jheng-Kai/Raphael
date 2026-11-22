@@ -48,12 +48,12 @@ def linked(path):
     return path.is_symlink() or (hasattr(path, "is_junction") and path.is_junction())
 
 
-def package(folder, *, installed=False):
+def package(folder, *, installed=False, cached=False):
     """Take one bounded snapshot, copying only verified files and in-folder file aliases."""
     from .skill_sources import folder_snapshot
 
     try:
-        files = folder_snapshot(folder, installed=installed, skill_links=True).finish()
+        files = folder_snapshot(folder, installed=installed, skill_links=True, cached=cached).finish()
     except OSError as error:
         raise MemberError("not_found", "skill files are unavailable") from error
     return files

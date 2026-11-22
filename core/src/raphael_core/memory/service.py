@@ -71,7 +71,7 @@ from ..router import Router as RpcRouter
 from . import legacy
 from .conversation import SUMMARY_PURPOSE, Conversation
 from .reflection import FULL_FROM, MAX_TURNS, Applied, Edit, Reflector, about_the_owner
-from .store import UNCONFIRMED, MemoryFile, MemorySnapshot, is_unconfirmed, owner_stated, relation, told_stamp
+from .store import ENTRY_DELIMITER, UNCONFIRMED, MemoryFile, MemorySnapshot, is_unconfirmed, owner_stated, relation, told_stamp
 from .growth import Growth
 
 logger = logging.getLogger(__name__)
@@ -167,6 +167,7 @@ class MemoryService(Growth):
         quiet_s: float = QUIET_S,
         start_delay_s: float = START_DELAY_S,
         notify: Callable[[str, dict], None] | None = None,
+        event_index=None,
     ) -> None:
         self.skill_review = None
         self._notify = notify
@@ -188,7 +189,7 @@ class MemoryService(Growth):
         self._owner_thread = threading.get_ident()
         self.shared = MemoryFile(self.homes, None, on_change=lambda: self._changed(0, "shared"), conn=conn, now_ms=now_ms, owner_thread=self._owner_thread)
         self._files: dict[int, MemoryFile] = {}
-        self._history = AgentHistory(conn, now_ms)
+        self._history = AgentHistory(conn, now_ms, event_index=event_index)
         self._settings = SettingsStore(conn)
         self._spend = SpendTracker(conn, now_ms, tz)
         self.conversation = Conversation(
@@ -382,15 +383,31 @@ class MemoryService(Growth):
         """The memory as a turn of `member_id` reads it, at the turn's start: USER.md and its own file;
         USER.md alone without a member (`SharedMemory`). It is text, so nothing the turn writes changes it,
         and the next turn reads what the files say then. A new turn may try a failed edit again."""
+        return self._snapshot_text(*self._snapshot_inputs(member_id))
+
+    async def snapshot_async(self, member_id: int | None = 0) -> MemorySnapshot:
+        # Capture entries and recall metadata on their SQLite connection's thread.
+        return await asyncio.to_thread(self._snapshot_text, *self._snapshot_inputs(member_id))
+
+    def _snapshot_inputs(self, member_id):
+        shared_entries = self.shared.entries()
+        self.shared.metadata.recalled(shared_entries)
         self.shared.reset_failures()
-        self.shared.metadata.recalled(self.shared.entries())
-        if member_id is None:
-            return MemorySnapshot(shared=self.shared.prompt_text(), own=None, shared_usage=self.shared.usage())
-        own = self.own(member_id)
-        own.metadata.recalled(own.entries())
-        own.reset_failures()
-        return MemorySnapshot(shared=self.shared.prompt_text(), own=own.prompt_text(),
-                              shared_usage=self.shared.usage(), own_usage=own.usage())
+        own = None if member_id is None else self.own(member_id)
+        own_entries = own.entries() if own is not None else []
+        if own is not None:
+            own.metadata.recalled(own_entries)
+            own.reset_failures()
+        return shared_entries, own, own_entries
+
+    def _snapshot_text(self, shared_entries, own, own_entries):
+        def usage(memory, entries):
+            return memory._usage(len(ENTRY_DELIMITER.join(entries)))
+
+        return MemorySnapshot(shared=self.shared._prompt_text(shared_entries),
+                              own=own._prompt_text(own_entries) if own is not None else None,
+                              shared_usage=usage(self.shared, shared_entries),
+                              own_usage=usage(own, own_entries) if own is not None else "")
 
     def shared_reader(self) -> "SharedMemory":
         """What a room's turn or work a colleague handed over may do with the memory."""
@@ -468,6 +485,14 @@ class MemoryService(Growth):
                 "DELETE FROM memory_state WHERE key = ? OR key LIKE ? OR key LIKE 'skills:%:through'",
                 (_REFLECTED, f"{_REFLECTED}:%"),
             )
+
+    async def search_async(self, query: str, **options) -> ToolResult:
+        try:
+            await self._history.wait_for_event_index()
+        except sqlite3.Error as exc:
+            logger.warning("Could not prepare the conversation index: %s", type(exc).__name__)
+            return ToolResult("history_search", False, None, "error")
+        return self.search(query, **options)
 
     def search(
         self,
@@ -965,8 +990,14 @@ class MemberMemory:
     def snapshot(self) -> MemorySnapshot:
         return self.memory.snapshot(self.member_id)
 
+    async def snapshot_async(self) -> MemorySnapshot:
+        return await self.memory.snapshot_async(self.member_id)
+
     def search(self, query: str, *, limit: int = 5, exclude: Sequence[int] = ()) -> ToolResult:
         return self.memory.search(query, limit=limit, exclude=exclude, member_id=self.member_id)
+
+    async def search_async(self, query: str, *, limit: int = 5, exclude: Sequence[int] = ()) -> ToolResult:
+        return await self.memory.search_async(query, limit=limit, exclude=exclude, member_id=self.member_id)
 
 
 @dataclass(frozen=True)
@@ -981,5 +1012,11 @@ class SharedMemory:
     def snapshot(self) -> MemorySnapshot:
         return self.memory.snapshot(None)
 
+    async def snapshot_async(self) -> MemorySnapshot:
+        return await self.memory.snapshot_async(None)
+
     def search(self, query: str, *, limit: int = 5, exclude: Sequence[int] = ()) -> ToolResult:
         return ToolResult("history_search", False, None, "blocked")
+
+    async def search_async(self, query: str, *, limit: int = 5, exclude: Sequence[int] = ()) -> ToolResult:
+        return self.search(query, limit=limit, exclude=exclude)

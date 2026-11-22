@@ -1,5 +1,6 @@
 """Bounded, redacted private tool transcripts, retrievable only through their turn's scope."""
 
+import asyncio
 import json
 import re
 import uuid
@@ -31,15 +32,35 @@ def safe_text(value, limit):
     return text if len(text) <= limit else text[:limit - 16] + "\n[truncated]"
 
 
+def _prepare(arguments, result):
+    return safe_text(arguments, ARGS_CHARS), safe_text(result, RESULT_CHARS)
+
+
+def _turn_exists(conn, turn_id):
+    return turn_id and conn.execute("SELECT 1 FROM agent_turns WHERE id=?", (turn_id,)).fetchone()
+
+
 def record(conn, turn_id, call_id, tool, arguments, result, *, ok, kind=None, external=False):
-    if not turn_id or not conn.execute("SELECT 1 FROM agent_turns WHERE id=?", (turn_id,)).fetchone():
+    if _turn_exists(conn, turn_id):
+        _write(conn, turn_id, call_id, tool, _prepare(arguments, result), ok, kind, external)
+
+
+async def record_async(conn, turn_id, call_id, tool, arguments, result, *, ok, kind=None, external=False):
+    if not _turn_exists(conn, turn_id):
         return
+    prepared = await asyncio.to_thread(_prepare, arguments, result)
+    # A clear may have removed the turn while the redaction was running.
+    if _turn_exists(conn, turn_id):
+        _write(conn, turn_id, call_id, tool, prepared, ok, kind, external)
+
+
+def _write(conn, turn_id, call_id, tool, prepared, ok, kind, external):
     with conn:
         conn.execute("INSERT INTO turn_tool_events(turn_id,call_id,tool,redacted_args,redacted_result,outcome,external,created_at_ms) "
                      "VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(turn_id,call_id) DO UPDATE SET "
                      "redacted_result=excluded.redacted_result,outcome=excluded.outcome,external=excluded.external",
-                     (turn_id, call_id or uuid.uuid4().hex, str(tool)[:160], safe_text(arguments, ARGS_CHARS),
-                      safe_text(result, RESULT_CHARS), "ok" if ok else str(kind or "error")[:80], int(bool(external)), wall_clock_ms()))
+                     (turn_id, call_id or uuid.uuid4().hex, str(tool)[:160], *prepared,
+                      "ok" if ok else str(kind or "error")[:80], int(bool(external)), wall_clock_ms()))
         from ..agent.history import AgentHistory
         AgentHistory(conn).reindex(turn_id)
 

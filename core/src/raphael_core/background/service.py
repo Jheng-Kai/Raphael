@@ -1932,7 +1932,7 @@ class BackgroundService:
         # The generation the task was taken up at, not the one it has now: a Stop while it was being started (its member's
         # computer seated, its files read) raised it, and the run then ends before it begins (R-PUMP-02).
         run.generation = task.generation
-        from ..agent.actions import action_scope
+        from ..agent.actions import observed_action
         run.tool_allowed = lambda key: bool((current := self._speaker(task.member_id)) and current.uses_plugin(key))
         snapshot.tool_allowed = run.tool_allowed
         run.room_speech = task.scope == "room"
@@ -1944,7 +1944,7 @@ class BackgroundService:
                        if task.scope == "private" and task.routine_id is None and task.mode != "consult" else None)
         # A reply's short window is for the model's silence: a tool it waits on has a task's own (`TaskRun._call`).
         run.tool_seconds = self._limits.seconds
-        run.action = lambda name, arguments: action_scope(self._history, task.turn_id, language,
+        run.action = lambda name, arguments: observed_action(self._history, task.turn_id, language,
             snapshot.refs[name].name if name in snapshot.refs else name, arguments,
             server=snapshot.refs[name].server if name in snapshot.refs else None,
             changed=lambda: self._changed(task.id, RUNNING))
@@ -1988,7 +1988,7 @@ class BackgroundService:
             context,
             limits,
             self._earlier_attempt(task),
-            memory_snapshot=None if memory is None else memory.snapshot(),
+            memory_snapshot=None if memory is None else await memory.snapshot_async(),
             attachments=files,
             speaker=speaker,
             cli=room_cli,

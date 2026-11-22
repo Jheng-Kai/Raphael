@@ -264,24 +264,15 @@ class AgentHistory:
     """The `agent_turns` table. Use it on the thread that owns `conn`."""
 
     def __init__(
-        self, conn: sqlite3.Connection, now_ms: Callable[[], int] = wall_clock_ms
+        self, conn: sqlite3.Connection, now_ms: Callable[[], int] = wall_clock_ms, *, event_index=None
     ) -> None:
         self._conn = conn
         self._now_ms = now_ms
-        self._events_indexed = False
+        self._event_index = event_index
 
-    def _repair_event_index(self) -> None:
-        if self._events_indexed:
-            return
-        # Older indexes included transport keys. Repair only turns with structured receipts.
-        rows = self._conn.execute("SELECT DISTINCT t.id, t.question, t.text, t.detail FROM agent_turns t"
-                                  " JOIN agent_messages m ON m.turn_id=t.id WHERE m.kind='event'"
-                                  " AND ltrim(m.text) LIKE '{%'").fetchall()
-        if rows:
-            with self._conn:
-                for row in rows:
-                    self._index(row["id"], row["question"], row["text"], row["detail"])
-        self._events_indexed = True
+    async def wait_for_event_index(self) -> None:
+        if self._event_index is not None:
+            await self._event_index.wait()
 
     def add(
         self,
@@ -476,7 +467,7 @@ class AgentHistory:
                 found[turn.id] = turn
         return found
 
-    def add_message(self, turn_id: int, kind: str, text: str) -> None:
+    def add_message(self, turn_id: int, kind: str, text: str, *, action: bool = False) -> bool:
         """Commit one visible line immediately; cleared turns are never resurrected."""
         if kind not in ("progress", "reply", "event", "thinking", "media"):
             raise ValueError("unknown message kind")
@@ -487,10 +478,11 @@ class AgentHistory:
                 " WHERE turn_id = ? HAVING EXISTS (SELECT 1 FROM agent_turns WHERE id = ?)",
                 (turn_id, kind, text, self._now_ms(), turn_id, turn_id),
             )
-            if cursor.rowcount:
+            if cursor.rowcount and not action:
                 turn = self.get(turn_id)
                 if turn:
                     self._index(turn_id, turn.question, turn.text, turn.detail)
+        return bool(cursor.rowcount)
 
     def _with_messages(self, turns: list[Turn], *, omit_cards: Iterable[str] = ()) -> list[Turn]:
         saved = self.messages(turn.id for turn in turns if turn.id is not None)
@@ -758,7 +750,6 @@ class AgentHistory:
             limit = max(1, min(limit, most if most is not None else 2**63 - 1))
         if not words:
             return []
-        self._repair_event_index()
         where, params = _filters(since_ms, exclude, member_id, conversation_id)
         found = self._find(words, limit, where, params)
         if not found and any(len(word.pairs) > 1 for word in words):

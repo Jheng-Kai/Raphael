@@ -229,7 +229,7 @@ def test_the_worker_is_never_given_or_let_through_a_step_on_the_desktop(conn):
 class _Notes:
     """A memory with one entry, for the run's prompt."""
 
-    def snapshot(self, member_id=0):
+    async def snapshot_async(self, member_id=0):
         return "主人住在台北"
 
     def after_turn(self, member_id=0):

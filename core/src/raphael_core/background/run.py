@@ -774,15 +774,15 @@ class TaskRun:
             if longer > 0 and self._clock() < self.deadline:
                 self.touch(waiting=longer)
             try:
-                with self.action(name, arguments) as status:
+                async with self.action(name, arguments) as status:
                     from ..management import background_management
                     task = self._store.get(self.task_id)
                     with background_management(task.member_id if task else 0):
                         reply = await self._tool(name, arguments, call_id if isinstance(call_id, str) else "")
                     if task and task.turn_id:
-                        from ..memory.tool_events import record as record_tool_event
+                        from ..memory.tool_events import record_async as record_tool_event
                         ref = self.snapshot.refs.get(name)
-                        record_tool_event(self._store._conn, task.turn_id, call_id, name, arguments, reply.get("content", ""),
+                        await record_tool_event(self._store._conn, task.turn_id, call_id, name, arguments, reply.get("content", ""),
                                           ok=reply.get("ok", False), kind=reply.get("kind"),
                                           external=bool(ref and (ref.kind == MCP or ref.name in ("web_read", "web_search", "read_attachment"))))
                     if status is not None:
@@ -1076,8 +1076,9 @@ class TaskRun:
     async def answer_call(self, waiting: Waiting, approval: Approval | None, action: Action | None, *, expired: bool = False) -> str:
         from ..management import background_management
         task = self._store.get(self.task_id)
-        with self.action(waiting.alias, waiting.arguments) as status, background_management(task.member_id if task else 0):
-            return await self._answered_call(waiting, approval, action, status, expired=expired)
+        async with self.action(waiting.alias, waiting.arguments) as status:
+            with background_management(task.member_id if task else 0):
+                return await self._answered_call(waiting, approval, action, status, expired=expired)
 
     async def _answered_call(self, waiting: Waiting, approval: Approval | None, action: Action | None, status, *, expired: bool = False) -> str:
         """The call the task paused on, now that the owner answered: made with the yes (`approval`,
@@ -1311,7 +1312,7 @@ class TaskRun:
             if name == "read_attachment":
                 return await self._read_attachment(arguments)
             if name == "history_search":
-                return self._search_history(arguments)
+                return await self._search_history(arguments)
             if name in TEAM_TOOLS:
                 if self._team is None:
                     return ToolResult(name, False, None, "blocked")
@@ -1357,21 +1358,21 @@ class TaskRun:
             )
         )
 
-    def _search_history(self, arguments: dict) -> ToolResult:
+    async def _search_history(self, arguments: dict) -> ToolResult:
         """The past turns searched."""
         if self._memory is None:
             return ToolResult("history_search", False, None, "blocked")
         query = arguments.get("query")
         if not isinstance(query, str) or not query.strip():
             return ToolResult("history_search", False, None, "bad_arguments")
-        return self._memory.search(query.strip())
+        return await self._memory.search_async(query.strip())
 
 
 class MemoryReader(Protocol):
     """What a task may do with the memory (`memory.service.MemoryService`, or a member's
     `MemberMemory`): search its past turns; the growth tools, where it has them."""
 
-    def search(self, query: str, *, limit: int = 5, exclude: Sequence[int] = ()) -> ToolResult: ...
+    async def search_async(self, query: str, *, limit: int = 5, exclude: Sequence[int] = ()) -> ToolResult: ...
 
 
 # A team tool (`agent.team`) made for a task: its name and arguments to what came of it.
