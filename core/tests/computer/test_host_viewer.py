@@ -4,6 +4,7 @@ import asyncio
 import base64
 import json
 import os
+from contextlib import aclosing, asynccontextmanager
 from types import SimpleNamespace
 
 import httpx
@@ -64,6 +65,16 @@ async def expect_eventually(predicate):
     async with asyncio.timeout(5):
         while not predicate():
             await asyncio.sleep(0.01)
+
+
+@asynccontextmanager
+async def host_frames(client, base):
+    async with client.stream("GET", base + "host-frames") as feed:
+        assert feed.status_code == 200
+        # Like the canvas page's reader, keep the iterator alive while sending control and input requests.
+        # Finalizing a one-shot iterator closes the HTTP connection and releases the viewer's lease.
+        async with aclosing(feed.aiter_lines()) as lines:
+            yield lines
 
 
 async def test_a_renewed_panel_follows_the_active_transport_for_its_conversation(tmp_path):
@@ -157,8 +168,8 @@ async def test_host_viewer_streams_only_watched_member_tabs_and_acks_every_frame
             assert (await client.get(first["url"])).status_code == 200
             assert (await client.get(first["url"].replace("host.html", "vnc.html"))).status_code == 403
             assert not one.cast.watchers
-            async with client.stream("GET", first["url"].replace("host.html", "host-frames")) as feed:
-                frame = json.loads(await anext(feed.aiter_lines()))
+            async with host_frames(client, first["url"].removesuffix("host.html")) as lines:
+                frame = json.loads(await anext(lines))
                 assert base64.b64decode(frame["image"]).decode() == one.session
                 assert not two.cast.watchers
                 assert ("Page.screencastFrameAck", {"sessionId": 19}, one.session) in cdp.calls
@@ -196,14 +207,29 @@ async def test_host_viewer_gate_and_handback_use_the_same_tab(tmp_path):
             await viewer.open({**params, "preview": True})
         opened = await viewer.open(params)
         owner = {"session": opened["session"], "takeover": card.id}
-        url = opened["url"].replace("host.html", "host-input")
+        session = viewer.sessions[opened["session"]]
+        base = opened["url"].removesuffix("host.html")
+        url = base + "host-input"
         async with httpx.AsyncClient(trust_env=False, timeout=5) as client:
-            async with client.stream("GET", opened["url"].replace("host.html", "host-frames")) as feed:
-                lines = feed.aiter_lines()
+            assert not session.sockets
+            with pytest.raises(RpcError, match="desktop unavailable"):
+                await viewer.control({**owner, "held": True})
+            async with host_frames(client, base) as lines:
+                await anext(lines)
+                sockets = session.sockets.copy()
+                assert len(sockets) == 1
+                assert viewer.host_peers[next(iter(sockets))][1] is session
+                assert (await viewer.control({**owner, "held": True}))["control"] == "owner"
+                assert (await client.get(base + "control")).json() == {"held": True}
+            # An actual disconnect drops input authority. Only an explicit Done can resume the request.
+            await expect_eventually(lambda: not session.sockets and not viewer.owners)
+            assert not finished and not browser.held
+            async with host_frames(client, base) as lines:
                 await anext(lines)
                 text = {"type": "text", "text": "Sample"}
                 assert (await client.post(url, json=text, headers={"Origin": viewer.origin})).status_code == 403
                 assert (await viewer.control({**owner, "held": True}))["control"] == "owner"
+                assert (await client.get(base + "control")).json() == {"held": True}
                 assert browser.held == {tab.scope}
                 assert (await client.post(url, json=text, headers={"Origin": "http://example.invalid"})).status_code == 403
                 events = [
@@ -221,6 +247,9 @@ async def test_host_viewer_gate_and_handback_use_the_same_tab(tmp_path):
                 returned = await viewer.control({**owner, "held": False})
                 assert returned["control"] == "member" and "host_request" not in returned
                 assert finished == [card]
+                assert session.sockets and (await client.get(base + "control")).json() == {"held": False}
+                cdp.frame(tab.session)
+                assert base64.b64decode(json.loads(await anext(lines))["image"]).decode() == tab.session
                 assert [call[1]["type"] for call in cdp.calls if call[0].startswith("Input.dispatch")][-2:] == [
                     "keyUp", "mouseReleased"]
                 assert (await client.post(url, json=text, headers={"Origin": viewer.origin})).status_code == 403
@@ -284,8 +313,8 @@ async def test_native_chrome_sign_in_handback_releases_input_and_resumes_same_ta
             base = opened["url"].removesuffix("host.html")
             async with httpx.AsyncClient(trust_env=False, timeout=10) as client:
                 assert (await client.get(base + "host.html")).status_code == 200
-                async with client.stream("GET", base + "host-frames") as feed:
-                    frame = json.loads(await anext(feed.aiter_lines()))
+                async with host_frames(client, base) as lines:
+                    frame = json.loads(await anext(lines))
                     assert (frame["width"], frame["height"]) == (1280, 900)
                     assert (await viewer.control({**control, "held": True}))["control"] == "owner"
                     assert (await client.get(base + "control")).json() == {"held": True}
