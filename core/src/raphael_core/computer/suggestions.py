@@ -1,4 +1,4 @@
-"""Owner decisions on a member's offer to continue in the virtual machine."""
+"""Decisions on a member's offer to continue in the virtual machine."""
 
 import asyncio
 import logging
