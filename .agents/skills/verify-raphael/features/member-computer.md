@@ -26,9 +26,11 @@ separate site sign-ins. Docker on another host uses its own volumes.
 
 Opening a page opens the Computer tab on that same page. The page fills the rounded
 1280 × 900 frame. A takeover card appears only while a member waits for the owner for
-an owner-only step. Done releases input and resumes the original call on that tab.
+an owner-only step. The reason stays on the card, while the thread shows the member's own words.
+Done releases input and resumes the original call on that tab.
 Done, Skip and other request endings remove the card from the conversation.
-An idle browser and an unavailable VM keep their wallpaper without panel errors.
+A visible Computer tab reconnects when a stream or lease ends or the active target changes.
+An idle browser and an unavailable VM with no live target keep their wallpaper without panel errors.
 An unexpected failure reaches the active member as an internal note. Missing Docker
 keeps the action to ask Raphael for setup.
 The last watcher leaving stops the screencast. Shutdown closes relay connections
@@ -563,6 +565,12 @@ npm run look -- computer-member-switch desktop-panel desktop-return-stopped pane
 `seatMarks`, the fixture paints that seat's colour band), the owner goes to the calendar, opens member 2 in the sidebar, and
 the Computer tab streams seat 2: one iframe, seat 2's page and colour, no frame of seat 1 anywhere, member 1's session
 closed and never renewed after member 2 opened, member 2's own status read. Native, not run: two real running seats.
+
+The enlarged view keeps its own connected frame and lease while the owner visits a different member or page.
+Returning restores that conversation's view and input ownership. The Vitest checks drive the drawer's scrim,
+conversation, sidebar and header, then verify member switching, background renewal, lease loss and target replacement.
+`desktop-host-takeover` presses the title bar while Chrome is under the owner's control and checks
+that the same document, open count and close count are preserved.
 
 ## The disk notice names the disk that is full
 

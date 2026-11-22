@@ -32,12 +32,12 @@ async def rig(tmp_path, conn, monkeypatch):
     snapshot.refresh_computer(hub, 1)
     gate = ToolGate(hub)
 
-    async def call(name, arguments=None, *, turn=42, private=True, task_id=None):
+    async def call(name, arguments=None, *, turn=42, private=True, task_id=None, notice=None, progress=None):
         member = 0 if task_id else 1
         if task_id:
             await hub.prepare(member)
             snapshot.refresh_computer(hub, member)
-        with vm_scope(("turn", member, 11), turn_id=turn, private=private):
+        with vm_scope(("turn", member, 11), turn_id=turn, private=private, notice=notice, progress=progress):
             result = await gate.call_plugin(snapshot.refs["computer__" + name].key, arguments or {}, task_id=task_id)
             snapshot.refresh_computer(hub, 1)
             return result
@@ -58,10 +58,15 @@ async def waiting(vm, member=1):
 
 async def test_private_takeover_blocks_every_tool_and_resumes_once_after_explicit_done(rig):
     vm, viewer, call, snapshot = rig
-    task = asyncio.create_task(call("request_takeover", {"reason": "sign_in"}))
+    progress, notices = [], []
+    detail = "Sign in on the page."
+    task = asyncio.create_task(call("request_takeover", {"reason": "sign_in", "detail": detail},
+                                    notice=notices.append, progress=progress.append))
     work = await waiting(vm)
     try:
-        assert (await viewer.status({"member_id": 1, "conversation_id": 11}))["works"][0]["state"] == "waiting_control"
+        [card] = (await viewer.status({"member_id": 1, "conversation_id": 11}))["works"]
+        assert (card["state"], card["reason"], card["detail"]) == ("waiting_control", "sign_in", detail)
+        assert progress == notices == []
         assert "works" not in await viewer.status({"member_id": 0, "conversation_id": 11})
         assert "works" not in await viewer.status({"member_id": 1, "conversation_id": 12})
         snapshot.find("vault_entries fill_contact fill_card")
@@ -87,6 +92,7 @@ async def test_private_takeover_blocks_every_tool_and_resumes_once_after_explici
         await viewer.control({**opened, "held": False, "takeover": work.request_id})
         result = await task
         assert result.ok and json.loads(result.text)["status"] == "owner_finished"
+        assert progress == notices == []
         assert not vm.held
         with vm_scope(("turn", 1, 11), turn_id=42, private=True, task=asyncio.current_task()):
             work.task = asyncio.current_task()

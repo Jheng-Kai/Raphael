@@ -1306,8 +1306,12 @@ export function checkRendered(name, context = {}) {
   }
   if (name === 'desktop-stream') {
     const frame = document.querySelector('iframe[data-desktop-stream]');
-    require(visible(frame) && frame.contentDocument?.defaultView.__desktopConnections === 1, 'the existing viewer is connected before enlargement');
-    window.__look.desktopStream = { frame, document: frame.contentDocument, opens: window.__look.calls.filter(call => call.method === 'computer.viewer_open').length, closes: window.__look.calls.filter(call => call.method === 'computer.viewer_close').length };
+    const embedded = frame?.contentDocument, calls = window.__look.calls;
+    const connected = frame?.src.includes('transport=host') ? !!embedded?.querySelector('canvas') : embedded?.defaultView.__desktopConnections === 1;
+    require(visible(frame) && connected, 'the existing viewer is connected');
+    window.__look.desktopStream = { frame, document: embedded, opens: calls.filter(call => call.method === 'computer.viewer_open').length,
+      closes: calls.filter(call => call.method === 'computer.viewer_close').length,
+      drags: calls.filter(call => call.command === 'plugin:window|start_dragging').length };
     return {check:name};
   }
   // R-COMP-RELEASE-01: Stop only hands the computer back.
@@ -4797,6 +4801,17 @@ export function checkRendered(name, context = {}) {
   if (name === "desktop-host-no-card") {
     require(!document.querySelector('.page-agent [data-desktop-work], .page-agent [data-card-host-screen]'), 'work the member does on its own puts no computer card in the conversation');
     require(visible(document.querySelector('.mb-det .desktop-panel')), 'the Computer tab opened by itself');
+    return {check:name};
+  }
+  if (name === "desktop-host-outside-press") {
+    const panel = document.querySelector('.desktop-panel[data-expanded]');
+    const frame = panel?.querySelector('iframe:not([hidden])');
+    const before = window.__look.desktopStream, calls = window.__look.calls;
+    require(panel?.dataset.interactive === 'true' && visible(frame), 'the enlarged page still takes owner input');
+    require(before && before.frame === frame && before.document === frame?.contentDocument, 'the same browser document stays connected');
+    require(calls.filter(call => call.method === 'computer.viewer_open').length === before?.opens &&
+      calls.filter(call => call.method === 'computer.viewer_close').length === before?.closes, 'the outside press neither closes nor reopens the session');
+    require(calls.filter(call => call.command === 'plugin:window|start_dragging').length === before.drags + 1, 'the title bar received the outside press');
     return {check:name};
   }
   if (name === "desktop-host-frame") {

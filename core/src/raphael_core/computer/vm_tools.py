@@ -787,12 +787,10 @@ class VmTools:
         if host_key:
             if not self.vm.enabled:
                 return PluginResult(False, "blocked")
-            progress, language = _NOTE.get()
-            announce = _NOTICE.get() or progress
-            # Opening the browser is not news: the Computer tab shows the page, and the member says what it did.
+            # The Computer tab and the waiting card carry browser state and the reason for a handoff.
             result = await self.host_computer.call(
                 key, arguments, member=member, scope=scope, turn_id=turn_id, conversation_id=conversation_id, private=private,
-                approver=approver, language=language, announce=None, explain=announce)
+                approver=approver, language=_NOTE.get()[1], announce=None)
             if self.audit:
                 _, tool = self.host_computer.routes[key]
                 self.audit.add(server="computer", tool=tool.name, tier=tool.tier.name, approver=approver,

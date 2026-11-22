@@ -387,7 +387,9 @@ export function createAgent(app: AppContext, places?: {
   detailsScrim.setAttribute("aria-hidden", "true");
   // The press that closes the panel goes on to what it was over (R-UI-121).
   // The header button opened it, and is not pressed again by the press that closes it (R-UI-124).
-  detailsScrim.addEventListener("click", event => closeAndPress(event, detailsScrim, () => members.setDetails(false), conversationButton));
+  detailsScrim.addEventListener("click", event => {
+    if (!desktop.expanded()) closeAndPress(event, detailsScrim, () => members.setDetails(false), conversationButton);
+  });
   el.insertBefore(detailsScrim, members.details);
   if (members.detailsOpen()) el.dataset.det = "open";
   el.querySelector(".mb-head-l")!.append(members.picker);
@@ -516,7 +518,7 @@ export function createAgent(app: AppContext, places?: {
   }
 
   conversationButton.addEventListener("click", () => {
-    members.setDetails(!members.detailsOpen());
+    if (!desktop.expanded()) members.setDetails(!members.detailsOpen());
   });
   window.addEventListener("conversations-changed", (event) => {
     const member = (event as CustomEvent<number>).detail;
@@ -562,7 +564,7 @@ export function createAgent(app: AppContext, places?: {
     unreadFrom = null;
     unreadCaptured = false;
     openingThread = true;
-    // A member's private computer does not stay open behind a group.
+    // The room hides the private view and ends a plain preview.
     desktop.hide(true);
     el.classList.add("is-room"); memberChat.hidden = true;
     roomPane.el.querySelector(".room-picker")!.append(members.picker);
