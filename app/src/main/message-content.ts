@@ -185,6 +185,17 @@ function linkChipHTML(url: string, labelHTML: string | null, query: string): str
     `${labelHTML === null ? ` data-link-bare${local ? "" : " data-link-title"}` : ""} rel="noreferrer noopener">${siteMark(url)}<span class="link-name">${name}</span></a>`;
 }
 
+/**
+ * A markdown link's destination as CommonMark reads it: the <...> around it (how a path with spaces or backslashes is
+ * written) is dropped, and so is a title after it ("...", '...' or (...)). Every model writes these forms.
+ */
+export function linkDestination(raw: string): string {
+  const value = raw.trim();
+  const angled = /^<([^<>\n]*)>(?:\s+(?:"[^"]*"|'[^']*'|\([^()]*\)))?$/.exec(value);
+  if (angled) return angled[1].trim();
+  return value.replace(/\s+(?:"[^"]*"|'[^']*'|\([^()]*\))$/, "");
+}
+
 function inline(text: string, query: string, markdown: boolean, urls: Set<string>, depth = 0, mentions: readonly MentionTarget[] = [], files?: KnownFiles): string {
   let out = "", at = 0, plain = "";
   const flush = (): void => { out += mentions.length ? mentionsHTML(plain, mentions, words => highlightHTML(words, query)) : highlightHTML(plain, query); plain = ""; };
@@ -230,12 +241,19 @@ function inline(text: string, query: string, markdown: boolean, urls: Set<string
         let end = middle + 2, level = 1;
         for (; end < text.length && level; end++) { if (text[end] === "(") level++; if (text[end] === ")") level--; }
         if (!level) {
-          const target = text.slice(middle + 2, end - 1);
-          const html = link(target, text.slice(at + 1, middle));
+          const target = linkDestination(text.slice(middle + 2, end - 1));
+          const label = text.slice(at + 1, middle);
+          const html = link(target, label);
           if (html) { flush(); out += html; at = end; continue; }
-          if (isAttachmentLink(target)) { flush(); out += attachmentLinkHTML(target, text.slice(at + 1, middle), files, query); at = end; continue; }
-          // A file on a computer has no address to open: its path is what the owner can use, not the markdown around it.
-          if (/^(?:\/|[A-Za-z]:[\\/])/.test(target)) { flush(); out += pathHTML(target, query); at = end; continue; }
+          if (isAttachmentLink(target)) { flush(); out += attachmentLinkHTML(target, label, files, query); at = end; continue; }
+          // A file on a computer has no address to open: its words, then its path, which is what the owner can use, never the
+          // markdown around them (a member wrote [今天的課](<D:\...\lesson.html>), 2026-11-22).
+          if (/^(?:\/|[A-Za-z]:[\\/])/.test(target)) {
+            flush();
+            const said = label.trim(), base = target.slice(Math.max(target.lastIndexOf("/"), target.lastIndexOf("\\")) + 1);
+            const words = said && said !== target && said !== base ? inline(label, query, true, urls, depth + 1, mentions, files) + " " : "";
+            out += words + pathHTML(target, query); at = end; continue;
+          }
         }
         else { plain += text.slice(at + 1, middle) + " "; at = middle + 2; continue; }
       }

@@ -327,6 +327,8 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       // Explicit JSON path examples are provider field names, not untranslated catalogue keys.
       if (element.matches('code[data-json-paths]') && /^(?:data|event)\./.test(match[1])) continue;
       if (element.matches(".skl-import-hint") && match[1] === "skills.sh") continue;
+      // A file name in a path (…\daily-japanese-template.html) is not a catalogue key: a key never follows a separator.
+      if (/[\\/_-]/.test(value[match.index + match[0].indexOf(match[1]) - 1] ?? "")) continue;
       if (!namespaces.includes(match[1].split(".")[0]) || seenKeys.has(match[1])) continue;
       seenKeys.add(match[1]); missingI18nKeys.push({ ...description, key: match[1] });
     }
