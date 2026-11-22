@@ -690,7 +690,7 @@ export function checkRendered(name, context = {}) {
       require(descriptions[0].scrollWidth > descriptions[0].clientWidth, 'the long description is truncated');
       for (const row of skills) {
         const label = row.querySelector('.skl-label'), more = row.querySelector('[data-skl="skill-more"]'), toggle = row.querySelector('.tg');
-        require(Math.abs(label.getBoundingClientRect().left - left) <= 1, 'each skill name and description align with the back button');
+        require(Math.abs(row.getBoundingClientRect().left - left) <= 1 && label.getBoundingClientRect().left > row.getBoundingClientRect().left + 8, 'each skill row starts at the back button, with its words inside the card');
         require(visible(more) && more.nextElementSibling === toggle &&
           more.getBoundingClientRect().right <= toggle.getBoundingClientRect().left, 'each skill puts ⋯ left of its switch');
       }
