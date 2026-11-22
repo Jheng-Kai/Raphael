@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 from pathlib import Path
+import shlex
 
 import pytest
 
@@ -12,6 +13,7 @@ from raphael_core.computer import vm as vm_module
 from raphael_core.computer.lifecycle import maintain
 from raphael_core.computer.viewer import DesktopViewer
 from raphael_core.computer.vm import IMAGE, IMAGE_CLEAN_S, IMAGE_LABELS, LABEL, LocalVm, Result, VmError, build_args
+from raphael_core.evaluate.computer_acceptance import IMAGE_ENV
 from .test_vm import Runtime, container
 
 CONTEXT = Path(vm_module.__file__).parent / "image"
@@ -25,6 +27,21 @@ ID9, ID11, ID12, ID_NEWER = ("sha256:" + digit * 64 for digit in "9ab4")
 
 def labels(layer, **extra):
     return {**IMAGE_LABELS, f"{LABEL}.layer": str(layer), **extra}
+
+
+def test_layer_fifteen_restores_runtime_metadata_in_the_flattened_image():
+    dockerfile = (CONTEXT / "Dockerfile").read_text(encoding="utf-8")
+    prepared, final = dockerfile.split("\nFROM scratch\n")
+    assert "FROM layer14 AS computer-rootfs" in prepared
+    assert "/tmp/raphael-prune-packages.sh;" in prepared
+    assert final.startswith("COPY --from=computer-rootfs / /\n")
+    assert 'CMD ["supervisord", "-n", "-c", "/etc/supervisor/supervisord.conf"]' in final
+    assert {"WORKDIR /home/cua", "USER root", "EXPOSE 5901 6901", "STOPSIGNAL SIGTERM"} <= set(final.splitlines())
+    assert 'org.raphael.computer.layer="15"' in final
+
+    instructions = final.replace("\\\n", "").splitlines()
+    variables = [variable for line in instructions if line.startswith("ENV ") for variable in shlex.split(line)[1:]]
+    assert dict(variable.split("=", 1) for variable in variables) == IMAGE_ENV
 
 
 class Engine(Runtime):

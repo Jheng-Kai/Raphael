@@ -48,7 +48,6 @@ def test_layer_twelve_writes_over_what_earlier_steps_installed_and_only_layer_fo
         assert line in step
     # Nothing before it changes, so a PC that built layer 11 runs this one step again.
     assert "COPY layer12/" not in dockerfile[:eleven] and dockerfile.count("COPY desktop/") == 1
-    assert module.IMAGE.endswith("-v14") and module.IMAGE_LABELS[f"{module.LABEL}.layer"] == "14"
     for path in LAYER.iterdir():
         assert b"\r\n" not in path.read_bytes(), f"{path.name} must keep LF line ends inside Linux"
 

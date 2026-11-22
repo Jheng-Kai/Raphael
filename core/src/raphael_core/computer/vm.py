@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 BASE = "docker.io/trycua/xfce-cua@sha256:274eb636f5cf3fc58f705916ee72b7a701270b3877369d08533a385c5325be9b"
 VERSION = "0.37.0"
-IMAGE = "raphael/cua-local-vm:driver-0.37.0-v14"
+IMAGE = "raphael/cua-local-vm:driver-0.37.0-v15"
 # Every image of ours is a tag of this repository. Only its tags that carry LABEL are ever named as a build's cache or
 # removed as an older layer; an image of any other repository is never touched.
 REPOSITORY = IMAGE.split(":", 1)[0]
@@ -54,7 +54,7 @@ DRIVER = "/usr/local/libexec/raphael/cua-driver"
 SOCKET = "/run/user/1000/raphael-cua.sock"
 SCREENS_READY = "/dev/shm/raphael-screens.ready"
 LABEL = "org.raphael.computer"
-IMAGE_LABELS = {LABEL: "1", f"{LABEL}.driver": VERSION, f"{LABEL}.base": BASE, f"{LABEL}.layer": "14"}
+IMAGE_LABELS = {LABEL: "1", f"{LABEL}.driver": VERSION, f"{LABEL}.base": BASE, f"{LABEL}.layer": "15"}
 MAX_OUTPUT = 50_000  # what a task may be shown of a result at most (`worker.guards`)
 JOB_LOG_MAX = 256 * 1024  # bytes of combined stdout and stderr kept per detached job
 # The owner's hold of a screen ends by itself after this long without a click or a key of theirs (a sign-in request that
@@ -412,10 +412,9 @@ def known_previous(raw, target, owner):
         # owner's own computer the day layer 8 came; layers 8 to 12 kept that shape. A layer that is not named here is
         # refused as incompatible, and its computer does not start: each new layer adds the one before it. Layer 13 is
         # the first with the UTF-8 locale in its environment: every layer before it is made again once.
-        if layer == "13":
-            # Layer 14 changed only the image (Google's Chrome on arm64): a layer 13 computer already has this layer's
-            # environment, screens and limits (a shared one its size from the engine), so it is judged as the container it
-            # will become.
+        if layer in ("13", "14"):
+            # Layers 14 and 15 changed only the image. The environment, screens and limits have the same shape
+            # since layer 13 (a shared computer gets its size from the engine).
             labels[f"{LABEL}.layer"] = IMAGE_LABELS[f"{LABEL}.layer"]
             return compatible(previous, target, owner, raw["Image"])
         six = shared_upgrade and layer in ("5", "7", "8", "9", "10", "11", "12") and screens == ["RAPHAEL_SCREENS=6"]

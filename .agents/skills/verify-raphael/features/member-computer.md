@@ -1428,6 +1428,24 @@ home that has none, so a member's own home of an arm64 PC that the carry record 
 its Chromium profile along (a home carried before is handled and is never carried again). Whether Google lets a
 sign-in through stays Google's decision; no test signs in.
 
+## Smaller computer image (layer 15)
+
+The desktop and cua-driver 0.37.0 use Google Chrome on amd64 and arm64. The driver already prefers the root-owned
+Chrome launcher, and both launch paths still use the container's isolation and their existing no-sandbox flags.
+The Chrome policy, launchers, XFCE, TigerVNC, websockify/noVNC, Python, Git, Node/npm and CJK fonts stay.
+
+The Dockerfile checks the layer 14 filesystem, purges Chromium and the unused build and FFmpeg tools, then copies
+the merged filesystem into a scratch image. Firefox's files therefore disappear from the delivered image layers.
+Apt retains dependencies still in use, and Make is kept for members' projects. The final image restores the
+environment defaults in its image config and starts supervisord directly. The old steps remain usable as
+the layer14 target. The first measured v15 build was 2,497,161,306 bytes, versus 4,174,853,886 for v14.
+
+At next start, layer 14 per-member and shared computers are recreated with their existing workspace and team mounts.
+Layer 14 Chrome profiles stay in the workspace. The existing one-time Chromium migration still applies to older
+arm64 workspaces. Real computer verification checks the built image's `Config.Env` before starting any computer.
+Panel and wallpaper checks use plain guest commands, and the migration runs when a layer 14 image is present.
+There are no Look scene changes.
+
 ## Responsive computer tools
 
 R-COMP-PERF-01 through R-COMP-PERF-06 supersede the earlier full-screen bootstrap,

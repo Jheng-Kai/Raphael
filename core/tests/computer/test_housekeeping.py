@@ -410,6 +410,14 @@ async def test_a_member_computer_of_the_layer_before_is_made_again_once_too(per_
 async def made_again_once(vm, target, runtime):
     """Started once, a computer of an earlier layer is stopped, removed and made again; the next start finds it whole."""
     original = vm.run
+    mounts = runtime.raw["Mounts"]
+    kept = []
+    for folder in (target.workspace, target.shared):
+        if folder is not None:
+            folder.mkdir(parents=True, exist_ok=True)
+            sentinel = folder / "kept.txt"
+            sentinel.write_text("kept", encoding="utf-8")
+            kept.append(sentinel)
 
     async def runner(args, **kwargs):
         actual = args[2:] if args[:1] == ["--host"] else args
@@ -422,26 +430,31 @@ async def made_again_once(vm, target, runtime):
     assert (await vm.start(target))["ready"]
     assert [(args[0], args[1] if len(args) > 1 else "") for args, _ in runtime.calls if args[0] in ("stop", "rm", "run")] == [
         ("stop", "--time"), ("rm", target.name), ("run", "-d")]
+    run = next(args for args, _ in runtime.calls if args[0] == "run")
+    expected_mounts = [module.mount_arg(held["Source"], held["Destination"]) for held in mounts]
+    assert [run[index + 1] for index, flag in enumerate(run) if flag == "--mount"] == expected_mounts
+    assert all(sentinel.read_text(encoding="utf-8") == "kept" for sentinel in kept)
     runtime.calls.clear()
     vm.running.clear()
     assert (await vm.start(target))["ready"]
     assert not [args for args, _ in runtime.calls if args[0] in ("stop", "rm", "run", "create")]
 
 
-async def test_a_shared_computer_of_layer_13_is_made_again_once_on_layer_14_with_its_size_from_the_engine(desktop):
+@pytest.mark.parametrize("layer", ["13", "14"])
+async def test_a_shared_computer_of_layer_13_is_made_again_once_on_layer_14_with_its_size_from_the_engine(desktop, layer):
     # Layer 14 changed only the image (Google's Chrome on arm64). A layer 13 computer has this layer's environment (the
     # locale), its screens and its limits; a shared one its size from the engine, which no layer before 13 had.
     vm, target, runtime = desktop
-    assert module.IMAGE.endswith("-v14") and module.IMAGE_LABELS[f"{LABEL}.layer"] == "14"
-    runtime.raw = earlier_layer(runtime.raw, "13")
+    runtime.raw = earlier_layer(runtime.raw, layer)
     runtime.raw["HostConfig"].update(Memory=8 * GIB, MemorySwap=8 * GIB, NanoCpus=6_000_000_000)
     assert known_previous(runtime.raw, target, vm.owner) and not compatible(runtime.raw, target, vm.owner, runtime.image_id)
     await made_again_once(vm, target, runtime)
 
 
-async def test_a_member_computer_of_layer_13_is_made_again_once_on_layer_14(per_bot_desktop):
+@pytest.mark.parametrize("layer", ["13", "14"])
+async def test_a_member_computer_of_layer_13_is_made_again_once_on_layer_14(per_bot_desktop, layer):
     vm, target, runtime = per_bot_desktop
-    runtime.raw = earlier_layer(runtime.raw, "13")
+    runtime.raw = earlier_layer(runtime.raw, layer)
     assert known_previous(runtime.raw, target, vm.owner) and not compatible(runtime.raw, target, vm.owner, runtime.image_id)
     await made_again_once(vm, target, runtime)
 

@@ -1,5 +1,5 @@
 # Adapted from third-party code under Apache-2.0, with changes; see core/packaging/licenses/NOTICES.md.
-FROM docker.io/trycua/xfce-cua@sha256:274eb636f5cf3fc58f705916ee72b7a701270b3877369d08533a385c5325be9b
+FROM docker.io/trycua/xfce-cua@sha256:274eb636f5cf3fc58f705916ee72b7a701270b3877369d08533a385c5325be9b AS layer14
 USER root
 COPY desktop/ /opt/raphael-desktop/
 RUN set -eux; \
@@ -113,8 +113,9 @@ RUN printf '%s\n' \
       'stderr_logfile=/var/log/supervisor/cua-driver.error.log' \
       'priority=30' \
       >> /etc/supervisor/supervisord.conf
-# The driver's page tools drive a root-owned system Chromium. With every capability dropped it cannot make its own
-# sandbox, and the container is one already. Chromium opens every new window beside its first, whatever screen the
+# The driver's page tools use a root-owned browser. Layer 14 checks both driver candidates; layer 15 keeps Chrome,
+# the first candidate. With only SETUID and SETGID available, the browser uses the container as its sandbox.
+# A Chromium-family browser opens every new window beside its first, whatever screen the
 # pointer is on, and the driver has no tool that moves one: wmctrl puts a member's window on its own screen.
 # The desktop draws its picture through gdk-pixbuf, which reads SVG only with librsvg's loader: without it the
 # town (five SVG drawings) was never drawn and the desktop stayed one flat colour.
@@ -345,3 +346,41 @@ LABEL org.raphael.computer="1" \
       org.raphael.computer.driver="0.37.0" \
       org.raphael.computer.base="docker.io/trycua/xfce-cua@sha256:274eb636f5cf3fc58f705916ee72b7a701270b3877369d08533a385c5325be9b" \
       org.raphael.computer.layer="14"
+
+FROM layer14 AS computer-rootfs
+# The driver already prefers the root-owned Chrome launcher. The desktop and driver both supply their existing
+# no-sandbox flags. Keep the desktop, Python runtimes, and coding tools while letting apt retain their dependencies.
+COPY layer15/ /opt/raphael-layer15/
+RUN set -eux; \
+    install -m 0755 /opt/raphael-layer15/prune-packages.sh /tmp/raphael-prune-packages.sh; \
+    /tmp/raphael-prune-packages.sh; \
+    rm -rf /tmp/raphael-prune-packages.sh /opt/raphael-layer15; \
+    sed -i -e 's/Google Chrome (amd64 images only)/Google Chrome (amd64 and arm64 images)/' \
+      -e 's/build-essential, /make, /' /usr/local/share/licenses/raphael/THIRD_PARTY_NOTICES.txt; \
+    install -d -m 0700 -o cua -g cua /run/user/1000; \
+    install -d -m 1777 /tmp/.X11-unix; \
+    install -d /var/log/supervisor; \
+    test -s /etc/supervisor/supervisord.conf; \
+    supervisord --version
+
+# Copy the merged filesystem, then restore the layer 14 metadata that startup and docker exec both need.
+FROM scratch
+COPY --from=computer-rootfs / /
+ENV PATH=/opt/venv/bin:/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin \
+    DEBIAN_FRONTEND=noninteractive \
+    HOME=/home/cua \
+    DISPLAY=:1 \
+    DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus \
+    VNC_PORT=5901 \
+    NOVNC_PORT=6901 \
+    VNC_RESOLUTION=1280x900 \
+    VNC_COL_DEPTH=24
+WORKDIR /home/cua
+USER root
+EXPOSE 5901 6901
+STOPSIGNAL SIGTERM
+CMD ["supervisord", "-n", "-c", "/etc/supervisor/supervisord.conf"]
+LABEL org.raphael.computer="1" \
+      org.raphael.computer.driver="0.37.0" \
+      org.raphael.computer.base="docker.io/trycua/xfce-cua@sha256:274eb636f5cf3fc58f705916ee72b7a701270b3877369d08533a385c5325be9b" \
+      org.raphael.computer.layer="15"
