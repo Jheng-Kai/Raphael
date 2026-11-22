@@ -20,14 +20,18 @@ Local commands keep their existing approval flow for other owner-PC work.
 
 Raphael runs headed Google Chrome with one shared profile in the machine-local data folder.
 On Windows Chrome lives on a separate desktop with no Explorer taskbar and never takes
-focus on the owner's desktop. Each turn or task owns its tabs and action lock.
+focus on the owner's desktop. Every member owns its tabs across turns and tasks,
+including tabs the owner opens with Add and popups. Every tab has its own action
+lock. The member checks browser_tabs before opening another copy and uses the tab
+shown in the Computer panel by default.
 Local Docker and Chrome share the member workspace and team folder while retaining
 separate site sign-ins. Docker on another host uses its own volumes.
 
 Opening a page opens the Computer tab on that same page. The page fills the frame
 under the [host browser toolbar](#host-browser-toolbar). A takeover card appears only while a member waits for the owner for
 an owner-only step. The reason stays on the card, while the thread shows the member's own words.
-Done releases input and resumes the original call on the scope's current tab.
+Done releases input and resumes the original call on the requested tab, its related
+popup or its live opener.
 Done, Skip and other request endings remove the card from the conversation.
 A visible Computer tab reconnects when a stream or lease ends or the active target changes.
 Returning from Details by click, Home/End or Forward shows the live Chrome page or
@@ -43,8 +47,10 @@ within the same limit as the VM. Both scenes check the right-aligned computer co
 An idle browser and an unavailable VM with no live target keep their wallpaper without panel errors.
 An unexpected failure reaches the active member as an internal note. Missing Docker
 keeps the action to ask Raphael for setup.
-The last watcher leaving stops the screencast. Shutdown closes relay connections
-and Chrome's profile process tree.
+The last watcher leaving stops the screencast. Tabs remain open through idle time
+and after member work ends. Closing the last member tab leaves Chrome running.
+A crash is recovered on the next use. App shutdown closes relay connections and
+Chrome's profile process tree. The VM keeps its own idle setting.
 
 Run from `app/`:
 ```sh
@@ -58,25 +64,31 @@ Look uses the production canvas with fixture frames. Run `test_host_computer.py`
 `test_host_viewer.py` locally with CI unset. Their native tests use Google Chrome,
 isolated profiles and local pages. They check the ordinary browser UA, `navigator.webdriver`
 being false, changing 1280 × 900 frames away from the input desktop, private input,
-handback of the same tab, downloads and shutdown. The owner checks actual Google
+handback of the same tab, downloads and shutdown. The coordinate journey reads
+a page from the previous turn, checks a 1280×900 screenshot and acts on a control
+that is replaced every animation frame. The production-turn scenario reuses the
+owner's tab after listing it. The owner checks actual Google
 sign-in. Native Chrome and OS prompts, including certificate pickers, sit outside the
 page screencast.
 
 ## Host browser toolbar
 
 R-COMP-HOST-07 and R-UI-178. The Computer panel and enlarged view share the tab strip
-and address row. Select a tab while watching and the member's tab stays selected in
-Chrome. Take control to change the real selection, open or close a tab, or navigate.
-The member's tools use the same turn or task tab list after handback. The member's
+and address row. Selecting a tab while watching also sets the member's default tab.
+Take control to open or close a tab, or navigate. The member's tools keep the same
+member-owned tab list after handback. The member's
 Chrome viewport stays at 1280×900 during watch, takeover and handback. The page
 keeps that aspect edge to edge below the toolbar and in the sign-in card preview.
 The enlarged view fits the entire frame, including the toolbar, in the window.
 
-A Chrome target with a scoped opener inherits that scope. The view follows the new
+A Chrome target with a member-owned opener belongs to that same member. The view follows the new
 tab or popup, including a small sign-in window, and returns to the live opener on
 close. The same viewer lease stays in place. Input names the tab whose frame it came
 from. An active handback remains answerable after an OAuth popup closes if its work
-still has a live page.
+still has a live opener. The member can use stable refs or the 1280×900 page PNG
+with coordinate click, double-click and scroll, and type or press keys in the
+focused control. A stale ref is refreshed once and retried only for a unique role
+and name. Sign-in, verification and payment still use the owner's takeover.
 
 Run from `app/`:
 

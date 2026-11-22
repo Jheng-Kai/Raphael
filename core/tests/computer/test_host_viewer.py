@@ -67,12 +67,11 @@ def host_viewer(root):
 
 def fake_tab(browser, member, conversation, *, turn_id=None):
     identifier = str(member) if turn_id is None else str(turn_id)
-    scope = ("turn", member, conversation, turn_id)
-    tab = Tab(identifier, identifier, "cdp-" + identifier, scope, member, browser.profile,
+    tab = Tab(identifier, identifier, "cdp-" + identifier, member, browser.profile,
               conversation=conversation, turn_id=turn_id)
     tab.cast = Screencast(browser, tab)
     browser.tabs[identifier] = tab
-    browser.owned_targets[tab.target] = scope
+    browser.owned_targets[tab.target] = member
     browser.select(tab)
     return tab
 
@@ -201,10 +200,14 @@ async def test_host_viewer_streams_only_watched_member_tabs_and_acks_every_frame
     cdp = browser.cdp = Cdp(browser)
     one, two = fake_tab(browser, 1, 10), fake_tab(browser, 2, 20)
     try:
-        assert (await viewer.status({"member_id": 1, "conversation_id": 11}))["state"] == "absent"
+        same_member = await viewer.status({"member_id": 1, "conversation_id": 11})
+        assert same_member["state"] == "running" and same_member["target"] == one.view
+        assert (await viewer.status({"member_id": 3, "conversation_id": 10}))["state"] == "absent"
         with pytest.raises(RpcError, match="desktop unavailable"):
-            await viewer.open({"member_id": 1, "conversation_id": 11})
-        first = await viewer.open({"member_id": 1, "conversation_id": 10})
+            await viewer.open({"member_id": 3, "conversation_id": 10})
+        with pytest.raises(RpcError, match="browser tab changed"):
+            await viewer.open({"member_id": 1, "conversation_id": 11, "target_id": two.view})
+        first = await viewer.open({"member_id": 1, "conversation_id": 11})
         second = await viewer.open({"member_id": 2, "conversation_id": 20})
         assert first["url"].endswith("/host.html")
         assert not cdp.calls
@@ -277,7 +280,7 @@ async def test_host_viewer_gate_and_handback_use_the_same_tab(tmp_path):
                 assert (await client.post(url, json=text, headers={"Origin": viewer.origin})).status_code == 403
                 assert (await viewer.control({**owner, "held": True}))["control"] == "owner"
                 assert (await client.get(base + "control")).json() == {"held": True}
-                assert browser.held == {tab.scope}
+                assert browser.held == {tab.member: tab}
                 assert (await client.post(url, json=text, headers={"Origin": "http://example.invalid"})).status_code == 403
                 events = [
                     {"type": "mousePressed", "x": 20, "y": 30, "button": "left", "buttons": 1, "count": 1},
@@ -338,22 +341,22 @@ async def test_host_browser_toolbar_follows_popups_without_replacing_the_lease(t
             browser._event("Target.targetCreated", {"targetInfo": {
                 "type": "page", "targetId": "popup", "openerId": opener.target, "title": "Sign-in", "url": "about:blank",
             }}, None)
-            await browser.wait_popups(opener.scope)
-            popup = browser.tab(opener.scope)
-            assert popup.opener == opener.id and popup is not opener
+            await browser.wait_popups(opener.member)
+            popup = browser.tab(opener.member)
+            assert popup.opener is opener and popup is not opener
             await frame_for(lines, popup)
             assert popup.viewport == (1280, 900)
             model = (await client.get(base + "host-browser")).json()
             assert model["shown"] == popup.id and [tab["id"] for tab in model["tabs"]] == [opener.id, popup.id]
             assert model["tabs"][1]["title"] == "Sign-in"
-            tool_view, _, _ = await HostComputerTools.browser_call(
-                SimpleNamespace(browser=browser), "browser_tabs", {}, "auto", 1, opener.scope, 10, None)
+            tool_view, _, _, _ = await HostComputerTools.browser_call(
+                SimpleNamespace(browser=browser), "browser_tabs", {}, "auto", 1, (("turn", 1, 10), 42), 10, None)
             assert [(tab["tab_id"], tab["shown"]) for tab in tool_view["tabs"]] == [(opener.id, False), (popup.id, True)]
             assert (await viewer.renew(first))["target"] == opener.view
 
             assert (await action("select", opener)).status_code == 204
             await frame_for(lines, opener)
-            assert browser.selected(opener.scope) is popup
+            assert browser.selected(opener.member) is opener
             assert not any(call[0] == "Page.bringToFront" for call in cdp.calls)
             assert (await action("select", popup)).status_code == 204
             await frame_for(lines, popup)
@@ -361,7 +364,7 @@ async def test_host_browser_toolbar_follows_popups_without_replacing_the_lease(t
             assert (await viewer.control({**first, "held": True}))["control"] == "owner"
             assert (await action("select", opener)).status_code == 204
             await frame_for(lines, opener)
-            assert browser.selected(opener.scope) is opener
+            assert browser.selected(opener.member) is opener
             assert ("Page.bringToFront", None, opener.session) in cdp.calls
             assert (await action("select", popup)).status_code == 204
             await frame_for(lines, popup)
@@ -382,13 +385,16 @@ async def test_host_browser_toolbar_follows_popups_without_replacing_the_lease(t
             assert (await action("close", other)).status_code == 403
             assert (await action("close", popup)).status_code == 204
             await frame_for(lines, opener)
-            assert browser.tab(opener.scope) is opener and (await viewer.renew(first))["control"] == "owner"
+            assert browser.tab(opener.member) is opener and (await viewer.renew(first))["control"] == "owner"
             assert (await action("new", opener)).status_code == 204
-            new = browser.tab(opener.scope)
+            new = browser.tab(opener.member)
             await frame_for(lines, new)
             assert new is not opener and new.view == opener.view
             assert (await viewer.control({**first, "held": False}))["control"] == "member"
-            assert browser.tab(opener.scope) is new and other.id in browser.tabs
+            tool_view, _, _, _ = await HostComputerTools.browser_call(
+                SimpleNamespace(browser=browser), "browser_tabs", {}, "auto", 1, (("task", 7), 43), 10, None)
+            assert [(row["tab_id"], row["shown"]) for row in tool_view["tabs"]] == [(opener.id, False), (new.id, True)]
+            assert browser.tab(opener.member) is new and other.id in browser.tabs
     finally:
         await viewer.aclose()
         await browser.aclose()
@@ -449,8 +455,8 @@ async def test_popup_can_close_before_done_without_ending_its_handback(tmp_path,
     browser._event("Target.targetCreated", {"targetInfo": {
         "type": "page", "targetId": "popup", "openerId": opener.target,
     }}, None)
-    await browser.wait_popups(opener.scope)
-    popup = browser.selected(opener.scope)
+    await browser.wait_popups(opener.member)
+    popup = browser.selected(opener.member)
     assert popup is not opener
     waiting = asyncio.create_task(cards.wait_for_browser(
         turn_id=turn_id, member_id=0, conversation_id=10, reason="sign_in", language="en", tab=popup, browser=browser))
@@ -471,7 +477,7 @@ async def test_popup_can_close_before_done_without_ending_its_handback(tmp_path,
             assert "host_request" not in (await viewer.control({**control, "held": False}))
             await asyncio.wait_for(waiting, 5)
             assert cards.store.get(card.id).state == "done"
-            assert browser.tab(opener.scope) is opener and not browser.held
+            assert browser.tab(opener.member) is opener and not browser.held
     finally:
         waiting.cancel()
         await asyncio.gather(waiting, return_exceptions=True)
@@ -580,8 +586,8 @@ async def test_native_chrome_frames_and_owner_input(tmp_path):
     async with site:
         try:
             await browser.start()
-            one = await browser.new_tab(("turn", 1, 10), 1, tmp_path, 10)
-            two = await browser.new_tab(("task", 2), 2, tmp_path)
+            one = await browser.new_tab(1, tmp_path, 10)
+            two = await browser.new_tab(2, tmp_path)
             url = f"http://127.0.0.1:{site.sockets[0].getsockname()[1]}"
             for tab in (one, two):
                 assert await host_page.navigate(browser, tab, url)
@@ -623,7 +629,7 @@ async def test_native_chrome_frames_and_owner_input(tmp_path):
 @pytest.mark.skipif(chrome_executable() is None or bool(os.environ.get("CI")), reason="Google Chrome is unavailable or this is CI")
 async def test_native_chrome_follows_small_popups_and_blank_links_on_the_same_lease(tmp_path):
     viewer, browser = host_viewer(tmp_path.resolve())
-    group = ("turn", 1, 10)
+    member = 1
     site = await asyncio.start_server(serve, "127.0.0.1", 0)
 
     async def evaluate(tab, expression):
@@ -633,8 +639,8 @@ async def test_native_chrome_follows_small_popups_and_blank_links_on_the_same_le
     async with site:
         try:
             await browser.start()
-            opener = await browser.new_tab(group, 1, tmp_path, 10)
-            other = await browser.new_tab(("task", 2), 2, tmp_path)
+            opener = await browser.new_tab(member, tmp_path, 10)
+            other = await browser.new_tab(2, tmp_path)
             url = f"http://127.0.0.1:{site.sockets[0].getsockname()[1]}"
             assert await host_page.navigate(browser, opener, url + "/opener")
             assert await host_page.navigate(browser, other, url)
@@ -658,9 +664,9 @@ async def test_native_chrome_follows_small_popups_and_blank_links_on_the_same_le
 
                 for button in ("#open-popup", "#open-tab"):
                     await click(opener, button)
-                    await expect_eventually(lambda: browser.selected(group) is not opener)
-                    popup = browser.selected(group)
-                    assert popup and popup.opener == opener.id
+                    await expect_eventually(lambda: browser.selected(member) is not opener)
+                    popup = browser.selected(member)
+                    assert popup and popup.opener is opener
                     frame = await frame_for(lines, popup, (1280, 900))
                     assert base64.b64decode(frame["image"]).startswith(b"\xff\xd8")
                     assert await evaluate(popup, "[innerWidth, innerHeight]") == [1280, 900]
@@ -677,7 +683,7 @@ async def test_native_chrome_follows_small_popups_and_blank_links_on_the_same_le
                         response = await client.post(base + "host-browser", headers=headers, json={"action": "close", "tab": popup.id})
                         assert response.status_code == 204
                     await frame_for(lines, opener, (1280, 900))
-                    assert browser.tab(group) is opener and popup.id not in browser.tabs
+                    assert browser.tab(member) is opener and popup.id not in browser.tabs
 
                 assert (await viewer.control({**opened, "held": False}))["control"] == "member"
                 assert not browser.held
@@ -728,7 +734,7 @@ async def test_native_headed_chrome_streams_off_the_owner_desktop(tmp_path):
     site = await asyncio.start_server(serve, "127.0.0.1", 0)
     async with site:
         try:
-            tab, _ = await browser.open_tab(("turn", 1, 10), 1, tmp_path, 10)
+            tab, _ = await browser.open_tab(1, tmp_path, 10)
             url = f"http://127.0.0.1:{site.sockets[0].getsockname()[1]}"
             assert await host_page.navigate(browser, tab, url)
             proof = await browser.command(tab, "Runtime.evaluate", {

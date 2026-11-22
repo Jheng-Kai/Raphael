@@ -2155,11 +2155,11 @@ class VmTools:
 
     async def close_task_browser(self, task_id, *, keep_page=False):
         if self.host_computer is not None:
-            await self.host_computer.browser.close_scope(("task", task_id), keep_page=keep_page)
+            self.host_computer.finish_work(task_id=task_id)
 
     def close_turn_browser(self, turn_id, *, keep_page=False):
         if self.host_computer is not None:
-            self.host_computer.close_turn(turn_id, keep_page=keep_page)
+            self.host_computer.finish_work(turn_id=turn_id)
 
     async def aclose(self):
         if self.suggestions is not None:
