@@ -30,6 +30,16 @@ an owner-only step. The reason stays on the card, while the thread shows the mem
 Done releases input and resumes the original call on the scope's current tab.
 Done, Skip and other request endings remove the card from the conversation.
 A visible Computer tab reconnects when a stream or lease ends or the active target changes.
+Returning from Details by click, Home/End or Forward shows the live Chrome page or
+VM seat again within a second. Chrome can close the old watching lease concurrently
+with its replacement. The VM can reuse its still-connected preview.
+
+```powershell
+npm run look -- member-panel-computer-return-host member-panel-computer-return-docker --theme both --width 1120,720,1920x1080
+```
+
+The Chrome scene delays the old close reply and verifies that the live page returns
+within the same limit as the VM. Both scenes check the right-aligned computer control.
 An idle browser and an unavailable VM with no live target keep their wallpaper without panel errors.
 An unexpected failure reaches the active member as an internal note. Missing Docker
 keeps the action to ask Raphael for setup.
@@ -1198,7 +1208,7 @@ A clear Details / Library / Computer hierarchy that explains the actual unavaila
 
 R-PANEL-01 through R-PANEL-04 govern the header, shared tabs, live controls and all offline states. Enter from the conversation title for Details; use the monitor for Computer. Gear retains identity, memory, skills, commands and voice. The panel reads the existing private worker-task lane (including delegated private work), newest first. Tasks open their existing results and stop/rerun through the row menu. Library uses the shared team-file chip; file handles are scoped to the selected member's local workspace/team folder, with recorded artifacts/pages retained even without a running computer. Remote volumes are never scanned as local paths. The current scan is capped at 500 entries, depth 3, 100 visible files and 100 task/page/artifact records; ordinary Show more advances by 12.
 
-Each thing is said once. Sleeping, starting, waking, updating, repairing, stopped Docker Desktop, missing installation, named remote failure and missing image show the full sentence only inside the screen. The header keeps a matching short state word beside location and overflow, without another face or explanation. Buttons sit after the sentence in normal flow; every offline state has the existing member slime. Only a live screen offers Enlarge and Take control underneath, with no repeated name caption. Details keeps the outer conversation heading and suppresses the list's internal heading. Owner engine recovery starts only the installed local app and reports readiness without implicitly creating a computer (a member's own tool call also starts the installed Docker Desktop and waits up to 120 s, see R-PANEL-04; reads and the viewer still never do); selecting the location recovery opens the existing control. No administrator/app-update advice is shown for a stopped engine.
+Each thing is said once. Sleeping, starting, waking, updating, repairing, stopped Docker Desktop, missing installation, named remote failure and missing image show the full sentence only inside the screen. The header keeps the existing short preparation and maintenance words. A normally running computer shows no status word in the header. Buttons sit after the sentence in normal flow; every offline state has the existing member slime. Only a live screen offers Enlarge and Take control underneath, with no repeated name caption. Details keeps the outer conversation heading and suppresses the list's internal heading. Owner engine recovery starts only the installed local app and reports readiness without implicitly creating a computer (a member's own tool call also starts the installed Docker Desktop and waits up to 120 s, see R-PANEL-04; reads and the viewer still never do); selecting the location recovery opens the existing control. No administrator/app-update advice is shown for a stopped engine.
 
 Consistency comparisons use the existing ui.tabs plain variant, shared fileChipHTML, btn and openMenu. The three member tabs fill the panel to keep equal navigation targets; Connections retains its compact counted tabs within Settings. Work menus have only the applicable action, while maintenance retains its wider descriptive rows and takeover retains its icons. These contextual differences reuse the existing components and tokens. Engine readiness uses the existing viewer notice with role=status and neutral text; failures retain role=alert. Offline recovery buttons retain the screen's existing dark contrast treatment over the wallpaper, while Enlarge and Take control use ordinary panel buttons below it.
 
@@ -1212,9 +1222,8 @@ Inspect every contact sheet and full-size computer state at light 720/dark 1120 
 
 ## Settings and lifecycle merge
 
-The computer tab header pairs its dropdown with a short state word. Maintenance
-lives below the preview. The
-computer dropdown opens the SSH editor with its explicit host check and copyable
+The computer tab header right-aligns the dropdown with the screen. When available,
+maintenance sits to its left. The dropdown opens the SSH editor with its explicit host check and copyable
 repairs from the existing viewer_status owner RPC.
 
 ```powershell

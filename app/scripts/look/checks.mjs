@@ -825,9 +825,9 @@ export function checkRendered(name, context = {}) {
       require(!visible(panel.querySelector('[data-desktop="take"]')), 'Take control waits in the larger view, never under the preview');
       // R-COMP-UPDATE-01: the one line under the screen is an update of the computer's image, said while it lasts.
       require(!visible(panel.querySelector('.desktop-caption')) || preparing && !!panel.querySelector('.desktop-panel[data-desktop-update]'), 'no caption stands under the screen but the line of an update');
-      require(!!visible(panel.querySelector('.computer-lifecycle-state')) === runs, 'the header names the state only once the computer runs');
+      const word = panel.querySelector('.computer-lifecycle-state');
+      if (live) require(!visible(word) && !word.textContent.trim(), 'the live header has no running word');
       if (!runs) requireBareScreen(panel.querySelector('.desktop-screen'));
-      if (live) require(panel.querySelector('[data-computer-state-text]')?.textContent === '執行中', 'the live header names the running state');
     }
     if (tab === 'details') require([...panel.querySelectorAll('.mb-dh')].filter(node => visible(node) && node.textContent === '對話').length === (panel.querySelector('[data-slot="conversations"]') ? 1 : 0), 'Details names the conversation section once, and only for Raphael');
     if (name === 'member-panel-details') {
@@ -955,6 +955,10 @@ export function checkRendered(name, context = {}) {
       require(visible(open) && Math.abs(cover.width - screen.width) <= 2 && Math.abs(cover.height - screen.height) <= 2, 'the whole preview is the button that opens the larger view');
       require(getComputedStyle(open.querySelector('.desktop-open-pill')).opacity === '0', 'the Open pill shows only under the pointer');
       require(!visible(caption), 'no caption stands under the screen');
+    } else if (name === 'member-panel-computer-return-live') {
+      const screen = panel.querySelector('.desktop-screen'), frame = screen.querySelector('iframe');
+      require(visible(frame) && !visible(screen.querySelector('.desktop-placeholder')), 'return shows the live page instead of a bare cover');
+      require(getComputedStyle(screen.querySelector('.desktop-open-pill')).opacity === '0', 'the Open pill stays quiet on return');
     } else if (name === 'member-panel-computer-docker-stopped') {
       // The engine failure is not said on the screen; the screen is the press that starts Docker Desktop.
       require(!shownText(panel).includes('Docker Desktop') &&!visible(panel.querySelector('[data-desktop="retry"]')) && !visible(panel.querySelector('[data-desktop-location]')), 'neither Docker Desktop nor a recovery button is drawn');
@@ -980,6 +984,12 @@ export function checkRendered(name, context = {}) {
     }
     return {check:name, tab};
   }
+  if (name === 'computer-tab-left') {
+    const panel = document.querySelector('.desktop-panel');
+    require(!visible(panel) || getComputedStyle(panel).visibility === 'hidden'
+      || document.querySelector('.conversation-trigger')?.getAttribute('aria-expanded') === 'false', 'leaving Computer hides the screen or closes the panel');
+    return {check:name};
+  }
   if (name === 'panel-state-layout') {
     // Nothing is written over a computer that is not showing its screen: the wallpaper alone, and the
     // state stays in the panel's data. The one press that starts it is the cover, which is the screen itself.
@@ -990,7 +1000,11 @@ export function checkRendered(name, context = {}) {
     const phase = expectedDesktopState(state);
     require(panel.dataset.desktopState === phase, `the panel keeps its state in data (${panel.dataset.desktopState} vs ${phase})`);
     requireBareScreen(screen);
-    require(!visible(panel.querySelector('.computer-lifecycle-state')) && !visible(panel.querySelector('.desktop-caption')), 'neither the header nor a caption says the state in words');
+    const progress = {starting:'啟動中', building:'更新中', preparing:'啟動中', waking:'喚醒中', updating:'更新中', repairing:'修復中'};
+    const expected = state.transport && progress[state.lifecycle ?? state.state];
+    const status = panel.querySelector('.computer-lifecycle-state');
+    require(expected ? visible(status) && status.textContent === expected : !visible(status), 'the header keeps the existing preparation or maintenance word');
+    require(!visible(panel.querySelector('.desktop-caption')), 'the screen has no caption');
     require(visible(panel.querySelector('[data-computer-choice]')), 'the computer dropdown stays on the header row');
     const cover = panel.querySelector('[data-desktop="enlarge"]'), bounds = screen.getBoundingClientRect();
     if (['starting', 'building', 'preparing'].includes(phase)) require(!visible(cover), 'a computer that is getting ready is not pressable');
@@ -1157,18 +1171,23 @@ export function checkRendered(name, context = {}) {
     require(visible(header), 'the member panel header is visible');
     const panel = header.closest('.desktop-panel'), row = header.querySelector('.desktop-choice-row');
     const dropdown = row.querySelector('[data-computer-choice]'), status = row.querySelector('.computer-lifecycle-state');
-    require(visible(dropdown) && header.querySelectorAll('button[aria-haspopup]').length === 1, 'the header has one computer dropdown');
-    require(row.querySelectorAll('button').length === 1 && visible(document.querySelector('[data-det="gear"]')) && visible(document.querySelector('[data-det="close"]')), 'only the dropdown is in the header row, with gear and close still available on the panel');
-    const bounds = header.getBoundingClientRect(), choice = dropdown.getBoundingClientRect();
-    require(choice.left >= bounds.left - 1 && choice.right <= bounds.right + 1, 'the dropdown stays inside the header');
+    const maintenance = row.querySelector('[data-computer-menu]'), buttons = [...row.querySelectorAll('button')].filter(visible);
+    require(visible(dropdown) && buttons.at(-1) === dropdown && buttons.every(button => button === dropdown || button === maintenance), 'the dropdown is the rightmost control, beside maintenance where available');
+    require(visible(document.querySelector('[data-det="gear"]')) && visible(document.querySelector('[data-det="close"]')), 'gear and close stay available on the panel');
+    const bounds = header.getBoundingClientRect(), choice = dropdown.getBoundingClientRect(), screen = panel.querySelector('.desktop-screen').getBoundingClientRect();
+    require(choice.left >= bounds.left - 1 && Math.abs(choice.right - screen.right) <= 1, 'the dropdown lines up with the right edge of the screen');
+    if (visible(maintenance)) {
+      const more = maintenance.getBoundingClientRect();
+      require(more.right <= choice.left + 1 && more.top < choice.bottom && more.bottom > choice.top, 'maintenance sits to the left of the dropdown on the same row');
+    }
     if (visible(status)) {
-      const word = status.getBoundingClientRect();
-      require(word.left >= choice.right - 1 && word.right <= bounds.right + 1 && word.top < choice.bottom && word.bottom > choice.top, 'the quiet state word is beside the choice on the same row');
+      const word = status.getBoundingClientRect(), first = buttons[0].getBoundingClientRect();
+      require(word.left >= bounds.left - 1 && word.right <= first.left + 1 && word.top < choice.bottom && word.bottom > choice.top, 'the quiet state word fits before the controls on the same row');
     }
     const setup = panel.querySelector('.desktop-docker-setup'), help = setup.querySelector('[data-docker-help]');
     require(!panel.querySelector('[data-act="docker-download"]'), 'there is no Docker download button');
     if (name === 'desktop-computer-choice-host') {
-      require(dropdown.textContent === '這台電腦' && !visible(setup) && !shownText(header).includes('Docker'), 'this computer never shows Docker installation words');
+      require(dropdown.textContent === '這台電腦' && !visible(setup) && !visible(maintenance) && !visible(status), 'watching this computer shows the choice alone');
     } else if (name === 'desktop-computer-choice-missing') {
       const explanation = setup.querySelector('span'), style = getComputedStyle(help);
       require(dropdown.textContent === '虛擬機（本機）' && visible(setup) && explanation.textContent === '尚未安裝 Docker' && help.textContent === '請 Raphael 安裝', 'a missing Docker has one explanation and one ask action');
@@ -1177,6 +1196,7 @@ export function checkRendered(name, context = {}) {
       require(!panel.querySelector('iframe[src]'), 'the unavailable virtual machine has no stream');
     } else if (name === 'desktop-computer-choice-docker') {
       const local = document.querySelector('.menu [data-value="docker-local"]'), remote = document.querySelector('.menu [data-value="docker-remote"]');
+      require(visible(maintenance) && !visible(status), 'a running VM has maintenance and no running word');
       require(dropdown.textContent === '虛擬機（studio-mini）' && visible(local) && local.textContent.includes('虛擬機（本機）') && visible(remote) && remote.getAttribute('aria-checked') === 'true', 'the one menu shows the local and selected SSH locations');
     } else if (name === 'desktop-computer-choice') {
       require(dropdown.textContent === '虛擬機（本機）' && window.__look.calls.some(call => call.method === 'computer.viewer_close'), 'the choice follows the member to Docker and closes the host stream');

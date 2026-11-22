@@ -215,16 +215,15 @@ iframe[data-desktop-stream][hidden] { display: block !important; position: absol
 :is(.desktop-mode, .desktop-actions) .btn.sm:disabled { border-color: color-mix(in srgb, var(--text) 40%, var(--content)); background: color-mix(in srgb, var(--text) 40%, var(--content)); }
 
 .desktop-location-header { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); min-width: 0; }
-.desktop-choice-row { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
+.desktop-choice-row { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-2); min-width: 0; }
+.desktop-choice-row > .computer-lifecycle { display: contents; }
 .desktop-computer-choice { min-width: 0; }
 .desktop-computer-choice .sel { max-width: min(100%, 260px); padding-inline-start: var(--sp-2); }
 .desktop-computer-choice .sel, .desktop-computer-choice .sel:is(:hover, :active, [aria-expanded="true"]):not(:disabled) { border-color: transparent; background: transparent; }
-.computer-lifecycle-state { min-width: 0; color: var(--text-2); font-size: var(--fs-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.computer-lifecycle-state { min-width: 0; margin-inline-end: auto; color: var(--text-2); font-size: var(--fs-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .desktop-docker-setup { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-1) var(--sp-2); margin: 0; padding-inline: var(--sp-2); color: var(--text-2); font-size: var(--fs-sm); }
 .btn.desktop-docker-help { min-height: 0; padding: 0; border: 0; background: transparent; color: var(--link); font: inherit; text-align: start; white-space: normal; }
 .btn.desktop-docker-help:is(:hover, :active):not(:disabled) { background: transparent; text-decoration: underline; text-underline-offset: 3px; }
-.desktop-settings { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
-.desktop-panel[data-expanded] .desktop-settings { display: none; }
 .menu.computer-location-popover { width: min(380px, calc(100vw - var(--sp-4))); padding: var(--sp-3); }
 .menu.computer-location-popover .slist { --slist-pad: 0px; padding-inline: 0; }
 /* The repair command's copy button is a code block control, not a menu row. */

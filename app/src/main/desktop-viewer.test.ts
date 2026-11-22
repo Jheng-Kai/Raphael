@@ -170,7 +170,7 @@ test("only a Docker choice shows the missing-Docker line and asks Raphael throug
   mounted.show(); await flush();
   expect(computerChoice().textContent).toBe("這台電腦");
   expect(panel().querySelector("[data-docker-help]")).toBeNull();
-  expect(panel().querySelectorAll(".desktop-location-header button[aria-haspopup]")).toHaveLength(1);
+  expect(panel().querySelectorAll(".desktop-location-header button[aria-haspopup]:not([hidden])")).toHaveLength(1);
   selectComputer("docker"); await flush();
   expect(computerChoice().textContent).toBe("虛擬機（本機）");
   expect(frame().src).toContain("/chrome/host.html");
@@ -283,8 +283,8 @@ test('the captioned preview opens the larger view to watch the same stream, Esc 
   // Nothing is written over the screen or under it, not even before the stream is up.
   expectBareScreen(panel());
   message('connected');
-  expect(panel().querySelector<HTMLElement>('.computer-lifecycle-state')!.hidden).toBe(false);
-  expect(panel().querySelector('[data-computer-state-text]')?.textContent).toBe(t('desktop.state.running'));
+  expect(panel().querySelector<HTMLElement>('.computer-lifecycle-state')!.hidden).toBe(true);
+  expect(panel().querySelector('[data-computer-state-text]')).toBeNull();
   expect(panel().querySelector<HTMLElement>('.desktop-caption')!.hidden).toBe(true);
   const stream=frame();
   enlarge().click(); await flush();
@@ -663,7 +663,7 @@ test('a sleeping computer is shown, not started, until the owner presses its scr
   opened({session:'one',url:'http://127.0.0.1:5000/one/vnc.html'}); api.desktopRenew.mockResolvedValue(running);
   await vi.advanceTimersByTimeAsync(10_000); await flush();
   expect(panel().dataset.desktopState).not.toBe('stopped');
-  expect(panel().querySelector<HTMLElement>('.computer-lifecycle-state')!.hidden).toBe(false);
+  expect(panel().querySelector<HTMLElement>('.computer-lifecycle-state')!.hidden).toBe(true);
   expect(panel().querySelector('.desktop-preparation')).toBeNull();
 });
 
@@ -1151,6 +1151,61 @@ test('a running computer is not streamed while its Computer tab is closed: Detai
   // The computer lives in the third tab only, so no stream is opened unseen for another view of the panel.
   api.desktopStatus.mockResolvedValue(running); mounted.show(); await vi.advanceTimersByTimeAsync(2000); await flush();
   expect(api.desktopOpen).not.toHaveBeenCalled(); expect(host.querySelector('iframe')).toBeNull();
+});
+
+test.each(['host', 'docker'] as const)('returning from Details immediately shows the running %s computer', async transport => {
+  const state: DesktopState = {...running, transport, target:'live-target'};
+  api.desktopStatus.mockResolvedValue(state);
+  api.desktopRenew.mockResolvedValue(state);
+  api.desktopClose.mockImplementationOnce(() => new Promise(resolve => setTimeout(resolve, 1500)));
+  if (transport === 'host') api.desktopOpen
+    .mockResolvedValueOnce({session:'first',url:'http://127.0.0.1:5000/first/host.html'})
+    .mockResolvedValueOnce({session:'second',url:'http://127.0.0.1:5000/second/host.html'});
+
+  const selectTab = async (tab: 'computer' | 'details'): Promise<void> => {
+    host.dataset.detailsTab = tab;
+    panelOpen = tab === 'computer';
+    // The conversation's member-panel-tab handler uses this path for every kind of tab selection.
+    mounted.show(); mounted.sync();
+    await flush();
+  };
+  await selectTab('computer');
+  message('connected');
+  expect(frame().hidden).toBe(false);
+  const liveFrame = frame();
+
+  await selectTab('details');
+  if (transport === 'host') expect(liveFrame.isConnected).toBe(false);
+  await selectTab('computer');
+  await vi.advanceTimersByTimeAsync(999);
+  if (transport === 'host') {
+    expect(api.desktopClose).toHaveBeenCalledExactlyOnceWith('first');
+    expect(api.desktopOpen).toHaveBeenCalledTimes(2);
+    expect(frame().getAttribute('src')).toContain('/second/host.html');
+    message('connected');
+  } else {
+    expect(api.desktopOpen).toHaveBeenCalledTimes(1);
+    expect(frame()).toBe(liveFrame);
+  }
+  expect(frame().hidden).toBe(false);
+  expect(panel().querySelector<HTMLElement>('.desktop-placeholder')!.hidden).toBe(true);
+  await vi.advanceTimersByTimeAsync(501);
+  expect(frame().hidden).toBe(false);
+});
+
+test.each([
+  [{state:'preparing'}, 'desktop.state.starting'],
+  [{state:'stopped', lifecycle:'waking'}, 'desktop.state.waking'],
+  [{state:'running', lifecycle:'updating'}, 'desktop.state.updating'],
+] as const)('keeps the existing progress label beside the VM controls for %j', async (phase, word) => {
+  api.desktopStatus.mockResolvedValue({...running, transport:'docker', ...phase});
+  panelOpen = true;
+  mounted.show(); await flush();
+  const row = panel().querySelector<HTMLElement>('.desktop-choice-row')!;
+  const status = row.querySelector<HTMLElement>('.computer-lifecycle-state')!;
+  expect(status.hidden).toBe(false);
+  expect(status.textContent).toBe(t(word));
+  expect([...row.querySelectorAll('button:not([hidden])')]).toEqual([row.querySelector('[data-computer-menu]'), computerChoice()]);
 });
 
 test('watching wakes a sleeping computer and opens a running one large, the way the Computer tab does', async () => {
