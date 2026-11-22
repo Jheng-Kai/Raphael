@@ -1,6 +1,14 @@
 import type { Messages } from "./zh-TW";
 
 export const ru = {
+  "browser.tabs": "Вкладки браузера",
+  "browser.newTab": "Новая вкладка",
+  "browser.closeTab": "Закрыть вкладку",
+  "browser.back": "Назад",
+  "browser.forward": "Вперёд",
+  "browser.reload": "Обновить",
+  "browser.address": "Адрес",
+  "browser.navigationFailed": "Не удалось открыть эту страницу.",
   "memberComputer.switchFailed": "Не удалось передать участнику выбор компьютера.",
   "memberComputer.stopFailed": "Не удалось остановить задачу на компьютере.",
   "memberComputer.returnFailed": "Не удалось вернуть участнику управление компьютером.",

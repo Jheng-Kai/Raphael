@@ -8,6 +8,7 @@ import { esc, ico, backButton as roundBackButton, iconButton, btn, patchHTML, se
 import { openActions } from "./member-column";
 import { FILE_MAX_BYTES, fileMime, storeUpload } from "./attachments";
 import "./desktop-viewer.css";
+import { mountHostBrowserToolbar, type HostBrowserModel } from "./host-browser-toolbar";
 import { mountDesktopTimeline, desktopWorkText, type DesktopWork } from "./desktop-timeline";
 import { mountMemberResources } from "./member-profile-resources";
 import { cardFailure } from "./card";
@@ -171,6 +172,12 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     return screen;
   }
   let frame = newFrame();
+  let browserModel: HostBrowserModel | undefined;
+  const browserToolbar = mountHostBrowserToolbar(panel.querySelector(".desktop-screen")!, (action, id) => {
+    if (session && state?.transport === "host") {
+      frame.contentWindow?.postMessage({ type: "raphael-desktop-browser-action", action, id }, new URL(session.url).origin);
+    }
+  });
   const tabBar = host.querySelector('.mb-tabs');
   if (tabBar) tabBar.after(panel); else (host.querySelector('.mb-det-scroll') ?? host).prepend(panel);
   const take = panel.querySelector<HTMLButtonElement>('[data-desktop="take"]')!;
@@ -389,6 +396,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     paint(wallpaper, 'hidden', visibleTarget() && !connected);
     // The small picture is a card in the conversation; the larger view and the Computer tab are the stream itself.
     const hostView = state?.transport === "host";
+    browserToolbar.draw(hostView && running && connected ? browserModel : undefined, interactive && !watching && !changing);
     askFrames(!!running && connected && !!inline && !expanded && !owner && (hostView || !pending()));
     const preview = lastFrames.get(member());
     const picture = running && !stalled && (!connected || !hostView && inline && !expanded) ? preview : undefined;
@@ -432,6 +440,8 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     if (state?.transport === 'host' && streamMember !== undefined) lastFrames.delete(streamMember);
     generation++; takeOnConnect = false; watching = false; send(false); framesOn = false; frame.remove(); frame.removeAttribute('src'); connected = interactive = false;
     const previous = session; session = undefined;
+    browserModel = undefined;
+    browserToolbar.draw(undefined, false);
     if (previous) closeLease(previous);
     if (keepExpanded && panel.hasAttribute('data-expanded')) {
       watching = true;
@@ -493,6 +503,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     document.documentElement.toggleAttribute('data-desktop-watch', watching);
     expand(true, false);
     if (connected && state.control === 'owner' && !watching && !changing) send(true);
+    if (state.transport === "host") frame.contentWindow?.postMessage({ type: "raphael-desktop-browser-refresh" }, new URL(session.url).origin);
     // The member selector finishes drawing its default tab in the same turn.
     queueMicrotask(() => { if (visible && session === view.session && !options.panelVisible()) options.openPanel(); });
     return true;
@@ -589,6 +600,15 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
       return;
     }
     if (event.data?.type !== 'raphael-desktop') return;
+    if (event.data.state === "browser" && state?.transport === "host") {
+      browserModel = event.data.model;
+      browserToolbar.draw(connected ? browserModel : undefined, interactive && !watching && !changing);
+      return;
+    }
+    if (event.data.state === "browser-action") {
+      browserToolbar.result(event.data.id, event.data.ok === true);
+      return;
+    }
     if (event.data.state === 'frame') {
       if (state?.control === 'owner' || pending() && state?.transport !== 'host') return;
       if (typeof event.data.image === 'string' && event.data.image.startsWith('data:image/jpeg;base64,') && streamMember !== undefined && lastFrames.get(streamMember) !== event.data.image) { lastFrames.set(streamMember, event.data.image); draw(); }

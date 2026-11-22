@@ -4814,16 +4814,63 @@ export function checkRendered(name, context = {}) {
     require(calls.filter(call => call.command === 'plugin:window|start_dragging').length === before.drags + 1, 'the title bar received the outside press');
     return {check:name};
   }
-  if (name === "desktop-host-frame") {
-    const frame = document.querySelector('.desktop-screen iframe[src*="transport=host"]');
-    const image = frame?.contentDocument?.querySelector('canvas');
+  if (name === "desktop-host-frame" || name === "desktop-host-card-frame") {
+    const card = name === "desktop-host-card-frame";
+    const frame = document.querySelector('.desktop-screen[data-host-browser] iframe[src*="transport=host"]:not([hidden])');
+    const image = card ? document.querySelector('[data-computer-card] .desktop-last:not([hidden])') :
+      frame?.contentDocument?.querySelector('canvas');
     require(visible(image), 'the Chrome page is painted');
-    const box = image.getBoundingClientRect();
-    const win = image.ownerDocument.defaultView;
-    require(win.getComputedStyle(image).objectFit === 'cover' && Math.abs(box.width / box.height - 1280 / 900) <= 0.015, 'the page fills the desktop aspect ratio');
-    require(image.width === 1280 && image.height === 900 && Math.abs(box.width - win.innerWidth) <= 1 && Math.abs(box.height - win.innerHeight) <= 1, 'the canvas fills the iframe edge to edge');
-    require(!visible(frame.closest('.desktop-panel').querySelector('.desktop-notice')), 'the panel has the same working page');
+    const box = (card ? image : frame).getBoundingClientRect();
+    require(Math.abs(box.width / box.height / (1280 / 900) - 1) <= 0.01,
+      `the page keeps the 1280:900 aspect: ${box.width}x${box.height}`);
+    if (!card) {
+      const canvas = image.getBoundingClientRect(), win = image.ownerDocument.defaultView;
+      require(image.width === 1280 && image.height === 900, 'the Chrome framebuffer is 1280x900');
+      require(Math.abs(canvas.width - win.innerWidth) <= 1 && Math.abs(canvas.height - win.innerHeight) <= 1, 'the canvas fills the iframe edge to edge');
+      const screen = frame.closest('.desktop-screen'), outer = screen.getBoundingClientRect();
+      const bar = screen.querySelector('.host-browser-toolbar').getBoundingClientRect();
+      require(Math.abs(outer.height - bar.height - box.height) <= 1 && Math.abs(bar.bottom - box.top) <= 1 &&
+        Math.abs(box.left - outer.left) <= 1 && Math.abs(box.right - outer.right) <= 1, 'the toolbar sits above an edge-to-edge page');
+      const panel = screen.closest('.desktop-panel');
+      if (panel.hasAttribute('data-expanded')) {
+        const shell = screen.closest('.desktop-shell').getBoundingClientRect();
+        require(Math.abs(outer.left + outer.right - shell.left - shell.right) <= 1 &&
+          outer.top >= shell.top && outer.bottom <= shell.bottom, 'the expanded frame is centered and fits the window');
+      }
+      require(!visible(panel.querySelector('.desktop-notice')), 'the panel has the same working page');
+    }
     return {check:name, width:box.width, height:box.height};
+  }
+  if (name.startsWith("desktop-host-tabs-")) {
+    const screen = document.querySelector('.desktop-screen[data-host-browser]');
+    const toolbar = screen?.querySelector('.host-browser-toolbar');
+    const strip = toolbar?.querySelector('.host-browser-strip');
+    const frame = screen?.querySelector('iframe:not([hidden])');
+    require(visible(toolbar) && visible(frame), 'the browser toolbar and live page are both in the existing screen');
+    const outer = screen.getBoundingClientRect(), bar = toolbar.getBoundingClientRect(), page = frame.getBoundingClientRect();
+    const within = (a, b) => Math.abs(a - b) <= 1;
+    require(within(bar.top, outer.top) && within(bar.bottom, page.top) && within(page.bottom, outer.bottom) &&
+      within(page.left, outer.left) && within(page.right, outer.right), 'the toolbar sits above an edge-to-edge page');
+    require(strip.querySelectorAll('[aria-pressed="true"]').length === 1, 'one shown tab is visibly selected');
+    if (name === 'desktop-host-tabs-many') {
+      require(strip.scrollWidth > strip.clientWidth, 'crowded tabs scroll horizontally inside the toolbar');
+      for (const button of strip.querySelectorAll('[data-browser-action="select"]')) {
+        const title = button.querySelector('.host-browser-tab-title');
+        require(button.hasAttribute('data-tooltip') === (title.scrollWidth > title.clientWidth), 'only a cut title has a tooltip');
+      }
+    }
+    if (name === 'desktop-host-tabs-popup') {
+      require(toolbar.querySelector('[data-browser-tab="popup"][aria-pressed="true"]') &&
+        toolbar.querySelector('[data-browser-tab="library"]'), 'the popup and opener share the strip');
+    }
+    if (name === 'desktop-host-tabs-watch' || name === 'desktop-host-tabs-control') {
+      const held = name === 'desktop-host-tabs-control';
+      require(visible(toolbar.querySelector('.host-browser-address')) === held &&
+        visible(toolbar.querySelector('.host-browser-url')) !== held, 'only the held browser has an editable address');
+      require([...toolbar.querySelectorAll('[data-browser-action="new"], [data-browser-action="close"], [data-browser-action="reload"]')]
+        .every(button => button.disabled === !held), 'browser mutations require takeover');
+    }
+    return {check:name, width:page.width, height:page.height};
   }
   if (name === "desktop-frame") {
     const shell = document.querySelector('.desktop-shell');

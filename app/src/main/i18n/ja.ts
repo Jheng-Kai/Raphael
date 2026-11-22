@@ -5,6 +5,14 @@ import { missingJa } from "./missing-catalogs";
 import type { Messages } from './zh-TW';
 
 export const ja = {
+  "browser.tabs": "ブラウザのタブ",
+  "browser.newTab": "新しいタブ",
+  "browser.closeTab": "タブを閉じる",
+  "browser.back": "前のページ",
+  "browser.forward": "次のページ",
+  "browser.reload": "再読み込み",
+  "browser.address": "アドレス",
+  "browser.navigationFailed": "このページを開けませんでした。",
   "memberComputer.switchFailed": "コンピューターの選択をメンバーに送れませんでした。",
   "memberComputer.stopFailed": "コンピューターでの作業を停止できませんでした。",
   "memberComputer.returnFailed": "操作をメンバーに返せませんでした。",

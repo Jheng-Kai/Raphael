@@ -230,11 +230,12 @@ class HostComputerTools:
                 try:
                     detail = data.get("detail", "")
                     await self.cards.wait_for_browser(turn_id=turn_id, member_id=member, conversation_id=conversation_id,
-                                                      language=language, reason=reason, tab=tab, detail=detail)
+                                                      language=language, reason=reason, tab=tab, detail=detail, browser=browser)
                 finally:
                     tab.handoff = False
                 async with browser.work_lock(work):
-                    data, blocks = await host_page.snapshot(browser, tab, {})
+                    await browser.wait_popups(work)
+                    data, blocks = await host_page.snapshot(browser, browser.selected(work) or tab, {})
                 if data.get("owner_needed"):
                     data["status"] = "owner_step_still_needed"
                 else:
@@ -255,15 +256,13 @@ class HostComputerTools:
 
     async def browser_call(self, name, arguments, approver, member, work, conversation, announce, *, turn_id=None):
         browser = self.browser
+        await browser.wait_popups(work)
         if name == "browser_tabs":
             if arguments.get("show"):
                 raise BrowserError("browser_background_only")
-            tabs = []
-            if browser.cdp is not None and browser.tabs:
-                listing = await browser.cdp.call("Target.getTargets")
-                owned = {tab.target: tab.id for tab in browser.tabs.values() if tab.scope == work}
-                tabs = [{"tab_id": owned[row["targetId"]], "title": row["title"], "url": row["url"], "shown": None}
-                        for row in listing["targetInfos"] if row["targetId"] in owned]
+            current = browser.selected(work)
+            tabs = [{"tab_id": tab.id, "title": tab.title, "url": tab.url, "shown": tab is current}
+                    for tab in browser.scope_tabs(work) if browser.live(tab) and not tab.finished]
             return {"tabs": tabs}, [], None
         if name == "browser_open":
             if isinstance(work[0], tuple) and not work[1]:

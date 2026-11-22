@@ -5,6 +5,14 @@ import { missingEn } from "./missing-catalogs";
 import type { Messages } from './zh-TW';
 
 export const en = {
+  "browser.tabs": "Browser tabs",
+  "browser.newTab": "New tab",
+  "browser.closeTab": "Close tab",
+  "browser.back": "Go back",
+  "browser.forward": "Go forward",
+  "browser.reload": "Reload",
+  "browser.address": "Address",
+  "browser.navigationFailed": "Could not open this page.",
   "memberComputer.switchFailed": "Could not send the computer choice to the member.",
   "memberComputer.stopFailed": "Could not stop the computer task.",
   "memberComputer.returnFailed": "Could not return computer control to the member.",

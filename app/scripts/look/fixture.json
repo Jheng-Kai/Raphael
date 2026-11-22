@@ -1,4 +1,20 @@
 {
+  "hostBrowserTabs": [
+    {"id":"library","title":"Video Library","url":"https://videos.example.invalid/library"},
+    {"id":"agenda","title":"Weekly planning notes and meeting agenda","url":"https://notes.example.invalid/agenda"},
+    {"id":"popup","title":"Sign in to Video Library","url":"https://accounts.example.invalid/sign-in"},
+    {"id":"photos","title":"Photography reference library","url":"https://photos.example.invalid/reference"},
+    {"id":"calendar","title":"Editorial calendar","url":"https://calendar.example.invalid"},
+    {"id":"articles","title":"Reading list and saved articles","url":"https://notes.example.invalid/reading"},
+    {"id":"team","title":"Team workspace","url":"https://team.example.invalid"},
+    {"id":"recipe","title":"Recipe collection","url":"https://recipes.example.invalid"},
+    {"id":"inbox","title":"Inbox","url":"https://mail.example.invalid"},
+    {"id":"work","title":"Project workspace","url":"https://work.example.invalid"},
+    {"id":"archive","title":"Document archive","url":"https://archive.example.invalid"},
+    {"id":"travel","title":"Travel notes","url":"https://travel.example.invalid"},
+    {"id":"studio","title":"Studio projects","url":"https://studio.example.invalid"},
+    {"id":"report","title":"Research report and citations","url":"https://report.example.invalid"}
+  ],
   "skillLibrary": [{"key": "set:1", "name": "pstack", "kind": "plugin", "source": "jheng-kai/pstack", "description": "工程流程的技能組", "version": "1.4.0", "enabled": true, "access": [], "updatable": true, "skills": [{"id": 101, "name": "poteto-mode", "description": "照固定流程完成一件工作，並把每一步記錄下來", "enabled": true}, {"id": 102, "name": "verify", "description": "依變更範圍挑選要跑的檢查並回報結果", "enabled": true}, {"id": 103, "name": "look", "description": "拍下受影響畫面的截圖並逐張檢查", "enabled": true}, {"id": 104, "name": "judge", "description": "依設計標準為截圖評分", "enabled": true}, {"id": 105, "name": "review", "description": "檢查差異裡的錯誤與遺漏", "enabled": true}, {"id": 106, "name": "rules", "description": "把重複出現的失敗寫成規則", "enabled": true}, {"id": 107, "name": "notes", "description": "整理工作筆記與下一步", "enabled": true}]},
     {"key": "pack:2", "name": "研究工具", "kind": "pack", "source": "example/research-skills", "description": "", "version": "", "enabled": true, "access": [1, 2], "updatable": true, "skills": [{"id": 201, "name": "來源核對", "description": "核對引用資料與發布日期", "enabled": true}, {"id": 202, "name": "每週摘要", "description": "整理本週重點與下一步", "enabled": false}]},
     {"key": "skill:3", "name": "會議紀錄", "kind": "single", "source": "會議紀錄.md", "description": "把會議逐字稿整理成決議與待辦，依議題彙整背景、討論重點與下一步，並為每項待辦記下負責人、期限和仍需釐清的問題，讓下一次會議可以接著討論。", "version": "", "enabled": true, "access": "all", "updatable": false, "skills": [{"id": 301, "name": "會議紀錄", "description": "把會議逐字稿整理成決議與待辦，依議題彙整背景、討論重點與下一步，並為每項待辦記下負責人、期限和仍需釐清的問題，讓下一次會議可以接著討論。", "enabled": true}]}],

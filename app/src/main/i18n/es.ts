@@ -1,6 +1,14 @@
 import type { Messages } from "./zh-TW";
 
 export const es = {
+  "browser.tabs": "Pestañas del navegador",
+  "browser.newTab": "Nueva pestaña",
+  "browser.closeTab": "Cerrar pestaña",
+  "browser.back": "Atrás",
+  "browser.forward": "Adelante",
+  "browser.reload": "Recargar",
+  "browser.address": "Dirección",
+  "browser.navigationFailed": "No se pudo abrir esta página.",
   "memberComputer.switchFailed": "No se pudo comunicar la elección al miembro.",
   "memberComputer.stopFailed": "No se pudo detener la tarea en el ordenador.",
   "memberComputer.returnFailed": "No se pudo devolver el control al miembro.",

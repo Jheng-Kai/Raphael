@@ -23,8 +23,8 @@ class Screencast:
         if not self.watchers:
             return
         meta = params["metadata"]
-        self.latest = image = json.dumps({"image": params["data"], "width": meta["deviceWidth"],
-                                          "height": meta["deviceHeight"]}).encode() + b"\n"
+        self.latest = image = json.dumps({"image": params["data"], "target": self.tab.id,
+                                          "width": meta["deviceWidth"], "height": meta["deviceHeight"]}).encode() + b"\n"
         for queue in self.watchers:
             self.offer(queue, image)
 

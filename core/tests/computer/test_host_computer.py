@@ -240,6 +240,8 @@ async def test_scope_close_waits_for_all_owned_targets_even_after_a_session_deta
             assert target not in closing
             closing[target] = polls + 1
             return {"success": True}
+        if method == "Target.attachToTarget":
+            raise BrowserError("chrome_command_failed")
         assert method == "Target.getTargets"
         polls += 1
         targets.difference_update(target for target, deadline in closing.items() if deadline < polls)
@@ -294,6 +296,13 @@ async def serve(reader, writer):
             content = b'<form><label>Password<input type="password" value="hidden-test-value"></label></form>'
         elif path == b"/download":
             content = b"download contents"
+        elif path == b"/opener":
+            content = (b'<title>Work page</title><button id="open-popup" onclick="window.open(\'/popup\',\'_blank\','
+                       b'\'popup,width=280,height=250\')">Open sign-in</button>'
+                       b'<a id="open-tab" href="/popup" target="_blank">Open verification</a>')
+        elif path == b"/popup":
+            content = (b'<title>Sign-in</title><label>Code<input id="name"></label>'
+                       b'<button id="done" onclick="window.close()">Done</button>')
         else:
             content = (b'<title>Intranet test</title><label for="name">Project name</label><input id="name">'
                        b'<button onclick="document.querySelector(\'output\').textContent=document.querySelector(\'#name\').value">Preview</button><output></output>')

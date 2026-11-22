@@ -34,6 +34,21 @@ class Cdp:
         self.calls.append((method, params, session))
         if method == "Page.startScreencast":
             self.frame(session)
+        elif method == "Target.attachToTarget":
+            return {"sessionId": "cdp-" + params["targetId"]}
+        elif method == "Target.createTarget":
+            return {"targetId": f"new-{len(self.calls)}"}
+        elif method == "Target.closeTarget":
+            self.browser._event("Target.targetDestroyed", {"targetId": params["targetId"]}, None)
+        elif method == "Page.getFrameTree":
+            return {"frameTree": {"frame": {"id": session, "url": "about:blank"}}}
+        elif method == "Page.navigate":
+            return {}
+        elif method == "Page.getNavigationHistory":
+            return {"currentIndex": 1, "entries": [{"id": 17}, {"id": 23}, {"id": 29}]}
+
+    async def close(self):
+        self.reader.cancel()
 
     def frame(self, session):
         self.browser._event("Page.screencastFrame", {
@@ -57,6 +72,7 @@ def fake_tab(browser, member, conversation, *, turn_id=None):
               conversation=conversation, turn_id=turn_id)
     tab.cast = Screencast(browser, tab)
     browser.tabs[identifier] = tab
+    browser.owned_targets[tab.target] = scope
     browser.select(tab)
     return tab
 
@@ -257,7 +273,7 @@ async def test_host_viewer_gate_and_handback_use_the_same_tab(tmp_path):
             assert not finished and not browser.held
             async with host_frames(client, base) as lines:
                 await anext(lines)
-                text = {"type": "text", "text": "Sample"}
+                text = {"type": "text", "text": "Sample", "target": tab.id}
                 assert (await client.post(url, json=text, headers={"Origin": viewer.origin})).status_code == 403
                 assert (await viewer.control({**owner, "held": True}))["control"] == "owner"
                 assert (await client.get(base + "control")).json() == {"held": True}
@@ -269,7 +285,7 @@ async def test_host_viewer_gate_and_handback_use_the_same_tab(tmp_path):
                     text,
                 ]
                 for event in events:
-                    assert (await client.post(url, json=event, headers={"Origin": viewer.origin})).status_code == 204
+                    assert (await client.post(url, json={**event, "target": tab.id}, headers={"Origin": viewer.origin})).status_code == 204
                 assert [call[0] for call in cdp.calls if call[0].startswith("Input.")] == [
                     "Input.dispatchMouseEvent", "Input.dispatchKeyEvent", "Input.insertText"]
                 assert all(call[2] == tab.session for call in cdp.calls)
@@ -288,6 +304,179 @@ async def test_host_viewer_gate_and_handback_use_the_same_tab(tmp_path):
                     await viewer.control({**owner, "held": False})
     finally:
         await viewer.aclose()
+
+
+async def frame_for(lines, tab, size=None):
+    async with asyncio.timeout(8):
+        while True:
+            frame = json.loads(await anext(lines))
+            if frame["target"] == tab.id and (size is None or (frame["width"], frame["height"]) == size):
+                return frame
+
+
+async def test_host_browser_toolbar_follows_popups_without_replacing_the_lease(tmp_path):
+    viewer, browser = host_viewer(tmp_path)
+    cdp = browser.cdp = Cdp(browser)
+    opener = fake_tab(browser, 1, 10)
+    other = fake_tab(browser, 2, 20)
+    params = {"member_id": 1, "conversation_id": 10}
+    try:
+        first = await viewer.open(params)
+        base = first["url"].removesuffix("host.html")
+        origin = {"Origin": viewer.origin}
+        async with httpx.AsyncClient(trust_env=False, timeout=5) as client, host_frames(client, base) as lines:
+            await frame_for(lines, opener)
+
+            async def action(name, tab, **values):
+                return await client.post(base + "host-browser", json={"action": name, "tab": tab.id, **values}, headers=origin)
+
+            assert (await action("select", other)).status_code == 403
+            assert (await action("new", opener)).status_code == 403
+            assert (await action("close", opener)).status_code == 403
+            assert (await action("navigate", opener, url="https://example.test")).status_code == 403
+            cdp.socket = SimpleNamespace(port=12345)
+            browser._event("Target.targetCreated", {"targetInfo": {
+                "type": "page", "targetId": "popup", "openerId": opener.target, "title": "Sign-in", "url": "about:blank",
+            }}, None)
+            await browser.wait_popups(opener.scope)
+            popup = browser.tab(opener.scope)
+            assert popup.opener == opener.id and popup is not opener
+            await frame_for(lines, popup)
+            assert popup.viewport == (1280, 900)
+            model = (await client.get(base + "host-browser")).json()
+            assert model["shown"] == popup.id and [tab["id"] for tab in model["tabs"]] == [opener.id, popup.id]
+            assert model["tabs"][1]["title"] == "Sign-in"
+            tool_view, _, _ = await HostComputerTools.browser_call(
+                SimpleNamespace(browser=browser), "browser_tabs", {}, "auto", 1, opener.scope, 10, None)
+            assert [(tab["tab_id"], tab["shown"]) for tab in tool_view["tabs"]] == [(opener.id, False), (popup.id, True)]
+            assert (await viewer.renew(first))["target"] == opener.view
+
+            assert (await action("select", opener)).status_code == 204
+            await frame_for(lines, opener)
+            assert browser.selected(opener.scope) is popup
+            assert not any(call[0] == "Page.bringToFront" for call in cdp.calls)
+            assert (await action("select", popup)).status_code == 204
+            await frame_for(lines, popup)
+
+            assert (await viewer.control({**first, "held": True}))["control"] == "owner"
+            assert (await action("select", opener)).status_code == 204
+            await frame_for(lines, opener)
+            assert browser.selected(opener.scope) is opener
+            assert ("Page.bringToFront", None, opener.session) in cdp.calls
+            assert (await action("select", popup)).status_code == 204
+            await frame_for(lines, popup)
+            for target, expected in ((opener.id, 403), (other.id, 403), (popup.id, 204)):
+                response = await client.post(base + "host-input", json={"type": "text", "text": "Code", "target": target}, headers=origin)
+                assert response.status_code == expected
+            assert ("Input.insertText", {"text": "Code"}, popup.session) in cdp.calls
+            assert (await action("navigate", popup, url="file:///private")).status_code == 403
+            assert (await action("navigate", popup, url="http://127.0.0.1:12345")).status_code == 403
+            assert (await action("navigate", popup, url="https://example.test")).status_code == 204
+            assert ("Page.navigate", {"url": "https://example.test"}, popup.session) in cdp.calls
+            assert (await action("back", popup)).status_code == 204
+            assert (await action("forward", popup)).status_code == 204
+            assert ("Page.navigateToHistoryEntry", {"entryId": 17}, popup.session) in cdp.calls
+            assert ("Page.navigateToHistoryEntry", {"entryId": 29}, popup.session) in cdp.calls
+            assert (await action("reload", popup)).status_code == 204
+            assert ("Page.reload", None, popup.session) in cdp.calls
+            assert (await action("close", other)).status_code == 403
+            assert (await action("close", popup)).status_code == 204
+            await frame_for(lines, opener)
+            assert browser.tab(opener.scope) is opener and (await viewer.renew(first))["control"] == "owner"
+            assert (await action("new", opener)).status_code == 204
+            new = browser.tab(opener.scope)
+            await frame_for(lines, new)
+            assert new is not opener and new.view == opener.view
+            assert (await viewer.control({**first, "held": False}))["control"] == "member"
+            assert browser.tab(opener.scope) is new and other.id in browser.tabs
+    finally:
+        await viewer.aclose()
+        await browser.aclose()
+
+
+async def test_host_toolbar_navigation_does_not_block_another_members_control(tmp_path):
+    viewer, browser = host_viewer(tmp_path)
+    cdp = browser.cdp = Cdp(browser)
+    cdp.socket = SimpleNamespace(port=12345)
+    first_tab = fake_tab(browser, 1, 10)
+    second_tab = fake_tab(browser, 2, 20)
+    navigating, finish = asyncio.Event(), asyncio.Event()
+    call = cdp.call
+
+    async def delay_navigation(method, params=None, *, session=None):
+        if method == "Page.navigate" and session == first_tab.session:
+            navigating.set()
+            await finish.wait()
+        return await call(method, params, session=session)
+
+    cdp.call = delay_navigation
+    try:
+        first = await viewer.open({"member_id": 1, "conversation_id": 10})
+        second = await viewer.open({"member_id": 2, "conversation_id": 20})
+        first_base = first["url"].removesuffix("host.html")
+        second_base = second["url"].removesuffix("host.html")
+        async with (httpx.AsyncClient(trust_env=False, timeout=5) as client,
+                    host_frames(client, first_base) as first_lines, host_frames(client, second_base) as second_lines):
+            await frame_for(first_lines, first_tab)
+            await frame_for(second_lines, second_tab)
+            await viewer.control({**first, "held": True})
+            request = asyncio.create_task(client.post(first_base + "host-browser", headers={"Origin": viewer.origin},
+                json={"action": "navigate", "tab": first_tab.id, "url": "https://example.test"}))
+            try:
+                async with asyncio.timeout(2):
+                    await navigating.wait()
+                    assert (await viewer.control({**second, "held": True}))["control"] == "owner"
+                    result = await client.post(second_base + "host-input", headers={"Origin": viewer.origin},
+                        json={"type": "text", "text": "Second member", "target": second_tab.id})
+                    assert result.status_code == 204
+                    assert ("Input.insertText", {"text": "Second member"}, second_tab.session) in cdp.calls
+            finally:
+                finish.set()
+                response = await request
+            assert response.status_code == 204
+    finally:
+        await viewer.aclose()
+        await browser.aclose()
+
+
+async def test_popup_can_close_before_done_without_ending_its_handback(tmp_path, conn):
+    viewer, browser = host_viewer(tmp_path)
+    browser.cdp = Cdp(browser)
+    cards = viewer.handbacks = HandbackCards(conn, None)
+    turn_id = AgentHistory(conn).add(session_id="popup-handback", question="Sign in", route="answer",
+                                     prefix="", text="", status="running", source="app", member_id=0)
+    opener = fake_tab(browser, 0, 10, turn_id=turn_id)
+    browser._event("Target.targetCreated", {"targetInfo": {
+        "type": "page", "targetId": "popup", "openerId": opener.target,
+    }}, None)
+    await browser.wait_popups(opener.scope)
+    popup = browser.selected(opener.scope)
+    assert popup is not opener
+    waiting = asyncio.create_task(cards.wait_for_browser(
+        turn_id=turn_id, member_id=0, conversation_id=10, reason="sign_in", language="en", tab=popup, browser=browser))
+    try:
+        await expect_eventually(lambda: cards.browser_request(0, 10)[0] is popup)
+        card = cards.browser_request(0, 10)[1]
+        opened = await viewer.open({"member_id": 0, "conversation_id": 10})
+        base = opened["url"].removesuffix("host.html")
+        control = {**opened, "takeover": card.id}
+        async with httpx.AsyncClient(trust_env=False, timeout=5) as client, host_frames(client, base) as lines:
+            await frame_for(lines, popup)
+            assert (await viewer.control({**control, "held": True}))["control"] == "owner"
+            browser._event("Target.targetDestroyed", {"targetId": popup.target}, None)
+            await frame_for(lines, opener)
+            assert not waiting.done()
+            renewed = await viewer.renew(opened)
+            assert renewed["host_request"]["request_id"] == card.id and renewed["control"] == "owner"
+            assert "host_request" not in (await viewer.control({**control, "held": False}))
+            await asyncio.wait_for(waiting, 5)
+            assert cards.store.get(card.id).state == "done"
+            assert browser.tab(opener.scope) is opener and not browser.held
+    finally:
+        waiting.cancel()
+        await asyncio.gather(waiting, return_exceptions=True)
+        await viewer.aclose()
+        await browser.aclose()
 
 
 async def test_host_live_card_and_panel_bind_the_same_tab_and_follow_its_replacement(tmp_path):
@@ -359,7 +548,7 @@ async def test_native_chrome_sign_in_handback_releases_input_and_resumes_same_ta
                     typed = {"type": "text", "text": "Owner signed in through the panel"}
                     headers = {"Origin": viewer.origin}
                     for event in [*events, typed]:
-                        assert (await client.post(base + "host-input", json=event, headers=headers)).status_code == 204
+                        assert (await client.post(base + "host-input", json={**event, "target": tab.id}, headers=headers)).status_code == 204
                     returned = await viewer.control({**control, "held": False})
                     assert returned["control"] == "member" and "host_request" not in returned
                     assert not viewer.owners and not browser.held
@@ -418,7 +607,7 @@ async def test_native_chrome_frames_and_owner_input(tmp_path):
                         assert (await client.post(endpoint, json=events[-1], headers=headers)).status_code == 403
                         await viewer.control({"session": first["session"], "held": True})
                         for event in events:
-                            assert (await client.post(endpoint, json=event, headers=headers)).status_code == 204
+                            assert (await client.post(endpoint, json={**event, "target": one.id}, headers=headers)).status_code == 204
                         for tab, expected in ((one, events[-1]["text"]), (two, "")):
                             result = await browser.command(tab, "Runtime.evaluate", {
                                 "expression": "document.querySelector('#name').value", "returnByValue": True})
@@ -429,6 +618,75 @@ async def test_native_chrome_frames_and_owner_input(tmp_path):
             finally:
                 await browser.aclose()
                 await asyncio.sleep(0.1)  # Chrome's connections to the test site end; their transports close
+
+
+@pytest.mark.skipif(chrome_executable() is None or bool(os.environ.get("CI")), reason="Google Chrome is unavailable or this is CI")
+async def test_native_chrome_follows_small_popups_and_blank_links_on_the_same_lease(tmp_path):
+    viewer, browser = host_viewer(tmp_path.resolve())
+    group = ("turn", 1, 10)
+    site = await asyncio.start_server(serve, "127.0.0.1", 0)
+
+    async def evaluate(tab, expression):
+        result = await browser.command(tab, "Runtime.evaluate", {"expression": expression, "returnByValue": True})
+        return result["result"].get("value")
+
+    async with site:
+        try:
+            await browser.start()
+            opener = await browser.new_tab(group, 1, tmp_path, 10)
+            other = await browser.new_tab(("task", 2), 2, tmp_path)
+            url = f"http://127.0.0.1:{site.sockets[0].getsockname()[1]}"
+            assert await host_page.navigate(browser, opener, url + "/opener")
+            assert await host_page.navigate(browser, other, url)
+            opened = await viewer.open({"member_id": 1, "conversation_id": 10})
+            base = opened["url"].removesuffix("host.html")
+            headers = {"Origin": viewer.origin}
+            async with httpx.AsyncClient(trust_env=False, timeout=10) as client, host_frames(client, base) as lines:
+                await frame_for(lines, opener, (1280, 900))
+                assert await evaluate(opener, "[innerWidth, innerHeight]") == [1280, 900]
+                assert (await viewer.control({**opened, "held": True}))["control"] == "owner"
+
+                async def send(tab, event):
+                    response = await client.post(base + "host-input", json={**event, "target": tab.id}, headers=headers)
+                    assert response.status_code == 204
+
+                async def click(tab, selector):
+                    rect = await evaluate(tab, f"document.querySelector({json.dumps(selector)}).getBoundingClientRect().toJSON()")
+                    for kind, buttons in (("mousePressed", 1), ("mouseReleased", 0)):
+                        await send(tab, {"type": kind, "x": rect["x"] + 8, "y": rect["y"] + 8,
+                                         "button": "left", "buttons": buttons, "count": 1})
+
+                for button in ("#open-popup", "#open-tab"):
+                    await click(opener, button)
+                    await expect_eventually(lambda: browser.selected(group) is not opener)
+                    popup = browser.selected(group)
+                    assert popup and popup.opener == opener.id
+                    frame = await frame_for(lines, popup, (1280, 900))
+                    assert base64.b64decode(frame["image"]).startswith(b"\xff\xd8")
+                    assert await evaluate(popup, "[innerWidth, innerHeight]") == [1280, 900]
+                    model = (await client.get(base + "host-browser")).json()
+                    assert model["shown"] == popup.id and {tab["id"] for tab in model["tabs"]} == {opener.id, popup.id}
+                    assert (await viewer.renew(opened))["control"] == "owner"
+                    await click(popup, "#name")
+                    await send(popup, {"type": "text", "text": "Test code"})
+                    assert await evaluate(popup, "document.querySelector('#name').value") == "Test code"
+                    assert await evaluate(other, "document.querySelector('#name').value") == ""
+                    if button == "#open-popup":
+                        await click(popup, "#done")
+                    else:
+                        response = await client.post(base + "host-browser", headers=headers, json={"action": "close", "tab": popup.id})
+                        assert response.status_code == 204
+                    await frame_for(lines, opener, (1280, 900))
+                    assert browser.tab(group) is opener and popup.id not in browser.tabs
+
+                assert (await viewer.control({**opened, "held": False}))["control"] == "member"
+                assert not browser.held
+        finally:
+            try:
+                await viewer.aclose()
+            finally:
+                await browser.aclose()
+                await asyncio.sleep(0.1)
 
 
 def windows_on_desktop(pid, desktop=None):

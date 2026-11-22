@@ -7,6 +7,45 @@ const input = document.querySelector('textarea');
 const tell = (state, details = {}) => parent.postMessage({ type: 'raphael-desktop', state, ...details }, '*');
 let stream, connected = false, interactive = false, desired = false, thumbnails = false;
 let frame, viewport, thumbnailTimer, controlRevision = 0, pasteId = 0, lastThumbnail = 0;
+let browserTimer, browserModel, browserRead = 0;
+const jsonHeaders = { 'Content-Type': 'application/json' };
+
+async function readBrowser(feed) {
+    clearTimeout(browserTimer);
+    const revision = ++browserRead;
+    try {
+        const response = await fetch('host-browser', { signal: feed.signal });
+        if (!response.ok || response.status === 204) return;
+        const model = await response.text();
+        if (stream === feed && revision === browserRead && model !== browserModel) {
+            browserModel = model;
+            tell('browser', { model: JSON.parse(model) });
+        }
+    } catch {
+        // A selection change may race this read. The next read uses the current tab.
+    } finally {
+        if (stream === feed && revision === browserRead) {
+            browserTimer = setTimeout(() => void readBrowser(feed), 600);
+        }
+    }
+}
+
+async function browserAction(action, id) {
+    const feed = stream;
+    if (!feed) return;
+    let ok = false;
+    try {
+        const response = await fetch('host-browser', { method: 'POST', headers: jsonHeaders,
+            body: JSON.stringify(action), signal: feed.signal });
+        ok = response.ok;
+    } catch {
+        // The session may have closed while the action was in progress.
+    }
+    if (stream === feed) {
+        tell('browser-action', { id, ok });
+        void readBrowser(feed);
+    }
+}
 
 async function watch() {
     if (stream || document.hidden) return;
@@ -14,6 +53,7 @@ async function watch() {
     try {
         const response = await fetch('host-frames', { signal: feed.signal });
         if (!response.ok) throw new Error('Stream unavailable');
+        void readBrowser(feed);
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let pending = '';
@@ -46,8 +86,8 @@ async function watch() {
         // The parent owns retry and session disposal.
     } finally {
         if (stream === feed) {
-            stream = undefined;
             tell(connected ? 'disconnected' : 'unreachable');
+            stop();
         }
     }
 }
@@ -59,6 +99,8 @@ function stop() {
     controlRevision++;
     pasteId++;
     clearTimeout(thumbnailTimer);
+    clearTimeout(browserTimer);
+    browserModel = undefined;
 }
 
 function thumbnail(force = false) {
@@ -98,18 +140,18 @@ async function control(held) {
 let sending = false;
 const events = [];
 async function dispatch(event) {
-    if (!interactive) return;
+    if (!interactive || !viewport?.target) return;
     const revision = controlRevision;
     const latest = events.at(-1);
     if (latest?.event.type === 'mouseMoved' && event.type === 'mouseMoved') events.pop();
-    events.push({ revision, event });
+    events.push({ revision, event: { ...event, target: viewport.target } });
     if (sending) return;
     sending = true;
     try {
         while (events.length) {
             const next = events.shift();
             if (!interactive || next.revision !== controlRevision) continue;
-            const response = await fetch('host-input', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            const response = await fetch('host-input', { method: 'POST', headers: jsonHeaders,
                 body: JSON.stringify(next.event) });
             if (response.ok && next.revision === controlRevision) tell('input-accepted');
         }
@@ -125,9 +167,8 @@ const modifiers = event => Number(event.altKey) + 2 * Number(event.ctrlKey)
 function pointer(event, type) {
     if (!interactive || !viewport) return;
     const rect = canvas.getBoundingClientRect();
-    const scale = Math.max(rect.width / canvas.width, rect.height / canvas.height);
-    const x = (event.clientX - rect.left - (rect.width - canvas.width * scale) / 2) / (canvas.width * scale);
-    const y = (event.clientY - rect.top - (rect.height - canvas.height * scale) / 2) / (canvas.height * scale);
+    const x = (event.clientX - rect.left) / rect.width;
+    const y = (event.clientY - rect.top) / rect.height;
     if (!canvas.hasPointerCapture(event.pointerId) && (x < 0 || x > 1 || y < 0 || y > 1)) return;
     event.preventDefault();
     if (type === 'mousePressed') {
@@ -174,6 +215,11 @@ input.addEventListener('paste', event => {
 window.addEventListener('message', event => {
     if (event.source !== parent) return;
     if (event.data?.type === 'raphael-desktop-control') void control(event.data.held === true);
+    if (event.data?.type === 'raphael-desktop-browser-action') void browserAction(event.data.action, event.data.id);
+    if (event.data?.type === 'raphael-desktop-browser-refresh' && stream) {
+        browserModel = undefined;
+        void readBrowser(stream);
+    }
     if (event.data?.type === 'raphael-desktop-frames') {
         thumbnails = event.data.on === true;
         thumbnail(true);

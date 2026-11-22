@@ -202,8 +202,8 @@ class HandbackCards:
         router.register("integrations.card_done", self._done)
         router.register("integrations.card_stop", self._stop)
 
-    async def wait_for_browser(self, *, turn_id, member_id, conversation_id, language, reason, tab, detail=""):
-        """Wait in the original call with its exact tab."""
+    async def wait_for_browser(self, *, turn_id, member_id, conversation_id, language, reason, tab, detail="", browser=None):
+        """Wait in the original call while its Chrome work still has a page."""
         from .host_browser import BrowserError
 
         if not turn_id:
@@ -214,11 +214,11 @@ class HandbackCards:
                                run_id=run_id, reason=reason, app="Chrome", language=language, note=detail)
         self._browser[run_id] = (returned, tab, card)
         self._changed(card)
-        closed = asyncio.create_task(tab.closed.wait())
+        closed = asyncio.create_task(browser.wait_scope_closed(tab.scope) if browser else tab.closed.wait())
         try:
             async with asyncio.timeout(self._wait_ms / 1000):
                 await asyncio.wait((returned, closed), return_when=asyncio.FIRST_COMPLETED)
-                if tab.closed.is_set():
+                if closed.done():
                     raise BrowserError("browser_tab_changed")
                 if not returned.result():
                     raise BrowserError("browser_handback_stopped")

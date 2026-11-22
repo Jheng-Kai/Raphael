@@ -53,7 +53,7 @@ ELEMENT_ACTION = """function(action, text, replace, identity, matchLabel) {
 }"""
 
 
-async def evaluate(browser, tab, expression):
+async def evaluate(browser, tab, expression, *, await_promise=False):
     """Evaluate a fixed expression in an isolated world on the current main frame."""
     tree = await browser.command(tab, "Page.getFrameTree")
     frame = tree["frameTree"]["frame"]
@@ -61,7 +61,8 @@ async def evaluate(browser, tab, expression):
     context = (await browser.command(tab, "Page.createIsolatedWorld",
                                      {"frameId": frame["id"], "worldName": "Raphael"}))["executionContextId"]
     result = await browser.command(tab, "Runtime.evaluate", {"expression": expression,
-                                   "contextId": context, "returnByValue": True})
+                                   "contextId": context, "returnByValue": True,
+                                   **({"awaitPromise": True} if await_promise else {})})
     if "exceptionDetails" in result:
         raise BrowserError("browser_page_changed")
     return result["result"].get("value"), context
@@ -168,7 +169,7 @@ async def act(browser, tab, name, arguments, approver):
     tab.refs.clear()
     try:
         result = await browser.command(tab, "Runtime.callFunctionOn", {
-            "objectId": object_id, "functionDeclaration": ELEMENT_ACTION, "returnByValue": True,
+            "objectId": object_id, "functionDeclaration": ELEMENT_ACTION, "returnByValue": True, "userGesture": action == "click",
             "arguments": [{"value": value} for value in
                           (action, text, arguments.get("replace", False), row["name"], match_label)],
         })

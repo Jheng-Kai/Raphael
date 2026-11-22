@@ -1,6 +1,14 @@
 import type { Messages } from "./zh-TW";
 
 export const ptBR = {
+  "browser.tabs": "Abas do navegador",
+  "browser.newTab": "Nova aba",
+  "browser.closeTab": "Fechar aba",
+  "browser.back": "Voltar",
+  "browser.forward": "Avançar",
+  "browser.reload": "Recarregar",
+  "browser.address": "Endereço",
+  "browser.navigationFailed": "Não foi possível abrir esta página.",
   "memberComputer.switchFailed": "Não foi possível enviar a escolha ao membro.",
   "memberComputer.stopFailed": "Não foi possível parar a tarefa no computador.",
   "memberComputer.returnFailed": "Não foi possível devolver o controle ao membro.",
