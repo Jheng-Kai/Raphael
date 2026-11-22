@@ -73,14 +73,31 @@ const descriptionOf = (p: LibraryPackage): string =>
 
 function packageHTML(p: LibraryPackage, v: SkillLibraryView): string {
   const plugin = isPlugin(p);
-  const about = descriptionOf(p);
   const count = plugin ? '<span class="skl-count">' + esc(t("skillLib.count", { count: p.skills.length })) + ico("right") + '</span>' : "";
-  const words = '<span class="lbl skl-label"><span class="t skl-title"><span class="skl-name">' + esc(p.name) + '</span>' + count + '</span>' +
-    (about ? '<span class="d skl-description">' + esc(about) + '</span>' : '') + '</span>';
+  const words = libraryLabelHTML(p.name, descriptionOf(p), count);
   const name = plugin
     ? '<button type="button" class="btn skl-open" data-skl="open" data-key="' + esc(p.key) + '">' + words + '</button>'
     : '<div class="skl-single" tabindex="-1" data-library-skill="' + (p.skills[0]?.id ?? "") + '">' + words + '</div>';
-  return '<div class="row skl-pack" data-skl-pack="' + esc(p.key) + '">' + name + controlsHTML(p, v) + '</div>';
+  return libraryRowHTML("skl-pack", `data-skl-pack="${esc(p.key)}"`, name, controlsHTML(p, v));
+}
+
+function libraryLabelHTML(name: string, description: string, count = ""): string {
+  return `<span class="lbl skl-label"><span class="t skl-title"><span class="skl-name">${esc(name)}</span>${count}</span>` +
+    (description ? `<span class="d skl-description">${esc(description)}</span>` : "") + "</span>";
+}
+
+function libraryRowHTML(className: string, attrs: string, label: string, controls: string): string {
+  return `<div class="row skl-entry ${className}" ${attrs}>${label}${controls}</div>`;
+}
+
+function pluginSkillHTML(p: LibraryPackage, skill: LibrarySkill): string {
+  const attrs = ` data-key="${esc(p.key)}" data-id="${skill.id}"`;
+  const toggle = tg(skill.enabled, `${t("members.profile.enable")} ${skill.name}`, ` data-skl="skill"${attrs}${p.enabled ? "" : " disabled"}`);
+  const more = skill.description
+    ? iconBtn("more", t("members.more", { p0: skill.name }), ` data-skl="skill-more"${attrs} aria-haspopup="menu" aria-expanded="false"`)
+    : "";
+  const label = `<div class="skl-single">${libraryLabelHTML(skill.name, skill.description)}</div>`;
+  return libraryRowHTML("skl-skill", `tabindex="-1" data-library-skill="${skill.id}"`, label, `<div class="ctl">${toggle}${more}</div>`);
 }
 
 function packageSectionHTML(kind: "plugins" | "skills", packages: LibraryPackage[], v: SkillLibraryView): string {
@@ -94,17 +111,15 @@ function packageSectionHTML(kind: "plugins" | "skills", packages: LibraryPackage
  * A package's page, in the list's place: the back arrow and its name, who may use it, its switch and its ⋯ as on its row,
  * where it came from, then its skills, each with its own switch (off while the package is).
  */
-function packagePageHTML(p: LibraryPackage, v: SkillLibraryView): string {
-  const skills = p.skills.map(skill => `<div class="row skl-skill" tabindex="-1" data-library-skill="${skill.id}">` +
-    `<div class="lbl"><div class="t">${esc(skill.name)}</div>${skill.description ? `<div class="d">${esc(skill.description)}</div>` : ""}</div>` +
-    `<div class="ctl">${tg(skill.enabled, `${t("members.profile.enable")} ${skill.name}`, ` data-skl="skill" data-key="${esc(p.key)}" data-id="${skill.id}"${p.enabled ? "" : " disabled"}`)}</div></div>`).join("");
+function packagePageHTML(p: LibraryPackage, v: SkillLibraryView, notice: string): string {
+  const skills = p.skills.map(skill => pluginSkillHTML(p, skill)).join("");
   const source = p.source ? `<p class="d skl-source">${esc(p.source)}${p.version ? ` · ${esc(p.version)}` : ""}</p>` : "";
-  return `<section class="sgroup skl skl-page" data-skl-page="${esc(p.key)}" aria-labelledby="skl-page-name">` +
-    `<div class="row skl-page-head skl-pack" data-skl-pack="${esc(p.key)}">` +
-    backButton(t("chooser.back"), ' data-skl="back" data-k="skl-back"', "skl-back") +
-    `<h2 class="skl-page-name" id="skl-page-name">${esc(p.name)}</h2>` +
+  return `<section class="skl skl-page" data-skl-page="${esc(p.key)}" aria-labelledby="set-title">` +
+    `<header class="row skl-page-head skl-pack" data-skl-pack="${esc(p.key)}">` +
+    backButton(t("chooser.back"), ' data-skl="back" data-k="skl-back"') +
+    `<h1 class="skl-page-name" id="set-title" tabindex="-1">${esc(p.name)}</h1>` +
     `<span class="skl-count">${esc(t("skillLib.count", { count: p.skills.length }))}</span>` +
-    controlsHTML(p, v) + `</div>` + source +
+    controlsHTML(p, v) + `</header>` + notice + source +
     (p.description ? `<p class="d skl-about">${esc(p.description)}</p>` : "") +
     `<div class="slist skl-skills">${skills}</div></section>`;
 }
@@ -124,15 +139,15 @@ function importHTML(v: SkillLibraryView): string {
     `</div>${input}<p class="d skl-import-hint">${esc(t("skillLib.importHint"))}</p>${v.error ? `<p class="skl-error" role="alert">${esc(v.error)}</p>` : ""}<input type="file" id="skl-file" accept="${ACCEPT}" hidden></div>`;
 }
 
-export function skillLibraryHTML(v: SkillLibraryView): string {
+export function skillLibraryHTML(v: SkillLibraryView, listHeading = "", notice = ""): string {
   const page = v.page ? v.packages.find(p => p.key === v.page) : undefined;
-  if (hasPage(page)) return packagePageHTML(page, v);
+  if (hasPage(page)) return packagePageHTML(page, v, notice);
   const list = v.failed ? `<p class="d skl-empty" role="alert">${esc(t("skillLib.loadFailed"))}</p>`
     : !v.loaded ? `<p class="d skl-empty">${esc(t("vault.busy"))}</p>`
     : v.packages.length ? packageSectionHTML("plugins", v.packages.filter(isPlugin), v) +
       packageSectionHTML("skills", v.packages.filter(p => !isPlugin(p)), v)
     : `<p class="d skl-empty">${esc(t("skillLib.empty"))}</p>`;
-  return `<section class="sgroup skl" aria-label="${esc(t("settings.paneSkills"))}">` +
+  return listHeading + notice + `<section class="sgroup skl" aria-label="${esc(t("settings.paneSkills"))}">` +
     importHTML(v) + list + `</section>`;
 }
 
@@ -264,6 +279,12 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
       if (access === "all") { closeMenu(); anchor.focus({ preventScroll: true }); }
     });
   };
+  const showDetails = (anchor: HTMLElement, name: string, description: string): void => {
+    const details = openPopover(anchor, `<div class="skl-details"><strong>${esc(name)}</strong><p>${esc(description)}</p></div>`, {
+      className: "menu", role: "dialog", label: t("card.details"),
+    });
+    details.focus({ preventScroll: true });
+  };
   const more = (anchor: HTMLElement, key: string): void => {
     const p = byKey(key);
     if (!p) return;
@@ -272,12 +293,8 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
       ...(p.updatable ? [{ id: "refresh", label: t("skillLib.update"), icon: "refresh" as const }] : []),
       { id: "delete", label: t("skillLib.remove"), icon: "trash", ask: t("skillLib.removeAsk") },
     ], picked => {
-      if (picked === "details") {
-        const details = openPopover(anchor, `<div class="skl-details"><strong>${esc(p.name)}</strong><p>${esc(descriptionOf(p))}</p></div>`, {
-          className: "menu", role: "dialog", label: t("card.details"),
-        });
-        details.focus({ preventScroll: true });
-      } else if (picked === "refresh") void core<{ package: LibraryPackage }>("skills.library.update", { key, refresh: true })
+      if (picked === "details") showDetails(anchor, p.name, descriptionOf(p));
+      else if (picked === "refresh") void core<{ package: LibraryPackage }>("skills.library.update", { key, refresh: true })
         .then(result => { replace(result.package); redraw(); })
         .catch(error => toaster.info(failureText(error)));
       else void core("skills.library.delete", { key })
@@ -308,6 +325,12 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
       }
       case "access": chooseAccess(target, key); break;
       case "more": more(target, key); break;
+      case "skill-more": {
+        const skill = byKey(key)?.skills.find(item => item.id === Number(target.dataset.id));
+        if (skill?.description) openActions(target, [{ id: "details", label: t("card.details"), icon: "info" }],
+          () => showDetails(target, skill.name, skill.description));
+        break;
+      }
       case "import-go": {
         const text = root.querySelector<HTMLTextAreaElement>("#skl-text")?.value ?? "";
         const source = root.querySelector<HTMLInputElement>("#skl-source")?.value.trim() ?? "";

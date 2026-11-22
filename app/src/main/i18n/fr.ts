@@ -4,8 +4,6 @@ export const fr = {
   "memberComputer.mode": "Ordinateur",
   "memberComputer.host": "Cet ordinateur",
   "memberComputer.docker": "Ordinateur isolé (Docker)",
-  "memberComputer.hostHint": "Utilise le Chrome de Raphael sur cet ordinateur pour te connecter à ton intranet.",
-  "memberComputer.dockerHint": "Travaille dans un environnement Docker isolé.",
   "memberComputer.desktopControl": "Contrôler le bureau",
   "memberComputer.showTab": "Afficher l’onglet Chrome",
   "memberComputer.setup": "Aide-moi à configurer l’ordinateur isolé (Docker).",

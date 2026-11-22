@@ -569,12 +569,24 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, positions };
   }
+  if (name === 'member-computer-host' || name === 'member-computer-docker') {
+    const list = document.querySelector('.ms-pane [data-k="ms-computer"] .ms-list');
+    const mode = list?.querySelector('[data-k="ms-computer-mode"]');
+    const control = list?.querySelector('[data-k="ms-desktop-control"]');
+    const expected = name === 'member-computer-host' ? '這台電腦' : '隔離電腦（Docker）';
+    require(visible(mode) && mode.matches('.sel[aria-haspopup="menu"]') && mode.textContent.trim() === expected, 'the dropdown shows the selected computer mode');
+    require(visible(control) && control.matches('[role="switch"][aria-checked="false"][aria-label="操作桌面"]'), 'desktop control starts off');
+    const rows = [...list.children];
+    require(rows.length === 2 && rows[0].matches('.ms-row') && rows[0].contains(mode) &&
+      rows[1].matches('.ms-row') && rows[1].contains(control) && !list.querySelector('.ms-empty, p'), 'only the two control rows are shown');
+    return { check: name };
+  }
   if (name.startsWith('skill-library') || name === 'member-skills-library') {
     // Team skills (skill-library.ts): packages with access controls, an importer and a member's read-only list.
     const rowOf = key => document.querySelector(`.skl-pack[data-skl-pack="${key}"]`);
     const accessOf = key => rowOf(key)?.querySelector('.skl-access span')?.textContent.trim();
     // A package's page stands in the list's place (R-SKILL-17): it has no importer of its own.
-    const onPage = name === 'skill-library-open' || name === 'skill-library-page-top';
+    const onPage = name === 'skill-library-open' || name === 'skill-library-page-top' || name === 'skill-library-skill-details';
     if (name !== 'member-skills-library' && !onPage) {
       const pane = document.querySelector('.modal-scrim .skl');
       require(pane?.getAttribute('aria-label') === '團隊技能', 'the Settings section names Team skills');
@@ -609,20 +621,26 @@ export function checkRendered(name, context = {}) {
       require(accessOf('set:1') === '還沒給任何人' && accessOf('pack:2') === '小晴、小森' && accessOf('skill:3') === '整個團隊', `who may use each is said on its row (${accessOf('set:1')} / ${accessOf('pack:2')} / ${accessOf('skill:3')})`);
       require(!rowOf('skill:3').querySelector('.skl-count, [data-skl="open"]') && rowOf('skill:3').querySelector('.skl-single .d')?.textContent.startsWith('把會議逐字稿整理成決議與待辦'), 'a skill alone is one row: its words under its name, nothing to open');
     }
-    if (onPage) {
+    if (onPage && name !== 'skill-library-skill-details') {
       const page = document.querySelector('.modal-scrim .skl-page'), head = page?.querySelector('.skl-page-head');
       require(visible(page) && !document.querySelector('.modal-scrim .skl-import, .modal-scrim .skl-list'), "the package's page takes the list's place: no importer, no other package");
       const back = head.querySelector('[data-skl="back"]');
       roundBack(back);
       require(document.activeElement === back, 'the focus is on the back arrow');
-      const title = head.querySelector('.skl-page-name');
+      const title = head.querySelector('h1.skl-page-name');
       require(title?.textContent.trim().length > 0 && title.scrollWidth <= title.clientWidth + 1, "the package's name is whole");
       require(visible(head.querySelector('.skl-access')) && visible(head.querySelector('.tg[role="switch"]')) && visible(head.querySelector('[data-skl="more"]')), 'who may use it, its switch and its ⋯ stand as on its row');
-      const box = page.getBoundingClientRect();
-      for (const part of [back, head.querySelector('.ctl')]) {
-        const r = part.getBoundingClientRect();
-        require(r.left >= box.left - 10 && r.right <= box.right + 1, `the head stays inside the tab (${Math.round(r.left)}-${Math.round(r.right)} in ${Math.round(box.left)}-${Math.round(box.right)})`);
-      }
+      const content = page.closest('.set-content');
+      const headings = [...content.querySelectorAll('h1')];
+      require(content.firstElementChild === page && page.firstElementChild === head && headings.length === 1 && headings[0] === title,
+        'the plugin name is the page title with no section title above it');
+      const start = content.getBoundingClientRect(), arrow = back.getBoundingClientRect(), titleBox = title.getBoundingClientRect();
+      const center = box => (box.top + box.bottom) / 2;
+      require(Math.abs(arrow.left - start.left) <= 1 && Math.abs(center(arrow) - center(titleBox)) <= 1 &&
+        Math.abs(arrow.top - start.top) <= 1 && Math.abs(titleBox.left - arrow.right - parseFloat(getComputedStyle(head).columnGap)) <= 1,
+        'the shared back button and title share the top-left row');
+      const controls = head.querySelector('.ctl').getBoundingClientRect();
+      require(Math.abs(center(arrow) - center(controls)) <= 1 && Math.abs(controls.right - start.right) <= 1, 'package controls stay on the title row at its right edge');
       require(document.querySelector('.modal-scrim .modal-body').scrollTop === 0, 'the page opens at its top');
       require(document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, 'the window does not scroll sideways');
     }
@@ -637,6 +655,26 @@ export function checkRendered(name, context = {}) {
       require(skills.length === 7 && skills.every(row => visible(row.querySelector('.tg[role="switch"]'))), `the seven skills of pstack are listed on its page, each with its own switch (${skills.length})`);
       require(document.querySelector('.skl-page-name')?.textContent.trim() === 'pstack' && accessOf('set:1') === '還沒給任何人', 'the page names pstack and who may use it');
       require(document.querySelector('.skl-page .skl-source')?.textContent.includes('jheng-kai/pstack'), 'where it came from is said once');
+      const left = document.querySelector('.skl-page [data-skl="back"]').getBoundingClientRect().left;
+      for (const selector of ['.skl-source', '.skl-about', '.skl-skills', '.skl-skill']) {
+        const part = document.querySelector(`.skl-page ${selector}`);
+        require(visible(part) && Math.abs(part.getBoundingClientRect().left - left) <= 1, `${selector} lines up with the back button`);
+      }
+      require(skills.every(row => row.offsetHeight === skills[0].offsetHeight), 'every skill row has the same height');
+      const descriptions = skills.map(row => row.querySelector('.skl-description'));
+      for (const description of descriptions) {
+        require(visible(description), 'each fixture skill has a visible description');
+        const style = getComputedStyle(description);
+        require(style.whiteSpace === 'nowrap' && style.textOverflow === 'ellipsis' && style.overflowX === 'hidden' &&
+          Math.abs(description.getBoundingClientRect().height - parseFloat(style.lineHeight)) <= 1, 'each description takes one line and ends in an ellipsis when needed');
+      }
+      require(descriptions[0].scrollWidth > descriptions[0].clientWidth, 'the long description is truncated');
+    }
+    if (name === 'skill-library-skill-details') {
+      const description = document.querySelector('.skl-page [data-library-skill="101"] .skl-description');
+      const details = document.querySelector('.skl-details'), text = details?.querySelector('p');
+      require(visible(details) && text?.textContent === description?.textContent, 'the skill overflow reveals its full description');
+      require(text.getBoundingClientRect().height > description.getBoundingClientRect().height, 'the full description wraps');
     }
     if (name === 'skill-library-back') {
       const body = document.querySelector('.modal-scrim .modal-body'), opener = document.querySelector('[data-skl="open"][data-key="pack:37"]');

@@ -254,7 +254,6 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     const mode = member.computer_mode ?? "host";
     const label = t("memberComputer.mode");
     return section("", row(label, sel(computerChoices(), mode, label, ' data-ms="computer-mode" data-k="ms-computer-mode"')) +
-      muted(t(mode === "docker" ? "memberComputer.dockerHint" : "memberComputer.hostHint")) +
       row(t("memberComputer.desktopControl"), tg(member.desktop_control ?? false, t("memberComputer.desktopControl"),
         ' data-ms="desktop-control" data-k="ms-desktop-control"')), "", "ms-computer");
   }

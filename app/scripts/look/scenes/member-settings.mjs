@@ -69,10 +69,10 @@ const stepScenes = [
 ];
 export default [
   ...personaScenes,
-  scene("member-computer-host", "The default computer mode uses Raphael's Chrome and desktop control starts off", computer, {
+  scene("member-computer-host", "This computer is selected, with desktop control off on the next row", [...computer, check("member-computer-host")], {
     ...filled, memberComputerMode: "host",
   }),
-  scene("member-computer-docker", "The selected Docker mode explains the isolated computer", computer, {
+  scene("member-computer-docker", "Docker is selected, with desktop control off on the next row", [...computer, check("member-computer-docker")], {
     ...filled, memberComputerMode: "docker",
   }),
   ...stepScenes,

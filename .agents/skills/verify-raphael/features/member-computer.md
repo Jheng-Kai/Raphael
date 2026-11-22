@@ -16,6 +16,7 @@ npm run look -- member-computer-host member-computer-docker card-browser-sign-in
 ```
 
 Inspect both dropdown states and the sign-in card with its Chrome tab action and Done.
+The member settings scenes check two rows: the selected mode dropdown and the desktop control switch.
 The fixture shows the controls only. Run the local-page Chrome test in
 `core/tests/computer/test_host_computer.py` for browser state, tab isolation,
 background input, downloads and idle close. Use an isolated native data directory for

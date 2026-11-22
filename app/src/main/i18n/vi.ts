@@ -4,8 +4,6 @@ export const vi = {
   "memberComputer.mode": "Máy tính",
   "memberComputer.host": "Máy tính này",
   "memberComputer.docker": "Máy tính cách ly (Docker)",
-  "memberComputer.hostHint": "Dùng Chrome riêng của Raphael trên máy này để bạn đăng nhập vào mạng nội bộ.",
-  "memberComputer.dockerHint": "Làm việc trong môi trường Docker cách ly.",
   "memberComputer.desktopControl": "Điều khiển màn hình",
   "memberComputer.showTab": "Hiện thẻ Chrome",
   "memberComputer.setup": "Hãy giúp tôi thiết lập máy tính cách ly (Docker).",

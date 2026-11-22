@@ -4,8 +4,6 @@ export const id = {
   "memberComputer.mode": "Komputer",
   "memberComputer.host": "Komputer ini",
   "memberComputer.docker": "Komputer terisolasi (Docker)",
-  "memberComputer.hostHint": "Menggunakan Chrome milik Raphael di komputer ini agar Anda bisa masuk ke intranet.",
-  "memberComputer.dockerHint": "Bekerja dalam lingkungan Docker yang terisolasi.",
   "memberComputer.desktopControl": "Kendalikan desktop",
   "memberComputer.showTab": "Tampilkan tab Chrome",
   "memberComputer.setup": "Bantu saya menyiapkan komputer terisolasi (Docker).",

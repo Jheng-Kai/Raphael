@@ -7,8 +7,6 @@ export const zhTW = {
   "memberComputer.mode": "電腦",
   "memberComputer.host": "這台電腦",
   "memberComputer.docker": "隔離電腦（Docker）",
-  "memberComputer.hostHint": "使用 Raphael 在這台電腦上的 Chrome，你可以登入公司內網。",
-  "memberComputer.dockerHint": "在 Docker 的隔離環境中工作。",
   "memberComputer.desktopControl": "操作桌面",
   "memberComputer.showTab": "開啟 Chrome 分頁",
   "memberComputer.setup": "請幫我設定隔離電腦（Docker）。",

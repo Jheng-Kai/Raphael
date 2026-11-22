@@ -8,8 +8,6 @@ export const en = {
   "memberComputer.mode": "Computer",
   "memberComputer.host": "This computer",
   "memberComputer.docker": "Isolated computer (Docker)",
-  "memberComputer.hostHint": "Uses Raphael’s Chrome on this computer so you can sign in to your intranet.",
-  "memberComputer.dockerHint": "Works in an isolated Docker environment.",
   "memberComputer.desktopControl": "Operate the desktop",
   "memberComputer.showTab": "Show Chrome tab",
   "memberComputer.setup": "Help me set up the isolated computer (Docker).",

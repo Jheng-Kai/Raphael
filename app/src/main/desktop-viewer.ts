@@ -98,10 +98,9 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   const action = panel.querySelector<HTMLButtonElement>('[data-desktop="return"]')!;
   const retry = panel.querySelector<HTMLButtonElement>('[data-desktop="retry"]')!;
   const placeholder = panel.querySelector<HTMLElement>('.desktop-placeholder')!;
-  const stateContent = document.createElement('div'); stateContent.className = 'desktop-state-content';
   const stateActions = document.createElement('div'); stateActions.className = 'desktop-state-actions';
   const stateRecovery = document.createElement('span'); stateRecovery.className = 'desktop-state-recovery';
-  stateActions.append(retry, stateRecovery); placeholder.append(stateContent, stateActions);
+  stateActions.append(retry, stateRecovery); placeholder.append(stateActions);
   const enlarge = panel.querySelector<HTMLButtonElement>('[data-desktop="enlarge"]')!;
   const modeLabel = panel.querySelector<HTMLElement>('.desktop-mode-label')!;
   const takeoverBar = panel.querySelector<HTMLElement>('.desktop-takeover-bar')!;
@@ -276,7 +275,6 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     if (picture && last.src !== picture) paint(last, "src", picture);
     paint(placeholder, "hidden", (!!running && connected) || (!!picture && !stalled));
     // Nothing is written or drawn over a computer that is not showing its screen, asleep, starting or stopped: the wallpaper alone, and a press anywhere starts it. Its state stays in the panel's data and labels.
-    patchHTML(stateContent, state?.error === 'host_browser' ? `<p>${esc(t("memberComputer.hostHint"))}</p>` : '');
     patchHTML(stateRecovery, '');
     if (!running && frame.hasAttribute('src')) { frame.remove(); frame.removeAttribute('src'); connected = interactive = false; }
     if (running && session && !frame.hasAttribute('src') && active()) { paint(frame, "src", session.url); panel.querySelector('.desktop-screen')!.append(frame); }
@@ -287,7 +285,6 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
       let waiting = inline.querySelector<HTMLElement>(':scope > .desktop-placeholder');
       if (!waiting) { waiting = document.createElement('div'); waiting.className = 'desktop-placeholder'; inline.append(waiting); }
       paint(waiting, 'hidden', !!running && connected);
-      patchHTML(waiting, stateContent.innerHTML);
       inline.toggleAttribute("data-owner-control", !!owner);
       const cover = inline.querySelector<HTMLButtonElement>(":scope > button"); if (cover) paint(cover, "hidden", !!owner);
     }

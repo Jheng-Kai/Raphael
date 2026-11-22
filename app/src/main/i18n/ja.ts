@@ -8,8 +8,6 @@ export const ja = {
   "memberComputer.mode": "コンピューター",
   "memberComputer.host": "このコンピューター",
   "memberComputer.docker": "分離されたコンピューター（Docker）",
-  "memberComputer.hostHint": "このコンピューターの Raphael 専用 Chrome で社内ネットワークにログインできます。",
-  "memberComputer.dockerHint": "Docker の分離環境で作業します。",
   "memberComputer.desktopControl": "デスクトップを操作する",
   "memberComputer.showTab": "Chrome のタブを表示",
   "memberComputer.setup": "分離されたコンピューター（Docker）の設定を手伝ってください。",

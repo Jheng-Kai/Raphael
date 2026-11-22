@@ -27,6 +27,9 @@ npm run look -- member-switch member-switch-yellow member-switch-white member-sw
 
 ## Member settings page
 
+Computer shows the mode dropdown and the desktop control switch as two rows.
+The `member-computer-host` and `member-computer-docker` scenes check the selected mode and the two-row layout.
+
 A member's settings are a page of their own, where the conversation is (R-PANEL-05).
 The panel keeps Details / Library / Computer and its bots; its head is the gear on the left and the
 close on the right, apart. The gear opens `member-settings.ts` over the conversation (the panel folds
@@ -932,8 +935,9 @@ a repository, a selected folder or file, an uploaded archive or Markdown, or pas
 Markdown. A single skill defaults to every member. A multi-skill import defaults to
 an empty audience. Each member's details summarize assigned, switched-on packages
 under `members.skills.list.library`. Private skills keep their own edit controls.
-A package of several opens on a page of its own in the tab, never folded open under its row
-(R-SKILL-17, settings-appearance.md).
+A plugin opens on a page of its own in the tab (R-SKILL-17). Its name is the main heading beside
+the round back button. The source, description and equal-height skill rows line up with the button.
+See [the Settings feature map](settings-appearance.md#團隊技能-r-skill-17) for the layout and Details scenes.
 
 The owner RPCs are `skills.library.list`, `import`, `update` and `delete` under the
 same prefix. Refresh replaces the source snapshot, preserves retained switches

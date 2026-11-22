@@ -9,7 +9,9 @@ export default [
   scene("skill-library", "Plugins and standalone skills have separate sections and equal rows", [...list, check("skill-library")]),
   scene("skill-library-details", "The overflow opens the full description of a standalone skill", [
     ...list, click('[data-skl="more"][data-key="skill:3"]'), click('[data-pick="details"]'), wait(".skl-details"), check("skill-library-details")]),
-  scene("skill-library-open", "Pressing a package's row opens it on a page of its own in the tab: the back arrow and its name, who may use it, its switch and ⋯, then its skills, each with its own switch", [...opened, check("skill-library-open")]),
+  scene("skill-library-open", "The plugin name and round back button lead the page, with controls on their right. The source, description and equal one-line skill rows align with the back button.", [...opened, check("skill-library-open")]),
+  scene("skill-library-skill-details", "A plugin skill's overflow reveals the full description", [
+    ...opened, click('[data-skl="skill-more"][data-id="101"]'), click('[data-pick="details"]'), wait(".skl-details"), check("skill-library-skill-details")]),
   scene("skill-library-back", "Enter opens a package low in a long library, and Esc returns to the list where it was left, the focus on that package's row", [
     ...list, scroll('[data-skl-pack="pack:37"]'), focus('[data-skl="open"][data-key="pack:37"]'), key("Enter"), wait('.skl-page[data-skl-page="pack:37"]'), check("skill-library-page-top"),
     key("Escape"), waitGone(".skl-page"), check("skill-library-back")], { skillPackages: true }),

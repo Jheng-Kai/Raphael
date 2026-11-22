@@ -4,8 +4,6 @@ export const de = {
   "memberComputer.mode": "Computer",
   "memberComputer.host": "Dieser Computer",
   "memberComputer.docker": "Isolierter Computer (Docker)",
-  "memberComputer.hostHint": "Verwendet Raphaels Chrome auf diesem Computer, damit du dich im Intranet anmelden kannst.",
-  "memberComputer.dockerHint": "Arbeitet in einer isolierten Docker-Umgebung.",
   "memberComputer.desktopControl": "Desktop steuern",
   "memberComputer.showTab": "Chrome-Tab anzeigen",
   "memberComputer.setup": "Hilf mir, den isolierten Computer (Docker) einzurichten.",
