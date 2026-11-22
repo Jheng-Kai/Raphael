@@ -247,7 +247,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   const pending = (): DesktopWork | undefined => waiting()[0];
   const waitingTurns = (): string => [...new Set(waiting().map(work => work.turn_id))].sort((a,b) => a-b).join(",");
   const waitingRequests = (): string[] => waiting().map(work => work.request_id || work.id);
-  const inlineSelector = "[data-card-desktop-screen], [data-card-screen], [data-card-host-screen]";
+  const inlineSelector = "[data-card-desktop-screen], [data-card-screen]";
   const inlineScreen = () => [...options.timeline.querySelectorAll<HTMLElement>(inlineSelector)].find(screen => !screen.closest('[hidden]'));
   const active = (): boolean => visible && (options.panelVisible() || !!inlineScreen());
   const send = (held: boolean, pointer?: { x:number; y:number }): void => { if (session) frame.contentWindow?.postMessage({ type:"raphael-desktop-control", held, pointer }, new URL(session.url).origin); };
@@ -343,7 +343,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     paint(modeLabel.querySelector('span')!, "textContent", t(mode === "operating" ? "desktop.operating" : mode === "taking" ? "desktop.taking" : "desktop.watching"));
     paint(modeLabel.dataset, "mode", mode);
     // The owner can take over whenever the pill says 觀看中, whoever the core says holds the lease: a pill that watches always offers the way out of it.
-    paint(take, "textContent", t("desktop.take")); paint(take, "hidden", mode !== "watching" || !running || !expanded || !!demonstration || state?.transport === "host" && !pending()); paint(take, "disabled", changing || !connected);
+    paint(take, "textContent", t("desktop.take")); paint(take, "hidden", mode !== "watching" || !running || !expanded || !!demonstration); paint(take, "disabled", changing || !connected);
     paint(frame, "hidden", !running || !connected);
     paint(frame.style, "pointerEvents", interactive && !watching ? "auto" : "none");
     paint(action, "textContent", t(pending() ? "desktop.done" : "desktop.release")); paint(action, "hidden", watching || !expanded || !!recording || !owner && !pending());
@@ -754,7 +754,6 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     });
   });
   function acquire(): void {
-    if (state?.transport === 'host' && !pending()) return;
     if (watching) { watching = false; document.documentElement.removeAttribute('data-desktop-watch'); }
     suspended = false; takeOnConnect = true; expand(true);
     if (connected) { takeOnConnect = false; void control(true); } else if (state?.state === 'running') void openStream();
@@ -804,7 +803,6 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     // A sign-in is no work for a small picture: the
     // card's screen and its 接手 open the same stream in the larger view and take control there; 我完成了 in its pill
     // gives the request back.
-    if (button.dataset.cardDesktop === 'watch') { visible = true; options.openPanel(); draw(); void openStream(); }
     else if (button.dataset.cardDesktop === 'take') { visible = true; acquire(); }
     else if (button.dataset.cardDesktop === 'return') void handback();
     else {

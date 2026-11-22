@@ -33,12 +33,13 @@ screencast. Shutdown closes relay connections and the profile process tree.
 
 Run from `app/`:
 ```sh
-npm run look -- member-settings desktop-computer-choice desktop-computer-choice-missing desktop-computer-choice-docker desktop-computer-suggestion-installed desktop-computer-suggestion-missing desktop-panel desktop-host-live-card desktop-host-panel desktop-host-takeover desktop-host-handback --theme both --width 1120,720,1920x1080
+npm run look -- member-settings desktop-computer-choice desktop-computer-choice-missing desktop-computer-choice-docker desktop-computer-suggestion-installed desktop-computer-suggestion-missing desktop-panel desktop-host-no-card desktop-host-panel desktop-host-takeover desktop-host-handback --theme both --width 1120,720,1920x1080
 ```
 
 Inspect the member settings navigation, the single dropdown with its local and SSH
-entries, quiet saved switching, both suggestion actions and their hover row, the full-frame
-Chrome page in the live card and panel, and the private takeover and Done flow.
+entries, quiet saved switching, both suggestion actions and their hover row, Chrome work
+opening the Computer tab with no card in the conversation, taking that tab at any time, the
+full-frame page, and the private takeover and Done flow.
 Look uses the production canvas with fixture frames. Run
 `test_native_chrome_sign_in_handback_releases_input_and_resumes_same_tab`,
 `test_native_headless_chrome_frames_and_owner_input` and

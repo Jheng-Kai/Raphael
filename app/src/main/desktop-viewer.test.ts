@@ -231,32 +231,37 @@ test('the host sign-in card uses the canvas transport and returns its live reque
   expect(api.desktopOpen).toHaveBeenCalledTimes(1);
 });
 
-test('the Chrome card and panel use one tab and the watch button never takes control', async () => {
+test('Chrome work opens the Computer tab, puts no card in the conversation, and the owner can take the tab like Docker', async () => {
   const hostState: DesktopState = {
     ...running, transport: 'host', target: 'page',
     works: [{ ...work, id: 'page', transport: 'host', state: 'running', request_id: undefined, reason: '' }],
   };
-  api.desktopStatus.mockResolvedValue(hostState);
+  api.desktopStatus.mockResolvedValue({...running, transport: 'host'});
   api.desktopRenew.mockResolvedValue(hostState);
   api.desktopOpen.mockResolvedValue({session:'one',url:'http://127.0.0.1:5000/one/host.html'});
   mounted.show();
   await flush();
-  message('connected');
-  const image = 'data:image/jpeg;base64,AAAA';
-  message('frame', {image});
-  const card = host.querySelector<HTMLElement>('[data-desktop-work="page"]')!;
-  expect(card.querySelector<HTMLImageElement>('.desktop-last')?.src).toBe(image);
-  expect(card.querySelectorAll('[data-card-failed-close]')).toHaveLength(1);
-  card.querySelector<HTMLButtonElement>('[data-card-desktop="watch"]')!.click();
+  api.desktopStatus.mockResolvedValue(hostState);
+  mounted.refreshStatus();
   await flush();
   expect(panelOpen).toBe(true);
-  expect(frame().closest('.desktop-screen')).not.toBeNull();
-  expect(api.desktopOpen).toHaveBeenCalledExactlyOnceWith(1, {conversation_id:11,transport:'host',target_id:'page'});
-  expect(api.desktopControl).not.toHaveBeenCalled();
-  panelOpen = false;
-  card.querySelector<HTMLButtonElement>('[data-card-failed-close]')!.click();
+  expect(host.querySelector('[data-desktop-work]')).toBeNull();
+  mounted.sync();
   await flush();
-  expect(api.desktopClose).toHaveBeenCalledExactlyOnceWith('one');
+  expect(api.desktopOpen).toHaveBeenCalledWith(1, {conversation_id:11,transport:'host',target_id:'page'});
+  message('connected');
+  message('frame', {image:'data:image/jpeg;base64,AAAA'});
+  expect(host.querySelector('[data-desktop-work]')).toBeNull();
+  expect(api.desktopControl).not.toHaveBeenCalled();
+  api.desktopControl.mockResolvedValue({...hostState, control:'owner'});
+  enlarge().click(); await flush();
+  expect(take().hidden).toBe(false);
+  take().click(); await flush();
+  expect(api.desktopControl).toHaveBeenCalledWith('one', true);
+  hostState.works![0]!.state = 'done';
+  mounted.refreshStatus();
+  await flush();
+  expect(host.querySelector('[data-desktop-work]')).toBeNull();
 });
 
 test.each(navInputs)("%s folds the watching view without changing control", async input => {
