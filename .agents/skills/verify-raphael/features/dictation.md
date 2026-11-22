@@ -464,7 +464,8 @@ keys do must work through `window-hotkeys.ts` too (`source=Window` in the log). 
 dictation's transcription from there (R-VC-01). A question said into a conversation leaves the voice slot once
 its words are in (`hand_over`), so the dictation key works during the answer (R-VC-02).
 In toggle mode the worker waits for release of a standalone Right Alt tap. A Right Alt+Space chord consumes that
-prefix and reports only the quick question from either source, with either release order. The quick question keeps
+prefix and reports only the quick question from either source, with either release order. After a standalone Right Alt
+tap ends a quick recording, a new chord can start as soon as recognition finishes. The quick question keeps
 its listening overlay and greeting with Raphael in front as well as in another app (R-AG-05, R-AG-06). `npm run native --
 voice-keys` proves both with the real worker, the recognising light and a slow brain at high depth. A turn said
 into a conversation has the time a typed one has; only the overlay's quick question has `VOICE_TURN_TIMEOUT_S`.
