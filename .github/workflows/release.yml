@@ -173,6 +173,11 @@ jobs:
           $config = @('--config', 'src-tauri/tauri.release.conf.json')
           if ($env:TAURI_SIGNING_PRIVATE_KEY -and $env:RAPHAEL_UPDATER_PUBLIC_KEY) {
             "updater=signed" >> $env:GITHUB_OUTPUT
+            # The Tauri CLI checks the updater signature against the configured public key, which tauri.conf.json leaves empty.
+            $temp = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [IO.Path]::GetTempPath() }
+            $pubkeyConfig = Join-Path $temp 'updater-pubkey.conf.json'
+            [IO.File]::WriteAllText($pubkeyConfig, (@{ plugins = @{ updater = @{ pubkey = $env:RAPHAEL_UPDATER_PUBLIC_KEY.Trim() } } } | ConvertTo-Json -Depth 4 -Compress))
+            $config += @('--config', $pubkeyConfig)
           } else {
             "updater=disabled" >> $env:GITHUB_OUTPUT
             Write-Output "::warning::Updater feed was skipped because the owner's signing keys are not set."
@@ -356,6 +361,10 @@ jobs:
           config=(--config src-tauri/tauri.release.conf.json --config src-tauri/tauri.release.macos.conf.json)
           if [[ -n "$TAURI_SIGNING_PRIVATE_KEY" && -n "$RAPHAEL_UPDATER_PUBLIC_KEY" ]]; then
             echo "updater=signed" >> "$GITHUB_OUTPUT"
+            # The Tauri CLI checks the updater signature against the configured public key, which tauri.conf.json leaves empty.
+            pubkey_config="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/updater-pubkey.conf.json"
+            printf '{"plugins":{"updater":{"pubkey":"%s"}}}' "$(printf '%s' "$RAPHAEL_UPDATER_PUBLIC_KEY" | tr -d '\r\n ')" > "$pubkey_config"
+            config+=(--config "$pubkey_config")
           else
             echo "updater=disabled" >> "$GITHUB_OUTPUT"
             config+=(--config src-tauri/tauri.release-no-updater.conf.json)
