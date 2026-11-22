@@ -1,4 +1,5 @@
-/** The live Chrome card and the Docker handoff card, rendered in their work's turn. */
+/** The handoff card of either computer, rendered in its work's turn. Work the member does on its own shows in the
+ *  Computer tab, which opens when the work begins, and puts no card in the conversation. */
 import type { DesktopState } from "./desktop-viewer";
 import { t } from "./i18n";
 import { esc, ico } from "./ui";
@@ -57,11 +58,6 @@ export function mountDesktopTimeline(host: HTMLElement): { update(state: Desktop
         content: `<div class="card-computer-screen" data-card-desktop-screen><button type="button" class="btn" data-card-desktop="take" aria-label="${esc(t("cards.takeover"))}">${ico("monitor")}</button></div>`,
         actions: btn(esc(t("cards.takeover")), "sm pri", ' data-card-desktop="take"') + btn(esc(t("desktop.done")), "sm", ' data-card-desktop="return"'),
         close: waitingCloseHTML(' data-card-desktop="skip"', t("cards.skip")), statusInHeading: true,
-        cls: "computer-card", attrs: ` data-desktop-work="${esc(work.id)}" data-work-state="${work.state}"`,
-      }) : work.transport === "host" && !state.host_request ? cardHTML({
-        title: t("memberComputer.host"), status: work.state === "done" ? "done" : "ready",
-        statusText: desktopWorkText(work), close: failedClose(),
-        content: `<div class="card-computer-screen" data-card-host-screen><button type="button" class="btn desktop-open" data-card-desktop="watch" aria-label="${esc(t("desktop.open"))}"><span class="desktop-open-pill">${ico("open")}</span></button></div>`,
         cls: "computer-card", attrs: ` data-desktop-work="${esc(work.id)}" data-work-state="${work.state}"`,
       }) : (asked.has(work.id) || !!work.request_id) ? settledCardHTML(work) : "";
       if (rendered.get(slot) === html) continue;

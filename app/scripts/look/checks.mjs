@@ -4873,20 +4873,20 @@ export function checkRendered(name, context = {}) {
     require(visible(summary) && summary.textContent === "English (United States)", "the Settings row names only English (United States)");
     return {check: name};
   }
-  if (name === "desktop-host-thumbnail" || name === "desktop-host-frame") {
-    const thumb = document.querySelector('[data-card-host-screen] .desktop-last');
+  if (name === "desktop-host-no-card") {
+    require(!document.querySelector('.page-agent [data-desktop-work], .page-agent [data-card-host-screen]'), 'work the member does on its own puts no computer card in the conversation');
+    require(visible(document.querySelector('.mb-det .desktop-panel')), 'the Computer tab opened by itself');
+    return {check:name};
+  }
+  if (name === "desktop-host-frame") {
     const frame = document.querySelector('.desktop-screen iframe[src*="transport=host"]');
-    const image = name === "desktop-host-thumbnail" ? thumb : frame?.contentDocument?.querySelector('canvas');
+    const image = frame?.contentDocument?.querySelector('canvas');
     require(visible(image), 'the Chrome page is painted');
     const box = image.getBoundingClientRect();
     const win = image.ownerDocument.defaultView;
     require(win.getComputedStyle(image).objectFit === 'cover' && Math.abs(box.width / box.height - 1280 / 900) <= 0.015, 'the page fills the desktop aspect ratio');
-    if (image === thumb) {
-      require(thumb.naturalWidth === 1280 && thumb.naturalHeight === 900 && visible(thumb.parentElement.querySelector('[data-card-desktop="watch"]')), 'the thumbnail opens the page for watching');
-    } else {
-      require(image.width === 1280 && image.height === 900 && Math.abs(box.width - win.innerWidth) <= 1 && Math.abs(box.height - win.innerHeight) <= 1, 'the canvas fills the iframe edge to edge');
-      require(!visible(frame.closest('.desktop-panel').querySelector('.desktop-error')), 'the panel has the same working page');
-    }
+    require(image.width === 1280 && image.height === 900 && Math.abs(box.width - win.innerWidth) <= 1 && Math.abs(box.height - win.innerHeight) <= 1, 'the canvas fills the iframe edge to edge');
+    require(!visible(frame.closest('.desktop-panel').querySelector('.desktop-error')), 'the panel has the same working page');
     return {check:name, width:box.width, height:box.height};
   }
   if (name === "desktop-frame") {
