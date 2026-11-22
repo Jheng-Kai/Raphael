@@ -38,6 +38,8 @@
 .row.skl-page-head { gap: var(--sp-2); min-height: 0; padding: 0; margin-bottom: var(--sp-3); }
 .modal-body .skl-page-head > h1 { min-width: 0; padding: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .skl-page-head > .ctl { margin-left: auto; }
+/* In a narrow window the settings' × (.modal-x, 36 px at 12 px from the corner) reaches the title row: its ⋯ stops short of it. */
+@media (max-width: 900px) { .row.skl-page-head { padding-right: 40px; } }
 .modal-body .skl-page-head .ctl .sel { width: auto; max-width: 100%; justify-content: flex-end; gap: var(--sp-1); padding-inline: var(--sp-2); border-color: transparent; background-color: transparent; color: var(--text-2); }
 .modal-body .skl-page-head .ctl .sel:hover:not(:disabled), .modal-body .skl-page-head .ctl .sel[aria-expanded="true"] { border-color: transparent; background-color: transparent; color: var(--text); }
 .skl-source, .skl-about { margin: 0 0 var(--sp-3); color: var(--text-3); font-size: var(--fs-sm); overflow-wrap: anywhere; }

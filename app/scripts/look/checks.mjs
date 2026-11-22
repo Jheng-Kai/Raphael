@@ -640,7 +640,9 @@ export function checkRendered(name, context = {}) {
         Math.abs(arrow.top - start.top) <= 1 && Math.abs(titleBox.left - arrow.right - parseFloat(getComputedStyle(head).columnGap)) <= 1,
         'the shared back button and title share the top-left row');
       const controls = head.querySelector('.ctl').getBoundingClientRect();
-      require(Math.abs(center(arrow) - center(controls)) <= 1 && Math.abs(controls.right - start.right) <= 1, 'package controls stay on the title row at its right edge');
+      // The row's right padding is the room it leaves for the settings' × in a narrow window.
+      const room = parseFloat(getComputedStyle(head).paddingRight) || 0;
+      require(Math.abs(center(arrow) - center(controls)) <= 1 && Math.abs(controls.right - (start.right - room)) <= 1, 'package controls stay on the title row at its right edge');
       require(document.querySelector('.modal-scrim .modal-body').scrollTop === 0, 'the page opens at its top');
       require(document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, 'the window does not scroll sideways');
     }
@@ -669,6 +671,10 @@ export function checkRendered(name, context = {}) {
           Math.abs(description.getBoundingClientRect().height - parseFloat(style.lineHeight)) <= 1, 'each description takes one line and ends in an ellipsis when needed');
       }
       require(descriptions[0].scrollWidth > descriptions[0].clientWidth, 'the long description is truncated');
+      // At 720 the settings' × once covered the title row's ⋯ (2026-11-22).
+      const close = document.querySelector('.modal-scrim .modal-x')?.getBoundingClientRect();
+      const headMore = document.querySelector('.skl-page-head [data-skl="more"]')?.getBoundingClientRect();
+      require(close && headMore && (headMore.right <= close.left || headMore.top >= close.bottom || headMore.bottom <= close.top), "the title row's ⋯ stays clear of the settings' ×");
     }
     if (name === 'skill-library-skill-details') {
       const description = document.querySelector('.skl-page [data-library-skill="101"] .skl-description');
