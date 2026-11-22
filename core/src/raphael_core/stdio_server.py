@@ -16,6 +16,8 @@ import os
 import sys
 import threading
 import time
+import traceback
+from time import monotonic as _monotonic  # the sampler's own clock: tests replace `time`
 from dataclasses import dataclass
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from typing import BinaryIO
@@ -46,11 +48,48 @@ class _ReadLine:
     received_at: float
 
 
-async def _watch_loop_lag(expected: float) -> None:
+STALL_SAMPLE_S = 1.5
+
+
+class _StallSampler:
+    """Names the code that holds the event loop when it stops answering.
+
+    The lag warning only says how long the loop was blocked; a 22-second stall on the owner's PC
+    (2026-11-22) left no trace of what blocked it. The loop beats on every lag tick; a watcher
+    thread sees a missed beat and logs the loop thread's stack once per stall (file, line, function
+    and source text only, never local values, so no secret reaches the log).
+    """
+
+    def __init__(self) -> None:
+        self.beat = _monotonic()
+        self.thread_id = threading.get_ident()
+        self.reported = False
+        self.stopped = threading.Event()
+
+    def tick(self) -> None:
+        self.beat = _monotonic()
+        self.reported = False
+
+    def watch(self) -> None:
+        while not self.stopped.wait(0.5):
+            stalled = _monotonic() - self.beat
+            if stalled < STALL_SAMPLE_S or self.reported:
+                continue
+            self.reported = True
+            frame = sys._current_frames().get(self.thread_id)
+            if frame is None:
+                continue
+            stack = "".join(traceback.format_stack(frame, limit=14))
+            logger.warning("Event loop stalled stalled_ms=%.0f; loop thread stack:\n%s", stalled * 1000, stack)
+
+
+async def _watch_loop_lag(expected: float, sampler: _StallSampler | None = None) -> None:
     loop = asyncio.get_running_loop()
     last_warning, skipped = None, 0
     while True:
         await asyncio.sleep(max(0.0, expected - loop.time()))
+        if sampler is not None:
+            sampler.tick()
         now = loop.time()
         lag = now - expected
         if lag > LAG_WARNING_S:
@@ -133,7 +172,9 @@ async def serve(router: Router, lines: AsyncIterator[str | _ReadLine], write: Ca
 
     router.set_notifier(forward)
     tasks: set[asyncio.Task[None]] = set()
-    watcher = asyncio.create_task(_watch_loop_lag(asyncio.get_running_loop().time() + LAG_INTERVAL_S))
+    sampler = _StallSampler()
+    threading.Thread(target=sampler.watch, name="loop-stall-sampler", daemon=True).start()
+    watcher = asyncio.create_task(_watch_loop_lag(asyncio.get_running_loop().time() + LAG_INTERVAL_S, sampler))
     try:
         async for incoming in lines:
             received_at = incoming.received_at if isinstance(incoming, _ReadLine) else time.perf_counter()
@@ -152,6 +193,7 @@ async def serve(router: Router, lines: AsyncIterator[str | _ReadLine], write: Ca
             task.add_done_callback(tasks.discard)
         await asyncio.gather(*tasks)
     finally:
+        sampler.stopped.set()
         watcher.cancel()
         for task in tasks:  # still running only if we were cancelled or `lines` failed
             task.cancel()
