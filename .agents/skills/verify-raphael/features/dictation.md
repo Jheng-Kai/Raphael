@@ -470,6 +470,17 @@ its listening overlay and greeting with Raphael in front as well as in another a
 voice-keys` proves both with the real worker, the recognising light and a slow brain at high depth. A turn said
 into a conversation has the time a typed one has; only the overlay's quick question has `VOICE_TURN_TIMEOUT_S`.
 
+On Windows, the shell handles the Space system-menu command at the native window, using the
+current quick-ask bindings (R-AG-05). The window still delivers the key to the existing
+quick-ask handler. Rebinding away from Alt+Space restores Windows' menu for that chord.
+The overlay and learned-word pill stay passive, so clicking them keeps keyboard input with
+the underlying foreground window. For native acceptance, press the bound chord with Raphael
+in front and with another app in front. In both cases, confirm the recording starts once
+and the transcript precedes the reply. With Raphael in front, confirm no system menu opens,
+the main window stays visible, and the title area's system menu still works. Rebind quick
+ask to an unused function key, press the formerly bound Alt+Space chord to open the Windows
+menu, and try the new quick-ask shortcut without restarting.
+
 A question said to the overlay (Alt+Space) leaves the slot the same way, and the dictation key always wins (R-VC-03):
 a standalone dictation press can start a recording while an answer is pending, showing, or waiting for yes or no. The answer is held while
 a recording has the overlay and told again once the words are typed, for its ordinary time; a newer quick question

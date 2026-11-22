@@ -224,6 +224,24 @@ describe("focused-window hotkeys", () => {
     expect(reduceHotkey(alt.state, key("Space"), defaults).actions).toEqual([]);
   });
 
+  test.each([
+    ["Alt+Space", "AltLeft"], ["Alt+Space", "AltRight"], ["Space+ROpt", "AltRight"],
+  ])("%s is recognized from %s in a Windows window until rebinding", (binding, side) => {
+    const withAgent = { ...defaults, agent_keys: [binding] };
+    const alt = reduceHotkey(emptyHotkeyState(), key(side), withAgent, false, false);
+    const space = reduceHotkey(alt.state, key("Space"), withAgent, false, false);
+    expect(space.actions).toEqual(["agent_down"]);
+    expect(space.preventDefault).toBe(true);
+    const up = reduceHotkey(space.state, key(side, "keyup"), withAgent, false, false);
+    expect(up.actions.filter((action) => action.startsWith("agent"))).toEqual(["agent_up"]);
+
+    const rebound = { ...defaults, agent_keys: ["F9"] };
+    const altAfterRebind = reduceHotkey(emptyHotkeyState(), key(side), rebound, false, false);
+    const spaceAfterRebind = reduceHotkey(altAfterRebind.state, key("Space"), rebound, false, false);
+    expect(spaceAfterRebind.actions).toEqual([]);
+    expect(spaceAfterRebind.preventDefault).toBe(false);
+  });
+
   test("a question key of its own: an Alt prefix is swallowed like the other chords", () => {
     const own = { dictation_keys: ["F9"], paste_last_keys: [], agent_keys: ["AltRight+Space"] };
     const alt = reduceHotkey(emptyHotkeyState(), key("AltRight"), own);

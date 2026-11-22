@@ -33,6 +33,23 @@ export const emptyHotkeyState = (): HotkeyState => ({ held: [], swallowed: [], d
 // Legacy handy-keys aliases beyond letters/digits and these modifiers are not supported here.
 const codeName = canonicalKey;
 
+// Older device files can spell Alt+Space with the native modifier aliases. Resolve those to
+// browser codes so the window recognizes the same quick-ask chord as the system menu guard.
+function windowsAgentBindings(bindings: string[]): string[] {
+  return bindings.flatMap((binding) => {
+    const parts = binding.split("+").map(codeName);
+    if (!parts.includes("space")) return [binding];
+    const normalized = parts.map((part) => {
+      if (/^(opt|option)$/.test(part)) return "alt";
+      if (/^(?:(?:alt|opt|option)_?left|l(?:alt|opt|option))$/.test(part)) return "altleft";
+      if (/^(?:(?:alt|opt|option)_?right|r(?:alt|opt|option)|altgr)$/.test(part)) return "altright";
+      return part;
+    });
+    if (!normalized.includes("alt")) return [normalized.join("+")];
+    return ["altleft", "altright"].map((side) => normalized.map((part) => part === "alt" ? side : part).join("+"));
+  });
+}
+
 function matchBinding(bindings: string[], held: string[], code: string): string[] | undefined {
   return bindings.map((binding) => binding.split("+").map(codeName)).find((parts) =>
     parts.includes(code) && parts.every((part) => held.includes(part)) &&
@@ -71,6 +88,7 @@ export function reduceHotkey(previous: HotkeyState, event: KeyInput, bindings: B
     state.swallowed = state.swallowed.filter((part) => part !== code);
   } else {
     state.held.push(code);
+    const agentBindings = mac ? bindings.agent_keys ?? [] : windowsAgentBindings(bindings.agent_keys ?? []);
     // AltGr produces a synthetic left Ctrl before Right Alt on Windows.
     if (event.altGraph && state.held.includes("altright")) {
       state.held = state.held.filter((part) => part !== "controlleft");
@@ -78,7 +96,7 @@ export function reduceHotkey(previous: HotkeyState, event: KeyInput, bindings: B
     // Swallow Alt before the rest of a configured chord arrives, including its release, so
     // an Alt-only tap or repeat cannot activate WebView2's menu handling.
     if ((code === "altright" || code === "altleft") &&
-      [...bindings.dictation_keys, ...bindings.paste_last_keys, ...(bindings.agent_keys ?? []), ...(bindings.tidy_keys ?? [])].some((binding) =>
+      [...bindings.dictation_keys, ...bindings.paste_last_keys, ...agentBindings, ...(bindings.tidy_keys ?? [])].some((binding) =>
         binding.split("+").map(codeName).includes(code))) {
       if (!state.swallowed.includes(code)) state.swallowed.push(code);
       preventDefault = true;
@@ -91,12 +109,12 @@ export function reduceHotkey(previous: HotkeyState, event: KeyInput, bindings: B
       } else {
         const dictation = matchBinding(bindings.dictation_keys, state.held, code);
         const paste = matchBinding(bindings.paste_last_keys, state.held, code);
-        const agent = matchBinding(bindings.agent_keys ?? [], state.held, code);
+        const agent = matchBinding(agentBindings, state.held, code);
         const tidy = matchBinding(bindings.tidy_keys ?? [], state.held, code);
         if (dictation && state.dictation.length === 0) {
           state.dictation = dictation;
           state.dictationPrefix = dictation.every(part => MODIFIERS.has(part)) &&
-            (bindings.agent_keys ?? []).some(binding => {
+            agentBindings.some(binding => {
               const parts = binding.split("+").map(codeName);
               return parts.length === dictation.length + 1 &&
                 parts.some(part => !MODIFIERS.has(part)) && dictation.every(part => parts.includes(part));
