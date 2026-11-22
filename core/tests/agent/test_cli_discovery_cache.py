@@ -12,7 +12,7 @@ async def test_executable_and_version_cache_expires_and_keeps_auth_fresh(tmp_pat
     now, found, probes = [0.0], [], []
     script = tmp_path / "fake-cli"
     script.touch()
-    monkeypatch.setattr(discovery.shutil, "which", lambda name, **kw: found.append(name) or str(script))
+    monkeypatch.setattr(discovery, "_path_candidates", lambda name, environ: found.append(name) or [script])
     monkeypatch.setattr(discovery, "resolve_command", lambda path, environ: [str(path)])
     brains = CliBrains(home=tmp_path, environ={}, clock=lambda: now[0])
     monkeypatch.setattr(brains, "_needs_models", lambda name: False)
@@ -47,7 +47,7 @@ async def test_cold_discovery_runs_off_the_event_loop_and_missing_commands_are_c
     main = threading.get_ident()
     brains = CliBrains(home=tmp_path, environ={})
     monkeypatch.setattr(brains, "_needs_models", lambda name: False)
-    monkeypatch.setattr(discovery.shutil, "which", lambda *args, **kwargs: threads.append(threading.get_ident()))
+    monkeypatch.setattr(discovery, "_path_candidates", lambda *args: threads.append(threading.get_ident()) or [])
     try:
         await brains.list()
         await brains.list()
