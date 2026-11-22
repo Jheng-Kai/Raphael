@@ -9,7 +9,8 @@ export default [
   scene("skill-library", "Plugins and standalone skills have separate sections and equal rows", [...list, check("skill-library")]),
   scene("skill-library-details", "The overflow opens the full description of a standalone skill", [
     ...list, click('[data-skl="more"][data-key="skill:3"]'), click('[data-pick="details"]'), wait(".skl-details"), check("skill-library-details")]),
-  scene("skill-library-open", "A package opens on its own page and shows progress while the update is pending", [
+  scene("skill-library-open", "Pressing a package's row opens it on a page of its own in the tab: the back arrow and its name, who may use it, its switch and ⋯, then its skills, each with its own switch", [...opened, check("skill-library-open")]),
+  scene("skill-library-refresh", "A package shows progress on its own page while its update is pending", [
     ...opened, check("skill-library-open"), click('[data-skl="more"][data-key="set:1"]'), click('[data-pick="refresh"]'),
     wait('.skl-refresh-status[role="status"]')], { skillRefreshPending: true }),
   scene("skill-library-back", "Enter opens a package low in a long library, and Esc returns to the list where it was left, the focus on that package's row", [
