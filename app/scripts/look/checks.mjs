@@ -2515,6 +2515,8 @@ export function checkRendered(name, context = {}) {
       if (name === 'completion-arrows') require(last.classList.contains('is-active') && input.getAttribute('aria-activedescendant') === last.id && document.activeElement === input, 'the arrow key carried the highlight to the last row and the focus stayed in the field');
     } else {
       require(rows.every(row => row.querySelector('.mdesc')?.textContent), 'commands and skills have descriptions');
+      // A long description once wrapped to four lines here (owner, 2026-11-22): one line, cut with an ellipsis.
+      require(rows.every(row => { const d = row.querySelector('.mdesc'), s = getComputedStyle(d); return s.whiteSpace === 'nowrap' && s.textOverflow === 'ellipsis' && d.getBoundingClientRect().height <= parseFloat(s.lineHeight) + 1; }), 'each description takes one line');
       if (name === 'completion-slash' || name === 'completion-clash') require(heads.join('|') === '指令|技能', 'commands and skills have separate headings');
       if (name === 'completion-plugin') require(heads.join('|') === '技能' && menu.querySelector('.msource')?.textContent === 'Field Notes', 'the plugin is quiet small print, never a section');
       if (name === 'completion-clash') require(values.join('|') === 'review|field-notes:review|desk-notes:review', 'clashes show qualified plugin names');
