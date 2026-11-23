@@ -1020,7 +1020,12 @@ export function createAgent(app: AppContext, places?: {
       if (voice.isUp) voice.drop();
       return;
     }
-    if (askCard.parentElement !== cardHome) cardHome.append(askCard);
+    // In the dock the card stands above the composer, never under it at the window's lower edge.
+    if (cardHome === home) {
+      const anchor = home.querySelector<HTMLElement>(':scope > [data-mount="background-questions"]') ?? composer;
+      if (askCard.nextElementSibling !== anchor) home.insertBefore(askCard, anchor);
+    }
+    else if (askCard.parentElement !== cardHome) cardHome.append(askCard);
     askCard.classList.toggle("is-member", !inRaphael());
     if (asking && !askCard.hidden && askCard.dataset.id === question!.id) return;
     askCard.hidden = !asking;

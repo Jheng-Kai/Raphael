@@ -657,6 +657,18 @@ export function checkRendered(name, context = {}) {
       require(actionBoxes[0].right <= actionBoxes[1].left && actionBoxes[1].right <= actionBoxes[2].left,
         'access and ⋯ are visibly left of the switch');
       require(document.querySelector('.modal-scrim .modal-body').scrollTop === 0, 'the page opens at its top');
+      {
+        // A plugin with many skills scrolls under its title: at the bottom the way back, the title and the close stay at the top.
+        const body = document.querySelector('.modal-scrim .modal-body');
+        if (body.scrollHeight > body.clientHeight + 40) {
+          const top = close.getBoundingClientRect().top;
+          body.scrollTop = body.scrollHeight;
+          const press = control => { const r = control.getBoundingClientRect(), at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return at === control || control.contains(at); };
+          const ok = Math.abs(close.getBoundingClientRect().top - top) <= 1 && press(close) && press(back) && press(title);
+          body.scrollTop = 0;
+          require(ok, "scrolled to the bottom of the plugin, its way back, title and close still stand at the top and take a press");
+        }
+      }
       require(document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, 'the window does not scroll sideways');
     }
     if (name === 'nav-side-plugin') {
@@ -9537,6 +9549,21 @@ export function checkRendered(name, context = {}) {
     require(getComputedStyle(modal).borderTopLeftRadius === "12px", "settings uses the dialog radius rather than a pill");
     const box = close.getBoundingClientRect(), hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
     require(close === hit || close.contains(hit), "rounded corners do not clip the close control");
+    // A long page scrolls under its header: at the bottom the close, and a way back if there is one, still stand at the top.
+    const body = modal.querySelector(".modal-body");
+    let scrolledTested = false;
+    if (body && body.scrollHeight > body.clientHeight + 40) {
+      const before = body.scrollTop, start = close.getBoundingClientRect().top;
+      body.scrollTop = body.scrollHeight;
+      const reachable = control => { if (!control || !visible(control)) return true; const r = control.getBoundingClientRect(), at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return at === control || control.contains(at); };
+      const back = modal.querySelector(".modal-body header .back-button");
+      const after = close.getBoundingClientRect().top, bodyTop = body.getBoundingClientRect().top;
+      const stays = after >= bodyTop - 1 && after <= start + 1 && reachable(close) && reachable(back);
+      const detail = `close ${Math.round(start)}→${Math.round(after)}, body top ${Math.round(bodyTop)}, scrolled ${body.scrollTop}, reachable ${reachable(close)}/${reachable(back)}, head ${close.parentElement?.className} ${getComputedStyle(close.parentElement).position} parent ${close.parentElement?.parentElement?.className} ${getComputedStyle(close.parentElement.parentElement).overflow}/${getComputedStyle(close.parentElement.parentElement).display}`;
+      body.scrollTop = before;
+      require(stays, `scrolled to the bottom, the close and the way back still stand at the top and take a press (${detail})`);
+      scrolledTested = true;
+    }
     // The settings: flat tabs, no group names, no search and no line under a tab's name.
     const scrim = modal.closest('.modal-scrim');
     if (!scrim.hasAttribute('data-standalone')) {
@@ -9545,7 +9572,7 @@ export function checkRendered(name, context = {}) {
       require(!scrim.querySelector('.nav-group, #set-search'), "the tabs sit flat, with no group names and no search");
       require(!scrim.querySelector('.set-purpose'), "a tab is its name alone, with no line under it");
     }
-    return { check: name, radius: getComputedStyle(modal).borderTopLeftRadius };
+    return { check: name, radius: getComputedStyle(modal).borderTopLeftRadius, scrolledTested };
   }
   if (name === "sidebar-hidden-folder-closed" || name === "sidebar-hidden-folder") if (matchMedia('(max-width: 859px)').matches) return {check:name,compact:true};
   if (name === "sidebar-hidden-folder-closed") {
