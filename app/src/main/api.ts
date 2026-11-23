@@ -1,3 +1,4 @@
+import type { FolderInfo } from "./types";
 // The main window's way to the rest of the app: calls to the core through `core_call`, and the
 // commands of commands.rs. Every function rejects with the reason as a string (`describeError`
 // makes it fit to show).
@@ -398,8 +399,13 @@ export const dictionaryImport = (words: string[]): Promise<{ added: number; skip
 
 // ---------- the brain's settings and the key ----------
 
+export const folderInfo = (path: string): Promise<FolderInfo> => core("folders.info", { path });
+export const switchBranch = (path: string, branch: string): Promise<FolderInfo> => core("folders.switch_branch", { path, branch });
+export const memberFolder = (member_id: number): Promise<{ path: string }> => core("folders.member", { member_id });
+export const openMemberFolder = (member: number): Promise<void> => openTeamFile(`member-folder:${member}`);
+
 export const settingsGet = (): Promise<{ settings: BrainSettings }> => core("settings.get");
-export const settingsSet = (key: keyof BrainSettings, value: string | number | boolean | string[] | Record<string, string[]> | null): Promise<{ settings: BrainSettings }> =>
+export const settingsSet = (key: keyof BrainSettings, value: string | number | boolean | string[] | Record<string, string | string[] | undefined> | null): Promise<{ settings: BrainSettings }> =>
   core("settings.set", { key, value });
 /** The languages the speech recognition can listen for, in groups (中文: 台灣、香港、…). */
 export const languagesList = (): Promise<{ groups: LanguageGroup[] }> => core("languages.list");

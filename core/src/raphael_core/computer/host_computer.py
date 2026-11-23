@@ -139,8 +139,7 @@ class HostComputerTools:
                 else self.vm.target_for("", self.vm.key_for("", member)))
 
     def folders(self, member):
-        target = self.local_target(member)
-        return self.vm.member_workspace(target), target.shared
+        return self.vm.local_folders(member)
 
     def finish_work(self, *, turn_id=None, task_id=None):
         for tab in self.browser.tabs.values():
@@ -165,10 +164,15 @@ class HostComputerTools:
             if raw == alias or raw.startswith(alias + "/"):
                 return (folder / raw[len(alias):].lstrip("/")).resolve()
         path = Path(raw)
-        return (workspace / path).resolve() if not path.is_absolute() and not raw.startswith("~") else Path(place(raw))
+        from ..folders import work_folder
+        work = work_folder(self.vm.settings, member, self.vm.local_folders) if self.vm.settings else workspace
+        return (work / path).resolve() if not path.is_absolute() and not raw.startswith("~") else Path(place(raw))
 
     def inside_work(self, path, member):
-        return any(path.is_relative_to(folder) and folder.resolve() == folder for folder in self.folders(member))
+        if any(path.is_relative_to(folder) and folder.resolve() == folder for folder in self.folders(member)):
+            return True
+        projects = self.vm.settings.get("project_folders") if self.vm.settings else ()
+        return any(path.is_relative_to(folder) and folder.resolve() == folder for folder in map(Path, projects or ())) and not self.files.guard()(str(path))
 
     def private_path(self, path, member):
         if path.is_relative_to(self.browser.profile.resolve()):

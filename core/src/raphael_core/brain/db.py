@@ -2440,6 +2440,22 @@ COMMIT;
 _MIGRATIONS[98] = _restore_computer_choice
 
 
+def _project_folders(conn):
+    rows = dict(conn.execute("SELECT key, value FROM settings WHERE key IN ('owner_output_folder','member_write_folders')"))
+    output = json.loads(rows.get("owner_output_folder", '""'))
+    previous = json.loads(rows.get("member_write_folders", "{}"))
+    projects = list(dict.fromkeys(path for path in [output, *(path for paths in previous.values() for path in paths)] if path))
+    selections = {member: paths[0] for member, paths in previous.items() if paths and paths[0]}
+    values = [(key, json.dumps(value)) for key, value in (("project_folders", projects), ("member_work_folder", selections)) if value]
+    with conn:
+        conn.executemany("INSERT INTO settings (key, value) VALUES (?, ?)", values)
+        conn.execute("DELETE FROM settings WHERE key IN ('owner_output_folder','member_write_folders')")
+        conn.execute("PRAGMA user_version = 99")
+
+
+_MIGRATIONS[99] = _project_folders
+
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 

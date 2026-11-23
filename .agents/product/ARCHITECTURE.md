@@ -88,7 +88,7 @@ words read from its stylesheet, its policy first) and hands it with the page id 
 window's allowlist does not name, so no folder or path comes from the window. The core takes only
 a report page and only the drawing's elements and attributes (links within the page, one style
 with no tag in it), names the file after the stored title, writes it exclusively in
-owner_output_folder or else Downloads, and returns where; the shell selects it in File Explorer.
+the member’s work folder, falling back to Downloads, and returns where; the shell selects it in File Explorer.
 No page host, frame, migration or model tool is added (R-PAGE-01; core/tests/agent/test_pages.py).
 
 An HTML page is shared the same way (R-PAGE-08) with the opposite split: the window gives
@@ -228,10 +228,10 @@ No native global hotkey or new RPC is added (A-06). MembersService owns admissio
 before the existing _run for schedules, event receipts and webhooks. Recent
 history stays in routine_runs; its projection is limited to 20, not pruned.
 The single SettingsStore registry adds internal owner activity/admission state
-and owner_output_folder (A-08). Bounded rolling-hour receipts retain member and
+and the project folder settings (A-08). Bounded rolling-hour receipts retain member and
 time only, surviving routine deletion. Owner activity is accepted only through
 the existing owner-window viewing boundary, never from model tools.
-The existing shared brain.owner.owner_context carries the escaped output path
+The existing shared brain.owner.owner_context carries the escaped work, team and project paths
 and delivery instruction to foreground API/CLI and background prompts. It does
 not add a writer, model loop, worker, grant, migration or filesystem side effect
 (A-01/03/04). Host and member-computer destinations stay distinct. Actual native

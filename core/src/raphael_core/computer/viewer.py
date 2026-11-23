@@ -311,14 +311,14 @@ class DesktopViewer:
         return {"image": "data:image/jpeg;base64," + base64.b64encode(data).decode("ascii")}
 
     def message_path_roots(self, member, target):
-        from ..brain.owner import member_folders
-
-        folders = member_folders(self.vm.settings, member) if self.vm.settings else []
-        roots = [(Path(folder), None) for folder in folders]
+        projects = self.vm.settings.get("project_folders") if self.vm.settings else []
+        roots = [(source, PurePosixPath(guest)) for guest, source in target.projects]
+        roots.extend((Path(folder), None) for folder in projects)
         if not target.remote:
             roots.append((target.workspace, PurePosixPath(GUEST)))
             if target.shared is not None:
                 roots.append((target.shared, PurePosixPath(SHARED)))
+        roots.extend((folder, None) for folder in self.vm.local_folders(member))
         return roots
 
     @staticmethod
@@ -392,6 +392,15 @@ class DesktopViewer:
     async def team_file(self, params):
         """Where a file of the team folder is on this PC, for the owner's own press. A folder on another computer has no such place."""
         path = params.get("path")
+        own = re.fullmatch(r"member-folder:(0|[1-9][0-9]*)", path) if isinstance(path, str) else None
+        if own:
+            member = int(own[1])
+            self.target({"member_id": member})
+            await self.vm.settled()
+            folder = self.file_root(self.vm.local_folders(member)[0])
+            from .vm import bound_folder
+            await asyncio.to_thread(bound_folder, folder)
+            return {"path": str(folder), "opens_folder": True}
         if params.get("member_id") is not None:
             return await self.message_path(params["member_id"], path)
         member_file = re.fullmatch(r"member-file:(0|[1-9][0-9]*):(workspace|team):(.+)", path) if isinstance(path, str) else None

@@ -341,6 +341,9 @@ class Brain:
             "dictionary.delete": self._dictionary_delete,
             "dictionary.learn": self._dictionary_learn,
             "dictionary.undo": self._dictionary_undo,
+            "folders.info": self._folder_info,
+            "folders.switch_branch": self._switch_branch,
+            "folders.member": self._member_folder,
             "settings.get": self._settings_get,
             "settings.set": self._settings_set,
             "languages.list": self._languages_list,
@@ -861,6 +864,24 @@ class Brain:
         return result
 
     # --- settings -------------------------------------------------------------------------------
+
+    async def _folder_info(self, params):
+        from ..folders import folder_info
+        return await folder_info(params)
+
+    async def _switch_branch(self, params):
+        from ..folders import switch_branch
+        answer = await switch_branch(self._settings, params)
+        self._notify_settings()
+        return answer
+
+    async def _member_folder(self, params):
+        from ..folders import default_folders
+        member = params.get("member_id")
+        if type(member) is not int or member < 0:
+            raise invalid_params("Choose a member")
+        folder = getattr(self, "member_folders", default_folders)(member)[0]
+        return {"path": str(folder)}
 
     async def _settings_get(self, params: dict) -> dict:
         return {"settings": self._settings.all()}

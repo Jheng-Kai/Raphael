@@ -27,7 +27,7 @@ from ..agent.policy import Tier
 from ..integrations.audit import AuditLog
 from ..services.attachments import Attachment, MAX_FILE_BYTES, sniff_ok
 from ..agent.data_floor import DataFloor
-from .vm import SHARED, VmError, engine_start_allowed
+from .vm import GUEST, SHARED, VmError, engine_start_allowed
 from .vm_bridge import CuaBridge, call_driver_tool
 from .owner_files import KEPT_WORDS, MAC_PRIVATE, kept_place, place as owner_place
 from .owner_transfer import REMOTE_FILE_MAX, hand_over, safe_name
@@ -354,6 +354,8 @@ class VmTools:
         self.leases = {}
         self.scope_busy = lambda scope: scope[0] == "async" and not scope[1].done()
         self.vm.busy = lambda key: key in self.leases and self.scope_busy(self.leases[key])
+        self.mount_start = ContextVar("computer_mount_start", default=None)
+        self.vm.mount_busy = self._mount_busy
         self.listed = set()
         self.connections, self.labels = {}, itertools.count(1)
         # The driver in a running computer remembers every session label that has ended and refuses it for good. A
@@ -684,6 +686,13 @@ class VmTools:
         except (VmError, OSError, TimeoutError):
             running = False
         return PluginResult(True, text=json.dumps({"computer": "docker", "installed": installed, "running": running}))
+
+    def _mount_busy(self, target):
+        start = self.mount_start.get()
+        own_start = start is not None and start[0] == target.key
+        return self.vm.unit_active(target) > int(own_start) or any(
+            self.detached_busy(peer) or start != (peer.key, True) and self.vm.busy(peer.key)
+            for peer in self.vm.unit_targets(target))
 
     def detached_busy(self, target):
         now = time.monotonic()
@@ -1037,14 +1046,16 @@ class VmTools:
                 if row is None:
                     return PluginResult(False, "blocked")
                 member = row[0]
-            if target.screen == 0 and target == self.vm.target(member):
+            current = self.vm.target(member)
+            if target.screen == 0 and target == current:
                 await self.vm.seat(member)
                 return PluginResult(False, "computer_changed")
-            if target != self.vm.target(member):
-                current = self.vm.target(member)
+            if target != current:
                 if current.container and not current.screen and current.key == target.key:
                     await self.vm.seat(member)
                 return PluginResult(False, "computer_changed", "This computer is no longer the member's own. Read the refreshed computer tool catalog.")
+            # The catalogue binds the desktop's identity. Mount preferences can change without changing its identity.
+            target = current
             if self.tier_of(key) is None or approver == "none" or tool.tier >= Tier.T2 and approver != "user":
                 return result
             if target.key in self.vm.held:
@@ -1078,6 +1089,7 @@ class VmTools:
             # Only the screen is shared out: a command or a file in the workspace takes nobody's turn, and no turn waits
             # for one.
             screen = tool.name not in ("vm_exec", "attach_file", "copy_from_owner", *FILE_TOOLS)
+            new_lease = screen and self.leases.get(target.key) != owner
             if screen and (busy := await self._take_screen(target, owner)) is not None:
                 result = busy
                 return result
@@ -1130,7 +1142,18 @@ class VmTools:
                 self.commands[target.key] = self.commands.get(target.key, 0) + 1
             try:
                 # Only a member's own call that needs its computer may start Docker Desktop; a read or a viewer never does (R-PANEL-04).
-                await self._started(target, member, tool.name)
+                # The first call of a new holder may rebuild. Its own new lease has not done work yet.
+                start = self.mount_start.set((target.key, new_lease))
+                try:
+                    try:
+                        await self._started(target, member, tool.name)
+                    except VmError as error:
+                        if str(error) != "busy" or (kept := await self.vm.running_project_mounts(target)) is None:
+                            raise
+                        target = kept
+                        await self._started(target, member, tool.name)
+                finally:
+                    self.mount_start.reset(start)
                 await self._disk_notice(target)
                 if target != self.vm.target(member):
                     return PluginResult(False, "computer_changed")
@@ -1149,6 +1172,9 @@ class VmTools:
                     member_workspace = self.host_computer is not None and target.container == "shared"
                     if member_workspace:
                         carried["member_workspace"] = True
+                    work_folder = self.vm.guest_work_folder(target, member) if target.projects else None
+                    if work_folder and work_folder != self.vm.guest_workspace(target):
+                        carried["work_folder"] = work_folder
                     if background:
                         data = await self.vm.execute(target, arguments["command"], wait, background=True, **carried)
                         folder = self.vm.member_workspace(target) if member_workspace else target.workspace
@@ -1178,15 +1204,16 @@ class VmTools:
                             if target.key in self.vm.held:
                                 raise VmError("owner_holds_control")
                             return result
-                    if self.host_computer is not None and target.container and tool.name != "file_history":
-                        arguments = {**arguments, "path": self.member_file_path(target, arguments.get("path", "."))}
+                    if ((self.host_computer is not None and target.container or target.projects)
+                            and tool.name != "file_history"):
+                        arguments = {**arguments, "path": self.member_file_path(target, arguments.get("path", "."), member)}
                     result = await file_tools.call(self.vm, target, tool.name, arguments, self.file_reads,
                                                    self._file_run(target, member, owner, turn), checkpoint,
                                                    history if tool.name == "file_history" else None)
                 elif tool.name == "attach_file":
                     path = arguments["path"]
-                    if self.host_computer is not None and target.container:
-                        path = self.member_file_path(target, path)
+                    if self.host_computer is not None and target.container or target.projects:
+                        path = self.member_file_path(target, path, member)
                     data = await self.vm.read_file(target, path, limit=MAX_FILE_BYTES)
                     name = PurePosixPath(arguments["path"]).name
                     attachment = await asyncio.to_thread(self.attachments.save,
@@ -1379,14 +1406,14 @@ class VmTools:
                 self.vm.invalidate(target)
                 await asyncio.sleep(delay * attempt)
 
-    def member_file_path(self, target, path):
+    def member_file_path(self, target, path, member=None):
         guest = PurePosixPath(path)
         workspace = PurePosixPath(self.vm.guest_workspace(target))
-        root = workspace.parent.parent
-        if guest.is_relative_to(root) and not guest.is_relative_to(root / "members"):
-            guest = guest.relative_to(root)
+        if target.container and guest.is_relative_to(GUEST) and not guest.is_relative_to(PurePosixPath(GUEST) / "members"):
+            return str(workspace / guest.relative_to(GUEST))
         if not guest.is_absolute() and not path.startswith("~"):
-            return str(workspace / guest)
+            work = self.vm.guest_work_folder(target, member) if target.projects and member is not None else workspace
+            return str(PurePosixPath(work) / guest)
         return path
 
     async def _copy_from_owner(self, target, path):

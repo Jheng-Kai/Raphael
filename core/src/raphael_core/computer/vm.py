@@ -16,16 +16,19 @@ import math
 import os
 import re
 import secrets
+import shlex
 import sqlite3
 import stat
 import time
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
+
+from ..folders import PROJECTS, choice, project_mounts
 
 logger = logging.getLogger(__name__)
 
@@ -197,6 +200,7 @@ class Target:
     screen: int = 1
     screens: int = 1
     container: str = ""
+    projects: tuple = field(default=(), compare=False)
 
     @property
     def unit(self):
@@ -291,6 +295,7 @@ def run_args(target, owner, password, *, tz=None, size=None):
         "--cap-drop", "ALL", "--cap-add", "SETUID", "--cap-add", "SETGID", "--shm-size", "512m",
         "--mount", mount_arg(target.workspace, remote=bool(target.remote)),
         *(["--mount", mount_arg(target.shared, SHARED, remote=bool(target.remote))] if target.shared else []),
+        *(arg for destination, source in target.projects for arg in ("--mount", mount_arg(source, destination))),
         "-e", f"VNC_PW={password}",
         "-e", f"TZ={zone}",
         # Tools handle Chinese and Japanese file names only under a UTF-8 locale; the image's default is POSIX.
@@ -381,7 +386,7 @@ def compatible(raw, target, owner, image_id):
 
 
 def mounts_match(mounts, configured, target):
-    expected = {GUEST: target.workspace, **({SHARED: target.shared} if target.shared else {})}
+    expected = {GUEST: target.workspace, **({SHARED: target.shared} if target.shared else {}), **dict(target.projects)}
     if len(mounts) != len(expected) or len(configured) != len(expected):
         return False
     for destination, source in expected.items():
@@ -396,6 +401,29 @@ def mounts_match(mounts, configured, target):
         elif Path(request.get("Source", "")).resolve() != source.resolve():
             return False
     return True
+
+
+def previous_mounts(raw, target):
+    """Read the prior project bindings while requiring the canonical workspace and team mounts."""
+    configured = raw.get("HostConfig", {}).get("Mounts", raw.get("Mounts", []))
+    if not isinstance(configured, list):
+        return target
+    projects = []
+    for mount in configured:
+        if not isinstance(mount, dict):
+            return target
+        guest = mount.get("Target", mount.get("Destination", ""))
+        if not isinstance(guest, str) or not guest.startswith(PROJECTS + "/"):
+            continue
+        name = guest[len(PROJECTS) + 1:]
+        source = mount.get("Source")
+        if not isinstance(source, str):
+            return target
+        source = Path(source)
+        if target.remote or not source.is_absolute() or not name or "/" in name or name in (".", ".."):
+            return target
+        projects.append((guest, source))
+    return replace(target, projects=tuple(projects))
 
 
 def known_previous(raw, target, owner):
@@ -452,6 +480,7 @@ class LocalVm:
         self.locks, self.targets = {}, {}
         self.task = None
         self.busy = lambda key: False
+        self.mount_busy = lambda target: bool(self.unit_active(target) or self.unit_busy(target))
         self.native_busy = lambda target: False
         self.input_busy = lambda target: bool(self.active.get(target.key))
         self.timezone = lambda: None
@@ -859,7 +888,34 @@ class LocalVm:
         return Target(key, name,
                       PurePosixPath(name + "-workspace") if host else self.homes / key,
                       PurePosixPath(f"raphael-computer-{self.owner}-team") if host else self.team,
-                      host)
+                      host, projects=self.projects() if not host else ())
+
+    def projects(self):
+        if self.settings is None:
+            return ()
+        # Never bind a parent of internal storage, or bind internal state in its own right.
+        private = (self.root, self.machine)
+        def allowed(source):
+            try:
+                resolved = source.resolve()
+                return not any(resolved.is_relative_to(root) or root.is_relative_to(resolved) for root in private)
+            except (OSError, RuntimeError):
+                return False
+        return tuple((guest, source) for guest, source in project_mounts(self.settings.get("project_folders") or [])
+                     if allowed(source))
+
+    def local_folders(self, member):
+        target = (self.shared_target("", member, 0) if self.mode == "shared" and not self.remote
+                  else self.target_for("", self.key_for("", member)))
+        return self.member_workspace(target), target.shared
+
+    def guest_work_folder(self, target, member):
+        chosen = choice(self.settings, member) if self.settings is not None else None
+        if chosen:
+            for guest, source in target.projects:
+                if source == Path(chosen):
+                    return guest
+        return self.guest_workspace(target)
 
     def placed(self, name):
         """Where one of the computers' folders is: in the machine-local folder once it is there, and in the data
@@ -1404,7 +1460,7 @@ class LocalVm:
 
     def _recent_start(self, target):
         kept = self.running.get(target.physical)
-        if kept and kept[1] == self._start_signature() and 0 <= self.clock() - kept[0] < PREFLIGHT_S:
+        if kept and kept[1] == (self._start_signature(), target.projects) and 0 <= self.clock() - kept[0] < PREFLIGHT_S:
             return self.seat_status(target, kept[2])
         return None
 
@@ -1424,7 +1480,7 @@ class LocalVm:
             self.invalidate(target)
             state = await self._prepare_start(target)
             if state.get("ready"):
-                self.running[target.physical] = self.clock(), self._start_signature(), dict(state)
+                self.running[target.physical] = self.clock(), (self._start_signature(), target.projects), dict(state)
                 # Ready means running on the current image (`compatible`): older layers are no longer needed by it.
                 self.clean_soon(target)
             return state
@@ -1548,6 +1604,19 @@ class LocalVm:
             await asyncio.sleep(1)
         raise VmError("health_timeout")
 
+    async def running_project_mounts(self, target):
+        """A busy desktop can keep its existing mounts until work releases it."""
+        if target.remote or target.state_key in self.maintenance:
+            return None
+        raw = await self.inspect(target)
+        if not raw or raw.get("State", {}).get("Running") is not True:
+            return None
+        previous = previous_mounts(raw, target)
+        image_id = await self.image(target)
+        if previous.projects != target.projects and image_id and compatible(raw, previous, self.owner, image_id):
+            return previous
+        return None
+
     async def _upgrade_image(self, target):
         import copy
         raw = await self.inspect(target)
@@ -1560,11 +1629,16 @@ class LocalVm:
         if legacy_remote:
             host["PortBindings"] = {"6901/tcp": [{"HostIp": "127.0.0.1", "HostPort": ""}]}
         # `previous` carries the remote binding repair, so an old remote computer of a previous layer still upgrades.
-        image_upgrade = known_previous(previous, target, self.owner) and (raw.get("Image") != image_id or target.container == "shared")
-        if (not raw or not image_id or not (image_upgrade or legacy_remote and raw.get("Image") == image_id
+        prior = previous_mounts(previous, target)
+        mounts_changed = dict(prior.projects) != dict(target.projects)
+        mount_upgrade = mounts_changed and compatible(previous, prior, self.owner, image_id)
+        image_upgrade = known_previous(previous, prior, self.owner) and (raw.get("Image") != image_id or target.container == "shared")
+        if (not raw or not image_id or not (mount_upgrade or image_upgrade or legacy_remote and raw.get("Image") == image_id
                 and compatible(previous, target, self.owner, raw.get("Image")))):
             raise VmError("incompatible")
         if self.unit_held(target) or (self.unit_active(target) > 1 or self.unit_active(target, excluding=target.key)) or self.unit_busy(target, excluding=target.key):
+            raise VmError("busy")
+        if mounts_changed and self.mount_busy(target):
             raise VmError("busy")
         if (self.preparation.get(target.state_key) or {}).get("state") in ("starting", "building", "preparing"):
             # A computer of an earlier layer is made again on this one: part of the update the state names. Only inside a
@@ -1572,6 +1646,10 @@ class LocalVm:
             self.updating.add(target.state_key)
             self._progress(target, "preparing")
         self.rebuild_notice(target)
+        if mounts_changed:
+            await self.disconnect_unit(target)
+            if self.unit_held(target) or self.unit_active(target) > 1 or self.unit_active(target, excluding=target.key) or self.mount_busy(target):
+                raise VmError("busy")
         if raw.get("State", {}).get("Running") and (await self.run_for(target, ["stop", "--time", "10", target.name], timeout=30)).code:
             raise VmError("stop_failed")
         if (await self.run_for(target, ["rm", target.name])).code:
@@ -1893,7 +1971,7 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
     def guest_workspace(self, target):
         return f"{GUEST}/members/{target.key}" if target.container == "shared" else GUEST
 
-    async def execute(self, target, command, timeout=60, *, background=False, keys=None, member_workspace=False):
+    async def execute(self, target, command, timeout=60, *, background=False, keys=None, member_workspace=False, work_folder=None):
         """Run `command` in the workspace. In the foreground it is waited for, at most `FOREGROUND_S`, and ended then;
         in the background it is started detached and this returns at once with a job whose log and exit code the
         caller reads with later commands. A job is ended by its own timeout, at most `BACKGROUND_S`.
@@ -1908,10 +1986,15 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
         carried = {"env": keys, "redact": lambda text, values=tuple(keys.values()): _withheld(values, text)} if keys else {}
         if type(timeout) not in (int, float) or not math.isfinite(timeout) or not 0 < timeout <= (BACKGROUND_S if background else FOREGROUND_S):
             raise VmError("bad_arguments")
-        folder = self.guest_workspace(target) if member_workspace else GUEST
-        in_workspace = f"mkdir -p {folder} && cd {folder} && {command}" if folder != GUEST else f"cd {GUEST} && {command}"
+        workspace = self.guest_workspace(target) if member_workspace else GUEST
+        if work_folder:
+            in_workspace = f"cd -- {shlex.quote(work_folder)} && {command}"
+        elif workspace == GUEST:
+            in_workspace = f"cd {GUEST} && {command}"
+        else:
+            in_workspace = f"mkdir -p {workspace} && cd {workspace} && {command}"
         if background:
-            return await self._detached(target, in_workspace, timeout, keys, folder=folder)
+            return await self._detached(target, in_workspace, timeout, keys, folder=workspace)
         # The guest timeout also ends the process when the host docker client is cancelled.
         token = secrets.token_hex(16)
         script = 'echo $$ > "$1"; shift; exec timeout --signal=TERM --kill-after=2 "$@"'
@@ -1946,7 +2029,8 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
 
     async def read_file(self, target, guest_path, *, limit):
         path = PurePosixPath(guest_path) if isinstance(guest_path, str) else PurePosixPath("/")
-        root = GUEST if path.is_relative_to(GUEST) else SHARED if target.shared and path.is_relative_to(SHARED) else None
+        roots = [GUEST, *([SHARED] if target.shared else []), *(guest for guest, _ in target.projects)]
+        root = next((root for root in roots if path.is_relative_to(root)), None)
         if not path.is_absolute() or ".." in path.parts or root is None:
             raise VmError("outside_workspace")
         # Resolve in the guest as well: Linux symlinks on a Windows bind mount are
@@ -1981,7 +2065,7 @@ print(base64.b64encode(data).decode())
         and the file's bytes go over stdin; `answer_bytes` is how many file bytes the answer may carry."""
         from . import files_guest
         source = Path(files_guest.__file__).read_text(encoding="utf-8")
-        payload = json.dumps({**request, "roots": [GUEST, SHARED]}).encode("utf-8")
+        payload = json.dumps({**request, "roots": [GUEST, SHARED, *(guest for guest, _ in target.projects)]}).encode("utf-8")
         args = exec_args(target, ["timeout", "--signal=TERM", "--kill-after=1", "55", "/opt/venv/bin/python", "-c", source],
                          interactive=True)
         result = await self.run_for(target, args, timeout=60, limit=answer_bytes * 4 // 3 + 65_536, input=payload)

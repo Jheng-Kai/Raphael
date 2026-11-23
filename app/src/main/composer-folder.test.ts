@@ -1,157 +1,113 @@
 // @vitest-environment happy-dom
-// The member's folder in the composer's row (composer-folder.ts, R-PC-05): it names where the member's files for the owner go,
-// and its menu lists the output folder first, then the ones added, switches between them and adds one, saving the member's
-// folders whole.
 import { beforeEach, expect, test, vi } from "vitest";
+import type { BrainSettings, FolderInfo } from "./types";
 
-const state = vi.hoisted(() => ({ settings: { owner_output_folder: "C:\\Owner\\Deliveries", member_write_folders: {} as Record<string, string[]> } }));
 const api = vi.hoisted(() => ({
-  settingsGet: vi.fn(async () => ({ settings: structuredClone(state.settings) })),
-  settingsSet: vi.fn(async (_key: string, value: Record<string, string[]>) => {
-    state.settings.member_write_folders = structuredClone(value);
-    return { settings: structuredClone(state.settings) };
-  }),
-  pickOutputFolder: vi.fn(async (): Promise<string | null> => null),
+  settingsGet: vi.fn(), settingsSet: vi.fn(), folderInfo: vi.fn(), memberFolder: vi.fn(),
+  switchBranch: vi.fn(), pickOutputFolder: vi.fn(),
 }));
 vi.mock("./api", () => api);
-import { mountComposerFolder, removeFolder } from "./composer-folder";
-import { setLocale, t } from "./i18n";
-import type { MainEvent } from "./types";
+
+import { mountComposerFolder } from "./composer-folder";
+import { setLocale } from "./i18n";
 import { closeMenu } from "./ui";
 
-const flush = async (): Promise<void> => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
-let member = 3, button: HTMLButtonElement, handlers: ((event: MainEvent) => void)[];
+const repo = "C:\\Work\\Repo", plain = "D:\\Notes", own = "C:\\Raphael\\members\\3", added = "F:\\New";
+const info = (path: string, branch = "main"): FolderInfo => ({
+  path, name: path.split("\\").pop()!, exists: true, git: path === repo,
+  branch: path === repo ? branch : "", branches: path === repo ? ["draft", "main"] : [],
+});
+let settings: Partial<BrainSettings>;
+const flush = () => new Promise<void>(resolve => setTimeout(resolve, 0));
+const find = (selector: string) => document.querySelector<HTMLElement>(selector)!;
+const rows = () => [...document.querySelectorAll<HTMLElement>("#app-popover [role=radio]")];
+const choose = async (index: number) => { rows()[index].click(); await flush(); };
 
-async function mount(): Promise<ReturnType<typeof mountComposerFolder>> {
-  button = document.createElement("button");
-  button.innerHTML = '<svg class="i"></svg><span></span>';
-  document.body.append(button);
-  handlers = [];
-  const mounted = mountComposerFolder(button, () => member, { onEvent: handler => { handlers.push(handler); } });
+async function mount() {
+  document.body.innerHTML = '<button id="folder" aria-expanded="false"><span></span></button><button id="branch" aria-expanded="false"><span></span></button>';
+  mountComposerFolder(find("#folder"), find("#branch"), () => ({ id: 3, name: "日文老師" }));
   await flush();
-  return mounted;
 }
-const word = (): string => button.querySelector("span")!.textContent ?? "";
-const open = async (): Promise<HTMLElement> => { button.click(); await flush(); return document.querySelector<HTMLElement>("#app-popover .cb-folders")!; };
-const press = async (selector: string): Promise<void> => { document.querySelector<HTMLElement>(`#app-popover ${selector}`)!.click(); await flush(); };
 
 beforeEach(() => {
   closeMenu();
-  document.body.innerHTML = "";
   setLocale("zh-TW");
-  member = 3;
-  state.settings = { owner_output_folder: "C:\\Owner\\Deliveries", member_write_folders: { "3": ["D:\\Work\\Notes", "E:\\Archive"] } };
-  vi.clearAllMocks();
+  vi.resetAllMocks();
+  settings = { project_folders: [repo, plain], member_work_folder: { "7": plain } };
+  api.settingsGet.mockImplementation(async () => ({ settings }));
+  api.settingsSet.mockImplementation(async (key, value) => {
+    settings = { ...settings, [key]: value };
+    return { settings };
+  });
+  api.folderInfo.mockImplementation(async path => info(path));
+  api.memberFolder.mockResolvedValue({ path: own });
+  api.pickOutputFolder.mockResolvedValue(null);
 });
 
-test("it waits hidden until the folders are read, then names the member's first folder with its whole path in its name", async () => {
-  button = document.createElement("button");
-  button.innerHTML = "<span></span>";
-  let answer!: (value: { settings: typeof state.settings }) => void;
-  api.settingsGet.mockImplementationOnce(() => new Promise(resolve => { answer = resolve; }));
-  mountComposerFolder(button, () => member);
-  expect(button.hidden).toBe(true);
-  answer({ settings: structuredClone(state.settings) }); await flush();
-  expect(button.hidden).toBe(false);
-  expect(button.querySelector("span")!.textContent).toBe("Notes");
-  expect(button.getAttribute("aria-label")).toBe(t("composerFolder.label", { p0: "D:\\Work\\Notes" }));
-});
-
-test("a member with no folder of its own names the output folder, and with none at all asks for one", async () => {
-  member = 4;
-  const mounted = await mount();
-  expect(word()).toBe("Deliveries");
-  state.settings.owner_output_folder = "";
-  handlers.forEach(handler => handler({ type: "SettingsChanged" } as MainEvent)); await flush();
-  expect(word()).toBe(t("output.pick"));
-  expect(button.getAttribute("aria-label")).toBe(t("composerFolder.none"));
-  // Another member is drawn from what was read, without a read of its own.
-  member = 3; mounted.draw();
-  expect(word()).toBe("Notes");
-});
-
-test("its menu lists the output folder first and the added ones after it by name, and choosing one puts it first, keeping the other members' folders", async () => {
-  state.settings.member_write_folders["9"] = ["F:\\Other"];
+test("the composer lists the member folder first and remembers projects with their branches", async () => {
   await mount();
-  const card = await open();
-  const rows = [...card.querySelectorAll<HTMLElement>("[data-folder]")];
-  expect(rows.map(row => row.querySelector(".cb-name b")!.textContent)).toEqual(["Deliveries", "Notes", "Archive"]);
-  expect(rows.map(row => row.getAttribute("aria-checked"))).toEqual(["false", "true", "false"]);
-  // Each folder's whole path is written under its name, with no tooltip saying it again; one action, 加入資料夾, at its foot.
-  expect(rows.map(row => row.querySelector(".cb-name small")!.textContent)).toEqual(["C:\\Owner\\Deliveries", "D:\\Work\\Notes", "E:\\Archive"]);
-  expect(rows.some(row => row.hasAttribute("data-tooltip"))).toBe(false);
-  expect([...card.querySelectorAll<HTMLElement>("[data-folder-act]")].map(act => act.dataset.folderAct)).toEqual(["add"]);
-  expect(card.lastElementChild!.querySelector('[data-folder-act="add"]')!.textContent).toBe(t("writeFolders.add"));
-  await press('[data-folder="2"]');
-  expect(api.settingsSet).toHaveBeenCalledWith("member_write_folders", { "3": ["E:\\Archive", "D:\\Work\\Notes"], "9": ["F:\\Other"] });
-  expect(word()).toBe("Archive");
-  expect(document.querySelector("#app-popover .cb-folders")).toBeNull();
-  // The order of the menu stays; the one already chosen saves nothing.
-  const again = await open();
-  expect([...again.querySelectorAll("[data-folder]")].map(row => row.querySelector(".cb-name b")!.textContent)).toEqual(["Deliveries", "Archive", "Notes"]);
-  await press('[data-folder="1"]');
-  expect(api.settingsSet).toHaveBeenCalledTimes(1);
+  expect(find("#folder").textContent).toBe("日文老師的資料夾");
+  expect(find("#branch").hidden).toBe(true);
+  find("#folder").click(); await flush();
+  expect(rows().map(row => row.querySelector("b")!.textContent)).toEqual(["日文老師的資料夾", "Repo", "Notes"]);
+  expect(rows()[0].textContent).toContain(own);
+  expect(rows()[0].getAttribute("aria-checked")).toBe("true");
+  expect(rows()[1].querySelector(".project-branch")!.textContent).toBe("main");
+  expect(rows()[2].querySelector(".project-branch")).toBeNull();
+  await choose(1);
+  expect(api.settingsSet).toHaveBeenLastCalledWith("member_work_folder", { "3": repo, "7": plain });
+  expect(find("#branch").hidden).toBe(false);
+  expect(find("#branch").textContent).toBe("main");
+  find("#folder").click(); await flush(); await choose(0);
+  expect(api.settingsSet).toHaveBeenLastCalledWith("member_work_folder", { "7": plain });
+  expect(find("#branch").hidden).toBe(true);
 });
 
-test("choosing the output folder puts it first in the member's list, and a member with none has it checked", async () => {
+test("the open folder card fills in the member path when the core answers", async () => {
+  let answer!: (folder: { path: string }) => void;
+  api.memberFolder.mockReturnValue(new Promise(resolve => { answer = resolve; }));
   await mount();
-  await open();
-  await press('[data-folder="0"]');
-  expect(api.settingsSet).toHaveBeenLastCalledWith("member_write_folders", { "3": ["C:\\Owner\\Deliveries", "D:\\Work\\Notes", "E:\\Archive"] });
-  expect(word()).toBe("Deliveries");
-  member = 4;
-  const card = await open();
-  const rows = [...card.querySelectorAll<HTMLElement>("[data-folder]")];
-  expect(rows.map(row => [row.querySelector(".cb-name b")!.textContent, row.getAttribute("aria-checked")])).toEqual([["Deliveries", "true"]]);
-  await press('[data-folder="0"]');
-  expect(api.settingsSet).toHaveBeenCalledTimes(1);
+  find("#folder").click();
+  expect(rows()[0].textContent).not.toContain(own);
+  answer({ path: own });
+  await flush();
+  expect(rows()[0].textContent).toContain(own);
 });
 
-test("a folder added with the picker is chosen at once and named on the button, one already listed is chosen, and the chosen one or a cancelled picker changes nothing", async () => {
+test("the branch card switches local branches and shows Git's refusal", async () => {
+  settings.member_work_folder = { "3": repo };
   await mount();
-  await open();
-  api.pickOutputFolder.mockResolvedValueOnce("F:\\New");
-  await press('[data-folder-act="add"]');
-  expect(api.settingsSet).toHaveBeenLastCalledWith("member_write_folders", { "3": ["F:\\New", "D:\\Work\\Notes", "E:\\Archive"] });
-  expect(word()).toBe("New");
-  const card = await open();
-  expect([...card.querySelectorAll<HTMLElement>("[data-folder]")].map(row => [row.querySelector(".cb-name b")!.textContent, row.getAttribute("aria-checked")]))
-    .toEqual([["Deliveries", "false"], ["New", "true"], ["Notes", "false"], ["Archive", "false"]]);
-  button.click(); // its own button folds it again (R-UI-124)
-  for (const picked of ["F:\\New", null]) {
-    await open();
-    api.pickOutputFolder.mockResolvedValueOnce(picked);
-    await press('[data-folder-act="add"]');
-  }
-  expect(api.settingsSet).toHaveBeenCalledTimes(1);
-  await open();
-  api.pickOutputFolder.mockResolvedValueOnce("E:\\Archive");
-  await press('[data-folder-act="add"]');
-  expect(api.settingsSet).toHaveBeenLastCalledWith("member_write_folders", { "3": ["E:\\Archive", "F:\\New", "D:\\Work\\Notes"] });
-  expect(word()).toBe("Archive");
-  // A member with none had the output folder: the added one is chosen and the output folder follows it.
-  member = 4;
-  await open();
-  api.pickOutputFolder.mockResolvedValueOnce("G:\\Drafts");
-  await press('[data-folder-act="add"]');
-  expect(api.settingsSet).toHaveBeenLastCalledWith("member_write_folders", expect.objectContaining({ "4": ["G:\\Drafts", "C:\\Owner\\Deliveries"] }));
-  expect(word()).toBe("Drafts");
+  find("#branch").click(); await flush();
+  expect(rows().map(row => [row.textContent, row.getAttribute("aria-checked")])).toEqual([["draft", "false"], ["main", "true"]]);
+  api.switchBranch.mockRejectedValueOnce(new Error("error: Your local changes would be overwritten"));
+  await choose(0);
+  expect(document.querySelector(".toast")?.textContent).toContain("error: Your local changes would be overwritten");
+  api.switchBranch.mockResolvedValueOnce(info(repo, "draft"));
+  find("#branch").click(); await flush(); await choose(0);
+  expect(api.switchBranch).toHaveBeenLastCalledWith(repo, "draft");
+  expect(find("#branch").textContent).toBe("draft");
 });
 
-test("removing a folder chooses the next one, and the output folder left alone is the empty list, the default", () => {
-  const output = "C:\\Owner\\Deliveries";
-  expect(removeFolder(["D:\\Notes", output, "E:\\Archive"], output, "D:\\Notes")).toEqual([output, "E:\\Archive"]);
-  expect(removeFolder([output, "D:\\Notes"], output, "D:\\Notes")).toEqual([]);
-  expect(removeFolder(["D:\\Notes"], output, "D:\\Notes")).toEqual([]);
-});
-
-test("with no folder and no output folder the menu says the member cannot write, and the one added is chosen", async () => {
-  state.settings = { owner_output_folder: "", member_write_folders: {} };
+test("without the Git CLI the composer shows the branch with no choices", async () => {
+  settings.member_work_folder = { "3": repo };
+  api.folderInfo.mockImplementation(async path => ({ ...info(path), branches: [] }));
   await mount();
-  const card = await open();
-  expect(card.querySelector(".cb-empty")!.textContent).toBe(t("memberSettings.foldersNone"));
-  api.pickOutputFolder.mockResolvedValueOnce("D:\\Work");
-  await press('[data-folder-act="add"]');
-  expect(api.settingsSet).toHaveBeenLastCalledWith("member_write_folders", { "3": ["D:\\Work"] });
-  expect(word()).toBe("Work");
+  expect(find("#branch").textContent).toBe("main");
+  find("#branch").click(); await flush();
+  expect(rows()).toEqual([]);
+});
+
+test("a picked project is added and selected immediately and cancellation writes nothing", async () => {
+  await mount();
+  find("#folder").click();
+  find('[data-project-pick="-1"]').click(); await flush();
+  expect(api.settingsSet).not.toHaveBeenCalled();
+  api.pickOutputFolder.mockResolvedValue(added);
+  find("#folder").click();
+  find('[data-project-pick="-1"]').click(); await flush();
+  expect(api.settingsSet.mock.calls).toEqual([
+    ["project_folders", [repo, plain, added]],
+    ["member_work_folder", { "3": added, "7": plain }],
+  ]);
+  expect(find("#folder").textContent).toBe("New");
 });

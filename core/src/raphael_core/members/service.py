@@ -1237,9 +1237,12 @@ class MembersService:
         member = _whole(params, "member_id")
         if not self.member_exists(member):
             raise invalid_params("no such member")
-        workspaces = getattr(self, "panel_workspaces", lambda member: [])(member)
+        from ..folders import default_folders, work_folder
+        folders = getattr(self, "member_folders", default_folders)
+        workspaces = getattr(self, "panel_workspaces", lambda member: [("team", folders(member)[1])])(member)
         return snapshot(self._conn, member, workspaces, _whole({"limit": 12, **params}, "limit", least=1),
-                        output_folder=self._settings.get("owner_output_folder"), tz=self._tz, paths=paths)
+                        work_folder=work_folder(self._settings, member, folders),
+                        work_mount=getattr(self, "project_mount", lambda member: None)(member), tz=self._tz, paths=paths)
 
     async def _library(self, params):
         return self._library_snapshot(params)

@@ -881,7 +881,7 @@ Offline contracts: core/tests/integrations/test_chat_connections.py, core/tests/
 R-COLLEAGUE-04: Connections > an app shows each public account label; Account label edits that exact account. Add another account reuses existing sign-in and asks for a label afterward. A returned email is the default; provider refresh retains owner labels by account ID. Members and connections_list receive public labels and the shared instruction to ask which account unless specified.
 
 ```powershell
-npm run look -- account-labels account-label-edit output-folder-picker output-folder-picker-cancel --theme both --width 1120,720,1920x1080
+npm run look -- account-labels account-label-edit project-folder-picker project-folder-picker-cancel --theme both --width 1120,720,1920x1080
 ```
 
 Core fakes prove persistence and projection. IPC fixtures never prove OAuth or provider metadata. Custom MCP services without multiple managed account identities retain their service identity.

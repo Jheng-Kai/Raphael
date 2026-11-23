@@ -1,5 +1,11 @@
 # Raphael feature map
 
+## Project folders
+
+See [Member computer](member-computer.md#the-owners-files-read-everywhere-write-in-the-owners-folders-r-pc-04-r-pc-05)
+and [Settings and appearance](settings-appearance.md#project-folders-in-general) for R-PC-05, R-OUTPUT-01,
+R-COLLEAGUE-06 and R-COMP-PROJECT-01, with the composer, branch, member settings and General scenes.
+
 ## Where the app's data lives
 
 See [Member computer](member-computer.md#where-the-apps-data-lives) for the inventory of every kind of data the app

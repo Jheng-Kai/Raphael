@@ -228,11 +228,13 @@ export function installMock(fixture, config = {}, target = window) {
   // What the first member's personality page holds (member-settings.ts): its name, role, personality and instructions as the scene gives them.
   if (variant.persona) Object.assign(data.members.find(member => member.id === 1), variant.persona);
 
-  if (variant.ownerOutputFolder) data.settings.owner_output_folder = "C:\\Owner\\Deliveries";
-  // Member 1's own folders (R-PC-05): a short path and one long enough to wrap.
-  if (variant.memberWriteFolders) data.settings.member_write_folders = { "1": ["C:\\Owner\\Notes", "D:\\專案\\拉斐爾\\文件\\二〇二六年度規劃與市場研究資料彙整"] };
-  // Many folders: the menu's list scrolls as the @ menu's does.
-  if (variant.manyWriteFolders) data.settings.member_write_folders = { "1": Array.from({ length: 14 }, (_, index) => `C:\\Owner\\Projects\\Project ${index + 1}`) };
+  const gitProject = "C:\\Owner\\Notes";
+  let projectBranch = "main";
+  if (variant.projectFolders) {
+    data.settings.project_folders = [gitProject, "D:\\專案\\拉斐爾\\文件\\二〇二六年度規劃與市場研究資料彙整"];
+    if (variant.projectSelected) data.settings.member_work_folder = { "1": gitProject };
+  }
+  if (variant.manyProjects) data.settings.project_folders = Array.from({ length: 14 }, (_, index) => 'C:\\Owner\\Projects\\Project ' + (index + 1));
   if (variant.routineGuard) for (const routine of data.routines.filter(item => item.member_id === 1)) {
     Object.assign(routine, { enabled: false, next_run: null, last_error: "已暫停：擁有者超過 30 天未使用。請確認後重新開啟。" });
   }
@@ -1562,6 +1564,13 @@ export function installMock(fixture, config = {}, target = window) {
         if (!desktopSessions.get(p.session)) throw new Error("desktop viewer expired");
         return { name: p.name, path: `/home/cua/team/${p.name}` };
       }
+      case "folders.member": return { path: "C:\\Raphael\\members\\" + p.member_id };
+      case "folders.info": return { path: p.path, name: p.path.split("\\").pop(), exists: true, git: p.path === gitProject,
+        branch: p.path === gitProject ? projectBranch : "", branches: p.path === gitProject ? ["draft", "main"] : [] };
+      case "folders.switch_branch":
+        projectBranch = p.branch;
+        notify("SettingsChanged");
+        return { path: p.path, name: p.path.split("\\").pop(), exists: true, git: true, branch: projectBranch, branches: ["draft", "main"] };
       case "settings.get": return { settings: data.settings };
       // A question opening later is not there at the first read, as one that opens while the owner is elsewhere.
       case "background.waiting.list": { data.waitingReads = (data.waitingReads ?? 0) + 1; return { waiting: variant.roomQuestion && (!variant.roomQuestionLate || data.waitingReads > 1) ? [{ id: "room-q", member_id: 1, member_name: "小晴", room_id: 1 }] : [] }; }
@@ -1582,7 +1591,12 @@ export function installMock(fixture, config = {}, target = window) {
         if (p.action === "abort") return {};
         return { name: upload.name, mime: upload.mime, data: "", size: upload.size, stored_id: `${"0".repeat(31)}${data.uploadCount}` };
       }
-      case "settings.set": data.settings[p.key] = p.value; notify("SettingsChanged"); return { settings: data.settings };
+      case "settings.set":
+        data.settings[p.key] = p.value;
+        if (p.key === "project_folders") data.settings.member_work_folder = Object.fromEntries(
+          Object.entries(data.settings.member_work_folder ?? {}).filter(([, path]) => p.value.includes(path)));
+        notify("SettingsChanged");
+        return { settings: data.settings };
       case "status.get": return data.status;
       case "home.overview": {
         if (!p.month) return data.home;
@@ -2725,7 +2739,7 @@ export function installMock(fixture, config = {}, target = window) {
       if (command === "open_team_file") { state.openedTeamFile = args.path; return; }
       if (command === "open_attachment") { (state.openedAttachments ??= []).push(args.id); return; }
       if (command === "open_library_file") { state.openedLibraryFile = { member_id: args.memberId, id: args.id }; return; }
-      // A report saved as a file (report_save, which the core writes): in Downloads, as when no output folder is chosen.
+      // A report saved as a file (report_save, which the core writes): in Downloads when the work folder cannot be used.
       if (command === "report_save") return { place: "downloads", folder: "Downloads" };
       if (command === "pick_output_folder") return variant.folderCancel ? null : data.colleagueSample.path;
       if (command === "member_template_file") {

@@ -2232,7 +2232,7 @@ core/tests/agent/test_routine_event.py and core/tests/members/test_harness.py.
 A checked local path is inline code in the conversation, with the same text, background and
 spacing as other code. Hover or keyboard focus adds a thin underline and a pointer. Keyboard
 focus also shows the shared focus ring. A path outside the member's workspace, the team files,
-the output folder and the folders assigned to that member stays plain code. The core resolves
+the member and team shared folders and the remembered projects stays plain code. The core resolves
 links and parent components before deciding, and checks the current roots again on press.
 A readable regular file opens through the existing native opener. Folders and other file types
 are selected in the file manager. A missing file gives a quiet notice.
@@ -2969,8 +2969,8 @@ The core stamps `as_of` (ISO text, never 13 digits of milliseconds, which can pa
   core's `pages.export` (the window may not call it, so no folder comes from the window): only a
   report page, only that drawing's elements and attributes, links within the page; the file is
   named after the page as Windows takes a name, `(2)` and on, never over a file, in 設定 › 一般 ›
-  輸出資料夾, or in Downloads when none is chosen or it takes nothing. The shell selects it in File
-  Explorer; a toast says 已存到「下載」 or the output folder's name (a failure: 檔案沒有存成，請再試一次。),
+  member's work folder, or Downloads when that destination is unavailable. The shell selects it in File
+  Explorer; a toast says 已存到「下載」 or the work folder's name (a failure: 檔案沒有存成，請再試一次。),
   and the report stays open.
 - **The share card** (`conversation-share`): the member's share opens one row, 建立副本 and what
   follows it, whose mark is the member's own face twice (`.share-faces`: 20 px behind and above at

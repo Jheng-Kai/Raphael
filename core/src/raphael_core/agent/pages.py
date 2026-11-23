@@ -538,12 +538,11 @@ class PageHost:
 
 
 class Pages:
-    def __init__(self, conn, *, notify=None, now_ms=wall_clock_ms, output_folder=lambda: ""):
+    def __init__(self, conn, *, notify=None, now_ms=wall_clock_ms, work_folder=lambda member: ""):
         self.store = PageStore(conn, now_ms)
         self.host = PageHost(self.store)
         self.notify, self.tool_call = notify, None
-        # The owner's output folder (settings `owner_output_folder`), read when a report is saved.
-        self.output_folder = output_folder
+        self.work_folder = work_folder
         # The page the owner has open in front of them, as the window last said (`pages.viewing`): in memory only.
         self._viewing = None
 
@@ -640,8 +639,7 @@ class Pages:
         """Saves a page as a file the owner can pass on: a
         report as the document the app drew of it (`html`, checked by report_page.checked_file), an HTML page as the file
         this core builds of what is stored (`page_file`: nothing the window says goes into it). Named after the page, in
-        the owner's output folder, or in `downloads` (the shell's Downloads folder) when none is chosen or it takes
-        nothing. Answers where it went; the shell shows the file selected in its folder."""
+        the member's work folder, or in Downloads if it cannot be saved there. Answers where it went; the shell selects it."""
         from .report_page import FILE_BYTES, checked_file, file_name, save_file  # report_page imports this module
         page = self.of(params)
         try:
@@ -654,7 +652,7 @@ class Pages:
                 raise RpcError(NOT_FOUND, "Only a report or an HTML page is saved as a file", {"kind": "not_shareable"})
         except PageError as error:
             raise invalid_params(str(error)) from None
-        folders = [("output", Path(chosen))] if (chosen := self.output_folder()) else []
+        folders = [("work", Path(chosen))] if (chosen := self.work_folder(page["member_id"])) else []
         downloads = params.get("downloads")
         folders.append(("downloads", Path(downloads) if isinstance(downloads, str) and Path(downloads).is_absolute()
                         else Path.home() / "Downloads"))

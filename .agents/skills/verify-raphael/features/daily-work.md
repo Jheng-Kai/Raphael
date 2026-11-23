@@ -35,25 +35,18 @@ See [Conversation](conversation.md#calm-conversations) for R-UI-101/R-CLI-07 and
   it never resumes work automatically. Explicit enable clears the reason.
   Pointer/key interaction reports through members.viewing at most once a minute;
   scheduler and background list refreshes are not presence.
-- R-OUTPUT-01: Settings > General owns the optional absolute owner output folder.
-  Blank keeps the task destination. The existing shared owner_context supplies
-  its escaped path and default delivery instruction to API, CLI and background
-  speakers. This grants no tool/OS permission. VM paths are not owner-PC paths;
-  unavailable authorized delivery uses export/attachment and reports the limit.
-  Saving/changing the preference never creates, moves or rewrites existing files.
+- R-OUTPUT-01: Members save files to their selected project or their own shared folder. Owner context supplies
+  the work, team and remaining project paths as the member sees them. Report export falls back to Downloads.
 
 ## How to get to it (user POV)
 
 Press Ctrl+K, type a command/member name or shortcut and press Enter, or use the
 shared arrow-key menu controls. Escape restores the originating control. Open
-Settings > General for Output folder. A paused routine's reason appears in the
+Settings › General for Project folders. A paused routine's reason appears in the
 member's existing details list; review it and enable through the existing editor.
 The keyboard palette opens near the top center because it has no clicked
 trigger. Cross-conversation search stays anchored to the sidebar picker. Both
-use the same shared popover surface and search field. The output folder uses
-the settings text-field helper, matching the SSH-host and city rows.
-The output-folder scene checks the field height against General's owner-name
-field, its text inset and the rendered saved path.
+use the same shared popover surface and search field.
 
 ## Driving it with look
 
@@ -62,13 +55,12 @@ full-size review. Run after the shared heavy waiter says clear, or after its
 timeout under the follow-up's explicit exception. Native/live remain deferred.
 
 ```powershell
-npm run look -- shortcut-new-in-composer shortcut-sidebar-in-composer shortcut-member-in-composer command-palette command-palette-filter command-palette-member shortcut-find-chief shortcut-find-member shortcut-find-room shortcut-search owner-output-folder routine-guard-reason chat sidebar-rail sidebar-drawer --theme both --width 1120,720,1920x1080
+npm run look -- shortcut-new-in-composer shortcut-sidebar-in-composer shortcut-member-in-composer command-palette command-palette-filter command-palette-member shortcut-find-chief shortcut-find-member shortcut-find-room shortcut-search project-folders-settings routine-guard-reason chat sidebar-rail sidebar-drawer --theme both --width 1120,720,1920x1080
 ```
 
 Inspect every contact sheet and full-size palette, compact search/finder,
 General setting and paused reason. Compare palette rows to the member picker and
-cross-conversation search at matching theme/width; compare the folder field with
-the owner profile and SSH-host field, and reasons with existing event errors.
+cross-conversation search at matching theme/width; compare the project rows with nearby General settings, and reasons with existing event errors.
 Run judge on that same selected run only after network/subscription and external
 reference prerequisites are authorized. The original no-network/no-paid-API
 restriction still defers judge; do not infer design acceptance from look alone.
@@ -110,12 +102,14 @@ HTTPS forwarding, real authentication and native subscription delivery remain
 separate acceptance.
 
 
-## Native output folder choice
+## Native project folder choice
 
-R-COLLEAGUE-06: Settings > General > output folder is a folder picker like Claude's or ChatGPT's, with no typed field. Unset, the row is 選擇資料夾 alone. Chosen, the button carries the folder's name, the whole path stands under the row name; the folder is changed with that one button. A chosen native path uses the same settings writer; cancel leaves the preference unchanged.
+R-COLLEAGUE-06 uses the native picker from General or the member composer. General lists remembered projects
+and forgets each from its own menu. Removal resets the selected work folders and leaves project files in place.
 
 ```powershell
-npm run look -- owner-output-folder output-folder-picker output-folder-picker-cancel --theme both --width 1120,720,1920x1080
+npm run look -- project-folders-settings project-folder-picker project-folder-picker-cancel project-folder-remove --theme both --width 1120,720,1920x1080
 ```
 
-The look picker is an IPC fixture. The actual OS dialog, cancel and filesystem delivery remain native acceptance.
+The browser fixture proves the visible list, picker result, cancellation and removal. Verify the native dialog,
+file manager and matching host and Docker files separately.

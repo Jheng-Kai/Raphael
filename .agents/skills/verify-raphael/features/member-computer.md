@@ -1190,7 +1190,7 @@ need separate acceptance.
 This supersedes the Library notes below (team-file chips, the workspace/team scan, This week / Earlier, the three-to-a-row
 picture grid, the time on each row, day-by-day groups). A Library of working screenshots is noise, so it lists
 only deliverables, read from `members.library` (media cards and files or links its replies handed over, pages
-it published with their first day, verified receipts in the owner's output folder; never owner uploads, scratch files or
+it published with their first day, verified receipts in the member's work folder; never owner uploads, scratch files or
 undelivered screenshots), split into all, pages, media and files. member-panel-work.ts draws it:
 
 - A row of chips under the tabs, always 全部 / 頁面 / 媒體 / 檔案 in that order, also for a member with one kind
@@ -1897,43 +1897,27 @@ every turn and task, every source and brain (API, and CLI through its MCP list) 
   Raphael's own data keeps the data floor. Walks skip `Library`, `AppData`, caches, `.git` and `node_modules` unless they
   start inside them (each app's container on a Mac would ask the owner). A denied file on a Mac names System Settings ›
   Privacy & Security › Files and Folders or Full Disk Access.
-- Writes (T2, kind write): `write_file`, `edit_file`, only inside the member's folders (`brain.owner.member_folders`): the
-  output folder of Settings › General, every member's default and always one of them, and the ones the owner added for
-  that member (`member_write_folders` by member id, set in that member's settings, 工具 › 可以寫入的資料夾: picked, never
-  typed, removed one by one). Both are owner-only settings, never a management tool. Elsewhere `tier_for_call` says T0 and `call` refuses (`not_writable`), so no card asks for a write
-  that cannot happen. The calling member comes with the command context (`local_tools._CONTEXT`, its sixth part): the
-  speaker of a turn, the member of a task.
-- The member's list keeps its chosen folder first, where its files for the owner go; the output folder is written into the
-  list only while an added folder follows it, so the output folder alone is the empty list. The owner context names the
-  chosen folder as its output folder and the rest as its write folders (`brain/owner.py`). A command it starts on this
-  computer begins in the chosen folder (`command_folder`).
-- Migration 88 turned the one list every member shared into each member's own list, the output folder first.
-- The member's settings and the composer's menu list the folders in one order (`composer-folder.ts` `listedFolders`): the
-  output folder first, then the added ones in the order they were added. In the settings the output folder is marked 預設
-  and has no ⋯ (it is changed in Settings › General alone); each added one is removed from its own ⋯, the next one chosen
-  when it was the chosen one.
-- The composer of a member's own conversation names the chosen folder beside the permission (the `.cmp-folder` button in
-  the permission's quiet type), else 選擇資料夾. Its menu is the permission's kind of card: each folder by its name with its
-  whole path written under it, the chosen one checked (choosing one puts it first), the list scrolling as the @ menu's does
-  when there are many (`composer-folder-many`), and 加入資料夾 alone at its foot: the native picker, and the folder picked is
-  chosen at once and named on the button (`composer-folder-added`). Short of room its word hides with the permission's and its folder icon
-  stays (`fitComposerRow`); a room's composer has none.
-  The composer's + menu offers the same 加入資料夾 (R-UI-166, `composer-plus.ts`): it is `composer-folder.ts`'s own `add()`, shown while the folder button is.
+- Writes (T2, kind write) reach a member's own shared folder, the team folder and each remembered project. Kept
+  paths, the data floor and read-before-edit still apply. The composer lists the member's own folder first and
+  projects in added order. The checked row sets the working location. Add folder is the native picker. In member
+  settings, the member's own folder is one row that opens it in the file manager.
+- Git branches are visible beside the project and on the separate branch button. Its card checks the current ref
+  and lists local branches. If Git is unavailable, a branch read from HEAD has no switch choices. Git's refusal
+  appears in the toast. Migration 99 only changes settings, keeping the old output path and all per-member projects.
+- Local Docker bind-mounts existing projects under /home/cua/projects and recreates an idle container after a mount
+  change, preserving the workspace. The member's default folder maps to /home/cua/workspace in a per-member
+  container and to its own subfolder there on the shared desktop. Hosts reached over SSH retain their own volumes.
 
-Offline: core/tests/agent/test_owner_files.py (lists in every mode, reads from app, Telegram and Slack, a CLI brain, kept
-places and links, glob and grep, writes inside and outside, each member's own folders, an unapproved write),
-brain/test_owner.py (the prompt per member, migration 88), member-settings.test.ts, settings-view.test.ts and
-composer-folder.test.ts. Look: `member-write-folders` (the output folder first and marked, adds with the picker, removes
-the chosen one), `member-write-folders-default` (the output folder alone), `composer-folder` and `composer-folder-menu`
-beside the output folder scenes; the composer row's narrow scenes prove the folder gives way with the permission:
+Offline checks cover the migration, permissions, prompts, temporary Git repositories and simulated mount changes.
+See [General](settings-appearance.md#project-folders-in-general) for adding, cancelling and removing projects.
 
 ```powershell
-npm run look -- member-write-folders member-write-folders-default composer-folder composer-folder-menu composer-folder-added composer-folder-many owner-output-folder output-folder-picker output-folder-picker-cancel --theme both --width 1120,720,1920x1080
-npm run look -- composer-row-narrow composer-row-language composer-row-owner room --theme both --width 1120,720,1920x1080
+npm run look -- member-own-folder composer-folder composer-folder-menu composer-folder-added composer-folder-many composer-branch composer-row-narrow composer-row-language composer-row-owner --theme both --width 1120,720,1920x1080
 ```
 
-Not verified: a live model choosing these tools, a real macOS privacy prompt while a walk runs, and Windows paths on a
-real Windows disk (CI runs the offline suite there).
+Compare the composer controls with the permission control and the member's folder row with other tool rows.
+Native picker, file-manager opening and the Linux bind mounts require real acceptance.
+
 
 ## Owner-PC commands (hidden, every turn's, with the card; see above)
 

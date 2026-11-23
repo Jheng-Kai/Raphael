@@ -17,7 +17,7 @@ from raphael_core.agent.mcp_server import RaphaelMcp
 from raphael_core.agent.policy import Tier
 from raphael_core.background.snapshot import take_snapshot
 from raphael_core.brain.settings import SettingsStore, checked
-from raphael_core.computer.vm import BASE, DRIVER, IMAGE, IMAGE_LABELS, LABEL, GUEST, LocalVm, Result, VmError, compatible, exec_args, healthy, run_args
+from raphael_core.computer.vm import BASE, DRIVER, IMAGE, IMAGE_LABELS, LABEL, GUEST, LocalVm, Result, VmError, compatible, exec_args, healthy, mounts_match, run_args
 from raphael_core.computer.vm_bridge import CuaBridge, normalize_schema
 from raphael_core.computer.vm_tools import VmTools, vm_scope
 from raphael_core.services.attachment_store import AttachmentStore
@@ -83,6 +83,8 @@ def container(vm, target, runtime):
         "NetworkSettings": {"Ports": {"6901/tcp": [{"HostIp": "127.0.0.1", "HostPort": "6080"}]}}}
     if target.shared:
         raw["Mounts"].append({"Type": "bind", "Source": str(target.shared), "Destination": "/home/cua/team", "RW": True})
+    for guest, source in target.projects:
+        raw["Mounts"].append({"Type": "bind", "Source": str(source), "Destination": guest, "RW": True})
     if target.remote:
         for mount, source in zip(raw["Mounts"], [target.workspace, target.shared]):
             mount.update(Type="volume", Name=str(source), Source="/engine/volumes/" + str(source))
@@ -621,6 +623,65 @@ def test_reuse_checks_original_host_mount_without_engine_path_translation(deskto
     assert compatible(runtime.raw, target, vm.owner, runtime.image_id)
     runtime.raw["HostConfig"]["Mounts"][0]["Source"] = str(target.workspace.parent)
     assert not compatible(runtime.raw, target, vm.owner, runtime.image_id)
+
+
+async def test_projects_mount_read_write_and_rebuild_only_at_idle_start(conn, tmp_path, monkeypatch):
+    settings = SettingsStore(conn)
+    settings.set("computer_vm_mode", "per-bot")
+    runtime = Runtime()
+    vm = LocalVm(tmp_path / "data", settings=settings, runner=runtime)
+    original = vm.target()
+    original.workspace.mkdir(parents=True)
+    saved = original.workspace / "keep.txt"
+    saved.write_text("original", encoding="utf-8")
+    runtime.raw = container(vm, original, runtime)
+    assert (await vm.start(original))["ready"]
+    hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Bridge)
+    await hub.prepare()
+    command = next(tool for tool in hub.offered() if tool.name == "vm_exec")
+    assert hub.routes[command.key].projects == ()
+
+    one, two, missing = (tmp_path / name / "Repo" for name in ("one", "two", "gone"))
+    one.mkdir(parents=True)
+    two.mkdir(parents=True)
+    settings.set("project_folders", [str(one), str(two), str(missing)])
+    target = vm.target()
+    assert target.projects == (("/home/cua/projects/Repo", one), ("/home/cua/projects/Repo (2)", two))
+    assert not mounts_match(runtime.raw["Mounts"], runtime.raw["Mounts"], target)
+    assert vm._recent_start(target) is None
+    expected = container(vm, target, runtime)["Mounts"]
+    assert mounts_match(expected, expected, target)
+    expected[-1]["RW"] = False
+    assert not mounts_match(expected, expected, target)
+    args = run_args(target, vm.owner, "synthetic")
+    mounts = [next(csv.reader([args[i + 1]])) for i, arg in enumerate(args) if arg == "--mount"]
+    assert mounts[-2:] == [["type=bind", f"source={one}", "target=/home/cua/projects/Repo"],
+                          ["type=bind", f"source={two}", "target=/home/cua/projects/Repo (2)"]]
+    runtime.calls.clear()
+    vm.active[original.key] = 1
+    with pytest.raises(VmError, match="busy"):
+        await vm.start(target)
+    vm.active.clear()
+    vm.busy = lambda key: True
+    with pytest.raises(VmError, match="busy"):
+        await vm.start(target)
+    kept = await vm.running_project_mounts(target)
+    assert kept is not None and kept.projects == original.projects
+    assert (await vm.start(kept))["ready"]
+    assert not any(args[0] in ("stop", "rm") for args, _ in runtime.calls)
+
+    async def create(created, zone):
+        runtime.raw = container(vm, created, runtime)
+        return Result(0)
+    monkeypatch.setattr(vm, "create", create)
+    vm.busy = lambda key: False
+    settings.set("member_work_folder", {"0": str(two)})
+    assert (await hub.call(command.key, {"command": "pwd"}, approver="auto")).ok
+    assert [args for args, _ in runtime.calls if args[0] in ("stop", "rm")] == [
+        ["stop", "--time", "10", target.name], ["rm", target.name],
+    ]
+    assert saved.read_text(encoding="utf-8") == "original"
+    assert any(args[-1] == "cd -- '/home/cua/projects/Repo (2)' && pwd" for args, _ in runtime.calls)
 
 
 @pytest.mark.parametrize("change", [

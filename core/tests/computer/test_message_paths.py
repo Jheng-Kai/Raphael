@@ -17,9 +17,9 @@ def paths(tmp_path):
     for folder in (workspace, output, granted, other, team):
         folder.mkdir()
         (folder / "report.md").write_text("report", encoding="utf-8")
-    settings = {"owner_output_folder": str(output), "member_write_folders": {"1": [str(granted)], "2": [str(other)]}}
-    target = SimpleNamespace(workspace=workspace, shared=team, remote="")
-    vm = SimpleNamespace(target=lambda member: target, settings=settings)
+    settings = {"project_folders": [str(output), str(granted)]}
+    target = SimpleNamespace(workspace=workspace, shared=team, remote="", projects=(("/home/cua/projects/allowed", granted),))
+    vm = SimpleNamespace(target=lambda member: target, settings=settings, local_folders=lambda member: (workspace, team))
     viewer = DesktopViewer(vm, member_exists=lambda member: member in (1, 2))
     return viewer, target, settings, output, granted, other
 
@@ -27,7 +27,7 @@ def paths(tmp_path):
 async def test_only_existing_grants_become_links_and_open(paths):
     viewer, target, settings, output, granted, other = paths
     allowed = [str(granted / "report.md"), str(output / "report.md"), str(target.workspace / "report.md"),
-               str(target.shared / "report.md"), "/home/cua/workspace/report.md", "/home/cua/team/report.md"]
+               str(target.shared / "report.md"), "/home/cua/workspace/report.md", "/home/cua/team/report.md", "/home/cua/projects/allowed/report.md"]
     if os.name == "nt":
         allowed += [granted.as_posix() + "/report.md", "/" + output.as_posix() + "/report.md"]
     refused = [str(other / "report.md"), str(other), "/outside/report.md", "report.md", "https://example.com/report.md"]
@@ -37,7 +37,8 @@ async def test_only_existing_grants_become_links_and_open(paths):
     for path in refused:
         with pytest.raises(RpcError, match="file unavailable"):
             await viewer.team_file({"member_id": 1, "path": path})
-    settings["member_write_folders"]["1"] = []
+    settings["project_folders"] = [str(output)]
+    target.projects = ()
     with pytest.raises(RpcError, match="file unavailable"):
         await viewer.team_file({"member_id": 1, "path": str(granted / "report.md")})
 
@@ -78,7 +79,7 @@ async def test_a_redirected_grant_is_refused(paths):
         redirected.symlink_to(other, target_is_directory=True)
     except (NotImplementedError, OSError):
         pytest.skip("Creating a symbolic link requires filesystem support")
-    settings["member_write_folders"]["1"] = [str(redirected)]
+    settings["project_folders"] = [str(redirected)]
     path = str(redirected / "report.md")
     assert await viewer.message_paths({"member_id": 1, "paths": [path]}) == {"allowed": []}
     with pytest.raises(RpcError, match="file unavailable"):

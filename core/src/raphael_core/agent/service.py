@@ -186,6 +186,7 @@ from .cli.loop import CLI_SILENCE_S, CLI_TOOL_S, COMPUTER_CHANGED, CliLoop, Sess
 from .persona import cli_system_prompt, memory_files
 from .persona import FULL_PERMISSION, NEW_MEMBER, NEW_MEMBER_STEP, PLAN_MODE, SETUP_ANSWER, SETUP_AFTER_CONNECT, SETUP_STEPS
 from ..brain.owner import owner_context
+from ..folders import default_folders, work_folder
 from .cities import cities_in
 from .commands import COMMANDS, AppCatalog, run_command
 from .device import DeviceActions
@@ -936,7 +937,10 @@ class AgentService:
         self._metrics_conn = conn
         self._spend = SpendTracker(conn, now_ms, tz)
         self._history = AgentHistory(conn, now_ms, event_index=event_index)
-        self.pages = Pages(conn, notify=notify, now_ms=now_ms, output_folder=lambda: self._settings.get("owner_output_folder"))
+        self.member_folders = default_folders
+        self.folder_target = lambda member: None
+        self.pages = Pages(conn, notify=notify, now_ms=now_ms,
+                           work_folder=lambda member: work_folder(self._settings, member, self.member_folders))
         self.pages.tool_call = self._page_tool_call
         self.conversations = Conversations(conn, now_ms)
         self.quotas = Quotas(conn, now_ms, notify)
@@ -2094,7 +2098,7 @@ class AgentService:
                 memory_snapshot=memory,
                 looked_up=looked_up,
                 speaker=ask.speaker,
-                roster=roster_prompt(self._team, ask.speaker, self._chat_language(ask)), owner=owner_context(self._settings, ask.speaker.id),
+                roster=roster_prompt(self._team, ask.speaker, self._chat_language(ask)), owner=self._owner_context(ask.speaker.id),
                 reasoning_effort=self._effort(settings),
                 recall=self._recall(ask, context), source=ask.source, messaging=self._messaging_context(ask.speaker.id),
                 viewing=viewing_text(ask.viewing), skipped_cards=skipped_cards_text(ask.skipped_cards),
@@ -2259,6 +2263,9 @@ class AgentService:
         run.task.add_done_callback(lambda _done, run=run: self._settle_unheard(run))
         return await self._next_from_run(run)
 
+    def _owner_context(self, member):
+        return owner_context(self._settings, member, folders=self.member_folders, target=self.folder_target(member))
+
     def _messaging_context(self, member_id: int) -> str:
         from .card_context import messaging_state
         return messaging_state(getattr(self._secret_cards, "messaging", None), member_id)
@@ -2284,7 +2291,8 @@ class AgentService:
             f"Owner's instructions: {speaker.instructions}\n\n"
         )
         from .card_context import source_text
-        return (persona + owner_context(self._settings, speaker.id) + conversation_block(context.summary, context.turns, index)
+        return (persona + owner_context(self._settings, include_folders=False)
+                + conversation_block(context.summary, context.turns, index)
                 + source_text(source) + self._messaging_context(speaker.id) + skipped_cards_text(skipped or {}))
 
     @member_turn(lambda self, run: run.context.speaker.id)
@@ -2602,7 +2610,7 @@ class AgentService:
                     instructions=ask.speaker.instructions, personality=ask.speaker.personality,
                     memory_snapshot=memory, narrated=True, memory_inline=False,
                 )
-            system += owner_context(self._settings, ask.speaker.id)
+            system += self._owner_context(ask.speaker.id)
             if ask.speaker.has_no_job and ask.scope == "private" and ask.exchange_speakers is None:
                 system += NEW_MEMBER
             if self._gate.plan_first:
@@ -3121,7 +3129,7 @@ class AgentService:
         from .owner_questions import ASK_OWNER, question_input
         from .persona import greeting_prompt
         system = greeting_prompt(ask.speaker)
-        system += owner_context(self._settings, ask.speaker.id) + roster_prompt(self._team, ask.speaker, self._chat_language(ask))
+        system += self._owner_context(ask.speaker.id) + roster_prompt(self._team, ask.speaker, self._chat_language(ask))
         if self._memory is not None:
             snapshot = await self._memory.snapshot_async(ask.speaker.id)
             memory = "\n".join(text for text in (snapshot.shared, snapshot.own) if text)
@@ -3174,7 +3182,7 @@ class AgentService:
         async def execute(call_id, name, args):
             raise AgentFailure("error")  # No tool of any kind is offered to a question about a reaction.
         common = dict(model=settings.model, ledger=ledger, language=ask.language, plain=True,
-                      system=reaction_prompt(ask.speaker) + owner_context(self._settings, ask.speaker.id), user=ask.text, tools=[],
+                      system=reaction_prompt(ask.speaker) + self._owner_context(ask.speaker.id), user=ask.text, tools=[],
                       progress=lambda text: None, thinking=lambda text: None, execute=execute)
         if brain_ref(settings.model):
             loop = CliLoop(brains=self._cli_brains, sessions=self._cli_sessions, member_id=ask.speaker.id, owner_text=ask.text,

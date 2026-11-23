@@ -330,10 +330,10 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     // Owner-authored text is data; labels, titles and placeholders remain UI copy. So is the name of a file a member
     // delivered (its Library's rows).
     // A secret's name, as its member wrote it (OPENROUTER_API_KEY), is a name, not copy to translate.
-    const authored = element.matches(".key-context .key-name, .cs-info-row .v, .modal-body .data-record > .data-record-text, .output-path, .output-name, .ms-path, .owner-data, .template-path, .lib-title, .thread :is(.message-text, .message-code code, .message-table td, .message-table th) mark[data-find-match]") || element.closest("textarea, .checkpoint summary, .checkpoint pre code, .checkpoint-uncovered li");
+    const authored = element.matches(".key-context .key-name, .cs-info-row .v, .modal-body .data-record > .data-record-text, .project-path, .ms-path, .owner-data, .template-path, .lib-title, .thread :is(.message-text, .message-code code, .message-table td, .message-table th) mark[data-find-match]") || element.closest("textarea, .checkpoint summary, .checkpoint pre code, .checkpoint-uncovered li");
     const strings = authored ? [] : [...element.childNodes].filter(node => node.nodeType === 3).map(node => node.textContent);
-    // The output folder's button names the owner's own folder in its label: that name is data too.
-    for (const attribute of ["aria-label", "title", "placeholder"]) if (element.hasAttribute(attribute) && !element.matches(".output-chosen")) strings.push(element.getAttribute(attribute));
+    // Project controls carry the owner's paths, names and Git refs in accessible labels.
+    for (const attribute of ["aria-label", "title", "placeholder"]) if (element.hasAttribute(attribute) && !element.matches(".cmp-work, [data-act=project-menu], [data-ms=folder-open]")) strings.push(element.getAttribute(attribute));
     for (const value of strings) for (const match of value.matchAll(keyPattern)) {
       // Explicit JSON path examples are provider field names, not untranslated catalogue keys.
       if (element.matches('code[data-json-paths]') && /^(?:data|event)\./.test(match[1])) continue;
