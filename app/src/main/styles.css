@@ -564,13 +564,11 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
   --head-cover: inset 0 0 0 100vmax var(--dialog), 0 calc(-1 * var(--body-top)) 0 var(--dialog);
   box-shadow: var(--head-cover); animation: set-head-edge linear both; animation-timeline: scroll(nearest block); animation-range: 0 12px; }
 @keyframes set-head-edge { from { box-shadow: var(--head-cover), 0 1px 0 transparent; } to { box-shadow: var(--head-cover), 0 var(--sp-3) 0 var(--dialog), 0 calc(var(--sp-3) + 1px) 0 var(--line); } }
-/* On the Connectors pages and a plugin's page the way back is the title itself: the chevron and the words are one control
-   with nothing drawn at rest; under the pointer one rounded fill lights under both. */
-.modal-body .back-title { display: inline-flex; align-items: center; gap: var(--sp-1); min-width: 0; min-height: 36px; margin-inline-start: -9px; padding: 0 var(--sp-3) 0 9px;
-  border-radius: var(--r-pill); cursor: pointer; }
-.modal-body .back-title:hover { background: var(--float-hover); }
-.modal-body .back-title:active { background: var(--float-pressed); }
-.modal-body .back-title > :is(h1, h2) { min-width: 0; margin: 0; padding: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* On the Connectors pages and a plugin's page the way back is the title itself: the chevron and the words, plain text with
+   nothing drawn around them, dimmed at rest and full under the pointer. */
+.modal-body .back-title { display: inline-flex; align-items: center; gap: var(--sp-1); min-width: 0; min-height: 36px; cursor: pointer; color: var(--text-2); }
+.modal-body .back-title:hover { color: var(--text); }
+.modal-body .back-title > :is(h1, h2) { min-width: 0; margin: 0; padding: 0; color: inherit; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .modal-body .btn.icon.back-button.back-link { flex: none; width: auto; min-width: 0; height: 36px; min-height: 36px; padding: 0; margin: 0;
   border-color: transparent; background: transparent; box-shadow: none; color: inherit; }
 .modal-body .set-content:has(> .cs), .modal-body .set-content > .cs { box-sizing: border-box; width: calc(100% + var(--close-gutter)); margin-right: calc(-1 * var(--close-gutter)); padding-right: var(--close-gutter); }
@@ -1035,7 +1033,7 @@ button.ob-tile:hover:not(:disabled) .ob-get { background: var(--pressed); }
 .btn.icon.close-button, .btn.icon.back-button { flex: none; width: 36px; min-width: 36px; height: 36px; min-height: 36px; padding: 0; border-color: transparent; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--edge-rim); color: var(--text-2); }
 .btn.icon:is(.back-button, .close-button):hover:not(:disabled) { background: var(--hover); color: var(--text); }
 .btn.icon:is(.back-button, .close-button):active:not(:disabled) { background: var(--pressed); color: var(--text); }
-/* The plain way back beside a title is only a chevron: its own states draw nothing; the title control around it lights instead. */
+/* The plain way back beside a title is only a chevron: its own states draw nothing, and it takes its title's colour. */
 .btn.icon.back-button.back-link, .btn.icon.back-button.back-link:is(:hover, :active, :focus):not(:disabled) { border-color: transparent; background: transparent; box-shadow: none; }
 .btn.icon:is(.back-button, .close-button) .i { width: 18px; height: 18px; }
 :root[data-keys] .btn.icon.back-button:focus-visible,
