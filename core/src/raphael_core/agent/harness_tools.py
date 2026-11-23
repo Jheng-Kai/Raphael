@@ -149,14 +149,14 @@ DEFINITIONS = {
     SHARE_TEMPLATE: definition("Offer your member recipe as a snapshot card for the owner to review, save or publish. Describe what you do for strangers in one or two sentences in the owner's language; no names, private facts, credentials, internal URLs or customer data. Members only.", {"description": {"type": "string", "maxLength": 280}}, ["description"]),
     SHOW_PAGE: definition(
         "Show a page inside this conversation: a report or dashboard the owner asked for (報告, 總覽, 統整, 儀表板, report, "
-        "overview), or an operable page such as a product page, form, interactive comparison or small tool. Give exactly one "
-        "of report or html. Prefer plain text or a table for a simple answer. report: the app draws it, opened from a link "
+        "overview), or an operable page such as a product page, form, interactive comparison or small tool. Give report "
+        "or html. Prefer plain text or a table for a simple answer. report: the app draws it, opened from a link "
         "card; it shows when its data is from and that it states only recorded facts, so write only what your tools and "
         "colleagues returned, leaving out the unknown. html: a fragment or document, at most 256 KB UTF-8, no secrets, run in "
         "a sandbox without fetch or server forms, styled by the app (type, tables, links; classes .callout .info .warn .ok, "
         ".toc, .chips, .cards, .kpis, .num on figures). window.raphael.send(text) asks the owner's next message to be text; "
-        "window.raphael.open(url) asks to open an HTTPS link. Theme CSS variables (they follow the owner's light or dark theme, "
-        "also set as <html data-theme>; add no theme switch): --bg, --surface, --fg, --muted, --line, "
+        "window.raphael.open(url) asks to open an HTTPS link. Theme CSS variables (the owner's theme, also <html data-theme>; "
+        "no theme switch): --bg, --surface, --fg, --muted, --line, "
         "--accent, --ok, --warn, --err, --chart-1 to 8, --font. External assets (chart libraries too): cdnjs.cloudflare.com, "
         "cdn.jsdelivr.net, unpkg.com, Google Fonts. Returns page_id; update_page replaces it in place.",
         {"title": {"type": "string", "maxLength": 80}, "report": REPORT, "html": {"type": "string"},
