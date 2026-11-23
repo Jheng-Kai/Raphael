@@ -5,7 +5,7 @@ const canvas = document.querySelector('canvas');
 const context = canvas.getContext('2d', { alpha: false });
 const input = document.querySelector('textarea');
 const tell = (state, details = {}) => parent.postMessage({ type: 'raphael-desktop', state, ...details }, '*');
-let stream, connected = false, interactive = false, desired = false, thumbnails = false;
+let stream, painted = false, interactive = false, desired = false, thumbnails = false;
 let frame, viewport, thumbnailTimer, controlRevision = 0, pasteId = 0, lastThumbnail = 0;
 let browserTimer, browserModel, browserRead = 0;
 const jsonHeaders = { 'Content-Type': 'application/json' };
@@ -53,6 +53,7 @@ async function watch() {
     try {
         const response = await fetch('host-frames', { signal: feed.signal });
         if (!response.ok) throw new Error('Stream unavailable');
+        tell('connected');
         void readBrowser(feed);
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
@@ -75,9 +76,9 @@ async function watch() {
             context.drawImage(image, 0, 0);
             viewport = next;
             frame = image.src;
-            if (!connected) {
-                connected = true;
-                tell('connected');
+            if (!painted) {
+                painted = true;
+                tell('painted');
                 if (desired) void control(true);
             }
             thumbnail();
@@ -86,7 +87,7 @@ async function watch() {
         // The parent owns retry and session disposal.
     } finally {
         if (stream === feed) {
-            tell(connected ? 'disconnected' : 'unreachable');
+            tell(painted ? 'disconnected' : 'unreachable');
             stop();
         }
     }
@@ -95,7 +96,8 @@ async function watch() {
 function stop() {
     stream?.abort();
     stream = undefined;
-    connected = interactive = false;
+    painted = interactive = false;
+    frame = viewport = undefined;
     controlRevision++;
     pasteId++;
     clearTimeout(thumbnailTimer);
@@ -105,7 +107,7 @@ function stop() {
 
 function thumbnail(force = false) {
     clearTimeout(thumbnailTimer);
-    if (!thumbnails || !frame || interactive || !connected) return;
+    if (!thumbnails || !frame || interactive || !painted) return;
     const now = performance.now();
     const remaining = 2000 - (now - lastThumbnail);
     if (!force && remaining > 0) {
@@ -128,7 +130,7 @@ async function control(held) {
     try {
         const response = await fetch('control');
         const value = response.ok && (await response.json()).held;
-        if (revision !== controlRevision || !connected) return;
+        if (revision !== controlRevision || !painted) return;
         interactive = value === true;
         if (interactive) input.focus({ preventScroll: true });
         tell('interactive', { held: interactive });
@@ -234,11 +236,5 @@ window.addEventListener('message', event => {
 document.addEventListener('visibilitychange', () => document.hidden ? stop() : void watch());
 window.addEventListener('pagehide', stop);
 window.raphaelOwnsInput = () => interactive;
-bindViewerInput(['pointerdown', 'pointermove', 'pointerup', 'pointercancel'], () => canvas,
-    window.raphaelOwnsInput, (_canvas, event, x, y) => {
-        if (event.type === 'pointercancel') { void dispatch({ type: 'release' }); return; }
-        const type = { pointerdown: 'mousePressed', pointermove: 'mouseMoved', pointerup: 'mouseReleased', wheel: 'mouseWheel' }[event.type];
-        sendPointer(event, type, x, y);
-    }, () => viewport?.target);
 void watch();
 """

@@ -23,10 +23,23 @@ class Screencast:
         if not self.watchers:
             return
         meta = params["metadata"]
-        self.latest = image = json.dumps({"image": params["data"], "target": self.tab.id,
-                                          "width": meta["deviceWidth"], "height": meta["deviceHeight"]}).encode() + b"\n"
+        self.publish(params["data"], meta["deviceWidth"], meta["deviceHeight"])
+
+    def publish(self, data, width, height):
+        self.latest = image = json.dumps({"image": data, "target": self.tab.id,
+                                          "width": width, "height": height}).encode() + b"\n"
         for queue in self.watchers:
             self.offer(queue, image)
+
+    async def first_picture(self):
+        # Starting a screencast on an already composed page can leave it quiet
+        # indefinitely. A single screenshot primes it without periodic encoding.
+        with suppress(ValueError, OSError, TimeoutError):
+            async with asyncio.timeout(0.75):
+                shot = await self.browser.command(self.tab, "Page.captureScreenshot",
+                                                  {"format": "jpeg", "quality": 75, "fromSurface": True})
+            if not self.latest and shot and shot.get("data"):
+                self.publish(shot["data"], *self.tab.viewport)
 
     async def watch(self):
         queue = asyncio.Queue(maxsize=1)
@@ -36,6 +49,8 @@ class Screencast:
             try:
                 if first:
                     await self.browser.command(self.tab, "Page.startScreencast", {"format": "jpeg", "quality": 75})
+                if not self.latest:
+                    await self.first_picture()
                 if self.latest:
                     self.offer(queue, self.latest)
             except BaseException:

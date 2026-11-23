@@ -71,35 +71,40 @@ owner's tab after listing it. The owner checks actual Google
 sign-in. Native Chrome and OS prompts, including certificate pickers, sit outside the
 page screencast.
 
-## Owner control in either size
+## Owner control in the enlarged view
 
-R-COMP-OWNER-INPUT-01, R-PANEL-03 and R-NAV-04. A click, wheel gesture or key inside either
-live viewer takes control and is delivered after the lease is confirmed. Take control remains
-available in the pill. The panel uses the same pill below the screen, with a separate enlarge
-button. Collapse, Escape and Back fold the viewer while keeping the lease, iframe and input.
-The member gets a regular waiting result when its tool is blocked by the owner, explains why it
-is waiting in the conversation, and can act again once the owner releases control. Private
-sign-in and payment still use the existing card and wait for Done.
+R-COMP-OWNER-INPUT-01, R-COMP-PREVIEW-01, R-PANEL-03 and R-NAV-04. The Computer
+panel has an Open cover and a view-only page. In the enlarged view, Take control
+or a takeover card acquires page input. Collapse, Escape and Back fold the screen
+and release control. A takeover card stays pending until the owner chooses Done.
+The member gets a regular waiting result while the owner holds input and can act
+again after release. The wallpaper remains visible until the Chrome canvas or VM
+framebuffer is painted. Chrome primes a quiet screencast with one screenshot per
+attachment when needed, including tab switches and reconnections.
 
 From app:
 
 ```powershell
-npm run look -- desktop-owner-panel desktop-owner-shrink desktop-host-owner-panel desktop-host-owner-shrink desktop-host-tabs-panel desktop-host-handback --theme both --width 1120,720,1920x1080
+npm run look -- desktop-owner-panel desktop-owner-shrink desktop-host-owner-panel desktop-host-owner-shrink desktop-wallpaper-before-frame desktop-host-tabs-panel desktop-host-handback --theme both --width 1120,720,1920x1080
 ```
 
-Compare the VM and host pill with the host handback pill at the same width and theme. The look
-fixtures check first click, key and wheel delivery and input after folding on the same lease. VM engine and native
-Chrome acceptance use their own gates. The evaluate scenario checks the member's waiting reply
-with a fake brain.
+Compare the Chrome and VM previews and the enlarged handback controls at the
+same width and theme. Look checks view-only page input, a toolbar navigation
+while watching, release on folding, a still-pending card and wallpaper after
+connection but before the first picture. The evaluate scenario checks the
+member's waiting reply with a fake brain. The real Chrome journey measures a
+first 1280×900 picture within one second on a static local page before and after
+reconnection, and changes that page through the toolbar without holding input.
+VM engine and native Chrome use their own gates.
 
 ## Host browser toolbar
 
-R-COMP-HOST-07 and R-UI-178. The Computer panel and enlarged view share the tab strip
-and address row. Selecting a tab while watching changes only the owner's view. Its close button
-removes the tab from the member's list. The member recovers to a current tab or opens a new one
-and reads it before retrying an action aimed at the closed tab. Take control to open a tab,
-navigate or type in the address field. The member's
-Chrome viewport stays at 1280×900 during watch, takeover and handback. The page
+R-COMP-HOST-07 and R-UI-180. The Computer panel and enlarged view share an
+editable address field and the same tab, close, new, back, forward and reload
+controls. They act on the member's Chrome while watching and during takeover.
+The member recovers to a current tab or opens a new one and reads it before
+retrying an action aimed at a closed tab. The member's Chrome viewport stays
+at 1280×900 during watch, takeover and handback. The page
 keeps that aspect edge to edge below the toolbar and in the sign-in card preview.
 The enlarged view fits the entire frame, including the toolbar, in the window.
 
