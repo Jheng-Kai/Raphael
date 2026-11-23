@@ -95,7 +95,7 @@ SELDOM = frozenset({*COMMANDS, "computer"}) - {"open"}
 _DEFINITIONS: dict[str, dict[str, Any]] = {
     "weather": {
         "description": (
-            "The weather now, today and tomorrow in a city; ask which one if unsaid. "
+            "The weather now, the next hours and the coming days in a city; ask which one if unsaid. "
             "Present the known days in a forecast fenced block using the shared schema."
         ),
         "parameters": {

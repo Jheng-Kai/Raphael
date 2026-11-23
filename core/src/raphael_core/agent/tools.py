@@ -29,6 +29,7 @@ Nothing here logs a city, a question or an answer.
 
 import asyncio
 import logging
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -74,6 +75,8 @@ DISABLED = "disabled"
 WEATHER_TIMEOUT_S = 120.0
 WEATHER_TRY_S = 30.0
 WEATHER_TRIES = 2
+HOURS_SHOWN = 12  # the hours ahead the answer is given (Open-Meteo is asked for as many)
+DAYS_SHOWN = 7
 # A search with its model's reading of the results.
 SEARCH_TIMEOUT_S = 125.0
 SEARCH_MAX_TOKENS = 500
@@ -209,6 +212,20 @@ def _at(values: Any, index: int) -> Any:
     return values[index] if isinstance(values, list) and index < len(values) else None
 
 
+def _at_list(values: Any) -> list:
+    return values if isinstance(values, list) else []
+
+
+_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+_LOCAL_TIME = re.compile(r"\d{4}-\d{2}-\d{2}T(\d{2}:\d{2})")
+
+
+def _clock(value: Any) -> str | None:
+    """The "HH:MM" of an Open-Meteo local time ("2026-10-20T14:00"), or None."""
+    found = _LOCAL_TIME.match(value) if isinstance(value, str) else None
+    return found.group(1) if found else None
+
+
 def _compact(entries: dict[str, Any]) -> dict[str, Any]:
     """`entries` without the ones that have no value."""
     return {key: value for key, value in entries.items() if value is not None}
@@ -253,7 +270,7 @@ class Tools:
     # --- the weather ----------------------------------------------------------------------------
 
     async def weather(self, city: str, language: str) -> ToolResult:
-        """The weather in `city` now, today and tomorrow, with the place named in `language`. No city is no guess: the
+        """The weather in `city` now, the next hours and days, with the place named in `language`. No city is no guess: the
         answer is told to ask which one."""
         if not city.strip():
             return ToolResult("weather", False, None, "needs_city",
@@ -333,11 +350,13 @@ class Tools:
             {
                 "latitude": latitude,
                 "longitude": longitude,
-                "current": "temperature_2m,weather_code",
+                "current": "temperature_2m,weather_code,apparent_temperature,relative_humidity_2m,wind_speed_10m",
+                "hourly": "temperature_2m,precipitation_probability,weather_code",
                 "daily": "temperature_2m_max,temperature_2m_min,"
                 "precipitation_probability_max,weather_code",
                 "timezone": "auto",
-                "forecast_days": 2,
+                "forecast_hours": 12,
+                "forecast_days": 7,
             },
             deadline,
             "forecast",
@@ -346,15 +365,48 @@ class Tools:
         data = _compact({"city": named if isinstance(named, str) else None})
         if city_key(named if isinstance(named, str) else "") != city_key(city):
             data["asked_for"] = city.strip()  # what the user called it, which the answer may use
-        current, daily = forecast.get("current"), forecast.get("daily")
+        current, hourly, daily = forecast.get("current"), forecast.get("hourly"), forecast.get("daily")
         if isinstance(current, dict):
             data["now"] = _compact(
                 {
                     "temperature_c": _number(current.get("temperature_2m")),
                     "sky": sky_of(current.get("weather_code")),
+                    "feels_like_c": _number(current.get("apparent_temperature")),
+                    "humidity_percent": _number(current.get("relative_humidity_2m")),
+                    "wind_kmh": _number(current.get("wind_speed_10m")),
                 }
             )
+        if isinstance(hourly, dict):
+            hours = []
+            for index, time in enumerate(_at_list(hourly.get("time"))):
+                hour = _compact(
+                    {
+                        "time": _clock(time),
+                        "temperature_c": _number(_at(hourly.get("temperature_2m"), index)),
+                        "rain_chance_percent": _number(_at(hourly.get("precipitation_probability"), index)),
+                        "sky": sky_of(_at(hourly.get("weather_code"), index)),
+                    }
+                )
+                if "time" in hour and len(hour) > 1:
+                    hours.append(hour)
+            if hours:
+                data["hours"] = hours[:HOURS_SHOWN]
         if isinstance(daily, dict):
+            days = []
+            for index, date in enumerate(_at_list(daily.get("time"))):
+                day = _compact(
+                    {
+                        "date": date if isinstance(date, str) and _DATE.fullmatch(date) else None,
+                        "low_c": _number(_at(daily.get("temperature_2m_min"), index)),
+                        "high_c": _number(_at(daily.get("temperature_2m_max"), index)),
+                        "rain_chance_percent": _number(_at(daily.get("precipitation_probability_max"), index)),
+                        "sky": sky_of(_at(daily.get("weather_code"), index)),
+                    }
+                )
+                if "date" in day and len(day) > 1:
+                    days.append(day)
+            if days:
+                data["days"] = days[:DAYS_SHOWN]
             for index, day in enumerate(("today", "tomorrow")):
                 data[day] = _compact(
                     {
@@ -368,6 +420,10 @@ class Tools:
                 )
         if not any(data.get(part) for part in ("now", "today", "tomorrow")):
             raise ValueError("The forecast holds nothing")
+        data["source"] = "Open-Meteo"
+        updated = _clock(current.get("time")) if isinstance(current, dict) else None
+        if updated:
+            data["updated"] = updated  # the place's own local time of the reading
         return data
 
     # --- the web --------------------------------------------------------------------------------
