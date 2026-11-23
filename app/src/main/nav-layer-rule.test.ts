@@ -70,7 +70,8 @@ test("every layer builder and Escape dismissal has a navigation owner", () => {
   const sources = import.meta.glob<string>(["./**/*.ts", "!./**/*.test.ts", "!./i18n/**"], { eager: true, query: "?raw", import: "default" });
   expect(Object.keys(sources).length).toBeGreaterThan(100);
   expect(Object.entries(sources).flatMap(([path, source]) => uncovered(path.slice(2), source))).toEqual([]);
-});
+  // It parses every source file: on a busy runner that takes longer than the default five seconds.
+}, 60_000);
 
 test("an unrelated registered panel cannot cover a new unregistered dialog or Escape handler", () => {
   const source = `function known(el) { registerDismissal(el, close); }
