@@ -404,6 +404,7 @@ export const ko = {
   "cards.yourMessage": "내 메시지",
   "settings.081": "보기",
   "forms.today": "오늘",
+  "forms.hourly": "시간별 예보", "forms.daily": "일별 예보", "forms.feels": "체감 {p0}", "forms.highLow": "최고 {p0} 최저 {p1}", "forms.humidity": "습도 {p0}", "forms.wind": "바람 {p0}", "forms.updated": "{p0} 업데이트",
   "format.001": "오늘",
   "auto.today": "오늘",
   "forms.board": "작업",

@@ -404,6 +404,7 @@ export const ptBR = {
   "cards.yourMessage": "Sua mensagem",
   "settings.081": "Ver",
   "forms.today": "Hoje",
+  "forms.hourly": "Previsão por hora", "forms.daily": "Previsão diária", "forms.feels": "Sensação {p0}", "forms.highLow": "Máx. {p0} Mín. {p1}", "forms.humidity": "Umidade {p0}", "forms.wind": "Vento {p0}", "forms.updated": "Atualizado {p0}",
   "format.001": "Hoje",
   "auto.today": "Hoje",
   "forms.board": "Tarefas",

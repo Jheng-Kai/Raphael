@@ -404,6 +404,7 @@ export const id = {
   "cards.yourMessage": "Pesan Anda",
   "settings.081": "Lihat",
   "forms.today": "Hari ini",
+  "forms.hourly": "Prakiraan per jam", "forms.daily": "Prakiraan harian", "forms.feels": "Terasa {p0}", "forms.highLow": "T:{p0} R:{p1}", "forms.humidity": "Kelembapan {p0}", "forms.wind": "Angin {p0}", "forms.updated": "Diperbarui {p0}",
   "format.001": "Hari ini",
   "auto.today": "Hari ini",
   "forms.board": "Tugas",

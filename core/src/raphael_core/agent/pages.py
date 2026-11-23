@@ -280,6 +280,15 @@ def state_script(state):
     return "<script>window.__raphaelState=" + text.replace("<", "\\u003c").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029") + ";</script>"
 
 
+def theme_script(theme):
+    """The app's theme on the page's root as `data-theme`, before the page's own markup: a page written with a light and a
+    dark palette (`html[data-theme="light"]`) reads in the window's theme, even one whose `<html data-theme="dark">` names
+    a default (the parser keeps an attribute the root already has). The page's own script may still change it, a toggle of
+    its own, and the frame is drawn again when the window's theme changes."""
+    name = "dark" if theme == "dark" else "light"
+    return f"<script>document.documentElement.setAttribute('data-theme','{name}')</script>"
+
+
 def document(page, theme, state=None):
     """Prepend host styles/helper to a fragment or a full document, after its preamble. `state` is what the owner left on
     the page (R-PAGE-14): the helper puts it back."""
@@ -301,7 +310,8 @@ def document(page, theme, state=None):
     base = BASE if page["source"] == "html" else ""
     return ('<!DOCTYPE html><meta charset="utf-8"><meta name="viewport" content="width=device-width">'
             f"<title>{html_lib.escape(page['title'])}</title><style>:root{{{variables};color-scheme:{theme}}}"
-            f"body{{background:var(--bg);color:var(--fg);font-family:var(--font)}}{base}</style>" + state_script(state) + _HELPER + content)
+            f"body{{background:var(--bg);color:var(--fg);font-family:var(--font)}}{base}</style>" + state_script(state)
+            + theme_script(theme) + _HELPER + content)
 
 
 def page_file(page):
@@ -309,7 +319,8 @@ def page_file(page):
     helper that talks to the window, in its reader's own theme (the dark words stand under `prefers-color-scheme`), and
     with the page's own policy first in its head: the same sources, no connection, no form, no frame. The sandbox of that
     policy is a header's alone, and a meta element cannot carry it."""
-    text = document(page, "light").replace(_HELPER, "", 1)
+    # A file follows its reader's own theme (prefers-color-scheme below), so it carries neither the helper nor the theme.
+    text = document(page, "light").replace(_HELPER, "", 1).replace(theme_script("light"), "", 1)
     policy = "; ".join(part for part in page_csp(page).split("; ") if not part.startswith("sandbox"))
     dark = ";".join(f"--{key}:{value}" for key, value in {**THEME["dark"], "font": FONT}.items())
     text = text.replace('<meta charset="utf-8">', '<meta charset="utf-8">'

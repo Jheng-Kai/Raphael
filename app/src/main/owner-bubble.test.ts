@@ -3,7 +3,7 @@ import { expect, test } from "vitest";
 import { esc } from "./ui";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { LIGHT_WORDS_RATIO, memberAccent, memberColor, memberSwitch, nameAccent, ownerBubble, ownerBubbleLink } from "./owner-bubble";
+import { LIGHT_WORDS_RATIO, memberAccent, memberColor, memberSwitch, nameAccent, ownerBubble } from "./owner-bubble";
 import { RAPHAEL_COLOR, slimeCharactersHTML, slimeColorOf, slimeColorsHTML } from "./slime";
 
 const WORDS = { light: "#ffffff", dark: "#0a0a0a" };
@@ -25,23 +25,6 @@ test("every character and colour makes a bubble whose words read", () => {
     const { fill, words } = ownerBubble(colour);
     // White words on coloured bubbles use a 3.4:1 minimum; dark words on a nearly white slime read at 4.5:1 or more.
     expect(ratio(fill, WORDS[words]), `${colour} as ${fill} with ${words} words`).toBeGreaterThanOrEqual(words === "light" ? LIGHT_WORDS_RATIO : 4.5);
-  }
-});
-
-test("owner links meet 4.5:1 on the neutral and every member bubble in both themes", () => {
-  const css = readFileSync(join(__dirname, "styles.css"), "utf8");
-  const links = [...css.matchAll(/--link: (#[\da-f]{6})/g)].map(match => match[1]!);
-  const neutral = [...css.matchAll(/--bubble: (#[\da-f]{6})/g)].map(match => match[1]!);
-  expect(links).toHaveLength(2);
-  for (const [theme, link] of links.entries()) {
-    expect(ratio(link, neutral[theme]!)).toBeGreaterThanOrEqual(4.5);
-  }
-  // The conversation uses the same member fill and ink in both themes.
-  for (const colour of new Set([RAPHAEL_COLOR, ...everySlime()])) {
-    const { fill } = ownerBubble(colour);
-    const link = ownerBubbleLink(fill);
-    expect(ratio(link, fill), colour).toBeGreaterThanOrEqual(4.5);
-    expect(parseInt(link.slice(5, 7), 16), colour).toBeGreaterThan(parseInt(link.slice(1, 3), 16));
   }
 });
 

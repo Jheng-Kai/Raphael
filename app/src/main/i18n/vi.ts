@@ -404,6 +404,7 @@ export const vi = {
   "cards.yourMessage": "Tin nhắn của bạn",
   "settings.081": "Xem",
   "forms.today": "Hôm nay",
+  "forms.hourly": "Dự báo theo giờ", "forms.daily": "Dự báo hằng ngày", "forms.feels": "Cảm giác như {p0}", "forms.highLow": "Cao {p0} Thấp {p1}", "forms.humidity": "Độ ẩm {p0}", "forms.wind": "Gió {p0}", "forms.updated": "Cập nhật {p0}",
   "format.001": "Hôm nay",
   "auto.today": "Hôm nay",
   "forms.board": "Công việc",

@@ -830,7 +830,9 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .chat-message > .ans { max-width: 100%; border: 0; border-radius: var(--pa-br); }
 
 .bubble .message-quote, .bubble .quote-author { color: var(--on-bubble); border-color: currentColor; }
-.owner-message .bubble .message-link { color: var(--owner-bubble-link, var(--link)); }
+/* An address or a slash name in the owner's own bubble keeps the bubble's words colour; it shows it opens only under the
+   pointer, with the shared underline (R-LINK-02). */
+.owner-message .bubble .message-link { color: inherit; }
 .owner-skill-notice { text-align: end; margin: 0 0 var(--sp-2); }
 /* Send and Raphael voice form one quiet, equal-sized pair in every composer. */
 .cmp-pair { display: inline-flex; flex: none; align-items: center; gap: var(--sp-1); }

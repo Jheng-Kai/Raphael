@@ -131,7 +131,9 @@ export async function run(options) {
         [base + "core/rfb.js"]: { contentType: "text/javascript", body: await readFile(join(import.meta.dirname, "fixtures/desktop-rfb.js"), "utf8") },
       };
     }
-    if (options.selected.some(scene => scene.fixture?.pageBase)) fixture.pageBaseDocs = await pageBaseDocuments(fixture.pageBaseHtml);
+    // LOOK_PAGE_FILE shows any page (one a member wrote, read from elsewhere) in the base page's place, wrapped by the real
+    // core, to see it in the app's frame at every width and theme; a page of the owner's never becomes a fixture.
+    if (options.selected.some(scene => scene.fixture?.pageBase)) fixture.pageBaseDocs = await pageBaseDocuments(process.env.LOOK_PAGE_FILE ? await readFile(process.env.LOOK_PAGE_FILE, "utf8") : fixture.pageBaseHtml);
     if (options.selected.some(scene => scene.fixture?.pageWindow)) fixture.pageWindowDocs = await pageBaseDocuments(fixture.pageWindowHtml);
     // A checklist page as the core serves it, with nothing left on it and with what the owner left on it (R-PAGE-14).
     if (options.selected.some(scene => scene.fixture?.pageState)) {

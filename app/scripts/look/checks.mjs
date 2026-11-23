@@ -45,18 +45,13 @@ export function checkRendered(name, context = {}) {
     const links = [...(bubble?.querySelectorAll(".message-link") ?? [])];
     require(links.length === 2 && links.every(visible), "only the known slash name and URL are links");
     require(links[0].textContent === "/code-review" && links[1].textContent === "https://example.com/changes", "the links keep their written words");
-    const blue = getComputedStyle(links[1]).color;
-    const expected = tokenColour(bubble, bubble.closest(".mb-chat[data-member-bubble]") ? "--owner-bubble-link" : "--link");
-    const luminance = rgb => rgb.match(/[\d.]+/g).slice(0, 3).map(Number).reduce((sum, n, i) => {
-      const c = n / 255;
-      return sum + [0.2126, 0.7152, 0.0722][i] * (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
-    }, 0);
-    const brightness = [blue, getComputedStyle(bubble).backgroundColor].map(luminance).sort((a, b) => b - a);
-    require((brightness[0] + 0.05) / (brightness[1] + 0.05) >= 4.5, "the link has at least 4.5:1 contrast against the bubble");
+    // R-LINK-02: in the owner's bubble a link wears the bubble's words colour, never blue; only the pointer shows it opens.
+    const words = getComputedStyle(bubble.querySelector(".message-text")).color;
     require(links.every(link => {
       const style = getComputedStyle(link);
-      return style.color === expected && style.backgroundColor === "rgba(0, 0, 0, 0)" && style.paddingInlineStart === "0px" && style.borderTopWidth === "0px";
-    }), "both links are bare words in the link colour");
+      return style.color === words && style.textDecorationLine === "none" && style.cursor === "pointer" &&
+        style.backgroundColor === "rgba(0, 0, 0, 0)" && style.paddingInlineStart === "0px" && style.borderTopWidth === "0px";
+    }), "both links are bare words in the bubble's words colour, with a pointer and no underline at rest");
     const notice = turn.querySelector("[data-skill-notice]");
     require(visible(notice) && bubble.getBoundingClientRect().bottom <= notice.getBoundingClientRect().top,
       "the skipped skill is shown below the owner bubble");
@@ -581,7 +576,7 @@ export function checkRendered(name, context = {}) {
     const rowOf = key => document.querySelector(`.skl-pack[data-skl-pack="${key}"]`);
     const accessOf = key => rowOf(key)?.querySelector('.skl-access span')?.textContent.trim();
     // A package's page stands in the list's place (R-SKILL-17): it has no importer of its own.
-    const onPage = name === 'skill-library-open' || name === 'skill-library-page-top' || name === 'skill-library-skill-details';
+    const onPage = ['skill-library-open', 'skill-library-page-top', 'skill-library-skill-page', 'skill-library-doc-alone'].includes(name);
     if (name !== 'member-skills-library' && !onPage) {
       const pane = document.querySelector('.modal-scrim .skl');
       require(pane?.getAttribute('aria-label') === '團隊技能', 'the Settings section names Team skills');
@@ -596,7 +591,8 @@ export function checkRendered(name, context = {}) {
       for (const row of rows) {
         const r = row.getBoundingClientRect();
         require(r.left >= box.left - 1 && r.right <= box.right + 1, `a package row stays inside the tab (${Math.round(r.left)}-${Math.round(r.right)})`);
-        require(row.querySelector('.tg[role="switch"]') && row.querySelector('[data-skl="more"]'), 'each package has its switch and ⋯');
+        const more = row.querySelector('[data-skl="more"]');
+        require(row.querySelector('.tg[role="switch"]') && more && !visible(more), 'each package has its switch, and its ⋯ (for the right click) is not drawn');
       }
     }
     if (name === 'skill-library') {
@@ -617,9 +613,9 @@ export function checkRendered(name, context = {}) {
       require(document.querySelectorAll('.skl-pack').length === 3, 'one row per package, not per skill');
       require(rowOf('set:1').querySelector('.skl-count')?.textContent.trim() === '7 個技能' && !document.querySelector('.skl-skill'), 'pstack is one folded row that says how many skills it holds');
       require(accessOf('set:1') === '還沒給任何人' && accessOf('pack:2') === '小晴、小森' && accessOf('skill:3') === '整個團隊', `who may use each is said on its row (${accessOf('set:1')} / ${accessOf('pack:2')} / ${accessOf('skill:3')})`);
-      require(!rowOf('skill:3').querySelector('.skl-count, [data-skl="open"]') && rowOf('skill:3').querySelector('.skl-single .d')?.textContent.startsWith('把會議逐字稿整理成決議與待辦'), 'a skill alone is one row: its words under its name, nothing to open');
+      require(!rowOf('skill:3').querySelector('.skl-count, [data-skl="open"]') && rowOf('skill:3').querySelector('[data-skl="open-skill"] .d')?.textContent.startsWith('把會議逐字稿整理成決議與待辦'), 'a skill alone is one row, its words under its name, that opens its own page');
     }
-    if (onPage && name !== 'skill-library-skill-details') {
+    if (name === 'skill-library-open' || name === 'skill-library-page-top') {
       const page = document.querySelector('.modal-scrim .skl-page'), head = page?.querySelector('.skl-page-head');
       require(visible(page) && !document.querySelector('.modal-scrim .skl-import, .modal-scrim .skl-list'), "the package's page takes the list's place: no importer, no other package");
       const back = head.querySelector('[data-skl="back"]');
@@ -629,23 +625,22 @@ export function checkRendered(name, context = {}) {
       require(title?.textContent.trim().length > 0 && title.scrollWidth <= title.clientWidth + 1, "the package's name is whole");
       const close = head.querySelector('.close-button'), actionsRow = page.querySelector('.skl-page-actions');
       const actions = actionsRow.querySelector('.ctl'), access = actions.querySelector('.skl-access');
-      const more = actions.querySelector('[data-skl="more"]'), toggle = actions.querySelector('.tg[role="switch"]');
-      const count = head.querySelector('.skl-count');
+      const update = actions.querySelector('[data-skl="refresh"]'), more = actions.querySelector('[data-skl="more"]'), toggle = actions.querySelector('.tg[role="switch"]');
       require(visible(close) && page.querySelectorAll('.close-button').length === 1, 'one shared close stands beside the package title');
-      require([access, more, toggle].every(visible) && access.nextElementSibling === more && more.nextElementSibling === toggle &&
-        actions.lastElementChild === toggle && actionsRow.parentElement === title.parentElement.parentElement, 'access, ⋯ and the rightmost switch stand at the end of the title row');
+      require([access, update, toggle].every(visible) && !visible(more) && access.nextElementSibling === update &&
+        actions.lastElementChild === toggle && actionsRow.parentElement === title.parentElement.parentElement, 'access, the update button and the rightmost switch stand at the end of the title row; no ⋯ is drawn');
       const content = page.closest('.set-content');
       const headings = [...content.querySelectorAll('h1')];
       require(content.firstElementChild === page && page.firstElementChild.firstElementChild === head &&
         headings.length === 1 && headings[0] === title && title.id === 'set-title',
         'the plugin name is the page title with no section title above it');
       const start = content.getBoundingClientRect(), arrow = back.getBoundingClientRect(), titleBox = title.getBoundingClientRect();
-      const closeBox = close.getBoundingClientRect(), countBox = count.getBoundingClientRect(), controls = actions.getBoundingClientRect();
+      const closeBox = close.getBoundingClientRect(), controls = actions.getBoundingClientRect();
       const centre = box => (box.top + box.bottom) / 2;
-      require(visible(count) && title.parentElement.nextElementSibling === count &&
+      require(!head.querySelector('.skl-count') && title.parentElement.nextElementSibling === actionsRow &&
         Math.abs(arrow.left - start.left) <= 1 && Math.abs(arrow.top - start.top) <= 1 && titleBox.left > arrow.right &&
-        [titleBox, countBox, closeBox].every(part => Math.abs(centre(arrow) - centre(part)) <= 1),
-        'the back button, title and count start at the top left and share a centre line with the close');
+        [titleBox, closeBox].every(part => Math.abs(centre(arrow) - centre(part)) <= 1),
+        'the way back and the title start at the top left with no skill count, and share a centre line with the close');
       const body = document.querySelector('.modal-scrim .modal-body').getBoundingClientRect();
       require(closeBox.left >= start.right + 8 && closeBox.right <= body.right && [...content.querySelectorAll('*')].filter(visible)
         .every(node => node === close || close.contains(node) || node.getBoundingClientRect().right <= closeBox.left - 8),
@@ -653,9 +648,9 @@ export function checkRendered(name, context = {}) {
       const room = parseFloat(getComputedStyle(actionsRow).paddingInlineEnd) || 0;
       require(Math.abs(controls.right - (start.right - room)) <= 1 && Math.abs(centre(controls) - centre(titleBox)) <= 2,
         'the controls stand on the title row at its right end, left of the close column');
-      const actionBoxes = [access, more, toggle].map(control => control.getBoundingClientRect());
+      const actionBoxes = [access, update, toggle].map(control => control.getBoundingClientRect());
       require(actionBoxes[0].right <= actionBoxes[1].left && actionBoxes[1].right <= actionBoxes[2].left,
-        'access and ⋯ are visibly left of the switch');
+        'access and the update button are visibly left of the switch');
       require(document.querySelector('.modal-scrim .modal-body').scrollTop === 0, 'the page opens at its top');
       {
         // A plugin with many skills scrolls under its title: at the bottom the way back, the title and the close stay at the top.
@@ -674,11 +669,25 @@ export function checkRendered(name, context = {}) {
     if (name === 'nav-side-plugin') {
       require(!document.querySelector('.skl-page') && document.activeElement === rowOf('set:1')?.querySelector('.skl-open'), "Mouse Back returns to Team skills with focus on the plugin's row");
     }
-    if (name === 'skill-library-details') {
-      const description = rowOf('skill:3')?.querySelector('.skl-description');
-      const details = document.querySelector('.skl-details'), text = details?.querySelector('p');
-      require(visible(details) && text?.textContent === description?.textContent && !document.querySelector('.skl-page'), 'the overflow reveals the full description on the list');
-      require(text.scrollWidth <= text.clientWidth + 1 && text.getBoundingClientRect().height > description.getBoundingClientRect().height, 'the description wraps within the popover');
+    if (name === 'skill-library-skill-page' || name === 'skill-library-doc-alone') {
+      // Every skill opens on a page of its own: the way back and its name, its controls, a quote of its words, its document.
+      const page = document.querySelector('.modal-scrim .skl-doc-page'), head = page?.querySelector('.skl-page-head');
+      const alone = name === 'skill-library-doc-alone';
+      require(visible(page) && !document.querySelector('.modal-scrim .skl-import, .modal-scrim .skl-list, .modal-scrim .skl-skills'), "the skill's page takes its package's place");
+      const back = head.querySelector('[data-skl="back"]'), title = head.querySelector('h1#set-title');
+      require(back.matches('.back-link') && document.activeElement === back && title?.textContent.trim() === (alone ? '會議紀錄' : 'poteto-mode'), "the way back has the focus, beside the skill's name");
+      const controls = [...head.querySelectorAll('.skl-page-actions .ctl > button')].filter(visible).map(control => control.dataset.skl);
+      require(controls.join(',') === (alone ? 'access,toggle' : 'skill'), `its controls: its own switch, or a skill alone its package's (${controls})`);
+      const quote = page.querySelector('.skl-about'), doc = page.querySelector('.skl-doc');
+      require(visible(quote) && quote.querySelector('p')?.textContent.length > 10 && (!alone || quote.querySelector('.skl-source')), 'a quote of its words, with where it came from for a skill alone');
+      require(visible(doc) && doc.querySelector('.ans') && !doc.textContent.includes('description:') && (alone || doc.querySelector('.message-code')), 'its document is drawn as Markdown, without its front matter');
+      const left = back.getBoundingClientRect().left;
+      for (const part of [quote, doc]) require(Math.abs(part.getBoundingClientRect().left - left) <= 1, 'the quote and the document line up with the way back');
+      require(!page.querySelector('[data-skl="skill-more"]') && document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, 'no ⋯, and the window does not scroll sideways');
+    }
+    if (name === 'skill-library-right-click') {
+      const picks = [...document.querySelectorAll('.mb-menu [data-pick]')].map(item => item.dataset.pick);
+      require(picks.join(',') === 'refresh,delete', `the right click offers 更新 and 刪除 only (${picks})`);
     }
     if (name === 'skill-library-row-lit') {
       // The lit row is the card itself, never a smaller rounded box inside it.
@@ -692,11 +701,12 @@ export function checkRendered(name, context = {}) {
       const skills = [...document.querySelectorAll('.skl-page .skl-skills .skl-skill')];
       require(skills.length === 7 && skills.every(row => visible(row.querySelector('.tg[role="switch"]'))), `the seven skills of pstack are listed on its page, each with its own switch (${skills.length})`);
       require(document.querySelector('.skl-page-name')?.textContent.trim() === 'pstack' && accessOf('set:1') === '還沒給任何人', 'the page names pstack and who may use it');
-      require(document.querySelector('.skl-page .skl-source')?.textContent.includes('jheng-kai/pstack'), 'where it came from is said once');
-      const count = document.querySelector('.skl-page-head .skl-count');
-      require(count?.textContent.trim() === '7 個技能', 'the title gives the number of skills');
+      const source = document.querySelectorAll('.skl-page .skl-source');
+      require(source.length === 1 && source[0].parentElement.matches('.skl-about') && source[0].textContent.includes('jheng-kai/pstack') && source[0].textContent.includes('1.4.0'),
+        'where it came from and its version are said once, inside the quote');
+      require(!document.querySelector('.skl-page-head .skl-count'), 'the title gives no count of skills');
       const left = document.querySelector('.skl-page [data-skl="back"]').getBoundingClientRect().left;
-      for (const selector of ['.skl-source', '.skl-about', '.skl-skills', '.skl-skill']) {
+      for (const selector of ['.skl-about', '.skl-skills', '.skl-skill']) {
         const part = document.querySelector(`.skl-page ${selector}`);
         require(visible(part) && Math.abs(part.getBoundingClientRect().left - left) <= 1, `${selector} lines up with the back button`);
       }
@@ -710,17 +720,11 @@ export function checkRendered(name, context = {}) {
       }
       require(descriptions[0].scrollWidth > descriptions[0].clientWidth, 'the long description is truncated');
       for (const row of skills) {
-        const label = row.querySelector('.skl-label'), more = row.querySelector('[data-skl="skill-more"]'), toggle = row.querySelector('.tg');
+        const label = row.querySelector('.skl-label'), opener = row.querySelector('[data-skl="open-skill"]'), toggle = row.querySelector('.tg');
         require(Math.abs(row.getBoundingClientRect().left - left) <= 1 && label.getBoundingClientRect().left > row.getBoundingClientRect().left + 8, 'each skill row starts at the back button, with its words inside the card');
-        require(visible(more) && more.nextElementSibling === toggle &&
-          more.getBoundingClientRect().right <= toggle.getBoundingClientRect().left, 'each skill puts ⋯ left of its switch');
+        require(opener && Math.abs(opener.getBoundingClientRect().width - row.getBoundingClientRect().width) <= 1 && !row.querySelector('[data-skl="skill-more"], [data-skl="more"]') &&
+          row.querySelector('.ctl').lastElementChild === toggle, 'each skill row opens its page across the row, its switch at the right and no ⋯');
       }
-    }
-    if (name === 'skill-library-skill-details') {
-      const description = document.querySelector('.skl-page [data-library-skill="101"] .skl-description');
-      const details = document.querySelector('.skl-details'), text = details?.querySelector('p');
-      require(visible(details) && text?.textContent === description?.textContent, 'the skill overflow reveals its full description');
-      require(text.getBoundingClientRect().height > description.getBoundingClientRect().height, 'the full description wraps');
     }
     if (name === 'skill-library-back') {
       const body = document.querySelector('.modal-scrim .modal-body'), opener = document.querySelector('[data-skl="open"][data-key="pack:37"]');
@@ -2157,7 +2161,7 @@ export function checkRendered(name, context = {}) {
         require(!card.closest('.ans,.bubble'), 'forms are sibling timeline blocks');
         require(card.querySelector('button[data-rich-act="copy-source"]'), 'the shared copy button is present');
         require(!card.querySelector('script,img,iframe,[onerror],[src]'), 'form data cannot load or execute content');
-        for (const node of card.querySelectorAll('.board-card,.forecast-day,.chart-legend')) require(node.scrollWidth <= node.clientWidth + 1, 'content wraps within its card');
+        for (const node of card.querySelectorAll('.board-card,.wx-day,.wx-now,.wx-foot,.chart-legend')) require(node.scrollWidth <= node.clientWidth + 1, `content fits within its card: ${node.className}`);
         if (card.matches('.message-chart')) require(card.querySelectorAll('circle title,rect title').length >= 6, 'every plotted value has readable hover text');
         // A key shows what it names: a bar chart's is a filled swatch in the bar's own colour, a line's a stroke.
         if (card.matches('.message-chart')) {
@@ -2168,10 +2172,27 @@ export function checkRendered(name, context = {}) {
           }
         }
       }
-      if (name === "form-forecast") {
-        require(cards[0].querySelectorAll('.forecast-day').length === 7, 'seven known days fit without a panel scrollbar');
+      if (name === "form-forecast" || name === "form-forecast-full") {
+        const days = [...cards[0].querySelectorAll('.wx-day')];
+        require(days.length === 7, 'seven known days, one row each');
         require(cards[0].querySelector('[aria-current="date"]'), 'today is marked in the forecast');
-        require([...cards[0].querySelectorAll('.forecast-day > strong')].every(day => !/^\d{4}-/.test(day.textContent)), 'forecast column dates stay short, with the full date in a title');
+        require(days.every(day => !/^\d{4}-/.test(day.querySelector('.wx-name').textContent)), 'each day is named short, with the full date in a title');
+        // Every row's parts line up in columns: the lows end on one edge, the highs on another, the bars between them.
+        const edges = selector => new Set(days.map(day => Math.round(day.querySelector(selector).getBoundingClientRect().right)));
+        require(edges('.wx-low').size === 1 && edges('.wx-high').size === 1 && edges('.wx-range').size === 1, 'the lows, the bars and the highs stand in columns');
+        require(days.every(day => { const bar = day.querySelector('.wx-range > i').getBoundingClientRect(), track = day.querySelector('.wx-range').getBoundingClientRect(); return bar.left >= track.left - 0.5 && bar.right <= track.right + 0.5 && bar.width >= 2; }), "each day's bar lies within the week's range");
+      }
+      if (name === "form-forecast-full") {
+        const card = cards[0], now = card.querySelector('.wx-now'), temp = now.querySelector('.wx-temp');
+        require(visible(now.querySelector('.wx-glyph.wx-lg')) && temp.textContent === '24°' && parseFloat(getComputedStyle(temp).fontSize) >= 36, 'now: its glyph and the temperature large');
+        require(now.querySelector('.wx-now-words').textContent.includes('74%') && now.querySelector('.wx-now-words').textContent.includes('18 km/h'), 'now: feels like, high and low, wind and humidity');
+        const hours = card.querySelector('.wx-hours'), columns = [...hours.querySelectorAll('.wx-hour')];
+        require(columns.length === 12 && getComputedStyle(hours).overflowX === 'auto' && new Set(columns.map(c => Math.round(c.getBoundingClientRect().top))).size === 1, 'the twelve hours stand in one row that scrolls on its own');
+        require(columns.filter(c => c.querySelector('.wx-rain')).length === 4, 'rain chances stand only under the rainy hours');
+        require(columns.every(c => c.querySelector('.wx-when').scrollWidth <= c.querySelector('.wx-when').clientWidth + 1), 'every hour reads whole');
+        const foot = card.querySelector('.wx-foot');
+        require(foot.textContent.includes('Open-Meteo') && foot.textContent.includes('16:00'), 'the foot names the source and when it was read');
+        require(document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, 'the window does not scroll sideways');
       }
       if (name === "form-board") require(cards[0].querySelectorAll('.board-column').length === 5, 'five board columns wrap without dragging');
     }
@@ -3541,7 +3562,7 @@ export function checkRendered(name, context = {}) {
     if (name === "rich-image-loaded") require(scope.querySelector('.message-image img')?.referrerPolicy === 'no-referrer', "consented image omits referrer");
     if (name === "rich-table-example") {
       require(scope.querySelectorAll('th').length === 3 && scope.querySelector('.message-table a') && scope.querySelector('.message-table td code'), "owner example has three aligned columns, links and inline code");
-      require(getComputedStyle(scope.querySelector('.message-table td')).overflowWrap === 'anywhere', "long Chinese cells wrap within the column");
+      require(getComputedStyle(scope.querySelector('.message-table td')).overflowWrap === 'break-word', "long Chinese cells wrap within the column, between words");
       // R-UI-167: columns take the room their contents need, so the long description gets the most of it.
       const widths = [...scope.querySelectorAll('.message-table th')].map(th => th.getBoundingClientRect().width);
       require(widths[1] > widths[0] && widths[1] > widths[2], `the long column is the widest: ${widths.map(Math.round)}`);
@@ -3552,6 +3573,28 @@ export function checkRendered(name, context = {}) {
         require(lines === 1, `a short cell stays on one line: 「${cell.textContent.trim()}」 took ${lines}`);
       }
       require(scope.querySelectorAll('.message-table tbody td.short').length >= 2, "the label column counts as short words");
+    }
+    if (name === "rich-table-short-columns") {
+      // #307: a column of long text keeps room for several words however many short columns stand beside it, the card
+      // scrolling sideways when they no longer fit; a word of letters and digits (12V, CAN) never breaks in its middle.
+      const font = parseFloat(getComputedStyle(scope.querySelector('.message-table td')).fontSize);
+      const long = [...scope.querySelectorAll('.message-table th')].at(-1);
+      require(!long.classList.contains('short'), "the last column holds long text");
+      require(long.getBoundingClientRect().width >= 8 * font, `the long column keeps room for several words: ${Math.round(long.getBoundingClientRect().width)} px at ${font} px`);
+      for (const cell of scope.querySelectorAll('.message-table tbody td:last-child')) {
+        const range = document.createRange(); range.selectNodeContents(cell);
+        const lines = new Set([...range.getClientRects()].map(rect => Math.round(rect.top))).size;
+        require(lines <= 4, `a long cell stays a few lines tall: 「${cell.textContent.trim()}」 took ${lines}`);
+      }
+      for (const word of ["12V", "CAN", "120Ω"]) {
+        const cell = [...scope.querySelectorAll('.message-table td')].find(td => td.textContent.includes(word));
+        const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+        let node; while ((node = walker.nextNode()) && !node.data.includes(word));
+        const range = document.createRange(), at = node.data.indexOf(word);
+        range.setStart(node, at); range.setEnd(node, at + word.length);
+        const lines = new Set([...range.getClientRects()].map(rect => Math.round(rect.top))).size;
+        require(lines === 1, `「${word}」 stays whole on one line, took ${lines}`);
+      }
     }
     if (name === "rich-wide-table") {
       const scroller = scope.querySelector('.message-table .rich-scroll');
@@ -9238,9 +9281,9 @@ export function checkRendered(name, context = {}) {
     const modal = connectModal(), back = modal.querySelector('.cs-back'), close = modal.querySelector('.modal-x'), content = modal.querySelector('.cs');
     require(visible(back) && visible(close) && back.matches('button[data-conn="back"]'), "the back chevron and the dialog's ✕ are both real buttons on screen");
     const a = back.getBoundingClientRect(), x = close.getBoundingClientRect(), centreY = (a.top + a.bottom) / 2, centreX = (a.left + a.right) / 2;
-    // The way back is the title itself: a plain chevron, as tall as the ✕, beside words that go back too.
-    require(back.matches('.back-link') && Math.round(a.height) === Math.round(x.height) && getComputedStyle(back).boxShadow === 'none'
-      && back.closest('.back-title')?.querySelector('[data-title-back]'), `the way back is a plain chevron the ✕'s height, one control with its title (${a.width}x${a.height})`);
+    // An app's page keeps the round back the ✕'s own size (only the connected list goes back by its title).
+    require(Math.round(a.width) === Math.round(x.width) && Math.round(a.height) === Math.round(x.height) && a.width >= 30, `the back chevron is the ✕'s own size, not smaller (${a.width}x${a.height} against ${x.width}x${x.height})`);
+    require(!back.matches('.back-link') && parseFloat(getComputedStyle(back).borderTopLeftRadius) >= a.height / 2, "it is round");
     require(Math.abs(centreY - (x.top + x.bottom) / 2) <= 1, `it stands on the ✕'s line (${centreY} against ${(x.top + x.bottom) / 2})`);
     const misses = [[a.left + 3, centreY], [a.right - 3, centreY], [centreX, a.top + 3], [centreX, a.bottom - 3], [centreX, centreY]].filter(([px, py]) => { const hit = document.elementFromPoint(px, py); return !(hit && (hit === back || back.contains(hit))); });
     require(misses.length === 0, `a press anywhere on its 36 px lands on it (${misses.length} points did not)`);

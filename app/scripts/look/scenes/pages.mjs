@@ -25,6 +25,8 @@ const dropdown = "[data-report-filter]";
 const pick = value => click(`.menu .menu-choice[data-value="${value}"]`);
 const baseOpen = [member(1), wait('.pg-body[data-state="ready"] iframe'), { action: "frame-wait", selector: "table" }, click(".pg-card .pg-body"), wait(".pgv-frame-box iframe"), { action: "frame-wait", selector: ".kpis" }];
 const baseFixture = { baseTurn: true, pageBase: true };
+// Any page in the real frame (the base page, or LOOK_PAGE_FILE): its card, then open in the conversation's place.
+const fileCard = [member(1), wait('.pg-body[data-state="ready"] iframe'), { action: "frame-wait", selector: "body *" }];
 // R-PAGE-14: a checklist page as the core serves it (its helper, the owner's state put back); the frame is the real one.
 const stateOpen = [member(1), wait('.pg-body[data-state="ready"] iframe'), { action: "frame-wait", selector: "#passport" },
   click(".pg-card .pg-body"), wait(".pgv-frame-box iframe"), { action: "frame-wait", selector: "#passport" }];
@@ -115,4 +117,6 @@ export default [
   scene("page-base-table", "The same page read down to its table: tabs as quiet words with the chosen one bold, a header row, hairlines, figures at the right, links in the theme's blue", [...baseOpen, frameCheck("page-base"), frameScroll(560), check("page-base")], baseFixture),
   scene("page-base-end", "The same page read to its end: cards in a grid, a quote with its rule, code, a list and a muted line", [...baseOpen, frameCheck("page-base"), frameScroll(1800), check("page-base")], baseFixture),
   { ...scene("page-dashboard-file", "The overview saved as a file and opened on its own: the same tiles and charts, with nothing that runs", [...dashboard, ...share, { action: "saved-file" }, check("page-dashboard-file")], dashboardFixture), file: true },
+  scene("page-file-card", "A page in its card, in the real frame: the base page, or the one LOOK_PAGE_FILE names", [...fileCard], baseFixture),
+  scene("page-file-open", "The same page open in the conversation's place, in the real frame", [...fileCard, click(".pg-card .pg-body"), wait(".pgv-frame-box iframe"), { action: "frame-wait", selector: "body *" }], baseFixture),
 ];

@@ -14,7 +14,7 @@ from mcp.server.mcpserver import MCPServer
 
 from raphael_core.agent.harness_tools import definitions_for, tool
 from raphael_core.agent.history import AgentHistory
-from raphael_core.agent.pages import HTML_BYTES, MCP_MIME, PageError, PageHost, PageStore, domains, page_csp, page_file
+from raphael_core.agent.pages import HTML_BYTES, MCP_MIME, PageError, PageHost, PageStore, document, domains, page_csp, page_file
 from raphael_core.agent.permissions import PermissionCards
 from raphael_core.agent.policy import Tier
 from raphael_core.agent.report_page import FILE_POLICY, file_name
@@ -890,6 +890,17 @@ def test_an_html_page_file_is_the_page_without_the_window_helper_under_the_pages
         assert wanted in policy
     assert "sandbox" not in policy and "https://cdnjs.cloudflare.com" in policy
     assert text.index('<meta charset="utf-8">') < head
+
+
+def test_a_page_reads_in_the_windows_theme_even_with_a_default_of_its_own():
+    page = {"title": "News", "html": '<!doctype html><html data-theme="dark"><body><h1>News</h1></body></html>', "source": "html", "network": {}}
+    for theme in ("light", "dark"):
+        text = document(page, theme)
+        # The window's theme is on the root before the page's <html>, whose own default the parser then leaves out.
+        script = f"<script>document.documentElement.setAttribute('data-theme','{theme}')</script>"
+        assert text.index(script) < text.index('<html data-theme="dark">') < text.index("<h1>News</h1>")
+    # A file follows its reader's theme instead.
+    assert "setAttribute('data-theme'" not in _page_file(html="<h1>News</h1>")
 
 
 async def test_a_shared_html_page_is_saved_from_what_is_stored_never_from_text_the_window_gives(make_rig, tmp_path):

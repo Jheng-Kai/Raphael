@@ -404,6 +404,7 @@ export const es = {
   "cards.yourMessage": "Tu mensaje",
   "settings.081": "Ver",
   "forms.today": "Hoy",
+  "forms.hourly": "Pronóstico por horas", "forms.daily": "Pronóstico diario", "forms.feels": "Sensación {p0}", "forms.highLow": "Máx. {p0} Mín. {p1}", "forms.humidity": "Humedad {p0}", "forms.wind": "Viento {p0}", "forms.updated": "Actualizado {p0}",
   "format.001": "Hoy",
   "auto.today": "Hoy",
   "forms.board": "Tareas",

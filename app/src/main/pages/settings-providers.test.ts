@@ -100,7 +100,7 @@ test("mouse Back and Forward retrace Slack, Connectors and the conversation", as
   });
 });
 
-test("mouse Back closes a plugin menu, then returns to the team skill list, then closes Settings", async () => {
+test("mouse Back closes a plugin menu, then returns from a skill to its plugin, to the team skill list, then closes Settings", async () => {
   api.core.mockResolvedValue({ members: [], packages: [{
     key: "set:1", name: "Example plugin", kind: "plugin", source: "", description: "", version: "",
     enabled: true, access: "all", updatable: false, skills: [{ id: 1, name: "example", description: "Skill notes", enabled: true }],
@@ -117,11 +117,10 @@ test("mouse Back closes a plugin menu, then returns to the team skill list, then
     back();
     expect(document.querySelector("#app-popover")).toBeNull();
     expect(page.el.querySelector(".skl-page")).not.toBeNull();
-    click('[data-skl="skill-more"]');
-    click('#app-popover [data-pick="details"]');
-    expect(document.querySelector(".skl-details")?.textContent).toContain("Skill notes");
+    click('[data-skl="open-skill"][data-id="1"]');
+    expect(page.el.querySelector(".skl-doc-page #set-title")?.textContent).toBe("example");
     back();
-    expect(document.querySelector(".skl-details")).toBeNull();
+    expect(page.el.querySelector(".skl-doc-page")).toBeNull();
     expect(page.el.querySelector(".skl-page")).not.toBeNull();
     back();
     expect(page.el.querySelector(".skl-page")).toBeNull();
@@ -134,7 +133,7 @@ test("mouse Back closes a plugin menu, then returns to the team skill list, then
     sendNavInput("mouse", "forward");
     expect(page.el.querySelector(".skl-page")).not.toBeNull();
     sendNavInput("mouse", "forward");
-    expect(document.querySelector(".skl-details")?.textContent).toContain("Skill notes");
+    expect(page.el.querySelector(".skl-doc-page")).not.toBeNull();
   });
 });
 

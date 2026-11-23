@@ -341,6 +341,7 @@ export const ja = {
   "cards.sendFailed": "送信できませんでした",
   "cards.yourMessage": "メッセージ",
   "forms.today": "今日", "forms.board": "タスク",
+  "forms.hourly": "1時間ごとの予報", "forms.daily": "日ごとの予報", "forms.feels": "体感 {p0}", "forms.highLow": "最高 {p0} 最低 {p1}", "forms.humidity": "湿度 {p0}", "forms.wind": "風 {p0}", "forms.updated": "{p0} 更新",
   "mcp.argLines": "引数（1行に1つ）", "mcp.secretNames": "秘密の項目名（コンマ区切り）",
   "mcp.enable": "確認して有効にする", "mcp.draft": "未テスト", "mcp.approval": "テストでこのPCのコマンドを実行します",
   "mcp.testing": "テスト中…", "mcp.tested": "テスト成功", "mcp.enabled": "有効", "mcp.cancelled": "キャンセル済み",

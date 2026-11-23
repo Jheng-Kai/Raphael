@@ -404,6 +404,7 @@ export const zhCN = {
   "cards.yourMessage": "你的消息",
   "settings.081": "查看",
   "forms.today": "今天",
+  "forms.hourly": "每小时预报", "forms.daily": "每日预报", "forms.feels": "体感 {p0}", "forms.highLow": "高 {p0} 低 {p1}", "forms.humidity": "湿度 {p0}", "forms.wind": "风 {p0}", "forms.updated": "更新于 {p0}",
   "format.001": "今天",
   "auto.today": "今天",
   "forms.board": "工作事项",

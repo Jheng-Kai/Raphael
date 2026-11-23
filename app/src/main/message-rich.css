@@ -14,10 +14,18 @@
 .rich-scroll { overflow-x: auto; max-width: 100%; }
 /* Columns take the room their contents need: a number column stays narrow and the long text gets the rest. */
 .message-table table { width: 100%; border-collapse: collapse; table-layout: auto; }
-.message-table th, .message-table td { padding: var(--sp-2) var(--sp-3); vertical-align: top; overflow-wrap: anywhere; border-bottom: 1px solid var(--line); }
+/* Lines break between words (any two Chinese characters, or at spaces), never inside a word of letters and digits such as
+   12V or CAN; only a long path or address in code or a link may break anywhere. A column of longer words keeps room for
+   several of them (#307: beside four short columns it once stood one character a line), and the card scrolls sideways when
+   the columns no longer fit. */
+.message-table th, .message-table td { padding: var(--sp-2) var(--sp-3); vertical-align: top; overflow-wrap: break-word; border-bottom: 1px solid var(--line); }
+.message-table :is(th, td):not(.short) { min-width: 8em; }
+.message-table :is(th, td):not(.short) :is(code, a) { overflow-wrap: anywhere; }
 /* Chinese may break between any two characters, so a column of short words (a number, a level, a label) would give its room
-   away to the long text and stand each word in pieces: such a column keeps every cell on one line (`short`, message-content.ts). */
-.message-table .short { white-space: nowrap; }
+   away to the long text and stand each word in pieces: such a column never breaks inside a word (`short`, message-content.ts).
+   It may still break at a space, so that four such columns beside one of long text leave it room. */
+.message-table .short { word-break: keep-all; }
+.message-table .short :is(a, code) { white-space: nowrap; }
 .message-table th { background: var(--surface-2); font-weight: var(--weight-semibold); }
 .message-table tr:last-child td { border-bottom: 0; }
 .message-table th:not(:last-child), .message-table td:not(:last-child) { border-inline-end: 1px solid var(--line); }
@@ -62,13 +70,52 @@
 .message-text hr { border: 0; border-top: 1px solid var(--edge); margin: var(--sp-3) 0; }
 .message-task { list-style: none; }
 .message-task input { margin-inline: -1.3em .5em; accent-color: var(--accent-text); }
-.forecast-days { display: grid; grid-template-columns: repeat(auto-fit, minmax(76px, 1fr)); gap: var(--sp-2); padding: var(--sp-3); }
-.forecast-day { display: flex; flex-direction: column; align-items: center; gap: var(--sp-2); padding: var(--sp-2); border-radius: var(--r-sm); text-align: center; overflow-wrap: anywhere; min-width: 0; }
-.forecast-day[aria-current] { background: var(--surface-2); }
-.forecast-day > .i { width: 20px; height: 20px; }
-.forecast-temperatures { display: flex; gap: var(--sp-2); font-variant-numeric: tabular-nums; }
-.forecast-temperatures > span, .form-units, .board-card > span { color: var(--text-2); }
-.form-units { margin: 0; padding: 0 var(--sp-3) var(--sp-2); font-size: var(--fs-xs); }
+/* The weather, as a weather app draws it (message-forms.ts forecastHTML): now with its glyph and the temperature large,
+   the hours ahead in one row that scrolls, one row a day with its low and high on a bar of the week's range, then the
+   unit, the source and when it was read. The glyphs are the only colour: the sun amber, rain blue, clouds grey. */
+.message-forecast { font-variant-numeric: tabular-nums; }
+.wx-glyph { flex: none; width: 24px; height: 24px; overflow: visible; }
+.wx-glyph.wx-lg { width: 52px; height: 52px; }
+.wx-sun { fill: var(--chart-4); }
+.wx-ray { stroke: var(--chart-4); stroke-width: 1.6; stroke-linecap: round; }
+.wx-moon { fill: color-mix(in srgb, var(--chart-4) 70%, var(--text-2)); }
+.wx-cloud { fill: color-mix(in srgb, var(--text-2) 46%, var(--panel)); }
+.wx-glyph[data-sky="partly"] .wx-cloud { stroke: var(--panel); stroke-width: 1.2; }
+.wx-drop { stroke: var(--chart-1); stroke-width: 1.7; stroke-linecap: round; fill: none; }
+.wx-flake { fill: var(--chart-1); }
+.wx-bolt { fill: var(--chart-4); }
+.wx-mist { stroke: var(--text-3); stroke-width: 1.6; stroke-linecap: round; fill: none; }
+.wx-now { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-4) var(--sp-4) var(--sp-3); }
+.wx-temp { font-size: calc(2 * var(--fs-h1)); font-weight: var(--weight-regular); line-height: 1; letter-spacing: -0.02em; }
+.wx-now-words { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; min-width: 0; color: var(--text-2); font-size: var(--fs-xs); line-height: 1.45; }
+.wx-now-words > strong { color: var(--text); font-size: var(--fs-sm); font-weight: var(--weight-semibold); }
+.wx-part { padding: var(--sp-2) var(--sp-4) var(--sp-3); border-top: 1px solid var(--line); }
+.wx-part > h4 { margin: 0 0 var(--sp-2); color: var(--text-3); font-size: var(--fs-xs); font-weight: var(--weight-regular); }
+/* The hours stand in one row that scrolls on its own when they do not fit, each column as wide as its words need. */
+.wx-hours { display: flex; gap: var(--sp-1); overflow-x: auto; scrollbar-width: thin; padding-bottom: var(--sp-1); }
+.wx-hour { display: flex; flex: 1 0 48px; flex-direction: column; align-items: center; gap: var(--sp-1); min-width: 48px; font-size: var(--fs-xs); }
+.wx-hour > b { font-size: var(--fs-sm); font-weight: var(--weight-semibold); }
+.wx-when { color: var(--text-2); white-space: nowrap; }
+.wx-sky { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 36px; }
+.wx-rain { color: var(--chart-1); font-size: var(--fs-2xs); line-height: 1.2; }
+/* A day a row: its name, its sky and rain chance, its low, the bar of its range in the week's, its high. */
+/* The rows reach into the part's padding, so today's light band has room beside its words. */
+.wx-days { display: grid; grid-template-columns: minmax(0, 1fr); margin: 0 calc(-1 * var(--sp-2)); }
+.wx-day { display: grid; grid-template-columns: minmax(3.5em, 5em) 44px 3em minmax(60px, 1fr) 3em; align-items: center; gap: var(--sp-3); min-height: 40px; padding: 0 var(--sp-2); border-radius: var(--r-sm); font-size: var(--fs-sm); }
+.wx-day[aria-current] { background: var(--surface-2); }
+.wx-day .wx-sky { min-height: 0; }
+.wx-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--weight-semibold); }
+.wx-low { color: var(--text-2); text-align: end; }
+.wx-high { text-align: end; font-weight: var(--weight-semibold); }
+.wx-range { position: relative; height: 4px; border-radius: var(--r-pill); background: var(--track); }
+.wx-range > i { position: absolute; top: 0; bottom: 0; border-radius: inherit; }
+.wx-foot { display: flex; justify-content: space-between; gap: var(--sp-3); padding: var(--sp-2) var(--sp-4) var(--sp-3); border-top: 1px solid var(--line); color: var(--text-3); font-size: var(--fs-xs); }
+.wx-foot > span:empty { display: none; }
+@media (max-width: 520px) {
+  .wx-day { grid-template-columns: minmax(3em, 4em) 36px 2.6em minmax(40px, 1fr) 2.6em; gap: var(--sp-2); }
+  .wx-temp { font-size: calc(1.75 * var(--fs-h1)); }
+}
+.board-card > span { color: var(--text-2); }
 .board-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr)); align-items: start; gap: var(--sp-3); padding: var(--sp-3); }
 .board-column { min-width: 0; overflow-wrap: anywhere; }
 .board-column h4 { margin: 0 0 var(--sp-2); font: inherit; font-weight: var(--weight-semibold); }

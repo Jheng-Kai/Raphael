@@ -340,6 +340,7 @@ export const zhTW = {
   "cards.sendFailed": "未能傳送",
   "cards.yourMessage": "你的訊息",
   "forms.today": "今天", "forms.board": "工作事項",
+  "forms.hourly": "每小時預報", "forms.daily": "每日預報", "forms.feels": "體感 {p0}", "forms.highLow": "高 {p0} 低 {p1}", "forms.humidity": "濕度 {p0}", "forms.wind": "風 {p0}", "forms.updated": "更新於 {p0}",
   "mcp.argLines": "參數（每行一個）", "mcp.secretNames": "秘密欄位名稱（以逗號分隔）",
   "mcp.enable": "確認啟用", "mcp.draft": "待測試", "mcp.approval": "測試將在你的電腦執行這個指令",
   "mcp.testing": "測試中…", "mcp.tested": "測試成功", "mcp.enabled": "已啟用", "mcp.cancelled": "已取消",

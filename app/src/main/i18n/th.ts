@@ -404,6 +404,7 @@ export const th = {
   "cards.yourMessage": "ข้อความของคุณ",
   "settings.081": "ดู",
   "forms.today": "วันนี้",
+  "forms.hourly": "พยากรณ์รายชั่วโมง", "forms.daily": "พยากรณ์รายวัน", "forms.feels": "รู้สึกเหมือน {p0}", "forms.highLow": "สูง {p0} ต่ำ {p1}", "forms.humidity": "ความชื้น {p0}", "forms.wind": "ลม {p0}", "forms.updated": "อัปเดต {p0}",
   "format.001": "วันนี้",
   "auto.today": "วันนี้",
   "forms.board": "งาน",

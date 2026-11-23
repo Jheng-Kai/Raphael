@@ -155,7 +155,8 @@ DEFINITIONS = {
         "colleagues returned, leaving out the unknown. html: a fragment or document, at most 256 KB UTF-8, no secrets, run in "
         "a sandbox without fetch or server forms, styled by the app (type, tables, links; classes .callout .info .warn .ok, "
         ".toc, .chips, .cards, .kpis, .num on figures). window.raphael.send(text) asks the owner's next message to be text; "
-        "window.raphael.open(url) asks to open an HTTPS link. Theme CSS variables: --bg, --surface, --fg, --muted, --line, "
+        "window.raphael.open(url) asks to open an HTTPS link. Theme CSS variables (they follow the owner's light or dark theme, "
+        "also set as <html data-theme>; add no theme switch): --bg, --surface, --fg, --muted, --line, "
         "--accent, --ok, --warn, --err, --chart-1 to 8, --font. External assets (chart libraries too): cdnjs.cloudflare.com, "
         "cdn.jsdelivr.net, unpkg.com, Google Fonts. Returns page_id; update_page replaces it in place.",
         {"title": {"type": "string", "maxLength": 80}, "report": REPORT, "html": {"type": "string"},

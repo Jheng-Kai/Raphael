@@ -404,6 +404,7 @@ export const tr = {
   "cards.yourMessage": "İletiniz",
   "settings.081": "Görüntüle",
   "forms.today": "Bugün",
+  "forms.hourly": "Saatlik tahmin", "forms.daily": "Günlük tahmin", "forms.feels": "Hissedilen {p0}", "forms.highLow": "Y:{p0} D:{p1}", "forms.humidity": "Nem {p0}", "forms.wind": "Rüzgâr {p0}", "forms.updated": "Güncellendi {p0}",
   "format.001": "Bugün",
   "auto.today": "Bugün",
   "forms.board": "Görevler",

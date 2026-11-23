@@ -54,8 +54,7 @@ test.each([true, false])("update progress stays visible until the package RPC co
   const pending = new Promise<{ package: LibraryPackage }>((resolve, reject) => { finish = resolve; fail = reject; });
   const { root } = await setup(() => pending);
   press(root, '[data-skl="open"][data-key="set:1"]');
-  press(root, '[data-skl="more"][data-key="set:1"]');
-  press(document, '[data-pick="refresh"]');
+  press(root, '[data-skl="refresh"][data-key="set:1"]');
   expect(api.core).toHaveBeenCalledWith("skills.library.update", { key: "set:1", refresh: true });
   expect(root.querySelector('[role="status"].skl-refresh-status')).not.toBeNull();
   expect(root.querySelector<HTMLButtonElement>('[data-skl="skill"]')?.disabled).toBe(true);
@@ -70,7 +69,8 @@ test.each([true, false])("update progress stays visible until the package RPC co
 });
 
 test("one row per package says who may use it, and its name opens its skills on a page of its own", async () => {
-  const { root } = await setup();
+  const { root } = await setup((method, params) => method === "members.skills.read"
+    ? { text: `---\nname: skill\ndescription: 說明\n---\n# 怎麼用\n\n第 ${params.id} 個技能的內容` } : {});
   expect(root.querySelector("h1#set-title")?.textContent).toBe("團隊技能");
   expect(root.querySelector(".set-head .close-button")).not.toBeNull();
   expect(root.querySelector(".skl")?.getAttribute("aria-label")).toBe("團隊技能");
@@ -80,7 +80,7 @@ test("one row per package says who may use it, and its name opens its skills on 
   expect(root.querySelector('[data-skl-section="skills"] [data-skl-pack="skill:3"]')).not.toBeNull();
   expect(root.querySelector('.skl-pack[data-skl-pack="set:1"] .skl-count')?.textContent).toBe("3 個技能");
   expect(root.querySelector('.skl-pack[data-skl-pack="skill:3"] .skl-count, .skl-pack[data-skl-pack="skill:3"] [data-skl="open"]')).toBeNull();
-  expect(root.querySelector('.skl-pack[data-skl-pack="skill:3"] .skl-single .d')?.textContent).toBe("會議紀錄 的說明");
+  expect(root.querySelector('.skl-pack[data-skl-pack="skill:3"] [data-skl="open-skill"] .d')?.textContent).toBe("會議紀錄 的說明");
   expect([accessOf(root, "set:1"), accessOf(root, "pack:2"), accessOf(root, "skill:3")]).toEqual(["還沒給任何人", "小晴、小森", "整個團隊"]);
   expect(root.querySelector(".skl-skill")).toBeNull();
   // No row folds open any more: the row is a way to its page, with no expanded state.
@@ -93,34 +93,54 @@ test("one row per package says who may use it, and its name opens its skills on 
   expect(root.querySelectorAll(".skl-pack")).toHaveLength(1);
   expect([...root.querySelectorAll("h1")].map(heading => heading.textContent)).toEqual(["研究工具"]);
   expect(page.querySelector(".skl-page-head h1#set-title")?.textContent).toBe("研究工具");
-  expect(page.querySelector(".skl-page-head .skl-count")?.textContent).toBe("2 個技能");
+  expect(page.querySelector(".skl-page-head .skl-count")).toBeNull();
+  // Where it came from stands in the quote under the title.
+  expect(page.querySelector(".skl-about > .skl-source")?.textContent).toBe("example/research");
   expect(page.querySelector(".skl-page-head .close-button")).not.toBeNull();
   expect(document.activeElement).toBe(page.querySelector('[data-skl="back"]'));
   expect(accessOf(root, "pack:2")).toBe("小晴、小森");
+  // Who may use it, the update button and the switch; the ⋯ is not drawn (a right click presses it).
   const controls = [...page.querySelectorAll<HTMLElement>(".skl-page-actions .ctl > button")];
-  expect(controls.map(control => control.dataset.skl)).toEqual(["access", "more", "toggle"]);
+  expect(controls.map(control => control.dataset.skl)).toEqual(["access", "refresh", "more", "toggle"]);
   expect(controls.every(control => control.dataset.key === "pack:2")).toBe(true);
+  expect(page.querySelector<HTMLElement>('[data-skl="more"]')!.hidden).toBe(true);
   const rows = [...page.querySelectorAll(".skl-skill")];
   expect(rows.map(row => row.querySelector(".t")?.textContent)).toEqual(["來源核對", "每週摘要"]);
   expect(rows[1].querySelector(".tg")?.getAttribute("aria-checked")).toBe("false");
-  for (const row of rows)
-    expect([...row.querySelectorAll<HTMLElement>(".ctl > button")].map(control => control.dataset.skl)).toEqual(["skill-more", "skill"]);
-  press(root, '[data-skl="skill-more"][data-id="4"]');
-  press(document, '[data-pick="details"]');
-  expect(document.querySelector(".skl-details p")?.textContent).toBe("來源核對 的說明");
-  closeMenu();
+  for (const row of rows) {
+    expect([...row.querySelectorAll<HTMLElement>(".ctl > button")].map(control => control.dataset.skl)).toEqual(["skill"]);
+    expect(row.querySelector('[data-skl="open-skill"]')).not.toBeNull();
+  }
+  // A skill opens on its own page, which reads and shows its document without its front matter.
+  press(root, '[data-skl="open-skill"][data-id="4"]');
+  expect(api.core).toHaveBeenCalledWith("members.skills.read", { member_id: 0, shared: true, id: 4 });
+  expect(root.querySelector(".skl-doc-page h1#set-title")?.textContent).toBe("來源核對");
+  await settle();
+  const doc = root.querySelector(".skl-doc")!;
+  expect(doc.textContent).toContain("第 4 個技能的內容");
+  expect(doc.textContent).not.toContain("description:");
+  expect(root.querySelector(".skl-doc-page .skl-about p")?.textContent).toBe("來源核對 的說明");
+  expect([...root.querySelectorAll<HTMLElement>(".skl-doc-page .skl-page-actions .ctl > button")].map(control => control.dataset.skl)).toEqual(["skill"]);
+  press(root, '[data-skl="back"]');
+  expect(root.querySelector('.skl-page[data-skl-page="pack:2"]:not(.skl-doc-page)')).not.toBeNull();
+  expect(document.activeElement).toBe(root.querySelector('[data-skl="open-skill"][data-id="4"]'));
   // A skill's own switch, and the package's.
   press(root, '[data-skl="skill"][data-id="5"]');
   expect(api.core).toHaveBeenCalledWith("skills.library.update", { key: "pack:2", skill: { id: 5, enabled: true } });
   press(root, '[data-skl="toggle"][data-key="pack:2"]');
   expect(api.core).toHaveBeenCalledWith("skills.library.update", { key: "pack:2", enabled: false });
   expect(root.querySelector<HTMLButtonElement>('[data-skl="skill"][data-id="4"]')!.disabled).toBe(true);
-  // A standalone skill keeps its row, with its full description in the overflow menu.
+  // A skill alone opens on its page too, with its package's controls, and goes back to the list.
   press(root, '[data-skl="back"]');
   expect(root.querySelector('[data-skl="open"][data-key="skill:3"]')).toBeNull();
-  press(root, '[data-skl="more"][data-key="skill:3"]');
-  press(document, '[data-pick="details"]');
-  expect(document.querySelector(".skl-details p")?.textContent).toBe("會議紀錄 的說明");
+  press(root, '[data-skl="open-skill"][data-key="skill:3"]');
+  await settle();
+  expect(root.querySelector(".skl-doc-page h1#set-title")?.textContent).toBe("會議紀錄");
+  expect(root.querySelector(".skl-doc")?.textContent).toContain("第 6 個技能的內容");
+  expect([...root.querySelectorAll<HTMLElement>(".skl-doc-page .skl-page-actions .ctl > button")].map(control => control.dataset.skl)).toEqual(["access", "more", "toggle"]);
+  press(root, '[data-skl="back"]');
+  expect(root.querySelector(".skl-page")).toBeNull();
+  expect(document.activeElement).toBe(root.querySelector('[data-skl="open-skill"][data-key="skill:3"]'));
 });
 
 test.each(navInputs)("a step back with %s returns from a package's page to the list", async input => {

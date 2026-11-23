@@ -341,6 +341,7 @@ export const en = {
   "cards.sendFailed": "Could not send",
   "cards.yourMessage": "Your message",
   "forms.today": "Today", "forms.board": "Tasks",
+  "forms.hourly": "Hourly forecast", "forms.daily": "Daily forecast", "forms.feels": "Feels like {p0}", "forms.highLow": "H:{p0} L:{p1}", "forms.humidity": "Humidity {p0}", "forms.wind": "Wind {p0}", "forms.updated": "Updated {p0}",
   "mcp.argLines": "Arguments (one per line)", "mcp.secretNames": "Secret names (comma separated)",
   "mcp.enable": "Confirm and enable", "mcp.draft": "Not tested", "mcp.approval": "Testing runs this command on your PC",
   "mcp.testing": "Testing…", "mcp.tested": "Test passed", "mcp.enabled": "Enabled", "mcp.cancelled": "Cancelled",

@@ -1825,7 +1825,12 @@ export function installMock(fixture, config = {}, target = window) {
         notify("MembersChanged", { member_id: p.member_id });
         return { skill: skillRow(skill), skills: [skillRow(skill)] };
       }
-      case "members.skills.read": { const skill = skillOf(p); return { skill: skillRow(skill), text: skillText(skill) }; }
+      case "members.skills.read": {
+        // A skill of Team skills (a package's) is read in the shared scope too: its page shows its document.
+        const library = p.shared && data.skillLibrary?.flatMap(pack => pack.skills).find(item => item.id === p.id);
+        if (library) return { skill: { ...library, member_id: -1 }, text: `---\nname: ${library.name}\ndescription: ${library.description}\n---\n# ${library.name}\n\n${library.description}\n\n## 步驟\n\n1. 先讀需求，列出要確認的事。\n2. 依序完成，每一步記下結果。\n3. 最後逐項核對。\n\n\`\`\`bash\nnpm run verify -- --changed\n\`\`\`\n` };
+        const skill = skillOf(p); return { skill: skillRow(skill), text: skillText(skill) };
+      }
       case "members.skills.update": {
         const inherited = !p.shared && data.skills.find(s => s.id === p.id && s.member_id === -1);
         if (inherited) {

@@ -1965,7 +1965,7 @@ conversation's whole column, as wide as the composer, and a table's columns take
 `reply-measure` and `rich-table-example` measure it). Selected acceptance:
 
 ```powershell
-npm run look -- rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-invalid rich-streaming rich-sequence rich-line-breaks rich-class rich-state rich-er rich-architecture rich-wide-table reply-split-bubbles conversation-chief-up conversation-member-up conversation-room-up long-owner long-owner-expanded long-room-messages chat --theme both --width 1120,720,1920x1080
+npm run look -- rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-table-short-columns rich-invalid rich-streaming rich-sequence rich-line-breaks rich-class rich-state rich-er rich-architecture rich-wide-table reply-split-bubbles conversation-chief-up conversation-member-up conversation-room-up long-owner long-owner-expanded long-room-messages chat --theme both --width 1120,720,1920x1080
 ```
 
 A diagram opens larger from its whole chart, not only the header's expand icon (R-UI-173): the drawn chart under the header is
@@ -2258,7 +2258,7 @@ set by `bindComposerRow` on a press or a key, cleared when the focus leaves).
 ```powershell
 npm run look -- composer-opened-calm composer-engaged composer-long-link composer-long-link-sent composer-link-edit room-long-link room-composer-files room-composer-drop-sign room-draft-picture-opened room-files-sent --theme both --width 1120,720,1920x1080
 npm run look -- empty-conversation-recording empty-conversation-hearing composer-voice-recording composer-voice-sent composer-stop-voice composer-stop-voice-result composer-stop-pending esc-recording-cancel composer-learn chat --theme both --width 1120,720,1920x1080
-npm run look -- team-file-reply reply-local-links rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-invalid rich-streaming rich-sequence rich-line-breaks rich-class rich-state rich-er rich-architecture rich-wide-table reply-split-bubbles conversation-chief-up conversation-member-up conversation-room-up long-owner long-owner-expanded long-room-messages chat --theme both --width 1120,720,1920x1080
+npm run look -- team-file-reply reply-local-links rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-table-short-columns rich-invalid rich-streaming rich-sequence rich-line-breaks rich-class rich-state rich-er rich-architecture rich-wide-table reply-split-bubbles conversation-chief-up conversation-member-up conversation-room-up long-owner long-owner-expanded long-room-messages chat --theme both --width 1120,720,1920x1080
 ```
 
 Links: a link in the composer and in a sent message shows its whole address in the link colour (`--link`, blue), never a shortened name; the field's words are the address itself, so copy, cut and send give the same text. `composer-url-chip` requires the whole address, the link colour, a matching field and copy and no sideways overflow; `composer-link-sent` requires the whole address to go out with the words after it, and `room-link-sent` also requires the group's sent message to show the whole address in the link colour (the member conversation's mock does not echo the sent bubble; message-content.test.ts covers its HTML). A bubble that wears a member's colour keeps its own words colour for a link so that it reads (R-UI-81); a neutral bubble shows the link colour. The look driver's `clipboard-paste` does the browser's default insertion of pasted words when no page code took the paste.
@@ -2285,7 +2285,7 @@ background reports, spoken text and dictated captions get readable values; histo
 keeps the original fences. Existing tables retain their conversion behavior.
 
 ```powershell
-npm run look -- form-forecast form-board form-chart-bar form-chart-line form-invalid form-streaming form-truncated form-room rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-invalid rich-streaming rich-sequence rich-line-breaks rich-class rich-state rich-er rich-architecture rich-wide-table long-owner long-owner-expanded long-member-reply long-room-messages reply-split-bubbles bot-message-from-centred overlay-long-answer --theme both --width 1120,720,1920x1080
+npm run look -- form-forecast form-forecast-full form-board form-chart-bar form-chart-line form-invalid form-streaming form-truncated form-room rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-table-short-columns rich-invalid rich-streaming rich-sequence rich-line-breaks rich-class rich-state rich-er rich-architecture rich-wide-table long-owner long-owner-expanded long-member-reply long-room-messages reply-split-bubbles bot-message-from-centred overlay-long-answer --theme both --width 1120,720,1920x1080
 ```
 
 There are no message-* scenes in this branch: message-content/message-rich tests,
@@ -3140,8 +3140,10 @@ How to get to it: in a member's conversation, ask for a list or comparison with 
 `callout`, a table with `filter` and link cells, or an `html` page that uses the base classes); press the page card.
 
 ```powershell
-npm run look -- page-document page-document-menu page-document-filter page-base page-base-table page-base-end --theme both --width 1120,720,1920x1080
+npm run look -- page-document page-document-menu page-document-filter page-base page-base-table page-base-end page-file-card page-file-open --theme both --width 1120,720,1920x1080
 ```
+
+page-file-card and page-file-open show the base page, or any page named by `LOOK_PAGE_FILE` (a page a member wrote, read from a copy of the owner's data), in the app's real frame: wrapped by the real core, in both themes and every width. The owner's page never becomes a fixture. A page from elsewhere may ask for fonts the look blocks; that request is the only failure to expect.
 
 page-document checks the large title (31.9 px, 26.4 under 640), the summary in the text's colour with no promise, the contents box (a
 list down the page, a box as wide as the page, or the column beside a 960 px page), three notes in three tone colours with the

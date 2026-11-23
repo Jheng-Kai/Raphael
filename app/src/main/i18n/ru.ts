@@ -404,6 +404,7 @@ export const ru = {
   "cards.yourMessage": "Ваше сообщение",
   "settings.081": "Просмотреть",
   "forms.today": "Сегодня",
+  "forms.hourly": "Почасовой прогноз", "forms.daily": "Прогноз по дням", "forms.feels": "Ощущается как {p0}", "forms.highLow": "Макс. {p0} Мин. {p1}", "forms.humidity": "Влажность {p0}", "forms.wind": "Ветер {p0}", "forms.updated": "Обновлено {p0}",
   "format.001": "Сегодня",
   "auto.today": "Сегодня",
   "forms.board": "Задачи",
