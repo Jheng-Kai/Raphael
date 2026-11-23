@@ -221,7 +221,7 @@ _LOCAL_TIME = re.compile(r"\d{4}-\d{2}-\d{2}T(\d{2}:\d{2})")
 
 
 def _clock(value: Any) -> str | None:
-    """The "HH:MM" of an Open-Meteo local time ("2026-10-20T14:00"), or None."""
+    """The "HH:MM" of an Open-Meteo local time ("YYYY-MM-DDTHH:MM"), or None."""
     found = _LOCAL_TIME.match(value) if isinstance(value, str) else None
     return found.group(1) if found else None
 
