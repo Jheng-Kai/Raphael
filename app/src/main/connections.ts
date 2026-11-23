@@ -15,7 +15,7 @@ import { confirmDelete, openDialog as openMemberDialog } from "./member-dialogs"
 import { managedGroup, pluginTool, storePlugin, type ManagedConnector } from "./plugins-data";
 import { openMcpImport } from "./mcp-import";
 import { isTopLayer, registerDismissal } from "./dismissals";
-import { dayLabel, describeError, formatClock } from "./format";
+import { dayLabel, describeError, formatClock, formatShortDateTime } from "./format";
 import { getLocale, t } from "./i18n";
 import { linkedText } from "./message-content";
 import { STORE_GROUPS, popularApp, popularRank, storeGroup, storeMatches, storeNameRank, storeNear } from "./store-finder";
@@ -701,17 +701,20 @@ const accountStatus = (status: string): { kind: "ok" | "warn" | "err" | "idle"; 
   return { kind: known.kind, text: tr(known.key) };
 };
 
-function accountName(account: NonNullable<ConnectionGroup["accounts"]>[number], index: number): string {
+function accountName(account: NonNullable<ConnectionGroup["accounts"]>[number], index: number, several = false): string {
   const identity = account.display_name || account.alias;
   if (identity && account.label && account.label !== identity) return `${identity} · ${account.label}`;
-  return identity || account.label || t("conn.accountN", { p0: index + 1 });
+  if (identity || account.label) return identity || account.label!;
+  // Accounts with no address and no name (a key's) are told apart by when each was connected, and the newest is said.
+  return [t("conn.accountN", { p0: index + 1 }), several && account.created_at ? formatShortDateTime(account.created_at * 1000) : "",
+    several && account.newest ? t("picker.sortNewest") : ""].filter(Boolean).join(" · ");
 }
 
 /** Show one row per managed account, or one for a signed-in custom server. */
 function accountsHTML(g: ConnectionGroup): string {
   const rows: { label: string; kind: "ok" | "warn" | "err" | "idle"; text: string }[] =
     g.source === "composio" ? (g.accounts ?? []).map((account, n) => ({
-      label: account.display_name ? `${g.name} · ${accountName(account, n)}` : accountName(account, n),
+      label: account.display_name ? `${g.name} · ${accountName(account, n)}` : accountName(account, n, (g.accounts?.length ?? 0) > 1),
       ...accountStatus(account.status),
     }))
     : g.source === "google" ? [{ label: g.accounts?.[0]?.label || t("conn.googleAccount"), ...accountStatus(g.accounts?.[0]?.status ?? (g.status === "ready" ? "ACTIVE" : "INACTIVE")) }]
@@ -1103,7 +1106,18 @@ export function createConnections(host: ConnectionsHost): Connections {
     if (open && !(open.kind === "group" ? groupById(open.id) : entryById(open.id))) open = null;
     // A reading that finds nothing new touches nothing: the page stands as it is, under a press that is on its way.
     refresh();
+    if (status.status === "fulfilled" && managed.some(c => c.accounts?.some(a => a.status === "ACTIVE"))) void rereadAccounts(mine);
     if (configured && status.status === "fulfilled" && !Array.isArray(composioCatalog)) await loadCatalog();
+  }
+
+  /** The page drew what the core stored. One read of Composio's accounts (the core makes it at most every half minute) says
+   *  whether one was removed or changed elsewhere, and only a difference draws the page again. */
+  async function rereadAccounts(mine: number): Promise<void> {
+    try {
+      const read = await api.connectorsStatus(true);
+      if (mine !== loads || JSON.stringify(read.connectors) === JSON.stringify(managed)) return;
+    } catch { return; }
+    await load();
   }
 
   async function loadCatalog(): Promise<void> {
@@ -1302,7 +1316,7 @@ export function createConnections(host: ConnectionsHost): Connections {
       if (anchor) { click(anchor); document.querySelector<HTMLButtonElement>('.menu [data-conn="disconnect"]')?.focus(); }
       return;
     }
-    const name = accountName(account, (group.accounts ?? []).indexOf(account));
+    const name = accountName(account, (group.accounts ?? []).indexOf(account), (group.accounts?.length ?? 0) > 1);
     if (connected && !(await confirmDelete(name, { words: { title: t("account.removeConfirm", { p0: name }), hint: t("account.removeHint"), action: t("account.remove") } }))) return;
     void act(id, async () => { await api.connectorsRemoveAccount(id, accountId); });
   }

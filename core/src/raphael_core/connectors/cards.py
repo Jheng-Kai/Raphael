@@ -445,6 +445,19 @@ class ConnectorCards:
         except Exception:
             return False
 
+    async def verify(self, app: App) -> None:
+        """Before a card is refused because the app is connected, an app Raphael holds as connected is read at Composio once:
+        what is kept is the last read, and an account removed or ended elsewhere would leave a ready app whose tools all fail.
+        A read that cannot be made (no key, a Mac that was not asked yet, Composio unreachable) leaves what is kept."""
+        slug = getattr(app, "composio", "")
+        entry = self._connectors.store.connectors.get("composio:" + slug) if slug else None
+        if entry is None or entry.status != "ACTIVE":
+            return
+        try:
+            await self._connectors.watch_once()
+        except Exception as exc:  # the class only: nothing of what a failed read said is kept
+            logger.warning("Could not read an app's accounts: %s", type(exc).__name__)
+
     def show(self, *, turn_id: int, member_id: int, conversation_id: int | None, app: App, language: str,
              done: Iterable[tuple[str, str]] = (), reconnect: bool = False) -> Card | None:
         """The card a task asks for, or None when the app is connected already."""

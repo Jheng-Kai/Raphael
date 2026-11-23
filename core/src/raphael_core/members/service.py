@@ -176,8 +176,9 @@ def _rpc_error(error: MemberError) -> RpcError:
 
 def _library_error(error: MemberError) -> RpcError:
     """A refusal of the team skill library: its kind leads the message too, since the shell passes the window the message
-    and not the data, and the window says each kind in words (skill-library.ts `failureText`)."""
-    return RpcError(INVALID_PARAMS, f"Invalid params: {error.kind}: {error}", {"kind": error.kind})
+    and not the data, and the window says each kind in words (skill-library.ts `failureText`). `library` tells the
+    agent that the kind is the library's own answer (taken, not_found, ...) and not a wrong argument of its call."""
+    return RpcError(INVALID_PARAMS, f"Invalid params: {error.kind}: {error}", {"kind": error.kind, "library": True})
 
 
 def _uploaded_picture(params, kind):
@@ -1030,7 +1031,7 @@ class MembersService:
         try:
             package = await self.packages.view_async(key)
         except MemberError as error:
-            raise _rpc_error(error) from None
+            raise _library_error(error) from None
         if len(params) < 2:
             raise invalid_params("give a package change")
         if "enabled" in params and type(params["enabled"]) is not bool:
@@ -1075,9 +1076,9 @@ class MembersService:
         try:
             await self.packages.delete_async(params.get("key"))
         except MemberError as error:
-            raise _rpc_error(error) from None
+            raise _library_error(error) from None
         except OSError as error:
-            raise _rpc_error(MemberError("io", "could not remove the skill files")) from error
+            raise _library_error(MemberError("io", "could not remove the skill files")) from error
         self._changed("members.skills.changed", 0)
         self._changed()
         return {"deleted": True}
