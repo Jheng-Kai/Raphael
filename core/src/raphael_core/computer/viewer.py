@@ -15,6 +15,7 @@ import re
 import secrets
 import stat
 import time
+from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from weakref import WeakValueDictionary
@@ -27,6 +28,7 @@ from .vm import GUEST, OWNER_IDLE_S, SHARED, VmError
 from .owner_transfer import CLIPBOARD_MAX, clipboard_text, hand_over, safe_name
 from .viewer_relay import Policy, ViewerRelay
 from .host_view import HostInputGate
+from .host_browser import BrowserError
 from .host_page import navigate as navigate_host_page
 from .host_view_script import SCRIPT as HOST_VIEW
 from .viewer_input import FRAME_PRESENTATION
@@ -42,6 +44,7 @@ TAKE_WAIT_S = 10
 # An open page polls every two seconds and each answer starts several Docker processes.
 UNWATCHED_STATUS_S = 10
 # What the owner's press may open; anything else, such as a program a member wrote, is only shown in its folder.
+NEW_TAB_URL = "https://www.google.com/"
 READABLE = frozenset(".html .htm .pdf .png .jpg .jpeg .gif .webp .svg .txt .md .csv .json .mp3 .wav .m4a .mp4 .webm .docx .xlsx .pptx".split())
 HOST_PAGE = b"""<!doctype html><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; connect-src 'self'; img-src data:; style-src 'unsafe-inline'">
@@ -1403,6 +1406,10 @@ class DesktopViewer:
                             browser.held[tab.member] = new_tab
                         session.host_watched_tab = new_tab
                         browser.notify_view()
+                    # The owner's own new tab opens on a search page, as a browser's start page would.
+                    with suppress(BrowserError, OSError, TimeoutError):
+                        async with asyncio.timeout(10):
+                            await navigate_host_page(browser, new_tab, NEW_TAB_URL)
                 elif action == "navigate" and isinstance(event.get("url"), str) and len(event["url"]) <= 8192:
                     await navigate_host_page(browser, tab, event["url"].strip())
                 elif action == "reload":

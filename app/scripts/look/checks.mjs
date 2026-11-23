@@ -626,7 +626,7 @@ export function checkRendered(name, context = {}) {
       const count = head.querySelector('.skl-count');
       require(visible(close) && page.querySelectorAll('.close-button').length === 1, 'one shared close stands beside the package title');
       require([access, more, toggle].every(visible) && access.nextElementSibling === more && more.nextElementSibling === toggle &&
-        actions.lastElementChild === toggle && head.nextElementSibling === actionsRow, 'access, ⋯ and the rightmost switch are on their own row under the title');
+        actions.lastElementChild === toggle && actionsRow.parentElement === title.parentElement, 'access, ⋯ and the rightmost switch stand at the end of the title row');
       const content = page.closest('.set-content');
       const headings = [...content.querySelectorAll('h1')];
       require(content.firstElementChild === page && page.firstElementChild.firstElementChild === head &&
@@ -635,15 +635,17 @@ export function checkRendered(name, context = {}) {
       const start = content.getBoundingClientRect(), arrow = back.getBoundingClientRect(), titleBox = title.getBoundingClientRect();
       const closeBox = close.getBoundingClientRect(), countBox = count.getBoundingClientRect(), controls = actions.getBoundingClientRect();
       const centre = box => (box.top + box.bottom) / 2;
-      const gap = parseFloat(getComputedStyle(title.parentElement).columnGap) || 0;
       require(visible(count) && title.nextElementSibling === count &&
-        Math.abs(arrow.left - start.left) <= 1 && Math.abs(arrow.top - start.top) <= 1 &&
-        Math.abs(titleBox.left - arrow.right - gap) <= 1 && Math.abs(closeBox.right - start.right) <= 1 &&
-        [titleBox, countBox, closeBox].every(part => Math.abs(centre(arrow) - centre(part)) <= 1),
-        'the back button, title and count start at the top left and share a centre line with the close at the right edge');
+        Math.abs(arrow.left - start.left) <= 1 && Math.abs(arrow.top - start.top) <= 1 && Math.abs(centre(arrow) - centre(closeBox)) <= 1 &&
+        titleBox.top >= arrow.bottom - 1 && Math.abs(titleBox.left - start.left) <= 1 && Math.abs(centre(countBox) - centre(titleBox)) <= 1,
+        'the back button stands alone at the top left, level with the close; the title and count start the row below');
+      const body = document.querySelector('.modal-scrim .modal-body').getBoundingClientRect();
+      require(closeBox.left >= start.right + 8 && closeBox.right <= body.right && [...content.querySelectorAll('*')].filter(visible)
+        .every(node => node === close || close.contains(node) || node.getBoundingClientRect().right <= closeBox.left - 8),
+        'the close stands alone in its column at the top right: nothing of the page runs under it');
       const room = parseFloat(getComputedStyle(actionsRow).paddingInlineEnd) || 0;
-      require(controls.left >= start.left - 1 && Math.abs(controls.right - (start.right - room)) <= 1 &&
-        controls.top >= head.getBoundingClientRect().bottom - 1, 'the controls fit on the right below the title and clear the close');
+      require(Math.abs(controls.right - (start.right - room)) <= 1 && Math.abs(centre(controls) - centre(titleBox)) <= 2,
+        'the controls stand on the title row at its right end, left of the close column');
       const actionBoxes = [access, more, toggle].map(control => control.getBoundingClientRect());
       require(actionBoxes[0].right <= actionBoxes[1].left && actionBoxes[1].right <= actionBoxes[2].left,
         'access and ⋯ are visibly left of the switch');
@@ -5994,10 +5996,13 @@ export function checkRendered(name, context = {}) {
   if (name === "content-width") {
     const settings = document.querySelector('.modal-scrim:not([hidden]) .set-content');
     if (visible(settings)) {
-      const edge = settings.getBoundingClientRect();
+      // The content's own edge: a pane that reaches into the close column keeps it free with its padding.
+      const outer = settings.getBoundingClientRect(), edge = { left: outer.left, top: outer.top, bottom: outer.bottom,
+        right: outer.right - (parseFloat(getComputedStyle(settings).paddingRight) || 0) };
       for (const child of settings.children) {
         if (!visible(child) || ['absolute', 'fixed'].includes(getComputedStyle(child).position)) continue;
-        const box = child.getBoundingClientRect();
+        // A child that reaches into the close column keeps it free with the same padding, so its content edge is compared.
+        const outerBox = child.getBoundingClientRect(), box = { left: outerBox.left, right: outerBox.right - (parseFloat(getComputedStyle(child).paddingRight) || 0) };
         require(box.left >= edge.left - 1 && box.right <= edge.right + 1, `settings content shares one measure: ${child.className}`);
       }
       // Every section's small title stands on its card's left edge, not inset like the card's content, and the controls
@@ -6029,7 +6034,11 @@ export function checkRendered(name, context = {}) {
       const action = settings.querySelector('.set-head > :last-child:not(h1)');
       const form = settings.querySelector('.cs-form .add-grid');
       const contentRight = form ? form.getBoundingClientRect().left + form.clientWidth - parseFloat(getComputedStyle(form).paddingRight) : edge.right;
-      if (visible(action)) require(Math.abs(action.getBoundingClientRect().right - contentRight) <= 1, "settings header action shares the content right edge");
+      if (visible(action) && action.matches('.close-button')) {
+        // The close stands alone in its column at the top right of the body, right of the content's edge.
+        const box = action.getBoundingClientRect(), body = settings.closest('.modal-body')?.getBoundingClientRect() ?? edge;
+        require(box.left >= contentRight + 8 && box.right <= body.right, "settings close stands in its own column right of the content");
+      } else if (visible(action)) require(Math.abs(action.getBoundingClientRect().right - contentRight) <= 1, "settings header action shares the content right edge");
       for (const selector of ['.cs-apps .cs-chips', '.cs-results']) {
         const control = settings.querySelector(selector);
         if (visible(control)) require(Math.abs(control.getBoundingClientRect().right - edge.right) <= 1, `settings toolbar shares the content right edge: ${selector}`);

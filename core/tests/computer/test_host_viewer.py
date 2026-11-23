@@ -422,6 +422,7 @@ async def test_host_browser_toolbar_follows_popups_without_replacing_the_lease(t
             new = browser.tab(opener.member)
             await frame_for(lines, new)
             assert new is not opener and new.view == opener.view
+            assert ("Page.navigate", {"url": "https://www.google.com/"}, new.session) in cdp.calls
             assert (await viewer.control({**first, "held": False}))["control"] == "member"
             tool_view, _, _, _ = await HostComputerTools.browser_call(
                 SimpleNamespace(browser=browser), "browser_tabs", {}, "auto", 1, (("task", 7), 43), 10, None)
