@@ -1,7 +1,7 @@
 """Host navigation heard inside the page and computer frames, whose input cannot bubble to the app.
 
-A frame whose input belongs to someone else defines `window.raphaelOwnsInput`: while it says so (the owner holds a computer's
-controls), the side buttons and the keys go to that computer, as every other key does, and nothing is sent to the app."""
+An enlarged computer forwards Escape and navigation shortcuts to the host even
+while the owner holds its input, so the host can fold the view and hand it back."""
 
 FRAME_NAVIGATION = """(() => {
   const mac = /Mac/i.test(navigator.platform);

@@ -4547,13 +4547,37 @@ export function checkRendered(name, context = {}) {
     require(faces.every(face => face.naturalWidth === 192 && face.naturalHeight === 192), "owner photo is bounded to 192px");
     return {check:name, faces:faces.length};
   }
-  if (name === 'desktop-owner-small') {
+  if (['desktop-owner-small', 'desktop-owner-shrunk', 'desktop-owner-request-pending',
+    'desktop-wallpaper-before-frame'].includes(name)) {
     const panel = document.querySelector('.desktop-panel'), calls = window.__look.calls;
-    require(visible(panel) && !panel.hasAttribute('data-expanded') && panel.dataset.interactive === 'true', 'the Computer panel is small and interactive');
-    require(visible(panel.querySelector('[data-desktop="enlarge"]')) && visible(panel.querySelector('[data-desktop="return"]')), 'enlarge and Stop are available beside the screen');
-    require(panel.querySelector('.desktop-mode-label').dataset.mode === 'operating', 'the pill says the owner is in control');
-    require(calls.filter(call => call.method === 'computer.viewer_control').length === 1 &&
-      calls.filter(call => call.method === 'computer.viewer_open').length === 1, 'the same lease and stream are used at either size');
+    const frame = panel.querySelector('iframe'), wallpaper = panel.querySelector('.desktop-screen .desktop-wallpaper');
+    require(visible(panel) && !panel.hasAttribute('data-expanded') && panel.dataset.interactive === 'false', 'the Computer panel is view-only');
+    require(!visible(panel.querySelector('.desktop-mode')) && !visible(panel.querySelector('[data-desktop="return"]')),
+      'the small panel has no control pill');
+    if (name === 'desktop-wallpaper-before-frame') {
+      require(visible(wallpaper) && wallpaper.complete && wallpaper.naturalWidth > 0 && frame.hidden,
+        'the wallpaper is still visible after connection and before the first picture');
+    } else {
+      require(visible(panel.querySelector('[data-desktop="enlarge"]')) && getComputedStyle(frame).pointerEvents === 'none' &&
+        frame.tabIndex === -1, 'enlarge is available and the page takes no input');
+    }
+    const controls = calls.filter(call => call.method === 'computer.viewer_control');
+    if (name === 'desktop-owner-small') require(!controls.length, 'preview input never acquires a lease');
+    if (name === 'desktop-owner-shrunk') require(controls.length === 2 && controls[0].params.held &&
+      !controls[1].params.held && !controls[1].params.takeover, 'folding releases the same lease without finishing a request');
+    if (name === 'desktop-owner-request-pending') {
+      const card = document.querySelector('.computer-card');
+      require(visible(card) && shownText(card).includes('需要你') &&
+        visible(card.querySelector('[data-card-desktop="take"].pri')) &&
+        visible(card.querySelector('[data-card-desktop="return"]')), 'the card still needs the owner and offers Take over and Done');
+    }
+    return {check:name};
+  }
+  if (name === 'desktop-host-toolbar-navigation') {
+    const address = document.querySelector('.host-browser-address');
+    require(visible(address) && address.value === 'https://videos.example.invalid/library/saved', 'the address is editable while watching');
+    require(window.__look.calls.filter(call => call.method === 'computer.viewer_control').every((call, index, all) =>
+      call.params.held ? all.slice(index + 1).some(next => !next.params.held) : true), 'navigation does not require a held lease');
     return {check:name};
   }
   if (name.startsWith("computer-") && name !== "computer-panel-quiet" || ['desktop-owner','desktop-handback','desktop-viewer','desktop-offline','desktop-absent'].includes(name)) {
@@ -4891,12 +4915,9 @@ export function checkRendered(name, context = {}) {
         toolbar.querySelector('[data-browser-tab="library"]'), 'the popup and opener share the strip');
     }
     if (name === 'desktop-host-tabs-watch' || name === 'desktop-host-tabs-control') {
-      const held = name === 'desktop-host-tabs-control';
-      require(visible(toolbar.querySelector('.host-browser-address')) === held &&
-        visible(toolbar.querySelector('.host-browser-url')) !== held, 'only the held browser has an editable address');
-      require([...toolbar.querySelectorAll('[data-browser-action="close"]')].every(button => !button.disabled), 'tabs can close while watching');
-      require([...toolbar.querySelectorAll('[data-browser-action="new"], [data-browser-action="reload"]')]
-        .every(button => button.disabled === !held), 'browser mutations require takeover');
+      require(visible(toolbar.querySelector('.host-browser-address')), 'the Chrome address is editable in both views');
+      require([...toolbar.querySelectorAll('[data-browser-action="close"], [data-browser-action="new"], [data-browser-action="reload"]')]
+        .every(button => !button.disabled), 'the Chrome toolbar actions stay enabled in both views');
     }
     return {check:name, width:page.width, height:page.height};
   }

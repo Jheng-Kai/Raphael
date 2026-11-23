@@ -32,7 +32,7 @@
 /* The small preview keeps only a notice under its screen: the rest of the foot belongs to the larger view. */
 .desktop-panel:not([data-expanded]) :is(.desktop-foot, .desktop-notes) { display: contents; }
 .desktop-panel:not([data-expanded]) :is(.desktop-teach-missing, .desktop-recording, .desktop-request, .desktop-review, .desktop-try, .desktop-actions),
-.desktop-panel:not([data-expanded], [data-live]) .desktop-bar { display: none; }
+.desktop-panel:not([data-expanded]) .desktop-bar { display: none; }
 .desktop-panel[data-expanded] .desktop-actions > :is([data-desktop="take"], [data-desktop="revoke"]) { display: none; }
 .desktop-panel[data-expanded]:not([data-teaching]) .desktop-actions > [data-desktop="teach"] { display: none; }
 .desktop-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); padding: 0 var(--sp-1) var(--sp-2); }
@@ -57,7 +57,7 @@
 }
 .desktop-screen[data-host-browser] { display: grid; grid-template-rows: auto auto; grid-template-columns: minmax(0, 1fr); aspect-ratio: auto; }
 .desktop-screen[data-host-browser]::before { content: ""; grid-area: 2 / 1; width: 100%; aspect-ratio: 1280 / 900; }
-.desktop-screen[data-host-browser] > :is(iframe, .desktop-open) { grid-area: 2 / 1; position: absolute; inset: 0; min-height: 0; }
+.desktop-screen[data-host-browser] > :is(iframe, .desktop-open, .desktop-wallpaper, .desktop-last) { grid-area: 2 / 1; position: absolute; inset: 0; min-height: 0; }
 .host-browser-toolbar {
   grid-area: 1 / 1; z-index: 2; min-width: 0; container-type: inline-size;
   --text: var(--host-browser-text); --text-2: var(--host-browser-text-2);
@@ -85,15 +85,14 @@
 }
 .host-browser-toolbar .btn.host-browser-tab-button:is(:hover, :active):not(:disabled) { background: transparent; }
 .host-browser-tab[data-shown] .host-browser-tab-button { font-weight: var(--weight-medium); }
-.host-browser-tab-title, .host-browser-url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.host-browser-tab-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .host-browser-favicon { display: flex; align-items: center; justify-content: center; flex: none; width: 16px; height: 16px; color: var(--text-2); }
 .host-browser-favicon :is(img, svg) { width: 16px; height: 16px; }
 .host-browser-address-row { gap: var(--sp-1); padding: var(--sp-1) var(--sp-2) var(--sp-2); }
-.host-browser-url, .host-browser-address {
+.host-browser-address {
   flex: 1; min-width: 0; height: var(--h-field); padding: 0 var(--sp-2);
   border: 1px solid transparent; border-radius: var(--r-pill); font-size: var(--fs-xs);
 }
-.host-browser-url { line-height: calc(var(--h-field) - 2px); color: var(--text-2); }
 .host-browser-address { border-color: var(--line); background: var(--surface-2); color: var(--text); }
 .host-browser-address[aria-invalid] { border-color: var(--err); }
 .host-browser-error { margin: 0 var(--sp-2) var(--sp-2); color: var(--err); font-size: var(--fs-xs); }
@@ -196,9 +195,7 @@ iframe[data-desktop-stream][hidden] { display: block !important; position: absol
 .window-chrome > .btn.icon[data-desktop="collapse"]:active:not(:disabled) { background: var(--pressed); }
 .window-chrome > .back-button { align-self: center; }
 .desktop-dock { display: none; }
-.desktop-panel:is([data-expanded], [data-live]) .desktop-dock { grid-column: 2; display: flex; align-items: center; gap: var(--sp-2); }
-.desktop-dock > [data-desktop="enlarge"] .desktop-open-pill { padding: 0; background: transparent; color: inherit; opacity: 1; }
-.desktop-dock > [data-desktop="enlarge"] .desktop-open-pill > span { display: none; }
+.desktop-panel[data-expanded] .desktop-dock { grid-column: 2; display: flex; align-items: center; gap: var(--sp-2); }
 .desktop-mode, .desktop-panel[data-expanded] .desktop-actions { display: flex; align-items: center; gap: var(--sp-1); height: 36px; padding: 0 4px 0 12px; border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--surface-2); }
 .desktop-panel[data-expanded] .desktop-actions { grid-column: 3; justify-self: start; flex-wrap: wrap; justify-content: flex-start; height: auto; min-height: 36px; max-width: 100%; box-sizing: border-box; padding: 6px 4px; row-gap: 6px; }
 /* No demonstration, or nothing of it to press (its review is open): no second pill. */

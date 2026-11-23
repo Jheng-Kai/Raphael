@@ -1495,7 +1495,7 @@ export function installMock(fixture, config = {}, target = window) {
         // fixture's RFB page reads `seat`, and paints that seat's colour band when the scene asks (`seatMarks`).
         (state.sessionLog ??= []).push({ session, member: p.member_id });
         const host = data.desktop?.transport === "host";
-        return { session, url: `${location.origin}/scripts/look/fixtures/${host ? "host.html" : "desktop.html"}?seat=${p.member_id ?? 0}${variant.seatMarks ? "&mark=1" : ""}${host ? "&transport=host" : ""}` };
+        return { session, url: `${location.origin}/scripts/look/fixtures/${host ? "host.html" : "desktop.html"}?seat=${p.member_id ?? 0}${variant.seatMarks ? "&mark=1" : ""}${variant.desktopAwaitPaint ? "&awaitPaint=1" : ""}${host ? "&transport=host" : ""}` };
       }
       case "computer.viewer_renew": {
         if (!desktopSessions.has(p.session)) throw new Error("desktop viewer expired");

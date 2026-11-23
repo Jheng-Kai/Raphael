@@ -86,8 +86,12 @@ async def test_private_takeover_blocks_every_tool_and_resumes_once_after_explici
         opened = await viewer.open({"member_id": 1, "conversation_id": 11})
         assert (await viewer.renew(opened))["control"] == "member"
         await viewer.control({**opened, "held": True})
-        with pytest.raises(RpcError):
-            await viewer.control({**opened, "held": False})
+        released = await viewer.control({**opened, "held": False})
+        assert released["control"] == "member"
+        assert released["works"][0]["state"] == "waiting_control"
+        assert vm.work.pending(vm.target(1)) is work
+        assert vm.target(1).key not in viewer.owners and not task.done()
+        assert (await call("get_desktop_state")).kind == "waiting_for_owner"
         await viewer.control({**opened, "held": False, "takeover": work.request_id})
         await viewer.control({**opened, "held": False, "takeover": work.request_id})
         result = await task

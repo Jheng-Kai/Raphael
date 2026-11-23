@@ -27,7 +27,7 @@ from .viewer_relay import Policy, ViewerRelay
 from .host_view import HostInputGate
 from .host_page import navigate as navigate_host_page
 from .host_view_script import SCRIPT as HOST_VIEW
-from .viewer_input import INPUT_TAKEOVER, VM_INPUT
+from .viewer_input import FRAME_PRESENTATION
 from ..paths import local_storage_root
 
 LEASE_SECONDS = 15
@@ -66,7 +66,22 @@ async function connect() {
     rfb.scaleViewport = true;
     rfb.clipViewport = false;
     rfb.background = 'transparent';
-    rfb.addEventListener('connect', () => tell('connected'));
+    const client = rfb;
+    rfb.addEventListener('connect', () => {
+      tell('connected');
+      // noVNC reports connection before the initial framebuffer update. Its
+      // canvas is transparent until the server's pixels reach the display.
+      const canvas = screen.querySelector('canvas');
+      const context = canvas?.getContext('2d');
+      const deadline = performance.now() + 20000;
+      function firstPicture() {
+        if (rfb !== client || !context) return;
+        if (canvas.width && canvas.height && context.getImageData(canvas.width >> 1, canvas.height >> 1, 1, 1).data[3]) {
+          tell('painted');
+        } else if (performance.now() < deadline) setTimeout(firstPicture, 50);
+      }
+      firstPicture();
+    });
     rfb.addEventListener('disconnect', () => {rfb = null; tell('disconnected');});
     rfb.addEventListener('securityfailure', () => {rfb?.disconnect(); tell('disconnected');});
   } catch { tell('unreachable'); }
@@ -190,8 +205,8 @@ addEventListener('pagehide', () => {snapshot(); clearInterval(framesTimer); fram
 document.documentElement.classList.remove('noVNC_loading');
 connect();
 setInterval(() => { if (!rfb) connect(); }, 2000);
-''' + b"window.raphaelOwnsInput = () => !!rfb && !rfb.viewOnly;\n" + FRAME_NAVIGATION.encode() + INPUT_TAKEOVER + VM_INPUT
-HOST_SCRIPT = FRAME_NAVIGATION.encode() + INPUT_TAKEOVER + HOST_VIEW
+''' + b"window.raphaelOwnsInput = () => !!rfb && !rfb.viewOnly;\n" + FRAME_NAVIGATION.encode() + FRAME_PRESENTATION
+HOST_SCRIPT = FRAME_NAVIGATION.encode() + FRAME_PRESENTATION + HOST_VIEW
 
 
 def embedded_page(content):
@@ -804,20 +819,29 @@ class DesktopViewer:
                     await self.relay.call(self.relay.release(replaced))
             await self.disconnect_target(target, keep=session)
             await self.check_session_target(token, session)
-        elif owner == token:
-            if pending and params.get("takeover") != pending.request_id:
-                raise invalid_params("explicit takeover handback required")
-            # The socket's RFB gate rejects input as soon as ownership is removed.
-            self.owners.pop(target.key, None)
-            self.publish_session(token)
-            if self.relay:
-                await self.relay.call(self.relay.release(token))
-                await self.check_session_target(token, session)
-            await self.disconnect_target(target, keep=session)
-            await self.check_session_target(token, session)
-            self.vm.hold(target, False)
-            if pending:
-                self.vm.work.complete(target, params["takeover"])
+        else:
+            request = params.get("takeover")
+            if pending and request is not None:
+                if request != pending.request_id:
+                    raise invalid_params("explicit takeover handback required")
+                if owner not in (None, token):
+                    raise invalid_params("desktop control required")
+            if owner == token:
+                # The socket's RFB gate rejects input as soon as ownership is removed.
+                self.owners.pop(target.key, None)
+                self.publish_session(token)
+                try:
+                    if self.relay:
+                        await self.relay.call(self.relay.release(token))
+                        await self.check_session_target(token, session)
+                    await self.disconnect_target(target, keep=session)
+                    await self.check_session_target(token, session)
+                finally:
+                    # A pending private step keeps its own hold on member tools until Done.
+                    if not self.vm.work.pending(target):
+                        self.vm.hold(target, False)
+            if pending and request is not None:
+                self.vm.work.complete(target, request)
         session.expires = self.vm.clock() + LEASE_SECONDS
         self.publish_session(token)
         if session.sockets:
@@ -1236,12 +1260,11 @@ class DesktopViewer:
         if tab is None:
             return None
         history = {}
-        if self.host_input_allowed(token, session):
-            try:
-                async with asyncio.timeout(1):
-                    history = await browser.command(tab, "Page.getNavigationHistory") or {}
-            except (ValueError, OSError, TimeoutError):
-                pass
+        try:
+            async with asyncio.timeout(1):
+                history = await browser.command(tab, "Page.getNavigationHistory") or {}
+        except (ValueError, OSError, TimeoutError):
+            pass
         if not self.host_current(session) or self.host_selected(session) is not tab:
             return None
         index = history.get("currentIndex", 0)
@@ -1256,45 +1279,42 @@ class DesktopViewer:
         tab = browser.tabs.get(identifier) if isinstance(identifier, str) else None
         if shown is None or tab is None or not tab.ready or tab.member != session.member_id:
             return False
-        owned = self.host_input_allowed(token, session)
-        if not owned:
-            if session.preview or tab.member in browser.held or tab.member in browser.handback:
-                return False
-            if action == "select":
-                session.host_watched_tab = tab
-                browser.notify_view()
-                return True
-            if action == "close":
-                async with browser.action_lock(tab):
-                    if tab.member in browser.held or tab.member in browser.handback:
-                        return False
-                    await browser.close_tab(tab, by_owner=True)
-                return True
+        if session.preview:
             return False
         async with browser.action_lock(tab):
-            if (not self.host_input_allowed(token, session) or not browser.live(tab)
+            owned = self.host_input_allowed(token, session)
+            handback = browser.handback.get(tab.member)
+            if (not self.host_current(session)
+                    or not owned and tab.member in browser.held
                     or action not in ("select", "close") and tab is not self.host_selected(session)):
+                return False
+            if handback is not None and (action == "select" or not owned) and not browser.related_tabs(tab, handback):
                 return False
             async with asyncio.timeout(4):
                 if action == "select":
-                    handback = browser.handback.get(tab.member)
-                    if handback is not None and not browser.related_tabs(tab, handback):
-                        return False
-                    await session.host_gate.release()
-                    await browser.activate(tab)
+                    if owned:
+                        await session.host_gate.release()
+                        await browser.activate(tab)
+                    else:
+                        browser.select(tab)
                     session.host_watched_tab = tab
-                    browser.held[tab.member] = self.host_selected(session)
+                    if owned:
+                        browser.held[tab.member] = self.host_selected(session)
+                    browser.notify_view()
                 elif action == "close":
-                    if session.host_gate.tab is tab:
+                    if owned and session.host_gate.tab is tab:
                         await session.host_gate.release()
                     await browser.close_tab(tab, by_owner=True)
                 elif action == "new":
-                    await session.host_gate.release()
+                    if owned:
+                        await session.host_gate.release()
                     new_tab = await browser.new_tab(tab.member, tab.workspace, session.conversation_id, previous=tab)
                     async with browser.action_lock(new_tab):
-                        await browser.activate(new_tab)
+                        if owned:
+                            await browser.activate(new_tab)
+                            browser.held[tab.member] = new_tab
                         session.host_watched_tab = new_tab
-                        browser.held[tab.member] = new_tab
+                        browser.notify_view()
                 elif action == "navigate" and isinstance(event.get("url"), str) and len(event["url"]) <= 8192:
                     await navigate_host_page(browser, tab, event["url"].strip())
                 elif action == "reload":
@@ -1306,7 +1326,8 @@ class DesktopViewer:
                         await browser.command(tab, "Page.navigateToHistoryEntry", {"entryId": history["entries"][index]["id"]})
                 else:
                     return False
-        session.input_at = self.vm.clock()
+        if owned:
+            session.input_at = self.vm.clock()
         return True
 
     async def aclose(self):

@@ -1028,40 +1028,32 @@ export async function perform(page, step, evidenceDirectory) {
       });
       return {check:'desktop-drop-file', synthetic:true};
     }
-    case 'desktop-owner-press': {
-      const handle = await visible('.desktop-screen iframe:not([hidden])');
-      const frame = await handle.contentFrame();
-      const count = await frame.evaluate(() => window.__desktopPointerEvents?.length ?? 0);
-      await frame.click('canvas');
-      await page.waitForFunction(() => document.querySelector('.desktop-panel')?.dataset.interactive === 'true');
-      await frame.waitForFunction(at => {
-        const events = window.__desktopPointerEvents ?? [];
-        return events[at] === 'mousePressed' && events[at + 1] === 'mouseReleased';
-      }, {}, count);
-      await handle.dispose();
-      return {check:'desktop-owner-press', synthetic:true};
+    case 'desktop-wait-address': {
+      await page.waitForFunction(value => {
+        const address = document.querySelector('.host-browser-address');
+        return address !== document.activeElement && address?.value === value;
+      }, {timeout:6000}, step.value);
+      break;
     }
-    case 'desktop-owner-first-input': {
+    case 'desktop-preview-input': {
       const handle = await visible('.desktop-screen iframe:not([hidden])');
+      const box = await handle.boundingBox();
       const frame = await handle.contentFrame();
-      await frame.waitForFunction(() => !window.raphaelOwnsInput(), { timeout: 6000 });
-      if (step.input === 'key') {
-        const count = await frame.evaluate(() => window.__desktopAcceptedKeys ?? 0);
-        await frame.focus('canvas');
-        await page.keyboard.press('k');
-        await frame.waitForFunction(before => window.__desktopAcceptedKeys === before + 1, { timeout: 6000 }, count)
-          .catch(async () => { throw new Error('First key was not delivered: ' + JSON.stringify(await frame.evaluate(() => ({
-            keys:window.__desktopAcceptedKeys, active:document.activeElement?.tagName, held:window.raphaelOwnsInput(),
-            controls:parent.__look.calls.filter(call => call.method === 'computer.viewer_control').map(call => call.params.held),
-          })))); });
-      } else {
-        await frame.hover('canvas');
-        await page.mouse.wheel({ deltaY: 64 });
-        await frame.waitForFunction(() => window.__desktopWheelDelta === 64);
-      }
-      await page.waitForFunction(() => document.querySelector('.desktop-panel')?.dataset.interactive === 'true');
+      const input = () => frame.evaluate(() => ({
+        pointer: window.__desktopPointerEvents?.length ?? 0, keys: window.__desktopAcceptedKeys ?? 0,
+        wheel: window.__desktopWheelDelta ?? 0,
+      }));
+      const before = await input();
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.wheel({ deltaY: 64 });
+      await page.keyboard.press('k');
+      await page.click('[data-desktop="enlarge"]');
+      await page.waitForSelector('.desktop-panel[data-expanded][data-interactive="false"]');
+      await page.click('[data-desktop="collapse"]');
+      const after = await input();
+      if (JSON.stringify(before) !== JSON.stringify(after)) throw new Error('The preview delivered page input');
       await handle.dispose();
-      return {check:'desktop-owner-first-input', input:step.input, synthetic:true};
+      return {check:'desktop-preview-input', synthetic:true};
     }
     case 'desktop-owner-typing': {
       await page.waitForFunction(() => document.querySelector('.desktop-panel')?.dataset.interactive === 'true');

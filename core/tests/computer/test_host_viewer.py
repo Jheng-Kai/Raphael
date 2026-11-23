@@ -4,7 +4,8 @@ import asyncio
 import base64
 import json
 import os
-from contextlib import aclosing, asynccontextmanager
+from contextlib import aclosing, asynccontextmanager, suppress
+from time import perf_counter
 from types import SimpleNamespace
 
 import httpx
@@ -44,6 +45,8 @@ class Cdp:
             return {"frameTree": {"frame": {"id": session, "url": "about:blank"}}}
         elif method == "Page.navigate":
             return {}
+        elif method == "Page.captureScreenshot":
+            return {"data": base64.b64encode(session.encode()).decode()}
         elif method == "Page.getNavigationHistory":
             return {"currentIndex": 1, "entries": [{"id": 17}, {"id": 23}, {"id": 29}]}
 
@@ -317,6 +320,27 @@ async def frame_for(lines, tab, size=None):
                 return frame
 
 
+async def test_idle_screencast_starts_and_restarts_with_a_screenshot(tmp_path):
+    viewer, browser = host_viewer(tmp_path)
+    cdp = browser.cdp = Cdp(browser)
+    cdp.frame = lambda _session: None
+    tab = fake_tab(browser, 1, 10)
+    tab.viewport = (1280, 900)
+    try:
+        opened = await viewer.open({"member_id": 1, "conversation_id": 10})
+        base = opened["url"].removesuffix("host.html")
+        async with httpx.AsyncClient(trust_env=False, timeout=5) as client:
+            for _ in range(2):
+                async with host_frames(client, base) as lines:
+                    async with asyncio.timeout(1):
+                        await frame_for(lines, tab, (1280, 900))
+                await expect_eventually(lambda: not tab.cast.watchers)
+        assert [call[0] for call in cdp.calls].count("Page.captureScreenshot") == 2
+    finally:
+        await viewer.aclose()
+        await browser.aclose()
+
+
 async def test_host_browser_toolbar_follows_popups_without_replacing_the_lease(tmp_path, monkeypatch):
     async def snapshot(browser, tab, arguments):
         return {"tab_id": tab.id}, []
@@ -324,6 +348,7 @@ async def test_host_browser_toolbar_follows_popups_without_replacing_the_lease(t
     monkeypatch.setattr("raphael_core.computer.host_page.snapshot", snapshot)
     viewer, browser = host_viewer(tmp_path)
     cdp = browser.cdp = Cdp(browser)
+    cdp.socket = SimpleNamespace(port=12345)
     opener = fake_tab(browser, 1, 10)
     other = fake_tab(browser, 2, 20)
     params = {"member_id": 1, "conversation_id": 10}
@@ -338,9 +363,12 @@ async def test_host_browser_toolbar_follows_popups_without_replacing_the_lease(t
                 return await client.post(base + "host-browser", json={"action": name, "tab": tab.id, **values}, headers=origin)
 
             assert (await action("select", other)).status_code == 403
-            assert (await action("new", opener)).status_code == 403
-            assert (await action("navigate", opener, url="https://example.test")).status_code == 403
-            cdp.socket = SimpleNamespace(port=12345)
+            assert (await action("navigate", opener, url="https://example.test")).status_code == 204
+            assert ("Page.navigate", {"url": "https://example.test"}, opener.session) in cdp.calls
+            assert (await action("back", opener)).status_code == 204
+            assert (await action("forward", opener)).status_code == 204
+            assert (await action("reload", opener)).status_code == 204
+            assert not browser.held
             browser._event("Target.targetCreated", {"targetInfo": {
                 "type": "page", "targetId": "popup", "openerId": opener.target, "title": "Sign-in", "url": "about:blank",
             }}, None)
@@ -359,7 +387,7 @@ async def test_host_browser_toolbar_follows_popups_without_replacing_the_lease(t
 
             assert (await action("select", opener)).status_code == 204
             await frame_for(lines, opener)
-            assert browser.selected(opener.member) is popup
+            assert browser.selected(opener.member) is opener
             assert (await viewer.renew(first))["control"] == "member"
             assert not any(call[0] == "Page.bringToFront" for call in cdp.calls)
             assert (await action("select", popup)).status_code == 204
@@ -410,6 +438,10 @@ async def test_host_browser_toolbar_follows_popups_without_replacing_the_lease(t
                 "auto", 1, (("task", 7), 43), 10, None)
             assert recovery["status"] == "tab_closed" and tab is opener
             assert not any(method == "Input.dispatchMouseEvent" for method, _, _ in cdp.calls)
+            assert (await action("new", opener)).status_code == 204
+            watched = browser.selected(opener.member)
+            assert watched is not opener and not browser.held
+            await frame_for(lines, watched)
     finally:
         await viewer.aclose()
         await browser.aclose()
@@ -587,6 +619,61 @@ async def test_native_chrome_sign_in_handback_releases_input_and_resumes_same_ta
             if request and not request.done():
                 request.cancel()
                 await asyncio.gather(request, return_exceptions=True)
+            try:
+                await viewer.aclose()
+            finally:
+                await browser.aclose()
+                await asyncio.sleep(0.1)
+
+
+@pytest.mark.skipif(chrome_executable() is None or bool(os.environ.get("CI")), reason="Google Chrome is unavailable or this is CI")
+async def test_native_static_chrome_reconnect_and_toolbar_without_control(tmp_path):
+    async def static_page(reader, writer):
+        try:
+            async with asyncio.timeout(2):
+                await reader.readuntil(b"\r\n\r\n")
+            body = b"<!doctype html><title>Static page</title><p>Static page with no animation.</p>"
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\nContent-Length: "
+                         + str(len(body)).encode() + b"\r\n\r\n" + body)
+            await writer.drain()
+        except (OSError, asyncio.IncompleteReadError, TimeoutError):
+            pass
+        finally:
+            writer.close()
+            with suppress(OSError):
+                await writer.wait_closed()
+
+    viewer, browser = host_viewer(tmp_path.resolve())
+    async with await asyncio.start_server(static_page, "127.0.0.1", 0) as site:
+        try:
+            tab, _ = await browser.open_tab(1, tmp_path, 10)
+            url = f"http://127.0.0.1:{site.sockets[0].getsockname()[1]}"
+            assert await host_page.navigate(browser, tab, url + "/first")
+            await expect_eventually(lambda: tab.url == url + "/first")
+            opened = await viewer.open({"member_id": 1, "conversation_id": 10})
+            base = opened["url"].removesuffix("host.html")
+            headers = {"Origin": viewer.origin}
+            async with httpx.AsyncClient(trust_env=False, timeout=5) as client:
+                for attempt in ("start", "reconnect"):
+                    await asyncio.sleep(0.5)  # Let the static page finish painting before attachment.
+                    before = perf_counter()
+                    async with asyncio.timeout(1), host_frames(client, base) as lines:
+                        frame = await frame_for(lines, tab, (1280, 900))
+                        assert base64.b64decode(frame["image"]).startswith(b"\xff\xd8")
+                        print(f"Static Chrome {attempt}: {(perf_counter() - before) * 1000:.0f} ms")
+                        if attempt == "reconnect":
+                            async def action(name, **params):
+                                return await client.post(base + "host-browser", headers=headers,
+                                                         json={"action": name, "tab": tab.id, **params})
+
+                            assert (await action("navigate", url=url + "/second")).status_code == 204
+                            await expect_eventually(lambda: tab.url == url + "/second")
+                            result = await browser.command(tab, "Runtime.evaluate", {
+                                "expression": "location.pathname", "returnByValue": True})
+                            assert result["result"]["value"] == "/second"
+                            assert browser.selected(1) is tab and not browser.held
+                    await expect_eventually(lambda: not tab.cast.watchers)
+        finally:
             try:
                 await viewer.aclose()
             finally:

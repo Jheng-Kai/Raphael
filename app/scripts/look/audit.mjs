@@ -348,7 +348,10 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
   // picker were drawn over the open tab's). Ask the element itself, not the attribute.
   for (const element of doc.body.querySelectorAll('[hidden]')) {
     if (element.namespaceURI === 'http://www.w3.org/2000/svg' || element.getAttribute('hidden') === 'until-found') continue;
-    const display = win.getComputedStyle(element).display;
+    const style = win.getComputedStyle(element);
+    // The viewer keeps its layout box so its remote canvas can size itself before the first draw.
+    if (element.matches('iframe[data-desktop-stream]') && style.visibility === 'hidden') continue;
+    const { display } = style;
     // Inside another hidden thing an element keeps its own computed display but has no box, so the box is the test.
     if (display !== 'none' && (display === 'contents' ? element.parentElement?.getClientRects().length : element.getClientRects().length)) productRules.push({ ...describe(element), rule: 'R-UI-140', reason: `An element with the hidden attribute is drawn (display: ${display})` });
   }

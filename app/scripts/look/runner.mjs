@@ -306,6 +306,10 @@ export async function run(options) {
               (result.traces ??= []).push(trace);
             }
           }
+          if (assertion?.check === 'desktop-host-toolbar-navigation' &&
+              !result.hostActions?.some(action => action.action === 'navigate')) {
+            throw new Error('The Chrome toolbar never sent its navigation request');
+          }
           if (assertion?.check) (result.assertions ??= []).push(assertion);
         }
         await page.evaluate(decodeVisibleImages);

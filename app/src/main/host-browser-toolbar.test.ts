@@ -21,16 +21,21 @@ function setup() {
 
 afterEach(() => document.body.replaceChildren());
 
-it("shows the selected Chrome tab, allows watch-only selection and keeps the address plain text", () => {
+it("opens, selects and closes Chrome tabs and offers history while watching", () => {
   const { screen, send, toolbar, button, address, model } = setup();
-  toolbar.draw(model, false);
+  toolbar.draw(model);
   expect(button('[data-browser-tab="popup"][aria-pressed="true"]').getAttribute("aria-label")).toBe(tabs[1].title);
   expect(screen.querySelector(".host-browser-favicon img")?.getAttribute("src")).toBe(tabs[1].favicon);
-  expect(screen.querySelector(".host-browser-url")?.textContent).toBe(tabs[1].url);
-  expect(address.hidden).toBe(true);
-  for (const action of ["new", "back", "forward", "reload"]) {
-    expect(button(`[data-browser-action="${action}"]`).disabled).toBe(true);
+  expect(address.value).toBe(tabs[1].url);
+  expect(address.hidden).toBe(false);
+  expect(button('[data-browser-action="forward"]').disabled).toBe(true);
+  for (const action of ["new", "back", "reload"]) {
+    const control = button(`[data-browser-action="${action}"]`);
+    expect(control.disabled).toBe(false);
+    control.click();
+    expect(send).toHaveBeenLastCalledWith({action, tab:"popup"}, expect.any(Number));
   }
+  send.mockClear();
   button('[data-browser-tab="page"][data-browser-action="select"]').click();
   expect(send).toHaveBeenCalledOnce();
   expect(send.mock.calls[0][0]).toEqual({ action: "select", tab: "page" });
@@ -38,20 +43,20 @@ it("shows the selected Chrome tab, allows watch-only selection and keeps the add
   expect(close.disabled).toBe(false);
   close.click();
   expect(send).toHaveBeenLastCalledWith({ action: "close", tab: "popup" }, expect.any(Number));
-  toolbar.draw(undefined, false);
+  toolbar.draw(undefined);
   expect(screen.hasAttribute("data-host-browser")).toBe(false);
 });
 
 it("submits the address for the displayed tab and preserves an in-progress edit through state updates", () => {
   const { screen, send, toolbar, button, address, model } = setup();
-  toolbar.draw(model, true);
+  toolbar.draw(model);
   expect(address.hidden).toBe(false);
   expect(button('[data-browser-action="back"]').disabled).toBe(false);
   expect(button('[data-browser-action="forward"]').disabled).toBe(true);
   address.focus();
   address.value = "work.example.test/next";
   address.dispatchEvent(new Event("input"));
-  toolbar.draw({ ...model, forward: true }, true);
+  toolbar.draw({ ...model, forward: true });
   expect(address.value).toBe("work.example.test/next");
   address.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", isComposing: true }));
   expect(send).not.toHaveBeenCalled();
@@ -60,7 +65,7 @@ it("submits the address for the displayed tab and preserves an in-progress edit 
   toolbar.result(send.mock.calls[0][1], false);
   expect(address.getAttribute("aria-invalid")).toBe("true");
   expect(screen.querySelector(".host-browser-error")?.textContent).toBe(t("browser.navigationFailed"));
-  toolbar.draw({ ...model, shown: "page" }, true);
+  toolbar.draw({ ...model, shown: "page" });
   expect(address.hasAttribute("aria-invalid")).toBe(false);
   expect(address.value).toBe(tabs[0].url);
   button('[data-browser-action="reload"]').click();

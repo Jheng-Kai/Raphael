@@ -11,17 +11,16 @@ export function mountHostBrowserToolbar(screen: HTMLElement, send: (action: Host
   bar.className = "host-browser-toolbar";
   bar.hidden = true;
   bar.innerHTML = '<div class="host-browser-tabs"><div class="host-browser-strip" role="group"></div><div class="host-browser-add"></div></div>' +
-    '<div class="host-browser-address-row"><div class="host-browser-history"></div><span class="host-browser-url" dir="ltr"></span>' +
-    '<input class="host-browser-address" type="text" inputmode="url" dir="ltr" autocomplete="off" spellcheck="false" maxlength="8192" hidden></div>' +
+    '<div class="host-browser-address-row"><div class="host-browser-history"></div>' +
+    '<input class="host-browser-address" type="text" inputmode="url" dir="ltr" autocomplete="off" spellcheck="false" maxlength="8192"></div>' +
     '<p class="host-browser-error" role="status" hidden></p>';
   screen.prepend(bar);
   const strip = bar.querySelector<HTMLElement>(".host-browser-strip")!;
   const add = bar.querySelector<HTMLElement>(".host-browser-add")!;
   const history = bar.querySelector<HTMLElement>(".host-browser-history")!;
-  const url = bar.querySelector<HTMLElement>(".host-browser-url")!;
   const address = bar.querySelector<HTMLInputElement>(".host-browser-address")!;
   const error = bar.querySelector<HTMLElement>(".host-browser-error")!;
-  let model: HostBrowserModel | undefined, owned = false, drawn = "", actionId = 0, failed = false;
+  let model: HostBrowserModel | undefined, drawn = "", actionId = 0, failed = false;
   let editing = false, navigationId: number | undefined;
 
   const measureTitles = () => {
@@ -51,19 +50,18 @@ export function mountHostBrowserToolbar(screen: HTMLElement, send: (action: Host
     failed = show;
   }
 
-  function draw(next: HostBrowserModel | undefined, held: boolean): void {
+  function draw(next: HostBrowserModel | undefined): void {
     const shown = next?.tabs.find(tab => tab.id === next.shown);
-    const signature = JSON.stringify([next, held, getLocale()]);
+    const signature = JSON.stringify([next, getLocale()]);
     if (signature === drawn) return;
     drawn = signature;
-    if (next?.shown !== model?.shown || held !== owned || !shown) {
+    if (next?.shown !== model?.shown || !shown) {
       editing = false;
       actionId++;
       showError(false);
     }
     const changedTab = next?.shown !== model?.shown;
     model = next;
-    owned = held;
     screen.toggleAttribute("data-host-browser", !!shown);
     bar.hidden = !shown;
     if (!shown) return;
@@ -79,13 +77,10 @@ export function mountHostBrowserToolbar(screen: HTMLElement, send: (action: Host
           "host-browser-tab-button", ` data-browser-action="select" data-browser-tab="${esc(tab.id)}" aria-pressed="${tab.id === shown.id}" aria-label="${name}"`) +
         control("x", t("browser.closeTab"), "close", false, tab.id) + '</div>';
     }).join(""));
-    patchHTML(add, control("plus", t("browser.newTab"), "new", !owned));
-    patchHTML(history, control("arrowLeft", t("browser.back"), "back", !owned || !next!.back) +
-      control("arrowRight", t("browser.forward"), "forward", !owned || !next!.forward) +
-      control("rotateClockwise", t("browser.reload"), "reload", !owned));
-    url.hidden = owned;
-    address.hidden = !owned;
-    url.textContent = shown.url;
+    patchHTML(add, control("plus", t("browser.newTab"), "new", false));
+    patchHTML(history, control("arrowLeft", t("browser.back"), "back", !next!.back) +
+      control("arrowRight", t("browser.forward"), "forward", !next!.forward) +
+      control("rotateClockwise", t("browser.reload"), "reload", false));
     if (!editing) address.value = shown.url;
     if (changedTab) {
       const selected = strip.querySelector<HTMLElement>("[data-shown]");
@@ -110,7 +105,7 @@ export function mountHostBrowserToolbar(screen: HTMLElement, send: (action: Host
     address.value = model?.tabs.find(tab => tab.id === model?.shown)?.url ?? "";
   });
   address.addEventListener("keydown", event => {
-    if (!model || !owned || event.isComposing || event.keyCode === 229) return;
+    if (!model || event.isComposing || event.keyCode === 229) return;
     if (event.key !== "Enter") return;
     event.preventDefault();
     event.stopPropagation();
