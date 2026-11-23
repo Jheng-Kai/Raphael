@@ -2,6 +2,7 @@ import { describeError } from "./format";
 import { t } from "./i18n";
 import { openDialog } from "./member-dialogs";
 import { messageUrl, tablePlainText } from "./message-content";
+import { mountMessagePaths } from "./message-paths";
 import { copyButton, esc, iconButton, toaster } from "./ui";
 import { type DiagramZoom, mountDiagramZoom } from "./diagram-zoom";
 import "./message-rich.css";
@@ -218,6 +219,7 @@ function colorsOf(root: HTMLElement): Record<string, string> {
 export function mountRichContent(root: HTMLElement): void {
   // Establish container metrics at mount; mutations only use the cached reading state.
   readingAnchor(root);
+  const checkPaths = mountMessagePaths(root);
   const states = new WeakMap<HTMLElement, string>();
   const themes = new WeakMap<HTMLElement, number>();
   let themeVersion = 0;
@@ -366,6 +368,7 @@ export function mountRichContent(root: HTMLElement): void {
         for (const block of node.querySelectorAll<HTMLElement>(".message-code")) added.add(block);
         mountShimmers(node);
       }
+      checkPaths(newContent);
       newContent.clear();
       if (added.size) blocks = [...new Set([...blocks, ...added])].filter(block => !block.closest("details:not([open])"))
         .sort((a, b) => a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1);
@@ -383,6 +386,7 @@ export function mountRichContent(root: HTMLElement): void {
   new MutationObserver(() => { themeVersion++; schedule(true); }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "data-skin", "style"] });
   if (typeof ResizeObserver === "function") new ResizeObserver(() => schedule(true)).observe(root);
   mountShimmers(root);
+  checkPaths([root]);
   refresh();
 }
 

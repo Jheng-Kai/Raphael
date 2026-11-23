@@ -1279,6 +1279,7 @@ export const fr = {
   "agent.attach": "Joindre un fichier",
   "agent.dropFiles": "Déposez pour ajouter des fichiers",
   "agent.attachTotal": "Les pièces jointes peuvent totaliser {p0} MB",
+  "agent.pathUnavailable": "Impossible d’ouvrir ce chemin.",
   "agent.fileUnavailable": "Impossible d’ouvrir la pièce jointe. Joignez à nouveau l’original ; si l’échec persiste, utilisez un format lisible.",
   "agent.unattach": "Retirer le fichier",
   "agent.attachTooMany": "Vous pouvez joindre jusqu’à {p0} fichiers",

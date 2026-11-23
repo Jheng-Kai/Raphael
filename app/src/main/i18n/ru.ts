@@ -1279,6 +1279,7 @@ export const ru = {
   "agent.attach": "Прикрепить файл",
   "agent.dropFiles": "Перетащите для добавления файлов",
   "agent.attachTotal": "Общий размер вложений до {p0} MB",
+  "agent.pathUnavailable": "Не удалось открыть этот путь.",
   "agent.fileUnavailable": "Не удалось открыть вложение. Прикрепите оригинал снова; если не помогает, используйте читаемый формат.",
   "agent.unattach": "Убрать файл",
   "agent.attachTooMany": "Можно прикрепить до {p0} файлов",

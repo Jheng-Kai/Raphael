@@ -10,18 +10,20 @@ import asyncio
 import base64
 import json
 import logging
+import os
 import re
 import secrets
+import stat
 import time
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from weakref import WeakValueDictionary
 
 import httpx
 
 from ..frame_navigation import FRAME_NAVIGATION
 from ..protocol import invalid_params
-from .vm import OWNER_IDLE_S, SHARED, VmError
+from .vm import GUEST, OWNER_IDLE_S, SHARED, VmError
 from .owner_transfer import CLIPBOARD_MAX, clipboard_text, hand_over, safe_name
 from .viewer_relay import Policy, ViewerRelay
 from .host_view import HostInputGate
@@ -292,6 +294,7 @@ class DesktopViewer:
             router.register(f"computer.viewer_{name}", handler)
         router.register("computer.lifecycle", self.lifecycle)
         router.register("computer.team_file", self.team_file)
+        router.register("computer.message_paths", self.message_paths)
         router.register("computer.wallpaper", self.wallpaper)
 
     async def wallpaper(self, _params):
@@ -304,9 +307,90 @@ class DesktopViewer:
             return {}
         return {"image": "data:image/jpeg;base64," + base64.b64encode(data).decode("ascii")}
 
+    def message_path_roots(self, member, target):
+        from ..brain.owner import member_folders
+
+        folders = member_folders(self.vm.settings, member) if self.vm.settings else []
+        roots = [(Path(folder), None) for folder in folders]
+        if not target.remote:
+            roots.append((target.workspace, PurePosixPath(GUEST)))
+            if target.shared is not None:
+                roots.append((target.shared, PurePosixPath(SHARED)))
+        return roots
+
+    @staticmethod
+    def resolve_message_path(path, roots):
+        """Resolve an authored path inside one of the owner's existing roots."""
+        if type(path) is not str or not 1 <= len(path) <= 4096 or any(ord(char) < 32 for char in path):
+            return None
+        guest = PurePosixPath(path) if path.startswith("/") and "\\" not in path else None
+        if os.name == "nt":
+            if re.match(r"^/[A-Za-z]:[\\/]", path):
+                path = path[1:]
+            # A local drive path has one colon. Exclude alternate streams and native device namespaces.
+            native = Path(path) if re.match(r"^[A-Za-z]:[\\/][^:\"<>|?*]*$", path) else None
+            if native is not None and native.is_reserved():
+                return None
+        else:
+            native = Path(path) if path.startswith("/") and not path.startswith("//") else None
+
+        for folder, alias in roots:
+            if not folder.is_absolute():
+                continue
+            if guest is not None and alias is not None and guest.is_relative_to(alias):
+                relative = guest.relative_to(alias)
+                # A Windows drive or alternate stream must never be appended as a guest filename.
+                if os.name == "nt" and re.search(r'[:\"<>|?*]', str(relative)):
+                    return None
+                source = folder / relative
+            elif native is not None and native.is_relative_to(folder):
+                source = native
+            else:
+                continue
+            try:
+                root = local_storage_root(folder)
+                found = source.resolve()
+            except (OSError, ValueError, RuntimeError):
+                continue
+            if found.is_relative_to(root):
+                return found
+        return None
+
+    async def message_paths(self, params):
+        """The main window gets only the authored paths it may make interactive."""
+        paths = params.get("paths")
+        if not isinstance(paths, list) or len(paths) > 64:
+            raise invalid_params("paths must be a list of up to 64 entries")
+        member = params.get("member_id")
+        target = self.target({"member_id": member})
+        roots = self.message_path_roots(member, target)
+        def allowed():
+            return [path for path in paths if self.resolve_message_path(path, roots) is not None]
+
+        return {"allowed": await asyncio.to_thread(allowed)}
+
+    async def message_path(self, member, path):
+        target = self.target({"member_id": member})
+        roots = self.message_path_roots(member, target)
+
+        def checked():
+            found = self.resolve_message_path(path, roots)
+            if found is not None:
+                mode = found.stat().st_mode
+                if stat.S_ISREG(mode) or stat.S_ISDIR(mode):
+                    return {"path": str(found), "reads": stat.S_ISREG(mode) and found.suffix.lower() in READABLE}
+            raise invalid_params("file unavailable")
+
+        try:
+            return await asyncio.to_thread(checked)
+        except OSError:
+            raise invalid_params("file unavailable") from None
+
     async def team_file(self, params):
         """Where a file of the team folder is on this PC, for the owner's own press. A folder on another computer has no such place."""
         path = params.get("path")
+        if params.get("member_id") is not None:
+            return await self.message_path(params["member_id"], path)
         member_file = re.fullmatch(r"member-file:(0|[1-9][0-9]*):(workspace|team):(.+)", path) if isinstance(path, str) else None
         if member_file:
             member, area, relative = member_file.groups()
@@ -329,7 +413,11 @@ class DesktopViewer:
             raise invalid_params("not a team file on this computer")
         root = self.file_root(target.shared)
         found = (root / path[len(SHARED) + 1:]).resolve()
-        if not found.is_relative_to(root) or not found.is_file():
+        if not found.is_relative_to(root):
+            raise invalid_params("no such team file")
+        if found.is_dir():
+            return {"path": str(found), "reads": False}
+        if not found.is_file():
             raise invalid_params("no such team file")
         return {"path": str(found), "reads": found.suffix.lower() in READABLE}
 

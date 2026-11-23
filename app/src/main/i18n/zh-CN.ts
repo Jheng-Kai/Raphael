@@ -1279,6 +1279,7 @@ export const zhCN = {
   "agent.attach": "附加文件",
   "agent.dropFiles": "放开以加入文件",
   "agent.attachTotal": "附件总大小最多 {p0} MB",
+  "agent.pathUnavailable": "无法打开此路径。",
   "agent.fileUnavailable": "无法打开这个附件，请重新附加原档，若仍失败请改用可打开的格式。",
   "agent.unattach": "移除文件",
   "agent.attachTooMany": "最多只能附加 {p0} 个文件",

@@ -662,6 +662,10 @@ export const attachmentSource = async (id: string): Promise<string> => convertFi
 export interface UpdateView { state: "idle" | "checking" | "found" | "downloading" | "ready" | "waiting" | "installing" | "error"; version: string; notes: string; error: string; installed?: string; }
 export const updateControl = (action: "status" | "receipt" | "check" | "install" | "cancel"): Promise<UpdateView> => invoke("update_control", { action });
 export const openTeamFile = (path: string): Promise<void> => invoke("open_team_file", { path });
+export const checkMessagePaths = (member_id: number, paths: string[]): Promise<{ allowed: string[] }> =>
+  core("computer.message_paths", { member_id, paths });
+export const openMessagePath = (memberId: number, path: string): Promise<void> =>
+  invoke("open_team_file", { memberId, path });
 /** Opens a file a member delivered, by the handle its Library gave (`members.library_file`, checked by the core). */
 export const openLibraryFile = (memberId: number, id: string): Promise<void> => invoke("open_library_file", { memberId, id });
 

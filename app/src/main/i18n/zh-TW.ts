@@ -992,6 +992,7 @@ export const zhTW = {
   "agent.dropFiles": "放開以加入檔案",
   "agent.openFile": "開啟",
   "agent.attachTotal": "附件總大小最多 {p0} MB",
+  "agent.pathUnavailable": "無法開啟這個路徑。",
   "agent.fileUnavailable": "無法開啟這個附件，請重新附加原檔，若仍失敗請改用可開啟的格式。",
   "agent.unattach": "移除檔案",
   "agent.tooLong": "問題太長了",

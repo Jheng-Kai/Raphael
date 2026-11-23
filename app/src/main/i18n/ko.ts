@@ -1279,6 +1279,7 @@ export const ko = {
   "agent.attach": "파일 첨부",
   "agent.dropFiles": "파일을 놓아 추가하세요",
   "agent.attachTotal": "첨부 파일은 총 {p0} MB까지 가능합니다",
+  "agent.pathUnavailable": "이 경로를 열 수 없습니다.",
   "agent.fileUnavailable": "첨부 파일을 열지 못했습니다. 원본을 다시 첨부하고 계속 실패하면 읽을 수 있는 형식을 사용하세요.",
   "agent.unattach": "파일 제거",
   "agent.attachTooMany": "파일은 최대 {p0}개 첨부할 수 있습니다",

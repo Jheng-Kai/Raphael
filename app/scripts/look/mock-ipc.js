@@ -1464,6 +1464,9 @@ export function installMock(fixture, config = {}, target = window) {
       // The page that stands open beside the composer, told before a message is sent (what the member is then told "here" means).
       case "pages.viewing": state.viewing.push(p.id ?? null); return { viewing: p.id ?? null };
       case "pages.state": return { kept: true };
+      case "computer.message_paths":
+        return { allowed: variant.richReply === "clickablePaths" && p.member_id === 1
+          ? p.paths.filter(path => path === "D:\\Reports\\2026-11-23.md" || path === "/D:/Reports/2026-11-23.md") : [] };
       case "computer.wallpaper": return variant.ownWallpaper ? { image: variant.ownWallpaper } : {};
       case "computer.lifecycle": {
         if (p.target !== data.desktop.target || p.host !== data.desktop.host || p.action === 'reset' && p.confirmed !== true) throw new Error('Maintenance confirmation or target missing');

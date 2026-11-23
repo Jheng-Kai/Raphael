@@ -3394,6 +3394,20 @@ export function checkRendered(name, context = {}) {
     require(Object.values(tokens).every(value=>/^#([0-9a-f]{2})\1\1$/i.test(value)), "both themes are neutral greys including text, accent, focus and selection");
     return {check:name, surfaces, tokens};
   }
+  if (name === "reply-local-path" || name === "reply-local-path-hover") {
+    const code = [...document.querySelectorAll('code[data-message-path][role="link"]')].find(visible);
+    require(code && code.tabIndex === 0 && !code.hasAttribute("title") && !code.hasAttribute("data-tooltip"), "the visible path is a keyboard link without a tooltip");
+    const plain = code.closest("[data-path-member]").querySelector("code[data-message-path]:not([role])");
+    require(visible(plain) && !plain.hasAttribute("tabindex"), "the path outside approved folders is plain code");
+    const style = getComputedStyle(code), baseline = getComputedStyle(plain);
+    for (const property of ["backgroundColor", "color", "fontFamily", "fontSize", "padding", "borderRadius"]) {
+      require(style[property] === baseline[property], "the checked path keeps the same code styling: " + property);
+    }
+    const hovered = name.endsWith("-hover");
+    require(style.textDecorationLine === (hovered ? "underline" : "none"), "only hovering underlines the checked path");
+    if (hovered) require(style.cursor === "pointer" && style.textDecorationThickness === "1px", "hover shows a pointer and a thin underline");
+    return { check: name, path: code.textContent, outside: plain.textContent, decoration: style.textDecorationLine, cursor: style.cursor };
+  }
   if (name === "recovered-reply") {
     const link = [...document.querySelectorAll('.thread a[data-url="https://example.com/reply"]')].find(visible);
     const prose = link?.closest(".message-text");

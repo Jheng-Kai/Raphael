@@ -1279,6 +1279,7 @@ export const th = {
   "agent.attach": "แนบไฟล์",
   "agent.dropFiles": "วางเพื่อเพิ่มไฟล์",
   "agent.attachTotal": "ไฟล์แนบรวมได้ไม่เกิน {p0} MB",
+  "agent.pathUnavailable": "เปิดเส้นทางนี้ไม่ได้",
   "agent.fileUnavailable": "เปิดไฟล์แนบไม่ได้ แนบต้นฉบับอีกครั้ง หากยังไม่ได้ให้ใช้รูปแบบที่อ่านได้",
   "agent.unattach": "นำไฟล์ออก",
   "agent.attachTooMany": "แนบได้ไม่เกิน {p0} ไฟล์",

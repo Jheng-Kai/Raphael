@@ -1279,6 +1279,7 @@ export const ptBR = {
   "agent.attach": "Anexar arquivo",
   "agent.dropFiles": "Solte para adicionar arquivos",
   "agent.attachTotal": "Anexos podem somar até {p0} MB",
+  "agent.pathUnavailable": "Não foi possível abrir este caminho.",
   "agent.fileUnavailable": "Não foi possível abrir o anexo. Anexe o original novamente; se falhar, use um formato legível.",
   "agent.unattach": "Remover arquivo",
   "agent.attachTooMany": "Você pode anexar até {p0} arquivos",

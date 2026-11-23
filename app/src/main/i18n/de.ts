@@ -1279,6 +1279,7 @@ export const de = {
   "agent.attach": "Datei anhängen",
   "agent.dropFiles": "Dateien zum Hinzufügen ablegen",
   "agent.attachTotal": "Anhänge dürfen insgesamt {p0} MB haben",
+  "agent.pathUnavailable": "Dieser Pfad kann nicht geöffnet werden.",
   "agent.fileUnavailable": "Anhang konnte nicht geöffnet werden. Original erneut anhängen; bei weiterem Fehler lesbares Format verwenden.",
   "agent.unattach": "Datei entfernen",
   "agent.attachTooMany": "Höchstens {p0} Dateien anhängen",

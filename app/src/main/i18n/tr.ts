@@ -1279,6 +1279,7 @@ export const tr = {
   "agent.attach": "Dosya ekle",
   "agent.dropFiles": "Dosya eklemek için bırakın",
   "agent.attachTotal": "Eklerin toplamı en fazla {p0} MB olabilir",
+  "agent.pathUnavailable": "Bu yol açılamadı.",
   "agent.fileUnavailable": "Ek açılamadı. Özgün dosyayı yeniden ekleyin; sürerse okunabilir biçim kullanın.",
   "agent.unattach": "Dosyayı kaldır",
   "agent.attachTooMany": "En fazla {p0} dosya ekleyebilirsiniz",

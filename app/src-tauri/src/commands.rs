@@ -466,6 +466,7 @@ const ALLOWED_METHODS: &[&str] = &[
     // The owner chose to be asked again after refusing the macOS Keychain (R-PRIV-KEYCHAIN-01).
     "keychain.ask_again",
     "computer.viewer_status",
+    "computer.message_paths",
     "computer.teach",
     "computer.viewer_open",
     "computer.viewer_renew",
@@ -2149,16 +2150,24 @@ pub async fn attachment_source(
     Ok(id)
 }
 
-/// Open a file of the team folder at the owner's press. The core says where it is and whether it reads;
-/// anything else is only shown in its folder, so a press never runs a program a member wrote.
+/// Open a checked file at the owner's press. The core resolves team handles and authored paths;
+/// folders and files outside the readable set are revealed in the file manager.
 #[tauri::command]
-pub async fn open_team_file(app: AppHandle, webview: Webview, path: String) -> Result<(), String> {
+pub async fn open_team_file(
+    app: AppHandle,
+    webview: Webview,
+    path: String,
+    member_id: Option<u64>,
+) -> Result<(), String> {
     require_main(&webview)?;
     let core = app
         .try_state::<Arc<CoreProcess>>()
         .ok_or(CORE_NOT_RUNNING)?;
     let result = core
-        .call("computer.team_file", json!({"path": path}))
+        .call(
+            "computer.team_file",
+            json!({"path": path, "member_id": member_id}),
+        )
         .await
         .map_err(|_| "file unavailable".to_owned())?;
     let found = result
@@ -3174,6 +3183,8 @@ mod tests {
     fn desktop_viewer_exposes_only_named_main_window_operations() {
         assert!(is_allowed_method("computer.teach"));
         assert!(!is_allowed_method("computer.teach_input"));
+        assert!(is_allowed_method("computer.message_paths"));
+        assert!(!is_allowed_method("computer.team_file"));
         for method in [
             "computer.viewer_status",
             "computer.viewer_open",
