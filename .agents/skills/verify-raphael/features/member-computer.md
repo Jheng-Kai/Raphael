@@ -1903,9 +1903,13 @@ every turn and task, every source and brain (API, and CLI through its MCP list) 
   settings, the member's own folder is one row that opens it in the file manager.
 - Git branches are visible beside the project and on the separate branch button. Its card checks the current ref
   and lists local branches. If Git is unavailable, a branch read from HEAD has no switch choices. Git's refusal
-  appears in the toast. Migration 99 only changes settings, keeping the old output path and all per-member projects.
-- Local Docker bind-mounts existing projects under /home/cua/projects and recreates an idle container after a mount
-  change, preserving the workspace. The member's default folder maps to /home/cua/workspace in a per-member
+  appears in the toast. Core Git calls disable hooks and fsmonitor. Repositories with their own filters
+  must be switched in the owner's terminal. Migration 99 keeps the valid old paths within the project limit.
+- Local Docker bind-mounts existing local projects under /home/cua/projects. It skips UNC paths and, if launching
+  with project mounts fails, tries once with only the workspace and team mounts. The prompt uses the available
+  mounts. Names with a collision keep their assigned suffix when another project is removed. An existing container
+  can still be viewed and stopped after a mount change. It is rebuilt on its next idle start, preserving the
+  workspace. The member's default folder maps to /home/cua/workspace in a per-member
   container and to its own subfolder there on the shared desktop. Hosts reached over SSH retain their own volumes.
 
 Offline checks cover the migration, permissions, prompts, temporary Git repositories and simulated mount changes.

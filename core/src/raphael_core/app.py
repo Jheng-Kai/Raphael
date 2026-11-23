@@ -1113,7 +1113,7 @@ class App(Router):
         self.agent.member_folders = self.background.member_folders = self.members.member_folders = self.vm.local_folders
         def folder_target(member):
             if self.vm.enabled and self.vm_tools.computer_mode(member) == "docker":
-                return self.vm.target(member)
+                return self.vm.mounted_target(self.vm.target(member))
             return None
         self.agent.folder_target = self.background.folder_target = folder_target
         self.background.use_team(self.members, self.agent.team_tool)
@@ -1135,7 +1135,7 @@ class App(Router):
             return [("workspace", own if target.remote else target.workspace), ("team", team)]
         self.members.panel_workspaces = panel_workspaces
         def project_mount(member):
-            target = self.vm.target(member)
+            target = self.vm.mounted_target(self.vm.target(member))
             work = self.vm.guest_work_folder(target, member)
             return work if work != self.vm.guest_workspace(target) else None
         self.members.project_mount = project_mount

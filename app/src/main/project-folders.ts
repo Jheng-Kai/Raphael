@@ -24,15 +24,27 @@ export function editProjectFolders(edit: (settings: BrainSettings) => Promise<Br
 
 export async function rememberProject(settings: BrainSettings, path: string): Promise<BrainSettings> {
   const projects = settings.project_folders ?? [];
-  if (projects.includes(path)) return settings;
+  if (rememberedPath(projects, path)) return settings;
   return (await api.settingsSet("project_folders", [...projects, path])).settings;
+}
+
+function rememberedPath(projects: readonly string[], path: string): string | undefined {
+  function key(value: string): string {
+    const trimmed = value.trim();
+    if (/^(?:[a-z]:[\\/]|\\\\|\/\/)/i.test(trimmed)) {
+      return trimmed.replace(/[\\/]+$/, "").replace(/\//g, "\\").toLowerCase();
+    }
+    return trimmed.replace(/\/+$/, "");
+  }
+  const requested = key(path);
+  return projects.find(project => key(project) === requested);
 }
 
 export async function chooseProject(settings: BrainSettings, member: number, path: string | null): Promise<BrainSettings> {
   const choices = { ...settings.member_work_folder };
-  if ((choices[member] ?? null) === path) return settings;
-  if (path === null) delete choices[member];
-  else if (settings.project_folders?.includes(path)) choices[member] = path;
-  else return settings;
+  const remembered = path === null ? null : rememberedPath(settings.project_folders ?? [], path);
+  if (remembered === undefined || (choices[member] ?? null) === remembered) return settings;
+  if (remembered === null) delete choices[member];
+  else choices[member] = remembered;
   return (await api.settingsSet("member_work_folder", choices)).settings;
 }

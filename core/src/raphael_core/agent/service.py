@@ -186,7 +186,7 @@ from .cli.loop import CLI_SILENCE_S, CLI_TOOL_S, COMPUTER_CHANGED, CliLoop, Sess
 from .persona import cli_system_prompt, memory_files
 from .persona import FULL_PERMISSION, NEW_MEMBER, NEW_MEMBER_STEP, PLAN_MODE, SETUP_ANSWER, SETUP_AFTER_CONNECT, SETUP_STEPS
 from ..brain.owner import owner_context
-from ..folders import default_folders, work_folder
+from ..folders import choice, default_folders
 from .cities import cities_in
 from .commands import COMMANDS, AppCatalog, run_command
 from .device import DeviceActions
@@ -940,7 +940,7 @@ class AgentService:
         self.member_folders = default_folders
         self.folder_target = lambda member: None
         self.pages = Pages(conn, notify=notify, now_ms=now_ms,
-                           work_folder=lambda member: work_folder(self._settings, member, self.member_folders))
+                           project_folder=lambda member: choice(self._settings, member))
         self.pages.tool_call = self._page_tool_call
         self.conversations = Conversations(conn, now_ms)
         self.quotas = Quotas(conn, now_ms, notify)

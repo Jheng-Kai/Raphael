@@ -398,14 +398,18 @@ def mounts_match(mounts, configured, target):
         if target.remote:
             if actual.get("Name") != str(source) or request.get("Source", actual.get("Name")) != str(source):
                 return False
-        elif Path(request.get("Source", "")).resolve() != source.resolve():
-            return False
+        else:
+            requested = Path(request.get("Source", ""))
+            if requested != source and requested.resolve() != source.resolve():
+                return False
     return True
 
 
 def previous_mounts(raw, target):
     """Read the prior project bindings while requiring the canonical workspace and team mounts."""
-    configured = raw.get("HostConfig", {}).get("Mounts", raw.get("Mounts", []))
+    if not isinstance(raw, dict) or not isinstance(host := raw.get("HostConfig"), dict):
+        return target
+    configured = host.get("Mounts", raw.get("Mounts", []))
     if not isinstance(configured, list):
         return target
     projects = []
@@ -507,6 +511,8 @@ class LocalVm:
         self.changes = 0
         self.status_engines = {}
         self.running = {}
+        self.mounted_projects = {}
+        self.dropped_project_mounts = {}
         self._installed = None
         self.engine_lock, self.build_lock = asyncio.Lock(), asyncio.Lock()
         from .takeover import ComputerWork
@@ -891,7 +897,8 @@ class LocalVm:
                       host, projects=self.projects() if not host else ())
 
     def projects(self):
-        if self.settings is None:
+        projects = self.settings.get("project_folders") if self.settings is not None else None
+        if not projects:
             return ()
         # Never bind a parent of internal storage, or bind internal state in its own right.
         private = (self.root, self.machine)
@@ -901,8 +908,12 @@ class LocalVm:
                 return not any(resolved.is_relative_to(root) or root.is_relative_to(resolved) for root in private)
             except (OSError, RuntimeError):
                 return False
-        return tuple((guest, source) for guest, source in project_mounts(self.settings.get("project_folders") or [])
+        names = getattr(self.settings, "project_mount_names", None)
+        return tuple((guest, source) for guest, source in project_mounts(projects, names(projects) if names else None)
                      if allowed(source))
+
+    def mounted_target(self, target):
+        return replace(target, projects=self.mounted_projects.get(target.physical, target.projects))
 
     def local_folders(self, member):
         target = (self.shared_target("", member, 0) if self.mode == "shared" and not self.remote
@@ -1212,11 +1223,18 @@ class LocalVm:
         if raw is None:
             # A failed inspect can mean the engine or image changed outside Raphael.
             self.invalidate(target)
+            self.mounted_projects.pop(target.physical, None)
             image_id = await self.image(target)
             return {"state": "missing", "image": bool(image_id), "ready": False}
-        if not image_id or not compatible(raw, target, self.owner, image_id):
+        mounted = previous_mounts(raw, target)
+        if not image_id or not compatible(raw, mounted, self.owner, image_id):
             self.invalidate(target)
+            self.mounted_projects.pop(target.physical, None)
             return {"state": "incompatible", "ready": False}
+        self.mounted_projects[target.physical] = mounted.projects
+        dropped = self.dropped_project_mounts.get(target.physical)
+        mounts_stale = dict(mounted.projects) != dict(target.projects) and (
+            mounted.projects or dropped != dict(target.projects))
         running = raw.get("State", {}).get("Running") is True
         ready = False
         screens_pending = False
@@ -1232,6 +1250,7 @@ class LocalVm:
         port = next((int(p["HostPort"]) for p in bindings if p.get("HostIp") == "127.0.0.1" and str(p.get("HostPort", "")).isdigit()), None)
         url = f"http://127.0.0.1:{port}/vnc.html#autoconnect=true&resize=scale&view_only=true&path=websockify?token=screen-{target.screen}" if port and not target.remote and target.screen else ""
         return {"state": "running" if running else "stopped", "ready": ready, "viewer_url": url,
+                **({"mounts_stale": True} if mounts_stale else {}),
                 **({"screens_pending": True} if screens_pending else {})}
 
     async def viewer_connection(self, target):
@@ -1253,7 +1272,8 @@ class LocalVm:
             raise VmError("unavailable")
         image_id = await self.image(target)
         raw = await self.inspect(target)
-        if not image_id or not compatible(raw, target, self.owner, image_id) or raw.get("State", {}).get("Running") is not True:
+        if (not raw or not image_id or not compatible(raw, previous_mounts(raw, target), self.owner, image_id)
+                or raw.get("State", {}).get("Running") is not True):
             raise VmError("unavailable")
         bindings = raw.get("NetworkSettings", {}).get("Ports", {}).get("6901/tcp") or []
         port = next((int(p["HostPort"]) for p in bindings if p.get("HostIp") == "127.0.0.1" and str(p.get("HostPort", "")).isdigit()), None)
@@ -1542,7 +1562,7 @@ class LocalVm:
     async def _start(self, target):
         self.validate_storage(target)
         state = await self.status(target, probe=False)
-        if state["state"] == "incompatible":
+        if state["state"] == "incompatible" or state.get("mounts_stale"):
             state = await self._upgrade_image(target)
         if state["state"] in ("unavailable", "incompatible"):
             raise VmError(state["state"])
@@ -1680,11 +1700,30 @@ class LocalVm:
     async def create(self, target, zone, *, only_create=False):
         """Make the computer's container; a shared computer takes the size its engine gives it."""
         size = await self.machine_size(target) if target.container == "shared" else None
-        args = run_args(target, self.owner, secrets.token_urlsafe(24), tz=zone, size=size)
-        if only_create:
-            args[:2] = ["create"]
+        async def launch(candidate):
+            args = run_args(candidate, self.owner, secrets.token_urlsafe(24), tz=zone, size=size)
+            if only_create:
+                args[:2] = ["create"]
+            return await self.run_for(candidate, args, timeout=60)
+
         self.fitted[(target.remote, target.name)] = resources(target, size)
-        return await self.run_for(target, args, timeout=60)
+        result = await launch(target)
+        if not result.code or not target.projects:
+            self.dropped_project_mounts.pop(target.physical, None)
+            return result
+        # Docker can leave a stopped container behind after a failed run. Remove only the one we recognize.
+        raw = await self.inspect(target)
+        if raw:
+            if (raw.get("State", {}).get("Running") is not False
+                    or not compatible(raw, target, self.owner, await self.image(target))
+                    or (await self.run_for(target, ["rm", target.name])).code):
+                return result
+        result = await launch(replace(target, projects=()))
+        if not result.code:
+            self.dropped_project_mounts[target.physical] = dict(target.projects)
+            self.mounted_projects[target.physical] = ()
+            logger.warning("The Docker computer started without project mounts: %s", ", ".join(dict(target.projects)))
+        return result
 
     async def fit_limits(self, target):
         """A shared computer that was made at another size is brought to the engine's present one in place, with
@@ -1792,7 +1831,7 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
     async def _reconcile_timezone(self, target, state, zone, *, keep_stopped=False):
         if state["state"] in ("running", "stopped") and self.timezone():
             raw = await self.inspect(target)
-            if not compatible(raw, target, self.owner, await self.image(target)):
+            if not raw or not compatible(raw, previous_mounts(raw, target), self.owner, await self.image(target)):
                 raise VmError("incompatible")
             if f"TZ={zone}" not in raw["Config"].get("Env", []):
                 if self.unit_held(target) or (self.unit_active(target) > 1 or self.unit_active(target, excluding=target.key)) or self.unit_busy(target, excluding=target.key) or self.unit_busy(target) and not self.unit_active(target):
@@ -1841,9 +1880,11 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
             state = await self.status(target, probe=False)
             if state["state"] == "incompatible":
                 raw = await self.inspect(target)
-                if known_previous(raw, target, self.owner) or (captured_image and raw and raw.get("Image") == captured_image
-                        and compatible(raw, target, self.owner, captured_image)):
-                    state = {"state": "running" if raw.get("State", {}).get("Running") else "stopped"}
+                if raw:
+                    mounted = previous_mounts(raw, target)
+                    if known_previous(raw, mounted, self.owner) or (captured_image and raw.get("Image") == captured_image
+                            and compatible(raw, mounted, self.owner, captured_image)):
+                        state = {"state": "running" if raw.get("State", {}).get("Running") else "stopped"}
             if state["state"] == "missing":
                 self.wallpaper_attempted.pop((target.remote, target.name), None)
                 return
@@ -1856,6 +1897,7 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
             self.changes += 1
             if result.code:
                 raise VmError("stop_failed")
+            self.dropped_project_mounts.pop(target.physical, None)
             self.wallpaper_attempted.pop((target.remote, target.name), None)
             self.woken.pop(target.state_key, None)
             if remove and (await self.run_for(target, ["rm", target.name])).code:

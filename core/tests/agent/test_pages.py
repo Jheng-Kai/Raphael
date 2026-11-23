@@ -803,21 +803,22 @@ async def test_a_shared_report_is_saved_in_the_members_work_folder_else_download
     page = await _shown_report(rig, client)
     downloads = tmp_path / "Downloads"
     saved = await rig.call("pages.export", {"id": page, "html": _file(), "downloads": str(downloads)})
-    assert saved == {"path": str(tmp_path / "Member" / "Team report.html"), "place": "work", "folder": "Member"}
-    assert (tmp_path / "Member" / "Team report.html").read_bytes() == _file().encode("utf-8")
+    assert saved == {"path": str(downloads / "Team report.html"), "place": "downloads", "folder": "Downloads"}
+    assert Path(saved["path"]).read_bytes() == _file().encode("utf-8")
     again = await rig.call("pages.export", {"id": page, "html": _file(), "downloads": str(downloads)})
-    assert again["path"] == str(tmp_path / "Member" / "Team report (2).html") and len(list((tmp_path / "Member").iterdir())) == 2
+    assert again["path"] == str(downloads / "Team report (2).html")
+    assert not (tmp_path / "Member").exists()
 
-    # The member's selected project first, made if it is gone; one that takes nothing leaves the file in Downloads.
-    rig.settings.set("project_folders", [str(tmp_path / "Out" / "Reports")])
-    rig.settings.set("member_work_folder", {"0": str(tmp_path / "Out" / "Reports")})
+    project = tmp_path / "Out" / "Reports"
+    project.mkdir(parents=True)
+    rig.settings.set("project_folders", [str(project)])
+    rig.settings.set("member_work_folder", {"0": str(project)})
     chosen = await rig.call("pages.export", {"id": page, "html": _file(), "downloads": str(downloads)})
-    assert chosen == {"path": str(tmp_path / "Out" / "Reports" / "Team report.html"), "place": "work", "folder": "Reports"}
-    (tmp_path / "taken").write_text("a file, not a folder")
-    rig.settings.set("project_folders", [str(tmp_path / "taken" / "Reports")])
-    rig.settings.set("member_work_folder", {"0": str(tmp_path / "taken" / "Reports")})
+    assert chosen == {"path": str(project / "Team report.html"), "place": "work", "folder": "Reports"}
+    project.rename(tmp_path / "Moved")
     fallen = await rig.call("pages.export", {"id": page, "html": _file(), "downloads": str(downloads)})
-    assert fallen["place"] == "downloads" and fallen["path"] == str(downloads / "Team report.html")
+    assert fallen["place"] == "downloads" and fallen["path"] == str(downloads / "Team report (3).html")
+    assert not project.exists()
 
 
 @pytest.mark.parametrize("html", [
@@ -857,7 +858,7 @@ async def test_a_table_link_goes_into_the_file_as_an_https_link_and_nothing_else
     page = await _shown_report(rig, client)
     link = '<a class="rp-link" href="https://www.google.com/maps/search/?api=1&amp;query=%E6%B7%BA%E8%8D%89%E5%AF%BA" rel="noopener noreferrer">地圖</a>'
     saved = await rig.call("pages.export", {"id": page, "html": _file(DRAWING + link), "downloads": str(tmp_path)})
-    assert Path(saved["path"]) == tmp_path / "Member" / "Team report.html"
+    assert Path(saved["path"]) == tmp_path / "Team report.html"
     assert "query=%E6%B7%BA" in Path(saved["path"]).read_text("utf-8")
 
 
@@ -903,13 +904,14 @@ async def test_a_shared_html_page_is_saved_from_what_is_stored_never_from_text_t
     page = stored(rig.conn, title="Tokyo: a/b", html="<h1>Tokyo</h1>")
     downloads = tmp_path / "Downloads"
     saved = await rig.call("pages.export", {"id": page["id"], "html": "<script>alert(1)</script>", "downloads": str(downloads)})
-    assert saved == {"path": str(tmp_path / "Member" / "Tokyo a b.html"), "place": "work", "folder": "Member"}
-    written = (tmp_path / "Member" / "Tokyo a b.html").read_text("utf-8")
+    assert saved == {"path": str(downloads / "Tokyo a b.html"), "place": "downloads", "folder": "Downloads"}
+    written = Path(saved["path"]).read_text("utf-8")
     assert "<h1>Tokyo</h1>" in written and "alert(1)" not in written and "parent.postMessage" not in written
     # With no `html` at all, as the window sends it for a page, and again: never over another file.
     again = await rig.call("pages.export", {"id": page["id"], "downloads": str(downloads)})
-    assert again["path"] == str(tmp_path / "Member" / "Tokyo a b (2).html")
+    assert again["path"] == str(downloads / "Tokyo a b (2).html")
     # The member's selected project first.
+    (tmp_path / "Out").mkdir()
     rig.settings.set("project_folders", [str(tmp_path / "Out")])
     rig.settings.set("member_work_folder", {"0": str(tmp_path / "Out")})
     chosen = await rig.call("pages.export", {"id": page["id"], "downloads": str(downloads)})
@@ -918,8 +920,6 @@ async def test_a_shared_html_page_is_saved_from_what_is_stored_never_from_text_t
 
 async def test_a_changed_page_is_shared_as_it_is_now_and_a_secret_in_it_still_stops_the_file(make_rig, tmp_path):
     rig = make_rig()
-    work = tmp_path / "Member"
-    rig.service.member_folders = lambda member: (work, tmp_path / "Team")
     page = stored(rig.conn, html="<p>first</p>")
     PageStore(rig.conn).update(page["id"], "<p>second</p>")
     saved = await rig.call("pages.export", {"id": page["id"], "downloads": str(tmp_path)})
@@ -929,7 +929,7 @@ async def test_a_changed_page_is_shared_as_it_is_now_and_a_secret_in_it_still_st
     with pytest.raises(RpcError) as error:
         await rig.call("pages.export", {"id": page["id"], "downloads": str(tmp_path)})
     assert error.value.code == INVALID_PARAMS
-    assert list(work.iterdir()) == [Path(saved["path"])]
+    assert list(tmp_path.iterdir()) == [Path(saved["path"])]
 
 
 @pytest.mark.parametrize("title,name", [

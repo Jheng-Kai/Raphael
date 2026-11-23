@@ -154,7 +154,7 @@ npm run look -- desktop-host-local desktop-host-error settings-owner --theme bot
 ## Project folders in General
 
 The project list uses one row per folder, with its full path and Git branch. The ⋯ menu offers Remove.
-Add folder opens the native picker at the foot of the list. See [Daily work](daily-work.md#native-project-folder-choice)
+Add folder opens the native picker at the foot of the list. The settings accept up to 50 distinct projects. See [Daily work](daily-work.md#native-project-folder-choice)
 for the native checks and [Member computer](member-computer.md#the-owners-files-read-everywhere-write-in-the-owners-folders-r-pc-04-r-pc-05)
 for the composer and Docker paths.
 

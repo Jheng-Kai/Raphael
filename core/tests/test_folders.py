@@ -53,6 +53,48 @@ def test_project_mount_name_cannot_be_a_parent_directory(tmp_path):
     assert folders.project_mounts([str(source)]) == (("/home/cua/projects/Project", source),)
 
 
+@pytest.mark.parametrize("old_members", ["null", "[]", "false", "not JSON"])
+def test_project_migration_tolerates_invalid_old_settings(monkeypatch, old_members):
+    with sqlite3.connect(":memory:") as conn:
+        conn.row_factory = sqlite3.Row
+        with monkeypatch.context() as old:
+            old.setattr(db, "LATEST_VERSION", 98)
+            db.migrate(conn)
+        conn.executemany("INSERT INTO settings (key, value) VALUES (?, ?)", [
+            ("owner_output_folder", '{"invalid": true}'), ("member_write_folders", old_members),
+        ])
+        db.migrate(conn)
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == db.LATEST_VERSION
+        assert SettingsStore(conn).get("project_folders") == []
+        assert SettingsStore(conn).get("member_work_folder") == {}
+    conn.close()
+
+
+def test_project_migration_skips_invalid_paths_in_old_member_lists(monkeypatch, tmp_path):
+    path = str(tmp_path / "Repo")
+    with sqlite3.connect(":memory:") as conn:
+        conn.row_factory = sqlite3.Row
+        with monkeypatch.context() as old:
+            old.setattr(db, "LATEST_VERSION", 98)
+            db.migrate(conn)
+        conn.executemany("INSERT INTO settings (key, value) VALUES (?, ?)", [
+            ("owner_output_folder", "42"),
+            ("member_write_folders", json.dumps({"1": [None, 42, [], path + "/", {"path": path}], "2": path})),
+        ])
+        db.migrate(conn)
+        assert SettingsStore(conn).get("project_folders") == [path]
+        assert SettingsStore(conn).get("member_work_folder") == {"1": path}
+    conn.close()
+
+
+def test_unc_projects_are_skipped_before_the_filesystem_is_probed(monkeypatch):
+    def unexpected_probe(path):
+        pytest.fail(f"Probed the network path {path}")
+
+    monkeypatch.setattr(folders, "existing_folder", unexpected_probe)
+    assert folders.project_mounts([r"\\server\share\Repo", "//server/share/Other"]) == ()
+
+
 @pytest.fixture
 def repository(tmp_path, monkeypatch):
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(tmp_path / "gitconfig"))
@@ -110,3 +152,32 @@ async def test_switch_branch_requires_a_project_and_preserves_gits_dirty_tree_er
         await folders.switch_branch(settings, {"path": path, "branch": "main"})
     assert tracked.read_text(encoding="utf-8") == "uncommitted"
     assert (await folders.folder_info({"path": path}))["branch"] == "draft"
+
+
+async def test_switch_branch_ignores_checkout_hooks(conn, repository):
+    settings = SettingsStore(conn)
+    settings.set("project_folders", [str(repository)])
+    hook = repository / ".git" / "hooks" / "post-checkout"
+    hook.write_bytes(b"#!/bin/sh\nprintf checked > hook-ran.txt\n")
+    hook.chmod(0o755)
+    assert (await folders.switch_branch(settings, {"path": str(repository), "branch": "draft"}))["branch"] == "draft"
+    assert not (repository / "hook-ran.txt").exists()
+
+
+async def test_switch_branch_allows_filters_configured_outside_the_repository(conn, repository):
+    settings = SettingsStore(conn)
+    settings.set("project_folders", [str(repository)])
+    subprocess.run(["git", "config", "--global", "filter.example.smudge", "unused"], check=True, capture_output=True)
+    assert (await folders.switch_branch(settings, {"path": str(repository), "branch": "draft"}))["branch"] == "draft"
+
+
+@pytest.mark.parametrize("driver", ["clean", "smudge", "process"])
+async def test_switch_branch_refuses_repository_filters(conn, repository, driver):
+    settings = SettingsStore(conn)
+    settings.set("project_folders", [str(repository)])
+    subprocess.run(["git", "-C", str(repository), "config", f"filter.example.{driver}", "unused"],
+                   check=True, capture_output=True)
+    with pytest.raises(RpcError, match="runs its own Git filters. Switch branches in your own terminal"):
+        await folders.switch_branch(settings, {"path": str(repository), "branch": "draft"})
+    assert folders.head_branch(repository) == "main"
+    assert (repository / "tracked.txt").read_text(encoding="utf-8") == "main"

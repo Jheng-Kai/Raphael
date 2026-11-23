@@ -1,12 +1,13 @@
 import json
+from pathlib import Path
 
 import pytest
 
-from raphael_core.computer.vm import Target
-
-from raphael_core.brain.settings import SettingsStore
 from raphael_core.brain.owner import owner_context
-from raphael_core.folders import project_mounts
+from raphael_core.brain.settings import SettingsStore
+from raphael_core.computer.local_tools import command_folder
+from raphael_core.computer.vm import Target
+from raphael_core.folders import project_mounts, work_folder
 
 
 def test_owner_profile_is_saved_and_prompted_as_data(conn):
@@ -55,6 +56,30 @@ def test_prompt_names_host_and_docker_work_folders(conn, tmp_path):
                                "branch": "main"}
     assert told(9)["work_folder"] == str(own)
     assert told(9, target)["work_folder"] == "/home/cua/workspace"
+
+
+def test_a_removed_project_falls_back_to_the_members_own_folder(conn, tmp_path):
+    settings = SettingsStore(conn)
+    chosen, own, team = (tmp_path / name for name in ("project", "own", "team"))
+    chosen.mkdir()
+    settings.set("project_folders", [str(chosen)])
+    settings.set("member_work_folder", {"4": str(chosen)})
+
+    def member_folders(member):
+        return own, team
+
+    assert work_folder(settings, 4, member_folders) == chosen
+    chosen.rmdir()
+    assert work_folder(settings, 4, member_folders) == own
+    start = command_folder(settings, 4, member_folders)
+    assert start == str(own)
+    (Path(start) / "result.txt").write_text("saved", encoding="utf-8")
+    assert (own / "result.txt").is_file()
+    assert not chosen.exists()
+    prompt = owner_context(settings, 4, folders=member_folders)
+    data = json.loads(prompt.split("<owner_context>\n")[1].split("\n</owner_context>")[0])
+    assert data["work_folder"] == str(own)
+    assert data["project_folders"] == []
 
 
 @pytest.mark.parametrize("path", ["relative/path", "C:relative", "/bad\npath", "x" * 1001])

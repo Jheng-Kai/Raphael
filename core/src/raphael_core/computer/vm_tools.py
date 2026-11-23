@@ -1152,6 +1152,7 @@ class VmTools:
                             raise
                         target = kept
                         await self._started(target, member, tool.name)
+                    target = self.vm.mounted_target(target)
                 finally:
                     self.mount_start.reset(start)
                 await self._disk_notice(target)

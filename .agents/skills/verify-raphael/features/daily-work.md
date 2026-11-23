@@ -36,7 +36,8 @@ See [Conversation](conversation.md#calm-conversations) for R-UI-101/R-CLI-07 and
   Pointer/key interaction reports through members.viewing at most once a minute;
   scheduler and background list refreshes are not presence.
 - R-OUTPUT-01: Members save files to their selected project or their own shared folder. Owner context supplies
-  the work, team and remaining project paths as the member sees them. Report export falls back to Downloads.
+  the work, team and remaining project paths as the member sees them. Report export uses an existing
+  selected project when it can save there and Downloads otherwise.
 
 ## How to get to it (user POV)
 

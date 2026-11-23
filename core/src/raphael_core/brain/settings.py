@@ -339,9 +339,11 @@ def checked(key: str, value: Any) -> tuple[str, Any]:
     if key == "computer_vm_idle_minutes" and value != 0 and not 5 <= value <= 1440:
         raise ValueError("Computer idle minutes must be between 5 and 1440")
     if key in ("project_folders", "member_work_folder"):
-        from ..folders import checked_path
+        from ..folders import PROJECT_LIMIT, checked_path, project_paths
         if key == "project_folders":
-            value = list(dict.fromkeys(checked_path(path) for path in value))
+            value = list(project_paths(value).values())
+            if len(value) > PROJECT_LIMIT:
+                raise ValueError(f"Remember up to {PROJECT_LIMIT} project folders")
         else:
             if any(not isinstance(member, str) or not re.fullmatch(r"0|[1-9][0-9]{0,9}", member) for member in value):
                 raise ValueError("Work folders are kept by member id")
@@ -465,6 +467,11 @@ class SettingsStore:
             return _read_favorites(saved)
         if key == "disconnected_clis":
             return _read_disconnected_clis(saved)
+        if key == "project_folders" and isinstance(saved, list):
+            from ..folders import PROJECT_LIMIT, project_paths
+            return list(project_paths(saved, ignore_invalid=True).values())[:PROJECT_LIMIT]
+        if key == "member_work_folder" and isinstance(saved, dict):
+            return self._project_selections(saved, self.get("project_folders"))
         if saved is None and key in _NULLABLE and self._conn.execute(
             "SELECT 1 FROM settings WHERE key = ?", (key,)
         ).fetchone():
@@ -483,8 +490,15 @@ class SettingsStore:
             raise ValueError("Setting 'stt_local_model' must name a model for the local engine")
         if key == "stt_local_model" and value is None and self.get("stt_engine") == "local":
             raise ValueError("Setting 'stt_local_model' must name a model while the engine is local")
-        if key == "member_work_folder" and not set(value.values()).issubset(self.get("project_folders")):
-            raise ValueError("A work folder must be a remembered project")
+        if key == "member_work_folder":
+            canonical = self._project_selections(value, self.get("project_folders"))
+            if len(canonical) != len(value):
+                raise ValueError("A work folder must be a remembered project")
+            value = canonical
+        elif key == "project_folders":
+            from ..folders import project_names
+            names = project_names(value, self.project_mount_names(self.get("project_folders")))
+            old = self.get("member_work_folder")
         encoded = json.dumps(value, allow_nan=False)
         with self._conn:
             self._conn.execute(
@@ -493,10 +507,25 @@ class SettingsStore:
                 (key, encoded),
             )
             if key == "project_folders":
-                old = self.get("member_work_folder")
-                kept = {member: path for member, path in old.items() if path in value}
+                self._conn.execute(
+                    "INSERT INTO settings (key, value) VALUES ('_project_mount_names', ?)"
+                    " ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                    (json.dumps(names),),
+                )
+                kept = self._project_selections(old, value)
                 if kept != old:
                     self._conn.execute("UPDATE settings SET value=? WHERE key='member_work_folder'", (json.dumps(kept),))
+
+    @staticmethod
+    def _project_selections(selections, projects):
+        from ..folders import path_key, project_paths
+        paths = project_paths(projects)
+        return {member: paths[key] for member, path in selections.items()
+                if isinstance(path, str) and (key := path_key(path)) in paths}
+
+    def project_mount_names(self, projects):
+        from ..folders import project_names
+        return project_names(projects, self._saved("_project_mount_names"))
 
     def all(self) -> dict[str, Any]:
         """Every setting: the defaults with the saved values on top."""
@@ -506,5 +535,7 @@ class SettingsStore:
                 values[row["key"]] = json.loads(row["value"])
         values["model_favorites"] = _read_favorites(values["model_favorites"])
         values["disconnected_clis"] = _read_disconnected_clis(values["disconnected_clis"])
+        values["project_folders"] = self.get("project_folders")
+        values["member_work_folder"] = self.get("member_work_folder")
         values["languages"] = self._languages()
         return values

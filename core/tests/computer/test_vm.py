@@ -6,6 +6,7 @@ import csv
 import json
 import os
 import sys
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -16,6 +17,7 @@ from raphael_core.agent.gate import ToolGate
 from raphael_core.agent.mcp_server import RaphaelMcp
 from raphael_core.agent.policy import Tier
 from raphael_core.background.snapshot import take_snapshot
+from raphael_core.brain.owner import owner_context
 from raphael_core.brain.settings import SettingsStore, checked
 from raphael_core.computer.vm import BASE, DRIVER, IMAGE, IMAGE_LABELS, LABEL, GUEST, LocalVm, Result, VmError, compatible, exec_args, healthy, mounts_match, run_args
 from raphael_core.computer.vm_bridge import CuaBridge, normalize_schema
@@ -646,8 +648,14 @@ async def test_projects_mount_read_write_and_rebuild_only_at_idle_start(conn, tm
     two.mkdir(parents=True)
     settings.set("project_folders", [str(one), str(two), str(missing)])
     target = vm.target()
-    assert target.projects == (("/home/cua/projects/Repo", one), ("/home/cua/projects/Repo (2)", two))
+    assert target.projects[0] == ("/home/cua/projects/Repo", one)
+    second_guest, second_source = target.projects[1]
+    assert second_source == two and second_guest.startswith("/home/cua/projects/Repo (")
+    assert len(target.projects) == 2
     assert not mounts_match(runtime.raw["Mounts"], runtime.raw["Mounts"], target)
+    state = await vm.status(target)
+    assert state["state"] == "running" and state["ready"] and state["mounts_stale"]
+    assert (await vm.viewer_connection(target))[0] == 6080
     assert vm._recent_start(target) is None
     expected = container(vm, target, runtime)["Mounts"]
     assert mounts_match(expected, expected, target)
@@ -656,7 +664,7 @@ async def test_projects_mount_read_write_and_rebuild_only_at_idle_start(conn, tm
     args = run_args(target, vm.owner, "synthetic")
     mounts = [next(csv.reader([args[i + 1]])) for i, arg in enumerate(args) if arg == "--mount"]
     assert mounts[-2:] == [["type=bind", f"source={one}", "target=/home/cua/projects/Repo"],
-                          ["type=bind", f"source={two}", "target=/home/cua/projects/Repo (2)"]]
+                          ["type=bind", f"source={two}", f"target={second_guest}"]]
     runtime.calls.clear()
     vm.active[original.key] = 1
     with pytest.raises(VmError, match="busy"):
@@ -681,7 +689,96 @@ async def test_projects_mount_read_write_and_rebuild_only_at_idle_start(conn, tm
         ["stop", "--time", "10", target.name], ["rm", target.name],
     ]
     assert saved.read_text(encoding="utf-8") == "original"
-    assert any(args[-1] == "cd -- '/home/cua/projects/Repo (2)' && pwd" for args, _ in runtime.calls)
+    assert any(args[-1] == f"cd -- '{second_guest}' && pwd" for args, _ in runtime.calls)
+    settings.set("project_folders", [str(two)])
+    reopened = LocalVm(vm.root, settings=SettingsStore(conn), runner=runtime)
+    assert reopened.target().projects == ((second_guest, two),)
+
+
+@pytest.mark.parametrize("action", ["stop", "sweep", "capacity"])
+async def test_idle_project_mount_drift_allows_stop_sweep_and_eviction(tmp_path, conn, monkeypatch, action):
+    runtime = Runtime()
+    settings = SettingsStore(conn)
+    settings.set("computer_vm_mode", "per-bot")
+    vm = LocalVm(tmp_path / "data", settings=settings, runner=runtime, clock=lambda: 0)
+    project = tmp_path / "Repo"
+    project.mkdir()
+    settings.set("project_folders", [str(project)])
+    original = vm.target()
+    runtime.raw = container(vm, original, runtime)
+    settings.set("project_folders", [])
+    await vm.recover()
+    assert vm.last_activity[original.state_key] == 0
+    target = vm.target()
+    assert (await vm.status(target, probe=False))["mounts_stale"]
+    if action == "stop":
+        await vm.stop(target)
+    elif action == "sweep":
+        vm.clock = lambda: 15 * 60 + 1
+        await vm.sweep()
+        assert target.state_key not in vm.last_activity
+    else:
+        monkeypatch.setattr("raphael_core.computer.vm.LOCAL_LIMIT", 1)
+        new = vm.target(9)
+        real_inspect = vm.inspect
+
+        async def inspect(candidate):
+            return None if candidate.name == new.name else await real_inspect(candidate)
+
+        monkeypatch.setattr(vm, "inspect", inspect)
+        await vm._make_room(new)
+    assert runtime.raw["State"]["Running"] is False
+    assert [args for args, _ in runtime.calls if args[0] in ("stop", "rm")] == [
+        ["stop", "--time", "10", target.name],
+    ]
+
+
+@pytest.mark.parametrize("leaves_container", [False, True])
+async def test_failed_project_mount_retries_once_and_uses_the_workspace(conn, tmp_path, caplog, leaves_container):
+    class RejectingRuntime(Runtime):
+        attempts = 0
+
+        async def __call__(self, args, **kwargs):
+            if args[0] == "run":
+                self.calls.append((args, kwargs))
+                self.attempts += 1
+                if self.attempts == 1:
+                    assert any(",target=/home/cua/projects/Repo" in arg for arg in args)
+                    if leaves_container:
+                        self.raw = container(vm, target, self)
+                        self.raw["State"]["Running"] = False
+                    return Result(1, stderr="permission denied for the project mount")
+                assert not any("/home/cua/projects/" in arg for arg in args)
+                self.raw = container(vm, replace(target, projects=()), self)
+                return Result(0)
+            return await super().__call__(args, **kwargs)
+
+    runtime = RejectingRuntime()
+    settings = SettingsStore(conn)
+    settings.set("computer_vm_mode", "per-bot")
+    project = tmp_path / "Repo"
+    project.mkdir()
+    settings.set("project_folders", [str(project)])
+    settings.set("member_work_folder", {"0": str(project)})
+    vm = LocalVm(tmp_path / "data", settings=settings, runner=runtime, clock=lambda: 0)
+    target = vm.target()
+    assert (await vm.start(target))["ready"]
+    assert runtime.attempts == 2
+    assert vm.dropped_project_mounts[target.physical] == dict(target.projects)
+    assert "/home/cua/projects/Repo" in caplog.text
+    assert vm.mounted_target(target).projects == ()
+    assert vm.guest_work_folder(vm.mounted_target(target), 0) == GUEST
+    prompt = owner_context(settings, target=vm.mounted_target(target), folders=vm.local_folders)
+    assert "/home/cua/projects/Repo" not in prompt and f'"work_folder":"{GUEST}"' in prompt
+    assert [args for args, _ in runtime.calls if args[0] == "rm"] == ([["rm", target.name]] if leaves_container else [])
+    vm.clock = lambda: 120
+    assert (await vm.start(target))["ready"]
+    hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Bridge)
+    await hub.prepare()
+    command = next(tool for tool in hub.offered() if tool.name == "vm_exec")
+    assert (await hub.call(command.key, {"command": "pwd"}, approver="auto")).ok
+    assert any(args[0] == "exec" and args[-1] == f"cd {GUEST} && pwd" for args, _ in runtime.calls)
+    assert runtime.attempts == 2
 
 
 @pytest.mark.parametrize("change", [

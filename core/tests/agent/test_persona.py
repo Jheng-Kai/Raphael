@@ -38,7 +38,9 @@ def test_all_system_contracts_require_owner_approval_for_outward_vm_actions(lang
         persona.member_worker_system_prompt(**member, model_calls=5, tool_calls=10),
     ]
     for prompt in prompts:
-        for clause in ("no per-action approval", "owner holds control", "sending a message or email",
+        for clause in ("no per-action approval", "Never act while the owner holds control.",
+                       "Use only the computer assigned by the owner. If it cannot start, say why and stop.",
+                       "sending a message or email",
                        "publishing or posting", "outside the workspace", "paying or buying",
                        "approve on CLI brains", "API harness", "owner's yes", "unavailable, denied"):
             assert clause in prompt, clause
