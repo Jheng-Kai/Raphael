@@ -1034,7 +1034,7 @@ button.ob-tile:hover:not(:disabled) .ob-get { background: var(--pressed); }
 .btn.icon:is(.back-button, .close-button):hover:not(:disabled) { background: var(--hover); color: var(--text); }
 .btn.icon:is(.back-button, .close-button):active:not(:disabled) { background: var(--pressed); color: var(--text); }
 /* The plain way back beside a title is only a chevron: its own states draw nothing, and it takes its title's colour. */
-.btn.icon.back-button.back-link, .btn.icon.back-button.back-link:is(:hover, :active, :focus):not(:disabled) { border-color: transparent; background: transparent; box-shadow: none; }
+.btn.icon.back-button.back-link, .btn.icon.back-button.back-link:is(:hover, :active):not(:disabled) { border-color: transparent; background: transparent; box-shadow: none; }
 .btn.icon:is(.back-button, .close-button) .i { width: 18px; height: 18px; }
 :root[data-keys] .btn.icon.back-button:focus-visible,
 :root[data-keys] .btn.icon.close-button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }

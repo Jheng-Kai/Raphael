@@ -16,6 +16,8 @@ const registration = /\b(?:registerDismissal|bindNavLayer|openPopover|openDialog
 const keyOwners: Record<string, RegExp> = {
   "window-hotkeys.ts:handle": /voiceCapture/,
   "safety-rules.ts:key": /cancelEdit\(\)/,
+  // The address field's Escape puts the page's own address back, as a browser's does: a field edit, not a layer.
+  "host-browser-toolbar.ts:mountHostBrowserToolbar": /address\.value = shownUrl\(\)/,
   "ui.ts:listenForMenuEvents": /registerDismissal\(el, dismiss/,
 };
 
