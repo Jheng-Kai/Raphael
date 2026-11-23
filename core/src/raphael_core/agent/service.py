@@ -348,6 +348,8 @@ VOICE_TURN_TIMEOUT_S = 180.0
 _UNSPOKEN = ("denied", "expired", "cancelled")
 # How much of what a reading gave back (a held reading, after the owner's yes) the model is shown.
 _READ_CHARS = 6000
+# How much of a failed change's own words the member is told on a card of several.
+_FAILURE_CHARS = 600
 # Route classification retained for callers; all routes now share the full-history
 # and selected half-window context policy.
 _FULL_CONTEXT_ROUTES = ("discuss",)
@@ -736,6 +738,18 @@ OWN_CALENDAR_NOTE = (
 FLOOR_REFUSALS = 3
 FLOOR_AGAIN = (" This is the second refusal: do not try another command or path. Answer the owner now, in their language, "
                "with what you can: say in one plain sentence what you could not do, and go on with the rest of what they asked.")
+
+# What the team skill library answered, as a member is told it (members/service.py `_library_error`): its kind, its own
+# words and, where one is clear, the next step. Such an answer is a state of the library, never a wrong argument.
+_LIBRARY_NEXT = {
+    "taken": (" A skill with this name is already in the library, possibly switched off. Read member_library_list, then "
+              "remove that package (member_library_delete) or refresh it (member_library_update) instead of importing it again."),
+}
+
+
+def _library_instruction(kind: str, message: str) -> str:
+    return message.removeprefix("Invalid params: ") + _LIBRARY_NEXT.get(kind, "")
+
 
 _HARNESS_NOTES = {
     "owner_private_chat_only": "Management tools require the owner's interactive private chat or an approved background member action.",
@@ -3307,6 +3321,13 @@ class AgentService:
             return False
         return item is not None and item.name in READS
 
+    @staticmethod
+    def _left_out(result: ToolResult) -> dict:
+        """What an import that was made could not take (a skill library package's `skipped_references`, `skipped_links`)."""
+        package = result.data.get("package") if isinstance(result.data, dict) else None
+        left = {key: package[key] for key in ("skipped_references", "skipped_links") if isinstance(package, dict) and package.get(key)}
+        return {"left_out": left} if left else {}
+
     async def _carry_out_management_batch(self, pending: Pending, approval: Approval | None, followup: _Followup) -> dict:
         """The owner said yes to the card of several changes: each is carried out in order under its own part of that
         one yes. One that fails does not stop the others, and the failure is said plainly, to the owner and to the member."""
@@ -3334,8 +3355,11 @@ class AgentService:
                 result = ToolResult(call.tool.key, False, None, "error")
             gone = not result.ok and isinstance(result.data, dict) and result.data.get("field") == "not_found"
             lines.append(worded(line, language, done=result.ok, gone=gone))
-            report.append({"change": line, "ok": result.ok, **({} if result.ok else {"error": "not_found" if gone else str(result.error)}),
-                           **({"result": json.dumps(result.data, ensure_ascii=False, default=str)[:_READ_CHARS]} if result.ok and self._reading(call) else {})})
+            report.append({"change": line, "ok": result.ok,
+                           **({} if result.ok else {"error": "not_found" if gone else str(result.error),
+                                                    **({"message": result.instruction[:_FAILURE_CHARS]} if result.instruction else {})}),
+                           **({"result": json.dumps(result.data, ensure_ascii=False, default=str)[:_READ_CHARS]} if result.ok and self._reading(call) else {}),
+                           **(self._left_out(result) if result.ok else {})})
         done = sum(item["ok"] for item in report)
         step = self._step("tool", "management_batch", BUILTIN_SERVER, "ok" if done == len(report) else "error", began,
                           None if done == len(report) else "partial")
@@ -4083,7 +4107,10 @@ class AgentService:
                 instruction = COMPOSIO_KEY_STEP
             result = ToolResult(name, False, None, kind, instruction=instruction)
         except RpcError as error:
-            if error.code == INVALID_PARAMS:
+            if error.code == INVALID_PARAMS and (error.data or {}).get("library"):
+                kind = str(error.data.get("kind") or "bad_arguments")
+                result = ToolResult(name, False, {"field": kind}, kind, instruction=_library_instruction(kind, error.message))
+            elif error.code == INVALID_PARAMS:
                 result = ToolResult(name, False, {"field": (error.data or {}).get("kind", "")}, "bad_arguments", instruction=error.message)
             else:
                 # Not the member's arguments (#279): the handler failed, and its own words say why.
