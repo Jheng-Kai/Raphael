@@ -636,9 +636,9 @@ export function checkRendered(name, context = {}) {
       const closeBox = close.getBoundingClientRect(), countBox = count.getBoundingClientRect(), controls = actions.getBoundingClientRect();
       const centre = box => (box.top + box.bottom) / 2;
       require(visible(count) && title.nextElementSibling === count &&
-        Math.abs(arrow.left - start.left) <= 1 && Math.abs(arrow.top - start.top) <= 1 && Math.abs(centre(arrow) - centre(closeBox)) <= 1 &&
-        titleBox.top >= arrow.bottom - 1 && Math.abs(titleBox.left - start.left) <= 1 && Math.abs(centre(countBox) - centre(titleBox)) <= 1,
-        'the back button stands alone at the top left, level with the close; the title and count start the row below');
+        Math.abs(arrow.left - start.left) <= 1 && Math.abs(arrow.top - start.top) <= 1 && titleBox.left > arrow.right &&
+        [titleBox, countBox, closeBox].every(part => Math.abs(centre(arrow) - centre(part)) <= 1),
+        'the back button, title and count start at the top left and share a centre line with the close');
       const body = document.querySelector('.modal-scrim .modal-body').getBoundingClientRect();
       require(closeBox.left >= start.right + 8 && closeBox.right <= body.right && [...content.querySelectorAll('*')].filter(visible)
         .every(node => node === close || close.contains(node) || node.getBoundingClientRect().right <= closeBox.left - 8),

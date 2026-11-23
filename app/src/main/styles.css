@@ -560,9 +560,10 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .modal-scrim[data-standalone] .modal-body { padding-right: calc(var(--sp-4) + var(--close-gutter)); }
 /* A long page scrolls under its header: the back button, the title and the close stay where they are, on the dialog's own
    colour, and a hairline shows under them only once something has scrolled beneath. */
-.modal-body :is(.set-content > .set-head, .cs > .cs-top, .cs-page > .cs-head, .skl-pack) { position: sticky; top: var(--body-top); z-index: 3; background: var(--dialog);
-  box-shadow: 0 calc(-1 * var(--body-top)) 0 var(--dialog); animation: set-head-edge linear both; animation-timeline: scroll(nearest block); animation-range: 0 12px; }
-@keyframes set-head-edge { from { box-shadow: 0 calc(-1 * var(--body-top)) 0 var(--dialog), 0 1px 0 transparent; } to { box-shadow: 0 calc(-1 * var(--body-top)) 0 var(--dialog), 0 var(--sp-3) 0 var(--dialog), 0 calc(var(--sp-3) + 1px) 0 var(--line); } }
+.modal-body :is(.set-content > .set-head, .cs > .cs-top, .cs-page > .cs-head, .skl-pack) { position: sticky; top: 0; z-index: 3;
+  --head-cover: inset 0 0 0 100vmax var(--dialog), 0 calc(-1 * var(--body-top)) 0 var(--dialog);
+  box-shadow: var(--head-cover); animation: set-head-edge linear both; animation-timeline: scroll(nearest block); animation-range: 0 12px; }
+@keyframes set-head-edge { from { box-shadow: var(--head-cover), 0 1px 0 transparent; } to { box-shadow: var(--head-cover), 0 var(--sp-3) 0 var(--dialog), 0 calc(var(--sp-3) + 1px) 0 var(--line); } }
 /* A page title that has a back button beside it goes back too. */
 [data-title-back] { cursor: pointer; }
 [data-title-back]:hover { color: var(--text-2); }

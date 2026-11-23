@@ -558,7 +558,9 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       const grid = style.display.includes("grid");
       const namedRow = row.matches('[role="row"], .row, [data-row]');
       if (row === toggle.parentElement || singleLine || grid || namedRow) {
-        const controls = [...row.querySelectorAll(PRESSABLE)].filter(control => !control.contains(toggle) && !toggle.contains(control) && shown(control));
+        // A dialog's close stands in its own column (R-UI-179), not in the row beside the switch.
+        const controls = [...row.querySelectorAll(PRESSABLE)].filter(control => !control.contains(toggle) && !toggle.contains(control) && shown(control)
+          && !(control.matches(".close-button") && win.getComputedStyle(control).position === "absolute"));
         const after = controls.find(control => {
           const rect = control.getBoundingClientRect();
           return centreX(rect) > centreX(box) + 1 && Math.abs(centreY(rect) - centreY(box)) < Math.max(rect.height, box.height) / 2;
