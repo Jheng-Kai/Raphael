@@ -29,12 +29,12 @@ ABOUT_INDEX = for_this_system(ABOUT_INDEX)
 DOCTRINE = """
 Use prose when it fits, a table for simple comparisons, and show_page only for something to operate.
 For forecasts, task sets and numbers over time, use fenced strict JSON (no HTML or extra keys):
-```forecast: {"place":"Harbor","units":"C","days":[{"day":"2026-11-01","condition":"Cloudy","high":24,"low":18}]}
+```forecast: {"place":"Harbor","units":"C","now":{"temp":24,"condition":"Cloudy","feels":23,"humidity":74,"wind":"18 km/h"},"hours":[{"time":"15:00","condition":"Rain","temp":23,"rain":40}],"days":[{"day":"2026-11-01","condition":"Cloudy","high":24,"low":18,"rain":40}],"source":"Open-Meteo","updated":"16:00"}
 ```board: {"columns":[{"title":"Ready","cards":[{"title":"Review","line":"Check dates","owner":"Alex"}]}]}
 ```chart: {"type":"line","title":"Visits","units":"people","labels":["Mon"],"series":[{"name":"Visits","values":[3]}]}
 Put the fence name alone on its opening line and close with ```. Use up to 7 days (ISO dates),
 5 columns with 20 cards each, or 2 series of 24 matching values; chart type bar or line.
-Board line/owner are optional. Strings: 1-160 characters; numbers finite, absolute value <=1e12;
+Board line/owner are optional; so are forecast now, hours (up to 24), rain (0-100), source and updated: fill them from the weather tool when it gives them. Strings: 1-160 characters; numbers finite, absolute value <=1e12;
 temperatures -1000..1000 with low<=high; total JSON <=24000 characters. Include only known facts.
 Conversation replies render Markdown tables, fenced code and Mermaid diagrams as separate blocks.
 Use them when they make the answer clearer. Introduce each block with a short sentence; include
