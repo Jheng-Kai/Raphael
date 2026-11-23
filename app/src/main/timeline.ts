@@ -1,7 +1,7 @@
 import { missingHTML, missingRepairHTML, missingText, type Missing } from "./missing";
 import { fileKind, sentFileHTML } from "./attachments";
 import { videoPlayerHTML } from "./media-player";
-import { computerCardsHTML, computerResumedLineHTML } from "./computer-card";
+import { computerCardsHTML } from "./computer-card";
 import { connectorCardsHTML, resumedLineHTML } from "./connector-card";
 import { NAME, eventLineHTML, eventPeopleHTML } from "./event-line";
 import { handoffGroupHTML } from "./handoff-line";
@@ -745,7 +745,7 @@ function messageBlockHTML(turn: AgentTurn, key: string, text: string, time: numb
   // An earlier version of an edited message is read again, not answered: its replies keep Copy alone, no menu, no Run again.
   const earlier = earlierVersion(turn);
   const retry = reply && last && !earlier ? rerunActionHTML(turn, state, regenerate) : "";
-  return `<div class="chat-message${expanded ? " is-expanded" : ""}" data-message="${esc(key)}"${reply ? ' data-reply="true"' : ""}>` +
+  return `<div class="chat-message${expanded ? " is-expanded" : ""}" data-message="${esc(key)}"${reply ? ` data-reply="true"${turn.status === "running" ? "" : ` data-path-member="${turn.member_id ?? 0}"`}` : ""}>` +
     (reply && origin && sourceOf(turn) === "routine" ? routineLineHTML(turn) : "") +
     withReactions(reply ? replyContentHTML(text, query, turn.status === "running", undefined, state.files) : `<div class="ans progress"><div class="message-text">${messageHTML(text, query)}</div></div>`, turn.reactions?.[key]) +
     (reply && last && !earlier ? usageActionHTML(turn) + signinActionHTML(turn, state, latestFailure) : "") +
@@ -1282,7 +1282,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
   const line = (classes: string, body: string): string => `<li class="tn${classes}" data-id="${id}" data-status="${esc(turn.status)}"${live && part?.owner !== "question" ? ' data-live="true"' : ""}` +
     `${part?.after !== undefined ? ` data-after="${esc(part.after)}"` : ""}>${body}</li>`;
   const head = !first ? "" :
-    (resumed ? resumedLineHTML(turn) + secretResumedLineHTML(turn) + computerResumedLineHTML(turn) : "") +
+    (resumed ? resumedLineHTML(turn) + secretResumedLineHTML(turn) : "") +
     // A brief another member handed over says who from, in place of the owner's bubble.
     (delegatedTurn(turn) && turn.question.trim() ? receivedLineHTML(turn, look) : "") +
     // The message the composer holds for editing is not drawn: it is taken back into the composer, and returns if the edit is given up.

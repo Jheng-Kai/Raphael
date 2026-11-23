@@ -162,7 +162,8 @@ export function openActions(anchor: HTMLElement, items: readonly (ActionItem | t
           `<span class="ck">${item.icon ? ico(item.icon) : ""}</span><span class="mt">${esc(item.label)}</span>${item.submenu ? ico("right") : ""}</button>`,
       )
       .join(""),
-    { className: "menu mb-menu", role: "menu", label: anchor.getAttribute("aria-label") ?? undefined },
+    { className: "menu mb-menu", role: "menu", label: anchor.getAttribute("aria-label") ?? undefined,
+      navigation: { step: direction => direction === "forward" || !!el.querySelector('[data-asking="true"]') } },
   );
   el.addEventListener("click", (e) => {
     const led = lead && (e.target as Element).closest<HTMLElement>("[data-lead]");

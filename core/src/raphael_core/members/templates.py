@@ -1,5 +1,6 @@
 """Portable member recipes: explicit public fields only, never grants or private state."""
 
+import asyncio
 import json
 import re
 from pathlib import PurePosixPath
@@ -188,12 +189,15 @@ async def handle(service, params):
                                   "ui_language": params.get("ui_language")})
     identifier = made["member"]["id"]
     try:
-        for skill in value["skills"]:
-            kept = service.capabilities.keep_recipe(identifier, skill["text"], skill.get("files", {}))
-            service.capabilities.update_skill(identifier, kept["id"], False)
+        if value["skills"]:
+            source = "member-template"
+            documents = [(source, {"SKILL.md": skill["text"].encode("utf-8"),
+                                   **{path: content.encode("utf-8") for path, content in skill.get("files", {}).items()}})
+                         for skill in value["skills"]]
+            await service.packages.install(identifier, documents, source, "template", "", enabled=False)
         for routine in value["routines"]:
             service.store.create_routine(member_id=identifier, **routine, enabled=False, next_run_ms=None)
-    except Exception:
+    except (Exception, asyncio.CancelledError):
         # Never leave a partly imported recipe presented as complete.
         await service._delete({"id": identifier})
         raise

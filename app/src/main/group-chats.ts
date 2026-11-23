@@ -496,7 +496,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
       const actions= messageActionsHTML(m.created, false, undefined, false).replace('</div>',reactionControlHTML() + iconButton("chat", t("rooms.thread"), ` data-room-act="thread" data-message="${m.id}"`).replace(" title=", " data-tooltip=") + (!owner?iconButton("reply",t("rooms.reply"),` data-room-act="reply" data-message="${m.id}"`).replace(" title="," data-tooltip="):"")+"</div>");
       const metadata = (m.reply_count ? `<button type="button" class="btn sm room-thread-chip" data-room-act="thread" data-message="${m.id}">${esc(t("rooms.threadCount", { p0: m.reply_count }))}</button>` : "");
       const preview = ` data-expandable="true"`, expanded = expandedMessages.has(m.id) ? " is-expanded" : "";
-      return `<li class="tn au-room-message${m.kind==="wrapup"?" au-room-wrapup":""}" data-room-message="${m.id}">${owner?`<div class="me">${ownerFaceHTML()}<div class="chat-message owner-message${expanded}"${preview}>${withReactions(`${words?"":reply}${filesHTML(m.attachments)}${words?`<div class="bubble">${reply}<div class="message-text">${messageHTML(words, "", false, addressable)}</div>${messageExpandHTML(words, expandedMessages.has(m.id))}</div>`:""}`, m.reactions)}${actions}${metadata}</div></div>`:`<div class="ra"><span class="ra-face"${member?` data-tooltip="${esc(member.name)}"`:""}>${member?faceHTML(member,30):""}</span><div class="ra-body"><b class="au-room-author">${esc(member?.name??t("members.title"))}</b>${(parts.some(part=>part.trim())?parts:[words]).map((part,index)=>`<div class="chat-message" data-room-part="${index}">${index===0?withReactions(quoted(replyContentHTML(part,"",m.status==="running"),reply),m.reactions):replyContentHTML(part,"",m.status==="running")}${index===parts.length-1?actions+metadata:""}</div>`).join("")}${m.turn ? conversationCardsHTML(m.turn, m.member_id ? member?.name : t("agent.title"), pictureActionsHTML(actions)) : ""}</div></div>`}</li>`;
+      return `<li class="tn au-room-message${m.kind==="wrapup"?" au-room-wrapup":""}" data-room-message="${m.id}">${owner?`<div class="me">${ownerFaceHTML()}<div class="chat-message owner-message${expanded}"${preview}>${withReactions(`${words?"":reply}${filesHTML(m.attachments)}${words?`<div class="bubble">${reply}<div class="message-text">${messageHTML(words, "", false, addressable)}</div>${messageExpandHTML(words, expandedMessages.has(m.id))}</div>`:""}`, m.reactions)}${actions}${metadata}</div></div>`:`<div class="ra"><span class="ra-face"${member?` data-tooltip="${esc(member.name)}"`:""}>${member?faceHTML(member,30):""}</span><div class="ra-body"><b class="au-room-author">${esc(member?.name??t("members.title"))}</b>${(parts.some(part=>part.trim())?parts:[words]).map((part,index)=>`<div class="chat-message" data-room-part="${index}"${m.status!=="running"&&m.member_id!==null?` data-path-member="${m.member_id}"`:""}>${index===0?withReactions(quoted(replyContentHTML(part,"",m.status==="running"),reply),m.reactions):replyContentHTML(part,"",m.status==="running")}${index===parts.length-1?actions+metadata:""}</div>`).join("")}${m.turn ? conversationCardsHTML(m.turn, m.member_id ? member?.name : t("agent.title"), pictureActionsHTML(actions)) : ""}</div></div>`}</li>`;
     }), })).filter(line => line.html) : [{ key: "empty", html: `<li class="au-empty">${esc(t("rooms.empty"))}</li>`, turnId: undefined }];
     renderedMessages.retain(new Set(grouped.map(({entry}) => entryKey(entry))));
     const changed = patchThread(thread, wanted, drawn, {
@@ -570,14 +570,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
       measureAllMessages();
     }
     else if(act==="stop"&&room&&!stopping){stopping=true;const id=room.id;draw();void api.roomStop(id).then(()=>refresh()).catch(error=>toaster.info(describeError(error))).finally(()=>{stopping=false;if(opened)draw();});}
-    else if(act==="thread" && roomId && !sideOpening){
-      sideOpening = true;
-      const current = roomId, message = Number(target.dataset.message);
-      closeSideThread?.(); closeSideThread = undefined;
-      void openRoomThread(el, _app, current, message, list, () => { if (opened) void refresh(); }).then(close => {
-        if (!opened || current !== roomId) close(); else closeSideThread = close;
-      }).catch(error => toaster.info(describeError(error))).finally(() => { sideOpening = false; });
-    }
+    else if(act==="thread") openSideThread(Number(target.dataset.message));
     else if(act==="reply"){replyTo=messages.find(m=>m.id===Number(target.dataset.message));draw();composer.input.focus();}
     else if(act==="jump-reply") void (async () => {
       const id = Number(target.dataset.message), current = roomId;
@@ -600,6 +593,17 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     else if(act==="team-file-open")void api.openTeamFile(target.dataset.path??"").catch(()=>toaster.info(t("agent.fileUnavailable")));
     else if(act==="older") void loadRoomEarlier().then(() => { if (messages[0] && roomWindow.focus(`message:${messages[0].id}`)) draw(); });
   });
+  function openSideThread(message: number): void {
+    if (!roomId || sideOpening) return;
+    sideOpening = true;
+    const current = roomId;
+    closeSideThread?.(); closeSideThread = undefined;
+    void openRoomThread(el, _app, current, message, list, () => { if (opened) void refresh(); }, () => {
+      if (opened && current === roomId) openSideThread(message);
+    }).then(close => {
+      if (!opened || current !== roomId) close(); else closeSideThread = close;
+    }).catch(error => toaster.info(describeError(error))).finally(() => { sideOpening = false; });
+  }
   window.addEventListener("room-deleted",event=>{forgetRoomDraft((event as CustomEvent<number>).detail);});
   const listener=(event?: MainEvent):void=>{
     if (!opened || !el.isConnected) return;
@@ -613,10 +617,15 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   };listeners.add(listener);onLocaleChange(()=>{if(opened)draw();});
   onAvatarChange(()=>{if(opened && el.isConnected)draw();});
   return {el,close,refresh,
+    keepNavigationPlace(): boolean {
+      if (questionWaits(messages.flatMap(message => message.turn ? [message.turn] : []),
+        pendingQuestions?.room === roomId ? pendingQuestions?.questions ?? [] : [])) return true;
+      if (!replyTo && !composer.input.value && !composer.el.querySelector(".cmp-chip")) return false;
+      composer.input.focus({ preventScroll: true });
+      return true;
+    },
     /** Ctrl+F opens the room's search bar: no button in its top row any more. */
     find:()=>finder.open(),
-    /** The page open in the room's thread place, for the way back (nav-history.ts), and how a step opens or puts one away. */
-    page:()=>pagesHost.shown(),showPage:(id:string,title:string)=>void pagesHost.show(id,title,()=>{}),closePage:()=>pagesHost.close(),
     async open(id:number){
     closeSideThread?.(); closeSideThread = undefined;
     if (meetingPanel?.isConnected) closeMenu();

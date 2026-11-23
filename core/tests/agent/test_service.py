@@ -37,6 +37,8 @@ LOCAL_NOW = datetime(2026, 10, 20, 14, 5, 9, tzinfo=timezone(timedelta(hours=8))
 METHODS = [
     "agent.ask",
     "agent.cancel",
+    "agent.computer_choice",
+    "agent.computer_suggestion",
     "agent.confirm",
     "agent.history.clear",
     "agent.history.delete",
@@ -1399,7 +1401,9 @@ async def test_nothing_at_t2_or_above_runs_on_the_strength_of_a_spoken_request(
 async def test_cancelling_a_request_that_is_still_thinking_ends_it_and_nothing_is_done(
     make_rig, client, actions
 ):
-    rig = make_rig(decider=Decider(client, jev_total_s=10.0, jev_first_s=10.0))
+    notices = []
+    rig = make_rig(decider=Decider(client, jev_total_s=10.0, jev_first_s=10.0),
+                   notify=lambda method, params: notices.append((method, params)))
 
     async def hang(**kwargs):
         await asyncio.sleep(30)
@@ -1407,10 +1411,14 @@ async def test_cancelling_a_request_that_is_still_thinking_ends_it_and_nothing_i
     client.decisions.append(hang)
     asking = asyncio.ensure_future(rig.ask("打開 YouTube"))
     await until(lambda: client.decide_calls)
+    [pending] = await rig.turns()
+    assert pending["status"] == "running"
+    notices.clear()
     assert await rig.call("agent.cancel", {"session_id": "s1"}) == {}
     result = await asyncio.wait_for(asking, 2)
     assert result == {"status": "done", "turn_id": 0, "prefix": "了", "text": "已取消。"}
     assert actions.calls == [] and await rig.turns() == []
+    assert ("agent.turn", {"turn_id": pending["id"], "member_id": 0, "failure": None}) in notices
 
 
 async def test_a_request_that_arrives_after_its_cancel_is_cancelled_and_runs_nothing(

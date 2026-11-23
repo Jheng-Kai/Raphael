@@ -647,13 +647,13 @@ class ContextKeeper:
 
     async def fit(self, messages: MutableSequence[dict[str, Any]], tools: Sequence[dict] = ()) -> None:
         """Shrink `messages` in place if the next prompt is due to: see the module."""
-        if self.used(messages, tools) < self.trigger:
+        before = self.used(messages, tools)
+        if before < self.trigger:
             return
         now = self._clock()
         asked = self._summarize is not None and now >= self._paused_until and now >= self._blocked_until
         if asked:
-            before = self.used(messages, tools)
-            if await self._fold(messages, self._room(self.tail)):
+            if await self._fold(messages, self._room(self.tail), excess=before - self.trigger):
                 after = self.used(messages, tools)
                 if after < before * SAVED_ENOUGH and after < self.trigger:
                     self._ineffective = 0
@@ -663,8 +663,10 @@ class ContextKeeper:
                     self._blocked_until = self._clock() + ANTI_THRASH_S
                     self._ineffective = 1  # the next try is a probe: one more that does not help blocks again
         shorten_results(messages, _tail_start(messages, self._room(self.trigger * KEEP_SHARE)))
-        if not asked and self.used(messages, tools) >= self.trigger * ENOUGH_SHARE and self._clock() >= self._blocked_until:
-            await self._fold(messages, self._room(self.tail))
+        if not asked and self._clock() >= self._blocked_until:
+            used = self.used(messages, tools)
+            if used >= self.trigger * ENOUGH_SHARE:
+                await self._fold(messages, self._room(self.tail), excess=used - self.trigger)
 
     async def overflowed(self, messages: MutableSequence[dict[str, Any]], window: int | None = None) -> bool:
         """The provider refused the prompt as too long, and may have said what its window is. Shrink
@@ -692,11 +694,16 @@ class ContextKeeper:
                 return True
         return False
 
-    async def _fold(self, messages: MutableSequence[dict[str, Any]], tail: int, *, force: bool = False) -> bool:
+    async def _fold(
+        self, messages: MutableSequence[dict[str, Any]], tail: int, *, excess: int = 0, force: bool = False,
+    ) -> bool:
         """Replace the rounds between the owner's request and a tail of `tail` tokens with a checkpoint."""
         request = next((i for i, message in enumerate(messages) if message.get("role") == "user"), None)
         if request is None:
             return False
+        if excess > 0:
+            # The system and request stay. Their size can push the prompt over budget even when all rounds fit in the tail.
+            tail = min(tail, max(total_tokens(messages[request + 1 :]) - excess, 0))
         cut = _tail_start(messages, tail)
         if cut <= request + 1:
             return False

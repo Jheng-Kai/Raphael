@@ -225,7 +225,7 @@
 .mb-dialog { display: flex; flex-direction: column; gap: calc(14px + 6 * var(--pa-u)); width: min(var(--pa-dlg-w), 100%); max-height: 100%; overflow: hidden; padding: var(--pa-dlg-pad); border-radius: var(--r-lg); background: var(--dialog); border: 1px solid var(--float-edge); box-shadow: var(--pop); animation: dialog-in 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
 .mb-dlg-head { display: flex; align-items: center; gap: var(--sp-2); }
 .mb-dlg-head h2 { flex: 1; min-width: 0; margin: 0; font: 500 var(--pa-dlg-h2)/1.35 var(--display); overflow-wrap: anywhere; }
-.mb-dialog .btn.icon { width: calc(34px + 8 * var(--pa-u)); min-height: calc(34px + 8 * var(--pa-u)); border-radius: var(--r-sm); }
+.mb-dialog .btn.icon:where(:not(.back-button, .close-button)) { width: calc(34px + 8 * var(--pa-u)); min-height: calc(34px + 8 * var(--pa-u)); border-radius: var(--r-sm); }
 .mb-dlg-head, .mb-dlg-act { flex: none; }
 .mb-dlg-body { min-height: 0; overflow-x: hidden; overflow-y: auto; scroll-padding-block: var(--sp-4); display: grid; grid-template-columns: minmax(0, 1fr); gap: calc(12px + 4 * var(--pa-u)); }
 .mb-dlg-body:empty { display: none; }
@@ -246,7 +246,7 @@
 .mb-dialog.mb-confirm { width: min(440px, 100%); gap: 0; padding: 0; border: 1px solid var(--edge); border-radius: var(--r-lg); }
 .mb-confirm .mb-dlg-head { align-items: center; min-height: 48px; padding: var(--sp-2) var(--sp-4); border-bottom: 1px solid var(--line); }
 .mb-confirm .mb-dlg-head h2 { font-size: var(--fs-sm); font-weight: var(--weight-semibold); }
-.mb-confirm .mb-dlg-head .btn.icon { flex: none; width: 32px; min-height: 32px; }
+.mb-confirm .mb-dlg-head .btn.icon:where(:not(.back-button, .close-button)) { flex: none; width: 32px; min-height: 32px; }
 .mb-confirm:has(.mb-dlg-act [data-dlg="cancel"]) .mb-dlg-head [data-dlg="close"] { display: none; }
 .mb-confirm .mb-dlg-body { padding: var(--sp-4); font-size: var(--fs-sm); line-height: 1.55; color: var(--text-2); overflow-wrap: anywhere; }
 .mb-confirm .mb-dlg-body p { margin: 0; }
@@ -292,7 +292,7 @@
 /* The icons are drawn on a 16 px grid and are shown at 16 or 20 px, never between (ui-rules.test.ts): so
    they do not follow the fluid sizes, they step from 16 to 20 px once the window is wide. */
 @media (min-width: 1280px) {
-  .page-agent .btn.mb-tool .i, :is(.page-agent, .side) .mb-item .btn.mb-more .i, .page-agent .mb-det-head .btn.icon .i, .page-agent .mb-dh .btn.icon .i, .mb-dialog .btn.icon .i { width: 20px; height: 20px; }
+  .page-agent .btn.mb-tool .i, :is(.page-agent, .side) .mb-item .btn.mb-more .i, .page-agent .mb-det-head .btn.icon:where(:not(.back-button, .close-button)) .i, .page-agent .mb-dh .btn.icon .i, .mb-dialog .btn.icon:where(:not(.back-button, .close-button)) .i { width: 20px; height: 20px; }
   .sys .i { width: 20px; height: 20px; }
   .menu.mb-avpop :is(.ck, .ck svg, svg.i), .menu.mb-menu :is(.ck, .ck svg, svg.i) { width: 20px; height: 20px; }
 }

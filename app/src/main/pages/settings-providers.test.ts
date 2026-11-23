@@ -4,8 +4,8 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { AppContext, MainEvent, ModelCatalog, SettingsPane } from "../types";
 import { setLocale, t } from "../i18n";
 import { createHotkeyRecording } from "../hotkey-recording";
-import { Navigation } from "../nav-history";
-import { hasOpenLayer, stepOpenLayer } from "../dismissals";
+import { clearLayerForward } from "../nav-history";
+import { stepOpenLayer } from "../dismissals";
 import { installNavInput } from "../nav-input";
 import { navInputs, pressLayer, sendNavInput } from "../test-support/nav-layer-input";
 import { Cleared } from "../cleared";
@@ -23,7 +23,7 @@ const api = vi.hoisted(() => ({
   // The read-ahead after start-up also reads 連接 (connections.ts load); here that core does not answer it.
   toolsetsList: vi.fn(async () => { throw new Error("offline"); }), connectorsStatus: vi.fn(async () => { throw new Error("offline"); }),
   integrationsAudit: vi.fn(async () => { throw new Error("offline"); }), integrationsInventory: vi.fn(async () => { throw new Error("offline"); }),
-  integrationsCatalog: vi.fn(async () => { throw new Error("offline"); }),
+  integrationsCatalog: vi.fn(),
 }));
 vi.mock("../api", () => api);
 vi.mock("@tauri-apps/api/app", () => ({ getVersion: async () => "test" }));
@@ -46,8 +46,10 @@ const flush = async () => { for (let i = 0; i < 40; i++) await Promise.resolve()
 const listeners = new Set<(event: MainEvent) => void>();
 const send = (event: MainEvent) => { for (const listener of listeners) listener(event); };
 let page: ReturnType<typeof createSettings>;
-const closeSettings = vi.fn();
-const go = vi.fn();
+const closeSettings = vi.fn(() => { page.hide(); page.el.hidden = true; });
+const go = vi.fn((id: string, pane: SettingsPane) => {
+  if (id === "settings") { page.el.hidden = false; void page.show(pane); }
+});
 async function mount(open: SettingsPane = "models") {
   create();
   await page.show(open); await flush();
@@ -62,6 +64,98 @@ function create() {
   document.body.append(page.el); page.el.hidden = false;
 }
 const click = (selector: string) => { const button = document.querySelector<HTMLButtonElement>(selector); expect(button, selector).not.toBeNull(); button!.click(); };
+
+function withMouseBack(check: (back: () => void) => void): void {
+  const underlying = vi.fn();
+  const stop = installNavInput(window, direction => {
+    if (!stepOpenLayer(direction)) underlying();
+  });
+  try {
+    check(() => sendNavInput("mouse", "back"));
+    expect(underlying).not.toHaveBeenCalled();
+  } finally { stop(); }
+}
+
+test("mouse Back and Forward retrace Slack, Connectors and the conversation", async () => {
+  const description = { "zh-TW": "Slack", en: "Slack", ja: "Slack" };
+  api.integrationsCatalog.mockResolvedValue({ services: [{
+    id: "slack", name: "Slack", publisher: "Slack", icon: "slack", category: "messaging", auth: "oauth",
+    summary: description, about: description, examples: {}, server_id: null,
+  }] });
+  await mount("connections");
+  click('.cs-card [data-conn="open-store"][data-id="slack"]');
+  expect(page.el.querySelector("#cs-page-title")?.textContent).toBe("Slack");
+  withMouseBack(back => {
+    back();
+    expect(page.el.querySelector(".cs-apps")).not.toBeNull();
+    expect(document.activeElement?.getAttribute("data-k")).toBe("cs-store:slack");
+    expect(closeSettings).not.toHaveBeenCalled();
+    back();
+    expect(closeSettings).toHaveBeenCalledOnce();
+    sendNavInput("mouse", "forward");
+    expect(page.el.hidden).toBe(false);
+    expect(page.el.querySelector(".cs-apps")).not.toBeNull();
+    sendNavInput("mouse", "forward");
+    expect(page.el.querySelector("#cs-page-title")?.textContent).toBe("Slack");
+  });
+});
+
+test("mouse Back closes a plugin menu, then returns to the team skill list, then closes Settings", async () => {
+  api.core.mockResolvedValue({ members: [], packages: [{
+    key: "set:1", name: "Example plugin", kind: "plugin", source: "", description: "", version: "",
+    enabled: true, access: "all", updatable: false, skills: [{ id: 1, name: "example", description: "Skill notes", enabled: true }],
+  }] });
+  await mount("skills");
+  click('[data-skl="open"][data-key="set:1"]');
+  const header = page.el.querySelector(".skl-page header")!;
+  expect(header.querySelector('#set-title')?.textContent).toBe("Example plugin");
+  expect(header.querySelector('.close-button')).not.toBeNull();
+  expect(page.el.querySelectorAll('.close-button')).toHaveLength(1);
+  click('.skl-page [data-skl="access"]');
+  expect(document.querySelector("#app-popover")).not.toBeNull();
+  withMouseBack(back => {
+    back();
+    expect(document.querySelector("#app-popover")).toBeNull();
+    expect(page.el.querySelector(".skl-page")).not.toBeNull();
+    click('[data-skl="skill-more"]');
+    click('#app-popover [data-pick="details"]');
+    expect(document.querySelector(".skl-details")?.textContent).toContain("Skill notes");
+    back();
+    expect(document.querySelector(".skl-details")).toBeNull();
+    expect(page.el.querySelector(".skl-page")).not.toBeNull();
+    back();
+    expect(page.el.querySelector(".skl-page")).toBeNull();
+    expect(page.el.querySelector('[data-skl="open"][data-key="set:1"]')).toBe(document.activeElement);
+    expect(closeSettings).not.toHaveBeenCalled();
+    back();
+    expect(closeSettings).toHaveBeenCalledOnce();
+    sendNavInput("mouse", "forward");
+    expect(page.pane()).toBe("skills");
+    sendNavInput("mouse", "forward");
+    expect(page.el.querySelector(".skl-page")).not.toBeNull();
+    sendNavInput("mouse", "forward");
+    expect(document.querySelector(".skl-details")?.textContent).toContain("Skill notes");
+  });
+});
+
+test("mouse Back keeps an unsaved connector form and its visible Cancel can discard it", async () => {
+  await mount("connections");
+  click('[data-k="conn-add"]');
+  click('#app-popover [data-value="custom"]');
+  const field = page.el.querySelector<HTMLInputElement>("#conn-name")!;
+  field.value = "Draft";
+  field.dispatchEvent(new Event("input", { bubbles: true }));
+  withMouseBack(back => {
+    back();
+    expect(field.isConnected).toBe(true);
+    expect(field.value).toBe("Draft");
+    expect(closeSettings).not.toHaveBeenCalled();
+    click('[data-conn="form-cancel"]');
+    expect(page.el.querySelector(".cs-apps")).not.toBeNull();
+    back();
+    expect(closeSettings).toHaveBeenCalledOnce();
+  });
+});
 
 test.each(navInputs)("navigation in the key recorder never records a navigation chord with %s", async input => {
   const recorded = vi.fn(), ended = vi.fn(), cell = document.createElement("button");
@@ -78,7 +172,7 @@ test.each(navInputs)("navigation in the key recorder never records a navigation 
   expect(recorded).not.toHaveBeenCalled();
 });
 
-test.each(navInputs)("back clears a private vault draft and leaves Settings open with %s", async input => {
+test.each(navInputs)("Back protects a private vault draft and leaves Settings open with %s", async input => {
   await mount("safety");
   click('[data-vault="new"]');
   click('#app-popover [data-value="contact"]');
@@ -87,33 +181,30 @@ test.each(navInputs)("back clears a private vault draft and leaves Settings open
   pressLayer(input, "forward");
   expect(field.value).toBe("unsaved");
   pressLayer(input);
-  expect(field.value).toBe("");
+  expect(field.value).toBe("unsaved");
+  expect(document.activeElement).toBe(field);
+  click('[data-vault="cancel"]');
   expect(page.el.querySelector(".vault-editor")).toBeNull();
   expect(closeSettings).not.toHaveBeenCalled();
 });
 
-test.each(navInputs)("Settings retraces Usage's overview and analysis before closing with %s", async input => {
+test.each(navInputs)("Back closes Settings and Forward restores the selected Usage tab with %s", async input => {
   await mount("usage");
-  const navigation = new Navigation({
-    where: () => ({ page: "agent", pane: page.pane(), paneView: page.navView() }),
-    inGuide: () => false,
-    stepLayer: stepOpenLayer,
-    show(place) { expect(place.pane).toBe("usage"); page.showNavView(place.pane!, place.paneView!); },
-  });
-  const stop = installNavInput(window, direction => navigation.step(direction), hasOpenLayer);
-  try {
-    navigation.note();
-    click('[data-usage-tab="analysis"]');
-    sendNavInput(input, "back");
-    expect(page.navView()).toBe("overview");
-    sendNavInput(input, "forward");
-    expect(page.navView()).toBe("analysis");
-    sendNavInput(input, "forward");
-    expect(closeSettings).not.toHaveBeenCalled();
-    sendNavInput(input, "back");
-    sendNavInput(input, "back");
-    expect(closeSettings).toHaveBeenCalledOnce();
-  } finally { stop(); }
+  click('[data-usage-tab="analysis"]');
+  pressLayer(input, "back");
+  expect(page.el.hidden).toBe(true);
+  pressLayer(input, "forward");
+  expect(page.el.hidden).toBe(false);
+  expect(page.el.querySelector('[data-usage-tab="analysis"]')?.getAttribute("aria-selected")).toBe("true");
+});
+
+test.each(navInputs)("Back closes Settings from Models selected after General with %s", async input => {
+  await mount("general");
+  click('[data-pane="models"]');
+  pressLayer(input, "back");
+  expect(page.el.hidden).toBe(true);
+  pressLayer(input, "forward");
+  expect(page.pane()).toBe("models");
 });
 
 test("opening Settings and navigating back to Models starts at the top and a redraw preserves its position", async () => {
@@ -171,6 +262,9 @@ test("快速提問 picks its effort inside the model list, as the answer model d
 
 beforeEach(() => {
   vi.restoreAllMocks(); vi.resetAllMocks(); listeners.clear(); setLocale("en");
+  closeSettings.mockImplementation(() => { page.hide(); page.el.hidden = true; });
+  go.mockImplementation((id, pane) => { if (id === "settings") { page.el.hidden = false; void page.show(pane); } });
+  api.integrationsCatalog.mockRejectedValue(new Error("offline"));
   api.core.mockImplementation(async method => method === "memory.get" ? {text:"",revision:0} : method === "safety.rules.list" ? {rules:[]} : {});
   api.settingsGet.mockResolvedValue({ settings: { stt_engine: "cloud" } });
   api.secretsStatus.mockResolvedValue({ has_key: true });
@@ -192,7 +286,7 @@ beforeEach(() => {
   api.membersList.mockRejectedValue(new Error("offline"));
   api.settingsSet.mockImplementation(async (key: string, value: string) => ({ settings: { stt_engine: "cloud", [key]: value } }));
 });
-afterEach(() => { page?.hide(); document.body.innerHTML = ""; setLocale("zh-TW"); });
+afterEach(() => { clearLayerForward(); page?.hide(); document.body.innerHTML = ""; setLocale("zh-TW"); });
 
 /** A week of `usage.analytics`, as the core answers it (brain/usage.py). */
 const DAYS = ["2026-11-15", "2026-11-16", "2026-11-17", "2026-11-18", "2026-11-19", "2026-11-20", "2026-11-21"];
@@ -444,10 +538,12 @@ test("Models contains no spending and Usage mounts its allowances once, plainly,
   const node = page.el.querySelector(".usage-analytics")!;
   // This month's spending leads in a card, then the allowances, and nothing else is on the page.
   expect(spend.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  // No refresh button anywhere on the tab, and nothing beside its name: opening Settings reads it all.
+  // Opening Settings reads the usage data. The header's only button is Close.
   expect(node.querySelector("button.icon")).toBeNull();
-  expect(page.el.querySelector('[data-act="models-refresh"], .set-head, .models-refresh')).toBeNull();
-  expect(page.el.querySelector(".set-content > h1")?.nextElementSibling?.classList.contains("usage-page")).toBe(true);
+  expect(page.el.querySelector('[data-act="models-refresh"], .models-refresh')).toBeNull();
+  const header = page.el.querySelector(".set-content > .set-head")!;
+  expect(Array.from(header.querySelectorAll("button")).map(button => button.dataset.act)).toEqual(["close"]);
+  expect(header.nextElementSibling?.classList.contains("usage-page")).toBe(true);
   // 概覽 has no chart: the charts of a period are 分析's.
   expect(page.el.querySelector(".ua-card, .ua-chart, .run-tiles, .run-bill, [data-ua-range], .foot")).toBeNull();
   setLocale("ja"); await flush();

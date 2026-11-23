@@ -108,6 +108,14 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
   const productPattern = phrases.length ? new RegExp(`\\b(?:${phrases.map(name => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\\b`, "gi") : null;
   const keyPattern = /\b([a-z][A-Za-z0-9]*\.[A-Za-z0-9_.-]+)\b/g;
   const seenKeys = new Set();
+  // R-UI-179: a dialog's close stands alone in a column the dialog's body keeps free at its top right. It is drawn there
+  // on purpose, outside the box of its header, so that reach alone is not an overflow; any other overflow still is.
+  const inCloseColumn = (element, box) => {
+    const close = [...element.querySelectorAll(".close-button")].find(button => win.getComputedStyle(button).position === "absolute");
+    if (!close) return false;
+    const reach = close.getBoundingClientRect().right - box.right;
+    return reach > 0 && element.scrollWidth - element.clientWidth <= Math.ceil(reach) + 1;
+  };
   for (const element of doc.body.querySelectorAll("*")) {
     if (!visible(element)) continue;
     const box = element.getBoundingClientRect(), style = win.getComputedStyle(element);
@@ -115,7 +123,8 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     if (!element.matches(".window-resize") && !clipped(element) && (box.left < -1 || box.top < -1 || box.right > viewport.width + 1 || box.bottom > viewport.height + 1))
       outsideViewport.push({ ...description, bounds: { left: box.left, top: box.top, right: box.right, bottom: box.bottom } });
     // SVG uses viewBox coordinates, so text clientWidth and scrollWidth are not CSS overflow measurements.
-    if (element.namespaceURI !== 'http://www.w3.org/2000/svg' && element.clientWidth > 0 && element.scrollWidth > element.clientWidth + 1 && !/auto|scroll|hidden|clip/.test(style.overflowX || style.overflow))
+    if (element.namespaceURI !== 'http://www.w3.org/2000/svg' && element.clientWidth > 0 && element.scrollWidth > element.clientWidth + 1 && !/auto|scroll|hidden|clip/.test(style.overflowX || style.overflow)
+      && !inCloseColumn(element, box))
       horizontalOverflow.push({ ...description, width: element.clientWidth, scrollWidth: element.scrollWidth });
     if (!onScreen(element)) continue;
     // Not a failure: words that a box cuts off without an ellipsis or a line clamp, for the person reading the pictures to look at.
@@ -146,7 +155,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     // so is an icon that floats on a picture (the lightbox's close, a member page's way back and its cover's change), which needs its own surface,
     // and so are the guide's foot's round buttons: a step's pair, the way back on a quiet grey and
     // the way on a circle of the accent.
-    const sidebarAction = element.matches(".side .btn.icon, .page-agent .mb-det-head .btn.icon, .page-agent .mb-head :is(.ra-tools, .mb-head-l, .room-picker) .btn.icon, :is(.mb-dlg-head, .cs-dlg-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock) .btn.icon, .btn.icon.modal-x, .ob-foot .ob-pair > .btn.icon, .media-lightbox .lb-card > .btn.icon.lb-close, .ms-cover > .btn.icon.ms-cover-btn, .ms-bar > .btn.icon.ms-back");
+    const sidebarAction = element.matches(".side .btn.icon, .page-agent .mb-det-head .btn.icon, .page-agent .mb-head :is(.ra-tools, .mb-head-l, .room-picker) .btn.icon, :is(.mb-dlg-head, .cs-dlg-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock) .btn.icon, .btn.icon.close-button, .ob-foot .ob-pair > .btn.icon, .ms-cover > .btn.icon.ms-cover-btn, .ms-bar > .btn.icon.ms-back");
     const violation = (rule, reason) => productRules.push({ ...description, rule, reason });
     if (element.matches('button:disabled[title], [aria-disabled="true"][title]')) {
       const title = element.getAttribute('title')?.trim();
@@ -295,13 +304,15 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       // members (「2 則訊息」), the words that open their conversation, and a package's name in Team skills, which opens its page.
       // Pending question rows reveal their card.
       // Keep this inventory explicit: ordinary action buttons never opt out by an attribute.
-      const navigation = element.matches('.pending-questions > .pending-question, .conversation-trigger, .conversation-open, .mb-panel-row, .mb-panel-back, .ms-open, .mb-det .mb-rt, .mb-chat-choice, .mc-source, .room-row, .cs-open, .cs-main, .skl-open, .cs-have, .cs-viewall, .au-room-row > .btn:first-child, .event-open, .event-count, .menu-reactions .reaction, .reaction-bar .reaction, .ho-row, .ho-stat, .lib-row, .tpr-row, .au-edit, .cal-chip, .cal-more, .au-day-num, .au-date-nav > .au-today, .steps-sum, .task-sum, .desktop-panel .desktop-screen > .btn.desktop-open') || element.closest('.mb-col, .au-month-grid, .au-drag-members, .au-segment, .mc-segments') || element.hasAttribute('aria-expanded') || element.matches('.conversation-card > .card-actions > .card-quiet');
+      // Browser tabs choose the page shown in the viewer, like segmented navigation.
+      const navigation = element.matches('.host-browser-strip .btn.host-browser-tab-button, .pending-questions > .pending-question, .conversation-trigger, .conversation-open, .mb-panel-row, .mb-panel-back, .ms-open, .mb-det .mb-rt, .mb-chat-choice, .mc-source, .room-row, .cs-open, .cs-main, .skl-open, .cs-have, .cs-viewall, .au-room-row > .btn:first-child, .event-open, .event-count, .menu-reactions .reaction, .reaction-bar .reaction, .ho-row, .ho-stat, .lib-row, .tpr-row, .au-edit, .cal-chip, .cal-more, .au-day-num, .au-date-nav > .au-today, .steps-sum, .task-sum, .desktop-panel .desktop-screen > .btn.desktop-open') || element.closest('.mb-col, .au-month-grid, .au-drag-members, .au-segment, .mc-segments') || element.hasAttribute('aria-expanded') || element.matches('.conversation-card > .card-actions > .card-quiet');
       const hasBorder = ['Top', 'Right', 'Bottom', 'Left'].some(side => parseFloat(style[`border${side}Width`]) > 0 && !['transparent', 'rgba(0, 0, 0, 0)'].includes(style[`border${side}Color`]) && !['none', 'hidden'].includes(style[`border${side}Style`]));
       if (!floatingLatest && element.classList.contains('icon') && hasBorder) violation('R-UI-18', 'Icon button has a visible border');
       const routineNavigation = element.matches('.chat-message .routine-origin > button.routine-run-link[data-act="open-routine"]');
+      const dockerSetupInChat = element.matches('.desktop-docker-setup > button.desktop-docker-help[data-docker-help]');
       // On a floating surface (R-FLOAT-01) a control is framed by its fill (`--float-ctl`), like the chips and 「Connect」 buttons.
       const filledOnFloat = !!element.closest('.modal, .mb-dialog, .cs-dialog, .au-pop, .cb-card, .menu') && !/rgba\(0, 0, 0, 0\)|transparent/.test(style.backgroundColor);
-      if (!navigation && !routineNavigation && !element.matches(".queued-actions > .btn:is([data-act=cancel-message], [data-act=send-now])") && !element.classList.contains('icon') && element.textContent.trim() && !hasBorder && !filledOnFloat) violation('R-UI-18', 'Text action button has no frame');
+      if (!navigation && !routineNavigation && !dockerSetupInChat && !element.matches(".queued-actions > .btn:is([data-act=cancel-message], [data-act=send-now])") && !element.classList.contains('icon') && element.textContent.trim() && !hasBorder && !filledOnFloat) violation('R-UI-18', 'Text action button has no frame');
     }
     // The guide's row follows the rule like any other: its round arrow (or ×) is at the left of the black
     // primary, not stacked above it, so nothing in the guide is exempt.
@@ -327,6 +338,8 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       // Explicit JSON path examples are provider field names, not untranslated catalogue keys.
       if (element.matches('code[data-json-paths]') && /^(?:data|event)\./.test(match[1])) continue;
       if (element.matches(".skl-import-hint") && match[1] === "skills.sh") continue;
+      // A file name in a path (…\daily-japanese-template.html) is not a catalogue key: a key never follows a separator.
+      if (/[\\/_-]/.test(value[match.index + match[0].indexOf(match[1]) - 1] ?? "")) continue;
       if (!namespaces.includes(match[1].split(".")[0]) || seenKeys.has(match[1])) continue;
       seenKeys.add(match[1]); missingI18nKeys.push({ ...description, key: match[1] });
     }
@@ -346,7 +359,10 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
   // picker were drawn over the open tab's). Ask the element itself, not the attribute.
   for (const element of doc.body.querySelectorAll('[hidden]')) {
     if (element.namespaceURI === 'http://www.w3.org/2000/svg' || element.getAttribute('hidden') === 'until-found') continue;
-    const display = win.getComputedStyle(element).display;
+    const style = win.getComputedStyle(element);
+    // The viewer keeps its layout box so its remote canvas can size itself before the first draw.
+    if (element.matches('iframe[data-desktop-stream]') && style.visibility === 'hidden') continue;
+    const { display } = style;
     // Inside another hidden thing an element keeps its own computed display but has no box, so the box is the test.
     if (display !== 'none' && (display === 'contents' ? element.parentElement?.getClientRects().length : element.getClientRects().length)) productRules.push({ ...describe(element), rule: 'R-UI-140', reason: `An element with the hidden attribute is drawn (display: ${display})` });
   }
@@ -526,6 +542,75 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     if (!toggle || !visible(row) || !visible(main) || !visible(toggle) || !onScreen(row)) continue;
     if (lit(hovered.get(main)?.fill) && !lit(hovered.get(row)?.fill))
       productRules.push({ ...describe(main), rule: 'R-UI-157', reason: `The row's button lights alone under the pointer, its switch outside the fill (${hovered.get(main).fill.selector.trim()})` });
+  }
+  // R-UI-178: measure visible controls, including when CSS reorders the markup. A switch drawn inside a menu button
+  // belongs to that button. A control in a different vertical row or clipped out of view cannot compete with the switch.
+  // A named row bounds its control group, even when a grid places another row beside it.
+  const shown = element => visible(element) && onScreen(element);
+  const centreY = box => box.top + box.height / 2;
+  const centreX = box => box.left + box.width / 2;
+  for (const toggle of doc.querySelectorAll(".tg")) {
+    if (!shown(toggle)) continue;
+    const box = toggle.getBoundingClientRect();
+    for (let row = toggle.parentElement; row && row !== doc.body; row = row.parentElement) {
+      const style = win.getComputedStyle(row);
+      const singleLine = style.display.includes("flex") && !style.flexDirection.startsWith("column");
+      const grid = style.display.includes("grid");
+      const namedRow = row.matches('[role="row"], .row, [data-row]');
+      if (row === toggle.parentElement || singleLine || grid || namedRow) {
+        // A dialog's close stands in its own column (R-UI-179), not in the row beside the switch.
+        const controls = [...row.querySelectorAll(PRESSABLE)].filter(control => !control.contains(toggle) && !toggle.contains(control) && shown(control)
+          && !(control.matches(".close-button") && win.getComputedStyle(control).position === "absolute"));
+        const after = controls.find(control => {
+          const rect = control.getBoundingClientRect();
+          return centreX(rect) > centreX(box) + 1 && Math.abs(centreY(rect) - centreY(box)) < Math.max(rect.height, box.height) / 2;
+        });
+        if (after) {
+          productRules.push({ ...describe(toggle), rule: "R-UI-178", reason: `A control stands to the right of the switch (${describe(after).label ?? describe(after).class})` });
+          break;
+        }
+      }
+      if (grid || namedRow || row.matches(`${PRESSABLE}, header, form, section, [role="dialog"]`) || style.flexDirection.startsWith("column")) break;
+    }
+  }
+  // R-UI-179: a header's close and back use the same rim, square bounds and centre line; without a back, the close shares the title's.
+  const headerSelector = 'header, [role="banner"], .mb-dlg-head, .cs-dlg-head, .mb-det-head, .dialog-header, .modal-header, [data-dialog-header]';
+  const frame = button => {
+    const style = win.getComputedStyle(button);
+    return [style.borderTopLeftRadius, style.borderTopWidth, style.borderTopStyle, style.borderTopColor, style.boxShadow];
+  };
+  for (const header of doc.querySelectorAll(headerSelector)) {
+    if (!shown(header)) continue;
+    const title = [...header.querySelectorAll('h1, h2, h3, [role="heading"], .card-title')].find(shown);
+    // A plain way back (chevron and title words, no circle) is not a round control to match.
+    const back = [...header.querySelectorAll(".back-button:not(.back-link)")].find(shown);
+    const controls = [...header.querySelectorAll('button, [role="button"], a[href]')].filter(shown);
+    const closes = controls.filter(control => control.matches(".close-button") || /^[×✕✖✗]$/.test(control.textContent.trim())
+      || control.querySelector('svg path[d="M18 6 6 18"]'));
+    const report = (element, reason) => productRules.push({ ...describe(element), rule: "R-UI-179", reason });
+    for (const close of closes) {
+      const box = close.getBoundingClientRect(), rim = frame(close);
+      if (!close.matches("button.close-button") || !close.querySelector("svg")
+        || Math.abs(box.width - 36) > 1 || Math.abs(box.height - 36) > 1 || parseFloat(rim[0]) < box.height / 2
+        || (!rim[4] || rim[4] === "none") && (!parseFloat(rim[1]) || rim[2] === "none" || !parsed(rim[3])?.a)) {
+        report(close, "The header close is missing its shared round button or frame");
+      }
+      const other = back?.getBoundingClientRect();
+      if (other && (Math.abs(box.width - other.width) > 1 || Math.abs(box.height - other.height) > 1
+        || frame(back).some((value, i) => value !== rim[i]) || Math.abs(centreY(box) - centreY(other)) > 1)) {
+        report(close, "The header close and back differ in size, frame or vertical centre");
+      }
+      // A page with a way back keeps its back button alone on the first row, level with the close; the title is below.
+      if (!other && title && Math.abs(centreY(box) - centreY(title.getBoundingClientRect())) > 1)
+        report(close, "The header close does not share the title's vertical centre");
+    }
+    if (header.closest('[role="dialog"], dialog')) {
+      for (const node of [header, ...header.querySelectorAll("*")]) {
+        if (node.closest('button, [role="button"], a[href]') || !shown(node)) continue;
+        if ([...node.childNodes].some(child => child.nodeType === 3 && /^[×✕✖✗]$/.test(child.textContent.trim())))
+          report(node, "A bare close glyph stands in a dialog header");
+      }
+    }
   }
   // R-UI-53: a hover fill keeps its words off its edges. Measured at rest, so every row of every scene counts.
   const HOVER_TEXT_GAP = 6, HOVER_ROW_MIN = 80;

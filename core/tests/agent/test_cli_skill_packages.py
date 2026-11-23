@@ -3,6 +3,8 @@
 import json
 import os
 import sys
+import tempfile
+import threading
 from pathlib import Path
 
 import pytest
@@ -105,3 +107,52 @@ for line in sys.stdin:
         skills=[{"name": "assigned", "path": str(folder / "SKILL.md")}])]
     assert events[-1].kind == "final" and events[-1].text == "Normal login", events
     assert not (tmp_path / ".raphael/claude-brains").exists()
+
+
+async def test_native_skill_snapshot_reuses_file_bytes_off_the_loop(tmp_path, monkeypatch):
+    folder = tmp_path / "assigned"
+    (folder / "scripts").mkdir(parents=True)
+    document = folder / "SKILL.md"
+    document.write_text("Assigned skill", encoding="utf-8")
+    helper = folder / "scripts" / "task.txt"
+    helper.write_text("first", encoding="utf-8")
+    script = tmp_path / "cli.py"
+    script.write_text('''import json, sys
+from pathlib import Path
+root = Path(sys.argv[sys.argv.index("--plugin-dir") + 1])
+body = (root / "skills/skill-0/scripts/task.txt").read_text()
+sys.stdin.readline()
+print(json.dumps({"type": "result", "subtype": "success", "result": body}))
+''', encoding="utf-8")
+    loop_thread = threading.get_ident()
+    opened = []
+    cleaned = []
+    original = Path.open
+    cleanup = tempfile.TemporaryDirectory.cleanup
+
+    def observed(path, *args, **kwargs):
+        if path in (document, helper):
+            assert threading.get_ident() != loop_thread
+            opened.append(path)
+        return original(path, *args, **kwargs)
+
+    def observed_cleanup(directory):
+        if (Path(directory.name) / "raphael-skills").is_dir():
+            assert threading.get_ident() != loop_thread
+            cleaned.append(directory.name)
+        cleanup(directory)
+
+    monkeypatch.setattr(tempfile.TemporaryDirectory, "cleanup", observed_cleanup)
+    for expected in ("first", "first", "second"):
+        if expected == "second":
+            # Editing a nested file in place leaves the package root's directory mtime alone.
+            helper.write_text(expected, encoding="utf-8")
+        with monkeypatch.context() as patch:
+            patch.setattr(Path, "open", observed)
+            driver = Driver("claude", [sys.executable, str(script)], home=tmp_path)
+            events = [event async for event in driver.run(user="Use assigned skill", system="", permission=None,
+                endpoint="http://127.0.0.1:1/mcp", token="synthetic",
+                skills=[{"name": "assigned", "path": str(document)}])]
+        assert events[-1].kind == "final" and events[-1].text == expected, events
+    assert opened.count(document) == opened.count(helper) == 2
+    assert len(cleaned) == 3

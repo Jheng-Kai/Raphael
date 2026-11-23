@@ -1028,10 +1028,37 @@ export async function perform(page, step, evidenceDirectory) {
       });
       return {check:'desktop-drop-file', synthetic:true};
     }
+    case 'desktop-wait-address': {
+      await page.waitForFunction(value => {
+        const address = document.querySelector('.host-browser-address');
+        return address !== document.activeElement && address?.value === value;
+      }, {timeout:6000}, step.value);
+      break;
+    }
+    case 'desktop-preview-input': {
+      const handle = await visible('.desktop-screen iframe:not([hidden])');
+      const box = await handle.boundingBox();
+      const frame = await handle.contentFrame();
+      const input = () => frame.evaluate(() => ({
+        pointer: window.__desktopPointerEvents?.length ?? 0, keys: window.__desktopAcceptedKeys ?? 0,
+        wheel: window.__desktopWheelDelta ?? 0,
+      }));
+      const before = await input();
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.wheel({ deltaY: 64 });
+      await page.keyboard.press('k');
+      await page.click('[data-desktop="enlarge"]');
+      await page.waitForSelector('.desktop-panel[data-expanded][data-interactive="false"]');
+      await page.click('[data-desktop="collapse"]');
+      const after = await input();
+      if (JSON.stringify(before) !== JSON.stringify(after)) throw new Error('The preview delivered page input');
+      await handle.dispose();
+      return {check:'desktop-preview-input', synthetic:true};
+    }
     case 'desktop-owner-typing': {
       await page.waitForFunction(() => document.querySelector('.desktop-panel')?.dataset.interactive === 'true');
       // The stream the owner holds: the larger view a card's 接手 opens (R-PANEL-09), or the card's own screen.
-      const handle = await page.$('.desktop-panel[data-expanded] .desktop-screen iframe, [data-card-desktop-screen] iframe');
+      const handle = await page.$('.desktop-panel .desktop-screen iframe:not([hidden]), [data-card-desktop-screen] iframe');
       const frame = await handle.contentFrame();
       await frame.click('canvas');
       await page.keyboard.type('synthetic-owner-input');

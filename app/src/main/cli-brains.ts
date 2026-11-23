@@ -139,7 +139,7 @@ export function createCliBrains(host: { visible(): boolean; redraw(): void }) {
   /** OpenAI's own requirement: said once, the first time. */
   function welcome(): void {
     const dialog = openDialog({
-      title: t("brains.welcomeTitle"), cls: "mb-confirm",
+      title: t("brains.welcomeTitle"), cls: "mb-confirm", blockNavigation: true,
       body: `<p>${esc(t("brains.welcomeBody"))}</p>`,
       actions: { secondary: btn(esc(t("brains.manageUsage")), "", ' data-dlg="usage"'), primary: { label: esc(t("brains.welcomeDone")), attrs: ' data-dlg="close"' } },
       onAct: (act) => {

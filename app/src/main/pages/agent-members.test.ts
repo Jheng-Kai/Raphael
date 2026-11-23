@@ -39,20 +39,22 @@ const api = vi.hoisted(() => ({ statusGet: vi.fn(async () => ({ openrouter: { st
   core: vi.fn(),
   roomsList: vi.fn(),
   roomMessages: vi.fn(),
-  desktopStatus: vi.fn(), desktopOpen: vi.fn(), desktopRenew: vi.fn(), desktopClose: vi.fn(),
+  desktopStatus: vi.fn(), desktopOpen: vi.fn(), desktopRenew: vi.fn(), desktopClose: vi.fn(), desktopControl: vi.fn(),
 }));
 vi.mock("../api", () => api);
 
 import { Cleared } from "../cleared";
 import { createAgent } from "./agent";
+import { openDialog } from "../member-dialogs";
 import { openGroupChat } from "../group-chats";
 import { closeMenu } from "../ui";
 import { resetAsks } from "../chat-ask";
 import { describeError } from "../format";
-import { stepSideLayer } from "../dismissals";
+import { clearLayerForward } from "../nav-history";
+import { stepOpenLayer } from "../dismissals";
 import { installNavInput } from "../nav-input";
 import { PlaceHistory, stepPlace } from "../place-history";
-import { sendNavInput } from "../test-support/nav-layer-input";
+import { navInputs, sendNavInput } from "../test-support/nav-layer-input";
 
 const member = (id: number, more: Partial<Member> = {}): Member => ({
   id, name: `成員${id}`, role: "", instructions: "", avatar: "", group_id: null, model: "", tools: null, position: id, created: 0, unread: false, waiting: false, preview: "", last_at: null, ...more,
@@ -81,9 +83,12 @@ const flush = async (): Promise<void> => {
 };
 
 function mount(mode: "hold" | "toggle" = "hold", history?: PlaceHistory) {
-  const notePlace = (): void => history?.arrive(agent.currentChatPlace());
+  const notePlace = (): void => { history?.arrive(agent.currentChatPlace()); };
   const app = {
-    go: vi.fn(notePlace),
+    go: vi.fn((page: string, arg?: Parameters<ReturnType<typeof createAgent>["show"]>[0]) => {
+      if (page === "agent" && (arg?.startsWith("member-settings:") || !arg && agent.settingsOf() !== null)) agent.show(arg);
+      notePlace();
+    }),
     device: () => ({ dictation_mode: mode }),
     onEvent(handler: (event: MainEvent) => void) {
       send = handler;
@@ -107,11 +112,115 @@ const pick = async (id: number) => {
   await flush();
 };
 
-test.each(["relative", "absolute"])("mouse Back leaves the docked details panel open and dismisses the floating panel (%s)", async position => {
+test.each(["owner", "watching"])("outside presses in the conversation, sidebar and panel header preserve the enlarged computer (%s)", async mode => {
+  const running = { state: "running", ready: true, control: "member", transport: "host", target: "tab" };
+  api.desktopStatus.mockResolvedValue(running);
+  api.desktopOpen.mockResolvedValue({ session: "outside", url: "http://127.0.0.1:5000/outside" });
+  api.desktopRenew.mockResolvedValue(running);
+  api.desktopControl.mockResolvedValue({ ...running, control: "owner" });
+  const agent = mount();
+  try {
+    await flush();
+    await pick(3);
+    const trigger = $(".conversation-trigger");
+    if (trigger.getAttribute("aria-expanded") !== "true") trigger.click();
+    $('[data-det="tab"][data-tab="computer"]').click();
+    await flush();
+    const frame = $<HTMLIFrameElement>(".desktop-screen iframe");
+    const signal = (state: string, held = false) => window.dispatchEvent(new MessageEvent("message", {
+      source: frame.contentWindow, origin: "http://127.0.0.1:5000", data: { type: "raphael-desktop", state, held },
+    }));
+    signal("connected");
+    $('[data-desktop="enlarge"]').click();
+    if (mode === "owner") {
+      $('[data-desktop="take"]').click();
+      await flush();
+      signal("interactive", true);
+    }
+    const closeCount = api.desktopClose.mock.calls.length;
+    // In the floating layout the scrim receives a press over the conversation.
+    for (const selector of [".mb-det-scrim", ".composer", ".mb-col", ".conversation-trigger"]) {
+      const target = $(selector);
+      target.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
+      target.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, button: 0 }));
+      target.click();
+      await flush();
+      expect(api.desktopClose.mock.calls.slice(closeCount), selector).toEqual([]);
+      expect($(".desktop-panel").hasAttribute("data-expanded"), selector).toBe(true);
+      expect($(".desktop-screen iframe"), selector).toBe(frame);
+      expect($(".desktop-panel").dataset.interactive, selector).toBe(String(mode === "owner"));
+    }
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    if (mode === "owner") {
+      api.desktopControl.mockResolvedValue(running);
+      $('[data-desktop="return"]').click();
+      await flush();
+    }
+    $('[data-desktop="collapse"]').click();
+  } finally {
+    agent.hide();
+  }
+});
+
+test.each(navInputs)("Back closes the open Computer panel and Forward restores its tab with %s", async input => {
+  const agent = mount();
+  const stop = installNavInput(window, stepOpenLayer);
+  try {
+    await flush(); await pick(3);
+    const trigger = $(".conversation-trigger");
+    if (trigger.getAttribute("aria-expanded") === "true") trigger.click();
+    trigger.click();
+    const panel = $("#member-details");
+    $('[data-det="tab"][data-tab="computer"]').click();
+    expect(panel.dataset.detailsTab).toBe("computer");
+    sendNavInput(input, "back");
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(agent.currentChatPlace().page).toBe("member");
+    sendNavInput(input, "forward");
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    expect(panel.dataset.detailsTab).toBe("computer");
+  } finally { stop(); clearLayerForward(); agent.hide(); }
+});
+
+test.each(navInputs)("Back closes member settings from Skills and Forward restores Skills with %s", async input => {
+  const agent = mount();
+  const stop = installNavInput(window, stepOpenLayer);
+  try {
+    await flush(); await pick(3);
+    agent.show("member-settings:3");
+    $('[data-ms="cat"][data-cat="skills"]').click();
+    expect($('[data-ms="cat"][data-cat="skills"]').getAttribute("aria-current")).toBe("page");
+    sendNavInput(input, "back");
+    expect(agent.settingsOf()).toBeNull();
+    sendNavInput(input, "forward");
+    expect(agent.settingsOf()).toBe(3);
+    expect($('[data-ms="cat"][data-cat="skills"]').getAttribute("aria-current")).toBe("page");
+  } finally { stop(); clearLayerForward(); agent.hide(); }
+});
+
+test("Back keeps a member's unsent composer draft in its conversation", async () => {
   const history = new PlaceHistory();
   const agent = mount("hold", history);
-  const stop = installNavInput(window, vi.fn(), undefined, direction => stepPlace(direction, history, {
-    layer: stepSideLayer,
+  const show = vi.fn();
+  const stop = installNavInput(window, direction => stepPlace(direction, history, {
+    layer: stepOpenLayer, leave: agent.keepNavigationPlace, exists: () => true, show,
+  }));
+  try {
+    await flush(); await pick(3); await pick(4);
+    const composer = $<HTMLTextAreaElement>(".page-agent .cmp-input");
+    composer.value = "Keep this unsent";
+    sendNavInput("mouse", "back");
+    expect(show).not.toHaveBeenCalled();
+    expect(composer.value).toBe("Keep this unsent");
+    expect(document.activeElement).toBe(composer);
+  } finally { stop(); agent.hide(); }
+});
+
+test("mouse Back closes the dialog over the current member before walking conversation history", async () => {
+  const history = new PlaceHistory();
+  const agent = mount("hold", history);
+  const stop = installNavInput(window, direction => stepPlace(direction, history, {
+    layer: stepOpenLayer,
     exists: place => place.page === "member" && agent.chatPlaceExists(place),
     show: place => { if (place.page === "member") agent.showChatPlace(place); },
   }));
@@ -120,22 +229,24 @@ test.each(["relative", "absolute"])("mouse Back leaves the docked details panel 
     await pick(3);
     const first = agent.currentChatPlace();
     await pick(4);
-    const second = agent.currentChatPlace();
-    const trigger = $(".conversation-trigger");
-    if (trigger.getAttribute("aria-expanded") !== "true") trigger.click();
-    const panel = $("#member-details");
-    panel.style.position = position;
-    $('[data-det="tab"][data-tab="library"]').click();
-    sendNavInput("mouse", "back");
-    if (position === "absolute") {
-      expect(agent.currentChatPlace()).toEqual(second);
-      expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    const current = agent.currentChatPlace();
+    const dialog = openDialog({ title: "Review", body: '<textarea></textarea>', actions: {}, onAct() {} });
+    try {
+      const field = dialog.el.querySelector("textarea")!;
+      field.value = "Keep these words";
       sendNavInput("mouse", "back");
-    } else {
-      expect(trigger.getAttribute("aria-expanded")).toBe("true");
-      expect(panel.dataset.detailsTab).toBe("library");
-    }
-    expect(agent.currentChatPlace()).toEqual(first);
+      expect(dialog.el.isConnected).toBe(true);
+      expect(field.value).toBe("Keep these words");
+      field.value = "";
+      sendNavInput("mouse", "back");
+      expect(dialog.el.isConnected).toBe(false);
+      expect(agent.currentChatPlace()).toEqual(current);
+      sendNavInput("mouse", "forward");
+      expect(dialog.el.isConnected).toBe(true);
+      sendNavInput("mouse", "back");
+      sendNavInput("mouse", "back");
+      expect(agent.currentChatPlace()).toEqual(first);
+    } finally { dialog.close(); clearLayerForward(); }
   } finally { stop(); agent.hide(); }
 });
 
@@ -486,16 +597,16 @@ test("the settings page folds the details panel away at any width, and leaving i
   await openDetails();
   const panel = document.querySelector<HTMLElement>(".mb-det")!;
   expect(panel.hidden).toBe(false);
-  agent.showNavView("m:3>s:tools"); await flush();
+  agent.show("member-settings:3"); await flush();
   await vi.waitFor(() => expect(panel.hidden).toBe(true));
   expect(document.querySelector<HTMLElement>("[data-member-settings]")!.hidden).toBe(false);
-  agent.showNavView("m:3"); await flush();
+  agent.show(); await flush();
   await vi.waitFor(() => expect(panel.hidden).toBe(false));
   // A panel that was closed stays closed after the page.
   $('[data-det="close"]').click(); await flush();
   await vi.waitFor(() => expect(panel.hidden).toBe(true));
-  agent.showNavView("m:3>s:tools"); await flush();
-  agent.showNavView("m:3"); await flush();
+  agent.show("member-settings:3"); await flush();
+  agent.show(); await flush();
   expect(panel.hidden).toBe(true);
   agent.hide();
 });
@@ -511,7 +622,7 @@ test("a closed details panel reads nothing while work runs, and the settings pag
   // The panel no longer counts skills or commands: those are the settings page's.
   await openDetails();
   expect(read()).not.toContain("memory.get"); expect(api.membersSkillsList).not.toHaveBeenCalled();
-  agent.showNavView("m:3>s:tools"); await flush();
+  agent.show("member-settings:3"); await flush();
   // The page holds no memory to read, only what the member has.
   expect(read()).not.toContain("memory.get");
   expect(api.membersSkillsList).toHaveBeenCalledWith(3); expect(api.membersCommandsList).toHaveBeenCalledWith(3);
@@ -526,7 +637,7 @@ test("a restarted core receives the current viewing even with an unchanged roste
   expect(api.membersList).toHaveBeenCalledTimes(1);
   expect(api.membersViewing).toHaveBeenCalledExactlyOnceWith(3);
   // The open settings page reads what the member has again for the restarted core.
-  agent.showNavView("m:3>s:tools"); await flush();
+  agent.show("member-settings:3"); await flush();
   api.membersSkillsList.mockClear();
   send({ type: "CoreReady" } as unknown as MainEvent); await flush();
   await vi.waitFor(() => expect(api.membersSkillsList).toHaveBeenCalledWith(3));
@@ -1183,7 +1294,7 @@ test("member notifications refresh names, groups, unread dots and the open heade
   await flush();
   await pick(3);
   await openDetails();
-  agent.showNavView("m:3>s:tools");
+  agent.show("member-settings:3");
   const next = structuredClone(LIST);
   next.members[1] = { ...next.members[1], name: "Updated name", role: "Updated role", group_id: 5 };
   next.members[2] = { ...next.members[2], waiting: true, unread: true, preview: "New preview" };
@@ -1204,7 +1315,7 @@ test("a memory change reads nothing and shows nothing on the member's page", asy
   await flush();
   await pick(3);
   $(".conversation-trigger").click();
-  agent.showNavView("m:3>s:tools"); await flush();
+  agent.show("member-settings:3"); await flush();
   api.core.mockClear(); api.membersSkillsList.mockClear();
   for (const event of [{ member_id: 4, space: "own" }, { member_id: 3, space: "own" }, { member_id: 0, space: "shared" }] as const) {
     send({ type: "MemoryChanged", ...event });
@@ -1739,7 +1850,7 @@ describe("the details panel", () => {
     await flush();
     await pick(3);
     if ($(".mb-det").hidden) $(".conversation-trigger").click();
-    agent.showNavView("m:3>s:tools");
+    agent.show("member-settings:3");
     api.membersUpdate.mockResolvedValue({ member: { ...LIST.members[1], name: "嚴格老師" } });
     api.membersList.mockResolvedValue({
       ...structuredClone(LIST),
@@ -1930,13 +2041,14 @@ test("a same-length reply edit still refreshes without serializing the full hist
 
 test("computer search navigation leaves a room and restores the computer landing panel", async () => {
   api.settingsGet.mockResolvedValue({settings:{computer_ssh_alias:""}});
+  api.desktopStatus.mockResolvedValue({transport:"idle", state:"absent", ready:false, control:"member"});
   const agent = mount(); await flush();
   window.dispatchEvent(new CustomEvent("raphael:open-room", {detail:{roomId:1}})); await flush();
   agent.show("computer"); await flush();
   expect(agent.el.querySelector<HTMLElement>(".au-room-pane")!.hidden).toBe(true);
   expect(agent.el.querySelector<HTMLElement>(".mb-det")!.hidden).toBe(false);
   expect(agent.el.querySelector<HTMLElement>(".mb-det")!.dataset.detailsTab).toBe("computer");
-  expect(agent.el.querySelector(".mb-det [data-computer-location]")).not.toBeNull();
+  expect(agent.el.querySelector(".mb-det [data-computer-choice]")).not.toBeNull();
   agent.el.querySelector<HTMLButtonElement>('[data-det="gear"]')!.click();
   agent.show("computer"); await flush();
   expect(agent.el.querySelector<HTMLElement>(".mb-det")!.dataset.detailsTab).toBe("computer");

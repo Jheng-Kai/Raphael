@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
-import { expect, test, vi } from "vitest";
-import { stepSideLayer } from "./dismissals";
+import { afterEach, expect, test, vi } from "vitest";
+import { stepOpenLayer } from "./dismissals";
+import { clearLayerForward } from "./nav-history";
 import { openDialog } from "./member-dialogs";
 import { openMemberCreator } from "./member-creator";
 import { installNavInput } from "./nav-input";
@@ -12,6 +13,7 @@ const b: MainPlace = { page: "member", member: 2, conversation: 22 };
 const c: MainPlace = { page: "room", room: 3 };
 const calendar: MainPlace = { page: "automations" };
 const exists = () => true;
+afterEach(() => { clearLayerForward(); document.body.replaceChildren(); });
 
 test("places step back and forward, and a new switch drops forward entries", () => {
   const history = new PlaceHistory();
@@ -46,41 +48,45 @@ test("receiving a conversation ID identifies the original visit to that member",
   expect(history.step("forward", exists)).toEqual(b);
 });
 
-test("mouse Back closes the dialog alone and Forward does not reopen it", () => {
+test("mouse Back closes the dialog alone and Forward reopens it", () => {
   const history = new PlaceHistory();
   history.arrive(a);
   history.arrive(b);
-  const show = vi.fn(), keyboard = vi.fn();
+  const show = vi.fn();
   const dialog = openDialog({ title: "Settings", body: "", actions: {}, onAct() {} });
-  const stop = installNavInput(window, keyboard, undefined, direction => {
-    stepPlace(direction, history, { layer: stepSideLayer, exists, show });
+  const stop = installNavInput(window, direction => {
+    stepPlace(direction, history, { layer: stepOpenLayer, exists, show });
   });
   try {
     sendNavInput("mouse", "back");
     expect(dialog.el.isConnected).toBe(false);
     expect(show).not.toHaveBeenCalled();
     sendNavInput("mouse", "forward");
-    expect(dialog.el.isConnected).toBe(false);
+    expect(dialog.el.isConnected).toBe(true);
+    sendNavInput("mouse", "back");
     expect(show).not.toHaveBeenCalled();
     sendNavInput("mouse", "back");
     expect(show).toHaveBeenCalledExactlyOnceWith(a);
-    expect(keyboard).not.toHaveBeenCalled();
   } finally { stop(); dialog.close(); }
 });
 
-test("mouse Back closes the member maker and its draft is there when it is opened again", () => {
+test("mouse Back keeps the member maker draft and Forward restores the clean maker tab", () => {
   const options = { groupId: null, taken: [], create: vi.fn() };
   const maker = openMemberCreator(options);
   maker.el.querySelector<HTMLInputElement>("#mb-new-name")!.value = "Robin";
   maker.el.querySelector<HTMLButtonElement>('[data-slime-tab="characters"]')!.click();
-  const stop = installNavInput(window, vi.fn(), undefined, stepSideLayer);
+  const stop = installNavInput(window, stepOpenLayer);
   try {
+    sendNavInput("mouse", "back");
+    expect(maker.el.isConnected).toBe(true);
+    const field = maker.el.querySelector<HTMLInputElement>("#mb-new-name")!;
+    expect(field.value).toBe("Robin");
+    expect(document.activeElement).toBe(field);
+    field.value = "";
     sendNavInput("mouse", "back");
     expect(maker.el.isConnected).toBe(false);
     sendNavInput("mouse", "forward");
-    expect(maker.el.isConnected).toBe(false);
-    const reopened = openMemberCreator(options);
-    expect(reopened.el.querySelector<HTMLInputElement>("#mb-new-name")!.value).toBe("Robin");
-    reopened.close();
+    expect(maker.el.isConnected).toBe(true);
+    expect(document.querySelector('.cr-dialog [data-slime-tab="characters"]')?.getAttribute("aria-selected")).toBe("true");
   } finally { stop(); maker.close(); }
 });

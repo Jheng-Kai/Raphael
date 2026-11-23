@@ -5,6 +5,7 @@
 The Computer section of member settings uses the shared dropdown and switch for This
 computer, Isolated computer (Docker) and desktop control. See [Member computer](member-computer.md#this-computer-mode)
 for R-COMP-HOST-01 through R-COMP-HOST-06 and the selected look command.
+The mode row shows the dropdown alone, followed by the desktop control switch on its own row.
 
 
 ## Interface locale coverage
@@ -64,10 +65,12 @@ This supersedes the About-you grouping and the search notes below.
 
 ## 團隊技能 (R-SKILL-17)
 
-The Team skills tab lists Plugins first and Skills second, with no heading or card for an empty section. A manifest or several skills makes a plugin. All rows have the same height, with a name and at most one ellipsized description line. A plugin's row opens its page through the name, its count with a trailing chevron or the empty space. The access menu, switch and overflow stay independent. The shared round back button, Escape or a step back restore the scroll and row focus. The full description is available on the plugin page and from Details in the overflow. The importer is the first card. Its chips name the accepted archives and Markdown, folders and pasted SKILL.md. A quiet hint names GitHub and skills.sh links, archives, folders containing SKILL.md and pasted text. Who may use a package is the vault's choice (整個團隊 or the characters ticked). Its menu leads each row with who it names, a character's 20 px face from the roster and, for 整個團隊, the team's own picture (its first four faces in one square, Raphael first, as the sidebar draws the team); a ticked row's check stands at its right edge, never at the left (R-UI-174, `skill-library-access`). A character's skills page shows the packages given to it read-only under 來自團隊技能, with an 開啟團隊技能 button to this tab. The core is `skills.library.*` (R-SKILL-15, R-SKILL-16); the shell lets those four methods through `core_call`.
+The Team skills tab lists Plugins first and Skills second, with no heading or card for an empty section. A manifest or several skills makes a plugin. All rows have the same height, with a name and at most one ellipsized description line. A plugin's row opens its page through the name, its count with a trailing chevron or the empty space. The lit row fills its card (R-UI-157). The Team skills list has the shared Settings title and close. The plugin name is the only main heading on its page, beside the round back button and the count. The round framed close shares their centre line at the right (R-UI-179). The access dropdown, overflow and rightmost switch stand on a separate row aligned to the right (R-UI-178). The source, full plugin description and skill list line up with the back button. Skill rows reuse the list component and have equal heights with one ellipsized description line. A skill's overflow precedes its switch and opens its full description in Details. Right-clicking the skill row opens the same menu (R-UI-44). The shared round back button, Escape or Mouse Back restore the scroll and row focus. The full description is available on the plugin page and from Details in the overflow. The importer is the first card. Its chips name the accepted archives and Markdown, folders and pasted SKILL.md. A quiet hint names GitHub and skills.sh links, archives, folders containing SKILL.md and pasted text. Who may use a package is the vault's choice (整個團隊 or the characters ticked). Its menu leads each row with who it names, a character's 20 px face from the roster and, for 整個團隊, the team's own picture (its first four faces in one square, Raphael first, as the sidebar draws the team); a ticked row's check stands at its right edge, never at the left (R-UI-174, `skill-library-access`). A character's skills page shows the packages given to it read-only under 來自團隊技能, with an 開啟團隊技能 button to this tab. The core is `skills.library.*` (R-SKILL-15, R-SKILL-16); the shell lets those four methods through `core_call`.
 
+
+The package page and its row show the existing Updating status while refresh is pending. The owner can return to the list or use other packages. The skill-library-open scene holds the update RPC open. R-PERF-23 and R-PERF-24 use a synthetic 60-member, 58-skill roster and a blocked file writer to check the core's metadata cache and unrelated RPC latency.
 ```powershell
-npm run look -- skill-library skill-library-open skill-library-back skill-library-access skill-library-details skill-library-import skill-library-imported skill-library-import-failed member-skills-library --theme both --width 1120,720,1920x1080
+npm run look -- skill-library skill-library-row-lit skill-library-open skill-library-refresh skill-library-skill-details skill-library-back nav-side-plugin skill-library-access skill-library-details skill-library-import skill-library-imported skill-library-import-failed member-skills-library --theme both --width 1120,720,1920x1080
 ```
 
 ```powershell
@@ -141,8 +144,8 @@ No private key belongs in source.
 General keeps the owner profile, weather city and output folder
 together in About you. Tools and Safety retain their shared scope; legacy agent
 links resolve to Tools.
-Computer search opens that member's panel. Host checks and copyable repair
-commands use the location popover, never the retired settings pane.
+Computer search opens that member's panel. The virtual machine dropdown opens
+the SSH editor, with host checks and copyable repair commands.
 
 ```powershell
 npm run look -- desktop-host-local desktop-host-error settings-owner --theme both --width 1120,720,1920x1080
@@ -382,15 +385,12 @@ unchanged. Every member's draft
 preference switch is the first row inside the same grouped resource card as
 Skills and Commands.
 
-The computer panel header owns one compact shared location control, also available
-in its empty state. It shows Local or the saved SSH alias, uses the shared popover,
-select, field and buttons, saves only `computer_ssh_alias`, and rejects invalid
-aliases before storage. Its words describe current state; there is no invented
-host check RPC. Remote current-state errors remain inside the popover. A local
-absent runtime retains one Docker download action there. Settings searches for
-computer location or remote return one result that closes Settings and opens the
-computer panel. No host is started or checked by opening the popover, and an
-existing viewer stream is not replaced by changing the setting.
+The computer tab has one dropdown that includes Local and the saved SSH alias for
+Docker. The SSH editor saves `computer_ssh_alias` and rejects invalid aliases
+before storage. It shows remote connection errors contextually and checks the host
+on an explicit press. When a local Docker installation is missing, the Docker
+choice offers the existing ask-Raphael action. Settings searches for computer
+location or remote close Settings and open the computer panel.
 
 Selected scenes (synthetic zh-TW, both themes, 1120,720,1920x1080):
 profile, settings-owner, appearance, dictation, tools, safety,
@@ -402,8 +402,8 @@ desktop-host-local,
 desktop-host-remote, desktop-host-invalid, desktop-host-error, desktop-install,
 desktop-panel, desktop-viewer, desktop-absent, panel-no-computer.
 
-Compare General/Tools/Safety rows with Appearance, the location select/input with
-General's city and Appearance's select, the grouped draft row across both members,
+Compare General/Tools/Safety rows with Appearance, the SSH input with General's
+city and the computer dropdown with Appearance's select, the grouped draft row across both members,
 and the computer panel header in the landing and expanded viewer. Inspect all
 contact sheets and relevant full-size panes/popovers at matching sizes/themes.
 Focused tests: settings-view.test.ts, settings-providers.test.ts,
@@ -420,17 +420,15 @@ Completed work detail also preserves the existing missing-service notice and rep
 button from persisted steps, including turns with action events. The missing-search
 and missing-search-repair scenes cover the real work section and shared Tools form.
 The language audit treats typed synthetic values as owner data while continuing to
-reject untranslated control labels. The desktop-absent browser assertion also
-requires at least 4.5:1 text contrast for the Docker download button. The button
-uses the same existing desktop-frame surface tokens as its neighbouring notices.
+reject untranslated control labels. The missing Docker scene verifies that the
+setup action stays plain text under the pointer.
 
-The location popover uses one shared inset and stacked, full-width controls. Its
-scope is stated once; the header alone names the saved host. Every desktop-host-*
-scene runs host-settings-layout, checking each wrapped text line and control edge
-within 1px, matching select/field widths, and left-aligned trigger text. Keep the
-same standard field/select padding inside those controls. No status note repeats
-the host, and host errors remain contextual. The follow-up matrix is the four host
-scenes plus desktop-panel, both themes at 1120,720,1920x1080.
+The SSH editor uses one shared inset and a full-width field. Its scope is stated
+once. The desktop-host-remote, desktop-host-invalid and desktop-host-error scenes
+run host-settings-layout, checking that the visible text and the field share a
+left edge within 1px. The desktop-host-local scene checks the current entry in
+the computer dropdown. Run the four host scenes plus desktop-panel in both themes
+at 1120,720,1920x1080.
 
 
 ## Shared owner vault

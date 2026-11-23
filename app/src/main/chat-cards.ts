@@ -66,9 +66,21 @@ function templateCardHTML(card: TemplateCard): string {
   });
 }
 
-/** The pairing and template cards of a turn, below what it said. */
+/** The pairing, template and computer suggestion cards of a turn. */
 export function chatCardsHTML(turn: AgentTurn): string {
-  return (turn.pairings ?? []).map(pairingCardHTML).join("") + (turn.templates ?? []).map(templateCardHTML).join("");
+  const suggestion = turn.computer_suggestion;
+  const pending = suggestion?.state === "pending";
+  const attrs = ` data-suggestion-turn="${esc(turn.id)}"`;
+  const computer = suggestion ? cardHTML({
+    title: t("memberComputer.suggestionTitle"), status: pending ? "waiting" : "done",
+    statusText: pending ? t("cards.needsYou") : undefined, statusInHeading: true,
+    content: `<p class="card-body">${esc(suggestion.reason)}</p>`,
+    close: waitingCloseHTML(` data-act="computer-suggestion-dismiss"${attrs}`, t("common.close")),
+    actions: pending ? btn(`<span>${esc(t(suggestion.installed ? "memberComputer.suggestionSwitch" : "memberComputer.suggestionInstall"))}</span>${ico("right")}`,
+      "sm computer-suggestion-action", ` data-act="computer-suggestion-${suggestion.installed ? "switch" : "setup"}"${attrs}`) : "",
+    cls: "computer-suggestion-card",
+  }) : "";
+  return (turn.pairings ?? []).map(pairingCardHTML).join("") + (turn.templates ?? []).map(templateCardHTML).join("") + computer;
 }
 
 /** The template card's snapshot, reviewed as the export review shows a recipe. */
@@ -88,7 +100,7 @@ async function viewTemplate(id: string, avatar = ""): Promise<void> {
 }
 
 /** A press on one of these cards; true when it was one of theirs. */
-export function chatCardAction(act: HTMLElement): boolean {
+export function chatCardAction(act: HTMLElement, askDockerSetup?: () => void): boolean {
   const kind = act.dataset.act ?? "";
   const pairing = act.dataset.pairing, template = act.dataset.templateCard;
   const card = act.closest<HTMLElement>(".conversation-card");
@@ -97,6 +109,22 @@ export function chatCardAction(act: HTMLElement): boolean {
     busy(true);
     void work().catch((error) => { if (!cardFailure(card, () => run(work))) toaster.info(describeError(error)); }).finally(() => busy(false));
   };
+  if (kind === "computer-suggestion-switch" || kind === "computer-suggestion-setup" || kind === "computer-suggestion-dismiss") {
+    const action = kind.slice("computer-suggestion-".length);
+    const button = act as HTMLButtonElement;
+    if (button.disabled) return true;
+    const change = async (): Promise<void> => {
+      const turn = Number(act.dataset.suggestionTurn);
+      button.disabled = true;
+      try {
+        if ((await api.core<{ setup?: boolean }>("agent.computer_suggestion", { turn_id: turn, action })).setup) askDockerSetup?.();
+      } catch (error) {
+        if (!cardFailure(card, () => { void change(); }, undefined, t("memberComputer.switchFailed"))) toaster.info(describeError(error));
+      } finally { button.disabled = false; }
+    };
+    void change();
+    return true;
+  }
   if (kind === "bot-link") {
     const platform = act.dataset.platform as keyof typeof BOT_SETUP_URLS | undefined;
     if (platform && platform in BOT_SETUP_URLS) void api.openLink(BOT_SETUP_URLS[platform]).catch((error) => toaster.info(describeError(error)));

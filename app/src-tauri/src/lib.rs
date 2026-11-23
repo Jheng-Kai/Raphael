@@ -371,6 +371,7 @@ pub fn run() {
             // the controller can hold it too. If the keyboard hook cannot start, the app runs on
             // without hotkeys.
             let (hotkey_events, hotkey_event_rx) = tokio::sync::mpsc::unbounded_channel();
+            let dictation_mode = dictation::ModeCell::default();
             // End-to-end runs press the keys with SendInput, which the hook ignores otherwise.
             // Development builds only.
             #[cfg(debug_assertions)]
@@ -379,8 +380,16 @@ pub fn run() {
                 handy_keys::accept_injected_input(true);
             }
             let hotkey_event_rx = {
-                match hotkey::HotkeyService::start(&hotkey::Bindings::default(), hotkey_events) {
+                match hotkey::HotkeyService::start(
+                    &hotkey::Bindings::default(),
+                    hotkey_events,
+                    dictation_mode.clone(),
+                ) {
                     Ok(service) => {
+                        #[cfg(windows)]
+                        for window in app.webview_windows().values() {
+                            service.guard_system_menu(window);
+                        }
                         app.manage(std::sync::Arc::new(service));
                         Some(hotkey_event_rx)
                     }
@@ -395,7 +404,7 @@ pub fn run() {
             // Ties the hotkeys, the core, the overlay and pasting together. It takes whatever of
             // them started; without the core, dictation is off.
             #[cfg(any(windows, target_os = "macos"))]
-            dictation::spawn(app.handle(), hotkey_event_rx);
+            dictation::spawn(app.handle(), hotkey_event_rx, dictation_mode);
             #[cfg(not(any(windows, target_os = "macos")))]
             {
                 log::error!("dictation needs Windows or macOS");
@@ -548,6 +557,7 @@ pub fn startup_plugins_for_tests<R: Runtime>(
 fn early_state<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
     builder
         .manage(overlay::mouse::Windows::default())
+        .manage(learned::State::default())
         // A stored attachment under a stable, cacheable URL for the main window (media_protocol.rs).
         .manage(media_protocol::MediaGrants::default())
         .manage(updates::Updates::default())
@@ -687,6 +697,7 @@ mod early_state_tests {
             .expect("the mock app builds");
         assert!(app.try_state::<updates::Updates>().is_some());
         assert!(app.try_state::<overlay::mouse::Windows>().is_some());
+        assert!(app.try_state::<learned::State>().is_some());
         assert!(app.try_state::<media_protocol::MediaGrants>().is_some());
     }
 }

@@ -1,21 +1,43 @@
 """Private, in-memory computer work. Only an explicit owner handback resumes a call.
 
-No screen, tool arguments, owner input or model-written text is kept here. A core
-restart drops the waiting coroutine; it cannot replay or resume an old request.
+Work retains the short owner-facing handoff reason and its state. It holds no
+screen or owner input. A core restart drops the waiting coroutine.
 """
 import asyncio
+import json
 import secrets
 from dataclasses import dataclass, field
 from collections.abc import Callable
 
+from ..agent.plugins import PluginResult
 from .vm import VmError
 
 REASONS = ("sign_in", "password", "two_factor", "captcha", "payment", "other")
 TAKEOVER = {
-    "description": "Pause this private computer task for owner-only sign-in, password, 2FA, CAPTCHA, payment or consent. Never request secrets in chat or arguments. The private conversation card contains the live screen; the owner types directly into it, never into chat or model tools. Wait for the owner's explicit I'm done; disconnect, timeout and Stop never resume. Then inspect the intended get_window_state (max_elements 200, include_screenshot false) or get_browser_state before input and continue the same task once without repeating completed work.",
-    "parameters": {"type": "object", "properties": {"reason": {"type": "string", "enum": list(REASONS)}},
+    "description": ("Pause only for an owner-only step such as sign-in, 2FA, CAPTCHA, payment or consent. "
+                    "Explain the step in a public message and choose the matching reason. For other, give the "
+                    "exact owner-only step in detail. To show a page, open it and point to the Computer panel. "
+                    "Never request secrets in chat or tool arguments. Wait for explicit Done, then inspect "
+                    "the same window or tab before acting."),
+    "parameters": {"type": "object", "properties": {"reason": {"type": "string", "enum": list(REASONS)},
+                                                       "detail": {"type": "string", "maxLength": 300}},
                    "required": ["reason"], "additionalProperties": False},
 }
+
+TAKEOVER_REASON_REQUIRED = "Give the reason the owner must take over and describe the owner-only step when using other."
+
+
+def owner_waiting_result():
+    return PluginResult(True, "waiting_for_owner", json.dumps({
+        "status": "waiting_for_owner",
+        "note": "The owner is using the computer right now. Nothing was done. Tell the owner plainly that you are "
+                "waiting for them to finish. Do other work if possible, or try again once they hand control back.",
+    }))
+
+
+def takeover_detail(arguments):
+    detail = " ".join(arguments.get("detail", "").split())
+    return detail if detail or arguments.get("reason") != "other" else None
 
 
 @dataclass
@@ -30,6 +52,7 @@ class Work:
     state: str = "running"
     tool: str = ""
     reason: str = ""
+    detail: str = ""
     request_id: str = ""
     check_required: bool = False
     returned: asyncio.Future | None = field(default=None, repr=False)
@@ -42,7 +65,8 @@ class Work:
             self.state = "stopped" if self.task.cancelled() else "done"
             self.inferred = True
         return {"id": self.id, "turn_id": self.turn_id, "state": self.state,
-                "tool": self.tool, "reason": self.reason, "request_id": self.request_id}
+                "tool": self.tool, "reason": self.reason, "request_id": self.request_id,
+                **({"detail": self.detail} if self.detail else {})}
 
 
 class ComputerWork:
@@ -80,12 +104,13 @@ class ComputerWork:
         return next((work for work in self.items.values()
                      if work.target == target and work.state == "waiting_control"), None)
 
-    async def request(self, work, reason):
+    async def request(self, work, reason, detail=""):
         if work is None:
             raise VmError("private_conversation_required")
         if self.pending(work.target):
             raise VmError("takeover_pending")
         work.reason, work.state = reason, "waiting_control"
+        work.detail = detail
         work.request_id = secrets.token_urlsafe(18)
         work.returned = asyncio.get_running_loop().create_future()
         self.vm.hold(work.target, True)

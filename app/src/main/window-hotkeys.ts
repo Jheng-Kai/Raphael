@@ -4,7 +4,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { canonicalKey } from "./keys";
 import { IS_MAC } from "../shared/platform";
 
-export type WindowHotkey = "dictation_down" | "dictation_up" | "paste_last" | "tidy" | "cancel" | "cancel_key" | "agent_down" | "agent_up";
+export type WindowHotkey = "dictation_down" | "dictation_up" | "dictation_prefix_down" | "dictation_prefix_up" |
+  "dictation_blur" | "paste_last" | "tidy" | "cancel" | "cancel_key" | "agent_down" | "agent_up";
 /** `agent_keys` and `tidy_keys` are missing from the settings of an app that does not know those keys yet. */
 interface Bindings { dictation_keys: string[]; paste_last_keys: string[]; agent_keys?: string[]; tidy_keys?: string[] }
 export interface KeyInput {
@@ -17,6 +18,7 @@ interface HotkeyState {
   held: string[];
   swallowed: string[];
   dictation: string[];
+  dictationPrefix: boolean;
   agent: string[];
 }
 
@@ -25,11 +27,28 @@ const MODIFIERS = new Set([
   "shiftleft", "shiftright", "metaleft", "metaright",
 ]);
 
-export const emptyHotkeyState = (): HotkeyState => ({ held: [], swallowed: [], dictation: [], agent: [] });
+export const emptyHotkeyState = (): HotkeyState => ({ held: [], swallowed: [], dictation: [], dictationPrefix: false, agent: [] });
 
 // Settings records browser codes; device.json's default uses the alias V (see canonicalKey).
 // Legacy handy-keys aliases beyond letters/digits and these modifiers are not supported here.
 const codeName = canonicalKey;
+
+// Older device files can spell Alt+Space with the native modifier aliases. Resolve those to
+// browser codes so the window recognizes the same quick-ask chord as the system menu guard.
+function windowsAgentBindings(bindings: string[]): string[] {
+  return bindings.flatMap((binding) => {
+    const parts = binding.split("+").map(codeName);
+    if (!parts.includes("space")) return [binding];
+    const normalized = parts.map((part) => {
+      if (/^(opt|option)$/.test(part)) return "alt";
+      if (/^(?:(?:alt|opt|option)_?left|l(?:alt|opt|option))$/.test(part)) return "altleft";
+      if (/^(?:(?:alt|opt|option)_?right|r(?:alt|opt|option)|altgr)$/.test(part)) return "altright";
+      return part;
+    });
+    if (!normalized.includes("alt")) return [normalized.join("+")];
+    return ["altleft", "altright"].map((side) => normalized.map((part) => part === "alt" ? side : part).join("+"));
+  });
+}
 
 function matchBinding(bindings: string[], held: string[], code: string): string[] | undefined {
   return bindings.map((binding) => binding.split("+").map(codeName)).find((parts) =>
@@ -48,6 +67,7 @@ export function reduceHotkey(previous: HotkeyState, event: KeyInput, bindings: B
     held: previous.held.filter((part) => part !== code),
     swallowed: [...previous.swallowed],
     dictation: [...previous.dictation],
+    dictationPrefix: previous.dictationPrefix,
     agent: [...previous.agent],
   };
   const actions: WindowHotkey[] = [];
@@ -57,8 +77,9 @@ export function reduceHotkey(previous: HotkeyState, event: KeyInput, bindings: B
     // its modifiers alone, or a V left behind would keep the next Right Option+V from being a press.
     if (mac && (code === "metaleft" || code === "metaright")) state.held = state.held.filter((part) => MODIFIERS.has(part));
     if (state.dictation.includes(code)) {
-      actions.push("dictation_up");
+      actions.push(state.dictationPrefix ? "dictation_prefix_up" : "dictation_up");
       state.dictation = [];
+      state.dictationPrefix = false;
     }
     if (state.agent.includes(code)) {
       actions.push("agent_up");
@@ -67,6 +88,7 @@ export function reduceHotkey(previous: HotkeyState, event: KeyInput, bindings: B
     state.swallowed = state.swallowed.filter((part) => part !== code);
   } else {
     state.held.push(code);
+    const agentBindings = mac ? bindings.agent_keys ?? [] : windowsAgentBindings(bindings.agent_keys ?? []);
     // AltGr produces a synthetic left Ctrl before Right Alt on Windows.
     if (event.altGraph && state.held.includes("altright")) {
       state.held = state.held.filter((part) => part !== "controlleft");
@@ -74,7 +96,7 @@ export function reduceHotkey(previous: HotkeyState, event: KeyInput, bindings: B
     // Swallow Alt before the rest of a configured chord arrives, including its release, so
     // an Alt-only tap or repeat cannot activate WebView2's menu handling.
     if ((code === "altright" || code === "altleft") &&
-      [...bindings.dictation_keys, ...bindings.paste_last_keys, ...(bindings.agent_keys ?? []), ...(bindings.tidy_keys ?? [])].some((binding) =>
+      [...bindings.dictation_keys, ...bindings.paste_last_keys, ...agentBindings, ...(bindings.tidy_keys ?? [])].some((binding) =>
         binding.split("+").map(codeName).includes(code))) {
       if (!state.swallowed.includes(code)) state.swallowed.push(code);
       preventDefault = true;
@@ -87,17 +109,22 @@ export function reduceHotkey(previous: HotkeyState, event: KeyInput, bindings: B
       } else {
         const dictation = matchBinding(bindings.dictation_keys, state.held, code);
         const paste = matchBinding(bindings.paste_last_keys, state.held, code);
-        const agent = matchBinding(bindings.agent_keys ?? [], state.held, code);
+        const agent = matchBinding(agentBindings, state.held, code);
         const tidy = matchBinding(bindings.tidy_keys ?? [], state.held, code);
         if (dictation && state.dictation.length === 0) {
           state.dictation = dictation;
-          actions.push("dictation_down");
+          state.dictationPrefix = dictation.every(part => MODIFIERS.has(part)) &&
+            agentBindings.some(binding => {
+              const parts = binding.split("+").map(codeName);
+              return parts.length === dictation.length + 1 &&
+                parts.some(part => !MODIFIERS.has(part)) && dictation.every(part => parts.includes(part));
+            });
+          actions.push(state.dictationPrefix ? "dictation_prefix_down" : "dictation_down");
         }
         if (paste) actions.push("paste_last");
-        // Like paste_last: one press, after the dictation_down of Right Alt, which the app drops.
+        // Like paste_last, tidy is a press with no release action.
         if (tidy) actions.push("tidy");
-        // Either key of Right Alt+Space may go down first, here as for the hook: agent_down follows the
-        // dictation_down of Right Alt, and the app tells them apart.
+        // Either key can go down first. The worker resolves the shared dictation prefix.
         if (agent && state.agent.length === 0) {
           state.agent = agent;
           actions.push("agent_down");
@@ -180,7 +207,7 @@ export function installWindowHotkeys(
   };
   const blur = (): void => {
     // A hold that loses focus will not necessarily receive its DOM key-up.
-    if (!recorderPaused && state.dictation.length > 0) forward("dictation_up");
+    if (!recorderPaused && state.dictation.length > 0) forward(state.dictationPrefix ? "dictation_blur" : "dictation_up");
     if (!recorderPaused && state.agent.length > 0) forward("agent_up");
     state = emptyHotkeyState();
   };

@@ -262,7 +262,7 @@ export function createAgent(app: AppContext, places?: {
   resolved(member: number, conversation: number): void;
 }): Page & {
   sidebar: HTMLElement; loadSidebar(): Promise<void>; memberFace(id: number, size: number): string; settingsOf(): number | null;
-  navView(): string; showNavView(key: string): void;
+  keepNavigationPlace(): boolean;
   currentChatPlace(): ChatPlace; chatPlaceExists(place: ChatPlace): boolean; showChatPlace(place: ChatPlace): void;
 } {
   const el = document.createElement("div");
@@ -377,6 +377,7 @@ export function createAgent(app: AppContext, places?: {
     openPanel: () => members.computer(), panelVisible: () => members.detailsOpen() && members.details.dataset.detailsTab === 'computer',
     changed: () => { if (visible && !scroller.hidden) drawThread(); },
     trySkill: text => sendFromPage(text),
+    chooseComputer: transport => api.core("agent.computer_choice", { member_id: members.current(), transport }),
     stop: turnId => { const turn = turns.find(turn => turn.id === turnId); return turn?.task ? api.workerCancel(turn.task.id) : turn?.session_id ? api.agentStop(turn.session_id, memberId()) : Promise.resolve(); },
   });
   members.details.addEventListener('member-panel-tab', () => { if (visible && !roomPane.active) desktop.show(); desktop.sync(); });
@@ -386,7 +387,9 @@ export function createAgent(app: AppContext, places?: {
   detailsScrim.setAttribute("aria-hidden", "true");
   // The press that closes the panel goes on to what it was over (R-UI-121).
   // The header button opened it, and is not pressed again by the press that closes it (R-UI-124).
-  detailsScrim.addEventListener("click", event => closeAndPress(event, detailsScrim, () => members.setDetails(false), conversationButton));
+  detailsScrim.addEventListener("click", event => {
+    if (!desktop.expanded()) closeAndPress(event, detailsScrim, () => members.setDetails(false), conversationButton);
+  });
   el.insertBefore(detailsScrim, members.details);
   if (members.detailsOpen()) el.dataset.det = "open";
   el.querySelector(".mb-head-l")!.append(members.picker);
@@ -515,7 +518,7 @@ export function createAgent(app: AppContext, places?: {
   }
 
   conversationButton.addEventListener("click", () => {
-    members.setDetails(!members.detailsOpen());
+    if (!desktop.expanded()) members.setDetails(!members.detailsOpen());
   });
   window.addEventListener("conversations-changed", (event) => {
     const member = (event as CustomEvent<number>).detail;
@@ -561,7 +564,7 @@ export function createAgent(app: AppContext, places?: {
     unreadFrom = null;
     unreadCaptured = false;
     openingThread = true;
-    // A member's private computer does not stay open behind a group.
+    // The room hides the private view and ends a plain preview.
     desktop.hide(true);
     el.classList.add("is-room"); memberChat.hidden = true;
     roomPane.el.querySelector(".room-picker")!.append(members.picker);
@@ -1017,7 +1020,12 @@ export function createAgent(app: AppContext, places?: {
       if (voice.isUp) voice.drop();
       return;
     }
-    if (askCard.parentElement !== cardHome) cardHome.append(askCard);
+    // In the dock the card stands above the composer, never under it at the window's lower edge.
+    if (cardHome === home) {
+      const anchor = home.querySelector<HTMLElement>(':scope > [data-mount="background-questions"]') ?? composer;
+      if (askCard.nextElementSibling !== anchor) home.insertBefore(askCard, anchor);
+    }
+    else if (askCard.parentElement !== cardHome) cardHome.append(askCard);
     askCard.classList.toggle("is-member", !inRaphael());
     if (asking && !askCard.hidden && askCard.dataset.id === question!.id) return;
     askCard.hidden = !asking;
@@ -2778,14 +2786,13 @@ export function createAgent(app: AppContext, places?: {
     for (const button of buttons) button.disabled = true;
     try {
       if (act.dataset.act === "card-takeover") { desktop.takeover(); for (const button of buttons) button.disabled = false; return; }
-      if (act.dataset.act === "card-browser-focus") {
-        await api.core("integrations.card_focus_browser", { id });
-        for (const button of buttons) button.disabled = false;
-      } else if (act.dataset.act === "card-resume") await api.cardResume(id);
+      if (act.dataset.act === "card-resume") await api.cardResume(id);
       else if (act.dataset.act === "card-done") await api.cardDone(id);
       else await api.cardStop(id);
     } catch (err) {
-      cardFailure(act.closest(".conversation-card"), () => { void taskCardAction(act); });
+      const card = act.closest(".conversation-card");
+      const message = card?.classList.contains("computer-card") ? t(act.dataset.act === "card-stop" ? "memberComputer.stopFailed" : "memberComputer.returnFailed") : undefined;
+      cardFailure(card, () => { void taskCardAction(act); }, undefined, message);
       for (const button of buttons) button.disabled = false;
     }
   }
@@ -3051,14 +3058,16 @@ export function createAgent(app: AppContext, places?: {
       case "template-share":
       case "template-copy-link":
       case "template-unshare":
-        chatCardAction(act);
+      case "computer-suggestion-switch":
+      case "computer-suggestion-setup":
+      case "computer-suggestion-dismiss":
+        chatCardAction(act, () => { app.go("agent", "raphael"); askInChat(RAPHAEL_ID, "setup-docker"); });
         break;
       case "card-save":
         void secretSave(act);
         break;
       case "card-resume":
       case "card-takeover":
-      case "card-browser-focus":
       case "card-done":
       case "card-stop":
         void taskCardAction(act);
@@ -3272,7 +3281,7 @@ export function createAgent(app: AppContext, places?: {
         if (!loaded && visible && !roomPane.active && renderedPage!==pageStamp()) render();
         scheduleRefresh(loaded ? 0 : 1000+REFRESH_DELAY_MS);
       }
-      else if (event.type === "AgentTurn" && (event.member_id ?? RAPHAEL_ID) === memberId()) { dirtyTurnIds.add(event.turn_id); scheduleRefresh(); }
+      else if (event.type === "AgentTurn" && (event.member_id ?? RAPHAEL_ID) === memberId()) { desktop.refreshStatus(); dirtyTurnIds.add(event.turn_id); scheduleRefresh(); }
       // Loaded running work changes history; activity and turn events own the roster's state and preview.
       if (event.type !== "WorkerChanged" || event.state !== "running" || !hasWorkerTask(turns, event.task_id)) members.changed(event.type === "WorkerChanged" ? 1000 : undefined);
     }
@@ -3396,59 +3405,13 @@ export function createAgent(app: AppContext, places?: {
     else members.select(place.member, true);
   }
 
-  /** The titles of the pages opened here, so a step forward can open one again with its name. */
-  const pageTitles = new Map<string, string>();
-  /** The conversation a member's thread shows when it is not the newest one, which is the one a member opens at. */
-  const conversationStep = (): string => {
-    const chosen = conversationId(), newest = newestConversation(conversationCache.get(memberId()) ?? []);
-    return chosen !== undefined && newest && chosen !== newest.id ? `:c:${chosen}` : "";
-  };
-  /**
-   * What the page shows, in words the history keeps (a group `r:5`; a member's thread `m:3`, with `:c:17` for an older
-   * conversation; then `>s:` and the view of the member's settings page, or `>p:` and a page open in the thread's place).
-   */
-  function navView(): string {
-    const room = currentRoomId();
-    let key = room !== null ? `r:${room}` : `m:${memberId()}${conversationStep()}`;
-    if (room === null && members.settings.isOpen()) key += `>s:${members.settings.navView()}`;
-    const page = room !== null ? roomPane.page() : pagesHost.shown();
-    if (page) {
-      pageTitles.set(page.id, page.title);
-      key += `>p:${page.id}`;
-    }
-    return key;
-  }
-  /** Puts the page back at a view `navView` named. A step takes the ways a press takes, so each view comes in as it does then. */
-  function showNavView(key: string): void {
-    const [chat = "", ...layers] = key.split(">");
-    const settingsView = layers.find(layer => layer.startsWith("s:"))?.slice(2);
-    const pageId = layers.find(layer => layer.startsWith("p:"))?.slice(2);
-    const room = /^r:(\d+)$/.exec(chat), thread = /^m:(\d+)(?::c:(\d+))?$/.exec(chat);
-    if (room) {
-      // A room opened by the step reads its thread first: its page comes back with the next step, within the room.
-      if (currentRoomId() !== Number(room[1])) { void openGroupChat(Number(room[1])); return; }
-      const open = roomPane.page();
-      if (pageId !== undefined && open?.id !== pageId) roomPane.showPage(pageId, pageTitles.get(pageId) ?? "");
-      else if (pageId === undefined && open) roomPane.closePage();
-      return;
-    }
-    if (!thread) return;
-    const member = Number(thread[1]);
-    const conversation = thread[2] !== undefined ? Number(thread[2]) : newestConversation(conversationCache.get(member) ?? [])?.id;
-    if (conversation !== undefined && (member !== memberId() || conversation !== conversationId() || currentRoomId() !== null)) openConversation(member, conversation);
-    else if (member !== memberId() || currentRoomId() !== null) members.select(member);
-    // The member's settings page opens and closes as its gear and its arrow do (show), keeping the thread's place.
-    if (settingsView !== undefined && !members.settings.isOpen()) {
-      chatPlace = !scroller.hidden ? { bottom: atBottom(), top: scroller.scrollTop } : { bottom: true, top: 0 };
-      members.openSettings();
-    } else if (settingsView === undefined && members.settings.isOpen()) {
-      members.closeSettings();
-      restoreChatPlace();
-    }
-    if (settingsView !== undefined) members.settings.showNavView(settingsView);
-    const shown = pagesHost.shown();
-    if (pageId !== undefined && shown?.id !== pageId) void pagesHost.show(pageId, pageTitles.get(pageId) ?? "", () => {});
-    else if (pageId === undefined && shown) pagesHost.close();
+  function keepNavigationPlace(): boolean {
+    if (roomPane.active) return roomPane.keepNavigationPlace();
+    if (question || questionWaits(turns, pendingQuestions?.member === memberId()
+      && pendingQuestions.conversation === conversationId() ? pendingQuestions.questions : [])) return true;
+    if (!heldDraft() && !replacing && !state.bubbleEditing) return false;
+    (state.bubbleEditing ? thread.querySelector("textarea") : input)?.focus({ preventScroll: true });
+    return true;
   }
 
   return {
@@ -3458,8 +3421,7 @@ export function createAgent(app: AppContext, places?: {
     loadSidebar: () => members.load(),
     memberFace: (id, size) => members.faceOf(id, size),
     settingsOf: () => members.settings.isOpen() ? members.current() : null,
-    navView,
-    showNavView,
+    keepNavigationPlace,
     currentChatPlace,
     chatPlaceExists,
     showChatPlace,

@@ -86,6 +86,12 @@ export function browserPath() {
   return found;
 }
 
+function writeHostFrame(host, images) {
+  const target = host.model.shown, image = images[target === "popup" ? 1 : 0];
+  const frame = JSON.stringify({ target, image, width: 1280, height: 900 }) + "\n";
+  for (const response of host.responses) response.write(frame);
+}
+
 export async function run(options) {
   const cpuSlowdown = Number(process.env.LOOK_CPU_SLOWDOWN ?? 1);
   if (!Number.isFinite(cpuSlowdown) || cpuSlowdown < 1) throw new Error("LOOK_CPU_SLOWDOWN must be a finite number >= 1");
@@ -108,16 +114,18 @@ export async function run(options) {
     report.executablePath = executablePath;
     const { createServer } = await import(pathToFileURL(requireFromApp.resolve("vite")).href);
     const fixture = JSON.parse(await readFile(join(import.meta.dirname, "fixture.json"), "utf8"));
-    let desktopResponses = {};
+    let desktopResponses = {}, hostFeed, hostFixture, hostImages;
     if (needsDesktopFixture(options.selected)) {
       // Render the production bridge shell/bootstrap, replacing only remote RFB.
       const python = corePython();
       const source = join(import.meta.dirname, "fixtures/desktop-upstream.html.txt");
-      const { stdout } = await promisify(execFile)(python, ["-c", "import json,sys; from pathlib import Path; from raphael_core.computer.viewer import embedded_page,BOOTSTRAP; print(json.dumps({'page':embedded_page(Path(sys.argv[1]).read_text(encoding='utf-8')).decode(),'bootstrap':BOOTSTRAP.decode()}))", source], { windowsHide: true, env: { ...process.env, PYTHONPATH: join(app, "../core/src"), PYTHONDONTWRITEBYTECODE: "1" } });
+      const { stdout } = await promisify(execFile)(python, ["-c", "import json,sys; from pathlib import Path; from raphael_core.computer.viewer import embedded_page,BOOTSTRAP,HOST_PAGE,HOST_SCRIPT; print(json.dumps({'page':embedded_page(Path(sys.argv[1]).read_text(encoding='utf-8')).decode(),'bootstrap':BOOTSTRAP.decode(),'host':HOST_PAGE.decode(),'host_script':HOST_SCRIPT.decode()}))", source], { windowsHide: true, env: { ...process.env, PYTHONPATH: join(app, "../core/src"), PYTHONDONTWRITEBYTECODE: "1" } });
       const bridge = JSON.parse(stdout), base = "/scripts/look/fixtures/";
       desktopResponses = {
         [base + "desktop.html"]: { contentType: "text/html", body: bridge.page },
         [base + "bridge.js"]: { contentType: "text/javascript", body: bridge.bootstrap },
+        [base + "host.html"]: { contentType: "text/html", body: bridge.host },
+        [base + "host.js"]: { contentType: "text/javascript", body: bridge.host_script },
         [base + "control"]: { contentType: "application/json", body: JSON.stringify({ held: true }) },
         [base + "connection"]: { contentType: "application/json", body: JSON.stringify({ held: false, path: "/synthetic-rfb" }) },
         [base + "core/rfb.js"]: { contentType: "text/javascript", body: await readFile(join(import.meta.dirname, "fixtures/desktop-rfb.js"), "utf8") },
@@ -140,7 +148,21 @@ export async function run(options) {
     // Words a Chinese window may show in Latin letters: the synthetic data's own, and names of products and keys.
     const latinFor = (scene, locale) => sceneLatinNames(scene, locale, fixture);
     const namespaces = [...new Set([...translations.matchAll(/"([a-z][A-Za-z0-9]*)\.[^"\n]+"\s*:/g)].map(match => match[1]))];
-    server = await createServer({ configFile: false, root: app, cacheDir: join(directory, "vite-cache"), server: { host: "127.0.0.1", port: 0, hmr: false, watch: null, fs: { allow: [app] } } });
+    if (options.selected.some(scene => scene.fixture?.desktop?.transport === "host")) {
+      const images = await Promise.all(["host-page.jpg", "host-popup.jpg"].map(name => readFile(join(import.meta.dirname, "fixtures", name))));
+      hostImages = images.map(image => image.toString("base64"));
+      hostFeed = { name: "look-host-frames", configureServer(server) {
+        server.middlewares.use("/scripts/look/fixtures/host-frames", (_request, response) => {
+          response.writeHead(200, { "Content-Type": "application/x-ndjson" });
+          // The real canvas keeps reading until its viewer closes.
+          const current = hostFixture;
+          current.responses.add(response);
+          response.on("close", () => current.responses.delete(response));
+          writeHostFrame(current, hostImages);
+        });
+      } };
+    }
+    server = await createServer({ configFile: false, root: app, cacheDir: join(directory, "vite-cache"), plugins: hostFeed ? [hostFeed] : [], server: { host: "127.0.0.1", port: 0, hmr: false, watch: null, fs: { allow: [app] } } });
     await server.listen();
     await warmupEntries(server, options.selected.map(scene => scene.entry || "index.html"), entry => readFile(join(app, entry), "utf8"));
     const address = server.httpServer.address();
@@ -152,6 +174,13 @@ export async function run(options) {
     report.browser = await browser.version();
     for (const scene of options.selected) for (const theme of options.themes) for (const width of options.widths) {
       const page = await browser.newPage();
+      const hostTabs = scene.fixture?.hostTabs;
+      const host = hostFixture = {
+        model: { shown: hostTabs === "popup" ? "popup" : "library", back: hostTabs === "popup", forward: false,
+          tabs: fixture.hostBrowserTabs.filter(tab => hostTabs === "many" ? tab.id !== "popup" : tab.id === "library" ||
+            tab.id === "agenda" || hostTabs === "popup" && tab.id === "popup") },
+        responses: new Set(),
+      };
       const runtimeErrors = [];
       let profiler;
       const result = { scene: scene.name, theme, width, height: options.heights[width] ?? 900, locale: options.locale, runtimeErrors, image: null, failed: true };
@@ -198,7 +227,27 @@ export async function run(options) {
           }
           const disposition = requestDisposition(url, origin);
           const desktopResponse = url.startsWith(origin + "/") && desktopResponses[new URL(url).pathname];
-          if (desktopResponse && new URL(url).pathname.endsWith('/control')) {
+          if (url === origin + "/scripts/look/fixtures/host-browser") {
+            if (request.method() === "POST") {
+              const { action, tab, url: address } = JSON.parse(request.postData());
+              if (action === "select" || action === "navigate") host.model.shown = tab;
+              if (action === "navigate") host.model.tabs = host.model.tabs.map(row => row.id === tab ? { ...row, url: address } : row);
+              if (action === "close") {
+                host.model.tabs = host.model.tabs.filter(row => row.id !== tab);
+                if (host.model.shown === tab) host.model.shown = host.model.tabs[0]?.id;
+              }
+              (result.hostActions ??= []).push({ action, tab });
+              writeHostFrame(host, hostImages);
+              void request.respond({ status: 204 }).catch(() => {});
+            } else void request.respond({ status: 200, contentType: "application/json", body: JSON.stringify(host.model) }).catch(() => {});
+          } else if (url === origin + "/scripts/look/fixtures/host-input") {
+            const { type } = JSON.parse(request.postData());
+            void request.frame().evaluate(kind => {
+              if (kind === 'mousePressed' || kind === 'mouseReleased') (window.__desktopPointerEvents ??= []).push(kind);
+              if (kind === 'keyDown') window.__desktopAcceptedKeys = (window.__desktopAcceptedKeys ?? 0) + 1;
+            }, type)
+              .then(() => request.respond({ status:204 })).catch(() => {});
+          } else if (desktopResponse && new URL(url).pathname.endsWith('/control')) {
             void request.frame().evaluate(() => window.__desktopAcceptedInputs ?? 0).then(input_sequence => request.respond({ status:200, contentType:'application/json', body:JSON.stringify({held:!scene.fixture?.desktopUnconfirmed,input_sequence}) })).catch(() => {});
           } else if (desktopResponse) void request.respond({ status: 200, ...desktopResponse }).catch(() => {});
           else if (imageResponses[url] && request.resourceType() === "image") void request.respond({ status: 200, contentType: "image/svg+xml", body: imageResponses[url] }).catch(() => {});
@@ -256,6 +305,10 @@ export async function run(options) {
               await page.tracing.stop();
               (result.traces ??= []).push(trace);
             }
+          }
+          if (assertion?.check === 'desktop-host-toolbar-navigation' &&
+              !result.hostActions?.some(action => action.action === 'navigate')) {
+            throw new Error('The Chrome toolbar never sent its navigation request');
           }
           if (assertion?.check) (result.assertions ??= []).push(assertion);
         }
@@ -328,7 +381,11 @@ export async function run(options) {
         }
         const failures = requestFailures();
         result.navigationAborts = failures.filter(failure => failure.superseded);
-        for (const failure of failures) if (!failure.superseded && !favicon(failure.url)) error("request", failure.message);
+        for (const failure of failures) {
+          // Closing a watched Chrome tab cancels its open frame response.
+          const viewerClosed = failure.url === origin + "/scripts/look/fixtures/host-frames" && failure.message.endsWith("net::ERR_ABORTED");
+          if (!failure.superseded && !favicon(failure.url) && !viewerClosed) error("request", failure.message);
+        }
         result.failed = failedChecks(result);
       } catch (value) { error("capture", value.message); }
       finally { await page.close(); }

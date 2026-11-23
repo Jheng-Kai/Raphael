@@ -1,5 +1,7 @@
 import * as api from "./api";
 import { createChatComposer } from "./chat-composer";
+import { rememberLayerBack } from "./nav-history";
+import { bindNavLayer } from "./nav-layers";
 import { describeError } from "./format";
 import { getLocale, t } from "./i18n";
 import { messageHTML, replyContentHTML } from "./message-content";
@@ -9,20 +11,21 @@ import { patchThread } from "./thread-diff";
 import { conversationCardsHTML, messageActionsHTML, filesHTML, pictureActionsHTML } from "./timeline";
 import { copyPicture, pictureIdAt } from "./picture-message";
 import { mountConversationCardActions } from "./conversation-card-actions";
-import { mountOwnerQuestions } from "./owner-questions";
+import { mountOwnerQuestions, questionWaits } from "./owner-questions";
 import { createBackgroundQuestions } from "./background-questions";
 import { carryTyped } from "./secret-card";
 import { carryMail } from "./mail-card";
 import { faceHTML } from "./members";
 import { mountMessageMetadata, reactionControlHTML, withReactions } from "./message-metadata";
 import type { AppContext, MembersList, RoomMessage } from "./types";
-import { copyButton, esc, iconButton, toaster } from "./ui";
+import { copyButton, esc, headerCloseButton, toaster } from "./ui";
 
 /** One side thread, carried by the existing room worker and composer. */
-export async function openRoomThread(host: HTMLElement, app: AppContext, roomId: number, messageId: number, people: MembersList, changed: () => void): Promise<() => void> {
+export async function openRoomThread(host: HTMLElement, app: AppContext, roomId: number, messageId: number, people: MembersList, changed: () => void, reopen?: () => void): Promise<() => void> {
+  const opener = document.activeElement;
   const result = await api.core<{ thread_id: number }>("rooms.thread_open", { room_id: roomId, message_id: messageId });
   const pane = document.createElement("aside"); pane.className = "room-side-thread"; pane.setAttribute("aria-label", t("rooms.thread"));
-  pane.innerHTML = `<header data-window-drag><b>${esc(t("rooms.thread"))}</b>${iconButton("x", t("common.close"), ' data-thread-close')}</header><div class="room-side-scroll"><div class="room-thread-origin"></div><ol class="thread"></ol></div><div class="room-thread-dock"></div>`;
+  pane.innerHTML = `<header data-window-drag><b role="heading" aria-level="2">${esc(t("rooms.thread"))}</b>${headerCloseButton(t("common.close"), ' data-thread-close')}</header><div class="room-side-scroll"><div class="room-thread-origin"></div><ol class="thread"></ol></div><div class="room-thread-dock"></div>`;
   host.append(pane); host.classList.add("has-side-thread");
   let alive = true, generation = 0, messages: RoomMessage[] = [], pending: string | undefined;
   const thread = pane.querySelector<HTMLElement>("ol")!, origin = pane.querySelector<HTMLElement>(".room-thread-origin")!;
@@ -37,7 +40,7 @@ export async function openRoomThread(host: HTMLElement, app: AppContext, roomId:
     const actions = messageActionsHTML(message.created, false, undefined, false, reactionControlHTML());
     const body = message.member_id === null
       ? `<div class="me"><div class="chat-message owner-message">${withReactions(`${filesHTML(message.attachments)}<div class="bubble"><div class="message-text">${messageHTML(message.text, "", false)}</div></div>`, message.reactions)}${actions}</div></div>`
-      : `<div class="ra"><span class="ra-face"${member ? ` data-tooltip="${esc(member.name)}"` : ""}>${member ? faceHTML(member, 28) : ""}</span><div class="ra-body"><b class="au-room-author">${esc(member?.name ?? t("rooms.owner"))}</b><div class="chat-message">${withReactions(`${filesHTML(message.attachments)}${replyContentHTML(message.text, "", message.status === "running")}`, message.reactions)}${actions}</div>${message.turn ? conversationCardsHTML(message.turn, member?.name, pictureActionsHTML(actions)) : ""}</div></div>`;
+      : `<div class="ra"><span class="ra-face"${member ? ` data-tooltip="${esc(member.name)}"` : ""}>${member ? faceHTML(member, 28) : ""}</span><div class="ra-body"><b class="au-room-author">${esc(member?.name ?? t("rooms.owner"))}</b><div class="chat-message"${message.status === "running" ? "" : ` data-path-member="${message.member_id}"`}>${withReactions(`${filesHTML(message.attachments)}${replyContentHTML(message.text, "", message.status === "running")}`, message.reactions)}${actions}</div>${message.turn ? conversationCardsHTML(message.turn, member?.name, pictureActionsHTML(actions)) : ""}</div></div>`;
     return `<li class="tn" data-side-message="${message.id}">${body}</li>`;
   };
   const refresh = async (): Promise<void> => {
@@ -94,6 +97,19 @@ export async function openRoomThread(host: HTMLElement, app: AppContext, roomId:
   });
   const unsubscribe = app.onEvent(event => { if (event.type === "WorkerChanged" || (event.type === "RoomsChanged" && event.room_id === roomId) || (event.type === "AgentTurn" && messages.some(message => message.turn_id === event.turn_id))) void refresh().catch(error => toaster.info(describeError(error))); });
   const close = (): void => { if (!alive) return; alive = false; generation++; unsubscribe(); unmount(); questions.reset(); composer.stopVoice(); media.reset(); pane.remove(); host.classList.remove("has-side-thread"); changed(); };
+  bindNavLayer(pane, () => {
+    if (questions.questions().length || questionWaits(messages.flatMap(message => message.turn ? [message.turn] : []))) return;
+    const draft = composer.snapshot();
+    if (pending || draft.text || draft.pageId || composer.el.querySelector(".cmp-chip")) {
+      composer.input.focus();
+      return;
+    }
+    const leave = (): void => {
+      close();
+      if (opener instanceof HTMLElement && host.contains(opener)) opener.focus({ preventScroll: true });
+    };
+    if (reopen) rememberLayerBack(leave, reopen); else leave();
+  });
   pane.querySelector("[data-thread-close]")!.addEventListener("click", close);
   try { await refresh(); composer.input.focus(); } catch (error) { close(); throw error; }
   return close;

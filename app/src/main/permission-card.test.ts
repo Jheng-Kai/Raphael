@@ -148,7 +148,7 @@ describe("a permission card", () => {
     expect(actions(html)).toEqual(["perm-deny", "perm-once", "perm-always"]);
     // Real framed buttons, the primary first, each naming its card and who answers it; declining is the × at the top right.
     const head = html.slice(0, html.indexOf("</header>"));
-    expect(head).toContain('class="btn icon row card-close" aria-label="拒絕" title="拒絕" data-act="perm-deny" data-card="q1" data-source="ask"');
+    expect(head).toContain('class="btn icon close-button card-close" aria-label="拒絕" title="拒絕" data-act="perm-deny" data-card="q1" data-source="ask"');
     expect(html).toContain('class="btn sm pri" data-act="perm-once" data-card="q1" data-source="ask"');
     expect(html.indexOf("perm-once")).toBeLessThan(html.indexOf("perm-always"));
     expect(html).not.toContain(" disabled");

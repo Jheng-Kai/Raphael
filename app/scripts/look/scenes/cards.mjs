@@ -2,12 +2,18 @@ import chat from "./chat.mjs";
 import questions from "./owner-questions.mjs";
 import mcp from "./mcp-proposals.mjs";
 import pages from "./pages.mjs";
-import { scene, check, click, key, member, scroll, type, wait } from "./steps.mjs";
+import { scene, check, click, key, member, scroll, type, wait, waitGone } from "./steps.mjs";
 
 const source = [...chat, ...questions, ...mcp, ...pages];
 const alias = (name, original) => ({...source.find(scene => scene.name === original), name});
 const computer = {running:"fresh",runningMember:1,desktop:{state:"running",ready:true,control:"member",works:[{id:"private-computer-task",request_id:"private-takeover-request",turn_id:2,state:"waiting_control",tool:"get_desktop_state",reason:"sign_in"}]}};
 const entry = [member(1),wait('[data-card-desktop-screen] iframe:not([hidden])')];
+const hostCard = {computerCard: 'signin', browserHandback: true,
+  desktop:{transport:'host',target:'chrome-tab',state:'running',ready:true,control:'member',
+    host_request:{id:'card-pc',request_id:'card-pc',turn_id:140,state:'waiting_control',tool:'get_browser_state',reason:'sign_in',detail:'請登入範例帳戶。'}}};
+const hostCardPreview = [member(1), wait('[data-computer-card="card-pc"] .desktop-last:not([hidden])')];
+const hostTake = [...hostCardPreview, click('[data-computer-card="card-pc"] [data-act="card-takeover"].pri'),
+  wait('.desktop-panel[data-expanded][data-interactive="true"] iframe[src*="transport=host"]')];
 export default [
   ...Object.entries({
     "card-page-ready":"page-product", "card-page-failed":"page-gone", "card-background":"room-question-card",
@@ -25,13 +31,28 @@ export default [
   scene('card-login','Login credentials stay masked in the card',[member(1),wait('[data-login-user]'),type('[data-login-user]','reader@example.invalid'),type('[data-secret-input]','synthetic-password'),check('card-shell')],{loginCard:true}),
   scene('card-question-key','A focused question takes B, while typing A stays in the answer field', [member(1),wait('[data-owner-question="owner-choice"]'),type('[data-owner-answer-input]','A'),check('card-question-typing'),click('[data-owner-question="owner-choice"] .card-title'),key('b'),wait('[data-card-state="answered"]'),check('card-question-key')],{ownerQuestion:'asked'}),
   scene('card-computer-waiting','The existing live stream sits inside the waiting card', [...entry,check('card-computer-inline')],computer),
-  scene('card-browser-sign-in', 'Chrome sign-in uses the existing handback card with the exact tab action',
-    [member(1), wait('[data-computer-card="card-pc"] [data-act="card-browser-focus"]'), check('card-shell')],
-    {computerCard: 'signin', browserHandback: true}),
+  scene('desktop-host-no-card', 'Chrome work opens the Computer tab by itself and puts no card in the conversation',
+    [member(1), wait('.desktop-screen[data-host-browser] iframe[src*="transport=host"]:not([hidden])'), check('desktop-host-no-card'), check('desktop-host-frame')],
+    {running:"fresh",runningMember:1, desktop:{transport:"host",target:"chrome-tab",state:"running",ready:true,control:"member",
+      works:[{id:"chrome-tab",turn_id:2,transport:"host",state:"running",tool:"browser_open",reason:""}]}}),
+  scene('desktop-host-card', 'The Chrome sign-in card preserves the page aspect',
+    [...hostCardPreview, check('desktop-host-card-frame')], hostCard),
+  scene('desktop-host-takeover', 'Take control opens Chrome in the large viewer and a title bar press preserves the same page and owner input',
+    [...hostTake, wait('[data-desktop="return"]:not([hidden])'), check('desktop-stream'), click('.window-chrome [data-window-drag]'),
+      check('desktop-host-outside-press'), {action:'desktop-owner-typing'}, check('desktop-host-frame')], hostCard),
+  scene('desktop-host-tabs-popup', 'A sign-in popup is the selected tab and takes input in the enlarged view',
+    [...hostTake, wait('[data-browser-tab="popup"][aria-pressed="true"]'), {action:'desktop-owner-typing'},
+      check('desktop-host-frame'), check('desktop-host-tabs-control'), check('desktop-host-tabs-popup')], {...hostCard, hostTabs:'popup'}),
+  scene('desktop-host-handback', 'Done returns the host browser tab from the same viewer',
+    [...hostTake, click('[data-desktop="return"]'), waitGone('[data-computer-card="card-pc"]'), check('host-handoff-returned')], hostCard),
+  scene('desktop-host-skip-idle', 'Skipping a Chrome sign-in removes the card and leaves the Computer tab idle',
+    [member(1), wait('[data-computer-card="card-pc"]'), click('[data-computer-card="card-pc"] [data-act="card-stop"]'),
+      waitGone('[data-computer-card="card-pc"]'), {action:'open-computer'}, wait('.desktop-panel:not([hidden])[data-desktop-state="idle"]'),
+      check('computer-panel-quiet'), check('host-handoff-skipped')], hostCard),
   // R-PANEL-09: a sign-in is no work for a small picture. The card's screen and its 接手 carry the same stream into the larger view,
   // where the owner's input reaches it and the pill's 我完成了 gives the request back once.
   scene('card-computer-takeover','A click on the card screen takes the same stream into the larger view under the owner hands without reconnecting', [...entry,click('[data-card-desktop-screen] button'),wait('.desktop-panel[data-expanded][data-interactive="true"] .desktop-screen iframe'),{action:'desktop-owner-typing'},check('computer-takeover-owner')],computer),
-  scene('card-computer-handback','Done in the larger view pill hands back the same nonce once and the card settles', [...entry,click('[data-card-desktop="take"].pri'),wait('.desktop-panel[data-expanded][data-interactive="true"]'),click('[data-desktop="return"]'),wait('.computer-card[data-desktop-settled="handed_back"]'),check('computer-takeover-done')],computer),
+  scene('card-computer-handback','Done in the larger view pill hands back the same nonce once and removes the card', [...entry,click('[data-card-desktop="take"].pri'),wait('.desktop-panel[data-expanded][data-interactive="true"]'),click('[data-desktop="return"]'),waitGone('.computer-card'),check('computer-takeover-done')],computer),
   scene('card-send-failed','A failed message returns to the composer with a local retry', [member(1),type('.cmp-input','Please review the project note.'),click('.cmp-send'),wait('.composer-failure [data-card-retry]'),check('card-send-failed')],{cardSendFailure:true}),
   scene('card-send-retry','Retry delivers the restored words once more', [member(1),type('.cmp-input','Please review the project note.'),click('.cmp-send'),wait('[data-card-retry]'),click('[data-card-retry]'),wait('.cmp-input'),check('card-send-retry')],{cardSendFailure:true}),
   scene('card-mail-failed','Failed mail retains its editable version', [member(1),wait('[data-mail-card]'),click('[data-act="mail-send"]'),wait('[data-mail-state="failed"]'),check('card-mail-failed')],{mailDraft:'draft',cardMailFailure:true}),

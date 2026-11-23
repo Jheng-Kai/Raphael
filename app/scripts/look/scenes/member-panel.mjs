@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { scene, member, click, wait, check, key, hover } from './steps.mjs';
+import { scene, member, click, wait, check, key, hover, sideButton, navKey } from './steps.mjs';
 
 const fixture = JSON.parse(readFileSync(join(import.meta.dirname, '../fixture.json'), 'utf8'));
 /** The fixture's members with member `id` as the slime `avatar` (a yellow or a white-ish one, for the colour on its switches). */
@@ -9,7 +9,15 @@ const details = [member(1), {action:'open-details'}, wait('.mb-det[data-details-
 // Nothing is written over an offline computer, so scenes wait for the state the panel keeps in data.
 const computer = (phase = 'unavailable') => [...details, click('.mb-tabs [data-tab="computer"]'), wait(`.desktop-panel:not([hidden])[data-desktop-state="${phase}"]`)];
 const state = (value, extra = {}) => ({desktop:{state:value,ready:value==='running',control:'member',host:'',target:'synthetic-member',...extra}});
+const computerTab = '#member-tab-computer', detailsTab = '#member-tab-details';
+const livePreview = '.mb-det[data-details-tab="computer"] .desktop-screen iframe:not([hidden])';
 export default [
+  scene('nav-side-panel', 'Back closes the opened Computer panel and Forward restores its tab', [
+    ...details, click('.mb-det [data-det="close"]'), wait('.conversation-trigger[aria-expanded="false"]'),
+    { action: 'open-details' }, click('.mb-tabs [data-tab="computer"]'), wait('.mb-det[data-details-tab="computer"]'),
+    sideButton('back'), wait('.conversation-trigger[aria-expanded="false"]'), check('nav-conversation-1'),
+    sideButton('forward'), wait('.conversation-trigger[aria-expanded="true"]'), wait('.mb-det[data-details-tab="computer"]:not([hidden])'),
+  ]),
   scene('member-panel-details', 'Details opens first with the routines and no list of past work', [...details,wait('.mb-rts .mb-rt'),check('member-panel-details')]),
   scene('member-panel-details-empty', 'Details keeps one-line empty sections', [...details,check('member-panel-details-empty')], {routineEmpty:true}),
   // The computer lives in the third tab only, for every member, Raphael included:
@@ -33,16 +41,23 @@ export default [
   scene('member-panel-library-open', 'A delivered file opens with the computer\'s own program, and a picture opens large', [...details,click('.mb-tabs [data-tab="library"]'),wait('.lib-thumb img[src]'),click('[data-panel-file="delivered-file:bundle"]'),click('.lib-row:has(.lib-thumb)'),wait('.media-lightbox'),check('member-panel-library-open')], {memberPanelFiles:true}),
   scene('member-panel-library-empty', 'Library keeps its empty sentence and arrow keys reach Computer and return', [...details,click('.mb-tabs [data-tab="library"]'),wait('.mb-det[data-details-tab="library"] .mp-empty'),check('member-panel-library-empty'),key('ArrowRight'),wait('.mb-det[data-details-tab="computer"]'),key('ArrowLeft'),wait('.mb-det[data-details-tab="library"]'),check('member-panel-library-empty')]),
   scene('member-panel-computer-live', 'The Computer tab of the panel shows the existing live stream', [member(1),{action:'open-details'},click('.page-agent #member-tab-computer'),wait('.desktop-screen iframe:not([hidden])'),check('member-panel-computer-live')], state('running')),
+  ...['host', 'docker'].map(transport => scene(`member-panel-computer-return-${transport}`, 'Click, keyboard and Forward return to the live computer within a second', [
+    ...details, click(computerTab), wait(livePreview),
+    click(detailsTab), check('computer-tab-left'), click(computerTab), wait(livePreview, 1000), check('member-panel-computer-return-live'),
+    key('Home'), check('computer-tab-left'), key('End'), wait(livePreview, 1000), check('member-panel-computer-return-live'),
+    navKey('back'), check('computer-tab-left'), navKey('forward'), wait(livePreview, 1000), check('member-panel-computer-return-live'),
+    check(transport === 'host' ? 'desktop-host-frame' : 'desktop-frame'), check('computer-header-layout'),
+  ], {...state('running', {transport}), desktopCloseDelay: 1500})),
   ...[
-    ['asleep',state('stopped'),'stopped'], ['starting',state('starting'),'starting'], ['waking',state('preparing',{lifecycle:'waking'}),'preparing'], ['updating',state('building',{lifecycle:'updating'}),'building'], ['repairing',state('preparing',{lifecycle:'repairing'}),'preparing'],
+    ['asleep',state('stopped'),'stopped'], ['starting',state('starting',{transport:'docker'}),'starting'], ['waking',state('preparing',{transport:'docker',lifecycle:'waking'}),'preparing'], ['updating',state('building',{transport:'docker',lifecycle:'updating'}),'building'], ['repairing',state('preparing',{transport:'docker',lifecycle:'repairing'}),'preparing'],
     ['docker-stopped',state('unavailable',{error:'docker_stopped'}),'unavailable'], ['docker-missing',state('absent',{error:'docker_missing'}),'unavailable'],
     ['remote', {...state('unavailable',{error:'remote_unavailable',host:'studio-mini'}),computerHost:'studio-mini'},'unavailable'], ['image-missing',state('missing',{image:false}),'stopped'],
-  ].map(([name, fixture, phase]) => scene(`member-panel-computer-${name}`, 'The screen over an offline computer is the wallpaper alone: no words, face, button or header word, and a press starts it', name==='starting'||['waking','updating','repairing'].includes(name)
-    ? [...computer(phase),check('member-panel-computer-state'),check('panel-state-layout')]
+  ].map(([name, fixture, phase]) => scene(`member-panel-computer-${name}`, 'An offline computer keeps its wallpaper; the header keeps the existing progress word while a computer gets ready', name==='starting'||['waking','updating','repairing'].includes(name)
+    ? [...computer(phase),check('member-panel-computer-state'),check('panel-state-layout'),check('computer-header-layout')]
     : [...computer(phase),check(`member-panel-computer-${name}`),check('panel-state-layout')], fixture)),
-  scene('member-panel-docker-start', 'Only an owner press on the screen starts this PC and the ready result stays contextual', [...computer('unavailable'),click('[data-desktop="enlarge"]'),wait('.desktop-error:not([hidden])'),check('member-panel-docker-start')], state('unavailable',{error:'docker_stopped'})),
-  scene('member-panel-location-hover', 'The computer location is words and a chevron with no frame or fill, even under the pointer', [...computer('unavailable'),hover('.desktop-location-header [data-computer-location]'),check('member-panel-location-hover')], {...state('unavailable',{error:'remote_unavailable',host:'mac-mini'}),computerHost:'mac-mini'}),
-  scene('member-panel-remote-location', 'An unavailable computer keeps the header location control, which opens the existing popover', [...computer('unavailable'),click('.desktop-location-header [data-computer-location]'),wait('.computer-location-popover'),check('member-panel-remote-location')], state('unavailable',{error:'docker_stopped'})),
+  scene('member-panel-docker-start', 'Only an owner press on the screen starts this PC and the ready result stays contextual', [...computer('unavailable'),click('[data-desktop="enlarge"]'),wait('.desktop-notice:not([hidden])'),check('member-panel-docker-start')], state('unavailable',{error:'docker_stopped'})),
+  scene('member-panel-location-hover', 'The computer dropdown names its SSH location with no frame or fill, even under the pointer', [...computer('unavailable'),wait('[data-computer-choice][title*="mac-mini"]'),hover('[data-computer-choice]'),check('member-panel-location-hover')], {...state('unavailable',{error:'remote_unavailable',host:'mac-mini'}),computerHost:'mac-mini'}),
+  scene('member-panel-remote-location', 'An unavailable virtual machine still opens its SSH editor from the computer dropdown', [...computer('unavailable'),wait('[data-computer-choice][data-location-ready]'),click('[data-computer-choice]'),click('.menu [data-action="0"]'),wait('.computer-location-popover'),check('member-panel-remote-location')], state('unavailable',{error:'docker_stopped'})),
   // A member's colour is on its switches too: a routine that is on in the member's panel, the panel of a yellow
   // and of a white-ish slime (a knob that still shows), and Raphael's own in its blue.
   scene('member-switch', 'In the member\'s panel a routine that is on has a switch in the member\'s colour, and the off ones are as they were', [...details, wait('.mb-routine-row .tg[aria-checked="true"]'), check('member-switch')]),

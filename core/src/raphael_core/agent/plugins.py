@@ -89,6 +89,7 @@ class PluginTool:
     # Its description is shown to a model whole: the core wrote it and keeps its length (the member's computer).
     # Cut at DESCRIPTION_CHARS, every computer tool read as the same opening words of the approval rule.
     whole: bool = False
+    alias_group: str | None = None
 
 
 @dataclass
@@ -198,7 +199,7 @@ def make_offer(tools: list[PluginTool]) -> Offer:
     ordered = sorted(tools, key=lambda t: (t.tier, t.server.casefold(), t.name))
     offer = Offer(tools=ordered)
     for tool in ordered:
-        base = _ALIAS_UNSAFE.sub("_", f"{tool.server}__{tool.name}").strip("_") or "tool"
+        base = _ALIAS_UNSAFE.sub("_", f"{tool.alias_group or tool.server}__{tool.name}").strip("_") or "tool"
         if not base[0].isalpha():  # some providers (Gemini) take only a name that starts with a letter
             base = f"t_{base}"
         base = base[:60]

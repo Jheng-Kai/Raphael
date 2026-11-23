@@ -1849,43 +1849,54 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     result.batch = await context.rpc("dictionary.correct",{edits});
     if (JSON.stringify([...result.batch.learned].sort()) !== JSON.stringify(["Alice","Claude"])) throw new Error(`Native Tracker did not learn the complete batch: ${JSON.stringify(result.batch)}`);
     await learned.waitForSelector('#learned-pill:not([hidden])',{visible:true});
-    await learned.hover('#learned-pill');
-    await pause(11200);
-    if (!await learned.$('#learned-pill:not([hidden])')) throw new Error("Hover did not retain the native learned pill");
-    result.focusDuring = await context.windows();
-    // The learned window has no title (R-LEARN-WIN-02: nothing a system could paint of it is a word the owner never chose), and it is
-    // the only window of the app with a rounded click region.
+    // The shell watches the real desktop cursor, including over the click-through caption.
     const learnedWindow = windows => windows.windows.find(window => window.rounded && window.title === "");
+    for (let i = 0; i < 20; i++) {
+      result.focusDuring = await context.windows();
+      if (learnedWindow(result.focusDuring)?.visible) break;
+      await pause(100);
+    }
     const pillWindow = learnedWindow(result.focusDuring);
-    if (!pillWindow?.visible) throw new Error(`The learned window is not shown while its notice is: ${JSON.stringify(pillWindow)}`);
-    // The mouse passes through until the real pointer is on the pill's own controls, which CDP hovering never moves.
-if (!pillWindow || !(pillWindow.style & 0x08000000) || !pillWindow.rounded) throw new Error(`Native learned pill is not passive with its rounded click region: ${JSON.stringify(pillWindow)}`);
-    // The window style itself has no title bar (WS_CAPTION | WS_SYSMENU): tao writes one into every style and hides it only on screen.
-    if (!Number.isInteger(pillWindow.frame) || pillWindow.frame & 0x00C80000) throw new Error(`Native learned pill has a title bar in its window style: ${JSON.stringify(pillWindow)}`);
-    const [left,top,right,bottom] = pillWindow.rect, work = result.focusBefore.workArea;
-    // 16 logical pixels above the taskbar, at any scale from 100% to 300%.
-    if (Math.abs((left+right)/2-(work[0]+work[2])/2)>1 || work[3]-bottom<16 || work[3]-bottom>48 || top<work[1]) throw new Error(`Native pill is not centred just above the taskbar of the active monitor: ${JSON.stringify({pill:pillWindow.rect,work})}`);
-    if (result.focusBefore.foreground !== result.focusDuring.foreground) throw new Error("Publishing the learned pill changed the foreground window");
-    await capture("learned-hover",learned);
-    await learned.click('.learned-undo');
-    await learned.waitForSelector('#learned-pill[hidden]');
-    result.afterUndo = await snapshot();
-    for (const table of ["dictionary","dictionary_evidence"]) if (JSON.stringify(result.beforeLearning[table]) !== JSON.stringify(result.afterUndo[table])) throw new Error(`Native Undo did not restore ${table} exactly`);
-    result.focusAfter = await context.windows();
-    if (result.focusBefore.foreground !== result.focusAfter.foreground) throw new Error("Undo stole the foreground focus");
-    // After Undo the window is gone entirely, not an empty bar (R-LEARN-WIN-02): it is hidden once its pill has faded.
-    for (let waited = 0; learnedWindow(result.focusAfter)?.visible && waited < 20; waited++) { await pause(100); result.focusAfter = await context.windows(); }
-    if (learnedWindow(result.focusAfter)?.visible) throw new Error("Undo left the learned window on the screen");
-    if (!Number.isInteger(learnedWindow(result.focusAfter).frame) || learnedWindow(result.focusAfter).frame & 0x00C80000) throw new Error("Undo left a title bar in the learned window's style");
-    result.expiringBatch = await context.rpc("dictionary.correct",{edits});
-    await learned.waitForSelector('#learned-pill:not([hidden])',{visible:true});
-    await learned.mouse.move(-20,-20);
-    await learned.waitForSelector('#learned-pill[hidden]',{timeout:14000});
-    for (let waited = 0; waited < 20; waited++) { result.afterExpiry = await context.windows(); if (!learnedWindow(result.afterExpiry)?.visible) break; await pause(100); }
-    if (learnedWindow(result.afterExpiry)?.visible) throw new Error("Expiry left the learned window on the screen");
-    if (!(learnedWindow(result.afterExpiry).style & 0x20)) throw new Error("Expired learned window is not click-through");
-    if (!Number.isInteger(learnedWindow(result.afterExpiry).frame) || learnedWindow(result.afterExpiry).frame & 0x00C80000) throw new Error("Expiry left a title bar in the learned window's style");
-    await capture("learned-expired");
+    if (!pillWindow?.visible) throw new Error("The learned window was never shown");
+    const [left, top, right, bottom] = pillWindow.rect, work = result.focusBefore.workArea;
+    const originalCursor = await context.cursor();
+    try {
+      await context.cursor(left + Math.floor((right - left) / 4), Math.floor((top + bottom) / 2));
+      await pause(12_500);
+      if (!await learned.$('#learned-pill:not([hidden])')) throw new Error("Hover did not retain the native learned pill");
+      result.focusDuring = await context.windows();
+      const hoveredWindow = learnedWindow(result.focusDuring);
+      if (!hoveredWindow?.visible || !(hoveredWindow.style & 0x08000000) || !(hoveredWindow.style & 0x20)) {
+        throw new Error(`The hovered learned caption did not stay visible, passive and click-through: ${JSON.stringify(hoveredWindow)}`);
+      }
+      if (!Number.isInteger(hoveredWindow.frame) || hoveredWindow.frame & 0x00C80000) throw new Error(`Native learned pill has a title bar in its window style: ${JSON.stringify(hoveredWindow)}`);
+      // 16 logical pixels above the taskbar, at any scale from 100% to 300%.
+      if (Math.abs((left+right)/2-(work[0]+work[2])/2)>1 || work[3]-bottom<16 || work[3]-bottom>48 || top<work[1]) throw new Error(`Native pill is not centred just above the taskbar of the active monitor: ${JSON.stringify({pill:pillWindow.rect,work})}`);
+      if (result.focusBefore.foreground !== result.focusDuring.foreground) throw new Error("Publishing the learned pill changed the foreground window");
+      await capture("learned-hover", learned);
+      await learned.click('.learned-undo');
+      await learned.waitForSelector('#learned-pill[hidden]');
+      result.afterUndo = await snapshot();
+      for (const table of ["dictionary","dictionary_evidence"]) if (JSON.stringify(result.beforeLearning[table]) !== JSON.stringify(result.afterUndo[table])) throw new Error(`Native Undo did not restore ${table} exactly`);
+      result.focusAfter = await context.windows();
+      if (result.focusBefore.foreground !== result.focusAfter.foreground) throw new Error("Undo stole the foreground focus");
+      // The window goes entirely after fade (R-LEARN-WIN-02).
+      for (let waited = 0; learnedWindow(result.focusAfter)?.visible && waited < 20; waited++) { await pause(100); result.focusAfter = await context.windows(); }
+      if (learnedWindow(result.focusAfter)?.visible) throw new Error("Undo left the learned window on the screen");
+      if (!Number.isInteger(learnedWindow(result.focusAfter).frame) || learnedWindow(result.focusAfter).frame & 0x00C80000) throw new Error("Undo left a title bar in the learned window's style");
+
+      await context.cursor(work[0] + 1, work[1] + 1);
+      result.expiringBatch = await context.rpc("dictionary.correct",{edits});
+      await learned.waitForSelector('#learned-pill:not([hidden])',{visible:true});
+      await learned.waitForSelector('#learned-pill[hidden]',{timeout:16000});
+      for (let waited = 0; waited < 20; waited++) { result.afterExpiry = await context.windows(); if (!learnedWindow(result.afterExpiry)?.visible) break; await pause(100); }
+      if (learnedWindow(result.afterExpiry)?.visible) throw new Error("Expiry left the learned window on the screen");
+      if (!(learnedWindow(result.afterExpiry).style & 0x20)) throw new Error("Expired learned window is not click-through");
+      if (!Number.isInteger(learnedWindow(result.afterExpiry).frame) || learnedWindow(result.afterExpiry).frame & 0x00C80000) throw new Error("Expiry left a title bar in the learned window's style");
+      await capture("learned-expired");
+    } finally {
+      await context.cursor(...originalCursor);
+    }
   } else if (name === "voice-conversation") {
     const conversation = await newConversation(context);
     const before = new Set((await snapshot()).agent_turns.map(row => row.id));

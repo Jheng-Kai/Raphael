@@ -2,8 +2,7 @@ import * as api from "./api";
 import type { DesktopState } from "./desktop-viewer";
 import { t } from "./i18n";
 import { openDialog } from "./member-dialogs";
-import { btn, closeMenu, esc, iconButton, openMenu, patchHTML } from "./ui";
-import { computerStateLabel } from './computer-state';
+import { btn, closeMenu, esc, iconButton, openMenu } from "./ui";
 
 export type ComputerMaintenance = "restart" | "update" | "repair" | "reset";
 const maintenanceWords = {
@@ -11,28 +10,21 @@ const maintenanceWords = {
   repair: ['desktop.repair', 'desktop.repairHint'], reset: ['desktop.reset', 'desktop.resetHint'],
 } as const;
 
-export function mountComputerLifecycle(_host: HTMLElement, panel: HTMLElement, member: () => number,
-  read: () => DesktopState | undefined, perform: (action: ComputerMaintenance, captured: DesktopState) => Promise<void>): { draw(): void; locationHost: HTMLElement } {
-  const header = panel.querySelector('.desktop-location-header') ?? panel;
-  const holder = document.createElement('span');
-  holder.className = 'computer-lifecycle';
-  holder.innerHTML = `<span class="computer-lifecycle-state" role="status"></span><span class="computer-lifecycle-location"></span>${iconButton('more', t('chat.more'), ' data-computer-menu aria-haspopup="menu" aria-expanded="false"')}`;
-  header.insertBefore(holder, header.querySelector('[data-det="gear"]'));
+export function mountComputerLifecycle(holder: HTMLElement, member: () => number,
+  read: () => DesktopState | undefined, perform: (action: ComputerMaintenance, captured: DesktopState) => Promise<void>): { draw(show: boolean): void } {
+  holder.innerHTML = iconButton('more', t('chat.more'), ' data-computer-menu aria-haspopup="menu" aria-expanded="false"');
   const button = holder.querySelector<HTMLButtonElement>('[data-computer-menu]')!;
-  const label = holder.querySelector<HTMLElement>('[role="status"]')!;
-  const fail = (): void => { const error = panel.querySelector<HTMLElement>('.desktop-error')!; error.textContent = t('desktop.maintenanceFailed'); error.hidden = false; };
   function menu(): void {
-    const captured = read(); if (!captured) return;
+    const captured = read(); if (!captured || button.hidden) return;
     const owner = member();
-    const reportFailure = (): void => { if (owner === member()) fail(); };
     const run = (action: ComputerMaintenance): void => {
       closeMenu();
       if (owner !== member()) return;
-      if (action !== 'reset') { void perform(action, captured).catch(reportFailure); return; }
-      openDialog({ title: t('desktop.resetConfirm'), cls: 'mb-confirm', describedByBody: true,
+      if (action !== 'reset') { void perform(action, captured); return; }
+      openDialog({ title: t('desktop.resetConfirm'), cls: 'mb-confirm', blockNavigation: true, describedByBody: true,
         body: `<p>${esc(t('desktop.resetHint'))}</p><p>${esc(t(captured.mode === 'shared' ? 'desktop.shared' : 'desktop.perMember'))}</p>`,
         actions: { secondary: btn(esc(t('common.cancel')), '', ' data-dlg="cancel"'), primary: { label: esc(t('desktop.reset')), attrs: ' data-dlg="reset"' } },
-        onAct(action, _target, dialog) { dialog.close(); if (action === 'reset' && owner === member()) void perform('reset', captured).catch(reportFailure); } });
+        onAct(action, _target, dialog) { dialog.close(); if (action === 'reset' && owner === member()) void perform('reset', captured); } });
     };
     openMenu(button, [], '', () => {}, t(captured.mode === 'shared' ? 'desktop.shared' : 'desktop.perMember'), [
       { label: t('desktop.wait'), desc: t('desktop.waitHint'), run() { closeMenu(); } },
@@ -42,22 +34,19 @@ export function mountComputerLifecycle(_host: HTMLElement, panel: HTMLElement, m
         run() {
           closeMenu();
           openMenu(button, [5,15,60,0].map(value => ({value:String(value),label:t(value === 0 ? 'desktop.neverSleep' : 'desktop.sleepMinutes',{p0:value})})), String(captured.idle_minutes ?? 15), value => {
-            void api.settingsSet('computer_vm_idle_minutes', Number(value)).then(() => { if (owner === member() && read()) read()!.idle_minutes = Number(value); }).catch(fail);
+            void api.settingsSet('computer_vm_idle_minutes', Number(value)).then(() => { if (owner === member() && read()) read()!.idle_minutes = Number(value); }).catch(() => {});
           }, t('desktop.sleepAfter'));
         } },
     ]);
   }
   button.addEventListener('click', menu);
-  return { locationHost: holder.querySelector<HTMLElement>('.computer-lifecycle-location')!, draw() {
+  return { draw(show) {
     const state = read();
     // R-UI-71: an unchanged renewal writes nothing here either.
     const set = <T extends object, K extends keyof T>(target: T, key: K, value: T[K]): void => { if (target[key] !== value) target[key] = value; };
-    // A connection that repaired itself is not news to the owner: nothing is said of it (R-UI-93).
-    const available = !!state && state.state !== 'absent';
-    // No words over a computer that is not running: its state shows once its screen is up.
-    set(label, 'hidden', !state || state.state !== 'running'); set(button, 'hidden', !available);
+    const available = !!state && state.state !== 'absent' && state.transport !== 'host';
+    set(button, 'hidden', !show || !available);
     if (button.getAttribute('aria-label') !== t('chat.more')) button.setAttribute('aria-label', t('chat.more'));
     set(button, 'title', t('chat.more'));
-    patchHTML(label, `<span data-computer-state-text>${esc(computerStateLabel(state))}</span>`);
   } };
 }

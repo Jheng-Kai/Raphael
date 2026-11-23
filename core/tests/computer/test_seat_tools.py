@@ -342,7 +342,7 @@ async def test_peer_native_wait_preserves_its_existing_connection_and_bound_page
     vm.hold(first, True)
     try:
         result = await call(hub, 2, "click", dict(pid=20, window_id=20, x=5, y=6))
-        assert result.kind == "computer_busy"
+        assert result.kind == "waiting_for_owner"
         assert hub.connections.get(second.key) == connection and connection[0].alive
         assert (await call(hub, 2, "get_browser_state", dict(target_id="own-target", tab_id="tab"))).ok
     finally:
@@ -517,8 +517,9 @@ def test_the_launcher_waits_for_the_window_by_the_clock_and_then_says_how_long(a
     if shell is None:
         pytest.skip("An installed POSIX shell is required for the launcher's wait test")
     loop = launcher[launcher.index("new=\nattempt=0"):launcher.index("# The browser opens a new window where its last one was")]
-    # The launcher's deadline is in whole seconds (`date +%s`): a wait of N seconds ends after N-1 to N, so 3 here waits at least 2.
-    loop = re.sub(r"(deadline=\$\(\( \$\(date \+%s\) \+ )60", r"\g<1>3", loop)
+    # Keep the timeout-bound case short. Successful cases allow several looks even in a slow Windows POSIX shell.
+    deadline = 3 if appears_after is None else 15
+    loop = re.sub(r"(deadline=\$\(\( \$\(date \+%s\) \+ )60", lambda match: f"{match[1]}{deadline}", loop)
     count = (tmp_path / "looks").as_posix()
     after = 10**6 if appears_after is None else appears_after
     script = f'''set -eu
@@ -1141,7 +1142,7 @@ async def test_owner_hold_blocks_foreground_page_input_but_navigation_continues(
     vm.hold(vm.target(1), True)
     try:
         result = await call(hub, 2, name, dict(target_id="own-target", tab_id="tab", delivery_mode="foreground", **args))
-        assert result.kind == "computer_busy" and all(sent != name for sent, _ in client.calls)
+        assert result.kind == "waiting_for_owner" and all(sent != name for sent, _ in client.calls)
         assert (await call(hub, 2, "browser_navigate", dict(target_id="own-target", tab_id="tab", url="about:blank"))).ok
         assert (await call(hub, 2, "browser_dialog", dict(target_id="own-target", tab_id="tab", action="inspect"))).ok
     finally:

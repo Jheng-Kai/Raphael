@@ -11,6 +11,7 @@ import json
 import re
 import os
 import logging
+import shutil
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -103,6 +104,38 @@ def _antigravity_final(response: str, responses: list[str], answer: list[str], t
         extra = response
     parts = [*answer, *([text] if text and not extra.startswith(text) else []), *([extra] if extra else [])]
     return "\n".join(part for part in parts if part)
+
+
+def _stage_skills(plugin, skills):
+    from ...members.skill_library import package
+    from ...members.store import MemberError
+    from ..failure import skill_failure
+
+    manifest = plugin / ".claude-plugin/plugin.json"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(json.dumps({"name": "raphael-skills", "version": "1.0.0"}), encoding="utf-8")
+    paths, loaded, skipped = [], [], []
+    for index, skill in enumerate(skills):
+        folder = plugin / "skills" / f"skill-{index}"
+        try:
+            if "path" not in skill:
+                raise MemberError("archive", "invalid skill package")
+            snapshot = package(Path(skill["path"]).parent, installed=True, cached=True)
+        except MemberError as error:
+            skipped.append(skill_failure(skill["name"], error))
+            continue
+        for relative, data in snapshot.items():
+            if relative == "SKILL.md":
+                # Keep native command substitutions behind the existing approval path.
+                data = data.replace(b"!`", b"\\!`")
+                if skill.get("plugin_root"):
+                    data = data.replace(b"${CLAUDE_PLUGIN_ROOT}", skill["plugin_root"].replace("\\", "/").encode())
+            target = folder / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(data)
+        paths.append(str(folder / "SKILL.md"))
+        loaded.append(skill)
+    return paths, loaded, skipped
 
 
 class Driver:
@@ -213,37 +246,15 @@ class Driver:
             loaded_skills = []
             skill_paths = []
             if skills and structured is None:
-                from ...members.skill_library import package
-                from ...members.store import MemberError
-                from ..failure import skill_failure, skill_instruction
+                from ...members.skill_library import stage_files
+                from ..failure import skill_instruction
 
-                skipped = []
                 plugin = files.path / "raphael-skills"
-                manifest = plugin / ".claude-plugin/plugin.json"
-                manifest.parent.mkdir(parents=True)
-                manifest.write_text(json.dumps({"name": "raphael-skills", "version": "1.0.0"}), encoding="utf-8")
-                for index, skill in enumerate(skills):
-                    folder = plugin / "skills" / f"skill-{index}"
-                    try:
-                        if "path" not in skill:
-                            raise MemberError("archive", "invalid skill package")
-                        snapshot = package(Path(skill["path"]).parent, installed=True)
-                    except MemberError as error:
-                        notice = skill_failure(skill["name"], error)
-                        skipped.append(notice)
-                        yield Event("skill_unavailable", data=notice)
-                        continue
-                    for relative, data in snapshot.items():
-                        if relative == "SKILL.md":
-                            # Native expansion must not execute command substitutions outside our approval path.
-                            data = data.replace(b"!`", b"\\!`")
-                            if skill.get("plugin_root"):
-                                data = data.replace(b"${CLAUDE_PLUGIN_ROOT}", skill["plugin_root"].replace("\\", "/").encode())
-                        target = folder / relative
-                        target.parent.mkdir(parents=True, exist_ok=True)
-                        target.write_bytes(data)
-                    skill_paths.append(str(folder / "SKILL.md"))
-                    loaded_skills.append(skill)
+                skill_paths, loaded_skills, skipped = await stage_files(
+                    _stage_skills, plugin, skills, discard=lambda _: shutil.rmtree(plugin, ignore_errors=True),
+                )
+                for notice in skipped:
+                    yield Event("skill_unavailable", data=notice)
                 if skipped:
                     system += "\n\n" + skill_instruction(skipped)
             prompt_file = files.write("system.txt", system)

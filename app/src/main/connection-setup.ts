@@ -293,6 +293,7 @@ export function openConnectionSetup(target: SetupTarget, hooks: SetupHooks): Pro
     const dialog = openDialog({
       title: t("setup.title", { p0: target.name }),
       cls: "cn-setup-dialog",
+      blockNavigation: true,
       body: `<p class="cn-wait" role="status">${esc(t("setup.loading", { p0: target.name }))}</p>`,
       actions: { secondary: btn(esc(t("common.cancel")), "", ' data-dlg="cancel"'), primary: { label: esc(t("conn.join")), attrs: ' data-dlg="add" disabled' } },
       canClose: () => !busy,

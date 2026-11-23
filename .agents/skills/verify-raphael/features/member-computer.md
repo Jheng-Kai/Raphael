@@ -1,26 +1,139 @@
 # Member computer (Phases A and B)
 
-## This computer mode
+## Assigning a computer to a member
 
-R-COMP-HOST-01 through R-COMP-HOST-06. The per-member choice is stored independently of
-the Docker host and seat settings. Windows uses %LOCALAPPDATA%\Raphael\browser. macOS
-uses the Raphael Application Support folder. An isolated test data folder gets its own
-browser profile. The background browser's turn or task owns each tab and the main Chrome
-connection never goes into a workspace. Chrome sign-in uses the existing handback card,
-keeps the exact tab, and proceeds only after the owner returns it. Actual desktop
-control is separately enabled per member.
+R-COMP-CHOICE-01 through R-COMP-CHOICE-03 and R-COMP-HOST-02 through R-COMP-HOST-06.
+The owner assigns the member's computer in the Computer tab. Its one dropdown
+saves the choice without posting in chat, with the local and SSH Docker locations
+in the same menu. New members use Raphael Chrome. The member receives its assigned
+computer's tools and a read-only status tool. A failed startup is reported in the
+conversation. Switching the preference leaves an idle VM asleep. Only the owner's
+Alt+Space quick ask can operate the owner's actual desktop.
+
+Chrome can open web pages and use workspace files. When a private request needs
+a shell, installation, a desktop app or a long-running process, the member says
+why and offers a virtual machine once. The card's full-width action switches the
+member and continues the original request. When Docker is missing, the action
+asks Raphael for setup in its conversation. The decision stays with the owner.
+Background work reports that it needs a VM and stops. Task installs use the VM.
+Local commands keep their existing approval flow for other owner-PC work.
+
+Raphael runs headed Google Chrome with one shared profile in the machine-local data folder.
+On Windows Chrome lives on a separate desktop with no Explorer taskbar and never takes
+focus on the owner's desktop. Every member owns its tabs across turns and tasks,
+including tabs the owner opens with Add and popups. Every tab has its own action
+lock. The member checks browser_tabs before opening another copy and uses the tab
+shown in the Computer panel by default.
+Local Docker and Chrome share the member workspace and team folder while retaining
+separate site sign-ins. Docker on another host uses its own volumes.
+
+Opening a page opens the Computer tab on that same page. The page fills the frame
+under the [host browser toolbar](#host-browser-toolbar). A takeover card appears only while a member waits for the owner for
+an owner-only step. The reason stays on the card, while the thread shows the member's own words.
+Done releases input and resumes the original call on the requested tab, its related
+popup or its live opener.
+Done, Skip and other request endings remove the card from the conversation.
+A visible Computer tab reconnects when a stream or lease ends or the active target changes.
+Returning from Details by click, Home/End or Forward shows the live Chrome page or
+VM seat again within a second. Chrome can close the old watching lease concurrently
+with its replacement. The VM can reuse its still-connected preview.
+
+```powershell
+npm run look -- member-panel-computer-return-host member-panel-computer-return-docker --theme both --width 1120,720,1920x1080
+```
+
+The Chrome scene delays the old close reply and verifies that the live page returns
+within the same limit as the VM. Both scenes check the right-aligned computer control.
+An idle browser and an unavailable VM with no live target keep their wallpaper without panel errors.
+An unexpected failure reaches the active member as an internal note. Missing Docker
+keeps the action to ask Raphael for setup.
+The last watcher leaving stops the screencast. Tabs remain open through idle time
+and after member work ends. Closing the last member tab leaves Chrome running.
+A crash is recovered on the next use. App shutdown closes relay connections and
+Chrome's profile process tree. The VM keeps its own idle setting.
 
 Run from `app/`:
 ```sh
-npm run look -- member-computer-host member-computer-docker card-browser-sign-in --theme both --width 1120,720,1920x1080
+npm run look -- member-settings desktop-computer-choice desktop-computer-choice-missing desktop-computer-choice-docker desktop-computer-suggestion-installed desktop-computer-suggestion-missing desktop-panel desktop-host-no-card desktop-host-panel desktop-host-takeover desktop-host-handback desktop-host-skip-idle desktop-quiet-vm --theme both --width 1120,720,1920x1080
 ```
 
-Inspect both dropdown states and the sign-in card with its Chrome tab action and Done.
-The fixture shows the controls only. Run the local-page Chrome test in
-`core/tests/computer/test_host_computer.py` for browser state, tab isolation,
-background input, downloads and idle close. Use an isolated native data directory for
-the visible Chrome, OS certificate prompt and real sign-in journey.
+Inspect the local and SSH choices, saved switching, both suggestion actions, normal Chrome
+work opening the Computer tab without a card, the full-frame page, takeover and Done, and
+the idle panels after a skipped Chrome request or unavailable VM.
+Look uses the production canvas with fixture frames. Run `test_host_computer.py` and
+`test_host_viewer.py` locally with CI unset. Their native tests use Google Chrome,
+isolated profiles and local pages. They check the ordinary browser UA, `navigator.webdriver`
+being false, changing 1280 × 900 frames away from the input desktop, private input,
+handback of the same tab, downloads and shutdown. The coordinate journey reads
+a page from the previous turn, checks a 1280×900 screenshot and acts on a control
+that is replaced every animation frame. The production-turn scenario reuses the
+owner's tab after listing it. The owner checks actual Google
+sign-in. Native Chrome and OS prompts, including certificate pickers, sit outside the
+page screencast.
 
+## Owner control in the enlarged view
+
+R-COMP-OWNER-INPUT-01, R-COMP-PREVIEW-01, R-PANEL-03 and R-NAV-04. The Computer
+panel has an Open cover and a view-only page. In the enlarged view, Take control
+or a takeover card acquires page input. Collapse, Escape and Back fold the screen
+and release control. A takeover card stays pending until the owner chooses Done.
+The member gets a regular waiting result while the owner holds input and can act
+again after release. The wallpaper remains visible until the Chrome canvas or VM
+framebuffer is painted. Chrome primes a quiet screencast with one screenshot per
+attachment when needed, including tab switches and reconnections.
+
+From app:
+
+```powershell
+npm run look -- desktop-owner-panel desktop-owner-shrink desktop-host-owner-panel desktop-host-owner-shrink desktop-wallpaper-before-frame desktop-host-tabs-panel desktop-host-handback --theme both --width 1120,720,1920x1080
+```
+
+Compare the Chrome and VM previews and the enlarged handback controls at the
+same width and theme. Look checks view-only page input, a toolbar navigation
+while watching, release on folding, a still-pending card and wallpaper after
+connection but before the first picture. The evaluate scenario checks the
+member's waiting reply with a fake brain. The real Chrome journey measures a
+first 1280×900 picture within one second on a static local page before and after
+reconnection, and changes that page through the toolbar without holding input.
+VM engine and native Chrome use their own gates.
+
+## Host browser toolbar
+
+R-COMP-HOST-07 and R-UI-180. The Computer panel and enlarged view share an
+editable address field and the same tab, close, new, back, forward and reload
+controls. They act on the member's Chrome while watching and during takeover.
+The member recovers to a current tab or opens a new one and reads it before
+retrying an action aimed at a closed tab. The member's Chrome viewport stays
+at 1280×900 during watch, takeover and handback. The page
+keeps that aspect edge to edge below the toolbar and in the sign-in card preview.
+The enlarged view fits the entire frame, including the toolbar, in the window.
+
+A Chrome target with a member-owned opener belongs to that same member. The view follows the new
+tab or popup, including a small sign-in window, and returns to the live opener on
+close. The same viewer lease stays in place. Input names the tab whose frame it came
+from. An active handback remains answerable after an OAuth popup closes if its work
+still has a live opener. The member can use stable refs or the 1280×900 page PNG
+with coordinate click, double-click and scroll, and type or press keys in the
+focused control. A stale ref is refreshed once and retried only for a unique role
+and name. Sign-in, verification and payment still use the owner's takeover.
+
+Run from `app/`:
+
+```sh
+npm run look -- desktop-host-tabs-panel desktop-host-tabs-expanded desktop-host-tabs-control desktop-host-tabs-popup desktop-host-no-card desktop-host-panel desktop-host-card desktop-host-takeover desktop-host-handback desktop-viewer --theme both --width 1120,720,1920x1080
+```
+
+Inspect the compact favicon strip, the horizontally scrolled strip, the selected tab,
+the address in both modes, the popup, the card preview and the outer edges of the
+canvas. The frame checks allow 1% deviation from the 1280:900 page aspect. Compare the
+round controls against the other Computer viewer's controls at the same theme and
+width. The look fixture exercises the app's real toolbar and canvas.
+
+Run `test_host_computer.py` and `test_host_viewer.py` locally with CI unset. The
+native popup test opens a small window and a blank-target link from a loopback page,
+checks the fixed 1280×900 frames and owner input, and returns to the opener after each close.
+The native handback test verifies Done and the resumed member tool. Provider sign-in
+requires the owner's own Google or Notion session.
 
 ## Recovering the seat browser after an unreadable stale lock
 
@@ -535,6 +648,12 @@ npm run look -- computer-member-switch desktop-panel desktop-return-stopped pane
 `seatMarks`, the fixture paints that seat's colour band), the owner goes to the calendar, opens member 2 in the sidebar, and
 the Computer tab streams seat 2: one iframe, seat 2's page and colour, no frame of seat 1 anywhere, member 1's session
 closed and never renewed after member 2 opened, member 2's own status read. Native, not run: two real running seats.
+
+The enlarged view keeps its own connected frame and lease while the owner visits a different member or page.
+Returning restores that conversation's view and input ownership. The Vitest checks drive the drawer's scrim,
+conversation, sidebar and header, then verify member switching, background renewal, lease loss and target replacement.
+`desktop-host-takeover` presses the title bar while Chrome is under the owner's control and checks
+that the same document, open count and close count are preserved.
 
 ## The disk notice names the disk that is full
 
@@ -1113,14 +1232,14 @@ This supersedes every earlier note below that describes words, the member face, 
 recovery buttons (Start Docker, Use remote, Download, Retry), the Open pill, the caption under the screen or the header
 state word for an offline computer. While a computer is not showing its live screen (sleeping, starting, waking, updating,
 repairing, stopped Docker, missing installation, remote failure, missing image) the panel draws only the wallpaper: no text,
-face, button, pill or caption inside the screen, and the header state label (computer-lifecycle-state) is hidden until the
-computer runs. The state stays in `data-desktop-state`. The location menu and the overflow menu remain.
+face, button, pill or caption inside the screen. The state stays in `data-desktop-state`. The current computer selection
+may have a short word in the header beside the dropdown. Docker's locations are part of that menu.
 
 One press anywhere on the screen (the `[data-desktop="enlarge"]` cover, visible in every state except while it is getting
 ready) starts it: asleep wakes it, a stopped engine starts Docker through `computer.viewer_status {start_docker:true}`, a
 stalled or unreachable stream reopens, and a running screen opens the larger view as before. Rendered checks use the shared
 `requireBareScreen` helper in scripts/look/checks.mjs. desktop-install and member-panel-remote-location keep their names but
-now cover the absent computer's bare screen and the header location control; no scene was retired.
+cover the absent computer's bare screen and the SSH editor opened from the computer dropdown.
 
 ## Three-tab member panel and local engine recovery
 
@@ -1128,7 +1247,7 @@ A clear Details / Library / Computer hierarchy that explains the actual unavaila
 
 R-PANEL-01 through R-PANEL-04 govern the header, shared tabs, live controls and all offline states. Enter from the conversation title for Details; use the monitor for Computer. Gear retains identity, memory, skills, commands and voice. The panel reads the existing private worker-task lane (including delegated private work), newest first. Tasks open their existing results and stop/rerun through the row menu. Library uses the shared team-file chip; file handles are scoped to the selected member's local workspace/team folder, with recorded artifacts/pages retained even without a running computer. Remote volumes are never scanned as local paths. The current scan is capped at 500 entries, depth 3, 100 visible files and 100 task/page/artifact records; ordinary Show more advances by 12.
 
-Each thing is said once. Sleeping, starting, waking, updating, repairing, stopped Docker Desktop, missing installation, named remote failure and missing image show the full sentence only inside the screen. The header keeps a matching short state word beside location and overflow, without another face or explanation. Buttons sit after the sentence in normal flow; every offline state has the existing member slime. Only a live screen offers Enlarge and Take control underneath, with no repeated name caption. Details keeps the outer conversation heading and suppresses the list's internal heading. Owner engine recovery starts only the installed local app and reports readiness without implicitly creating a computer (a member's own tool call also starts the installed Docker Desktop and waits up to 120 s, see R-PANEL-04; reads and the viewer still never do); selecting the location recovery opens the existing control. No administrator/app-update advice is shown for a stopped engine.
+Each thing is said once. Sleeping, starting, waking, updating, repairing, stopped Docker Desktop, missing installation, named remote failure and missing image show the full sentence only inside the screen. The header keeps the existing short preparation and maintenance words. A normally running computer shows no status word in the header. Buttons sit after the sentence in normal flow; every offline state has the existing member slime. Only a live screen offers Enlarge and Take control underneath, with no repeated name caption. Details keeps the outer conversation heading and suppresses the list's internal heading. Owner engine recovery starts only the installed local app and reports readiness without implicitly creating a computer (a member's own tool call also starts the installed Docker Desktop and waits up to 120 s, see R-PANEL-04; reads and the viewer still never do); selecting the location recovery opens the existing control. No administrator/app-update advice is shown for a stopped engine.
 
 Consistency comparisons use the existing ui.tabs plain variant, shared fileChipHTML, btn and openMenu. The three member tabs fill the panel to keep equal navigation targets; Connections retains its compact counted tabs within Settings. Work menus have only the applicable action, while maintenance retains its wider descriptive rows and takeover retains its icons. These contextual differences reuse the existing components and tokens. Engine readiness uses the existing viewer notice with role=status and neutral text; failures retain role=alert. Offline recovery buttons retain the screen's existing dark contrast treatment over the wallpaper, while Enlarge and Take control use ordinary panel buttons below it.
 
@@ -1142,13 +1261,9 @@ Inspect every contact sheet and full-size computer state at light 720/dark 1120 
 
 ## Settings and lifecycle merge
 
-The member header reads state, shared location, maintenance overflow, settings,
-close. A sleeping state gets a full-width line before the controls in the narrow
-panel. The same location control moves into takeover without a second copy.
-Empty computers retain location and installation guidance. Existing maintenance,
-sleep choices, watch-only enlargement, leases and render caching remain intact.
-The explicit remote host check and copyable repairs move from the retired settings
-pane into the location popover using the existing viewer_status owner RPC.
+The computer tab header right-aligns the dropdown with the screen. When available,
+maintenance sits to its left. The dropdown opens the SSH editor with its explicit host check and copyable
+repairs from the existing viewer_status owner RPC.
 
 ```powershell
 npm run look -- settings-owner safety desktop-host-local desktop-host-remote desktop-panel computer-maintenance-menu computer-state-sleeping owner-output-folder --theme both --width 1120,720,1920x1080
@@ -1156,8 +1271,8 @@ npm run look -- settings-owner safety desktop-host-local desktop-host-remote des
 
 ## Computer lifecycle in words
 
-R-COMP-PERF-01/07/10/11/12 remain authoritative. The member panel header's
-overflow offers Wait, Restart, Update, Repair and Reset, in that order. Shared
+R-COMP-PERF-01/07/10/11/12 remain authoritative. The maintenance overflow
+offers Wait, Restart, Update, Repair and Reset, in that order. Shared
 openMenu descriptions explain preservation/removal. Reset uses the existing
 mb-confirm dialog and sends confirmed=true only after the owner's explicit yes;
 changing members before confirmation performs no maintenance. Host and target

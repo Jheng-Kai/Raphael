@@ -9,6 +9,7 @@ export default class RFB extends EventTarget {
     window.__desktopSeat = query.get('seat');
     this.mark = query.get('mark') === '1' ? ({ 1: '#c0392b', 2: '#1e8449' }[window.__desktopSeat] ?? '#2980b9') : null;
     this.target = target;
+    this.awaitPaint = query.get('awaitPaint') === '1';
     target.style.cssText = 'display:flex;align-items:center;justify-content:center;width:100%;height:100%;overflow:hidden;background:rgb(40,40,40)';
     this.canvas = document.createElement('canvas');
     // A seat of the shared computer: 1280 x 900 (core computer/vm.py `screen_grid`).
@@ -25,6 +26,12 @@ export default class RFB extends EventTarget {
     // The computer's default picture at the fixture hour, chosen as wallpaper.py chooses it (R-UI-92).
     this.wallpaper.src = `/wallpapers/${hour >= 6 && hour < 18 ? 'day' : 'night'}.jpg`;
     this.canvas.addEventListener('mousemove', () => { if (!this.viewOnly) window.__desktopAcceptedInputs = (window.__desktopAcceptedInputs ?? 0) + 1; });
+    for (const [type, name] of [['mousedown', 'mousePressed'], ['mouseup', 'mouseReleased']]) {
+      this.canvas.addEventListener(type, () => { if (!this.viewOnly) (window.__desktopPointerEvents ??= []).push(name); });
+    }
+    this.canvas.addEventListener('wheel', event => {
+      if (!this.viewOnly) window.__desktopWheelDelta = event.deltaY;
+    });
     target.append(this.canvas);
     this.observer = new ResizeObserver(() => this.draw());
     this.observer.observe(target);
@@ -40,6 +47,7 @@ export default class RFB extends EventTarget {
     const scale = this.scale ? Math.min(width / this.canvas.width, height / this.canvas.height) : 1;
     this.canvas.style.width = `${this.canvas.width * scale}px`;
     this.canvas.style.height = `${this.canvas.height * scale}px`;
+    if (this.awaitPaint) return;
     const ctx = this.canvas.getContext('2d');
     ctx.fillStyle = '#171717'; ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     if (this.wallpaper.complete && this.wallpaper.naturalWidth) ctx.drawImage(this.wallpaper,0,0,this.canvas.width,this.canvas.height);

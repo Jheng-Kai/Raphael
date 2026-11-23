@@ -2,11 +2,13 @@
 
 import asyncio
 import json
+import threading
 
 import pytest
 
 from raphael_core.brain.openrouter import ChatToolCall, ChatTurn
 from raphael_core.agent.actions import is_action
+from raphael_core.computer.handback import HandbackCards
 from .conftest import decision
 from .test_service import make_rig  # noqa: F401
 from .test_plugins import plugins, calls  # noqa: F401
@@ -26,6 +28,43 @@ async def typed(rig, text="Check the time", member_id=0):
     rig.typed_count = getattr(rig, "typed_count", 0) + 1
     session = "live" if rig.typed_count == 1 else f"live-{rig.typed_count}"
     return await rig.call("agent.ask", {"session_id": session, "text": text, "ui_language": "en", "source": "app", "member_id": member_id})
+
+
+async def test_a_viewer_note_and_cancelled_handoff_add_no_chat_messages(make_rig, client, conn):
+    cards = HandbackCards(conn, None)
+    rig = make_rig(handbacks=cards)
+    ready = asyncio.Event()
+    asked = "Open the sign-in page."
+    spoken = "The sign-in page is open."
+
+    async def pause(**_kwargs):
+        ready.set()
+        await asyncio.Future()
+
+    client.chats = [chat(spoken, ("local_time", {})), pause]
+    task = asyncio.create_task(typed(rig, asked))
+    try:
+        await asyncio.wait_for(ready.wait(), 5)
+        [(scope, loop)] = rig.service._owner_loops.items()
+        member, conversation = scope
+        turn_id = loop.owner_turn_id
+        card = cards.store.open(turn_id=turn_id, member_id=member, conversation_id=conversation,
+                                run_id="browser:test", reason="sign_in", app="Chrome", language="en")
+        assert not await rig.service.computer_view_problem(member, conversation + 1, "host", "show the screen")
+        assert await rig.service.computer_view_problem(member, conversation, "host", "show the screen")
+        [note] = loop.owner_input.drain()
+        assert "Internal note from the app" in note["content"] and "reopen it" in note["content"]
+        cards.store.move(card.id, "cancelled")
+        await rig.call("agent.cancel", {"session_id": "live"})
+        await asyncio.wait_for(task, 5)
+        [turn] = await rig.turns()
+        assert turn["status"] == "cancelled" and turn["question"] == asked
+        assert all(message["kind"] != "reply" for message in turn["messages"])
+        assert any(spoken in message["text"] for message in turn["messages"])
+    finally:
+        if not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
 
 
 async def test_tool_narration_is_progress_and_only_final_is_a_reply(make_rig, client):
@@ -56,6 +95,86 @@ async def test_tool_narration_is_progress_and_only_final_is_a_reply(make_rig, cl
     events = rig.conn.execute('SELECT turn_id,tool,outcome FROM turn_tool_events ORDER BY id').fetchall()
     # This fixture reuses call id "0"; retries replace that event instead of duplicating it.
     assert [tuple(event) for event in events] == [(turn['id'], 'local_time', 'ok')]
+
+
+async def test_observed_action_words_are_prepared_off_the_loop(make_rig, client, monkeypatch):
+    from raphael_core.agent import actions
+    import raphael_core.agent.history as history
+
+    loop_thread = threading.get_ident()
+    sentence = actions.sentence
+    prepared = []
+    indexed = []
+    index_terms = history.index_terms
+    add_message = history.AgentHistory.add_message
+    action_reindexes = []
+
+    def observed(tool, *args, **kwargs):
+        prepared.append((tool, threading.get_ident()))
+        return sentence(tool, *args, **kwargs)
+
+    def count_index(*args):
+        indexed.append(args)
+        return index_terms(*args)
+
+    def count_action_index(store, turn_id, kind, text, **options):
+        before = len(indexed)
+        result = add_message(store, turn_id, kind, text, **options)
+        if kind == "event" and is_action(text):
+            action_reindexes.append(len(indexed) - before)
+        return result
+
+    monkeypatch.setattr(actions, "sentence", observed)
+    monkeypatch.setattr(history, "index_terms", count_index)
+    monkeypatch.setattr(history.AgentHistory, "add_message", count_action_index)
+    rig = make_rig()
+    client.decisions.append(decision("answer"))
+    seen = []
+
+    async def after_tool(**kwargs):
+        [turn] = await rig.turns()
+        receipts = [json.loads(m["text"]) for m in turn["messages"] if is_action(m["text"])]
+        seen.append(receipts)
+        return chat(json.dumps({"prefix": "Answer", "text": "Done.", "detail": ""}))
+
+    client.chats = [chat("", ("local_time", {})), after_tool]
+    assert (await typed(rig))["text"] == "Done."
+    [receipts] = seen
+    assert [receipt["state"] for receipt in receipts] == ["running", "done"]
+    assert receipts[0]["id"] == receipts[1]["id"]
+    assert action_reindexes == [0, 0]
+    assert len(prepared) == 1 and prepared[0][0] == "local_time" and prepared[0][1] != loop_thread
+
+
+async def test_secret_scans_for_prompt_and_tool_transcript_run_off_the_loop(make_rig, client, conn, tmp_path, monkeypatch):
+    from raphael_core.memory import scan
+    from raphael_core.memory.service import MemoryService
+
+    loop_thread = threading.get_ident()
+    scanned = {"sample-memory-phrase": [], "sample-scan-phrase": []}
+    findings = scan._findings
+
+    def observed(text):
+        for phrase, threads in scanned.items():
+            if phrase in text:
+                threads.append(threading.get_ident())
+        yield from findings(text)
+
+    monkeypatch.setattr(scan, "_findings", observed)
+    memory = MemoryService(conn, tmp_path / "memory", client, None)
+    note = memory.own(0)._path()
+    note.parent.mkdir(parents=True, exist_ok=True)
+    note.write_text("sample-memory-phrase password: example912-memory", encoding="utf-8")
+    rig = make_rig(memory=memory)
+    client.decisions.append(decision("answer"))
+    client.chats = [chat("", ("local_time", {"note": "sample-scan-phrase password: example890-sensitive"})),
+                    chat(json.dumps({"prefix": "Answer", "text": "Done.", "detail": ""}))]
+    assert (await typed(rig))["text"] == "Done."
+    (redacted,) = rig.conn.execute("SELECT redacted_args FROM turn_tool_events").fetchone()
+    assert "sample-scan-phrase" in redacted and "example890-sensitive" not in redacted
+    sent = json.dumps(client.chat_calls[0]["messages"])
+    assert "BLOCKED" in sent and "example912-memory" not in sent
+    assert all(threads and loop_thread not in threads for threads in scanned.values())
 
 
 async def test_a_permission_pauses_the_sequence_and_yes_continues_the_same_turn(make_rig, plugins, calls, client):

@@ -557,7 +557,7 @@ describe("the connected apps", () => {
     const d = dom(html);
     expect(d.querySelectorAll(".cs.cs-connected")).toHaveLength(1);
     expect(d.querySelector(".cs-apps")).toBeNull();
-    const back = d.querySelector(".cs-top > .back-button")!;
+    const back = d.querySelector(".cs-top > .back-title > .back-button")!;
     expect(back.getAttribute("data-conn")).toBe("back");
     expect(back.getAttribute("title")).toBe("返回");
     expect(back.querySelector("svg.i")).not.toBeNull();
@@ -574,7 +574,8 @@ describe("the connected apps", () => {
     expect(main.querySelector(".ds")!.textContent).toBe("Notion的一句話");
     expect(main.querySelector(".logo-mono")).not.toBeNull();
     expect(notion!.innerHTML).toMatch(/class="tg" role="switch" aria-checked="true" aria-label="開啟 Notion" data-conn="enable" data-id="ab12"/);
-    expect(notion!.querySelectorAll("button")).toHaveLength(2);
+    expect(notion!.matches('[data-row="connected-app"]')).toBe(true);
+    expect([...notion!.children]).toEqual([main, notion!.querySelector(".tg")]);
     // A server of the user's own: where it is reached, and the generic app mark.
     expect(files!.textContent).toContain("npx");
     expect(files!.querySelector(".mono.md svg.logo-generic")).not.toBeNull();
@@ -767,7 +768,7 @@ describe("the page of a connected app", () => {
     const title = head.querySelector("h2.big")!;
     expect(title.textContent).toBe("Notion");
     expect(title.id).toBe("cs-page-title");
-    const join = head.querySelector(".cs-join")!;
+    const join = head.parentElement!.querySelector(".cs-join")!;
     expect(join.querySelector(".cs-state")!.textContent).toBe("已連結");
     const toggle = join.querySelector<HTMLElement>('[role="switch"]')!;
     expect(toggle.getAttribute("aria-checked")).toBe("true");
@@ -775,6 +776,7 @@ describe("the page of a connected app", () => {
     expect(toggle.dataset).toMatchObject({ conn: "enable", id: "ab12", k: "cs-dlg-enable" });
     const menu = join.querySelector<HTMLElement>('[data-conn="server-menu"]')!;
     expect(menu.dataset.id).toBe("ab12");
+    expect(join.lastElementChild).toBe(toggle);
     expect(menu.getAttribute("aria-haspopup")).toBe("menu");
     expect(menu.getAttribute("aria-label")).toBeTruthy();
     expect(menu.getAttribute("title")).toBe(menu.getAttribute("aria-label"));

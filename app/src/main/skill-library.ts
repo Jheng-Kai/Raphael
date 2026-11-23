@@ -14,7 +14,8 @@ import type { MessageKey } from "./i18n/zh-TW";
 import { isTopLayer } from "./dismissals";
 import { openActions } from "./member-column";
 import { faceHTML, groupFacesHTML, RAPHAEL_ID } from "./members";
-import { bindNavLayer } from "./nav-layers";
+import { rememberLayerBack } from "./nav-history";
+import { bindNavLayer, keepEditedField } from "./nav-layers";
 import { backButton, btn, closeMenu, esc, fieldHTML, ico, iconBtn, openPopover, tg, toaster } from "./ui";
 import "./skill-library.css";
 
@@ -30,10 +31,10 @@ type Face = Parameters<typeof faceHTML>[0];
 export interface SkillLibraryView {
   packages: LibraryPackage[]; members: LibraryMember[]; loaded: boolean; failed: boolean;
   /** The package whose page is open in the list's place, or null for the list. */
-  page: string | null; pasting: boolean; busy: boolean; error: string;
+  page: string | null; pasting: boolean; busy: boolean; refreshing: Set<string>; error: string;
 }
 export const emptySkillLibraryView = (): SkillLibraryView => ({
-  packages: [], members: [], loaded: false, failed: false, page: null, pasting: false, busy: false, error: "",
+  packages: [], members: [], loaded: false, failed: false, page: null, pasting: false, busy: false, refreshing: new Set(), error: "",
 });
 
 /** The causes the core names (the `MemberError` kind that leads its message, members/service.py `_library_error`), in
@@ -54,13 +55,15 @@ export function accessText(access: Access, members: LibraryMember[]): string {
   return names.length <= 2 ? names.join("、") : t("skillLib.people", { count: names.length });
 }
 
-/** A package's controls, the same on its row and on its page: who may use it, its switch and its ⋯. */
+/** A package's controls, the same on its row and on its page: who may use it, its ⋯ and its switch. */
 function controlsHTML(p: LibraryPackage, v: SkillLibraryView): string {
+  const busy = v.refreshing.has(p.key) ? " disabled" : "";
   return `<div class="ctl">` +
-    `<button type="button" class="sel skl-access" data-skl="access" data-key="${esc(p.key)}" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(t("vault.access"))}">` +
+    (busy ? `<span class="d skl-refresh-status" role="status">${esc(t("desktop.updating"))}</span>` : "") +
+    `<button type="button" class="sel skl-access" data-skl="access" data-key="${esc(p.key)}" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(t("vault.access"))}"${busy}>` +
     `<span>${esc(accessText(p.access, v.members))}</span>${ico("down")}</button>` +
-    tg(p.enabled, `${t("members.profile.enable")} ${p.name}`, ` data-skl="toggle" data-key="${esc(p.key)}"`) +
-    iconBtn("more", t("members.more", { p0: p.name }), ` data-skl="more" data-key="${esc(p.key)}" aria-haspopup="menu" aria-expanded="false"`) +
+    iconBtn("more", t("members.more", { p0: p.name }), ` data-skl="more" data-key="${esc(p.key)}" aria-haspopup="menu" aria-expanded="false"${busy}`) +
+    tg(p.enabled, `${t("members.profile.enable")} ${p.name}`, ` data-skl="toggle" data-key="${esc(p.key)}"${busy}`) +
     `</div>`;
 }
 
@@ -73,14 +76,31 @@ const descriptionOf = (p: LibraryPackage): string =>
 
 function packageHTML(p: LibraryPackage, v: SkillLibraryView): string {
   const plugin = isPlugin(p);
-  const about = descriptionOf(p);
   const count = plugin ? '<span class="skl-count">' + esc(t("skillLib.count", { count: p.skills.length })) + ico("right") + '</span>' : "";
-  const words = '<span class="lbl skl-label"><span class="t skl-title"><span class="skl-name">' + esc(p.name) + '</span>' + count + '</span>' +
-    (about ? '<span class="d skl-description">' + esc(about) + '</span>' : '') + '</span>';
+  const words = libraryLabelHTML(p.name, descriptionOf(p), count);
   const name = plugin
     ? '<button type="button" class="btn skl-open" data-skl="open" data-key="' + esc(p.key) + '">' + words + '</button>'
     : '<div class="skl-single" tabindex="-1" data-library-skill="' + (p.skills[0]?.id ?? "") + '">' + words + '</div>';
-  return '<div class="row skl-pack" data-skl-pack="' + esc(p.key) + '">' + name + controlsHTML(p, v) + '</div>';
+  return libraryRowHTML("skl-pack", `data-skl-pack="${esc(p.key)}"`, name, controlsHTML(p, v));
+}
+
+function libraryLabelHTML(name: string, description: string, count = ""): string {
+  return `<span class="lbl skl-label"><span class="t skl-title"><span class="skl-name">${esc(name)}</span>${count}</span>` +
+    (description ? `<span class="d skl-description">${esc(description)}</span>` : "") + "</span>";
+}
+
+function libraryRowHTML(className: string, attrs: string, label: string, controls: string): string {
+  return `<div class="row skl-entry ${className}" ${attrs}>${label}${controls}</div>`;
+}
+
+function pluginSkillHTML(p: LibraryPackage, skill: LibrarySkill, v: SkillLibraryView): string {
+  const attrs = ` data-key="${esc(p.key)}" data-id="${skill.id}"`;
+  const toggle = tg(skill.enabled, `${t("members.profile.enable")} ${skill.name}`, ` data-skl="skill"${attrs}${p.enabled && !v.refreshing.has(p.key) ? "" : " disabled"}`);
+  const more = skill.description
+    ? iconBtn("more", t("members.more", { p0: skill.name }), ` data-skl="skill-more"${attrs} aria-haspopup="menu" aria-expanded="false"`)
+    : "";
+  const label = `<div class="skl-single">${libraryLabelHTML(skill.name, skill.description)}</div>`;
+  return libraryRowHTML("skl-skill", `tabindex="-1" data-library-skill="${skill.id}"`, label, `<div class="ctl">${more}${toggle}</div>`);
 }
 
 function packageSectionHTML(kind: "plugins" | "skills", packages: LibraryPackage[], v: SkillLibraryView): string {
@@ -91,20 +111,18 @@ function packageSectionHTML(kind: "plugins" | "skills", packages: LibraryPackage
 }
 
 /**
- * A package's page, in the list's place: the back arrow and its name, who may use it, its switch and its ⋯ as on its row,
+ * A package's page, in the list's place: the back arrow and its name, then who may use it, its ⋯ and its switch,
  * where it came from, then its skills, each with its own switch (off while the package is).
  */
-function packagePageHTML(p: LibraryPackage, v: SkillLibraryView): string {
-  const skills = p.skills.map(skill => `<div class="row skl-skill" tabindex="-1" data-library-skill="${skill.id}">` +
-    `<div class="lbl"><div class="t">${esc(skill.name)}</div>${skill.description ? `<div class="d">${esc(skill.description)}</div>` : ""}</div>` +
-    `<div class="ctl">${tg(skill.enabled, `${t("members.profile.enable")} ${skill.name}`, ` data-skl="skill" data-key="${esc(p.key)}" data-id="${skill.id}"${p.enabled ? "" : " disabled"}`)}</div></div>`).join("");
+function packagePageHTML(p: LibraryPackage, v: SkillLibraryView, headerClose: string, notice: string): string {
+  const skills = p.skills.map(skill => pluginSkillHTML(p, skill, v)).join("");
   const source = p.source ? `<p class="d skl-source">${esc(p.source)}${p.version ? ` · ${esc(p.version)}` : ""}</p>` : "";
-  return `<section class="sgroup skl skl-page" data-skl-page="${esc(p.key)}" aria-labelledby="skl-page-name">` +
-    `<div class="row skl-page-head skl-pack" data-skl-pack="${esc(p.key)}">` +
-    backButton(t("chooser.back"), ' data-skl="back" data-k="skl-back"', "skl-back") +
-    `<h2 class="skl-page-name" id="skl-page-name">${esc(p.name)}</h2>` +
+  return `<section class="skl skl-page" data-skl-page="${esc(p.key)}" aria-labelledby="set-title">` +
+    `<div class="skl-pack" data-skl-pack="${esc(p.key)}"><header class="set-head skl-page-head">` +
+    `<div class="skl-page-title"><span class="back-title">` + backButton(t("chooser.back"), ' data-skl="back" data-k="skl-back"', "back-link") +
+    `<h1 class="skl-page-name" id="set-title" tabindex="-1" data-title-back>${esc(p.name)}</h1></span>` +
     `<span class="skl-count">${esc(t("skillLib.count", { count: p.skills.length }))}</span>` +
-    controlsHTML(p, v) + `</div>` + source +
+    `<div class="skl-page-actions">` + controlsHTML(p, v) + `</div></div>` + headerClose + `</header></div>` + notice + source +
     (p.description ? `<p class="d skl-about">${esc(p.description)}</p>` : "") +
     `<div class="slist skl-skills">${skills}</div></section>`;
 }
@@ -124,15 +142,16 @@ function importHTML(v: SkillLibraryView): string {
     `</div>${input}<p class="d skl-import-hint">${esc(t("skillLib.importHint"))}</p>${v.error ? `<p class="skl-error" role="alert">${esc(v.error)}</p>` : ""}<input type="file" id="skl-file" accept="${ACCEPT}" hidden></div>`;
 }
 
-export function skillLibraryHTML(v: SkillLibraryView): string {
+export function skillLibraryHTML(v: SkillLibraryView, { listHeader = "", pageClose = "", notice = "" }:
+  { listHeader?: string; pageClose?: string; notice?: string } = {}): string {
   const page = v.page ? v.packages.find(p => p.key === v.page) : undefined;
-  if (hasPage(page)) return packagePageHTML(page, v);
+  if (hasPage(page)) return packagePageHTML(page, v, pageClose, notice);
   const list = v.failed ? `<p class="d skl-empty" role="alert">${esc(t("skillLib.loadFailed"))}</p>`
     : !v.loaded ? `<p class="d skl-empty">${esc(t("vault.busy"))}</p>`
     : v.packages.length ? packageSectionHTML("plugins", v.packages.filter(isPlugin), v) +
       packageSectionHTML("skills", v.packages.filter(p => !isPlugin(p)), v)
     : `<p class="d skl-empty">${esc(t("skillLib.empty"))}</p>`;
-  return `<section class="sgroup skl" aria-label="${esc(t("settings.paneSkills"))}">` +
+  return listHeader + notice + `<section class="sgroup skl" aria-label="${esc(t("settings.paneSkills"))}">` +
     importHTML(v) + list + `</section>`;
 }
 
@@ -189,6 +208,13 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
     catch (error) { toaster.info(failureText(error)); await load(); return; }
     redraw();
   };
+  const refresh = async (key: string): Promise<void> => {
+    state.refreshing.add(key);
+    redraw();
+    try { replace((await core<{ package: LibraryPackage }>("skills.library.update", { key, refresh: true })).package); }
+    catch (error) { toaster.info(failureText(error)); }
+    finally { state.refreshing.delete(key); redraw(); }
+  };
   const bring = async (params: Record<string, unknown>): Promise<void> => {
     state.busy = true; state.error = ""; redraw();
     try {
@@ -211,7 +237,7 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
     root.querySelector<HTMLElement>('[data-skl="back"]')?.focus({ preventScroll: true });
   };
   /** Back to the list, where it was left, with the focus on the package's row. */
-  const back = (): void => {
+  const backToList = (): void => {
     const key = state.page;
     if (!key) return;
     closeMenu();
@@ -220,6 +246,11 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
     const box = scroller();
     if (box) box.scrollTop = listScroll;
     root.querySelector<HTMLElement>(`[data-skl="open"][data-key="${CSS.escape(key)}"]`)?.focus({ preventScroll: true });
+  };
+  const back = (): void => {
+    const key = state.page;
+    if (!key) return;
+    rememberLayerBack(backToList, () => { if (hasPage(byKey(key))) open(key); });
   };
   const bringFile = async (file: File): Promise<void> => {
     if (file.size > MAX_FILE) { state.error = t("skillLib.tooLarge"); redraw(); return; }
@@ -264,6 +295,20 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
       if (access === "all") { closeMenu(); anchor.focus({ preventScroll: true }); }
     });
   };
+  const showDetails = (anchor: HTMLElement, name: string, description: string): void => {
+    const details = openPopover(anchor, `<div class="skl-details"><strong>${esc(name)}</strong><p>${esc(description)}</p></div>`, {
+      className: "menu", role: "dialog", label: t("card.details"),
+      navigation: { restore: () => {
+        const { skl, key, id } = anchor.dataset;
+        return () => {
+          const trigger = anchor.isConnected ? anchor : [...root.querySelectorAll<HTMLElement>("[data-skl]")].find(el =>
+            el.dataset.skl === skl && el.dataset.key === key && el.dataset.id === id);
+          if (trigger) showDetails(trigger, name, description);
+        };
+      } },
+    });
+    details.focus({ preventScroll: true });
+  };
   const more = (anchor: HTMLElement, key: string): void => {
     const p = byKey(key);
     if (!p) return;
@@ -272,19 +317,13 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
       ...(p.updatable ? [{ id: "refresh", label: t("skillLib.update"), icon: "refresh" as const }] : []),
       { id: "delete", label: t("skillLib.remove"), icon: "trash", ask: t("skillLib.removeAsk") },
     ], picked => {
-      if (picked === "details") {
-        const details = openPopover(anchor, `<div class="skl-details"><strong>${esc(p.name)}</strong><p>${esc(descriptionOf(p))}</p></div>`, {
-          className: "menu", role: "dialog", label: t("card.details"),
-        });
-        details.focus({ preventScroll: true });
-      } else if (picked === "refresh") void core<{ package: LibraryPackage }>("skills.library.update", { key, refresh: true })
-        .then(result => { replace(result.package); redraw(); })
-        .catch(error => toaster.info(failureText(error)));
+      if (picked === "details") showDetails(anchor, p.name, descriptionOf(p));
+      else if (picked === "refresh") void refresh(key);
       else void core("skills.library.delete", { key })
         .then(() => {
           state.packages = state.packages.filter(other => other.key !== key);
           // Deleted from its own page: the list comes back, where it was left.
-          if (state.page === key) back(); else redraw();
+          if (state.page === key) backToList(); else redraw();
         })
         .catch(error => toaster.info(failureText(error)));
     });
@@ -308,6 +347,12 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
       }
       case "access": chooseAccess(target, key); break;
       case "more": more(target, key); break;
+      case "skill-more": {
+        const skill = byKey(key)?.skills.find(item => item.id === Number(target.dataset.id));
+        if (skill?.description) openActions(target, [{ id: "details", label: t("card.details"), icon: "info" }],
+          () => showDetails(target, skill.name, skill.description));
+        break;
+      }
       case "import-go": {
         const text = root.querySelector<HTMLTextAreaElement>("#skl-text")?.value ?? "";
         const source = root.querySelector<HTMLInputElement>("#skl-source")?.value.trim() ?? "";
@@ -361,7 +406,7 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
     /** After each drawing: a package's page is a step of its own, so a step back (a side button, Alt+Left) returns to the list. */
     painted(): void {
       const page = root.querySelector<HTMLElement>(".skl-page");
-      if (page) bindNavLayer(page, back);
+      if (page) bindNavLayer(page, back, { step: direction => state.busy || direction === "back" && keepEditedField(page) });
     },
     reset: (): void => { epoch++; state.pasting = false; state.error = ""; state.page = null; },
   };

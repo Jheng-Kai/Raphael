@@ -12,6 +12,7 @@ import os
 import re
 import shutil
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from urllib.parse import quote, urlsplit
 
@@ -20,7 +21,7 @@ import httpx
 from ..bots.homes import atomic
 from .store import MemberError
 from .skill_library import (SHARED, MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES, MAX_DISCOVERY_ENTRIES,
-                            linked, location, roots, version_key, walk)
+                            linked, location, roots, stage_files, version_key, walk)
 
 MAX_MANIFEST_BYTES = 256 * 1024
 MAX_TREE_BYTES = 4 * 1024 * 1024
@@ -323,6 +324,23 @@ async def download_plugin(target):
         raise MemberError("download", "could not download the GitHub plugin") from None
 
 
+@dataclass
+class PluginInstall:
+    identity: str
+    manifest: dict
+    previous: object
+    old: dict
+    retained: set
+    components: list
+    files: dict
+    source: str
+    marketplace: str
+    target: dict | None
+    access: str | list | None
+    servers: list
+    revision: tuple
+
+
 class PluginSets:
     def plugin_root(self, identifier):
         row = self.conn.execute("SELECT folder FROM skill_sets WHERE id=?", (identifier,)).fetchone()
@@ -384,14 +402,29 @@ class PluginSets:
         key = row["set_key"] if row["set_kind"] == "skill" else ".raphael-commands/" + row["set_key"]
         return self.homes.safe(self.homes.home(SHARED) / row["folder"] / key / "SKILL.md")
 
-    def plugin_sets(self):
+    def _plugin_set_inputs(self, identifier=None):
+        rows = self.conn.execute("SELECT * FROM skill_sets WHERE (? IS NULL OR id=?) ORDER BY id", (identifier, identifier))
         result = []
-        for row in self.conn.execute("SELECT * FROM skill_sets ORDER BY id"):
+        for row in rows:
             info = json.loads(row["metadata"])
-            changed = False
+            latest = None
             if info.get("marketplace"):
                 found = self.conn.execute("SELECT catalog FROM skill_marketplaces WHERE repo=?", (info["marketplace"],)).fetchone()
                 latest = next((p for p in json.loads(found[0])["plugins"] if p["name"] == row["name"]), None) if found else None
+            counts = dict(self.conn.execute("SELECT set_kind,COUNT(*) FROM member_skills WHERE set_id=? GROUP BY set_kind", (row["id"],)))
+            result.append((row, info, latest, counts))
+        return result
+
+    def plugin_sets(self, identifier=None):
+        return self._plugin_set_views(self._plugin_set_inputs(identifier))
+
+    async def plugin_sets_async(self, identifier=None):
+        return await asyncio.to_thread(self._plugin_set_views, self._plugin_set_inputs(identifier))
+
+    def _plugin_set_views(self, inputs):
+        result = []
+        for row, info, latest, counts in inputs:
+            if info.get("marketplace"):
                 changed = bool(latest and latest["installable"] and version_key(latest["version"]) > version_key(row["version"]))
             else:
                 try:
@@ -401,14 +434,40 @@ class PluginSets:
                     changed = local_stamp(latest) != info.get("fingerprint")
                 except (MemberError, OSError):
                     changed = None
-            counts = dict(self.conn.execute("SELECT set_kind,COUNT(*) FROM member_skills WHERE set_id=? GROUP BY set_kind", (row["id"],)))
             result.append({"id": row["id"], "name": row["name"], "version": row["version"], "description": row["description"],
                            "source": row["source"], "skill_count": counts.get("skill", 0), "command_count": counts.get("command", 0),
                            "source_changed": changed, "marketplace": info.get("marketplace", ""), "mcp_servers": info.get("mcp_servers", [])})
         return result
 
     def install_set(self, source, files, *, marketplace="", target=None, access=None, expected_id=None, require_new=False, required_skill=None):
-        """Validate everything before one database commit; failed installs leave grants intact."""
+        """Install synchronously through the same plan, writer and transaction."""
+        plan = self._plan_set(source, files, marketplace=marketplace, target=target, access=access,
+                              expected_id=expected_id, require_new=require_new, required_skill=required_skill)
+        folder, info = self._write_set(plan)
+        try:
+            identifier = self._commit_set(plan, folder, info)
+        except BaseException:
+            self._discard_set(folder)
+            raise
+        self._discard_previous_set(plan)
+        self._mirror(SHARED)
+        return self.plugin_sets(identifier)[0]
+
+    async def _install_set_async(self, source, files, *, enabled=None, skill=None, **options):
+        plan = self._plan_set(source, files, **options)
+        folder, info = await stage_files(self._write_set, plan, discard=lambda staged: self._discard_set(staged[0]))
+        try:
+            identifier = self._commit_set(plan, folder, info, enabled=enabled, skill=skill)
+        except BaseException:
+            await asyncio.to_thread(self._discard_set, folder)
+            raise
+        installed = self._plugin_set_inputs(identifier)
+        await asyncio.to_thread(self._discard_previous_set, plan)
+        await self._mirror_async(SHARED)
+        return (await asyncio.to_thread(self._plugin_set_views, installed))[0]
+
+    def _plan_set(self, source, files, *, marketplace="", target=None, access=None, expected_id=None,
+                  require_new=False, required_skill=None):
         from .skills import stored_skill_name
 
         manifest = manifest_from(files)
@@ -448,53 +507,79 @@ class PluginSets:
             components.append((part, key, stored, existing))
         if required_skill is not None and required_skill not in retained:
             raise MemberError("not_found", "the refreshed package no longer has that skill")
-        public_servers = mcp_servers(files, manifest)
+        checked = {}
+        for key, data in files.items():
+            path = relative_path(key)
+            if path.split("/")[0].casefold().startswith(".raphael"):
+                raise MemberError("source", "reserved plugin metadata path")
+            checked[path] = data
+        return PluginInstall(identity, manifest, previous, old, retained, components, checked,
+                             source, marketplace, target, access, mcp_servers(files, manifest), self.skill_revision())
+
+    def _write_set(self, plan):
         root = self.homes.safe(self.homes.home(SHARED) / "skill-sets")
         root.mkdir(parents=True, exist_ok=True)
         folder = Path(tempfile.mkdtemp(prefix="set-", dir=root))
         try:
+            files = dict(plan.files)
+            for part, *_ in plan.components:
+                key = part["key"] if part["kind"] == "skill" else f".raphael-commands/{part['key']}/SKILL.md"
+                files[key] = part["text"].encode()
             for key, data in files.items():
-                if key.split("/")[0].casefold().startswith(".raphael"):
-                    raise MemberError("source", "reserved plugin metadata path")
-                atomic(self.homes.safe(folder / relative_path(key)), data)
-            for part in parts:
-                path = folder / part["key"] if part["kind"] == "skill" else folder / ".raphael-commands" / part["key"] / "SKILL.md"
-                atomic(self.homes.safe(path), part["text"].encode())
-            public_servers = json.loads(json.dumps(public_servers).replace("${CLAUDE_PLUGIN_ROOT}", str(folder).replace("\\", "/")))
-            info = {"marketplace": marketplace, "target": target, "mcp_servers": public_servers,
-                    "fingerprint": local_stamp(Path(source[6:])) if source.startswith("local:") else None}
-            with self.conn:
-                values = (manifest["name"], manifest["version"], source, str(manifest.get("description", "")), folder.relative_to(self.homes.home(SHARED)).as_posix(), json.dumps(info))
-                if previous:
-                    identifier = previous["id"]
-                    self.conn.execute("UPDATE skill_sets SET name=?,version=?,source=?,description=?,folder=?,metadata=? WHERE id=?", (*values, identifier))
-                else:
-                    identifier = self.conn.execute("INSERT INTO skill_sets(name,version,source,description,folder,metadata,identity) VALUES (?,?,?,?,?,?,?)", (*values, identity)).lastrowid
-                if access is not None:
-                    self.conn.execute("UPDATE skill_packages SET access=? WHERE key=?", (json.dumps(access), f"set:{identifier}"))
-                elif not previous and len(parts) == 1:
-                    self.conn.execute("UPDATE skill_packages SET access=? WHERE key=?", ('"all"', f"set:{identifier}"))
-                if previous:
-                    # Free both unique names before applying moves and renames in this transaction.
-                    self.conn.execute("UPDATE member_skills SET name=char(0)||id,set_key=NULL WHERE set_id=?", (identifier,))
-                for part, key, stored, existing in components:
-                    if existing:
-                        self.conn.execute("UPDATE member_skills SET name=?,description=?,source=?,set_kind=?,set_key=? WHERE id=?",
-                                          (stored, part["description"], "plugin:" + manifest["name"], part["kind"], key, existing["id"]))
-                    else:
-                        self.conn.execute("INSERT INTO member_skills(member_id,name,description,source,set_id,set_key,set_kind) VALUES (-1,?,?,?,?,?,?)", (stored, part["description"], "plugin:" + manifest["name"], identifier, key, part["kind"]))
-                for removed in old.values():
-                    if removed["id"] not in retained:
-                        self.conn.execute("DELETE FROM member_skills WHERE id=?", (removed["id"],))
+                atomic(self.homes.safe(folder / key), data)
+            servers = json.loads(json.dumps(plan.servers).replace("${CLAUDE_PLUGIN_ROOT}", str(folder).replace("\\", "/")))
+            info = {"marketplace": plan.marketplace, "target": plan.target, "mcp_servers": servers,
+                    "fingerprint": local_stamp(Path(plan.source[6:])) if plan.source.startswith("local:") else None}
+            return folder, info
         except BaseException:
-            shutil.rmtree(self.homes.safe(folder))
+            self._discard_set(folder)
             raise
-        if previous:
-            shutil.rmtree(self.homes.safe(self.homes.home(SHARED) / previous["folder"]))
-        self._mirror(SHARED)
-        return next(s for s in self.plugin_sets() if s["id"] == identifier)
 
-    async def import_plugin(self, source=None, *, set_id=None, marketplace=None, name=None, access=None, require_new=False, required_skill=None):
+    def _commit_set(self, plan, folder, info, *, enabled=None, skill=None):
+        from .skill_packages import SkillPackages
+
+        previous = self.conn.execute("SELECT * FROM skill_sets WHERE identity=?", (plan.identity,)).fetchone()
+        if previous != plan.previous or self.skill_revision() != plan.revision:
+            raise MemberError("not_found", "the plugin set changed during refresh")
+        access = plan.access
+        if access is not None:
+            SkillPackages(self).validate_access(access)
+        manifest = plan.manifest
+        with self.conn:
+            values = (manifest["name"], manifest["version"], plan.source, str(manifest.get("description", "")), folder.relative_to(self.homes.home(SHARED)).as_posix(), json.dumps(info))
+            if previous:
+                identifier = previous["id"]
+                self.conn.execute("UPDATE skill_sets SET name=?,version=?,source=?,description=?,folder=?,metadata=? WHERE id=?", (*values, identifier))
+            else:
+                identifier = self.conn.execute("INSERT INTO skill_sets(name,version,source,description,folder,metadata,identity) VALUES (?,?,?,?,?,?,?)", (*values, plan.identity)).lastrowid
+            if access is None and not previous and len(plan.components) == 1:
+                access = "all"
+            if previous:
+                # Free both unique names before applying moves and renames in this transaction.
+                self.conn.execute("UPDATE member_skills SET name=char(0)||id,set_key=NULL WHERE set_id=?", (identifier,))
+            for part, key, stored, existing in plan.components:
+                if existing:
+                    self.conn.execute("UPDATE member_skills SET name=?,description=?,source=?,set_kind=?,set_key=? WHERE id=?",
+                                      (stored, part["description"], "plugin:" + manifest["name"], part["kind"], key, existing["id"]))
+                else:
+                    self.conn.execute("INSERT INTO member_skills(member_id,name,description,source,set_id,set_key,set_kind) VALUES (-1,?,?,?,?,?,?)", (stored, part["description"], "plugin:" + manifest["name"], identifier, key, part["kind"]))
+            for removed in plan.old.values():
+                if removed["id"] not in plan.retained:
+                    self.conn.execute("DELETE FROM member_skills WHERE id=?", (removed["id"],))
+            SkillPackages(self).apply_changes(f"set:{identifier}", access=access, enabled=enabled, skill=skill)
+        return identifier
+
+    def _discard_set(self, folder):
+        shutil.rmtree(self.homes.safe(folder))
+
+    def _discard_previous_set(self, plan):
+        if plan.previous:
+            self._discard_set(self.homes.home(SHARED) / plan.previous["folder"])
+
+    async def import_plugin(self, source=None, *, set_id=None, marketplace=None, name=None, access=None, require_new=False,
+                            required_skill=None, enabled=None, skill=None):
+        revision = self.skill_revision()
+        target = None
         if set_id is not None:
             previous = self.conn.execute("SELECT * FROM skill_sets WHERE id=?", (set_id,)).fetchone()
             if previous is None:
@@ -516,7 +601,16 @@ class PluginSets:
             manifest = manifest_from(files)
             if manifest["name"] != plugin["name"] or manifest["version"] != plugin["version"]:
                 raise MemberError("source", "download differs from the listed plugin version")
-            return self.install_set(f"github:{marketplace}/{name}", files, marketplace=marketplace, target=plugin["target"], access=access, expected_id=set_id, require_new=require_new, required_skill=required_skill)
+            source, target = f"github:{marketplace}/{name}", plugin["target"]
+        else:
+            source, files = await asyncio.to_thread(self._local_plugin_snapshot, source)
+        if set_id is not None and revision != self.skill_revision():
+            raise MemberError("not_found", "the plugin set changed during refresh")
+        return await self._install_set_async(source, files, marketplace=marketplace or "", target=target, access=access,
+                                             expected_id=set_id, require_new=require_new, required_skill=required_skill,
+                                             enabled=enabled, skill=skill)
+
+    def _local_plugin_snapshot(self, source):
         folder, root = location(self.skill_home, source)
         if root.name != "cache" or len(folder.relative_to(root).parts) != 3:
             raise MemberError("source", "choose an installed plugin folder")
@@ -524,7 +618,7 @@ class PluginSets:
         if not versions:
             raise MemberError("not_found", "no installed version of that plugin")
         folder = max(versions, key=lambda p: (version_key(p.name), p.stat().st_mtime_ns))
-        return self.install_set("local:" + str(folder), local_files(folder), access=access, expected_id=set_id, require_new=require_new, required_skill=required_skill)
+        return "local:" + str(folder), local_files(folder)
 
     async def add_marketplace(self, repo):
         data = await catalog(repo)

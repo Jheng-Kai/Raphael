@@ -1,11 +1,12 @@
 // Settings > Models: provider metadata is public; credentials live only in the input until sent.
-import { LayerViews } from "./nav-layers";
+import { rememberLayerBack } from "./nav-history";
+import { keepEditedField } from "./nav-layers";
 import * as api from "./api";
 import { isTopLayer, registerDismissal } from "./dismissals";
 import { t } from "./i18n";
 import { providerMark } from "./provider-marks";
 import type { MainEvent, ModelProvider, ProviderKind, ProviderField, ProviderPatch, ProviderModel, ProviderTest } from "./types";
-import { DISCONNECT_CONFIRM_MS, btn, esc, fieldHTML, ico, backButton, iconButton, openMenu, sel } from "./ui";
+import { DISCONNECT_CONFIRM_MS, btn, esc, fieldHTML, ico, backButton, headerCloseButton, openMenu, sel } from "./ui";
 import { findsName } from "./find-match";
 
 export interface ProvidersView {
@@ -80,7 +81,7 @@ function directoryHTML(v: ProvidersView, lead = ""): string {
     }).join("") + `</div></section>` : "";
   }).join("");
   return `<div class="cs-scrim" data-pv="scrim" data-dialog="provider:add"><div class="cs-dialog pv-dialog pv-catalog pv-dir" id="pv-dialog" role="dialog" aria-modal="true" aria-labelledby="pv-title" tabindex="-1" data-trap>` +
-    `<div class="cs-dlg-head"><h2 id="pv-title">${esc(t("providers.add"))}</h2>${ROLE_LABELS[v.role ?? ""] ? `<span class="pv-for">${esc(t("chooser.slot", { name: ROLE_LABELS[v.role!]() }))}</span>` : ""}<span class="sp"></span>${iconButton("x", t("providers.close"), ' data-pv="close" data-k="pv-close" data-nav-back')}</div>` +
+    `<div class="cs-dlg-head"><h2 id="pv-title">${esc(t("providers.add"))}</h2>${ROLE_LABELS[v.role ?? ""] ? `<span class="pv-for">${esc(t("chooser.slot", { name: ROLE_LABELS[v.role!]() }))}</span>` : ""}<span class="sp"></span>${headerCloseButton(t("providers.close"), ' data-pv="close" data-k="pv-close" data-nav-back')}</div>` +
     `<div class="pv-scroll"><p class="note">${esc(ROLE_NOTES[v.role ?? ""]?.() ?? t("providers.choose"))}</p>${fieldHTML(t("providers.searchKinds"), v.kindQuery ?? "", { id: "pv-kind-search", icon: "search" })}` +
     `<div class="pv-directory">${(v.kindQuery ?? "").trim() ? "" : lead}${groups || `<p class="note" role="status">${esc(t("providers.noMatches"))}</p>`}</div><p class="pv-results note" role="status">${esc(t("providers.results", { p0: count }))}</p></div></div></div>`;
 }
@@ -113,7 +114,7 @@ function dialogHTML(v: ProvidersView, lead = ""): string {
     return `<div class="pv-field"><label class="pv-label" for="${esc(inputId(v, field))}">${esc(title)}</label><div class="svc-line">${control}</div></div>`;
   }).join("");
   return `<div class="cs-scrim" data-pv="scrim" data-dialog="provider:${esc(v.adding ? "add" : v.open.id ?? kind.kind)}"><div class="cs-dialog pv-dialog pv-editor${v.adding ? " pv-catalog" : ""}" id="pv-dialog" role="dialog" aria-modal="true" aria-labelledby="pv-title" tabindex="-1" data-trap>` +
-    `<div class="cs-dlg-head"><span class="ic">${providerMark(kind.kind)}</span><h2 id="pv-title">${esc(provider?.name ?? kind.name)}</h2><span class="sp"></span>${iconButton("x", t("providers.close"), ' data-pv="close" data-k="pv-close" data-nav-back')}</div><div class="pv-body"><div class="pv-setup">` +
+    `<div class="cs-dlg-head">${v.open.id ? "" : backButton(t("providers.back"), ` data-pv="back" data-k="pv-back"${disabled}`)}<span class="ic">${providerMark(kind.kind)}</span><h2 id="pv-title">${esc(provider?.name ?? kind.name)}</h2><span class="sp"></span>${headerCloseButton(t("providers.close"), ' data-pv="close" data-k="pv-close" data-nav-back')}</div><div class="pv-body"><div class="pv-setup">` +
     (kind.local_context_hint ? `<p class="note">${esc(t("providers.contextHint"))}</p>` : "") +
     fields + (kind.docs_url ? btn(esc(t("providers.getKey")), "", ` data-pv="docs" data-k="pv-docs"${disabled}`) : "") +
     (provider && allowsMultiple(kind) ? btn(esc(t("providers.another")), "", ` data-pv="another" data-k="pv-another"${disabled}`) : "") + (v.error ? `<p class="note" role="alert">${esc(errorText(v.error))}</p>` : "") +
@@ -122,8 +123,7 @@ function dialogHTML(v: ProvidersView, lead = ""): string {
     `<div class="pv-model-list">${modelsHTML(v)}</div></section></div></div>` +
     `<div class="pv-feedback">${feedbackHTML(v)}</div>` +
     `<div class="pv-footer">` +
-    (v.open.id ? btn(esc(t(v.confirming ? "providers.confirmRemove" : "providers.remove")), "danger", ` data-pv="remove" data-k="pv-remove"${disabled}`) :
-      backButton(t("providers.back"), ` data-pv="back" data-k="pv-back"${disabled}`)) +
+    (v.open.id ? btn(esc(t(v.confirming ? "providers.confirmRemove" : "providers.remove")), "danger", ` data-pv="remove" data-k="pv-remove"${disabled}`) : "") +
     `<div class="pv-footer-actions">${btn(esc(t("providers.test")), "", ` data-pv="test" data-k="pv-test"${v.busy || !v.open.id || v.dirty ? " disabled" : ""}`)}` +
     btn(esc(t("providers.save")), "pri", ` data-pv="save" data-k="pv-save"${v.busy || !v.canSave ? " disabled" : ""}`) + `</div></div></div></div>`;
 }
@@ -175,7 +175,6 @@ export function providersAddHTML(v: ProvidersView, lead = ""): string {
 export interface ProvidersHost { root: HTMLElement; visible(): boolean; redraw(): void; }
 export function createProviders(host: ProvidersHost) {
   let state = emptyProvidersView();
-  let views: LayerViews<string> | undefined;
   let stopOutside: (() => void) | null = null;
   let loads = 0;
   let modelLoads = 0;
@@ -226,13 +225,24 @@ export function createProviders(host: ProvidersHost) {
     const scroll = host.root.querySelector(".pv-body")?.scrollTop;
     const selection = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement ? [active.selectionStart, active.selectionEnd] : null;
     host.redraw();
-    const key = navView();
     if ((state.open || state.adding) && !stopOutside) {
-      views = new LayerViews(state.open?.id ? key : "pv:dir");
       stopOutside = registerDismissal(() => host.root.querySelector<HTMLElement>("#pv-dialog"), close, () => !state.busy, undefined,
-        direction => state.busy || views!.step(direction, showNavView));
+        {
+          step: direction => {
+            if (state.busy || state.confirming) return true;
+            if (direction !== "back") return false;
+            const panel = host.root.querySelector("#pv-dialog")!;
+            if (keepEditedField(panel, ".pv-field input, .pv-field textarea") || state.dirty) return true;
+            if (!state.open || state.open.id) return false;
+            backToDirectory(panel);
+            return true;
+          },
+          restore: () => {
+            const key = navView(), role = state.role;
+            return () => { if (key === "pv:dir") directory(role); else showNavView(key); };
+          },
+        });
     } else if (!state.open && !state.adding) { stopOutside?.(); stopOutside = null; }
-    if (state.open || state.adding) views?.visit(key);
     for (const input of host.root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('.pv-field input:not([type="file"]), .pv-field textarea')) {
       if (drafts.has(input.id)) input.value = drafts.get(input.id)!;
       if (active?.id === input.id) { input.focus(); if (selection) input.setSelectionRange(selection[0], selection[1]); }
@@ -281,6 +291,11 @@ export function createProviders(host: ProvidersHost) {
     redraw();
     const previous = [...host.root.querySelectorAll<HTMLElement>('[data-pv="add"]')].find((el) => el.dataset.id === from);
     (previous ?? host.root.querySelector<HTMLElement>("#pv-kind-search"))?.focus();
+  }
+  function backToDirectory(panel: ParentNode): void {
+    if (state.busy || keepEditedField(panel, ".pv-field input, .pv-field textarea") || state.dirty) return;
+    const key = navView();
+    rememberLayerBack(() => directory(), () => showNavView(key));
   }
   async function remove() {
     const open = state.open;
@@ -402,7 +417,7 @@ export function createProviders(host: ProvidersHost) {
       if (button instanceof HTMLButtonElement && button.disabled) return true;
       if (button.dataset.pv !== "remove") clearConfirmation();
       if (button.dataset.pv === "directory") directory();
-      if (button.dataset.pv === "back" && !views?.step("back", showNavView)) directory();
+      if (button.dataset.pv === "back") backToDirectory(button.closest("#pv-dialog")!);
       if (button.dataset.pv === "enable") void enable(button.dataset.id!);
       if (button.dataset.pv === "add") {
         const existing = state.providers.find((p) => p.kind === button.dataset.id);

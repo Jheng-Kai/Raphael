@@ -8,8 +8,10 @@ import os
 import stat
 import struct
 import tarfile
+import threading
 import zipfile
 import zlib
+from collections import OrderedDict
 from pathlib import Path, PureWindowsPath
 
 from .capabilities import MAX_SKILL_BYTES
@@ -365,10 +367,58 @@ def local(source):
         raise invalid() from None
 
 
-def folder_snapshot(path, *, byte_limit=None, entry_limit=None, depth_limit=None, installed=False, skill_links=False):
+def _file_revision(info):
+    return (info.st_dev, info.st_ino, info.st_mode, info.st_nlink, info.st_size,
+            info.st_mtime_ns, info.st_ctime_ns)
+
+
+def _read_files(entries):
+    files = {}
+    for key, child, revision in entries:
+        size = revision[4]
+        if any(linked(path) for path in (child, *child.parents)):
+            raise invalid()
+        with child.open("rb") as stream:
+            opened = _file_revision(os.fstat(stream.fileno()))
+            # Windows reports different creation times through stat and fstat.
+            if opened[:-1] != revision[:-1]:
+                raise invalid()
+            data = stream.read(size + 1)
+            if len(data) != size or _file_revision(os.fstat(stream.fileno())) != opened:
+                raise invalid()
+            files[key] = data
+    return files
+
+
+# Keep room for many small skills without retaining an unbounded set of file bodies.
+_PACKAGE_CACHE_BYTES = 2 * MAX_PACKAGE_BYTES
+_PACKAGE_CACHE_ENTRIES = 64
+_package_cache = OrderedDict()
+_package_cache_lock = threading.Lock()
+
+
+def _cached_files(path, entries, size):
+    with _package_cache_lock:
+        found = _package_cache.get(path)
+        if found is not None and found[0] == entries:
+            _package_cache.move_to_end(path)
+            return found[1]
+    files = _read_files(entries)
+    with _package_cache_lock:
+        _package_cache.pop(path, None)
+        _package_cache[path] = (entries, files, size)
+        total = sum(item[2] for item in _package_cache.values())
+        while total > _PACKAGE_CACHE_BYTES or len(_package_cache) > _PACKAGE_CACHE_ENTRIES:
+            _, (_, _, evicted_size) = _package_cache.popitem(last=False)
+            total -= evicted_size
+    return files
+
+
+def folder_snapshot(path, *, byte_limit=None, entry_limit=None, depth_limit=None, installed=False, skill_links=False, cached=False):
     if any(linked(p) for p in (path, *path.parents)):
         raise invalid()
     snapshot = Snapshot(byte_limit, entry_limit)
+    regular = []
     pending = [path]
     while pending:
         directory_path = pending.pop()
@@ -400,11 +450,16 @@ def folder_snapshot(path, *, byte_limit=None, entry_limit=None, depth_limit=None
                         raise oversized()
                     pending.append(child)
                 else:
-                    with child.open("rb") as stream:
-                        opened = os.fstat(stream.fileno())
-                        if not os.path.samestat(info, opened) or opened.st_nlink != 1:
-                            raise invalid()
-                        snapshot.read(key, stream, info.st_size)
+                    if cached:
+                        regular.append((key, child, _file_revision(info)))
+                    else:
+                        with child.open("rb") as stream:
+                            opened = os.fstat(stream.fileno())
+                            if not os.path.samestat(info, opened) or opened.st_nlink != 1:
+                                raise invalid()
+                            snapshot.read(key, stream, info.st_size)
+    if cached:
+        snapshot.files.update(_cached_files(path, tuple(regular), snapshot.size))
     return snapshot
 
 

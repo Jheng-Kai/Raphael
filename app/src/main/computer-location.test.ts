@@ -15,10 +15,10 @@ beforeEach(() => {
 afterEach(() => { closeMenu(); document.body.replaceChildren(); });
 async function mount(alias = "") {
   api.settingsGet.mockResolvedValue({ settings: { computer_ssh_alias: alias } });
-  const host = document.createElement("header"); document.body.append(host);
-  const changed = vi.fn(), mounted = mountComputerLocation(host, changed);
-  await mounted.refresh(); host.querySelector<HTMLButtonElement>("button")!.click();
-  return { host, mounted, changed };
+  const button = document.createElement("button"); document.body.append(button);
+  const changed = vi.fn(), mounted = mountComputerLocation(changed);
+  await mounted.refresh(); mounted.open(button);
+  return { button, mounted, changed };
 }
 const click = (selector: string): void => document.querySelector<HTMLButtonElement>(selector)!.click();
 const change = async (value: string): Promise<void> => {
@@ -29,23 +29,25 @@ const change = async (value: string): Promise<void> => {
 
 test.each(["zh-TW", "en", "ja"] as const)("the %s popover keeps one scope line and only contextual errors", locale => {
   setLocale(locale);
-  document.body.innerHTML = computerLocationHTML(true, "studio-mini");
+  document.body.innerHTML = computerLocationHTML("studio-mini");
   expect([...document.querySelectorAll("p")].map(note => note.textContent)).toEqual([t("desktop.sharedLocation")]);
   expect(document.querySelector('[role="status"]')).toBeNull();
-  document.body.innerHTML = computerLocationHTML(true, "studio-mini", false, false, t("desktop.locationHostError"));
+  const error = "The host check failed.";
+  document.body.innerHTML = computerLocationHTML("studio-mini", false, error);
   expect(document.querySelectorAll("p")).toHaveLength(2);
-  expect(document.querySelector('[role="alert"]')!.textContent).toBe(t("desktop.locationHostError"));
+  expect(document.querySelector('[role="alert"]')!.textContent).toBe(error);
+  expect(document.querySelector('.sel')).toBeNull();
 });
 
 test("local to remote saves only the existing shared alias setting, and local clears it", async () => {
-  const { changed } = await mount();
-  click('[data-k="computer-host"]'); click('#app-submenu [data-value="remote"]');
+  const { changed, mounted } = await mount();
   await change("studio-mini");
   expect(api.settingsSet).toHaveBeenCalledExactlyOnceWith("computer_ssh_alias", "studio-mini");
   expect(changed).toHaveBeenCalledTimes(1);
-  expect(document.querySelector('[data-computer-location]')!.textContent).toContain("studio-mini");
-  click('[data-k="computer-host"]'); click('#app-submenu [data-value="local"]'); await flush();
+  expect(mounted.alias()).toBe("studio-mini");
+  mounted.hide(); await mounted.useLocal();
   expect(api.settingsSet).toHaveBeenLastCalledWith("computer_ssh_alias", "");
+  expect(mounted.alias()).toBe("");
 });
 
 test("invalid remote aliases remain editable and never reach storage", async () => {
@@ -57,20 +59,20 @@ test("invalid remote aliases remain editable and never reach storage", async () 
 });
 
 test("a save refusal keeps the last saved host and shows a value-free inline error", async () => {
-  await mount("studio-mini"); api.settingsSet.mockRejectedValue(new Error("synthetic private failure"));
+  const { mounted } = await mount("studio-mini"); api.settingsSet.mockRejectedValue(new Error("synthetic private failure"));
   await change("workstation");
-  expect(document.querySelector('[data-computer-location]')!.textContent).toContain("studio-mini");
+  expect(mounted.alias()).toBe("studio-mini");
   expect(document.querySelector('[role="alert"]')!.textContent).toContain("無法儲存");
   expect(document.body.textContent).not.toContain("synthetic private failure");
   api.settingsSet.mockResolvedValue({ settings: { computer_ssh_alias: "workstation" } });
   document.querySelector("#computer-ssh-alias")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
   await flush();
-  expect(document.querySelector('[data-computer-location]')!.textContent).toContain("workstation");
+  expect(mounted.alias()).toBe("workstation");
 });
 
-test("a host status error is current state only and opening the popover starts no host check", async () => {
-  const { mounted } = await mount("studio-mini"); mounted.status(true);
-  expect(document.querySelector('[role="alert"]')).not.toBeNull();
+test("opening the popover starts no host check", async () => {
+  const { mounted } = await mount("studio-mini");
+  expect(document.querySelector('[role="alert"]')).toBeNull();
   expect(api.settingsSet).not.toHaveBeenCalled();
   expect(api.desktopHostCheck).not.toHaveBeenCalled();
   mounted.hide(); expect(document.querySelector('.computer-location-popover')).toBeNull();
@@ -99,13 +101,14 @@ test("a late host check cannot replace the result for a changed alias", async ()
   expect(document.querySelector('[data-computer-host-health]')).toBeNull();
 });
 
-test("the local host label follows the window language and the shared popover reopens in it", async () => {
-  const { host } = await mount();
+test("the SSH editor follows the window language without a second dropdown", async () => {
+  const { mounted, button } = await mount();
   setLocale("en");
-  expect(host.querySelector('[data-computer-location]')!.textContent).toContain(t("desktop.locationLocal"));
   expect(document.querySelector('.computer-location-popover')).toBeNull();
-  host.querySelector<HTMLButtonElement>('[data-computer-location]')!.click();
+  mounted.open(button);
   expect(document.querySelector('.computer-location-popover')!.textContent).toContain(t("desktop.sharedLocation"));
+  expect(document.querySelector('.computer-location-popover')!.textContent).toContain(t("desktop.sshAlias"));
+  expect(document.querySelector('.computer-location-popover .sel')).toBeNull();
 });
 
 test("a refused key login names the user ssh tried, so a wrong account is the first thing to check", () => {

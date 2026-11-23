@@ -137,8 +137,8 @@ async def test_a_change_during_preparation_prevents_file_and_command_dispatch(de
     try:
         with vm_scope(("turn", 0, 7), turn_id=7):
             result = await hub.call(tools[name], arguments, approver="auto")
-        assert not result.ok
-        assert result.kind == ("owner_holds_control" if change == "owner_hold" else "computer_changed")
+        assert result.ok == (change == "owner_hold")
+        assert result.kind == ("waiting_for_owner" if change == "owner_hold" else "computer_changed")
         vm.execute.assert_not_awaited()
         vm.read_file.assert_not_awaited()
     finally:

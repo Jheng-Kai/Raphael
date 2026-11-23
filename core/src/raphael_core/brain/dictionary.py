@@ -129,6 +129,7 @@ class DictionaryStore:
         self._conn = conn
         self._now_ms = now_ms
         self._learning_undo: dict[str, tuple[float, list[dict]]] = {}
+        self._held_learning_undo: dict[str, list[dict]] = {}
 
     def add(self, word: str, misheard: Sequence[str] = (), source: str = "manual") -> Entry:
         """Add a word, or merge `misheard` into the entry it already has and return that entry.
@@ -307,24 +308,35 @@ class DictionaryStore:
         evidence = self._conn.execute("SELECT * FROM dictionary_evidence WHERE word_key = ?", (key,)).fetchall()
         return {"word": row["word"] if row else word, "row": dict(row) if row else None, "evidence": [dict(e) for e in evidence]}
 
-    def remember_learning(self, before: list[dict]) -> str:
-        now = time.monotonic()
-        self._learning_undo = {k: v for k, v in self._learning_undo.items() if now - v[0] < 600}
+    def remember_learning(self, before: list[dict], *, hold: bool = False) -> str:
         token = secrets.token_urlsafe(24)
         changes = [{"before": item, "after": self.learning_snapshot(item["word"])} for item in before]
+        if hold:
+            # The desktop releases this token when its queued or hover-paused notice ends.
+            self._held_learning_undo[token] = changes
+            return token
+        now = time.monotonic()
+        self._learning_undo = {k: v for k, v in self._learning_undo.items() if now - v[0] < 600}
         self._learning_undo[token] = (now, changes)
         # A notice is transient; keep memory bounded even under synthetic event floods.
         if len(self._learning_undo) > 64:
             del self._learning_undo[next(iter(self._learning_undo))]
         return token
 
+    def discard_learning_undo(self, token: str) -> None:
+        self._held_learning_undo.pop(token, None)
+        self._learning_undo.pop(token, None)
+
     def undo_learning(self, token: str) -> bool:
-        batch = self._learning_undo.pop(token, None)
-        if batch is None or time.monotonic() - batch[0] >= 600:
-            return False
+        changes = self._held_learning_undo.pop(token, None)
+        if changes is None:
+            batch = self._learning_undo.pop(token, None)
+            if batch is None or time.monotonic() - batch[0] >= 600:
+                return False
+            changes = batch[1]
         changed = False
         with self._conn:
-            for item in batch[1]:
+            for item in changes:
                 before, after = item["before"], item["after"]
                 if self.learning_snapshot(after["word"]) != after:
                     continue  # Never overwrite a later edit or a new learning observation.

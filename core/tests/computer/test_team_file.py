@@ -21,12 +21,14 @@ async def test_a_team_file_is_found_and_only_what_reads_opens(tmp_path):
         page = await found.team_file({"path": "/home/cua/team/office/index.html"})
         assert page == {"path": str((tmp_path / "office" / "index.html").resolve()), "reads": True}
         assert (await found.team_file({"path": "/home/cua/team/office/setup.exe"}))["reads"] is False
+        assert await found.team_file({"path": "/home/cua/team/office"}) == {
+            "path": str((tmp_path / "office").resolve()), "reads": False}
     finally:
         await found.aclose()
 
 
 @pytest.mark.parametrize("path", ["/home/cua/team/../secret.txt", "/home/cua/team/office/missing.html", "/home/cua/workspace/a.txt",
-                                  "C:\\Windows\\win.ini", "/home/cua/team/office", 7])
+                                  "C:\\Windows\\win.ini", 7])
 async def test_nothing_else_is_a_team_file(tmp_path, path):
     (tmp_path / "team" / "office").mkdir(parents=True)
     (tmp_path / "secret.txt").write_text("private")

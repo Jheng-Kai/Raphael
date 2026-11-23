@@ -421,7 +421,7 @@ async def test_status_and_session_urls_never_publish_vnc_credentials(viewer):
     bridge, _, _ = viewer
     public = await bridge.status({"member_id": 1})
     opened = await bridge.open({"member_id": 1})
-    assert public == {"state": "running", "ready": True, "control": "member",
+    assert public == {"state": "running", "ready": True, "control": "member", "transport": "docker",
                       "host": "", "target": bridge.vm.target(1).key, "mode": "shared", "idle_minutes": 15, "lifecycle": None}
     assert "private" not in json.dumps([public, opened, await bridge.vm.status(bridge.vm.target())])
     assert "password" not in opened["url"]
@@ -695,7 +695,7 @@ def test_library_embedding_omits_standalone_chrome_and_keeps_upstream_notices():
     assert "Copyright noVNC authors" in page
     assert "base.css" not in page and "control_bar" not in page and "app/ui.js" not in page
     assert 'src="bridge.js"' in page and 'id="noVNC_container"' in page
-    assert 'background:#171717' in page
+    assert 'background:transparent' in page
 
 
 async def test_private_connection_uses_the_current_validated_container_after_restart(viewer):

@@ -123,7 +123,8 @@ test("setup keeps Back and actions outside the scrolling fields and saves only a
   const footer = root.querySelector(".pv-footer")!;
   expect(footer).not.toBeNull();
   expect(footer.closest(".pv-body")).toBeNull();
-  expect(footer.querySelector('[data-pv="back"]')).not.toBeNull();
+  expect(root.querySelector('.cs-dlg-head .back-button[data-pv="back"]')).not.toBeNull();
+  expect(root.querySelector('.cs-dlg-head .close-button[data-pv="close"]')).not.toBeNull();
   expect(footer.querySelector('[data-pv="remove"]')).toBeNull();
   expect(root.querySelector<HTMLButtonElement>('[data-pv="save"]')?.disabled).toBe(true);
   fill('input[type="password"]', "new-secret");
@@ -244,7 +245,7 @@ test.each(["zh-TW", "en", "ja"] as const)("%s renders every kind as a marked car
   expect(cards[2].textContent).toContain(t("providers.compatibleNote"));
 });
 
-test("the add dialog preserves search on back, discards credentials and restores focus on close", async () => {
+test("the add dialog protects credentials on back, restores search, and returns focus on close", async () => {
   api.providersList.mockResolvedValue({ providers: [] });
   const panel = mount(); await panel.load(); click('[data-pv="directory"]');
   expect(document.activeElement?.id).toBe("pv-kind-search");
@@ -253,7 +254,11 @@ test("the add dialog preserves search on back, discards credentials and restores
   click('[data-pv="add"][data-id="openai"]');
   expect(root.querySelectorAll('[role="dialog"]')).toHaveLength(1);
   expect(root.querySelector('[data-dialog="provider:add"] .pv-catalog')).not.toBeNull();
-  root.querySelector<HTMLInputElement>('input[type="password"]')!.value = "discard-on-back";
+  fill('input[type="password"]', "draft-credential");
+  click('[data-pv="back"]');
+  expect(root.querySelector<HTMLInputElement>('input[type="password"]')?.value).toBe("draft-credential");
+  expect(document.activeElement).toBe(root.querySelector('input[type="password"]'));
+  fill('input[type="password"]', "");
   click('[data-pv="back"]');
   expect(root.querySelector<HTMLInputElement>("#pv-kind-search")?.value).toBe("OpenAI");
   expect(root.querySelectorAll(".pv-add")).toHaveLength(1);

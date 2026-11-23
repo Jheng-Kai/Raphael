@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { scene, click, wait, check, type, scroll, settings, hover, focus, key, pressAt, pressThrough } from "./steps.mjs";
+import { scene, click, wait, waitGone, check, type, scroll, settings, hover, focus, key, member, sideButton, pressAt, pressThrough } from "./steps.mjs";
 
 // 連結應用程式 (R-APPS-01, R-APPS-02): one view, a chip of the connected apps, a search, a row of chips, the apps
 // in sections; an app's page in the dialog's place. The colour rule for everything that floats (R-FLOAT-01) is checked in the pictures of
@@ -63,6 +63,7 @@ const OWNER_ROWS = [["composio:gmail", "Gmail"], ["mobbin", "Mobbin MCP"], ["not
   ["composio:googledrive", "Google Drive"], ["github", "GitHub"]];
 const rowOf = (id) => `.cs-linked[data-id="${id}"]`;
 const PAGE = ".cs-page .cs-head";
+const slackDetail = [...open, type("#conn-search", "Slack"), click('.cs-card [data-conn="open-store"][data-id="slack"]'), wait(PAGE), check("connect-back"), check("connectors-slack-detail")];
 // Where a finger can land on a row: the line under the name, the name, the mark, the empty end of the row before the switch, and its top edge.
 const partsOf = (id, name) => [
   pressAt(`${rowOf(id)} .ds`, 0.3, 0.5, PAGE, name), pressAt(`${rowOf(id)} .nm`, 0.3, 0.5, PAGE, name), pressAt(`${rowOf(id)} .cs-tile`, 0.5, 0.5, PAGE, name),
@@ -72,6 +73,12 @@ const everyPart = OWNER_ROWS.flatMap(([id, name]) => partsOf(id, name).flatMap((
 const ownerList = [...linked, check("owner-list")];
 const refreshed = { action: "emit", events: [{ type: "ConnectionsChanged" }], wait: 400 };
 const ownerRowScenes = [
+  scene("connectors-slack-detail", "Slack's page puts Back, its title and Close on one line", slackDetail),
+  scene("nav-side-slack", "Back goes from Slack to Connectors and the conversation. Forward restores Connectors and Slack", [
+    member(1), member(2), ...slackDetail, sideButton("back"), wait(".cs-apps"), sideButton("back"),
+    waitGone('.modal-scrim[data-page="settings"]:not([hidden])'), check("nav-side-settings-closed"),
+    sideButton("forward"), wait('.modal-scrim:not([hidden]) .cs-apps'), sideButton("forward"), wait(PAGE), check("connectors-slack-detail"),
+  ]),
   scene("connected-owner-rows", "The owner's list of seven, no heading: a real press on the line, the name, the mark, the empty end and the top edge of every row opens that app's page", [
     ...ownerList, ...everyPart, check("owner-list"),
   ], OWNER_LIST),

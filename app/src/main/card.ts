@@ -2,7 +2,7 @@ import "./card.css";
 import { core } from "./api";
 import { describeError } from "./format";
 import { t } from "./i18n";
-import { btn, esc, ico, iconBtn, toaster } from "./ui";
+import { btn, esc, headerCloseButton, ico, toaster } from "./ui";
 import { linkedText } from "./message-content";
 import type { AgentTurn, OwnerQuestion } from "./types";
 
@@ -33,7 +33,7 @@ export function cardStatusHTML(status: CardStatus, text?: string): string {
 }
 
 /** The × at a card's top right that puts a failed card away. */
-export const failedClose = (): string => iconBtn("x", t("common.close"), " data-card-failed-close", "card-close");
+export const failedClose = (): string => headerCloseButton(t("common.close"), " data-card-failed-close", "card-close");
 
 /**
  * The question a member's background work waits on while the owner deals with this card (`card_id`): the card a connect, key or
@@ -47,7 +47,7 @@ export const waitingOwnerQuestion = (turn: AgentTurn, cardId: string): OwnerQues
  * carry what declining that card does (deny a permission, stop the computer hand-back, close a connect or key card in the
  * core); the card's own decline button is gone from its footer, so the × is its only one.
  */
-export const waitingCloseHTML = (attrs: string, label = t("common.cancel")): string => iconBtn("x", label, attrs, "card-close");
+export const waitingCloseHTML = (attrs: string, label = t("common.cancel")): string => headerCloseButton(label, attrs, "card-close");
 
 /** The × that closes a connect or key card in the core (`integrations.card_close`), which also answers the work waiting on it. */
 export const cardCloseHTML = (id: string): string => waitingCloseHTML(` data-card-close="${esc(id)}"`);
@@ -104,15 +104,15 @@ export function cardFailure(card: Element | null, retry: () => void, dismiss?: (
   const prior = status?.outerHTML;
   // 重試 below what went wrong; putting it away is the × at the card's top right, not a 「關閉」 beside 重試.
   const head = card.querySelector<HTMLElement>(":scope > .card-head");
-  // A card drawn as failed already has its × (cardHTML's failedClose): that one puts it away too, never a second beside it.
-  let dismissButton = head?.querySelector<HTMLElement>("[data-card-dismiss], [data-card-failed-close]") ?? null;
+  // Keep the existing close action, including a waiting card that stops work.
+  let dismissButton = head?.querySelector<HTMLElement>(".card-close") ?? null;
   const added = !dismissButton;
   const clear = (): void => { failure!.remove(); if (added) dismissButton?.remove(); original.forEach(footer => { footer.hidden = false; }); if (prior) { const pill = card.querySelector(".card-status"); if (pill) pill.outerHTML = prior; } };
   // A card drawn as failed already says how in its status (「未能傳送」): that word stays.
   if (status && !status.classList.contains("is-failed")) status.outerHTML = cardStatusHTML("failed", t("cards.failed"));
   failure.innerHTML = `${message === null ? "" : `<p role="alert">${esc(message)}</p>`}<div class="card-actions">${btn(esc(t("cards.retry")), "sm pri", " data-card-retry")}</div>`;
   if (head && !dismissButton) {
-    head.insertAdjacentHTML("beforeend", iconBtn("x", t("common.close"), " data-card-dismiss", "card-close"));
+    head.insertAdjacentHTML("beforeend", headerCloseButton(t("common.close"), " data-card-dismiss", "card-close"));
     dismissButton = head.querySelector<HTMLElement>("[data-card-dismiss]");
   }
   failure.querySelector("[data-card-retry]")!.addEventListener("click", () => { clear(); retry(); });

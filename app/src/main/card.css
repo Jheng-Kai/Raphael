@@ -6,6 +6,7 @@
 }
 .conversation-card[hidden] { display: none; }
 .card-head { display: flex; align-items: start; gap: 8px; min-width: 0; }
+.card-head:has(> .close-button) { align-items: center; }
 .card-heading { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
 .card-heading > .mono { width: 22px; height: 22px; flex: 0 0 22px; }
 .card-title { font-size: var(--fs-sm); font-weight: var(--weight-semibold); overflow-wrap: anywhere; }
@@ -27,6 +28,7 @@
 .conversation-card :is(.card-actions, .sc-form, .question-submit) .pri:disabled { border-color: transparent; }
 /* A card's text buttons are a little taller than the compact ones, not hugging their words to the limit: the field height. */
 .conversation-card :is(.card-actions, .question-submit) .btn:not(.icon) { min-height: var(--h-field); padding-block: 0; line-height: calc(var(--h-field) - 2px); }
+.computer-suggestion-card .card-actions .computer-suggestion-action { width: 100%; justify-content: space-between; text-align: start; white-space: normal; }
 /* The quiet way out stands left of the others, as Cancel does beside a dialog's action. */
 .conversation-card .card-actions > .card-quiet { background: transparent; border-color: transparent; color: var(--text-2); }
 .card-disclosure-toggle.btn { display: flex; align-items: center; gap: 6px; padding: 1px 8px; margin-inline: -8px; border: 0; background: transparent; color: var(--text-2); font-size: var(--fs-xs); min-height: var(--h-ctl-sm); }

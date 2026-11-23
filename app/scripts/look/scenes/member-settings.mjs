@@ -11,7 +11,6 @@ const page = [member(1), ...gear];
 // Chooses a kind in the page's left column and waits for its first section.
 const kind = (id, ready) => [click(`.ms-pane .ms-nav [data-cat="${id}"]`), wait(`.ms-pane .ms-nav [data-cat="${id}"][aria-current="page"]`), wait(ready)];
 const filled = { memberSettings: true, skills: [learnedSkill(1), sharedSourceSkill] };
-const computer = [...page, ...kind("computer", '[data-k="ms-computer-mode"]')];
 export const memberSettingsPage = page;
 // A long conversation of the member's, so that the thread scrolls and its place can be told.
 const longThread = { ...filled, heavyThread: { member: 1, count: 30, newest: 300050 } };
@@ -43,19 +42,24 @@ const personaScenes = [
   scene('member-persona-saved', 'Enter on one line saves it: the row is back with the new words, the pencil is back and nothing is said', [...soul, ...edit('personality'), type('.ms-pane #ms-personality', manner), key('Enter'), wait('.ms-pane [data-ms="edit"][data-field="personality"]:not([aria-busy])'), check('member-settings-persona-saved')], persona('', job)),
   scene('member-persona-escape', 'Escape puts the old words back, saves nothing and says nothing', [...soul, ...edit('instructions'), type('.ms-pane #ms-instructions', '全部改掉'), key('Escape'), wait('.ms-pane [data-ms="edit"][data-field="instructions"]'), check('member-settings-persona-escape')], persona(manner, job)),
 ];
-// The navigation shortcuts retrace views within pages and layers (R-NAV-03).
+// One Back per level, with the selected section restored by Forward (R-NAV-03).
 const intoSkill = [...page, ...kind('soul', '.ms-pane [data-k="ms-personality"]'), ...kind('skills', '.ms-pane [data-ms="skill-open"]'), click('.ms-pane [data-ms="skill-open"]'), wait('.ms-pane #ms-skill-text')];
 const stepScenes = [
-  scene('nav-steps-member-settings', 'Back from a skill\'s page is its tab; back again walks the tabs the owner opened, then the conversation; forward goes in again', [
-    ...intoSkill, navKey('back'), check('nav-ms-skills'), navKey('back'), check('nav-ms-soul'), navKey('back'), check('nav-ms-tools'),
-    navKey('back'), check('nav-conversation-1'), navKey('forward'), check('nav-ms-tools'), navKey('forward'), check('nav-ms-soul'),
+  scene('nav-steps-member-settings', 'Back from a skill goes to Skills, then to the conversation. Forward restores each level', [
+    ...intoSkill, navKey('back'), check('nav-ms-skills'), navKey('back'), check('nav-conversation-1'),
+    navKey('forward'), check('nav-ms-skills'), navKey('forward'), wait('.ms-pane #ms-skill-text'), check('nav-ms-skill'),
+  ], filled),
+  scene('nav-side-member-settings', 'Mouse Back from the Skills section closes member settings. Forward returns to Skills', [
+    ...page, ...kind('skills', '.ms-pane [data-ms="skill-open"]'), sideButton('back'), check('nav-conversation-1'),
+    sideButton('forward'), check('nav-ms-skills'),
   ], filled),
   scene('nav-steps-skill-arrow', 'The page\'s own arrow takes a step back, so the forward shortcut opens the skill again', [
     ...intoSkill, click('.ms-pane [data-ms="back"]'), wait('.ms-pane[data-view="main"]'), check('nav-ms-skills'), navKey('forward'), wait('.ms-pane #ms-skill-text'), check('nav-ms-skill'),
   ], filled),
-  scene('nav-steps-settings', 'In Settings back walks the tabs the owner opened before it closes them, and never moves the page underneath', [
-    member(1), ...settings('tools'), click('.modal-scrim [data-pane="about"]'), wait('.modal-scrim [data-pane="about"][aria-current="page"]'),
-    navKey('back'), check('nav-settings-tools'), navKey('back'), check('nav-settings-general'), navKey('back'), check('nav-settings-closed'), check('nav-conversation-1'),
+  scene('nav-steps-settings', 'Back closes Settings from Models over the same conversation. Forward restores Models', [
+    member(1), ...settings('general'), click('.modal-scrim [data-pane="models"]'),
+    wait('.modal-scrim [data-pane="models"][aria-current="page"]'), navKey('back'), check('nav-settings-closed'), check('nav-conversation-1'),
+    navKey('forward'), wait('.modal-scrim:not([hidden]) [data-pane="models"][aria-current="page"]'),
   ], filled),
   scene('nav-steps-conversations', 'Each conversation opened from the sidebar is a step', [
     member(1), wait('.mb-col [data-member="1"][aria-current="true"]'), member(2), wait('.mb-col [data-member="2"][aria-current="true"]'),
@@ -69,14 +73,8 @@ const stepScenes = [
 ];
 export default [
   ...personaScenes,
-  scene("member-computer-host", "The default computer mode uses Raphael's Chrome and desktop control starts off", computer, {
-    ...filled, memberComputerMode: "host",
-  }),
-  scene("member-computer-docker", "The selected Docker mode explains the isolated computer", computer, {
-    ...filled, memberComputerMode: "docker",
-  }),
   ...stepScenes,
-  scene('member-settings', 'The gear opens the member as a page: a cover it can change, the face across it, name and role in place, the kinds of settings on the left and only the chosen one beside them', [...page, check('member-settings')], filled),
+  scene('member-settings', 'The gear opens the member as a page: a cover it can change, the face across it, name and role in place, the kinds of settings on the left and only the chosen one beside them', [...page, check('member-settings'), check('member-settings-no-computer')], filled),
   scene('member-settings-raphael', 'Raphael has the same page and the same kinds as every member: tools, skills and commands, personality and instructions, notifications', [{ action: 'open-details' }, click('.mb-det [data-det="gear"]'), wait('.ms-pane:not([hidden]) .ms-name'), wait('.ms-pane .ms-nav [data-cat="tools"][aria-current="page"]'), check('member-settings'), check('member-settings-raphael')], filled),
   scene('member-settings-skills', 'Skills and commands: names with switches and pluses, with assigned Team skills in their own section', [
     ...page, ...kind('skills', '.ms-pane [data-k="ms-library"]'), check('member-settings'), check('member-skills-library'),

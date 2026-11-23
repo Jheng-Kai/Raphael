@@ -295,8 +295,8 @@ div.handoff-event > .event-line { min-width: 0; max-width: 100%; }
 .au-rhythm-runs [data-status="confirm"] { color: var(--warn); }
 .au-rhythm-runs .btn:disabled { opacity: 1; color: var(--text-3); }
 .au-pop-routine-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); }
-.au-pop-tools { display: flex; justify-content: flex-end; gap: var(--sp-1); margin-right: calc(-1 * var(--sp-2)); }
-.au-pop-detail h2 { margin: 0; font-size: var(--fs-lg); font-weight: var(--weight-semibold); line-height: 1.35; overflow-wrap: anywhere; }
+.au-pop-tools { display: flex; align-items: center; gap: var(--sp-1); }
+.au-pop-detail h2 { flex: 1; min-width: 0; margin: 0; font-size: var(--fs-lg); font-weight: var(--weight-semibold); line-height: 1.35; overflow-wrap: anywhere; }
 .au-pop-time, .au-pop-status { margin: 0; font-size: var(--fs-sm); color: var(--text-2); }
 .au-pop-notes { margin: var(--sp-1) 0 0; max-height: 168px; overflow-y: auto; font-size: var(--fs-sm); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .au-pop-from { display: flex; align-items: center; gap: var(--sp-2); margin: var(--sp-1) 0 0; font-size: var(--fs-xs); color: var(--text-2); }

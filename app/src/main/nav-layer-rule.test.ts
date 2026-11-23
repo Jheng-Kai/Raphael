@@ -10,13 +10,14 @@ const renderOwners: Record<string, [string, string]> = {
   "connections.ts:keyDialogHTML": ["cs-dialog", "registerDismissal"],
 };
 
-const registration = /\b(?:registerDismissal|bindNavLayer|bindLayerSteps|openPopover|openDialog)\s*\(/;
+const registration = /\b(?:registerDismissal|bindNavLayer|openPopover|openDialog)\s*\(/;
 // Escape also occurs in key decoding, history observation, focus routing and recording. These
 // functions do not create a dismissible layer. Full-page navigation uses the named page view.
 const keyOwners: Record<string, RegExp> = {
-  "nav-input.ts:key": /heard\(event\.key === "Escape"\)/,
   "window-hotkeys.ts:handle": /voiceCapture/,
   "safety-rules.ts:key": /cancelEdit\(\)/,
+  // The address field's Escape puts the page's own address back, as a browser's does: a field edit, not a layer.
+  "host-browser-toolbar.ts:mountHostBrowserToolbar": /address\.value = shownUrl\(\)/,
   "ui.ts:listenForMenuEvents": /registerDismissal\(el, dismiss/,
 };
 
@@ -69,7 +70,8 @@ test("every layer builder and Escape dismissal has a navigation owner", () => {
   const sources = import.meta.glob<string>(["./**/*.ts", "!./**/*.test.ts", "!./i18n/**"], { eager: true, query: "?raw", import: "default" });
   expect(Object.keys(sources).length).toBeGreaterThan(100);
   expect(Object.entries(sources).flatMap(([path, source]) => uncovered(path.slice(2), source))).toEqual([]);
-});
+  // It parses every source file: on a busy runner that takes longer than the default five seconds.
+}, 60_000);
 
 test("an unrelated registered panel cannot cover a new unregistered dialog or Escape handler", () => {
   const source = `function known(el) { registerDismissal(el, close); }

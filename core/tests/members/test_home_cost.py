@@ -100,7 +100,7 @@ async def test_the_overview_resolves_no_cli_and_the_composer_resolves_each_once(
     brains = owner_home.agent._cli_brains
     brains.commands = None
     calls = []
-    monkeypatch.setattr(discovery.shutil, "which", lambda name, **kw: calls.append(name))
+    monkeypatch.setattr(discovery, "_path_candidates", lambda name, environ: calls.append(name) or [])
     await owner_home.call("home.overview")
     assert calls == []
     await owner_home.call("brains.cli")

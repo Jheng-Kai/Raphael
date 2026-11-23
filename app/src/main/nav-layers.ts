@@ -1,7 +1,20 @@
-import { NAV_LIMIT, type NavStep } from "./nav-history";
+import { NAV_LIMIT, rememberLayerBack, type NavStep } from "./nav-history";
 
-/** True when a step stayed inside the layer. Back at its first view falls through to its close. */
-export type LayerStep = (direction: NavStep, withinLayer: () => boolean) => boolean;
+export interface LayerNavigation {
+  back?: () => void;
+  discard?: () => void;
+  /** Owns special cases such as a guide, confirmation or dirty editor. */
+  step?: (direction: NavStep) => boolean;
+  /** Captures the current destination before Back closes it. */
+  restore?: () => (() => void) | undefined;
+}
+
+/** Close one level, recording what Forward can restore after it. */
+export function closeLayerBack(close: () => void, navigation: LayerNavigation): void {
+  const restore = navigation.restore?.();
+  if (restore) rememberLayerBack(close, restore, navigation.discard);
+  else close();
+}
 
 /** A small history owned by one open panel, including its initial view. */
 export class LayerViews<T> {
@@ -30,59 +43,43 @@ export class LayerViews<T> {
   }
 }
 
-interface InlineLayer {
+interface InlineLayer extends LayerNavigation {
   order: number;
-  active(direction?: NavStep): boolean;
+  active(): boolean;
   back(): void;
-  step?: LayerStep;
-  /** Overrides eligibility for a mouse side press, for surfaces that also have keyboard history. */
-  side?: () => boolean;
-  /** The layer is itself a place of the view history (a page, a member's settings, the Details column): forward with no
-   *  inner step goes on through the history instead of stopping at it. */
-  place: boolean;
 }
 
 const inline = new WeakMap<HTMLElement, InlineLayer>();
 let order = 0;
 
 /** An inline surface that owns navigation but keeps its existing outside-click policy. */
-export function bindNavLayer(el: HTMLElement, back: () => void, options: {
-  active?: (direction?: NavStep) => boolean; step?: LayerStep; place?: boolean; side?: () => boolean;
-} = {}): void {
+export function bindNavLayer(el: HTMLElement, back: () => void, options: LayerNavigation & { active?: () => boolean } = {}): void {
   el.dataset.navLayer = "";
-  inline.set(el, { order: ++order, back, active: options.active ?? (() => true), step: options.step, place: options.place ?? false, side: options.side });
+  inline.set(el, { ...options, order: ++order, back, active: options.active ?? (() => true) });
 }
 
-/**
- * Inline editors keep the same cancel action and busy guard as their visible button. Back never throws away words that were
- * typed: once a field of the editor differs from what it held when the editor was drawn, back only puts the focus on it, and
- * the editor's own Cancel is the way to drop them. A secret's draft (`secret`: a vault entry, a key) is the exception: back
- * drops it as its Cancel does, so a secret never stays in a field the owner has left.
- */
-export function bindLayerCancels(root: HTMLElement, selector: string, options: { secret?: boolean } = {}): void {
+/** Keep unsaved input in its editor until the owner uses the editor's own save or cancel control. */
+export function keepEditedField(root: ParentNode, selector = "input, textarea, select"): boolean {
+  for (const field of root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(selector)) {
+    if (field.disabled || field.closest("[hidden], [inert]")) continue;
+    const changed = field instanceof HTMLSelectElement ? [...field.options].some((option, i) =>
+      option.selected !== (option.defaultSelected || i === 0 && !field.multiple && ![...field.options].some(item => item.defaultSelected)))
+      : field instanceof HTMLInputElement && (field.type === "checkbox" || field.type === "radio")
+        ? field.checked !== field.defaultChecked : field.value !== field.defaultValue;
+    if (changed) { field.focus({ preventScroll: true }); return true; }
+  }
+  return false;
+}
+
+/** Focus a changed inline editor so the owner can save or cancel it. */
+export function bindLayerCancels(root: HTMLElement, selector: string): void {
   for (const button of root.querySelectorAll<HTMLButtonElement>(selector)) {
     const editor = button.closest<HTMLElement>("section, form, .ob-tile, .cs-form") ?? root;
     const fields = (): (HTMLInputElement | HTMLTextAreaElement)[] => [...editor.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("input:not([type=file]), textarea")];
     const drawn = fields().map(field => field.value);
-    const changedField = (now = fields()) => {
-      const changed = now.findIndex((field, at) => field.value !== drawn[at]);
-      if (changed >= 0 || now.length !== drawn.length) return now[Math.max(changed, 0)];
-    };
-    bindNavLayer(button, () => {
-      const field = !options.secret && changedField();
-      if (field) { field.focus(); return; }
-      button.click();
-    }, { side: () => !options.secret && !!changedField() });
+    const changedField = () => fields().find((field, at) => field.value !== drawn[at]);
+    bindNavLayer(button, () => changedField()?.focus({ preventScroll: true }), { active: () => !!changedField() });
   }
-}
-
-/** Delegate a tab or subpage at the edge of its history back to the enclosing layer. */
-export function bindLayerSteps<T>(el: HTMLElement, views: LayerViews<T>, show: (view: T) => void): void {
-  bindNavLayer(el, () => {}, {
-    side: () => false,
-    active: direction => direction ? views.canStep(direction) : views.canStep("back") || views.canStep("forward"),
-    step: direction => views.step(direction, show),
-  });
 }
 
 /**
@@ -90,12 +87,12 @@ export function bindLayerSteps<T>(el: HTMLElement, views: LayerViews<T>, show: (
  * bound in; among the rest the one bound last is on top. Parents are left out before the order is compared, so the answer
  * never depends on where an unrelated layer stands in the document.
  */
-function topInline(scope: ParentNode, direction?: NavStep, side = false): InlineLayer | undefined {
+function topInline(scope: ParentNode): InlineLayer | undefined {
   const nodes = [...scope.querySelectorAll<HTMLElement>("[data-nav-layer]")];
   if (scope instanceof HTMLElement && inline.has(scope)) nodes.unshift(scope);
   const eligible = nodes.filter(el => {
     const layer = inline.get(el);
-    return !!layer && !el.closest("[hidden], [inert]") && (side && layer.side ? layer.side() : layer.active(direction));
+    return !!layer && !el.closest("[hidden], [inert]") && layer.active();
   });
   const innermost = eligible.filter(el => !eligible.some(other => other !== el && el.contains(other)));
   let top: HTMLElement | undefined;
@@ -119,24 +116,8 @@ export function frameStep(event: MessageEvent, scope: Document | HTMLElement): N
   if (!owner?.contains(frame) || !scope.contains(owner)) return;
   const origin = frame.sandbox.contains("allow-same-origin") ? new URL(frame.src, document.baseURI).origin : "null";
   const layer = inline.get(owner);
-  if (event.origin === origin && layer && topInline(scope, direction, event.data.input === "side") === layer) return direction;
+  if (event.origin === origin && layer && topInline(scope) === layer) return direction;
 }
 
-export function hasInlineLayer(): boolean { return !!topInline(document); }
+export function inlineLayer(scope: ParentNode): InlineLayer | undefined { return topInline(scope); }
 
-export function stepInlineLayer(scope: ParentNode, direction: NavStep, withinLayer: () => boolean): boolean {
-  const layer = topInline(scope, direction);
-  if (!layer) return false;
-  if (layer.step?.(direction, withinLayer)) return true;
-  // Forward never moves the page under a dialog or a menu, but a layer that is itself a place lets it go on.
-  if (direction === "forward") return !layer.place;
-  layer.back();
-  return true;
-}
-
-export function stepInlineSideLayer(scope: ParentNode, direction: NavStep): boolean {
-  const layer = topInline(scope, direction, true);
-  if (!layer) return false;
-  if (direction === "back") layer.back();
-  return true;
-}

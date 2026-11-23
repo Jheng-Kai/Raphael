@@ -11,11 +11,11 @@
 // owner gives the member about how to be and what to do, so each is one quiet row of its words, whole, with a pencil: a press
 // turns the row into a field in place. A skill opens in a view of its own; no row has a text button where
 // an icon says it.
+import { rememberLayerBack } from "./nav-history";
 import { bindNavLayer } from "./nav-layers";
 import "./member-panel.css";
 import "./member-settings.css";
 import * as api from "./api";
-import { askInChat } from "./chat-ask";
 import { addFolder, folderName, listedFolders, removeFolder } from "./composer-folder";
 import { describeError } from "./format";
 import { onLocaleChange, getLocale, t } from "./i18n";
@@ -29,7 +29,7 @@ import { connectedApps, toolOn, toolsAfterToggle, type ToolChoices } from "./mem
 import { skillOriginLabel } from "./skill-source";
 import { slimeColorOf } from "./slime";
 import type { AppContext, BrainSettings, LibraryRef, Member, MemberCommand, MemberPatch, MemberSkill, MembersList } from "./types";
-import { type IconName, actionRow, btn, closeMenu, esc, ico, iconBtn, backButton as roundBackButton, iconButton, openConfirmMenu, openMenu, openMenuOnArrow, openPopover, patchHTML, sel, tg, toaster } from "./ui";
+import { type IconName, actionRow, btn, closeMenu, esc, ico, iconBtn, backButton as roundBackButton, iconButton, openConfirmMenu, openMenuOnArrow, openPopover, patchHTML, tg, toaster } from "./ui";
 
 export interface MemberSettingsHost {
   app: AppContext;
@@ -42,6 +42,7 @@ export interface MemberSettingsHost {
   refreshList(): void;
   /** The arrow and Escape: back to the member's conversation. */
   back(): void;
+  reopen?(): void;
 }
 
 export interface MemberSettings {
@@ -65,10 +66,9 @@ type Field = "personality" | "instructions";
 type Loaded<T> = T | "loading" | "failed";
 
 /** The kinds of settings in the page's left column, in the owner's order, the same for every member. */
-type Category = "tools" | "computer" | "skills" | "soul" | "notify";
+type Category = "tools" | "skills" | "soul" | "notify";
 const CATEGORIES: readonly { id: Category; icon: IconName; label: MessageKey }[] = [
   { id: "tools", icon: "plug", label: "settings.paneTools" },
-  { id: "computer", icon: "monitor", label: "memberComputer.mode" },
   { id: "skills", icon: "sparkle", label: "members.profile.skills" },
   { id: "soul", icon: "smile", label: "members.profile.soul" },
   { id: "notify", icon: "bell", label: "memberSettings.notify" },
@@ -121,7 +121,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
   let toolChoices: Loaded<ToolChoices> = "loading";
   /** The owner's folders for members (R-PC-05): each member's own, and the output folder a member with none writes to. */
   let folders: Loaded<{ own: Record<string, string[]>; output: string }> = "loading";
-  let skillText: { id: number; skill: MemberSkill; text: string; revision?: string } | "loading" | null = null;
+  let skillText: { id: number; skill: MemberSkill; text: string; original: string; revision?: string } | "loading" | null = null;
   let skillBusy = false;
   let command: { id: number | null; name: string; description: string; template: string } = { id: null, name: "", description: "", template: "" };
   let source = "";
@@ -246,19 +246,6 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
    * member has its own list. Under
    * them, how it acts with mail and Slack.
    */
-  function computerChoices() {
-    return [{ value: "host", label: t("memberComputer.host") }, { value: "docker", label: t("memberComputer.docker") }];
-  }
-
-  function computerHTML(member: Member): string {
-    const mode = member.computer_mode ?? "host";
-    const label = t("memberComputer.mode");
-    return section("", row(label, sel(computerChoices(), mode, label, ' data-ms="computer-mode" data-k="ms-computer-mode"')) +
-      muted(t(mode === "docker" ? "memberComputer.dockerHint" : "memberComputer.hostHint")) +
-      row(t("memberComputer.desktopControl"), tg(member.desktop_control ?? false, t("memberComputer.desktopControl"),
-        ' data-ms="desktop-control" data-k="ms-desktop-control"')), "", "ms-computer");
-  }
-
   function toolsHTML(member: Member): string {
     let rows: string;
     if (toolChoices === "loading") rows = spinner();
@@ -301,8 +288,6 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     switch (category) {
       case "tools":
         return toolsHTML(member);
-      case "computer":
-        return computerHTML(member);
       case "skills":
         return skillsHTML() + commandsHTML();
       case "soul":
@@ -342,7 +327,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     return Math.max(0, img.naturalHeight * scale - box.height);
   }
 
-  bindNavLayer(cover, () => endReposition(false), { active: () => reposition !== null });
+  bindNavLayer(cover, goBack, { active: () => reposition !== null });
 
   function endReposition(save: boolean): void {
     const moved = reposition;
@@ -509,6 +494,39 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
   }
   const back = (): void => { view = { kind: "main" }; draw(); scroll.scrollTop = 0; };
 
+  function goBack(): void {
+    if (reposition) {
+      if (reposition.at === reposition.from) endReposition(false);
+      else cover.querySelector<HTMLElement>('[data-ms="cover-save"]')?.focus();
+      return;
+    }
+    if (view.kind === "skill" && skillText && skillText !== "loading" && (skillBusy || skillText.text !== skillText.original)) {
+      el.querySelector<HTMLElement>("#ms-skill-text")?.focus();
+      return;
+    }
+    if (view.kind === "command") {
+      const saved = Array.isArray(commands) ? commands.find(item => item.id === command.id) : undefined;
+      const fields = { name: "#ms-command-name", description: "#ms-command-description", template: "#ms-command-template" } as const;
+      for (const key of ["name", "description", "template"] as const) {
+        if (command[key] !== (saved?.[key] ?? "")) { el.querySelector<HTMLElement>(fields[key])?.focus(); return; }
+      }
+    }
+    if (view.kind === "main") {
+      if (adding && source) { el.querySelector<HTMLElement>("#ms-skill-source")?.focus(); return; }
+      // Editable profile fields save on blur, including when the back arrow is pressed.
+      if (document.activeElement instanceof HTMLElement && el.contains(document.activeElement)) document.activeElement.blur();
+      const tab = category;
+      rememberLayerBack(host.back, () => { host.reopen?.(); category = tab; draw(); });
+    } else {
+      const current = view;
+      const draft = { ...command };
+      rememberLayerBack(back, () => {
+        if (current.kind === "skill") void openSkill(current.id);
+        if (current.kind === "command") { command = draft; view = current; draw(); scroll.scrollTop = 0; }
+      });
+    }
+  }
+
   async function openSkill(id: number): Promise<void> {
     const memberId = host.member().id;
     view = { kind: "skill", id }; skillText = "loading"; draw(); scroll.scrollTop = 0;
@@ -517,7 +535,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
       if (view.kind !== "skill" || view.id !== id || memberId !== host.member().id) return;
       // The list knows whose the skill is (shared, from the library); the read adds its text and its revision.
       const known = Array.isArray(skills) ? skills.find(item => item.id === id) : undefined;
-      skillText = { id, skill: { ...known, ...answer.skill }, text: answer.text, revision: answer.skill?.revision ?? undefined };
+      skillText = { id, skill: { ...known, ...answer.skill }, text: answer.text, original: answer.text, revision: answer.skill?.revision ?? undefined };
     } catch (error) { toaster.info(describeError(error)); back(); return; }
     draw();
   }
@@ -606,7 +624,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     if (!act || (act as HTMLButtonElement).disabled) return;
     const member = host.member();
     switch (act.dataset.ms) {
-      case "back": if (view.kind === "main") host.back(); else back(); break;
+      case "back": goBack(); break;
       case "avatar": openMemberAvatarMenu(act, member, host.update); break;
       case "edit": {
         const field = act.dataset.field as Field;
@@ -653,19 +671,6 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
       case "cover": openCoverMenu(act, member); break;
       case "cover-save": endReposition(true); break;
       case "cover-cancel": endReposition(false); break;
-      case "computer-mode":
-        openMenu(act, computerChoices(), member.computer_mode ?? "host", async mode => {
-          if (mode !== "host" && mode !== "docker" || mode === (member.computer_mode ?? "host")) return;
-          if (!await host.update(member.id, { computer_mode: mode }) || mode !== "docker") return;
-          try {
-            if ((await api.desktopStatus(member.id)).error === "docker_missing" && host.member().id === member.id) {
-              host.back();
-              askInChat(member.id, "setup-docker");
-            }
-          } catch (error) { toaster.info(describeError(error)); }
-        });
-        break;
-      case "desktop-control": void host.update(member.id, { desktop_control: !member.desktop_control }); break;
       case "draft": void host.update(member.id, { draft_first: !(member.draft_first ?? true) }); break;
       case "notify": void host.update(member.id, { notify: !(member.notify ?? false) }); break;
       case "tool": void toggleTool(act.dataset.id ?? ""); break;
@@ -721,13 +726,6 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
       cancelField(target as HTMLInputElement | HTMLTextAreaElement);
     }
   });
-  el.addEventListener("focusin", event => {
-    const field = event.target;
-    if (field instanceof HTMLElement && field.matches("#ms-name, #ms-role, textarea[data-field]")) {
-      bindNavLayer(field, () => cancelField(field as HTMLInputElement | HTMLTextAreaElement),
-        { active: () => document.activeElement === field });
-    }
-  });
   el.addEventListener("focusout", (event) => {
     const target = event.target as HTMLElement;
     if (target instanceof HTMLInputElement && (target.id === "ms-name" || target.id === "ms-role") || target instanceof HTMLTextAreaElement && target.dataset.field) void saveField(target as HTMLInputElement | HTMLTextAreaElement);
@@ -741,7 +739,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     event.preventDefault();
     // A move of the cover is left first, the picture back where it was.
     if (reposition) endReposition(false);
-    else if (view.kind === "main") host.back(); else back();
+    else goBack();
   });
   onLocaleChange(draw);
   scroll.addEventListener("scroll", () => { el.toggleAttribute("data-scrolled", scroll.scrollTop > 8); }, { passive: true });
@@ -753,7 +751,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
       if (!el.hidden) { draw(); return; }
       el.hidden = false;
       el.closest(".page-agent")?.setAttribute("data-member-settings-open", "");
-      bindNavLayer(el, () => view.kind === "main" ? host.back() : back(), { step: (_direction, withinLayer) => withinLayer(), place: true });
+      bindNavLayer(el, goBack);
       view = { kind: "main" }; category = CATEGORIES[0].id; editing.clear(); saving.clear(); adding = false; source = ""; skillText = null; skillBusy = false;
       skills = "loading"; commands = "loading"; toolChoices = "loading"; reposition = null; delete cover.dataset.repositioning;
       drawn = ""; drawnFor = null;

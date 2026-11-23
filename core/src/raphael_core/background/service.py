@@ -119,7 +119,7 @@ from ..agent.policy import UNATTENDED_WAIT_S, Action, Approval, Confirmations, O
 from ..agent.safety import asked_with
 from ..agent.speaker import MAX_DEPTH, RAPHAEL, RAPHAEL_NAMES, Speaker
 from ..agent.steps import REFUSED_REASONS, step_view as _step_view
-from ..agent.team import CONSULTED, Team, handoff_refused, team_tools_for, roster_prompt
+from ..agent.team import CONSULTED, Team, handoff_refused, native_skills_for, team_tools_for, roster_prompt
 from ..agent.tools import ToolResult, Tools, without_internal_ids
 from ..brain.catalog import CatalogEntry, context_window
 from ..brain.model_ref import CLI_NAMES
@@ -1785,7 +1785,8 @@ class BackgroundService:
             finally:
                 close_browser = getattr(self._gate.plugins, "close_task_browser", None)
                 if close_browser is not None:
-                    await close_browser(task.id)
+                    current = self._store.get(task.id)
+                    await close_browser(task.id, keep_page=current is not None and current.state == "done")
 
     async def _execute_scoped(self, task: Task, files: Sequence[Attachment] = ()) -> None:
         language = task.language
@@ -1931,7 +1932,7 @@ class BackgroundService:
         # The generation the task was taken up at, not the one it has now: a Stop while it was being started (its member's
         # computer seated, its files read) raised it, and the run then ends before it begins (R-PUMP-02).
         run.generation = task.generation
-        from ..agent.actions import action_scope
+        from ..agent.actions import observed_action
         run.tool_allowed = lambda key: bool((current := self._speaker(task.member_id)) and current.uses_plugin(key))
         snapshot.tool_allowed = run.tool_allowed
         run.room_speech = task.scope == "room"
@@ -1943,7 +1944,7 @@ class BackgroundService:
                        if task.scope == "private" and task.routine_id is None and task.mode != "consult" else None)
         # A reply's short window is for the model's silence: a tool it waits on has a task's own (`TaskRun._call`).
         run.tool_seconds = self._limits.seconds
-        run.action = lambda name, arguments: action_scope(self._history, task.turn_id, language,
+        run.action = lambda name, arguments: observed_action(self._history, task.turn_id, language,
             snapshot.refs[name].name if name in snapshot.refs else name, arguments,
             server=snapshot.refs[name].server if name in snapshot.refs else None,
             changed=lambda: self._changed(task.id, RUNNING))
@@ -1959,13 +1960,22 @@ class BackgroundService:
             run.restore_continuation(recovered.get("run_state", {}))
             run.reopen()
         expand = getattr(self._team, "expand_command", None)
+        resolve_async = getattr(self._team, "resolve_slash_async", None)
         resolve = getattr(self._team, "resolve_slash", None)
         from ..agent.failure import skill_failure, skill_instruction
 
         notices = []
-        request, skill_loaded = resolve(speaker.id, task.text,
-            on_failure=lambda name, error: notices.append(skill_failure(name, error))) if resolve is not None else (
-            expand(speaker.id, task.text) if expand is not None else task.text, False)
+
+        def on_skill_failure(name, error):
+            notices.append(skill_failure(name, error))
+
+        request, skill_loaded = task.text, False
+        if resolve_async is not None:
+            request, skill_loaded = await resolve_async(speaker.id, task.text, on_failure=on_skill_failure)
+        elif resolve is not None:
+            request, skill_loaded = resolve(speaker.id, task.text, on_failure=on_skill_failure)
+        elif expand is not None:
+            request = expand(speaker.id, task.text)
         if notices:
             request += "\n\n" + skill_instruction(notices)
             for notice in notices:
@@ -1978,7 +1988,7 @@ class BackgroundService:
             context,
             limits,
             self._earlier_attempt(task),
-            memory_snapshot=None if memory is None else memory.snapshot(),
+            memory_snapshot=None if memory is None else await memory.snapshot_async(),
             attachments=files,
             speaker=speaker,
             cli=room_cli,
@@ -2034,7 +2044,7 @@ class BackgroundService:
                        'Pass their complete answers to the owner when they answer the request; you may add one line of your own. Never replace the result with a recap; do not ask them again.')
         spec = {
             "task_id": task.id,
-            "skills": getattr(self._team, "native_skills", lambda member: [])(task.member_id),
+            "skills": await native_skills_for(self._team, task.member_id) if room_cli else [],
             "system": system,
             "user": user,
             "tools": run.snapshot.definitions,

@@ -11,17 +11,18 @@ const stand = (box: { top: number; width: number; height: number }): HTMLElement
   return composer;
 };
 
-test("a note stands over the composer's top edge, wherever a long draft or its attachments put it", () => {
+test("a note stands at the composer's top right corner, wherever a long draft or its attachments put it", () => {
   vi.useFakeTimers();
   vi.stubGlobal("innerHeight", 900);
+  vi.stubGlobal("innerWidth", 1000);
   stand({ top: 600, width: 700, height: 250 });
   toaster.info("最多只能附加 20 個檔案");
   const host = document.querySelector<HTMLElement>(".toasts")!;
-  expect(host.style.getPropertyValue("--toast-lift")).toBe("312px");
+  expect([host.style.bottom, host.style.right, host.style.getPropertyValue("--toast-max")]).toEqual(["308px", "300px", "700px"]);
   // The composer shrinks again: the next note follows it.
   stand({ top: 780, width: 700, height: 100 });
   toaster.info("好了");
-  expect(document.querySelector<HTMLElement>(".toasts")!.style.getPropertyValue("--toast-lift")).toBe("132px");
+  expect(document.querySelector<HTMLElement>(".toasts")!.style.bottom).toBe("128px");
   vi.unstubAllGlobals();
 });
 
@@ -30,6 +31,7 @@ test("with no composer in sight the note keeps its usual place", () => {
   vi.stubGlobal("innerHeight", 900);
   document.body.innerHTML = "<main></main>";
   toaster.info("好了");
-  expect(document.querySelector<HTMLElement>(".toasts")!.style.getPropertyValue("--toast-lift")).toBe("");
+  const host = document.querySelector<HTMLElement>(".toasts")!;
+  expect([host.style.bottom, host.style.right]).toEqual(["", ""]);
   vi.unstubAllGlobals();
 });

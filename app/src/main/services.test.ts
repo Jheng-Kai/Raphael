@@ -284,11 +284,12 @@ describe("the dialog of a capability", () => {
     expect(draw()).not.toContain("cs-scrim");
   });
 
-  test("has the icon and name, the same switch, and a borderless close button", () => {
+  test("has the icon and name, the shared round close, and a switch below the header", () => {
     const d = inDialog(dialog("search"));
     expect(d).toContain('<div class="svc-view"><div class="cs-dlg-head"><span class="ic svc-ic xl" aria-hidden="true"><svg');
     expect(d).toMatch(/role="switch" aria-checked="true" aria-label="開啟 搜尋網路" data-svc="toggle" data-id="search" data-k="svc-dlg-toggle"/);
-    expect(d).toMatch(/<button type="button" class="btn icon" aria-label="關閉" title="關閉" data-svc="close" data-k="svc-close"/);
+    expect(d).toMatch(/<button type="button" class="btn icon close-button" aria-label="關閉" title="關閉" data-svc="close" data-k="svc-close"/);
+    expect(d.indexOf('data-k="svc-close"')).toBeLessThan(d.indexOf('data-k="svc-dlg-toggle"'));
   });
 
   test("lists the services under 「已安裝」, each a mark, a name with its state, what choosing it means, a chevron; a check on the one in use only", () => {
@@ -408,9 +409,9 @@ describe("the page of one service", () => {
     expect(model).toContain('<h2 class="cs-dlg-name" id="svc-dlg-title">指定模型</h2>');
   });
 
-  test("only real buttons: a bordered text button or a borderless icon one", () => {
+  test("uses text buttons and the shared header icon buttons", () => {
     for (const d of [dialog("search", "brave"), dialog("search", "searxng")]) {
-      for (const tag of buttons(inDialog(d))) expect(tag).toMatch(/class="btn(?: icon(?: back-button)?| pri| danger)?"/);
+      for (const tag of buttons(inDialog(d))) expect(tag).toMatch(/class="btn(?: icon(?: (?:back|close)-button)?| pri| danger)?"/);
     }
   });
 });

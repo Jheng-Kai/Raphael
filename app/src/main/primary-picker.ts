@@ -38,6 +38,7 @@ export function openPrimaryPicker(o: PrimaryPickerOptions): Promise<number | nul
     const dialog = openDialog({
       title,
       cls: "mb-chat-picker mb-primary-picker",
+      navigationSuspend: true,
       body:
         `<input class="mb-fin" type="search" data-primary-search placeholder="${esc(t("members.sidePickerHint"))}" aria-label="${esc(t("members.sidePickerHint"))}" autocomplete="off" spellcheck="false">` +
         `<div class="mb-chat-choices"${o.immediate ? ` role="group"` : ` role="radiogroup"`} aria-label="${esc(title)}"></div>`,

@@ -1,20 +1,17 @@
 """Subscription-only images, bounded session output and shared catalog/delivery contracts."""
 
 import asyncio
-import base64
 import json
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-import httpx
 import pytest
 
 from raphael_core.agent.cli.discovery import CliBrains
 from raphael_core.agent.cli.images import CodexImages, REFERENCE, environment
 from raphael_core.agent.ledger import Ledger
-from raphael_core.brain.openrouter import OpenRouterClient, OpenRouterError
-from raphael_core.brain.providers.chatgpt import ChatGPTProvider
+from raphael_core.brain.openrouter import OpenRouterClient
 from raphael_core.brain.providers.registry import ProviderRegistry
 from raphael_core.brain.secrets import MemoryKeyStore
 from raphael_core.brain.service import Brain
@@ -59,10 +56,13 @@ class Children:
             stdout.feed_data(('\n'.join(json.dumps(p) for p in packets) + '\n').encode())
         if status or self.state != 'timeout':
             stdout.feed_eof()
-        process = SimpleNamespace(stdout=stdout, stdin=Input(), returncode=0, wait=AsyncMock(return_value=0))
+        line, code = {
+            'signed-out': (b'Not logged in', 1), 'api-key': (b'Logged in using an API key - private-key', 0),
+            'check-failed': (b'private error from launcher', 1),
+        }.get(self.state, (b'Logged in using ChatGPT', 0)) if status else (b'', 0)
+        process = SimpleNamespace(stdout=stdout, stdin=Input(), returncode=code, wait=AsyncMock(return_value=code))
         child = SimpleNamespace(process=process, command=command, environ=environ, cwd=cwd,
-                                stderr_tail=b'Logged in using ChatGPT' if status and self.state != 'signed-out' else b'',
-                                kill=AsyncMock())
+                                stderr_tail=line, kill=AsyncMock())
         async def start():
             child._stderr = asyncio.create_task(asyncio.sleep(0))
             if not status and self.state in ('success', 'oversize', 'invalid', 'multiple'):
@@ -80,7 +80,6 @@ class Children:
 def backend(tmp_path, state='success'):
     brains = CliBrains(home=tmp_path, environ={'PATH': '', 'OPENAI_API_KEY': 'fake-secret',
         'OPENAI_BASE_URL': 'https://forbidden.example', 'ACCESS_TOKEN': 'fake-token'}, commands={'codex': ['fake-codex']})
-    brains.logged_in = lambda name: state != 'signed-out'
     children = Children(tmp_path, state)
     return CodexImages(brains=brains, child=children), children
 
@@ -90,6 +89,7 @@ async def test_codex_success_reads_only_its_thread_and_never_copies_credentials(
     other = tmp_path / '.codex' / 'generated_images' / 'another-session'
     other.mkdir(parents=True)
     (other / 'private.png').write_bytes(PNG + b'wrong')
+    (other.parent.parent / 'config.toml').write_text('cli_auth_credentials_store = "keyring"\n', encoding='utf-8')
     charged = []
     result = await service.generate('A fox', square=True, charge=charged.append)
     assert result.mime == 'image/png' and result.data == PNG
@@ -98,6 +98,7 @@ async def test_codex_success_reads_only_its_thread_and_never_copies_credentials(
     assert 'exec' in turn.command and '--ignore-user-config' in turn.command and '--ignore-rules' in turn.command
     assert 'features.image_generation=true' in turn.command and 'features.shell_tool=false' in turn.command
     assert 'features.code_mode_host=true' in turn.command and 'forced_login_method="chatgpt"' in turn.command
+    assert 'cli_auth_credentials_store="keyring"' in turn.command
     assert '1:1' in turn.process.stdin.raw.decode()
     assert turn.environ == {'PATH': ''}
     assert not Path(turn.cwd).exists()
@@ -113,7 +114,7 @@ async def test_codex_failures_never_fallback_or_publish(tmp_path, state, kind):
     with pytest.raises(ServiceError) as caught:
         await service.generate('One image')
     assert caught.value.kind == kind and caught.value.service == 'codex'
-    assert len(children.made) == (0 if state == 'signed-out' else 2)
+    assert len(children.made) == (1 if state == 'signed-out' else 2)
     assert not service.choices() if state == 'signed-out' else True
     assert all(child.kill.await_count == 1 for child in children.made)
 
@@ -133,11 +134,7 @@ async def test_codex_stop_kills_own_child_and_releases_turn(tmp_path):
 
 async def test_catalog_requires_subscription_login_not_a_key_or_file_alone(conn, tmp_path):
     subscription, children = backend(tmp_path)
-    children.state = 'signed-out'
-    assert await subscription.refresh() is False
-    assert subscription.choices() == []
-    children.state = 'success'
-    assert await subscription.refresh() is True
+    children.state = 'api-key'
     keys = MemoryKeyStore()
     client = OpenRouterClient(lambda: None)
     registry = ProviderRegistry(conn, client, keys, credential=lambda pid: MemoryKeyStore())
@@ -145,6 +142,13 @@ async def test_catalog_requires_subscription_login_not_a_key_or_file_alone(conn,
     brain = Brain(conn, client, keys, providers=registry)
     brain._pricing.catalog = AsyncMock(return_value=([], None, 'builtin'))
     try:
+        assert (await brain._models_catalog({}))['image'] == []
+        await brain._provider_refresh
+        assert subscription.choices() == []
+        children.state = 'success'
+        assert not subscription.brains.logged_in('codex')
+        assert (await brain._models_catalog({}))['image'] == []
+        await brain._provider_refresh
         view = await brain._models_catalog({})
         assert [row['id'] for row in view['image']] == [REFERENCE]
         # model-picker.ts removes cli: IDs before constructing non-answer sources.
@@ -158,9 +162,26 @@ async def test_catalog_requires_subscription_login_not_a_key_or_file_alone(conn,
         assert service.media_choices('image') == []
         assert (await brain._models_catalog({}))['image'] == []
     finally:
+        await brain.aclose()
         await service.aclose()
         await registry.aclose()
         await client.aclose()
+
+
+@pytest.mark.parametrize('state,reason', [('missing', 'cli_missing'), ('api-key', 'api_key_login'),
+    ('check-failed', 'login_status_failed'), ('signed-out', 'signed_out'), ('disconnected', 'disconnected_in_settings')])
+async def test_codex_unavailable_logs_one_reason_without_cli_output(tmp_path, caplog, state, reason):
+    subscription, children = backend(tmp_path, state)
+    if state == 'missing':
+        subscription.brains.commands.clear()
+    elif state == 'disconnected':
+        subscription.brains._set_disconnected('codex', True)
+    with caplog.at_level('INFO'):
+        assert not await subscription.refresh()
+        assert not await subscription.refresh()
+    assert subscription.choices() == []
+    assert [record.getMessage() for record in caplog.records] == [f'Codex subscription drawing unavailable: {reason}']
+    assert len(children.made) == (0 if state in ('missing', 'disconnected') else 2)
 
 
 async def test_member_tool_and_ledger_record_subscription_not_a_price(conn, tmp_path):
@@ -192,48 +213,7 @@ async def test_signed_out_member_tool_has_existing_repair_shape(conn, tmp_path):
     result = await tools.call('mcp:media/image_generate', {'prompt': 'A fox'}, approver='user')
     assert result.kind == 'auth_expired'
     assert json.loads(result.text)['missing'] == {'resource': 'codex', 'requirement': 'cli', 'state': 'missing', 'repair': 'models'}
-    assert not children.made and not list(conn.execute('SELECT * FROM spend'))
-
-
-@pytest.mark.parametrize('state,kind', [('success', None), ('signed-out', 'auth_expired'),
-    ('refusal', 'content_policy'), ('timeout', 'timeout'), ('non-image', 'bad_response'),
-    ('unsupported', 'invalid_request')])
-async def test_chatgpt_responses_image_contract_without_codex_or_api_fallback(state, kind):
-    requests = []
-    async def handle(request):
-        requests.append(request)
-        if state == 'timeout':
-            raise httpx.ReadTimeout('synthetic')
-        if state == 'unsupported':
-            return httpx.Response(400, json={'error': {'code': 'subscription_sharing_unsupported_capability', 'param': 'tools'}})
-        items = [{'type': 'image_generation_call', 'status': 'completed', 'result': base64.b64encode(PNG).decode()}]
-        if state == 'refusal':
-            items = [{'type': 'message', 'content': [{'type': 'refusal', 'refusal': 'private refusal'}]}]
-        if state == 'non-image':
-            items = [{'type': 'message', 'content': [{'type': 'output_text', 'text': 'No image'}]}]
-        packets = [{'type': 'response.output_item.done', 'item': item} for item in items]
-        packets.append({'type': 'response.completed', 'response': {'status': 'completed', 'output': []}})
-        return httpx.Response(200, content=''.join('data: ' + json.dumps(p) + '\n\n' for p in packets))
-    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as http:
-        auth = SimpleNamespace(access_token=AsyncMock(return_value='synthetic'), session=lambda: 1,
-                               check_session=lambda session: None, http=lambda: http)
-        if state == 'signed-out':
-            auth.access_token.side_effect = OpenRouterError(0, 'auth_expired', 'synthetic')
-        provider = ChatGPTProvider(auth)
-        if kind:
-            with pytest.raises(OpenRouterError) as caught:
-                await provider.generate_image(model='chosen', prompt='A fox', square=True)
-            assert caught.value.kind == kind
-        else:
-            result = await provider.generate_image(model='chosen', prompt='A fox', square=True)
-            assert result.data == PNG
-        assert len(requests) == (0 if state == 'signed-out' else 1)
-        if requests:
-            body = json.loads(requests[0].content)
-            assert body['model'] == 'chosen' and body['stream'] is True
-            assert body['tool_choice'] == {'type': 'image_generation'}
-            assert body['tools'] == [{'type': 'image_generation', 'size': '1024x1024', 'output_format': 'png'}]
-            assert str(requests[0].url) == 'https://api.openai.com/v1/responses'
+    assert len(children.made) == 1 and not list(conn.execute('SELECT * FROM spend'))
 
 
 def test_environment_removes_key_and_endpoint_overrides():

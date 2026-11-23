@@ -7,7 +7,6 @@
 .desktop-wallpaper { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; }
 /* R-UI-95: the stage sits below the owner's picture's subject (the placeholder is a column). */
 .desktop-wallpaper[data-own] ~ .desktop-placeholder { justify-content: flex-end; }
-.desktop-panel:not([data-expanded]) .desktop-wallpaper[data-own] ~ .desktop-placeholder .desktop-state-content > .desktop-boot-face > .av { --av: 44px; }
 .desktop-last { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 .desktop-panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
 .desktop-shell { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: var(--sp-2); min-height: 0; }
@@ -25,22 +24,14 @@
 /* No words over a computer that is not showing its screen: the press starts it, with no label. */
 .desktop-panel:is([data-desktop-state="stopped"], [data-desktop-state="unavailable"]) .btn.desktop-open .desktop-open-pill { display: none; }
 @media (prefers-reduced-motion: reduce) { .desktop-open-pill { transition: none; } }
-.computer-lifecycle { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); min-width: 0; width: 100%; }
-.computer-lifecycle-state { display: flex; align-items: center; gap: var(--sp-2); color: var(--text-2); font-size: var(--fs-sm); }
-.desktop-location-header .computer-lifecycle-state { white-space: nowrap; }
-.mb-det-head:has(.computer-lifecycle) { flex-wrap: wrap; }
-.mb-det-head .mb-det-fill:has(+ .computer-lifecycle) { display: none; }
-.mb-det-head .computer-lifecycle { display: contents; }
-.mb-det-head .computer-lifecycle-state:not(:empty) { flex-basis: 100%; }
-.computer-lifecycle-state:empty { display: none; }
-.computer-lifecycle-location { min-width: 0; margin-left: auto; }
 .desktop-screen, [data-card-desktop-screen], [data-card-screen] { --text: var(--desktop-frame-text); --text-2: var(--desktop-frame-text); --text-3: color-mix(in srgb, var(--desktop-frame-text) 70%, transparent); --panel: var(--desktop-frame-bg); --content: var(--desktop-frame-bg); }
 .desktop-takeover-bar { display: contents; }
 .desktop-takeover-bar[hidden] { display: none; }
 .desktop-screen > [data-desktop="retry"] { --btn: var(--desktop-frame-bg); --btn-edge: color-mix(in srgb, var(--desktop-frame-text) 30%, var(--desktop-frame-bg)); --hover: color-mix(in srgb, var(--desktop-frame-text) 10%, var(--desktop-frame-bg)); --pressed: color-mix(in srgb, var(--desktop-frame-text) 18%, var(--desktop-frame-bg)); --hover-edge: var(--desktop-frame-text); --focus: var(--desktop-frame-text); position: absolute; left: 50%; bottom: var(--sp-3); transform: translateX(-50%); }
 /* The small preview keeps only a notice under its screen: the rest of the foot belongs to the larger view. */
 .desktop-panel:not([data-expanded]) :is(.desktop-foot, .desktop-notes) { display: contents; }
-.desktop-panel:not([data-expanded]) :is(.desktop-bar, .desktop-teach-missing, .desktop-recording, .desktop-request, .desktop-review, .desktop-try) { display: none; }
+.desktop-panel:not([data-expanded]) :is(.desktop-teach-missing, .desktop-recording, .desktop-request, .desktop-review, .desktop-try, .desktop-actions),
+.desktop-panel:not([data-expanded]) .desktop-bar { display: none; }
 .desktop-panel[data-expanded] .desktop-actions > :is([data-desktop="take"], [data-desktop="revoke"]) { display: none; }
 .desktop-panel[data-expanded]:not([data-teaching]) .desktop-actions > [data-desktop="teach"] { display: none; }
 .desktop-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); padding: 0 var(--sp-1) var(--sp-2); }
@@ -57,6 +48,58 @@
    2 px off 1280:900, the seat's picture fitted one side and the other showed a dark sliver. The running screen covers it. */
 .desktop-screen { position: relative; width: 100%; aspect-ratio: 1280 / 900; overflow: clip; background: var(--content); box-shadow: inset 0 0 0 1px var(--line); border-radius: var(--r-lg); }
 .desktop-screen iframe, [data-card-desktop-screen] iframe, [data-card-screen] iframe { position: relative; z-index: 1; display: block; width: 100%; height: 100%; border: 0; }
+/* The Chrome toolbar and canvas share the frame; the preview's enlarge button covers only the canvas. */
+.desktop-panel {
+  --host-browser-text: var(--text);
+  --host-browser-text-2: var(--text-2);
+  --host-browser-panel: var(--panel);
+}
+.desktop-screen[data-host-browser] { display: grid; grid-template-rows: auto auto; grid-template-columns: minmax(0, 1fr); aspect-ratio: auto; }
+.desktop-screen[data-host-browser]::before { content: ""; grid-area: 2 / 1; width: 100%; aspect-ratio: 1280 / 900; }
+.desktop-screen[data-host-browser] > :is(iframe, .desktop-open, .desktop-wallpaper, .desktop-last) { grid-area: 2 / 1; position: absolute; inset: 0; min-height: 0; }
+.host-browser-toolbar {
+  grid-area: 1 / 1; z-index: 2; min-width: 0; container-type: inline-size;
+  --text: var(--host-browser-text); --text-2: var(--host-browser-text-2);
+  --panel: var(--host-browser-panel);
+  background: var(--panel); color: var(--text); border-bottom: 1px solid var(--line);
+}
+.host-browser-tabs, .host-browser-address-row, .host-browser-history, .host-browser-tab, .host-browser-strip { display: flex; align-items: center; }
+.host-browser-tabs { gap: var(--sp-1); padding: var(--sp-1) var(--sp-2) 0; }
+.host-browser-strip {
+  flex: 0 1 auto; min-width: 0; gap: var(--sp-1); overflow-x: auto;
+  overscroll-behavior-x: contain; scrollbar-width: thin; padding: 3px;
+}
+.host-browser-tab {
+  flex: 0 0 auto; width: clamp(104px, 20cqi, 184px); min-width: 0;
+  border-radius: var(--r-sm); padding-inline: var(--sp-1);
+}
+.host-browser-tab[data-shown] { background: var(--selected); }
+.host-browser-tab:not([data-shown]):hover { background: var(--hover); }
+.host-browser-toolbar .btn.icon { flex: none; border-radius: var(--r-pill); }
+.host-browser-toolbar .btn.host-browser-tab-button {
+  display: flex; align-items: center; justify-content: flex-start; flex: 1 1 auto; gap: var(--sp-1);
+  width: auto; min-width: 0; padding-inline: var(--sp-1); color: var(--text);
+  min-height: var(--h-tab); border-radius: var(--r-sm); border-color: transparent; font-size: var(--fs-xs);
+  background: transparent;
+}
+.host-browser-toolbar .btn.host-browser-tab-button:is(:hover, :active):not(:disabled) { background: transparent; }
+.host-browser-tab[data-shown] .host-browser-tab-button { font-weight: var(--weight-medium); }
+.host-browser-tab-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.host-browser-favicon { display: flex; align-items: center; justify-content: center; flex: none; width: 16px; height: 16px; color: var(--text-2); }
+.host-browser-favicon :is(img, svg) { width: 16px; height: 16px; }
+.host-browser-address-row { gap: var(--sp-1); padding: var(--sp-1) var(--sp-2) var(--sp-2); }
+.host-browser-address {
+  flex: 1; min-width: 0; height: var(--h-field); padding: 0 var(--sp-2);
+  border: 1px solid transparent; border-radius: var(--r-pill); font-size: var(--fs-xs);
+}
+.host-browser-address { border-color: var(--line); background: var(--surface-2); color: var(--text); }
+.host-browser-address[aria-invalid] { border-color: var(--err); }
+.host-browser-error { margin: 0 var(--sp-2) var(--sp-2); color: var(--err); font-size: var(--fs-xs); }
+@container (max-width: 440px) {
+  .host-browser-tab { width: 56px; }
+  .host-browser-toolbar .btn.host-browser-tab-button { gap: 0; }
+  .host-browser-tab-title { width: 0; }
+}
 /* noVNC measures the viewport during connection. Give the waiting frame the
    screen's dimensions without displacing the placeholder. */
 iframe[data-desktop-stream][hidden] { display: block !important; position: absolute; inset: 0; visibility: hidden; }
@@ -67,12 +110,9 @@ iframe[data-desktop-stream][hidden] { display: block !important; position: absol
 .desktop-review { min-width: 0; }
 .desktop-actions:has(> [hidden]:only-child), .desktop-actions:not(:has(> :not([hidden]))) { display: none; }
 .desktop-placeholder { position: relative; min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-3); padding: var(--sp-3); overflow-wrap: anywhere; text-align: center; color: var(--text-2); pointer-events: none; }
-.desktop-state-content { display: grid; justify-items: center; gap: var(--sp-2); width: 100%; min-width: 0; }
-/* The one-sentence state's face; preparation keeps its own size inside its pill (R-UI-93). */
-.desktop-state-content > .desktop-boot-face > .av { --av: 48px; }
 .desktop-state-actions, .desktop-state-recovery { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--sp-2); }
 .desktop-state-actions .btn { --btn: var(--desktop-frame-bg); --btn-edge: color-mix(in srgb, var(--desktop-frame-text) 30%, var(--desktop-frame-bg)); --hover: color-mix(in srgb, var(--desktop-frame-text) 10%, var(--desktop-frame-bg)); --pressed: color-mix(in srgb, var(--desktop-frame-text) 18%, var(--desktop-frame-bg)); color: var(--desktop-frame-text); max-width: 100%; white-space: normal; }
-.desktop-panel:not([data-expanded]) .desktop-screen:has(.desktop-placeholder:not([hidden])) { display: flex; align-items: stretch; }
+.desktop-panel:not([data-expanded]) .desktop-screen:not([data-host-browser]):has(.desktop-placeholder:not([hidden])) { display: flex; align-items: stretch; }
 .desktop-panel:not([data-expanded]) .desktop-placeholder { width: 100%; }
 .desktop-placeholder > * { pointer-events: auto; }
 [data-card-desktop-screen] > .desktop-placeholder, [data-card-screen] > .desktop-placeholder { position: absolute; inset: 0; }
@@ -82,10 +122,10 @@ iframe[data-desktop-stream][hidden] { display: block !important; position: absol
    at most 480 px (R-CARD-01). */
 .page-agent .conversation-card.computer-card:is([data-work-state="waiting_control"], [data-card-state="control"]) { width: 100%; max-width: none; }
 .conversation-card .card-computer-screen:is([data-card-desktop-screen], [data-card-screen]) { aspect-ratio: 1280 / 900; background: var(--desktop-frame-bg); }
+.card-computer-screen > .desktop-last { object-fit: cover; }
 .desktop-message, .desktop-placeholder .missing-note, .desktop-preparation { padding: var(--sp-3) var(--sp-4); border-radius: var(--r-lg); background: color-mix(in srgb, var(--desktop-frame-bg) 82%, transparent); }
 .desktop-placeholder .missing-note, .desktop-placeholder > [data-act="docker-download"] { --btn: var(--desktop-frame-bg); --hover: color-mix(in srgb, var(--desktop-frame-text) 10%, var(--desktop-frame-bg)); --pressed: color-mix(in srgb, var(--desktop-frame-text) 18%, var(--desktop-frame-bg)); }
-.desktop-error { margin: 0; color: var(--err); }
-.desktop-error[role="status"] { color: var(--text-2); }
+.desktop-notice { margin: 0; color: var(--text-2); }
 /* A slim pill, the face beside its one stage; a percent or the first-build note
    takes the next line. */
 .desktop-preparation { width: fit-content; max-width: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: var(--sp-2); row-gap: var(--sp-1); padding: 6px var(--sp-3) 6px 6px; border-radius: var(--r-pill); }
@@ -122,6 +162,10 @@ iframe[data-desktop-stream][hidden] { display: block !important; position: absol
 .desktop-panel[data-expanded]:has(.desktop-notes > :not([hidden])) .desktop-shell { --desktop-foot: 88px; }
 .desktop-panel[data-expanded] :is(.desktop-screen, .desktop-review, .desktop-foot) { width: min(100cqw, (100cqh - var(--desktop-foot)) * 1280 / 900); min-width: 0; }
 .desktop-panel[data-expanded] :is(.desktop-screen, .desktop-review) { grid-area: 1 / 1; height: auto; min-height: 0; aspect-ratio: 1280 / 900; }
+.desktop-panel[data-expanded] .desktop-screen[data-host-browser] {
+  width: min(100cqw, max(0px, (100cqh - var(--desktop-foot) - var(--host-browser-toolbar-height, 0px)) * 1280 / 900));
+  aspect-ratio: auto;
+}
 .desktop-panel[data-expanded] .desktop-caption { display: none; }
 .desktop-panel[data-expanded] .desktop-screen { box-shadow: none; border-radius: var(--r-md); background: var(--desktop-frame-bg); }
 /* The skill review and the file changes take the screen's place, in a quiet box of its size that scrolls on its own. */
@@ -166,14 +210,16 @@ iframe[data-desktop-stream][hidden] { display: block !important; position: absol
 :is(.desktop-mode, .desktop-actions) .btn.sm:is([data-desktop="return"], [data-desktop="discard-teach"]):active:not(:disabled) { background: color-mix(in srgb, var(--text) 22%, var(--surface-2)); }
 :is(.desktop-mode, .desktop-actions) .btn.sm:disabled { border-color: color-mix(in srgb, var(--text) 40%, var(--content)); background: color-mix(in srgb, var(--text) 40%, var(--content)); }
 
-.desktop-location-header { display: flex; justify-content: flex-end; min-width: 0; }
-.computer-location { min-width: 0; }
-.computer-location .btn { max-width: 100%; }
-/* Beside the state word and the ⋯ the location is a quiet button: words and a chevron, with no frame and no
-   fill, not even under the pointer. Keyboard focus keeps its ring. */
-.desktop-location-header .computer-location .btn, .desktop-location-header .computer-location .btn:is(:hover, :active, [aria-expanded="true"]):not(:disabled) { border-color: transparent; background: transparent; }
-.computer-location .btn > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.desktop-takeover-bar .computer-location { flex: 0 1 auto; }
+.desktop-location-header { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); min-width: 0; }
+.desktop-choice-row { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-2); min-width: 0; }
+.desktop-choice-row > .computer-lifecycle { display: contents; }
+.desktop-computer-choice { min-width: 0; }
+.desktop-computer-choice .sel { max-width: min(100%, 260px); padding-inline-start: var(--sp-2); }
+.desktop-computer-choice .sel, .desktop-computer-choice .sel:is(:hover, :active, [aria-expanded="true"]):not(:disabled) { border-color: transparent; background: transparent; }
+.computer-lifecycle-state { min-width: 0; margin-inline-end: auto; color: var(--text-2); font-size: var(--fs-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.desktop-docker-setup { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-1) var(--sp-2); margin: 0; padding-inline: var(--sp-2); color: var(--text-2); font-size: var(--fs-sm); }
+.btn.desktop-docker-help { min-height: 0; padding: 0; border: 0; background: transparent; color: var(--link); font: inherit; text-align: start; white-space: normal; }
+.btn.desktop-docker-help:is(:hover, :active):not(:disabled) { background: transparent; text-decoration: underline; text-underline-offset: 3px; }
 .menu.computer-location-popover { width: min(380px, calc(100vw - var(--sp-4))); padding: var(--sp-3); }
 .menu.computer-location-popover .slist { --slist-pad: 0px; padding-inline: 0; }
 /* The repair command's copy button is a code block control, not a menu row. */
@@ -181,9 +227,7 @@ iframe[data-desktop-stream][hidden] { display: block !important; position: absol
 .menu.computer-location-popover .row { flex-direction: column; align-items: stretch; min-height: 0; gap: var(--sp-2); padding-block: var(--sp-2); }
 .menu.computer-location-popover .row > .lbl { flex: none; min-width: 0; }
 .menu.computer-location-popover .row > .ctl { width: 100%; margin-left: 0; justify-content: flex-start; }
-.menu.computer-location-popover .field, .menu.computer-location-popover .ctl .sel { width: 100%; max-width: 100%; min-width: 0; }
-.menu.computer-location-popover .sel { justify-content: space-between; padding: 0 var(--sp-2) 0 var(--sp-3); border: 1px solid var(--btn-edge); background: var(--btn); text-align: left; }
-.menu.computer-location-popover .sel > span { flex: 1; min-width: 0; text-align: left; }
+.menu.computer-location-popover .field { width: 100%; max-width: 100%; min-width: 0; }
 .menu.computer-location-popover > .btn { border: 1px solid var(--btn-edge); background: var(--btn); }
 .computer-location-purpose, .computer-location-error { margin: var(--sp-2) 0; font-size: var(--fs-sm); line-height: 1.5; overflow-wrap: anywhere; white-space: normal; }
 .computer-location-purpose { color: var(--text-3); }

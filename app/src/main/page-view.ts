@@ -9,6 +9,7 @@
 // The page (R-PAGE-11) runs to the window's
 // foot and the composer floats over it: the view measures what stands over the page's foot (the composer's dock
 // and the answer line over it) so the page can scroll its last line clear of them.
+import { rememberLayerBack } from "./nav-history";
 import { bindNavLayer } from "./nav-layers";
 import "./page-view.css";
 import { cancelGesture } from "../shared/cancel-gesture";
@@ -22,6 +23,7 @@ export interface PageViewOpen {
   kind: "page" | "report";
   /** What gets the focus back when the page is put away. */
   opener?: HTMLElement | null;
+  reopen?(): void;
   /**
    * The one thing this page can be passed on by (Share: a report or an HTML page is saved as a file). It stands at the
    * header's top right, where the thread's own share stands, as the round button every header tool is: one place for what is
@@ -152,7 +154,7 @@ export function mountPageView(stage: HTMLElement, shell?: PageShell): PageView {
     if (slot) {
       slot.insertAdjacentHTML("afterbegin", backButton(t("chooser.back"), ' data-page-back hidden', "ra-tool pgv-back"));
       back = slot.querySelector<HTMLButtonElement>("[data-page-back]");
-      back!.addEventListener("click", () => close());
+      back!.addEventListener("click", goBack);
     }
     tools = pane?.querySelector<HTMLElement>(":scope > .mb-head .ra-tools") ?? null;
     // The header's centre says which page this is while it stands: the page's mark and its title. A
@@ -196,13 +198,18 @@ export function mountPageView(stage: HTMLElement, shell?: PageShell): PageView {
     status.replaceChildren();
     delete status.dataset.drawn;
     host.hidden = false;
-    bindNavLayer(host, close, { place: true });
+    bindNavLayer(host, goBack);
     shell?.fold();
     stage.classList.add("is-page");
     pane?.setAttribute("data-conversation-page", "");
     watchFoot();
     if (back) { back.hidden = false; back.setAttribute("aria-label", t("chooser.back")); back.title = t("chooser.back"); }
     drawAction();
+  }
+
+  function goBack(): void {
+    const reopen = current?.reopen;
+    if (reopen) rememberLayerBack(close, reopen); else close();
   }
 
   function close(): void {
@@ -238,7 +245,7 @@ export function mountPageView(stage: HTMLElement, shell?: PageShell): PageView {
     if ([...document.querySelectorAll('#app-popover, .mb-scrim, .modal-scrim, [role="dialog"], [role="menu"], [role="listbox"]')].some(layer => !layer.closest("[hidden], [inert]"))) return;
     if (gesture.hasTarget()) return;
     event.preventDefault();
-    close();
+    goBack();
   });
 
   return {

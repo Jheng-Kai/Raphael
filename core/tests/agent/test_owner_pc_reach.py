@@ -27,6 +27,34 @@ from .test_local_commands import local_hub
 from .test_narration import chat, typed
 from .test_service import make_rig  # noqa: F401
 
+
+async def test_switching_a_computer_saves_the_members_preference_without_a_chat_turn(make_rig, client, conn, tmp_path):
+    from raphael_core.computer.vm import LocalVm
+    from raphael_core.computer.vm_tools import VmTools
+
+    rig = rig_with_pc(make_rig, conn)
+    hub = VmTools(rig.service._plugins, LocalVm(tmp_path, settings=SettingsStore(conn)), attachments=None, conn=conn)
+    rig.service._plugins = hub
+    with conn:
+        member = conn.execute("INSERT INTO members (name,role,position,created_at_ms) VALUES ('Member','',0,1)").lastrowid
+    assert hub.computer_mode(member) == hub.computer_mode(0) == "host"
+    before = conn.execute("SELECT COUNT(*) FROM agent_turns").fetchone()[0]
+    assert await rig.call("agent.computer_choice", {"member_id": member, "transport": "docker"}) == {"transport": "docker"}
+    assert hub.computer_mode(member) == "docker" and hub.computer_mode(0) == "host"
+    assert conn.execute("SELECT COUNT(*) FROM agent_turns").fetchone()[0] == before
+    assert not client.chat_calls
+
+
+@pytest.mark.parametrize("interactive", [True, False])
+def test_a_member_snapshot_never_exposes_desktop_tools_in_api_cli_or_background(conn, interactive):
+    from raphael_core.agent.speaker import Speaker
+
+    hub, _ = local_hub(conn)
+    snapshot = take_snapshot(hub, speaker=Speaker(id=4), interactive=interactive, max_tier=Tier.T3, owner_screen=False)
+    assert not PC_TOOLS.intersection(names(snapshot.definitions))
+    assert not PC_TOOLS.intersection(snapshot.catalog())
+    assert {"local__local_exec", "local__local_job"} <= snapshot.listed()
+
 # What shows things on the owner's screen or drives it: the run on the desktop and the fixed commands.
 PC_TOOLS = {"computer", *COMMANDS}
 # The hidden commands on the owner's PC, every turn's and task's with the card.

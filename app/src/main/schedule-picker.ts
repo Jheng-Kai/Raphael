@@ -23,10 +23,15 @@ export function monthGrid(month: Date, selected: string, attr: string): string {
     }).join("") + `</div>`;
 }
 
-export function openDatePicker(anchor: HTMLElement, value: string, onPick: (key: string) => void): void {
-  let month = localDay(value || dateKey(new Date()));
+export function openDatePicker(anchor: HTMLElement, value: string, onPick: (key: string) => void, resume?: Date): void {
+  let month = resume ?? localDay(value || dateKey(new Date()));
   if (Number.isNaN(month.getTime())) month = new Date();
-  const pop = openPopover(anchor, "", { className: "menu au-date-menu", role: "dialog", label: t("auto.date") });
+  const pop = openPopover(anchor, "", { className: "menu au-date-menu", role: "dialog", label: t("auto.date"),
+    navigation: { restore: () => {
+      const shown = month;
+      return () => { if (anchor.isConnected) openDatePicker(anchor, value, onPick, shown); };
+    } },
+  });
   const draw = (): void => {
     pop.innerHTML = `<div class="au-month-head">${iconButton("left", t("auto.monthPrevious"), ' data-month="-1"')}<b>${esc(monthLabel(month))}</b>${iconButton("right", t("auto.monthNext"), ' data-month="1"')}</div>` + monthGrid(month, value, "data-date");
     placeMenu();

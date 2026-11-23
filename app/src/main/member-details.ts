@@ -2,6 +2,7 @@
 // the owner changes about a member lives on the member settings page (member-settings.ts), which the gear opens in the
 // main area where the conversation is.
 
+import { clearLayerForward } from "./nav-history";
 import { noticeHTML } from "./missing";
 import "./messaging.css";
 import { openRoutineView } from "./routine-view";
@@ -16,7 +17,7 @@ import {
   routineSentenceHTML, routineStatus, stableMember,
 } from "./members";
 import type { AppContext, Member, MemberPatch, MembersList, Routine } from "./types";
-import { esc, ico, iconButton, patchHTML, tg, toaster } from "./ui";
+import { esc, ico, headerCloseButton, iconButton, patchHTML, tg, toaster } from "./ui";
 import { eventRead } from './event-read';
 import { createAttachmentMedia } from "./attachment-media";
 import { openMediaLightbox } from "./media-lightbox";
@@ -70,7 +71,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   el.innerHTML =
     // The gear on the left edge and close on the right, apart: the gear opens the member's settings as
     // a page of its own in the main area. Sharing is done from the conversation's header.
-    `<div class="mb-det-head" data-window-drag>${iconButton("gear", t("computer.settings"), ' data-det="gear"', "mb-tool")}<span class="mb-det-fill"></span>${iconButton("x", t("members.close"), ' data-det="close"', "mb-tool")}</div>` +
+    `<div class="mb-det-head" data-window-drag>${iconButton("gear", t("computer.settings"), ' data-det="gear"', "mb-tool")}<span class="mb-det-fill"></span>${headerCloseButton(t("members.close"), ' data-det="close"')}</div>` +
     `<div class="mb-det-scroll"><div class="mb-who"></div><div class="mb-tabs"></div><div class="mb-tab-body" role="tabpanel" id="member-panel-body"></div></div>`;
   const who = el.querySelector<HTMLElement>(".mb-who")!;
   const tabBar = el.querySelector<HTMLElement>(".mb-tabs")!;
@@ -105,6 +106,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     workTimer = setTimeout(() => { workTimer = undefined; if (!el.hidden) void loadWork(true); }, Math.min(1500, Math.max(0, workSince + 5000 - now)));
   }
   function select(page: DetailsTab): void {
+    if (tab !== page) clearLayerForward();
     tab = page; draw();
     el.dispatchEvent(new CustomEvent('member-panel-tab', {bubbles:true}));
     if (page !== 'computer') void loadWork();

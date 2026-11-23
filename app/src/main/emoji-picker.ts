@@ -63,14 +63,19 @@ function blocksHTML(emoji: readonly Emoji[], chosen: readonly string[]): string 
 }
 
 /** Every emoji in one card beside `anchor`; `onPick` gets the one chosen. */
-export function openEmojiPicker(anchor: HTMLElement, chosen: readonly string[], onPick: (emoji: string) => void): void {
+export function openEmojiPicker(anchor: HTMLElement, chosen: readonly string[], onPick: (emoji: string) => void, query = ""): void {
   const el = openPopover(
     anchor,
     `<label class="emoji-find">${ico("search")}<input type="search" autocomplete="off" spellcheck="false" placeholder="${esc(t("chat.emojiSearch"))}" aria-label="${esc(t("chat.emojiSearch"))}"></label>` +
       `<div class="emoji-grid" role="listbox" aria-label="${esc(t("chat.react"))}"><p class="emoji-none" role="status">${esc(t("common.loading"))}</p></div>` +
       `<div class="emoji-foot" aria-hidden="true"><span class="emoji-foot-char"></span><span class="emoji-foot-name"></span></div>`,
     // From the button's left edge, above it when there is room: beside the message, never over the sidebar.
-    { className: "menu emoji-picker", role: "dialog", label: t("chat.react"), placement: "start", onKey: (event) => move(event) },
+    { className: "menu emoji-picker", role: "dialog", label: t("chat.react"), placement: "start", onKey: (event) => move(event),
+      navigation: { restore: () => {
+        const text = input.value;
+        return () => { if (anchor.isConnected) openEmojiPicker(anchor, chosen, onPick, text); };
+      } },
+    },
   );
   const input = el.querySelector<HTMLInputElement>("input")!;
   const grid = el.querySelector<HTMLElement>(".emoji-grid")!;
@@ -129,6 +134,7 @@ export function openEmojiPicker(anchor: HTMLElement, chosen: readonly string[], 
   grid.addEventListener("pointerover", (event) => name((event.target as Element).closest<HTMLElement>(".emoji-cell") ?? undefined));
   grid.addEventListener("focusin", (event) => name((event.target as Element).closest<HTMLElement>(".emoji-cell") ?? undefined));
   input.addEventListener("input", draw);
+  input.value = query;
   input.focus();
   void emojiSections().then((loaded) => {
     if (!el.isConnected) return;

@@ -407,13 +407,17 @@ existing Escape handling.
 used for external editor corrections. Core owns final term acceptance and opaque,
 single-use batch Undo, including prior evidence restoration. A separate passive
 `learned.html` native window shows the learned batch and localized Undo at the active
-monitor's horizontal center, 16 px above its taskbar. It expires after five seconds
-without hover. Its window never has a title bar, not even in its style, whatever tao rewrites
-(R-LEARN-WIN-01, `overlay/frame.rs`). The window is there only while a notice is: it is made hidden and with an empty
-title, shown without activation once the notice is sized, placed and shaped, and hidden again 220 ms after the notice ends
-(Undo, expiry or a click) unless a new one came; no pale bar and no English title stays on a Chinese interface
-(R-LEARN-WIN-02, `learned.rs`). The ordinary overlay remains click-through. Fixture pill evidence
-does not establish native hit-testing, positioning, paste or persistence.
+monitor's horizontal center, 16 px above its taskbar. Every saved batch is queued once,
+including when a new dictation or quick answer is already underway. The native countdown
+starts at reveal and allows ten seconds for one word, plus two seconds per additional
+word. The shell pauses it anywhere over the pill and resumes the remaining time when
+the pointer leaves. Only Undo receives clicks. The core holds each batch's Undo token
+through the queue and hover, and releases it on expiry or Undo. The window is made
+hidden with an empty title (R-LEARN-WIN-01), shown without activation after layout,
+and hidden after the 220 ms fade interval before showing the next batch (R-LEARN-WIN-02).
+The ordinary overlay stays independent. Run the `overlay-learned-pill` scene in both
+themes at 1120,720,1920x1080. Native hit testing, positioning, paste and persistence
+are covered by separate native acceptance.
 
 `stable-click` records the clicked view control and persistent content above it,
 then rejects position/size changes over 1px after settling. Normal look clicks on
@@ -439,8 +443,7 @@ comes from the same stored turn stream as the conversation, newest line only, in
 existing 14px caption position. No rotating placeholder status is sent. The API fast
 router remains available; CLI quick questions skip auxiliary routing and native session
 resume, consuming only the recent quick context and that conversation's own summary.
-Native acceptance must check stale-session rejection, foreground suppression and
-hotkey/transcript timing.
+Native acceptance checks stale-session rejection, overlay continuity while Raphael is in front, and hotkey/transcript timing.
 
 ```powershell
 npm run look -- overlay-step overlay-long-answer --theme both --width 1120,720,1920x1080
@@ -463,12 +466,27 @@ prove actual transcription speed.
 The global hook does not always hear the keyboard while the app's own window is in front, so everything the
 keys do must work through `window-hotkeys.ts` too (`source=Window` in the log). One Esc ends a recording or a
 dictation's transcription from there (R-VC-01). A question said into a conversation leaves the voice slot once
-its words are in (`hand_over`), so the dictation key works during the answer (R-VC-02). `npm run native --
+its words are in (`hand_over`), so the dictation key works during the answer (R-VC-02).
+In toggle mode the worker waits for release of a standalone Right Alt tap. A Right Alt+Space chord consumes that
+prefix and reports only the quick question from either source, with either release order. After a standalone Right Alt
+tap ends a quick recording, a new chord can start as soon as recognition finishes. The quick question keeps
+its listening overlay and greeting with Raphael in front as well as in another app (R-AG-05, R-AG-06). `npm run native --
 voice-keys` proves both with the real worker, the recognising light and a slow brain at high depth. A turn said
 into a conversation has the time a typed one has; only the overlay's quick question has `VOICE_TURN_TIMEOUT_S`.
 
+On Windows, the shell handles the Space system-menu command at the native window, using the
+current quick-ask bindings (R-AG-05). The window still delivers the key to the existing
+quick-ask handler. Rebinding away from Alt+Space restores Windows' menu for that chord.
+The overlay and learned-word pill stay passive, so clicking them keeps keyboard input with
+the underlying foreground window. For native acceptance, press the bound chord with Raphael
+in front and with another app in front. In both cases, confirm the recording starts once
+and the transcript precedes the reply. With Raphael in front, confirm no system menu opens,
+the main window stays visible, and the title area's system menu still works. Rebind quick
+ask to an unused function key, press the formerly bound Alt+Space chord to open the Windows
+menu, and try the new quick-ask shortcut without restarting.
+
 A question said to the overlay (Alt+Space) leaves the slot the same way, and the dictation key always wins (R-VC-03):
-pressed while the answer is worked on, asked a yes or no, or on the overlay, it dictates at once. The answer is held while
+a standalone dictation press can start a recording while an answer is pending, showing, or waiting for yes or no. The answer is held while
 a recording has the overlay and told again once the words are typed, for its ordinary time; a newer quick question
 replaces it. The shell's timing is proved by the `dictation.rs` tests named in R-VC-03; the one thing the corner shows
 is the answer arriving behind the dictation's 100 %, which `overlay-held-answer` replays on the real overlay page:
@@ -669,7 +687,7 @@ npm.cmd run native -- conversation-and-learned-pill voice-conversation locale-sw
 `conversation-and-learned-pill` uses the bundled debug shell, real Rust correction Tracker, core
 acceptance (the offline model's `native_learn_review` names the replaced words) and SQLite evidence. It checks owner
 expansion, conversation scrolling, two Escape presses for a pending fake answer, that nothing is learned while
-`auto_learn` is off, a complete learned batch once it is on, hover retention past the ten-second Undo window, exact
+`auto_learn` is off, a complete learned batch once it is on, retention while the real desktop pointer hovers over the click-through caption past the two-word countdown, exact
 batch/evidence Undo and expiry. Read-only Win32 inspection
 checks the learned window's NOACTIVATE style, that its window style has no title bar
 (R-LEARN-WIN-01: while shown, after Undo and after expiry), rounded click region, click-through
@@ -709,8 +727,9 @@ history. The words are still pasted, so nothing is lost, and the NOT_CLEANED not
 R-UI-70: the desktop overlay and learned notice start click-through. The real pages
 report visible physical client rectangles over the shell-only floating_controls IPC,
 allowlisted only for the calling overlay/learned window. The overlay reports the
-question card, question buttons, expansion button and Stop; the learned page reports
-its body and Undo. A 30 ms Tauri cursor-position poll exists only while bounds remain.
+question card, question buttons, expansion button and Stop. The learned page reports
+only Undo. While the pill is shown, a separate cursor-position poll tracks hover over
+the whole pill without changing its click regions.
 Scene changes/notice completion clear holds and invalidate late geometry by revision.
 UI-thread setters also reject obsolete queued changes, so a worker enable cannot
 run after an immediate hide and restore interception.

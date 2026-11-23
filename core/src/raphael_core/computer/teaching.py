@@ -288,7 +288,7 @@ class Teaching:
                 token, session = self.viewer.session(params)
                 target = session.target
                 self.recover(session.member_id, target)
-                if (session.preview or target != self.viewer.vm.target(session.member_id)
+                if (session.preview or session.host_tab is not None or target != self.viewer.vm.target(session.member_id)
                         or self.viewer.vm.work.pending(target) or self.active(token)):
                     raise invalid_params("use the member's own available computer")
                 if any(r.member == session.member_id for r in self.items.values()) or len(self.items) >= 16:

@@ -106,6 +106,26 @@ def test_restored_completion_evidence_uses_only_the_result_header(read_ok):
     assert check.required is not read_ok
 
 
+@pytest.mark.parametrize("status", ["waiting_for_owner", "tab_closed"])
+def test_a_computer_notice_does_not_count_as_a_delivered_click(status):
+    from raphael_core.agent.service import AgentService, _tool_result
+    from raphael_core.worker.computer_verification import ComputerVerification
+    from raphael_core.worker.loop import result_text
+
+    name = "computer__click"
+    call = SimpleNamespace(tool=SimpleNamespace(server="computer", name="click"))
+    result = AgentService._loop_result(_tool_result(call, PluginResult(True, status, json.dumps({"status": status}))))
+    assert result.ok and result.kind == status
+    check = ComputerVerification()
+    check.after(name, {}, result.ok, result.kind)
+    assert check.finishing() is None
+    check.restore([
+        {"role": "assistant", "tool_calls": [{"id": "click", "function": {"name": name, "arguments": "{}"}}]},
+        {"role": "tool", "tool_call_id": "click", "content": result_text(name, result)},
+    ])
+    assert check.finishing() is None
+
+
 @pytest.mark.parametrize("arguments,checked", [
     ({"expect": [{"window": {"exists": True}}]}, True),   # the driver's own schema (0.37.0)
     ({"predicates": [{"exists": True}]}, True),            # the name of the older schema, still counted

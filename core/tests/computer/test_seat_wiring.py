@@ -258,8 +258,8 @@ async def test_a_hold_refuses_its_seat_but_only_blocks_other_seats_native_input(
     _, session = await hub._connection(second)
     hub.page_windows[(second.key, "own")] = (session, 2, 2)
     vm.hold(first, True)
-    for member, name, kind in [(1, "get_desktop_state", "owner_holds_control"),
-                                (1, "browser_navigate", "owner_holds_control"), (2, "click", "computer_busy"),
+    for member, name, kind in [(1, "get_desktop_state", "waiting_for_owner"),
+                                (1, "browser_navigate", "waiting_for_owner"), (2, "click", "waiting_for_owner"),
                                 (2, "get_desktop_state", None), (2, "browser_navigate", None)]:
         tool = next(tool for tool in hub.offered_for(member) if tool.name == name)
         with vm_scope(("turn", member, 1)):
@@ -267,11 +267,10 @@ async def test_a_hold_refuses_its_seat_but_only_blocks_other_seats_native_input(
                     {"target_id": "own", "tab_id": "tab", "url": "about:blank"} if name == "browser_navigate" else {})
             result = await hub.call(tool.key, args, approver="auto")
         assert result.kind == kind
-        if kind == "computer_busy":
+        if kind == "waiting_for_owner":
             said = json.loads(result.text)
-            assert said["held_by"] == "the owner"
-            # A member turned away is told what is true, including when it ends, and not to guess another cause.
-            assert "Nothing was done" in said["note"] and "5 minutes without input" in said["note"]
+            assert result.ok and said["status"] == "waiting_for_owner"
+            assert "The owner is using the computer right now. Nothing was done." in said["note"]
     vm.hold(second, True)
     vm.hold(first, False)
     assert vm.unit_held(first)

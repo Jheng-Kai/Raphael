@@ -56,6 +56,8 @@ export function openShortcutEditor(app: Pick<AppContext, "device" | "setDevice">
     // A recording owns Escape and the presses until it ends; a save under way finishes first.
     canClose: () => !busy && !recording.active(),
     onClosing: () => { void recording.cancel(); },
+    navigationSuspend: true,
+    navigationDirty: () => Object.keys(changedKeys(draft, app.device())).length > 0,
   });
   const error = dialog.el.querySelector<HTMLElement>(".kd-error")!;
   const say = (text: string): void => { error.textContent = text; error.hidden = !text; };

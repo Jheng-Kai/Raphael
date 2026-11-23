@@ -42,11 +42,11 @@ class PrivateFiles:
         replaced a cancellation one run in fifteen and the files stayed)."""
         for _ in range(40):
             try:
-                self._directory.cleanup()
+                await asyncio.to_thread(self._directory.cleanup)
                 return
             except PermissionError:
                 await asyncio.sleep(.05)
-        shutil.rmtree(self.path, ignore_errors=True)
+        await asyncio.to_thread(shutil.rmtree, self.path, ignore_errors=True)
         logger.warning("Could not remove a CLI run's private files at once")
 
 
@@ -147,6 +147,26 @@ class _WindowsJob:
         if not self._kill_on_close(False):
             raise OSError("job_release")
         self.close()
+
+    def empty(self):
+        import ctypes as c
+        from ctypes import wintypes as w
+
+        class Accounting(c.Structure):
+            _fields_ = [("times", c.c_longlong * 4), ("page_faults", w.DWORD),
+                        ("total", w.DWORD), ("active", w.DWORD), ("terminated", w.DWORD)]
+
+        query = self.kernel.QueryInformationJobObject
+        query.argtypes = [w.HANDLE, c.c_int, c.c_void_p, w.DWORD, c.c_void_p]
+        info = Accounting()
+        return bool(query(self.handle, 1, c.byref(info), c.sizeof(info), None) and not info.active)
+
+    def terminate(self):
+        from ctypes import wintypes as w
+
+        terminate = self.kernel.TerminateJobObject
+        terminate.argtypes = [w.HANDLE, w.UINT]
+        terminate(self.handle, 1)
 
     def close(self):
         if self.handle:

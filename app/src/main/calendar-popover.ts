@@ -10,7 +10,7 @@ import { linkedText } from "./message-content";
 import { ownerFaceHTML } from "./owner-avatar";
 import { dateKey, localDay, openDatePicker } from "./schedule-picker";
 import type { RoutineRun } from "./types";
-import { actionRow, btn, closeMenu, esc, ico, iconButton, openMenu, sel, tg, toaster, type Choice } from "./ui";
+import { actionRow, btn, closeMenu, esc, headerCloseButton, ico, iconButton, openMenu, sel, tg, toaster, type Choice } from "./ui";
 
 /** An event as the editor holds it. No id: one that is being made. */
 export interface EventDraft { id?: number; title: string; start: number; end: number; allDay: boolean; notes: string }
@@ -41,7 +41,7 @@ export function besidePlacement(
   return { left: x, top: Math.max(viewport.top + gap, Math.min(anchor.top, lowest)) };
 }
 
-function openPanel(rect: Pick<DOMRect, "left" | "right" | "top">, cls: string, label: string, o: { canClose?(): boolean; onClose?(): void } = {}): Panel {
+function openPanel(rect: Pick<DOMRect, "left" | "right" | "top">, cls: string, label: string, o: { canClose?(): boolean; onClose?(): void; restore?(): () => void; parent?(): void } = {}): Panel {
   closePanel();
   closeMenu();
   const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -72,7 +72,7 @@ function openPanel(rect: Pick<DOMRect, "left" | "right" | "top">, cls: string, l
     if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); panel.close(); }
   };
   const stop = registerDismissal(el, () => panel.close(), () => o.canClose?.() ?? true, undefined,
-    direction => { if (direction === "back") panel.close(); return true; });
+    { restore: o.restore, back: o.parent ? () => { panel.close(); o.parent?.(); } : undefined });
   document.addEventListener("keydown", onKey, true);
   current = panel;
   place(panel, rect);
@@ -104,6 +104,8 @@ export interface EditorOptions {
   /** The core has it. The panel closes when this is done, so that what it draws takes the placeholder's place. */
   onSaved(): void | Promise<void>;
   onClose?(): void;
+  reopen?(): void;
+  parent?(): void;
   /** Make it a routine instead: only for something new. */
   onRoutine?(draft: EventDraft): void;
 }
@@ -114,8 +116,9 @@ export function openEventEditor(rect: Pick<DOMRect, "left" | "right" | "top">, d
   let startDay = dateKey(new Date(draft.start)), startTime = clockOf(draft.start);
   // An all-day event is over at the midnight after its last date; the form shows that date.
   let endDay = dateKey(new Date(draft.allDay ? Math.max(draft.end - 1, draft.start) : draft.end)), endTime = clockOf(draft.end);
-  const first = { title, notes };
-  const editing = (): boolean => title !== first.title || notes !== first.notes;
+  const first = { title, notes, allDay, startDay, startTime, endDay, endTime };
+  const editing = (): boolean => title !== first.title || notes !== first.notes || allDay !== first.allDay
+    || startDay !== first.startDay || startTime !== first.startTime || endDay !== first.endDay || endTime !== first.endTime;
   const asDraft = (): EventDraft => ({
     ...(draft.id ? { id: draft.id } : {}), title, notes, allDay,
     start: allDay ? localDay(startDay).getTime() : momentOf(startDay, startTime),
@@ -171,7 +174,7 @@ export function openEventEditor(rect: Pick<DOMRect, "left" | "right" | "top">, d
     } catch (error) { toaster.info(describeError(error)); }
     finally { saving = false; }
   };
-  panel = openPanel(rect, "au-pop-editor", t(draft.id ? "cal.edit" : "auto.create"), { canClose: () => { read(); return !saving && !editing(); }, onClose: o.onClose });
+  panel = openPanel(rect, "au-pop-editor", t(draft.id ? "cal.edit" : "auto.create"), { canClose: () => { read(); return !saving && !editing(); }, onClose: o.onClose, parent: o.parent, restore: () => o.reopen ?? (() => { openEventEditor(rect, draft, o); }) });
   panel.el.innerHTML = body();
   place(panel, rect);
   panel.el.addEventListener("input", e => {
@@ -225,7 +228,7 @@ export function openEventDetail(rect: Pick<DOMRect, "left" | "right" | "top">, e
     : entry.kind === "routine"
       ? `${entry.member ? faceHTML(entry.member, 20) : ""}<span>${esc(t("cal.fromRoutine", { p0: entry.member?.name ?? "" }))}${entry.routine ? ` · ${routineSentenceHTML(entry.routine)}` : ""}</span>`
       : `${googleMark()}<span>${esc(t("cal.fromGoogle"))}</span>`;
-  const panel = openPanel(rect, "au-pop-detail", entry.title, { onClose: o.onClose });
+  const panel = openPanel(rect, "au-pop-detail", entry.title, { onClose: o.onClose, restore: () => () => { openEventDetail(rect, entry, o); } });
   const today = dateKey(o.today ?? new Date());
   const todayRuns = (entry.runs ?? []).filter(r=>dateKey(new Date(r.at))===today);
   const runsHTML = entry.rhythm ? `<div class="au-rhythm-runs" aria-label="${esc(t("auto.todayRuns"))}">${todayRuns.map(r=>{
@@ -234,11 +237,11 @@ export function openEventDetail(rect: Pick<DOMRect, "left" | "right" | "top">, e
     return btn(ico(icon)+`<time>${esc(formatClock(r.at))}</time>`,"sm",` data-rhythm-time="${r.at}" data-status="${status}" aria-label="${esc(formatClock(r.at)+" · "+label)}"${r.run?.turn_id ? "" : " disabled"}`);
   }).join("")}</div><p class="au-pop-time">${esc(t("auto.nextRun"))} · ${entry.routine?.next_run ? esc(whenDay(entry.routine.next_run)+" · "+formatClock(entry.routine.next_run)) : esc(t("auto.notYet"))}</p>` : "";
   panel.el.innerHTML =
-    `<header class="au-pop-tools">` +
+    `<header class="au-pop-tools"><h2>${esc(entry.title)}</h2>` +
     (o.onEdit ? iconButton("pencil", t("cal.edit"), ' data-pop="edit"') : "") +
     (o.onMore ? iconButton("more", t("members.more", { p0: entry.title }), ' data-pop="more" aria-haspopup="menu" aria-expanded="false"') : "") +
-    iconButton("x", t("common.close"), ' data-pop="close"') + `</header>` +
-    `<h2>${esc(entry.title)}</h2>${entry.rhythm && entry.routine ? "" : `<p class="au-pop-time">${esc(when)}</p>`}` +
+    headerCloseButton(t("common.close"), ' data-pop="close"') + `</header>` +
+    `${entry.rhythm && entry.routine ? "" : `<p class="au-pop-time">${esc(when)}</p>`}` +
     // Notes are read whole here, so an address in them is a link (the editor's field keeps them as words to type in).
     (entry.notes ? `<p class="au-pop-notes">${linkedText(entry.notes)}</p>` : "") +
     `<p class="au-pop-from">${from}</p>` +

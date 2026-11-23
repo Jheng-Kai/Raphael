@@ -1,8 +1,6 @@
 """ChatGPT plan inference through public Responses, in Raphael's own guarded tool loop."""
 
 import asyncio
-import base64
-import binascii
 import json
 import logging
 import time
@@ -79,63 +77,6 @@ class ChatGPTProvider:
             self._unlisted_efforts.add(model)
             logger.debug("ChatGPT reasoning metadata unavailable for %s; retaining backend default", model)
         return least
-
-    async def generate_image(self, *, model, prompt, square=False, timeout_s=240):
-        """Request one hosted image on this plan, without borrowing Codex or API credentials."""
-        from ...services.attachments import Attachment, MAX_IMAGE_BYTES, sniff_ok
-
-        token = await self.auth.access_token()
-        session = self.auth.session()
-        body = {"model": model, "input": [{"role": "user", "content": prompt}],
-                "instructions": "Generate exactly one image. Do not call other tools.",
-                "store": False, "stream": True, "tools": [{"type": "image_generation",
-                    "output_format": "png", **({"size": "1024x1024"} if square else {})}],
-                "tool_choice": {"type": "image_generation"}}
-        completed, output = None, []
-        try:
-            async with asyncio.timeout(timeout_s):
-                async with self.auth.http().stream("POST", RESOURCE + "/responses", json=body,
-                        headers={"Authorization": "Bearer " + token}, timeout=timeout_s,
-                        follow_redirects=False) as response:
-                    if not response.is_success:
-                        await response.aread()
-                        try:
-                            error = response.json()
-                        except ValueError:
-                            error = {}
-                        raise failure(response.status_code, error, response.headers.get("x-request-id"))
-                    async for packet in Packets(response, timeout_s, lambda packet: False):
-                        kind = packet.get("type")
-                        if kind in ("response.failed", "response.incomplete", "error"):
-                            raise failure(200, packet.get("response", packet))
-                        if kind == "response.output_item.done":
-                            output.append(packet["item"])
-                        elif kind == "response.completed":
-                            completed = packet["response"]
-            self.auth.check_session(session)
-            if not isinstance(completed, dict) or completed.get("status") != "completed":
-                raise OpenRouterError(200, "bad_response", "ChatGPT returned no completed image")
-            items = completed.get("output") or output
-            if any(part.get("type") == "refusal" for item in items if isinstance(item, dict)
-                   for part in item.get("content", []) if isinstance(part, dict)):
-                raise OpenRouterError(200, "content_policy", "ChatGPT declined the image")
-            images = [item for item in items if isinstance(item, dict) and item.get("type") == "image_generation_call"]
-            if len(images) != 1 or images[0].get("status") != "completed":
-                raise ValueError
-            encoded = images[0].get("result")
-            if not isinstance(encoded, str) or len(encoded) > 4 * ((MAX_IMAGE_BYTES + 2) // 3):
-                raise ValueError
-            raw = base64.b64decode(encoded, validate=True)
-            mime = next(mime for mime in ("image/png", "image/jpeg", "image/webp") if sniff_ok(mime, raw))
-            if len(raw) > MAX_IMAGE_BYTES:
-                raise ValueError
-            return Attachment("generated." + {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp"}[mime], mime, raw)
-        except (TimeoutError, httpx.TimeoutException):
-            raise OpenRouterError(0, "timeout", "ChatGPT image timed out") from None
-        except httpx.TransportError:
-            raise OpenRouterError(0, "network", "ChatGPT image was interrupted") from None
-        except (ValueError, TypeError, KeyError, StopIteration, binascii.Error):
-            raise OpenRouterError(200, "bad_response", "ChatGPT returned no valid image") from None
 
     async def models(self, timeout_s=5):
         token = await self.auth.access_token()

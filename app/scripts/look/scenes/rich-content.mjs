@@ -7,11 +7,16 @@ const zoomed = [{ action: "wheel", selector: ".diagram-dialog .diagram-stage", d
   { action: "pointer-drag", selector: ".diagram-dialog .diagram-stage", dx: -140, dy: -50 },
   { action: "pointer-drag", selector: ".diagram-dialog .diagram-stage", dx: 60, dy: 30, button: "right", expectMenuClosed: true }];
 const ready = [wait(table), scroll('.message-code:not(.message-diagram)'), wait('.message-code[data-highlighted="true"]'), scroll('.message-diagram'), wait(diagram), check("rich-content"), check("reply-measure")];
+const localPath = '.message-text code[data-message-path][role="link"]';
+const localPathReply = [member(1), wait(localPath), scroll(localPath)];
 const recovered = [wait('.thread a[data-url="https://example.com/reply"]'), wait('.thread .message-code[data-complete="false"]'), check("recovered-reply")];
 export default [
   scene("recovered-member-reply", "A member's stored malformed reply keeps its later links, list and code", [member(1), ...recovered], { richReply: "brokenReply" }),
   scene("recovered-room-reply", "A room shows the words of a stored malformed reply", [room(1), ...recovered], { richReply: "brokenReply" }),
   scene("team-file-reply", "A file of the team folder is a real button in the reply", [wait('[data-act="team-file-open"]')], { richReply: "teamFile" }),
+  scene("reply-local-path", "A member's checked local path looks like the other inline code at rest", [...localPathReply, check("reply-local-path")], { richReply: "clickablePaths" }),
+  scene("reply-local-path-hover", "A checked local path gains only a thin underline and a pointer", [...localPathReply, hover(localPath), check("reply-local-path-hover")], { richReply: "clickablePaths" }),
+  scene("reply-local-links", "Links written as [words](<D:\path>) or with a title read as words and a path, never raw markdown", [wait('.ra-scroll code')], { richReply: "localLinks" }),
   scene("rich-chief", "Chief reply has ordered rich cards outside text bubbles", [...ready, scroll(table)], { richReply: true }),
   scene("rich-member", "Member reply shares the same typed rich content", [member(1), ...ready, scroll(table)], { richReply: true }),
   scene("rich-room", "Group reply shares the same rich cards", [room(1), ...ready, scroll(table)], { richReply: true }),

@@ -5,7 +5,7 @@ import json
 import asyncio
 import re
 import sqlite3
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 from contextvars import ContextVar
 from functools import wraps
 from urllib.parse import urlsplit
@@ -14,7 +14,7 @@ from .steps import reason_of
 
 _ACTIVE = ContextVar("public_action", default=None)
 _PRIVATE = re.compile(r"password|passwd|token|secret|key|authorization|credential|cookie|login", re.I)
-_SENSITIVE = re.compile(r"(?:https?://|[\w.+-]+@[\w.-]+|(?:sk|ghp|gho|eyJ)[-_A-Za-z0-9]{8,}|[A-Za-z0-9_-]{24,}|password|token|secret|authorization|api.?key)", re.I)
+_SENSITIVE = re.compile(r"(?:https?://|(?<![\w.+-])[\w.+-]+@[\w.-]+|(?:sk|ghp|gho|eyJ)[-_A-Za-z0-9]{8,}|[A-Za-z0-9_-]{24,}|password|token|secret|authorization|api.?key)", re.I)
 _APPS = {"googlecalendar":"Google Calendar", "github":"GitHub", "gmail":"Gmail", "notion":"Notion", "slack":"Slack", "googledrive":"Google Drive"}
 _WORDS = with_ui_words({
     "en": {
@@ -172,19 +172,19 @@ def _targets(history, tool, arguments):
 
 
 @contextmanager
-def action_scope(history, turn_id, language, tool, arguments, *, server=None, changed=None):
+def action_scope(history, turn_id, language, tool, arguments, *, server=None, changed=None, words=None):
     if not turn_id or _ACTIVE.get() == (history._conn, turn_id):
         yield {}
         return
-    present, past = sentence(tool, _targets(history, tool, arguments), language, server=server)
+    present, past = words if words is not None else sentence(tool, _targets(history, tool, arguments), language, server=server)
     key = uuid4().hex
     result = {}
     def publish(state):
         try:
-            history.add_message(turn_id, "event", json.dumps({"type": "action", "id": key, "present": present, "past": past, "state": state, **result}, ensure_ascii=False))
+            saved = history.add_message(turn_id, "event", json.dumps({"type": "action", "id": key, "present": present, "past": past, "state": state, **result}, ensure_ascii=False), action=True)
         except sqlite3.Error:
             return
-        if changed and history.get(turn_id):
+        if changed and saved:
             changed()
     token = _ACTIVE.set((history._conn, turn_id))
     ending = "done"
@@ -207,12 +207,23 @@ def action_scope(history, turn_id, language, tool, arguments, *, server=None, ch
             _ACTIVE.reset(token)
 
 
+@asynccontextmanager
+async def observed_action(history, turn_id, language, tool, arguments, *, server=None, changed=None):
+    if not turn_id or _ACTIVE.get() == (history._conn, turn_id):
+        yield {}
+        return
+    args = _targets(history, tool, arguments)
+    words = await asyncio.to_thread(sentence, tool, args, language, server=server)
+    with action_scope(history, turn_id, language, tool, arguments, server=server, changed=changed, words=words) as status:
+        yield status
+
+
 def action_call(context):
     def decorate(function):
         @wraps(function)
         async def observed(*args, **kwargs):
             details = context(*args, **kwargs)
-            with (action_scope(**details) if isinstance(details, dict) else details) as status:
+            async with (observed_action(**details) if isinstance(details, dict) else details) as status:
                 result = await function(*args, **kwargs)
                 ok = getattr(result, "ok", True)
                 if status is not None:

@@ -43,31 +43,29 @@ describe("rendered look checks", () => {
     } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
   });
 
-  it("rejects split text edges, mismatched controls and centered location values", () => {
+  it("rejects split text edges and a second dropdown in the SSH editor", () => {
     const browser = new Window();
-    browser.document.body.innerHTML = '<div class="computer-location-popover"><p class="computer-location-purpose">Shared scope</p><div class="lbl"><div class="t">Computer location</div></div><button class="sel"><span>Local</span></button><label class="field"><input></label></div>';
-    let lineLeft = 100, fieldLeft = 100, fieldRight = 300, textInset = 13, textAlign = "left";
+    browser.document.body.innerHTML = '<div class="computer-location-popover"><p class="computer-location-purpose">Shared scope</p><div class="lbl"><div class="t">SSH alias</div></div><label class="field"><input></label></div>';
+    let lineLeft = 100, fieldLeft = 100;
     const rect = (left = 100, right = 300) => ({ left, right, width: right - left, height: 34 });
-    for (const element of browser.document.querySelectorAll("*")) { element.checkVisibility = () => true; element.getBoundingClientRect = () => element.matches('.field') ? rect(fieldLeft, fieldRight) : rect(); }
+    for (const element of browser.document.querySelectorAll("*")) { element.checkVisibility = () => true; element.getBoundingClientRect = () => element.matches('.field') ? rect(fieldLeft) : rect(); }
     browser.document.createRange = () => {
       let element;
-      return { selectNodeContents(node) { element = node; }, getClientRects: () => [rect(), rect(element.matches('.t') ? lineLeft : 100)], getBoundingClientRect: () => rect(100 + textInset) };
+      return { selectNodeContents(node) { element = node; }, getClientRects: () => [rect(), rect(element.matches('.t') ? lineLeft : 100)] };
     };
     vi.stubGlobal("document", browser.document);
-    vi.stubGlobal("getComputedStyle", () => ({ textAlign, borderLeftWidth: "1px", paddingLeft: "12px" }));
     try {
       expect(() => checkRendered("host-settings-layout")).not.toThrow();
       lineLeft = 118; expect(() => checkRendered("host-settings-layout")).toThrow("one left edge"); lineLeft = 100;
       fieldLeft = 102; expect(() => checkRendered("host-settings-layout")).toThrow("one left edge"); fieldLeft = 100;
-      fieldRight = 290; expect(() => checkRendered("host-settings-layout")).toThrow("right edge"); fieldRight = 300;
-      textAlign = "center"; expect(() => checkRendered("host-settings-layout")).toThrow("left-aligned"); textAlign = "left";
-      textInset = 50; expect(() => checkRendered("host-settings-layout")).toThrow("left-aligned");
+      browser.document.querySelector('.computer-location-popover').insertAdjacentHTML('beforeend', '<button class="sel">Local</button>');
+      expect(() => checkRendered("host-settings-layout")).toThrow("no second dropdown");
     } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
   });
   it("rejects words, a face or a recovery button drawn over an absent computer's wallpaper", () => {
     // An offline computer shows its wallpaper alone and the whole screen is the one press that starts it.
     const browser = new Window();
-    const markup = extra => `<header class="desktop-location-header"><button data-computer-location>This computer</button></header><section class="desktop-panel"><div class="desktop-screen"><img class="desktop-wallpaper"><div class="desktop-placeholder">${extra}</div><button data-desktop="enlarge"><span class="desktop-open-pill">Open</span></button></div></section>`;
+    const markup = extra => `<section class="desktop-panel"><header class="desktop-location-header"><button data-computer-choice>This computer</button></header><div class="desktop-screen"><img class="desktop-wallpaper"><div class="desktop-placeholder">${extra}</div><button data-desktop="enlarge"><span class="desktop-open-pill">Open</span></button></div></section>`;
     browser.__look = { calls: [] };
     const run = extra => {
       browser.document.body.innerHTML = markup(extra);
@@ -89,7 +87,7 @@ describe("rendered look checks", () => {
     } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
   });  it("accepts a typed host name as data while still rejecting untranslated controls", () => {
     const window = new Window();
-    window.document.body.innerHTML = '<button data-computer-location><span>studio-mini</span></button><button>Save</button>';
+    window.document.body.innerHTML = '<button data-computer-choice><span>虛擬機（studio-mini）</span></button><button>Save</button>';
     for (const element of window.document.querySelectorAll("*")) element.getBoundingClientRect = () => ({ x: 0, y: 0, left: 0, top: 0, right: 120, bottom: 32, width: 120, height: 32 });
     const scene = { fixture: {}, steps: [{ action: "type", selector: "#computer-ssh-alias", text: "studio-mini" }] };
     const result = auditDocument(window.document, { width: 1120, height: 900 }, [], sceneLatinNames(scene, "zh-TW", {}));
@@ -107,6 +105,93 @@ describe("rendered look checks", () => {
     expect(run("")).toHaveLength(1);
     // The row lit as one, the switch on its fill: what Connect Apps and the member settings page do.
     expect(run(".row:hover { background: #ededed; } .row > .btn.open:hover { background: transparent; }")).toHaveLength(0);
+  });
+  it("rejects a visible control to the right of a switch", () => {
+    const browser = new Window();
+    const { document: doc } = browser;
+    doc.body.innerHTML = '<div class="row"><div class="ctl"><button class="tg" role="switch"></button><button aria-label="Options"></button></div></div>';
+    const [toggle, other] = doc.querySelectorAll("button");
+    const rect = (left, top, width, height) => ({ left, right: left + width, top, bottom: top + height, width, height });
+    for (const node of doc.querySelectorAll("*")) node.getBoundingClientRect = () => rect(0, 0, 400, 100);
+    toggle.getBoundingClientRect = () => rect(160, 10, 40, 28);
+    let otherBox = rect(210, 6, 36, 36);
+    other.getBoundingClientRect = () => otherBox;
+    const violations = () => auditDocument(doc, { width: 720, height: 480 }).productRules.filter(item => item.rule === "R-UI-178");
+    try {
+      expect(violations()).toHaveLength(1);
+      other.hidden = true;
+      expect(violations()).toEqual([]);
+      other.hidden = false;
+      otherBox = rect(210, 48, 36, 36);
+      expect(violations()).toEqual([]);
+      otherBox = rect(110, 6, 36, 36);
+      expect(violations()).toEqual([]);
+    } finally { browser.happyDOM.abort(); }
+  });
+  it("keeps switch ordering within each row of a multi-column grid", () => {
+    const browser = new Window();
+    const { document: doc } = browser;
+    doc.body.innerHTML = '<div style="display:grid"><div data-row="app" style="display:flex"><button>App one</button><button class="tg" role="switch"></button></div><div data-row="app" style="display:flex"><button>App two</button><button class="tg" role="switch"></button></div></div>';
+    const rect = (left, width) => ({ left, right: left + width, top: 8, bottom: 44, width, height: 36 });
+    for (const node of doc.querySelectorAll("*")) node.getBoundingClientRect = () => rect(0, 720);
+    const [first, firstSwitch, second, secondSwitch] = doc.querySelectorAll("button");
+    first.getBoundingClientRect = () => rect(10, 220);
+    firstSwitch.getBoundingClientRect = () => rect(238, 38);
+    second.getBoundingClientRect = () => rect(370, 270);
+    secondSwitch.getBoundingClientRect = () => rect(648, 38);
+    const violations = () => auditDocument(doc, { width: 720, height: 480 }).productRules.filter(item => item.rule === "R-UI-178");
+    try {
+      expect(violations()).toEqual([]);
+      const more = doc.createElement("button");
+      more.textContent = "Options";
+      more.getBoundingClientRect = () => rect(284, 36);
+      firstSwitch.after(more);
+      expect(violations()).toHaveLength(1);
+    } finally { browser.happyDOM.abort(); }
+  });
+  it("rejects an unframed or misaligned header close and a bare close glyph", () => {
+    const browser = new Window();
+    const { document: doc } = browser;
+    doc.body.innerHTML = '<div role="dialog"><header><button class="back-button"></button><h2>Title</h2><button class="close-button"><svg></svg></button></header></div>';
+    const rect = (left, top, width, height) => ({ left, right: left + width, top, bottom: top + height, width, height });
+    for (const node of doc.querySelectorAll("*")) node.getBoundingClientRect = () => rect(0, 0, 400, 100);
+    const [back, close] = doc.querySelectorAll("button");
+    for (const button of [back, close]) {
+      button.style.boxShadow = "inset 0 0 0 1px rgb(0, 0, 0)";
+      button.style.borderTopLeftRadius = "999px";
+    }
+    back.getBoundingClientRect = () => rect(10, 10, 36, 36);
+    doc.querySelector("h2").getBoundingClientRect = () => rect(60, 16, 100, 24);
+    let top = 11;
+    close.getBoundingClientRect = () => rect(350, top, 36, 36);
+    const violations = () => auditDocument(doc, { width: 720, height: 480 }).productRules.filter(item => item.rule === "R-UI-179");
+    try {
+      expect(violations()).toEqual([]);
+      top = 12;
+      expect(violations().map(item => item.reason)).toContain("The header close and back differ in size, frame or vertical centre");
+      top = 10;
+      close.style.boxShadow = "inset 0 0 0 2px rgb(0, 0, 0)";
+      expect(violations().map(item => item.reason)).toContain("The header close and back differ in size, frame or vertical centre");
+      close.style.boxShadow = back.style.boxShadow;
+      back.remove();
+      const cardTitle = doc.createElement("b");
+      cardTitle.className = "card-title";
+      cardTitle.textContent = "Title";
+      cardTitle.getBoundingClientRect = () => rect(60, 16, 100, 24);
+      doc.querySelector("h2").replaceWith(cardTitle);
+      expect(violations()).toEqual([]);
+      top = 12;
+      expect(violations().map(item => item.reason)).toContain("The header close does not share the title's vertical centre");
+      top = 10;
+      close.style.boxShadow = "none";
+      expect(violations().map(item => item.reason)).toContain("The header close is missing its shared round button or frame");
+      close.remove();
+      const glyph = doc.createElement("span");
+      glyph.textContent = "×";
+      glyph.getBoundingClientRect = () => rect(350, 10, 36, 36);
+      doc.querySelector("header").append(glyph);
+      expect(violations().map(item => item.reason)).toContain("A bare close glyph stands in a dialog header");
+    } finally { browser.happyDOM.abort(); }
   });
   it("accepts the complete 1Password brand while still rejecting an untranslated Password label", () => {
     const window = new Window();
@@ -498,7 +583,7 @@ describe("rendered look checks", () => {
   });
   it("checks remote host settings without entering the computer panel contract", () => {
     const window = new Window();
-    window.document.body.innerHTML = '<input id="computer-ssh-alias" value="studio-mini"><button data-k="computer-host"></button>';
+    window.document.body.innerHTML = '<input id="computer-ssh-alias" value="studio-mini"><button data-computer-choice>虛擬機（studio-mini）</button>';
     for (const element of window.document.querySelectorAll('*')) element.getBoundingClientRect = () => ({ width: 100, height: 34 });
     window.__look = { calls: [{ method: 'settings.set', params: { key: 'computer_ssh_alias', value: 'studio-mini' } }] };
     vi.stubGlobal('document', window.document); vi.stubGlobal('window', window);
@@ -515,6 +600,22 @@ describe("rendered look checks", () => {
       window.document.querySelector('.diagram-view').innerHTML = '<svg></svg>';
       expect(() => checkRendered('rich-fallback')).toThrow('keeps source');
     } finally { vi.unstubAllGlobals(); window.happyDOM.abort(); }
+  });
+  it("allows a dialog close placed in its own column, and nothing more than that reach (R-UI-179)", () => {
+    const window = new Window();
+    window.document.body.innerHTML = '<div class="modal-body"><header class="set-head"><h1>一般</h1><button class="btn icon close-button" style="position:absolute"><svg></svg></button></header></div>';
+    const header = window.document.querySelector('header'), close = window.document.querySelector('.close-button');
+    for (const element of window.document.querySelectorAll('*')) element.getBoundingClientRect = () => ({ left: 10, top: 10, right: 310, bottom: 46, width: 300, height: 36 });
+    close.getBoundingClientRect = () => ({ left: 330, top: 10, right: 366, bottom: 46, width: 36, height: 36 });
+    Object.defineProperty(header, 'clientWidth', { value: 300 });
+    let scroll = 356;
+    Object.defineProperty(header, 'scrollWidth', { get: () => scroll });
+    const overflow = () => auditDocument(window.document, { width: 1120, height: 900 }, []).horizontalOverflow.elements.map(item => item.class);
+    try {
+      expect(overflow()).not.toContain('set-head');
+      scroll = 420;
+      expect(overflow()).toContain('set-head');
+    } finally { window.happyDOM.abort(); }
   });
   it("measures SVG overflow at its CSS container and allows only rich code's local horizontal scroll", () => {
     const window = new Window();
@@ -994,8 +1095,13 @@ describe("rendered look checks", () => {
     expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-16', 'R-UI-18']);
   });
   it("checks text frames and bare icon borders", () => {
-    const { audit } = productAudit('<button class="btn" style="border: none">Save</button><button class="btn icon" style="border: 1px solid red">X</button><button class="btn" style="border: 1px solid red">Cancel</button>');
+    const { audit } = productAudit('<button class="btn" style="border: none">Save</button><button class="btn icon" style="border: 1px solid red">X</button><button class="btn" style="border: 1px solid red">Cancel</button><p class="desktop-docker-setup">尚未安裝 Docker <button class="btn desktop-docker-help" data-docker-help style="border: none">請 Raphael 安裝</button></p>');
     expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-18', 'R-UI-18']);
+  });
+  it("allows frameless host browser tabs inside the tab strip", () => {
+    const { audit } = productAudit('<div class="host-browser-strip"><button class="btn host-browser-tab-button" style="border:0">Library</button></div>' +
+      '<button class="btn host-browser-tab-button" style="border:0">Save</button>');
+    expect(audit().productRules.filter(item => item.rule === 'R-UI-18').map(item => item.text)).toEqual(['Save']);
   });
   it("allows a quiet routine inspection link only inside its reply origin", () => {
     const { audit } = productAudit('<div class="chat-message"><div class="routine-origin"><button class="btn routine-run-link" data-act="open-routine" style="border:0">Sample routine</button></div></div><button class="btn routine-run-link" data-act="open-routine" style="border:0">Save</button>');

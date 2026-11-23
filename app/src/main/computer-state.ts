@@ -25,9 +25,9 @@ export function computerUpdateLine(state: DesktopState | undefined): string {
 
 /** A short header word agrees with the screen without repeating its explanation. */
 export function computerStateLabel(state: DesktopState | undefined): string {
-  const phase = state?.lifecycle ?? (state?.error === 'docker_stopped' || state?.error === 'remote_unavailable' || !state || ['absent', 'unavailable', 'incompatible'].includes(state.state) || state.state === 'missing' && state.image === false ? 'unavailable'
+  const phase = state?.lifecycle ?? (state?.error || !state || ['absent', 'unavailable', 'incompatible'].includes(state.state) || state.state === 'missing' && state.image === false ? 'idle'
     : state.state === 'stopped' || state.state === 'missing' ? 'sleeping'
     : state.state === 'building' ? 'updating'
     : state.state === 'starting' || state.state === 'preparing' ? 'starting' : 'running');
-  return t(({sleeping:'desktop.state.sleeping', starting:'desktop.state.starting', waking:'desktop.state.waking', updating:'desktop.state.updating', repairing:'desktop.state.repairing', unavailable:'desktop.state.unavailable', running:'desktop.state.running'} as const)[phase]);
+  return t(({sleeping:'desktop.state.sleeping', starting:'desktop.state.starting', waking:'desktop.state.waking', updating:'desktop.state.updating', repairing:'desktop.state.repairing', idle:'memberComputer.idle', running:'desktop.state.running'} as const)[phase]);
 }

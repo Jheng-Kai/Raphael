@@ -13,7 +13,7 @@
 // What the core cannot answer (a core from before the members, or one that is starting again)
 // leaves Raphael alone in the column: the page works as it did before.
 
-import { bindNavLayer, LayerViews } from "./nav-layers";
+import { bindNavLayer } from "./nav-layers";
 import * as api from "./api";
 import { settleAsks } from "./chat-ask";
 import { shortcut, openCommandPalette, type Command } from "./shortcuts";
@@ -154,11 +154,13 @@ export function createMembers(host: MembersHost): MembersShell {
   let viewingConversation: number | null | undefined;
   let refreshDue = 0;
   let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+  let panelOwned = false;
   let open = typeof innerWidth === "number" ? innerWidth >= DETAILS_COLUMN_MIN_PX : true;
   /** Whether the details panel was open when the settings page folded it away; null while the page is closed. */
   let panelBeforeSettings: boolean | null = null;
+  let panelOwnedBeforeSettings = false;
   /** The same for an open page (R-PAGE-08): whether the panel stood open and on which tab; null while no page is open. */
-  let panelBeforePage: { open: boolean; tab: DetailsTab } | null = null;
+  let panelBeforePage: { open: boolean; owned: boolean; tab: DetailsTab } | null = null;
   let stopLeaving: (() => void) | null = null;
   let panelRead = false;
   let refreshOnShow = false;
@@ -227,6 +229,7 @@ export function createMembers(host: MembersHost): MembersShell {
     update,
     refreshList: () => void load(),
     back: () => host.app.go("agent"),
+    reopen: () => host.app.go("agent", `member-settings:${current}`),
   });
 
   // The panel's left edge drags it wider or narrower, and dragged narrower than it can be it closes; the
@@ -441,25 +444,19 @@ export function createMembers(host: MembersHost): MembersShell {
     readCurrent();
   }
 
-  let stopPanelTabs: (() => void) | undefined;
   function bindPanelNavigation(): void {
-    const trail = new LayerViews<DetailsTab>("details");
-    const noteTab = (): void => trail.visit(details.el.dataset.detailsTab as DetailsTab);
-    details.el.addEventListener("member-panel-tab", noteTab);
-    stopPanelTabs = () => details.el.removeEventListener("member-panel-tab", noteTab);
     bindNavLayer(details.el, () => setDetails(false), {
-      // A column beside the conversation (wide windows) is part of the page however it was opened: back closes it only where
-      // it stands over the conversation, and walks its tabs either way.
-      active: () => open && (innerWidth < DETAILS_COLUMN_MIN_PX || trail.canStep("back") || trail.canStep("forward")),
-      step: direction => trail.step(direction, details.select),
-      side: () => open && currentRoomId() === null && getComputedStyle(details.el).position === "absolute",
-      place: true,
+      active: () => open && panelOwned && currentRoomId() === null && !settings.isOpen(),
+      restore: () => {
+        const tab = details.el.dataset.detailsTab as DetailsTab;
+        return () => { setDetails(true); details.select(tab); };
+      },
     });
   }
 
-  function setDetails(next: boolean, overview = false): void {
+  function setDetails(next: boolean, overview = false, owned = true): void {
+    if (next) panelOwned = owned;
     if (next === open) { if (next && overview) details.overview(); return; }
-    stopPanelTabs?.();
     open = next;
     host.onDetailsChange?.(open);
     const page = details.el.parentElement;
@@ -687,7 +684,7 @@ export function createMembers(host: MembersHost): MembersShell {
     // The settings page takes the room: the details panel folds away while it is open, at every width, and comes back
     // as it was when the page is left for the conversation.
     openSettings() {
-      if (!settings.isOpen()) panelBeforeSettings = open;
+      if (!settings.isOpen()) { panelBeforeSettings = open; panelOwnedBeforeSettings = panelOwned; }
       setDetails(false);
       settings.open();
     },
@@ -695,16 +692,16 @@ export function createMembers(host: MembersHost): MembersShell {
       const wasOpen = settings.isOpen(), restore = panelBeforeSettings;
       panelBeforeSettings = null;
       settings.close();
-      if (wasOpen && restore) setDetails(true);
+      if (wasOpen && restore) setDetails(true, false, panelOwnedBeforeSettings);
     },
     foldForPage() {
-      panelBeforePage ??= { open, tab: (details.el.dataset.detailsTab as DetailsTab | undefined) ?? 'details' };
+      panelBeforePage ??= { open, owned: panelOwned, tab: (details.el.dataset.detailsTab as DetailsTab | undefined) ?? 'details' };
       setDetails(false);
     },
     unfoldAfterPage() {
       const was = panelBeforePage;
       panelBeforePage = null;
-      if (was?.open && !open) { setDetails(true); details.select(was.tab); }
+      if (was?.open && !open) { setDetails(true, false, was.owned); details.select(was.tab); }
     },
     computer() { setDetails(true); details.select('computer'); },
     picker,

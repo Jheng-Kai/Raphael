@@ -156,8 +156,11 @@ async def test_creation_returns_while_its_own_brain_writes_hidden_greeting(setup
 async def test_greeting_includes_only_nonempty_memory_text(setup, client, monkeypatch, shared, own):
     from raphael_core.memory.store import MemorySnapshot
     rig, team = setup
-    monkeypatch.setattr(team.memory, 'snapshot', lambda member_id: MemorySnapshot(
-        shared=shared, own=own, shared_usage='shared-usage-marker', own_usage='own-usage-marker'))
+
+    async def snapshot(member_id):
+        return MemorySnapshot(shared=shared, own=own, shared_usage='shared-usage-marker', own_usage='own-usage-marker')
+
+    monkeypatch.setattr(team.memory, 'snapshot_async', snapshot)
     client.chats = [live_said('I am Mia. What can I take off your plate?')]
     new = (await rig.call('members.create', {'name': 'Mia', 'greet': True}))['member']
     [turn] = await rig.turns(member_id=new['id'])

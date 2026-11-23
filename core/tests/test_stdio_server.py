@@ -741,3 +741,29 @@ async def test_loop_lag_rate_limit_reports_the_exact_skipped_count(monkeypatch, 
         await server._watch_loop_lag(0.25)
     logs = [record for record in caplog.records if record.msg.startswith('Event loop lag')]
     assert len(logs) == 2 and [record.args[1] for record in logs] == [0, 1]
+
+
+def test_a_stalled_loop_logs_the_blocking_stack(caplog, monkeypatch):
+    import time as _time
+    from raphael_core import stdio_server
+
+    monkeypatch.setattr(stdio_server, "STALL_SAMPLE_S", 0.2)
+
+    def block_the_loop_for_a_while():
+        _time.sleep(1.2)
+
+    async def main():
+        sampler = stdio_server._StallSampler()
+        watcher = stdio_server.threading.Thread(target=sampler.watch, daemon=True)
+        watcher.start()
+        try:
+            block_the_loop_for_a_while()
+        finally:
+            sampler.stopped.set()
+            watcher.join()
+
+    with caplog.at_level("WARNING", logger="raphael_core.stdio_server"):
+        asyncio.run(main())
+    stalls = [record.getMessage() for record in caplog.records if "Event loop stalled" in record.getMessage()]
+    assert len(stalls) == 1
+    assert "block_the_loop_for_a_while" in stalls[0]

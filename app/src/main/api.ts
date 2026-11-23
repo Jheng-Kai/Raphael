@@ -140,9 +140,9 @@ export const statusCheckOpenrouter = (): Promise<Status["openrouter"]> => core("
 /** After the owner refused the macOS Keychain: the next read that needs a key asks once more (R-PRIV-KEYCHAIN-01). */
 export const keychainAskAgain = (): Promise<{ refused: boolean }> => core("keychain.ask_again");
 
-export const desktopStatus = (member_id: number, conversation_id?: number): Promise<DesktopState> => core("computer.viewer_status", { member_id, conversation_id });
+export const desktopStatus = (member_id: number, conversation_id?: number, transport?: "host" | "docker"): Promise<DesktopState> => core("computer.viewer_status", { member_id, conversation_id, transport });
 export const desktopWallpaper = (): Promise<{ image?: string }> => core("computer.wallpaper");
-export const desktopOpen = (member_id: number, options?: { conversation_id?: number; preview?: boolean }): Promise<DesktopSession> => core("computer.viewer_open", { member_id, ...options });
+export const desktopOpen = (member_id: number, options?: { conversation_id?: number; preview?: boolean; transport?: "host"; target_id?: string }): Promise<DesktopSession> => core("computer.viewer_open", { member_id, ...options });
 export const desktopRenew = (session: string): Promise<DesktopState> => core("computer.viewer_renew", { session });
 export const desktopControl = (session: string, held: boolean, takeover?: string): Promise<DesktopState> => core("computer.viewer_control", { session, held, takeover });
 export const desktopClose = (session: string): Promise<unknown> => core("computer.viewer_close", { session });
@@ -662,6 +662,10 @@ export const attachmentSource = async (id: string): Promise<string> => convertFi
 export interface UpdateView { state: "idle" | "checking" | "found" | "downloading" | "ready" | "waiting" | "installing" | "error"; version: string; notes: string; error: string; installed?: string; }
 export const updateControl = (action: "status" | "receipt" | "check" | "install" | "cancel"): Promise<UpdateView> => invoke("update_control", { action });
 export const openTeamFile = (path: string): Promise<void> => invoke("open_team_file", { path });
+export const checkMessagePaths = (member_id: number, paths: string[]): Promise<{ allowed: string[] }> =>
+  core("computer.message_paths", { member_id, paths });
+export const openMessagePath = (memberId: number, path: string): Promise<void> =>
+  invoke("open_team_file", { memberId, path });
 /** Opens a file a member delivered, by the handle its Library gave (`members.library_file`, checked by the core). */
 export const openLibraryFile = (memberId: number, id: string): Promise<void> => invoke("open_library_file", { memberId, id });
 

@@ -101,10 +101,59 @@ def cli_available(installed, logged_in, disconnected=False):
     return bool(installed) and logged_in is True and not bool(disconnected)
 
 
+WINDOWS_LAUNCHERS = (".exe", ".bat", ".cmd", ".ps1")
+
+
+def _windows_path(path):
+    return [folder for part in path.split(";") if (folder := Path(part.strip().strip('"'))).is_absolute()]
+
+
+def _windows_node(path):
+    return next((str(folder / "node.exe") for folder in _windows_path(path) if (folder / "node.exe").is_file()), None)
+
+
+def _registered_windows_node():
+    """Find Node in the configured Windows PATH if the desktop inherited an older one."""
+    import winreg
+
+    for hive, location in ((winreg.HKEY_CURRENT_USER, "Environment"),
+                           (winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment")):
+        try:
+            with winreg.OpenKey(hive, location) as key:
+                path, kind = winreg.QueryValueEx(key, "Path")
+            if kind == winreg.REG_EXPAND_SZ:
+                path = winreg.ExpandEnvironmentStrings(path)
+        except OSError:
+            continue
+        if isinstance(path, str) and (node := _windows_node(path)):
+            return node
+    return None
+
+
+def _suffixes(environ):
+    if sys.platform != "win32":
+        return (".exe", ".cmd", ".ps1", "")
+    # npm also installs an extensionless POSIX script, which Windows cannot launch.
+    listed = environ.get("PATHEXT", "").lower().split(";")
+    return [suffix for suffix in dict.fromkeys((*listed, *WINDOWS_LAUNCHERS)) if suffix in WINDOWS_LAUNCHERS]
+
+
+def _path_candidates(executable, environ):
+    """The command's places on PATH, the one lookup discovery makes outside its own known folders."""
+    path_value = environ.get("PATH", "")
+    if sys.platform == "win32":
+        return [folder / (executable + suffix) for folder in _windows_path(path_value) for suffix in _suffixes(environ)]
+    found = shutil.which(executable, path=path_value)
+    return [Path(found)] if found else []
+
+
 def resolve_command(path, environ=None):
     path = Path(path).resolve()
     environ = os.environ if environ is None else environ
-    if path.suffix.lower() not in (".cmd", ".ps1", ".bat"):
+    suffix = path.suffix.lower()
+    if sys.platform == "win32" and suffix not in WINDOWS_LAUNCHERS:
+        raise ValueError("unsupported_launcher")
+    if suffix not in (".cmd", ".ps1", ".bat"):
         return [str(path)]
     # Only recognize npm's quoted JavaScript entry point; never execute shim text.
     text = path.read_text(encoding="utf-8-sig")
@@ -115,7 +164,13 @@ def resolve_command(path, environ=None):
     if not entry.is_file() or not entry.is_relative_to(path.parent):
         raise ValueError("unsupported_shim")
     node = path.parent / "node.exe"
-    found = str(node) if node.is_file() else shutil.which("node", path=environ.get("PATH", ""))
+    path_value = environ.get("PATH", "")
+    if node.is_file():
+        found = str(node)
+    elif sys.platform == "win32":
+        found = _windows_node(path_value) or _registered_windows_node()
+    else:
+        found = shutil.which("node", path=path_value)
     if not found:
         raise ValueError("node_missing")
     return [found, str(entry)]
@@ -188,7 +243,6 @@ class CliBrains:
         if self.commands is not None:
             return self.commands.get(name)
         executable = EXECUTABLE.get(name, name)
-        found = shutil.which(executable, path=self.environ.get("PATH", ""))
         roots = [self.home / ".local" / "bin", self.home / ".bun" / "bin"]
         if sys.platform == "darwin":
             # An app opened from Finder has none of the shell's PATH: the places Homebrew, npm, Volta
@@ -201,8 +255,8 @@ class CliBrains:
             local = Path(self.environ["LOCALAPPDATA"])
             roots.extend([local / "Microsoft" / "WinGet" / "Links", local / "Programs" / executable,
                           local / "Programs" / "Claude", local / "npm", local / "agy" / "bin"])
-        candidates = [Path(found)] if found else []
-        candidates.extend(root / (executable + suffix) for root in roots for suffix in (".exe", ".cmd", ".ps1", ""))
+        candidates = _path_candidates(executable, self.environ)
+        candidates.extend(root / (executable + suffix) for root in roots for suffix in _suffixes(self.environ))
         for path in candidates:
             if path.is_file():
                 try:
@@ -372,10 +426,10 @@ class CliBrains:
 
     async def _one(self, name):
         command = await asyncio.to_thread(self.command, name)
-        logged_in = self.logged_in(name) if command else False
+        logged_in = await asyncio.to_thread(self.logged_in, name) if command else False
         disconnected = self.disconnected(name)
         available = cli_available(command, logged_in, disconnected)
-        models = self._known_models(name) if available else []
+        models = await asyncio.to_thread(self._known_models, name) if available else []
         item = {"id": name, "name": NAMES[name], "installed": bool(command),
                 "logged_in": logged_in, "disconnected": disconnected, "available": available,
                 "login_command": LOGIN[name], "models": models,

@@ -3,6 +3,7 @@
 // the core wrote goes through `esc` first.
 
 import { onLocaleChange, t, translatedMessage } from "./i18n";
+import type { LayerNavigation } from "./nav-layers";
 import { pressWentThrough, pressWithoutOpener, registerDismissal } from "./dismissals";
 
 import { type Notifier, UNDO_MS } from "./undo";
@@ -253,6 +254,10 @@ export const iconButton = (name: IconName, label: string, attrs = "", cls = ""):
 export const backButton = (label: string, attrs = "", cls = ""): string =>
   iconButton("left", label, ' data-nav-back' + attrs, "back-button" + (cls ? " " + cls : ""));
 
+/** The matching round close control in a page or dialog header. */
+export const headerCloseButton = (label: string, attrs = "", cls = ""): string =>
+  iconButton("x", label, attrs, "close-button" + (cls ? " " + cls : ""));
+
 /** The filled primary send glyph shares the icon source with the line drawings. */
 export const sendGlyph = (): string => `<svg class="cmp-plane" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.4 20.4 20.85 12.92a1 1 0 0 0 0-1.84L3.4 3.6a1 1 0 0 0-1.39.91L2 9.12c0 .5.37.93.87.99L17 12 2.87 13.88c-.5.07-.87.5-.87 1l.01 4.61c0 .71.73 1.2 1.39.91Z"/></svg>`;
 
@@ -394,7 +399,6 @@ interface MenuState {
   stopHover?: () => void;
   completion?: (choices: Choice[], pick: (value: string) => void, anchorRect?: () => DOMRect) => void;
   completionRect?: DOMRect;
-  reopen?: HTMLElement;
 }
 let menu: MenuState | null = null;
 let menuListening = false;
@@ -713,6 +717,7 @@ function listenForSubmenus(state: MenuState): void {
 }
 
 export interface PopoverOptions {
+  navigation?: LayerNavigation;
   /** Beside preserves its parent menu; start aligns text completions above their character; right stands on the anchor's right, ending where it ends; middle stands in the middle of the window, whatever the anchor. */
   placement?: "beside" | "start" | "above" | "center" | "right" | "middle";
   /** A live text/caret rectangle; the field remains the dismissal and focus anchor. */
@@ -745,7 +750,6 @@ export function openPopover(anchor: HTMLElement, html: string, o: PopoverOptions
   const rect = at ? pointRect(at) : (parentRect ? { top: rowRect.top, bottom: rowRect.bottom, height: rowRect.height,
     left: parentRect.left, right: parentRect.right, width: parentRect.width } as DOMRect : previous ?? rowRect);
   if (parent) {
-    parent.reopen = undefined;
     while (menu && menu !== parent) closeMenuLevel();
   }
   if (!parent) closeMenu();
@@ -768,16 +772,8 @@ export function openPopover(anchor: HTMLElement, html: string, o: PopoverOptions
     }
     : () => { const root = menuRootAnchor(); closeMenu(); if (!pressWentThrough()) root?.focus({ preventScroll: true }); };
   menu = { el, anchor, rect, parent, placement: at ? "pointer" : o.placement, anchorRect: at ? () => pointRect(at) : o.anchorRect, at,
-    stopOutside: registerDismissal(el, dismiss, undefined, parent?.el ?? anchor, direction => {
-      if (direction === "back" && parent) {
-        dismiss();
-        parent.reopen = anchor;
-        anchor.focus({ preventScroll: true });
-        return true;
-      }
-      if (direction === "forward" && menu?.reopen?.isConnected) menu.reopen.click();
-      return false;
-    }), onKey: o.onKey, onClose: o.onClose };
+    stopOutside: registerDismissal(el, dismiss, undefined, parent?.el ?? anchor,
+      o.navigation ?? { step: direction => direction === "forward" }), onKey: o.onKey, onClose: o.onClose };
   anchor.setAttribute("aria-expanded", "true");
   anchor.setAttribute("aria-controls", el.id);
   if (!o.deferPlacement) placeMenu();
@@ -795,7 +791,8 @@ export function openConfirmMenu(anchor: HTMLElement, o: { label: string; ask: st
   const el = openPopover(
     anchor,
     `<button type="button" role="menuitem" class="danger" tabindex="-1" data-confirm-item><span class="ck">${ico("trash")}</span><span class="mt">${esc(o.label)}</span></button>`,
-    { className: "menu mb-menu", role: "menu", label: anchor.getAttribute("aria-label") ?? undefined, onClose: () => clearTimeout(timer) },
+    { className: "menu mb-menu", role: "menu", label: anchor.getAttribute("aria-label") ?? undefined,
+      navigation: { step: direction => asking || direction === "forward" }, onClose: () => clearTimeout(timer) },
   );
   const item = el.querySelector<HTMLElement>("[data-confirm-item]")!;
   const say = (text: string): void => {
@@ -1145,7 +1142,7 @@ export const CHECK = `<svg viewBox="0 0 24 24" aria-hidden="true">${ICON.check}<
 /** How long a short note stays: a little more time for a longer one, which has to be read. */
 const infoMs = (message: string): number => Math.min(8000, 2000 + 100 * message.length);
 
-/** The toasts at the bottom of the window: short notes, and the ones with 「復原」. */
+/** The toasts at the composer's top right corner: short notes, and the ones with 「復原」. */
 class Toaster implements Notifier {
   private host: HTMLElement | null = null;
   private undoToast: HTMLElement | null = null;
@@ -1168,20 +1165,38 @@ class Toaster implements Notifier {
       this.host.className = "toasts";
       document.body.append(this.host);
     }
-    this.lift(this.host);
+    this.place(this.host);
+    this.follow();
     return this.host;
   }
 
+  private frame = 0;
+
   /**
-   * A conversation's composer grows with its attachments, its quote and its draft, and a note that stands a fixed height above the
-   * window's foot then lay over its attachments. The note stands over the composer's top edge,
-   * wherever that is; styles.css keeps its usual height as the least.
+   * Every note stands at the composer's top right corner, whatever the window shows around it: never over the sidebar or a
+   * side panel. The composer grows with its attachments, its quote and its draft and moves when a panel opens, so the notes
+   * follow it while any is on screen. With no composer in view they keep the window's lower right corner (styles.css).
    */
-  private lift(host: HTMLElement): void {
-    const composers = [...document.querySelectorAll<HTMLElement>(".page-agent:not([hidden]) .composer")];
-    const top = composers.map(composer => composer.getBoundingClientRect()).find(box => box.width > 0 && box.height > 0)?.top;
-    if (top === undefined) host.style.removeProperty("--toast-lift");
-    else host.style.setProperty("--toast-lift", `${Math.max(0, Math.round(window.innerHeight - top + 12))}px`);
+  private place(host: HTMLElement): void {
+    const box = [...document.querySelectorAll<HTMLElement>(".page-agent:not([hidden]) .composer")]
+      .map(composer => composer.getBoundingClientRect()).find(rect => rect.width > 0 && rect.height > 0);
+    if (!box) {
+      for (const name of ["right", "bottom", "--toast-max"]) host.style.removeProperty(name);
+      return;
+    }
+    host.style.right = `${Math.max(8, Math.round(window.innerWidth - box.right))}px`;
+    host.style.bottom = `${Math.max(8, Math.round(window.innerHeight - box.top + 8))}px`;
+    host.style.setProperty("--toast-max", `${Math.round(box.width)}px`);
+  }
+
+  private follow(): void {
+    if (this.frame) return;
+    const tick = (): void => {
+      if (!this.host?.isConnected || !this.host.childElementCount) { this.frame = 0; return; }
+      this.place(this.host);
+      this.frame = requestAnimationFrame(tick);
+    };
+    this.frame = requestAnimationFrame(tick);
   }
 
   /**

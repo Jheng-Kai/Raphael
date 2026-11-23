@@ -1004,9 +1004,9 @@ activity labels remain the fallback.
 ## Member media
 
 The shared image_generate/video_generate tools use only the owner's explicit image_model
-and video_model settings. Both default unset: discovery is not consent. These separate
-paid API models are independent of every member's conversational brain, including CLI
-subscriptions; changing a brain changes neither setting. The owner chooses in existing
+and video_model settings. Both default unset: discovery is not consent. These media models are
+independent of every member's conversational brain; changing a brain changes neither
+setting. The owner chooses in existing
 Settings > Models rows, with provider, per-image/per-request/token pricing when
 known and an explicit API-charge note. Image-only catalog entries remain selectable.
 No compatible discovered video model is shown as none available, never invented.
@@ -1036,9 +1036,11 @@ external design acceptance.
 
 `media-models-codex` (fixture `mediaCodex`) opens the drawing-model picker with the core's own Codex subscription model beside OpenRouter and asserts
 OpenAI's mark (R-UI-123) in the source list, the head of its models and its row, the same drawing in all three, no plug or robot, and 「Codex 訂閱」 said
-in the window's language; `media-models-menu` asserts OpenRouter's own mark in the same list. Other subscription tools (Claude Code, Antigravity) are
+in the window's language. With a signed-in ChatGPT account, the same scene checks one quiet note under Subscriptions, above API, with no ChatGPT drawing source.
+The ChatGPT plan's [OAuth route](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations) does not support the hosted image tool.
+`media-models-menu` asserts OpenRouter's own mark and the absence of the note while signed out. Other subscription tools (Claude Code, Antigravity) are
 covered by the unit case that every tool in `CLIS` resolves to its maker's mark under its id and its lowercased name; their sources appear in the
-answer picker only. Not covered: a live Codex login.
+answer picker only. Core tests cover the Windows launcher order and login-status diagnostics, including a ChatGPT login with no credential file. Live Codex drawing is a separate check.
 
 `price-parts` (R-MODEL-06) runs in `media-models-unset`, `media-models-set` and `media-models-menu` (and in `models`, `quick-model-menu` and `model-choices-*`):
 a price is parts joined by 「 · 」 and no part is broken across lines while a line of its row could hold it, measured from the client rects of each part's own
@@ -1377,16 +1379,19 @@ formal request naming the quick one. The quick model and effort answer quick tur
 turns keep no native session, and each turn records the model that actually answered (Raphael's
 face tooltip). A request replaces only the YES/NO questions waiting in its own conversation, so
 quick use leaves a formal approval waiting and adds no formal rows. A spoken answer with public
-progress has no reply message: the thread shows its text after the work line. A quick question is the one
+progress has no reply message: the thread shows its text after the work line. Once speech recognition returns words,
+the core records the spoken question as running and announces it with `agent.turn`. The quick conversation replaces
+the recognition placeholder with the question and its live presence while the answer is pending (R-AG-06). A quick question is the one
 turn that reaches the owner's own screen (R-PC-01): the fast router, the commands to open, lock or
 copy and the desktop run are its alone, and a spoken or typed turn of a formal conversation goes to the
 narrated harness with none of them; the hidden local commands are every turn's, with the card (R-PC-02).
 
 ```powershell
-npm run look -- quick-question-result quick-formal-isolation quick-stop quick-model-selection --theme both --width 1120,720,1920x1080
+npm run look -- composer-stop-voice quick-question-result quick-formal-isolation quick-stop quick-model-selection --theme both --width 1120,720,1920x1080
 ```
 
-`quick-question-result` announces an Alt+Space answer through the native `AgentTurn` event while
+`composer-stop-voice` opens quick during recognition, announces a running turn, and checks the question, live presence,
+and disappearance of the recognition placeholder. `quick-question-result` announces an Alt+Space answer through the native `AgentTurn` event while
 the quick conversation is open and checks its answer and quick model. `quick-formal-isolation`
 sends one formal and one quick question through the real composer and checks the destination
 each names at the native boundary and that neither thread shows the other. `quick-stop` presses
@@ -1452,10 +1457,9 @@ with the hand-off line: it pauses and the turn shows 電腦 · 你正在控制 w
 watch on the owner's input are down) and asks the shell for no look, step or key, and the owner's own input ends
 nothing. 我完成了 (`integrations.card_done`) answers at once and gives the computer back, once: the run looks at the
 windows again, checks that the form is gone (once; when it is still there the card says 看起來還沒完成，請再試一次 and the
-computer stays the owner's), and carries on with the same task, repeating nothing. When the run ends the task
-resumes once in its thread, opening with 電腦 已交還控制，繼續原本的工作. 停止 (`integrations.card_stop`), Stop, a newer
+computer stays the owner's), and carries on with the same task, repeating nothing. When the run resumes in its thread, the card leaves and the member's messages remain. 停止 (`integrations.card_stop`), Stop, a newer
 computer task, the time (30 minutes) and closing end the run; a replayed 我完成了, the app closing or the core
-restarting (the card is 連線中斷) never resume it or give control back by themselves. Spoken, quick and room runs keep
+restarting (the stale card is gone) never resume it or give control back by themselves. Spoken, quick and room runs keep
 the hand-off line. A step that needs a yes after the owner gave the computer back asks in a permission card (below).
 
 ```powershell
@@ -2222,6 +2226,25 @@ consent and live model choice remain unverified; fixtures use fake transports.
 Routine event lines distinguish once, weekdays, daily, weekly and every in zh-TW,
 ja and en, including start_date, until and max_runs. Evidence:
 core/tests/agent/test_routine_event.py and core/tests/members/test_harness.py.
+
+## Local paths in member replies
+
+A checked local path is inline code in the conversation, with the same text, background and
+spacing as other code. Hover or keyboard focus adds a thin underline and a pointer. Keyboard
+focus also shows the shared focus ring. A path outside the member's workspace, the team files,
+the output folder and the folders assigned to that member stays plain code. The core resolves
+links and parent components before deciding, and checks the current roots again on press.
+A readable regular file opens through the existing native opener. Folders and other file types
+are selected in the file manager. A missing file gives a quiet notice.
+
+```powershell
+npm run look -- reply-local-path reply-local-path-hover --theme both --width 1120,720,1920x1080
+```
+
+Compare each scene's checked path against the outside path in the same reply. The browser
+fixture covers appearance, hover and the main-window check. The operating system's file
+association and file manager selection require a native press.
+
 ## Existing composer and file consumers (feature-map sync)
 
 A link in the composer is drawn in the link colour but stays words (R-UI-168): `composer-link-edit` pastes one, presses
@@ -2235,7 +2258,7 @@ set by `bindComposerRow` on a press or a key, cleared when the focus leaves).
 ```powershell
 npm run look -- composer-opened-calm composer-engaged composer-long-link composer-long-link-sent composer-link-edit room-long-link room-composer-files room-composer-drop-sign room-draft-picture-opened room-files-sent --theme both --width 1120,720,1920x1080
 npm run look -- empty-conversation-recording empty-conversation-hearing composer-voice-recording composer-voice-sent composer-stop-voice composer-stop-voice-result composer-stop-pending esc-recording-cancel composer-learn chat --theme both --width 1120,720,1920x1080
-npm run look -- team-file-reply rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-invalid rich-streaming rich-sequence rich-line-breaks rich-class rich-state rich-er rich-architecture rich-wide-table reply-split-bubbles conversation-chief-up conversation-member-up conversation-room-up long-owner long-owner-expanded long-room-messages chat --theme both --width 1120,720,1920x1080
+npm run look -- team-file-reply reply-local-links rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-invalid rich-streaming rich-sequence rich-line-breaks rich-class rich-state rich-er rich-architecture rich-wide-table reply-split-bubbles conversation-chief-up conversation-member-up conversation-room-up long-owner long-owner-expanded long-room-messages chat --theme both --width 1120,720,1920x1080
 ```
 
 Links: a link in the composer and in a sent message shows its whole address in the link colour (`--link`, blue), never a shortened name; the field's words are the address itself, so copy, cut and send give the same text. `composer-url-chip` requires the whole address, the link colour, a matching field and copy and no sideways overflow; `composer-link-sent` requires the whole address to go out with the words after it, and `room-link-sent` also requires the group's sent message to show the whole address in the link colour (the member conversation's mock does not echo the sent bubble; message-content.test.ts covers its HTML). A bubble that wears a member's colour keeps its own words colour for a link so that it reads (R-UI-81); a neutral bubble shows the link colour. The look driver's `clipboard-paste` does the browser's default insertion of pasted words when no page code took the paste.
@@ -3301,12 +3324,12 @@ stopped): the rules that made `.ans.progress` and the replies of a failed turn a
 The look check `message-text-colour` measures the real messages on screen and a message of each kind under a turn of each state drawn into
 the same thread, in both themes.
 
-A computer handoff the owner has settled folds to its title and one word naming what was done with the computer, 「已交回」 (or 「已略過」 when the owner skipped it
-and the work stopped), with no status pill, and its fold says 「電腦已交還。」 (or that the computer work stopped); never 「完成」
-and never the work's live state (R-COMP-HANDOFF-01, R-CARD-15). `computer-takeover-done` checks it after `card-computer-handback`.
+A computer handoff card exists only while the member waits for the owner. Done, Skip,
+expiry and other request endings remove it from the conversation. The remaining replies
+come from the member (R-COMP-HANDOFF-01, R-CARD-15).
 
 ```powershell
-npm run look -- message-text-colour chat card-computer-handback card-sheet --theme both --width 1120,720,1920x1080
+npm run look -- message-text-colour chat card-computer-handback chat-handback desktop-host-handback desktop-host-skip-idle card-sheet --theme both --width 1120,720,1920x1080
 ```
 
 ## The composer's row gives way, and its emblem stays sharp (R-UI-160, R-UI-161)

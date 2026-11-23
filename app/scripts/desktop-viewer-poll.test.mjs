@@ -57,10 +57,12 @@ test("a connected viewer only renews its captured lease while unchanged polls ba
   api.desktopStatus.mockResolvedValue(running);
   viewer.show(); await flush();
   const frame = host.querySelector("iframe");
-  window.dispatchEvent(new MessageEvent("message", {
-    source: frame.contentWindow, origin: "http://127.0.0.1:5000",
-    data: { type: "raphael-desktop", state: "connected" },
-  }));
+  for (const state of ["connected", "painted"]) {
+    window.dispatchEvent(new MessageEvent("message", {
+      source: frame.contentWindow, origin: "http://127.0.0.1:5000",
+      data: { type: "raphael-desktop", state },
+    }));
+  }
   await advance(24000);
   expect(api.desktopStatus).toHaveBeenCalledTimes(1);
   expect(api.desktopRenew).toHaveBeenCalledTimes(4);

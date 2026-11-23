@@ -258,10 +258,10 @@ describe("the tabs", () => {
         expect(html).not.toContain("set-purpose");
         // Connections' Add stands beside its search, clear of the dialog's ✕.
         if (id === "connections") expect(html).toMatch(/<div class="cs-bar">.*?<\/div><button type="button" class="sel cs-add"[^>]*data-k="conn-add"/s);
-        // No tab has a button beside its name: 用量 is read again by each opening of Settings, not by a refresh.
-        // (Connections' name stands in the first row of its one view, where its chip of the connected apps comes after it.)
-        expect(html.startsWith(id === "connections" ? `<div class="cs cs-apps"><div class="cs-top">${head}` : head)).toBe(true);
-        expect(html).not.toMatch(/set-head|models-refresh/);
+        const headerStart = id === "connections" ? '<div class="cs cs-apps"><header class="cs-top">' : '<header class="set-head">';
+        expect(html.startsWith(headerStart + head)).toBe(true);
+        expect(html).toMatch(/class="btn icon close-button modal-x"[^>]*data-k="settings-close"/);
+        expect(html).not.toContain("models-refresh");
         expect(html).not.toContain('class="purpose"');
       }
     }

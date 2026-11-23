@@ -111,7 +111,6 @@ from .schedule import Schedule, first_eligible_slot, next_run
 from .covers import Covers, selection as cover_selection
 from .store import (
     ROUTINE_RUN_STATUS_SQL,
-    COMPUTER_FIELDS,
     PROFILE_FIELDS,
     Group,
     Member,
@@ -366,13 +365,17 @@ class MembersService:
         """Keep every member's home as it should be, the built-in member's too: its SOUL.md, written from
         its details (the details pane is where the owner edits who it is, and the file is how it reads
         anywhere else), its skills' mirror and a MEMORY.md."""
-        homes = self.capabilities.homes
         for identifier in [0, *(member.id for member in self.store.members())]:
-            homes.soul(identifier, soul_document(self.speaker(identifier)))
-            self.capabilities._mirror(identifier)
-            if not (homes.home(identifier) / "MEMORY.md").exists():
-                homes.keep(identifier, "MEMORY.md", "")
-            homes.safe(homes.state(identifier) / "SOUL.md").unlink(missing_ok=True)  # the old JSON mirror
+            self._initialize_home(self.speaker(identifier))
+
+    def _initialize_home(self, speaker: Speaker, *, skills_mirrored=False) -> None:
+        homes = self.capabilities.homes
+        homes.soul(speaker.id, soul_document(speaker))
+        if not skills_mirrored:
+            self.capabilities._mirror(speaker.id)
+        if not (homes.home(speaker.id) / "MEMORY.md").exists():
+            homes.keep(speaker.id, "MEMORY.md", "")
+        homes.safe(homes.state(speaker.id) / "SOUL.md").unlink(missing_ok=True)  # the old JSON mirror
 
     def register(self, router: Router) -> None:
         self._management_rpc = router.call
@@ -476,10 +479,13 @@ class MembersService:
 
     def roster(self) -> list[Speaker]:
         """Public inventory never carries another member's private persona or brain."""
-        return [Speaker(id=speaker.id, name=speaker.name, role=speaker.role, blurb=speaker.blurb,
-                        capabilities=speaker.capabilities)
-                for identifier in [0, *(member.id for member in self.store.members())]
-                if (speaker := self.speaker(identifier)) is not None]
+        primary = self.primary_id()
+        first = self.first_bot_profile()
+        rows = [{"id": 0, **{field: first.get(field, "") for field in ("name", "role", "blurb")}}]
+        rows.extend(self._conn.execute("SELECT id,name,role,blurb FROM members ORDER BY pinned DESC,position,id"))
+        return [Speaker(id=row["id"], name=row["name"], role=row["role"], blurb=row["blurb"],
+                        capabilities=frozenset({"chief"}) if row["id"] == primary else frozenset())
+                for row in rows]
 
     def primary_id(self) -> int:
         """The owner's primary contact (0 for Raphael): the one place the roster, the window and the prompts read it from."""
@@ -503,6 +509,7 @@ class MembersService:
             name=name, role=role or "", instructions=instructions or "", group_id=group_id,
             personality=personality, model=self._starting_model(),
         )
+        self._initialize_home(member.speaker())
         self._changed()
         return member.speaker()
 
@@ -513,8 +520,6 @@ class MembersService:
 
     def _changed(self, method: str = "members.changed", member_id: int | None = None) -> None:
         """Announce committed data changes using identifiers only."""
-        if method == "members.changed":
-            self.sync_homes()
         if self._notify is not None:
             self._notify(method, {} if member_id is None else {"member_id": member_id})
 
@@ -704,7 +709,7 @@ class MembersService:
         last = latest.get(member.id)
         activity, activity_label = self.activity.describe(member.id, waiting, tasks=tasks)
         view: dict[str, Any] = {
-            **{field: getattr(member, field) for field in (*PROFILE_FIELDS, *COMPUTER_FIELDS)},
+            **{field: getattr(member, field) for field in PROFILE_FIELDS},
             "id": member.id,
             "chief": self.store.is_chief(member.id),
             "name": member.name,
@@ -743,7 +748,6 @@ class MembersService:
         view: dict[str, Any] = {
             "blurb": "", "reply_style": "full",
             "notify": self._settings.get("raphael_notify"), "ask_before_members": False, "pinned": self._chief_pinned(), "hidden": False, "draft_first": self._settings.get("raphael_draft_first"),
-            "computer_mode": self._settings.get("raphael_computer_mode"), "desktop_control": self._settings.get("raphael_desktop_control"),
             "id": 0,
             "chief": self.store.is_chief(0),
             "name": RAPHAEL_NAMES[language],
@@ -804,11 +808,20 @@ class MembersService:
     def resolve_slash(self, member_id: int, text: str, *, on_failure=None) -> tuple[str, bool]:
         return self.capabilities.resolve_slash(member_id, text, on_failure=on_failure)
 
+    async def resolve_slash_async(self, member_id, text, *, on_failure=None):
+        return await self.capabilities.resolve_slash_async(member_id, text, on_failure=on_failure)
+
     def enabled_skills(self, member_id: int) -> list[dict]:
         return [skill for skill in self.capabilities.skills(member_id) if skill["enabled"]]
 
+    def enabled_skill_summaries(self, member_id: int) -> list[dict]:
+        return [skill for skill in self.capabilities.skills(member_id, details=False) if skill["enabled"]]
+
     def native_skills(self, member_id: int) -> list[dict]:
         return self.capabilities.native_skills(member_id)
+
+    async def native_skills_async(self, member_id: int) -> list[dict]:
+        return await self.capabilities.native_skills_async(member_id)
 
     def learn_skill(self, member_id, args, turn_id=None, *, source="tool"):
         """A skill the member writes itself. Logged with its name and source only, so the app's log can count them."""
@@ -846,10 +859,19 @@ class MembersService:
         except (OSError, MemberError):
             return None
 
+    async def skill_read_async(self, member_id: int, name: object) -> str | None:
+        try:
+            return await self.capabilities.read_skill_async(member_id, name)
+        except (OSError, MemberError):
+            return None
+
     def skill_file(self, member_id: int, name: object, reference: object) -> str:
         """A file of an enabled skill's own folder, by its path there (`MemberCapabilities.read_skill_file`); MemberError
         says why it cannot be read."""
         return self.capabilities.read_skill_file(member_id, name, reference)
+
+    async def skill_file_async(self, member_id: int, name: object, reference: object) -> str:
+        return await self.capabilities.read_skill_file_async(member_id, name, reference)
 
     def _cap(self, method, *args):
         from ..bots.homes import HomeError
@@ -876,15 +898,15 @@ class MembersService:
         self._package_fields(params, ("member_id", "shared", "discover", "marketplace"))
         if "discover" in params and type(params["discover"]) is not bool:
             raise invalid_params("discover must be true or false")
-        result = {"skills": self._cap(self.capabilities.skills, member_id)}
-        result["sets"] = self._cap(self.capabilities.plugin_sets) if member_id == -1 or params.get("discover") is True else []
+        result = {"skills": await self.capabilities.detailed_skills(member_id)}
+        result["sets"] = await self.capabilities.plugin_sets_async() if member_id == -1 or params.get("discover") is True else []
         if params.get("discover") is True:
-            result["sources"] = self._cap(self.capabilities.plugin_sources)
+            result["sources"] = await asyncio.to_thread(self.capabilities.plugin_sources)
             result["marketplaces"] = [json.loads(row[0]) for row in self._conn.execute("SELECT catalog FROM skill_marketplaces ORDER BY repo")]
         if "marketplace" in params:
             try:
                 result["marketplace"] = await self.capabilities.add_marketplace(params["marketplace"])
-                result["sets"] = self.capabilities.plugin_sets()
+                result["sets"] = await self.capabilities.plugin_sets_async()
             except MemberError as error:
                 raise _rpc_error(error) from None
         if member_id != -1:
@@ -898,23 +920,38 @@ class MembersService:
         args = {k: v for k, v in params.items() if k not in ("shared", "member_id")}
         if member_id != -1 and set(args) == {"source"} and isinstance(args["source"], str) and args["source"].startswith("local:"):
             # Keep version discovery and reimport semantics of an installed private skill.
-            from .skill_library import location
-            self._cap(skill_sources.local_path, args["source"])
             try:
-                folder, _ = location(self.capabilities.skill_home, args["source"])
-            except MemberError:
-                folder = None
-            if folder and (folder / "SKILL.md").is_file():
-                skill = self._cap(self.capabilities.import_local, member_id, args["source"])
-                self._changed("members.skills.changed", member_id)
-                self._changed()
-                return {"skill": skill, "skills": [skill]}
+                snapshot = await self._private_local_skill(member_id, args["source"])
+                if snapshot is not None:
+                    self._changed("members.skills.changed", member_id)
+                    self._changed()
+                    return {"skill": snapshot, "skills": [snapshot]}
+            except MemberError as error:
+                raise _rpc_error(error) from None
+            except (OSError, UnicodeError) as error:
+                raise _rpc_error(MemberError("io", "could not read or keep skill files")) from error
         _, ids, plugin = await self._import_package(member_id, args)
         if plugin:
-            return {"set": plugin, "skills": self.capabilities.skills(-1)}
-        installed = {s["id"]: s for s in self.capabilities.skills(member_id)}
+            return {"set": plugin, "skills": await self.capabilities.detailed_skills(-1)}
+        installed = {s["id"]: s for s in await self.capabilities.detailed_skills(member_id)}
         skills = [installed[i] for i in ids]
         return {"skill": skills[0], "skills": skills}
+
+    async def _private_local_skill(self, member_id, source):
+        await asyncio.to_thread(skill_sources.local_path, source)
+        cap = self.capabilities
+        revision = cap.skill_revision()
+        skills = self._conn.execute("SELECT id,name,source FROM member_skills WHERE member_id=? AND source LIKE 'local:%' ORDER BY id",
+                                    (member_id,)).fetchall()
+        snapshot = await asyncio.to_thread(cap._local_import_snapshot, source, skills, cap.homes.home(member_id) / "skills")
+        if snapshot is None:
+            return None
+        if revision != cap.skill_revision():
+            raise MemberError("not_found", "the skill library changed during import")
+        files, local = snapshot
+        current = local["metadata"]["source"]
+        _, [identifier] = await self.packages.install(member_id, [(current, files)], current, "source", "", local=local)
+        return next(skill for skill in await cap.detailed_skills(member_id) if skill["id"] == identifier)
 
     @staticmethod
     def _package_fields(params, allowed):
@@ -923,11 +960,11 @@ class MembersService:
 
     async def _packages_list(self, params):
         self._package_fields(params, ())
-        return {"packages": self.packages.list(), "members": [{"id": m.id, "name": m.name} for m in self.store.members()]}
+        return {"packages": await self.packages.list_async(), "members": [{"id": m.id, "name": m.name} for m in self.store.members()]}
 
     async def _packages_import(self, params):
         key, _, _ = await self._import_package(-1, params, new_package=True)
-        return {"package": self.packages.view(key)}
+        return {"package": await self.packages.view_async(key)}
 
     async def _package_documents(self, params):
         if "text" in params:
@@ -936,13 +973,13 @@ class MembersService:
                 raise invalid_params("text must be Markdown")
             return [("paste", {"SKILL.md": text.encode()})], "pasted text", "paste", ""
         if "file" in params:
-            files, name = skill_sources.uploaded(params["file"])
+            files, name = await asyncio.to_thread(skill_sources.uploaded, params["file"])
             return [("upload", f) for f in files], name, "upload", name
         source = params["source"]
         if not isinstance(source, str) or not source.strip():
             raise invalid_params("source must be a nonempty string")
         if source.startswith("local:"):
-            files, name = skill_sources.local(source)
+            files, name = await asyncio.to_thread(skill_sources.local, source)
             return [(source, f) for f in files], source, "source", name
         documents = await download_skills(source)
         return documents, source, "source", source.rstrip("/").split("/")[-1]
@@ -972,12 +1009,12 @@ class MembersService:
                     marketplace=params.get("marketplace"), name=params.get("name"), access=params.get("access"),
                     require_new=new_package and identifier is None)
                 key = f"set:{plugin['id']}"
-                ids = [s["id"] for s in self.packages.view(key)["skills"]]
+                ids = [s["id"] for s in (await self.packages.view_async(key))["skills"]]
             else:
                 if sum(k in params for k in ("source", "text", "file")) != 1:
                     raise invalid_params("choose exactly one source, text or file")
                 data = await self._package_documents(params)
-                key, ids = self.packages.install(member, *data, access=params.get("access"), name=params.get("name"))
+                key, ids = await self.packages.install(member, *data, access=params.get("access"), name=params.get("name"))
         except MemberError as error:
             raise (_library_error if member == -1 else _rpc_error)(error) from None
         except (OSError, UnicodeError) as error:
@@ -989,7 +1026,11 @@ class MembersService:
     async def _packages_update(self, params):
         self._package_fields(params, ("key", "enabled", "access", "skill", "refresh"))
         key = params.get("key")
-        package = self._cap(self.packages.view, key)
+        revision = self.capabilities.skill_revision()
+        try:
+            package = await self.packages.view_async(key)
+        except MemberError as error:
+            raise _rpc_error(error) from None
         if len(params) < 2:
             raise invalid_params("give a package change")
         if "enabled" in params and type(params["enabled"]) is not bool:
@@ -1004,35 +1045,37 @@ class MembersService:
                     or type(skill["enabled"]) is not bool or skill["id"] not in {s["id"] for s in package["skills"]}):
                 raise invalid_params("give a skill in this package and its switch")
         try:
+            if revision != self.capabilities.skill_revision():
+                raise MemberError("not_found", "the skill library changed during update")
+            changes = {"access": params.get("access"), "enabled": params.get("enabled"), "skill": skill}
             if params.get("refresh"):
                 if not package["updatable"]:
                     raise MemberError("source", "this package has no available update source")
                 required = skill["id"] if skill else None
                 if key.startswith("set:"):
-                    await self.capabilities.import_plugin(set_id=int(key[4:]), access=params.get("access"), required_skill=required)
+                    await self.capabilities.import_plugin(set_id=int(key[4:]), required_skill=required, **changes)
                 else:
                     data = await self._package_documents({"source": package["source"]})
-                    self.packages.install(-1, *data, key=key, access=params.get("access"), required_skill=required)
-            with self._conn:
-                if "access" in params:
-                    self._conn.execute("UPDATE skill_packages SET access=? WHERE key=?", (json.dumps(params["access"]), key))
-                if "enabled" in params:
-                    self._conn.execute("UPDATE skill_packages SET enabled=? WHERE key=?", (params["enabled"], key))
-                if skill:
-                    self._conn.execute("UPDATE member_skills SET enabled=? WHERE id=? AND package_key=?",
-                                       (skill["enabled"], skill["id"], key))
+                    if revision != self.capabilities.skill_revision():
+                        raise MemberError("not_found", "the skill library changed during refresh")
+                    await self.packages.install(-1, *data, key=key, required_skill=required, **changes)
+            else:
+                with self._conn:
+                    self.packages.apply_changes(key, **changes)
         except MemberError as error:
             raise _library_error(error) from None
         except (OSError, UnicodeError) as error:
             raise _library_error(MemberError("io", "could not refresh skill files")) from error
         self._changed("members.skills.changed", 0)
         self._changed()
-        return {"package": self.packages.view(key)}
+        return {"package": await self.packages.view_async(key)}
 
     async def _packages_delete(self, params):
         self._package_fields(params, ("key",))
         try:
-            self._cap(self.packages.delete, params.get("key"))
+            await self.packages.delete_async(params.get("key"))
+        except MemberError as error:
+            raise _rpc_error(error) from None
         except OSError as error:
             raise _rpc_error(MemberError("io", "could not remove the skill files")) from error
         self._changed("members.skills.changed", 0)
@@ -1041,7 +1084,13 @@ class MembersService:
 
     async def _skills_read(self, params: dict) -> dict:
         """A skill and its whole document, for the owner's page of it (the model reads one by `skill_read`)."""
-        skill, text = self._cap(self.capabilities.document, self._skill_scope(params), _whole(params, "id", least=1))
+        from ..bots.homes import HomeError
+        try:
+            skill, text = await self.capabilities.document_async(self._skill_scope(params), _whole(params, "id", least=1))
+        except MemberError as error:
+            raise _rpc_error(error) from None
+        except HomeError as error:
+            raise invalid_params(str(error)) from None
         return {"skill": skill, "text": text}
 
     async def _skills_update(self, params: dict) -> dict:
@@ -1071,10 +1120,10 @@ class MembersService:
         if "set_id" in params:
             if member_id != -1:
                 raise invalid_params("plugin sets belong to the shared library")
-            deleted = self._cap(self.capabilities.delete_set, _whole(params, "set_id", least=1))
-            self._changed("members.skills.changed", 0)
-            self._changed()
-            return {"deleted": deleted}
+            identifier = _whole(params, "set_id", least=1)
+            if not self._conn.execute("SELECT 1 FROM skill_sets WHERE id=?", (identifier,)).fetchone():
+                return {"deleted": False}
+            return await self._packages_delete({"key": f"set:{identifier}"})
         identifier = _whole(params, "id", least=1)
         if member_id == -1:
             row = self._conn.execute("SELECT package_key FROM member_skills WHERE id=? AND member_id=-1", (identifier,)).fetchone()
@@ -1131,19 +1180,30 @@ class MembersService:
                 self.capabilities.save_command(copy.id, None, command["name"], command["description"], command["template"])
             # Its own skills only: the shared library's skills stay shared (#278), and the copy has them as the original
             # does, switched on or off for it the same way.
-            for skill in self.capabilities.owned_skills(member_id):
-                text = self.capabilities._path(member_id, skill["id"]).read_text(encoding="utf-8")
-                saved = self.capabilities.keep_skill(copy.id, skill["source"], text)
-                self.capabilities.update_skill(copy.id, saved["id"], skill["enabled"])
+            inputs = self.capabilities._owned_skill_inputs(member_id)
+            if inputs:
+                revision = self.capabilities.skill_revision()
+                documents = await asyncio.to_thread(self._copy_skill_documents, inputs)
+                if revision != self.capabilities.skill_revision():
+                    raise MemberError("not_found", "the member's skills changed during copy")
+                await self.packages.install(copy.id, documents, "member-copy", "copy", "",
+                                            skill_switches=[row["enabled"] for _, row, _, _ in inputs])
             self.capabilities.copy_package_access(member_id, copy.id)
-        except (MemberError, OSError) as error:
-            if copy is not None:
+            self._initialize_home(copy.speaker(), skills_mirrored=bool(inputs))
+        except (MemberError, OSError, asyncio.CancelledError) as error:
+            if copy is not None and self.store.exists(copy.id):
                 for skill in self.capabilities.owned_skills(copy.id):
                     self.capabilities.delete_skill(copy.id, skill["id"])
                 self.store.delete_member(copy.id)
+            if isinstance(error, asyncio.CancelledError):
+                raise
             raise _rpc_error(error if isinstance(error, MemberError) else MemberError("io", "could not copy skills")) from None
         self._changed()
         return {"member": self.view_of(copy)}
+
+    def _copy_skill_documents(self, inputs):
+        return [(skill["source"], {"SKILL.md": self.capabilities.homes.safe(path).read_bytes()})
+                for _, skill, path, _ in inputs]
 
     async def _list(self, params: dict) -> dict:
         if "panel_member_id" in params:
@@ -1232,6 +1292,7 @@ class MembersService:
             )
         except MemberError as error:
             raise _rpc_error(error) from None
+        self._initialize_home(member.speaker())
         logger.info("A member was added")
         group = None if member.group_id is None else self.store.group(member.group_id)
         language = self._ui_language(params)
@@ -1291,8 +1352,7 @@ class MembersService:
     def _update_raphael(self, params: dict, *, profile_fields=("personality", "instructions")) -> dict:
         from ..brain.settings import checked
 
-        preferences = {"tools": "raphael_tools", "notify": "raphael_notify", "draft_first": "raphael_draft_first",
-                       "computer_mode": "raphael_computer_mode", "desktop_control": "raphael_desktop_control"}
+        preferences = {"tools": "raphael_tools", "notify": "raphael_notify", "draft_first": "raphael_draft_first"}
         if set(params) - {"id", *profile_fields, *preferences, "cover", "cover_position"}:
             raise RpcError(INVALID_PARAMS, "This field is not editable for the first Bot", {"kind": "raphael"})
         cover = self._updated_cover(0, params)
@@ -1317,28 +1377,18 @@ class MembersService:
                                    (key, json.dumps(value)))
             if "cover" in params or "cover_position" in params:
                 self._save_cover(0, cover)
+        self.capabilities.homes.soul(0, soul_document(self.speaker(0)))
         self._changed()
         return {"member": self._raphael_view(self._language(), {}, set(), {})}
 
-    def computer_preference(self, member_id, field):
-        if member_id == 0:
-            return self._settings.get("raphael_" + field)
-        member = self.store.member(member_id)
-        return getattr(member, field) if member is not None else ("host" if field == "computer_mode" else False)
-
     async def _update(self, params: dict) -> dict:
-        if "computer_mode" in params and type(params.get("id")) is int:
-            member_id = params["id"]
-            if (params["computer_mode"] != self.computer_preference(member_id, "computer_mode")
-                    and getattr(self, "computer_mode_busy", lambda member: False)(member_id)):
-                raise invalid_params("Wait for the current computer work to finish before changing modes")
         if type(params.get("id")) is int and params["id"] == 0:
             return self._update_raphael(params)
         member_id = self._member_id(params)
         cover = self._updated_cover(member_id, params)
         fields = {
             name: params[name]
-            for name in ("name", "role", "personality", "instructions", "group_id", "avatar", "tools", "model", "position", *PROFILE_FIELDS, *COMPUTER_FIELDS)
+            for name in ("name", "role", "personality", "instructions", "group_id", "avatar", "tools", "model", "position", *PROFILE_FIELDS)
             if name in params
         }
         avatar = fields.get("avatar")
@@ -1360,6 +1410,7 @@ class MembersService:
         if old is not None and "avatar" in fields and old.avatar != member.avatar:
             if not any(other.id != member_id and other.avatar == old.avatar for other in self.store.members()):
                 self._remove_picture(old.avatar)
+        self.capabilities.homes.soul(member_id, soul_document(member.speaker()))
         self._changed()
         return {"member": self.view_of(member)}
 
@@ -1863,7 +1914,7 @@ class MembersService:
         if name in ("member_skill_delete", "member_command_delete"):
             member = arguments.get("member_id", 0)
             try:
-                resources = (self.capabilities.skills(-1 if arguments.get("shared") else member)
+                resources = (self.capabilities.skills(-1 if arguments.get("shared") else member, details=False)
                              if name == "member_skill_delete" else self.capabilities.commands(member))
             except MemberError:
                 resources = []
@@ -2147,7 +2198,7 @@ class MembersService:
                 speaker = self.speaker(identifier)
                 model = speaker.model or self._starting_model()
                 routines = (await self._routines_list({"member_id": identifier}))["routines"]
-                counts = {"skills_count": len(self.capabilities.skills(identifier)),
+                counts = {"skills_count": len(self.capabilities.skills(identifier, details=False)),
                           "commands_count": len(self.capabilities.commands(identifier)) if identifier else 0,
                           "routines_count": len(routines)}
                 if detail_id is None:

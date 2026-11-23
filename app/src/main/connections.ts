@@ -6,7 +6,8 @@
 // and how many are on, its information, and removal in the overflow menu. Existing custom MCP setup and device reauthentication stay available.
 // Secrets go directly to the core vault and never enter the render snapshot.
 
-import { bindLayerSteps, bindNavLayer, LayerViews } from "./nav-layers";
+import { rememberLayerBack } from "./nav-history";
+import { bindNavLayer, keepEditedField } from "./nav-layers";
 import { noticeHTML } from "./missing";
 import * as api from "./api";
 import { type InventoryView, appOf, connectedCount, isConnected, whyNot } from "./apps-inventory";
@@ -23,7 +24,7 @@ import { serviceIconOf } from "./service-icons";
 import { entryIcon } from "./service-mark";
 export { entryIcon, iconHTML } from "./service-mark";
 import type { AuditEntry, ConnectionGroup, ConnectionTool, MainEvent, NewConnection, StoreService, Words } from "./types";
-import { DISCONNECT_CONFIRM_MS, type Choice, actionRow, btn, closeMenu, esc, fieldHTML, ico, iconBtn, backButton, iconButton, openPopover, row, sel, st, tg, toaster } from "./ui";
+import { DISCONNECT_CONFIRM_MS, type Choice, actionRow, btn, closeMenu, esc, fieldHTML, ico, iconBtn, backButton, headerCloseButton, iconButton, openPopover, row, sel, st, tg, toaster } from "./ui";
 
 /** How long the next sign-in waits for the one it cancelled to give its account back before it gives up beginning. */
 const LOGIN_STOP_MS = 600_000;
@@ -460,7 +461,7 @@ export const COMPOSIO_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="curren
 const composioMark = (): string => `<span class="cs-icon md cs-composio-mark" aria-hidden="true">${COMPOSIO_SVG}</span>`;
 
 /** The dialog's close button, as the key dialog has it. */
-const closeButton = (): string => iconButton("x", t("common.close"), ' data-conn="close" data-k="cs-close"');
+const closeButton = (): string => headerCloseButton(t("common.close"), ' data-conn="close" data-k="cs-close"');
 
 function keyDialogHTML(v: ConnectionsView): string {
   return `<div class="cs-scrim" data-conn="scrim" data-dialog="composio-key"><div class="cs-dialog" id="cs-dialog" role="dialog" aria-modal="true" aria-labelledby="cs-dlg-title" tabindex="-1" data-trap>` +
@@ -572,8 +573,8 @@ export const connectionsAddHTML = (): string =>
   `<button type="button" class="sel cs-add" aria-haspopup="menu" aria-expanded="false" data-k="conn-add">` +
   `<span>${esc(t("conn.addMenu"))}</span>${ico("down")}</button>`;
 
-/** A bare chevron at the top left: back from an app's page or from the list of the connected apps. */
-const backHTML = (): string => backButton(t("conn.back"), ' data-conn="back" data-k="cs-back"', "cs-back");
+/** A round chevron at the top left: back from an app's page or from the list of the connected apps. */
+const backHTML = (): string => backButton(t("conn.back"), ' data-conn="back" data-k="cs-back"', "cs-back back-link");
 /** The connected list's title is its way back: the chevron and the title are one button. */
 // ---------- the connected apps: one list ----------
 
@@ -587,7 +588,7 @@ function itemHTML(g: ConnectionGroup, v: ConnectionsView): string {
   const busy = v.busy.has(g.id) || v.login?.target === g.id;
   const id = esc(g.id);
   return (
-    `<div class="cs-linked" data-conn="open" data-id="${id}">` +
+    `<div class="cs-linked" data-row="connected-app" data-conn="open" data-id="${id}">` +
     btn(
       `${tileHTML(groupIcon(g, v, "md"))}<span class="tx"><span class="nm">${esc(g.name)}</span><span class="ds">${lineOf(g, v)}</span></span>`,
       "cs-main",
@@ -768,7 +769,7 @@ function toolsHTML(g: ConnectionGroup, v: ConnectionsView, busy: boolean, loggin
  * name and, at the right, 「連結」 (or, when it is connected, its state, its switch and its ⋯), a paragraph on it, then what is known of it in
  * bordered cards: its tools, and its information. It is the page of an app of the catalog, of a connected one, and of a server of the owner's own.
  */
-function appPageHTML(s: StoreService | undefined, g: ConnectionGroup | undefined, v: ConnectionsView): string {
+function appPageHTML(s: StoreService | undefined, g: ConnectionGroup | undefined, v: ConnectionsView, close: string): string {
   const name = g?.name ?? s!.name;
   const key = g?.id ?? s!.id;
   const busy = v.busy.has(key);
@@ -777,12 +778,12 @@ function appPageHTML(s: StoreService | undefined, g: ConnectionGroup | undefined
   const mark = g ? groupIcon(g, v, "xl") : entryIcon(s!, "xl");
   const action = g
     ? `<span class="cs-state">${ico("check")}<span>${esc(t("conn.tab.installed"))}</span></span>` +
-      serviceSwitch(g, ` data-conn="enable"${id} data-k="cs-dlg-enable"${busy ? " disabled" : ""}`) +
-      iconButton("more", t("mcp.actions"), ` data-conn="server-menu"${id} aria-haspopup="menu"${busy ? " disabled" : ""}`)
+      iconButton("more", t("mcp.actions"), ` data-conn="server-menu"${id} aria-haspopup="menu"${busy ? " disabled" : ""}`) +
+      serviceSwitch(g, ` data-conn="enable"${id} data-k="cs-dlg-enable"${busy ? " disabled" : ""}`)
     : loggingIn
       ? `<span class="cs-wait" role="status">${esc(t(s!.auth === "none" ? "conn.connecting" : "conn.loggingIn"))}</span>` + btn(esc(t("conn.cancel")), "cs-connect", ' data-conn="cancel-login"')
       : btn(esc(t("conn.connect")), "pri cs-connect", ` data-conn="join" data-id="${esc(s!.id)}"`);
-  const head = `<div class="cs-head">${tileHTML(mark, "lg")}<h2 class="big" id="cs-page-title">${esc(name)}</h2><div class="cs-join">${action}</div></div>`;
+  const head = `<header class="cs-head"><span class="back-title">${backHTML()}${tileHTML(mark, "lg")}<h2 class="big" id="cs-page-title" data-title-back>${esc(name)}</h2></span>${close}</header>`;
   const about = `<p class="cs-desc">${linkedText(g?.description || (s ? words(s.about) : t("conn.customServer")))}</p>`;
   const secrets = g ? [...g.env, ...g.headers] : [];
   // What signing in asks of the owner, said once, in a line, where the old page said it twice.
@@ -822,7 +823,7 @@ function appPageHTML(s: StoreService | undefined, g: ConnectionGroup | undefined
       (secrets.length ? `<span>${ico("lock")}<span class="code">${esc(secrets.join(", "))}</span></span>` : "") + `</div>`
     : "";
   return (
-    backHTML() + head + about + lead + alert + loginErrorHTML(v, key) + dialogNoticeHTML(v) +
+    `<div class="cs-summary">${head}<div class="cs-join">${action}</div></div>` + about + lead + alert + loginErrorHTML(v, key) + dialogNoticeHTML(v) +
     (g ? accountsHTML(g) : "") +
     (tryItems ? `<section class="cs-sec"><h3>${esc(t("conn.try"))}</h3><ul class="cs-say">${tryItems}</ul></section>` : "") +
     (g ? toolsHTML(g, v, busy, loggingIn) : "") +
@@ -843,7 +844,7 @@ function pairsHTML(f: ConnectionForm): string {
   return fld(label, adder, t(f.id ? "mcp.keepSecrets" : "conn.form.secretNote"));
 }
 
-function formHTML(f: ConnectionForm): string {
+function formHTML(f: ConnectionForm, close: string): string {
   const off = f.busy;
   const fields =
     f.type === "stdio"
@@ -855,7 +856,7 @@ function formHTML(f: ConnectionForm): string {
   const error = f.error ? `<div class="note" role="alert">${st("err", f.error())}</div>` : "";
   const typeSel = sel(typeChoices(), f.type, t("conn.form.type"), ` data-k="conn-type"${off ? " disabled" : ""}`);
   return (
-    `<h2 class="big">${esc(t(f.id ? "mcp.edit" : "mcp.add"))}</h2>` +
+    `<header class="cs-top"><span class="back-title">${backButton(t("conn.back"), ' data-conn="form-back"', "cs-back back-link")}<h2 class="big cs-top-t" id="set-title" tabindex="-1" data-title-back>${esc(t(f.id ? "mcp.edit" : "mcp.add"))}</h2></span>${close}</header>` +
     `<div class="add-grid">` +
     `<div class="two">${fld(t("conn.form.type"), typeSel)}${fld(t("conn.form.name"), fieldHTML(t("conn.form.nameHint"), f.name, { id: "conn-name", label: t("conn.form.name"), disabled: off }), "", "conn-name")}</div>` +
     fields +
@@ -893,18 +894,18 @@ const quietHeading = (heading: string): string => (heading ? `<div class="cs-vh"
  * The dialog, below its title: the form, an app's page, the list of the connected apps, or the one view of the apps (a search, the
  * chips of its categories, then the sections). The key dialog of Composio stands over any of them.
  */
-export function connectionsHTML(v: ConnectionsView, heading = ""): string {
+export function connectionsHTML(v: ConnectionsView, heading = "", close = ""): string {
   const key = v.keyOpen ? keyDialogHTML(v) : "";
-  if (v.form) return `<div class="cs cs-form">${formHTML(v.form)}</div>`;
+  if (v.form) return `<div class="cs cs-form">${formHTML(v.form, close)}</div>`;
   const target = openTarget(v);
-  if (target) return `<div class="cs cs-page">${quietHeading(heading)}${appPageHTML(target.entry, target.group, v)}</div>` + key;
+  if (target) return `<div class="cs cs-page">${quietHeading(heading)}${appPageHTML(target.entry, target.group, v, close)}</div>` + key;
   if (v.screen === "connected" && Array.isArray(v.groups) && v.groups.length) {
-    return `<div class="cs cs-connected"><div class="cs-top">${backHTML()}<h2 class="cs-top-t">${esc(t("conn.tab.installed"))}</h2></div>${quietHeading(heading)}` +
+    return `<div class="cs cs-connected"><header class="cs-top"><span class="back-title">${backHTML()}<h2 class="cs-top-t" data-title-back>${esc(t("conn.tab.installed"))}</h2></span>${close}</header>${quietHeading(heading)}` +
       `<div class="cs-body" data-cs-body>${installedHTML(v)}</div></div>` + key;
   }
   // The connected apps could not be read: the chip that would open them says so instead, with the way to read them again.
   const unread = v.groups === "failed" ? `<div class="alert core-note">${st("err", t("conn.loadFailed"))}${btn(esc(t("plugins.retry")), "sm", ' data-conn="retry-connections"')}</div>` : "";
-  return `<div class="cs cs-apps"><div class="cs-top">${heading}${haveChipHTML(v)}</div>${unread}${barHTML(v)}${chipsHTML(v)}` +
+  return `<div class="cs cs-apps"><header class="cs-top">${heading}${haveChipHTML(v)}${close}</header>${unread}${barHTML(v)}${chipsHTML(v)}` +
     `<div class="cs-results" data-cs-scroll><div class="cs-body" data-cs-body>${bodyHTML(v)}</div></div></div>` + key;
 }
 
@@ -959,6 +960,7 @@ export interface Connections {
   /** The panel is closed or leaves the dialog: drop what must not stay (an unsent form, a pending disconnect). */
   reset(): void;
   /** The view on screen in words the way back keeps: the connected list (`connected`) and an app's page over it (`group:github`). */
+  restoreList(): () => void;
   navView(): string;
   /** Shows the view `navView` named; an app that is gone leaves the list it was in. */
   showNavView(key: string): void;
@@ -993,7 +995,9 @@ export function createConnections(host: ConnectionsHost): Connections {
   let login: Login | null = null;
   let loginError: ConnectionsView["loginError"] = null;
   let dialogNotice: ConnectionsView["dialogNotice"] = null;
+  let formParent: OpenApp | null = null;
   let form: ConnectionForm | null = null;
+  let originalForm = "";
   let loads = 0;
   let stopOutside: (() => void) | null = null;
 
@@ -1018,7 +1022,10 @@ export function createConnections(host: ConnectionsHost): Connections {
     // The key's dialog is the one that stands over the page; a press outside it closes it.
     if (keyOpen && !stopOutside && typeof document !== "undefined") {
       const root = host.root ?? document.querySelector("#cs-dialog")?.parentElement?.parentElement;
-      if (root) stopOutside = registerDismissal(() => root.querySelector<HTMLElement>("#cs-dialog"), closeDialog);
+      if (root) stopOutside = registerDismissal(() => root.querySelector<HTMLElement>("#cs-dialog"), closeDialog, undefined, undefined, {
+        step: direction => keyBusy || direction === "back" && keepEditedField(root.querySelector("#cs-dialog")!),
+        restore: () => () => { keyOpen = true; redraw(); focusOn("#cs-dialog"); },
+      });
     } else if (!keyOpen) { stopOutside?.(); stopOutside = null; }
   };
 
@@ -1193,10 +1200,25 @@ export function createConnections(host: ConnectionsHost): Connections {
   function editServer(id: string): void {
     const group = groupById(id);
     if (!group || group.catalog_id) return;
+    formParent = open;
     open = null;
     form = { ...emptyForm(), id, type: group.transport, name: group.name, command: group.command, args: group.args.join("\n"), url: group.url, limit: group.result_size_limit ?? 8000,
       pairLines: (group.transport === "stdio" ? group.env : group.headers).map(name => `${name}=`).join("\n") };
+    originalForm = formValues(form);
     redraw(); focusOn("#conn-name");
+  }
+
+  const formValues = (draft: ConnectionForm): string =>
+    JSON.stringify([draft.type, draft.name, draft.command, draft.args, draft.url, draft.pairLines, draft.limit]);
+
+  function backFromForm(): void {
+    if (!form || form.busy) return;
+    if (formValues(form) !== originalForm) { focusOn('[data-conn="form-cancel"]'); return; }
+    const key = navView(), parent = formParent;
+    rememberLayerBack(() => {
+      form = null;
+      if (parent) openPage(parent); else redraw();
+    }, () => showNavView(key));
   }
 
   /** The key's dialog closes, and the focus goes back to what opened it. */
@@ -1210,6 +1232,12 @@ export function createConnections(host: ConnectionsHost): Connections {
 
   /** Steps back: from an app's page to the view it was opened from, or from the list of the connected apps to the one view. */
   function back(): void {
+    if (confirming !== null) return;
+    const key = navView();
+    if (key) rememberLayerBack(backToParent, () => showNavView(key));
+  }
+
+  function backToParent(): void {
     clearTimeout(confirmTimer);
     confirming = null;
     loginError = null;
@@ -1221,7 +1249,6 @@ export function createConnections(host: ConnectionsHost): Connections {
       auditOpen = false;
     } else if (screen === "connected") screen = "apps";
     else return;
-    views.step("back", () => {});
     redraw();
     // The focus returns to the row (or the chip) that was pressed.
     if (from) focusOn(`[data-k="${from.kind === "group" ? "cs-open" : "cs-store"}:${typeof CSS !== "undefined" ? CSS.escape(from.id) : from.id}"]`);
@@ -1501,6 +1528,9 @@ export function createConnections(host: ConnectionsHost): Connections {
       case "back":
         back();
         break;
+      case "form-back":
+        backFromForm();
+        break;
       case "enable": {
         const group = groupById(id);
         if (group) void act(id, async () => {
@@ -1667,9 +1697,9 @@ export function createConnections(host: ConnectionsHost): Connections {
     if (e.key === "Escape" && panel && !isTopLayer(panel)) return false;
     // Escape steps back (the key's dialog, then an app's page, then the list of the connected apps); once there is nothing to step back
     // from it is the settings' own, and closes the dialog.
-    if (e.key === "Escape" && !e.defaultPrevented && (keyOpen || open || screen === "connected")) {
+    if (e.key === "Escape" && !e.defaultPrevented && (keyOpen || form || open || screen === "connected")) {
       e.preventDefault();
-      if (keyOpen) closeDialog(); else back();
+      if (keyOpen) closeDialog(); else if (form) backFromForm(); else back();
       return true;
     }
     const el = e.target as HTMLElement | null;
@@ -1689,14 +1719,12 @@ export function createConnections(host: ConnectionsHost): Connections {
   }
 
   /** Fits the row of chips to the width the dialog has now. */
-  let views = new LayerViews("");
   function painted(): void {
     const panel = typeof document !== "undefined" ? (host.root ?? document).querySelector<HTMLElement>(".cs") : null;
-    if (panel) {
-      views.visit(navView());
-      if (form?.busy) bindNavLayer(panel, () => {});
-      else bindLayerSteps(panel, views, showNavView);
-    }
+    if (panel) bindNavLayer(panel, () => { if (form) backFromForm(); else back(); }, {
+      active: () => !!form || !!open || screen === "connected",
+      step: () => !!form?.busy || confirming !== null,
+    });
     const row = typeof document !== "undefined" ? (host.root ?? document).querySelector<HTMLElement>("[data-cs-chips]") : null;
     if (row) fitChips(row);
   }
@@ -1729,8 +1757,10 @@ export function createConnections(host: ConnectionsHost): Connections {
           pick: (value) => {
             if (value === "paste" || value === "import") { openMcpImport(value === "import", () => void load()); return; }
             if (value !== "custom" || form?.busy) return;
+            formParent = open;
             open = null;
             form = emptyForm();
+            originalForm = formValues(form);
             redraw();
             focusOn("#conn-name");
           },
@@ -1764,12 +1794,12 @@ export function createConnections(host: ConnectionsHost): Connections {
     clearTimeout(confirmTimer);
     confirming = null;
     form = null;
+    originalForm = "";
     open = null;
     toolsOpen = false;
     auditOpen = false;
     search = "";
     screen = "apps";
-    views = new LayerViews("");
     loginError = null;
     dialogNotice = null;
     drawn = null; // whatever stands on the page is not this view's: the next reading draws
@@ -1794,7 +1824,7 @@ export function createConnections(host: ConnectionsHost): Connections {
       const id = editor.slice(5);
       if (form && (form.id ?? "") === id) return;
       if (id && groupById(id)) { editServer(id); return; }
-      if (!id) { open = null; form = emptyForm(); redraw(); focusOn("#conn-name"); return; }
+      if (!id) { formParent = open; open = null; form = emptyForm(); originalForm = formValues(form); redraw(); focusOn("#conn-name"); return; }
     }
     form = null;
     const wanted: OpenApp | null = page && (page[1] === "app" ? entryById(page[2]) : groupById(page[2])) ? { kind: page[1] as OpenApp["kind"], id: page[2] } : null;
@@ -1812,5 +1842,13 @@ export function createConnections(host: ConnectionsHost): Connections {
     void signIn({ id }, group.name, true);
   }
 
-  return { view, load, click, input, key, menuFor, painted, scrolled, followEvent, reset, navView, showNavView, relogin };
+  function restoreList(): () => void {
+    const chosen = { screen, category, search, shown, recommendedAll };
+    return () => {
+      ({ screen, category, search, shown, recommendedAll } = chosen);
+      redraw();
+    };
+  }
+
+  return { view, load, click, input, key, menuFor, painted, scrolled, followEvent, reset, restoreList, navView, showNavView, relogin };
 }

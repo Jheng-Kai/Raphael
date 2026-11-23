@@ -42,7 +42,6 @@ DEFAULTS: dict[str, Any] = {
     "chief_pinned": False,
     "raphael_draft_first": True,
     "raphael_computer_mode": "host",
-    "raphael_desktop_control": False,
     "raphael_tools": None,
     "raphael_notify": False,
     "owner_name": "",

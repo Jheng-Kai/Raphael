@@ -1,9 +1,18 @@
-import { scene, click, wait, member, page, settings, scroll, check, type, key, rightClick } from "./steps.mjs";
+import { scene, click, hover, wait, member, page, settings, scroll, check, type, key, rightClick, waitGone } from "./steps.mjs";
 const computer = (state = "running") => ({ running:"fresh", runningMember:1, desktop:{ state:"running", ready:true, control:"member", works:[
   {id:"private-computer-task",request_id:state === "waiting_control" ? "private-takeover-request" : "",turn_id:2,state,tool:"get_desktop_state",reason:state === "waiting_control" ? "sign_in" : ""},
 ]} });
 const entry = [member(1), {action:"open-details"}, wait('.desktop-panel:not([hidden])'), wait('.desktop-panel[data-desktop-state="member"]'), wait('.desktop-screen iframe:not([hidden])')];
+const hostTabs = {running:"fresh", runningMember:1, hostTabs:"many", desktop:{transport:"host", target:"chrome-tab",
+  state:"running", ready:true, control:"member", works:[{id:"chrome-tab",turn_id:2,transport:"host",state:"running",tool:"browser_open",reason:""}]}};
+const hostEntry = [member(1), wait('.desktop-screen[data-host-browser] iframe:not([hidden])')];
+const hostExpand = [...hostEntry, click('[data-desktop="enlarge"]'), wait('.desktop-panel[data-expanded] .host-browser-toolbar:not([hidden])')];
 const take = [...entry, click('[data-desktop="enlarge"]'), click('[data-desktop="take"]'), wait('.desktop-panel[data-interactive="true"][data-control-latency-ms]')];
+const previewOnly = [{action:'desktop-preview-input'}, check('desktop-owner-small')];
+const ownerShrink = input => [wait('.desktop-panel[data-expanded][data-interactive="true"]'),
+  input, wait('.desktop-panel:not([data-expanded])[data-desktop-state="member"]'), check('desktop-owner-shrunk')];
+const hostAddress = 'https://videos.example.invalid/library/saved';
+const navigateHost = [type('.host-browser-address', hostAddress), key('Enter'), {action:'desktop-wait-address', value:hostAddress}, check('desktop-host-toolbar-navigation')];
 const teachComputer = () => ({desktop:{state:'running',ready:true,control:'member'}});
 const teaching = [member(1),{action:'open-details'},wait('.desktop-screen iframe:not([hidden])'),click('[data-desktop="enlarge"]'),click('[data-desktop="take"]'),wait('.desktop-panel[data-interactive="true"]'),click('[data-desktop="menu"]'),click('#app-popover [data-pick="teach"]'),wait('.desktop-recording:not([hidden])')];
 const draft = [...teaching,click('[data-desktop="teach"]'),wait('.desktop-review #mp-skill-text')];
@@ -11,7 +20,10 @@ const menu = [click('[data-desktop="menu"]'),wait('#app-popover [data-pick="send
 const boot = (state, desktopHour = 9, extra = {}) => ({desktopHour, desktop:{state,ready:false,control:'member',...extra}});
 // A booting computer says nothing: the scene waits for the panel's own state in data, not for words.
 const bootEntry = (state = 'starting') => [member(1), {action:'open-details'}, wait(`.desktop-panel:not([hidden])[data-desktop-state="${state}"]`)];
-const hostHealth = [member(1),{action:'open-details'},wait('[data-computer-location]:not(:disabled)'),click('[data-computer-location]'),wait('[data-k="computer-host"]'),click('[data-k="computer-host"]'),click('.menu [data-value="remote"]'),type('#computer-ssh-alias','studio-mini'),key('Tab'),click('[data-act="computer-host-check"]'),wait('[data-computer-host-health]'),check('desktop-host-health')];
+const computerMenu = '[data-computer-choice][data-location-ready]:not(:disabled)';
+const openComputerMenu = [wait(computerMenu), click(computerMenu)];
+const sshEditor = [...openComputerMenu, click('.menu [data-action="0"]'), wait('#computer-ssh-alias')];
+const hostHealth = [member(1),{action:'open-details'},...sshEditor,type('#computer-ssh-alias','studio-mini'),key('Tab'),click('[data-act="computer-host-check"]'),wait('[data-computer-host-health]'),check('desktop-host-health')];
 const ownPicture = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 673"><defs><linearGradient id="g" x2="1" y2="1"><stop offset="0" stop-color="#bfe3ff"/><stop offset="1" stop-color="#1c5fa8"/></linearGradient></defs><rect width="1200" height="673" fill="url(#g)"/><circle cx="570" cy="230" r="90" fill="#fff"/></svg>')}`;
 export default [
   scene('computer-maintenance-menu', 'Right-clicking the header offers maintenance in escalation order', [...entry,rightClick('.desktop-location-header'),wait('.menu [data-action="5"]'),check('computer-maintenance-menu')], {...computer(), desktop:{...computer().desktop,host:'',target:'synthetic-member',mode:'per-bot',idle_minutes:15}}),
@@ -24,8 +36,8 @@ export default [
   // R-COMP-WAKE-01: the computer wakes when a member's own tool needs it, and then the conversation says who and why, once, in a
   // normal line (no toast, no card); the panel's Details tab says nothing about it, the computer lives in its own tab.
   scene('computer-wake-line', 'A member that wakes the sleeping computer leaves one line naming itself and why', [member(1),wait('[data-computer-woke]'),check('computer-wake-line')], {...computer(),wokeLine:true}),
-  scene('desktop-host-health', 'The remote check explains the problem without starting anything', hostHealth),
-  scene('desktop-host-repair', 'Scroll to the manual repair and copy its exact command', [...hostHealth,scroll('[data-computer-host-repair]'),click('[data-computer-host-repair] [data-act="copy-code"]'),wait('[data-computer-host-repair] [aria-label="已複製"]'),check('desktop-host-repair')]),
+  scene('desktop-host-health', 'The remote check explains the problem without starting anything', hostHealth, {desktop:{state:'stopped',ready:false,control:'member'}}),
+  scene('desktop-host-repair', 'Scroll to the manual repair and copy its exact command', [...hostHealth,scroll('[data-computer-host-repair]'),click('[data-computer-host-repair] [data-act="copy-code"]'),wait('[data-computer-host-repair] [aria-label="已複製"]'),check('desktop-host-repair')], {desktop:{state:'stopped',ready:false,control:'member'}}),
   scene('member-delete-ask-computer', 'A member with a computer on a host is asked about as any other: its name, one sentence, Cancel and Delete, and nothing about the computer', [member(1),click('[data-member-more="1"]'),click('[data-pick="delete"]'),wait('.mb-dialog.mb-confirm'),check('member-delete-ask'),check('delete-confirmation')], {...computer(),computerHost:'studio-mini'}),
   // R-COMP-SWITCH-01: member 1's computer is open, the owner
   // goes to another page and comes back through member 2 in the sidebar; the Computer tab streams member 2's seat, never member 1's.
@@ -49,7 +61,7 @@ export default [
   scene('panel-off','The sleeping screen keeps its wallpaper and proportions, and the whole screen wakes it',[member(1),{action:'open-details'},wait('.desktop-panel[data-desktop-state="stopped"]'),{action:'desktop-refresh-still'},check('level-off'),check('composer-row-fits')],{desktop:{state:'stopped',ready:false,control:'member'}}),
   scene('desktop-return-stopped','Returning through the calendar restores the unchanged sleeping screen',[member(1),{action:'open-details'},wait('.desktop-panel[data-desktop-state="stopped"]'),check('level-off'),page('automations'),wait('.au-page:not([hidden])'),member(1),wait('.page-agent:not([hidden])'),{action:'open-details'},wait('.desktop-panel:not([hidden])[data-desktop-state="stopped"]'),check('level-off')],{desktop:{state:'stopped',ready:false,control:'member'}}),
   scene('desktop-start','Starting the computer preserves the panel and screen width',[member(1),{action:'open-details'},wait('.desktop-panel[data-desktop-state="stopped"]'),check('level-start-before'),click('[data-desktop="enlarge"][data-asleep]'),wait('.desktop-screen iframe:not([hidden])'),check('level-start-after')],{desktopStarts:true,desktop:{state:'stopped',ready:false,control:'member'}}),
-  scene('panel-no-computer','Without a computer the panel retains its location control and empty state',[member(1),{action:'open-details'},wait('.mb-det [data-computer-location]'),check('level-no-computer'),check('composer-row-fits')],{desktop:{state:'missing',ready:false,control:'member',granted:false}}),
+  scene('panel-no-computer','Without a computer the panel retains its computer choice and empty state',[member(1),{action:'open-details'},wait('.mb-det [data-computer-choice]'),check('level-no-computer'),check('composer-row-fits')],{desktop:{state:'missing',ready:false,control:'member',granted:false}}),
   scene('panel-gear','The gear opens the member settings page where the conversation is, and the panel folds away until it is left',[...entry,click('.mb-det [data-det="gear"]'),wait('.ms-pane:not([hidden]) .ms-name'),check('level-gear')],computer()),
   scene('panel-routine-row','A routine opens to read, its switch on its row',[...entry,click('.mb-tabs [data-tab="details"]'),click('.mb-rt'),wait('.rv-dialog'),check('level-routine')],computer()),
   scene('panel-raphael','Raphael shares the landing layout',[{action:'open-details'},wait('.desktop-panel[data-desktop-state="member"]'),wait('.desktop-screen iframe:not([hidden])'),check('level-panel'),check('composer-row-fits')],teachComputer()),
@@ -60,32 +72,78 @@ export default [
   scene('desktop-teach-draft','Back and the shared menu preserve the same unsaved skill document',[...draft,type('#mp-skill-text','## Inputs\nSample input\n## Procedure\nUnsaved sample procedure\n## Verification\nCheck the result'),click('[data-desktop="back"]'),click('[data-desktop="menu"]'),click('#app-popover [data-pick="teach"]'),wait('.desktop-review:not([hidden]) #mp-skill-text'),check('teach-draft')],teachComputer()),
   scene('desktop-teach-saved','Explicit save offers a new input in the same conversation',[...draft,click('[data-res="skill-save"]'),wait('.desktop-try:not([hidden])'),type('[data-teach-input]','第二季報告'),check('teach-saved')],teachComputer()),
   scene('desktop-teach-try','The saved skill and fresh input enter the existing conversation',[...draft,click('[data-res="skill-save"]'),wait('.desktop-try:not([hidden])'),type('[data-teach-input]','第二季報告'),click('[data-desktop="try-teach"]'),wait('.page-agent:not(:has(.desktop-panel[data-expanded])) .composer'),check('teach-try')],teachComputer()),
-  scene('desktop-teach-failed','A failed demonstration says so in one line under the screen, beside its review and discard',[...teaching,click('[data-desktop="teach"]'),wait('.desktop-error:not([hidden])'),wait('[data-desktop="discard-teach"]:not([hidden]):not(:disabled)'),check('teach-failed')],{...teachComputer(),teachFails:true}),
+  scene('desktop-teach-failed','A failed demonstration keeps its review and discard beside a quiet screen',[...teaching,click('[data-desktop="teach"]'),wait('[data-desktop="discard-teach"]:not([hidden]):not(:disabled)'),check('teach-failed')],{...teachComputer(),teachFails:true}),
   scene('desktop-teach-discard','One press discards the owner recording and returns control',[...teaching,click('[data-desktop="discard-teach"]'),wait('.page-agent:not(:has(.desktop-panel[data-expanded])) .composer'),check('teach-discard')],teachComputer()),
   scene('desktop-teach-shared','A shared computer visibly explains the separate member computer requirement',[member(1),{action:'open-details'},wait('.desktop-screen iframe:not([hidden])'),click('[data-desktop="enlarge"]'),click('[data-desktop="take"]'),wait('.desktop-teach-missing:not([hidden])'),check('teach-shared')],{desktop:{state:'running',ready:true,control:'member',teach_available:false}}),
-  scene("desktop-host-local", "Shared location popover shows the current local host", [member(1),{action:'open-details'},wait('[data-computer-location]:not(:disabled)'),click('[data-computer-location]'),wait('.computer-location-popover'),check('host-settings-layout'),check('host-settings-local')], {desktop:{state:'stopped',ready:false,control:'member'}}),
-  scene("desktop-host-remote", "Select another computer and persist its SSH config alias", [member(1),{action:'open-details'},wait('[data-computer-location]:not(:disabled)'),click('[data-computer-location]'),click('[data-k="computer-host"]'),click('.menu [data-value="remote"]'),type('#computer-ssh-alias','studio-mini'),key('Enter'),wait('#computer-ssh-alias:not(:disabled)'),check("host-settings-layout"),check("host-settings-remote")], {desktop:{state:'stopped',ready:false,control:'member'}}),
-  scene("desktop-host-invalid", "Invalid SSH aliases stay in the popover with an inline error", [member(1),{action:'open-details'},wait('[data-computer-location]:not(:disabled)'),click('[data-computer-location]'),click('[data-k="computer-host"]'),click('.menu [data-value="remote"]'),type('#computer-ssh-alias','-oBad'),key('Enter'),wait('#computer-ssh-alias[aria-invalid="true"]'),check("host-settings-layout"),check("host-settings-invalid")], {desktop:{state:'stopped',ready:false,control:'member'}}),
-  scene("desktop-host-error", "A remote host failure is described without implying a new host check", [member(1),{action:'open-details'},wait('[data-computer-location]:not(:disabled)'),click('[data-computer-location]'),wait('.computer-location-popover [role="alert"]'),check('host-settings-layout'),check('host-settings-error')], {computerHost:'studio-mini',desktop:{state:'unavailable',ready:false,control:'member',error:'ssh_unavailable'}}),
+  scene("desktop-host-local", "The computer menu shows Docker's current local location", [member(1),{action:'open-details'},...openComputerMenu,wait('.menu [data-value="docker-local"]'),check('host-settings-local')], {desktop:{state:'stopped',ready:false,control:'member'}}),
+  scene("desktop-host-remote", "Select another computer and persist its SSH config alias", [member(1),{action:'open-details'},...sshEditor,type('#computer-ssh-alias','studio-mini'),key('Enter'),wait('[data-computer-choice][title*="studio-mini"]'),check("host-settings-layout"),check("host-settings-remote")], {desktop:{state:'stopped',ready:false,control:'member'}}),
+  scene("desktop-host-invalid", "Invalid SSH aliases stay in the popover with an inline error", [member(1),{action:'open-details'},...sshEditor,type('#computer-ssh-alias','-oBad'),key('Enter'),wait('#computer-ssh-alias[aria-invalid="true"]'),check("host-settings-layout"),check("host-settings-invalid")], {desktop:{state:'stopped',ready:false,control:'member'}}),
+  scene("desktop-host-error", "A remote host failure is described without implying a new host check", [member(1),{action:'open-details'},...sshEditor,wait('.computer-location-popover [role="alert"]'),check('host-settings-layout'),check('host-settings-error')], {computerHost:'studio-mini',desktop:{state:'unavailable',ready:false,control:'member',error:'ssh_unavailable'}}),
   scene("desktop-collapse", "Close the preview while leaving the conversation in place", [...entry,{action:'close-details'},check("host-panel-collapsed")],computer()),
   scene("desktop-panel", "One live computer in the existing member side panel with only a system event in chat", [...entry,check("computer-panel"),check("desktop-frame")],computer()),
+  scene("desktop-host-panel", "The owner takes this computer's Chrome from the Computer tab at any time, as on the virtual machine",
+    [...hostExpand, click('[data-desktop="take"]'),wait('.desktop-panel[data-expanded][data-interactive="true"] iframe[src*="transport=host"]'),check("desktop-host-frame")],
+    {running:"fresh",runningMember:1,desktop:{transport:"host",target:"chrome-tab",state:"running",ready:true,control:"member",
+      works:[{id:"chrome-tab",turn_id:2,transport:"host",state:"running",tool:"browser_open",reason:""}]}}),
+  scene("desktop-host-owner-panel", "The Computer panel edits Chrome's address while its page is view-only",
+    [...hostEntry, ...previewOnly, ...navigateHost, check("desktop-host-tabs-watch"), check("desktop-host-frame")], hostTabs),
+  scene("desktop-host-owner-shrink", "Folding Chrome hands back the page and keeps its editable toolbar",
+    [...hostExpand, click('[data-desktop="take"]'), ...ownerShrink(click('[data-desktop="collapse"]')), ...navigateHost, check("desktop-host-tabs-watch"), check("desktop-host-frame")], hostTabs),
+  scene("desktop-host-tabs-panel", "The owner selects and closes a tab while watching without taking control",
+    [...hostEntry, click('[data-browser-action="select"][data-browser-tab="agenda"]'),
+      wait('[data-browser-tab="agenda"][aria-pressed="true"]'), check("desktop-host-tabs-many"),
+      click('[data-browser-action="close"][data-browser-tab="agenda"]'), waitGone('[data-browser-tab="agenda"]'),
+      check("desktop-host-frame"), check("desktop-host-tabs-watch")], hostTabs),
+  scene("desktop-host-tabs-expanded", "The larger watching view keeps the crowded tab strip inside the frame",
+    [...hostExpand, check("desktop-host-frame"), check("desktop-host-tabs-watch"), check("desktop-host-tabs-many")], hostTabs),
+  scene("desktop-host-tabs-control", "The address and Chrome actions are also available during takeover",
+    [...hostExpand, click('[data-desktop="take"]'), wait('.host-browser-address:not([hidden])'),
+      type('.host-browser-address', 'https://videos.example.invalid/library/saved'), key('Enter'),
+      check("desktop-host-frame"), check("desktop-host-tabs-control")], hostTabs),
+  scene("desktop-computer-choice", "Save the member's computer without starting the virtual machine",
+    [...entry, check("desktop-computer-choice-host"), click("[data-computer-choice]"), click('.menu [data-value="docker"]'),
+      wait('.desktop-panel[data-desktop-state="stopped"]'), check("desktop-computer-choice")],
+    {computerChoice: true, desktop:{transport:"host",state:"running",ready:true,control:"member"}}),
+  scene("desktop-computer-choice-missing", "Missing Docker appears only for the virtual machine and offers one text action",
+    [...entry, check("desktop-computer-choice-host"), click("[data-computer-choice]"), click('.menu [data-value="docker"]'),
+      wait("[data-docker-help]"), hover("[data-docker-help]"), check("desktop-computer-choice-missing")],
+    {computerChoice: true, dockerMissing: true, desktop:{transport:"host",state:"running",ready:true,control:"member"}}),
+  scene("desktop-computer-choice-docker", "The single computer dropdown includes Docker's local and SSH locations",
+    [...entry, ...openComputerMenu, wait('.menu [data-value="docker-remote"][aria-checked="true"]'), check("desktop-computer-choice-docker")],
+    {computerHost:"studio-mini", desktop:{transport:"docker",host:"studio-mini",state:"running",ready:true,control:"member"}}),
+  ...["installed", "missing"].map(docker => scene(`desktop-computer-suggestion-${docker}`,
+    "The member explains why a task needs a virtual machine and offers one owner action",
+    [member(1), wait(".computer-suggestion-card"), hover(".computer-suggestion-action"), check(`computer-suggestion-${docker}`)],
+    {computerSuggestion: docker})),
   scene("desktop-takeover", "A private sign-in need opens the side panel with its request above the live screen", [member(1),wait('[data-card-desktop-screen] iframe:not([hidden])'),check("computer-takeover")],computer("waiting_control")),
   scene("desktop-takeover-owner", "The card's 接手 opens the same stream large under the owner's hands, never through chat", [member(1),wait('[data-card-desktop-screen] iframe:not([hidden])'),click('[data-card-desktop=take].pri'),wait('.desktop-panel[data-expanded][data-interactive="true"] .desktop-screen iframe'),{action:'desktop-owner-typing'},check("computer-takeover-owner"),check("desktop-frame"),check("computer-foot-layout")],computer("waiting_control")),
-  scene("desktop-takeover-done", "One explicit done in the larger view's pill returns the current request once", [member(1),wait('[data-card-desktop-screen] iframe:not([hidden])'),click('[data-card-desktop=take].pri'),wait('.desktop-panel[data-expanded][data-interactive="true"]'),click('[data-desktop="return"]'),wait('.computer-card .card-status.is-done'),check("computer-takeover-done")],computer("waiting_control")),
+  scene("desktop-takeover-done", "One explicit done in the larger view's pill returns the current request once", [member(1),wait('[data-card-desktop-screen] iframe:not([hidden])'),click('[data-card-desktop=take].pri'),wait('.desktop-panel[data-expanded][data-interactive="true"]'),click('[data-desktop="return"]'),waitGone('.computer-card'),check("computer-takeover-done")],computer("waiting_control")),
   scene('desktop-watch-owner', 'Enlarging an owner-held screen does not acquire or release control', [member(1),{action:'open-details'},wait('.desktop-panel'),click('[data-desktop="enlarge"]'),check('desktop-watch')], {desktop:{state:'running',ready:true,control:'owner'}}),
-  scene('desktop-watch-retake', 'After a take-over the screen never confirmed and the core kept the lease, the pill watches and still offers Take control', [...entry, click('[data-desktop="enlarge"]'), click('[data-desktop="take"]'), wait('.desktop-error:not([hidden])', 12000), wait('.desktop-panel[data-desktop-state="owner"]', 12000), wait('[data-desktop="take"]:not([hidden]):not(:disabled)'), check('desktop-watch-retake'), check('computer-foot-layout')], {...computer(), desktopUnconfirmed:true, releaseFails:true}),
+  scene('desktop-watch-retake', 'After a take-over the screen never confirmed and the core kept the lease, the pill watches and still offers Take control', [...entry, click('[data-desktop="enlarge"]'), click('[data-desktop="take"]'), wait('.desktop-panel[data-desktop-state="owner"]', 12000), wait('[data-desktop="take"]:not([hidden]):not(:disabled)'), check('desktop-watch-retake'), check('computer-foot-layout')], {...computer(), desktopUnconfirmed:true, releaseFails:true}),
   scene("desktop-entry", "The monitor opens the landing preview in a working conversation", [...entry,check("computer-panel")],computer()),
   scene("desktop-viewer", "Open the existing stream large without a new dialog or session", [...entry,click('[data-desktop="enlarge"]'),wait('.desktop-panel[data-expanded]'),{action:"settle-motion"},check("desktop-viewer"),check("desktop-frame")],computer()),
   scene("desktop-viewer-night", "The larger view at night streams the computer with its dark default picture", [...entry,click('[data-desktop="enlarge"]'),wait('.desktop-panel[data-expanded]'),{action:"settle-motion"},check("desktop-viewer"),check("desktop-frame")],{...computer(),desktopHour:22}),
-  scene("desktop-owner", "A screen click acquires the lease immediately without a reconnect", [...take,check("desktop-owner"),check("desktop-frame")],computer()),
+  scene("desktop-owner", "Take control acquires the lease without a reconnect", [...take,check("desktop-owner"),check("desktop-frame")],computer()),
+  scene("desktop-owner-panel", "The small VM panel never takes page input or shows a control pill",
+    [...entry, ...previewOnly, check("desktop-frame")], computer()),
+  scene("desktop-owner-shrink", "Folding the held VM hands back input and keeps its takeover request pending",
+    [member(1), wait('[data-card-desktop-screen] iframe:not([hidden])'), click('[data-card-desktop="take"].pri'),
+      ...ownerShrink(key("Escape")), check("desktop-owner-request-pending"), check("desktop-frame")], computer("waiting_control")),
+  scene("desktop-wallpaper-before-frame", "A connected VM keeps its wallpaper until the first framebuffer is painted",
+    [member(1), {action:"open-details"}, wait('.desktop-panel[data-desktop-state="member"]'),
+      wait('.desktop-screen .desktop-wallpaper[src]:not([hidden])'), check('desktop-wallpaper-before-frame')],
+    {...computer(), desktopHour:9, desktopAwaitPaint:true}),
   scene("desktop-send-file-menu", "The held computer's ⋯ offers 傳送檔案到電腦 beside teaching, each with its own icon", [...take,click('[data-desktop="menu"]'),wait('#app-popover [data-pick="send-file"]'),check("desktop-send-file-menu")],computer()),
-  scene("desktop-file-dropped", "A file dropped on the screen while watching goes into the team folder and one quiet line says where", [...entry,{action:'desktop-drop-file'},wait('.desktop-panel .desktop-error[role="status"]:not([hidden])'),check("desktop-file-dropped")],computer()),
+  scene("desktop-file-dropped", "A file dropped on the screen while watching goes into the team folder and one quiet line says where", [...entry,{action:'desktop-drop-file'},wait('.desktop-panel .desktop-notice[role="status"]:not([hidden])'),check("desktop-file-dropped")],computer()),
   scene("desktop-handback", "Stop hands the computer back, the view keeps watching, and folding back restores the conversation", [...take,click('[data-desktop="return"]'),wait('.desktop-panel[data-expanded] .desktop-mode-label[data-mode="watching"]'),click('[data-desktop="collapse"]'),wait('.page-agent:not(:has(.desktop-panel[data-expanded])) .composer'),check("desktop-handback")],computer()),
   // R-COMP-RELEASE-01: ending control is not ending watching.
   scene('computer-release-keeps-watching', 'Stop in the larger view hands the computer back and the view stays open on the same live stream: the pill says Watching and Take control is offered again', [...take,click('[data-desktop="return"]'),wait('.desktop-panel[data-expanded] .desktop-mode-label[data-mode="watching"]'),wait('[data-desktop="take"]:not([hidden]):not(:disabled)'),check('release-keeps-watching')],computer()),
   // R-COMP-PREVIEW-01: a running computer's preview is its screen, never a black frame with only Open.
   scene('computer-preview-running', 'After a handback that leaves the panel open (a discarded demonstration), the Computer tab streams the running computer again instead of a black frame with only Open', [...teaching,click('[data-desktop="discard-teach"]'),wait('.page-agent:not(:has(.desktop-panel[data-expanded])) .composer'),{action:'open-computer'},wait('.desktop-screen iframe:not([hidden])'),check('preview-running')],teachComputer()),
   ...["stopped","unavailable","starting","building","preparing"].map(state=>scene(`desktop-${state}`, "Desktop preparation and contextual retry in the existing side panel", [member(1),{action:'open-details'},wait(`.desktop-panel[data-desktop-state="${state}"]`),check("desktop-offline"),...['starting','building','preparing'].includes(state) ? [check('desktop-boot'),{action:'desktop-refresh-still'}] : []], {desktopHour:9,desktop:{state,ready:false,control:"member",...(state === "building" ? {progress:"#3 [2/4] Installing desktop tools 37%"} : {}),...(state === "unavailable" ? {error:"docker_start_timeout"} : {})}})),
+  scene("desktop-quiet-vm", "A lost virtual machine viewer keeps its wallpaper and the idle label",
+    [...bootEntry("unavailable"), check("computer-panel-quiet")],
+    {desktopHour:9,desktop:{transport:"docker",target:"synthetic-member",state:"unavailable",ready:false,control:"member",error:"viewer_unreachable"}}),
   scene("desktop-absent", "Docker absent keeps the computer entry as a bare wallpaper that a press tries again", [member(1),{action:'open-details'},wait('.desktop-panel:not([hidden])[data-desktop-state="unavailable"]'),check("desktop-absent")]),
   scene("desktop-install", "Absent Docker draws no download button; the bare screen is the press", [member(1),{action:"open-details"},wait('.desktop-panel:not([hidden])[data-desktop-state="unavailable"]'),check("desktop-install")]),
 ].map(item => ({...item, steps:item.steps.flatMap(step => step.action === 'open-details' ? [step,click('.mb-tabs [data-tab="computer"]')] : [step])})).map(item => { if (['computer-state-sleeping', 'desktop-absent'].includes(item.name)) item.steps.push(check('panel-state-layout')); return item; }).map(item => ['desktop-host-local', 'desktop-host-remote', 'desktop-panel', 'computer-maintenance-menu', 'computer-state-sleeping'].includes(item.name)

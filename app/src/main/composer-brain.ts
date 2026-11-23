@@ -10,7 +10,8 @@
  * choice made in Settings reaches the button, and how a CLI's models reach it: the core asks the CLI only after the
  * first read, in the background.
  */
-import { bindLayerSteps, LayerViews } from "./nav-layers";
+import { rememberLayerBack } from "./nav-history";
+import { bindNavLayer } from "./nav-layers";
 import "./composer-brain.css";
 import * as api from "./api";
 import { t } from "./i18n";
@@ -237,17 +238,17 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
     waitForModels(sources);
   }
 
-  let menuViews: LayerViews<View>;
+  let parentView: View = "now";
   function resetMenuViews(): void {
     view = "now";
-    menuViews = new LayerViews<View>(view);
-    if (menu) bindLayerSteps(menu, menuViews, turnTo);
+    parentView = "now";
   }
   function open(button: HTMLButtonElement): void {
     source = ""; query = ""; modelTries = 0; view = "now"; paintedWho = paintedDepth = paintedBody = null;
     menu = openPopover(button, `<div class="cb-card cb-body" hidden></div><div class="cb-card cb-now"><div class="cb-now-who"></div><div class="cb-depth-slot"></div></div>`,
-      { className: "menu cb-menu", role: "dialog", label: t("chooser.title"), placement: "above", onClose: () => { menu = null; clearTimeout(modelTimer); } });
+      { className: "menu cb-menu", role: "dialog", label: t("chooser.title"), placement: "above", navigation: { restore: () => () => { if (button.isConnected) open(button); } }, onClose: () => { menu = null; clearTimeout(modelTimer); } });
     resetMenuViews();
+    bindNavLayer(menu, back, { active: () => view !== "now" });
     menu.addEventListener("click", click);
     menu.addEventListener("input", input);
     menu.addEventListener("change", change);
@@ -259,11 +260,19 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
 
   /** The card shows one view at a time, and the keyboard goes where the owner would look next. */
   function turnTo(next: View): void {
-    view = next; menuViews.visit(next); query = "";
+    view = next; query = "";
     paintMenu();
     const selected = next === "models" ? menu?.querySelector<HTMLElement>('.cb-list [aria-checked="true"]') : next === "sources" ? menu?.querySelector<HTMLElement>('.cb-source[aria-pressed="true"]') : null;
     selected?.scrollIntoView?.({ block: "nearest" });
     (selected ?? menu?.querySelector<HTMLElement>(next === "now" ? ".cb-pick" : ".cb-back"))?.focus({ preventScroll: true });
+  }
+
+  function back(): void {
+    if (view === "now") return;
+    const opened = view, selected = source, previous = parentView;
+    rememberLayerBack(() => { parentView = "now"; turnTo(previous); }, () => {
+      source = selected; parentView = previous; turnTo(opened);
+    });
   }
 
   function click(event: Event): void {
@@ -272,13 +281,13 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
     const target = (event.target as Element).closest<HTMLElement>("[data-cb-source], [data-model], [data-cb-act]");
     if (!target || (target as HTMLButtonElement).disabled) return;
     const act = target.dataset.cbAct;
-    if (act === "back") { menuViews.step("back", turnTo); return; }
+    if (act === "back") { back(); return; }
     if (act === "models") { const sources = answering(); source = (currentSource(sources) ?? sources[0])?.id ?? ""; turnTo("models"); return; }
-    if (act === "sources") { turnTo("sources"); return; }
+    if (act === "sources") { parentView = "now"; turnTo("sources"); return; }
     if (act === "retry") { modelTries = 0; paintMenu(); void reload(); return; }
     if (target.dataset.cbSource !== undefined) {
       // A provider chosen shows its models at once; nothing is saved until a model is chosen.
-      source = target.dataset.cbSource; modelTries = 0;
+      source = target.dataset.cbSource; modelTries = 0; parentView = "sources";
       turnTo("models");
       return;
     }

@@ -847,7 +847,10 @@ class App(Router):
 
         # The database is opened here, on the thread that runs the loop, and used there only.
         began = time.perf_counter()
-        self._conn = connect(paths.db_path(data_dir))
+        from .agent.history_index import EventIndexRepair
+        database = paths.db_path(data_dir)
+        self._conn = connect(database)
+        self._event_index = EventIndexRepair(database)
         logger.info("Startup phase=database elapsed_ms=%.1f", (time.perf_counter() - began) * 1000)
         began = time.perf_counter()
         try:
@@ -1008,7 +1011,8 @@ class App(Router):
         # Raphael's memory: the notes on this PC, the summary of the conversation, the reflection.
         memory_root = paths.memory_dir(data_dir) if memory_dir is None else memory_dir
         paths.owner_only_directory(memory_root)
-        self.memory = MemoryService(self._conn, memory_root, self.client, self.keys, notify=self.notify)
+        self.memory = MemoryService(self._conn, memory_root, self.client, self.keys, notify=self.notify,
+                                    event_index=self._event_index)
         self.memory.register(self)
         self.background.use_memory(self.memory)
         # The members of the owner's team, their pictures (in the local folder the memory is in,
@@ -1023,13 +1027,13 @@ class App(Router):
             connections=self.integrations.connections,
             vault=self.vault,
         )
-        if not fake_llm:
-            self.vm.member_computer_mode = lambda member: self.members.computer_preference(member, "computer_mode")
-            self.vm_tools.desktop_allowed = lambda member: self.members.computer_preference(member, "desktop_control")
-        self.members.computer_mode_busy = self.vm_tools.mode_busy
         if self.vm_tools.host_computer is not None:
             self.vm_tools.host_computer.cards = self.handbacks
             host = self.vm_tools.host_computer
+            self.desktop_viewer.active_transport = lambda member, _: self.vm_tools.computer_mode(member)
+            self.desktop_viewer.host_browser = host.browser
+            self.desktop_viewer.handbacks = self.handbacks
+            self.handbacks.release_browser = self.desktop_viewer.finish_browser_card
             self.vm.host_work_busy = lambda: bool(host.active or host.browser.downloads or host.browser.transfers)
         self.members.use_event_tools(self.gate)
         self.members.register(self)
@@ -1055,6 +1059,7 @@ class App(Router):
             notify=self._agent_notice,
             computer=self.computer,
             memory=self.memory,
+            event_index=self._event_index,
             services=self.services,
             attachment_store=self.attachment_store,
             team=self.members,
@@ -1069,6 +1074,7 @@ class App(Router):
             owner_language=lambda: configured_language(data_dir),
         )
         self.agent.register(self)
+        self.desktop_viewer.problem_note = self.agent.computer_view_problem
         self.register("integrations.card_close", self.agent.close_waiting_card)
         self.rooms.turn_view = lambda turn: self.agent._turn_views([turn])[0]
         from .native_journeys import bot_homes_brain
@@ -1090,6 +1096,8 @@ class App(Router):
                 return self.agent.computer_scope_busy(*scope[1:])
             return scope[0] == "async" and not scope[1].done()
         self.vm_tools.scope_busy = computer_scope_busy
+        self.vm_tools.suggestions.notify = self.notify
+        self.vm_tools.suggestions.resume = self.agent.resume_on_vm
         self.home = HomeOverview(self._conn, self, self.members, calendar_events=ConnectedCalendar(self, self.connectors, notify=self.notify))
         self.home.register()
         self.calendar.shown, self.calendar.zone, self.calendar.google_state = self.home.between, self.home.zone, self.home.google_state
@@ -1204,10 +1212,11 @@ class App(Router):
     # --- start-up and shutdown ------------------------------------------------------------------
 
     def start(self) -> None:
-        """Begin loading the speech side and warming up what the first dictation would build."""
+        """Begin the speech warm-up and the one-time history index repair."""
         if self._threads:
             return
         self._select_saved_engine()
+        self._threads.append(self._event_index.start(self._closing.is_set))
         for target, name in ((self._prewarm, "prewarm"), (self._startup, "startup")):
             thread = threading.Thread(target=target, name=f"raphael-{name}", daemon=True)
             self._threads.append(thread)

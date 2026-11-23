@@ -113,7 +113,9 @@ async def vm_smoke(directory):
         vm.hold(target, True)
         refused = []
         for name, arguments in calls:
-            assert (await gate.call_plugin(snapshot.refs[name].key, arguments)).kind == "owner_holds_control", name
+            result = await gate.call_plugin(snapshot.refs[name].key, arguments)
+            assert result.ok and result.kind == "waiting_for_owner", name
+            assert json.loads(result.text)["status"] == "waiting_for_owner", name
             refused.append(name)
         vm.hold(target, False)
         state = await vm.status(target)
@@ -122,7 +124,7 @@ async def vm_smoke(directory):
         return {"state": state, "completed": completed, "brain": "fake", "paid_requests": 0,
                 "prepare_docker_commands": 0, "next_turn_docker_commands": 0,
                 "without_approval": completed, "owner_held_refused": refused,
-                "control_gate": "refused while held", "attachment_id": attachment_id(hub.attachments), "page_tools": page_tools,
+                "control_gate": "waiting for owner", "attachment_id": attachment_id(hub.attachments), "page_tools": page_tools,
                 "preparation": preparation}
     finally:
         await vm.aclose(stop=False)

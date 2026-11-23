@@ -14,11 +14,10 @@
 // last click activated (a menu item that opened it counts as the menu's own opener), kept as the element and, for a list that
 // is drawn again, as a key that finds its twin. A press on that control closes the panel and does nothing else, wherever it
 // lands: through a scrim, beside a popover, on the anchor of a menu, or as Enter / Space on the focused control.
-import type { NavStep } from "./nav-history";
-import { frameStep, hasInlineLayer, stepInlineLayer, stepInlineSideLayer, type LayerStep } from "./nav-layers";
+import { restoreLayerForward, type NavStep } from "./nav-history";
+import { closeLayerBack, frameStep, inlineLayer, type LayerNavigation } from "./nav-layers";
 
-interface Layer {
-  step?: LayerStep;
+interface Layer extends LayerNavigation {
   panel(): HTMLElement | null;
   close(): void;
   canClose(): boolean;
@@ -344,11 +343,11 @@ function listen(): void {
 /** Register a panel, or a getter when rendering replaces its DOM; dispose with its close/reset. */
 export function registerDismissal(
   panel: HTMLElement | (() => HTMLElement | null), close: () => void,
-  canClose: () => boolean = () => true, anchor?: HTMLElement, step?: LayerStep,
+  canClose: () => boolean = () => true, anchor?: HTMLElement, navigation: LayerNavigation = {},
 ): () => void {
   listen();
   // Whatever opens a panel is its opener: the control the last click activated, nothing when the panel came without one (a key, a timer).
-  const layer: Layer = { panel: typeof panel === "function" ? panel : () => panel, close, canClose, anchor, step, opener: openerNow() };
+  const layer: Layer = { panel: typeof panel === "function" ? panel : () => panel, close, canClose, anchor, ...navigation, opener: openerNow() };
   layers.push(layer);
   return () => {
     const index = layers.indexOf(layer);
@@ -360,24 +359,18 @@ export function frameNavigation(event: MessageEvent): NavStep | undefined {
   return frameStep(event, top(true)?.panel ?? document);
 }
 
-export const hasOpenLayer = (): boolean => !!top(true) || hasInlineLayer();
+export const hasOpenLayer = (): boolean => !!top(true) || !!inlineLayer(document);
 
-/** Back belongs to the top open layer. Forward is consumed even when that layer has nowhere to go. */
-export function stepOpenLayer(direction: NavStep, withinLayer: () => boolean): boolean {
+/** The most specific visible surface spends the press before place history can move. */
+export function stepOpenLayer(direction: NavStep): boolean {
   const current = top(true);
-  if (stepInlineLayer(current?.panel ?? document, direction, withinLayer)) return true;
-  if (!current) return false;
-  const { layer } = current;
-  if (!layer.step?.(direction, withinLayer) && direction === "back" && layer.canClose()) layer.close();
-  return true;
-}
-
-export function stepSideLayer(direction: NavStep): boolean {
-  const current = top(true);
-  if (stepInlineSideLayer(current?.panel ?? document, direction)) return true;
-  if (!current) return false;
-  if (direction === "back" && current.layer.canClose()) current.layer.close();
-  return true;
+  const inside = inlineLayer(current?.panel ?? document);
+  const layer = inside ?? current?.layer;
+  if (layer?.step?.(direction) || !inside && current && !current.layer.canClose()) return true;
+  if (direction === "forward") return restoreLayerForward() || !!layer;
+  if (inside) closeLayerBack(inside.back, inside);
+  else if (current) closeLayerBack(current.layer.back ?? current.layer.close, current.layer);
+  return !!layer;
 }
 
 // The clicks that open panels come before the first panel does, so the page is listened to from the start.

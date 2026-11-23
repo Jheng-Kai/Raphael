@@ -117,7 +117,7 @@ export function mountConversationFind(o: { button?: HTMLElement; bar: HTMLElemen
       count.textContent = describeError(error);
     }
   }
-  function open(): void { bindNavLayer(o.bar, close); opened = true; o.changed?.(true); o.bar.hidden = false; o.button?.setAttribute('aria-expanded', 'true'); input.focus({preventScroll:true}); }
+  function open(): void { bindNavLayer(o.bar, close, { restore: () => () => open() }); opened = true; o.changed?.(true); o.bar.hidden = false; o.button?.setAttribute('aria-expanded', 'true'); input.focus({preventScroll:true}); }
   function close(focus = true): void {
     const viewport = o.scroll.getBoundingClientRect();
     const anchor = marks[index]?.closest<HTMLElement>('.chat-message, .timeline-event, .event-group') ?? [...o.thread.querySelectorAll<HTMLElement>('.chat-message, .message-text')].find(el => {
