@@ -39,7 +39,7 @@
 
 /* A package's page, in the list's place: the back arrow (as an app's page of 連接 has it), the name and the count, its
    controls as on its row, where it came from, then its skills on one card of Settings' rows. */
-.skl-page-title { display: flex; flex: 1 0 100%; align-items: center; gap: var(--sp-2); min-width: 0; }
+.skl-page-title { display: flex; flex: 1 1 auto; align-items: center; gap: var(--sp-2); min-width: 0; }
 .modal-body .skl-page-title > h1 { min-width: 0; padding: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .skl-page-actions { display: flex; justify-content: flex-end; margin-inline-start: auto; padding-inline-end: var(--sp-4); }
 .skl-page-actions > .ctl { display: flex; align-items: center; gap: var(--sp-2); }

@@ -953,9 +953,15 @@ class DesktopViewer:
     def host_selected(self, session):
         tab, card = self.host_selection(session.member_id, session.conversation_id)
         watched = session.host_watched_tab
-        if card is None and watched is not None and self.host_browser.live(watched):
-            return watched
-        return tab
+        base = watched if card is None and watched is not None and self.host_browser.live(watched) else tab
+        # A window the shown page opens (a sign-in, a verification) is followed at once, also during a takeover.
+        follow = self.host_browser.selected(session.member_id)
+        if (base is not None and follow is not None and follow is not base and self.host_browser.live(follow)
+                and any(item is base for item in self.host_browser.lineage(follow.opener))):
+            if card is None:
+                session.host_watched_tab = follow
+            return follow
+        return base
 
     def host_input_allowed(self, token, session):
         return (self.sessions.get(token) is session and not session.preview and bool(session.sockets)

@@ -783,7 +783,7 @@ function appPageHTML(s: StoreService | undefined, g: ConnectionGroup | undefined
     : loggingIn
       ? `<span class="cs-wait" role="status">${esc(t(s!.auth === "none" ? "conn.connecting" : "conn.loggingIn"))}</span>` + btn(esc(t("conn.cancel")), "cs-connect", ' data-conn="cancel-login"')
       : btn(esc(t("conn.connect")), "pri cs-connect", ` data-conn="join" data-id="${esc(s!.id)}"`);
-  const head = `<header class="cs-head">${backHTML()}${tileHTML(mark, "lg")}<h2 class="big" id="cs-page-title">${esc(name)}</h2>${close}</header>`;
+  const head = `<header class="cs-head">${backHTML()}${tileHTML(mark, "lg")}<h2 class="big" id="cs-page-title" data-title-back>${esc(name)}</h2>${close}</header>`;
   const about = `<p class="cs-desc">${linkedText(g?.description || (s ? words(s.about) : t("conn.customServer")))}</p>`;
   const secrets = g ? [...g.env, ...g.headers] : [];
   // What signing in asks of the owner, said once, in a line, where the old page said it twice.
@@ -856,7 +856,7 @@ function formHTML(f: ConnectionForm, close: string): string {
   const error = f.error ? `<div class="note" role="alert">${st("err", f.error())}</div>` : "";
   const typeSel = sel(typeChoices(), f.type, t("conn.form.type"), ` data-k="conn-type"${off ? " disabled" : ""}`);
   return (
-    `<header class="cs-top">${backButton(t("conn.back"), ' data-conn="form-back"', "cs-back")}<h2 class="big cs-top-t" id="set-title" tabindex="-1">${esc(t(f.id ? "mcp.edit" : "mcp.add"))}</h2>${close}</header>` +
+    `<header class="cs-top">${backButton(t("conn.back"), ' data-conn="form-back"', "cs-back")}<h2 class="big cs-top-t" id="set-title" tabindex="-1" data-title-back>${esc(t(f.id ? "mcp.edit" : "mcp.add"))}</h2>${close}</header>` +
     `<div class="add-grid">` +
     `<div class="two">${fld(t("conn.form.type"), typeSel)}${fld(t("conn.form.name"), fieldHTML(t("conn.form.nameHint"), f.name, { id: "conn-name", label: t("conn.form.name"), disabled: off }), "", "conn-name")}</div>` +
     fields +
@@ -900,7 +900,7 @@ export function connectionsHTML(v: ConnectionsView, heading = "", close = ""): s
   const target = openTarget(v);
   if (target) return `<div class="cs cs-page">${quietHeading(heading)}${appPageHTML(target.entry, target.group, v, close)}</div>` + key;
   if (v.screen === "connected" && Array.isArray(v.groups) && v.groups.length) {
-    return `<div class="cs cs-connected"><header class="cs-top">${backHTML()}<h2 class="cs-top-t">${esc(t("conn.tab.installed"))}</h2>${close}</header>${quietHeading(heading)}` +
+    return `<div class="cs cs-connected"><header class="cs-top">${backHTML()}<h2 class="cs-top-t" data-title-back>${esc(t("conn.tab.installed"))}</h2>${close}</header>${quietHeading(heading)}` +
       `<div class="cs-body" data-cs-body>${installedHTML(v)}</div></div>` + key;
   }
   // The connected apps could not be read: the chip that would open them says so instead, with the way to read them again.

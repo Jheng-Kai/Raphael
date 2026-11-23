@@ -181,6 +181,11 @@ export function createSettings(app: AppContext): SettingsPage {
     `<div class="modal-body"></div>` +
     `</div>`;
   const body = el.querySelector<HTMLElement>(".modal-body")!;
+  // A page title beside a back button goes back too, through that same button.
+  body.addEventListener("click", event => {
+    const title = (event.target as Element).closest("[data-title-back]");
+    if (title) title.closest("header")?.querySelector<HTMLButtonElement>(".back-button:not(:disabled)")?.click();
+  });
   const navList = el.querySelector<HTMLElement>(".set-list")!;
   let pane: SettingsPane = "general";
   let usageTab: UsageTab = "overview";

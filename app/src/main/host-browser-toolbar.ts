@@ -98,22 +98,39 @@ export function mountHostBrowserToolbar(screen: HTMLElement, send: (action: Host
     const action = button.dataset.browserAction as Action;
     send({ action, tab: button.dataset.browserTab ?? model.shown }, ++actionId);
   });
+  const shownUrl = (): string => model?.tabs.find(tab => tab.id === model?.shown)?.url ?? "";
   address.addEventListener("input", () => { editing = true; showError(false); });
+  // As in Chrome: the first press into the field selects the whole address; a press while it has the focus places the caret.
+  let selectOnUp = false;
+  address.addEventListener("mousedown", () => { selectOnUp = document.activeElement !== address; });
+  address.addEventListener("mouseup", event => {
+    if (!selectOnUp) return;
+    selectOnUp = false;
+    if (address.selectionStart === address.selectionEnd) { event.preventDefault(); address.select(); }
+  });
+  address.addEventListener("focus", () => { if (!selectOnUp) address.select(); });
   address.addEventListener("blur", () => {
     if (failed) return;
     editing = false;
-    address.value = model?.tabs.find(tab => tab.id === model?.shown)?.url ?? "";
+    address.value = shownUrl();
   });
   address.addEventListener("keydown", event => {
     if (!model || event.isComposing || event.keyCode === 229) return;
+    if (event.key === "Escape") {
+      // Escape puts the page's own address back, a second one leaves the field.
+      event.preventDefault();
+      event.stopPropagation();
+      if (editing || address.value !== shownUrl()) { editing = false; showError(false); address.value = shownUrl(); address.select(); }
+      else address.blur();
+      return;
+    }
     if (event.key !== "Enter") return;
     event.preventDefault();
     event.stopPropagation();
     const value = address.value.trim();
     if (!value) { showError(true); return; }
-    const url = /^(?:[a-z][\w+.-]*:\/\/|about:)/i.test(value) ? value : `https://${value}`;
     navigationId = ++actionId;
-    send({ action: "navigate", tab: model.shown, url }, navigationId);
+    send({ action: "navigate", tab: model.shown, url: addressTarget(value) }, navigationId);
   });
 
   return {
@@ -124,4 +141,13 @@ export function mountHostBrowserToolbar(screen: HTMLElement, send: (action: Host
       if (ok) { editing = false; address.blur(); }
     },
   };
+}
+
+/** What the address field goes to, as Chrome's omnibox does: an address as written, a bare host on https, anything else a Google search. */
+export function addressTarget(value: string): string {
+  const text = value.trim();
+  if (/^(?:[a-z][\w+.-]*:\/\/|about:)/i.test(text)) return text;
+  const host = /^(?:localhost|\d{1,3}(?:\.\d{1,3}){3}|(?:[\p{L}\p{N}-]+\.)+[\p{L}]{2,})(?::\d+)?(?:[/?#]\S*)?$/u;
+  if (!/\s/.test(text) && host.test(text)) return `https://${text}`;
+  return `https://www.google.com/search?q=${encodeURIComponent(text)}`;
 }
