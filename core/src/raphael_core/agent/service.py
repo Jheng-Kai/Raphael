@@ -4352,6 +4352,8 @@ class AgentService:
             raise HarnessToolError("needs_composio_key")
         if app is None:
             raise ValueError("unknown app")
+        if args.get("reconnect") is not True:
+            await self._cards.verify(app)  # an app held as connected is read at Composio before it is called connected
         card = self._cards.show(turn_id=ask.turn_id, member_id=ask.speaker.id, conversation_id=ask.conversation_id,
                                 app=app, language=ask.language, done=ask.made, reconnect=args.get("reconnect") is True)
         if card is None:

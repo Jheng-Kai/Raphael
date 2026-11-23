@@ -364,3 +364,34 @@ async def test_a_composio_card_that_reconnects_an_app_still_read_as_connected_ta
     _, card = await rig.connect(card)
     assert card.state == "connected" and deleted == [("/connected_accounts/ca_main", None)]  # given back, never revoked
     assert [(a["id"], a["label"]) for a in rig.connectors.store.connectors["composio:gmail"].accounts] == [("ca_test", "Jack")]
+
+
+async def test_an_app_composio_no_longer_connects_gets_its_card_even_while_the_list_says_connected(tmp_path, conn):
+    """connect_app said "connected already" on a memory: the app's account had been removed at Composio and every tool of it
+    failed. Before it says so the app is read at Composio; one that still works is still connected."""
+    listing = [None]
+    platform = Platform()
+
+    def transport(request):
+        if request.method == "GET" and request.url.path.endswith("/connected_accounts"):
+            return httpx.Response(200, json={"items": listing[0] if listing[0] is not None else [
+                {"id": "ca_test", "status": "ACTIVE", "toolkit": {"slug": "gmail"}}]})
+        return platform(request)
+
+    async def browser(url):
+        pass
+    rig = Rig(tmp_path, conn, GoogleFixture("n0nce"), transport=httpx.MockTransport(transport), browser=browser)
+    rig.vault.set("connectors:composio:key", "ak_test")
+    _, card = await rig.connect(rig.card())
+    assert card.state == "connected" and rig.cards.ready_tools(APPS["gmail"])
+    # Composio still has the account: nothing to ask the owner.
+    await rig.cards.verify(APPS["gmail"])
+    assert rig.card() is None
+    # Composio has none now: the app is not connected, and a card is shown for it.
+    listing[0] = []
+    await rig.cards.verify(APPS["gmail"])
+    assert not rig.cards.ready_tools(APPS["gmail"]) and rig.connectors.store.connectors["composio:gmail"].status == "INACTIVE"
+    later = AgentHistory(conn).add(session_id="s", question="again", route="answer", prefix="", text="", status="running",
+                                   source="app", member_id=0)
+    again = rig.cards.show(turn_id=later, member_id=0, conversation_id=None, app=APPS["gmail"], language="zh-TW")
+    assert again is not None and again.state == "pending"

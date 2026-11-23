@@ -473,6 +473,9 @@ async def test_connect_app_still_connects_google_when_the_owner_names_it(setup, 
         def needs_composio_key(self, app):
             return False
 
+        async def verify(self, app):
+            pass
+
         def show(self, **kwargs):
             self.shown.append(kwargs)
 
@@ -481,6 +484,36 @@ async def test_connect_app_still_connects_google_when_the_owner_names_it(setup, 
     client.chats = [chat("", ("connect_app", {"app": "googlecalendar"})), live_said("請按連接。")]
     await typed(rig, "幫我連 Google 行事曆", secretary.id)
     assert len(Cards.shown) == 1
+
+
+async def test_connect_app_reads_an_app_held_as_connected_at_composio_before_it_says_so(setup, client):
+    rig, team = setup
+    order = []
+
+    class Cards:
+        async def resolve(self, ident):
+            from raphael_core.connectors.apps import APPS
+            return APPS[ident]
+
+        def needs_composio_key(self, app):
+            return False
+
+        async def verify(self, app):
+            order.append(("read", app.id))
+
+        def show(self, **kwargs):
+            order.append(("show", kwargs["reconnect"]))
+
+    rig.service._cards = Cards()
+    secretary = member(team)
+    client.chats = [chat("", ("connect_app", {"app": "gmail"})), live_said("它已連接。")]
+    await typed(rig, "看我的信", secretary.id)
+    assert order == [("read", "gmail"), ("show", False)]
+    # A card the member asks for to sign in again is not held back by a read: the owner is asked either way.
+    order.clear()
+    client.chats = [chat("", ("connect_app", {"app": "gmail", "reconnect": True})), live_said("請重新登入。")]
+    await typed(rig, "重新連 Gmail", secretary.id)
+    assert order == [("show", True)]
 
 
 async def test_find_app_leaves_google_out_of_a_calendar_request(setup, client):
