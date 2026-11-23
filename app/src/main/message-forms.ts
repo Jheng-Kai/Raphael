@@ -105,7 +105,7 @@ function chartSVG(form: Extract<AnswerForm, { kind: "chart" }>): string {
   const values = form.series.flatMap(s => s.values), min = Math.min(0, ...values), max = Math.max(0, ...values);
   const range = max - min || 1, y = (v: number) => 200 - (v - min) / range * 168;
   const step = 480 / form.labels.length, x = (i: number) => 56 + step * (i + .5);
-  let content = `<path class="chart-axis" d="M56 32V200H536M56 ${y(0)}H536"/>`;
+  let content = (max > 0 ? `<path class="chart-grid" d="M56 ${y(max)}H536"/>` : "") + `<path class="chart-axis" d="M56 32V200H536M56 ${y(0)}H536"/>`;
   for (const value of [max, min]) content += `<text x="50" y="${y(value) + 4}" text-anchor="end">${esc(Number(value.toPrecision(4)))}</text>`;
   form.series.forEach((series, index) => {
     const cls = `chart-series chart-series-${index}`;

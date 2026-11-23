@@ -125,16 +125,19 @@
 .form-chart { display: block; width: 100%; height: auto; overflow: visible; }
 .form-chart text { fill: var(--text-2); font: var(--fs-xs) var(--ui); }
 .chart-axis { fill: none; stroke: var(--edge); stroke-width: 1; }
-.chart-series { fill: var(--text); stroke: var(--text); stroke-width: 2; }
-.chart-series-1 { fill: var(--text-2); stroke: var(--text-2); }
+/* A chart in a reply wears the overview's chart colours (report-chart.ts): the first series the theme's blue, the second a
+   lighter tint of it, with a faint line at the top value. */
+.chart-series { fill: var(--chart-1); stroke: var(--chart-1); stroke-width: 2; }
+.chart-series-1 { fill: color-mix(in srgb, var(--chart-1) 40%, var(--panel)); stroke: color-mix(in srgb, var(--chart-1) 55%, var(--panel)); }
+.chart-grid { fill: none; stroke: var(--line); stroke-width: 1; stroke-dasharray: 3 4; }
 .form-chart polyline { fill: none; }
 .form-chart polyline.chart-series-1 { stroke-dasharray: 6 4; }
 .chart-legend { display: flex; flex-wrap: wrap; gap: var(--sp-3); padding: var(--sp-2) var(--sp-3) 0; color: var(--text-2); font-size: var(--fs-xs); overflow-wrap: anywhere; }
-.chart-key::before { content: ""; display: inline-block; width: 14px; margin-inline-end: 6px; border-top: 2px solid var(--text); vertical-align: middle; }
-.chart-key-1::before { border-color: var(--text-2); border-top-style: dashed; }
+.chart-key::before { content: ""; display: inline-block; width: 14px; margin-inline-end: 6px; border-top: 2px solid var(--chart-1); vertical-align: middle; }
+.chart-key-1::before { border-color: color-mix(in srgb, var(--chart-1) 55%, var(--panel)); border-top-style: dashed; }
 /* A bar chart's key is the bar itself, a filled swatch in the bar's colour; a line's is a stroke, solid or dashed like the line. */
-.chart-legend-bar .chart-key::before { height: 10px; border: 0; background: var(--text); }
-.chart-legend-bar .chart-key-1::before { background: var(--text-2); }
+.chart-legend-bar .chart-key::before { height: 10px; border: 0; border-radius: var(--mark-radius); background: var(--chart-1); }
+.chart-legend-bar .chart-key-1::before { background: color-mix(in srgb, var(--chart-1) 40%, var(--panel)); }
 .hljs-keyword, .hljs-selector-tag, .hljs-built_in { color: var(--accent-text); font-weight: var(--weight-semibold); }
 .hljs-string, .hljs-attr, .hljs-title { color: var(--ok); }
 .hljs-number, .hljs-literal, .hljs-symbol { color: var(--warn); }
