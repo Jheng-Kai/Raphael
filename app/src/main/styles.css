@@ -565,11 +565,11 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
   box-shadow: var(--head-cover); animation: set-head-edge linear both; animation-timeline: scroll(nearest block); animation-range: 0 12px; }
 @keyframes set-head-edge { from { box-shadow: var(--head-cover), 0 1px 0 transparent; } to { box-shadow: var(--head-cover), 0 var(--sp-3) 0 var(--dialog), 0 calc(var(--sp-3) + 1px) 0 var(--line); } }
 /* On the Connectors pages and a plugin's page the way back is the title itself: a plain chevron and the words, no circle,
-   both pressable and lit together. */
+   both pressable and lit together: under the pointer both take the full text colour, never a lighter one. */
 .modal-body .btn.icon.back-button.back-link { flex: none; width: auto; min-width: 0; height: 36px; min-height: 36px; padding: 0; margin-inline-end: calc(var(--sp-1) - var(--sp-3));
   border-color: transparent; background: transparent; box-shadow: none; color: var(--text); }
 [data-title-back] { cursor: pointer; }
-.modal-body header:has(.back-link:hover, [data-title-back]:hover) :is(.btn.icon.back-button.back-link, [data-title-back]) { color: var(--text-2); }
+.modal-body header:has(.back-link:hover, [data-title-back]:hover) :is(.btn.icon.back-button.back-link, [data-title-back]) { color: var(--text); }
 .modal-body .set-content:has(> .cs), .modal-body .set-content > .cs { box-sizing: border-box; width: calc(100% + var(--close-gutter)); margin-right: calc(-1 * var(--close-gutter)); padding-right: var(--close-gutter); }
 .mb-dialog:not(.mb-confirm, .model-chooser, .store-dialog, .tpr) { --close-gutter: calc(36px + var(--sp-3)); padding-right: calc(var(--pa-dlg-pad) + var(--close-gutter)); }
 .cs-dialog:not(.pv-editor) { --close-gutter: calc(36px + var(--sp-3)); padding-right: calc(var(--sp-4) + var(--close-gutter)); }
@@ -1030,7 +1030,7 @@ button.ob-tile:hover:not(:disabled) .ob-get { background: var(--pressed); }
 .btn.icon.close-button, .btn.icon.back-button { flex: none; width: 36px; min-width: 36px; height: 36px; min-height: 36px; padding: 0; border-color: transparent; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--edge-rim); color: var(--text-2); }
 .btn.icon:is(.back-button, .close-button):hover:not(:disabled) { background: var(--hover); color: var(--text); }
 .btn.icon:is(.back-button, .close-button):active:not(:disabled) { background: var(--pressed); color: var(--text); }
-/* The plain way back beside a title is only a chevron: no fill or rim in any state; under the pointer it dims with its title. */
+/* The plain way back beside a title is only a chevron: no fill or rim in any state; under the pointer it and its title take the full text colour. */
 .btn.icon.back-button.back-link, .btn.icon.back-button.back-link:is(:hover, :active, :focus):not(:disabled) { border-color: transparent; background: transparent; box-shadow: none; }
 .btn.icon:is(.back-button, .close-button) .i { width: 18px; height: 18px; }
 :root[data-keys] .btn.icon.back-button:focus-visible,
