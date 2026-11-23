@@ -142,6 +142,10 @@ A sign-in cancelled half way can be removed, so no useless accounts pile up, and
   `core/tests/test_connectors.py` and `app/src/main/connections.test.ts`. The existing `accounts-card` and
   `accounts-remove-yes` scenes cover the account row and removal controls with fixture responses.
 
+- Accounts with no address and no name (an app added with a key) say when each was made, and with several the newest says so: `帳號 N · 月/日 時:分`
+  and `· 最新` on the newest (`accounts-dated`; the core marks it, `core/tests/test_connector_accounts.py` proves the marking and the reads). The page also
+  reads Composio's accounts once after it draws (`connectors.status` with `accounts`, at most twice a minute) and draws again only if one changed, so an
+  account removed elsewhere is gone from the list; the mock core of `look` has nothing to read, so only the row words are checked there.
 - A sign-in that was given up leaves no account: the core gives back (Composio and the list) the account of a flow that was cancelled, closed,
   failed or ran out, and any waiting one older than ten minutes when the list is read. `look` cannot prove that (the core is a mock there):
   `core/tests/test_connector_accounts.py` does, and the scene `accounts-card` shows the list after the core gave the old one back.
@@ -154,7 +158,7 @@ A sign-in cancelled half way can be removed, so no useless accounts pile up, and
   `integrations.connect_cancel`).
 
 ```powershell
-npm run look -- accounts-card accounts-menu accounts-relogin-menu connection-lost accounts-remove-ask accounts-remove-yes accounts-remove-waiting accounts-remove-last account-labels account-label-edit sign-in-waits sign-in-replaced sign-in-cancelled --theme both --width 1120,720,1920x1080
+npm run look -- accounts-card accounts-dated accounts-menu accounts-relogin-menu connection-lost accounts-remove-ask accounts-remove-yes accounts-remove-waiting accounts-remove-last account-labels account-label-edit sign-in-waits sign-in-replaced sign-in-cancelled --theme both --width 1120,720,1920x1080
 ```
 
 A connection that drops (R-ACCT-04): the core reads the accounts a minute after start and every twenty minutes (`watch_once`; on a Mac only once the key

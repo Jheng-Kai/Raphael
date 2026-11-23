@@ -1339,7 +1339,7 @@ export interface ConnectionGroup {
   description?: string;
   logo?: string;
   /** The accounts a managed service is signed in with, by their status (`ACTIVE`, `EXPIRED`, ...): never an account's name or id. */
-  accounts?: { id?: string; status: string; label?: string; display_name?: string; alias?: string }[];
+  accounts?: { id?: string; status: string; label?: string; display_name?: string; alias?: string; created_at?: number; newest?: boolean }[];
   disabled_tools?: string[];
   tools_state?: "loading" | "failed" | "ready";
   result_size_limit?: number;

@@ -398,6 +398,15 @@ export function checkRendered(name, context = {}) {
       require(visible(card.querySelector('[data-conn="add-account"]')), "加入另一個帳號 is still there");
       require(made("connectors.status").length > 0, "the list was read from the core");
     }
+    if (name === "accounts-dated") {
+      // R-ACCT-04: told apart by the time each was made (a clock in the window's own style), the newest said in a word.
+      const names = rows.map(row => row.querySelector(".nm").textContent);
+      require(rows.length === 2 && /^帳號 1 · (\d{4}\/)?\d+\/\d+ \d{2}:\d{2}$/.test(names[0]), `the first row says its number and when it was made: ${names[0]}`);
+      require(/^帳號 2 · (\d{4}\/)?\d+\/\d+ \d{2}:\d{2} · 最新$/.test(names[1]), `the second says so and that it is the newest: ${names[1]}`);
+      require(rows.every(row => row.querySelector(".st").textContent === "已連結" && row.querySelector('[data-conn="account-menu"]')), "each row still says 已連結 and has its ⋯");
+      require(rows.every(row => Math.abs(row.getBoundingClientRect().height - rows[0].getBoundingClientRect().height) < 1), "the rows are one height");
+      require(rows.every(row => row.scrollWidth <= row.clientWidth + 1 && visible(row.querySelector('[data-conn="account-menu"]')) && inside(row.querySelector('[data-conn="account-menu"]'), row)), "no row is cut at its side and every ⋯ is whole inside its row");
+    }
     if (name === "accounts-relogin-menu") {
       // R-ACCT-04: a dead account is signed in to again in its own place, so the way to do it stands first in its menu.
       const items = [...document.querySelectorAll('#app-popover [role="menuitem"]')];

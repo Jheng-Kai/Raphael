@@ -427,7 +427,8 @@ async function connectorCall<T>(method: string, params: object = {}): Promise<T>
   if (result && typeof result === "object" && "ok" in result && result.ok === false) throw new Error(result.error);
   return result as T;
 }
-export const connectorsStatus = (): Promise<import("./plugins-data").ConnectorStatus> => connectorCall("connectors.status", { refresh: false });
+/** What the core stores; with `accounts` it first reads the accounts from Composio (once in half a minute), so that one removed elsewhere is gone. */
+export const connectorsStatus = (accounts = false): Promise<import("./plugins-data").ConnectorStatus> => connectorCall("connectors.status", { refresh: false, ...(accounts ? { accounts: true } : {}) });
 export const connectorsCatalog = (): Promise<{ items: import("./plugins-data").Toolkit[]; categories: Array<{ id: string; name: string }> }> => connectorCall("connectors.catalog");
 export const connectorsCategories = (): Promise<{ items: Array<{ id: string; name: string }> }> => connectorCall("connectors.categories");
 export const connectorsTools = (id: string): Promise<{ items: import("./plugins-data").ConnectorTool[] }> => connectorCall("connectors.tools", { id });

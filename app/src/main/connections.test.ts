@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { Window } from "happy-dom";
 import { setLocale, t } from "./i18n";
+import { formatShortDateTime } from "./format";
 import type { AppsInventory, AuditEntry, ConnectionGroup, InventoryApp, StoreService } from "./types";
 
 const api = vi.hoisted(() => ({
@@ -2023,6 +2024,45 @@ describe("what the dialog does", () => {
         expect(api.connectorsDisconnect).not.toHaveBeenCalled();
         expect(texts(dom(connectionsHTML(c.view())), ".cs-acct .nm")).toEqual(["Gmail · home@example.test"]);
       } finally { c.reset(); }
+    });
+
+    test("accounts with no address and no name say when each was made, and the newest says so (R-ACCT-04)", async () => {
+      const first = { id: "a1", status: "ACTIVE", created_at: Date.UTC(2026, 9, 20, 6, 0) / 1000 };
+      const second = { id: "a2", status: "ACTIVE", created_at: Date.UTC(2026, 9, 21, 6, 0) / 1000, newest: true };
+      const c = await openGmail([first, second]);
+      try {
+        const names = texts(dom(connectionsHTML(c.view())), ".cs-acct .nm");
+        expect(names).toEqual([`帳號 1 · ${formatShortDateTime(first.created_at * 1000)}`, `帳號 2 · ${formatShortDateTime(second.created_at * 1000)} · 最新`]);
+      } finally { c.reset(); }
+      // One account is still just "帳號 1"; an account with a name keeps it, and a note of its time is not added.
+      const one = await openGmail([{ id: "a1", status: "ACTIVE", created_at: first.created_at }, { id: "a2", status: "ACTIVE", label: "Me", created_at: second.created_at, newest: true }]);
+      try { expect(texts(dom(connectionsHTML(one.view())), ".cs-acct .nm")[1]).toBe("Me"); } finally { one.reset(); }
+      const alone = await openGmail([{ id: "a1", status: "ACTIVE", created_at: first.created_at }]);
+      try { expect(texts(dom(connectionsHTML(alone.view())), ".cs-acct .nm")).toEqual(["帳號 1"]); } finally { alone.reset(); }
+    });
+
+    test("the page reads Composio's accounts after it draws, and draws again only when one was removed elsewhere", async () => {
+      // The core keeps what it read: the second reading of what is stored already has the one account that is left.
+      let held = [{ id: "a1", status: "ACTIVE", label: "Old" }, { id: "a2", status: "ACTIVE", label: "New" }];
+      api.connectorsStatus.mockReset();
+      api.connectorsStatus.mockImplementation(async (accounts?: boolean) => {
+        if (accounts === true) held = held.slice(-1);
+        return { connectors: [gmail(held)], composio_configured: true, google_configured: false };
+      });
+      const c = createConnections(host);
+      await c.load();
+      await settle();
+      try {
+        expect(api.connectorsStatus.mock.calls.map(call => call[0] === true)).toEqual([false, true, false, true]);
+        c.click(button("open", { id: "composio:gmail" }));
+        expect(texts(dom(connectionsHTML(c.view())), ".cs-acct .nm")).toEqual(["New"]);
+      } finally { c.reset(); }
+      // Nothing changed at Composio: one extra reading, and no second drawing.
+      api.connectorsStatus.mockClear();
+      const quiet = createConnections(host);
+      await quiet.load();
+      await settle();
+      try { expect(api.connectorsStatus.mock.calls.map(call => call[0] === true)).toEqual([false, true]); } finally { quiet.reset(); }
     });
 
     test("every row is a person, a name, a status and a ⋯; the 帳號名稱 button is gone", async () => {
