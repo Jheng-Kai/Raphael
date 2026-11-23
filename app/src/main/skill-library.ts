@@ -119,10 +119,10 @@ function packagePageHTML(p: LibraryPackage, v: SkillLibraryView, headerClose: st
   const source = p.source ? `<p class="d skl-source">${esc(p.source)}${p.version ? ` · ${esc(p.version)}` : ""}</p>` : "";
   return `<section class="skl skl-page" data-skl-page="${esc(p.key)}" aria-labelledby="set-title">` +
     `<div class="skl-pack" data-skl-pack="${esc(p.key)}"><header class="set-head skl-page-head">` +
-    backButton(t("chooser.back"), ' data-skl="back" data-k="skl-back"', "back-link") + headerClose +
-    `<div class="skl-page-title"><h1 class="skl-page-name" id="set-title" tabindex="-1" data-title-back>${esc(p.name)}</h1>` +
+    `<div class="skl-page-title"><span class="back-title">` + backButton(t("chooser.back"), ' data-skl="back" data-k="skl-back"', "back-link") +
+    `<h1 class="skl-page-name" id="set-title" tabindex="-1" data-title-back>${esc(p.name)}</h1></span>` +
     `<span class="skl-count">${esc(t("skillLib.count", { count: p.skills.length }))}</span>` +
-    `<div class="skl-page-actions">` + controlsHTML(p, v) + `</div></div></header></div>` + notice + source +
+    `<div class="skl-page-actions">` + controlsHTML(p, v) + `</div></div>` + headerClose + `</header></div>` + notice + source +
     (p.description ? `<p class="d skl-about">${esc(p.description)}</p>` : "") +
     `<div class="slist skl-skills">${skills}</div></section>`;
 }

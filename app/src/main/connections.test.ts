@@ -557,7 +557,7 @@ describe("the connected apps", () => {
     const d = dom(html);
     expect(d.querySelectorAll(".cs.cs-connected")).toHaveLength(1);
     expect(d.querySelector(".cs-apps")).toBeNull();
-    const back = d.querySelector(".cs-top > .back-button")!;
+    const back = d.querySelector(".cs-top > .back-title > .back-button")!;
     expect(back.getAttribute("data-conn")).toBe("back");
     expect(back.getAttribute("title")).toBe("返回");
     expect(back.querySelector("svg.i")).not.toBeNull();

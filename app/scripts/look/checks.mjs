@@ -16,7 +16,7 @@ export function checkRendered(name, context = {}) {
       // The Connectors pages and a plugin's page go back by their title: a plain 18 px chevron beside it, with no circle.
       const glyph = back.querySelector("svg.i")?.getBoundingClientRect(), style = getComputedStyle(back);
       require(glyph?.width === 18 && glyph.height === 18 && style.boxShadow === "none" && /rgba\(0, 0, 0, 0\)|transparent/.test(style.backgroundColor)
-        && back.closest("header")?.querySelector("[data-title-back]"), "the way back is a plain chevron beside a title that goes back too");
+        && back.closest(".back-title")?.querySelector("[data-title-back]"), "the way back is a plain chevron and a title, one control that goes back");
       return;
     }
     const { width, height } = back.getBoundingClientRect(), glyph = back.querySelector("svg.i")?.getBoundingClientRect();
@@ -633,7 +633,7 @@ export function checkRendered(name, context = {}) {
       const count = head.querySelector('.skl-count');
       require(visible(close) && page.querySelectorAll('.close-button').length === 1, 'one shared close stands beside the package title');
       require([access, more, toggle].every(visible) && access.nextElementSibling === more && more.nextElementSibling === toggle &&
-        actions.lastElementChild === toggle && actionsRow.parentElement === title.parentElement, 'access, ⋯ and the rightmost switch stand at the end of the title row');
+        actions.lastElementChild === toggle && actionsRow.parentElement === title.parentElement.parentElement, 'access, ⋯ and the rightmost switch stand at the end of the title row');
       const content = page.closest('.set-content');
       const headings = [...content.querySelectorAll('h1')];
       require(content.firstElementChild === page && page.firstElementChild.firstElementChild === head &&
@@ -642,7 +642,7 @@ export function checkRendered(name, context = {}) {
       const start = content.getBoundingClientRect(), arrow = back.getBoundingClientRect(), titleBox = title.getBoundingClientRect();
       const closeBox = close.getBoundingClientRect(), countBox = count.getBoundingClientRect(), controls = actions.getBoundingClientRect();
       const centre = box => (box.top + box.bottom) / 2;
-      require(visible(count) && title.nextElementSibling === count &&
+      require(visible(count) && title.parentElement.nextElementSibling === count &&
         Math.abs(arrow.left - start.left) <= 1 && Math.abs(arrow.top - start.top) <= 1 && titleBox.left > arrow.right &&
         [titleBox, countBox, closeBox].every(part => Math.abs(centre(arrow) - centre(part)) <= 1),
         'the back button, title and count start at the top left and share a centre line with the close');
@@ -9240,7 +9240,7 @@ export function checkRendered(name, context = {}) {
     const a = back.getBoundingClientRect(), x = close.getBoundingClientRect(), centreY = (a.top + a.bottom) / 2, centreX = (a.left + a.right) / 2;
     // The way back is the title itself: a plain chevron, as tall as the ✕, beside words that go back too.
     require(back.matches('.back-link') && Math.round(a.height) === Math.round(x.height) && getComputedStyle(back).boxShadow === 'none'
-      && back.closest('header')?.querySelector('[data-title-back]'), `the way back is a plain chevron the ✕'s height beside a title that goes back (${a.width}x${a.height})`);
+      && back.closest('.back-title')?.querySelector('[data-title-back]'), `the way back is a plain chevron the ✕'s height, one control with its title (${a.width}x${a.height})`);
     require(Math.abs(centreY - (x.top + x.bottom) / 2) <= 1, `it stands on the ✕'s line (${centreY} against ${(x.top + x.bottom) / 2})`);
     const misses = [[a.left + 3, centreY], [a.right - 3, centreY], [centreX, a.top + 3], [centreX, a.bottom - 3], [centreX, centreY]].filter(([px, py]) => { const hit = document.elementFromPoint(px, py); return !(hit && (hit === back || back.contains(hit))); });
     require(misses.length === 0, `a press anywhere on its 36 px lands on it (${misses.length} points did not)`);
