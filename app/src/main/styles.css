@@ -740,6 +740,8 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .window-chrome[data-conversation-caption] ~ .toasts { bottom: max(152px, var(--toast-lift, 0px)); }
 .window-chrome[data-conversation-details] ~ .toasts { right: calc(var(--pa-det) + 20px); }
 .window-chrome[data-conversation-details] ~ .toasts .toast { max-width: min(480px, calc(100vw - var(--pa-det) - 40px)); }
+/* Placed over the composer (ui.ts), a note is no wider than the composer itself. */
+.toasts[style*="--toast-max"] .toast { max-width: min(480px, var(--toast-max)); }
 /* A toast is a soft pill on the floating surface, like the question reminder beside it (R-FLOAT-01): its words, and a button framed by the
    control fill when it has one, never a box in the inverse of the page. */
 .toast { position: relative; overflow: hidden; pointer-events: auto; display: flex; align-items: center; gap: var(--sp-3); min-height: var(--h-field); padding: var(--sp-1) var(--sp-1) var(--sp-1) var(--sp-4); border: 1px solid var(--float-edge); border-radius: var(--r-pill); background: var(--float); color: var(--text); font-size: var(--fs-sm); box-shadow: var(--pop); max-width: min(480px, calc(100vw - 40px)); animation: toast-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1); }

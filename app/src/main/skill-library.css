@@ -46,6 +46,9 @@
 .modal-body .skl-page-actions .ctl .sel { width: auto; max-width: 100%; justify-content: flex-end; gap: var(--sp-1); padding-inline: var(--sp-2); border-color: transparent; background-color: transparent; color: var(--text-2); }
 .modal-body .skl-page-actions .ctl .sel:hover:not(:disabled), .modal-body .skl-page-actions .ctl .sel[aria-expanded="true"] { border-color: transparent; background-color: transparent; color: var(--text); }
 .skl-source, .skl-about { margin: 0 0 var(--sp-3); color: var(--text-3); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+/* A plugin's page: where it comes from in a small line under its name, then its own words set off as a quote. */
+.skl-page .skl-source { margin: calc(-1 * var(--sp-1)) 0 var(--sp-4) calc(18px + var(--sp-1)); font-size: var(--fs-xs); letter-spacing: 0.01em; }
+.skl-page .skl-about { max-width: 68ch; margin: 0 0 var(--sp-5); padding: var(--sp-1) 0 var(--sp-1) var(--sp-4); border-left: 2px solid var(--edge-rim); color: var(--text-2); font-size: var(--fs-sm); line-height: 1.65; }
 .modal-body .slist.skl-skills > .row.skl-entry { padding-inline: var(--sp-4); }
 
 .skl-access-menu { max-height: min(360px, calc(100vh - 16px)); }

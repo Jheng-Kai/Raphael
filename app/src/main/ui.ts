@@ -1142,7 +1142,7 @@ export const CHECK = `<svg viewBox="0 0 24 24" aria-hidden="true">${ICON.check}<
 /** How long a short note stays: a little more time for a longer one, which has to be read. */
 const infoMs = (message: string): number => Math.min(8000, 2000 + 100 * message.length);
 
-/** The toasts at the bottom of the window: short notes, and the ones with 「復原」. */
+/** The toasts at the composer's top right corner: short notes, and the ones with 「復原」. */
 class Toaster implements Notifier {
   private host: HTMLElement | null = null;
   private undoToast: HTMLElement | null = null;
@@ -1165,20 +1165,38 @@ class Toaster implements Notifier {
       this.host.className = "toasts";
       document.body.append(this.host);
     }
-    this.lift(this.host);
+    this.place(this.host);
+    this.follow();
     return this.host;
   }
 
+  private frame = 0;
+
   /**
-   * A conversation's composer grows with its attachments, its quote and its draft, and a note that stands a fixed height above the
-   * window's foot then lay over its attachments. The note stands over the composer's top edge,
-   * wherever that is; styles.css keeps its usual height as the least.
+   * Every note stands at the composer's top right corner, whatever the window shows around it: never over the sidebar or a
+   * side panel. The composer grows with its attachments, its quote and its draft and moves when a panel opens, so the notes
+   * follow it while any is on screen. With no composer in view they keep the window's lower right corner (styles.css).
    */
-  private lift(host: HTMLElement): void {
-    const composers = [...document.querySelectorAll<HTMLElement>(".page-agent:not([hidden]) .composer")];
-    const top = composers.map(composer => composer.getBoundingClientRect()).find(box => box.width > 0 && box.height > 0)?.top;
-    if (top === undefined) host.style.removeProperty("--toast-lift");
-    else host.style.setProperty("--toast-lift", `${Math.max(0, Math.round(window.innerHeight - top + 12))}px`);
+  private place(host: HTMLElement): void {
+    const box = [...document.querySelectorAll<HTMLElement>(".page-agent:not([hidden]) .composer")]
+      .map(composer => composer.getBoundingClientRect()).find(rect => rect.width > 0 && rect.height > 0);
+    if (!box) {
+      for (const name of ["right", "bottom", "--toast-max"]) host.style.removeProperty(name);
+      return;
+    }
+    host.style.right = `${Math.max(8, Math.round(window.innerWidth - box.right))}px`;
+    host.style.bottom = `${Math.max(8, Math.round(window.innerHeight - box.top + 8))}px`;
+    host.style.setProperty("--toast-max", `${Math.round(box.width)}px`);
+  }
+
+  private follow(): void {
+    if (this.frame) return;
+    const tick = (): void => {
+      if (!this.host?.isConnected || !this.host.childElementCount) { this.frame = 0; return; }
+      this.place(this.host);
+      this.frame = requestAnimationFrame(tick);
+    };
+    this.frame = requestAnimationFrame(tick);
   }
 
   /**
