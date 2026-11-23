@@ -392,6 +392,7 @@ OWNER_ONLY = {
     **dict.fromkeys(("computer.viewer_clipboard", "computer.viewer_put_file"),
                    "The owner's own paste, copy and files through the computer's screen they view."),
     "computer.lifecycle": "Restarting, updating, repairing or resetting a member computer is the owner's maintenance; reset removes a workspace.",
+    "computer.message_paths": "The owner's press on a path in a reply opens or reveals it on the owner's PC, inside trusted folders only.",
     **dict.fromkeys(("audio.monitor", "models.ensure", "models.local_use", "models.local_cancel", "models.local_delete"),
                    "Device and downloaded speech-model settings belong to the owner."),
 }
