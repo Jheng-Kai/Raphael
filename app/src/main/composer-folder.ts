@@ -35,7 +35,9 @@ export function mountComposerFolder(
     const id = member().id;
     if (settings && !memberPaths.has(id)) void readMemberPath(id);
     const path = selected(), info = path ? details.get(path) : undefined;
-    const label = path ? info?.name ?? folderName(path) : ownName();
+    // The member's own folder, the default, keeps the button's short word (選擇資料夾): the composer's row has room for it
+    // beside the permission and the model at every width; the menu names the folder whole.
+    const label = path ? info?.name ?? folderName(path) : t("composerFolder.pick");
     button.hidden = settings === null;
     button.querySelector("span")!.textContent = label;
     button.setAttribute("aria-label", t("composerFolder.label", { p0: path ?? (memberPaths.get(id) || label) }));

@@ -215,7 +215,7 @@ export const es = {
   "projectFolders.branchNamed": "Rama: {p0}",
   "projectFolders.detached": "HEAD separado",
   "writeFolders.add": "Añadir carpeta",
-  "composerFolder.label": "Carpeta de archivos: {p0}",
+  "composerFolder.pick": "Elegir carpeta", "composerFolder.label": "Carpeta de archivos: {p0}",
   "composerPlus.label": "Añadir archivos, aplicaciones y más",
   "composerPlus.files": "Añadir archivos o fotos",
   "composerPlus.slash": "Comandos con barra",

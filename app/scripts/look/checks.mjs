@@ -4088,11 +4088,13 @@ export function checkRendered(name, context = {}) {
           const shortened = modelName.scrollWidth > modelName.clientWidth + 0.5, slot = form.querySelector('.cmp-model'), gap = parseFloat(getComputedStyle(bar).columnGap) || 0;
           const whole = shortened ? modelName.scrollWidth : box(modelName).width, size = parseFloat(getComputedStyle(modelName).fontSize);
           const modelNeed = trigger.width - box(modelName).width + Math.min(whole, 6 * size);
-          // A member's folder beside the permission (composer-folder.ts) gives way with it: its word hides with the permission's.
+          // A member's folder and its branch beside the permission (composer-folder.ts, both `.cmp-work`) give way with it:
+          // their words hide with the permission's.
           const folder = [...form.querySelectorAll('.cmp-folder')].find(visible), folderWord = folder?.querySelector('span');
-          const folderWide = folder ? box(folder).width + (wordShown ? 0 : (parseFloat(getComputedStyle(folder).columnGap) || 0) + box(folderWord).width) : 0;
-          const modeWide = own.width + (wordShown ? 0 : (parseFloat(getComputedStyle(mode).columnGap) || 0) + letters.width) + folderWide;
-          const fixed = rects.filter(rect => !['cmp-mode', 'cmp-model', 'cmp-folder'].includes(rect.control)).reduce((sum, rect) => sum + rect.width, 0);
+          const workWide = [...form.querySelectorAll('.cmp-work')].filter(visible).reduce((sum, button) =>
+            sum + box(button).width + (wordShown ? 0 : (parseFloat(getComputedStyle(button).columnGap) || 0) + box(button.querySelector('span')).width), 0);
+          const modeWide = own.width + (wordShown ? 0 : (parseFloat(getComputedStyle(mode).columnGap) || 0) + letters.width) + workWide;
+          const fixed = rects.filter(rect => !['cmp-mode', 'cmp-model', 'cmp-work'].includes(rect.control)).reduce((sum, rect) => sum + rect.width, 0);
           if (folder) {
             const mark = folder.querySelector('svg.i'), own_ = box(folder);
             require(visible(mark) && box(mark).width >= 15.5 && box(mark).left >= own_.left && box(mark).right <= own_.right + 0.5, `the folder keeps its icon whole: ${JSON.stringify(round(own_))}`);

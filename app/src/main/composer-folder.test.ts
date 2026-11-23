@@ -46,7 +46,8 @@ beforeEach(() => {
 
 test("the composer lists the member folder first and remembers projects with their branches", async () => {
   await mount();
-  expect(find("#folder").textContent).toBe("日文老師的資料夾");
+  // The default keeps the short word on the button; the menu names the member's folder whole.
+  expect(find("#folder").textContent).toBe("選擇資料夾");
   expect(find("#branch").hidden).toBe(true);
   find("#folder").click(); await flush();
   expect(rows().map(row => row.querySelector("b")!.textContent)).toEqual(["日文老師的資料夾", "Repo", "Notes"]);

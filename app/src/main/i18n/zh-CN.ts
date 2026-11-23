@@ -215,7 +215,7 @@ export const zhCN = {
   "projectFolders.branchNamed": "分支：{p0}",
   "projectFolders.detached": "分离的 HEAD",
   "writeFolders.add": "添加文件夹",
-  "composerFolder.label": "存放文件夹：{p0}",
+  "composerFolder.pick": "选择文件夹", "composerFolder.label": "存放文件夹：{p0}",
   "composerPlus.label": "添加文件、应用程序等",
   "composerPlus.files": "添加文件或图片",
   "composerPlus.slash": "斜杠命令",

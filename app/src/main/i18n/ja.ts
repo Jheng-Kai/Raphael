@@ -191,7 +191,7 @@ export const ja = {
   "projectFolders.branchNamed": "ブランチ：{p0}",
   "projectFolders.detached": "分離 HEAD",
   "writeFolders.add": "フォルダーを追加",
-  "composerFolder.label": "保存フォルダー：{p0}",
+  "composerFolder.pick": "フォルダーを選択", "composerFolder.label": "保存フォルダー：{p0}",
   "composerPlus.label": "ファイルやアプリなどを追加",
   "composerPlus.files": "ファイルまたは写真を追加",
   "composerPlus.slash": "スラッシュコマンド",

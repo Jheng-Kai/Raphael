@@ -215,7 +215,7 @@ export const id = {
   "projectFolders.branchNamed": "Cabang: {p0}",
   "projectFolders.detached": "HEAD terlepas",
   "writeFolders.add": "Tambah folder",
-  "composerFolder.label": "Folder file: {p0}",
+  "composerFolder.pick": "Pilih folder", "composerFolder.label": "Folder file: {p0}",
   "composerPlus.label": "Tambah berkas, aplikasi, dan lainnya",
   "composerPlus.files": "Tambah berkas atau foto",
   "composerPlus.slash": "Perintah garis miring",

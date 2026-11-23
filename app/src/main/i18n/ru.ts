@@ -215,7 +215,7 @@ export const ru = {
   "projectFolders.branchNamed": "Ветка: {p0}",
   "projectFolders.detached": "Отсоединённый HEAD",
   "writeFolders.add": "Добавить папку",
-  "composerFolder.label": "Папка для файлов: {p0}",
+  "composerFolder.pick": "Выбрать папку", "composerFolder.label": "Папка для файлов: {p0}",
   "composerPlus.label": "Добавить файлы, приложения и другое",
   "composerPlus.files": "Добавить файлы или фото",
   "composerPlus.slash": "Слэш-команды",

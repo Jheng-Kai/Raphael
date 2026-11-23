@@ -215,7 +215,7 @@ export const ko = {
   "projectFolders.branchNamed": "브랜치: {p0}",
   "projectFolders.detached": "분리된 HEAD",
   "writeFolders.add": "폴더 추가",
-  "composerFolder.label": "저장 폴더: {p0}",
+  "composerFolder.pick": "폴더 선택", "composerFolder.label": "저장 폴더: {p0}",
   "composerPlus.label": "파일, 앱 등 추가",
   "composerPlus.files": "파일 또는 사진 추가",
   "composerPlus.slash": "슬래시 명령",

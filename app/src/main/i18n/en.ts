@@ -191,7 +191,7 @@ export const en = {
   "projectFolders.branchNamed": "Branch: {p0}",
   "projectFolders.detached": "Detached HEAD",
   "writeFolders.add": "Add folder",
-  "composerFolder.label": "Folder for files: {p0}",
+  "composerFolder.pick": "Choose folder", "composerFolder.label": "Folder for files: {p0}",
   "composerPlus.label": "Add files, apps and more",
   "composerPlus.files": "Add files or photos",
   "composerPlus.slash": "Slash commands",

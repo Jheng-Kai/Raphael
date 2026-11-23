@@ -215,7 +215,7 @@ export const vi = {
   "projectFolders.branchNamed": "Nhánh: {p0}",
   "projectFolders.detached": "HEAD tách rời",
   "writeFolders.add": "Thêm thư mục",
-  "composerFolder.label": "Thư mục lưu tệp: {p0}",
+  "composerFolder.pick": "Chọn thư mục", "composerFolder.label": "Thư mục lưu tệp: {p0}",
   "composerPlus.label": "Thêm tệp, ứng dụng và hơn thế",
   "composerPlus.files": "Thêm tệp hoặc ảnh",
   "composerPlus.slash": "Lệnh gạch chéo",

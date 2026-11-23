@@ -215,7 +215,7 @@ export const ptBR = {
   "projectFolders.branchNamed": "Ramificação: {p0}",
   "projectFolders.detached": "HEAD desanexado",
   "writeFolders.add": "Adicionar pasta",
-  "composerFolder.label": "Pasta dos arquivos: {p0}",
+  "composerFolder.pick": "Escolher pasta", "composerFolder.label": "Pasta dos arquivos: {p0}",
   "composerPlus.label": "Adicionar arquivos, aplicativos e mais",
   "composerPlus.files": "Adicionar arquivos ou fotos",
   "composerPlus.slash": "Comandos com barra",

@@ -215,7 +215,7 @@ export const th = {
   "projectFolders.branchNamed": "สาขา: {p0}",
   "projectFolders.detached": "HEAD แบบแยก",
   "writeFolders.add": "เพิ่มโฟลเดอร์",
-  "composerFolder.label": "โฟลเดอร์เก็บไฟล์: {p0}",
+  "composerFolder.pick": "เลือกโฟลเดอร์", "composerFolder.label": "โฟลเดอร์เก็บไฟล์: {p0}",
   "composerPlus.label": "เพิ่มไฟล์ แอป และอื่น ๆ",
   "composerPlus.files": "เพิ่มไฟล์หรือรูปภาพ",
   "composerPlus.slash": "คำสั่งสแลช",

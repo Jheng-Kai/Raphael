@@ -190,7 +190,7 @@ export const zhTW = {
   "projectFolders.branchNamed": "分支：{p0}",
   "projectFolders.detached": "分離的 HEAD",
   "writeFolders.add": "加入資料夾",
-  "composerFolder.label": "存放資料夾：{p0}",
+  "composerFolder.pick": "選擇資料夾", "composerFolder.label": "存放資料夾：{p0}",
   "composerPlus.label": "加入檔案、應用程式與更多",
   "composerPlus.files": "加入檔案或圖片",
   "composerPlus.slash": "斜線指令",

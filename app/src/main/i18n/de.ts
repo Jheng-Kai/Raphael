@@ -215,7 +215,7 @@ export const de = {
   "projectFolders.branchNamed": "Branch: {p0}",
   "projectFolders.detached": "Losgelöster HEAD",
   "writeFolders.add": "Ordner hinzufügen",
-  "composerFolder.label": "Ordner für Dateien: {p0}",
+  "composerFolder.pick": "Ordner auswählen", "composerFolder.label": "Ordner für Dateien: {p0}",
   "composerPlus.label": "Dateien, Apps und mehr hinzufügen",
   "composerPlus.files": "Dateien oder Fotos hinzufügen",
   "composerPlus.slash": "Slash-Befehle",

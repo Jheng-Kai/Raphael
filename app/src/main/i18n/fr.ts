@@ -215,7 +215,7 @@ export const fr = {
   "projectFolders.branchNamed": "Branche : {p0}",
   "projectFolders.detached": "HEAD détachée",
   "writeFolders.add": "Ajouter un dossier",
-  "composerFolder.label": "Dossier des fichiers : {p0}",
+  "composerFolder.pick": "Choisir un dossier", "composerFolder.label": "Dossier des fichiers : {p0}",
   "composerPlus.label": "Ajouter des fichiers, des applications et plus",
   "composerPlus.files": "Ajouter des fichiers ou des photos",
   "composerPlus.slash": "Commandes avec barre oblique",

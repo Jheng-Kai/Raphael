@@ -215,7 +215,7 @@ export const tr = {
   "projectFolders.branchNamed": "Dal: {p0}",
   "projectFolders.detached": "Ayrık HEAD",
   "writeFolders.add": "Klasör ekle",
-  "composerFolder.label": "Dosya klasörü: {p0}",
+  "composerFolder.pick": "Klasör seç", "composerFolder.label": "Dosya klasörü: {p0}",
   "composerPlus.label": "Dosya, uygulama ve daha fazlasını ekle",
   "composerPlus.files": "Dosya veya fotoğraf ekle",
   "composerPlus.slash": "Eğik çizgi komutları",
