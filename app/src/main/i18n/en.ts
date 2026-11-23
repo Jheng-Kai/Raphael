@@ -990,6 +990,7 @@ export const en = {
   "agent.dropFiles": "Drop to add files",
   "agent.openFile": "Open",
   "agent.attachTotal": "Attachments can total up to {p0} MB",
+  "agent.pathUnavailable": "This path could not be opened.",
   "agent.fileUnavailable": "This attachment could not be opened. Attach the original again; if it still fails, use a readable format.",
   "agent.unattach": "Remove the file",
   "agent.tooLong": "The question is too long",

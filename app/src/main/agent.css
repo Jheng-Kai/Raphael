@@ -243,6 +243,8 @@
 .message-text ul { list-style-type: disc; }
 .message-text li { padding-inline-start: 0.15em; }
 .message-text code { font-family: var(--mono); font-size: var(--fs-xs); padding: 0.12em 0.3em; border-radius: var(--r-sm); background: var(--surface-2); }
+code[data-message-path][role="link"]:is(:hover, :focus-visible) { cursor: pointer; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; }
+:root[data-keys] code[data-message-path][role="link"]:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-sm); }
 .message-code { position: relative; margin-block: 0.6em; min-width: 0; }
 .message-code pre { margin: 0; padding: 34px var(--sp-3) var(--sp-3); border-radius: var(--r-sm); background: var(--surface-2); white-space: pre-wrap; overflow-wrap: anywhere; }
 .message-code pre code { padding: 0; background: transparent; }

@@ -1279,6 +1279,7 @@ export const vi = {
   "agent.attach": "Đính kèm tệp",
   "agent.dropFiles": "Thả để thêm tệp",
   "agent.attachTotal": "Tổng đính kèm tối đa {p0} MB",
+  "agent.pathUnavailable": "Không thể mở đường dẫn này.",
   "agent.fileUnavailable": "Không mở được tệp đính kèm. Đính kèm bản gốc lại; nếu vẫn lỗi, dùng định dạng đọc được.",
   "agent.unattach": "Gỡ tệp",
   "agent.attachTooMany": "Có thể đính kèm tối đa {p0} tệp",

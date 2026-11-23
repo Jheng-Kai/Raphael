@@ -8,7 +8,7 @@ const main = import.meta.dirname;
 // Failures and invalid input. A localized failure may include details from the core.
 const failureKeys = [
   "agent.attachTooBig", "agent.attachTooMany", "agent.attachTotal", "agent.attachUnreadable",
-  "agent.fileUnavailable", "agent.tooLong", "backend.avatarKind", "bgq.gone", "cal.needsEnd",
+  "agent.fileUnavailable", "agent.pathUnavailable", "agent.tooLong", "backend.avatarKind", "bgq.gone", "cal.needsEnd",
   "cal.needsTitle", "card.busy", "cards.failed", "cards.templateLinkFailed",
   "cards.templateUnshareFailed", "chat.microphoneDenied", "chat.reattach", "chat.voiceEmpty",
   "chat.voiceFailed", "dictionary.020", "dictionary.021", "dictionary.024", "dictionary.029",

@@ -6,6 +6,7 @@ import { bindNavLayer } from "./nav-layers";
 import { dayLabel } from "./format";
 import { getLocale, t } from "./i18n";
 import { messageHTML } from "./message-content";
+import { mountMessagePaths } from "./message-paths";
 import type { HandoffView } from "./types";
 import { esc, ico, iconButton } from "./ui";
 
@@ -75,7 +76,7 @@ export function peerChatHTML(host: number, tasks: readonly HandoffView[], people
     day = label;
     const body = line.state
       ? `<p class="peer-state" role="status">${esc(line.state)}</p>`
-      : (line.text ? `<div class="chat-message"><div class="ans"><div class="message-text">${messageHTML(line.text, "", true)}</div></div></div>` : "") +
+      : (line.text ? `<div class="chat-message" data-path-member="${line.from}"><div class="ans"><div class="message-text">${messageHTML(line.text, "", true)}</div></div></div>` : "") +
         (line.files.length ? `<ul class="handoff-files">${line.files.map(name => `<li>${ico("file")}<span>${esc(name)}</span></li>`).join("")}</ul>` : "");
     return divider + `<li class="tn peer-line" data-peer-key="${esc(line.key)}" data-peer-from="${line.from}"><div class="ra">` +
       `<span class="ra-face">${person.face}</span><div class="ra-body">` +
@@ -140,6 +141,7 @@ export function openPeerChat(container: HTMLElement, trigger: HTMLElement, all: 
   el.className = "peer-chat";
   el.setAttribute("role", "dialog");
   el.setAttribute("aria-modal", "true");
+  const checkPaths = mountMessagePaths(el);
   let drawn = "";
   const paint = (): void => {
     const html = draw();
@@ -149,6 +151,7 @@ export function openPeerChat(container: HTMLElement, trigger: HTMLElement, all: 
     const atEnd = !scroll || scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 24;
     const top = scroll?.scrollTop ?? 0;
     el.innerHTML = drawn = html;
+    checkPaths([el]);
     el.setAttribute("aria-label", el.querySelector(".peer-pill")?.getAttribute("aria-label") ?? "");
     const next = el.querySelector<HTMLElement>(".peer-scroll")!;
     if (scroll) next.scrollTop = atEnd ? next.scrollHeight : top;

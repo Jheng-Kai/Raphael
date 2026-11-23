@@ -1,6 +1,74 @@
 // @vitest-environment happy-dom
-import { expect, test } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { expect, test, vi } from "vitest";
 import { messageHTML, messagePlainText, messageUrls, shortUrl } from "./message-content";
+import { mountMessagePaths } from "./message-paths";
+import { toaster } from "./ui";
+import { t } from "./i18n";
+
+const api = vi.hoisted(() => ({ checkMessagePaths: vi.fn(), openMessagePath: vi.fn() }));
+vi.mock("./api", () => api);
+vi.mock("../shared/platform", async importOriginal => ({
+  ...await importOriginal<typeof import("../shared/platform")>(),
+  IS_MAC: false,
+}));
+
+test("authored Windows paths display as native paths in bare, code and Markdown forms", () => {
+  const el = document.createElement("div");
+  const text = 'Report /D:/Team/report.md, `D:/Team/notes.txt` and [folder](</D:/Team/Some Folder>).\n\n```\nD:/Team/example.txt\n```';
+  el.innerHTML = messageHTML(text, "", true);
+  expect([...el.querySelectorAll("code[data-message-path]")].map(code => code.textContent)).toEqual([
+    "D:\\Team\\report.md", "D:\\Team\\notes.txt", "D:\\Team\\Some Folder",
+  ]);
+  expect(el.querySelector("pre code")?.textContent).toBe("D:/Team/example.txt");
+  expect(el.querySelector('[role="link"]')).toBeNull();
+  expect(messageHTML("Report /Users/me/report.md", "", true)).toContain(">/Users/me/report.md</code>");
+});
+
+test("only a checked path becomes a plain-looking keyboard link with a quiet failure notice", async () => {
+  const root = document.createElement("div");
+  const path = "/Users/me/allowed/report.md";
+  const outside = "/Users/me/elsewhere/report.md";
+  root.innerHTML = `<div data-path-member="7">${messageHTML(`Report ${path} or ${outside}`, "report", true)}</div>`;
+  api.checkMessagePaths.mockResolvedValue({ allowed: [path] });
+  api.openMessagePath.mockResolvedValue(undefined);
+  mountMessagePaths(root)([root]);
+  const [inside, external] = root.querySelectorAll("code");
+  expect(inside.getAttribute("role")).toBeNull();
+  await Promise.resolve();
+  expect(api.checkMessagePaths).toHaveBeenCalledWith(7, [path, outside]);
+  expect(inside.getAttribute("role")).toBe("link");
+  expect(inside.tabIndex).toBe(0);
+  expect(inside.querySelector("mark")?.textContent).toBe("report");
+  expect(inside.hasAttribute("title")).toBe(false);
+  expect(inside.hasAttribute("data-tooltip")).toBe(false);
+  expect(external.getAttribute("role")).toBeNull();
+  expect(external.hasAttribute("tabindex")).toBe(false);
+  external.click();
+  expect(api.openMessagePath).not.toHaveBeenCalled();
+  inside.click();
+  expect(api.openMessagePath).toHaveBeenCalledExactlyOnceWith(7, path);
+
+  const notice = vi.spyOn(toaster, "info").mockImplementation(() => {});
+  try {
+    api.openMessagePath.mockRejectedValueOnce(new Error("file unavailable"));
+    inside.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await Promise.resolve();
+    expect(api.openMessagePath).toHaveBeenCalledTimes(2);
+    expect(notice).toHaveBeenCalledExactlyOnceWith(t("agent.pathUnavailable"));
+  } finally {
+    notice.mockRestore();
+  }
+
+  const css = readFileSync(join(import.meta.dirname, "agent.css"), "utf8");
+  const style = 'code[data-message-path][role="link"]';
+  const hover = css.split(`${style}:is(:hover, :focus-visible) {`)[1]?.split("}")[0];
+  expect(hover).toContain("cursor: pointer");
+  expect(hover).toContain("text-decoration: underline");
+  expect(hover).not.toMatch(/\bcolor:/);
+  expect(css).toContain(`:root[data-keys] ${style}:focus-visible { outline: 2px solid var(--focus)`);
+});
 
 test("URLs stop at CJK punctuation, and a bare link is a chip that says its site", () => {
   const url = "https://www.cwa.gov.tw/V8/C/P/Typhoon/TY_WARN.html?lang=zh-TW&full=1";

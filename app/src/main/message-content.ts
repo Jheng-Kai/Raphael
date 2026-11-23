@@ -1,5 +1,6 @@
 // One typed reply parser for history, streaming, search and copy. Only generated tags enter HTML.
 import { highlightHTML } from "./conversation";
+import { IS_MAC } from "../shared/platform";
 import { getLocale, t } from "./i18n";
 import { mentionsHTML, type MentionTarget } from "./mention-text";
 import { esc, ico, iconBtn } from "./ui";
@@ -9,14 +10,30 @@ import { publicEventText } from "./public-event";
 import { composioText } from "./composio-result";
 import { SERVICE_ICONS, brandStyle, hasLogo, serviceIconOf, serviceIconSVG, serviceLogoHTML } from "./service-icons";
 
-// A file of the team folder is one press from opening; any other path is words the owner can use.
+// Team file chips keep their own opener. Other paths can become links after the core checks them.
 const TEAM_FILE = /^\/home\/cua\/team\/[^\s<>"'`]+$/;
 export function fileChipHTML(label: string, attrs: string): string {
   return `<button type="button" class="btn team-file"${attrs} title="${esc(t("agent.openFile"))}">${ico("file")}<span>${label}</span></button>`;
 }
-function pathHTML(path: string, query: string): string {
-  if (!TEAM_FILE.test(path)) return `<code>${highlightHTML(path, query)}</code>`;
-  return fileChipHTML(highlightHTML(path.slice(path.lastIndexOf("/") + 1), query), ` data-act="team-file-open" data-path="${esc(path)}"`);
+const LOCAL_PATH = /^(?:\/(?!\/)|[A-Za-z]:[\\/])/;
+const drivePath = (path: string): string => !IS_MAC && /^\/?[A-Za-z]:[\\/]/.test(path)
+  ? path.replace(/^\/(?=[A-Za-z]:)/, "").replace(/\//g, "\\") : path;
+
+function pathHTML(path: string, query: string, teamChip = true): string {
+  if (teamChip && TEAM_FILE.test(path)) {
+    return fileChipHTML(highlightHTML(path.slice(path.lastIndexOf("/") + 1), query), ` data-act="team-file-open" data-path="${esc(path)}"`);
+  }
+  const shown = drivePath(path);
+  const candidate = LOCAL_PATH.test(path) && path.length <= 4096 && !/[\u0000-\u001f]/.test(path);
+  return `<code${candidate ? ` data-message-path="${esc(shown)}"` : ""}>${highlightHTML(shown, query)}</code>`;
+}
+
+function barePath(text: string, at: number): string {
+  if (at && !/[\s([{"'“‘（「『]/.test(text[at - 1])) return "";
+  const char = text[at];
+  if (char !== "/" && text[at + 1] !== ":") return "";
+  const path = /^(?:\/(?!\/)(?:[A-Za-z]:[\\/])?|[A-Za-z]:[\\/])[^\s<>"'`()[\]{}，。！？；：、）】」』]+/.exec(text.slice(at))?.[0];
+  return path?.replace(/[.,;!?]+$/, "") ?? "";
 }
 
 /**
@@ -246,12 +263,11 @@ function inline(text: string, query: string, markdown: boolean, urls: Set<string
           const html = link(target, label);
           if (html) { flush(); out += html; at = end; continue; }
           if (isAttachmentLink(target)) { flush(); out += attachmentLinkHTML(target, label, files, query); at = end; continue; }
-          // A file on a computer has no address to open: its words, then its path, which is what the owner can use, never the
-          // markdown around them, as in [今天的課](<D:\...\lesson.html>).
-          if (/^(?:\/|[A-Za-z]:[\\/])/.test(target)) {
+          // A local destination shows its path beside any distinct label.
+          if (LOCAL_PATH.test(target) || target.startsWith("/")) {
             flush();
-            const said = label.trim(), base = target.slice(Math.max(target.lastIndexOf("/"), target.lastIndexOf("\\")) + 1);
-            const words = said && said !== target && said !== base ? inline(label, query, true, urls, depth + 1, mentions, files) + " " : "";
+            const said = drivePath(label.trim()), base = target.slice(Math.max(target.lastIndexOf("/"), target.lastIndexOf("\\")) + 1);
+            const words = said && said !== drivePath(target) && said !== base ? inline(label, query, true, urls, depth + 1, mentions, files) + " " : "";
             out += words + pathHTML(target, query); at = end; continue;
           }
         }
@@ -262,6 +278,10 @@ function inline(text: string, query: string, markdown: boolean, urls: Set<string
     if (raw) {
       const html = link(raw);
       if (html) { flush(); out += html; at += raw.length; continue; }
+    }
+    if (markdown) {
+      const path = barePath(text, at);
+      if (path) { flush(); out += pathHTML(path, query, false); at += path.length; continue; }
     }
     if (markdown && depth < 8 && /[*_~]/.test(text[at])) {
       const marker = text[at + 1] === text[at] ? text.slice(at, at + 2) : text[at];

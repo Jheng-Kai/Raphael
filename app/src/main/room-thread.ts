@@ -40,7 +40,7 @@ export async function openRoomThread(host: HTMLElement, app: AppContext, roomId:
     const actions = messageActionsHTML(message.created, false, undefined, false, reactionControlHTML());
     const body = message.member_id === null
       ? `<div class="me"><div class="chat-message owner-message">${withReactions(`${filesHTML(message.attachments)}<div class="bubble"><div class="message-text">${messageHTML(message.text, "", false)}</div></div>`, message.reactions)}${actions}</div></div>`
-      : `<div class="ra"><span class="ra-face"${member ? ` data-tooltip="${esc(member.name)}"` : ""}>${member ? faceHTML(member, 28) : ""}</span><div class="ra-body"><b class="au-room-author">${esc(member?.name ?? t("rooms.owner"))}</b><div class="chat-message">${withReactions(`${filesHTML(message.attachments)}${replyContentHTML(message.text, "", message.status === "running")}`, message.reactions)}${actions}</div>${message.turn ? conversationCardsHTML(message.turn, member?.name, pictureActionsHTML(actions)) : ""}</div></div>`;
+      : `<div class="ra"><span class="ra-face"${member ? ` data-tooltip="${esc(member.name)}"` : ""}>${member ? faceHTML(member, 28) : ""}</span><div class="ra-body"><b class="au-room-author">${esc(member?.name ?? t("rooms.owner"))}</b><div class="chat-message"${message.status === "running" ? "" : ` data-path-member="${message.member_id}"`}>${withReactions(`${filesHTML(message.attachments)}${replyContentHTML(message.text, "", message.status === "running")}`, message.reactions)}${actions}</div>${message.turn ? conversationCardsHTML(message.turn, member?.name, pictureActionsHTML(actions)) : ""}</div></div>`;
     return `<li class="tn" data-side-message="${message.id}">${body}</li>`;
   };
   const refresh = async (): Promise<void> => {

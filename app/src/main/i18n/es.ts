@@ -1279,6 +1279,7 @@ export const es = {
   "agent.attach": "Adjuntar archivo",
   "agent.dropFiles": "Suelta para añadir archivos",
   "agent.attachTotal": "Los adjuntos pueden sumar hasta {p0} MB",
+  "agent.pathUnavailable": "No se pudo abrir esta ruta.",
   "agent.fileUnavailable": "No se pudo abrir el adjunto. Adjunta el original otra vez; si falla, usa un formato legible.",
   "agent.unattach": "Quitar archivo",
   "agent.attachTooMany": "Puedes adjuntar hasta {p0} archivos",

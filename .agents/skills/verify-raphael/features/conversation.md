@@ -2222,6 +2222,25 @@ consent and live model choice remain unverified; fixtures use fake transports.
 Routine event lines distinguish once, weekdays, daily, weekly and every in zh-TW,
 ja and en, including start_date, until and max_runs. Evidence:
 core/tests/agent/test_routine_event.py and core/tests/members/test_harness.py.
+
+## Local paths in member replies
+
+A checked local path is inline code in the conversation, with the same text, background and
+spacing as other code. Hover or keyboard focus adds a thin underline and a pointer. Keyboard
+focus also shows the shared focus ring. A path outside the member's workspace, the team files,
+the output folder and the folders assigned to that member stays plain code. The core resolves
+links and parent components before deciding, and checks the current roots again on press.
+A readable regular file opens through the existing native opener. Folders and other file types
+are selected in the file manager. A missing file gives a quiet notice.
+
+```powershell
+npm run look -- reply-local-path reply-local-path-hover --theme both --width 1120,720,1920x1080
+```
+
+Compare each scene's checked path against the outside path in the same reply. The browser
+fixture covers appearance, hover and the main-window check. The operating system's file
+association and file manager selection require a native press.
+
 ## Existing composer and file consumers (feature-map sync)
 
 A link in the composer is drawn in the link colour but stays words (R-UI-168): `composer-link-edit` pastes one, presses

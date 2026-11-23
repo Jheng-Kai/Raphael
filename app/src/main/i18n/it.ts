@@ -1279,6 +1279,7 @@ export const it = {
   "agent.attach": "Allega file",
   "agent.dropFiles": "Rilascia per aggiungere file",
   "agent.attachTotal": "Gli allegati possono totalizzare {p0} MB",
+  "agent.pathUnavailable": "Impossibile aprire questo percorso.",
   "agent.fileUnavailable": "Impossibile aprire l’allegato. Allega di nuovo l’originale; se persiste, usa un formato leggibile.",
   "agent.unattach": "Rimuovi file",
   "agent.attachTooMany": "Puoi allegare fino a {p0} file",

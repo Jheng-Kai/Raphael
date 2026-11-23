@@ -745,7 +745,7 @@ function messageBlockHTML(turn: AgentTurn, key: string, text: string, time: numb
   // An earlier version of an edited message is read again, not answered: its replies keep Copy alone, no menu, no Run again.
   const earlier = earlierVersion(turn);
   const retry = reply && last && !earlier ? rerunActionHTML(turn, state, regenerate) : "";
-  return `<div class="chat-message${expanded ? " is-expanded" : ""}" data-message="${esc(key)}"${reply ? ' data-reply="true"' : ""}>` +
+  return `<div class="chat-message${expanded ? " is-expanded" : ""}" data-message="${esc(key)}"${reply ? ` data-reply="true"${turn.status === "running" ? "" : ` data-path-member="${turn.member_id ?? 0}"`}` : ""}>` +
     (reply && origin && sourceOf(turn) === "routine" ? routineLineHTML(turn) : "") +
     withReactions(reply ? replyContentHTML(text, query, turn.status === "running", undefined, state.files) : `<div class="ans progress"><div class="message-text">${messageHTML(text, query)}</div></div>`, turn.reactions?.[key]) +
     (reply && last && !earlier ? usageActionHTML(turn) + signinActionHTML(turn, state, latestFailure) : "") +

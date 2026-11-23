@@ -1279,6 +1279,7 @@ export const id = {
   "agent.attach": "Lampirkan berkas",
   "agent.dropFiles": "Lepaskan untuk menambah berkas",
   "agent.attachTotal": "Lampiran dapat berjumlah hingga {p0} MB",
+  "agent.pathUnavailable": "Jalur ini tidak dapat dibuka.",
   "agent.fileUnavailable": "Lampiran tidak dapat dibuka. Lampirkan aslinya lagi; jika tetap gagal, gunakan format terbaca.",
   "agent.unattach": "Hapus berkas",
   "agent.attachTooMany": "Anda dapat melampirkan hingga {p0} berkas",

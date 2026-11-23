@@ -990,6 +990,7 @@ export const ja = {
   "agent.dropFiles": "ドロップしてファイルを追加",
   "agent.openFile": "開く",
   "agent.attachTotal": "添付ファイルは合計 {p0} MB までです",
+  "agent.pathUnavailable": "このパスを開けません。",
   "agent.fileUnavailable": "添付ファイルを開けません。元のファイルを添付し直し、解決しなければ読み取れる形式を使ってください。",
   "agent.unattach": "ファイルを外す",
   "agent.tooLong": "質問が長すぎます",
