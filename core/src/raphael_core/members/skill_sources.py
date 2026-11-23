@@ -17,6 +17,7 @@ from pathlib import Path, PureWindowsPath
 from .capabilities import MAX_SKILL_BYTES
 from .skill_library import MAX_DISCOVERY_DEPTH, MAX_DISCOVERY_ENTRIES, MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES, linked, walk
 from .skill_plugins import relative_path
+from .skill_references import attach_shared
 from .store import MemberError
 
 
@@ -32,6 +33,7 @@ class SkillFiles(dict):
     def __init__(self):
         super().__init__()
         self.skipped_links = []
+        self.skipped_references = []
         self.folder = ""
         self.plugin_manifest = False
 
@@ -356,6 +358,8 @@ def local(source):
                 manifest = parent / PLUGIN_MANIFEST
                 if not linked(manifest.parent) and not linked(manifest) and manifest.is_file():
                     files.plugin_manifest = True
+                    # What the skill links to elsewhere in its plugin comes with it.
+                    attach_shared(files, snapshot, folder, parent)
                     break
                 if parent == path:
                     break
