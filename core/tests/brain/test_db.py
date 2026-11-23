@@ -435,7 +435,7 @@ SCHEMA_V27 = {
         "stop_requested INTEGER NOT NULL DEFAULT 0", "wrapup_sent INTEGER NOT NULL DEFAULT 0", "reason TEXT NOT NULL DEFAULT ''",
     ],
 }
-LATEST = 98
+LATEST = 99
 
 
 def test_v59_existing_tasks_default_to_no_artifact_and_keep_their_reports(monkeypatch, tmp_path):
@@ -770,7 +770,7 @@ SCHEMA_V98 = {**SCHEMA_V94, "members": [*SCHEMA_V94["members"], "computer_mode T
     "computer_suggestions": ["turn_id INTEGER PK", "member_id INTEGER NOT NULL", "reason TEXT NOT NULL", "language TEXT NOT NULL",
                              "state TEXT NOT NULL DEFAULT 'pending'", "installed INTEGER NOT NULL"]}
 
-PENDING_UPGRADES = (63, 64, *range(67, 99))
+PENDING_UPGRADES = (63, 64, *range(67, 100))
 
 
 def test_upgrade_preserves_computer_choice_and_removes_desktop_control(monkeypatch, tmp_path):

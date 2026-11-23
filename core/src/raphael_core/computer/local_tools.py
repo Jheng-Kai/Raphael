@@ -139,15 +139,17 @@ def command_of(arguments):
     return ""
 
 
-def command_folder(settings, member_id):
-    """Where a member's command on the owner's computer starts when it names no folder: its first folder, as Claude Code's
-    commands start in its project, else the owner's home. A start, not a fence: what a command may touch is still the
-    owner's yes on its card (R-PC-02)."""
-    from .owner_files import writable_folders
-    for folder in writable_folders(settings, member_id):
-        if os.path.isdir(folder):
-            return folder
-    return str(Path.home())
+def command_folder(settings, member_id, folders=None):
+    """Start a command in the member's work folder when it names no directory."""
+    from ..folders import default_folders, work_folder
+    from .vm import bound_folder
+    folders = folders or default_folders
+    own = folders(member_id)[0]
+    project = work_folder(settings, member_id, folders)
+    if project != own and project.is_dir():
+        return str(project)
+    bound_folder(own)
+    return str(own)
 
 
 def requires_command_approval(settings, command, *, external):
@@ -225,6 +227,11 @@ class LocalTools:
 
     def _full_permission(self):
         return self.settings.get("action_mode") == "bypass"
+
+    def shared_owner_file(self, key, arguments):
+        name = owner_file_tool(key)
+        return (name is not None and Draft202012Validator(OWNER_FILE_DEFINITIONS[name]["parameters"]).is_valid(arguments)
+                and self.owner_files.shared_path(arguments.get("path"), _CONTEXT.get()[5]))
 
     def requires_approval(self, arguments):
         return (self.data_floor.access("local_exec", arguments) is not None
@@ -312,7 +319,7 @@ class LocalTools:
             if approver == "none" or self.requires_approval(arguments) and approver != "user":
                 return result
             timeout = min(arguments.get("timeout_seconds", DEFAULT_TIMEOUT_S), MAX_TIMEOUT_S)
-            params = {"cwd": arguments.get("cwd") or command_folder(self.settings, member), "timeout_seconds": timeout}
+            params = {"cwd": arguments.get("cwd") or command_folder(self.settings, member, self.owner_files.member_folders), "timeout_seconds": timeout}
             if arguments.get("background"):
                 if len(self.jobs) >= 64:
                     for old, job in list(self.jobs.items()):

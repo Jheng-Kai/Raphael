@@ -77,8 +77,6 @@
 .ms-row > .ms-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* A folder's whole path is read, wrapped where it must, never cut (R-PC-05). */
 .ms-row > .ms-label.ms-path { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; padding-block: var(--sp-2); }
-/* The output folder is every member's default, changed in Settings › General alone: a quiet word where the others have ⋯. */
-.ms-row > .ms-tag { flex: none; margin-right: var(--sp-2); font-size: var(--fs-xs); color: var(--text-3); white-space: nowrap; }
 .ms-row:has(> .ms-open) { padding-left: 0; }
 .ms-empty { margin: 0; padding: var(--sp-3); font-size: var(--fs-sm); color: var(--text-3); }
 
@@ -147,3 +145,5 @@
 /* A command's words sit inside its row's button (its own padding beside the row's): the count ends where they do. */
 .ms-row.ms-lib-row { padding-right: calc(var(--sp-2) + var(--sp-3)); }
 .ms-lib-count { flex: none; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-xs); color: var(--text-3); }
+
+.ms-path > small { display: block; color: var(--text-3); font-size: var(--fs-xs); }

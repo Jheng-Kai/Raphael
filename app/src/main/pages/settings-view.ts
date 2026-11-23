@@ -1,3 +1,5 @@
+import { branchLabel, folderName } from "../project-folders";
+import type { FolderInfo } from "../types";
 // What the settings panel draws (settings.ts holds the state and the events): the tabs, and each
 // tab as HTML made from a snapshot of what the panel knows. Nothing here reads the page or calls
 // the app, so the structure of every tab and the rules for it can be tested without a
@@ -113,6 +115,7 @@ export const HOTKEY_ROWS: Record<HotkeyField, string> = { dictation_keys: "hotke
 
 /** Everything a tab is drawn from: what the panel has read, and what is being typed or done. */
 export interface SettingsView {
+  projectDetails?: ReadonlyMap<string, FolderInfo>;
   update?: import("../api").UpdateView | null;
   /** The view of 用量 that is open (概覽 when none is said). */
   usageTab?: UsageTab;
@@ -411,23 +414,21 @@ const coreNote = (v: SettingsView): string => (v.brain === null ? `<div class="a
 
 // ---------- the tabs ----------
 
-/**
- * The output folder as a native folder picker: no text field. Unset, it is 選擇資料夾 alone;
- * set, the button names the folder and the whole path stands under the row's name, so where it is stays plain.
- */
-function outputFolderRow(v: SettingsView): string {
-  const folder = v.brain?.owner_output_folder ?? "", off = v.brain === null ? " disabled" : "";
-  if (!folder) return row(t("output.folder"), esc(t("output.helpPick")), btn(ico("folder") + esc(t("output.pick")), "sm", ` data-act="output-pick"${off}`), { attrs: ' data-row="output-folder"' });
-  const name = folder.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || folder;
-  return row(t("output.folder"), `<span class="output-path">${esc(folder)}</span>`,
-    btn(ico("folder") + `<span class="output-name">${esc(name)}</span>`, "sm output-chosen", ` data-act="output-pick" aria-label="${esc(t("output.change", { p0: name }))}"${off}`),
-    { attrs: ' data-row="output-folder"' });
+function projectFolderRows(v: SettingsView): string {
+  const rows = (v.brain?.project_folders ?? []).map((path, index) => {
+    const info = v.projectDetails?.get(path), name = info?.name ?? folderName(path);
+    const description = `<span class="project-path owner-data">${esc(path)}</span>${branchLabel(info)}`;
+    const more = iconBtn("more", t("members.more", { p0: name }),
+      ` data-act="project-menu" data-project="${index}" data-k="project-menu:${index}" aria-haspopup="menu" aria-expanded="false"`);
+    return row(`<span class="owner-data">${esc(name)}</span>`, description, more, { attrs: ' data-row="project-folder"' });
+  });
+  const disabled = v.brain === null ? " disabled" : "";
+  rows.push(row("", "", btn(ico("plus") + esc(t("writeFolders.add")), "sm",
+    ` data-act="project-add" data-k="project-add"${disabled}`)));
+  return section(t("projectFolders.title"), rows, esc(t("projectFolders.help")));
 }
 
-/**
- * 一般, in a fixed order of sections: who you are, how the window looks, what Raphael works with (the timezone of
- * routines and the folder of what is delivered), and the guide. What it remembers is the 記憶 tab.
- */
+/** General settings for the owner, the window, routines and shared projects. */
 function generalHTML(v: SettingsView): string {
   return (
     settingsHeaderHTML(v) +
@@ -438,9 +439,7 @@ function generalHTML(v: SettingsView): string {
     ]) + `</div>` +
     section(t("agent.title"), [
       row(t("zone.title"), t("zone.help"), sel([{value:v.brain?.routine_timezone ?? "",label:v.brain?.routine_timezone ? zoneLabel(v.brain.routine_timezone) : `${t("zone.auto")} · ${zoneLabel(detectedTimezone())}`}], v.brain?.routine_timezone ?? "", t("zone.title"), ' data-k="routine-timezone"' + (v.brain === null ? ' disabled' : ''))),
-      // Where else each member may write is chosen in that member's settings (R-PC-05); this folder is every member's default.
-      outputFolderRow(v),
-    ])
+    ]) + projectFolderRows(v)
     // Telegram, Slack and Discord moved to each member's panel, Raphael's too, and are set up in the conversation
     // Nothing of them is set here.
     // The emblem's size, its subtitles and starting with Windows are fixed (device-fixed.ts), and the

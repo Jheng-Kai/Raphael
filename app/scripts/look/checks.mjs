@@ -368,12 +368,19 @@ export function checkRendered(name, context = {}) {
     if (name === "colleague-tunnel") require(document.querySelector('.au-tunnel').textContent.includes('tailscale funnel --bg http://127.0.0.1:43210'), "exact loopback-forward command");
     if (name === "colleague-tunnel-tested") require(document.querySelector('.au-tunnel').innerText.includes('已收到自測 POST'), "public URL probe returned to the editor");
     if (name === "colleague-tunnel-hmac") require(document.querySelector('[data-auth="hmac"]').getAttribute('aria-pressed') === 'true' && document.querySelector('.au-hook-secret').type === 'text', "explicit HMAC choice and one-time key");
-    if (name === "colleague-output") {
-      const path = window.__look.data.colleagueSample.path, row = document.querySelector('[data-row="output-folder"]');
-      require(calls.some(call => call.command === "pick_output_folder") && calls.some(call => call.method === "settings.set" && call.params.key === "owner_output_folder" && call.params.value === path), "native picker result is stored in settings");
-      require(row.querySelector('.output-name')?.textContent === path.split('\\').pop() && row.querySelector('.output-path')?.textContent === path, "the chosen folder shows its name on the button and its whole path under the row name");
+    if (name === "colleague-project-add" || name === "colleague-project-cancel") {
+      const path = window.__look.data.colleagueSample.path;
+      const writes = calls.filter(call => call.method === "settings.set" && call.params.key === "project_folders");
+      require(calls.some(call => call.command === "pick_output_folder"), "the native picker was opened");
+      if (name === "colleague-project-add") {
+        require(writes.length === 1 && writes[0].params.value.at(-1) === path, "the picker adds the project after the remembered ones");
+        require([...document.querySelectorAll(".project-path")].some(node => node.textContent === path), "the entire new path is on its own row");
+      } else require(!writes.length, "cancel leaves the project list alone");
     }
-    if (name === "colleague-output-cancel") require(calls.some(call => call.command === "pick_output_folder") && !calls.some(call => call.method === "settings.set" && call.params.key === "owner_output_folder"), "cancel never writes the folder setting");
+    if (name === "colleague-project-remove") {
+      const settings = window.__look.data.settings;
+      require(settings.project_folders.length === 1 && !settings.member_work_folder["1"], "removal clears the member's selection and keeps the other project");
+    }
     return {check:name};
   }
   // R-ACCT-01: the accounts of an app, and a sign-in that waits.
@@ -1504,80 +1511,57 @@ export function checkRendered(name, context = {}) {
     }
     return {check:name};
   }
-  if (name === "member-write-folders") {
-    // R-PC-05: the folders are member 1's own, picked with the native picker, each removed from its own ⋯.
-    const sample = window.__look.data.colleagueSample.path, calls = window.__look.calls;
-    const sets = calls.filter(call => call.method === "settings.set" && call.params.key === "member_write_folders").map(call => call.params.value);
-    require(calls.some(call => call.command === "pick_output_folder") && sets.length === 2, "the picker adds a folder and its ⋯ removes one");
-    require(Object.keys(sets[0]).join() === "1" && sets[0]["1"].length === 3 && sets[0]["1"][2] === sample, "the picked folder is the member's own");
-    require(JSON.stringify(sets[1]["1"]) === JSON.stringify(sets[0]["1"].slice(1)), "the first folder is the one removed, the picked one kept");
-    const section = document.querySelector('.ms-pane [data-k="ms-folders"]'), rows = [...section.querySelectorAll('.ms-folder')];
-    require(visible(section) && !section.querySelector('input, textarea'), "folders are picked, never typed");
-    require(section.querySelector('h2')?.textContent === "可以寫入的資料夾" && visible(section.querySelector('[data-ms="folder-add"]')), "the section is named and its + adds");
-    require(rows.length === 3 && rows.every(row => visible(row)), "each folder is a row of its own");
-    const paths = rows.map(row => row.querySelector('.ms-path')?.textContent);
-    require(paths[0] === "C:\\Owner\\Deliveries" && paths[2] === sample, `the output folder first, the added ones after it in their order: ${paths.join(" | ")}`);
-    const tag = rows[0].querySelector('.ms-tag');
-    require(visible(tag) && tag.textContent === "預設" && !rows[0].querySelector('[data-ms="folder-menu"]'), "the output folder is marked as the default and has no ⋯");
-    require(tag.getBoundingClientRect().left >= rows[0].querySelector('.ms-path').getBoundingClientRect().right - 0.5, "its mark never runs over its path");
-    for (const [index, row] of rows.entries()) {
-      const path = row.querySelector('.ms-path'), more = row.querySelector('[data-ms="folder-menu"]');
-      if (index) require(visible(more) && path.getBoundingClientRect().right <= more.getBoundingClientRect().left + 0.5, "the whole path never runs under its ⋯");
-      require(visible(path) && path.scrollWidth <= path.clientWidth + 1, "the whole path is shown, wrapped, never cut");
-    }
-    require(!section.querySelector('.ms-empty'), "no empty line beside the folders");
+  if (name === "member-own-folder") {
+    const section = document.querySelector('.ms-pane [data-k="ms-folder"]');
+    require(visible(section) && section.querySelectorAll(".ms-row").length === 1, "the member sees one folder row");
+    require(section.querySelector("small").textContent === "C:\\Raphael\\members\\1", "the member's own shared path is shown");
+    require(window.__look.calls.some(call => call.command === "open_team_file" && call.path === "member-folder:1"), "the folder control asks the shell to open it");
     return {check:name};
   }
   if (name === "composer-folder") {
-    // R-PC-05: the composer names where the member's files go, its first folder, as the permission names how it acts.
     const folder = document.querySelector('.page-agent .composer .cmp-folder'), word = folder?.querySelector('span'), mode = document.querySelector('.page-agent .composer .cmp-mode');
-    require(visible(folder) && word?.textContent === "Notes", `the button names the member's first folder: ${word?.textContent}`);
-    require(folder.getAttribute('aria-label') === "存放資料夾：C:\\Owner\\Notes", `its whole path is in its name: ${folder.getAttribute('aria-label')}`);
+    const branch = document.querySelector('.page-agent .composer .cmp-branch');
+    require(visible(folder) && word?.textContent === "Notes", "the selected project names the folder button");
+    require(folder.getAttribute("aria-label") === "存放資料夾：C:\\Owner\\Notes", "the folder button gives the full path");
     const a = folder.getBoundingClientRect(), b = mode.getBoundingClientRect();
-    require(Math.abs((a.top + a.bottom) / 2 - (b.top + b.bottom) / 2) <= 1 && a.left >= b.right - 0.5, "it stands right after the permission, on its line");
+    require(Math.abs((a.top + a.bottom) / 2 - (b.top + b.bottom) / 2) <= 1 && a.left >= b.right - 0.5, "the folder follows the permission");
+    require(visible(branch) && branch.textContent === "main" && folder.nextElementSibling === branch, "the branch immediately follows the project");
     require(getComputedStyle(folder).color === getComputedStyle(mode).color && getComputedStyle(folder).fontSize === getComputedStyle(mode).fontSize, "it wears the permission's quiet type");
-    require(!document.querySelector('.au-room-pane:not([hidden]) .composer .cmp-folder'), "a room's composer has no folder");
-    return {check: name};
+    return {check:name};
   }
   if (name === "composer-folder-added") {
-    // R-PC-05: a folder added from the menu is chosen at once, and the button names it.
     const button = document.querySelector('.page-agent .composer .cmp-folder');
-    require(button.textContent.trim() === "交付成果" && !document.querySelector('#app-popover .cb-folders'), `the button names the folder just added: ${button.textContent.trim()}`);
-    const saved = window.__look.data.settings.member_write_folders["1"];
-    require(saved[0] === "C:\\Owner\\交付成果", `the added folder is the member's first, where it writes: ${saved.join(" | ")}`);
-    return { check: name, saved: saved.length };
+    const settings = window.__look.data.settings, path = window.__look.data.colleagueSample.path;
+    require(button.textContent.trim() === "交付成果" && settings.project_folders.at(-1) === path && settings.member_work_folder["1"] === path, "the new folder is remembered and chosen");
+    return {check:name};
   }
   if (name === "composer-folder-many") {
-    const card = document.querySelector('#app-popover .cb-folders'), list = card.querySelector('[role="radiogroup"]'), add = card.querySelector('[data-folder-act="add"]');
-    require(list.querySelectorAll('[data-folder]').length === 15 && list.scrollHeight > list.clientHeight + 4, "fifteen folders scroll inside the list");
+    const card = document.querySelector('#app-popover .cb-folders'), list = card.querySelector('[role="radiogroup"]'), add = card.querySelector('[data-project-pick="-1"]');
+    require(list.querySelectorAll('[role="radio"]').length === 15 && list.scrollHeight > list.clientHeight + 4, "fifteen folders scroll inside the list");
     const box = document.querySelector('#app-popover').getBoundingClientRect();
-    require(visible(add) && add.getBoundingClientRect().bottom <= box.bottom + 0.5 && box.top >= 0 && box.bottom <= innerHeight, "加入資料夾 stays in view at the foot and the card stays inside the window");
+    require(visible(add) && add.getBoundingClientRect().bottom <= box.bottom + 0.5 && box.top >= 0 && box.bottom <= innerHeight, "the add action stays at the foot");
     list.scrollTop = list.scrollHeight;
-    const last = [...list.querySelectorAll('[data-folder]')].at(-1).getBoundingClientRect(), frame = list.getBoundingClientRect();
+    const last = list.querySelector('[role="radio"]:last-child').getBoundingClientRect(), frame = list.getBoundingClientRect();
     require(last.bottom <= frame.bottom + 1 && last.top >= frame.top - 1, "the last folder can be scrolled to");
     list.scrollTop = 0;
-    return { check: name };
+    return {check:name};
   }
   if (name === "composer-folder-menu") {
-    const card = document.querySelector('#app-popover .cb-folders'), button = document.querySelector('.page-agent .composer .cmp-folder');
-    require(visible(card) && card.querySelector('.cb-head h3')?.textContent === "可以寫入的資料夾", "the menu is the permission's kind of card, named for the folders");
-    const rows = [...card.querySelectorAll('[data-folder]')];
-    const names = rows.map(row => row.querySelector('.cb-name b')?.textContent);
-    require(names[0] === "Deliveries" && names[1] === "Notes" && rows.length === 3, `the output folder first, then the member's own, by name: ${names.join(" | ")}`);
-    require(rows.map(row => row.getAttribute('aria-checked')).join() === "false,true,false", "the chosen one, the member's first, is checked");
-    const paths = rows.map(row => row.querySelector('.cb-name small'));
-    require(paths[1]?.textContent === "C:\\Owner\\Notes" && paths.every(path => visible(path) && path.scrollWidth <= path.clientWidth + 1) && !rows.some(row => row.dataset.tooltip), "each folder's whole path is written under its name, whole, with no tooltip saying it again");
-    const acts = [...card.querySelectorAll('[data-folder-act]')];
-    const list = card.querySelector('[role="radiogroup"]');
-    require(getComputedStyle(list).overflowY === "auto" && list.getBoundingClientRect().bottom <= acts[0].getBoundingClientRect().top + 0.5, "the list scrolls above 加入資料夾, which stays at the foot");
-    require(acts.length === 1 && acts[0].dataset.folderAct === "add" && visible(acts[0]) && acts[0].getBoundingClientRect().top >= rows.at(-1).getBoundingClientRect().bottom - 0.5, "adding one is the one action, at the card's foot");
-    for (const name_ of rows.map(row => row.querySelector('.cb-name b'))) require(visible(name_) && name_.scrollWidth <= name_.clientWidth + 1, `each name is whole: ${name_.textContent}`);
-    const box = document.querySelector('#app-popover').getBoundingClientRect();
-    require(box.left >= 0 && box.top >= 0 && box.right <= innerWidth && box.bottom <= innerHeight, "the menu stays inside the window");
-    require(box.bottom <= button.getBoundingClientRect().top + 1, "it opens above the button");
-    const icons = [...card.querySelectorAll('.cb-actions svg')].map(node => node.innerHTML);
-    require(new Set(icons).size === icons.length, "each action has its own icon");
-    return {check: name};
+    const card = document.querySelector('#app-popover .cb-folders'), rows = [...card.querySelectorAll('[role="radio"]')];
+    require(visible(card) && card.querySelector('.cb-head h3').textContent === "專案資料夾", "the folders use the existing composer card");
+    require(rows.length === 3 && rows[0].textContent.includes("的資料夾") && rows[1].querySelector(".project-branch").textContent === "main", "the shared folder is first and Git projects show their branch");
+    require(rows.map(row => row.getAttribute("aria-checked")).join() === "false,true,false", "the selected project is checked");
+    require(rows.every(row => { const path = row.querySelector('.cb-name small'); return visible(path) && path.scrollWidth <= path.clientWidth + 1; }), "each row shows its whole path");
+    require(visible(card.querySelector('[data-project-pick="-1"]')), "the picker action stays below the project list");
+    return {check:name};
+  }
+  if (name === "composer-branch" || name === "composer-branch-switched") {
+    const rows = [...document.querySelectorAll('#app-popover [role="radio"]')];
+    require(rows.map(row => row.textContent).join() === "draft,main", "the branch card lists local branches");
+    const picked = rows.find(row => row.getAttribute("aria-checked") === "true");
+    require(picked?.textContent === (name === "composer-branch" ? "main" : "draft"), "the current branch is checked");
+    if (name === "composer-branch-switched") require(window.__look.calls.some(call => call.method === "folders.switch_branch" && call.params.branch === "draft"), "the branch choice reached the core");
+    return {check:name};
   }
   if (name.startsWith("composer-plus-")) {
     // R-UI-166: the composer's + opens one menu of what can be added; its apps and skills are submenus of switches that are the member's own settings.
@@ -1671,23 +1655,13 @@ export function checkRendered(name, context = {}) {
     }
     return {check: name, switches: switches.length};
   }
-  if (name === "member-write-folders-default") {
-    const section = document.querySelector('.ms-pane [data-k="ms-folders"]'), rows = [...(section?.querySelectorAll('.ms-folder') ?? [])];
-    require(rows.length === 1 && rows[0].querySelector('.ms-path')?.textContent === "C:\\Owner\\Deliveries", `a member with no folder of its own lists the output folder alone: ${rows.map(row => row.textContent).join(" | ")}`);
-    require(visible(rows[0].querySelector('.ms-tag')) && !rows[0].querySelector('[data-ms="folder-menu"]') && !section.querySelector('.ms-empty'), "marked as the default, with no ⋯ and no other line");
-    require(!document.querySelector('[data-row="write-folders"]'), "Settings › General has no list of folders for every member");
+  if (name === "project-folders-settings") {
+    const rows = [...document.querySelectorAll('[data-row="project-folder"]')];
+    require(rows.length === 2 && rows.every(row => visible(row.querySelector(".project-path")) && visible(row.querySelector('[data-act="project-menu"]'))),
+      "each remembered project has its own visible path and menu");
+    require(rows[0].querySelector(".project-branch").textContent === "main" && !rows[1].querySelector(".project-branch"), "Git projects show the current branch");
+    require(visible(document.querySelector('[data-act="project-add"]')), "the native picker is at the foot");
     return {check:name};
-  }
-  if (name === "owner-output-folder") {
-    const row = document.querySelector('[data-row="output-folder"]');
-    require(visible(row) && !row.querySelector('input, textarea'), "R-COLLEAGUE-06: the output folder is a picker, with no typed field");
-    const chosen = row.querySelector('[data-act="output-pick"]'), name_ = row.querySelector('.output-name'), path = row.querySelector('.output-path');
-    require(visible(chosen) && name_?.textContent === 'Deliveries', "the button names the chosen folder");
-    require(visible(path) && path.textContent === 'C:\\Owner\\Deliveries', "the whole path stands under the row name");
-    require(row.querySelectorAll('button').length === 1, "the folder is changed with its one button (R-UI-56: no clear button standing open)");
-    const box = row.getBoundingClientRect(), pick = chosen.getBoundingClientRect();
-    require(pick.right <= box.right + 0.5 && path.getBoundingClientRect().right <= pick.left, "the path never runs under the button");
-    return { check: name, button: Math.round(pick.width) };
   }
   if (name.startsWith("skills-") || ["growing-skills", "member-shared-source"].includes(name)) {
     for (const label of document.querySelectorAll('[data-skill-provenance], .mp-resource p, .ms-meta, .cs-linked .ds, .cs-page .cs-desc')) {
@@ -4166,11 +4140,13 @@ export function checkRendered(name, context = {}) {
           const shortened = modelName.scrollWidth > modelName.clientWidth + 0.5, slot = form.querySelector('.cmp-model'), gap = parseFloat(getComputedStyle(bar).columnGap) || 0;
           const whole = shortened ? modelName.scrollWidth : box(modelName).width, size = parseFloat(getComputedStyle(modelName).fontSize);
           const modelNeed = trigger.width - box(modelName).width + Math.min(whole, 6 * size);
-          // A member's folder beside the permission (composer-folder.ts) gives way with it: its word hides with the permission's.
+          // A member's folder and its branch beside the permission (composer-folder.ts, both `.cmp-work`) give way with it:
+          // their words hide with the permission's.
           const folder = [...form.querySelectorAll('.cmp-folder')].find(visible), folderWord = folder?.querySelector('span');
-          const folderWide = folder ? box(folder).width + (wordShown ? 0 : (parseFloat(getComputedStyle(folder).columnGap) || 0) + box(folderWord).width) : 0;
-          const modeWide = own.width + (wordShown ? 0 : (parseFloat(getComputedStyle(mode).columnGap) || 0) + letters.width) + folderWide;
-          const fixed = rects.filter(rect => !['cmp-mode', 'cmp-model', 'cmp-folder'].includes(rect.control)).reduce((sum, rect) => sum + rect.width, 0);
+          const workWide = [...form.querySelectorAll('.cmp-work')].filter(visible).reduce((sum, button) =>
+            sum + box(button).width + (wordShown ? 0 : (parseFloat(getComputedStyle(button).columnGap) || 0) + box(button.querySelector('span')).width), 0);
+          const modeWide = own.width + (wordShown ? 0 : (parseFloat(getComputedStyle(mode).columnGap) || 0) + letters.width) + workWide;
+          const fixed = rects.filter(rect => !['cmp-mode', 'cmp-model', 'cmp-work'].includes(rect.control)).reduce((sum, rect) => sum + rect.width, 0);
           if (folder) {
             const mark = folder.querySelector('svg.i'), own_ = box(folder);
             require(visible(mark) && box(mark).width >= 15.5 && box(mark).left >= own_.left && box(mark).right <= own_.right + 0.5, `the folder keeps its icon whole: ${JSON.stringify(round(own_))}`);

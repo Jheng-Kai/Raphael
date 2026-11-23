@@ -53,9 +53,9 @@ def _links(text):
         yield match[1], unquote(match[2] or match[3])
 
 
-def _roots(workspaces, output_folder):
+def _roots(workspaces, work_folder):
     roots = []
-    for area, path in [*workspaces, *([('output', output_folder)] if output_folder else [])]:
+    for area, path in [*workspaces, *([('work', work_folder)] if work_folder else [])]:
         if not path:
             continue
         try:
@@ -65,14 +65,14 @@ def _roots(workspaces, output_folder):
     return roots
 
 
-def _local(link, roots):
+def _local(link, roots, work_mount):
     # Explicit links may name authorized host roots or existing VM mounts only.
     link = link.removeprefix('file://')
     for area, root in roots:
         relative = link
-        mount = '/home/cua/team/' if area == 'team' else '/home/cua/workspace/'
-        if area != 'output' and link.startswith(mount):
-            relative = link[len(mount):]
+        mount = {'team': '/home/cua/team', 'workspace': '/home/cua/workspace', 'work': work_mount}.get(area)
+        if mount and link.startswith(mount + '/'):
+            relative = link[len(mount) + 1:]
         try:
             path = (root / relative).resolve(strict=True)
             if path.is_relative_to(root) and path.is_file():
@@ -82,14 +82,14 @@ def _local(link, roots):
     return None
 
 
-def snapshot(conn, member, workspaces=(), limit=12, *, output_folder='', tz=None, paths=None):
+def snapshot(conn, member, workspaces=(), limit=12, *, work_folder='', work_mount=None, tz=None, paths=None):
     """Read at most 1000 records per source and return at most 100 deliveries.
 
     Reads never walk directories, contact providers, hash file bytes or decode
-    thumbnails. Output receipt digests are rechecked only when opening a file.
+    thumbnails. Delivery receipt digests are rechecked only when opening a file.
     """
     limit = min(max(limit, 1), 100)
-    roots = _roots(workspaces, output_folder)
+    roots = _roots(workspaces, work_folder)
     files = {}
 
     def keep(key, *, identifier, name, mime, row, at_ms, kind=None, **extra):
@@ -131,7 +131,7 @@ def snapshot(conn, member, workspaces=(), limit=12, *, output_folder='', tz=None
                 continue
         else:
             for title, link in _links(row['text']):
-                _reply_link(link, title, roots, local_file, attachment, row, row['at_ms'])
+                _reply_link(link, title, roots, local_file, attachment, row, row['at_ms'], work_mount)
 
     # Older turns can predate the durable reply-message stream.
     for row in conn.execute(
@@ -140,7 +140,7 @@ def snapshot(conn, member, workspaces=(), limit=12, *, output_folder='', tz=None
         "AND NOT EXISTS(SELECT 1 FROM agent_messages m WHERE m.turn_id=t.id AND m.kind='reply') "
         "ORDER BY t.id DESC LIMIT ?", (member, SCAN_LIMIT)):
         for title, link in _links(row['text']):
-            _reply_link(link, title, roots, local_file, attachment, row, row['at_ms'])
+            _reply_link(link, title, roots, local_file, attachment, row, row['at_ms'], work_mount)
 
     for row in conn.execute(
         "SELECT p.id,p.title,p.turn_id,p.conversation_id,p.created_at_ms FROM pages p JOIN agent_turns t ON t.id=p.turn_id "
@@ -149,10 +149,10 @@ def snapshot(conn, member, workspaces=(), limit=12, *, output_folder='', tz=None
         keep('page:' + row['id'], identifier=row['id'], name=row['title'], mime='text/html', kind='page', row=row,
              at_ms=row['created_at_ms'], open={'method': 'pages.open', 'params': {'id': row['id']}})
 
-    # A verified write to the owner's explicit output directory is a delivery.
+    # A verified write to the owner's work folder is a delivery.
     # Other task artifacts, including screenshots, require a reply/card above.
-    output = next((root for area, root in roots if area == 'output'), None)
-    if output:
+    work = next((root for area, root in roots if area == 'work'), None)
+    if work:
         for row in conn.execute(
             "SELECT e.id,e.task_id,e.workspace,e.uri,e.verified_at_ms,w.turn_id,t.conversation_id FROM task_evidence e "
             "JOIN worker_tasks w ON w.id=e.task_id JOIN agent_turns t ON t.id=w.turn_id "
@@ -162,7 +162,7 @@ def snapshot(conn, member, workspaces=(), limit=12, *, output_folder='', tz=None
             try:
                 root = local_storage_root(row['workspace'])
                 path = (root / row['uri']).resolve(strict=True)
-                if path.is_file() and path.is_relative_to(root) and path.is_relative_to(output):
+                if path.is_file() and path.is_relative_to(root) and path.is_relative_to(work):
                     local_file(path, path.name, row, row['verified_at_ms'], (row['task_id'], row['id']))
             except (OSError, ValueError, TypeError):
                 continue
@@ -171,7 +171,7 @@ def snapshot(conn, member, workspaces=(), limit=12, *, output_folder='', tz=None
     return dict(files=ordered[:limit], has_more=len(ordered) > limit and limit < 100)
 
 
-def _reply_link(link, title, roots, local_file, attachment, row, at_ms):
+def _reply_link(link, title, roots, local_file, attachment, row, at_ms, work_mount):
     try:
         key = link.removeprefix('attachment:').removeprefix('attachments/')
         if ID.fullmatch(key):
@@ -181,7 +181,7 @@ def _reply_link(link, title, roots, local_file, attachment, row, at_ms):
         # A URL alone is not a delivered file or a published page.
         if url.scheme in ('http', 'https'):
             return
-        if path := _local(link, roots):
+        if path := _local(link, roots, work_mount):
             local_file(path, title, row, at_ms)
     except ValueError:
         return

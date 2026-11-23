@@ -486,6 +486,9 @@ class BackgroundService:
         self._store = TaskStore(conn, now_ms)
         self._history = AgentHistory(conn, now_ms)
         self._settings = SettingsStore(conn)
+        from ..folders import default_folders
+        self.member_folders = default_folders
+        self.folder_target = lambda member: None
         self._metrics_conn = conn
         self.activity.task_source = self._activity_tasks
         self.activity.task_batch_source = self._activity_tasks_by_member
@@ -2009,7 +2012,8 @@ class BackgroundService:
         # reply to the next, and in the system prompt each change had the provider read the member's whole
         # prefix again at full price, where its replies would otherwise share it.
         user += roster_prompt(self._team, speaker, self._chat_language(task, origin, context))
-        system += owner_context(self._settings, speaker.id)
+        system += owner_context(self._settings, speaker.id, folders=self.member_folders,
+                                target=self.folder_target(speaker.id))
         system += ('\nAssigned work starts NOW. Deadlines or dates in documents are context, never permission to defer. '
                    'Use handoff for real assignments, not @mentions. Return evidence of actions; a future-tense promise without action is incomplete.')
         if task.scope == 'room':

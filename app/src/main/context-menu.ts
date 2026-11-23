@@ -25,7 +25,7 @@ export const OVERFLOW_ROWS: readonly OverflowRow[] = [
   { more: '[data-computer-menu]', row: ".desktop-panel" },
   { more: '[data-res="skill-menu"]', row: ".mp-resource" },
   { more: '[data-res="command-menu"]', row: ".mp-resource" },
-  { more: '[data-ms="folder-menu"]', row: ".ms-folder" },
+  { more: '[data-act="project-menu"]', row: '[data-row="project-folder"]' },
   { more: '[data-msg="user-menu"]', row: ".msg-sub" },
   { more: '[data-act="local-menu"]', row: ".lm-row" },
   { more: '[data-rule="more"]', row: ".rules-row" },

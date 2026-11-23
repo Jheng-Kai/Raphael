@@ -529,7 +529,7 @@ test("share saves the report on screen as a file, once a press, says where it we
   expect(lastToast()).toBe("已存到「下載」");
   expect(stage.classList.contains("is-page") && view.isConnected && !stage.querySelector<HTMLElement>(".pgv")!.hidden).toBe(true);
 
-  save.mockResolvedValue({ place: "output", folder: "Raphael 輸出" });
+  save.mockResolvedValue({ place: "work", folder: "Raphael 輸出" });
   buttons[0]!.click();
   await flush();
   expect(lastToast()).toBe("已存到「Raphael 輸出」");

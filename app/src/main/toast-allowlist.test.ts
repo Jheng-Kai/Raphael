@@ -58,6 +58,7 @@ const allowedKeys = new Set([...failureKeys, ...unseenKeys, ...actionKeys, ...lo
 
 // Existing producers for messages whose text depends on a validated error or event.
 const forwarded: Record<string, readonly string[]> = {
+  "composer-folder.ts": ["message"], // Git refuses the branch switch and explains how to recover.
   "connection-lost.ts": ["connectionLostHTML(lost.name, lost.id)"],
   "connections.ts": ["text", "failureText(result.error)"],
   "conversation-card-actions.ts": ["text"],

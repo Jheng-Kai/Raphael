@@ -66,7 +66,7 @@ review, saving or publishing; private credential findings block export and publi
 grants consent, or saves the value. Successful cards resume the original request in its own thread
 once, preserving receipts so completed actions are not repeated. A failed card returns a classified
 reason to the same member, who diagnoses it and explains the owner-only step without making a new card.
-General holds account, appearance, interface language, time zone, output folder, shared memory and the guide.
+General holds account, appearance, interface language, time zone and project folders.
 Dictation holds transcription, microphone, hotkeys and retention; Tools holds work capabilities; Safety holds
 permissions; Models holds providers, subscriptions, choices and usage; About holds version information.
 Connected apps have their own entry. Telegram, Slack and Discord belong to each member's panel; setup,

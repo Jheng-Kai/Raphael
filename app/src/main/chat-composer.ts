@@ -81,7 +81,8 @@ export function composerHTML(folder = false): string {
     `<div class="cmp-field"><textarea class="cmp-input" rows="1" autocomplete="off" enterkeyhint="send"></textarea><div class="cmp-mirror" aria-hidden="true"></div></div>` +
     `<div class="cmp-bar"><button type="button" class="btn cmp-attach"${folder ? ' aria-haspopup="menu" aria-expanded="false"' : ' data-act="attach"'}>${ico("plus")}</button>` +
     `<button type="button" class="btn sm cmp-mode" aria-haspopup="menu" aria-expanded="false">${ico("shield")}<span></span></button>` +
-    (folder ? `<button type="button" class="btn sm cmp-folder" aria-haspopup="menu" aria-expanded="false" hidden>${ico("folder")}<span class="owner-data"></span></button>` : "") +
+    (folder ? `<button type="button" class="btn sm cmp-work cmp-folder" aria-haspopup="menu" aria-expanded="false" hidden>${ico("folder")}<span class="owner-data"></span></button>` +
+      `<button type="button" class="btn sm cmp-work cmp-branch" aria-haspopup="menu" aria-expanded="false" hidden>${ico("gitBranch")}<span class="owner-data"></span></button>` : "") +
     `<span class="cmp-model"></span>` +
     `<span class="cmp-pair">` +
     iconButton("send", t("chat.send"), " disabled", "cmp-send task-action").replace('type="button"', 'type="submit"').replace(" title=", " data-tooltip=").replace(ico("send"), sendGlyph()) +
@@ -157,15 +158,16 @@ export function permissionWordFits(row: { room: number; fixed: number; gaps: num
 function fitComposerRow(bar: HTMLElement): void {
   if (typeof ResizeObserver !== "function") return;
   const mode = bar.querySelector<HTMLElement>(".cmp-mode")!, word = mode.querySelector<HTMLElement>("span")!, model = bar.querySelector<HTMLElement>(".cmp-model")!;
-  // A member's folder beside the permission gives way with it: both words hide together, both icons stay.
-  const folder = bar.querySelector<HTMLElement>(".cmp-folder"), folderWord = folder?.querySelector<HTMLElement>("span") ?? null;
+  // The folder and branch labels give way with the permission label.
+  const work = [...bar.querySelectorAll<HTMLElement>(".cmp-work")];
+  const labels = work.map(button => button.querySelector<HTMLElement>("span")!);
   const width = (element: Element): number => element.getBoundingClientRect().width;
   const wide = (button: HTMLElement, label: HTMLElement, hidden: boolean): number =>
     width(button) + (hidden && width(button) > 0 ? (parseFloat(getComputedStyle(button).columnGap) || 0) + width(label) : 0);
   const fit = (): void => {
     if (!bar.isConnected || !bar.clientWidth) return;
     const hidden = mode.hasAttribute("data-word-hidden");
-    const modeWide = wide(mode, word, hidden) + (folder && folderWord ? wide(folder, folderWord, hidden) : 0);
+    const modeWide = wide(mode, word, hidden) + work.reduce((sum, button, index) => sum + wide(button, labels[index], hidden), 0);
     const trigger = model.querySelector<HTMLElement>(".mp-trigger"), name = trigger?.querySelector<HTMLElement>(".mp-tname");
     let modelNeed = 0;
     if (trigger && name) {
@@ -173,17 +175,17 @@ function fitComposerRow(bar: HTMLElement): void {
       modelNeed = width(trigger) - width(name) + Math.min(whole, NAME_KEPT_EM * parseFloat(getComputedStyle(name).fontSize));
     }
     const shown = [...bar.children].filter(child => width(child) > 0);
-    const fixed = shown.filter(child => child !== mode && child !== model && child !== folder).reduce((sum, child) => sum + width(child), 0);
+    const fixed = shown.filter(child => child !== mode && child !== model && !work.includes(child as HTMLElement)).reduce((sum, child) => sum + width(child), 0);
     const gaps = (shown.length - 1) * (parseFloat(getComputedStyle(bar).columnGap) || 0);
     const fits = permissionWordFits({ room: bar.clientWidth, fixed, gaps, modeWide, modelNeed, shown: !hidden });
     if (fits === hidden) mode.toggleAttribute("data-word-hidden", !fits);
     // The folder is drawn once its folders are read, often after the permission's word has already given way: it follows.
-    folder?.toggleAttribute("data-word-hidden", !fits);
+    for (const button of work) button.toggleAttribute("data-word-hidden", !fits);
   };
   const sizes = new ResizeObserver(fit);
-  for (const element of [bar, word, model, ...(folder && folderWord ? [folder, folderWord] : [])]) sizes.observe(element);
+  for (const element of [bar, word, model, ...work, ...labels]) sizes.observe(element);
   // Another model, depth, folder or language changes the words without always changing a size.
-  for (const element of [mode, model, ...(folder ? [folder] : [])]) new MutationObserver(fit).observe(element, { childList: true, subtree: true, characterData: true, attributes: element === folder, attributeFilter: element === folder ? ["hidden"] : undefined });
+  for (const element of [mode, model, ...work]) new MutationObserver(fit).observe(element, { childList: true, subtree: true, characterData: true, attributes: work.includes(element), attributeFilter: work.includes(element) ? ["hidden"] : undefined });
 }
 
 /** The row under a composer's field, wherever the composer is built: it gives way in order (R-UI-160). It also marks

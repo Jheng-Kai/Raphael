@@ -59,7 +59,6 @@ def test_the_defaults_are_the_documented_ones():
         "routine_webhook_port": 0,
         "routine_owner_seen_ms": 0,
         "routine_run_window": [],
-        "owner_output_folder": "",
         "chief_pinned": False,
         "raphael_draft_first": True,
         "raphael_tools": None,
@@ -68,8 +67,8 @@ def test_the_defaults_are_the_documented_ones():
         "first_bot_profile": {},
         "owner_name": "",
         "owner_about": "",
-        "owner_output_folder": "",
-        "member_write_folders": {},
+        "project_folders": [],
+        "member_work_folder": {},
         "routine_timezone": "",
         "routine_detected_timezone": "",
         "routine_owner_seen_ms": 0,
@@ -142,6 +141,23 @@ def test_all_is_the_defaults_with_saved_values_on_top(conn):
 def test_all_ignores_saved_keys_that_are_not_settings(conn):
     conn.execute("INSERT INTO settings (key, value) VALUES ('retired_setting', '1')")
     assert SettingsStore(conn).all() == DEFAULTS
+
+
+def test_project_paths_are_normalized_and_limited_to_fifty(conn):
+    settings = SettingsStore(conn)
+    project = r"C:\Work\Project"
+    settings.set("project_folders", [project + "\\", "c:/WORK/project/"])
+    assert settings.all()["project_folders"] == [project]
+    settings.set("member_work_folder", {"3": "C:/work/project/"})
+    assert settings.get("member_work_folder") == {"3": project}
+    settings.set("project_folders", [r"c:\WORK\project"])
+    assert settings.get("member_work_folder") == {"3": r"c:\WORK\project"}
+    projects = [fr"C:\Work\Project{i}" for i in range(50)]
+    settings.set("project_folders", [*projects, projects[0].lower() + "\\"])
+    assert settings.get("project_folders") == projects
+    with pytest.raises(ValueError, match="up to 50"):
+        settings.set("project_folders", [*projects, project])
+    assert settings.get("project_folders") == projects
 
 
 def test_a_whole_number_for_a_float_setting_is_kept_as_a_float(conn):

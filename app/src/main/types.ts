@@ -453,8 +453,8 @@ export type ReportTone = "info" | "warn" | "ok";
 /** `summary`: the member's one line under the title, in place of the date and the promise of recorded facts. */
 export interface Report { as_of: string; summary?: string; sections: ReportSection[] }
 export interface ReportOpened { kind: "report"; title: string; rev: number; report: Report }
-/** Where a report's file went (`report_save`): the owner's output folder, by its name, or Downloads. */
-export interface ReportSaved { place: "output" | "downloads"; folder: string }
+/** Where a report's file went (`report_save`): the member's work folder, by its name, or Downloads. */
+export interface ReportSaved { place: "work" | "downloads"; folder: string }
 
 export interface PageOpened {
   url: string;
@@ -729,10 +729,8 @@ export interface BrainSettings {
   chief_pinned?: boolean;
   owner_name?: string;
   owner_about?: string;
-  owner_output_folder?: string;
-  /** The folders on the owner's computer each member may write to, by member id (R-PC-05); a member with none writes to
-   *  the output folder. */
-  member_write_folders?: Record<string, string[]>;
+  project_folders?: string[];
+  member_work_folder?: Record<string, string>;
   routine_timezone?: string;
   routine_detected_timezone?: string;
   owner_photo?: string;
@@ -1432,3 +1430,12 @@ export interface MemberSkill { set_id?: number; set_kind?: "skill" | "command"; 
 /** A Team skills package assigned to a member (members.skills.list `library`): its key, name and skill count. */
 export interface LibraryRef { key: string; name: string; skills: number }
 export interface MemberCommand { id: number; name: string; description: string; template: string }
+
+export interface FolderInfo {
+  name: string;
+  path: string;
+  exists: boolean;
+  git: boolean;
+  branch: string;
+  branches: string[];
+}

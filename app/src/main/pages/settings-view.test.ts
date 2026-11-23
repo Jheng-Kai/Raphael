@@ -303,7 +303,7 @@ describe("the rules for every tab, in every language", () => {
   });
 
   test("a line under a row's name only where the setting would otherwise be set wrong", () => {
-    expect(described(tab("general"))).toEqual(["時區", "輸出資料夾"]);
+    expect(described(tab("general"))).toEqual(["時區"]);
     // Learning from corrections says that it pays the model for each check.
     expect(described(tab("dictation"))).toEqual(["自動加入字典"]);
     // the key's status, the month's forecast, what the limit does, and what each model costs
@@ -313,36 +313,25 @@ describe("the rules for every tab, in every language", () => {
 });
 
 describe("一般", () => {
-  test("output folder belongs to General", () => {
-    expect(rowOf(tab("general"), "輸出資料夾")).toContain('data-act="output-pick"');
-    expect(paneHTML(view({ pane: "agent" }))).not.toContain('data-row="output-folder"');
-  });
-
-  test("the output folder is a picker that names the chosen folder and shows its whole path", () => {
-    const unset = rowOf(tab("general"), "輸出資料夾");
-    expect(unset).not.toMatch(/<input|<textarea/);
-    expect(buttons(unset)).toHaveLength(1);
-    expect(unset).toContain("選擇資料夾");
-    const chosen = rowOf(tab("general", { brain: { ...brain, owner_output_folder: "C:\\Owner\\交付成果\\" } }), "輸出資料夾");
-    expect(chosen).not.toMatch(/<input|<textarea/);
-    expect(chosen).toContain('<span class="output-name">交付成果</span>');
-    expect(chosen).toContain('<span class="output-path">C:\\Owner\\交付成果\\</span>');
-    expect(chosen).toContain('aria-label="變更輸出資料夾（目前是 交付成果）"');
-    // The folder is changed, never cleared with a button standing open (R-UI-56); no title repeats the path.
-    expect(buttons(chosen)).toHaveLength(1);
-    expect(chosen).not.toMatch(/title="/);
-  });
-  test("General keeps only the output folder: where else a member may write is chosen in its own settings", () => {
-    const html = tab("general", { brain: { ...brain, member_write_folders: { "1": ["/Users/owner/Notes"] } } });
-    expect(html).toContain('data-row="output-folder"');
-    expect(html).not.toContain("write-folder");
-    expect(html).not.toContain("/Users/owner/Notes");
+  test("General shows remembered projects with their paths, branches and a menu per project", () => {
+    const path = "C:\\Owner\\Repo";
+    const brainSettings = { ...brain, project_folders: [path, "D:\\Notes"] };
+    const projectDetails = new Map([[path, { name: "Repo", path, exists: true, git: true, branch: "main", branches: ["main"] }]]);
+    const html = tab("general", { brain: brainSettings, projectDetails });
+    expect(html).toContain("專案資料夾");
+    expect(html).toContain(path);
+    expect(html).toContain("D:\\Notes");
+    expect(html).toContain('class="project-branch owner-data"');
+    expect(html).toContain("main</small>");
+    expect(html.match(/data-act="project-menu"/g)).toHaveLength(2);
+    expect(html).toContain('data-act="project-add"');
+    expect(paneHTML(view({ pane: "agent" }))).not.toContain('data-row="project-folder"');
   });
   test("General groups its sections: you, appearance and Raphael, the bots live elsewhere, and no way back into the guide", () => {
     const html = tab("general");
     expect(html).not.toContain("data-msg-section");
-    expect(groups(html)).toEqual(["關於你", t("skin.title"), t("agent.title")]);
-    expect(names(html).slice(0, 4)).toEqual([t("settings.067"), t("settings.059"), "時區", "輸出資料夾"]);
+    expect(groups(html)).toEqual(["關於你", t("skin.title"), t("agent.title"), t("projectFolders.title")]);
+    expect(names(html).slice(0, 3)).toEqual([t("settings.067"), t("settings.059"), "時區"]);
     // The guide is the first run's only.
     expect(html).not.toContain("導覽");
   });
@@ -445,7 +434,7 @@ describe("聽寫", () => {
 describe("拉斐爾", () => {
   test("moved rows keep their existing field ids and shortcut row", () => {
     expect(rowOf(tab("dictation"), "問拉斐爾")).toContain('data-row="agent-hotkey"');
-    expect(rowOf(tab("general"), "輸出資料夾")).toContain('data-act="output-pick"');
+    expect(tab("general")).toContain('data-act="project-add"');
   });
 
   test("hides the retired background cost cap", () => {
@@ -744,7 +733,7 @@ describe("while the core does not answer", () => {
     expect(rowOf(dictation, "你說的語言")).toMatch(/data-k="languages" disabled>/);
     expect(rowOf(dictation, "麥克風")).not.toContain("disabled");
     expect(rowOf(dictation, "聽寫")).not.toContain("disabled");
-    expect(rowOf(tab("general", down), "輸出資料夾")).toContain("disabled");
+    expect(tab("general", down)).toMatch(/data-act="project-add"[^>]*disabled>/);
     expect(rowOf(tab("dictation", down), "問拉斐爾")).not.toContain("disabled");
     const usage = tab("usage", down);
     expect(usage).not.toContain('id="limit-input"');

@@ -448,7 +448,7 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
   });
 
   /** Share (R-PAGE-08): the page saved as one HTML file, which the core builds of the page it keeps (`pages.export`: no text of
-   *  the window's goes into it), in the owner's output folder or Downloads, shown selected there, and a word of where it went. */
+   *  the window's goes into it), in the member's work folder or Downloads, shown selected there, and a word of where it went. */
   let sharing = false;
   async function share(live: Live): Promise<void> {
     if (sharing) return;
