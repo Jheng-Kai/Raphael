@@ -112,7 +112,7 @@
 .cs-sec-head { padding-inline: var(--sp-2); }
 .cs-card .btn.cs-main:is(:hover, :active):not(:disabled), .cs-linked .btn.cs-main:is(:hover, :active):not(:disabled) { background: transparent; }
 
-.cs-back { margin-inline-start: -9px; }
+.cs-back:not(.back-link) { margin-inline-start: -9px; }
 .cs-connected > .cs-top { margin-bottom: var(--sp-4); }
 .cs-connected > .cs-top > .cs-back { margin-block: 0; }
 .cs-head { display: flex; align-items: center; gap: var(--sp-3); }

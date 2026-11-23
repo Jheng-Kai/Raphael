@@ -574,7 +574,7 @@ export const connectionsAddHTML = (): string =>
   `<span>${esc(t("conn.addMenu"))}</span>${ico("down")}</button>`;
 
 /** A round chevron at the top left: back from an app's page or from the list of the connected apps. */
-const backHTML = (): string => backButton(t("conn.back"), ' data-conn="back" data-k="cs-back"', "cs-back");
+const backHTML = (): string => backButton(t("conn.back"), ' data-conn="back" data-k="cs-back"', "cs-back back-link");
 /** The connected list's title is its way back: the chevron and the title are one button. */
 // ---------- the connected apps: one list ----------
 
@@ -856,7 +856,7 @@ function formHTML(f: ConnectionForm, close: string): string {
   const error = f.error ? `<div class="note" role="alert">${st("err", f.error())}</div>` : "";
   const typeSel = sel(typeChoices(), f.type, t("conn.form.type"), ` data-k="conn-type"${off ? " disabled" : ""}`);
   return (
-    `<header class="cs-top">${backButton(t("conn.back"), ' data-conn="form-back"', "cs-back")}<h2 class="big cs-top-t" id="set-title" tabindex="-1" data-title-back>${esc(t(f.id ? "mcp.edit" : "mcp.add"))}</h2>${close}</header>` +
+    `<header class="cs-top">${backButton(t("conn.back"), ' data-conn="form-back"', "cs-back back-link")}<h2 class="big cs-top-t" id="set-title" tabindex="-1" data-title-back>${esc(t(f.id ? "mcp.edit" : "mcp.add"))}</h2>${close}</header>` +
     `<div class="add-grid">` +
     `<div class="two">${fld(t("conn.form.type"), typeSel)}${fld(t("conn.form.name"), fieldHTML(t("conn.form.nameHint"), f.name, { id: "conn-name", label: t("conn.form.name"), disabled: off }), "", "conn-name")}</div>` +
     fields +

@@ -12,6 +12,13 @@ export function checkRendered(name, context = {}) {
   };
   const roundBack = back => {
     require(visible(back) && back.matches("button.btn.icon.back-button[data-nav-back]") && back.getAttribute("aria-label"), "a named shared round back button leads the page");
+    if (back.matches(".back-link")) {
+      // The Connectors pages and a plugin's page go back by their title: a plain 18 px chevron beside it, with no circle.
+      const glyph = back.querySelector("svg.i")?.getBoundingClientRect(), style = getComputedStyle(back);
+      require(glyph?.width === 18 && glyph.height === 18 && style.boxShadow === "none" && /rgba\(0, 0, 0, 0\)|transparent/.test(style.backgroundColor)
+        && back.closest("header")?.querySelector("[data-title-back]"), "the way back is a plain chevron beside a title that goes back too");
+      return;
+    }
     const { width, height } = back.getBoundingClientRect(), glyph = back.querySelector("svg.i")?.getBoundingClientRect();
     require(width === 36 && height === 36 && glyph?.width === 18 && glyph.height === 18 && parseFloat(getComputedStyle(back).borderTopLeftRadius) >= 18, "the back button is a 36 px circle with an 18 px chevron");
   };
@@ -9196,7 +9203,9 @@ export function checkRendered(name, context = {}) {
     require(visible(view) && visible(view.querySelector(".cs-top-t")), "the connected list has its own title");
     roundBack(back);
     const box = back.getBoundingClientRect(), x = connectModal().querySelector('.modal-x').getBoundingClientRect(), glyph = back.querySelector('svg').getBoundingClientRect();
-    require(Math.abs((box.top + box.bottom) / 2 - (x.top + x.bottom) / 2) <= 1 && Math.abs(glyph.left - connectModal().querySelector('.cs').getBoundingClientRect().left) <= 3, "it stands on the ✕'s line, its chevron on the content's left edge");
+    const contentLeft = connectModal().querySelector('.cs').getBoundingClientRect().left;
+    require(Math.abs((box.top + box.bottom) / 2 - (x.top + x.bottom) / 2) <= 1 && Math.abs(glyph.left - contentLeft) <= 3,
+      `it stands on the ✕'s line, its chevron on the content's left edge (centres ${Math.round((box.top + box.bottom) / 2)}/${Math.round((x.top + x.bottom) / 2)}, chevron ${Math.round(glyph.left)} against ${Math.round(contentLeft)})`);
     require(!view.querySelector('.cs-chips, #conn-search') && view.querySelector('.cs-top-t')?.textContent === '已連結', "it is the list alone, under its own title");
     const rows = [...view.querySelectorAll('.cs-linked')];
     require(rows.length > 0 && rows.every(row => visible(row.querySelector('.cs-tile')) && row.querySelector('[role="switch"]')), "each row has its tile, its name and its switch");
@@ -9217,8 +9226,9 @@ export function checkRendered(name, context = {}) {
     const modal = connectModal(), back = modal.querySelector('.cs-back'), close = modal.querySelector('.modal-x'), content = modal.querySelector('.cs');
     require(visible(back) && visible(close) && back.matches('button[data-conn="back"]'), "the back chevron and the dialog's ✕ are both real buttons on screen");
     const a = back.getBoundingClientRect(), x = close.getBoundingClientRect(), centreY = (a.top + a.bottom) / 2, centreX = (a.left + a.right) / 2;
-    require(Math.round(a.width) === Math.round(x.width) && Math.round(a.height) === Math.round(x.height) && a.width >= 30, `the back chevron is the ✕'s own size, not smaller (${a.width}x${a.height} against ${x.width}x${x.height})`);
-    require(parseFloat(getComputedStyle(back).borderTopLeftRadius) >= a.height / 2, "it is round");
+    // The way back is the title itself: a plain chevron, as tall as the ✕, beside words that go back too.
+    require(back.matches('.back-link') && Math.round(a.height) === Math.round(x.height) && getComputedStyle(back).boxShadow === 'none'
+      && back.closest('header')?.querySelector('[data-title-back]'), `the way back is a plain chevron the ✕'s height beside a title that goes back (${a.width}x${a.height})`);
     require(Math.abs(centreY - (x.top + x.bottom) / 2) <= 1, `it stands on the ✕'s line (${centreY} against ${(x.top + x.bottom) / 2})`);
     const misses = [[a.left + 3, centreY], [a.right - 3, centreY], [centreX, a.top + 3], [centreX, a.bottom - 3], [centreX, centreY]].filter(([px, py]) => { const hit = document.elementFromPoint(px, py); return !(hit && (hit === back || back.contains(hit))); });
     require(misses.length === 0, `a press anywhere on its 36 px lands on it (${misses.length} points did not)`);

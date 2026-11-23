@@ -564,9 +564,12 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
   --head-cover: inset 0 0 0 100vmax var(--dialog), 0 calc(-1 * var(--body-top)) 0 var(--dialog);
   box-shadow: var(--head-cover); animation: set-head-edge linear both; animation-timeline: scroll(nearest block); animation-range: 0 12px; }
 @keyframes set-head-edge { from { box-shadow: var(--head-cover), 0 1px 0 transparent; } to { box-shadow: var(--head-cover), 0 var(--sp-3) 0 var(--dialog), 0 calc(var(--sp-3) + 1px) 0 var(--line); } }
-/* A page title that has a back button beside it goes back too. */
+/* On the Connectors pages and a plugin's page the way back is the title itself: a plain chevron and the words, no circle,
+   both pressable and lit together. */
+.modal-body .btn.icon.back-button.back-link { flex: none; width: auto; min-width: 0; height: 36px; min-height: 36px; padding: 0; margin-inline-end: calc(var(--sp-1) - var(--sp-3));
+  border-color: transparent; background: transparent; box-shadow: none; color: var(--text); }
 [data-title-back] { cursor: pointer; }
-[data-title-back]:hover { color: var(--text-2); }
+.modal-body header:has(.back-link:hover, [data-title-back]:hover) :is(.back-link, [data-title-back]) { color: var(--text-2); }
 .modal-body .set-content:has(> .cs), .modal-body .set-content > .cs { box-sizing: border-box; width: calc(100% + var(--close-gutter)); margin-right: calc(-1 * var(--close-gutter)); padding-right: var(--close-gutter); }
 .mb-dialog:not(.mb-confirm, .model-chooser, .store-dialog, .tpr) { --close-gutter: calc(36px + var(--sp-3)); padding-right: calc(var(--pa-dlg-pad) + var(--close-gutter)); }
 .cs-dialog:not(.pv-editor) { --close-gutter: calc(36px + var(--sp-3)); padding-right: calc(var(--sp-4) + var(--close-gutter)); }

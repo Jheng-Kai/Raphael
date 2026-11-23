@@ -582,7 +582,8 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
   for (const header of doc.querySelectorAll(headerSelector)) {
     if (!shown(header)) continue;
     const title = [...header.querySelectorAll('h1, h2, h3, [role="heading"], .card-title')].find(shown);
-    const back = [...header.querySelectorAll(".back-button")].find(shown);
+    // A plain way back (chevron and title words, no circle) is not a round control to match.
+    const back = [...header.querySelectorAll(".back-button:not(.back-link)")].find(shown);
     const controls = [...header.querySelectorAll('button, [role="button"], a[href]')].filter(shown);
     const closes = controls.filter(control => control.matches(".close-button") || /^[×✕✖✗]$/.test(control.textContent.trim())
       || control.querySelector('svg path[d="M18 6 6 18"]'));
