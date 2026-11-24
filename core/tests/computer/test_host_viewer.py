@@ -14,7 +14,7 @@ import pytest
 from raphael_core.computer import host_page
 from raphael_core.agent.history import AgentHistory
 from raphael_core.computer.handback import HandbackCards
-from raphael_core.computer.host_browser import ChromeProcessTree, HostBrowser, Tab, chrome_executable
+from raphael_core.computer.host_browser import ChromeProcessTree, HostBrowser, Tab, chrome_executable, headless_chrome
 from raphael_core.computer.host_computer import HostComputerTools
 from raphael_core.computer.host_view import Screencast
 from raphael_core.computer.viewer import DesktopViewer
@@ -860,6 +860,12 @@ async def test_native_headed_chrome_streams_off_the_owner_desktop(tmp_path):
                     private, _ = windows_on_desktop(pid, browser.process.desktop)
                     interactive, foreground = windows_on_desktop(pid)
                     assert private and not interactive and foreground not in private
+                elif headless_chrome():
+                    # A Mac runs it with no window at all (#308), and the page still sees the ordinary Chrome of a Mac.
+                    assert (await browser.cdp.call("Browser.getVersion"))["product"].startswith("HeadlessChrome/")
+                    brands = await browser.command(tab, "Runtime.evaluate", {
+                        "expression": "navigator.userAgentData.brands.map(brand => brand.brand).join()", "returnByValue": True})
+                    assert "Headless" not in brands["result"]["value"]
                 else:
                     bounds = (await browser.cdp.call("Browser.getWindowForTarget", {"targetId": tab.target}))["bounds"]
                     assert bounds["left"] + bounds["width"] < 0 and bounds["top"] + bounds["height"] < 0

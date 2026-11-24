@@ -4,6 +4,8 @@ import asyncio
 import json
 import logging
 import os
+import platform
+import plistlib
 import re
 import secrets
 import shutil
@@ -109,6 +111,55 @@ def chrome_executable():
     return None
 
 
+def headless_chrome():
+    """Whether Raphael's Chrome runs with no window at all (#308). Windows hides it on a desktop of its own
+    (`DesktopChrome`), where it draws as any shown window does. A Mac has no such desktop: it keeps every window on a
+    screen and a Chrome it starts takes the front, so there Chrome runs in its own headless mode, the whole Chrome with no
+    window, as OpenMausBot runs its browser. The view streams it as before (`Screencast`) and the owner works it there.
+    RAPHAEL_MAC_HEADED=1 brings the old window back, to compare on a Mac."""
+    return sys.platform == "darwin" and os.environ.get("RAPHAEL_MAC_HEADED") != "1"
+
+
+def mac_chrome_version(executable):
+    """The installed Chrome's version from its app bundle (`Info.plist`), read without starting it: "" when it cannot be."""
+    try:
+        with open(Path(executable).parents[1] / "Info.plist", "rb") as file:
+            version = plistlib.load(file).get("CFBundleShortVersionString", "")
+    except (OSError, IndexError, ValueError, plistlib.InvalidFileException):
+        return ""
+    return version if isinstance(version, str) and re.fullmatch(r"\d+(?:\.\d+){1,3}", version) else ""
+
+
+def mac_user_agent(version):
+    """The user agent of the ordinary Chrome of a Mac (Chrome reports its major version and a fixed macOS version), so a
+    page sees no HeadlessChrome in a request: a site that refuses headless browsers, Google's sign-in first, sees Chrome."""
+    return (f"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) "
+            f"Chrome/{version.split('.')[0]}.0.0.0 Safari/537.36")
+
+
+def mac_user_agent_metadata(version):
+    """What `navigator.userAgentData` and the client hints say, as the ordinary Chrome of a Mac says it: its brands
+    without HeadlessChrome."""
+    major = version.split(".")[0]
+    return {
+        "brands": [{"brand": "Google Chrome", "version": major}, {"brand": "Chromium", "version": major},
+                   {"brand": "Not_A Brand", "version": "24"}],
+        "fullVersionList": [{"brand": "Google Chrome", "version": version}, {"brand": "Chromium", "version": version},
+                            {"brand": "Not_A Brand", "version": "24.0.0.0"}],
+        "fullVersion": version, "platform": "macOS", "platformVersion": "",
+        "architecture": "arm" if platform.machine() == "arm64" else "x86", "model": "", "mobile": False,
+        "bitness": "64", "wow64": False,
+    }
+
+
+def window_arguments(mac_version):
+    """Where Chrome's window goes off Windows: none in headless (with the Mac's user agent when its version is known),
+    else far off every screen, which Linux keeps."""
+    if headless_chrome():
+        return ["--headless=new", *([f"--user-agent={mac_user_agent(mac_version)}"] if mac_version else [])]
+    return ["--window-position=-32000,-32000"]
+
+
 def page_url(value):
     try:
         url = urlsplit(value)
@@ -212,6 +263,7 @@ class HostBrowser:
         self.download_to = None
         self.owned_targets = {}
         self.startup_url = None
+        self.mac_version = ""  # the installed Chrome's version where it runs headless (`headless_chrome`)
         self.current = {}
         self.owner_closed = {}
         self.owner_closed_current = {}
@@ -399,11 +451,12 @@ class HostBrowser:
             # Leave a blank startup tab unowned. It keeps Chrome alive when the
             # last member tab closes, even when that closure comes from the page.
             pages = [self.startup_url, "about:blank"]
+            self.mac_version = mac_chrome_version(executable) if headless_chrome() else ""
             if os.name == "nt":
                 self.process = DesktopChrome([*argv, *pages])
             else:
                 self.process = await asyncio.create_subprocess_exec(
-                    *argv, "--window-position=-32000,-32000", *pages, stdin=asyncio.subprocess.DEVNULL,
+                    *argv, *window_arguments(self.mac_version), *pages, stdin=asyncio.subprocess.DEVNULL,
                     stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL, start_new_session=True)
             self.process_tree = ChromeProcessTree(self.process)
             if isinstance(self.process, DesktopChrome):
@@ -668,6 +721,14 @@ class HostBrowser:
             self._update_page(tab, title=info.get("title"), url=info.get("url"))
         try:
             await self.command(tab, "Page.enable")
+            if headless_chrome():
+                # No window holds the focus in headless: each page is told it has it, and it names itself as the ordinary
+                # Chrome of a Mac in navigator.userAgentData too (the request's user agent is set at the start).
+                await self.command(tab, "Emulation.setFocusEmulationEnabled", {"enabled": True})
+                if self.mac_version:
+                    await self.command(tab, "Emulation.setUserAgentOverride", {
+                        "userAgent": mac_user_agent(self.mac_version),
+                        "userAgentMetadata": mac_user_agent_metadata(self.mac_version)})
             await self.resize(tab, *VIEWPORT)
             tree = await self.command(tab, "Page.getFrameTree")
             frame = tree["frameTree"]["frame"]
