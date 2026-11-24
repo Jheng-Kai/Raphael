@@ -404,3 +404,20 @@ test("a Settings section's title stands on its card's left edge: no stylesheet i
   }
   expect(inset).toEqual([]);
 });
+
+test("a grid that scrolls inside a capped height sizes its rows by their content (R-UI-181)", () => {
+  // 選擇主要聯絡對象 listed twenty members in a list capped at 52vh: rows of the default size shrank to the buttons'
+  // min-height once the members did not fit, and every name ran over the description above it. A row as tall as its
+  // content never shrinks; the list scrolls instead.
+  const squashable: string[] = [];
+  for (const file of mainFiles.filter((f) => f.endsWith(".css"))) {
+    const css = read(file).replace(/\/\*[\s\S]*?\*\//g, "");
+    for (const [, selectors, body] of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const grid = /(?:^|;)\s*display\s*:\s*grid\b/.test(body!);
+      const capped = /(?:^|;)\s*max-height\s*:\s*(?!none\b)[^;]+/.test(body!);
+      const scrolls = /(?:^|;)\s*overflow(?:-y)?\s*:\s*(?:[\w-]+\s+)?(?:auto|scroll)\b/.test(body!);
+      if (grid && capped && scrolls && !/grid-auto-rows\s*:\s*(?:max-content|min-content)\b/.test(body!)) squashable.push(`${rel(file)}: ${selectors!.trim()}`);
+    }
+  }
+  expect(squashable).toEqual([]);
+});

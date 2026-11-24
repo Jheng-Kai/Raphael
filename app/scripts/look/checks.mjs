@@ -2,6 +2,42 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.checkVisibility() && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  // R-UI-182: a dialog's page scrolls under its header, which holds the close (and the way back) at the top of the body and
+  // keeps them pressable at its bottom. A page too short to scroll gets a tall spacer under its header for the test, so a
+  // header that would scroll away fails on every page and not only on the ones a fixture makes long. A page whose height is
+  // the dialog's and that scrolls inside a list of its own (Connect apps) never moves its header: the body cannot scroll
+  // even with the spacer, and the close must still stand where it was and take a press.
+  const headHoldsOnScroll = (body, close, others = []) => {
+    let holder = close.parentElement;
+    while (holder && holder !== body && getComputedStyle(holder).position !== 'sticky') holder = holder.parentElement;
+    require(holder && holder !== body, `the header holding the close is sticky (${close.parentElement?.className} in ${close.parentElement?.parentElement?.className})`);
+    let spacer = null;
+    if (body.scrollHeight <= body.clientHeight + 40) {
+      spacer = document.createElement('div');
+      spacer.style.height = `${body.clientHeight * 2}px`;
+      holder.parentElement.append(spacer);
+    }
+    const before = body.scrollTop, start = close.getBoundingClientRect().top, scrolls = body.scrollHeight > body.clientHeight + 1;
+    body.scrollTop = body.scrollHeight;
+    const press = control => { const r = control.getBoundingClientRect(), at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return at === control || control.contains(at); };
+    const after = close.getBoundingClientRect().top, bodyTop = body.getBoundingClientRect().top, scrolled = body.scrollTop;
+    const pressable = [close, ...others].filter(control => control && visible(control)).map(press);
+    body.scrollTop = before;
+    spacer?.remove();
+    require((scrolled > 0 || !scrolls) && Math.abs(after - start) <= 1 && after >= bodyTop - 1 && pressable.every(Boolean),
+      `scrolled to the bottom, the close and the way back still stand at the top and take a press (close ${Math.round(start)}→${Math.round(after)}, body top ${Math.round(bodyTop)}, scrolls ${scrolls}, scrolled ${scrolled}, pressable ${pressable})`);
+  };
+  // R-UI-181: each row of a list is as tall as what it holds: its face and words lie inside it and never reach the next row.
+  const rowsWhole = rows => {
+    let previous = null;
+    for (const row of rows) {
+      const box = row.getBoundingClientRect(), parts = [...row.querySelectorAll(':scope > *')].filter(visible).map(part => part.getBoundingClientRect());
+      const top = Math.min(...parts.map(part => part.top)), bottom = Math.max(...parts.map(part => part.bottom));
+      require(top >= box.top - 1 && bottom <= box.bottom + 1, `${row.textContent.trim().slice(0, 24)} holds its face and words (${Math.round(top)}-${Math.round(bottom)} in ${Math.round(box.top)}-${Math.round(box.bottom)})`);
+      require(!previous || box.top >= previous.bottom - 1, `${row.textContent.trim().slice(0, 24)} starts under the row before it`);
+      previous = box;
+    }
+  };
   const tokenColour = (element, token) => {
     const probe = document.createElement("i");
     probe.style.color = "var(" + token + ")";
@@ -599,6 +635,7 @@ export function checkRendered(name, context = {}) {
       const head = pane.closest('.set-content').querySelector('.set-head');
       require(head.querySelector('h1#set-title')?.textContent.trim() === '團隊技能' &&
         visible(head.querySelector('.close-button')), 'the list keeps its Team skills title and shared close');
+      if (name === 'skill-library') headHoldsOnScroll(head.closest('.modal-body'), head.querySelector('.close-button'));
       require(visible(pane) && pane.querySelectorAll('[data-skl="import-go"]').length === 1 && pane.firstElementChild?.matches('.skl-import'), 'the importer is the first card of the tab, with one 匯入');
       require(!pane.querySelector('.skl-head, .skl-drop-hint') && !pane.previousElementSibling?.matches?.('p'), 'nothing is written between the tab name and its first card');
       const box = pane.getBoundingClientRect();
@@ -668,18 +705,8 @@ export function checkRendered(name, context = {}) {
       require(actionBoxes[0].right <= actionBoxes[1].left && actionBoxes[1].right <= actionBoxes[2].left,
         'access and the update button are visibly left of the switch');
       require(document.querySelector('.modal-scrim .modal-body').scrollTop === 0, 'the page opens at its top');
-      {
-        // A plugin with many skills scrolls under its title: at the bottom the way back, the title and the close stay at the top.
-        const body = document.querySelector('.modal-scrim .modal-body');
-        if (body.scrollHeight > body.clientHeight + 40) {
-          const top = close.getBoundingClientRect().top;
-          body.scrollTop = body.scrollHeight;
-          const press = control => { const r = control.getBoundingClientRect(), at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return at === control || control.contains(at); };
-          const ok = Math.abs(close.getBoundingClientRect().top - top) <= 1 && press(close) && press(back) && press(title);
-          body.scrollTop = 0;
-          require(ok, "scrolled to the bottom of the plugin, its way back, title and close still stand at the top and take a press");
-        }
-      }
+      // A plugin with many skills scrolls under its title: at the bottom the way back, the title and the close stay at the top.
+      headHoldsOnScroll(document.querySelector('.modal-scrim .modal-body'), close, [back, title]);
       require(document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, 'the window does not scroll sideways');
     }
     if (name === 'nav-side-plugin') {
@@ -700,6 +727,10 @@ export function checkRendered(name, context = {}) {
       const left = back.getBoundingClientRect().left;
       for (const part of [quote, doc]) require(Math.abs(part.getBoundingClientRect().left - left) <= 1, 'the quote and the document line up with the way back');
       require(!page.querySelector('[data-skl="skill-more"]') && document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, 'no ⋯, and the window does not scroll sideways');
+      // A long document scrolls under the skill's header: the way back, its name and the close stay at the top (R-UI-182).
+      const close = head.querySelector('.close-button');
+      require(visible(close) && page.querySelectorAll('.close-button').length === 1, "one shared close stands in the skill's header");
+      headHoldsOnScroll(document.querySelector('.modal-scrim .modal-body'), close, [back, title]);
     }
     if (name === 'skill-library-right-click') {
       const picks = [...document.querySelectorAll('.mb-menu [data-pick]')].map(item => item.dataset.pick);
@@ -9666,20 +9697,9 @@ export function checkRendered(name, context = {}) {
     const box = close.getBoundingClientRect(), hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
     require(close === hit || close.contains(hit), "rounded corners do not clip the close control");
     // A long page scrolls under its header: at the bottom the close, and a way back if there is one, still stand at the top.
+    // A short page is made long for the test (R-UI-182).
     const body = modal.querySelector(".modal-body");
-    let scrolledTested = false;
-    if (body && body.scrollHeight > body.clientHeight + 40) {
-      const before = body.scrollTop, start = close.getBoundingClientRect().top;
-      body.scrollTop = body.scrollHeight;
-      const reachable = control => { if (!control || !visible(control)) return true; const r = control.getBoundingClientRect(), at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return at === control || control.contains(at); };
-      const back = modal.querySelector(".modal-body header .back-button");
-      const after = close.getBoundingClientRect().top, bodyTop = body.getBoundingClientRect().top;
-      const stays = after >= bodyTop - 1 && after <= start + 1 && reachable(close) && reachable(back);
-      const detail = `close ${Math.round(start)}→${Math.round(after)}, body top ${Math.round(bodyTop)}, scrolled ${body.scrollTop}, reachable ${reachable(close)}/${reachable(back)}, head ${close.parentElement?.className} ${getComputedStyle(close.parentElement).position} parent ${close.parentElement?.parentElement?.className} ${getComputedStyle(close.parentElement.parentElement).overflow}/${getComputedStyle(close.parentElement.parentElement).display}`;
-      body.scrollTop = before;
-      require(stays, `scrolled to the bottom, the close and the way back still stand at the top and take a press (${detail})`);
-      scrolledTested = true;
-    }
+    if (body?.contains(close)) headHoldsOnScroll(body, close, [modal.querySelector(".modal-body header .back-button")]);
     // The settings: flat tabs, no group names, no search and no line under a tab's name.
     const scrim = modal.closest('.modal-scrim');
     if (!scrim.hasAttribute('data-standalone')) {
@@ -9688,7 +9708,7 @@ export function checkRendered(name, context = {}) {
       require(!scrim.querySelector('.nav-group, #set-search'), "the tabs sit flat, with no group names and no search");
       require(!scrim.querySelector('.set-purpose'), "a tab is its name alone, with no line under it");
     }
-    return { check: name, radius: getComputedStyle(modal).borderTopLeftRadius, scrolledTested };
+    return { check: name, radius: getComputedStyle(modal).borderTopLeftRadius };
   }
   if (name === "sidebar-hidden-folder-closed" || name === "sidebar-hidden-folder") if (matchMedia('(max-width: 859px)').matches) return {check:name,compact:true};
   if (name === "sidebar-hidden-folder-closed") {
@@ -10053,6 +10073,8 @@ export function checkRendered(name, context = {}) {
         const b = button.getBoundingClientRect();
         require(b.left >= box.left && b.right <= box.right && b.height >= 40, `${button.textContent.trim()} is a whole row inside the window`);
       }
+      // With more characters than the list shows at once, the rows keep their height and the list scrolls (R-UI-181).
+      rowsWhole(choices);
       require(writes.length === 0 && tiles().join() === "0,3,1", "nothing is written before a member is pressed");
       return { check: name, choices: choices.length };
     }
@@ -10114,6 +10136,8 @@ export function checkRendered(name, context = {}) {
         const b = button.getBoundingClientRect();
         require(b.left >= box.left && b.right <= box.right && b.height >= 40, `${button.textContent.trim()} is a whole row inside the window`);
       }
+      // With more characters than the list shows at once, the rows keep their height and the list scrolls (R-UI-181).
+      rowsWhole(choices);
       require(sets.length === 0 && data.primaryId === 1, "nothing is set before 設為主要 is pressed");
       return { check: name, choices: choices.length, picked: picked[0].dataset.id };
     }

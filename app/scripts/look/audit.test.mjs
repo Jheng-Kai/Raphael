@@ -128,6 +128,25 @@ describe("rendered look checks", () => {
       expect(violations()).toEqual([]);
     } finally { browser.happyDOM.abort(); }
   });
+  it("rejects a row of a scrolling list squashed below its face and words", () => {
+    const browser = new Window();
+    const { document: doc } = browser;
+    doc.body.innerHTML = '<div class="list" style="overflow-y: auto"><button class="btn row"><span class="face"></span><span class="words">小晴</span></button></div>';
+    const [row] = doc.querySelectorAll("button"), [face, words] = row.children;
+    const rect = (left, top, width, height) => ({ left, right: left + width, top, bottom: top + height, width, height });
+    for (const node of doc.querySelectorAll("*")) node.getBoundingClientRect = () => rect(0, 0, 400, 300);
+    row.getBoundingClientRect = () => rect(0, 100, 400, 30);
+    face.getBoundingClientRect = () => rect(8, 98, 34, 34);
+    let wordsBox = rect(50, 95, 300, 40);
+    words.getBoundingClientRect = () => wordsBox;
+    const violations = () => auditDocument(doc, { width: 720, height: 480 }).productRules.filter(item => item.rule === "R-UI-181");
+    try {
+      expect(violations()).toHaveLength(1);
+      wordsBox = rect(50, 104, 300, 22);
+      face.getBoundingClientRect = () => rect(8, 100, 30, 30);
+      expect(violations()).toEqual([]);
+    } finally { browser.happyDOM.abort(); }
+  });
   it("keeps switch ordering within each row of a multi-column grid", () => {
     const browser = new Window();
     const { document: doc } = browser;

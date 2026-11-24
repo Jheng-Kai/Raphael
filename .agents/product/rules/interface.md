@@ -2,6 +2,13 @@
 
 Layout, controls, menus, floating surfaces, the sidebar, navigation, colours, words on screen and the guide. Part of [the product rules](../RULES.md); a rule's ID is unique across every file.
 
+## A dialog's rows and header keep their place
+
+| ID | Date | Rule | Check | Gate | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-UI-181 | 2026-11-24 | A row of a list is as tall as what it holds, however many rows the list has. A list capped in height scrolls once its rows no longer fit; a row never shrinks below its face and words to make room, and no row's content reaches the next row. A grid that caps its height and scrolls sizes its rows by their content (`grid-auto-rows: max-content`), because rows of the default size shrink to their buttons' min-height once they overflow. | vitest, look | hard | app/src/ui-rules.test.ts::a grid that scrolls inside a capped height sizes its rows by their content (R-UI-181); app/scripts/look/audit.test.mjs::rejects a row of a scrolling list squashed below its face and words; primary-contact-picker-long; primary-contact-picker; sidebar-tile-picker |
+| R-UI-182 | 2026-11-24 | Every page of Settings and Connect apps keeps its header at the top of the dialog while the page scrolls: the close, the way back and the title stay where they started and take a press at the bottom of the longest page. Each page of Team skills (the list, a package's page, a plugin's skill and a skill alone) holds its close in a header the shared sticky rule names. | vitest, look | hard | app/src/main/skill-library.test.ts::every page of Team skills keeps its close in a header the shared sticky rule holds at the top (R-UI-182); skill-library; skill-library-open; skill-library-skill-page; skill-library-doc-alone; foot-account-settings |
+
 ## Host browser toolbar
 
 | ID | Date | Rule | Check | Severity | Evidence |

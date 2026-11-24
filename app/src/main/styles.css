@@ -558,9 +558,10 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
    of its header. */
 .modal-body { --close-gutter: calc(36px + var(--sp-5)); padding-right: calc(var(--sp-4) + var(--close-gutter)); }
 .modal-scrim[data-standalone] .modal-body { padding-right: calc(var(--sp-4) + var(--close-gutter)); }
-/* A long page scrolls under its header: the back button, the title and the close stay where they are, on the dialog's own
-   colour, and a hairline shows under them only once something has scrolled beneath. */
-.modal-scrim .modal-body :is(.set-content > .set-head, .cs > .cs-top, .cs-page > .cs-head, .skl-page > .skl-pack) { position: sticky; top: 0; z-index: 3;
+/* A long page scrolls under its header (R-UI-182): the back button, the title and the close stay where they are, on the
+   dialog's own colour, and a hairline shows under them only once something has scrolled beneath. A plugin's skill page
+   has its header straight in the page, a package's page and a skill alone inside the package's wrapper. */
+.modal-scrim .modal-body :is(.set-content > .set-head, .cs > .cs-top, .cs-page > .cs-head, .skl-page > .skl-pack, .skl-page > .set-head) { position: sticky; top: 0; z-index: 3;
   --head-cover: inset 0 0 0 100vmax var(--dialog), 0 calc(-1 * var(--body-top)) 0 var(--dialog);
   box-shadow: var(--head-cover); animation: set-head-edge linear both; animation-timeline: scroll(nearest block); animation-range: 0 12px; }
 @keyframes set-head-edge { from { box-shadow: var(--head-cover), 0 1px 0 transparent; } to { box-shadow: var(--head-cover), 0 var(--sp-3) 0 var(--dialog), 0 calc(var(--sp-3) + 1px) 0 var(--line); } }
