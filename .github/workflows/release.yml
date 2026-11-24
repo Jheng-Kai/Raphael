@@ -121,7 +121,7 @@ jobs:
           "artifact-name=Raphael-windows-x64-$ref-$($env:GITHUB_SHA.Substring(0, 12))" >> $env:GITHUB_OUTPUT
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           version: "0.12.11"
           working-directory: core
@@ -276,7 +276,7 @@ jobs:
           echo "artifact-name=Raphael-macos-arm64-$ref-${GITHUB_SHA:0:12}" >> "$GITHUB_OUTPUT"
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           version: "0.12.11"
           working-directory: core
