@@ -4,6 +4,7 @@ and paid when its engine can be reached. A fake engine stands in for Docker; not
 
 import asyncio
 import json
+import os
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -368,3 +369,36 @@ async def test_the_database_keeps_the_record_of_computers_the_app_made(conn):
     assert conn.execute("SELECT COUNT(*) FROM computer_data").fetchone()[0] == 0
     columns = [row[1] for row in conn.execute("PRAGMA table_info(computer_data)")]
     assert columns == ["host", "key", "owed", "attempts"]
+
+
+async def test_a_deleted_member_leaves_no_folder_in_the_shared_computers_workspace(rig, vm, engine):
+    """#314: the card says the member and all its data are deleted for good; its own folder in the shared computer's
+    workspace goes too. Only that folder: others' folders stay, and so does anything else in the workspace, a hash-named
+    folder that belongs to no member included."""
+    one, two = await made(rig, "A"), await made(rig, "B")
+    gone, kept = vm.shared_member_folder(one.id), vm.shared_member_folder(two.id)
+    hex_named = vm.shared_members_folder() / "0123456789abcdef"
+    unrelated = vm.shared_members_folder() / "notes"
+    for folder in (gone, kept, hex_named, unrelated):
+        folder.mkdir(parents=True)
+        (folder / "work.txt").write_text("a file")
+    assert await delete(rig, one.id) == {"deleted": True}
+    assert not gone.exists()
+    for folder in (kept, hex_named, unrelated):
+        assert (folder / "work.txt").read_text() == "a file"
+
+
+async def test_a_deleted_members_folder_that_is_a_link_is_not_followed(rig, vm, engine, tmp_path):
+    one = await made(rig, "A")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "work.txt").write_text("not the member's")
+    link = vm.shared_member_folder(one.id)
+    link.parent.mkdir(parents=True)
+    if os.name == "nt":
+        import _winapi
+        _winapi.CreateJunction(str(outside), str(link))
+    else:
+        os.symlink(outside, link, target_is_directory=True)
+    assert await delete(rig, one.id) == {"deleted": True}
+    assert (outside / "work.txt").read_text() == "not the member's"

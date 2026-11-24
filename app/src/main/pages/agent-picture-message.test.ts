@@ -17,12 +17,15 @@ const api = vi.hoisted(() => ({
   workerRerun: vi.fn(),
   core: vi.fn(),
   openAttachment: vi.fn(),
+  copyAttachment: vi.fn(),
 }));
 vi.mock("../api", () => api);
 vi.mock("../ui", async original => ({ ...(await original<typeof import("../ui")>()), toaster: { info: vi.fn() } }));
 
 import { Cleared } from "../cleared";
 import { createAgent } from "./agent";
+import { installContextMenus } from "../context-menu";
+import { closeMenu } from "../ui";
 
 const FIRST = `${"b".repeat(32)}.png`, SECOND = `${"c".repeat(32)}.jpg`, REPORT = `${"d".repeat(32)}.pdf`;
 const PNG = btoa("synthetic png bytes");
@@ -116,6 +119,30 @@ test("a picture's ⋯ offers 複製圖片, which puts the picture itself on the 
   expect(blob.type).toBe("image/png");
   expect(new Uint8Array(await blob.arrayBuffer())).toEqual(Uint8Array.from(atob(PNG), c => c.charCodeAt(0)));
   agent.hide();
+});
+
+test("a right click on a picture the member sent offers one 複製圖片, and on a file the owner sent 複製檔案, which copies that file under its name", async () => {
+  const stop = installContextMenus(document);
+  api.copyAttachment.mockResolvedValue(undefined);
+  api.agentHistoryList.mockResolvedValue({ turns: [{ ...turn(), attachments: [{ id: REPORT, name: "季度報告.pdf", mime: "application/pdf", size: 1727 }] }] });
+  const agent = await open();
+  const menuOn = async (target: Element): Promise<HTMLElement[]> => {
+    target.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 2, clientX: 50, clientY: 50 }));
+    target.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: 50, clientY: 50 }));
+    await flush();
+    return [...document.querySelectorAll<HTMLElement>("#app-popover [data-pick]")];
+  };
+  const picture = agent.el.querySelector('.chat-message[data-message="1"] .attachment-picture, .chat-message[data-message="1"] img')!;
+  const onPicture = await menuOn(picture);
+  expect(onPicture.filter(item => item.textContent === "複製圖片")).toHaveLength(1);
+  closeMenu(); await flush();
+  const file = agent.el.querySelector('.chat-message[data-message="question"] .attachment-file[data-id]')!;
+  const onFile = await menuOn(file);
+  const copy = onFile.find(item => item.dataset.pick === "copy-attachment")!;
+  expect(copy.textContent).toBe("複製檔案");
+  copy.click(); await flush();
+  expect(api.copyAttachment).toHaveBeenCalledWith(REPORT, "季度報告.pdf");
+  agent.hide(); stop();
 });
 
 test("a reaction to a picture names that picture's message", async () => {

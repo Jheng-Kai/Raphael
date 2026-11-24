@@ -132,7 +132,8 @@ ACTIONS = (
     row("member_library_update", "skills.library.update", "Change or refresh a team skill package.", {
         "key": TEXT, "access": {"type": ["string", "array"], "items": ID}, "enabled": BOOL, "refresh": BOOL,
         "skill": obj({"id": ID, "enabled": BOOL}, ("id", "enabled"))}, ("key",), destructive=True),
-    row("member_library_delete", "skills.library.delete", "Delete a team skill package.", {"key": TEXT}, ("key",), destructive=True),
+    row("member_library_delete", "skills.library.delete",
+        "Delete a team skill package, or with `skill` (a skill id from member_library_list) only that one skill of it.", {"key": TEXT, "skill": ID}, ("key",), destructive=True),
     row("member_skill_import", "members.skills.import", "Import a member's skill package through the UI importer. " + SKILL_NAME_RULE + ".", {"member_id": MEMBER_ID, "shared": BOOL, "source": TEXT, "text": TEXT, "file": obj({"name": TEXT, "data": TEXT}, ("name", "data"))}, ("member_id",)),
     row("member_skill_update", "members.skills.update", "Edit a member skill document or turn it on/off. " + SKILL_NAME_RULE + ". Keep an existing name unchanged when editing.", {"member_id": MEMBER_ID, "shared": BOOL, "id": ID, "enabled": BOOL, "text": TEXT, "expected_hash": TEXT}, ("member_id", "id")),
     row("member_skill_delete", "members.skills.delete", "Delete a member or shared skill package and grants.", {"member_id": MEMBER_ID, "shared": BOOL, "id": ID}, ("member_id", "id"), destructive=True),

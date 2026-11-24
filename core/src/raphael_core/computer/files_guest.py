@@ -23,6 +23,11 @@ CHUNK = 1 << 20
 SAFE = hasattr(os, "O_NOFOLLOW") and os.open in os.supports_dir_fd
 
 
+def linked(path):
+    """Whether `path` is a link, or a junction (which `islink` does not say on Windows, and which a walk by path follows)."""
+    return os.path.islink(path) or getattr(os.path, "isjunction", lambda _: False)(path)
+
+
 class Folder:
     """The folder a file is in: a descriptor held open (in the guest), or its path (a host without descriptor calls)."""
 
@@ -31,7 +36,7 @@ class Folder:
         if not SAFE:
             for index in range(len(parts)):
                 here = os.path.join(path, *parts[:index + 1])
-                if nofollow and os.path.islink(here):
+                if nofollow and linked(here):
                     raise OSError(errno.ELOOP, "link")
                 if create and not os.path.exists(here):
                     os.mkdir(here, 0o755)

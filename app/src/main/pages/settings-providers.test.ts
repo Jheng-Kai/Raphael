@@ -978,9 +978,13 @@ test("General removes only the selected project and adds a picked folder", async
   await flush();
   expect(page.el.querySelector('[data-row="project-folder"] .project-branch')?.textContent).toBe("main");
   click('[data-project="0"]');
-  click("#app-popover .menu-action");
+  // 移除 asks in place: the first press turns it into the question, the second removes, and the menu closes.
+  click("#app-popover [data-confirm-item]");
+  expect(api.settingsSet).not.toHaveBeenCalled();
+  click("#app-popover [data-confirm-item]");
   await flush();
   expect(api.settingsSet).toHaveBeenLastCalledWith("project_folders", [notes]);
+  expect(document.getElementById("app-popover")).toBeNull();
   expect(page.el.querySelectorAll('[data-row="project-folder"]')).toHaveLength(1);
   api.pickOutputFolder.mockResolvedValue(added);
   click('[data-act="project-add"]');

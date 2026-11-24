@@ -1,5 +1,6 @@
 // A picture a member sends is a message of its own, as a text bubble is (R-UI-156): the same actions
 // stand beside it, a reply quotes it and Copy puts the picture itself on the clipboard.
+import { copyAttachment, core } from "./api";
 import { fileKind, fileMime } from "./attachments";
 import type { TurnAttachment } from "./types";
 
@@ -47,6 +48,18 @@ export const pictureIdAt = (control: HTMLElement): string | undefined =>
  * Puts a stored picture itself on the clipboard, as PNG, the one image type the async clipboard takes everywhere. The item
  * is handed over at once with the picture still on its way, so the press that asked for it is the gesture that counts.
  */
+/**
+ * A stored picture copied as an image, or, when it cannot be (too large to read whole, or no image clipboard), as its file:
+ * either way the owner's 「複製圖片」 puts it on the clipboard.
+ */
+export async function copyStoredPicture(id: string, name?: string): Promise<void> {
+  try {
+    await copyPicture(() => core<{ mime: string; data: string }>("attachments.get", { id }));
+  } catch {
+    await copyAttachment(id, name);
+  }
+}
+
 export async function copyPicture(read: () => Promise<{ mime: string; data: string }>): Promise<void> {
   if (typeof ClipboardItem !== "function" || typeof navigator.clipboard?.write !== "function") throw new Error("no image clipboard");
   const png = read().then(file => pngOf(new Blob([Uint8Array.from(atob(file.data), c => c.charCodeAt(0))], { type: file.mime })));

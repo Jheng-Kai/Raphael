@@ -110,3 +110,30 @@ async def test_limits_are_checked_from_metadata_before_large_allocation(tmp_path
         with pytest.raises(RpcError):
             await store.upload({"action":"begin","name":"sample.bin","mime":mime,"size":limit+1})
         await store.upload({"action":"abort","token":token})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("suffix", ["tgz", "exe", "unknown", "pdf"])
+async def test_a_copy_for_the_clipboard_takes_any_type_under_the_name_it_was_sent_with(tmp_path, suffix):
+    """Copying runs nothing, so a type that opening refuses is still copied, and the copy keeps its own name."""
+    store = AttachmentStore(tmp_path)
+    from raphael_core.services.attachments import Attachment
+    file = store.save(Attachment(f"季度報告.{suffix}", "application/octet-stream", b"synthetic attachment"))
+    copied = (await store.copy_path({"id": file.stored_id, "name": f"季度報告.{suffix}"}))["path"]
+    assert copied.endswith(f"季度報告.{suffix}")
+    with open(copied, "rb") as handle:
+        assert handle.read() == b"synthetic attachment"
+
+
+@pytest.mark.asyncio
+async def test_the_copy_before_stays_until_the_next_and_a_shown_name_is_never_a_path(tmp_path):
+    """The copy before the latest may still be being pasted, or still be on the clipboard when the latest fails."""
+    from pathlib import Path
+    store = AttachmentStore(tmp_path)
+    file = store.save(checked("note.txt", "text/plain", b"synthetic attachment"))
+    first = Path((await store.copy_path({"id": file.stored_id, "name": r"..\..\evil.txt"}))["path"])
+    assert first.name == "evil.txt" and first.parent.parent == store.root / "clipboard"
+    second = Path((await store.copy_path({"id": file.stored_id, "name": "CON.txt"}))["path"])
+    assert first.exists() and second.name == file.stored_id
+    third = Path((await store.copy_path({"id": file.stored_id, "name": "COM¹.txt"}))["path"])
+    assert not first.exists() and second.exists() and third.name == file.stored_id

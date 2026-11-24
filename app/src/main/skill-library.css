@@ -8,6 +8,9 @@
 .skl .btn.skl-go { flex: none; min-height: var(--h-field); }
 .skl-text { width: 100%; min-height: 112px; resize: vertical; font-family: var(--mono); font-size: var(--fs-sm); }
 .skl-error { margin: 0; color: var(--err); font-size: var(--fs-sm); }
+.skl-skipped { margin: 0 0 var(--sp-4); color: var(--text-2); font-size: var(--fs-sm); }
+.skl-skipped p { margin: 0; }
+.skl-skipped ul { margin: var(--sp-1) 0 0; padding-inline-start: 1.25em; }
 .skl-empty { margin: 0; padding-block: var(--sp-4); color: var(--text-3); font-size: var(--fs-sm); }
 
 /* The opener covers the row under its independent controls. */
