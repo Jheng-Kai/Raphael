@@ -2155,8 +2155,21 @@ print(base64.b64encode(data).decode())
                 work_area.absolute("/".join([root, *parts]))
             except work_area.PathRefused:
                 return {"error": "EINVAL"}
-            if any(set(part) & set(':*?"<>|') for part in parts):
+            # The computer sees these as plain letters of a name, Windows does not: a backslash is a separator
+            # (`a\..\..\b` climbs out, `\\host\share` and `C:\x` leave), a colon names a drive or a data stream, and a
+            # name that ends in a dot or a space is another name once Windows has trimmed it.
+            if any(set(part) & set('\\:*?"<>|') or any(ord(char) < 32 for char in part) or part[-1] in ". "
+                   for part in parts):
                 return {"error": "EINVAL"}
+        # Whatever the host's rules for a name, the file's real place (links followed, `..` folded, the disk's own
+        # case) must be below the project's real folder: refused, never asked about.
+        try:
+            real = os.path.realpath(root)
+            target = os.path.realpath(os.path.join(real, *parts))
+        except (OSError, ValueError):
+            return {"error": "EINVAL"}
+        if target == real or not files_guest.under(target, real):
+            return {"error": "outside"}
         return files_guest.handle({**{key: value for key, value in request.items() if key != "allowed"},
                                    "path": "/".join([root, *parts]), "roots": [root]})
 

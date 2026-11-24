@@ -84,6 +84,7 @@ import base64
 import binascii
 import hashlib
 import logging
+import os
 import re
 import json
 import secrets
@@ -1472,7 +1473,7 @@ class MembersService:
             if deleted:
                 if self.computer_data is not None:
                     await self.computer_data.vm.release_member_seats(member_id)
-                    await self._remove_shared_folders()
+                    await self._remove_shared_folders(member_id)
                 await self.webhooks.sync()
                 self._changed()
                 self._changed("routines.changed", member_id)
@@ -1481,23 +1482,21 @@ class MembersService:
         finally:
             self.deleting.discard(member_id)
 
-    async def _remove_shared_folders(self) -> None:
+    async def _remove_shared_folders(self, member_id: int) -> None:
         """A deleted member's own folder in the shared computer's workspace goes with it (#314): the card says the member
-        and all its data are deleted for good. Folders that earlier builds left behind for members already deleted go too.
-        Only a folder named by a member key (16 hex digits) that belongs to no member now is removed; nothing else in the
-        workspace is touched, and a folder that cannot be removed is left and logged. A remote computer's folders are its
-        own: they go with that computer (`computer/removals.py`)."""
+        and all its data are deleted for good. Only that one folder is removed (`shared_member_folder`): it must lie
+        directly inside the shared members folder and be neither a link nor a junction, and nothing else in the workspace
+        is touched, whatever it is named. A folder that cannot be removed is left and logged. A remote computer's folders
+        are its own: they go with that computer (`computer/removals.py`)."""
         vm = self.computer_data.vm
-        folder = vm.shared_members_folder()
-        if not folder.is_dir():
+        parent = vm.shared_members_folder()
+        entry = vm.shared_member_folder(member_id)
+        if (not parent.is_dir() or entry.parent != parent or entry.is_symlink() or os.path.isjunction(entry)
+                or not entry.is_dir() or entry.resolve().parent != parent.resolve()):
             return
-        kept = {vm.key_for("", member.id) for member in self.store.members()} | {vm.key_for("", 0)}
-        leftovers = [entry for entry in folder.iterdir()
-                     if entry.is_dir() and not entry.is_symlink() and re.fullmatch(r"[0-9a-f]{16}", entry.name) and entry.name not in kept]
-        for entry in leftovers:
-            await asyncio.to_thread(shutil.rmtree, entry, True)
-        if leftovers:
-            logger.info("Removed %d folder(s) of deleted members from the shared computer's workspace", len(leftovers))
+        await asyncio.to_thread(shutil.rmtree, entry, True)
+        if entry.exists():
+            logger.warning("A deleted member's folder in the shared computer's workspace could not be removed")
 
     async def _set_primary(self, params: dict) -> dict:
         member_id = _whole(params, "id")

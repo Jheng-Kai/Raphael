@@ -32,7 +32,7 @@ async def test_the_status_follows_each_switch(rig):
 def test_a_vision_tool_that_is_on_but_cannot_see_is_a_setup_gap(rig):
     rig.hub.vision.ready = lambda: False
     gaps = rig.hub.setup_gaps()
-    assert {"tool": "vision", "missing": "model", "where": "Settings > Tools > See images"} in gaps
+    assert {"tool": "vision", "missing": "model", "where": "Settings > Tools > Services > Images"} in gaps
     # Once it can see, or once the owner turns it off, it is no gap.
     rig.hub.vision.ready = lambda: True
     assert all(gap["tool"] != "vision" for gap in rig.hub.setup_gaps())
@@ -45,8 +45,8 @@ def test_a_search_with_no_service_and_a_reader_without_its_key_are_setup_gaps(ri
     rig.hub._openrouter_ready = lambda: False
     rig.settings.set("web_read_service", "firecrawl")
     gaps = {gap["tool"]: gap for gap in rig.hub.setup_gaps()}
-    assert gaps["search"]["missing"] == "service"
-    assert gaps["read"] == {"tool": "read", "missing": "key", "where": "Settings > Tools > Read web pages"}
+    assert gaps["search"] == {"tool": "search", "missing": "service", "where": "Settings > Tools > Services > Web search"}
+    assert gaps["read"] == {"tool": "read", "missing": "key", "where": "Settings > Tools > Services > Read web pages"}
     rig.keys.set("brave", "b-key")
     rig.keys.set("firecrawl", "f-key")
     assert {gap["tool"] for gap in rig.hub.setup_gaps()} & {"search", "read"} == set()
@@ -57,3 +57,24 @@ def test_vision_is_ready_only_with_a_model_that_is_not_known_to_be_blind(rig):
     assert Vision(object(), lambda: ("", None)).ready() is False
     assert Vision(object(), lambda: ("some/model", False)).ready() is False
     assert Vision(object(), lambda: ("some/model", None)).ready() is True
+
+
+def test_a_chosen_search_service_whose_key_is_not_stored_is_a_setup_gap(rig):
+    rig.hub._openrouter_ready = lambda: False
+    rig.settings.set("web_search_service", "brave")
+    gap = {"tool": "search", "missing": "key", "where": "Settings > Tools > Services > Web search"}
+    assert gap in rig.hub.setup_gaps()
+    # The key is stored: no gap. The key is cleared again: the gap is back, the same as the search's own `missing_secret`.
+    rig.keys.set("brave", "b-key")
+    assert all(entry["tool"] != "search" for entry in rig.hub.setup_gaps())
+    rig.keys.clear("brave")
+    assert gap in rig.hub.setup_gaps()
+    # A search that is off, or a service that needs no key, is no gap.
+    rig.settings.set("web_search_enabled", False)
+    assert all(entry["tool"] != "search" for entry in rig.hub.setup_gaps())
+    rig.settings.set("web_search_enabled", True)
+    rig.settings.set("web_search_service", "searxng")
+    assert gap not in rig.hub.setup_gaps()
+    # The chosen OpenRouter search with no OpenRouter key is a gap as well.
+    rig.settings.set("web_search_service", "openrouter")
+    assert gap in rig.hub.setup_gaps()

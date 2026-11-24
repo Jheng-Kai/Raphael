@@ -207,22 +207,36 @@ class ServiceHub:
 
     def setup_gaps(self) -> list[dict[str, str]]:
         """The tools the owner has on that cannot be used now, for self_check's setup (#316): which one, what it lacks and
-        where in Settings it is set up. A tool that is off is not a gap: it is not used at all."""
-        where = "Settings > Tools"
+        where in Settings it is set up, as the owner reads it (Tools, then Services, then the tool's own row). A tool that
+        is off is not a gap: it is not used at all. A service the owner chose whose key is not stored is a gap too: the
+        call would say `missing_secret`."""
+        where = "Settings > Tools > Services"
         gaps: list[dict[str, str]] = []
         if self.enabled("vision") and not self.vision.ready():
-            gaps.append({"tool": "vision", "missing": "model", "where": f"{where} > See images"})
-        if self.enabled("search") and self.search_service() == "none":
-            gaps.append({"tool": "search", "missing": "service", "where": f"{where} > Search the web"})
+            gaps.append({"tool": "vision", "missing": "model", "where": f"{where} > Images"})
+        if self.enabled("search"):
+            service = self.search_service()
+            if service == "none":
+                gaps.append({"tool": "search", "missing": "service", "where": f"{where} > Web search"})
+            elif self._lacks_key(SEARCH_OPTIONS, service):
+                gaps.append({"tool": "search", "missing": "key", "where": f"{where} > Web search"})
         for tool, options, service, label in (("read", READ_OPTIONS, self.read_service(), "Read web pages"),
-                                              ("pdf", PDF_OPTIONS, self.pdf_service(), "Read PDFs")):
-            if not self.enabled(tool):
-                continue
-            option = next((entry for entry in options if entry.id == service), None)
-            lacks_key = option is not None and option.needs_key and not self._keys.has(service)
-            if lacks_key or (service == "openrouter" and not self._openrouter_ready()):
+                                              ("pdf", PDF_OPTIONS, self.pdf_service(), "PDFs")):
+            if self.enabled(tool) and self._lacks_key(options, service):
                 gaps.append({"tool": tool, "missing": "key", "where": f"{where} > {label}"})
         return gaps
+
+    def _lacks_key(self, options: tuple[Option, ...], service: str) -> bool:
+        """Whether the chosen `service` of `options` needs a key (OpenRouter's, or its own) that is not stored."""
+        if service == "openrouter":
+            try:
+                return not self._openrouter_ready()
+            except Exception as exc:  # a key store that fails is no key
+                logger.warning("Could not tell whether an OpenRouter key is stored: %s", type(exc).__name__)
+                return True
+        option = next((entry for entry in options if entry.id == service), None)
+        return (option is not None and option.needs_key and not option.key_optional
+                and service in KEYED_SERVICES and not self._keys.has(service))
 
     def enabled(self, capability: str) -> bool:
         """Whether the owner has `capability` ("search", "read", "vision" or "pdf") on. A
