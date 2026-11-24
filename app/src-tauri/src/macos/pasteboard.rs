@@ -65,7 +65,8 @@ pub fn copy_file(path: &str) -> Result<(), String> {
         let path = NSString::from_str(path);
         let url_class: &AnyClass = class!(NSURL);
         // SAFETY: NSURL's class constructor with an NSString path; it answers nil for no path.
-        let url: Option<Retained<AnyObject>> = unsafe { msg_send![url_class, fileURLWithPath: &*path] };
+        let url: Option<Retained<AnyObject>> =
+            unsafe { msg_send![url_class, fileURLWithPath: &*path] };
         let url = url.ok_or_else(|| "no file to copy".to_owned())?;
         let array_class: &AnyClass = class!(NSArray);
         // SAFETY: NSArray's class constructor with one object.
@@ -73,7 +74,11 @@ pub fn copy_file(path: &str) -> Result<(), String> {
         // SAFETY: NSPasteboard's clearContents and writeObjects: with an array of NSURLs.
         let _: isize = unsafe { msg_send![&*pasteboard, clearContents] };
         let written: bool = unsafe { msg_send![&*pasteboard, writeObjects: &*list] };
-        if written { Ok(()) } else { Err("the pasteboard refused the file".to_owned()) }
+        if written {
+            Ok(())
+        } else {
+            Err("the pasteboard refused the file".to_owned())
+        }
     })
 }
 

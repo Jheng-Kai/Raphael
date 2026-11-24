@@ -420,7 +420,8 @@ pub fn copy_files(owner: isize, files: &[&str]) -> Result<(), String> {
         match unsafe { OpenClipboard(Some(HWND(owner as *mut core::ffi::c_void))) } {
             Ok(()) => {
                 let _opened = Opened(PhantomData);
-                unsafe { EmptyClipboard() }.map_err(|e| format!("could not empty the clipboard: {e}"))?;
+                unsafe { EmptyClipboard() }
+                    .map_err(|e| format!("could not empty the clipboard: {e}"))?;
                 let block = unsafe { global_from(data.as_slice()) }.ok_or("out of memory")?;
                 return if unsafe { give(HDROP, block) } {
                     Ok(())

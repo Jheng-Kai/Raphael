@@ -19,11 +19,11 @@ mod macos;
 mod windows;
 
 #[cfg(windows)]
+pub use self::clipboard::copy_files as copy_clipboard_files;
+#[cfg(windows)]
 pub use self::clipboard::read_text as read_clipboard_text;
 #[cfg(windows)]
 pub use self::clipboard::sequence_number as clipboard_sequence_number;
-#[cfg(windows)]
-pub use self::clipboard::copy_files as copy_clipboard_files;
 #[cfg(target_os = "macos")]
 pub use self::macos::MacPaster;
 #[cfg(target_os = "macos")]
