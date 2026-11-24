@@ -240,14 +240,20 @@ describe("Raphael's panel", () => {
     expect(api.routinesList).toHaveBeenCalledWith(0);
   });
 
-  test("its picture is changed here: from the PC, nothing of presets", async () => {
+  test("its picture is changed here: the members' slimes, the one it wears pressed, and a picture from the PC", async () => {
     current = 0;
     const panel = mount();
     await flush();
     panel.el.querySelector<HTMLElement>('[data-det="avatar"]')!.click();
-    expect([...document.querySelectorAll("#app-popover button")].map((b) => b.textContent)).toEqual(["從電腦選…"]);
+    // The first member is dressed as every member is: it wears the first blue slime until the owner chose another.
+    expect(document.querySelector('#app-popover [data-slime-character="blue-plain"]')!.getAttribute("aria-pressed")).toBe("true");
+    document.querySelector<HTMLElement>('#app-popover [data-slime-character="horns-red"]')!.click();
+    await flush();
+    expect(host.update).toHaveBeenCalledWith(0, { avatar: "slime:horns-red" });
+    const fromPc = [...document.querySelectorAll<HTMLElement>("#app-popover .menu-action")];
+    expect(fromPc.map((b) => b.textContent)).toEqual(["從電腦選…"]);
     api.avatarPick.mockResolvedValue(null);
-    document.querySelector<HTMLElement>("#app-popover button")!.click();
+    fromPc[0]!.click();
     await flush();
     expect(api.avatarPick).toHaveBeenCalled();
   });

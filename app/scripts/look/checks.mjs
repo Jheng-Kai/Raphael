@@ -1337,7 +1337,7 @@ export function checkRendered(name, context = {}) {
       require(dropdown.textContent === '這台電腦' && !visible(setup) && !visible(maintenance) && !visible(status), 'watching this computer shows the choice alone');
     } else if (name === 'desktop-computer-choice-missing') {
       const explanation = setup.querySelector('span'), style = getComputedStyle(help);
-      require(dropdown.textContent === '虛擬機（本機）' && visible(setup) && explanation.textContent === '尚未安裝 Docker' && help.textContent === '請 Raphael 安裝', 'a missing Docker has one explanation and one ask action');
+      require(dropdown.textContent === '虛擬機（本機）' && visible(setup) && explanation.textContent === '尚未安裝 Docker' && help.textContent === `請 ${window.__look.data.members.find(member => member.id === 1).name} 安裝`, 'a missing Docker has one explanation and one ask action, of the member whose computer it is, by its name');
       require(setup.querySelectorAll('button').length === 1 && help.matches(':hover') && style.backgroundColor === 'rgba(0, 0, 0, 0)' && style.borderTopWidth === '0px', 'the action remains plain text under the pointer');
       require(Math.abs(explanation.getBoundingClientRect().bottom - help.getBoundingClientRect().bottom) <= 3 && help.getBoundingClientRect().right <= bounds.right + 1, 'the Docker explanation and action fit on one line');
       require(!panel.querySelector('iframe[src]'), 'the unavailable virtual machine has no stream');
@@ -1357,7 +1357,8 @@ export function checkRendered(name, context = {}) {
     const style = getComputedStyle(button), footer = button.parentElement.getBoundingClientRect();
     require(card.querySelector('.card-title').textContent === '這件事需要虛擬機' && card.querySelector('.card-body').textContent.includes('終端機'), 'the card names the step that needs the virtual machine');
     require(card.querySelectorAll('.card-close').length === 1 && card.querySelectorAll('.card-actions button').length === 1, 'one close and one action');
-    require(shownText(button) === (name.endsWith('installed') ? '改用虛擬機' : '請 Raphael 協助安裝'), 'the action matches Docker availability');
+    // The install is asked of the first member, the chief of staff, by the name the owner gave it.
+    require(shownText(button) === (name.endsWith('installed') ? '改用虛擬機' : `請 ${window.__look.data.members.find(member => member.id === 0).name} 協助安裝`), 'the action matches Docker availability');
     require(button.matches(':hover') && style.backgroundColor !== 'rgba(0, 0, 0, 0)' && Math.abs(button.getBoundingClientRect().width - footer.width) <= 1, 'the whole action row lights up');
     return { check: name, action: shownText(button) };
   }
@@ -5355,6 +5356,61 @@ export function checkRendered(name, context = {}) {
     require(ink.bottom <= card.bottom && left.bottom <= card.bottom && left.left >= card.left && ink.right <= card.right, "both stay inside the card");
     return { back: left, ink };
   };
+  if (name === "onboarding-slime-waits" || name === "onboarding-slime") {
+    // The first slime: the owner dresses and names the member who is their chief of staff from then on. The slime large in
+    // the middle, its name in the guide's own pill field, the members' slime picker under it,
+    // and the foot's pair, whose way on waits for a name: the one thing the guide asks of everyone.
+    const card = document.querySelector('.ob-card').getBoundingClientRect();
+    const title = document.querySelector('.ob-col > h2');
+    require(title && parseFloat(getComputedStyle(title).fontSize) >= 28 && title.textContent === "為你的第一隻史萊姆取名字", `the headline asks for its name (${title?.textContent})`);
+    require(!document.querySelector('.ob-sub, .ob-floaters'), "no line of purpose and no floating slimes: the slime being made is the picture");
+    const face = document.querySelector('.ob-first-face .slime-surface');
+    const faceBox = face?.getBoundingClientRect();
+    require(visible(face) && faceBox.width >= 100 && Math.abs((faceBox.left + faceBox.right) / 2 - (card.left + card.right) / 2) <= 2, `the slime stands large in the middle of the card (${Math.round(faceBox?.width ?? 0)} px)`);
+    const field = document.querySelector('#ob-first-name'), fieldBox = field?.closest('.field')?.getBoundingClientRect();
+    require(visible(field) && field.maxLength === 16 && field.getAttribute('aria-label') && fieldBox.top >= faceBox.bottom, "its name is a field under it, as long as the core takes");
+    const picker = document.querySelector('.ob-first-picker'), pickerBox = picker?.getBoundingClientRect();
+    require(visible(picker) && picker.querySelector('[role="tablist"]') && picker.querySelectorAll('.mb-slime-group[data-active] [data-slime-character], .mb-slime-group[data-active] [data-slime-color]').length >= 6, "the members' slime picker stands under the name, its tabs and its slimes");
+    require(pickerBox.top >= fieldBox.bottom && pickerBox.left >= card.left && pickerBox.right <= card.right, "the picker stays inside the card, under the name");
+    require(getComputedStyle(picker).boxShadow === 'none' && getComputedStyle(picker).position === 'static', "the picker stands in the column without the popover's chrome");
+    requireStepPair(card, false);
+    const next = document.querySelector('.ob-foot [data-ob="next"]');
+    if (name === "onboarding-slime-waits") {
+      require(field.value === "", "the built-in name is never put in the field: the name is the owner's to give");
+      require(next.disabled, "the way on waits for a name");
+      const pressed = picker.querySelector('[aria-pressed="true"]');
+      require(pressed?.dataset.slimeCharacter === "blue-plain", "its look starts as the first blue slime");
+    } else {
+      require(field.value.trim() !== "" && !next.disabled, "with a name the way on is open");
+      const pressed = picker.querySelector('[aria-pressed="true"]');
+      const colour = element => element?.querySelector('.slime-surface')?.style.getPropertyValue('--slime-color') ?? element?.style.getPropertyValue('--slime-color');
+      require(pressed && pressed.dataset.slimeCharacter !== "blue-plain" && face.style.getPropertyValue('--slime-color') === colour(pressed), "the slime pressed is the one it wears at once");
+    }
+    return { check: name };
+  }
+  if (name === "first-slime-named") {
+    // After the guide the first member is the slime the owner made: its name and its face in the sidebar's top row and
+    // as the conversation's name, never the built-in Raphael.
+    const data = window.__look.data, first = data.members.find(member => member.id === 0);
+    require(first.name === "小藍" && first.avatar === "slime:horns-red", `the core kept the name and the slime (${first.name}, ${first.avatar})`);
+    const row = document.querySelector('.sidebar [data-member="0"], [data-member="0"].mb-row');
+    require(visible(row) && row.textContent.includes("小藍") && !row.textContent.includes("拉斐爾"), "the sidebar's first row is called by the name the owner gave");
+    const slime = row.querySelector('.slime-surface');
+    require(slime && slime.style.getPropertyValue('--slime-color').toLowerCase() !== "#3db5ff", "and wears the slime the owner chose, not the first blue one");
+    return { check: name };
+  }
+  if (name === "member-settings-raphael-restyled") {
+    // The chief of staff changes its look as every member does: its own picker, and the face it wears everywhere follows.
+    const first = window.__look.data.members.find(member => member.id === 0);
+    require(first.avatar === "slime:horns-red", `the first member wears the slime pressed (${first.avatar})`);
+    const face = document.querySelector('.ms-pane .ms-face .slime-surface');
+    const pressed = document.querySelector('#app-popover [data-slime-character="horns-red"]');
+    require(visible(face) && pressed?.getAttribute('aria-pressed') === "true", "the picker shows the slime it now wears");
+    require(face.style.getPropertyValue('--slime-color') === pressed.querySelector('.slime-surface').style.getPropertyValue('--slime-color'), "its settings face wears it at once");
+    const row = document.querySelector('[data-member="0"].mb-row .slime-surface');
+    require(row && row.style.getPropertyValue('--slime-color') === face.style.getPropertyValue('--slime-color'), "its sidebar row wears it too");
+    return { check: name };
+  }
   if (name === "onboarding-back-hover" || name === "onboarding-back-focus") {
     // The way back of a step's pair: a round button on a quiet grey of its own, one step lighter under
     // the pointer, with no edge; the keyboard shows the app's usual ring on it, and it comes before the primary.
@@ -11013,7 +11069,8 @@ export function checkRendered(name, context = {}) {
     const pane = document.querySelector(".ms-pane");
     const chat = document.querySelector(".page-agent .mb-chat");
     const view = pane.dataset.view;
-    const raphael = !pane.querySelector("#ms-name");
+    // The first member's page: its name field is member 0's (a view of its own has no name field at all).
+    const raphael = (pane.querySelector("#ms-name")?.dataset.member ?? "0") === "0";
     // The details panel folds away while the page is open and comes back as it was once the page is left.
     if (name === "member-settings-back") {
       require(!visible(pane) && visible(chat) && visible(chat.querySelector(".composer")), "the conversation is where the page was");
@@ -11162,7 +11219,9 @@ export function checkRendered(name, context = {}) {
         require(switches.length === 1 && visible(switches[0]), "notifications are one switch");
       }
       if (raphael) {
-        require(visible(pane.querySelector(".ms-static")) && !pane.querySelector("#ms-name, #ms-role"), "Raphael's name is not typed here");
+        // The first member's name is the owner's, typed in place as every member's; its role is the chief's and has no field.
+        const firstName = pane.querySelector("#ms-name");
+        require(visible(firstName) && !pane.querySelector("#ms-role") && firstName.getBoundingClientRect().left <= face.getBoundingClientRect().left + 8, "the first member's name is in place under the face, with no role field");
       } else {
         const memberName = pane.querySelector("#ms-name"), role = pane.querySelector("#ms-role");
         require(visible(memberName) && visible(role) && memberName.getBoundingClientRect().left <= face.getBoundingClientRect().left + 8, "the name and the role are in place under the face");

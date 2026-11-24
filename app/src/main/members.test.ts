@@ -23,6 +23,8 @@ import {
   plainLine,
   stableMember,
 } from "./members";
+import { firstBotName, rememberFirstBot } from "./first-bot";
+import { memberColor } from "./owner-bubble";
 import type { Member, MembersList } from "./types";
 
 afterEach(() => setLocale("zh-TW"));
@@ -91,6 +93,12 @@ describe("the column's sections", () => {
     expect(isMemberNameTaken("ラファエル", [])).toBe(true);
     expect(isMemberNameTaken("進度官", ["日文 老師"])).toBe(false);
   });
+
+  test("the first member may keep or take Raphael's name, the app's and the voice's, but not another member's", () => {
+    expect(isMemberNameTaken("拉斐爾", [], true)).toBe(false);
+    expect(isMemberNameTaken("Raphael", ["小晴"], true)).toBe(false);
+    expect(isMemberNameTaken("小晴", ["小晴"], true)).toBe(true);
+  });
 });
 
 describe("primary display order", () => {
@@ -141,6 +149,22 @@ describe("the faces", () => {
     expect(html).toContain("<svg");
     expect(html).toContain("#3DB5FF");
     expect(html).not.toMatch(/app-emblem|letter|拉/);
+  });
+
+  test("the first member wears the slime the owner dressed it in, everywhere: its face, its colour, its name", () => {
+    const dressed = { ...LIST, members: LIST.members.map((m) => (m.id === 0 ? { ...m, name: "小藍", avatar: "slime:horns-red" } : m)) };
+    const html = faceHTML(raphaelOf(dressed), 64);
+    expect(html).toContain("#F23B3B");
+    expect(html).not.toContain("#3DB5FF");
+    expect(memberColor(raphaelOf(dressed))).toBe("#F23B3B");
+    // A place that knows only the id draws and names it as the last roster did.
+    rememberFirstBot(dressed);
+    expect(faceHTML({ id: 0, name: "" }, 22)).toContain("#F23B3B");
+    expect(firstBotName()).toBe("小藍");
+    expect(raphaelOf(null).name).toBe("小藍");
+    rememberFirstBot(LIST);
+    expect(faceHTML({ id: 0, name: "" }, 22)).toContain("#3DB5FF");
+    expect(firstBotName()).toBe("拉斐爾");
   });
 
   test("a member is a slime, whatever picture an older build stored for it", () => {

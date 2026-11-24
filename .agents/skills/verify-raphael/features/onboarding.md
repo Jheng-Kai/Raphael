@@ -12,8 +12,8 @@ The welcome's language is a quiet button at the card's top left (globe, the lang
 name is its aria-label) that opens the language picker (language-picker.ts: each language in its own script, a
 search field once there are more than eight).
 
-A welcome, then three steps that are each a choice, then entry into the usable app with first-run
-state saved. There are no practice lessons, no microphone step and no completion screen. Everything sits in one card of a designed size (at most 1080 x 720) in the middle of
+A welcome, the first slime (its look and its name), then three steps that are each a choice, then entry into the usable
+app with first-run state saved. There are no practice lessons, no microphone step and no completion screen. Everything sits in one card of a designed size (at most 1080 x 720) in the middle of
 the window, with no progress bar and no side: every
 step is one calm centred column, a title (three of the team's slimes float by it, aria-hidden,
 others on every step and in other places; gone below 640px wide), the choice, and under it two round buttons
@@ -39,7 +39,16 @@ Settings has no 導覽 entry any more;
    answer in its manner (告。/解。/否。) fades in under it, then the ask is deleted and the next typed (six
    pairs, `onboarding.demo*`); with reduced motion the first pair stands; a reader hears one sentence
    (`onboarding.demoSummary`). Then one pill, 開始.
-1. **AI tools** (`onboarding-tools`): a store (every
+1. **The first slime** (`onboarding-slime`, checks `onboarding-slime-waits` and `onboarding-slime`, R-CHIEF-01): the owner's
+   first slime, their chief of staff from then on, is not made to be Raphael. Its slime stands large in the middle (112 px,
+   wearing the chief's crown), under it its name in the guide's own pill field (at most 16 characters, centred), and under
+   that the members' own slime picker (slime-tabs.ts, the one 新增角色 and the member settings open) without the popover's
+   chrome; its look starts as the first blue slime and a press dresses it at once. The name is the one thing the guide asks
+   of everyone: the built-in name is never put in the field, and the way on (and Enter in the field) waits for a name. The
+   way on keeps both as member 0's (`members.update {id: 0, name, avatar}`); a refusal is said and the step stays; going
+   back and on again with nothing changed sends nothing. A name the owner already gave stands in the field. No floating
+   slimes on this step: the slime being made is the picture.
+2. **AI tools** (`onboarding-tools`): a store (every
    tool equal, never ordered by what one owner set up). A search box (typos forgiven, R-FIND-01),
    then 熱門, the same for everyone (`POPULAR_TOOLS`: ChatGPT, Claude Code, Codex, OpenAI,
    Anthropic, Google Gemini), then every other tool under its kind (subscription accounts, official,
@@ -53,7 +62,7 @@ Settings has no 導覽 entry any more;
    which opens the same editor as Settings › 模型 › 新增供應商; the guide has no key tile of its own
    (R-COPY-02). ChatGPT and the command-line tools are driven by the same account controller as
    Settings > Models (`createCliBrains`).
-2. **Services** (`onboarding-services`, `onboarding-service-waiting`, `onboarding-services-composio`,
+3. **Services** (`onboarding-services`, `onboarding-service-waiting`, `onboarding-services-composio`,
    `onboarding-composio-key`, `onboarding-composio-saved`, `onboarding-services-n8n`): a search box,
    then, when Composio has no key, Composio's card across the step (Composio is connected first, and only
    without it are the connectors that need no Composio shown): 連接 opens its
@@ -71,29 +80,30 @@ Settings has no 導覽 entry any more;
    A waiting tile keeps its words inside it in every language and its 取消 stops the wait at once, even
    when the login never answers; lists the core does not answer within 15 s turn into 重試 (a cancelled
    sign-in never leaves the step spinning).
-3. **Abilities** (`onboarding-abilities`, `onboarding-abilities-choice`): the shared abilities
+4. **Abilities** (`onboarding-abilities`, `onboarding-abilities-choice`): the shared abilities
    of Settings > Tools (web search, reading web pages, images and PDFs; no speech) as the very rows and
    dialogs of that pane (`createServices`): each says which service it uses, keeps its switch and
    opens, inside the card, the choice of service with its key, and for images the model picker. That choice dims the whole
    window like every dialog, the caption strip included (R-UI-141); the window buttons stay on top of the dim.
 
-Every step can be gone past without choosing. The last step's primary button finishes; a first
+Every choice can be gone past without choosing; the first slime asks only for its name. The last step's primary button finishes; a first
 run then saves the device setting `onboarded`, a rerun from Settings does not.
 
 ## How to get to it (user POV)
 
-Launch with a fresh isolated data directory. Press Start, then Continue through the three steps
-and finish on the third to land on Raphael's conversation. Never reset an installed user's onboarding
+Launch with a fresh isolated data directory. Press Start, name the first slime (and choose its look), then Continue
+through the three steps and finish on the third to land on the conversation of the slime you named. Never reset an installed user's onboarding
 state.
 
 ## Driving it with look
 
 ```powershell
-npm run look -- onboarding onboarding-tools onboarding-back-hover onboarding-back-focus settings-owner onboarding-services onboarding-service-waiting onboarding-services-composio onboarding-composio-key onboarding-composio-saved onboarding-services-n8n onboarding-abilities onboarding-abilities-choice after-onboarding --theme both --width 1120,720,1920x1080
+npm run look -- onboarding onboarding-slime onboarding-tools onboarding-back-hover onboarding-back-focus settings-owner onboarding-services onboarding-service-waiting onboarding-services-composio onboarding-composio-key onboarding-composio-saved onboarding-services-n8n onboarding-abilities onboarding-abilities-choice after-onboarding --theme both --width 1120,720,1920x1080
 ```
 
 Keep the welcome and each step's PNGs, the contact sheet and the report. Each scene presses the
-real Next button from the welcome; `onboarding-services` signs in to Gmail through the managed
+real Next button from the welcome and names the first slime 小藍 in the red horned slime on the way (`after-onboarding`
+checks `first-slime-named`: the core kept both and the sidebar's first row wears them); `onboarding-services` signs in to Gmail through the managed
 connector and `onboarding-abilities` switches reading web pages off, so the rendered checks see a
 changed state. The Composio scenes start without a key: `onboarding-composio-key` types a consumer
 key (refused beside its field), `onboarding-composio-saved` a project key (the card goes and

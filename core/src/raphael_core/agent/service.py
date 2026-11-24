@@ -6930,7 +6930,7 @@ class AgentService:
             diagnostic = diagnostic or classify(kind, record=False)
             return self._finish(ask, route, "negative", diagnostic.sentence(self._model_name(model), ask.language), ledger, status="error", failure=failure)
         if diagnostic is not None:
-            name = RAPHAEL_NAMES[ask.language] if ask.speaker.is_raphael else ask.speaker.name
+            name = (ask.speaker.name or RAPHAEL_NAMES[ask.language]) if ask.speaker.is_raphael else ask.speaker.name
             return self._finish(ask, route, "negative", diagnostic.sentence(name, ask.language), ledger, status="error", failure=failure)
         if kind == "monthly_budget":
             text = monthly_budget_notice(ask.language, self._settings.get("monthly_limit_usd"))

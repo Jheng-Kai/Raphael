@@ -807,6 +807,14 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 @media (prefers-reduced-motion: reduce) { .ob-demo-reply { opacity: 1; transition: none; } .ob-caret { display: none; } }
 .ob-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; margin: 0; }
 .ob-main { margin-top: var(--sp-5); }
+/* The first slime: its face large in the middle, its name under it in the guide's own pill field, and the members' slime
+   picker under that (slime.css), stood in the column with only the popover's chrome taken off, as 新增角色 stands it. */
+.ob[data-step="slime"] .ob-col { width: min(100%, 520px); }
+.ob-first { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: var(--sp-3); margin-top: var(--sp-4); }
+.ob-first-face { display: flex; align-items: center; justify-content: center; height: 112px; }
+.ob-find.ob-first-name { width: 100%; margin-bottom: 0; }
+.ob-first-name .field input { text-align: center; }
+.ob .menu.mb-avpop.ob-first-picker:has(.mb-slime-tabs) { position: static; z-index: auto; max-height: none; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
 /* The language at the card's top left, a quiet pill: a globe, its own name, a chevron. */
 .ob-lang { position: absolute; top: var(--sp-4); left: var(--sp-4); z-index: 2; }
 .lang-btn.btn { gap: 6px; min-height: var(--h-ctl-sm); padding: 0 var(--sp-2) 0 calc(var(--sp-2) + 2px); border: 0; border-radius: var(--r-pill); background: transparent; font-size: var(--fs-xs); color: var(--text-2); }

@@ -1016,7 +1016,7 @@ describe("the page of an app that is not connected", () => {
     expect(connect.textContent).toBe("連結");
     expect(connect.disabled).toBe(false);
     expect(d.querySelector(".cs-desc")!.textContent).toBe("Linear的說明");
-    expect(d.querySelector(".cs-say")!.previousElementSibling!.textContent).toBe("對拉斐爾說說看");
+    expect(d.querySelector(".cs-say")!.previousElementSibling!.textContent).toBe("可以這樣說");
     expect(texts(d, ".cs-say li")).toEqual(["跟Linear說一", "跟Linear說二"]);
     // nothing of a connected app: no state, switch, menu, tools or actions
     for (const gone of [".cs-state", '[role="switch"]', '[data-conn="server-menu"]', '[data-conn="tool-list"]', ".cs-acts", ".cs-accts", ".cs-needs"]) expect(d.querySelector(gone), gone).toBeNull();

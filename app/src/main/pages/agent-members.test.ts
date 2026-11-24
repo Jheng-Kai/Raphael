@@ -1354,13 +1354,13 @@ test("a roster that moves only a last line, a step or an unread mark starts no L
   watch.disconnect(); agent.hide();
 });
 describe("Raphael's thread", () => {
-  test("reads plainly: its answers without 《》, 問拉斐爾, its voice button, asked with no member", async () => {
+  test("reads plainly: its answers without 《》, 傳訊息給 and its name as every member's, its voice button, asked with no member", async () => {
     mount();
     await flush();
     expect(api.agentHistoryList).toHaveBeenCalledWith({ limit: 50 });
     expect($(".thread").textContent).toContain("回答 2");
     expect($(".thread").textContent).not.toContain("《");
-    expect($<HTMLTextAreaElement>(".cmp-input").placeholder).toBe("問拉斐爾");
+    expect($<HTMLTextAreaElement>(".cmp-input").placeholder).toBe("傳訊息給 拉斐爾");
     expect($(".cmp-voice").hidden).toBe(false);
     expect($(".mb-pill-t").textContent).toBe("拉斐爾");
     $<HTMLTextAreaElement>(".cmp-input").value = "你好";
@@ -1557,7 +1557,7 @@ describe("a member's thread", () => {
     expect(api.agentHistoryList).toHaveBeenLastCalledWith({ limit: 50 });
     expect($(".thread").textContent).toContain("回答 2");
     expect($(".thread").textContent).not.toContain("今天的單字");
-    expect($<HTMLTextAreaElement>(".cmp-input").placeholder).toBe("問拉斐爾");
+    expect($<HTMLTextAreaElement>(".cmp-input").placeholder).toBe("傳訊息給 拉斐爾");
   });
 
   test("an unread thread opened is told to the core, and its dot goes", async () => {
