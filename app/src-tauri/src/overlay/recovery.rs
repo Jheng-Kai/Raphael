@@ -178,6 +178,7 @@ impl Recovery {
     pub(super) fn probe_event(&self) -> Option<OverlayEvent> {
         self.probe.as_ref().map(|probe| OverlayEvent::FrameProbe {
             id: probe.id,
+            again: self.extended_from.is_some(),
             hidden: self.scene.is_empty(),
             watch_end: self.expires.is_some()
                 && self
@@ -472,10 +473,15 @@ mod tests {
             true,
         );
         state.frame(1, false);
-        let mut at = now + CAPTION_LIMIT;
+        // Each tick comes a little late, as real ones do, so the last extension would run past the limit if it were not cut.
+        let late = Duration::from_millis(100);
+        let mut at = now + CAPTION_LIMIT + late;
         while state.tick(at) == Some(Action::Probe) {
             let id = match state.probe_event() {
-                Some(OverlayEvent::FrameProbe { id, .. }) => id,
+                Some(OverlayEvent::FrameProbe { id, again, .. }) => {
+                    assert!(again);
+                    id
+                }
                 _ => panic!("no probe"),
             };
             state.frame(id, false);
@@ -484,9 +490,10 @@ mod tests {
                     .expires
                     .is_some_and(|end| end <= now + CAPTION_HARD_LIMIT)
             );
-            at = state.expires.unwrap();
+            at = state.expires.unwrap() + late;
         }
-        assert!(at <= now + CAPTION_HARD_LIMIT);
+        // It ends at its first tick past the limit.
+        assert!(at <= now + CAPTION_HARD_LIMIT + late);
         assert!(state.native_hidden());
     }
 

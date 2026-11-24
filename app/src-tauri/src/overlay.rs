@@ -155,6 +155,9 @@ pub enum OverlayEvent {
         id: u64,
         hidden: bool,
         watch_end: bool,
+        /// Asked again about a caption whose time was extended: the page drew it before, so a page that has cleared it
+        /// answers "hidden" at once instead of waiting to see it first.
+        again: bool,
     },
     /// The emblem appears (the appear animation) and shows `mode`. A `line` (sent only when there
     /// is one) is Raphael's greeting to a question, written beside the emblem while it listens; a

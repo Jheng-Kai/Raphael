@@ -187,14 +187,15 @@ export class FrameAcknowledgements {
     private readonly nextFrame: (callback: FrameRequestCallback) => unknown = (callback) => requestAnimationFrame(callback),
   ) {}
 
-  probe(id: number, waitForHidden: boolean, watchEnd: boolean): void {
+  /** `again`: a caption whose time was extended, drawn before; already cleared, it is answered "hidden" at once. */
+  probe(id: number, waitForHidden: boolean, watchEnd: boolean, again = false): void {
     const generation = ++this.generation;
     let painted = false;
     let previousHidden: boolean | undefined;
     const tick = () => {
       if (generation !== this.generation) return;
       const hidden = this.hidden();
-      const ready = hidden ? waitForHidden || (watchEnd && painted) : !waitForHidden && !painted;
+      const ready = hidden ? waitForHidden || (watchEnd && (painted || again)) : !waitForHidden && !painted;
       if (hidden === previousHidden && ready) {
         this.acknowledge(id, hidden);
         if (hidden || !watchEnd) return;

@@ -388,7 +388,12 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
       return false;
     } finally {
       firstSaving = false;
-      if (!destroyed && flow.step === "slime") paintFoot();
+      if (!destroyed && flow.step === "slime") {
+        paintFoot();
+        // A visit drawn while the save ran drew the name field closed: it opens again with the save.
+        const field = root.querySelector<HTMLInputElement>("#ob-first-name");
+        if (field) field.disabled = false;
+      }
     }
   }
 

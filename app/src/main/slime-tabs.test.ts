@@ -7,6 +7,7 @@ vi.mock("./api", () => ({ core: vi.fn(), avatarPick: vi.fn(), avatarSave: vi.fn(
 
 import * as api from "./api";
 import { setAvatar, type CustomAvatar } from "./avatar";
+import { changeRaphaelAvatar } from "./avatar-settings";
 import { setLocale } from "./i18n";
 import { openMemberAvatarMenu } from "./member-avatar-menu";
 import { defaultSlimeAvatar, SLIME_GROUPS, slimeGroupName, slimeGroupOf, slimeGroupSwatch } from "./slime";
@@ -188,6 +189,18 @@ describe("the first member's slime and the owner's picture", () => {
     let saved!: (ok: boolean) => void;
     pick(() => new Promise<boolean>(resolve => { saved = resolve; }));
     setAvatar(picture(2));
+    saved(true);
+    await settle();
+    expect(api.avatarClear).not.toHaveBeenCalled();
+    setAvatar(null);
+  });
+
+  test("a picture still being chosen when the slime's save ends is not cleared under it", async () => {
+    setAvatar(picture(1));
+    let saved!: (ok: boolean) => void;
+    pick(() => new Promise<boolean>(resolve => { saved = resolve; }));
+    vi.mocked(api.avatarPick).mockReturnValue(new Promise(() => {}) as never);
+    void changeRaphaelAvatar();
     saved(true);
     await settle();
     expect(api.avatarClear).not.toHaveBeenCalled();
