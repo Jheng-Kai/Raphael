@@ -940,12 +940,13 @@ class MembersService:
                 raise _rpc_error(error) from None
             except (OSError, UnicodeError) as error:
                 raise _rpc_error(MemberError("io", "could not read or keep skill files")) from error
-        _, ids, plugin = await self._import_package(member_id, args)
+        _, ids, plugin, skipped = await self._import_package(member_id, args)
+        left_out = {"skipped": skipped} if skipped else {}
         if plugin:
-            return {"set": plugin, "skills": await self.capabilities.detailed_skills(-1)}
+            return {"set": plugin, "skills": await self.capabilities.detailed_skills(-1), **left_out}
         installed = {s["id"]: s for s in await self.capabilities.detailed_skills(member_id)}
         skills = [installed[i] for i in ids]
-        return {"skill": skills[0], "skills": skills}
+        return {"skill": skills[0], "skills": skills, **left_out}
 
     async def _private_local_skill(self, member_id, source):
         await asyncio.to_thread(skill_sources.local_path, source)
@@ -973,8 +974,9 @@ class MembersService:
         return {"packages": await self.packages.list_async(), "members": [{"id": m.id, "name": m.name} for m in self.store.members()]}
 
     async def _packages_import(self, params):
-        key, _, _ = await self._import_package(-1, params, new_package=True)
-        return {"package": await self.packages.view_async(key)}
+        key, _, _, skipped = await self._import_package(-1, params, new_package=True)
+        # What was left out because its name is taken is named with who holds it (#313): the rest is in the library.
+        return {"package": await self.packages.view_async(key), **({"skipped": skipped} if skipped else {})}
 
     async def _package_documents(self, params):
         if "text" in params:
@@ -1005,7 +1007,7 @@ class MembersService:
                 raise invalid_params(f"{field} must be a nonempty string")
         if "plugin" in params and type(params["plugin"]) is not bool:
             raise invalid_params("plugin must be true or false")
-        plugin = None
+        plugin, skipped = None, []
         try:
             if params.get("plugin") or "marketplace" in params or "set_id" in params:
                 if member != -1 or "text" in params or "file" in params:
@@ -1018,20 +1020,22 @@ class MembersService:
                 plugin = await self.capabilities.import_plugin(params.get("source"), set_id=identifier,
                     marketplace=params.get("marketplace"), name=params.get("name"), access=params.get("access"),
                     require_new=new_package and identifier is None)
+                skipped = plugin.pop("skipped", [])
                 key = f"set:{plugin['id']}"
                 ids = [s["id"] for s in (await self.packages.view_async(key))["skills"]]
             else:
                 if sum(k in params for k in ("source", "text", "file")) != 1:
                     raise invalid_params("choose exactly one source, text or file")
                 data = await self._package_documents(params)
-                key, ids = await self.packages.install(member, *data, access=params.get("access"), name=params.get("name"))
+                key, ids = await self.packages.install(member, *data, access=params.get("access"), name=params.get("name"),
+                                                         skipped=skipped)
         except MemberError as error:
             raise (_library_error if member == -1 else _rpc_error)(error) from None
         except (OSError, UnicodeError) as error:
             raise (_library_error if member == -1 else _rpc_error)(MemberError("io", "could not read or keep skill files")) from error
         self._changed("members.skills.changed", max(member, 0))
         self._changed()
-        return key, ids, plugin
+        return key, ids, plugin, skipped
 
     async def _packages_update(self, params):
         self._package_fields(params, ("key", "enabled", "access", "skill", "refresh"))
@@ -1081,16 +1085,21 @@ class MembersService:
         return {"package": await self.packages.view_async(key)}
 
     async def _packages_delete(self, params):
-        self._package_fields(params, ("key",))
+        self._package_fields(params, ("key", "skill"))
+        package = None
         try:
-            await self.packages.delete_async(params.get("key"))
+            if "skill" in params:
+                # One skill of a package, files and all; the package stays unless it was its last skill.
+                package = await self.packages.delete_skill_async(params.get("key"), params["skill"])
+            else:
+                await self.packages.delete_async(params.get("key"))
         except MemberError as error:
             raise _library_error(error) from None
         except OSError as error:
             raise _library_error(MemberError("io", "could not remove the skill files")) from error
         self._changed("members.skills.changed", 0)
         self._changed()
-        return {"deleted": True}
+        return {"deleted": True, **({"package": package} if package else {})}
 
     async def _skills_read(self, params: dict) -> dict:
         """A skill and its whole document, for the owner's page of it (the model reads one by `skill_read`)."""
@@ -1929,6 +1938,12 @@ class MembersService:
                     names.append(row[0])
                 if type(change.get("enabled")) is bool:
                     notes.extend(self.readable_values({"enabled": change["enabled"]}, language))
+            if type(arguments.get("skill")) is int:
+                # A delete of one skill of the package: the card names that skill beside its package.
+                row = self._conn.execute("SELECT name FROM member_skills WHERE package_key=? AND id=?",
+                                         (arguments.get("key"), arguments["skill"])).fetchone()
+                if row:
+                    names.append(row[0].rsplit(":", 1)[-1])
             if type(arguments.get("enabled")) is bool:
                 notes.extend(self.readable_values({"enabled": arguments["enabled"]}, language))
             for field in ("source", "marketplace", "name"):

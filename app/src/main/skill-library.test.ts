@@ -110,7 +110,9 @@ test("one row per package says who may use it, and its name opens its skills on 
   expect(rows.map(row => row.querySelector(".t")?.textContent)).toEqual(["來源核對", "每週摘要"]);
   expect(rows[1].querySelector(".tg")?.getAttribute("aria-checked")).toBe("false");
   for (const row of rows) {
-    expect([...row.querySelectorAll<HTMLElement>(".ctl > button")].map(control => control.dataset.skl)).toEqual(["skill"]);
+    // A skill's own ⋯ (刪除) is not drawn: a right click on its row presses it.
+    expect([...row.querySelectorAll<HTMLElement>(".ctl > button")].map(control => control.dataset.skl)).toEqual(["skill-more", "skill"]);
+    expect(row.querySelector<HTMLElement>('[data-skl="skill-more"]')!.hidden).toBe(true);
     expect(row.querySelector('[data-skl="open-skill"]')).not.toBeNull();
   }
   // A skill opens on its own page, which reads and shows its document without its front matter.
@@ -122,7 +124,7 @@ test("one row per package says who may use it, and its name opens its skills on 
   expect(doc.textContent).toContain("第 4 個技能的內容");
   expect(doc.textContent).not.toContain("description:");
   expect(root.querySelector(".skl-doc-page .skl-about p")?.textContent).toBe("來源核對 的說明");
-  expect([...root.querySelectorAll<HTMLElement>(".skl-doc-page .skl-page-actions .ctl > button")].map(control => control.dataset.skl)).toEqual(["skill"]);
+  expect([...root.querySelectorAll<HTMLElement>(".skl-doc-page .skl-page-actions .ctl > button")].map(control => control.dataset.skl)).toEqual(["skill-more", "skill"]);
   press(root, '[data-skl="back"]');
   expect(root.querySelector('.skl-page[data-skl-page="pack:2"]:not(.skl-doc-page)')).not.toBeNull();
   expect(document.activeElement).toBe(root.querySelector('[data-skl="open-skill"][data-id="4"]'));
@@ -335,4 +337,69 @@ test("a cause the core names leads its message and is said in words", async () =
   await settle(); await settle();
   expect(root.querySelector(".skl-import .skl-error")?.textContent).toBe("裡面找不到 SKILL.md。");
   expect(root.querySelector(".skl-import")).not.toBeNull();
+});
+
+const removeSkill = async (): Promise<void> => {
+  // 刪除 asks in its own place: the second press deletes.
+  const remove = () => document.querySelector<HTMLElement>('[data-pick="delete"]')!;
+  remove().click();
+  remove().click();
+  await settle();
+};
+
+test("one skill of a plugin is deleted alone, asked as a whole package's delete is, and the plugin stays", async () => {
+  const left: LibraryPackage = { ...packages()[0], skills: [skill(1, "verify"), skill(3, "judge")] };
+  const { root } = await setup(method => method === "skills.library.delete" ? { deleted: true, package: left } : {});
+  press(root, '[data-skl="open"][data-key="set:1"]');
+  press(root, '.skl-skill[data-library-skill="2"] [data-skl="skill-more"]');
+  await removeSkill();
+  expect(api.core).toHaveBeenCalledWith("skills.library.delete", { key: "set:1", skill: 2 });
+  expect(api.core).not.toHaveBeenCalledWith("skills.library.delete", { key: "set:1" });
+  expect(root.querySelector('.skl-page[data-skl-page="set:1"]')).not.toBeNull();
+  expect([...root.querySelectorAll(".skl-skill .t")].map(row => row.textContent)).toEqual(["verify", "judge"]);
+});
+
+test("a skill deleted from its own page returns to its plugin, and the last skill takes the package with it", async () => {
+  let answer: unknown = { deleted: true, package: { ...packages()[0], skills: [skill(1, "verify"), skill(2, "look")] } };
+  const { root } = await setup(method => method === "skills.library.delete" ? answer : {});
+  press(root, '[data-skl="open"][data-key="set:1"]');
+  press(root, '[data-skl="open-skill"][data-id="3"]');
+  press(root, '.skl-doc-page [data-skl="skill-more"][data-id="3"]');
+  await removeSkill();
+  expect(api.core).toHaveBeenCalledWith("skills.library.delete", { key: "set:1", skill: 3 });
+  expect(root.querySelector(".skl-doc-page")).toBeNull();
+  expect(root.querySelector('.skl-page[data-skl-page="set:1"]')).not.toBeNull();
+  // The core answers without a package when the skill was its package's last: the package is gone from the list.
+  answer = { deleted: true };
+  press(root, '.skl-skill[data-library-skill="2"] [data-skl="skill-more"]');
+  await removeSkill();
+  expect(root.querySelector(".skl-page")).toBeNull();
+  expect(root.querySelector('.skl-pack[data-skl-pack="set:1"]')).toBeNull();
+});
+
+test("a refused delete of one skill says why and reloads the library", async () => {
+  const { root } = await setup(method => { if (method === "skills.library.delete") throw new Error("[-32602] Invalid params: not_found: no such skill in this package"); return {}; });
+  const info = vi.spyOn(toaster, "info").mockImplementation(() => {});
+  press(root, '[data-skl="open"][data-key="set:1"]');
+  press(root, '.skl-skill[data-library-skill="1"] [data-skl="skill-more"]');
+  await removeSkill();
+  expect(info).toHaveBeenCalledWith("裡面找不到 SKILL.md。");
+  expect(root.querySelectorAll(".skl-skill")).toHaveLength(3);
+});
+
+test("a name that is taken says which package holds it, and an import that left skills out lists them with their holders", async () => {
+  expect(failureText(new Error('[-32602] Invalid params: taken: a skill named tdd already exists in the package "pstack" (switched off)')))
+    .toBe("「pstack」裡已有同名的「tdd」（可能已停用）。請先在團隊技能中把它刪除。");
+  expect(failureText(new Error('[-32602] Invalid params: taken: a skill named tdd already exists in the package "my "own" pack"')))
+    .toContain("my \"own\" pack");
+  const made = { ...packages()[1], key: "pack:9", name: "新套件", skills: [skill(9, "lint")] };
+  const { root } = await setup(method => method === "skills.library.import"
+    ? { package: made, skipped: [{ name: "tdd", held_by: "pstack" }, { name: "plan", held_by: "" }] } : {});
+  root.querySelector<HTMLInputElement>("#skl-source")!.value = "owner/new";
+  press(root, '[data-skl="import-go"]');
+  await settle(); await settle();
+  const note = root.querySelector(".skl-skipped")!;
+  expect(note.getAttribute("role")).toBe("status");
+  expect(note.querySelector("p")?.textContent).toBe("有 2 個技能的名稱已被占用，沒有匯入：");
+  expect([...note.querySelectorAll("li")].map(item => item.textContent)).toEqual(["tdd（已在「pstack」）", "plan"]);
 });

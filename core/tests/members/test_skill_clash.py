@@ -1,0 +1,129 @@
+"""One skill of a team package can be deleted alone, and a name that is taken says who holds it (#313)."""
+
+import json
+
+import pytest
+
+from raphael_core.protocol import RpcError
+from .test_skill_packages import archive, document, upload
+
+
+def pack(*names, name="tools.zip"):
+    return upload(name, archive([(f"{n}/SKILL.md", document(n).encode()) for n in names]))
+
+
+def skill_id(package, name):
+    return next(s["id"] for s in package["skills"] if s["name"] == name)
+
+
+async def packages(rig):
+    return {p["name"]: p for p in (await rig.call("skills.library.list", {}))["packages"]}
+
+
+async def test_a_taken_name_says_which_package_holds_it_and_whether_it_is_switched_off(rig):
+    held = (await rig.call("skills.library.import", pack("tdd", "review")))["package"]
+    with pytest.raises(RpcError, match=r'taken: a skill named tdd already exists in the package "tools.zip"$'):
+        await rig.call("skills.library.import", {"text": document("tdd")})
+    await rig.call("skills.library.update", {"key": held["key"], "skill": {"id": skill_id(held, "tdd"), "enabled": False}})
+    with pytest.raises(RpcError, match=r'in the package "tools.zip" \(switched off\)$'):
+        await rig.call("skills.library.import", {"text": document("tdd")})
+    assert len(await packages(rig)) == 1
+
+
+async def test_a_package_of_several_skills_imports_all_but_the_taken_ones_and_names_them(rig):
+    await rig.call("skills.library.import", pack("tdd", "review"))
+    made = await rig.call("skills.library.import", pack("tdd", "lint", "format", name="more.zip"))
+    assert made["skipped"] == [{"name": "tdd", "held_by": "tools.zip"}]
+    assert sorted(s["name"] for s in made["package"]["skills"]) == ["format", "lint"]
+    library = await packages(rig)
+    assert sorted(s["name"] for s in library["tools.zip"]["skills"]) == ["review", "tdd"]
+    # Nothing is left out when nothing clashes.
+    clean = await rig.call("skills.library.import", pack("plan", name="plan.zip"))
+    assert "skipped" not in clean
+
+
+async def test_a_package_whose_every_skill_is_taken_is_refused_naming_the_holder(rig):
+    await rig.call("skills.library.import", pack("tdd", "review"))
+    with pytest.raises(RpcError, match=r'taken: a skill named (tdd|review) already exists in the package "tools.zip"'):
+        await rig.call("skills.library.import", pack("tdd", "review", name="again.zip"))
+    assert list(await packages(rig)) == ["tools.zip"]
+
+
+async def test_one_skill_of_a_package_is_deleted_alone_and_frees_its_name(rig):
+    held = (await rig.call("skills.library.import", pack("tdd", "review", "lint")))["package"]
+    gone = skill_id(held, "tdd")
+    folder = rig.service.capabilities.homes.home(-1) / "skills" / str(gone)
+    assert folder.is_dir()
+    answer = await rig.call("skills.library.delete", {"key": held["key"], "skill": gone})
+    assert answer["deleted"] is True
+    assert sorted(s["name"] for s in answer["package"]["skills"]) == ["lint", "review"]
+    assert not folder.exists()
+    assert sorted(s["name"] for s in (await packages(rig))["tools.zip"]["skills"]) == ["lint", "review"]
+    # The name is free for another import, and the rest of the package is untouched.
+    again = await rig.call("skills.library.import", {"text": document("tdd")})
+    assert "skipped" not in again and again["package"]["skills"][0]["name"] == "tdd"
+    assert (rig.service.capabilities.homes.home(-1) / "skills" / str(skill_id(held, "review")) / "SKILL.md").is_file()
+
+
+async def test_deleting_the_last_skill_of_a_package_removes_the_package(rig):
+    held = (await rig.call("skills.library.import", pack("tdd", "review")))["package"]
+    first = await rig.call("skills.library.delete", {"key": held["key"], "skill": skill_id(held, "tdd")})
+    last = await rig.call("skills.library.delete", {"key": held["key"], "skill": skill_id(first["package"], "review")})
+    assert last == {"deleted": True}
+    assert not (await rig.call("skills.library.list", {}))["packages"]
+
+
+@pytest.mark.parametrize("skill", [999999, "1", True])
+async def test_deleting_a_skill_that_is_not_in_the_package_changes_nothing(rig, skill):
+    held = (await rig.call("skills.library.import", pack("tdd", "review")))["package"]
+    other = (await rig.call("skills.library.import", pack("plan", "lint", name="other.zip")))["package"]
+    with pytest.raises(RpcError):
+        await rig.call("skills.library.delete", {"key": held["key"], "skill": skill})
+    with pytest.raises(RpcError, match="not_found"):
+        await rig.call("skills.library.delete", {"key": held["key"], "skill": skill_id(other, "plan")})
+    library = await packages(rig)
+    assert [len(p["skills"]) for p in library.values()] == [2, 2]
+
+
+def desk(cap, tmp_path, market, extra=()):
+    cap.skill_home = tmp_path / "synthetic-home"
+    folder = cap.skill_home / f".claude/plugins/cache/{market}/desk/1.0.0"
+    files = {".claude-plugin/plugin.json": json.dumps({"name": "desk", "version": "1.0.0"}).encode(),
+             "skills/write/SKILL.md": document("write").encode(), "skills/check/SKILL.md": document("check").encode(),
+             **{f"skills/{n}/SKILL.md": document(n).encode() for n in extra}}
+    for relative, data in files.items():
+        path = folder / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+    return folder
+
+
+async def test_one_skill_of_a_plugin_is_deleted_alone_with_its_files(rig, tmp_path):
+    cap = rig.service.capabilities
+    made = (await rig.call("skills.library.import", {"plugin": True, "source": "local:" + str(desk(cap, tmp_path, "market"))}))["package"]
+    check = skill_id(made, "check")
+    kept = cap.plugin_root(int(made["key"][4:]))
+    assert (kept / "skills/check/SKILL.md").is_file()
+    answer = await rig.call("skills.library.delete", {"key": made["key"], "skill": check})
+    assert [s["name"] for s in answer["package"]["skills"]] == ["write"]
+    assert not (kept / "skills/check").exists() and (kept / "skills/write/SKILL.md").is_file()
+    assert [s["name"] for s in cap.skills(-1)] == ["write"]
+
+
+async def test_a_plugin_with_taken_skill_names_imports_the_rest_and_names_each_holder(rig, tmp_path):
+    cap = rig.service.capabilities
+    first = (await rig.call("skills.library.import", {"plugin": True, "source": "local:" + str(desk(cap, tmp_path, "one"))}))["package"]
+    await rig.call("skills.library.update", {"key": first["key"], "skill": {"id": skill_id(first, "write"), "enabled": False}})
+    second = desk(cap, tmp_path, "two", extra=("extra",))
+    made = await rig.call("skills.library.import", {"plugin": True, "source": "local:" + str(second)})
+    assert sorted(made["skipped"], key=lambda s: s["name"]) == [
+        {"name": "desk:check", "held_by": "desk"}, {"name": "desk:write", "held_by": "desk"}]
+    assert [s["name"] for s in made["package"]["skills"]] == ["extra"]
+    root = cap.plugin_root(int(made["package"]["key"][4:]))
+    assert (root / "skills/extra/SKILL.md").is_file() and not (root / "skills/write").exists()
+    assert len((await rig.call("skills.library.list", {}))["packages"]) == 2
+    # Every skill taken: the plugin is refused and the holder is named.
+    third = desk(cap, tmp_path, "three")
+    with pytest.raises(RpcError, match=r'taken: a skill named desk:\w+ already exists in the package "desk"'):
+        await rig.call("skills.library.import", {"plugin": True, "source": "local:" + str(third)})
+    assert len((await rig.call("skills.library.list", {}))["packages"]) == 2
