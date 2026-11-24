@@ -952,16 +952,11 @@ impl Overlay {
             return;
         };
         if let Some(hwnd) = native.hwnd {
-            sight::check(&native.window, hwnd, placement, {
-                #[cfg(windows)]
-                {
-                    native.visible.clone()
-                }
-                #[cfg(not(windows))]
-                {
-                    ()
-                }
-            });
+            // Only Windows watches whether the page should be seen; elsewhere the check takes no such flag.
+            #[cfg(windows)]
+            sight::check(&native.window, hwnd, placement, native.visible.clone());
+            #[cfg(not(windows))]
+            sight::check(&native.window, hwnd, placement);
         }
         #[cfg(target_os = "macos")]
         crate::macos::window::keep_in_front(&native.window);

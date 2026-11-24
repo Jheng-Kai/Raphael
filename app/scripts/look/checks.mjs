@@ -6837,8 +6837,8 @@ export function checkRendered(name, context = {}) {
     return { check: name, text: line.textContent };
   }
   if (name === "overlay-frame-ack") {
-    // In a real browser the page answers the native frame probe; on 2026-11-24 it threw "Illegal invocation" instead, the
-    // recovery took the overlay for frozen and reloaded and hid it during every dictation.
+    // In a real browser the page answers the native frame probe. When it threw "Illegal invocation" instead, the recovery
+    // took the overlay for frozen and reloaded and hid it during every dictation.
     const calls = window.__look.calls;
     const acks = calls.filter(call => call.command === "overlay_frame" && call.id === 990001);
     const failed = calls.filter(call => call.command === "overlay_log" && String(call.message ?? "").includes('"frameprobe" event failed'));
