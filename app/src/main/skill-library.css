@@ -18,11 +18,13 @@
 .modal-body .slist.skl-list > .row.skl-entry:first-child { border-top-left-radius: inherit; border-top-right-radius: inherit; }
 .modal-body .slist.skl-list > .row.skl-entry:last-child { border-bottom-left-radius: inherit; border-bottom-right-radius: inherit; }
 .modal-body .slist.skl-skills { --slist-pad: 0px; }
-.skl-list > .skl-pack:has(.skl-open):hover { background: var(--hover); }
-.skl .btn.skl-open { position: absolute; inset: 0; width: 100%; height: 100%; justify-content: flex-start; padding: 0 var(--sp-4); border: 0; box-shadow: none; background: transparent; color: var(--text); font-weight: var(--weight-regular); text-align: start; }
-.skl .btn.skl-open:is(:hover, :active):not(:disabled) { background: transparent; }
+/* Every row opens: a plugin its page, a skill its own page with its document. The opener covers the row under its switch. */
+.skl-list > .skl-pack:has(.skl-open, .skl-doc-open):hover, .skl-skills > .skl-skill:hover { background: var(--hover); }
+.skl .btn:is(.skl-open, .skl-doc-open) { position: absolute; inset: 0; width: 100%; height: 100%; justify-content: flex-start; padding: 0 var(--sp-4); border: 0; box-shadow: none; background: transparent; color: var(--text); font-weight: var(--weight-regular); text-align: start; }
+.skl .btn:is(.skl-open, .skl-doc-open):is(:hover, :active):not(:disabled) { background: transparent; }
 .skl-pack { --skl-control-space: calc(200px + 2 * var(--h-ctl) + 3 * var(--sp-2)); }
-.skl-open > .skl-label { max-width: calc(100% - var(--skl-control-space)); pointer-events: none; }
+.skl-skill { --skl-control-space: calc(var(--h-ctl) + 2 * var(--sp-4)); }
+:is(.skl-open, .skl-doc-open) > .skl-label { max-width: calc(100% - var(--skl-control-space)); pointer-events: none; }
 .skl-single { flex: 1 1 auto; min-width: 0; }
 .skl-entry .skl-label { display: block; min-width: 0; }
 .skl-title { display: flex; align-items: center; gap: var(--sp-2); }
@@ -34,8 +36,6 @@
 .skl-access { max-width: 200px; }
 .skl-access > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .skl-import-hint { margin: 0; color: var(--text-2); font-size: var(--fs-sm); }
-.skl-details { max-width: min(36ch, calc(100vw - 32px)); max-height: min(50vh, 20rem); overflow-x: hidden; overflow-y: auto; padding: var(--sp-3); overflow-wrap: anywhere; }
-.skl-details > p { margin: var(--sp-2) 0 0; white-space: pre-wrap; }
 
 /* A package's page, in the list's place: the back arrow (as an app's page of 連接 has it), the name and the count, its
    controls as on its row, where it came from, then its skills on one card of Settings' rows. */
@@ -46,10 +46,19 @@
 .modal-body .skl-page-actions .ctl .sel { width: auto; max-width: 100%; justify-content: flex-end; gap: var(--sp-1); padding-inline: var(--sp-2); border-color: transparent; background-color: transparent; color: var(--text-2); }
 .modal-body .skl-page-actions .ctl .sel:hover:not(:disabled), .modal-body .skl-page-actions .ctl .sel[aria-expanded="true"] { border-color: transparent; background-color: transparent; color: var(--text); }
 .skl-source, .skl-about { margin: 0 0 var(--sp-3); color: var(--text-3); font-size: var(--fs-sm); overflow-wrap: anywhere; }
-/* A plugin's page: where it comes from in a small line under its name, then its own words set off as a quote. */
-.skl-page .skl-source { margin: calc(-1 * var(--sp-1)) 0 var(--sp-4); font-size: var(--fs-xs); letter-spacing: 0.01em; }
+/* A plugin's or a skill's page: its own words set off as a quote under its name, where it came from and its version in a
+   small line at the quote's foot. */
 .skl-page .skl-about { max-width: 68ch; margin: 0 0 var(--sp-5); padding: var(--sp-1) 0 var(--sp-1) var(--sp-4); border-left: 2px solid var(--edge-rim); color: var(--text-2); font-size: var(--fs-sm); line-height: 1.65; }
-.modal-body .slist.skl-skills > .row.skl-entry { padding-inline: var(--sp-4); }
+.skl-page .skl-about > p { margin: 0; }
+.skl-page .skl-about > .skl-source { margin-top: var(--sp-2); color: var(--text-3); font-size: var(--fs-xs); letter-spacing: 0.01em; }
+.skl-page .skl-about > .skl-source:first-child { margin-top: 0; }
+.modal-body .slist.skl-skills > .row.skl-entry { padding-inline: var(--sp-4); border-radius: 0; }
+.modal-body .slist.skl-skills > .row.skl-entry:first-child { border-top-left-radius: inherit; border-top-right-radius: inherit; }
+.modal-body .slist.skl-skills > .row.skl-entry:last-child { border-bottom-left-radius: inherit; border-bottom-right-radius: inherit; }
+/* A skill's document, drawn as a reply draws Markdown, in the page's own type. */
+.skl-doc { max-width: 76ch; padding-bottom: var(--sp-6); }
+.skl-doc .ans { margin: 0 0 var(--sp-3); font: var(--weight-regular) var(--fs-sm)/1.7 var(--ui); color: var(--text); }
+.skl-doc .rich-block { margin: 0 0 var(--sp-3); }
 
 .skl-access-menu { max-height: min(360px, calc(100vh - 16px)); }
 

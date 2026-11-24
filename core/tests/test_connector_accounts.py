@@ -39,7 +39,10 @@ class Accounts(Platform):
             self.requests.append(request)
             if self.delete_status != 200:
                 return httpx.Response(self.delete_status, json={})
-            self.deleted.append((path.rsplit("/", 1)[1], request.url.params.get("revoke_on_delete") == "true"))
+            ident = path.rsplit("/", 1)[1]
+            self.deleted.append((ident, request.url.params.get("revoke_on_delete") == "true"))
+            if self.revoke_ok:  # what Composio gave back it lists no more
+                self.listing = [a for a in self.listing if a["id"] != ident]
             return httpx.Response(200, json={"success": self.revoke_ok})
         if request.method == "GET" and path == "/connected_accounts":
             self.requests.append(request)
@@ -59,7 +62,16 @@ def listed(ident, status, ago=None):
     return {"id": ident, "status": status, "toolkit": {"slug": "gmail"}, **({"created_at": iso(ago)} if ago is not None else {})}
 
 
+def mirrored(rows, slug="gmail"):
+    """What Composio lists for local rows that stand for its accounts (a row's `since` is when it began; with none, no time)."""
+    return [{"id": a["id"], "status": a["status"], "toolkit": {"slug": slug},
+             **({"created_at": iso(NOW - a["since"])} if a.get("since") else {})} for a in rows]
+
+
 def make(tmp_path, conn, fake, accounts=(), **options):
+    # An account is read from Composio before it is removed: unless the test says what Composio lists, it lists these.
+    if isinstance(fake, Accounts) and not fake.listing:
+        fake.listing = mirrored(accounts)
     router, service, hub, vault = setup_service(tmp_path, conn, fake, sleep=no_wait, wall=lambda: NOW, **options)
     vault.set("connectors:composio:key", "ak_private")
     entry = Connector("composio:gmail", "composio", status="ACTIVE", name="Gmail", accounts=list(accounts))
@@ -181,7 +193,7 @@ async def test_a_sign_in_that_failed_at_composio_keeps_its_row_to_be_removed_by_
     async def browser(url):
         pass
 
-    fake = Accounts(statuses=("FAILED",))
+    fake = Accounts([listed("ca_test", "FAILED")], statuses=("FAILED",))
     router, service, hub, vault = setup_service(tmp_path, conn, fake, open_browser=browser, sleep=no_wait)
     await router.call("connectors.set_key", {"key": "ak_private"})
     result = await router.call("connectors.connect", {"toolkit": "gmail"})
@@ -309,7 +321,8 @@ async def test_removing_another_account_while_a_sign_in_waits_leaves_that_sign_i
         entered.set()
         await asyncio.Event().wait()
 
-    fake = Accounts(statuses=("INITIATED",))
+    fake = Accounts([listed("ca_main", "ACTIVE", 99999), listed("ca_gone", "EXPIRED", 3000), listed("ca_test", "INITIATED", 5)],
+                    statuses=("INITIATED",))
     router, service, hub, vault = setup_service(tmp_path, conn, fake, open_browser=browser, sleep=no_wait, wall=lambda: NOW)
     await router.call("connectors.set_key", {"key": "ak_private"})
     old = Connector("composio:gmail", "composio", status="ACTIVE", name="Gmail",
@@ -342,10 +355,11 @@ async def sign_in_waiting_for(tmp_path, conn, *, stage="browser", accounts=()):
     async def sleep(seconds):
         await asyncio.sleep(0.01)
 
-    fake = Waiting(statuses=("INITIATED",))
+    github = Connector("composio:github", "composio", status="ACTIVE", name="GitHub", accounts=[account("ca_gh", "ACTIVE", label="Me")])
+    # Composio lists what the local rows stand for, and the account the sign-in made.
+    fake = Waiting([*mirrored(github.accounts, "github"), *mirrored(accounts), listed("ca_test", "INITIATED", 5)], statuses=("INITIATED",))
     router, service, hub, vault = setup_service(tmp_path, conn, fake, open_browser=browser, sleep=sleep, wall=lambda: NOW)
     await router.call("connectors.set_key", {"key": "ak_private"})
-    github = Connector("composio:github", "composio", status="ACTIVE", name="GitHub", accounts=[account("ca_gh", "ACTIVE", label="Me")])
     github.enabled_tools = ["GITHUB_A"]
     service.store.connectors[github.id] = github
     if accounts:
@@ -827,3 +841,92 @@ async def test_the_loss_is_told_to_the_window_with_the_apps_name(tmp_path, conn)
     router.notify = lambda method, params: sent.append((method, params))
     await service.watch_once()
     assert ("connectors.lost", {"id": "composio:gmail", "name": "Gmail"}) in sent
+
+
+async def test_removing_an_account_reads_composio_first_and_never_revokes_the_only_one_that_works(tmp_path, conn):
+    """The list said two connected accounts; one had been deleted at Composio. Counting from the list, 移除 on the one that
+    works revoked it and left the dead one: Composio is read first, and an app whose only working account is the one pressed
+    is not disconnected on a list that was out of date."""
+    fake = Accounts([listed("ca_new", "ACTIVE", 10)])
+    router, service, hub, entry = make(tmp_path, conn, fake, [account("ca_old", "ACTIVE"), account("ca_new", "ACTIVE")])
+    result = await router.call("connectors.remove_account", {"id": "composio:gmail", "account_id": "ca_new"})
+    assert fake.deleted == []
+    assert [(a["id"], a["status"]) for a in result["connector"]["accounts"]] == [("ca_new", "ACTIVE")]
+    assert result["connector"]["status"] == "ACTIVE" and "composio:gmail" in service.store.connectors
+    # The owner presses again, now on a list that says what Composio has: the last connected account is the app.
+    result = await router.call("connectors.remove_account", {"id": "composio:gmail", "account_id": "ca_new"})
+    assert result == {"disconnected": True} and fake.deleted == [("ca_new", True)]
+
+
+async def test_an_account_deleted_at_composio_is_removed_as_asked_without_a_second_delete(tmp_path, conn):
+    fake = Accounts([listed("ca_new", "ACTIVE", 10)])
+    router, service, hub, entry = make(tmp_path, conn, fake, [account("ca_old", "ACTIVE"), account("ca_new", "ACTIVE")])
+    result = await router.call("connectors.remove_account", {"id": "composio:gmail", "account_id": "ca_old"})
+    assert fake.deleted == [] and [a["id"] for a in result["connector"]["accounts"]] == ["ca_new"]
+    assert [a["id"] for a in ConnectorStore(tmp_path).connectors["composio:gmail"].accounts] == ["ca_new"]
+
+
+async def test_removing_a_connected_account_among_several_that_composio_still_has_revokes_only_that_one(tmp_path, conn):
+    fake = Accounts([listed("ca_a", "ACTIVE", 20), listed("ca_b", "ACTIVE", 10)])
+    router, service, hub, entry = make(tmp_path, conn, fake, [account("ca_a", "ACTIVE"), account("ca_b", "ACTIVE")])
+    result = await router.call("connectors.remove_account", {"id": "composio:gmail", "account_id": "ca_a"})
+    assert fake.deleted == [("ca_a", True)] and [a["id"] for a in result["connector"]["accounts"]] == ["ca_b"]
+
+
+async def test_composio_that_cannot_be_read_changes_nothing_when_an_account_is_removed(tmp_path, conn):
+    class Down(Accounts):
+        def __call__(self, request):
+            if request.method == "GET" and request.url.path.endswith("/connected_accounts"):
+                return httpx.Response(503, json={})
+            return super().__call__(request)
+
+    fake = Down()
+    router, service, hub, entry = make(tmp_path, conn, fake, [account("ca_a", "ACTIVE"), account("ca_b", "ACTIVE")])
+    result = await router.call("connectors.remove_account", {"id": "composio:gmail", "account_id": "ca_a"})
+    assert result["ok"] is False and fake.deleted == []
+    assert [a["id"] for a in entry.accounts] == ["ca_a", "ca_b"]
+
+
+async def test_disconnecting_an_app_gives_back_every_account_composio_holds_for_it(tmp_path, conn):
+    fake = Accounts([listed("ca_known", "ACTIVE", 20), listed("ca_elsewhere", "ACTIVE", 10)])
+    router, service, hub, entry = make(tmp_path, conn, fake, [account("ca_known", "ACTIVE"), account("ca_gone", "ACTIVE")])
+    assert await router.call("connectors.disconnect", {"id": "composio:gmail"}) == {"disconnected": True}
+    assert sorted(fake.deleted) == [("ca_elsewhere", True), ("ca_known", True)]
+
+
+async def test_the_page_reading_the_accounts_drops_one_removed_elsewhere_and_asks_composio_at_most_twice_a_minute(tmp_path, conn):
+    clock = [1000.0]
+    fake = Accounts([listed("ca_new", "ACTIVE", 10)])
+    router, service, hub, entry = make(tmp_path, conn, fake, [account("ca_old", "ACTIVE"), account("ca_new", "ACTIVE")], now=lambda: clock[0])
+
+    def reads():
+        return sum(r.method == "GET" and r.url.path.endswith("/connected_accounts") for r in fake.requests)
+
+    # What the window asks for first is what is stored: no read, as before.
+    result = await router.call("connectors.status", {"refresh": False})
+    assert [a["id"] for a in result["connectors"][0]["accounts"]] == ["ca_old", "ca_new"] and reads() == 0
+    result = await router.call("connectors.status", {"refresh": False, "accounts": True})
+    assert [a["id"] for a in result["connectors"][0]["accounts"]] == ["ca_new"] and reads() == 1
+    assert [a["id"] for a in ConnectorStore(tmp_path).connectors["composio:gmail"].accounts] == ["ca_new"]
+    await router.call("connectors.status", {"refresh": False, "accounts": True})
+    assert reads() == 1
+    clock[0] += 31
+    fake.listing = [listed("ca_new", "ACTIVE", 10), listed("ca_later", "ACTIVE", 1)]
+    result = await router.call("connectors.status", {"refresh": False, "accounts": True})
+    assert reads() == 2 and [a["id"] for a in result["connectors"][0]["accounts"]] == ["ca_new", "ca_later"]
+    with pytest.raises(RpcError):
+        await router.call("connectors.status", {"accounts": "yes"})
+
+
+async def test_accounts_with_no_address_or_name_say_when_they_were_made_and_which_is_the_newest(tmp_path, conn):
+    fake = Accounts([listed("ca_first", "ACTIVE", 5000), listed("ca_second", "ACTIVE", 100)])
+    router, service, hub, entry = make(tmp_path, conn, fake)
+    result = await router.call("connectors.status")
+    first, second = result["connectors"][0]["accounts"]
+    assert (first["id"], first["created_at"]) == ("ca_first", NOW - 5000) and "newest" not in first
+    assert (second["id"], second["created_at"], second["newest"]) == ("ca_second", NOW - 100, True)
+    # One account is never "the newest"; a later read keeps the time it was given.
+    fake.listing = [{"id": "ca_second", "status": "ACTIVE", "toolkit": {"slug": "gmail"}}]
+    result = await router.call("connectors.status")
+    [only] = result["connectors"][0]["accounts"]
+    assert only["created_at"] == NOW - 100 and "newest" not in only

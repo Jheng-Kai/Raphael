@@ -242,6 +242,148 @@ async def _until(condition, seconds=5):
     raise AssertionError("the sign-in was not noticed")
 
 
+def _claude_credentials(tmp_path):
+    folder = tmp_path / ".claude"
+    folder.mkdir(exist_ok=True)
+    credentials = folder / ".credentials.json"
+    credentials.write_text("{}")
+    return credentials
+
+
+def _signed_in_elsewhere(credentials):
+    import os
+    stamp = credentials.stat().st_mtime_ns
+    os.utime(credentials, ns=(stamp, stamp + 1_000_000_000))
+
+
+async def _claude_row(brains):
+    return next(item for item in (await brains.list())["clis"] if item["id"] == "claude")
+
+
+async def test_the_row_says_which_sign_in_is_lost_until_something_says_it_is_back(tmp_path):
+    """R-CLI-SIGNIN-06: the notice stays after the routine gate's half hour, and a sign-in done anywhere ends it."""
+    now = [100.0]
+    credentials = _claude_credentials(tmp_path)
+    brains = CliBrains(home=tmp_path, environ={}, commands={}, clock=lambda: now[0])
+    try:
+        assert (await _claude_row(brains))["sign_in_lost"] is None
+        brains.sign_in_lost("claude", "expired")
+        assert (await _claude_row(brains))["sign_in_lost"] == "expired"
+        brains.sign_in_lost("claude", "signed_out")
+        assert (await _claude_row(brains))["sign_in_lost"] == "signed_out"
+        now[0] += discovery_module.SIGNIN_LOST_S + 1
+        assert brains.sign_in_missing("claude") is None, "the gate asks the CLI itself again"
+        row = await _claude_row(brains)
+        assert row["sign_in_lost"] == "signed_out" and next(i for i in (await brains.list())["clis"] if i["id"] == "codex")["sign_in_lost"] is None
+        brains.sign_in_lost("claude", "expired")  # refused again: refreshed
+        assert (await _claude_row(brains))["sign_in_lost"] == "expired"
+        _signed_in_elsewhere(credentials)
+        await brains.check_lost()
+        assert (await _claude_row(brains))["sign_in_lost"] is None and brains.sign_in_cause("claude") is None
+    finally:
+        await brains.aclose()
+
+
+async def test_a_run_that_was_answered_ends_the_notice_and_a_credential_change_seen_by_the_gate_too(tmp_path):
+    credentials = _claude_credentials(tmp_path)
+    brains = CliBrains(home=tmp_path, environ={}, commands={})
+    try:
+        brains.sign_in_lost("claude", "expired")
+        brains.sign_in_back("claude")
+        assert (await _claude_row(brains))["sign_in_lost"] is None
+        brains.sign_in_lost("claude", "expired")
+        _signed_in_elsewhere(credentials)
+        assert brains.sign_in_missing("claude") is None
+        assert (await _claude_row(brains))["sign_in_lost"] is None
+    finally:
+        await brains.aclose()
+
+
+def test_the_app_is_told_when_a_sign_in_becomes_lost_and_when_it_is_back_and_not_at_every_refused_run(tmp_path):
+    events, back = [], []
+    brains = CliBrains(home=tmp_path, environ={}, commands={}, notify=lambda *event: events.append(event))
+    brains.on_back.append(back.append)
+    brains.sign_in_back("claude")  # an answered run of a CLI that was never lost says nothing
+    assert events == [] and back == []
+    brains.sign_in_lost("claude", "expired")
+    assert events == [("brains.changed", {})]
+    brains.sign_in_lost("claude", "expired")  # refused again: refreshed, not told again
+    brains.sign_in_lost("claude", "other")
+    assert events == [("brains.changed", {})]
+    brains.sign_in_lost("claude", "signed_out")  # another cause is another row
+    assert len(events) == 2
+    brains.sign_in_back("claude")
+    assert len(events) == 3 and back == ["claude"]
+    brains.sign_in_back("claude")
+    assert len(events) == 3 and back == ["claude"], "an answered run after it was back says nothing"
+
+
+def test_a_callback_that_fails_never_reaches_the_cli_path(tmp_path):
+    seen = []
+
+    def broken(name):
+        seen.append(name)
+        raise RuntimeError("PRIVATE cleanup failure")
+
+    brains = CliBrains(home=tmp_path, environ={}, commands={})
+    brains.on_back.extend([broken, seen.append])
+    brains.sign_in_lost("claude", "expired")
+    brains.sign_in_back("claude")
+    assert seen == ["claude", "claude"], "the next callback still runs"
+
+
+async def test_nothing_looks_at_the_credentials_while_no_sign_in_is_lost(tmp_path, monkeypatch):
+    """R-CLI-SIGNIN-06: about every 10 s off the loop while one is lost; no look at all otherwise."""
+    import threading
+    monkeypatch.setattr(discovery_module, "SIGNIN_WATCH_S", 0.01)
+    credentials = _claude_credentials(tmp_path)
+    brains = CliBrains(home=tmp_path, environ={}, commands={})
+    looks = []
+    real = brains._credential_stamp
+    brains._credential_stamp = lambda name: looks.append((name, threading.get_ident())) or real(name)
+    main = threading.get_ident()
+    try:
+        await brains.list()
+        await asyncio.sleep(0.1)
+        assert looks == [] and brains._lost_watch is None
+        brains.sign_in_lost("claude", "expired")
+        assert brains._lost_watch is not None
+        looks.clear()  # the one look that records the refusal's own stamp
+        await asyncio.sleep(0.1)
+        assert looks and {name for name, _ in looks} == {"claude"} and all(thread != main for _, thread in looks), "off the event loop"
+        _signed_in_elsewhere(credentials)
+        await _until(lambda: brains.sign_in_cause("claude") is None)
+        await _until(lambda: brains._lost_watch is None)
+        looks.clear()
+        await asyncio.sleep(0.1)
+        assert looks == [], "it stops when nothing is lost"
+    finally:
+        await brains.aclose()
+
+
+async def test_a_sign_in_that_finished_in_the_apps_console_cleans_up_even_with_no_record(tmp_path, monkeypatch):
+    from raphael_core.agent.cli import discovery
+    from .test_cli_brains import SignInProcess
+
+    if discovery.os.name != "nt":
+        pytest.skip("Windows visible console contract")
+    made, back = [], []
+    monkeypatch.setattr(discovery.subprocess, "Popen", lambda *args, **kwargs: made.append(SignInProcess()) or made[-1])
+    brains = CliBrains(home=tmp_path, environ={}, commands={"claude": ["claude.exe"]})
+    brains.on_back.append(back.append)
+    try:
+        brains.login("claude", again=True)
+        made[0].finish(1)  # closed before it finished: nothing is back
+        await _until(lambda: brains._signed.get("claude") == "stopped")
+        assert back == []
+        brains.login("claude", again=True)  # a restart forgot the refusal: no record is held
+        made[1].finish(0)
+        await _until(lambda: brains._signed.get("claude") == "done")
+        assert back == ["claude"] and brains.sign_in_cause("claude") is None
+    finally:
+        await brains.aclose()
+
+
 def test_claude_codes_sign_in_in_the_mac_keychain_is_a_sign_in(tmp_path):
     """R-CLI-SIGNIN-04: on a Mac Claude Code keeps its sign-in in the Keychain, not in a file; whether the item is there
     is all that is asked, and a look stands for KEYCHAIN_TTL_S."""

@@ -957,6 +957,10 @@ class App(Router):
             from .computer.vm_tools import BROWSER_OPEN
             self.vm_tools.host_computer = HostComputerTools(self.vm, self._conn, BROWSER_OPEN)
         self.tool_hub = LocalTools(self.tool_hub, self._conn, enabled=not fake_llm or os.environ.get("RAPHAEL_TEST_NATIVE_LOCAL") == "1")
+        local_tools = self.tool_hub
+        local_tools.owner_files.member_folders = self.vm.local_folders
+        if self.brain:
+            self.brain.member_folders = self.vm.local_folders
         from .services.generation import Generation
         from .services.generation_tools import GenerationTools
         from .services.fetch import PageFetcher
@@ -974,8 +978,10 @@ class App(Router):
             conn=self._conn,
             safety=SafetyGuard(self.safety_rules, SafetyJudge(self.client)),
         )
-        if self.vm_tools.host_computer is not None:
-            self.gate.data_floor.work_file = self.vm_tools.host_computer.work_file
+        def shared_work_file(key, arguments):
+            host = self.vm_tools.host_computer
+            return local_tools.shared_owner_file(key, arguments) or (host is not None and host.work_file(key, arguments))
+        self.gate.data_floor.work_file = shared_work_file
         # The app's own calendar, which the window, every member and every task change.
         self.calendar = OwnCalendar(self._conn, notify=self.notify)
         self.calendar.register(self)
@@ -1104,6 +1110,12 @@ class App(Router):
         self.vm.timezone = lambda: self.home.timezone_name
         self.home.timezone_changed = self.vm.refresh_timezone
         self.members.timezone_seen = self.home.note_timezone
+        self.agent.member_folders = self.background.member_folders = self.members.member_folders = self.vm.local_folders
+        def folder_target(member):
+            if self.vm.enabled and self.vm_tools.computer_mode(member) == "docker":
+                return self.vm.mounted_target(self.vm.target(member))
+            return None
+        self.agent.folder_target = self.background.folder_target = folder_target
         self.background.use_team(self.members, self.agent.team_tool)
         self.background.use_owner_tools(self.agent.background_owner_tool)
         self.background.use_attachment_store(self.attachment_store)
@@ -1117,10 +1129,23 @@ class App(Router):
         # Work that was to leave a file is judged on the file found in the member's computer; the
         # shared computer says who holds it by the member's name.
         self.desktop_viewer.task_artifact = self.background.artifact_path
-        self.members.panel_workspaces = lambda member: [] if self.vm.remote else [
-            ("workspace", self.vm.target(member).workspace), ("team", self.vm.target(member).shared)]
-        self.background.use_workspaces(
-            lambda member: [path for path in (self.vm.target(member).workspace, self.vm.target(member).shared) if path])
+        def panel_workspaces(member):
+            own, team = self.vm.local_folders(member)
+            target = self.vm.target(member)
+            return [("workspace", own if target.remote else target.workspace), ("team", team)]
+        self.members.panel_workspaces = panel_workspaces
+        def project_mount(member):
+            target = self.vm.mounted_target(self.vm.target(member))
+            work = self.vm.guest_work_folder(target, member)
+            return work if work != self.vm.guest_workspace(target) else None
+        self.members.project_mount = project_mount
+        def evidence_folders(member):
+            from .folders import work_folder
+            own, team = self.vm.local_folders(member)
+            target = self.vm.target(member)
+            project = work_folder(self.vm.settings, member, self.vm.local_folders)
+            return list(dict.fromkeys([*([] if target.remote else [target.workspace]), own, team, project]))
+        self.background.use_workspaces(evidence_folders)
         # The original of a video the owner attaches is put in the member's own computer, in its team folder, where the member can open it
         # (a computer on another host shares no folder with this PC).
         def in_computer(member):

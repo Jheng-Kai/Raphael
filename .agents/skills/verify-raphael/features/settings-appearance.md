@@ -58,7 +58,7 @@ Up and Down move focus through the list in that order. There are no
 group names, no search box and no line under a tab's name. Each tab is its name, then sections: a small name
 over one rounded card (`--panel`) of rows with no lines between them, the name left and the control right.
 一般 holds, in order: 關於你 (the owner's picture, name and about me), 外觀 (theme and language), 拉斐爾 (the
-routines' time zone and the output folder) and 啟動 (the guide). Telegram, Slack and Discord are no section here: each member's panel
+routines' time zone and project folders) and 啟動 (the guide). Telegram, Slack and Discord are no section here: each member's panel
 sets them up in its conversation. Older links land on 一般: `appearance` scrolls to its section, and
 `messaging` and `memory` open 一般 as it is. 連結應用程式 stays a dialog of its own from the sidebar (R-UI-111).
 This supersedes the About-you grouping and the search notes below.
@@ -70,7 +70,7 @@ The Team skills tab lists Plugins first and Skills second, with no heading or ca
 
 The package page and its row show the existing Updating status while refresh is pending. The owner can return to the list or use other packages. The skill-library-open scene holds the update RPC open. R-PERF-23 and R-PERF-24 use a synthetic 60-member, 58-skill roster and a blocked file writer to check the core's metadata cache and unrelated RPC latency.
 ```powershell
-npm run look -- skill-library skill-library-row-lit skill-library-open skill-library-refresh skill-library-skill-details skill-library-back nav-side-plugin skill-library-access skill-library-details skill-library-import skill-library-imported skill-library-import-failed member-skills-library --theme both --width 1120,720,1920x1080
+npm run look -- skill-library skill-library-row-lit skill-library-open skill-library-refresh skill-library-skill-page skill-library-back nav-side-plugin skill-library-access skill-library-doc-alone skill-library-right-click skill-library-import skill-library-imported skill-library-import-failed member-skills-library --theme both --width 1120,720,1920x1080
 ```
 
 ```powershell
@@ -81,7 +81,7 @@ npm run look -- profile appearance dictation tools safety models about settings-
 
 ## Signed updates
 
-Time zone and output folder keep their regrouped owner rows. Updates are available in About and the sidebar.
+Time zone and project folders keep their regrouped owner rows. Updates are available in About and the sidebar.
 A newer database also offers an update directly from its startup notice.
 
 ```powershell
@@ -141,7 +141,7 @@ No private key belongs in source.
 
 ## Settings merge consumers
 
-General keeps the owner profile, weather city and output folder
+General keeps the owner profile, weather city and project folders
 together in About you. Tools and Safety retain their shared scope; legacy agent
 links resolve to Tools.
 Computer search opens that member's panel. The virtual machine dropdown opens
@@ -151,22 +151,18 @@ the SSH editor, with host checks and copyable repair commands.
 npm run look -- desktop-host-local desktop-host-error settings-owner --theme both --width 1120,720,1920x1080
 ```
 
-## Owner output folder in General
+## Project folders in General
 
-R-OUTPUT-01 adds the optional absolute delivery folder to Settings > General,
-chosen with the folder picker of R-COLLEAGUE-06 (no typed field). Changing the preference
-never moves existing files. The shared owner context tells every speaker to use
-it by default within existing permissions; VM and owner-PC paths remain distinct.
-See [Daily work](daily-work.md) for prompt and native delivery limits.
-Follow-up 1 authorizes the selected look run; actual native/live delivery is deferred.
+The project list uses one row per folder, with its full path and Git branch. The ⋯ menu offers Remove.
+Add folder opens the native picker at the foot of the list. The settings accept up to 50 distinct projects. See [Daily work](daily-work.md#native-project-folder-choice)
+for the native checks and [Member computer](member-computer.md#the-owners-files-read-everywhere-write-in-the-owners-folders-r-pc-04-r-pc-05)
+for the composer and Docker paths.
 
 ```powershell
-npm run look -- owner-output-folder output-folder-picker output-folder-picker-cancel --theme both --width 1120,720,1920x1080
+npm run look -- project-folders-settings project-folder-picker project-folder-picker-cancel project-folder-remove --theme both --width 1120,720,1920x1080
 ```
 
-Inspect its full-size General pane in both themes at all three sizes. Compare
-the folder row's field, spacing, help text and focus with the surrounding owner
-and General settings; judge the selected run only under authorized prerequisites.
+Inspect each contact sheet and full-size project row for path wrapping, focus and menu placement.
 
 The owner's avatar is part of the account/profile section.
 Use the existing presets or file picker and drag/zoom crop dialog. A bounded 192px

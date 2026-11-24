@@ -531,13 +531,13 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .cmp-bar > .cmp-attach, .cmp-bar > .cmp-mode, .cmp-bar > .cmp-pair { flex: none; }
 /* The member's folder (composer-folder.ts) is the permission's kind of button beside it, and gives way with it; a long name ends
    in an ellipsis, its whole path in its name and its menu. */
-.cmp-bar > .cmp-folder { flex: 0 1 auto; min-width: 0; }
-.composer .btn.cmp-folder { position: relative; overflow: hidden; gap: var(--sp-1); min-height: var(--h-ctl); padding-inline: var(--sp-2); border-color: transparent; background: transparent; color: var(--text-2); font-size: var(--fs-xs); white-space: nowrap; }
-.composer .btn.cmp-folder > span { min-width: 0; max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
-.composer .btn.cmp-folder[data-word-hidden] > span { position: absolute; visibility: hidden; }
-.composer .btn.cmp-folder:hover:not(:disabled) { color: var(--text); }
-.composer .btn.cmp-folder:active:not(:disabled) { color: color-mix(in srgb, var(--text) 85%, transparent); }
-.composer .btn.cmp-folder .i { flex: none; width: 16px; height: 16px; }
+.cmp-bar > .cmp-work { flex: 0 1 auto; min-width: 0; }
+.composer .btn.cmp-work { position: relative; overflow: hidden; gap: var(--sp-1); min-height: var(--h-ctl); padding-inline: var(--sp-2); border-color: transparent; background: transparent; color: var(--text-2); font-size: var(--fs-xs); white-space: nowrap; }
+.composer .btn.cmp-work > span { min-width: 0; max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+.composer .btn.cmp-work[data-word-hidden] > span { position: absolute; visibility: hidden; }
+.composer .btn.cmp-work:hover:not(:disabled) { color: var(--text); }
+.composer .btn.cmp-work:active:not(:disabled) { color: color-mix(in srgb, var(--text) 85%, transparent); }
+.composer .btn.cmp-work .i { flex: none; width: 16px; height: 16px; }
 .cb-folders .cb-actions { border-top: 1px solid var(--line); }
 /* Many folders scroll inside the card as the @ menu does, 加入資料夾 staying at its foot; each path is written whole. */
 .cb-card.cb-folders { display: flex; flex-direction: column; max-height: min(420px, calc(100vh - 120px)); }
@@ -830,7 +830,9 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .chat-message > .ans { max-width: 100%; border: 0; border-radius: var(--pa-br); }
 
 .bubble .message-quote, .bubble .quote-author { color: var(--on-bubble); border-color: currentColor; }
-.owner-message .bubble .message-link { color: var(--owner-bubble-link, var(--link)); }
+/* An address or a slash name in the owner's own bubble keeps the bubble's words colour; it shows it opens only under the
+   pointer, with the shared underline (R-LINK-02). */
+.owner-message .bubble .message-link { color: inherit; }
 .owner-skill-notice { text-align: end; margin: 0 0 var(--sp-2); }
 /* Send and Raphael voice form one quiet, equal-sized pair in every composer. */
 .cmp-pair { display: inline-flex; flex: none; align-items: center; gap: var(--sp-1); }

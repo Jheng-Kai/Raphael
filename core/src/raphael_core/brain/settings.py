@@ -46,10 +46,8 @@ DEFAULTS: dict[str, Any] = {
     "raphael_notify": False,
     "owner_name": "",
     "owner_about": "",
-    "owner_output_folder": "",
-    # The folders on the owner's computer each member may write to (R-PC-05), by member id ("0" is Raphael). A member with
-    # none writes only to the output folder above (`brain.owner.member_folders`).
-    "member_write_folders": {},
+    "project_folders": [],
+    "member_work_folder": {},
     "routine_timezone": "",
     "routine_detected_timezone": "",
     "routine_owner_seen_ms": 0,
@@ -340,30 +338,16 @@ def checked(key: str, value: Any) -> tuple[str, Any]:
         raise ValueError("Computer host must be a simple SSH config alias")
     if key == "computer_vm_idle_minutes" and value != 0 and not 5 <= value <= 1440:
         raise ValueError("Computer idle minutes must be between 5 and 1440")
-    if key == "owner_output_folder":
-        from pathlib import PureWindowsPath, PurePosixPath
-        value = value.strip()
-        if value and (len(value) > 1000 or any(ord(char) < 32 for char in value)
-                      or not (PureWindowsPath(value).is_absolute() or PurePosixPath(value).is_absolute())):
-            raise ValueError("Output folder must be an absolute path without control characters")
-    if key == "member_write_folders":
-        from pathlib import PureWindowsPath, PurePosixPath
-        if any(type(member) is not str or type(folders) is not list or any(type(item) is not str for item in folders)
-               for member, folders in value.items()):
-            raise TypeError("Setting 'member_write_folders' must map member ids to lists of paths")
-        kept = {}
-        for member, folders in value.items():
-            if not re.fullmatch(r"0|[1-9][0-9]{0,9}", member):
-                raise ValueError("Write folders are kept by member id")
-            folders = list(dict.fromkeys(item.strip() for item in folders if item.strip()))
-            if len(folders) > 50 or any(len(item) > 1000 or any(ord(char) < 32 for char in item)
-                                        or not (PureWindowsPath(item).is_absolute() or PurePosixPath(item).is_absolute()) for item in folders):
-                raise ValueError("Write folders must be at most 50 absolute paths without control characters")
-            if folders:
-                kept[member] = folders
-        if len(kept) > 1000:
-            raise ValueError("Write folders are kept for at most 1000 members")
-        value = kept
+    if key in ("project_folders", "member_work_folder"):
+        from ..folders import PROJECT_LIMIT, checked_path, project_paths
+        if key == "project_folders":
+            value = list(project_paths(value).values())
+            if len(value) > PROJECT_LIMIT:
+                raise ValueError(f"Remember up to {PROJECT_LIMIT} project folders")
+        else:
+            if any(not isinstance(member, str) or not re.fullmatch(r"0|[1-9][0-9]{0,9}", member) for member in value):
+                raise ValueError("Work folders are kept by member id")
+            value = {member: checked_path(path) for member, path in value.items()}
     if key == "routine_owner_seen_ms" and value < 0:
         raise ValueError("Owner activity time cannot be negative")
     if key in ("owner_name", "owner_about"):
@@ -483,6 +467,11 @@ class SettingsStore:
             return _read_favorites(saved)
         if key == "disconnected_clis":
             return _read_disconnected_clis(saved)
+        if key == "project_folders" and isinstance(saved, list):
+            from ..folders import PROJECT_LIMIT, project_paths
+            return list(project_paths(saved, ignore_invalid=True).values())[:PROJECT_LIMIT]
+        if key == "member_work_folder" and isinstance(saved, dict):
+            return self._project_selections(saved, self.get("project_folders"))
         if saved is None and key in _NULLABLE and self._conn.execute(
             "SELECT 1 FROM settings WHERE key = ?", (key,)
         ).fetchone():
@@ -501,6 +490,15 @@ class SettingsStore:
             raise ValueError("Setting 'stt_local_model' must name a model for the local engine")
         if key == "stt_local_model" and value is None and self.get("stt_engine") == "local":
             raise ValueError("Setting 'stt_local_model' must name a model while the engine is local")
+        if key == "member_work_folder":
+            canonical = self._project_selections(value, self.get("project_folders"))
+            if len(canonical) != len(value):
+                raise ValueError("A work folder must be a remembered project")
+            value = canonical
+        elif key == "project_folders":
+            from ..folders import project_names
+            names = project_names(value, self.project_mount_names(self.get("project_folders")))
+            old = self.get("member_work_folder")
         encoded = json.dumps(value, allow_nan=False)
         with self._conn:
             self._conn.execute(
@@ -508,6 +506,26 @@ class SettingsStore:
                 " ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 (key, encoded),
             )
+            if key == "project_folders":
+                self._conn.execute(
+                    "INSERT INTO settings (key, value) VALUES ('_project_mount_names', ?)"
+                    " ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                    (json.dumps(names),),
+                )
+                kept = self._project_selections(old, value)
+                if kept != old:
+                    self._conn.execute("UPDATE settings SET value=? WHERE key='member_work_folder'", (json.dumps(kept),))
+
+    @staticmethod
+    def _project_selections(selections, projects):
+        from ..folders import path_key, project_paths
+        paths = project_paths(projects)
+        return {member: paths[key] for member, path in selections.items()
+                if isinstance(path, str) and (key := path_key(path)) in paths}
+
+    def project_mount_names(self, projects):
+        from ..folders import project_names
+        return project_names(projects, self._saved("_project_mount_names"))
 
     def all(self) -> dict[str, Any]:
         """Every setting: the defaults with the saved values on top."""
@@ -517,5 +535,7 @@ class SettingsStore:
                 values[row["key"]] = json.loads(row["value"])
         values["model_favorites"] = _read_favorites(values["model_favorites"])
         values["disconnected_clis"] = _read_disconnected_clis(values["disconnected_clis"])
+        values["project_folders"] = self.get("project_folders")
+        values["member_work_folder"] = self.get("member_work_folder")
         values["languages"] = self._languages()
         return values

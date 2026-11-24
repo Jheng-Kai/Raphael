@@ -18,10 +18,9 @@ const api = vi.hoisted(() => ({
   membersCommandsDelete: vi.fn(),
   membersToolChoices: vi.fn(),
   membersSetAvatar: vi.fn(),
-  settingsGet: vi.fn(),
-  settingsSet: vi.fn(),
+  memberFolder: vi.fn(),
+  openMemberFolder: vi.fn(),
   avatarPick: vi.fn(),
-  pickOutputFolder: vi.fn(),
   desktopStatus: vi.fn(),
   agentAskText: vi.fn(),
 }));
@@ -97,7 +96,8 @@ beforeEach(() => {
   api.membersCommandsDelete.mockResolvedValue({});
   api.membersToolChoices.mockResolvedValue({ tools: ["read_file"], connections: [{ id: "gmail", name: "Gmail", enabled: true }, { id: "notion", name: "Notion", enabled: true }, { id: "slack", name: "Slack", enabled: false }] });
   api.core.mockResolvedValue({});
-  api.settingsGet.mockResolvedValue({ settings: { owner_output_folder: "", member_write_folders: {} } });
+  api.memberFolder.mockResolvedValue({ path: "C:\\Raphael\\members\\3" });
+  api.openMemberFolder.mockResolvedValue(undefined);
 });
 
 describe("the page of a member", () => {
@@ -125,41 +125,11 @@ describe("the page of a member", () => {
     expect(page.el.querySelector('[data-cat="routines"], [data-cat="messaging"], .member-msg, [data-cat="model"], [data-cat="voice"], [data-cat="general"], [data-slot="model"]')).toBeNull();
   });
 
-  test("a member's folders are its own: the output folder first as every member's default, the ones picked after it, each removed from its own ⋯", async () => {
-    // R-PC-05: the owner chooses where each member may write on this computer; reading reaches the whole computer.
-    api.settingsGet.mockResolvedValue({ settings: { owner_output_folder: "C:\\Owner\\Deliveries", member_write_folders: { "4": ["D:\\Other"] } } });
+  test("member settings never show or open the member's own folder", async () => {
     await open(3);
-    const section = (): HTMLElement => $('[data-k="ms-folders"]');
-    const rows = (): string[][] => [...section().querySelectorAll(".ms-folder")].map(row => [row.querySelector(".ms-path")!.textContent!, row.querySelector(".ms-tag")?.textContent ?? (row.querySelector('[data-ms="folder-menu"]') ? "⋯" : "")]);
-    expect(section().querySelector("h2")!.textContent).toBe("可以寫入的資料夾");
-    // The output folder is changed in Settings › General alone: marked, with no ⋯ of its own.
-    expect(rows()).toEqual([["C:\\Owner\\Deliveries", "預設"]]);
-    expect(section().querySelector(".ms-empty, input, textarea")).toBeNull();
-    // The picker adds one after it; the whole map is saved with the other members' folders kept.
-    api.pickOutputFolder.mockResolvedValue("C:\\Work\\Notes");
-    api.settingsSet.mockImplementation(async (_key: string, value: Record<string, string[]>) => ({ settings: { owner_output_folder: "C:\\Owner\\Deliveries", member_write_folders: value } }));
-    await press('[data-ms="folder-add"]');
-    expect(api.settingsSet).toHaveBeenLastCalledWith("member_write_folders", { "4": ["D:\\Other"], "3": ["C:\\Owner\\Deliveries", "C:\\Work\\Notes"] });
-    expect(rows()).toEqual([["C:\\Owner\\Deliveries", "預設"], ["C:\\Work\\Notes", "⋯"]]);
-    // A folder listed already is nothing, the output folder too; a cancelled picker is nothing.
-    api.settingsSet.mockClear();
-    await press('[data-ms="folder-add"]');
-    api.pickOutputFolder.mockResolvedValue("C:\\Owner\\Deliveries");
-    await press('[data-ms="folder-add"]');
-    api.pickOutputFolder.mockResolvedValue(null);
-    await press('[data-ms="folder-add"]');
-    expect(api.settingsSet).not.toHaveBeenCalled();
-    // Removing it waits in its ⋯ and asks once; the output folder alone is the member's default again.
-    await press('[data-ms="folder-menu"][data-index="1"]');
-    (document.querySelector<HTMLElement>("#app-popover [data-confirm-item]"))!.click(); await flush();
-    (document.querySelector<HTMLElement>("#app-popover [data-confirm-item]"))!.click(); await flush();
-    expect(api.settingsSet).toHaveBeenLastCalledWith("member_write_folders", { "4": ["D:\\Other"] });
-    expect(rows()).toEqual([["C:\\Owner\\Deliveries", "預設"]]);
-  });
-
-  test("with no output folder either, the member is told it cannot write on this computer", async () => {
-    await open(4);
-    expect($('[data-k="ms-folders"] .ms-empty').textContent).toBe(t("memberSettings.foldersNone"));
+    expect(page.el.querySelector('[data-k="ms-folder"], [data-ms="folder-open"]')).toBeNull();
+    expect(page.el.textContent).not.toContain("C:\\Raphael\\members\\3");
+    expect(api.memberFolder).not.toHaveBeenCalled();
   });
 
   test("Raphael has the same kinds as every member, and only its name and role are not typed", async () => {

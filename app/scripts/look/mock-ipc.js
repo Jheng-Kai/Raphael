@@ -168,8 +168,22 @@ export function installMock(fixture, config = {}, target = window) {
     const row = data.clis.find(item => item.id === cli);
     // An expired session still has its credentials; a CLI that was never signed in or is not there is not available.
     Object.assign(row, { installed: cause !== "not_installed", logged_in: cause === "expired", available: cause === "expired" });
+    // The core remembers a refused sign-in (R-CLI-SIGNIN-06): the newest reply's own button stands for it, so no line above the composer.
+    if (cause !== "not_installed") row.sign_in_lost = cause;
     // `reacted`: the failed reply also carries a reaction, to see where it stands with the button under the bubble.
     if (variant.reacted) latest.reactions = { 1: ["👎"] };
+  }
+  // An earlier reply failed because Claude Code's sign-in ran out, and a newer one was answered after it (a routine's run at
+  // 07:00, the owner's question at 08:00): no reply carries a button, so the line above the composer mends it (R-CLI-SIGNIN-06).
+  if (variant.cliSigninLine) {
+    const failed = data.turns.filter(turn => turn.member_id === 1 && turn.conversation_id === 11).sort((a, b) => b.id - a.id)[0];
+    const sentence = "Claude Code 的登入已過期。", answer = "現在是早上 8 點 12 分。";
+    Object.assign(failed, { status: "error", text: sentence, model: "cli:claude", failure: { kind: "auth_expired", provider: "cli:claude", resets_at: null, cause: "expired" },
+      messages: [{ seq: 1, kind: "reply", text: sentence, at_ms: failed.created_at_ms }], task: null });
+    const at = failed.created_at_ms + 60 * 60_000;
+    data.turns.push({ ...structuredClone(failed), id: Math.max(0, ...data.turns.map(turn => turn.id)) + 1, session_id: "after-signin-lost", question: "現在幾點？", status: "done", text: answer,
+      model: "@openrouter:gpt-6-sol", failure: null, created_at_ms: at, messages: [{ seq: 1, kind: "reply", text: answer, at_ms: at }], reactions: undefined });
+    Object.assign(data.clis.find(item => item.id === "claude"), { name: "Claude Code", installed: true, logged_in: true, available: true, sign_in_lost: "expired" });
   }
   // The member settings page (member-settings.ts): two connections that are on.
   if (variant.memberSettings) {
@@ -228,11 +242,13 @@ export function installMock(fixture, config = {}, target = window) {
   // What the first member's personality page holds (member-settings.ts): its name, role, personality and instructions as the scene gives them.
   if (variant.persona) Object.assign(data.members.find(member => member.id === 1), variant.persona);
 
-  if (variant.ownerOutputFolder) data.settings.owner_output_folder = "C:\\Owner\\Deliveries";
-  // Member 1's own folders (R-PC-05): a short path and one long enough to wrap.
-  if (variant.memberWriteFolders) data.settings.member_write_folders = { "1": ["C:\\Owner\\Notes", "D:\\專案\\拉斐爾\\文件\\二〇二六年度規劃與市場研究資料彙整"] };
-  // Many folders: the menu's list scrolls as the @ menu's does.
-  if (variant.manyWriteFolders) data.settings.member_write_folders = { "1": Array.from({ length: 14 }, (_, index) => `C:\\Owner\\Projects\\Project ${index + 1}`) };
+  const gitProject = "C:\\Owner\\Notes";
+  let projectBranch = "main";
+  if (variant.projectFolders) {
+    data.settings.project_folders = [gitProject, "D:\\專案\\拉斐爾\\文件\\二〇二六年度規劃與市場研究資料彙整"];
+    if (variant.projectSelected) data.settings.member_work_folder = { "1": gitProject };
+  }
+  if (variant.manyProjects) data.settings.project_folders = Array.from({ length: 14 }, (_, index) => 'C:\\Owner\\Projects\\Project ' + (index + 1));
   if (variant.routineGuard) for (const routine of data.routines.filter(item => item.member_id === 1)) {
     Object.assign(routine, { enabled: false, next_run: null, last_error: "已暫停：擁有者超過 30 天未使用。請確認後重新開啟。" });
   }
@@ -1148,7 +1164,7 @@ export function installMock(fixture, config = {}, target = window) {
   // The CLI's sign-in console ended (`done`, or `stopped` when it was closed first), as `brains.cli` then tells.
   state.cliSigninEnds = (id, outcome) => {
     const cli = data.clis.find(item => item.id === id);
-    Object.assign(cli, { signing_in: false, login_result: outcome }, outcome === "done" ? { logged_in: true, available: true } : {});
+    Object.assign(cli, { signing_in: false, login_result: outcome }, outcome === "done" ? { logged_in: true, available: true, sign_in_lost: null } : {});
     notify("BrainsChanged", {});
   };
   // What the owner could see of the open conversation's place, frame by frame (`scrollTimeline`): a place seen once is the
@@ -1454,9 +1470,10 @@ export function installMock(fixture, config = {}, target = window) {
         // What the core serves of an HTML page that writes no style of its own: the page with the app's base style in front of it,
         // made by the core itself for each theme before the run (runner.mjs `pageBaseDocuments`).
         // `pageWindow`: a page laid out as a screen, a side column one window tall plus its padding (R-PAGE-12).
+        // `pageRail`: a sticky rail one window tall with its buttons at its foot beside a long article (R-PAGE-10).
         // A checklist as the core serves it: with nothing left on it, or with what the owner left on it (R-PAGE-14).
         if (p.id === "page-state") return { url: `data:text/html;charset=utf-8,${encodeURIComponent(data.pageStateDocs[variant.pageState === "saved" ? "saved" : "fresh"][p.theme === "dark" ? "dark" : "light"])}`, title: "出發前清單", rev: 1, height: 420, source: "html", server: null };
-        if (p.id === "page-base") return { url: `data:text/html;charset=utf-8,${encodeURIComponent((variant.pageWindow ? data.pageWindowDocs : data.pageBaseDocs)[p.theme === "dark" ? "dark" : "light"])}`, title: "東京行程候選清單", rev: 1, height: 900, source: "html", server: null };
+        if (p.id === "page-base") return { url: `data:text/html;charset=utf-8,${encodeURIComponent((variant.pageRail ? data.pageRailDocs : variant.pageWindow ? data.pageWindowDocs : data.pageBaseDocs)[p.theme === "dark" ? "dark" : "light"])}`, title: "東京行程候選清單", rev: 1, height: 900, source: "html", server: null };
         // Not a file of the dev server, which would write its own client into the page.
         // A page its member changed (`state.updatePage`) is another page: the news page's last heading, the product's price.
         if (p.id === "page-news") return { url: `data:text/html;charset=utf-8,${encodeURIComponent(data.pageNewsHtml.replace("__THEME__", p.theme === "dark" ? "dark" : "").replace("練習問題", (state.pageRevs[p.id] ?? 1) > 1 ? "練習問題（已更新）" : "練習問題"))}`, title: "每日新聞日文學習 2026-11-11", rev: state.pageRevs[p.id] ?? 1, height: 900, source: "html", server: null };
@@ -1562,6 +1579,13 @@ export function installMock(fixture, config = {}, target = window) {
         if (!desktopSessions.get(p.session)) throw new Error("desktop viewer expired");
         return { name: p.name, path: `/home/cua/team/${p.name}` };
       }
+      case "folders.member": return { path: "C:\\Raphael\\members\\" + p.member_id };
+      case "folders.info": return { path: p.path, name: p.path.split("\\").pop(), exists: true, git: p.path === gitProject,
+        branch: p.path === gitProject ? projectBranch : "", branches: p.path === gitProject ? ["draft", "main"] : [] };
+      case "folders.switch_branch":
+        projectBranch = p.branch;
+        notify("SettingsChanged");
+        return { path: p.path, name: p.path.split("\\").pop(), exists: true, git: true, branch: projectBranch, branches: ["draft", "main"] };
       case "settings.get": return { settings: data.settings };
       // A question opening later is not there at the first read, as one that opens while the owner is elsewhere.
       case "background.waiting.list": { data.waitingReads = (data.waitingReads ?? 0) + 1; return { waiting: variant.roomQuestion && (!variant.roomQuestionLate || data.waitingReads > 1) ? [{ id: "room-q", member_id: 1, member_name: "小晴", room_id: 1 }] : [] }; }
@@ -1582,7 +1606,12 @@ export function installMock(fixture, config = {}, target = window) {
         if (p.action === "abort") return {};
         return { name: upload.name, mime: upload.mime, data: "", size: upload.size, stored_id: `${"0".repeat(31)}${data.uploadCount}` };
       }
-      case "settings.set": data.settings[p.key] = p.value; notify("SettingsChanged"); return { settings: data.settings };
+      case "settings.set":
+        data.settings[p.key] = p.value;
+        if (p.key === "project_folders") data.settings.member_work_folder = Object.fromEntries(
+          Object.entries(data.settings.member_work_folder ?? {}).filter(([, path]) => p.value.includes(path)));
+        notify("SettingsChanged");
+        return { settings: data.settings };
       case "status.get": return data.status;
       case "home.overview": {
         if (!p.month) return data.home;
@@ -1825,7 +1854,12 @@ export function installMock(fixture, config = {}, target = window) {
         notify("MembersChanged", { member_id: p.member_id });
         return { skill: skillRow(skill), skills: [skillRow(skill)] };
       }
-      case "members.skills.read": { const skill = skillOf(p); return { skill: skillRow(skill), text: skillText(skill) }; }
+      case "members.skills.read": {
+        // A skill of Team skills (a package's) is read in the shared scope too: its page shows its document.
+        const library = p.shared && data.skillLibrary?.flatMap(pack => pack.skills).find(item => item.id === p.id);
+        if (library) return { skill: { ...library, member_id: -1 }, text: `---\nname: ${library.name}\ndescription: ${library.description}\n---\n# ${library.name}\n\n${library.description}\n\n## 步驟\n\n1. 先讀需求，列出要確認的事。\n2. 依序完成，每一步記下結果。\n3. 最後逐項核對。\n\n\`\`\`bash\nnpm run verify -- --changed\n\`\`\`\n` };
+        const skill = skillOf(p); return { skill: skillRow(skill), text: skillText(skill) };
+      }
       case "members.skills.update": {
         const inherited = !p.shared && data.skills.find(s => s.id === p.id && s.member_id === -1);
         if (inherited) {
@@ -2725,7 +2759,7 @@ export function installMock(fixture, config = {}, target = window) {
       if (command === "open_team_file") { state.openedTeamFile = args.path; return; }
       if (command === "open_attachment") { (state.openedAttachments ??= []).push(args.id); return; }
       if (command === "open_library_file") { state.openedLibraryFile = { member_id: args.memberId, id: args.id }; return; }
-      // A report saved as a file (report_save, which the core writes): in Downloads, as when no output folder is chosen.
+      // A report saved as a file (report_save, which the core writes): in Downloads when the work folder cannot be used.
       if (command === "report_save") return { place: "downloads", folder: "Downloads" };
       if (command === "pick_output_folder") return variant.folderCancel ? null : data.colleagueSample.path;
       if (command === "member_template_file") {

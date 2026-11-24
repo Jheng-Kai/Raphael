@@ -27,7 +27,9 @@ from ..agent.policy import Tier
 from ..integrations.audit import AuditLog
 from ..services.attachments import Attachment, MAX_FILE_BYTES, sniff_ok
 from ..agent.data_floor import DataFloor
-from .vm import SHARED, VmError, engine_start_allowed
+from .. import work_area
+from ..folders import choice
+from .vm import GUEST, SHARED, VmError, engine_start_allowed
 from .vm_bridge import CuaBridge, call_driver_tool
 from .owner_files import KEPT_WORDS, MAC_PRIVATE, kept_place, place as owner_place
 from .owner_transfer import REMOTE_FILE_MAX, hand_over, safe_name
@@ -40,6 +42,7 @@ from . import seat_view
 from . import file_tools
 from . import checkpoints as checkpoint_store
 from .file_tools import FILE_READS, FILE_TOOLS, FileReads
+from .owner_files import WRITES
 from ..worker.computer_verification import meaningful_expectation
 
 _SCOPE = ContextVar("computer_scope", default=None)
@@ -53,6 +56,15 @@ _WOKE = ContextVar("computer_woke", default=None)
 # Whose tool call is starting a sleeping computer right now: (member id, tool name). Unset for every other start.
 _WAKE = ContextVar("computer_wake", default=None)
 logger = logging.getLogger(__name__)
+# The tools of a member's computer that write a file at a path it names (R-FILE-06), and what a refused one says.
+GUEST_WRITES = ("write_file", "edit_file")
+OUTSIDE_GUEST = ("This path is on the owner's PC outside your work folder, so it is written only after the owner says yes to "
+                 "this exact change. It was not written. Save it in your work folder, or ask the owner.")
+
+
+def _under(path, root):
+    root = root.rstrip("/")
+    return path == root or path.startswith(root + "/")
 
 
 def plain_read(command):
@@ -354,6 +366,8 @@ class VmTools:
         self.leases = {}
         self.scope_busy = lambda scope: scope[0] == "async" and not scope[1].done()
         self.vm.busy = lambda key: key in self.leases and self.scope_busy(self.leases[key])
+        self.mount_start = ContextVar("computer_mount_start", default=None)
+        self.vm.mount_busy = self._mount_busy
         self.listed = set()
         self.connections, self.labels = {}, itertools.count(1)
         # The driver in a running computer remembers every session label that has ended and refuses it for good. A
@@ -685,6 +699,13 @@ class VmTools:
             running = False
         return PluginResult(True, text=json.dumps({"computer": "docker", "installed": installed, "running": running}))
 
+    def _mount_busy(self, target):
+        start = self.mount_start.get()
+        own_start = start is not None and start[0] == target.key
+        return self.vm.unit_active(target) > int(own_start) or any(
+            self.detached_busy(peer) or start != (peer.key, True) and self.vm.busy(peer.key)
+            for peer in self.vm.unit_targets(target))
+
     def detached_busy(self, target):
         now = time.monotonic()
         jobs = [(deadline, receipt) for deadline, receipt in self.detached_commands.get(target.key, ())
@@ -723,8 +744,72 @@ class VmTools:
     def tier_for_call(self, key, arguments):
         if self.host_computer and key in self.host_computer.routes:
             return self.host_computer.tier_for_call(key, arguments) if self.tier_of(key) is not None else None
+        if self.is_computer_tool(key) and self.firm_for_call(key, arguments):
+            return Tier.T3  # a write onto the owner's PC outside the work folder: asked in every mode, never waived
         # The hub knows nothing about computer tools, so it must not be asked about them.
         return self.tier_of(key) if key in (COMPUTER_STATUS_KEY, SUGGEST_COMPUTER_KEY) or self.is_computer_tool(key) else self.delegate.tier_for_call(key, arguments)
+
+    def firm_for_call(self, key, arguments):
+        """Whether this call is asked about in every permission mode (`ToolGate.firm_confirmation`): a write of the host
+        computer's file tools, or of the member's own computer's, onto a folder of the owner's PC outside the member's work
+        folder (R-FILE-06)."""
+        if self.host_computer and key in self.host_computer.routes:
+            return self.host_computer.firm_for_call(key, arguments)
+        tool = self.tools.get(key)
+        if tool is None or not isinstance(arguments, dict):
+            return False
+        scope = _SCOPE.get()
+        if scope and scope[0] == "turn":
+            member = scope[1]
+        else:
+            from .local_tools import _CONTEXT
+            member = _CONTEXT.get()[5]
+        try:
+            return self.guest_outside(tool.name, arguments, member, self.vm.mounted_target(self.vm.target(member)))
+        except (VmError, OSError, ValueError):
+            return False
+
+    def guest_area(self, target, member):
+        """(the folders of the computer that are folders of the owner's PC, the ones `member` may write in without asking):
+        the chosen project alone, else its own folder and the team's. Anything else in the computer is the computer's."""
+        reaching = [GUEST, SHARED, *(guest for guest, _ in target.projects)]
+        chosen = choice(self.vm.settings, member) if self.vm.settings is not None else None
+        return reaching, [self.vm.guest_work_folder(target, member)] if chosen else [self.vm.guest_workspace(target), SHARED]
+
+    def landing(self, key, arguments, member):
+        """The path a write of a computer's file tools lands at, as its card shows it to the owner (the arguments to put in
+        place of those written), or None for any other call: not the words the member wrote (`..`, a relative name, `~`),
+        but where the write goes. A call it cannot place is shown as written."""
+        try:
+            if self.host_computer and key in self.host_computer.routes:
+                tool = self.host_computer.routes[key][1]
+                if tool.name in WRITES:
+                    return {"path": work_area.shown(self.host_computer.path(member, arguments.get("path", "")))}
+                return None
+            tool = self.tools.get(key)
+            if tool is None or tool.name not in (*GUEST_WRITES, "browser_download"):
+                return None
+            field = "destination_root" if tool.name == "browser_download" else "path"
+            target = self.vm.mounted_target(self.vm.target(member))
+            path = arguments[field].strip()
+            if tool.name != "browser_download" and (self.host_computer is not None and target.container or target.projects):
+                path = self.member_file_path(target, path, member)
+            return {field: work_area.shown(file_tools.guest_path(path))}
+        except (VmError, OSError, ValueError, KeyError, AttributeError):
+            return None
+
+    def guest_outside(self, name, arguments, member, target):
+        """Whether this write lands, as its path is written, on a folder of the owner's PC that is not the member's work
+        folder. Where a link made inside the computer leads is judged in the computer (`files_guest.confined`)."""
+        raw = arguments.get("destination_root" if name == "browser_download" else "path")
+        if name not in (*GUEST_WRITES, "browser_download") or not isinstance(raw, str) or not raw.strip() or "\x00" in raw:
+            return False
+        path = raw.strip()
+        if name != "browser_download" and (self.host_computer is not None and target.container or target.projects):
+            path = self.member_file_path(target, path, member)
+        where = file_tools.guest_path(path)
+        reaching, allowed = self.guest_area(target, member)
+        return any(_under(where, root) for root in reaching) and not any(_under(where, folder) for folder in allowed)
 
     def kind_of(self, server, name):
         if server == "computer":
@@ -1037,14 +1122,16 @@ class VmTools:
                 if row is None:
                     return PluginResult(False, "blocked")
                 member = row[0]
-            if target.screen == 0 and target == self.vm.target(member):
+            current = self.vm.target(member)
+            if target.screen == 0 and target == current:
                 await self.vm.seat(member)
                 return PluginResult(False, "computer_changed")
-            if target != self.vm.target(member):
-                current = self.vm.target(member)
+            if target != current:
                 if current.container and not current.screen and current.key == target.key:
                     await self.vm.seat(member)
                 return PluginResult(False, "computer_changed", "This computer is no longer the member's own. Read the refreshed computer tool catalog.")
+            # The catalogue binds the desktop's identity. Mount preferences can change without changing its identity.
+            target = current
             if self.tier_of(key) is None or approver == "none" or tool.tier >= Tier.T2 and approver != "user":
                 return result
             if target.key in self.vm.held:
@@ -1055,6 +1142,9 @@ class VmTools:
                     return PluginResult(False, "takeover_reason_required", TAKEOVER_REASON_REQUIRED)
                 result = PluginResult(False, "bad_arguments")
                 return result
+            outside_write = self.guest_outside(tool.name, arguments, member, target)
+            if outside_write and approver != "user":
+                return PluginResult(False, "approval_required", OUTSIDE_GUEST)
             if tool.name == "vault_entries":
                 choices = self.logins.choices(member) if self.logins and hasattr(self.logins, "choices") else []
                 return PluginResult(True, text=json.dumps({"entries": choices}, ensure_ascii=False))
@@ -1078,6 +1168,7 @@ class VmTools:
             # Only the screen is shared out: a command or a file in the workspace takes nobody's turn, and no turn waits
             # for one.
             screen = tool.name not in ("vm_exec", "attach_file", "copy_from_owner", *FILE_TOOLS)
+            new_lease = screen and self.leases.get(target.key) != owner
             if screen and (busy := await self._take_screen(target, owner)) is not None:
                 result = busy
                 return result
@@ -1130,7 +1221,19 @@ class VmTools:
                 self.commands[target.key] = self.commands.get(target.key, 0) + 1
             try:
                 # Only a member's own call that needs its computer may start Docker Desktop; a read or a viewer never does (R-PANEL-04).
-                await self._started(target, member, tool.name)
+                # The first call of a new holder may rebuild. Its own new lease has not done work yet.
+                start = self.mount_start.set((target.key, new_lease))
+                try:
+                    try:
+                        await self._started(target, member, tool.name)
+                    except VmError as error:
+                        if str(error) != "busy" or (kept := await self.vm.running_project_mounts(target)) is None:
+                            raise
+                        target = kept
+                        await self._started(target, member, tool.name)
+                    target = self.vm.mounted_target(target)
+                finally:
+                    self.mount_start.reset(start)
                 await self._disk_notice(target)
                 if target != self.vm.target(member):
                     return PluginResult(False, "computer_changed")
@@ -1149,6 +1252,9 @@ class VmTools:
                     member_workspace = self.host_computer is not None and target.container == "shared"
                     if member_workspace:
                         carried["member_workspace"] = True
+                    work_folder = self.vm.guest_work_folder(target, member) if target.projects else None
+                    if work_folder and work_folder != self.vm.guest_workspace(target):
+                        carried["work_folder"] = work_folder
                     if background:
                         data = await self.vm.execute(target, arguments["command"], wait, background=True, **carried)
                         folder = self.vm.member_workspace(target) if member_workspace else target.workspace
@@ -1178,15 +1284,19 @@ class VmTools:
                             if target.key in self.vm.held:
                                 raise VmError("owner_holds_control")
                             return result
-                    if self.host_computer is not None and target.container and tool.name != "file_history":
-                        arguments = {**arguments, "path": self.member_file_path(target, arguments.get("path", "."))}
+                    if ((self.host_computer is not None and target.container or target.projects)
+                            and tool.name != "file_history"):
+                        arguments = {**arguments, "path": self.member_file_path(target, arguments.get("path", "."), member)}
+                    # A write that was not asked about is held to the work folder in the computer too, where a link made
+                    # inside it could lead onto the PC; one the owner said yes to is made where it was asked.
+                    limit = (self.guest_area(target, member)[1] if tool.name in GUEST_WRITES and not outside_write else None)
                     result = await file_tools.call(self.vm, target, tool.name, arguments, self.file_reads,
                                                    self._file_run(target, member, owner, turn), checkpoint,
-                                                   history if tool.name == "file_history" else None)
+                                                   history if tool.name == "file_history" else None, allowed=limit)
                 elif tool.name == "attach_file":
                     path = arguments["path"]
-                    if self.host_computer is not None and target.container:
-                        path = self.member_file_path(target, path)
+                    if self.host_computer is not None and target.container or target.projects:
+                        path = self.member_file_path(target, path, member)
                     data = await self.vm.read_file(target, path, limit=MAX_FILE_BYTES)
                     name = PurePosixPath(arguments["path"]).name
                     attachment = await asyncio.to_thread(self.attachments.save,
@@ -1379,14 +1489,14 @@ class VmTools:
                 self.vm.invalidate(target)
                 await asyncio.sleep(delay * attempt)
 
-    def member_file_path(self, target, path):
+    def member_file_path(self, target, path, member=None):
         guest = PurePosixPath(path)
         workspace = PurePosixPath(self.vm.guest_workspace(target))
-        root = workspace.parent.parent
-        if guest.is_relative_to(root) and not guest.is_relative_to(root / "members"):
-            guest = guest.relative_to(root)
+        if target.container and guest.is_relative_to(GUEST) and not guest.is_relative_to(PurePosixPath(GUEST) / "members"):
+            return str(workspace / guest.relative_to(GUEST))
         if not guest.is_absolute() and not path.startswith("~"):
-            return str(workspace / guest)
+            work = self.vm.guest_work_folder(target, member) if target.projects and member is not None else workspace
+            return str(PurePosixPath(work) / guest)
         return path
 
     async def _copy_from_owner(self, target, path):

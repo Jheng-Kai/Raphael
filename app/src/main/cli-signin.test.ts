@@ -109,8 +109,8 @@ test("the install guide of a missing CLI is the page Settings opens for it", asy
 
 test("a finished sign-in runs a failed task again by the core (a routine's run), and asks the question again only for a reply with no task", () => {
   const turn = (task?: { id: number; state: string }): AgentTurn => ({ id: 4, status: "error", question: "Morning check", task } as unknown as AgentTurn);
-  expect(signinRetry(turn({ id: 31, state: "failed" }))).toEqual({ kind: "rerun", task: 31 });
-  expect(signinRetry(turn({ id: 31, state: "interrupted" }))).toEqual({ kind: "rerun", task: 31 });
+  expect(signinRetry(turn({ id: 31, state: "failed" }))).toEqual({ kind: "core" });
+  expect(signinRetry(turn({ id: 31, state: "interrupted" }))).toEqual({ kind: "core" });
   expect(signinRetry(turn({ id: 31, state: "done" }))).toEqual({ kind: "ask" });
   expect(signinRetry(turn())).toEqual({ kind: "ask" });
 });

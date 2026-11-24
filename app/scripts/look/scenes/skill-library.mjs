@@ -8,19 +8,21 @@ const importing = [...list, wait("#skl-source")];
 export default [
   scene("skill-library", "Plugins and standalone skills have separate sections and equal rows", [...list, check("skill-library")]),
   scene("skill-library-row-lit", "A plugin's row under the pointer is lit across its whole card, corners and all", [...list, hover('[data-skl="open"][data-key="set:1"]'), check("skill-library-row-lit")]),
-  scene("skill-library-details", "The overflow opens the full description of a standalone skill", [
-    ...list, click('[data-skl="more"][data-key="skill:3"]'), click('[data-pick="details"]'), wait(".skl-details"), check("skill-library-details")]),
-  scene("skill-library-open", "The round back and close share the plugin title row. Access, ⋯ and the switch sit below it, followed by left-aligned skill rows.", [...opened, check("skill-library-open")]),
-  scene("skill-library-skill-details", "Right-clicking a skill row opens its overflow, whose Details action reveals the full description", [
-    ...opened, rightClick('.skl-page [data-library-skill="101"]'), click('[data-pick="details"]'), wait(".skl-details"), check("skill-library-skill-details")]),
+  scene("skill-library-doc-alone", "A skill alone opens on its own page: its controls, a quote of its words and where it came from, then its document", [
+    ...list, click('[data-skl="open-skill"][data-key="skill:3"]'), wait(".skl-doc-page .skl-doc .ans"), check("skill-library-doc-alone")]),
+  scene("skill-library-right-click", "A right click on a package's row offers 更新 and 刪除; no ⋯ is drawn", [
+    ...list, rightClick('.skl-pack[data-skl-pack="set:1"]'), wait('[data-pick="delete"]'), check("skill-library-right-click")]),
+  scene("skill-library-open", "The way back and the plugin title, then access, the update button and the switch on its row; a quote of its words holds where it came from; each skill row opens its page.", [...opened, check("skill-library-open")]),
+  scene("skill-library-skill-page", "A plugin's skill opens on its own page: the way back and its name, its switch, a quote of its words, then its document", [
+    ...opened, click('.skl-page [data-skl="open-skill"][data-id="101"]'), wait(".skl-doc-page .skl-doc .ans"), check("skill-library-skill-page")]),
   scene("nav-side-plugin", "Back returns from a skill to its plugin, Team skills and the conversation. Forward restores all three", [
-    ...opened, rightClick('.skl-page [data-library-skill="101"]'), click('[data-pick="details"]'), wait(".skl-details"),
-    sideButton("back"), waitGone(".skl-details"), wait(".skl-page"),
+    ...opened, click('.skl-page [data-skl="open-skill"][data-id="101"]'), wait(".skl-doc-page .skl-doc .ans"),
+    sideButton("back"), waitGone(".skl-doc-page"), wait(".skl-page"),
     sideButton("back"), waitGone(".skl-page"), check("nav-side-plugin"), sideButton("back"), check("nav-settings-closed"),
-    sideButton("forward"), wait(".skl-pack"), sideButton("forward"), wait(".skl-page"), sideButton("forward"), wait(".skl-details"),
+    sideButton("forward"), wait(".skl-pack"), sideButton("forward"), wait(".skl-page"), sideButton("forward"), wait(".skl-doc-page"),
   ]),
   scene("skill-library-refresh", "A package shows progress on its own page while its update is pending", [
-    ...opened, check("skill-library-open"), click('[data-skl="more"][data-key="set:1"]'), click('[data-pick="refresh"]'),
+    ...opened, check("skill-library-open"), click('[data-skl="refresh"][data-key="set:1"]'),
     wait('.skl-refresh-status[role="status"]')], { skillRefreshPending: true }),
   scene("skill-library-back", "Enter opens a package low in a long library, and Esc returns to the list where it was left, the focus on that package's row", [
     ...list, scroll('[data-skl-pack="pack:37"]'), focus('[data-skl="open"][data-key="pack:37"]'), key("Enter"), wait('.skl-page[data-skl-page="pack:37"]'), check("skill-library-page-top"),

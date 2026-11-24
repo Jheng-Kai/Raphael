@@ -2,7 +2,7 @@
 
 As Claude Code: its Read, Glob and Grep reach the whole computer, and its
 Write and Edit only the folders it was given. So every turn and every task, wherever it was asked from, may read, find and
-search the owner's files; a write goes only into the folders the owner listed in Settings (and the output folder), and
+search the owner's files; a write goes only into the member's shared folder, the team folder and the projects in Settings, and
 asks as any other change does. Commands on the owner's PC ask with their own card (R-PC-02); the desktop and the fixed
 commands stay with a quick question (R-PC-01).
 
@@ -26,6 +26,8 @@ import sys
 import time
 from pathlib import Path
 
+from .. import work_area
+from ..folders import default_folders
 from ..agent.plugins import PluginResult
 from . import files_guest
 from .file_tools import (GLOB_LIMIT, HEAD_LIMIT, QUOTE_CHARS, FileReads, Files, Refused, VmError, _paged, _refusal)
@@ -113,10 +115,8 @@ DEFINITIONS = {
 KEPT_WORDS = ("This place holds keys or passwords (SSH or cloud keys, the keychain, a browser's profile, a password "
               "manager, a .env file or a private key), so it is kept from members' file tools. Tell the owner plainly; "
               "they can open it themselves.")
-NOT_WRITABLE = ("You may write only inside your folders ({folders}): the output folder of Settings › General and the "
-                "folders the owner added for you. Save it there, or attach the file to your reply; tell the owner if it "
-                "must go elsewhere: the owner adds folders in your settings.")
-NO_FOLDERS = "no folder is chosen yet"
+OUTSIDE_WORDS = ("This path is outside your work folder, so it is written only after the owner says yes to this exact "
+                 "change. It was not written. Save it in your work folder, or ask the owner.")
 PROTECTED = "This is Raphael's own data, which members do not search."
 MAC_PRIVATE = (" macOS keeps this place private: the owner can allow Raphael in System Settings › Privacy & Security › "
                "Files and Folders, or Full Disk Access for mail, messages and other apps' data.")
@@ -202,22 +202,21 @@ class Kept:
 
 def _asked(path, home):
     """The owner's path as asked, absolute but not resolved through links: `~` and a relative path are taken from the
-    owner's home."""
-    if not isinstance(path, str) or "\x00" in path or not path.strip():
-        raise VmError("bad_path")
-    text = path.strip()
-    if text == "~" or text.startswith(("~/", "~\\")):
-        text = str(home) + text[1:]
-    candidate = Path(text)
-    if not candidate.is_absolute():
-        candidate = Path(home) / candidate
-    return os.path.abspath(candidate)
+    owner's home, and a Windows long or device prefix (question mark or dot after two slashes) is the plain path it names;
+    a device is refused."""
+    try:
+        return work_area.absolute(path, home, home)
+    except work_area.PathRefused:
+        raise VmError("bad_path") from None
 
 
 def place(path, home=None):
     """The owner's path, absolute and resolved through links (a link cannot lead a check astray): `~` and a relative
     path are taken from the owner's home."""
-    return os.path.realpath(_asked(path, home or _home()))
+    try:
+        return os.path.realpath(_asked(path, home or _home()))
+    except (OSError, ValueError):
+        raise VmError("bad_path") from None
 
 
 def kept_place(path, home=None):
@@ -227,12 +226,6 @@ def kept_place(path, home=None):
     asked = _asked(path, home)
     judge = Kept(home)
     return judge(asked) or judge(os.path.realpath(asked))
-
-
-def writable_folders(settings, member_id=0):
-    """The folders `member_id` may write to: the ones the owner chose for it, else the output folder (`member_folders`)."""
-    from ..brain.owner import member_folders
-    return member_folders(settings, member_id)
 
 
 class HostIO:
@@ -555,9 +548,26 @@ class OwnerFileTools:
 
     def __init__(self, settings, data_floor):
         self.settings, self.data_floor = settings, data_floor
+        self.member_folders = default_folders
         self.reads = FileReads()
 
-    def guard(self):
+    def shared_path(self, path, member_id):
+        """Allow only ordinary files under this member's own and the team's canonical folders."""
+        from ..paths import local_storage_root
+        try:
+            resolved = Path(place(path))
+            for folder in self.member_folders(member_id):
+                root = local_storage_root(folder)
+                if resolved.is_relative_to(root):
+                    parts = resolved.relative_to(root).parts
+                    return not any(part.casefold().startswith((".raphael-", ".browser-profiles"))
+                                   or part.casefold() in (".raphael", "raphael.db", "raphael.db-wal", "raphael.db-shm")
+                                   for part in parts) and not kept_place(path)
+        except (OSError, RuntimeError, ValueError, VmError):
+            pass
+        return False
+
+    def guard(self, member_id=None):
         """Whether a path is Raphael's own data, as a walk in another thread may ask it: the data floor without its
         database connection (which stays in this thread), and the folder of each database it has open."""
         from ..agent.data_floor import DataFloor
@@ -568,43 +578,46 @@ class OwnerFileTools:
 
         def protected(path):
             try:
-                return floor.protected(path) or any(_under(os.path.realpath(path), folder) for folder in databases)
+                return ((member_id is None or not self.shared_path(path, member_id))
+                        and (floor.protected(path) or any(_under(os.path.realpath(path), folder) for folder in databases)))
             except (OSError, ValueError):
                 return False
         return protected
 
-    def writable(self, arguments, member_id=0):
-        """Whether a write's path is inside a folder the owner lets `member_id` write to."""
+    def reach(self, arguments, member_id=0):
+        """Where a write's path is: "inside" the member's work folder (`work_area.area`: the chosen project alone, else its
+        own folder and the team's), "outside" it, or None for a path that cannot be written at all (not a path, a device,
+        a place that holds keys)."""
         try:
             path = place(arguments.get("path"))
-        except VmError:
-            return False
-        folders = []
-        for folder in writable_folders(self.settings, member_id):
-            try:
-                folders.append(os.path.realpath(folder))
-            except (OSError, ValueError):
-                continue
-        return any(_under(path, folder) for folder in folders) and not kept_place(arguments["path"])
+            if kept_place(arguments["path"]):
+                return None
+        except (VmError, OSError, ValueError):
+            return None
+        return "inside" if work_area.inside(path, work_area.area(self.settings, member_id, self.member_folders)) else "outside"
+
+    def writable(self, arguments, member_id=0):
+        """Whether a write's path is inside the member's work folder: written without a card."""
+        return self.reach(arguments, member_id) == "inside"
 
     async def call(self, name, arguments, *, approver, run, member_id=0):
         try:
             if name in WRITES:
-                if not self.writable(arguments, member_id):
-                    folders = writable_folders(self.settings, member_id)
-                    return PluginResult(False, "not_writable", NOT_WRITABLE.format(
-                        folders=", ".join(folders) if folders else NO_FOLDERS))
                 if approver == "none":
                     return PluginResult(False, "approval_required", "This change needs the owner's approval in the app. "
                                         "Wait for that approval before trying it again.")
+                # Outside the work folder the door asked the owner in every mode (`ToolGate.firm_confirmation`): a
+                # yes of this very change is the only way here, and a call that came without one is not made.
+                if self.reach(arguments, member_id) == "outside" and approver != "user":
+                    return PluginResult(False, "approval_required", OUTSIDE_WORDS)
             path = arguments.get("path")
             if name != "glob" and name != "grep" or path:
                 if kept_place(path or "~"):
                     return PluginResult(False, "kept", KEPT_WORDS)
             if name == "glob":
-                return await asyncio.to_thread(glob_files, arguments, self.guard())
+                return await asyncio.to_thread(glob_files, arguments, self.guard(member_id))
             if name == "grep":
-                return await asyncio.to_thread(grep_files, arguments, self.guard())
+                return await asyncio.to_thread(grep_files, arguments, self.guard(member_id))
             files = OwnerFiles(self.reads, run)
             result = await getattr(files, name)(arguments)
             return _denied_words(result)

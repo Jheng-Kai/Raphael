@@ -12,8 +12,10 @@
 //! - The watch ([`watch`]) asks the [`FieldProbe`] for the field that has the keyboard focus (on
 //!   Windows: UI Automation, [`UiaProbe`]), finds the pasted text in it, and reads it every 500 ms
 //!   until the "send" moment: the field lost most of the pasted text (the message was sent and the
-//!   box cleared), the focus moved on, 60 seconds passed, or a new dictation started. The last
-//!   text read before that moment is the one compared with the text right after the paste
+//!   box cleared). Only a send teaches: a focus move, 60 seconds or a new dictation end the watch
+//!   and learn nothing, because the text was still being written. At the send, the last text that
+//!   was stable (the same on two reads in a row, never one caught half typed or in the middle of an
+//!   input method's composition) is the one compared with the text right after the paste
 //!   ([`Tracker`]).
 //! - The dictated part of the field as pasted and as it was left ([`Revision`]) goes to the core
 //!   (`dictionary.learn`), whose model names the misheard words and which skips dismissed words
@@ -84,6 +86,13 @@ pub trait WatchedField {
     /// Sources that observe individual edits keep their own finer-grained origin history: `Some`
     /// is their answer (which may be no revision), `None` leaves it to the text reads.
     fn revision(&self) -> Option<Option<Revision>> {
+        None
+    }
+
+    /// Sources that see the send themselves (the Enter of a keyboard source, a terminal's cleared
+    /// input) say whether it happened: `Some`. `None` leaves it to the text reads, where the field
+    /// losing the pasted text is the send.
+    fn submitted(&self) -> Option<bool> {
         None
     }
 }
@@ -255,8 +264,10 @@ enum End {
 }
 
 /// Watches `field` after `pasted` went into it, and returns what the user made of the dictated
-/// part, if they changed it. `wait` waits one poll and says whether to go on (false: a new
-/// dictation started). Logs lengths and counts only, never the text.
+/// part, if they changed it and sent it. Only a send teaches: a focus move, the end of the minute
+/// and a new dictation return nothing, and at a send the text compared is the last one that was the
+/// same on two reads in a row, never a half-typed one. `wait` waits one poll and says whether to go
+/// on (false: a new dictation started). Logs lengths and counts only, never the text.
 pub fn watch(
     field: &mut dyn WatchedField,
     pasted: &str,
@@ -264,11 +275,13 @@ pub fn watch(
     mut wait: impl FnMut() -> bool,
 ) -> Option<Revision> {
     let mut tracker = None;
+    let mut last = String::new();
     for attempt in 0..=timing.find_polls {
         match field.read() {
             Snapshot::Text(text) => {
                 tracker = Tracker::new(&text, pasted);
                 if tracker.is_some() {
+                    last = text;
                     break;
                 }
             }
@@ -289,7 +302,9 @@ pub fn watch(
         return None;
     };
 
-    let mut last = String::new();
+    // The tracker as of the last text that two reads in a row agreed on. The text just pasted counts.
+    let mut settled = tracker.clone();
+    let mut is_settled = true;
     let mut end = End::Timeout;
     for _ in 0..timing.watch_polls {
         if !wait() {
@@ -299,6 +314,10 @@ pub fn watch(
         match field.read() {
             Snapshot::Text(text) => {
                 if text == last {
+                    if !is_settled {
+                        settled = tracker.clone();
+                        is_settled = true;
+                    }
                     continue;
                 }
                 let next = tracker.advanced(&text);
@@ -308,6 +327,7 @@ pub fn watch(
                 }
                 tracker = next;
                 last = text;
+                is_settled = false;
             }
             Snapshot::Left => {
                 end = End::Left;
@@ -315,7 +335,11 @@ pub fn watch(
             }
         }
     }
-    let revision = field.revision().unwrap_or_else(|| tracker.revision());
+    if !field.submitted().unwrap_or(end == End::Sent) {
+        log::info!("learn: the watch ended ({end:?}) without a send; nothing is learned");
+        return None;
+    }
+    let revision = field.revision().unwrap_or_else(|| settled.revision());
     log::info!(
         "learn: the watch ended ({end:?}) {}",
         if revision.is_some() {
@@ -754,6 +778,7 @@ mod tests {
             vec![
                 t(pasted),
                 t("Please use SampleToolX"),
+                t("Please use SampleToolX"),
                 t(""),
                 t("Unrelated output"),
             ],
@@ -764,7 +789,7 @@ mod tests {
             pasted_and_sent(&revision),
             Some((pasted, "Please use SampleToolX"))
         );
-        assert_eq!(field.1, 3, "never read output after a cleared field");
+        assert_eq!(field.1, 4, "never read output after a cleared field");
     }
 
     fn pasted_and_sent(revision: &Option<Revision>) -> Option<(&str, &str)> {
@@ -776,16 +801,44 @@ mod tests {
     #[test]
     fn the_text_before_the_field_was_cleared_is_the_final_one() {
         let fixed = fixed();
-        let mut field = Script(vec![t(PASTED), t(&fixed), t(""), t("下一則訊息")], 0);
+        let mut field = Script(
+            vec![t(PASTED), t(&fixed), t(&fixed), t(""), t("下一則訊息")],
+            0,
+        );
         let revision = watch(&mut field, PASTED, QUICK, || true);
         assert_eq!(pasted_and_sent(&revision), Some((PASTED, fixed.as_str())));
-        assert_eq!(field.1, 3, "no read after the send");
+        assert_eq!(field.1, 4, "no read after the send");
+    }
+
+    #[test]
+    fn a_send_after_a_half_typed_read_uses_the_last_stable_text() {
+        // The owner fixed the word (two reads agree), began typing on, and sent: the read between
+        // is a half-typed or mid-composition state, not what the message said.
+        let fixed = fixed();
+        let half = fixed.replacen("手提電話", "手提", 1);
+        let mut field = Script(vec![t(PASTED), t(&fixed), t(&fixed), t(&half), t("")], 0);
+        let revision = watch(&mut field, PASTED, QUICK, || true);
+        assert_eq!(pasted_and_sent(&revision), Some((PASTED, fixed.as_str())));
+        assert_eq!(field.1, 5);
+    }
+
+    #[test]
+    fn text_that_was_never_stable_before_the_send_is_not_learned() {
+        // Only one read of the edited text, then the field cleared: it may have been a state on
+        // the way to something else, so the last settled text (the paste, unedited) decides.
+        let mut field = Script(vec![t(PASTED), t(&fixed()), t("")], 0);
+        assert!(watch(&mut field, PASTED, QUICK, || true).is_none());
+        // A state that settled for a moment is not the last one either when it was changed again.
+        let (typo, right) = (PASTED.replacen("首機", "守機", 1), fixed());
+        let mut field = Script(vec![t(PASTED), t(&typo), t(&typo), t(&right), t("")], 0);
+        let revision = watch(&mut field, PASTED, QUICK, || true);
+        assert_eq!(pasted_and_sent(&revision), Some((PASTED, typo.as_str())));
     }
 
     #[test]
     fn the_watch_waits_for_the_pasted_text_to_show_up() {
         let fixed = fixed();
-        let mut field = Script(vec![t(""), t(PASTED), t(&fixed)], 0);
+        let mut field = Script(vec![t(""), t(PASTED), t(&fixed), t(&fixed), t("")], 0);
         let revision = watch(&mut field, PASTED, QUICK, || true);
         assert_eq!(pasted_and_sent(&revision), Some((PASTED, fixed.as_str())));
     }
@@ -798,36 +851,37 @@ mod tests {
     }
 
     #[test]
-    fn leaving_the_field_ends_the_watch_with_what_was_read() {
+    fn leaving_the_field_learns_nothing() {
         let fixed = fixed();
-        let mut field = Script(vec![t(PASTED), t(&fixed), Snapshot::Left, t(PASTED)], 0);
-        let revision = watch(&mut field, PASTED, QUICK, || true);
-        assert_eq!(pasted_and_sent(&revision), Some((PASTED, fixed.as_str())));
-        assert_eq!(field.1, 3);
+        let mut field = Script(
+            vec![t(PASTED), t(&fixed), t(&fixed), Snapshot::Left, t(PASTED)],
+            0,
+        );
+        assert!(watch(&mut field, PASTED, QUICK, || true).is_none());
+        assert_eq!(field.1, 4, "no read after the focus moved");
     }
 
     #[test]
-    fn the_watch_ends_after_its_time() {
+    fn the_watch_ends_after_its_time_and_learns_nothing_from_an_unsent_field() {
         let fixed = fixed();
         let mut reads = vec![t(PASTED), t(&fixed)];
         reads.extend(std::iter::repeat_n(t(&fixed), 20));
         let mut field = Script(reads, 0);
-        let revision = watch(&mut field, PASTED, QUICK, || true);
-        assert!(revision.is_some());
+        assert!(watch(&mut field, PASTED, QUICK, || true).is_none());
         assert_eq!(field.1, 1 + QUICK.watch_polls as usize);
     }
 
     #[test]
-    fn a_new_dictation_stops_the_watch() {
+    fn a_new_dictation_stops_the_watch_and_learns_nothing() {
         let fixed = fixed();
-        let mut field = Script(vec![t(PASTED), t(&fixed), t(PASTED)], 0);
+        let mut field = Script(vec![t(PASTED), t(&fixed), t(&fixed), t(PASTED)], 0);
         let mut waits = 0;
         let revision = watch(&mut field, PASTED, QUICK, || {
             waits += 1;
-            waits < 2
+            waits < 3
         });
-        assert_eq!(pasted_and_sent(&revision), Some((PASTED, fixed.as_str())));
-        assert_eq!(field.1, 2);
+        assert!(revision.is_none());
+        assert_eq!(field.1, 3);
     }
 
     #[test]
@@ -863,6 +917,9 @@ mod tests {
             }
             fn revision(&self) -> Option<Option<Revision>> {
                 Some(self.keys.revision())
+            }
+            fn submitted(&self) -> Option<bool> {
+                Some(self.keys.is_complete())
             }
         }
         let mut field = KeyboardField {
@@ -966,7 +1023,7 @@ mod tests {
     }
 
     fn sent_field() -> FakeProbe {
-        FakeProbe::reading(vec![text(PASTED), text(&fixed()), text("")])
+        FakeProbe::reading(vec![text(PASTED), text(&fixed()), text(&fixed()), text("")])
     }
 
     async fn run(learner: &Learner<Core, Overlay, FakeProbe>, target: &Target) {
@@ -1164,24 +1221,41 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_new_dictation_ends_the_watch_and_the_saved_batch_is_reported_once() {
+    async fn a_new_dictation_ends_the_watch_and_learns_nothing_from_an_unsent_field() {
         let core = Core::default().on("dictionary.learn", json!({"learned": ["手提電話"]}));
         let probe = FakeProbe::reading(vec![
             text(PASTED),
+            text(&fixed()),
             text(&fixed()),
             Step::NewDictationThen(fixed()),
             text(PASTED),
         ]);
         let (core, overlay, probe, learner) = learner(core, probe);
         run(&learner, &target("notepad.exe")).await;
-        assert_eq!(probe.reads(), 3, "no read after the new dictation");
-        assert_eq!(
-            core.calls("dictionary.learn").len(),
-            1,
-            "what was corrected is learned"
+        assert_eq!(probe.reads(), 4, "no read after the new dictation");
+        assert!(
+            core.calls("dictionary.learn").is_empty(),
+            "the message was not sent"
         );
-        assert_eq!(overlay.1.load(Ordering::SeqCst), 1);
-        assert_eq!(overlay.0.lock().unwrap().len(), 1);
+        assert_eq!(overlay.1.load(Ordering::SeqCst), 0);
+        assert!(overlay.0.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_focus_move_or_the_end_of_the_minute_learns_nothing() {
+        // The focus moves on (the script runs out) with the edit settled but never sent.
+        let core = Core::default().on("dictionary.learn", json!({"learned": ["手提電話"]}));
+        let moved = FakeProbe::reading(vec![text(PASTED), text(&fixed()), text(&fixed())]);
+        let (core, overlay, _, moved_on) = learner(core, moved);
+        run(&moved_on, &target("notepad.exe")).await;
+        assert!(core.calls("dictionary.learn").is_empty());
+        // The watch runs out of time with the edit settled and the field still open.
+        let mut open = vec![text(PASTED)];
+        open.extend(std::iter::repeat_n(text(&fixed()), 40));
+        let (core, _, _, timed_out) = learner(Core::default(), FakeProbe::reading(open));
+        run(&timed_out, &target("notepad.exe")).await;
+        assert!(core.calls("dictionary.learn").is_empty());
+        assert!(overlay.0.lock().unwrap().is_empty());
     }
 
     #[tokio::test]

@@ -45,18 +45,13 @@ export function checkRendered(name, context = {}) {
     const links = [...(bubble?.querySelectorAll(".message-link") ?? [])];
     require(links.length === 2 && links.every(visible), "only the known slash name and URL are links");
     require(links[0].textContent === "/code-review" && links[1].textContent === "https://example.com/changes", "the links keep their written words");
-    const blue = getComputedStyle(links[1]).color;
-    const expected = tokenColour(bubble, bubble.closest(".mb-chat[data-member-bubble]") ? "--owner-bubble-link" : "--link");
-    const luminance = rgb => rgb.match(/[\d.]+/g).slice(0, 3).map(Number).reduce((sum, n, i) => {
-      const c = n / 255;
-      return sum + [0.2126, 0.7152, 0.0722][i] * (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
-    }, 0);
-    const brightness = [blue, getComputedStyle(bubble).backgroundColor].map(luminance).sort((a, b) => b - a);
-    require((brightness[0] + 0.05) / (brightness[1] + 0.05) >= 4.5, "the link has at least 4.5:1 contrast against the bubble");
+    // R-LINK-02: in the owner's bubble a link wears the bubble's words colour, never blue; only the pointer shows it opens.
+    const words = getComputedStyle(bubble.querySelector(".message-text")).color;
     require(links.every(link => {
       const style = getComputedStyle(link);
-      return style.color === expected && style.backgroundColor === "rgba(0, 0, 0, 0)" && style.paddingInlineStart === "0px" && style.borderTopWidth === "0px";
-    }), "both links are bare words in the link colour");
+      return style.color === words && style.textDecorationLine === "none" && style.cursor === "pointer" &&
+        style.backgroundColor === "rgba(0, 0, 0, 0)" && style.paddingInlineStart === "0px" && style.borderTopWidth === "0px";
+    }), "both links are bare words in the bubble's words colour, with a pointer and no underline at rest");
     const notice = turn.querySelector("[data-skill-notice]");
     require(visible(notice) && bubble.getBoundingClientRect().bottom <= notice.getBoundingClientRect().top,
       "the skipped skill is shown below the owner bubble");
@@ -373,12 +368,19 @@ export function checkRendered(name, context = {}) {
     if (name === "colleague-tunnel") require(document.querySelector('.au-tunnel').textContent.includes('tailscale funnel --bg http://127.0.0.1:43210'), "exact loopback-forward command");
     if (name === "colleague-tunnel-tested") require(document.querySelector('.au-tunnel').innerText.includes('已收到自測 POST'), "public URL probe returned to the editor");
     if (name === "colleague-tunnel-hmac") require(document.querySelector('[data-auth="hmac"]').getAttribute('aria-pressed') === 'true' && document.querySelector('.au-hook-secret').type === 'text', "explicit HMAC choice and one-time key");
-    if (name === "colleague-output") {
-      const path = window.__look.data.colleagueSample.path, row = document.querySelector('[data-row="output-folder"]');
-      require(calls.some(call => call.command === "pick_output_folder") && calls.some(call => call.method === "settings.set" && call.params.key === "owner_output_folder" && call.params.value === path), "native picker result is stored in settings");
-      require(row.querySelector('.output-name')?.textContent === path.split('\\').pop() && row.querySelector('.output-path')?.textContent === path, "the chosen folder shows its name on the button and its whole path under the row name");
+    if (name === "colleague-project-add" || name === "colleague-project-cancel") {
+      const path = window.__look.data.colleagueSample.path;
+      const writes = calls.filter(call => call.method === "settings.set" && call.params.key === "project_folders");
+      require(calls.some(call => call.command === "pick_output_folder"), "the native picker was opened");
+      if (name === "colleague-project-add") {
+        require(writes.length === 1 && writes[0].params.value.at(-1) === path, "the picker adds the project after the remembered ones");
+        require([...document.querySelectorAll(".project-path")].some(node => node.textContent === path), "the entire new path is on its own row");
+      } else require(!writes.length, "cancel leaves the project list alone");
     }
-    if (name === "colleague-output-cancel") require(calls.some(call => call.command === "pick_output_folder") && !calls.some(call => call.method === "settings.set" && call.params.key === "owner_output_folder"), "cancel never writes the folder setting");
+    if (name === "colleague-project-remove") {
+      const settings = window.__look.data.settings;
+      require(settings.project_folders.length === 1 && !settings.member_work_folder["1"], "removal clears the member's selection and keeps the other project");
+    }
     return {check:name};
   }
   // R-ACCT-01: the accounts of an app, and a sign-in that waits.
@@ -397,6 +399,15 @@ export function checkRendered(name, context = {}) {
       require(rows.every(row => row.scrollWidth <= row.clientWidth + 1), "no row is cut at its side");
       require(visible(card.querySelector('[data-conn="add-account"]')), "加入另一個帳號 is still there");
       require(made("connectors.status").length > 0, "the list was read from the core");
+    }
+    if (name === "accounts-dated") {
+      // R-ACCT-04: told apart by the time each was made (a clock in the window's own style), the newest said in a word.
+      const names = rows.map(row => row.querySelector(".nm").textContent);
+      require(rows.length === 2 && /^帳號 1 · (\d{4}\/)?\d+\/\d+ \d{2}:\d{2}$/.test(names[0]), `the first row says its number and when it was made: ${names[0]}`);
+      require(/^帳號 2 · (\d{4}\/)?\d+\/\d+ \d{2}:\d{2} · 最新$/.test(names[1]), `the second says so and that it is the newest: ${names[1]}`);
+      require(rows.every(row => row.querySelector(".st").textContent === "已連結" && row.querySelector('[data-conn="account-menu"]')), "each row still says 已連結 and has its ⋯");
+      require(rows.every(row => Math.abs(row.getBoundingClientRect().height - rows[0].getBoundingClientRect().height) < 1), "the rows are one height");
+      require(rows.every(row => row.scrollWidth <= row.clientWidth + 1 && visible(row.querySelector('[data-conn="account-menu"]')) && inside(row.querySelector('[data-conn="account-menu"]'), row)), "no row is cut at its side and every ⋯ is whole inside its row");
     }
     if (name === "accounts-relogin-menu") {
       // R-ACCT-04: a dead account is signed in to again in its own place, so the way to do it stands first in its menu.
@@ -581,7 +592,7 @@ export function checkRendered(name, context = {}) {
     const rowOf = key => document.querySelector(`.skl-pack[data-skl-pack="${key}"]`);
     const accessOf = key => rowOf(key)?.querySelector('.skl-access span')?.textContent.trim();
     // A package's page stands in the list's place (R-SKILL-17): it has no importer of its own.
-    const onPage = name === 'skill-library-open' || name === 'skill-library-page-top' || name === 'skill-library-skill-details';
+    const onPage = ['skill-library-open', 'skill-library-page-top', 'skill-library-skill-page', 'skill-library-doc-alone'].includes(name);
     if (name !== 'member-skills-library' && !onPage) {
       const pane = document.querySelector('.modal-scrim .skl');
       require(pane?.getAttribute('aria-label') === '團隊技能', 'the Settings section names Team skills');
@@ -596,7 +607,8 @@ export function checkRendered(name, context = {}) {
       for (const row of rows) {
         const r = row.getBoundingClientRect();
         require(r.left >= box.left - 1 && r.right <= box.right + 1, `a package row stays inside the tab (${Math.round(r.left)}-${Math.round(r.right)})`);
-        require(row.querySelector('.tg[role="switch"]') && row.querySelector('[data-skl="more"]'), 'each package has its switch and ⋯');
+        const more = row.querySelector('[data-skl="more"]');
+        require(row.querySelector('.tg[role="switch"]') && more && !visible(more), 'each package has its switch, and its ⋯ (for the right click) is not drawn');
       }
     }
     if (name === 'skill-library') {
@@ -617,9 +629,9 @@ export function checkRendered(name, context = {}) {
       require(document.querySelectorAll('.skl-pack').length === 3, 'one row per package, not per skill');
       require(rowOf('set:1').querySelector('.skl-count')?.textContent.trim() === '7 個技能' && !document.querySelector('.skl-skill'), 'pstack is one folded row that says how many skills it holds');
       require(accessOf('set:1') === '還沒給任何人' && accessOf('pack:2') === '小晴、小森' && accessOf('skill:3') === '整個團隊', `who may use each is said on its row (${accessOf('set:1')} / ${accessOf('pack:2')} / ${accessOf('skill:3')})`);
-      require(!rowOf('skill:3').querySelector('.skl-count, [data-skl="open"]') && rowOf('skill:3').querySelector('.skl-single .d')?.textContent.startsWith('把會議逐字稿整理成決議與待辦'), 'a skill alone is one row: its words under its name, nothing to open');
+      require(!rowOf('skill:3').querySelector('.skl-count, [data-skl="open"]') && rowOf('skill:3').querySelector('[data-skl="open-skill"] .d')?.textContent.startsWith('把會議逐字稿整理成決議與待辦'), 'a skill alone is one row, its words under its name, that opens its own page');
     }
-    if (onPage && name !== 'skill-library-skill-details') {
+    if (name === 'skill-library-open' || name === 'skill-library-page-top') {
       const page = document.querySelector('.modal-scrim .skl-page'), head = page?.querySelector('.skl-page-head');
       require(visible(page) && !document.querySelector('.modal-scrim .skl-import, .modal-scrim .skl-list'), "the package's page takes the list's place: no importer, no other package");
       const back = head.querySelector('[data-skl="back"]');
@@ -629,23 +641,22 @@ export function checkRendered(name, context = {}) {
       require(title?.textContent.trim().length > 0 && title.scrollWidth <= title.clientWidth + 1, "the package's name is whole");
       const close = head.querySelector('.close-button'), actionsRow = page.querySelector('.skl-page-actions');
       const actions = actionsRow.querySelector('.ctl'), access = actions.querySelector('.skl-access');
-      const more = actions.querySelector('[data-skl="more"]'), toggle = actions.querySelector('.tg[role="switch"]');
-      const count = head.querySelector('.skl-count');
+      const update = actions.querySelector('[data-skl="refresh"]'), more = actions.querySelector('[data-skl="more"]'), toggle = actions.querySelector('.tg[role="switch"]');
       require(visible(close) && page.querySelectorAll('.close-button').length === 1, 'one shared close stands beside the package title');
-      require([access, more, toggle].every(visible) && access.nextElementSibling === more && more.nextElementSibling === toggle &&
-        actions.lastElementChild === toggle && actionsRow.parentElement === title.parentElement.parentElement, 'access, ⋯ and the rightmost switch stand at the end of the title row');
+      require([access, update, toggle].every(visible) && !visible(more) && access.nextElementSibling === update &&
+        actions.lastElementChild === toggle && actionsRow.parentElement === title.parentElement.parentElement, 'access, the update button and the rightmost switch stand at the end of the title row; no ⋯ is drawn');
       const content = page.closest('.set-content');
       const headings = [...content.querySelectorAll('h1')];
       require(content.firstElementChild === page && page.firstElementChild.firstElementChild === head &&
         headings.length === 1 && headings[0] === title && title.id === 'set-title',
         'the plugin name is the page title with no section title above it');
       const start = content.getBoundingClientRect(), arrow = back.getBoundingClientRect(), titleBox = title.getBoundingClientRect();
-      const closeBox = close.getBoundingClientRect(), countBox = count.getBoundingClientRect(), controls = actions.getBoundingClientRect();
+      const closeBox = close.getBoundingClientRect(), controls = actions.getBoundingClientRect();
       const centre = box => (box.top + box.bottom) / 2;
-      require(visible(count) && title.parentElement.nextElementSibling === count &&
+      require(!head.querySelector('.skl-count') && title.parentElement.nextElementSibling === actionsRow &&
         Math.abs(arrow.left - start.left) <= 1 && Math.abs(arrow.top - start.top) <= 1 && titleBox.left > arrow.right &&
-        [titleBox, countBox, closeBox].every(part => Math.abs(centre(arrow) - centre(part)) <= 1),
-        'the back button, title and count start at the top left and share a centre line with the close');
+        [titleBox, closeBox].every(part => Math.abs(centre(arrow) - centre(part)) <= 1),
+        'the way back and the title start at the top left with no skill count, and share a centre line with the close');
       const body = document.querySelector('.modal-scrim .modal-body').getBoundingClientRect();
       require(closeBox.left >= start.right + 8 && closeBox.right <= body.right && [...content.querySelectorAll('*')].filter(visible)
         .every(node => node === close || close.contains(node) || node.getBoundingClientRect().right <= closeBox.left - 8),
@@ -653,9 +664,9 @@ export function checkRendered(name, context = {}) {
       const room = parseFloat(getComputedStyle(actionsRow).paddingInlineEnd) || 0;
       require(Math.abs(controls.right - (start.right - room)) <= 1 && Math.abs(centre(controls) - centre(titleBox)) <= 2,
         'the controls stand on the title row at its right end, left of the close column');
-      const actionBoxes = [access, more, toggle].map(control => control.getBoundingClientRect());
+      const actionBoxes = [access, update, toggle].map(control => control.getBoundingClientRect());
       require(actionBoxes[0].right <= actionBoxes[1].left && actionBoxes[1].right <= actionBoxes[2].left,
-        'access and ⋯ are visibly left of the switch');
+        'access and the update button are visibly left of the switch');
       require(document.querySelector('.modal-scrim .modal-body').scrollTop === 0, 'the page opens at its top');
       {
         // A plugin with many skills scrolls under its title: at the bottom the way back, the title and the close stay at the top.
@@ -674,11 +685,25 @@ export function checkRendered(name, context = {}) {
     if (name === 'nav-side-plugin') {
       require(!document.querySelector('.skl-page') && document.activeElement === rowOf('set:1')?.querySelector('.skl-open'), "Mouse Back returns to Team skills with focus on the plugin's row");
     }
-    if (name === 'skill-library-details') {
-      const description = rowOf('skill:3')?.querySelector('.skl-description');
-      const details = document.querySelector('.skl-details'), text = details?.querySelector('p');
-      require(visible(details) && text?.textContent === description?.textContent && !document.querySelector('.skl-page'), 'the overflow reveals the full description on the list');
-      require(text.scrollWidth <= text.clientWidth + 1 && text.getBoundingClientRect().height > description.getBoundingClientRect().height, 'the description wraps within the popover');
+    if (name === 'skill-library-skill-page' || name === 'skill-library-doc-alone') {
+      // Every skill opens on a page of its own: the way back and its name, its controls, a quote of its words, its document.
+      const page = document.querySelector('.modal-scrim .skl-doc-page'), head = page?.querySelector('.skl-page-head');
+      const alone = name === 'skill-library-doc-alone';
+      require(visible(page) && !document.querySelector('.modal-scrim .skl-import, .modal-scrim .skl-list, .modal-scrim .skl-skills'), "the skill's page takes its package's place");
+      const back = head.querySelector('[data-skl="back"]'), title = head.querySelector('h1#set-title');
+      require(back.matches('.back-link') && document.activeElement === back && title?.textContent.trim() === (alone ? '會議紀錄' : 'poteto-mode'), "the way back has the focus, beside the skill's name");
+      const controls = [...head.querySelectorAll('.skl-page-actions .ctl > button')].filter(visible).map(control => control.dataset.skl);
+      require(controls.join(',') === (alone ? 'access,toggle' : 'skill'), `its controls: its own switch, or a skill alone its package's (${controls})`);
+      const quote = page.querySelector('.skl-about'), doc = page.querySelector('.skl-doc');
+      require(visible(quote) && quote.querySelector('p')?.textContent.length > 10 && (!alone || quote.querySelector('.skl-source')), 'a quote of its words, with where it came from for a skill alone');
+      require(visible(doc) && doc.querySelector('.ans') && !doc.textContent.includes('description:') && (alone || doc.querySelector('.message-code')), 'its document is drawn as Markdown, without its front matter');
+      const left = back.getBoundingClientRect().left;
+      for (const part of [quote, doc]) require(Math.abs(part.getBoundingClientRect().left - left) <= 1, 'the quote and the document line up with the way back');
+      require(!page.querySelector('[data-skl="skill-more"]') && document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, 'no ⋯, and the window does not scroll sideways');
+    }
+    if (name === 'skill-library-right-click') {
+      const picks = [...document.querySelectorAll('.mb-menu [data-pick]')].map(item => item.dataset.pick);
+      require(picks.join(',') === 'refresh,delete', `the right click offers 更新 and 刪除 only (${picks})`);
     }
     if (name === 'skill-library-row-lit') {
       // The lit row is the card itself, never a smaller rounded box inside it.
@@ -692,11 +717,12 @@ export function checkRendered(name, context = {}) {
       const skills = [...document.querySelectorAll('.skl-page .skl-skills .skl-skill')];
       require(skills.length === 7 && skills.every(row => visible(row.querySelector('.tg[role="switch"]'))), `the seven skills of pstack are listed on its page, each with its own switch (${skills.length})`);
       require(document.querySelector('.skl-page-name')?.textContent.trim() === 'pstack' && accessOf('set:1') === '還沒給任何人', 'the page names pstack and who may use it');
-      require(document.querySelector('.skl-page .skl-source')?.textContent.includes('jheng-kai/pstack'), 'where it came from is said once');
-      const count = document.querySelector('.skl-page-head .skl-count');
-      require(count?.textContent.trim() === '7 個技能', 'the title gives the number of skills');
+      const source = document.querySelectorAll('.skl-page .skl-source');
+      require(source.length === 1 && source[0].parentElement.matches('.skl-about') && source[0].textContent.includes('jheng-kai/pstack') && source[0].textContent.includes('1.4.0'),
+        'where it came from and its version are said once, inside the quote');
+      require(!document.querySelector('.skl-page-head .skl-count'), 'the title gives no count of skills');
       const left = document.querySelector('.skl-page [data-skl="back"]').getBoundingClientRect().left;
-      for (const selector of ['.skl-source', '.skl-about', '.skl-skills', '.skl-skill']) {
+      for (const selector of ['.skl-about', '.skl-skills', '.skl-skill']) {
         const part = document.querySelector(`.skl-page ${selector}`);
         require(visible(part) && Math.abs(part.getBoundingClientRect().left - left) <= 1, `${selector} lines up with the back button`);
       }
@@ -710,17 +736,11 @@ export function checkRendered(name, context = {}) {
       }
       require(descriptions[0].scrollWidth > descriptions[0].clientWidth, 'the long description is truncated');
       for (const row of skills) {
-        const label = row.querySelector('.skl-label'), more = row.querySelector('[data-skl="skill-more"]'), toggle = row.querySelector('.tg');
+        const label = row.querySelector('.skl-label'), opener = row.querySelector('[data-skl="open-skill"]'), toggle = row.querySelector('.tg');
         require(Math.abs(row.getBoundingClientRect().left - left) <= 1 && label.getBoundingClientRect().left > row.getBoundingClientRect().left + 8, 'each skill row starts at the back button, with its words inside the card');
-        require(visible(more) && more.nextElementSibling === toggle &&
-          more.getBoundingClientRect().right <= toggle.getBoundingClientRect().left, 'each skill puts ⋯ left of its switch');
+        require(opener && Math.abs(opener.getBoundingClientRect().width - row.getBoundingClientRect().width) <= 1 && !row.querySelector('[data-skl="skill-more"], [data-skl="more"]') &&
+          row.querySelector('.ctl').lastElementChild === toggle, 'each skill row opens its page across the row, its switch at the right and no ⋯');
       }
-    }
-    if (name === 'skill-library-skill-details') {
-      const description = document.querySelector('.skl-page [data-library-skill="101"] .skl-description');
-      const details = document.querySelector('.skl-details'), text = details?.querySelector('p');
-      require(visible(details) && text?.textContent === description?.textContent, 'the skill overflow reveals its full description');
-      require(text.getBoundingClientRect().height > description.getBoundingClientRect().height, 'the full description wraps');
     }
     if (name === 'skill-library-back') {
       const body = document.querySelector('.modal-scrim .modal-body'), opener = document.querySelector('[data-skl="open"][data-key="pack:37"]');
@@ -1491,80 +1511,57 @@ export function checkRendered(name, context = {}) {
     }
     return {check:name};
   }
-  if (name === "member-write-folders") {
-    // R-PC-05: the folders are member 1's own, picked with the native picker, each removed from its own ⋯.
-    const sample = window.__look.data.colleagueSample.path, calls = window.__look.calls;
-    const sets = calls.filter(call => call.method === "settings.set" && call.params.key === "member_write_folders").map(call => call.params.value);
-    require(calls.some(call => call.command === "pick_output_folder") && sets.length === 2, "the picker adds a folder and its ⋯ removes one");
-    require(Object.keys(sets[0]).join() === "1" && sets[0]["1"].length === 3 && sets[0]["1"][2] === sample, "the picked folder is the member's own");
-    require(JSON.stringify(sets[1]["1"]) === JSON.stringify(sets[0]["1"].slice(1)), "the first folder is the one removed, the picked one kept");
-    const section = document.querySelector('.ms-pane [data-k="ms-folders"]'), rows = [...section.querySelectorAll('.ms-folder')];
-    require(visible(section) && !section.querySelector('input, textarea'), "folders are picked, never typed");
-    require(section.querySelector('h2')?.textContent === "可以寫入的資料夾" && visible(section.querySelector('[data-ms="folder-add"]')), "the section is named and its + adds");
-    require(rows.length === 3 && rows.every(row => visible(row)), "each folder is a row of its own");
-    const paths = rows.map(row => row.querySelector('.ms-path')?.textContent);
-    require(paths[0] === "C:\\Owner\\Deliveries" && paths[2] === sample, `the output folder first, the added ones after it in their order: ${paths.join(" | ")}`);
-    const tag = rows[0].querySelector('.ms-tag');
-    require(visible(tag) && tag.textContent === "預設" && !rows[0].querySelector('[data-ms="folder-menu"]'), "the output folder is marked as the default and has no ⋯");
-    require(tag.getBoundingClientRect().left >= rows[0].querySelector('.ms-path').getBoundingClientRect().right - 0.5, "its mark never runs over its path");
-    for (const [index, row] of rows.entries()) {
-      const path = row.querySelector('.ms-path'), more = row.querySelector('[data-ms="folder-menu"]');
-      if (index) require(visible(more) && path.getBoundingClientRect().right <= more.getBoundingClientRect().left + 0.5, "the whole path never runs under its ⋯");
-      require(visible(path) && path.scrollWidth <= path.clientWidth + 1, "the whole path is shown, wrapped, never cut");
-    }
-    require(!section.querySelector('.ms-empty'), "no empty line beside the folders");
+  if (name === "member-no-own-folder") {
+    const pane = document.querySelector('.ms-pane:not([hidden])');
+    require(visible(pane) && visible(pane.querySelector('[data-k="ms-draft"]')), "the member's tools are on screen");
+    require(!pane.querySelector('[data-k="ms-folder"], [data-ms="folder-open"]') && !pane.textContent.includes("C:\\Raphael\\members"), "no row names, shows or opens the member's own folder");
     return {check:name};
   }
   if (name === "composer-folder") {
-    // R-PC-05: the composer names where the member's files go, its first folder, as the permission names how it acts.
     const folder = document.querySelector('.page-agent .composer .cmp-folder'), word = folder?.querySelector('span'), mode = document.querySelector('.page-agent .composer .cmp-mode');
-    require(visible(folder) && word?.textContent === "Notes", `the button names the member's first folder: ${word?.textContent}`);
-    require(folder.getAttribute('aria-label') === "存放資料夾：C:\\Owner\\Notes", `its whole path is in its name: ${folder.getAttribute('aria-label')}`);
+    const branch = document.querySelector('.page-agent .composer .cmp-branch');
+    require(visible(folder) && word?.textContent === "Notes", "the selected project names the folder button");
+    require(folder.getAttribute("aria-label") === "存放資料夾：C:\\Owner\\Notes", "the folder button gives the full path");
     const a = folder.getBoundingClientRect(), b = mode.getBoundingClientRect();
-    require(Math.abs((a.top + a.bottom) / 2 - (b.top + b.bottom) / 2) <= 1 && a.left >= b.right - 0.5, "it stands right after the permission, on its line");
+    require(Math.abs((a.top + a.bottom) / 2 - (b.top + b.bottom) / 2) <= 1 && a.left >= b.right - 0.5, "the folder follows the permission");
+    require(visible(branch) && branch.textContent === "main" && folder.nextElementSibling === branch, "the branch immediately follows the project");
     require(getComputedStyle(folder).color === getComputedStyle(mode).color && getComputedStyle(folder).fontSize === getComputedStyle(mode).fontSize, "it wears the permission's quiet type");
-    require(!document.querySelector('.au-room-pane:not([hidden]) .composer .cmp-folder'), "a room's composer has no folder");
-    return {check: name};
+    return {check:name};
   }
   if (name === "composer-folder-added") {
-    // R-PC-05: a folder added from the menu is chosen at once, and the button names it.
     const button = document.querySelector('.page-agent .composer .cmp-folder');
-    require(button.textContent.trim() === "交付成果" && !document.querySelector('#app-popover .cb-folders'), `the button names the folder just added: ${button.textContent.trim()}`);
-    const saved = window.__look.data.settings.member_write_folders["1"];
-    require(saved[0] === "C:\\Owner\\交付成果", `the added folder is the member's first, where it writes: ${saved.join(" | ")}`);
-    return { check: name, saved: saved.length };
+    const settings = window.__look.data.settings, path = window.__look.data.colleagueSample.path;
+    require(button.textContent.trim() === "交付成果" && settings.project_folders.at(-1) === path && settings.member_work_folder["1"] === path, "the new folder is remembered and chosen");
+    return {check:name};
   }
   if (name === "composer-folder-many") {
-    const card = document.querySelector('#app-popover .cb-folders'), list = card.querySelector('[role="radiogroup"]'), add = card.querySelector('[data-folder-act="add"]');
-    require(list.querySelectorAll('[data-folder]').length === 15 && list.scrollHeight > list.clientHeight + 4, "fifteen folders scroll inside the list");
+    const card = document.querySelector('#app-popover .cb-folders'), list = card.querySelector('[role="radiogroup"]'), add = card.querySelector('[data-project-pick="-1"]');
+    require(list.querySelectorAll('[role="radio"]').length === 15 && list.scrollHeight > list.clientHeight + 4, "fifteen folders scroll inside the list");
     const box = document.querySelector('#app-popover').getBoundingClientRect();
-    require(visible(add) && add.getBoundingClientRect().bottom <= box.bottom + 0.5 && box.top >= 0 && box.bottom <= innerHeight, "加入資料夾 stays in view at the foot and the card stays inside the window");
+    require(visible(add) && add.getBoundingClientRect().bottom <= box.bottom + 0.5 && box.top >= 0 && box.bottom <= innerHeight, "the add action stays at the foot");
     list.scrollTop = list.scrollHeight;
-    const last = [...list.querySelectorAll('[data-folder]')].at(-1).getBoundingClientRect(), frame = list.getBoundingClientRect();
+    const last = list.querySelector('[role="radio"]:last-child').getBoundingClientRect(), frame = list.getBoundingClientRect();
     require(last.bottom <= frame.bottom + 1 && last.top >= frame.top - 1, "the last folder can be scrolled to");
     list.scrollTop = 0;
-    return { check: name };
+    return {check:name};
   }
   if (name === "composer-folder-menu") {
-    const card = document.querySelector('#app-popover .cb-folders'), button = document.querySelector('.page-agent .composer .cmp-folder');
-    require(visible(card) && card.querySelector('.cb-head h3')?.textContent === "可以寫入的資料夾", "the menu is the permission's kind of card, named for the folders");
-    const rows = [...card.querySelectorAll('[data-folder]')];
-    const names = rows.map(row => row.querySelector('.cb-name b')?.textContent);
-    require(names[0] === "Deliveries" && names[1] === "Notes" && rows.length === 3, `the output folder first, then the member's own, by name: ${names.join(" | ")}`);
-    require(rows.map(row => row.getAttribute('aria-checked')).join() === "false,true,false", "the chosen one, the member's first, is checked");
-    const paths = rows.map(row => row.querySelector('.cb-name small'));
-    require(paths[1]?.textContent === "C:\\Owner\\Notes" && paths.every(path => visible(path) && path.scrollWidth <= path.clientWidth + 1) && !rows.some(row => row.dataset.tooltip), "each folder's whole path is written under its name, whole, with no tooltip saying it again");
-    const acts = [...card.querySelectorAll('[data-folder-act]')];
-    const list = card.querySelector('[role="radiogroup"]');
-    require(getComputedStyle(list).overflowY === "auto" && list.getBoundingClientRect().bottom <= acts[0].getBoundingClientRect().top + 0.5, "the list scrolls above 加入資料夾, which stays at the foot");
-    require(acts.length === 1 && acts[0].dataset.folderAct === "add" && visible(acts[0]) && acts[0].getBoundingClientRect().top >= rows.at(-1).getBoundingClientRect().bottom - 0.5, "adding one is the one action, at the card's foot");
-    for (const name_ of rows.map(row => row.querySelector('.cb-name b'))) require(visible(name_) && name_.scrollWidth <= name_.clientWidth + 1, `each name is whole: ${name_.textContent}`);
-    const box = document.querySelector('#app-popover').getBoundingClientRect();
-    require(box.left >= 0 && box.top >= 0 && box.right <= innerWidth && box.bottom <= innerHeight, "the menu stays inside the window");
-    require(box.bottom <= button.getBoundingClientRect().top + 1, "it opens above the button");
-    const icons = [...card.querySelectorAll('.cb-actions svg')].map(node => node.innerHTML);
-    require(new Set(icons).size === icons.length, "each action has its own icon");
-    return {check: name};
+    const card = document.querySelector('#app-popover .cb-folders'), rows = [...card.querySelectorAll('[role="radio"]')];
+    require(visible(card) && card.querySelector('.cb-head h3').textContent === "專案資料夾", "the folders use the existing composer card");
+    require(rows.length === 3 && rows[0].querySelector("b").textContent === "不指定資料夾" && !rows[0].querySelector("small") && rows[1].querySelector(".project-branch").textContent === "main", "「不指定資料夾」 comes first with no path, then the projects, Git ones with their branch");
+    require(!card.textContent.includes("的資料夾") && !card.textContent.includes("C:\\Raphael\\members"), "no row names or shows a member's own folder");
+    require(rows.map(row => row.getAttribute("aria-checked")).join() === "false,true,false", "the selected project is checked");
+    require(rows.slice(1).every(row => { const path = row.querySelector('.cb-name small'); return visible(path) && path.scrollWidth <= path.clientWidth + 1; }), "each project shows its whole path");
+    require(visible(card.querySelector('[data-project-pick="-1"]')), "the picker action stays below the project list");
+    return {check:name};
+  }
+  if (name === "composer-branch" || name === "composer-branch-switched") {
+    const rows = [...document.querySelectorAll('#app-popover [role="radio"]')];
+    require(rows.map(row => row.textContent).join() === "draft,main", "the branch card lists local branches");
+    const picked = rows.find(row => row.getAttribute("aria-checked") === "true");
+    require(picked?.textContent === (name === "composer-branch" ? "main" : "draft"), "the current branch is checked");
+    if (name === "composer-branch-switched") require(window.__look.calls.some(call => call.method === "folders.switch_branch" && call.params.branch === "draft"), "the branch choice reached the core");
+    return {check:name};
   }
   if (name.startsWith("composer-plus-")) {
     // R-UI-166: the composer's + opens one menu of what can be added; its apps and skills are submenus of switches that are the member's own settings.
@@ -1658,23 +1655,13 @@ export function checkRendered(name, context = {}) {
     }
     return {check: name, switches: switches.length};
   }
-  if (name === "member-write-folders-default") {
-    const section = document.querySelector('.ms-pane [data-k="ms-folders"]'), rows = [...(section?.querySelectorAll('.ms-folder') ?? [])];
-    require(rows.length === 1 && rows[0].querySelector('.ms-path')?.textContent === "C:\\Owner\\Deliveries", `a member with no folder of its own lists the output folder alone: ${rows.map(row => row.textContent).join(" | ")}`);
-    require(visible(rows[0].querySelector('.ms-tag')) && !rows[0].querySelector('[data-ms="folder-menu"]') && !section.querySelector('.ms-empty'), "marked as the default, with no ⋯ and no other line");
-    require(!document.querySelector('[data-row="write-folders"]'), "Settings › General has no list of folders for every member");
+  if (name === "project-folders-settings") {
+    const rows = [...document.querySelectorAll('[data-row="project-folder"]')];
+    require(rows.length === 2 && rows.every(row => visible(row.querySelector(".project-path")) && visible(row.querySelector('[data-act="project-menu"]'))),
+      "each remembered project has its own visible path and menu");
+    require(rows[0].querySelector(".project-branch").textContent === "main" && !rows[1].querySelector(".project-branch"), "Git projects show the current branch");
+    require(visible(document.querySelector('[data-act="project-add"]')), "the native picker is at the foot");
     return {check:name};
-  }
-  if (name === "owner-output-folder") {
-    const row = document.querySelector('[data-row="output-folder"]');
-    require(visible(row) && !row.querySelector('input, textarea'), "R-COLLEAGUE-06: the output folder is a picker, with no typed field");
-    const chosen = row.querySelector('[data-act="output-pick"]'), name_ = row.querySelector('.output-name'), path = row.querySelector('.output-path');
-    require(visible(chosen) && name_?.textContent === 'Deliveries', "the button names the chosen folder");
-    require(visible(path) && path.textContent === 'C:\\Owner\\Deliveries', "the whole path stands under the row name");
-    require(row.querySelectorAll('button').length === 1, "the folder is changed with its one button (R-UI-56: no clear button standing open)");
-    const box = row.getBoundingClientRect(), pick = chosen.getBoundingClientRect();
-    require(pick.right <= box.right + 0.5 && path.getBoundingClientRect().right <= pick.left, "the path never runs under the button");
-    return { check: name, button: Math.round(pick.width) };
   }
   if (name.startsWith("skills-") || ["growing-skills", "member-shared-source"].includes(name)) {
     for (const label of document.querySelectorAll('[data-skill-provenance], .mp-resource p, .ms-meta, .cs-linked .ds, .cs-page .cs-desc')) {
@@ -2157,7 +2144,7 @@ export function checkRendered(name, context = {}) {
         require(!card.closest('.ans,.bubble'), 'forms are sibling timeline blocks');
         require(card.querySelector('button[data-rich-act="copy-source"]'), 'the shared copy button is present');
         require(!card.querySelector('script,img,iframe,[onerror],[src]'), 'form data cannot load or execute content');
-        for (const node of card.querySelectorAll('.board-card,.forecast-day,.chart-legend')) require(node.scrollWidth <= node.clientWidth + 1, 'content wraps within its card');
+        for (const node of card.querySelectorAll('.board-card,.wx-day,.wx-now,.wx-foot,.chart-legend')) require(node.scrollWidth <= node.clientWidth + 1, `content fits within its card: ${node.className}`);
         if (card.matches('.message-chart')) require(card.querySelectorAll('circle title,rect title').length >= 6, 'every plotted value has readable hover text');
         // A key shows what it names: a bar chart's is a filled swatch in the bar's own colour, a line's a stroke.
         if (card.matches('.message-chart')) {
@@ -2168,10 +2155,27 @@ export function checkRendered(name, context = {}) {
           }
         }
       }
-      if (name === "form-forecast") {
-        require(cards[0].querySelectorAll('.forecast-day').length === 7, 'seven known days fit without a panel scrollbar');
+      if (name === "form-forecast" || name === "form-forecast-full") {
+        const days = [...cards[0].querySelectorAll('.wx-day')];
+        require(days.length === 7, 'seven known days, one row each');
         require(cards[0].querySelector('[aria-current="date"]'), 'today is marked in the forecast');
-        require([...cards[0].querySelectorAll('.forecast-day > strong')].every(day => !/^\d{4}-/.test(day.textContent)), 'forecast column dates stay short, with the full date in a title');
+        require(days.every(day => !/^\d{4}-/.test(day.querySelector('.wx-name').textContent)), 'each day is named short, with the full date in a title');
+        // Every row's parts line up in columns: the lows end on one edge, the highs on another, the bars between them.
+        const edges = selector => new Set(days.map(day => Math.round(day.querySelector(selector).getBoundingClientRect().right)));
+        require(edges('.wx-low').size === 1 && edges('.wx-high').size === 1 && edges('.wx-range').size === 1, 'the lows, the bars and the highs stand in columns');
+        require(days.every(day => { const bar = day.querySelector('.wx-range > i').getBoundingClientRect(), track = day.querySelector('.wx-range').getBoundingClientRect(); return bar.left >= track.left - 0.5 && bar.right <= track.right + 0.5 && bar.width >= 2; }), "each day's bar lies within the week's range");
+      }
+      if (name === "form-forecast-full") {
+        const card = cards[0], now = card.querySelector('.wx-now'), temp = now.querySelector('.wx-temp');
+        require(visible(now.querySelector('.wx-glyph.wx-lg')) && temp.textContent === '24°' && parseFloat(getComputedStyle(temp).fontSize) >= 36, 'now: its glyph and the temperature large');
+        require(now.querySelector('.wx-now-words').textContent.includes('74%') && now.querySelector('.wx-now-words').textContent.includes('18 km/h'), 'now: feels like, high and low, wind and humidity');
+        const hours = card.querySelector('.wx-hours'), columns = [...hours.querySelectorAll('.wx-hour')];
+        require(columns.length === 12 && getComputedStyle(hours).overflowX === 'auto' && new Set(columns.map(c => Math.round(c.getBoundingClientRect().top))).size === 1, 'the twelve hours stand in one row that scrolls on its own');
+        require(columns.filter(c => c.querySelector('.wx-rain')).length === 4, 'rain chances stand only under the rainy hours');
+        require(columns.every(c => c.querySelector('.wx-when').scrollWidth <= c.querySelector('.wx-when').clientWidth + 1), 'every hour reads whole');
+        const foot = card.querySelector('.wx-foot');
+        require(foot.textContent.includes('Open-Meteo') && foot.textContent.includes('16:00'), 'the foot names the source and when it was read');
+        require(document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, 'the window does not scroll sideways');
       }
       if (name === "form-board") require(cards[0].querySelectorAll('.board-column').length === 5, 'five board columns wrap without dragging');
     }
@@ -3541,7 +3545,7 @@ export function checkRendered(name, context = {}) {
     if (name === "rich-image-loaded") require(scope.querySelector('.message-image img')?.referrerPolicy === 'no-referrer', "consented image omits referrer");
     if (name === "rich-table-example") {
       require(scope.querySelectorAll('th').length === 3 && scope.querySelector('.message-table a') && scope.querySelector('.message-table td code'), "owner example has three aligned columns, links and inline code");
-      require(getComputedStyle(scope.querySelector('.message-table td')).overflowWrap === 'anywhere', "long Chinese cells wrap within the column");
+      require(getComputedStyle(scope.querySelector('.message-table td')).overflowWrap === 'break-word', "long Chinese cells wrap within the column, between words");
       // R-UI-167: columns take the room their contents need, so the long description gets the most of it.
       const widths = [...scope.querySelectorAll('.message-table th')].map(th => th.getBoundingClientRect().width);
       require(widths[1] > widths[0] && widths[1] > widths[2], `the long column is the widest: ${widths.map(Math.round)}`);
@@ -3552,6 +3556,28 @@ export function checkRendered(name, context = {}) {
         require(lines === 1, `a short cell stays on one line: 「${cell.textContent.trim()}」 took ${lines}`);
       }
       require(scope.querySelectorAll('.message-table tbody td.short').length >= 2, "the label column counts as short words");
+    }
+    if (name === "rich-table-short-columns") {
+      // #307: a column of long text keeps room for several words however many short columns stand beside it, the card
+      // scrolling sideways when they no longer fit; a word of letters and digits (12V, CAN) never breaks in its middle.
+      const font = parseFloat(getComputedStyle(scope.querySelector('.message-table td')).fontSize);
+      const long = [...scope.querySelectorAll('.message-table th')].at(-1);
+      require(!long.classList.contains('short'), "the last column holds long text");
+      require(long.getBoundingClientRect().width >= 8 * font, `the long column keeps room for several words: ${Math.round(long.getBoundingClientRect().width)} px at ${font} px`);
+      for (const cell of scope.querySelectorAll('.message-table tbody td:last-child')) {
+        const range = document.createRange(); range.selectNodeContents(cell);
+        const lines = new Set([...range.getClientRects()].map(rect => Math.round(rect.top))).size;
+        require(lines <= 4, `a long cell stays a few lines tall: 「${cell.textContent.trim()}」 took ${lines}`);
+      }
+      for (const word of ["12V", "CAN", "120Ω"]) {
+        const cell = [...scope.querySelectorAll('.message-table td')].find(td => td.textContent.includes(word));
+        const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+        let node; while ((node = walker.nextNode()) && !node.data.includes(word));
+        const range = document.createRange(), at = node.data.indexOf(word);
+        range.setStart(node, at); range.setEnd(node, at + word.length);
+        const lines = new Set([...range.getClientRects()].map(rect => Math.round(rect.top))).size;
+        require(lines === 1, `「${word}」 stays whole on one line, took ${lines}`);
+      }
     }
     if (name === "rich-wide-table") {
       const scroller = scope.querySelector('.message-table .rich-scroll');
@@ -4114,11 +4140,13 @@ export function checkRendered(name, context = {}) {
           const shortened = modelName.scrollWidth > modelName.clientWidth + 0.5, slot = form.querySelector('.cmp-model'), gap = parseFloat(getComputedStyle(bar).columnGap) || 0;
           const whole = shortened ? modelName.scrollWidth : box(modelName).width, size = parseFloat(getComputedStyle(modelName).fontSize);
           const modelNeed = trigger.width - box(modelName).width + Math.min(whole, 6 * size);
-          // A member's folder beside the permission (composer-folder.ts) gives way with it: its word hides with the permission's.
+          // A member's folder and its branch beside the permission (composer-folder.ts, both `.cmp-work`) give way with it:
+          // their words hide with the permission's.
           const folder = [...form.querySelectorAll('.cmp-folder')].find(visible), folderWord = folder?.querySelector('span');
-          const folderWide = folder ? box(folder).width + (wordShown ? 0 : (parseFloat(getComputedStyle(folder).columnGap) || 0) + box(folderWord).width) : 0;
-          const modeWide = own.width + (wordShown ? 0 : (parseFloat(getComputedStyle(mode).columnGap) || 0) + letters.width) + folderWide;
-          const fixed = rects.filter(rect => !['cmp-mode', 'cmp-model', 'cmp-folder'].includes(rect.control)).reduce((sum, rect) => sum + rect.width, 0);
+          const workWide = [...form.querySelectorAll('.cmp-work')].filter(visible).reduce((sum, button) =>
+            sum + box(button).width + (wordShown ? 0 : (parseFloat(getComputedStyle(button).columnGap) || 0) + box(button.querySelector('span')).width), 0);
+          const modeWide = own.width + (wordShown ? 0 : (parseFloat(getComputedStyle(mode).columnGap) || 0) + letters.width) + workWide;
+          const fixed = rects.filter(rect => !['cmp-mode', 'cmp-model', 'cmp-work'].includes(rect.control)).reduce((sum, rect) => sum + rect.width, 0);
           if (folder) {
             const mark = folder.querySelector('svg.i'), own_ = box(folder);
             require(visible(mark) && box(mark).width >= 15.5 && box(mark).left >= own_.left && box(mark).right <= own_.right + 0.5, `the folder keeps its icon whole: ${JSON.stringify(round(own_))}`);
@@ -4578,14 +4606,15 @@ export function checkRendered(name, context = {}) {
     return { check: name, lights: Object.keys(seen) };
   }
   if (name === "page-window-height" || name === "page-window-stable") {
-    // R-PAGE-12: a page sized by its window says its height once, near the area's, and the frame stays there.
-    const box = document.querySelector(".pgv-frame-box"), area = document.querySelector(".pgv-page");
-    const height = parseFloat(box?.style.getPropertyValue("--pgv-h") ?? "");
-    require(height > 0, "the page said its height");
-    require(height < area.clientHeight * 1.5, `the page stops near its own height: ${height} px for an area of ${area.clientHeight}`);
+    // R-PAGE-10, R-PAGE-12: a page sized by its window opens in a frame that is the page's window (the area under the header's band, down to just
+    // above the composer's row), and the frame stays that size: what the page says its height is sizes nothing there, so it cannot grow on.
+    const box = document.querySelector(".pgv-frame-box"), area = document.querySelector(".pgv-page"), areaStyle = getComputedStyle(area);
+    const height = box.getBoundingClientRect().height, window_ = area.clientHeight - parseFloat(areaStyle.paddingTop) - parseFloat(areaStyle.paddingBottom);
+    require(height > 0 && Math.abs(height - window_) <= 1, `the frame is the page's window: ${height} px for ${window_}`);
+    require(!box.hasAttribute("style") && !area.style.getPropertyValue("--pgv-h"), "what the page says its height is sizes nothing in the whole area");
     if (name === "page-window-height") { window.__pageWindowHeight = height; return { check: name, height }; }
     require(height === window.__pageWindowHeight, `it never grows on: ${window.__pageWindowHeight} px, then ${height} px`);
-    require(area.scrollHeight < area.clientHeight * 2, `the area has an end: ${area.scrollHeight} px to scroll in ${area.clientHeight}`);
+    require(area.scrollHeight <= area.clientHeight + 1, `the area has no scroll of its own: ${area.scrollHeight} px in ${area.clientHeight}`);
     return { check: name, height };
   }
   if (name === "sidebar-light-steady") {
@@ -5422,6 +5451,34 @@ export function checkRendered(name, context = {}) {
     require(document.querySelectorAll('[data-act="manage-usage"]').length === 1, "only the failed reply carries it");
     return { check: name };
   }
+  if (name.startsWith("cli-signin-line")) {
+    // A CLI's lost sign-in after newer turns (R-CLI-SIGNIN-06): one line above the composer, in its column, with one small button.
+    const chips = [...document.querySelectorAll(".signin-chip")].filter(visible);
+    const composer = document.querySelector(".ra-dock > .composer");
+    require(!document.querySelector(".turn-signin"), "no reply carries a sign-in button");
+    if (name === "cli-signin-line-done") {
+      require(chips.length === 0, "the line left once the sign-in was back");
+      require(!window.__look.calls.some(call => call.command === "agent_ask_text"), "no question was sent: the newest reply had not failed");
+      return { check: name };
+    }
+    require(chips.length === 1 && visible(composer), `one line above a visible composer (${chips.length})`);
+    const [chip] = chips, box = chip.getBoundingClientRect(), field = composer.getBoundingClientRect();
+    require(box.bottom <= field.top + 1 && Math.abs(box.left - field.left) <= 2 && box.width <= field.width + 1, "it stands right above the composer, in its column");
+    require(document.documentElement.scrollWidth <= innerWidth, "nothing runs out sideways");
+    const buttons = [...chip.querySelectorAll("button")].filter(visible), words = chip.querySelector(":scope > span")?.textContent.trim();
+    require(buttons.length === 1 && buttons[0].classList.contains("sm") && buttons[0].getBoundingClientRect().height <= 30, "one small button");
+    require(Math.abs(buttons[0].getBoundingClientRect().right - box.right) <= 16, "the button closes the line at its right");
+    if (name === "cli-signin-line") {
+      require(words === "Claude Code 的登入已過期", `the line names the tool and the cause: ${words}`);
+      require(buttons[0].dataset.act === "notice-signin" && buttons[0].textContent.trim() === "重新登入", `重新登入: ${buttons[0].textContent}`);
+    } else {
+      require(words === "請在開啟的視窗完成登入", `the waiting line: ${words}`);
+      require(buttons[0].textContent.trim() === "取消", "only 取消 while the window is open");
+      const started = window.__look.calls.filter(call => call.method === "brains.cli_login" && call.params.again === true && call.params.id === "claude");
+      require(started.length === 1, `Claude Code's own sign-in started once, again (${started.length})`);
+    }
+    return { check: name, words };
+  }
   if (name.startsWith("chat-cli-signin")) {
     // A reply that failed for want of its subscription CLI's sign-in (R-CLI-SIGNIN-01/02): the core's one sentence that names the tool
     // and the true cause, and under it the one button that mends it, where the owner is. Never the old sentence that named two causes.
@@ -5438,6 +5495,7 @@ export function checkRendered(name, context = {}) {
     require(buttons.every(button => button.classList.contains("btn") && button.classList.contains("sm")), "its buttons are the app's small buttons");
     require(buttons.every(button => button.getBoundingClientRect().height <= 30 && button.getBoundingClientRect().width <= 140), "each button is sized to its words");
     require(document.querySelectorAll(".turn-signin").length === 1 && !document.querySelector("[data-missing-repair]"), "one strip, and no second 開啟設定 beside it");
+    require(!visible(document.querySelector(".signin-chip")), "the newest reply's button stands for the lost sign-in: no second line above the composer");
     const cause = document.querySelector("[data-cause]")?.dataset.cause;
     const note = strip.querySelector(".signin-note");
     const phase = strip.dataset.phase ?? "idle";
@@ -7834,8 +7892,9 @@ export function checkRendered(name, context = {}) {
     const memberShare = pane.querySelector('.mb-head [data-act="share-member"]');
     require(!memberShare || !visible(memberShare), "the member's share waits while a page stands in the thread's place");
     // The area, since R-PAGE-10 (the page as a browser shows a file): the whole view right of the sidebar to the window's right edge,
-    // and the page edge to edge in it, with no margin, frame, corner or edge of its own, scrolling as a whole. Since R-PAGE-11 it runs to the
-    // window's foot and the composer floats over it.
+    // and the page edge to edge in it, with no margin, frame, corner or edge of its own. The frame is the page's window: it fills the area from
+    // under the header's band down to just above the composer's row, and the page scrolls in it. Since R-PAGE-11 the area runs to the
+    // window's foot, shows the page's own background behind the composer's row, and the composer floats over it.
     const areaBox = area.getBoundingClientRect(), shown = box.getBoundingClientRect(), side = document.querySelector("#nav")?.getBoundingClientRect();
     const frameBox = frame.getBoundingClientRect();
     require((!side || areaBox.left >= side.right - 1) && Math.abs(areaBox.left - paneBox.left) <= 1 && Math.abs(areaBox.right - paneBox.right) <= 1, `the area is the whole view beside the sidebar: ${Math.round(areaBox.left)}-${Math.round(areaBox.right)} of ${Math.round(paneBox.left)}-${Math.round(paneBox.right)}`);
@@ -7843,12 +7902,18 @@ export function checkRendered(name, context = {}) {
     require(Math.abs(frameBox.right - innerWidth) <= 1, `and reaches the window's right edge: ${Math.round(frameBox.right)} of ${innerWidth}`);
     const boxStyle = getComputedStyle(box), areaStyle = getComputedStyle(area);
     require(parseFloat(boxStyle.borderRadius) === 0 && boxStyle.borderTopWidth === "0px" && boxStyle.overflow === "visible" && boxStyle.boxShadow === "none" && boxStyle.maxWidth === "none", "no frame: no corner, edge, clip or width cap around the page");
-    require(parseFloat(areaStyle.paddingLeft) === 0 && parseFloat(areaStyle.paddingRight) === 0 && parseFloat(areaStyle.paddingBottom) === 0, "the area has no side or bottom padding");
-    require(areaStyle.overflowY === "auto" && area.contains(box), "the whole area scrolls");
-    require(shown.height >= area.clientHeight - parseFloat(areaStyle.paddingTop) - parseFloat(areaStyle.paddingBottom) - 1, `the page is at least as tall as the area: ${Math.round(shown.height)}`);
-    // It runs to the window's foot with the composer standing over it, and at rest the page itself is drawn under the composer.
+    require(parseFloat(areaStyle.paddingLeft) === 0 && parseFloat(areaStyle.paddingRight) === 0, "the area has no side padding");
+    // The area does not scroll (the page scrolls in its frame), and nothing scrolls under the band, so there is no fade there.
+    require(areaStyle.overflowY === "hidden" && areaStyle.maskImage === "none" && area.scrollHeight <= area.clientHeight + 1 && area.contains(box), `the area does not scroll: ${areaStyle.overflowY}, ${area.scrollHeight} in ${area.clientHeight}`);
+    const bandRoom = parseFloat(areaStyle.paddingTop), footRoom = parseFloat(areaStyle.paddingBottom);
+    require(Math.abs(shown.top - (areaBox.top + bandRoom)) <= 1 && Math.abs(shown.bottom - (areaBox.bottom - footRoom)) <= 1, `the frame fills the area from under the header's band to above the composer's row: ${Math.round(shown.top)}-${Math.round(shown.bottom)} of ${Math.round(areaBox.top)}-${Math.round(areaBox.bottom)}`);
+    require(bandRoom >= arrow.bottom - areaBox.top - 1 && footRoom > 0, `the band holds the header's buttons and the composer's row is kept clear: ${bandRoom} px, ${footRoom} px`);
+    // It runs to the window's foot with the composer standing over it; the frame ends above the composer's row, and behind that row the area shows the page's own background.
     const { composerBox } = pageUnderComposer(stage, area);
-    if (area.scrollTop === 0) require(frameBox.bottom >= areaBox.bottom - 1 && frameBox.top < composerBox.top, `the page is drawn under the composer, to the window's foot: ${Math.round(frameBox.bottom)} of ${Math.round(areaBox.bottom)}`);
+    require(frameBox.bottom <= composerBox.top - 0.5, `the page's window ends above the composer: ${Math.round(frameBox.bottom)} against ${Math.round(composerBox.top)}`);
+    const behind = getComputedStyle(area, "::before"), say = area.style.getPropertyValue("--pgv-bg");
+    require(/^rgba?\(/.test(behind.backgroundColor) && behind.backgroundColor !== "rgba(0, 0, 0, 0)" && Math.abs(parseFloat(behind.top) - bandRoom) <= 1 && Math.abs(parseFloat(behind.height) - (areaBox.height - bandRoom)) <= 1, `the page's own background is under the composer's row, from the band to the window's foot: ${behind.backgroundColor}, ${behind.top}, ${behind.height}`);
+    require(!say || /^rgba?\(\d+, \d+, \d+(, [\d.]+)?\)$/.test(say), `what the page said is a plain colour: ${say}`);
     require(!view.querySelector(".pgv-title"), "the title is the pill's, not a line of the page");
     require(view.querySelector(".pgv-status")?.hidden !== false || name !== "page-inplace", "nothing waits under the page before anything is sent");
     require(document.documentElement.scrollWidth <= innerWidth, "nothing runs out sideways");
@@ -8050,17 +8115,19 @@ export function checkRendered(name, context = {}) {
     const area = view && (report ? view.querySelector(".rp-scroll") : view.querySelector(".pgv-page"));
     require(stage.classList.contains("is-page") && !view.hidden && area, "a page stands in the conversation's place");
     const { areaBox, dockBox, composerBox } = pageUnderComposer(stage, area);
-    require(area.scrollHeight - area.scrollTop - area.clientHeight <= 1, `the page is read to its end: ${Math.round(area.scrollTop)} of ${area.scrollHeight - area.clientHeight}`);
+    // A report is read to its end by scrolling the area; an HTML page scrolls in its own frame (the scene waits for that), and its area does not scroll.
+    if (report) require(area.scrollHeight - area.scrollTop - area.clientHeight <= 1, `the page is read to its end: ${Math.round(area.scrollTop)} of ${area.scrollHeight - area.clientHeight}`);
+    else require(area.scrollHeight <= area.clientHeight + 1 && area.scrollTop === 0, `the area does not scroll: ${area.scrollHeight} in ${area.clientHeight}`);
     const line = view.querySelector(".pgv-status:not([hidden]) > *"), say = line && visible(line) ? line.getBoundingClientRect() : null;
     const floor = Math.min(composerBox.top, say?.top ?? Infinity);
-    // The page's own last line: an HTML page's is where the page it holds ends (the height it says), a report's its last section's foot.
+    // The page's own last line: an HTML page's window ends above the composer (and the answer line over it), a report's last section's foot stands clear of them.
     const box = view.querySelector(".pgv-frame-box");
     const end = report ? Math.max(...[...view.querySelectorAll(".rp-body > .rp-sec")].filter(visible).map(section => section.getBoundingClientRect().bottom))
-      : box.getBoundingClientRect().top + parseFloat(box.style.getPropertyValue("--pgv-h"));
-    require(Number.isFinite(end) && end <= floor - 4, `its last line stands clear above the composer${say ? " and the answer over it" : ""}: ${Math.round(end)} against ${Math.round(floor)}`);
-    // Scrolled exactly far enough: past its end only a gap (a report keeps its own foot under its last section).
+      : box.getBoundingClientRect().bottom;
+    require(Number.isFinite(end) && end <= floor - (report ? 4 : 0.5), `its last line stands clear above the composer${say ? " and the answer over it" : ""}: ${Math.round(end)} against ${Math.round(floor)}`);
+    // Scrolled exactly far enough: past its end only a gap (a report keeps its own foot under its last section; an HTML page's window ends a gap above the row).
     const room = report ? 2 * parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--sp-6")) + 48 : 48;
-    if (area.scrollTop > 0) require(floor - end <= room, `with no more than a gap's room past it: ${Math.round(floor - end)} px`);
+    if (!report || area.scrollTop > 0) require(floor - end <= room, `with no more than a gap's room past it: ${Math.round(floor - end)} px`);
     // A press on the composer is the composer's; beside it and under it, the page's (an HTML page's frame, or the report).
     const middle = document.elementFromPoint((composerBox.left + composerBox.right) / 2, composerBox.top + 12);
     require(middle && composer.contains(middle), `a press on the composer is the composer's: ${middle?.className || middle?.tagName}`);
@@ -8186,6 +8253,22 @@ export function checkRendered(name, context = {}) {
     const calls = window.__look.calls.filter(call => call.command === "report_save");
     require(calls.length === 0, "nothing is saved by looking");
     return { check: name, column: Math.round(column), aside };
+  }
+  if (name === "page-rail") {
+    // R-PAGE-10, R-PAGE-11: the page's window is the area from under the header's band to just above the composer's row, so a rail one window
+    // tall (and its buttons at its foot) is whole above the composer; behind that row the area shows the page's own background, which the page said.
+    const stage = document.querySelector(".page-agent .ra-stage"), view = stage.querySelector(":scope > .pgv"), area = view.querySelector(".pgv-page"), frame = view.querySelector(".pgv-frame-box iframe");
+    require(stage.classList.contains("is-page") && frame && visible(frame) && area, "the page is open in the conversation's place");
+    const { composerBox, areaBox } = pageUnderComposer(stage, area), box = frame.getBoundingClientRect(), style = getComputedStyle(area);
+    require(box.bottom <= composerBox.top - 0.5 && box.bottom >= composerBox.top - 64, `the page's window ends just above the composer: ${Math.round(box.bottom)} against ${Math.round(composerBox.top)}`);
+    require(Math.abs(box.top - (areaBox.top + parseFloat(style.paddingTop))) <= 1 && Math.abs(box.height - (areaBox.height - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom))) <= 1, `it fills the area under the band: ${Math.round(box.top)}, ${Math.round(box.height)}`);
+    const dark = document.documentElement.dataset.theme === "dark", said = area.style.getPropertyValue("--pgv-bg");
+    require(said === (dark ? "rgb(27, 23, 16)" : "rgb(246, 239, 224)"), `the page said its own background and the area paints it: ${said}`);
+    require(getComputedStyle(area, "::before").backgroundColor === said, `behind the composer's row: ${getComputedStyle(area, "::before").backgroundColor}`);
+    const behind = document.elementFromPoint((composerBox.left + composerBox.right) / 2, (composerBox.bottom + areaBox.bottom) / 2);
+    require(behind && area.contains(behind) && behind !== frame && !stage.querySelector(":scope > .ra-dock").contains(behind), `under the composer is the area, not the page's window: ${behind?.className || behind?.tagName}`);
+    require(area.scrollHeight <= area.clientHeight + 1 && area.scrollTop === 0, "the area does not scroll: the article scrolls in the page's window");
+    return { check: name, window: [Math.round(box.top), Math.round(box.bottom)], composer: Math.round(composerBox.top), background: said };
   }
   if (name === "page-base") {
     // An HTML page that writes no style of its own, opened in the conversation's place: since R-PAGE-10 its frame is the whole area, edge to edge
@@ -9230,7 +9313,7 @@ export function checkRendered(name, context = {}) {
     return { check: name, rows: rows.length };
   }
   if (name === "connectors-slack-detail") {
-    const title = connectModal()?.querySelector('.cs-page .cs-head h2');
+    const title = connectModal()?.querySelector('.cs-page .cs-app h2');
     require(visible(title) && title.textContent.trim() === 'Slack', "Slack's detail page is open");
     return { check: name };
   }
@@ -9238,9 +9321,9 @@ export function checkRendered(name, context = {}) {
     const modal = connectModal(), back = modal.querySelector('.cs-back'), close = modal.querySelector('.modal-x'), content = modal.querySelector('.cs');
     require(visible(back) && visible(close) && back.matches('button[data-conn="back"]'), "the back chevron and the dialog's ✕ are both real buttons on screen");
     const a = back.getBoundingClientRect(), x = close.getBoundingClientRect(), centreY = (a.top + a.bottom) / 2, centreX = (a.left + a.right) / 2;
-    // The way back is the title itself: a plain chevron, as tall as the ✕, beside words that go back too.
-    require(back.matches('.back-link') && Math.round(a.height) === Math.round(x.height) && getComputedStyle(back).boxShadow === 'none'
-      && back.closest('.back-title')?.querySelector('[data-title-back]'), `the way back is a plain chevron the ✕'s height, one control with its title (${a.width}x${a.height})`);
+    // An app's page keeps the round back the ✕'s own size (only the connected list goes back by its title).
+    require(Math.round(a.width) === Math.round(x.width) && Math.round(a.height) === Math.round(x.height) && a.width >= 30, `the back chevron is the ✕'s own size, not smaller (${a.width}x${a.height} against ${x.width}x${x.height})`);
+    require(!back.matches('.back-link') && parseFloat(getComputedStyle(back).borderTopLeftRadius) >= a.height / 2, "it is round");
     require(Math.abs(centreY - (x.top + x.bottom) / 2) <= 1, `it stands on the ✕'s line (${centreY} against ${(x.top + x.bottom) / 2})`);
     const misses = [[a.left + 3, centreY], [a.right - 3, centreY], [centreX, a.top + 3], [centreX, a.bottom - 3], [centreX, centreY]].filter(([px, py]) => { const hit = document.elementFromPoint(px, py); return !(hit && (hit === back || back.contains(hit))); });
     require(misses.length === 0, `a press anywhere on its 36 px lands on it (${misses.length} points did not)`);
@@ -9323,10 +9406,14 @@ export function checkRendered(name, context = {}) {
     require(visible(page) && visible(back) && back.tagName === 'BUTTON', "an app's page has a round back button");
     require(page.querySelector('.cs-vh')?.getBoundingClientRect().width <= 2, "the dialog's title is for a screen reader only");
     require(visible(close) && close.parentElement === back.parentElement, "the dialog's round close stands on the app's title row");
-    const head = page.querySelector('.cs-head'), tile = head.querySelector('.cs-tile.lg'), tileBox = tile.getBoundingClientRect(), nameNode = head.querySelector('h2.big');
+    const head = page.querySelector('.cs-head'), row = page.querySelector('.cs-app'), tile = row.querySelector('.cs-tile.lg'), tileBox = tile.getBoundingClientRect(), nameNode = row.querySelector('h2.big');
+    require(!head.querySelector('.cs-tile, h2') && tileBox.top >= back.getBoundingClientRect().bottom, "the back stands alone on the first row, the app's mark and name on the row under it");
+    require(Math.abs(tileBox.left - back.getBoundingClientRect().left) <= 12, "the mark starts at the back's left edge");
     require(Math.round(tileBox.width) === 56 && Math.round(tileBox.height) === 56 && getComputedStyle(tile).backgroundColor === 'rgb(255, 255, 255)', "the mark is on a white rounded tile of 56 px");
     require(nameNode.getBoundingClientRect().left > tileBox.right && Math.abs((nameNode.getBoundingClientRect().top + nameNode.getBoundingClientRect().bottom) - (tileBox.top + tileBox.bottom)) <= 4, "the name is beside the tile");
-    const actions = page.querySelector('.cs-join'), join = actions.querySelector('[data-conn="join"]'), state = actions.querySelector('.cs-state');
+    const actions = row.querySelector(':scope > .cs-join'), join = actions.querySelector('[data-conn="join"]'), state = actions.querySelector('.cs-state');
+    const actionsBox = actions.getBoundingClientRect(), rowBox = row.getBoundingClientRect();
+    require(Math.abs((actionsBox.top + actionsBox.bottom) - (tileBox.top + tileBox.bottom)) <= 4 && Math.abs(actionsBox.right - rowBox.right) <= 1, "what the app does now ends the same row, at its right, on the mark's centre line");
     if (name === "connect-app-connected") {
       require(!join && visible(state) && state.textContent.includes('已連結'), "a connected app shows its connected state in the place of 連結");
       require(visible(actions.querySelector('[data-k="cs-dlg-enable"]')) && actions.lastElementChild?.matches('[data-k="cs-dlg-enable"]') && visible(actions.querySelector('[data-conn="server-menu"]')), "with its switch and its ⋯ in that same place");
@@ -10982,7 +11069,7 @@ export function checkRendered(name, context = {}) {
         require(rows.size <= 3 && rows.size < kinds.length, `a narrow page's kinds are pills that wrap, not a tall list (${rows.size} rows)`);
       }
       for (const item of kinds) require(item.querySelector("span").scrollWidth <= item.querySelector("span").clientWidth + 1, `${item.dataset.cat} shows its whole name`);
-      const expected = { soul: ["ms-personality", "ms-instructions"], skills: ["ms-skills", "ms-library", "ms-commands"], tools: ["ms-tools", "ms-draft", "ms-folders"], notify: ["ms-notify"] }[category];
+      const expected = { soul: ["ms-personality", "ms-instructions"], skills: ["ms-skills", "ms-library", "ms-commands"], tools: ["ms-tools", "ms-draft"], notify: ["ms-notify"] }[category];
       const sections = [...pane.querySelectorAll(".ms-section[data-k]")].filter(visible).map(section => section.dataset.k);
       require(sections.join() === expected.join(), `${category} shows ${expected.join()} (${sections.join()})`);
       for (const section of pane.querySelectorAll(".ms-section[data-k]")) {
@@ -12381,6 +12468,22 @@ export function checkFrame(name) {
     require(style(".kpis b").fontSize === "28px" && style(".kpis").display === "grid", "figures in tiles of large numbers");
     require(style("blockquote").borderInlineStartWidth === "3px" && style("code").backgroundColor === words.surface, "a quote with its rule, code on the surface");
     return { check: name, dark, width: innerWidth, table: table.display, tracks };
+  }
+  // R-PAGE-10: the frame is the page's own window, as in a browser: a rail one window tall and sticky stays while the article scrolls, and its
+  // buttons at its foot are in the window, which ends above the composer (the app's own check, `page-rail`, measures that end).
+  if (name === "page-rail") {
+    const rail = document.querySelector(".rail"), rect = rail.getBoundingClientRect(), article = document.querySelector("article").getBoundingClientRect();
+    require(scrollY > 300 && article.top < -300, `the article has scrolled inside the page's window: ${Math.round(scrollY)} px`);
+    require(Math.abs(rect.top) <= 1 && Math.abs(rect.height - innerHeight) <= 1, `the rail is as tall as the window and stays at its top: ${Math.round(rect.top)}, ${Math.round(rect.height)} of ${innerHeight}`);
+    require(document.documentElement.scrollHeight > innerHeight * 2, `the page is much taller than its window: ${document.documentElement.scrollHeight} of ${innerHeight}`);
+    for (const id of ["hide", "copy"]) {
+      const button = document.getElementById(id).getBoundingClientRect();
+      require(button.top >= rect.top && button.bottom <= innerHeight + 0.5 && button.bottom > innerHeight - 80 && button.width > 40, `the button ${id} is in the window, at the rail's foot: ${Math.round(button.top)}-${Math.round(button.bottom)} of ${innerHeight}`);
+    }
+    const hide = document.getElementById("hide").getBoundingClientRect(), copy = document.getElementById("copy").getBoundingClientRect();
+    require(hide.bottom <= copy.top + 1, "the two buttons stand one over the other");
+    require(document.documentElement.scrollWidth <= innerWidth + 1, "nothing runs out sideways");
+    return { check: name, scrolled: Math.round(scrollY), window: innerHeight, buttons: [Math.round(hide.top), Math.round(copy.bottom)] };
   }
   throw new Error(`Unknown frame check: ${name}`);
 }

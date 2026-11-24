@@ -139,7 +139,8 @@ THEME = {
 FONT = '"Inter","Noto Sans TC","PingFang TC","Microsoft JhengHei UI","Microsoft JhengHei",system-ui,sans-serif'
 
 
-# A page open in the whole area is as tall as its content (up to 20000 px, R-PAGE-08): the area scrolls, the frame does not.
+# A page open in the whole area is shown as a browser shows it (R-PAGE-10): its frame is the page's window and the page scrolls in it.
+# The height it says only sizes its card in the thread; the background it says is what the window paints behind the composer's row.
 _HELPER = "<script>" + FRAME_NAVIGATION + """
 (() => {
   const post = (type, data) => parent.postMessage({raphaelPage: 1, type, ...data}, '*');
@@ -210,6 +211,30 @@ _HELPER = "<script>" + FRAME_NAVIGATION + """
   // Where the owner is reading: the window keeps it, so a page changed while open comes back to the same place.
   let scrolling = 0;
   addEventListener('scroll', () => { if (!scrolling) scrolling = requestAnimationFrame(() => { scrolling = 0; post('scroll', {y: Math.round(scrollY)}); }); }, {passive: true});
+  // The page's own background (R-PAGE-10): the window paints it behind the composer's row, so the page still reads as running to the
+  // window's foot. The first computed background colour of the body that is not transparent, then of the root, as a plain rgb() or
+  // rgba() (nothing else is ever sent; a colour in another notation is converted), or an empty one when the page has none.
+  const plain = value => {
+    // (This text is a Python string: no backslash may stand in it.)
+    let parts = /^rgba?[(][^)]*[)]$/.test(value) ? value.slice(value.indexOf('(') + 1, -1).split(/[ ,/]+/).filter(Boolean).map(Number) : null;
+    if (!parts || parts.length < 3 || parts.some(Number.isNaN)) {
+      try { const paint = document.createElement('canvas').getContext('2d'); paint.fillStyle = value; paint.fillRect(0, 0, 1, 1);
+        const [r, g, b, a] = paint.getImageData(0, 0, 1, 1).data; parts = [r, g, b, a / 255]; } catch { return ''; }
+    }
+    const [r, g, b, a = 1] = parts, byte = n => Math.max(0, Math.min(255, Math.round(n)));
+    if (!(a > 0)) return '';
+    return a >= 1 ? 'rgb(' + byte(r) + ', ' + byte(g) + ', ' + byte(b) + ')' : 'rgba(' + byte(r) + ', ' + byte(g) + ', ' + byte(b) + ', ' + Math.round(a * 1000) / 1000 + ')';
+  };
+  const background = () => {
+    for (const root of [document.body, document.documentElement]) {
+      const color = root ? plain(getComputedStyle(root).backgroundColor) : '';
+      if (color) return color;
+    }
+    return '';
+  };
+  const tell = () => post('background', {color: background()});
+  addEventListener('DOMContentLoaded', tell, {once: true});
+  addEventListener('load', tell, {once: true});
   // The page has the keys once the owner pressed in it: Escape there goes back to the conversation as it does outside,
   // unless it only drops an input method's candidate (WebKit, on macOS, marks that Escape with keyCode 229 alone).
   addEventListener('keydown', event => { if (event.key === 'Escape' && !event.defaultPrevented && !event.isComposing && event.keyCode !== 229) post('escape', {}); });
@@ -280,6 +305,15 @@ def state_script(state):
     return "<script>window.__raphaelState=" + text.replace("<", "\\u003c").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029") + ";</script>"
 
 
+def theme_script(theme):
+    """The app's theme on the page's root as `data-theme`, before the page's own markup: a page written with a light and a
+    dark palette (`html[data-theme="light"]`) reads in the window's theme, even one whose `<html data-theme="dark">` names
+    a default (the parser keeps an attribute the root already has). The page's own script may still change it, a toggle of
+    its own, and the frame is drawn again when the window's theme changes."""
+    name = "dark" if theme == "dark" else "light"
+    return f"<script>document.documentElement.setAttribute('data-theme','{name}')</script>"
+
+
 def document(page, theme, state=None):
     """Prepend host styles/helper to a fragment or a full document, after its preamble. `state` is what the owner left on
     the page (R-PAGE-14): the helper puts it back."""
@@ -301,7 +335,8 @@ def document(page, theme, state=None):
     base = BASE if page["source"] == "html" else ""
     return ('<!DOCTYPE html><meta charset="utf-8"><meta name="viewport" content="width=device-width">'
             f"<title>{html_lib.escape(page['title'])}</title><style>:root{{{variables};color-scheme:{theme}}}"
-            f"body{{background:var(--bg);color:var(--fg);font-family:var(--font)}}{base}</style>" + state_script(state) + _HELPER + content)
+            f"body{{background:var(--bg);color:var(--fg);font-family:var(--font)}}{base}</style>" + state_script(state)
+            + theme_script(theme) + _HELPER + content)
 
 
 def page_file(page):
@@ -309,7 +344,8 @@ def page_file(page):
     helper that talks to the window, in its reader's own theme (the dark words stand under `prefers-color-scheme`), and
     with the page's own policy first in its head: the same sources, no connection, no form, no frame. The sandbox of that
     policy is a header's alone, and a meta element cannot carry it."""
-    text = document(page, "light").replace(_HELPER, "", 1)
+    # A file follows its reader's own theme (prefers-color-scheme below), so it carries neither the helper nor the theme.
+    text = document(page, "light").replace(_HELPER, "", 1).replace(theme_script("light"), "", 1)
     policy = "; ".join(part for part in page_csp(page).split("; ") if not part.startswith("sandbox"))
     dark = ";".join(f"--{key}:{value}" for key, value in {**THEME["dark"], "font": FONT}.items())
     text = text.replace('<meta charset="utf-8">', '<meta charset="utf-8">'
@@ -538,12 +574,11 @@ class PageHost:
 
 
 class Pages:
-    def __init__(self, conn, *, notify=None, now_ms=wall_clock_ms, output_folder=lambda: ""):
+    def __init__(self, conn, *, notify=None, now_ms=wall_clock_ms, project_folder=lambda member: None):
         self.store = PageStore(conn, now_ms)
         self.host = PageHost(self.store)
         self.notify, self.tool_call = notify, None
-        # The owner's output folder (settings `owner_output_folder`), read when a report is saved.
-        self.output_folder = output_folder
+        self.project_folder = project_folder
         # The page the owner has open in front of them, as the window last said (`pages.viewing`): in memory only.
         self._viewing = None
 
@@ -640,8 +675,7 @@ class Pages:
         """Saves a page as a file the owner can pass on: a
         report as the document the app drew of it (`html`, checked by report_page.checked_file), an HTML page as the file
         this core builds of what is stored (`page_file`: nothing the window says goes into it). Named after the page, in
-        the owner's output folder, or in `downloads` (the shell's Downloads folder) when none is chosen or it takes
-        nothing. Answers where it went; the shell shows the file selected in its folder."""
+        the member's selected project, or Downloads. Answers where it went; the shell selects it."""
         from .report_page import FILE_BYTES, checked_file, file_name, save_file  # report_page imports this module
         page = self.of(params)
         try:
@@ -654,7 +688,7 @@ class Pages:
                 raise RpcError(NOT_FOUND, "Only a report or an HTML page is saved as a file", {"kind": "not_shareable"})
         except PageError as error:
             raise invalid_params(str(error)) from None
-        folders = [("output", Path(chosen))] if (chosen := self.output_folder()) else []
+        folders = [("work", Path(chosen))] if (chosen := self.project_folder(page["member_id"])) else []
         downloads = params.get("downloads")
         folders.append(("downloads", Path(downloads) if isinstance(downloads, str) and Path(downloads).is_absolute()
                         else Path.home() / "Downloads"))

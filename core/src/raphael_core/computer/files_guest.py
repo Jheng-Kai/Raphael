@@ -188,11 +188,32 @@ def read(request):
         folder.close()
 
 
+def under(path, root):
+    path, root = os.path.normcase(path), os.path.normcase(root).rstrip("/\\")
+    return path == root or path.startswith(root + os.sep)
+
+
+def confined(request):
+    """False when a write lands in one of the bind mounts (`roots`) outside the folders it may write in (`allowed`, named
+    by a request that was not asked about): judged by the path as it is written and by where its links lead, so a link made
+    inside the computer to a mount is no way round. A request without `allowed` is confined to nothing."""
+    allowed = request.get("allowed")
+    if allowed is None:
+        return True
+    path = request["path"]
+    for where in (os.path.normpath(path), os.path.realpath(path)):
+        if any(under(where, root) for root in request["roots"]) and not any(under(where, folder) for folder in allowed):
+            return False
+    return True
+
+
 def write(request):
     """Write a whole file in place of what is there, only if what is there is what the caller last saw (`expected`:
     its sha256, or "absent" for a new file); parent folders are made. The completed temporary file is linked into a
     free name or renamed over the old file, keeping its mode, so a reader never sees half a file."""
     data = base64.b64decode(request["data"], validate=True)
+    if not confined(request):
+        return {"error": "outside"}
     folder, name = locate(request["path"], request["roots"], create=True)
     try:
         try:

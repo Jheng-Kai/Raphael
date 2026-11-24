@@ -186,6 +186,7 @@ from .cli.loop import CLI_SILENCE_S, CLI_TOOL_S, COMPUTER_CHANGED, CliLoop, Sess
 from .persona import cli_system_prompt, memory_files
 from .persona import FULL_PERMISSION, NEW_MEMBER, NEW_MEMBER_STEP, PLAN_MODE, SETUP_ANSWER, SETUP_AFTER_CONNECT, SETUP_STEPS
 from ..brain.owner import owner_context
+from ..folders import choice, default_folders
 from .cities import cities_in
 from .commands import COMMANDS, AppCatalog, run_command
 from .device import DeviceActions
@@ -348,6 +349,8 @@ VOICE_TURN_TIMEOUT_S = 180.0
 _UNSPOKEN = ("denied", "expired", "cancelled")
 # How much of what a reading gave back (a held reading, after the owner's yes) the model is shown.
 _READ_CHARS = 6000
+# How much of a failed change's own words the member is told on a card of several.
+_FAILURE_CHARS = 600
 # Route classification retained for callers; all routes now share the full-history
 # and selected half-window context policy.
 _FULL_CONTEXT_ROUTES = ("discuss",)
@@ -737,6 +740,18 @@ FLOOR_REFUSALS = 3
 FLOOR_AGAIN = (" This is the second refusal: do not try another command or path. Answer the owner now, in their language, "
                "with what you can: say in one plain sentence what you could not do, and go on with the rest of what they asked.")
 
+# What the team skill library answered, as a member is told it (members/service.py `_library_error`): its kind, its own
+# words and, where one is clear, the next step. Such an answer is a state of the library, never a wrong argument.
+_LIBRARY_NEXT = {
+    "taken": (" A skill with this name is already in the library, possibly switched off. Read member_library_list, then "
+              "remove that package (member_library_delete) or refresh it (member_library_update) instead of importing it again."),
+}
+
+
+def _library_instruction(kind: str, message: str) -> str:
+    return message.removeprefix("Invalid params: ") + _LIBRARY_NEXT.get(kind, "")
+
+
 _HARNESS_NOTES = {
     "owner_private_chat_only": "Management tools require the owner's interactive private chat or an approved background member action.",
     "owner_model_request_required": "Only change a model or effort when the owner explicitly asks for that change. A failure does not authorize switching models.",
@@ -936,7 +951,10 @@ class AgentService:
         self._metrics_conn = conn
         self._spend = SpendTracker(conn, now_ms, tz)
         self._history = AgentHistory(conn, now_ms, event_index=event_index)
-        self.pages = Pages(conn, notify=notify, now_ms=now_ms, output_folder=lambda: self._settings.get("owner_output_folder"))
+        self.member_folders = default_folders
+        self.folder_target = lambda member: None
+        self.pages = Pages(conn, notify=notify, now_ms=now_ms,
+                           project_folder=lambda member: choice(self._settings, member))
         self.pages.tool_call = self._page_tool_call
         self.conversations = Conversations(conn, now_ms)
         self.quotas = Quotas(conn, now_ms, notify)
@@ -964,6 +982,7 @@ class AgentService:
         # as a turn of its own when the task stops running without reading it (R-QUEUE-11).
         background.owner_read = self._steered
         background.owner_unread = self._given_back
+        background.turn_removed = self._turn_removed
         # The connections to the plugins' servers, kept for a short while: a second question about
         # the same service does not start it again.
         self._pool = McpPool(idle_s=PLUGIN_IDLE_S)
@@ -1776,6 +1795,12 @@ class AgentService:
         held = getattr(self._background, "words_held", None)
         return held() if callable(held) else set()
 
+    def _turn_removed(self, turn):
+        """The background took a finished turn out of the history (the failed runs a CLI sign-in refused): its conversation
+        forgets what it summed up, as when the owner deletes a turn."""
+        self._conversation_of(turn.member_id, turn.conversation_id).clear_summary()
+        self._forget_cli_thread(turn.conversation_id)
+
     def _given_back(self, turn_ids):
         """A background task stopped running without reading the messages `turn_ids` handed to it: each conversation they
         were said in takes them back at its front, in the order they were said, to answer each as a turn of its own."""
@@ -2094,7 +2119,7 @@ class AgentService:
                 memory_snapshot=memory,
                 looked_up=looked_up,
                 speaker=ask.speaker,
-                roster=roster_prompt(self._team, ask.speaker, self._chat_language(ask)), owner=owner_context(self._settings, ask.speaker.id),
+                roster=roster_prompt(self._team, ask.speaker, self._chat_language(ask)), owner=self._owner_context(ask.speaker.id),
                 reasoning_effort=self._effort(settings),
                 recall=self._recall(ask, context), source=ask.source, messaging=self._messaging_context(ask.speaker.id),
                 viewing=viewing_text(ask.viewing), skipped_cards=skipped_cards_text(ask.skipped_cards),
@@ -2259,6 +2284,9 @@ class AgentService:
         run.task.add_done_callback(lambda _done, run=run: self._settle_unheard(run))
         return await self._next_from_run(run)
 
+    def _owner_context(self, member):
+        return owner_context(self._settings, member, folders=self.member_folders, target=self.folder_target(member))
+
     def _messaging_context(self, member_id: int) -> str:
         from .card_context import messaging_state
         return messaging_state(getattr(self._secret_cards, "messaging", None), member_id)
@@ -2284,7 +2312,8 @@ class AgentService:
             f"Owner's instructions: {speaker.instructions}\n\n"
         )
         from .card_context import source_text
-        return (persona + owner_context(self._settings, speaker.id) + conversation_block(context.summary, context.turns, index)
+        return (persona + owner_context(self._settings, include_folders=False)
+                + conversation_block(context.summary, context.turns, index)
                 + source_text(source) + self._messaging_context(speaker.id) + skipped_cards_text(skipped or {}))
 
     @member_turn(lambda self, run: run.context.speaker.id)
@@ -2602,7 +2631,7 @@ class AgentService:
                     instructions=ask.speaker.instructions, personality=ask.speaker.personality,
                     memory_snapshot=memory, narrated=True, memory_inline=False,
                 )
-            system += owner_context(self._settings, ask.speaker.id)
+            system += self._owner_context(ask.speaker.id)
             if ask.speaker.has_no_job and ask.scope == "private" and ask.exchange_speakers is None:
                 system += NEW_MEMBER
             if self._gate.plan_first:
@@ -3121,7 +3150,7 @@ class AgentService:
         from .owner_questions import ASK_OWNER, question_input
         from .persona import greeting_prompt
         system = greeting_prompt(ask.speaker)
-        system += owner_context(self._settings, ask.speaker.id) + roster_prompt(self._team, ask.speaker, self._chat_language(ask))
+        system += self._owner_context(ask.speaker.id) + roster_prompt(self._team, ask.speaker, self._chat_language(ask))
         if self._memory is not None:
             snapshot = await self._memory.snapshot_async(ask.speaker.id)
             memory = "\n".join(text for text in (snapshot.shared, snapshot.own) if text)
@@ -3174,7 +3203,7 @@ class AgentService:
         async def execute(call_id, name, args):
             raise AgentFailure("error")  # No tool of any kind is offered to a question about a reaction.
         common = dict(model=settings.model, ledger=ledger, language=ask.language, plain=True,
-                      system=reaction_prompt(ask.speaker) + owner_context(self._settings, ask.speaker.id), user=ask.text, tools=[],
+                      system=reaction_prompt(ask.speaker) + self._owner_context(ask.speaker.id), user=ask.text, tools=[],
                       progress=lambda text: None, thinking=lambda text: None, execute=execute)
         if brain_ref(settings.model):
             loop = CliLoop(brains=self._cli_brains, sessions=self._cli_sessions, member_id=ask.speaker.id, owner_text=ask.text,
@@ -3307,6 +3336,13 @@ class AgentService:
             return False
         return item is not None and item.name in READS
 
+    @staticmethod
+    def _left_out(result: ToolResult) -> dict:
+        """What an import that was made could not take (a skill library package's `skipped_references`, `skipped_links`)."""
+        package = result.data.get("package") if isinstance(result.data, dict) else None
+        left = {key: package[key] for key in ("skipped_references", "skipped_links") if isinstance(package, dict) and package.get(key)}
+        return {"left_out": left} if left else {}
+
     async def _carry_out_management_batch(self, pending: Pending, approval: Approval | None, followup: _Followup) -> dict:
         """The owner said yes to the card of several changes: each is carried out in order under its own part of that
         one yes. One that fails does not stop the others, and the failure is said plainly, to the owner and to the member."""
@@ -3334,8 +3370,11 @@ class AgentService:
                 result = ToolResult(call.tool.key, False, None, "error")
             gone = not result.ok and isinstance(result.data, dict) and result.data.get("field") == "not_found"
             lines.append(worded(line, language, done=result.ok, gone=gone))
-            report.append({"change": line, "ok": result.ok, **({} if result.ok else {"error": "not_found" if gone else str(result.error)}),
-                           **({"result": json.dumps(result.data, ensure_ascii=False, default=str)[:_READ_CHARS]} if result.ok and self._reading(call) else {})})
+            report.append({"change": line, "ok": result.ok,
+                           **({} if result.ok else {"error": "not_found" if gone else str(result.error),
+                                                    **({"message": result.instruction[:_FAILURE_CHARS]} if result.instruction else {})}),
+                           **({"result": json.dumps(result.data, ensure_ascii=False, default=str)[:_READ_CHARS]} if result.ok and self._reading(call) else {}),
+                           **(self._left_out(result) if result.ok else {})})
         done = sum(item["ok"] for item in report)
         step = self._step("tool", "management_batch", BUILTIN_SERVER, "ok" if done == len(report) else "error", began,
                           None if done == len(report) else "partial")
@@ -4083,7 +4122,10 @@ class AgentService:
                 instruction = COMPOSIO_KEY_STEP
             result = ToolResult(name, False, None, kind, instruction=instruction)
         except RpcError as error:
-            if error.code == INVALID_PARAMS:
+            if error.code == INVALID_PARAMS and (error.data or {}).get("library"):
+                kind = str(error.data.get("kind") or "bad_arguments")
+                result = ToolResult(name, False, {"field": kind}, kind, instruction=_library_instruction(kind, error.message))
+            elif error.code == INVALID_PARAMS:
                 result = ToolResult(name, False, {"field": (error.data or {}).get("kind", "")}, "bad_arguments", instruction=error.message)
             else:
                 # Not the member's arguments (#279): the handler failed, and its own words say why.
@@ -4325,6 +4367,8 @@ class AgentService:
             raise HarnessToolError("needs_composio_key")
         if app is None:
             raise ValueError("unknown app")
+        if args.get("reconnect") is not True:
+            await self._cards.verify(app)  # an app held as connected is read at Composio before it is called connected
         card = self._cards.show(turn_id=ask.turn_id, member_id=ask.speaker.id, conversation_id=ask.conversation_id,
                                 app=app, language=ask.language, done=ask.made, reconnect=args.get("reconnect") is True)
         if card is None:
@@ -4755,7 +4799,12 @@ class AgentService:
         waits in `_followups`."""
         language = ask.language
         arguments = card_arguments(call.tool.key, call.arguments)
-        shown = preview(arguments)
+        landing = getattr(self._plugins, "landing", None)
+        if callable(landing) and isinstance(placed := landing(call.tool.key, call.arguments, ask.speaker.id), dict):
+            arguments = {**arguments, **placed}  # a computer's write shows the place it lands, not the path as written
+        # What cannot be undone is asked about with the whole of what it is given (a write outside the work folder names its
+        # file at the end of a long path), not with the overlay's short line.
+        shown = preview(arguments, CARD_PREVIEW_CHARS) if (self._tier_now(call) or Tier.T0) >= Tier.T3 else preview(arguments)
         question = phrase(
             language,
             "confirm_plugin",

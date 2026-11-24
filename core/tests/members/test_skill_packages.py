@@ -318,3 +318,101 @@ def test_local_skill_copies_an_absolute_link_only_within_the_selected_folder(tmp
     [files], _ = skill_sources.local(f"local:{root}")
     assert files["read.txt"] == b"read this"
     assert files.skipped_links == ["external.txt"]
+
+
+def plugin_folder(tmp_path):
+    """A plugin whose one skill reads the actions beside its skills folder, as a real package lays them out."""
+    root = tmp_path / "bundle" / "track"
+    files = {
+        ".claude-plugin/plugin.json": '{"name":"track","version":"1.0.0"}',
+        "skills/lazy-mode/SKILL.md": document("lazy-mode") + (
+            "\nRead [report](../../actions/report.md) or [the notes](<../../actions/notes.md#top>)."
+            "\nFor any other action read ../../actions/<name>.md first, then `../../README.md`."
+            "\nNever read ../../../outside.md or [the big one](../../actions/big.bin)."
+            "\nAlso see [a sibling](../other/SKILL.md) and [its own file](../lazy-mode/references/own.md).\n"),
+        "skills/lazy-mode/references/own.md": "own reference",
+        "skills/other/SKILL.md": document("other"),
+        "actions/report.md": "# Report\nShared rules: [common](_common.md), [readme](../README.md).\n",
+        "actions/notes.md": "# Notes",
+        "actions/_common.md": "# Common\nBack to [the skill](../skills/lazy-mode/references/own.md).\n",
+        "actions/big.bin": "x" * 5000,
+        "README.md": "the plugin",
+    }
+    for relative, contents in files.items():
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(contents.encode())
+    (tmp_path / "bundle" / "outside.md").write_bytes(b"not part of the plugin")
+    return root
+
+
+def test_a_plugin_skill_takes_the_files_it_links_to_in_its_plugin(tmp_path, monkeypatch):
+    root = plugin_folder(tmp_path)
+    monkeypatch.setattr(skill_sources, "MAX_PACKAGE_BYTES", 4000)
+    documents, _ = skill_sources.local(f"local:{root}")
+    files = next(f for f in documents if "<name>" in f["SKILL.md"].decode() or "_plugin/" in f["SKILL.md"].decode())
+    text = files["SKILL.md"].decode()
+    assert files.plugin_manifest
+    # The links point into the skill's own folder now, where the copies are, and every one of them resolves.
+    assert "[report](_plugin/actions/report.md)" in text and "(<_plugin/actions/notes.md#top>)" in text
+    assert "_plugin/actions/<name>.md" in text and "`_plugin/README.md`" in text
+    assert "(references/own.md)" in text and "(_plugin/skills/other/SKILL.md)" in text
+    for link in ("_plugin/actions/report.md", "_plugin/actions/notes.md", "_plugin/README.md", "references/own.md"):
+        assert link in files
+    # What those files link to comes with them, relative to each other as in the plugin.
+    assert files["_plugin/actions/_common.md"] == b"# Common\nBack to [the skill](../skills/lazy-mode/references/own.md).\n"
+    assert files["_plugin/README.md"] == b"the plugin"
+    assert not any(name.endswith("outside.md") or name.endswith("big.bin") for name in files)
+    # What cannot come is named, with the reason.
+    assert {(item["path"], item["reason"]) for item in files.skipped_references} == {
+        ("../../../outside.md", "outside_plugin"), ("actions/big.bin", "too_large"),
+        ("skills/lazy-mode/references/own.md", "inside_skill")}
+
+
+async def test_the_imported_plugin_skill_reads_its_linked_files_and_the_result_names_what_is_missing(rig, tmp_path):
+    root = plugin_folder(tmp_path)
+    try:
+        (root / "actions" / "linked.md").symlink_to(root / "README.md")
+    except OSError as error:
+        pytest.skip(f"cannot create local symlinks: {error}")
+    skill = root / "skills" / "lazy-mode" / "SKILL.md"
+    skill.write_bytes(skill.read_bytes() + b"Also [a link](../../actions/linked.md).\n")
+    package = (await rig.call("skills.library.import", {"source": f"local:{root}"}))["package"]
+    named = next(s for s in package["skills"] if s["name"] == "lazy-mode")
+    assert package["kind"] == "plugin"
+    assert {(item["path"], item["reason"]) for item in package["skipped_references"][str(named["id"])]} == {
+        ("../../../outside.md", "outside_plugin"), ("actions/linked.md", "linked"),
+        ("skills/lazy-mode/references/own.md", "inside_skill")}
+    await rig.call("skills.library.update", {"key": package["key"], "access": "all"})
+    text = rig.service.skill_read(0, "lazy-mode")
+    assert "[report](_plugin/actions/report.md)" in text
+    # The link in the stored skill leads to the stored copy, and the copies keep their links to each other.
+    assert rig.service.skill_file(0, "lazy-mode", "_plugin/actions/report.md").startswith("# Report")
+    assert rig.service.skill_file(0, "lazy-mode", "_plugin/actions/_common.md").startswith("# Common")
+    assert rig.service.skill_file(0, "lazy-mode", "_plugin/README.md") == "the plugin"
+    assert rig.service.skill_file(0, "lazy-mode", "references/own.md") == "own reference"
+    from pathlib import Path
+
+    folder = Path(next(n for n in rig.service.native_skills(0) if n["name"].endswith("lazy-mode"))["path"]).parent
+    assert (folder / "_plugin" / "actions" / "report.md").is_file()
+    assert not (folder / "_plugin" / "actions" / "linked.md").exists()
+    assert not (folder.parent / "actions").exists()
+
+
+def test_a_skill_outside_a_plugin_or_beside_its_files_is_imported_as_it_is(tmp_path):
+    root = tmp_path / "loose"
+    (root / "skills" / "notes").mkdir(parents=True)
+    (root / "actions").mkdir()
+    (root / "actions" / "report.md").write_bytes(b"report")
+    text = document("notes") + "\nRead ../../actions/report.md.\n"
+    (root / "skills" / "notes" / "SKILL.md").write_bytes(text.encode())
+    [files], _ = skill_sources.local(f"local:{root}")
+    assert files["SKILL.md"] == text.encode() and list(files) == ["SKILL.md"] and not files.skipped_references
+    # A plugin skill whose folder already uses the shared name copies nothing and says why.
+    (root / ".claude-plugin").mkdir()
+    (root / ".claude-plugin" / "plugin.json").write_bytes(b"{}")
+    (root / "skills" / "notes" / "_plugin").mkdir()
+    (root / "skills" / "notes" / "_plugin" / "mine.md").write_bytes(b"mine")
+    [files], _ = skill_sources.local(f"local:{root}")
+    assert files["SKILL.md"] == text.encode() and "_plugin/actions/report.md" not in files
+    assert files.skipped_references == [{"path": "actions/report.md", "reason": "name_taken"}]

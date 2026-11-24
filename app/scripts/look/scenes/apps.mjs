@@ -41,6 +41,10 @@ const accountsPage = [...open, click('[data-conn="connected"]'), click('[data-co
 const gmailAccounts = ({ second = false } = {}) => connector("composio:gmail", { name: "Gmail", description: "搜尋郵件、撰寫草稿與回覆", enabled_tools: ["GMAIL_FETCH_EMAILS", "GMAIL_CREATE_DRAFT"],
   accounts: [{ id: "ca_main", status: "ACTIVE", label: "Alex" },
     ...(second ? [{ id: "ca_me", status: "ACTIVE", label: "工作信箱" }] : [{ id: "ca_wait", status: "INITIATED" }, { id: "ca_old", status: "INITIATED", stale: true }])] });
+// Two accounts of a key: no address and no name, told apart by when each was made (R-ACCT-04). The core marks the newest.
+const keyAccounts = () => connector("composio:gmail", { name: "Gmail", description: "搜尋郵件、撰寫草稿與回覆", enabled_tools: ["GMAIL_FETCH_EMAILS", "GMAIL_CREATE_DRAFT"],
+  accounts: [{ id: "ca_first", status: "ACTIVE", created_at: Date.UTC(2026, 9, 20, 6, 5) / 1000 },
+    { id: "ca_second", status: "ACTIVE", created_at: Date.UTC(2026, 9, 21, 14, 30) / 1000, newest: true }] });
 const appSwitch = state => wait(`[data-conn="enable"][data-id="github"][aria-checked="${state}"]`);
 
 const skillDoc = (name, description, body) => `---\nname: ${name}\ndescription: ${description}\n---\n${body}`;
@@ -101,6 +105,9 @@ export default [
   scene("accounts-card", "An app's accounts: the connected one and the sign-in that is still young; the one that waited too long is gone. Each row has a quiet ⋯ and no 帳號名稱 button", [
     ...accountsPage, check("accounts-card"),
   ], { managedConnectors: [gmailAccounts()] }),
+  scene("accounts-dated", "Two accounts with no address and no name: each row says when it was made, and the newest says so", [
+    ...accountsPage, check("accounts-dated"),
+  ], { managedConnectors: [keyAccounts()] }),
   scene("accounts-menu", "The ⋯ of an account row opens 重新命名 and then 移除 in red", [
     ...accountsPage, click('[data-conn="account-menu"][data-account="ca_wait"]'), wait("#app-popover"), check("accounts-menu"),
   ], { managedConnectors: [gmailAccounts()] }),

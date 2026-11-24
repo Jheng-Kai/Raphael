@@ -46,6 +46,8 @@ class GuestRuntime(Runtime):
             self.calls.append((args, kwargs))
             request = json.loads(kwargs["input"])
             request.update(path=self.host(request["path"]), roots=[str(self.folders[root]) for root in request["roots"]])
+            if "allowed" in request:
+                request["allowed"] = [self.host(folder) for folder in request["allowed"]]
             return Result(0, json.dumps(files_guest.handle(request)))
         return await super().__call__(args, **kwargs)
 

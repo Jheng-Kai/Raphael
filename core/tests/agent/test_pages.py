@@ -14,7 +14,7 @@ from mcp.server.mcpserver import MCPServer
 
 from raphael_core.agent.harness_tools import definitions_for, tool
 from raphael_core.agent.history import AgentHistory
-from raphael_core.agent.pages import HTML_BYTES, MCP_MIME, PageError, PageHost, PageStore, domains, page_csp, page_file
+from raphael_core.agent.pages import HTML_BYTES, MCP_MIME, PageError, PageHost, PageStore, document, domains, page_csp, page_file
 from raphael_core.agent.permissions import PermissionCards
 from raphael_core.agent.policy import Tier
 from raphael_core.agent.report_page import FILE_POLICY, file_name
@@ -797,24 +797,28 @@ async def _shown_report(rig, client):
     return (await rig.turns())[0]["pages"][0]["id"]
 
 
-async def test_a_shared_report_is_saved_as_its_file_in_the_output_folder_else_downloads_never_over_a_file(make_rig, client, tmp_path):
+async def test_a_shared_report_is_saved_in_the_members_work_folder_else_downloads_never_over_a_file(make_rig, client, tmp_path):
     rig = make_rig()
+    rig.service.member_folders = lambda member: (tmp_path / "Member", tmp_path / "Team")
     page = await _shown_report(rig, client)
     downloads = tmp_path / "Downloads"
     saved = await rig.call("pages.export", {"id": page, "html": _file(), "downloads": str(downloads)})
     assert saved == {"path": str(downloads / "Team report.html"), "place": "downloads", "folder": "Downloads"}
-    assert (downloads / "Team report.html").read_bytes() == _file().encode("utf-8")
+    assert Path(saved["path"]).read_bytes() == _file().encode("utf-8")
     again = await rig.call("pages.export", {"id": page, "html": _file(), "downloads": str(downloads)})
-    assert again["path"] == str(downloads / "Team report (2).html") and len(list(downloads.iterdir())) == 2
+    assert again["path"] == str(downloads / "Team report (2).html")
+    assert not (tmp_path / "Member").exists()
 
-    # The owner's output folder first, made if it is gone; one that takes nothing leaves the file in Downloads.
-    rig.settings.set("owner_output_folder", str(tmp_path / "Out" / "Reports"))
+    project = tmp_path / "Out" / "Reports"
+    project.mkdir(parents=True)
+    rig.settings.set("project_folders", [str(project)])
+    rig.settings.set("member_work_folder", {"0": str(project)})
     chosen = await rig.call("pages.export", {"id": page, "html": _file(), "downloads": str(downloads)})
-    assert chosen == {"path": str(tmp_path / "Out" / "Reports" / "Team report.html"), "place": "output", "folder": "Reports"}
-    (tmp_path / "taken").write_text("a file, not a folder")
-    rig.settings.set("owner_output_folder", str(tmp_path / "taken" / "Reports"))
+    assert chosen == {"path": str(project / "Team report.html"), "place": "work", "folder": "Reports"}
+    project.rename(tmp_path / "Moved")
     fallen = await rig.call("pages.export", {"id": page, "html": _file(), "downloads": str(downloads)})
     assert fallen["place"] == "downloads" and fallen["path"] == str(downloads / "Team report (3).html")
+    assert not project.exists()
 
 
 @pytest.mark.parametrize("html", [
@@ -850,10 +854,12 @@ async def test_a_report_file_where_anything_could_run_or_load_is_refused_and_not
 
 async def test_a_table_link_goes_into_the_file_as_an_https_link_and_nothing_else_leaves_the_page(make_rig, client, tmp_path):
     rig = make_rig()
+    rig.service.member_folders = lambda member: (tmp_path / "Member", tmp_path / "Team")
     page = await _shown_report(rig, client)
     link = '<a class="rp-link" href="https://www.google.com/maps/search/?api=1&amp;query=%E6%B7%BA%E8%8D%89%E5%AF%BA" rel="noopener noreferrer">地圖</a>'
     saved = await rig.call("pages.export", {"id": page, "html": _file(DRAWING + link), "downloads": str(tmp_path)})
-    assert "query=%E6%B7%BA" in (tmp_path / "Team report.html").read_text("utf-8") and saved["place"] == "downloads"
+    assert Path(saved["path"]) == tmp_path / "Team report.html"
+    assert "query=%E6%B7%BA" in Path(saved["path"]).read_text("utf-8")
 
 
 async def test_a_page_the_core_cannot_find_or_a_plugins_page_is_not_saved_as_a_file(make_rig, tmp_path):
@@ -892,21 +898,35 @@ def test_an_html_page_file_is_the_page_without_the_window_helper_under_the_pages
     assert text.index('<meta charset="utf-8">') < head
 
 
+def test_a_page_reads_in_the_windows_theme_even_with_a_default_of_its_own():
+    page = {"title": "News", "html": '<!doctype html><html data-theme="dark"><body><h1>News</h1></body></html>', "source": "html", "network": {}}
+    for theme in ("light", "dark"):
+        text = document(page, theme)
+        # The window's theme is on the root before the page's <html>, whose own default the parser then leaves out.
+        script = f"<script>document.documentElement.setAttribute('data-theme','{theme}')</script>"
+        assert text.index(script) < text.index('<html data-theme="dark">') < text.index("<h1>News</h1>")
+    # A file follows its reader's theme instead.
+    assert "setAttribute('data-theme'" not in _page_file(html="<h1>News</h1>")
+
+
 async def test_a_shared_html_page_is_saved_from_what_is_stored_never_from_text_the_window_gives(make_rig, tmp_path):
     rig = make_rig()
+    rig.service.member_folders = lambda member: (tmp_path / "Member", tmp_path / "Team")
     page = stored(rig.conn, title="Tokyo: a/b", html="<h1>Tokyo</h1>")
     downloads = tmp_path / "Downloads"
     saved = await rig.call("pages.export", {"id": page["id"], "html": "<script>alert(1)</script>", "downloads": str(downloads)})
     assert saved == {"path": str(downloads / "Tokyo a b.html"), "place": "downloads", "folder": "Downloads"}
-    written = (downloads / "Tokyo a b.html").read_text("utf-8")
+    written = Path(saved["path"]).read_text("utf-8")
     assert "<h1>Tokyo</h1>" in written and "alert(1)" not in written and "parent.postMessage" not in written
     # With no `html` at all, as the window sends it for a page, and again: never over another file.
     again = await rig.call("pages.export", {"id": page["id"], "downloads": str(downloads)})
     assert again["path"] == str(downloads / "Tokyo a b (2).html")
-    # The owner's output folder first.
-    rig.settings.set("owner_output_folder", str(tmp_path / "Out"))
+    # The member's selected project first.
+    (tmp_path / "Out").mkdir()
+    rig.settings.set("project_folders", [str(tmp_path / "Out")])
+    rig.settings.set("member_work_folder", {"0": str(tmp_path / "Out")})
     chosen = await rig.call("pages.export", {"id": page["id"], "downloads": str(downloads)})
-    assert chosen == {"path": str(tmp_path / "Out" / "Tokyo a b.html"), "place": "output", "folder": "Out"}
+    assert chosen == {"path": str(tmp_path / "Out" / "Tokyo a b.html"), "place": "work", "folder": "Out"}
 
 
 async def test_a_changed_page_is_shared_as_it_is_now_and_a_secret_in_it_still_stops_the_file(make_rig, tmp_path):
@@ -919,7 +939,8 @@ async def test_a_changed_page_is_shared_as_it_is_now_and_a_secret_in_it_still_st
     rig.conn.execute("UPDATE pages SET html=? WHERE id=?", ("<p>sk-ant-api03-" + "a1B2c3D4" * 8 + "</p>", page["id"]))
     with pytest.raises(RpcError) as error:
         await rig.call("pages.export", {"id": page["id"], "downloads": str(tmp_path)})
-    assert error.value.code == INVALID_PARAMS and len(list(tmp_path.iterdir())) == 1
+    assert error.value.code == INVALID_PARAMS
+    assert list(tmp_path.iterdir()) == [Path(saved["path"])]
 
 
 @pytest.mark.parametrize("title,name", [
@@ -943,6 +964,37 @@ def test_the_helper_does_not_pass_on_growth_that_only_follows_its_frame():
     assert "const grown = innerHeight - framed;" in _HELPER
     assert "Math.abs(height - previous - grown) <= 1" in _HELPER
     assert _HELPER.index("framed = innerHeight;") < _HELPER.index("post('height', {height})")
+
+
+def test_the_helper_tells_the_window_the_pages_own_background_as_a_plain_colour():
+    # R-PAGE-10: the window paints it behind the composer's row, so a page whose frame ends above the composer still reads as running to
+    # the window's foot. The first non-transparent computed background of the body, then of the root, said once the page is parsed and
+    # again once it has loaded (its style sheets may come late); the window takes only rgb() or rgba(), so the helper converts any other
+    # notation and says an empty colour for none.
+    from raphael_core.agent.pages import _HELPER
+    assert "const tell = () => post('background', {color: background()});" in _HELPER
+    assert "addEventListener('DOMContentLoaded', tell, {once: true});" in _HELPER
+    assert "addEventListener('load', tell, {once: true});" in _HELPER
+    background = _HELPER[_HELPER.index("const background = () => {"):_HELPER.index("const tell = ")]
+    assert background.index("document.body") < background.index("document.documentElement")
+    assert "getComputedStyle(root).backgroundColor" in background
+    # A transparent one is none; a colour in another notation goes through a canvas, so only rgb()/rgba() text is ever sent.
+    plain = _HELPER[_HELPER.index("const plain = value => {"):_HELPER.index("const background = () => {")]
+    assert "if (!(a > 0)) return '';" in plain and "getImageData" in plain
+    assert "'rgb(' +" in plain and "'rgba(' +" in plain
+    # The helper is a Python string: a backslash in it would be an escape of Python's, not of the page's script.
+    assert "\\" not in _HELPER
+
+
+async def test_the_page_a_window_gets_carries_the_helper_that_says_its_background(conn):
+    from raphael_core.agent.pages import _HELPER
+    page = stored(conn, title="Daily lesson", html=LESSON)
+    host = PageHost(PageStore(conn))
+    try:
+        body = (await fetch(await host.url(page["id"], "dark"))).split("\r\n\r\n", 1)[1]
+    finally:
+        await host.aclose()
+    assert "post('background', {color: background()})" in body and body.index(_HELPER) < body.index("<header>")
 
 
 # A member's page shaped like a daily lesson: a Google Fonts style sheet in its head, its words built by its own script at

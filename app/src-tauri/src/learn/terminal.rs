@@ -229,6 +229,11 @@ impl TerminalTracker {
         }
     }
 
+    /// Whether the input was sent (Enter, or its rows cleared), as opposed to lost or still open.
+    pub fn is_sent(&self) -> bool {
+        self.decision == TerminalDecision::Sent
+    }
+
     /// Unsafe input or lost field identity cannot retain a draft correction.
     pub fn invalidate(&mut self) {
         self.places.clear();

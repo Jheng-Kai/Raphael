@@ -62,7 +62,8 @@ categories (全部, 溝通, 生產力, 開發 and so on), with no count of what 
   (`pressThrough`). A page that draws itself again from under a press loses it, so `load()` draws only when the reading changes what the dialog drew (`drawn`).
 - 「✓ 已連結」 of a main-view row is pressable (the row opens the app's page from anywhere but 連結): `connected-owner-state-press`, check `app-state-press`.
   On an app's own page it stays words: its destination would be the page itself.
-- An app's page replaces the view. The shared round back and close buttons, the mark on a 56 px white tile and the name share the header centre line. Below it is 「連結」 (white, round) or, when connected, 「✓ 已連結」 with its ⋯ before its rightmost switch; a paragraph; accounts; for a connected app
+- An app's page replaces the view. The shared round back and close buttons stand alone on the header's centre line. On the row under it are the mark on a 56 px white tile, the name and,
+  ending the row on the same centre line, 「連結」 (white, round) or, when connected, 「✓ 已連結」 with its ⋯ before its rightmost switch; a paragraph; accounts; for a connected app
   a 工具 card (kind switches, the folded tool list); a 資訊 card (提供者, 類別, 登入方式, 伺服器, 工具) of 38 px rows; the latest actions and
   the 試用, sign-in and refresh buttons. After a sign-in from a page the page stays and shows the connected state.
 - The colour rule for everything that floats (R-FLOAT-01, with the dialog layer `--dialog` of R-FLOAT-03): `--float`, `--float-edge`, `--float-ctl`, `--float-hover`, `--float-sel`,
@@ -142,6 +143,10 @@ A sign-in cancelled half way can be removed, so no useless accounts pile up, and
   `core/tests/test_connectors.py` and `app/src/main/connections.test.ts`. The existing `accounts-card` and
   `accounts-remove-yes` scenes cover the account row and removal controls with fixture responses.
 
+- Accounts with no address and no name (an app added with a key) say when each was made, and with several the newest says so: `帳號 N · 月/日 時:分`
+  and `· 最新` on the newest (`accounts-dated`; the core marks it, `core/tests/test_connector_accounts.py` proves the marking and the reads). The page also
+  reads Composio's accounts once after it draws (`connectors.status` with `accounts`, at most twice a minute) and draws again only if one changed, so an
+  account removed elsewhere is gone from the list; the mock core of `look` has nothing to read, so only the row words are checked there.
 - A sign-in that was given up leaves no account: the core gives back (Composio and the list) the account of a flow that was cancelled, closed,
   failed or ran out, and any waiting one older than ten minutes when the list is read. `look` cannot prove that (the core is a mock there):
   `core/tests/test_connector_accounts.py` does, and the scene `accounts-card` shows the list after the core gave the old one back.
@@ -154,7 +159,7 @@ A sign-in cancelled half way can be removed, so no useless accounts pile up, and
   `integrations.connect_cancel`).
 
 ```powershell
-npm run look -- accounts-card accounts-menu accounts-relogin-menu connection-lost accounts-remove-ask accounts-remove-yes accounts-remove-waiting accounts-remove-last account-labels account-label-edit sign-in-waits sign-in-replaced sign-in-cancelled --theme both --width 1120,720,1920x1080
+npm run look -- accounts-card accounts-dated accounts-menu accounts-relogin-menu connection-lost accounts-remove-ask accounts-remove-yes accounts-remove-waiting accounts-remove-last account-labels account-label-edit sign-in-waits sign-in-replaced sign-in-cancelled --theme both --width 1120,720,1920x1080
 ```
 
 A connection that drops (R-ACCT-04): the core reads the accounts a minute after start and every twenty minutes (`watch_once`; on a Mac only once the key
@@ -881,7 +886,7 @@ Offline contracts: core/tests/integrations/test_chat_connections.py, core/tests/
 R-COLLEAGUE-04: Connections > an app shows each public account label; Account label edits that exact account. Add another account reuses existing sign-in and asks for a label afterward. A returned email is the default; provider refresh retains owner labels by account ID. Members and connections_list receive public labels and the shared instruction to ask which account unless specified.
 
 ```powershell
-npm run look -- account-labels account-label-edit output-folder-picker output-folder-picker-cancel --theme both --width 1120,720,1920x1080
+npm run look -- account-labels account-label-edit project-folder-picker project-folder-picker-cancel --theme both --width 1120,720,1920x1080
 ```
 
 Core fakes prove persistence and projection. IPC fixtures never prove OAuth or provider metadata. Custom MCP services without multiple managed account identities retain their service identity.

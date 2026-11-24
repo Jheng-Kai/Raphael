@@ -4,6 +4,7 @@ Open-Meteo is an httpx.MockTransport and OpenRouter a fake, so no test touches t
 """
 
 import asyncio
+import json
 import logging
 from datetime import datetime, timedelta, timezone
 
@@ -12,6 +13,7 @@ import pytest
 
 from raphael_core.agent import tools as tools_module
 from raphael_core.agent.ledger import Ledger
+from raphael_core.answer_forms import forms_plain_text
 from raphael_core.agent.tools import (
     SEARCH_PLUGINS,
     SKIES,
@@ -41,7 +43,25 @@ FORECAST = {
     "longitude": 121.5,
     "timezone": "Asia/Taipei",
     "current": {"time": "2026-10-20T14:00", "interval": 900, "temperature_2m": 24.1,
-                "weather_code": 2},
+                "weather_code": 2, "apparent_temperature": 25.4, "relative_humidity_2m": 74,
+                "wind_speed_10m": 18.3},
+    "hourly": {
+        "time": ["2026-10-20T14:00", "2026-10-20T15:00", "2026-10-20T16:00"],
+        "temperature_2m": [24.1, 23.5, None],
+        "precipitation_probability": [30, 40, None],
+        "weather_code": [2, 61, 3],
+    },
+    "daily": {
+        "time": ["2026-10-20", "2026-10-21", "2026-10-22"],
+        "temperature_2m_max": [27.3, 26.0, 25.0],
+        "temperature_2m_min": [21.0, 20.5, 19.0],
+        "precipitation_probability_max": [40, 70, 10],
+        "weather_code": [3, 61, 0],
+    },
+}  # fmt: skip
+# What Open-Meteo sends when it has none of the extras: the same forecast as before they were asked for.
+PLAIN_FORECAST = {
+    "current": {"time": "2026-10-20T14:00", "temperature_2m": 24.1, "weather_code": 2},
     "daily": {
         "time": ["2026-10-20", "2026-10-21"],
         "temperature_2m_max": [27.3, 26.0],
@@ -103,10 +123,12 @@ async def test_the_weather_is_looked_up_by_city_then_by_place(tools, meteo):
     assert dict(forecast.url.params) == {
         "latitude": "25.04776",
         "longitude": "121.53185",
-        "current": "temperature_2m,weather_code",
+        "current": "temperature_2m,weather_code,apparent_temperature,relative_humidity_2m,wind_speed_10m",
+        "hourly": "temperature_2m,precipitation_probability,weather_code",
         "daily": "temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code",
         "timezone": "auto",
-        "forecast_days": "2",
+        "forecast_hours": "12",
+        "forecast_days": "7",
     }
     assert isinstance(result, ToolResult) and result.name == "weather" and result.ok
 
@@ -120,7 +142,8 @@ async def test_the_weather_asks_which_city_when_none_is_known_and_looks_nothing_
     assert meteo.requests == []
 
 
-async def test_the_weather_is_the_place_now_today_and_tomorrow(tools):
+async def test_the_weather_is_the_place_now_today_and_tomorrow(tools, meteo):
+    meteo.forecast = PLAIN_FORECAST
     result = await tools.weather("Taipei", "zh-TW")
     assert result.data == {
         "city": "Taipei",
@@ -137,8 +160,82 @@ async def test_the_weather_is_the_place_now_today_and_tomorrow(tools):
             "rain_chance_percent": 70,
             "sky": "slight rain",
         },
+        "days": [
+            {"date": "2026-10-20", "low_c": 21.0, "high_c": 27.3, "rain_chance_percent": 40, "sky": "overcast"},
+            {"date": "2026-10-21", "low_c": 20.5, "high_c": 26.0, "rain_chance_percent": 70, "sky": "slight rain"},
+        ],
+        "source": "Open-Meteo",
+        "updated": "14:00",
+        "card": '```forecast\n{"place":"Taipei","units":"C","now":{"temp":24.1,"condition":"partly cloudy"},'
+                '"days":[{"day":"2026-10-20","condition":"overcast","high":27.3,"low":21.0,"rain":40},'
+                '{"day":"2026-10-21","condition":"slight rain","high":26.0,"low":20.5,"rain":70}],'
+                '"source":"Open-Meteo","updated":"14:00"}\n```',
+        "card_use": tools_module.CARD_USE,
     }
     assert result.error is None
+
+
+async def test_the_weather_hands_the_whole_forecast_form_ready_to_reply_with(tools):
+    """A member that wrote the form itself kept two days and no hours; the tool's card has every part it read (R-FORM-03)."""
+    data = (await tools.weather("台中", "zh-TW")).data
+    assert data["card_use"] == tools_module.CARD_USE
+    card = data["card"]
+    assert card.startswith("```forecast\n") and card.endswith("\n```")
+    form = json.loads(card.split("\n")[1])
+    assert form["place"] == "台中"  # what the owner called it, not the place the search found
+    assert form["units"] == "C"
+    assert form["now"] == {"temp": 24.1, "condition": "partly cloudy", "feels": 25.4, "humidity": 74, "wind": "18 km/h"}
+    assert form["hours"] == [{"time": "14:00", "condition": "partly cloudy", "temp": 24.1, "rain": 30},
+                             {"time": "15:00", "condition": "slight rain", "temp": 23.5, "rain": 40}]  # an hour with no temperature is left out
+    assert [day["day"] for day in form["days"]] == [day["date"] for day in data["days"]]
+    assert (form["source"], form["updated"]) == ("Open-Meteo", "14:00")
+    assert forms_plain_text(card) != card  # the app draws it: the checks every form passes take it
+
+
+async def test_a_forecast_with_no_whole_day_has_no_card(tools, meteo):
+    meteo.forecast = {"current": {"temperature_2m": 18.0, "weather_code": 0}, "daily": {"time": ["2026-10-20"], "temperature_2m_max": [20.0]}}
+    data = (await tools.weather("Taipei", "en")).data
+    assert "card" not in data and "card_use" not in data
+
+
+async def test_the_weather_adds_feels_like_humidity_wind_hours_days_source_and_time(tools):
+    data = (await tools.weather("Taipei", "zh-TW")).data
+    assert data["now"] == {"temperature_c": 24.1, "sky": "partly cloudy", "feels_like_c": 25.4,
+                           "humidity_percent": 74, "wind_kmh": 18.3}
+    assert data["hours"] == [
+        {"time": "14:00", "temperature_c": 24.1, "rain_chance_percent": 30, "sky": "partly cloudy"},
+        {"time": "15:00", "temperature_c": 23.5, "rain_chance_percent": 40, "sky": "slight rain"},
+        {"time": "16:00", "sky": "overcast"},  # what an hour lacks is left out
+    ]
+    assert [day["date"] for day in data["days"]] == ["2026-10-20", "2026-10-21", "2026-10-22"]
+    assert data["days"][2] == {"date": "2026-10-22", "low_c": 19.0, "high_c": 25.0, "rain_chance_percent": 10, "sky": "clear sky"}
+    assert (data["today"], data["tomorrow"]) == (
+        {"low_c": 21.0, "high_c": 27.3, "rain_chance_percent": 40, "sky": "overcast"},
+        {"low_c": 20.5, "high_c": 26.0, "rain_chance_percent": 70, "sky": "slight rain"})
+    assert (data["source"], data["updated"]) == ("Open-Meteo", "14:00")
+
+
+async def test_the_hours_and_days_are_capped_and_a_malformed_one_is_left_out(tools, meteo):
+    times = [f"2026-10-20T{hour:02d}:00" for hour in range(24)]
+    meteo.forecast = {
+        "current": {"time": "soon", "temperature_2m": 18.0},
+        "hourly": {"time": ["tomorrow", *times], "temperature_2m": list(range(25))},
+        "daily": {"time": ["x", *[f"2026-10-{20 + n}" for n in range(9)]], "temperature_2m_max": list(range(10))},
+    }
+    data = (await tools.weather("Taipei", "en")).data
+    assert len(data["hours"]) == 12 and data["hours"][0] == {"time": "00:00", "temperature_c": 1}
+    assert len(data["days"]) == 7 and data["days"][0] == {"date": "2026-10-20", "high_c": 1}
+    assert "updated" not in data  # a time that is not one is not said
+
+
+@pytest.mark.parametrize("extras", [{"hourly": "soon"}, {"hourly": {"time": 5}}, {"hourly": {}}, {"daily": {"time": "x"}}])
+async def test_a_forecast_whose_hours_or_days_are_unusable_still_answers_with_the_rest(tools, meteo, extras):
+    meteo.forecast = {**PLAIN_FORECAST, **extras}
+    data = (await tools.weather("Taipei", "en")).data
+    assert data["now"] == {"temperature_c": 24.1, "sky": "partly cloudy"} and "hours" not in data
+    assert data["source"] == "Open-Meteo"
+    if "daily" not in extras:
+        assert data["days"] and data["today"]
 
 
 @pytest.mark.parametrize(("language", "code"), [("zh-TW", "zh"), ("en", "en"), ("ja", "ja")])
@@ -314,7 +411,7 @@ async def test_a_request_whose_try_timed_out_is_asked_once_more_and_answers(clie
     setattr(meteo, which, slow_once)
     with caplog.at_level(logging.INFO, logger=tools_module.logger.name):
         result = await Tools(client, http=meteo.http, now=lambda: NOW).weather("台北", "zh-TW")
-    assert result.ok and result.data["now"] == {"temperature_c": 24.1, "sky": "partly cloudy"}
+    assert result.ok and result.data["now"]["temperature_c"] == 24.1
     assert len(tries) == 2 and len(meteo.requests) == 3
     stage = "place" if which == "geocoding" else "forecast"
     assert f"{stage} request failed on try 1 of 2" in caplog.text and "ReadTimeout" in caplog.text

@@ -15,7 +15,7 @@ import { confirmDelete, openDialog as openMemberDialog } from "./member-dialogs"
 import { managedGroup, pluginTool, storePlugin, type ManagedConnector } from "./plugins-data";
 import { openMcpImport } from "./mcp-import";
 import { isTopLayer, registerDismissal } from "./dismissals";
-import { dayLabel, describeError, formatClock } from "./format";
+import { dayLabel, describeError, formatClock, formatShortDateTime } from "./format";
 import { getLocale, t } from "./i18n";
 import { linkedText } from "./message-content";
 import { STORE_GROUPS, popularApp, popularRank, storeGroup, storeMatches, storeNameRank, storeNear } from "./store-finder";
@@ -573,8 +573,9 @@ export const connectionsAddHTML = (): string =>
   `<button type="button" class="sel cs-add" aria-haspopup="menu" aria-expanded="false" data-k="conn-add">` +
   `<span>${esc(t("conn.addMenu"))}</span>${ico("down")}</button>`;
 
-/** A round chevron at the top left: back from an app's page or from the list of the connected apps. */
-const backHTML = (): string => backButton(t("conn.back"), ' data-conn="back" data-k="cs-back"', "cs-back back-link");
+/** A round chevron at the top left: back from an app's page. The list of the connected apps goes back by its title instead:
+ *  a plain chevron beside 已連結, both pressable (`link`). */
+const backHTML = (link = false): string => backButton(t("conn.back"), ' data-conn="back" data-k="cs-back"', link ? "cs-back back-link" : "cs-back");
 /** The connected list's title is its way back: the chevron and the title are one button. */
 // ---------- the connected apps: one list ----------
 
@@ -700,17 +701,20 @@ const accountStatus = (status: string): { kind: "ok" | "warn" | "err" | "idle"; 
   return { kind: known.kind, text: tr(known.key) };
 };
 
-function accountName(account: NonNullable<ConnectionGroup["accounts"]>[number], index: number): string {
+function accountName(account: NonNullable<ConnectionGroup["accounts"]>[number], index: number, several = false): string {
   const identity = account.display_name || account.alias;
   if (identity && account.label && account.label !== identity) return `${identity} · ${account.label}`;
-  return identity || account.label || t("conn.accountN", { p0: index + 1 });
+  if (identity || account.label) return identity || account.label!;
+  // Accounts with no address and no name (a key's) are told apart by when each was connected, and the newest is said.
+  return [t("conn.accountN", { p0: index + 1 }), several && account.created_at ? formatShortDateTime(account.created_at * 1000) : "",
+    several && account.newest ? t("picker.sortNewest") : ""].filter(Boolean).join(" · ");
 }
 
 /** Show one row per managed account, or one for a signed-in custom server. */
 function accountsHTML(g: ConnectionGroup): string {
   const rows: { label: string; kind: "ok" | "warn" | "err" | "idle"; text: string }[] =
     g.source === "composio" ? (g.accounts ?? []).map((account, n) => ({
-      label: account.display_name ? `${g.name} · ${accountName(account, n)}` : accountName(account, n),
+      label: account.display_name ? `${g.name} · ${accountName(account, n)}` : accountName(account, n, (g.accounts?.length ?? 0) > 1),
       ...accountStatus(account.status),
     }))
     : g.source === "google" ? [{ label: g.accounts?.[0]?.label || t("conn.googleAccount"), ...accountStatus(g.accounts?.[0]?.status ?? (g.status === "ready" ? "ACTIVE" : "INACTIVE")) }]
@@ -765,9 +769,9 @@ function toolsHTML(g: ConnectionGroup, v: ConnectionsView, busy: boolean, loggin
 }
 
 /**
- * An app's page, in the dialog's place: a back chevron (the dialog's own × is at the other corner), the app's mark on a white tile with its
- * name and, at the right, 「連結」 (or, when it is connected, its state, its switch and its ⋯), a paragraph on it, then what is known of it in
- * bordered cards: its tools, and its information. It is the page of an app of the catalog, of a connected one, and of a server of the owner's own.
+ * An app's page, in the dialog's place: a back chevron alone on the first row (the dialog's own × at the other corner), then on one
+ * row the app's mark on a white tile, its name and, at the right, 「連結」 (or, when it is connected, its state, its ⋯ and its switch),
+ * a paragraph on it, then what is known of it in bordered cards: its tools, and its information. It is the page of an app of the catalog, of a connected one, and of a server of the owner's own.
  */
 function appPageHTML(s: StoreService | undefined, g: ConnectionGroup | undefined, v: ConnectionsView, close: string): string {
   const name = g?.name ?? s!.name;
@@ -783,7 +787,8 @@ function appPageHTML(s: StoreService | undefined, g: ConnectionGroup | undefined
     : loggingIn
       ? `<span class="cs-wait" role="status">${esc(t(s!.auth === "none" ? "conn.connecting" : "conn.loggingIn"))}</span>` + btn(esc(t("conn.cancel")), "cs-connect", ' data-conn="cancel-login"')
       : btn(esc(t("conn.connect")), "pri cs-connect", ` data-conn="join" data-id="${esc(s!.id)}"`);
-  const head = `<header class="cs-head"><span class="back-title">${backHTML()}${tileHTML(mark, "lg")}<h2 class="big" id="cs-page-title" data-title-back>${esc(name)}</h2></span>${close}</header>`;
+  const head = `<header class="cs-head">${backHTML()}${close}</header>`;
+  const title = `<div class="cs-app">${tileHTML(mark, "lg")}<h2 class="big" id="cs-page-title">${esc(name)}</h2><div class="cs-join">${action}</div></div>`;
   const about = `<p class="cs-desc">${linkedText(g?.description || (s ? words(s.about) : t("conn.customServer")))}</p>`;
   const secrets = g ? [...g.env, ...g.headers] : [];
   // What signing in asks of the owner, said once, in a line, where the old page said it twice.
@@ -823,7 +828,7 @@ function appPageHTML(s: StoreService | undefined, g: ConnectionGroup | undefined
       (secrets.length ? `<span>${ico("lock")}<span class="code">${esc(secrets.join(", "))}</span></span>` : "") + `</div>`
     : "";
   return (
-    `<div class="cs-summary">${head}<div class="cs-join">${action}</div></div>` + about + lead + alert + loginErrorHTML(v, key) + dialogNoticeHTML(v) +
+    `<div class="cs-summary">${head}${title}</div>` + about + lead + alert + loginErrorHTML(v, key) + dialogNoticeHTML(v) +
     (g ? accountsHTML(g) : "") +
     (tryItems ? `<section class="cs-sec"><h3>${esc(t("conn.try"))}</h3><ul class="cs-say">${tryItems}</ul></section>` : "") +
     (g ? toolsHTML(g, v, busy, loggingIn) : "") +
@@ -856,7 +861,7 @@ function formHTML(f: ConnectionForm, close: string): string {
   const error = f.error ? `<div class="note" role="alert">${st("err", f.error())}</div>` : "";
   const typeSel = sel(typeChoices(), f.type, t("conn.form.type"), ` data-k="conn-type"${off ? " disabled" : ""}`);
   return (
-    `<header class="cs-top"><span class="back-title">${backButton(t("conn.back"), ' data-conn="form-back"', "cs-back back-link")}<h2 class="big cs-top-t" id="set-title" tabindex="-1" data-title-back>${esc(t(f.id ? "mcp.edit" : "mcp.add"))}</h2></span>${close}</header>` +
+    `<header class="cs-top">${backButton(t("conn.back"), ' data-conn="form-back"', "cs-back")}<h2 class="big cs-top-t" id="set-title" tabindex="-1">${esc(t(f.id ? "mcp.edit" : "mcp.add"))}</h2>${close}</header>` +
     `<div class="add-grid">` +
     `<div class="two">${fld(t("conn.form.type"), typeSel)}${fld(t("conn.form.name"), fieldHTML(t("conn.form.nameHint"), f.name, { id: "conn-name", label: t("conn.form.name"), disabled: off }), "", "conn-name")}</div>` +
     fields +
@@ -900,7 +905,7 @@ export function connectionsHTML(v: ConnectionsView, heading = "", close = ""): s
   const target = openTarget(v);
   if (target) return `<div class="cs cs-page">${quietHeading(heading)}${appPageHTML(target.entry, target.group, v, close)}</div>` + key;
   if (v.screen === "connected" && Array.isArray(v.groups) && v.groups.length) {
-    return `<div class="cs cs-connected"><header class="cs-top"><span class="back-title">${backHTML()}<h2 class="cs-top-t" data-title-back>${esc(t("conn.tab.installed"))}</h2></span>${close}</header>${quietHeading(heading)}` +
+    return `<div class="cs cs-connected"><header class="cs-top"><span class="back-title">${backHTML(true)}<h2 class="cs-top-t" data-title-back>${esc(t("conn.tab.installed"))}</h2></span>${close}</header>${quietHeading(heading)}` +
       `<div class="cs-body" data-cs-body>${installedHTML(v)}</div></div>` + key;
   }
   // The connected apps could not be read: the chip that would open them says so instead, with the way to read them again.
@@ -1102,7 +1107,18 @@ export function createConnections(host: ConnectionsHost): Connections {
     if (open && !(open.kind === "group" ? groupById(open.id) : entryById(open.id))) open = null;
     // A reading that finds nothing new touches nothing: the page stands as it is, under a press that is on its way.
     refresh();
+    if (status.status === "fulfilled" && managed.some(c => c.accounts?.some(a => a.status === "ACTIVE"))) void rereadAccounts(mine);
     if (configured && status.status === "fulfilled" && !Array.isArray(composioCatalog)) await loadCatalog();
+  }
+
+  /** The page drew what the core stored. One read of Composio's accounts (the core makes it at most every half minute) says
+   *  whether one was removed or changed elsewhere, and only a difference draws the page again. */
+  async function rereadAccounts(mine: number): Promise<void> {
+    try {
+      const read = await api.connectorsStatus(true);
+      if (mine !== loads || JSON.stringify(read.connectors) === JSON.stringify(managed)) return;
+    } catch { return; }
+    await load();
   }
 
   async function loadCatalog(): Promise<void> {
@@ -1301,7 +1317,7 @@ export function createConnections(host: ConnectionsHost): Connections {
       if (anchor) { click(anchor); document.querySelector<HTMLButtonElement>('.menu [data-conn="disconnect"]')?.focus(); }
       return;
     }
-    const name = accountName(account, (group.accounts ?? []).indexOf(account));
+    const name = accountName(account, (group.accounts ?? []).indexOf(account), (group.accounts?.length ?? 0) > 1);
     if (connected && !(await confirmDelete(name, { words: { title: t("account.removeConfirm", { p0: name }), hint: t("account.removeHint"), action: t("account.remove") } }))) return;
     void act(id, async () => { await api.connectorsRemoveAccount(id, accountId); });
   }

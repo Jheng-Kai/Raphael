@@ -67,7 +67,7 @@ class SkillPackages:
     def _view(self, row, skills, plugin):
         key = row["key"]
         name, source = row["name"], row["source"]
-        skipped_links = {}
+        skipped_links, skipped_references = {}, {}
         plugin_manifest = False
         if plugin is None:
             home = self.cap.homes.home(SHARED)
@@ -76,6 +76,8 @@ class SkillPackages:
                 plugin_manifest |= info.get("plugin_manifest") is True
                 if info.get("skipped_links"):
                     skipped_links[str(skill["id"])] = info["skipped_links"]
+                if info.get("skipped_references"):
+                    skipped_references[str(skill["id"])] = info["skipped_references"]
         version = description = ""
         updatable = refetchable(row["origin"], source)
         if plugin is not None:
@@ -91,7 +93,8 @@ class SkillPackages:
         return {"key": key, "name": name, "kind": kind, "source": source, "description": description,
                 "version": version, "enabled": bool(row["enabled"]), "access": json.loads(row["access"]),
                 "updatable": updatable, "skills": skills,
-                **({"skipped_links": skipped_links} if skipped_links else {})}
+                **({"skipped_links": skipped_links} if skipped_links else {}),
+                **({"skipped_references": skipped_references} if skipped_references else {})}
 
     def list(self):
         return self._list_views(self._list_inputs())
@@ -147,6 +150,7 @@ class SkillPackages:
         for skill_source, files in documents:
             plugin_manifest |= getattr(files, "plugin_manifest", False)
             skipped_links = getattr(files, "skipped_links", [])
+            skipped_references = getattr(files, "skipped_references", [])
             files = validate_files(files)
             raw = files["SKILL.md"]
             if len(raw) > MAX_SKILL_BYTES:
@@ -182,6 +186,8 @@ class SkillPackages:
                 metadata.update(local["metadata"])
             if skipped_links:
                 metadata["skipped_links"] = skipped_links
+            if skipped_references:
+                metadata["skipped_references"] = skipped_references
             if origin in ("template", "copy"):
                 metadata = None
             prepared.append((stored, desc, skill_source, validate_files({**files, "SKILL.md": text.encode()}), metadata))

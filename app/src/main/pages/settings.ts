@@ -7,6 +7,8 @@
 // Raphael listens) has no switch: it is simply on. Learning from corrections asks the cleanup
 // model, so it is a device setting (`auto_learn`), off until the owner turns it on.
 
+import { editProjectFolders, readProjects, rememberProject } from "../project-folders";
+import type { FolderInfo } from "../types";
 import { clearLayerForward, type NavStep } from "../nav-history";
 import { closeLayerBack, bindLayerCancels, bindNavLayer, keepEditedField } from "../nav-layers";
 import { openTimezoneMenu } from "../timezones";
@@ -197,6 +199,7 @@ export function createSettings(app: AppContext): SettingsPage {
   let usageAgain = false;
 
   let brain: BrainSettings | null = null;
+  let projectDetails = new Map<string, FolderInfo>(), projectRead = 0;
   let update: api.UpdateView | null = null;
   let checkingUpdate = false;
   let updateTimer: ReturnType<typeof setTimeout> | undefined;
@@ -290,7 +293,7 @@ export function createSettings(app: AppContext): SettingsPage {
   app.onEvent((event) => {
     providers.followEvent(event);
     // Closed too: Settings open at once on what they hold, and a choice made at the composer must already be in it.
-    if (event.type === "SettingsChanged") void api.settingsGet().then(result => { brain = result.settings; if (visible) render(); }, () => {});
+    if (event.type === "SettingsChanged") void api.settingsGet().then(result => { brain = result.settings; if (visible) { render(); void refreshProjectDetails(); } }, () => {});
     cliBrains.followEvent(event);
     if (event.type === "ProvidersChanged") void loadCatalog(true);
     // A QuotaChanged while this page's own reading is under way is that reading's own finding (the core tells every
@@ -303,7 +306,7 @@ export function createSettings(app: AppContext): SettingsPage {
 
   /** What the tabs are drawn from, as the panel knows it now. */
   const view = (): SettingsView => ({
-    update,
+    update, projectDetails,
     pane, usageTab, analysis: analysis.view(), device: app.device(), brain, hasKey, openrouter, spend, catalog: typeof catalog === "object" ? catalog : knownCatalog() ?? catalog, devices, altgr, microphone, accessibility, version,
     languageGroups, now: Date.now(),
     connections: connections.view(), rules: rules.view(), vault: vault.view(), skillLibrary: skillLibrary.view(), services: services.view(), providers: providers.view(), cliBrains: cliBrains.view(), localModels, localDownload,
@@ -556,6 +559,7 @@ export function createSettings(app: AppContext): SettingsPage {
     syncMonitor();
     body.scrollTop = 0;
     render();
+    void refreshProjectDetails();
     body.scrollTop = 0;
     paintNav();
     replay(body, "pane-in");
@@ -682,6 +686,23 @@ export function createSettings(app: AppContext): SettingsPage {
   }
 
   // ---------- changes ----------
+
+  async function refreshProjectDetails(): Promise<void> {
+    if (!visible || pane !== "general") return;
+    const asked = ++projectRead;
+    const details = await readProjects(brain?.project_folders ?? []);
+    if (asked !== projectRead) return;
+    projectDetails = details;
+    if (visible && pane === "general") render();
+  }
+
+  function changeProjects(edit: (settings: BrainSettings) => Promise<BrainSettings>): void {
+    void editProjectFolders(edit).then(settings => {
+      brain = settings;
+      render();
+      void refreshProjectDetails();
+    }).catch(error => toaster.info(describeError(error)));
+  }
 
   async function changeBrain(key: keyof BrainSettings, value: string | number | boolean | string[] | null): Promise<void> {
     try {
@@ -1081,7 +1102,23 @@ export function createSettings(app: AppContext): SettingsPage {
         if (gear && !gear.disabled) cap.toggle(gear);
         break;
       }
-      case "output-pick": void api.pickOutputFolder().then(path => { if (path !== null) return changeBrain("owner_output_folder", path); }).catch(error => toaster.info(describeError(error))); break;
+      case "project-add":
+        void api.pickOutputFolder().then(path => {
+          if (path !== null) changeProjects(current => rememberProject(current, path));
+        }).catch(error => toaster.info(describeError(error)));
+        break;
+      case "project-menu": {
+        const button = target.closest<HTMLElement>("[data-project]")!;
+        const path = brain?.project_folders?.[Number(button.dataset.project)];
+        if (path === undefined) break;
+        if (menuIsOpenFor(button)) { closeMenu(); break; }
+        openMenu(button, [], "", () => {}, undefined, [{
+          label: t("projectFolders.remove"), icon: "trash",
+          run: () => changeProjects(async current => (await api.settingsSet("project_folders",
+            (current.project_folders ?? []).filter(project => project !== path))).settings),
+        }]);
+        break;
+      }
       case "update-check": void checkUpdate(); break;
       case "update-install": void checkUpdate("install"); break;
       case "update-cancel": void checkUpdate("cancel"); break;
@@ -1336,6 +1373,7 @@ export function createSettings(app: AppContext): SettingsPage {
       if (mine !== loads || !visible) return;
       // Nothing is redrawn under the owner's hands unless the read found something new.
       if (apply() || loading) { loading = false; render(); }
+      void refreshProjectDetails();
       // The microphone's answer is known now: the meter follows it.
       syncMonitor();
       if (repair) {

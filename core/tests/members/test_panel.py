@@ -101,11 +101,11 @@ def test_verified_task_artifacts_require_delivery_or_explicit_owner_output(conn,
     store.verify_artifact(task, 'capture', tmp_path / 'scratch.png', workspace=tmp_path, mime='image/png')
     conn.execute("UPDATE worker_tasks SET state='done',announced=1 WHERE id=?", (task,))
     assert snapshot(conn, 0, [('workspace', tmp_path)])['files'] == []
-    result = snapshot(conn, 0, [('workspace', tmp_path)], output_folder=str(output))
+    result = snapshot(conn, 0, [('workspace', tmp_path)], work_folder=str(output))
     assert [item['name'] for item in result['files']] == ['report.pdf']
     assert result['files'][0]['turn_id'] == identifier
     conn.execute("UPDATE worker_tasks SET announced=0 WHERE id=?", (task,))
-    assert snapshot(conn, 0, output_folder=str(output))['files'] == []
+    assert snapshot(conn, 0, work_folder=str(output))['files'] == []
 
 
 def test_grouping_uses_delivery_calendar_day_and_deduplicates_latest_delivery(conn):
@@ -144,7 +144,8 @@ async def test_rpc_compatibility_validation_and_delivered_file_open(rig, tmp_pat
     output.mkdir()
     delivered = output / 'report.md'
     delivered.write_text('report')
-    rig.service._settings.set('owner_output_folder', str(output))
+    rig.service._settings.set('project_folders', [str(output)])
+    rig.service._settings.set('member_work_folder', {'0': str(output)})
     history, identifier = turn(rig.conn, text=f'[Report](<{delivered}>)')
     result = await rig.call('members.library', {'member_id': 0})
     assert result == await rig.call('members.list', {'panel_member_id': 0})
@@ -179,7 +180,8 @@ async def test_output_receipt_is_reverified_on_open_and_not_hashed_on_listing(ri
     output.mkdir()
     result = output / 'result.pdf'
     result.write_bytes(b'original')
-    rig.service._settings.set('owner_output_folder', str(output))
+    rig.service._settings.set('project_folders', [str(output)])
+    rig.service._settings.set('member_work_folder', {'0': str(output)})
     history, identifier = turn(rig.conn)
     store = TaskStore(rig.conn)
     task = store.create(session_id='result', language='en', text='Report', member_id=0)

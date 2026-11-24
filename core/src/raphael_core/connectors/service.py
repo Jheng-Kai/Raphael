@@ -47,6 +47,8 @@ SIGN_IN_LIMIT_S = 600
 # The accounts are read this long after start and then this often, so that one that stopped is told while the apps are shut.
 WATCH_FIRST_S = 60
 WATCH_EVERY_S = 1200
+# A read of the accounts that the window asks for when it opens an app's page is not repeated within this long.
+ACCOUNTS_FRESH_S = 30
 # What `_signing_in` holds while the built-in Google sign-in waits: the account ids of Composio never look like this.
 GOOGLE_SIGN_IN = "google"
 
@@ -139,6 +141,8 @@ class ConnectorsService:
         # The accounts told as lost in this run: each is told once, and again only after it worked in between.
         self._told_lost: set[str] = set()
         self._watch: asyncio.Task | None = None
+        # When the accounts were last read from Composio (`now`), for a read that must not be repeated at once.
+        self._read_at: float | None = None
         self._transport = transport
         integrations.managed = self
         integrations._connector.managed_opener = self.open_managed
@@ -264,6 +268,10 @@ class ConnectorsService:
         alias = account.get("alias", old.get("alias"))
         if isinstance(alias, str) and alias.strip():
             view["alias"] = alias[:320]
+        # When Composio made the account: all that tells two accounts without an address or a name apart (a key's account).
+        created = _created_at(account.get("created_at")) or old.get("created_at")
+        if created:
+            view["created_at"] = created
         if account["status"] in WAITING:
             # When a sign-in began: Composio's own created time, else the time Raphael started it. A sign-in nobody can
             # date (one an earlier build left behind) has none, and counts as old.
@@ -355,8 +363,19 @@ class ConnectorsService:
             return {"connector": self._view(entry)}
         if account is None:
             raise invalid_params("No such connected account")
+        # The list is the last read of Composio, not Composio: counting its connected accounts from it could revoke the
+        # only one that works, and an account removed elsewhere is gone as asked.
+        listed_active = sum(a["status"] == "ACTIVE" for a in entry.accounts)
+        await self._reread()
+        account = next((a for a in entry.accounts if a["id"] == account_id), None)
+        if account is None:
+            return {"connector": self._view(entry)}
         active = account["status"] == "ACTIVE"
         if active and sum(a["status"] == "ACTIVE" for a in entry.accounts) == 1:
+            if listed_active > 1:
+                # The owner chose one of several on a list that was out of date, and it is the only one that works: nothing is
+                # revoked on that. The list they see now is Composio's, and the last connected account is the app (a disconnect).
+                return {"connector": self._view(entry)}
             return await self._disconnect(entry)
         await self._delete_account(account, revoke=active)
         entry.accounts = [a for a in entry.accounts if a["id"] != account_id]
@@ -367,6 +386,10 @@ class ConnectorsService:
     def _view(self, entry: Connector) -> dict:
         view = asdict(entry)
         view.pop("auth_config_id", None)
+        # With several accounts the newest is said, so that the one a sign-in just made is not guessed.
+        dated = [a for a in view["accounts"] if a.get("created_at")]
+        if entry.kind == "composio" and len(view["accounts"]) > 1 and dated:
+            max(dated, key=lambda a: a["created_at"])["newest"] = True
         if entry.kind == "google":
             view["enabled_tools"] = [name for name in TOOLS if self.tool_available(GOOGLE_SERVER, name)]
         return {**view, "stores_tool_payloads": entry.kind == "composio",
@@ -658,7 +681,7 @@ class ConnectorsService:
         try:
             if plan["needs"] == NEEDS_KEY:
                 async with self._lock:
-                    result = await self._connect_key(slug, details, plan, values, auth_id)
+                    result = await self._connect_key(slug, details, plan, values, auth_id, *self._replacing(params))
             else:
                 result = await self._connect_link(slug, details, params, auth_id=auth_id)
             connected = bool(result.get("connected"))
@@ -669,8 +692,10 @@ class ConnectorsService:
             elif before is not None and before.auth_config_id and before.auth_config_id != auth_id:
                 await self._forget_auth_config(before.auth_config_id)
 
-    async def _connect_key(self, slug, details, plan, values, auth_id):
-        """Add an app that signs in with the owner's own key: Composio makes the account from it, here, at once."""
+    async def _connect_key(self, slug, details, plan, values, auth_id, replace=(), again=False):
+        """Add an app that signs in with the owner's own key: Composio makes the account from it, here, at once. With
+        `again` (a card or a row that connects the app anew) the account it made takes the place of the app's earlier ones
+        (`_replace`), so that a new key never leaves a second account beside the old one."""
         await self._session()
         state = {"authScheme": plan["scheme"] or "API_KEY", "val": {**credentials_of(plan, values, "account"), "status": "ACTIVE"}}
         try:
@@ -706,11 +731,25 @@ class ConnectorsService:
         entry.description = (details.get("meta") or {}).get("description", "")
         entry.logo = (details.get("meta") or {}).get("logo", "")
         entry.status, entry.auth_config_id = "ACTIVE", auth_id
-        entry.accounts = [self.account_view(account, entry.accounts)]
+        # The accounts the app had stay on the list (Composio keeps them, and the next read would bring them back) unless
+        # the new one takes their place.
+        entry.accounts = [a for a in entry.accounts if a["id"] != account_id] + [self.account_view(account, entry.accounts)]
+        await self._replace(entry, account_id, list(replace), again=again)
         self._save()
         await self._load_tools(entry)
         await self._patch()
         return {"connected": True, "connector": self._view(entry)}
+
+    @staticmethod
+    def _replacing(params) -> tuple[list[str], bool]:
+        """The accounts a sign-in is for to take the place of (`replace`) and whether it is the app's sign-in `again`."""
+        replace = params.get("replace", [])
+        if not isinstance(replace, list) or len(replace) > 20 or any(not isinstance(i, str) or not i for i in replace):
+            raise invalid_params("replace must be a list of account ids")
+        again = params.get("again", False)
+        if type(again) is not bool:
+            raise invalid_params("again must be boolean")
+        return replace, again
 
     async def _connect_link(self, slug, details, params, *, auth_id=""):
         """Add an app the owner signs in to in the browser: Composio's own login, or the OAuth app of the owner's own
@@ -718,12 +757,7 @@ class ConnectorsService:
         body = {"toolkit": slug}
         if "alias" in params:
             body["alias"] = _text(params, "alias")
-        replace = params.get("replace", [])
-        if not isinstance(replace, list) or len(replace) > 20 or any(not isinstance(i, str) or not i for i in replace):
-            raise invalid_params("replace must be a list of account ids")
-        again = params.get("again", False)
-        if type(again) is not bool:
-            raise invalid_params("again must be boolean")
+        replace, again = self._replacing(params)
         connected = permitted = False
         try:
             # The lock is taken to set the sign-in up and to finish it, never for the wait between: the owner goes on working
@@ -916,6 +950,16 @@ class ConnectorsService:
         refresh = params.get("refresh", True)
         if type(refresh) is not bool:
             raise invalid_params("refresh must be boolean")
+        accounts = params.get("accounts", False)
+        if type(accounts) is not bool:
+            raise invalid_params("accounts must be boolean")
+        if accounts and not refresh:
+            # The window drew what is stored; this reads only the accounts, as the watch does and not more than twice a minute,
+            # so that one removed or changed elsewhere is not kept on the page.
+            try:
+                await self.watch_once(fresh_for=ACCOUNTS_FRESH_S)
+            except KeyringError:
+                pass
         if refresh and self.vault.filled(KEY) and not self._lock.locked() and not self.login_pending:
             async with self._lock:
                 await self._read_accounts()
@@ -940,6 +984,7 @@ class ConnectorsService:
         account that was connected and has stopped working (expired, failed, revoked, gone) is told to the window once."""
         before = {c.id: {a["id"]: a["status"] for a in c.accounts} for c in self.store.connectors.values() if c.kind == "composio"}
         accounts = await self.composio.pages("/connected_accounts", {"user_ids": self.store.user_id, "limit": 500})
+        self._read_at = self.now()
         by_slug = {}
         for account in accounts:
             slug = account.get("toolkit", {}).get("slug")
@@ -983,13 +1028,22 @@ class ConnectorsService:
             await asyncio.sleep(delay)
             delay = WATCH_EVERY_S * 2 if await self.watch_once() == "rate_limit" else WATCH_EVERY_S
 
-    async def watch_once(self) -> str:
+    async def _reread(self) -> None:
+        """The accounts as Composio has them now (under the lock), before a change that counts on them. A failure is the
+        caller's: nothing was changed yet."""
+        await self._read_accounts()
+        self._save()
+
+    async def watch_once(self, *, fresh_for: float = 0) -> str:
         """One read for the watch: only while some app is connected, the key is there, nothing holds the lock or waits for a
-        sign-in, and (on a Mac, where reading the key asks the owner) the key was already read in this run."""
+        sign-in, and (on a Mac, where reading the key asks the owner) the key was already read in this run. A read made
+        less than `fresh_for` seconds ago stands."""
         connected = any(a["status"] == "ACTIVE" for c in self.store.connectors.values() if c.kind == "composio" for a in c.accounts)
         # On a Mac the key counts as read once any part of this run read it: Composio's own calls, or the members' tools.
         if (not connected or not self.vault.filled(KEY) or self._lock.locked() or self.login_pending
                 or (keychain.asks() and not (self.composio.key_read or self.vault.read_in_run(KEY)))):
+            return "skipped"
+        if fresh_for and self._read_at is not None and self.now() - self._read_at < fresh_for:
             return "skipped"
         try:
             async with self._lock:
@@ -1014,7 +1068,10 @@ class ConnectorsService:
         entry = self._entry(params)
         await self._end_sign_in([entry.id, *(a["id"] for a in entry.accounts)])
         async with self._lock:
-            return await self._disconnect(self._entry(params))  # read again: a press that waited for the lock may find it gone
+            entry = self._entry(params)  # read again: a press that waited for the lock may find it gone
+            if entry.kind == "composio":
+                await self._reread()  # every account Composio holds for the app goes back, not only those this list knew
+            return await self._disconnect(entry)
 
     async def _disconnect(self, entry):
         if entry.kind == "google":

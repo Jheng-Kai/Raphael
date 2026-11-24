@@ -262,7 +262,12 @@ because the cleanup model judges each edit (`brain/learn_review.py`, a few token
 composer learns nothing. On, the watch sends the dictated part as pasted and as left (`dictionary.learn` `revision`), and
 the model names the misheard terms in any language; rewording is never learned, and the code checks only shape (at most
 40 characters and three words, no sentence punctuation). A learned rule the owner changes back is withdrawn without
-the model. The first correction
+the model. Learning waits for the send (R-LEARN-SEND-01): the composer compares only the dictated text as pasted with the
+same stretch as sent and gives the core that one pair (no state typed on the way, nothing during an input method's
+composition, nothing for a message never sent); another application's field is learned from only when it lost the pasted
+text (the send), by the last text two reads in a row agreed on, and a focus move, the minute's end or a new dictation
+learns nothing. A keyboard source or terminal learns after its own Enter. The owner's report, 珠蔡 saved on the way to
+朱菜, is proved by the composer's input-method test and the Rust watch tests, not by a real input method in the app. The first correction
 makes the word a term and the pair a hint: in the phrase list and the prompt from the next dictation, shown under
 常被聽成 in the Dictionary row (`dictionary.list` `heard`), and a replacement rule when the same pair is seen again.
 

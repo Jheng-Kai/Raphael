@@ -10,6 +10,7 @@ from jsonschema import Draft202012Validator
 from ..agent.data_floor import DataFloor, WRITE_REFUSAL
 from ..agent.plugins import PluginResult, PluginTool, tool_key
 from ..agent.policy import Tier
+from .. import work_area
 from . import host_page
 from .browser_tabs import BROWSER_TABS
 from .file_tools import Refused, _refusal
@@ -76,6 +77,7 @@ class HostComputerTools:
     def __init__(self, vm, conn, open_definition):
         self.vm = vm
         self.browser = HostBrowser(vm.machine / "browser")
+        self.browser.download_to = self.download_folder  # a download goes where the member works when it completes
         self.cards = None
         self.catalog, self.routes = {}, {}
         self.active = Counter()
@@ -139,8 +141,7 @@ class HostComputerTools:
                 else self.vm.target_for("", self.vm.key_for("", member)))
 
     def folders(self, member):
-        target = self.local_target(member)
-        return self.vm.member_workspace(target), target.shared
+        return self.vm.local_folders(member)
 
     def finish_work(self, *, turn_id=None, task_id=None):
         for tab in self.browser.tabs.values():
@@ -165,10 +166,15 @@ class HostComputerTools:
             if raw == alias or raw.startswith(alias + "/"):
                 return (folder / raw[len(alias):].lstrip("/")).resolve()
         path = Path(raw)
-        return (workspace / path).resolve() if not path.is_absolute() and not raw.startswith("~") else Path(place(raw))
+        from ..folders import work_folder
+        work = work_folder(self.vm.settings, member, self.vm.local_folders) if self.vm.settings else workspace
+        return (work / path).resolve() if not path.is_absolute() and not raw.startswith("~") else Path(place(raw))
 
     def inside_work(self, path, member):
-        return any(path.is_relative_to(folder) and folder.resolve() == folder for folder in self.folders(member))
+        if any(path.is_relative_to(folder) and folder.resolve() == folder for folder in self.folders(member)):
+            return True
+        projects = self.vm.settings.get("project_folders") if self.vm.settings else ()
+        return any(path.is_relative_to(folder) and folder.resolve() == folder for folder in map(Path, projects or ())) and not self.files.guard()(str(path))
 
     def private_path(self, path, member):
         if path.is_relative_to(self.browser.profile.resolve()):
@@ -178,6 +184,23 @@ class HostComputerTools:
                                                  for part in path.relative_to(root).parts):
                 return True
         return False
+
+    def write_reach(self, path, member):
+        """Whether a write at the resolved `path` is "inside" the member's work folder (the chosen project alone, else its
+        own folder and the team's) or "outside" it, where only the owner's yes on a card lets it be made (R-FILE-06)."""
+        roots = work_area.area(self.vm.settings, member, self.vm.local_folders)
+        return "inside" if work_area.inside(str(path), roots) else "outside"
+
+    def download_folder(self, member):
+        """Where a page's download is placed: the member's work folder (the chosen project, else its own folder)."""
+        if self.vm.settings is None:
+            return self.folders(member)[0]
+        from ..folders import work_folder
+        folder = work_folder(self.vm.settings, member, self.vm.local_folders)
+        try:
+            return Path(work_area.resolved(str(folder)))
+        except work_area.PathRefused:
+            return self.folders(member)[0]
 
     def work_file(self, key, arguments):
         route = self.routes.get(key)
@@ -199,11 +222,18 @@ class HostComputerTools:
         if tool.name in WRITES:
             try:
                 path = self.path(member, arguments.get("path", ""))
-                if self.inside_work(path, member) or self.files.writable({"path": str(path)}, member):
+                # Inside the work folder nothing asks; outside it is T3 and firm (`firm_for_call`): a yes in every mode.
+                # A private place or a place of keys is refused by `file_call` whatever is said, so nothing asks for it.
+                if self.private_path(path, member) or kept_place(str(path)) or self.write_reach(path, member) == "inside":
                     return Tier.T0
+                return Tier.T3
             except (VmError, OSError, AttributeError, ValueError):
                 pass
         return tool.tier
+
+    def firm_for_call(self, key, arguments):
+        route = self.routes.get(key)
+        return route is not None and route[1].name in WRITES and self.tier_for_call(key, arguments) == Tier.T3
 
     async def file_call(self, member, name, arguments, approver, scope):
         await self.vm.settled()
@@ -215,8 +245,7 @@ class HostComputerTools:
             return PluginResult(False, "protected_data", WRITE_REFUSAL)
         if kept_place(str(path)):
             return PluginResult(False, "kept", "This private system folder is unavailable.")
-        if name in WRITES and (approver == "none" or
-                not inside and not self.files.writable(args, member) and approver != "user"):
+        if name in WRITES and (approver == "none" or self.write_reach(path, member) == "outside" and approver != "user"):
             return PluginResult(False, "approval_required", "This write requires the owner's approval.")
         if name in ("glob", "grep"):
             from .owner_files import glob_files, grep_files
@@ -388,7 +417,7 @@ class HostComputerTools:
 
 DEFINITION_WORDS = {
     "read_file": "Read a file. Relative paths start in your work folder; team:/ selects the team folder. Read before overwriting.",
-    "write_file": "Write a file in your work folder, team folder or an owner-selected project. Other writes require approval.",
+    "write_file": "Write a file in your work folder. Other writes require approval.",
     "edit_file": "Edit a file you read in this turn. Relative paths start in your work folder; team:/ selects the team folder.",
     "glob": "List files under a folder by glob pattern. The default is your work folder; team:/ selects the team folder.",
     "grep": "Search files by regular expression. The default is your work folder; team:/ selects the team folder.",

@@ -212,6 +212,10 @@ BUILTIN_TOOLS = (*WEB_TOOLS, *MEMORY_READ_TOOLS, *ATTACHMENT_TOOLS, "find_tools"
 # The most attempts of one task that are looked back on.
 MAX_CHAIN = 20
 RERUNNABLE = ("interrupted", "cancelled", "limit", "failed")
+# The reasons a run ends with when its subscription CLI refused its sign-in (R-CLI-SIGNIN-01, -03), and how long after such an
+# end a sign-in that is back runs it again (R-CLI-SIGNIN-06).
+SIGNIN_REASONS = ("cli_login_expired", "cli_login", "cli_login_skipped")
+SIGNIN_RERUN_MS = 24 * 3600 * 1000
 # How a step of an earlier attempt ended, as the new attempt is told.
 # How a tool call of a task is told to the fast tier.
 _BRIEF_OUTCOME = {
@@ -486,6 +490,9 @@ class BackgroundService:
         self._store = TaskStore(conn, now_ms)
         self._history = AgentHistory(conn, now_ms)
         self._settings = SettingsStore(conn)
+        from ..folders import default_folders
+        self.member_folders = default_folders
+        self.folder_target = lambda member: None
         self._metrics_conn = conn
         self.activity.task_source = self._activity_tasks
         self.activity.task_batch_source = self._activity_tasks_by_member
@@ -529,6 +536,9 @@ class BackgroundService:
         self._room_cli_sessions = None
         self._cli_brains = None
         self._cli_quota = None
+        # Told a turn that was taken out of the history here (the agent's: its conversation forgets what it said).
+        self.turn_removed: Callable[[Turn], None] | None = None
+        self._cleanups: set[asyncio.Task] = set()
         self._cli_loops = {}
         self._handoff_runs = {}
         # turn id of an owner's message handed to a task under way (`steer` with its ticket) -> that task's run and the words,
@@ -562,6 +572,107 @@ class BackgroundService:
     def use_cli(self, brains, quota=None) -> None:
         """Share the assistant's installed CLI brains for room member worker turns."""
         self._cli_brains, self._cli_quota = brains, quota
+        callbacks = getattr(brains, "on_back", None)
+        if isinstance(callbacks, list) and self._cli_signed_in not in callbacks:
+            callbacks.append(self._cli_signed_in)
+
+    def _cli_signed_in(self, name: str) -> None:
+        """A CLI's sign-in is back (`CliBrains.on_back`): its failed runs are run again and taken out of the history. Never
+        raises into the CLI's path."""
+        try:
+            task = asyncio.get_running_loop().create_task(self._clear_sign_in_failures(name))
+        except RuntimeError:
+            return
+        self._cleanups.add(task)
+        task.add_done_callback(self._cleanups.discard)
+
+    async def _clear_sign_in_failures(self, name: str) -> None:
+        try:
+            await self._clean_sign_in_failures(name)
+        except asyncio.CancelledError:
+            raise
+        except Exception as error:
+            logger.warning("The failed runs of a CLI sign-in could not be cleared: %s", type(error).__name__)
+
+    def _cli_of(self, task: Task, turn: Turn) -> str | None:
+        """The CLI a failed run ran on: the provider its turn's failure names, else the model it was given."""
+        from ..agent.cli.discovery import brain_ref
+        provider = (turn.failure or {}).get("provider")
+        if isinstance(provider, str) and provider.startswith("cli:"):
+            return provider[4:]
+        reference = brain_ref(task.model_ref)
+        return reference[0] if reference else None
+
+    async def _clean_sign_in_failures(self, name: str) -> None:
+        """The sign-in of CLI `name` is back (R-CLI-SIGNIN-06): the runs it refused for it are over. A routine's newest such run
+        (and each one the owner handed over) that ended within 24 hours is run again, once; then the turns of all of them leave
+        the history. A question the owner was asked (a turn with no task) stays."""
+        rows = self._metrics_conn.execute(
+            "SELECT id FROM worker_tasks WHERE state='failed' AND scope='private' AND mode IS NULL AND turn_id IS NOT NULL "
+            f"AND reason IN ({','.join('?' * len(SIGNIN_REASONS))}) ORDER BY id", SIGNIN_REASONS).fetchall()
+        found: list[tuple[Task, Turn]] = []
+        for (task_id,) in rows:
+            task = self._store.get(task_id)
+            turn = self._history.get(task.turn_id) if task is not None and task.turn_id else None
+            if task is not None and turn is not None and turn.scope == "private" and self._cli_of(task, turn) == name:
+                found.append((task, turn))
+        if not found:
+            return
+        newest: dict[int, Task] = {}
+        for task, _ in found:
+            if task.routine_id is not None:
+                held = newest.get(task.routine_id)
+                if held is None or (task.finished_at_ms or 0, task.id) > (held.finished_at_ms or 0, held.id):
+                    newest[task.routine_id] = task
+        recent = self._now_ms() - SIGNIN_RERUN_MS
+        keep: set[int] = set()
+        for task, _ in found:
+            if task.routine_id is not None and newest[task.routine_id].id != task.id:
+                continue
+            if (task.finished_at_ms or 0) < recent or self._rerun_of_exists(task):
+                continue
+            try:
+                await self._rerun({"task_id": task.id})
+            except RpcError as error:
+                logger.info("A run that a sign-in refused was not run again: %s", error.message)
+                if error.code == BUSY:
+                    keep.add(task.id)  # the worker could not take it now: its failure stays until it can
+        for task, turn in found:
+            if task.id not in keep:
+                self._remove_failed_turn(task, turn)
+
+    def _rerun_of_exists(self, task: Task) -> bool:
+        """Whether this run was already run again: a task that is its rerun, or a later run of its routine that is not over
+        badly (under way, waiting or done)."""
+        if self._metrics_conn.execute("SELECT 1 FROM worker_tasks WHERE rerun_of=? LIMIT 1", (task.id,)).fetchone():
+            return True
+        return task.routine_id is not None and self._metrics_conn.execute(
+            "SELECT 1 FROM worker_tasks WHERE routine_id=? AND id>? AND state IN ('queued','running','waiting','done') LIMIT 1",
+            (task.routine_id, task.id)).fetchone() is not None
+
+    def _remove_failed_turn(self, task: Task, turn: Turn) -> None:
+        """Take one finished failed run's turn out of the history, and the app is told as when a turn is deleted."""
+        try:
+            with self._metrics_conn:
+                self._metrics_conn.execute("DELETE FROM routine_runs WHERE turn_id=?", (turn.id,))
+                if task.routine_id is not None:
+                    from ..members.service import _line
+                    said = _line((turn.text or turn.detail or "").strip().split("\n\n")[0])
+                    self._metrics_conn.execute("UPDATE routines SET last_error='' WHERE id=? AND last_error=?", (task.routine_id, said))
+            deleted = self._history.delete(turn.id)
+        except sqlite3.Error as exc:
+            logger.warning("Could not take a failed run out of the history: %s", type(exc).__name__)
+            return
+        if not deleted:
+            return
+        if self.turn_removed is not None:
+            try:
+                self.turn_removed(turn)
+            except Exception as error:
+                logger.warning("A conversation could not forget a removed turn: %s", type(error).__name__)
+        self._notify("agent.turn", {"turn_id": turn.id, "member_id": turn.member_id, "failure": None})
+        if task.routine_id is not None:
+            self._notify("routines.changed", {"member_id": task.member_id})
 
     def use_owner_tools(self, execute) -> None:
         self._owner_tools = execute
@@ -2009,7 +2120,8 @@ class BackgroundService:
         # reply to the next, and in the system prompt each change had the provider read the member's whole
         # prefix again at full price, where its replies would otherwise share it.
         user += roster_prompt(self._team, speaker, self._chat_language(task, origin, context))
-        system += owner_context(self._settings, speaker.id)
+        system += owner_context(self._settings, speaker.id, folders=self.member_folders,
+                                target=self.folder_target(speaker.id))
         system += ('\nAssigned work starts NOW. Deadlines or dates in documents are context, never permission to defer. '
                    'Use handoff for real assignments, not @mentions. Return evidence of actions; a future-tense promise without action is incomplete.')
         if task.scope == 'room':
@@ -3555,6 +3667,10 @@ class BackgroundService:
         self._cli_loops.clear()
         self._questions.cancel_all()
         self._disarm_expiry()
+        cleanups = list(self._cleanups)
+        for cleanup in cleanups:
+            cleanup.cancel()
+        await asyncio.gather(*cleanups, return_exceptions=True)
         self._interrupt_unfinished("restart")
         await self._host.aclose()
         await self._tools.aclose()

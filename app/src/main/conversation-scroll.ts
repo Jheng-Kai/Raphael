@@ -3,13 +3,13 @@ import { iconButton } from "./ui";
 
 /**
  * The conversation's header stands over the top of its thread (members.css), so a wheel turned over it would stop at the header. It
- * moves what the thread, or the page or report open in its place, would have moved: the header takes no room from the thread and no
+ * moves what the thread, or the report open in its place, would have moved (an HTML page scrolls in its own frame, which a wheel over the header does not reach): the header takes no room from the thread and no
  * wheel from it either.
  */
 export function passWheelUnder(head: HTMLElement, stage: HTMLElement): void {
   head.addEventListener("wheel", event => {
     if (event.ctrlKey || !event.deltaY) return;
-    const under = stage.classList.contains("is-page") ? stage.querySelector<HTMLElement>(".rp-scroll, .pgv-page") : stage.querySelector<HTMLElement>(":scope > .ra-scroll");
+    const under = stage.classList.contains("is-page") ? stage.querySelector<HTMLElement>(".rp-scroll") : stage.querySelector<HTMLElement>(":scope > .ra-scroll");
     if (!under || under.scrollHeight <= under.clientHeight) return;
     event.preventDefault();
     // What listens for the owner's wheel on the thread hears this one too (message-rich.ts lets go of the bottom on a wheel up).

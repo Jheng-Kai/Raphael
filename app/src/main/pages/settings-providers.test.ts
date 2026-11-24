@@ -12,6 +12,7 @@ import { Cleared } from "../cleared";
 import * as analytics from "../usage-analytics";
 
 const api = vi.hoisted(() => ({
+  folderInfo: vi.fn(), pickOutputFolder: vi.fn(),
   settingsGet: vi.fn(), settingsSet: vi.fn(), secretsStatus: vi.fn(), statusGet: vi.fn(), audioDevices: vi.fn(),
   desktopStatus: vi.fn(),
   historyList: vi.fn(), historyClear: vi.fn(), agentHistoryClear: vi.fn(), core: vi.fn(),
@@ -100,7 +101,7 @@ test("mouse Back and Forward retrace Slack, Connectors and the conversation", as
   });
 });
 
-test("mouse Back closes a plugin menu, then returns to the team skill list, then closes Settings", async () => {
+test("mouse Back closes a plugin menu, then returns from a skill to its plugin, to the team skill list, then closes Settings", async () => {
   api.core.mockResolvedValue({ members: [], packages: [{
     key: "set:1", name: "Example plugin", kind: "plugin", source: "", description: "", version: "",
     enabled: true, access: "all", updatable: false, skills: [{ id: 1, name: "example", description: "Skill notes", enabled: true }],
@@ -117,11 +118,10 @@ test("mouse Back closes a plugin menu, then returns to the team skill list, then
     back();
     expect(document.querySelector("#app-popover")).toBeNull();
     expect(page.el.querySelector(".skl-page")).not.toBeNull();
-    click('[data-skl="skill-more"]');
-    click('#app-popover [data-pick="details"]');
-    expect(document.querySelector(".skl-details")?.textContent).toContain("Skill notes");
+    click('[data-skl="open-skill"][data-id="1"]');
+    expect(page.el.querySelector(".skl-doc-page #set-title")?.textContent).toBe("example");
     back();
-    expect(document.querySelector(".skl-details")).toBeNull();
+    expect(page.el.querySelector(".skl-doc-page")).toBeNull();
     expect(page.el.querySelector(".skl-page")).not.toBeNull();
     back();
     expect(page.el.querySelector(".skl-page")).toBeNull();
@@ -134,7 +134,7 @@ test("mouse Back closes a plugin menu, then returns to the team skill list, then
     sendNavInput("mouse", "forward");
     expect(page.el.querySelector(".skl-page")).not.toBeNull();
     sendNavInput("mouse", "forward");
-    expect(document.querySelector(".skl-details")?.textContent).toContain("Skill notes");
+    expect(page.el.querySelector(".skl-doc-page")).not.toBeNull();
   });
 });
 
@@ -962,4 +962,29 @@ test("a provider change told while Settings is closed is read at once, so a sour
   api.modelsCatalog.mockClear();
   send({ type: "ProvidersChanged" }); await flush();
   expect(api.modelsCatalog).toHaveBeenCalled();
+});
+
+test("General removes only the selected project and adds a picked folder", async () => {
+  const repo = "C:\\Work\\Repo", notes = "C:\\Work\\Notes", added = "D:\\Research";
+  let projects = [repo, notes];
+  api.settingsGet.mockImplementation(async () => ({ settings: { project_folders: projects } }));
+  api.settingsSet.mockImplementation(async (_key, value) => {
+    projects = value;
+    return { settings: { project_folders: projects } };
+  });
+  api.folderInfo.mockImplementation(async path => ({ name: path.split("\\").pop(), path, exists: true,
+    git: path === repo, branch: path === repo ? "main" : "", branches: ["main"] }));
+  await mount("general");
+  await flush();
+  expect(page.el.querySelector('[data-row="project-folder"] .project-branch')?.textContent).toBe("main");
+  click('[data-project="0"]');
+  click("#app-popover .menu-action");
+  await flush();
+  expect(api.settingsSet).toHaveBeenLastCalledWith("project_folders", [notes]);
+  expect(page.el.querySelectorAll('[data-row="project-folder"]')).toHaveLength(1);
+  api.pickOutputFolder.mockResolvedValue(added);
+  click('[data-act="project-add"]');
+  await flush();
+  expect(api.settingsSet).toHaveBeenLastCalledWith("project_folders", [notes, added]);
+  expect(page.el.querySelectorAll('[data-row="project-folder"]')).toHaveLength(2);
 });

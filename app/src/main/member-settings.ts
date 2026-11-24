@@ -16,7 +16,6 @@ import { bindNavLayer } from "./nav-layers";
 import "./member-panel.css";
 import "./member-settings.css";
 import * as api from "./api";
-import { addFolder, folderName, listedFolders, removeFolder } from "./composer-folder";
 import { describeError } from "./format";
 import { onLocaleChange, getLocale, t } from "./i18n";
 import { openMemberAvatarMenu } from "./member-avatar-menu";
@@ -28,7 +27,7 @@ import { rememberAppLogos } from "./app-logos";
 import { connectedApps, toolOn, toolsAfterToggle, type ToolChoices } from "./member-tools";
 import { skillOriginLabel } from "./skill-source";
 import { slimeColorOf } from "./slime";
-import type { AppContext, BrainSettings, LibraryRef, Member, MemberCommand, MemberPatch, MemberSkill, MembersList } from "./types";
+import type { AppContext, LibraryRef, Member, MemberCommand, MemberPatch, MemberSkill, MembersList } from "./types";
 import { type IconName, actionRow, btn, closeMenu, esc, ico, iconBtn, backButton as roundBackButton, iconButton, openConfirmMenu, openMenuOnArrow, openPopover, patchHTML, tg, toaster } from "./ui";
 
 export interface MemberSettingsHost {
@@ -119,8 +118,6 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
   let library: LibraryRef[] = [];
   let commands: Loaded<MemberCommand[]> = "loading";
   let toolChoices: Loaded<ToolChoices> = "loading";
-  /** The owner's folders for members (R-PC-05): each member's own, and the output folder a member with none writes to. */
-  let folders: Loaded<{ own: Record<string, string[]>; output: string }> = "loading";
   let skillText: { id: number; skill: MemberSkill; text: string; original: string; revision?: string } | "loading" | null = null;
   let skillBusy = false;
   let command: { id: number | null; name: string; description: string; template: string } = { id: null, name: "", description: "", template: "" };
@@ -136,34 +133,17 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     const mine = ++epoch, id = host.member().id;
     // Each read is its own: one that fails (or a core that has not got it) leaves the others to answer.
     const read = <T>(call: () => Promise<T>): Promise<T> => Promise.resolve().then(call);
-    const [skillList, commandList, tools, settings] = await Promise.allSettled([
+    const [skillList, commandList, tools] = await Promise.allSettled([
       read(() => api.membersSkillsList(id)),
       read(() => api.membersCommandsList(id)),
       read(() => api.membersToolChoices()),
-      read(() => api.settingsGet()),
     ]);
     if (mine !== epoch || id !== host.member().id || el.hidden) return;
     if (skillList.status === "fulfilled") { skills = skillList.value?.skills ?? []; library = skillList.value?.library ?? []; }
     else if (!Array.isArray(skills)) skills = "failed";
     if (commandList.status === "fulfilled") commands = commandList.value?.commands ?? []; else if (!Array.isArray(commands)) commands = "failed";
     if (tools.status === "fulfilled" && tools.value) { toolChoices = tools.value; rememberAppLogos(tools.value.connections); } else if (typeof toolChoices !== "object") toolChoices = "failed";
-    if (settings.status === "fulfilled" && settings.value) folders = foldersOf(settings.value.settings); else if (typeof folders !== "object") folders = "failed";
     draw();
-  }
-
-  const foldersOf = (settings: BrainSettings): { own: Record<string, string[]>; output: string } =>
-    ({ own: settings.member_write_folders ?? {}, output: settings.owner_output_folder ?? "" });
-
-  /** The member's folders saved whole: the owner's choice alone (R-PC-05), never a member's. */
-  async function saveFolders(member: Member, next: string[]): Promise<void> {
-    if (typeof folders !== "object") return;
-    const own = { ...folders.own };
-    if (next.length) own[String(member.id)] = next; else delete own[String(member.id)];
-    try {
-      const saved = await api.settingsSet("member_write_folders", own);
-      folders = foldersOf(saved.settings);
-      draw();
-    } catch (error) { toaster.info(describeError(error)); }
   }
 
   // ---------- drawing ----------
@@ -257,30 +237,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
         `${tg(toolOn(member.tools, app.id), app.name, ` data-ms="tool" data-id="${esc(app.id)}" data-k="ms-tool:${esc(app.id)}"`)}</div>`).join("") || muted(t("memberSettings.noTools"));
     }
     return section("", rows, "", "ms-tools") +
-      section("", row(t("members.profile.draft"), tg(member.draft_first ?? true, t("members.profile.draft"), ' data-ms="draft" data-k="ms-draft"')), "", "ms-draft") +
-      foldersHTML(member);
-  }
-
-  /**
-   * The folders of the owner's computer this member may write to (R-PC-05), each a row with its whole path, as the composer's
-   * menu lists them: the output folder of Settings › General first, marked as every member's default and changed only there,
-   * then the ones added with the native picker, never typed, each removed in its ⋯. Reading reaches the whole computer (R-PC-04).
-   */
-  function foldersHTML(member: Member): string {
-    const title = t("memberSettings.folders");
-    const tool = iconBtn("plus", t("writeFolders.add"), ' data-ms="folder-add" data-k="ms-folder-add"');
-    let rows: string;
-    if (folders === "loading") rows = spinner();
-    else if (folders === "failed") rows = muted(t("mem.loadFailed"));
-    else {
-      const output = folders.output;
-      rows = listedFolders(folders.own[String(member.id)] ?? [], output).map((folder, index) =>
-        `<div class="ms-row ms-folder" data-k="ms-folder:${index}"><span class="ms-label ms-path owner-data">${esc(folder)}</span>` +
-        (folder === output ? `<span class="ms-tag">${esc(t("memberSettings.foldersDefault"))}</span>`
-          : iconBtn("more", t("members.more", { p0: folderName(folder) }), ` data-ms="folder-menu" data-index="${index}" data-k="ms-folder-menu:${index}" aria-haspopup="menu" aria-expanded="false"`)) +
-        `</div>`).join("") || muted(t("memberSettings.foldersNone"));
-    }
-    return section(title, rows, tool, "ms-folders");
+      section("", row(t("members.profile.draft"), tg(member.draft_first ?? true, t("members.profile.draft"), ' data-ms="draft" data-k="ms-draft"')), "", "ms-draft");
   }
 
   /** What the chosen kind holds. */
@@ -438,7 +395,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     // Another member, or the picture taken off, ends a move of the cover that was under way.
     if (reposition && (!sameMember || member.cover?.kind !== "image")) { reposition = null; delete cover.dataset.repositioning; }
     const face = faceHTML(member, 96).replace(/--slime-(?:delay|since):[^;"\s]+;?| data-slime-mounted="[\d.]+"/g, "");
-    const signature = JSON.stringify([stableMember(member), face, view, category, [...editing], [...saving], adding, skills, library, commands, toolChoices, folders, skillText, skillBusy, command, getLocale(),
+    const signature = JSON.stringify([stableMember(member), face, view, category, [...editing], [...saving], adding, skills, library, commands, toolChoices, skillText, skillBusy, command, getLocale(),
       reposition ? reposition.from : null]);
     if (drawn === signature) return;
     drawn = signature;
@@ -674,19 +631,6 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
       case "draft": void host.update(member.id, { draft_first: !(member.draft_first ?? true) }); break;
       case "notify": void host.update(member.id, { notify: !(member.notify ?? false) }); break;
       case "tool": void toggleTool(act.dataset.id ?? ""); break;
-      case "folder-add": void api.pickOutputFolder().then(path => {
-        if (path === null || typeof folders !== "object") return;
-        const own = folders.own[String(member.id)] ?? [], output = folders.output;
-        if (!listedFolders(own, output).includes(path)) return saveFolders(member, addFolder(own, output, path));
-      }).catch(error => toaster.info(describeError(error))); break;
-      case "folder-menu": {
-        if (typeof folders !== "object") break;
-        const own = folders.own[String(member.id)] ?? [], output = folders.output, folder = listedFolders(own, output)[Number(act.dataset.index)];
-        if (folder === undefined || folder === output) break;
-        openConfirmMenu(act, { label: t("writeFolders.remove", { p0: folderName(folder) }), ask: t("settings.keyRemoveConfirm"),
-          run: () => void saveFolders(member, removeFolder(own, output, folder)) });
-        break;
-      }
     }
   });
 

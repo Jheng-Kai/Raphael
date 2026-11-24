@@ -128,7 +128,20 @@ class ToolGate:
         retention = self._settings.get("history_retention_days") if self._settings else None
         return (self.data_floor.access(name, arguments) == "read" or background_requires_approval(name, arguments)
                 or name.endswith("/fill_card") or name in ("routine_delete", REMOVE_KEY, "management_batch")
-                or destructive(name, arguments, retention))
+                or destructive(name, arguments, retention) or self._outside_work_folder(name, arguments))
+
+    def _outside_work_folder(self, name, arguments) -> bool:
+        """A tool call that writes, moves or deletes outside the member's work folder: the hub that offers the tool says
+        so (`firm_for_call`), and the owner is asked in every mode (R-FILE-06). A hub that cannot say, or a call it cannot
+        read, is not outside; a hub that fails while judging it is, so a doubt asks."""
+        firm = getattr(self._plugins, "firm_for_call", None)
+        if not callable(firm) or not name.startswith("mcp:"):
+            return False
+        try:
+            return firm(name, arguments) is True
+        except Exception as exc:
+            logger.warning("Could not tell where a write goes: %s", type(exc).__name__)
+            return True
 
     @property
     def ask_first(self) -> bool:

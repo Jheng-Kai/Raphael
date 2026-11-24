@@ -477,6 +477,9 @@ const ALLOWED_METHODS: &[&str] = &[
     "computer.viewer_put_file",
     "computer.lifecycle",
     "computer.wallpaper",
+    "folders.info",
+    "folders.switch_branch",
+    "folders.member",
     "pages.open",
     // Where a YouTube video plays inside the window on a Mac (the core's page host, `/v/<id>`).
     "pages.video_base",
@@ -2174,7 +2177,9 @@ pub async fn open_team_file(
         .get("path")
         .and_then(Value::as_str)
         .ok_or("file unavailable")?;
-    if result.get("reads").and_then(Value::as_bool) == Some(true) {
+    if result.get("reads").and_then(Value::as_bool) == Some(true)
+        || result.get("opens_folder").and_then(Value::as_bool) == Some(true)
+    {
         return launch_link(found);
     }
     show_in_folder(found)
@@ -3701,6 +3706,9 @@ mod tests {
             "dictionary.delete",
             "settings.get",
             "settings.set",
+            "folders.info",
+            "folders.switch_branch",
+            "folders.member",
             "secrets.status",
             "secrets.set_openrouter_key",
             "secrets.clear_openrouter_key",

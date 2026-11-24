@@ -349,3 +349,63 @@ async def test_the_card_names_the_member_that_asks(setup, brain):
     brain(*[publish("member_skills_list", {"member_id": one.id}) for one in others])
     asked = await typed(rig, "Check the others", asker.id)
     assert asked["confirm"]["text"].split("\n")[0] == "「Ada」：有 2 項變更需要你同意"
+
+
+LAZY_MODE = "---\nname: lazy-mode\ndescription: Do the least\n---\nDo the least that works."
+
+
+async def test_a_library_import_that_fails_after_the_yes_tells_the_member_its_kind_and_words(setup, brain):
+    # Only "bad_arguments" reached the member before: a name that is taken looked like its own wrong call.
+    from raphael_core.management import publish
+
+    rig, team = setup
+    await rig.call("skills.library.import", {"text": LAZY_MODE})
+    brain(publish("member_library_import", {"text": LAZY_MODE, "access": []}), then="Already there.")
+    asked = await typed(rig, "Import lazy-mode", 0)
+    assert asked["status"] == "confirm"
+    done = await rig.confirm(asked["confirm"]["id"])
+    assert done["status"] == "done"
+    shown = brain.continued()
+    assert "taken: a skill named lazy-mode already exists" in shown
+    assert "member_library_list" in shown and "bad_arguments" not in shown
+    assert len((await rig.call("skills.library.list", {}))["packages"]) == 1
+
+
+async def test_each_failure_on_a_card_of_several_library_changes_keeps_its_kind_and_words(setup, brain):
+    from raphael_core.management import publish
+
+    rig, team = setup
+    await rig.call("skills.library.import", {"text": LAZY_MODE})
+    brain(publish("member_library_import", {"text": LAZY_MODE, "access": []}),
+          publish("member_library_delete", {"key": "pack:missing"}),
+          publish("member_library_update", {"key": "pack:missing", "enabled": False}), then="Two did not work.")
+    asked = await typed(rig, "Import lazy-mode and clean up", 0)
+    assert asked["status"] == "confirm" and rig.service._confirmations.waiting == 1
+    done = await rig.confirm(asked["confirm"]["id"])
+    assert done["status"] == "done"
+    shown = brain.continued()
+    assert shown.count("no such skill package") == 2 and "taken: a skill named lazy-mode already exists" in shown
+    assert "bad_arguments" not in shown
+    for kind in ("taken", "not_found"):
+        assert f'"error": "{kind}"' in shown.replace("\\", "")
+    said = [m["text"] for m in rig.service._history.messages([asked["turn_id"]])[asked["turn_id"]] if m["kind"] == "event"][-1]
+    assert said.count("未完成：") == 3 and "已不存在" in said
+
+
+# Alone on its card, and with another change on one card of several: the member is told in both.
+@pytest.mark.parametrize("several", [False, True])
+async def test_an_import_on_a_card_that_leaves_a_linked_file_out_names_it_to_the_member(setup, brain, tmp_path, several):
+    from raphael_core.management import publish
+
+    rig, team = setup
+    skill = tmp_path / "plugin" / "skills" / "lazy-mode"
+    skill.mkdir(parents=True)
+    (tmp_path / "plugin" / ".claude-plugin").mkdir()
+    (tmp_path / "plugin" / ".claude-plugin" / "plugin.json").write_bytes(b"{}")
+    (skill / "SKILL.md").write_bytes((LAZY_MODE + "\nRead [it](../../../elsewhere.md).\n").encode())
+    others = (publish("member_library_delete", {"key": "pack:missing"}),) if several else ()
+    brain(publish("member_library_import", {"source": f"local:{tmp_path / 'plugin'}", "access": []}), *others, then="Imported.")
+    asked = await typed(rig, "Import the plugin", 0)
+    assert (await rig.confirm(asked["confirm"]["id"]))["status"] == "done"
+    shown = brain.continued().replace("\\", "")
+    assert "skipped_references" in shown and "../../../elsewhere.md" in shown and "outside_plugin" in shown

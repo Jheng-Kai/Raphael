@@ -17,8 +17,9 @@ import type { AgentTurn, PageCard, PageOpened } from "./types";
 import { btn, esc, ico, toaster } from "./ui";
 
 const MIN_HEIGHT = 80, MAX_HEIGHT = 2400;
-/** A page open in the whole area is as tall as its content, up to this (core agent/pages.py's helper); its card keeps `MAX_HEIGHT`. */
-const FULL_MAX_HEIGHT = 20000;
+/** The colour a page says its own background is (core agent/pages.py's helper): a plain rgb or rgba colour and nothing else, so
+ *  nothing a page sends can reach the app's style as anything but a colour. */
+const PAGE_COLOR = /^rgba?\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*(?:,\s*(?:0|1|0?\.\d{1,4}|1\.0{1,4})\s*)?\)$/;
 const SEND_LIMIT = 4000, SEND_GAP_MS = 1000;
 /** How long a page asked for by its id waits for its card to be in the thread and ready. */
 const CARD_WAIT_MS = 10000;
@@ -101,9 +102,12 @@ interface Live {
   rev: number;
   frame: HTMLIFrameElement;
   height: number | null;
-  /** What it says it is as tall as in the whole area (not cut at its card's height), and the box that holds it there. */
-  full: number | null;
+  /** The area it stands in while it is open whole (R-PAGE-10: the frame is the page's window, which the page scrolls in), and the
+   *  box in it that holds the frame. */
+  area: HTMLElement | null;
   box: HTMLElement | null;
+  /** The colour it says its own background is (the helper's `background`), painted behind the composer's row while it is open. */
+  background: string | null;
   opened: PageOpened | null;
   /** It has drawn: its frame loaded, or the page said something (its helper speaks once it is parsed). Only then is its
    *  preview shown and pressable; a redraw of its line while it is still on its way keeps it loading. */
@@ -114,11 +118,13 @@ interface Live {
   drawTimer: ReturnType<typeof setTimeout> | undefined;
   /** It stands in the conversation's place (page-view.ts), not in its card. */
   expanded: boolean;
-  /** Where the owner was reading it there (how far the area is scrolled), kept for the next time it opens. */
+  /** Where the owner was reading it there (how far the page has scrolled in its frame, from its own scroll messages), kept for the
+   *  next time it opens. */
   reading: number;
-  /** A changed page loading beside the one on screen, which it replaces once it is ready, and the height it says. */
+  /** A changed page loading beside the one on screen, which it replaces once it is ready, and the height and the background it says. */
   next: HTMLIFrameElement | null;
-  nextFull: number | null;
+  nextHeight: number | null;
+  nextBackground: string | null;
   /** A declined external link asks no more without a sure press. */
   refused: boolean;
 }
@@ -189,13 +195,21 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
     else if (state !== "failed") close?.remove();
   }
 
-  /** A page is as tall as it says, in its card's preview. In the conversation's place it fills it and says nothing the card
-   *  follows: the card keeps its own height until the page is back and says so there, narrow again. */
+  /** A page is as tall as it says, in its card's preview. In the conversation's place its frame is that place's size and it scrolls
+   *  in it as in a browser (R-PAGE-10), so what it says changes nothing there: the card keeps its own height until the page is
+   *  back and says so there, narrow again. */
   function applyHeight(live: Live): void {
-    if (live.expanded) { live.box?.style.setProperty("--pgv-h", `${live.full ?? live.height ?? MIN_HEIGHT}px`); return; }
-    if (live.height !== null) cardOf(live)?.style.setProperty("--pg-h", `${live.height}px`);
+    if (!live.expanded && live.height !== null) cardOf(live)?.style.setProperty("--pg-h", `${live.height}px`);
   }
-  const heard = (live: Live, height: unknown): void => { live.height = clampHeight(height); live.full = clampHeight(height, FULL_MAX_HEIGHT); };
+  const heard = (live: Live, height: unknown): void => { live.height = clampHeight(height); };
+
+  /** Behind the composer's row the area shows the page's own background, so the page still reads as running to the window's foot. */
+  function paintBackground(live: Live): void {
+    if (live.background) live.area?.style.setProperty("--pgv-bg", live.background);
+    else live.area?.style.removeProperty("--pgv-bg");
+  }
+  /** Puts the page where the owner was reading it (R-PAGE-10): the helper scrolls to it in its own window. */
+  const placeAt = (live: Live, y: number, frame: HTMLIFrameElement = live.frame): void => { post(live, { raphaelPage: 1, type: "scroll-to", y }, frame); };
 
   async function open(live: Live): Promise<void> {
     live.ready = false;
@@ -240,7 +254,7 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
   }
 
   function make(id: string, rev: number): Live {
-    const live = { id, rev, height: null, full: null, box: null, opened: null, ready: false, failed: null, drawTimer: undefined, expanded: false, reading: 0, next: null, nextFull: null, refused: false } as unknown as Live;
+    const live = { id, rev, height: null, area: null, box: null, background: null, opened: null, ready: false, failed: null, drawTimer: undefined, expanded: false, reading: 0, next: null, nextHeight: null, nextBackground: null, refused: false } as unknown as Live;
     live.frame = newFrame(live);
     frames.set(id, live);
     return live;
@@ -248,7 +262,7 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
 
   /**
    * The page changed while it stands in the conversation's place (its member updated it): the new one loads beside the one
-   * on screen, is put back where the owner was reading, and takes its place once it has drawn, so nothing closes, flashes or
+   * on screen, is scrolled to where the owner was reading, and takes its place once it has drawn, so nothing closes, flashes or
    * jumps. A page that cannot be read again stays as it was.
    */
   async function replaceInPlace(live: Live): Promise<void> {
@@ -260,7 +274,8 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
     if (!live.expanded) { void open(live); return; }
     live.next?.remove();
     live.opened = opened;
-    live.nextFull = null;
+    live.nextHeight = null;
+    live.nextBackground = null;
     const next = newFrame(live);
     live.next = next;
     next.removeAttribute("inert");
@@ -273,13 +288,16 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
       live.next = null;
       const old = live.frame;
       live.frame = next;
-      // The area keeps its scroll, so the owner stays where they were reading; the changed page says how tall it is.
-      if (live.nextFull !== null) { live.full = live.nextFull; live.height = Math.min(MAX_HEIGHT, live.nextFull); live.nextFull = null; applyHeight(live); }
+      // The changed page says how tall it is (for its card) and what its background is.
+      if (live.nextHeight !== null) { live.height = live.nextHeight; live.nextHeight = null; applyHeight(live); }
+      live.background = live.nextBackground;
+      paintBackground(live);
       next.style.visibility = "";
       old.remove();
     };
     // Once it has drawn: a frame later, so the first paint of the changed page is what takes the place.
-    next.addEventListener("load", () => { requestAnimationFrame(swap); setTimeout(swap, 250); });
+    // It is scrolled to where the owner was reading before it shows, so the owner stays there.
+    next.addEventListener("load", () => { if (live.reading > 0) placeAt(live, live.reading, next); requestAnimationFrame(swap); setTimeout(swap, 250); });
     moveFrame(next, box);
     next.src = opened.url;
   }
@@ -418,13 +436,17 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
     }
   }
 
+  /** What a page says its background is, if it is a plain colour; anything else is none, and the area keeps its own. */
+  const backgroundOf = (color: unknown): string | null => (typeof color === "string" && PAGE_COLOR.test(color) ? color : null);
+
   window.addEventListener("message", event => {
     const live = event.source ? [...frames.values()].find(item => item.frame.contentWindow === event.source || item.next?.contentWindow === event.source) : undefined;
-    const data = event.data as { raphaelPage?: number; jsonrpc?: string; type?: string; text?: unknown; url?: unknown; height?: unknown; y?: unknown; state?: unknown } | null;
+    const data = event.data as { raphaelPage?: number; jsonrpc?: string; type?: string; text?: unknown; url?: unknown; height?: unknown; y?: unknown; color?: unknown; state?: unknown } | null;
     if (!live || !data || typeof data !== "object") return;
     const loading = live.next !== null && live.next.contentWindow === event.source;
     // A changed page still loading says how tall it is before it takes its place.
-    if (loading && data.raphaelPage === 1 && data.type === "height") live.nextFull = clampHeight(data.height, FULL_MAX_HEIGHT);
+    if (loading && data.raphaelPage === 1 && data.type === "height") live.nextHeight = clampHeight(data.height);
+    if (loading && data.raphaelPage === 1 && data.type === "background") live.nextBackground = backgroundOf(data.color);
     // A page that speaks has been read and laid out, though its load may wait on a font or a picture from elsewhere that
     // never comes: its preview stands now, not when that load ends.
     if (!loading && (data.raphaelPage === 1 || data.jsonrpc === "2.0")) drawn(live);
@@ -433,9 +455,11 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
       return;
     }
     if (data.raphaelPage !== 1) return;
-    // The area scrolls, not the page (R-PAGE-08): where the owner reads is kept from the area's own scroll (`expand`).
-    if (data.type === "scroll" || loading) return;
-    if (data.type === "height") { heard(live, data.height); applyHeight(live); }
+    if (loading) return;
+    // The page scrolls in its own window (R-PAGE-10): where the owner reads is what it says its scroll is, while it is open.
+    if (data.type === "scroll") { if (live.expanded && Number.isFinite(data.y)) live.reading = Math.max(0, Math.round(Number(data.y))); return; }
+    if (data.type === "background") { live.background = backgroundOf(data.color); paintBackground(live); }
+    else if (data.type === "height") { heard(live, data.height); applyHeight(live); }
     else if (data.type === "send" && placeText(live, data.text)) post(live, { raphaelPage: 1, type: "result", status: "placed" });
     else if (data.type === "open") openLink(live, data.url);
     // What the owner did on the page goes to the core, which serves it back when the page opens again (R-PAGE-14). The page
@@ -448,7 +472,7 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
   });
 
   /** Share (R-PAGE-08): the page saved as one HTML file, which the core builds of the page it keeps (`pages.export`: no text of
-   *  the window's goes into it), in the owner's output folder or Downloads, shown selected there, and a word of where it went. */
+   *  the window's goes into it), in the member's work folder or Downloads, shown selected there, and a word of where it went. */
   let sharing = false;
   async function share(live: Live): Promise<void> {
     if (sharing) return;
@@ -464,18 +488,18 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
   }
 
   /** The page opens in the whole area right of the sidebar, the same frame moved there, so nothing the
-   *  owner did in it is lost. The area scrolls, not the page: the frame is as tall as the page says. It is the card's frame
-   *  again, back at its top, when the owner goes back (`leave`). */
+   *  owner did in it is lost. The frame is the page's window, as a browser gives one: it fills the area from under the header's
+   *  band down to just above the composer's row and the page scrolls in it (R-PAGE-10), so `100vh`, sticky and fixed parts work.
+   *  It is the card's frame again, back at its top, when the owner goes back (`leave`). */
   function expand(live: Live, card: HTMLElement): void {
     const host = view();
     const title = card.querySelector(".card-title")?.textContent ?? live.opened?.title ?? "";
     host.body.innerHTML = `<div class="pgv-page" tabindex="-1"><div class="pgv-frame-box"></div></div>`;
     const area = host.body.querySelector<HTMLElement>(".pgv-page")!, box = area.querySelector<HTMLElement>(".pgv-frame-box")!;
     live.expanded = true;
+    live.area = area;
     live.box = box;
-    live.full ??= live.height ?? clampHeight(parseFloat(card.style.getPropertyValue("--pg-h")), FULL_MAX_HEIGHT);
-    applyHeight(live);
-    area.addEventListener("scroll", () => { live.reading = area.scrollTop; }, { passive: true });
+    paintBackground(live);
     host.open({
       id: live.id, title, kind: "page", opener: card.querySelector<HTMLElement>(".pg-body"),
       reopen: () => { void show(live.id, title, () => {}); },
@@ -483,19 +507,27 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
       action: live.opened?.source === "mcp" ? undefined : { icon: "fileDown", label: t("page.report.share"), run: () => { void share(live); } },
       leave() {
         live.expanded = false;
+        live.area = null;
         live.box = null;
         live.next?.remove();
         live.next = null;
-        live.nextFull = null;
+        live.nextHeight = null;
+        live.nextBackground = null;
         // The card shows the top of the page again; where the owner was reading is kept for the next time.
         const home = cardOf(live)?.querySelector<HTMLElement>(".pg-body");
         if (home) moveFrame(live.frame, home);
+        placeAt(live, 0);
         host.body.replaceChildren();
         applyHeight(live);
       },
     });
     moveFrame(live.frame, box);
-    if (live.reading > 0) area.scrollTop = live.reading;
+    // Back where the owner was reading (a frame that had to load again says it once it has).
+    if (live.reading > 0) {
+      const frame = live.frame, at = live.reading;
+      placeAt(live, at);
+      frame.addEventListener("load", () => { if (live.expanded && live.frame === frame) placeAt(live, at); }, { once: true });
+    }
   }
 
   /** A ready page opens whole; one still loading or failed has nothing to open. */

@@ -28,7 +28,9 @@ Nothing here logs a city, a question or an answer.
 """
 
 import asyncio
+import json
 import logging
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -74,6 +76,8 @@ DISABLED = "disabled"
 WEATHER_TIMEOUT_S = 120.0
 WEATHER_TRY_S = 30.0
 WEATHER_TRIES = 2
+HOURS_SHOWN = 12  # the hours ahead the answer is given (Open-Meteo is asked for as many)
+DAYS_SHOWN = 7
 # A search with its model's reading of the results.
 SEARCH_TIMEOUT_S = 125.0
 SEARCH_MAX_TOKENS = 500
@@ -209,9 +213,57 @@ def _at(values: Any, index: int) -> Any:
     return values[index] if isinstance(values, list) and index < len(values) else None
 
 
+def _at_list(values: Any) -> list:
+    return values if isinstance(values, list) else []
+
+
+_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+_LOCAL_TIME = re.compile(r"\d{4}-\d{2}-\d{2}T(\d{2}:\d{2})")
+
+
+def _clock(value: Any) -> str | None:
+    """The "HH:MM" of an Open-Meteo local time ("YYYY-MM-DDTHH:MM"), or None."""
+    found = _LOCAL_TIME.match(value) if isinstance(value, str) else None
+    return found.group(1) if found else None
+
+
 def _compact(entries: dict[str, Any]) -> dict[str, Any]:
     """`entries` without the ones that have no value."""
     return {key: value for key, value in entries.items() if value is not None}
+
+
+CARD_USE = "Put card in the reply as it is, its condition words in the owner's language: it draws this whole forecast."
+
+
+def forecast_card(data: dict[str, Any]) -> str | None:
+    """The forecast form (R-FORM-03) of what the weather tool read, whole and ready to reply with: now, the hours and the
+    days, the source and the time. A member that wrote the form itself kept only a day or two; this one has every part.
+    None when the days are too few to make a valid form."""
+    from ..answer_forms import forms_plain_text
+
+    days = [_compact({"day": day["date"], "condition": day["sky"], "high": day["high_c"], "low": day["low_c"],
+                      "rain": day.get("rain_chance_percent")})
+            for day in data.get("days", ()) if all(key in day for key in ("date", "sky", "high_c", "low_c"))]
+    place = data.get("asked_for") or data.get("city")
+    if not days or not isinstance(place, str):
+        return None
+    form: dict[str, Any] = {"place": place, "units": "C"}
+    now = data.get("now") or {}
+    if "temperature_c" in now and "sky" in now:
+        wind = now.get("wind_kmh")
+        form["now"] = _compact({"temp": now["temperature_c"], "condition": now["sky"], "feels": now.get("feels_like_c"),
+                                "humidity": now.get("humidity_percent"),
+                                "wind": None if wind is None else f"{round(wind)} km/h"})
+    hours = [_compact({"time": hour["time"], "condition": hour["sky"], "temp": hour["temperature_c"],
+                       "rain": hour.get("rain_chance_percent")})
+             for hour in data.get("hours", ()) if all(key in hour for key in ("time", "sky", "temperature_c"))]
+    if hours:
+        form["hours"] = hours
+    form["days"] = days
+    form.update(_compact({"source": data.get("source"), "updated": data.get("updated")}))
+    card = "```forecast\n" + json.dumps(form, ensure_ascii=False, separators=(",", ":")) + "\n```"
+    # Only a form the app draws is handed on: one the checks refuse would stand in the reply as its source.
+    return card if forms_plain_text(card) != card else None
 
 
 class Tools:
@@ -253,7 +305,7 @@ class Tools:
     # --- the weather ----------------------------------------------------------------------------
 
     async def weather(self, city: str, language: str) -> ToolResult:
-        """The weather in `city` now, today and tomorrow, with the place named in `language`. No city is no guess: the
+        """The weather in `city` now, the next hours and days, with the place named in `language`. No city is no guess: the
         answer is told to ask which one."""
         if not city.strip():
             return ToolResult("weather", False, None, "needs_city",
@@ -333,11 +385,13 @@ class Tools:
             {
                 "latitude": latitude,
                 "longitude": longitude,
-                "current": "temperature_2m,weather_code",
+                "current": "temperature_2m,weather_code,apparent_temperature,relative_humidity_2m,wind_speed_10m",
+                "hourly": "temperature_2m,precipitation_probability,weather_code",
                 "daily": "temperature_2m_max,temperature_2m_min,"
                 "precipitation_probability_max,weather_code",
                 "timezone": "auto",
-                "forecast_days": 2,
+                "forecast_hours": 12,
+                "forecast_days": 7,
             },
             deadline,
             "forecast",
@@ -346,15 +400,48 @@ class Tools:
         data = _compact({"city": named if isinstance(named, str) else None})
         if city_key(named if isinstance(named, str) else "") != city_key(city):
             data["asked_for"] = city.strip()  # what the user called it, which the answer may use
-        current, daily = forecast.get("current"), forecast.get("daily")
+        current, hourly, daily = forecast.get("current"), forecast.get("hourly"), forecast.get("daily")
         if isinstance(current, dict):
             data["now"] = _compact(
                 {
                     "temperature_c": _number(current.get("temperature_2m")),
                     "sky": sky_of(current.get("weather_code")),
+                    "feels_like_c": _number(current.get("apparent_temperature")),
+                    "humidity_percent": _number(current.get("relative_humidity_2m")),
+                    "wind_kmh": _number(current.get("wind_speed_10m")),
                 }
             )
+        if isinstance(hourly, dict):
+            hours = []
+            for index, time in enumerate(_at_list(hourly.get("time"))):
+                hour = _compact(
+                    {
+                        "time": _clock(time),
+                        "temperature_c": _number(_at(hourly.get("temperature_2m"), index)),
+                        "rain_chance_percent": _number(_at(hourly.get("precipitation_probability"), index)),
+                        "sky": sky_of(_at(hourly.get("weather_code"), index)),
+                    }
+                )
+                if "time" in hour and len(hour) > 1:
+                    hours.append(hour)
+            if hours:
+                data["hours"] = hours[:HOURS_SHOWN]
         if isinstance(daily, dict):
+            days = []
+            for index, date in enumerate(_at_list(daily.get("time"))):
+                day = _compact(
+                    {
+                        "date": date if isinstance(date, str) and _DATE.fullmatch(date) else None,
+                        "low_c": _number(_at(daily.get("temperature_2m_min"), index)),
+                        "high_c": _number(_at(daily.get("temperature_2m_max"), index)),
+                        "rain_chance_percent": _number(_at(daily.get("precipitation_probability_max"), index)),
+                        "sky": sky_of(_at(daily.get("weather_code"), index)),
+                    }
+                )
+                if "date" in day and len(day) > 1:
+                    days.append(day)
+            if days:
+                data["days"] = days[:DAYS_SHOWN]
             for index, day in enumerate(("today", "tomorrow")):
                 data[day] = _compact(
                     {
@@ -368,6 +455,13 @@ class Tools:
                 )
         if not any(data.get(part) for part in ("now", "today", "tomorrow")):
             raise ValueError("The forecast holds nothing")
+        data["source"] = "Open-Meteo"
+        updated = _clock(current.get("time")) if isinstance(current, dict) else None
+        if updated:
+            data["updated"] = updated  # the place's own local time of the reading
+        card = forecast_card(data)
+        if card:
+            data["card"], data["card_use"] = card, CARD_USE
         return data
 
     # --- the web --------------------------------------------------------------------------------

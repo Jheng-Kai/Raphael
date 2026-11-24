@@ -425,7 +425,7 @@ test("managed rows open the shared page and connect through their own provider",
   api.connectorsConnect.mockResolvedValue({ connected: false, error: "cancelled" });
   const { c, root, click } = setup(); await c.load(); await settle();
   click("open-store", "github");
-  expect(root.querySelector(".cs-page .cs-head")?.textContent).toContain("GitHub");
+  expect(root.querySelector(".cs-page .cs-app")?.textContent).toContain("GitHub");
   expect(root.querySelector(".cs-meta, .cs-say")).toBeNull();
   expect(root.querySelector(".cs-info")?.textContent).toContain("Composio");
   click("join", "github"); await settle();

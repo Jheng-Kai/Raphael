@@ -1,5 +1,11 @@
 # Raphael feature map
 
+## Project folders
+
+See [Member computer](member-computer.md#the-owners-files-read-everywhere-write-in-the-owners-folders-r-pc-04-r-pc-05)
+and [Settings and appearance](settings-appearance.md#project-folders-in-general) for R-PC-05, R-OUTPUT-01,
+R-COLLEAGUE-06 and R-COMP-PROJECT-01, with the composer, branch, member settings and General scenes.
+
 ## Where the app's data lives
 
 See [Member computer](member-computer.md#where-the-apps-data-lives) for the inventory of every kind of data the app
@@ -273,7 +279,7 @@ have no src; only Load image assigns a source, always without a referrer.
 
 ```powershell
 npm run verify -- --contract
-npm run look -- rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-invalid rich-streaming rich-sequence rich-class rich-state rich-er rich-architecture rich-wide-table reply-split-bubbles conversation-chief-up conversation-member-up conversation-room-up long-owner long-owner-expanded long-room-messages chat --theme both --width 1120,720,1920x1080
+npm run look -- rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-table-short-columns rich-invalid rich-streaming rich-sequence rich-class rich-state rich-er rich-architecture rich-wide-table reply-split-bubbles conversation-chief-up conversation-member-up conversation-room-up long-owner long-owner-expanded long-room-messages chat --theme both --width 1120,720,1920x1080
 ```
 
 Native regression: `npm run native -- rich-content` reads a synthetic persisted

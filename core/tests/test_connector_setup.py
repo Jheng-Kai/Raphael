@@ -95,6 +95,13 @@ class Store(Platform):
             ident = f"ca_{len(self.accounts) + 1}"
             self.accounts[ident] = body
             return httpx.Response(201, json={"id": ident, "status": "ACTIVE"})
+        if path == "/connected_accounts" and method == "GET" and self.accounts:
+            # What Composio lists: the accounts made here, each with the time it was made (ca_N, N minutes past ten).
+            self.requests.append(request)
+            return httpx.Response(200, json={"items": [
+                {"id": ident, "status": "ACTIVE", "created_at": f"2026-11-24T10:{int(ident[3:]):02d}:00Z",
+                 "toolkit": {"slug": self.auth_configs.get(body["auth_config"]["id"], {}).get("toolkit", {}).get("slug", "acme")}}
+                for ident, body in self.accounts.items()]})
         if path.startswith("/connected_accounts/ca_") and path != "/connected_accounts/ca_test":
             self.requests.append(request)
             ident = path.rsplit("/", 1)[1]
@@ -355,3 +362,41 @@ async def test_the_card_form_gives_fields_only_as_text(tmp_path, conn):
             await rig.router.call("integrations.card_connect", {"id": card.id, "fields": bad})
     assert rig.cards.store.get(card.id).state == "pending"
     assert not rig.store.auth_configs
+
+
+async def test_connecting_an_app_with_a_key_again_gives_the_old_account_back_and_keeps_its_name(tmp_path, conn):
+    """The card of an app that has accounts says `again`: the new key's account takes the old one's place at Composio, and
+    whenever Composio is read again it is the one account (a reconnect used to leave both, and the list hid the old one)."""
+    rig = Rig(tmp_path, conn)
+    await rig.router.call("connectors.connect", {"toolkit": "acme", "fields": {"generic_api_key": KEY}})
+    await rig.router.call("connectors.label", {"id": "composio:acme", "account_id": "ca_1", "label": "Work"})
+    result = await rig.router.call("connectors.connect", {"toolkit": "acme", "again": True, "fields": {"generic_api_key": SECRET}})
+    assert result["connected"] is True
+    assert "/connected_accounts/ca_1" in rig.store.deleted and set(rig.store.accounts) == {"ca_2"}
+    assert [(a["id"], a["label"]) for a in result["connector"]["accounts"]] == [("ca_2", "Work")]
+    status = await rig.router.call("connectors.status")
+    assert [a["id"] for a in status["connectors"][0]["accounts"]] == ["ca_2"]
+    assert status["connectors"][0]["status"] == "ACTIVE"
+
+
+async def test_a_key_that_composio_refuses_again_leaves_the_old_account_alone(tmp_path, conn):
+    rig = Rig(tmp_path, conn)
+    await rig.router.call("connectors.connect", {"toolkit": "acme", "fields": {"generic_api_key": KEY}})
+    rig.store.reject = True
+    result = await rig.router.call("connectors.connect", {"toolkit": "acme", "again": True, "fields": {"generic_api_key": SECRET}})
+    assert result["ok"] is False and not any("/connected_accounts/ca_1" in path for path in rig.store.deleted)
+    assert set(rig.store.accounts) == {"ca_1"}
+    assert [a["id"] for a in rig.connectors.store.connectors["composio:acme"].accounts] == ["ca_1"]
+
+
+async def test_adding_another_account_with_a_key_takes_nobodys_place(tmp_path, conn):
+    rig = Rig(tmp_path, conn)
+    await rig.router.call("connectors.connect", {"toolkit": "acme", "fields": {"generic_api_key": KEY}})
+    result = await rig.router.call("connectors.connect", {"toolkit": "acme", "fields": {"generic_api_key": SECRET}})
+    assert [a["id"] for a in result["connector"]["accounts"]] == ["ca_1", "ca_2"] and set(rig.store.accounts) == {"ca_1", "ca_2"}
+    assert not any(path.startswith("/connected_accounts/") for path in rig.store.deleted)
+    # Two accounts without an address or a name are told apart by when each was made, and the newest says so.
+    status = await rig.router.call("connectors.status")
+    accounts = status["connectors"][0]["accounts"]
+    assert [a["id"] for a in accounts] == ["ca_1", "ca_2"] and all(a["created_at"] for a in accounts)
+    assert [a.get("newest") for a in accounts] == [None, True]
