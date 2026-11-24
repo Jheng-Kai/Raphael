@@ -2321,7 +2321,8 @@ export function createAgent(app: AppContext, places?: {
     const pointedFile = contextMenuTarget()?.closest<HTMLElement>(".attachment-picture[data-attachment], .attachment-file[data-act=\"attachment-open\"][data-id]");
     const pointedId = pointedFile && message?.contains(pointedFile) ? (pointedFile.dataset.attachment ?? pointedFile.dataset.id ?? "") : "";
     const pointedPicture = !!pointedId && pointedFile!.classList.contains("attachment-picture");
-    const pointedName = pointedFile?.querySelector(".me-file-t")?.textContent ?? pointedFile?.dataset.title ?? undefined;
+    // The name it was sent with, as shown: a file's line, a picture's own alt.
+    const pointedName = (pointedFile?.querySelector(".me-file-t")?.textContent ?? pointedFile?.querySelector("img")?.getAttribute("alt")) || undefined;
     // A picture the member sent is the message itself: its own Copy below copies it, so it is not offered twice.
     if (pointedId && !(pointedPicture && source?.picture)) items.push({ id: "copy-attachment", label: t(pointedPicture ? "chat.copyImage" : "chat.copyFile"), icon: "copy" });
     if (source) items.push({ id: "reply", label: t("chat.reply"), icon: "reply" });

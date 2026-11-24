@@ -29,7 +29,7 @@ OPENABLE = frozenset("""
     zip 7z rar tar gz bz2 xz
 """.split())
 # A name Windows will not take as a file name, whatever its extension.
-RESERVED = re.compile(r"(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?", re.IGNORECASE)
+RESERVED = re.compile(r"(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])(\..*)?", re.IGNORECASE)
 
 
 def clipboard_name(*names):
@@ -178,7 +178,9 @@ class AttachmentStore:
     async def copy_path(self, params):
         """A copy of the stored file under the name it was sent with, for the clipboard: pasted into a folder, it is that
         file. Copying runs nothing, so any type may be copied (opening keeps its own list). Only the latest copy is kept: the
-        clipboard holds one file of ours at a time. The name is the stored one, else the one shown (`name`), never a path."""
+        clipboard holds one of ours at a time, and the one before it stays until the next copy, as it may still be being
+        pasted (or the clipboard still holds it when this copy fails). The name is the stored one, else the one shown
+        (`name`), never a path."""
         path = self.path(params.get("id"))
         try:
             stored = json.loads(path.with_name(path.name + ".json").read_text(encoding="utf-8")).get("name")
@@ -188,10 +190,17 @@ class AttachmentStore:
 
         def make():
             folder = self.checked_root() / "clipboard"
-            shutil.rmtree(folder, ignore_errors=True)
             target = folder / uuid.uuid4().hex / name
             target.parent.mkdir(parents=True)
-            shutil.copyfile(path, target)
+            try:
+                shutil.copyfile(path, target)
+            except OSError:
+                shutil.rmtree(target.parent, ignore_errors=True)
+                raise
+            earlier = sorted((entry for entry in folder.iterdir() if entry != target.parent),
+                             key=lambda entry: entry.stat().st_mtime_ns, reverse=True)
+            for entry in earlier[1:]:
+                shutil.rmtree(entry, ignore_errors=True)
             return str(target)
 
         return {"path": await asyncio.to_thread(make)}

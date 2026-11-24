@@ -126,11 +126,14 @@ async def test_a_copy_for_the_clipboard_takes_any_type_under_the_name_it_was_sen
 
 
 @pytest.mark.asyncio
-async def test_only_the_latest_clipboard_copy_is_kept_and_a_shown_name_is_never_a_path(tmp_path):
+async def test_the_copy_before_stays_until_the_next_and_a_shown_name_is_never_a_path(tmp_path):
+    """The copy before the latest may still be being pasted, or still be on the clipboard when the latest fails."""
+    from pathlib import Path
     store = AttachmentStore(tmp_path)
     file = store.save(checked("note.txt", "text/plain", b"synthetic attachment"))
-    first = (await store.copy_path({"id": file.stored_id, "name": r"..\..\evil.txt"}))["path"]
-    from pathlib import Path
-    assert Path(first).name == "evil.txt" and Path(first).parent.parent == store.root / "clipboard"
-    second = (await store.copy_path({"id": file.stored_id, "name": "CON.txt"}))["path"]
-    assert not Path(first).exists() and Path(second).name == file.stored_id
+    first = Path((await store.copy_path({"id": file.stored_id, "name": r"..\..\evil.txt"}))["path"])
+    assert first.name == "evil.txt" and first.parent.parent == store.root / "clipboard"
+    second = Path((await store.copy_path({"id": file.stored_id, "name": "CON.txt"}))["path"])
+    assert first.exists() and second.name == file.stored_id
+    third = Path((await store.copy_path({"id": file.stored_id, "name": "COM¹.txt"}))["path"])
+    assert not first.exists() and second.exists() and third.name == file.stored_id
