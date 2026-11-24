@@ -58,7 +58,7 @@ connected app with its own mark and a switch over the member's `tools` list, the
 waits in a ⋯ behind a second press; commands), 個性與指示 (personality and instructions, R-PANEL-07: two quiet rows of
 their words, whole, each with a pencil; a press opens a field in the row's place that is as tall as its words, Enter on
 one line, Ctrl+Enter or leaving it saves without a word (a spinner for the pencil meanwhile), Escape restores; nothing written is one quiet line of
-what could stand there; Raphael's too), 通知 (one switch). The model is chosen at the composer
+what could stand there; Raphael's too), 通知 (one switch, R-NOTIFY-01). The model is chosen at the composer
 alone, members have no voice (the release has none), and the group is the sidebar's. A cover picture moves up and
 down: 調整位置 in the cover's menu, then the picture follows the pointer and 取消 / 儲存位置
 stand where the change icon was (`members.update {cover_position}`, 0 to 100, 50 by default). Raphael's name and
@@ -86,8 +86,11 @@ switch on the fill; the details panel's routine rows too. The look audit fails a
 
 Members have no voice and there are no voice calls: see [Conversation](conversation.md#no-voice).
 The voice-memo and read-aloud switches, the reply Play/Pause control and the transcript are gone; a member's
-notifications are the settings page's 通知 switch. Selected scene: details-notify; unit coverage asserts no memo control
-or toggle.
+notifications are the settings page's 通知 switch. Off keeps completion and reply requests in the
+conversation: no overlay caption, notice or moved approval card, no app reminder toast, and no OS
+toast. Unread and sidebar status still update. Desktop quick-ask replies stay on the overlay.
+Raphael and other members default to off. Selected scenes: details-notify and member-settings-notify.
+Unit coverage checks the delivery gates. Native delivery and WebView2 recovery need Windows acceptance.
 
 ## Member panel tabs
 

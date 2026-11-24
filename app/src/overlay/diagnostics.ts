@@ -172,6 +172,39 @@ const FRAME_WAIT_MS = 1500;
 /** Pixel readback is deliberately much slower than the animation loop. */
 const PAINT_CHECK_MS = 500;
 
+/**
+ * A frame callback runs before painting. Two callbacks leave a render opportunity between them.
+ * A hidden acknowledgement additionally waits for the vanish animation to clear the canvas.
+ */
+export class FrameAcknowledgements {
+  private generation = 0;
+
+  constructor(
+    private readonly hidden: () => boolean,
+    private readonly acknowledge: (id: number, hidden: boolean) => void,
+    private readonly nextFrame: (callback: FrameRequestCallback) => unknown = requestAnimationFrame,
+  ) {}
+
+  probe(id: number, waitForHidden: boolean, watchEnd: boolean): void {
+    const generation = ++this.generation;
+    let painted = false;
+    let previousHidden: boolean | undefined;
+    const tick = () => {
+      if (generation !== this.generation) return;
+      const hidden = this.hidden();
+      const ready = hidden ? waitForHidden || (watchEnd && painted) : !waitForHidden && !painted;
+      if (hidden === previousHidden && ready) {
+        this.acknowledge(id, hidden);
+        if (hidden || !watchEnd) return;
+        painted = true;
+      }
+      previousHidden = hidden;
+      this.nextFrame(tick);
+    };
+    this.nextFrame(tick);
+  }
+}
+
 interface PaintSource {
   canvas: HTMLCanvasElement;
   /** False for an intentional hide or vanish, including when a notice expires. */

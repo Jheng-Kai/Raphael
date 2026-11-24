@@ -61,4 +61,4 @@ async def test_everyone_who_waits_is_listed_for_the_reminder(make_rig, plugins, 
     rig = make_rig()
     room, asked = await in_a_room(rig, plugins, conn)
     assert (await rig.rpc.call("background.waiting.list"))["waiting"] == [
-        {"id": asked["question_id"], "member_id": 0, "room_id": room, "member_name": ""}]
+        {"id": asked["question_id"], "member_id": 0, "room_id": room, "member_name": "", "notify": False}]

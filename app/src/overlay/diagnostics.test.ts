@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import {
   EntranceTimer,
+  FrameAcknowledgements,
   FrameWatch,
   SUBSCRIBE_RETRY_MS,
   describeError,
@@ -21,6 +22,43 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.useRealTimers();
+});
+
+test("a frame probe waits for a render opportunity and for the caption to clear", () => {
+  const queue: FrameRequestCallback[] = [];
+  const acknowledge = vi.fn();
+  let hidden = false;
+  const probe = new FrameAcknowledgements(() => hidden, acknowledge, callback => queue.push(callback));
+  const frame = () => queue.shift()!(0);
+  probe.probe(1, false, true);
+  frame();
+  expect(acknowledge).not.toHaveBeenCalled();
+  frame();
+  expect(acknowledge).toHaveBeenLastCalledWith(1, false);
+  hidden = true;
+  frame();
+  expect(acknowledge).toHaveBeenCalledTimes(1);
+  frame();
+  expect(acknowledge).toHaveBeenLastCalledWith(1, true);
+  expect(queue).toHaveLength(0);
+});
+
+test("a newer hidden probe discards the old probe and waits through the vanish", () => {
+  const queue: FrameRequestCallback[] = [];
+  const acknowledge = vi.fn();
+  let hidden = false;
+  const probe = new FrameAcknowledgements(() => hidden, acknowledge, callback => queue.push(callback));
+  const frame = () => queue.shift()!(0);
+  probe.probe(1, false, false);
+  probe.probe(2, true, false);
+  frame();
+  frame();
+  frame();
+  expect(acknowledge).not.toHaveBeenCalled();
+  hidden = true;
+  frame();
+  frame();
+  expect(acknowledge.mock.calls).toEqual([[2, true]]);
 });
 
 // ---- errors as text ----

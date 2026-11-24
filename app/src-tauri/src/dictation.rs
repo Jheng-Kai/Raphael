@@ -451,6 +451,8 @@ struct State {
     /// emblem of the dictation it took over, its reports of the wait, the answer or the YES/NO
     /// question), which must be hidden once the main window shows the question instead.
     on_overlay: bool,
+    /// The core preference for routing an app-typed reply outside its conversation.
+    notify_overlay: bool,
     /// Set on the turn of a question said to the overlay (Alt+Space) once it has left the voice
     /// slot: the number it was given when its words were in, so that the newest question is known.
     /// Its answer belongs to the overlay and waits for it (see [`DictationController::speak`]).
@@ -623,6 +625,7 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
                 media: MediaHold::default(),
                 questions: None,
                 on_overlay: false,
+                notify_overlay: true,
                 quick_order: None,
                 reading: None,
                 speech: 0,
@@ -673,15 +676,15 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
 
     /// The desktop hotkey keeps its overlay even when Raphael's conversation is in front.
     fn app_owns_question(&self) -> bool {
-        self.app_shows_question() && {
-            let state = lock(&self.state);
-            state.quick_order.is_none()
+        let state = lock(&self.state);
+        !state.notify_overlay
+            || (self.app_shows_question()
+                && state.quick_order.is_none()
                 && (self.voice.is_some()
                     || state
                         .session
                         .as_ref()
-                        .is_some_and(|session| session.conversation_id.is_some()))
-        }
+                        .is_some_and(|session| session.conversation_id.is_some())))
     }
 
     /// Sends the current question's update to the overlay with `call`. When the front window owns
@@ -2568,6 +2571,23 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
         let mut reply = self.core.call("agent.ask", params).await;
         let mut asked = 0;
         loop {
+            // A question asked from the overlay, dictation or the desktop is answered where it was asked; only an
+            // app-typed one follows the member's notify switch. Set on every turn so one typed turn never mutes the next.
+            let notify = if source == Some(TYPED_SOURCE) {
+                tokio::time::timeout(
+                    Duration::from_millis(500),
+                    self.core
+                        .call("members.notification_enabled", json!({"member_id": member})),
+                )
+                .await
+                .ok()
+                .and_then(Result::ok)
+                .and_then(|result| result.get("notify").and_then(Value::as_bool))
+                .unwrap_or(false)
+            } else {
+                true
+            };
+            lock(&self.state).notify_overlay = notify;
             let may_ask = asked < MAX_QUESTIONS_IN_A_TURN;
             let Some((prompt, answer)) =
                 self.show_reply(id, reply, may_ask, member, conversation_id)
@@ -2642,7 +2662,9 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
                 let gone = (err.code == CORE_EXITED)
                     .then(|| self.failure_notice(&err))
                     .flatten();
-                self.show(gone.unwrap_or(notices::ASK_FAILED));
+                if lock(&self.state).notify_overlay {
+                    self.show(gone.unwrap_or(notices::ASK_FAILED));
+                }
                 return None;
             }
         };
@@ -2655,7 +2677,7 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
             self.end_session(id);
             // A member's recording may have shown the shared listening overlay. Its answer
             // stays in the thread, so no answer overlay will replace that listening state.
-            if shown || (!added && self.voice.is_none()) {
+            if shown || (!added && self.voice.is_none() && lock(&self.state).notify_overlay) {
                 self.overlay.hide();
             }
             return None;
@@ -2710,7 +2732,9 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
                 if self.end_session(id) {
                     self.tell(DictationPhase::Failed, true);
                 }
-                self.show(notices::ASK_FAILED);
+                if lock(&self.state).notify_overlay {
+                    self.show(notices::ASK_FAILED);
+                }
                 None
             }
         }
@@ -3636,6 +3660,10 @@ mod app {
                                 if let Some(controller) = &controller { drop(controller.on_hotkey(HotkeyEvent::Cancel, now_ms())); }
                                 continue;
                             }
+                            #[cfg(windows)]
+                            if !reset && overlay.0.as_ref().is_some_and(|overlay| overlay.dismiss_caption()) {
+                                continue;
+                            }
                             if !reset && !controller.as_ref().is_some_and(|c| c.app_shows_question()) { continue; }
                             if reset || controller.as_ref().is_some_and(|c| c.app_shows_question()) {
                                 crate::commands::report_hotkey(event);
@@ -3824,6 +3852,15 @@ mod tests {
 
     impl CoreApi for FakeCore {
         async fn call(&self, method: &str, params: Value) -> Result<Value, RpcError> {
+            if method == "members.notification_enabled" {
+                return self
+                    .results
+                    .lock()
+                    .unwrap()
+                    .get(method)
+                    .cloned()
+                    .unwrap_or_else(|| Ok(json!({"notify": true})));
+            }
             self.calls.lock().unwrap().push((method.to_owned(), params));
             self.order.lock().unwrap().push(method.to_owned());
             if let Some((gated, gate)) = &self.gate
@@ -11625,6 +11662,37 @@ mod tests {
         let turn = c.ask_typed("幫我複製這句話").unwrap();
         until_stage(&c, AgentStage::Asking).await;
         (c, front, heard, turn)
+    }
+
+    #[tokio::test]
+    async fn a_spoken_answer_after_an_opted_out_typed_turn_is_still_said_on_the_overlay() {
+        let core = agent_core(answer("了", "好。"));
+        core.script("members.notification_enabled", Ok(json!({"notify": false})));
+        let c = controller(core, FakePaster::pasting("chrome.exe"));
+        c.ask_typed("please ask").unwrap().await.unwrap();
+        assert!(!c.overlay().events().iter().any(|e| e.starts_with("say:")));
+        start_turn(&c).await.await.unwrap();
+        assert!(
+            c.overlay().events().iter().any(|e| e == "say:了|好。"),
+            "{:?}",
+            c.overlay().events()
+        );
+    }
+
+    #[tokio::test]
+    async fn an_opted_out_typed_answer_and_confirmation_stay_in_the_conversation() {
+        let core = agent_core(question("c-1", 30_000));
+        core.script("members.notification_enabled", Ok(json!({"notify": false})));
+        core.script("agent.confirm", Ok(answer("Answer", "Done")));
+        let (c, front) = with_front(controller(core, FakePaster::pasting("chrome.exe")), true);
+        let task = c.ask_typed("please ask").unwrap();
+        until_stage(&c, AgentStage::Asking).await;
+        set_front(&front, false);
+        tokio::time::sleep(FRONT_POLL * 2).await;
+        assert!(c.overlay().events().is_empty());
+        c.on_confirm_in_app("c-1", true);
+        task.await.unwrap();
+        assert!(c.overlay().events().is_empty());
     }
 
     #[tokio::test]

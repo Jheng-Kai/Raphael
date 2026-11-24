@@ -111,17 +111,20 @@ async def test_tasks_left_unfinished_get_a_report_and_their_turn_is_completed(ma
     assert second.notifications == []  # said only once the app has said hello
 
 
-async def test_only_the_newest_interrupted_report_is_said_and_only_once(make_rig, conn):
+@pytest.mark.parametrize("enabled", [False, True])
+async def test_only_the_newest_interrupted_report_is_said_and_only_once(make_rig, conn, enabled):
     first = make_rig()
     older, _, _ = hand_over(first, conn)
     newer, _, _ = hand_over(first, conn)
     first.service._queue.clear()
     second = make_rig()
+    SettingsStore(conn).set("raphael_notify", enabled)
     second.service.announce_pending()
     assert second.reports() == [
         {
             "task_id": newer,
             "state": "interrupted",
+            "notify": enabled,
             "prefix": "Notice",
             "text": phrase("en", "worker_interrupted", steps="0"),
         }

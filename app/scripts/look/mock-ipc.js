@@ -1588,7 +1588,7 @@ export function installMock(fixture, config = {}, target = window) {
         return { path: p.path, name: p.path.split("\\").pop(), exists: true, git: true, branch: projectBranch, branches: ["draft", "main"] };
       case "settings.get": return { settings: data.settings };
       // A question opening later is not there at the first read, as one that opens while the owner is elsewhere.
-      case "background.waiting.list": { data.waitingReads = (data.waitingReads ?? 0) + 1; return { waiting: variant.roomQuestion && (!variant.roomQuestionLate || data.waitingReads > 1) ? [{ id: "room-q", member_id: 1, member_name: "小晴", room_id: 1 }] : [] }; }
+      case "background.waiting.list": { data.waitingReads = (data.waitingReads ?? 0) + 1; return { waiting: variant.roomQuestion && (!variant.roomQuestionLate || data.waitingReads > 1) ? [{ id: "room-q", member_id: 1, notify: true, member_name: "小晴", room_id: 1 }] : [] }; }
       case "attachments.get": {
         const stored = storedFile(p.id);
         if (stored) return stored;

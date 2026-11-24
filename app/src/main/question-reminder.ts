@@ -8,7 +8,7 @@ import { openMemberThread } from "./team-navigation";
 import type { AppContext } from "./types";
 import { btn, esc, ico, toaster } from "./ui";
 
-interface Waiting { id: string; member_id: number; member_name?: string; room_id?: number | null }
+interface Waiting { id: string; member_id: number; notify: boolean; member_name?: string; room_id?: number | null }
 
 /** Long enough for the card of the place on screen to have been read and drawn. */
 const SETTLE_MS = 500;
@@ -31,7 +31,7 @@ export function mountQuestionReminder(app: AppContext, memberFace: (id: number, 
       if (told.has(item.id)) continue;
       told.add(item.id);
       // What was already waiting when the app opened is in the sidebar.
-      if (first || onScreen(item.id)) continue;
+      if (item.notify !== true || first || onScreen(item.id)) continue;
       const place = item.room_id ? ` data-question-room="${item.room_id}"` : ` data-question-member="${item.member_id}"`;
       const face = memberFace(item.member_id, 22) || faceHTML({ id: item.member_id, name: item.member_name || "" }, 22);
       toaster.notice(() => {
