@@ -8,6 +8,7 @@ export default [
   ], {appUpdate:"not_configured"}),
   scene("update-found", "A signed release is named with readable notes and an install action", [...about, wait('[data-act="update-install"]'), check("app-update-found")], {appUpdate:"found"}),
   scene("update-ready", "A verified downloaded release waits for restart", [...about, check("app-update-ready")], {appUpdate:"ready"}),
+  scene("sidebar-update", "A downloaded release waits in the sidebar with its version and 重新啟動以更新", [wait(".side .sidebar-update-btn"), check("sidebar-update")], {appUpdate:"ready"}),
   scene("update-auto", "Background update checks can be enabled through the shared switch", [...about, click('[data-k="auto-update"]'), wait('[data-k="auto-update"][aria-checked="true"]'), check("app-update-auto")], {appUpdate:"found"}),
   scene("settings-switch-neutral", "A switch that is on in the Settings dialog keeps the accent: a member's colour stays in the member's own places", [...about, click('[data-k="auto-update"]'), wait('[data-k="auto-update"][aria-checked="true"]'), check("switch-neutral")], {appUpdate:"found"}),
   scene("attachment-limits", "The real composer keeps twenty files and refuses a twenty-first", [

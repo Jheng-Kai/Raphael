@@ -66,12 +66,12 @@ it("offers an update in the sidebar and cancels the owner's queued request", asy
   const stop = mountUpdateNotice(slot);
   const button = () => slot.querySelector<HTMLButtonElement>("[data-update-now]")!;
   try {
-    await vi.waitFor(() => expect(button()?.textContent).toContain(t("update.now")));
+    await vi.waitFor(() => expect(button()?.textContent).toContain(t("update.restart")));
     button().click();
     await vi.waitFor(() => expect(button().textContent).toContain(t("update.waiting")));
     expect(button().textContent).toContain(t("update.cancel"));
     button().click();
-    await vi.waitFor(() => expect(button().textContent).toContain(t("update.now")));
+    await vi.waitFor(() => expect(button().textContent).toContain(t("update.restart")));
     expect(vi.mocked(api.updateControl).mock.calls).toEqual([["status"], ["install"], ["cancel"]]);
     expect(toaster.info).not.toHaveBeenCalled();
   } finally { stop(); }

@@ -1127,6 +1127,19 @@ export function checkRendered(name, context = {}) {
     require(section.querySelector('[data-k="auto-update"]').getAttribute("aria-checked") === (name === "app-update-auto" ? "true" : "false"), "the switch reflects whether background checks are enabled");
     return {check:name};
   }
+  if (name === "sidebar-update") {
+    // R-APP-UPDATE-01: the sidebar's release says what a press does, 重新啟動以更新 (its words in every language), whole
+    // beside the version number.
+    const button = document.querySelector(".side .sidebar-update-btn"), act = button?.querySelector(".sidebar-update-act"), label = button?.querySelector(".nav-t");
+    const zh = document.documentElement.lang === "zh-TW";
+    require(visible(button) && (!zh || button.getAttribute("aria-label") === "新版本 1.1.0 重新啟動以更新"), "the sidebar shows the release and names it and its press whole to a screen reader");
+    if (visible(act)) {
+      const box = button.getBoundingClientRect(), actBox = act.getBoundingClientRect();
+      require((!zh || act.textContent === "重新啟動以更新") && act.scrollWidth <= act.clientWidth + 1 && actBox.right <= box.right + 0.5, "the restart action stands whole inside the button");
+      require(label.textContent === "1.1.0" && label.scrollWidth <= label.clientWidth + 1, "the version number beside it is whole");
+    }
+    return {check:name};
+  }
   if (name === 'desktop-updating') {
     // R-COMP-UPDATE-01: an update of the computer's image says so in one line under the screen, with how long it may
     // take; the screen stays bare (R-UI-93), cannot be pressed, and nothing is a notice or a toast.
