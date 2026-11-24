@@ -1915,6 +1915,7 @@ export const fr = {
   "auto.view": "Vue",
   "cal.google": "Google Agenda",
   "cal.title": "Ajouter un titre",
+  "cal.showAllDay": "Afficher les événements de la journée entière",
   "cal.ends": "Fin",
   "cal.notes": "Notes",
   "cal.deleteAsk": "Appuyez à nouveau pour supprimer",

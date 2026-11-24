@@ -1915,6 +1915,7 @@ export const de = {
   "auto.view": "Ansicht",
   "cal.google": "Google Kalender",
   "cal.title": "Titel hinzufügen",
+  "cal.showAllDay": "Ganztägige Termine anzeigen",
   "cal.ends": "Ende",
   "cal.notes": "Notizen",
   "cal.deleteAsk": "Zum Löschen erneut drücken",

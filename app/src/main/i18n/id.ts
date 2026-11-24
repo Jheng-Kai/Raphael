@@ -1915,6 +1915,7 @@ export const id = {
   "auto.view": "Tampilan",
   "cal.google": "Google Kalender",
   "cal.title": "Tambah judul",
+  "cal.showAllDay": "Tampilkan acara sepanjang hari",
   "cal.ends": "Selesai",
   "cal.notes": "Catatan",
   "cal.deleteAsk": "Tekan lagi untuk menghapus",

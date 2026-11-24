@@ -1915,6 +1915,7 @@ export const th = {
   "auto.view": "มุมมอง",
   "cal.google": "Google ปฏิทิน",
   "cal.title": "เพิ่มชื่อ",
+  "cal.showAllDay": "แสดงกิจกรรมตลอดวัน",
   "cal.ends": "สิ้นสุด",
   "cal.notes": "โน้ต",
   "cal.deleteAsk": "กดอีกครั้งเพื่อลบ",

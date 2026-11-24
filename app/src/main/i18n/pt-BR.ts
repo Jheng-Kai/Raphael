@@ -1915,6 +1915,7 @@ export const ptBR = {
   "auto.view": "Visualização",
   "cal.google": "Google Agenda",
   "cal.title": "Adicionar título",
+  "cal.showAllDay": "Mostrar eventos de dia inteiro",
   "cal.ends": "Término",
   "cal.notes": "Notas",
   "cal.deleteAsk": "Pressione novamente para excluir",

@@ -7498,7 +7498,7 @@ export function checkRendered(name, context = {}) {
   if (name === "calendar-more-focus") {
     const toggle = document.activeElement;
     require(toggle?.dataset.au === "all-day-toggle", "the keyboard stays on the button it pressed, whichever way the band went");
-    return { check: name, words: toggle.textContent, expanded: toggle.getAttribute('aria-expanded') };
+    return { check: name, label: toggle.getAttribute('aria-label'), expanded: toggle.getAttribute('aria-expanded') };
   }
   if (name === "calendar-more-month") {
     const cell = document.querySelector('[data-month-day="2026-10-24"] .cal-more:not([hidden])');
@@ -7521,42 +7521,36 @@ export function checkRendered(name, context = {}) {
     require(band.scrollHeight <= band.clientHeight + 1 && getComputedStyle(band).overflowY === 'visible' && getComputedStyle(head).overflowY === 'visible', "the band has no scrollbar of its own");
     for (const chip of chips) { const box = chip.getBoundingClientRect(), edge = band.getBoundingClientRect(); require(box.bottom <= edge.bottom + 1 && box.height > 0, "no chip of the band is cut off by its edge"); }
     for (const [index, chip] of chips.entries()) for (const other of chips.slice(index + 1)) require(!overlapping(chip.getBoundingClientRect(), other.getBoundingClientRect()), "no two chips of the band overlap");
-    for (const toggle of toggles) {
-      require(toggle.tagName === 'BUTTON' && !toggle.disabled && toggle.tabIndex >= 0 && visible(toggle) && toggle.getAttribute('aria-controls') === band.id, "the toggle is a real button a keyboard reaches, and it names what it opens");
-      require(toggle.getBoundingClientRect().bottom <= band.getBoundingClientRect().bottom + 1 && toggle.scrollWidth <= toggle.clientWidth + 1, "the toggle stands whole inside the band");
-      for (const chip of chips) require(!overlapping(toggle.getBoundingClientRect(), chip.getBoundingClientRect()), "the toggle covers no chip");
+    const hidden = columns.some(column => expected(column).length > standing(column).length);
+    require(!band.querySelector('.cal-more, [data-au="open-day"]'), "the day and week band uses only the shared chevron");
+    require(toggles.length === Number(open || hidden), "the band has one toggle when open or when it hides items");
+    const toggle = toggles[0];
+    if (toggle) {
+      require(toggle.matches('button.au-band-toggle') && !toggle.disabled && toggle.tabIndex >= 0 && visible(toggle) && toggle.getAttribute('aria-controls') === band.id, "the shared toggle is a real button that names the band");
+      require(toggle.getAttribute('aria-expanded') === String(open) && toggle.getAttribute('aria-label') === (open ? '收合' : '展開全天事項'), "the accessible state and label match the band");
+      const icon = toggle.querySelector('svg'), at = toggle.getBoundingClientRect(), edge = band.getBoundingClientRect();
+      const first = columns[0].getBoundingClientRect(), last = columns.at(-1).getBoundingClientRect(), label = band.querySelector('.au-all-day-label').getBoundingClientRect();
+      require(icon && !toggle.textContent.trim() && Math.abs(icon.getBoundingClientRect().left + icon.getBoundingClientRect().width / 2 - (at.left + at.width / 2)) <= 1, "the toggle contains only a centered chevron");
+      require(Math.abs(at.left - first.left) <= 1 && Math.abs(at.right - last.right) <= 1 && at.height === 20, "the toggle is a 20px strip spanning every day column");
+      require(at.top >= Math.max(...columns.map(column => column.getBoundingClientRect().bottom), label.bottom) && Math.abs(at.top - (edge.top + (state.rows - 1) * pitch + 1)) <= 1, "the final row belongs to the toggle below the day cells and time zone");
+      for (const chip of chips) require(!overlapping(at, chip.getBoundingClientRect()), "the toggle covers no chip");
     }
-    // The whole range opens and folds together (R-CAL-08): open, every day shows every item it has and one 「收合」 stands in the
-    // margin under the time zone, on the band's last row; folded, each day draws three rows and counts what it hides.
-    require(open === toggles.some(toggle => toggle.getAttribute('aria-expanded') === 'true'), "the band's head is open exactly while the band is");
     if (open) {
-      const fold = toggles[0], at = fold.getBoundingClientRect(), first = columns[0].getBoundingClientRect(), label = band.querySelector('.au-all-day-label').getBoundingClientRect();
-      require(toggles.length === 1 && fold.getAttribute('aria-expanded') === 'true' && fold.getAttribute('aria-label') === '收合' && fold.querySelector('svg'), "open, one 「收合」 folds the whole band");
-      require(at.right <= first.left + 1 && at.bottom <= band.getBoundingClientRect().bottom + 1 && at.top >= label.bottom - 1, "the 「收合」 stands in the margin, under the time zone");
-      require(fold.style.gridRow === band.dataset.rows, "the 「收合」 is on the band's last row");
       for (const column of columns) {
         const key = column.dataset.allDay, wanted = expected(column), seen = new Set(standing(column).map(chip => chip.dataset.entry));
         require(wanted.length === seen.size && wanted.every(item => seen.has(item.id)), `every item of ${key} is in the band: ${seen.size} of ${wanted.length}`);
       }
       const tallest = Math.max(...[...band.querySelectorAll('.au-bar:not(.au-draft)')].map(node => Number.parseInt(node.style.gridRowStart, 10)));
-      require(Number(band.dataset.rows) >= tallest, "the band is as tall as its tallest day");
-    } else for (const column of columns) {
-      const key = column.dataset.allDay, wanted = expected(column), here = standing(column), toggle = toggles.find(item => item.dataset.date === key);
-      const words = toggle?.textContent.match(/^還有 (\d+) 個$/);
-      require(new Set(here.map(chip => chip.closest('.au-bar').style.gridRow)).size <= 3, `${key} is folded to three rows at most`);
-      if (wanted.length > here.length) require(words && toggle.getAttribute('aria-expanded') === 'false' && Number(words[1]) === wanted.length - here.length, `${key} counts the items it hides: ${wanted.length - here.length}`);
-      else require(!toggle, `${key} has nothing hidden and no button`);
+      require(state.rows === tallest + 1, "the band fits its tallest day and the toggle row");
+    } else {
+      require(state.rows <= 3 + Number(hidden) && (!hidden || state.rows === 4), "the folded band uses up to three item rows and one row for the toggle when needed");
     }
     if (name === "calendar-more-cross") {
       // One bar crosses Saturday and Sunday: with the week open it is drawn once and whole across both days.
       const pieces = chips.filter(chip => chip.textContent.includes("週末專案 D")), sunday = columns.find(column => column.dataset.allDay === "2026-10-25");
       require(pieces.length === 1 && !pieces[0].closest('.au-bar').classList.contains('ends-after') && standing(sunday).includes(pieces[0]), "the bar across Saturday and Sunday is drawn once and whole");
     }
-    if (name === "calendar-more-fold") {
-      const thursday = toggles.find(toggle => toggle.dataset.date === "2026-10-22");
-      require(thursday && document.activeElement === thursday && thursday.getAttribute('aria-expanded') === 'false', "folding returns the keyboard to the 「還有 N 個」 that opened it");
-    }
-    if (name === "calendar-more-one") require(document.activeElement === toggles[0], "after opening, the keyboard is on the 「收合」");
+    if (name === "calendar-more-fold" || name === "calendar-more-one") require(toggle && document.activeElement === toggle, "focus stays on the shared toggle after activation");
     if (open) {
       // Every chip is in the document and, once scrolled to, whole and under the pointer (the day names that stay on top do not cover it).
       const port = scroll.getBoundingClientRect(), top = port.top + Math.max(...[...head.querySelectorAll('.au-day-head')].map(day => day.getBoundingClientRect().height));
@@ -7583,14 +7577,12 @@ export function checkRendered(name, context = {}) {
       scroll.scrollTop = 0;
       return { check: name, items: chips.length, rows: state.rows, growth };
     }
-    // Folded: three rows at most, each day's button says how many are left and nothing else is hidden (checked per day above).
-    require(!band.querySelector('[data-au="open-day"]'), "the band's count is no link to the day it already shows");
     if (name === "calendar-more-folded") window.__look.calendarMore = state;
     else {
       const before = window.__look.calendarMore;
       require(before && state.rows === before.rows && Math.abs(state.hoursTop - before.hoursTop) <= 1 && Math.abs(state.bandHeight - before.bandHeight) <= 1, "folded again, the band and the hours are where they were");
     }
-    return { check: name, toggles: toggles.map(toggle => toggle.textContent), chips: chips.length, rows: state.rows };
+    return { check: name, label: toggle?.getAttribute('aria-label'), chips: chips.length, rows: state.rows };
   }
   // A new event's draft and the ghost of a drag say their time from start to end where the chip has room for it, and their start alone where it has not (R-UI-142); the whole range then stands in the tooltip.
   if (name === "calendar-draft-time") {

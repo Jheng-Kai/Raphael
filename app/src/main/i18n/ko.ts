@@ -1915,6 +1915,7 @@ export const ko = {
   "auto.view": "보기",
   "cal.google": "Google Calendar",
   "cal.title": "제목 추가",
+  "cal.showAllDay": "하루 종일 일정 모두 보기",
   "cal.ends": "종료",
   "cal.notes": "메모",
   "cal.deleteAsk": "한 번 더 누르면 삭제됩니다",

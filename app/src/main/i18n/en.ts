@@ -1722,6 +1722,7 @@ export const en = {
   "cal.own": "Events",
   "cal.google": "Google Calendar",
   "cal.title": "Add title",
+  "cal.showAllDay": "Show all-day events",
   "cal.ends": "Ends",
   "cal.notes": "Notes",
   "cal.edit": "Edit",

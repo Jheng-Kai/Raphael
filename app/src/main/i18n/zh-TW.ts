@@ -1721,6 +1721,7 @@ export const zhTW = {
   "cal.own": "行程",
   "cal.google": "Google 日曆",
   "cal.title": "新增標題",
+  "cal.showAllDay": "展開全天事項",
   "cal.ends": "結束",
   "cal.notes": "備註",
   "cal.edit": "編輯",

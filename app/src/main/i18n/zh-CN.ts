@@ -1915,6 +1915,7 @@ export const zhCN = {
   "auto.view": "查看",
   "cal.google": "Google 日历",
   "cal.title": "添加标题",
+  "cal.showAllDay": "展开全天事项",
   "cal.ends": "结束",
   "cal.notes": "备注",
   "cal.deleteAsk": "再按一次删除",

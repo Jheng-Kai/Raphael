@@ -338,7 +338,7 @@ test("a draft or a dragged chip says its whole time range where there is room fo
  expect(asked).toEqual([wide.range]);
 });
 
-test("an opened all-day band draws every item of the days in view, and its folded count is what the open band adds",()=>{
+test("allDayBars keeps three rows when folded and draws every item when opened",()=>{
  const days=[localDay("2026-10-24"),localDay("2026-10-25")];
  const items=Array.from({length:10},(_,n)=>entry(`item${n}`,at(0,0,24),at(0,0,25),{allDay:true}));
  const folded=allDayBars(items,days), open=allDayBars(items,days,Infinity);
@@ -513,40 +513,82 @@ describe("the calendar's own events",()=>{
   expect(panel.querySelector('[data-pop="edit"]')).toBeNull();expect(panel.querySelector('[data-pop="more"]')).toBeNull();
   page.hide();
  });
- test("in the week, any day's 「還有 N 個」 opens the whole week, one 「收合」 folds it all, and the keyboard follows",async()=>{
+ test("one toggle opens and folds the whole week and keeps keyboard focus",async()=>{
   const dayEntry=(id:number,title:string,from:number,to=from)=>own(id,title,at(0,0,from),at(0,0,to+1),{all_day:true});
   const thu=[0,1,2,3,4].map(n=>dayEntry(10+n,`thu${n}`,22)), sat=[0,1,2,3,4].map(n=>dayEntry(20+n,`sat${n}`,24));
   const page=await open([dayEntry(1,"trip",22,24),...thu,...sat],"calendar-week:2026-10-24");
-  const toggle=(day:string)=>page.el.querySelector<HTMLElement>(`[data-au="all-day-toggle"][data-date="${day}"]`);
-  const fold=()=>page.el.querySelector<HTMLElement>('[data-au="all-day-toggle"][aria-expanded="true"]');
-  const drawn=(title:string)=>!!page.el.querySelector(`.au-all-day-row [data-wrap="own:${title}"]`);
-  const band=()=>page.el.querySelector<HTMLElement>(".au-all-day-row")!;
-  expect(page.el.querySelectorAll('[data-au="all-day-toggle"]')).toHaveLength(2);
-  expect(toggle("2026-10-22")!.getAttribute("aria-expanded")).toBe("false");
-  expect(drawn("12")).toBe(false);expect(Number(band().dataset.rows)).toBe(Number(band().dataset.foldedRows));
-  // Saturday's count opens every day: both days show all their items, and the trip across them stays one bar.
-  toggle("2026-10-24")!.click();
-  expect(page.el.querySelectorAll('[data-au="all-day-toggle"]')).toHaveLength(1);
-  expect(fold()!.getAttribute("aria-label")).toBe("Show less");
-  expect(fold()!.getAttribute("aria-controls")).toBe("au-all-day-band");
-  expect(fold()!.style.gridColumn).toBe("1");
-  expect(fold()!.style.gridRow).toBe(String(Number(band().dataset.rows)));
-  expect(document.activeElement).toBe(fold());
-  for(const n of [10,11,12,13,14,20,21,22,23,24]) expect(drawn(String(n)),`open ${n}`).toBe(true);
-  expect(page.el.querySelectorAll('.au-all-day-row [data-wrap="own:1"]')).toHaveLength(1);
+  const band=()=>page.el.querySelector<HTMLElement>("#au-all-day-band")!;
+  const toggle=()=>{
+    const buttons=band().querySelectorAll<HTMLButtonElement>("button.au-band-toggle");
+    expect(buttons).toHaveLength(1);
+    expect(band().querySelector(".cal-more")).toBeNull();
+    expect(buttons[0]!.getAttribute("aria-controls")).toBe(band().id);
+    expect(buttons[0]!.textContent).toBe("");
+    return buttons[0]!;
+  };
+  const drawn=(id:number)=>band().querySelectorAll(`[data-wrap="own:${id}"]`);
+  expect(toggle().getAttribute("aria-expanded")).toBe("false");
+  expect(toggle().getAttribute("aria-label")).toBe("Show all-day events");
+  expect(drawn(12)).toHaveLength(0);
+  expect(band().dataset.rows).toBe("4");
+
+  toggle().click();
+  expect(toggle().getAttribute("aria-expanded")).toBe("true");
+  expect(toggle().getAttribute("aria-label")).toBe("Show less");
+  expect(document.activeElement).toBe(toggle());
+  expect(document.querySelector(".au-pop-editor")).toBeNull();
+  for(const n of [10,11,12,13,14,20,21,22,23,24]) expect(drawn(n),`open ${n}`).toHaveLength(1);
+  expect(drawn(1)).toHaveLength(1);
+  expect((drawn(1)[0] as HTMLElement).style.gridColumn).toMatch(/span 3/);
   expect(Number(band().dataset.rows)).toBeGreaterThan(Number(band().dataset.foldedRows));
-  // One 收合 folds it all, and the keyboard returns to the count it pressed.
-  fold()!.click();
-  expect(fold()).toBeNull();
-  expect(page.el.querySelectorAll('[data-au="all-day-toggle"]')).toHaveLength(2);
-  expect(document.activeElement).toBe(toggle("2026-10-24"));
-  expect(drawn("12")).toBe(false);expect(drawn("24")).toBe(false);
-  // Another week folds everything again, and coming back finds it folded.
-  toggle("2026-10-22")!.click();
-  click('[data-au="next"]');click('[data-au="prev"]');
-  expect(page.el.querySelectorAll('[data-au="all-day-toggle"]')).toHaveLength(2);
-  expect(page.el.querySelectorAll('[aria-expanded="true"][data-au="all-day-toggle"]')).toHaveLength(0);
+
+  toggle().click();
+  expect(toggle().getAttribute("aria-expanded")).toBe("false");
+  expect(document.activeElement).toBe(toggle());
+  expect(drawn(12)).toHaveLength(0);
+  expect(drawn(24)).toHaveLength(0);
+  expect(band().dataset.rows).toBe("4");
+
+  toggle().click();
+  click('[data-au="next"]');
+  expect(band().querySelector(".au-band-toggle")).toBeNull();
+  click('[data-au="prev"]');
+  expect(toggle().getAttribute("aria-expanded")).toBe("false");
   page.hide();
+ });
+ test("the month keeps its overflow count and opens the day with all items and one band toggle",async()=>{
+  setLocale("zh-TW");
+  api.routinesList.mockResolvedValue({routines:[]});
+  const items=Array.from({length:5},(_,n)=>own(10+n,`item${n}`,at(0,0,24),at(0,0,25),{all_day:true}));
+  const height=vi.spyOn(HTMLElement.prototype,"clientHeight","get").mockImplementation(function(this:HTMLElement){
+    return this.classList.contains("au-month-chips") ? 42 : 0;
+  });
+  const page=await open(items,"calendar-week:2026-10-24");
+  try {
+    click('[data-au="view"]');click('#app-popover [data-value="month"]');
+    const more=page.el.querySelector<HTMLButtonElement>('[data-month-day="2026-10-24"] .cal-more:not([hidden])')!;
+    expect(more.textContent).toBe("還有 4 個");
+    more.click();
+    expect(page.el.querySelector('.is-one-day .au-day-col[data-day="2026-10-24"]')).not.toBeNull();
+
+    const rows=()=>page.el.querySelectorAll("#au-all-day-band .au-all-day-event");
+    const toggle=()=>{
+      const buttons=page.el.querySelectorAll<HTMLButtonElement>("#au-all-day-band button.au-band-toggle");
+      expect(buttons).toHaveLength(1);
+      expect(page.el.querySelector(".cal-more")).toBeNull();
+      return buttons[0]!;
+    };
+    expect(toggle().getAttribute("aria-expanded")).toBe("true");
+    expect(rows()).toHaveLength(5);
+    toggle().click();
+    expect(toggle().getAttribute("aria-expanded")).toBe("false");
+    expect(document.activeElement).toBe(toggle());
+    expect(rows()).toHaveLength(3);
+    toggle().click();
+    expect(toggle().getAttribute("aria-expanded")).toBe("true");
+    expect(document.activeElement).toBe(toggle());
+    expect(rows()).toHaveLength(5);
+  } finally { page.hide();height.mockRestore(); }
  });
  test("the month draws its days with chips and a click on an empty day makes an all-day event there",async()=>{
   const page=await open([own(4,"Dentist",at(14),at(15))],"calendar-week:2026-10-24");
