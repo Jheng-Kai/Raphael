@@ -726,7 +726,8 @@ export function checkRendered(name, context = {}) {
       require(visible(doc) && doc.querySelector('.ans') && !doc.textContent.includes('description:') && (alone || doc.querySelector('.message-code')), 'its document is drawn as Markdown, without its front matter');
       const left = back.getBoundingClientRect().left;
       for (const part of [quote, doc]) require(Math.abs(part.getBoundingClientRect().left - left) <= 1, 'the quote and the document line up with the way back');
-      require(!page.querySelector('[data-skl="skill-more"]') && document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, 'no ⋯, and the window does not scroll sideways');
+      // A skill of a plugin has a ⋯ that is not drawn: a right click presses it (R-SKILL-17).
+      require(!visible(page.querySelector('[data-skl="skill-more"]')) && document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, 'no ⋯ drawn, and the window does not scroll sideways');
       // A long document scrolls under the skill's header: the way back, its name and the close stay at the top (R-UI-182).
       const close = head.querySelector('.close-button');
       require(visible(close) && page.querySelectorAll('.close-button').length === 1, "one shared close stands in the skill's header");
@@ -769,8 +770,8 @@ export function checkRendered(name, context = {}) {
       for (const row of skills) {
         const label = row.querySelector('.skl-label'), opener = row.querySelector('[data-skl="open-skill"]'), toggle = row.querySelector('.tg');
         require(Math.abs(row.getBoundingClientRect().left - left) <= 1 && label.getBoundingClientRect().left > row.getBoundingClientRect().left + 8, 'each skill row starts at the back button, with its words inside the card');
-        require(opener && Math.abs(opener.getBoundingClientRect().width - row.getBoundingClientRect().width) <= 1 && !row.querySelector('[data-skl="skill-more"], [data-skl="more"]') &&
-          row.querySelector('.ctl').lastElementChild === toggle, 'each skill row opens its page across the row, its switch at the right and no ⋯');
+        require(opener && Math.abs(opener.getBoundingClientRect().width - row.getBoundingClientRect().width) <= 1 && ![...row.querySelectorAll('[data-skl="skill-more"], [data-skl="more"]')].some(visible) &&
+          row.querySelector('.ctl').lastElementChild === toggle, 'each skill row opens its page across the row, its switch at the right and no ⋯ drawn');
       }
     }
     if (name === 'skill-library-back') {
