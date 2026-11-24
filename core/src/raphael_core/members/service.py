@@ -23,7 +23,8 @@ The RPC methods (the main window only, through the shell's allow-list):
 - `members.update {id, name?, role?, personality?, instructions?, group_id?, avatar?, tools?, model?, position?}`
   -> `{member}`. `avatar` here is "" or a slime, "slime:<character>" or "slime:color:<color>". Raphael (0) is not changed here: its picture is the app's to change.
 - `members.delete {id}` -> `{deleted}`: the member, its conversation (and the exchanges of other
-  threads with it), its memory folder, its routines, its tasks and its picture. The app asks first. Its own
+  threads with it), its memory folder, its routines, its tasks and its picture, and its own folder in the shared
+  computer's workspace (#314). The app asks first. Its own
   computer, if it had one, is removed too, afterwards and in the background (`computer/removals.py`): the answer
   never waits for it, and nothing is asked of the caller about it.
 - `members.set_primary {id}` -> `{primary_id}`: the owner's primary contact, the Bot that new work is brought
@@ -86,6 +87,7 @@ import logging
 import re
 import json
 import secrets
+import shutil
 import sqlite3
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, replace
@@ -1461,6 +1463,7 @@ class MembersService:
             if deleted:
                 if self.computer_data is not None:
                     await self.computer_data.vm.release_member_seats(member_id)
+                    await self._remove_shared_folders()
                 await self.webhooks.sync()
                 self._changed()
                 self._changed("routines.changed", member_id)
@@ -1468,6 +1471,24 @@ class MembersService:
             return {"deleted": deleted}
         finally:
             self.deleting.discard(member_id)
+
+    async def _remove_shared_folders(self) -> None:
+        """A deleted member's own folder in the shared computer's workspace goes with it (#314): the card says the member
+        and all its data are deleted for good. Folders that earlier builds left behind for members already deleted go too.
+        Only a folder named by a member key (16 hex digits) that belongs to no member now is removed; nothing else in the
+        workspace is touched, and a folder that cannot be removed is left and logged. A remote computer's folders are its
+        own: they go with that computer (`computer/removals.py`)."""
+        vm = self.computer_data.vm
+        folder = vm.shared_members_folder()
+        if not folder.is_dir():
+            return
+        kept = {vm.key_for("", member.id) for member in self.store.members()} | {vm.key_for("", 0)}
+        leftovers = [entry for entry in folder.iterdir()
+                     if entry.is_dir() and not entry.is_symlink() and re.fullmatch(r"[0-9a-f]{16}", entry.name) and entry.name not in kept]
+        for entry in leftovers:
+            await asyncio.to_thread(shutil.rmtree, entry, True)
+        if leftovers:
+            logger.info("Removed %d folder(s) of deleted members from the shared computer's workspace", len(leftovers))
 
     async def _set_primary(self, params: dict) -> dict:
         member_id = _whole(params, "id")
