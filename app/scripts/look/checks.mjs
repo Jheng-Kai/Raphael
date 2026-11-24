@@ -4102,6 +4102,9 @@ export function checkRendered(name, context = {}) {
       const drawing = surface.querySelector('svg.slime .slime-marks');
       if (!drawing || !drawing.children.length) continue;
       marked++;
+      if (surface.hasAttribute("data-slime-mask")) {
+        require(getComputedStyle(surface.querySelector(".slime-eyes")).stroke === "none", "the opaque mask covers the resting eyes");
+      }
       require(!surface.querySelector('.slime-idle, .slime-loop, .slime-drop'), "idle uses one resting vector without droplets");
       require(!surface.getAnimations({subtree:true}).some(animation => animation.playState === 'running'), "idle has no running animation");
       for (const part of drawing.querySelectorAll('path,circle,ellipse')) require(getComputedStyle(part).visibility === 'visible', "the resting vector wears its costume");
@@ -7157,6 +7160,20 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, menuLeft: box.left, characterX: expected, delta: Math.abs(box.left - expected) };
   }
+  if (name === "slash-app-first") {
+    // R-SLASH-APP-01: the app's own command stands first under 內建, before the member's commands and skills.
+    const rows = [...document.querySelectorAll('#app-popover.slash-menu [data-value]')];
+    require(rows[0]?.dataset.value === "app:usage" && rows[0].textContent.includes("/usage") && rows[0].textContent.includes("打開用量"), "/usage leads the slash menu with what it does");
+    require(document.querySelector('#app-popover.slash-menu').textContent.includes("內建"), "it stands under 內建");
+    return { check: name };
+  }
+  if (name === "slash-usage-opened") {
+    // Choosing it ran it: Settings › 用量 is open, the draft holds no /usage and nothing was sent.
+    require(visible(document.querySelector('[data-usage-tab="overview"]')), "Settings › 用量 is open");
+    require(![...document.querySelectorAll('.composer textarea')].some(input => input.value.includes("/usage")), "the draft holds no /usage");
+    require(!window.__look.calls.some(call => /^agent\.ask/.test(call.method ?? call.command ?? "")), "nothing was sent to a member");
+    return { check: name };
+  }
   if (name === "mention-menu-signin-pick") {
     // Pressing an app that is not signed in is a way to its sign-in, not an address: the typed @ goes, the connect dialog opens.
     const composer = [...document.querySelectorAll('.composer textarea')].find(visible);
@@ -8976,9 +8993,9 @@ export function checkRendered(name, context = {}) {
     require(whole.top >= 0 && whole.bottom <= innerHeight && whole.left >= 0 && whole.right <= innerWidth, "the whole dialog stands in the window");
     // Nothing scrolls inside it.
     for (const part of [dialog, dialog.querySelector(".mb-dlg-body"), panels, picker]) require(part.scrollHeight <= part.clientHeight + 1 && part.scrollWidth <= part.clientWidth + 1, `nothing scrolls inside (.${part.className.split(" ")[0]} ${part.scrollHeight} of ${part.clientHeight})`);
-    // The order: head, large slime, name, tabs, grid, footer, each directly under the one before.
-    const head = dialog.querySelector(".mb-dlg-head"), order = [head, faceBox, nameField, picker.querySelector(".mb-slime-tabs"), panels, foot].map(part => part.getBoundingClientRect());
-    order.slice(1).forEach((below, at) => require(below.top >= order[at].bottom - 1, `the order is head, slime, name, tabs, grid, footer (part ${at + 1} starts above part ${at} ends)`));
+    // The order: head, large slime, name, grid, swatches, footer, each directly under the one before (R-SLIME-PICK-01).
+    const head = dialog.querySelector(".mb-dlg-head"), order = [head, faceBox, nameField, panels, picker.querySelector(".mb-slime-tabs"), foot].map(part => part.getBoundingClientRect());
+    order.slice(1).forEach((below, at) => require(below.top >= order[at].bottom - 1, `the order is head, slime, name, grid, swatches, footer (part ${at + 1} starts above part ${at} ends)`));
     require(head.querySelector("h2").textContent.trim() === "新增角色" && visible(head.querySelector('[data-dlg="close"]')), "the title at the left and the × at the right");
     require(head.querySelector("h2").getBoundingClientRect().left < head.querySelector('[data-dlg="close"]').getBoundingClientRect().left, "the title is left of the ×");
     // The preview is large and in the middle; the name is directly under it and centred.
@@ -8989,15 +9006,14 @@ export function checkRendered(name, context = {}) {
     require(getComputedStyle(nameField).textAlign === "center" && nameField.placeholder === "名字" && (nameField.maxLength === -1 || nameField.maxLength >= 100), "centred text, a placeholder in the window's language, and no cut shorter than the core's 100-character name");
     require(Math.abs(n.left - (bodyBox.left + pad)) <= 1 && Math.abs(n.right - (bodyBox.right - pad)) <= 1, "the name field fills the body's inner width");
     require(dialog.querySelectorAll("input, textarea").length === 1 && !dialog.querySelector('img, input[type="file"], [data-dlg="templates"], [data-tab], [data-pick]'), "it asks only for a name: no template button, no store tab, no pictures");
-    // The tabs fill the dialog's inner width: nothing blank at their right, six slimes across.
-    const first = tabs[0].getBoundingClientRect(), last = tabs[tabs.length - 1].getBoundingClientRect();
-    require(tabs.length === 6 && tabs.every(tab => visible(tab) && Math.abs(tab.getBoundingClientRect().top - first.top) <= 1), "six tabs in one row");
-    require(Math.abs(first.left - n.left) <= 2 && Math.abs(last.right - n.right) <= 2, `the tabs reach both inner edges as the name field does (${Math.round(first.left - n.left)} and ${Math.round(last.right - n.right)} px)`);
+    // The eleven swatches stand in two centred rows, six and then five, under the slimes; the slimes four across.
+    const tops = [...new Set(tabs.map(tab => Math.round(tab.getBoundingClientRect().top)))];
+    require(tabs.length === 11 && tops.length === 2 && tabs.filter(tab => Math.round(tab.getBoundingClientRect().top) === tops[0]).length === 6, "eleven swatches, six and then five");
     const open = [...picker.querySelectorAll("[data-slime-group]")].filter(panel => getComputedStyle(panel).visibility !== "hidden" && !panel.hasAttribute("inert"));
     require(open.length === 1 && open[0].dataset.slimeGroup === picker.querySelector('[role="tab"][aria-selected="true"]').dataset.slimeTab, "only the chosen tab's slimes show");
     const shown = [...open[0].querySelectorAll("button")], cells = shown.map(button => button.getBoundingClientRect());
     require(shown.length > 0 && shown.every(visible), "the open group's slimes are all there");
-    require(new Set(cells.map(cell => Math.round(cell.left))).size === Math.min(6, shown.length), "six slimes across");
+    require(new Set(cells.map(cell => Math.round(cell.left))).size === Math.min(4, shown.length), "four slimes across");
     require(cells.every(cell => cell.left >= n.left - 8 && cell.right <= n.right + 8), "the grid stays inside the dialog's inner edges");
     require(picker.querySelectorAll('[aria-pressed="true"]').length === 1, "exactly one slime is chosen");
     require(getComputedStyle(picker).position === "static" && getComputedStyle(picker).boxShadow === "none", "the picker lost the popover's chrome inside the dialog");
@@ -9007,13 +9023,14 @@ export function checkRendered(name, context = {}) {
     require(!document.querySelector(".mb-scrim ~ .mb-scrim") && document.querySelectorAll(".cr-dialog").length === 1, "one dialog");
     if (name === "member-maker") {
       require(start.disabled && !cancel.disabled && document.activeElement === nameField, "the name has the focus and there is nothing to press yet");
-      require(picker.querySelector('[role="tab"][aria-selected="true"]').dataset.slimeTab === "colors", "it opens on the group of the slime that is chosen");
+      const chosenTab = picker.querySelector('[role="tab"][aria-selected="true"]').dataset.slimeTab;
+      require(picker.querySelector(`[data-slime-group="${chosenTab}"] [aria-pressed="true"]`), `it opens on the family of the slime that is chosen (${chosenTab})`);
     } else if (name === "member-maker-tab") {
       const before = window.__look.makerBox, same = (a, b) => a.length === b.length && a.every((v, i) => Math.abs(v - b[i]) <= 0.6);
       require(before, "the dialog was measured before the press");
       require(same(box(dialog), before.dialog) && same(box(faceBox), before.face) && same(box(nameField), before.name) && same(box(picker), before.picker) && same(box(panels), before.panels) && same(box(foot), before.foot), "a tab press moved and resized nothing");
       require(tabs.every((tab, i) => same(box(tab), before.tabs[i])), "no tab moved");
-      require(picker.querySelector('[role="tab"][aria-selected="true"]').dataset.slimeTab === "characters", "the pressed tab is the chosen one");
+      require(picker.querySelector('[role="tab"][aria-selected="true"]').dataset.slimeTab === "purple", "the pressed tab is the chosen one");
       require(face.outerHTML === window.__look.makerFace, "a tab changes no slime: the large one is as it was");
     } else if (name === "member-maker-chosen") {
       require(!start.disabled, "a name makes 建立 pressable");
@@ -9581,7 +9598,7 @@ export function checkRendered(name, context = {}) {
     require(window.__look.data.members.find(row => row.id === 1)?.avatar === "slime:horn-lavender", "the member keeps it");
     // The slimes alone: no tab that draws a picture (R-UI-116); its tabs are the kinds of slime.
     require(!menu.querySelector('[data-avp-tab], [data-avp-pane], textarea, input'), "the picker is the slimes alone, with no 生成");
-    require(menu.querySelector('[role="tab"][aria-selected="true"]')?.dataset.slimeTab === "characters", "it stands on the group of the chosen slime");
+    require(menu.querySelector('[role="tab"][aria-selected="true"]')?.dataset.slimeTab === "purple", "it stands on the family of the chosen slime");
     const whole = menu.getBoundingClientRect();
     require(whole.top >= 0 && whole.bottom <= innerHeight && whole.left >= 0 && whole.right <= innerWidth, `the whole picker stands in the window (${Math.round(whole.bottom)} of ${innerHeight})`);
     require(menu.scrollHeight <= menu.clientHeight + 1, "the picker has no scroll of its own");
@@ -9595,12 +9612,14 @@ export function checkRendered(name, context = {}) {
     const look = { shadow: style.boxShadow, fill: style.backgroundColor }; chosen.remove();
     require(look.shadow === "none" && look.fill !== chosenFill, `no ring or chosen fill on the chosen slime: ${look.shadow} / ${look.fill}`);
     const face = document.querySelector('.mb-panel-identity [data-det="avatar"]').getBoundingClientRect(), box = menu.getBoundingClientRect();
+    const panel = document.querySelector(".mb-det:not([hidden])").getBoundingClientRect();
+    require(box.left >= panel.left + 4 && box.right <= panel.right - 4, "the portrait menu fits inside the details panel with a gutter");
     const centred = Math.abs((box.left + box.right) / 2 - (face.left + face.right) / 2) <= 2 || box.left <= 9 || box.right >= innerWidth - 9;
     require(box.top >= face.bottom - 1 && centred, `the picker is under the middle of the face: face ${Math.round(face.left)}-${Math.round(face.right)}, menu ${Math.round(box.left)}-${Math.round(box.right)}`);
     return { check: name };
   }
   if (name === "slime-picker-shape" || name === "slime-picker-box" || name === "slime-picker-tab") {
-    // The picker is a row of tabs above the open group's slimes, one size for every group (a control just pressed never moves).
+    // The swatches sit below the open group's slimes and stay in place when another group opens.
     const menu = document.querySelector(".mb-avpop");
     require(menu, "the picker is open");
     const tabs = [...menu.querySelectorAll('[role="tab"]')], panels = menu.querySelector(".mb-slime-panels");
@@ -9609,12 +9628,21 @@ export function checkRendered(name, context = {}) {
       window.__look.pickerBox = { menu: box(menu), panels: box(panels), tabs: tabs.map(box) };
       return { check: name };
     }
-    // 角色 is the story's characters alone; the archetypes from the red oni onward have the tab after it.
-    require(tabs.map(tab => tab.dataset.slimeTab).join() === "characters,fantasy,animals,nature,everyday,colors" && menu.querySelector('[role="tablist"]'), `the groups are tabs of one tablist (${tabs.map(tab => tab.dataset.slimeTab).join()})`);
-    require(menu.querySelectorAll('[data-slime-group="characters"] button').length === 24 && menu.querySelector('[data-slime-group="fantasy"] button')?.dataset.slimeCharacter === "oni-red", "角色 holds the story's 24 characters, and the red oni leads the next tab");
+    // R-SLIME-PICK-01: eleven colour swatches, each holding eight characters, including the earlier archetypes.
+    require(tabs.map(tab => tab.dataset.slimeTab).join() === "black,brown,red,orange,yellow,green,teal,blue,purple,pink,gray" && menu.querySelector('[role="tablist"]'), `the colours are tabs of one tablist (${tabs.map(tab => tab.dataset.slimeTab).join()})`);
+    require(tabs.every(tab => !tab.textContent.trim() && tab.getAttribute("aria-label") && visible(tab.querySelector(".mb-family-dot"))), "each tab is a swatch with its colour's name as its accessible name");
+    const counts = tabs.map(tab => menu.querySelectorAll(`[data-slime-group="${tab.dataset.slimeTab}"] [data-slime-character]`).length);
+    require(counts.every(count => count === 8) && !menu.querySelector("[data-slime-color]"), `each colour holds eight characters and nothing else (${counts.join()})`);
+    require(new Set([...menu.querySelectorAll("[data-slime-character]")].map(button => button.dataset.slimeCharacter)).size === 88, "eighty-eight characters in all, each once");
     require(tabs.filter(tab => tab.getAttribute("aria-selected") === "true").length === 1, "exactly one tab is chosen");
-    require(tabs.every(tab => visible(tab)) && tabs.every(tab => Math.abs(tab.getBoundingClientRect().top - tabs[0].getBoundingClientRect().top) <= 1), "the tabs stand in one row");
-    require(tabs.every(tab => tab.getBoundingClientRect().bottom <= panels.getBoundingClientRect().top + 1), "the tabs are above the slimes");
+    // Two centred rows, six swatches and then five, as a colour picker's are.
+    const rowTops = [...new Set(tabs.map(tab => Math.round(tab.getBoundingClientRect().top)))];
+    const perRow = rowTops.map(top => tabs.filter(tab => Math.round(tab.getBoundingClientRect().top) === top));
+    require(tabs.every(tab => visible(tab)) && perRow.map(row => row.length).join() === "6,5", `the swatches stand six and then five (${perRow.map(row => row.length).join()})`);
+    const middle = row => (row[0].getBoundingClientRect().left + row[row.length - 1].getBoundingClientRect().right) / 2;
+    require(Math.abs(middle(perRow[0]) - middle(perRow[1])) <= 1.5, "both rows are centred on one line");
+    require(tabs.every(tab => tab.getBoundingClientRect().top >= panels.getBoundingClientRect().bottom - 1), "the swatches stand under the slimes, and nothing stands above them");
+    require(menu.firstElementChild === panels || menu.firstElementChild?.contains(panels), "the slimes come first");
     const whole = menu.getBoundingClientRect();
     require(whole.top >= 0 && whole.bottom <= innerHeight && whole.left >= 0 && whole.right <= innerWidth, `the picker stands inside the window (${Math.round(whole.bottom)} of ${innerHeight})`);
     require(tabs.every(tab => tab.getBoundingClientRect().right <= whole.right + 1) || menu.querySelector("[data-chip-row][data-more-after], [data-chip-row][data-more-before]"), "the tabs fit the picker, or the chip row scrolls with its arrows");
@@ -9627,16 +9655,12 @@ export function checkRendered(name, context = {}) {
     require(!menu.querySelector("h1, h2, h3, h4"), "no heading inside the grid: the tab says it");
     const shown = [...open[0].querySelectorAll("button")];
     require(shown.length > 0 && shown.every(visible), "the group's slimes are all there");
-    // As wide as its row of tabs and no wider: the last tab
-    // ends at the picker's edge, and so does the grid under it.
-    const tabsPad = parseFloat(getComputedStyle(menu.querySelector('.mb-slime-tabs')).paddingRight), lastTab = tabs[tabs.length - 1].getBoundingClientRect();
-    require(menu.querySelector("[data-chip-row][data-more-after]") || Math.abs((whole.right - lastTab.right) - (tabs[0].getBoundingClientRect().left - whole.left)) <= 1.5, `nothing is left blank at the right of the tabs: the row ends as far from the right edge as it starts from the left (${Math.round(whole.right - lastTab.right)} and ${Math.round(tabs[0].getBoundingClientRect().left - whole.left)} px)`);
-    require(whole.width <= 521, `the picker is no wider than its tabs need (${Math.round(whole.width)} px)`);
+    require(whole.width <= 521, `the picker is no wider than its slimes need (${Math.round(whole.width)} px)`);
     const cells = shown.map(button => button.getBoundingClientRect()), columns = new Set(cells.map(cell => Math.round(cell.left))).size;
     require(cells.every(cell => cell.left >= whole.left + 1 && cell.right <= whole.right - 1), "the slimes stay inside the picker");
-    require(shown[0].matches('[data-slime-color]') ? columns === 6 : columns === Math.min(6, shown.length), `the slimes and the colours stand six across (${columns})`);
-    require(whole.right - Math.max(...cells.map(cell => cell.right)) <= 28 || shown.length < 6, `the grid reaches the picker's right edge as the tabs do (${Math.round(whole.right - Math.max(...cells.map(cell => cell.right)))} px short)`);
-    require(whole.width <= 320 || document.documentElement.lang !== "zh-TW", `six two-character tabs make a picker about 298 px wide (${Math.round(whole.width)} px)`);
+    require(columns === Math.min(4, shown.length), `the slimes stand four across, large, as a shape picker's do (${columns})`);
+    require(whole.right - Math.max(...cells.map(cell => cell.right)) <= 28 || shown.length < 4, `the grid reaches the picker's right edge as the tabs do (${Math.round(whole.right - Math.max(...cells.map(cell => cell.right)))} px short)`);
+    require(whole.width <= 320 || document.documentElement.lang !== "zh-TW", `four large slimes across make a picker about 290 px wide (${Math.round(whole.width)} px)`);
     require(panels.scrollHeight <= panels.clientHeight + 1, `the largest group fits without scrolling (${panels.scrollHeight} of ${panels.clientHeight})`);
     if (name === "slime-picker-tab") {
       const before = window.__look.pickerBox;
@@ -9645,7 +9669,7 @@ export function checkRendered(name, context = {}) {
       require(same(box(menu), before.menu), `the picker did not move or change size: ${box(menu)} / ${before.menu}`);
       require(same(box(panels), before.panels), "the place of the slimes did not change");
       require(tabs.every((tab, i) => same(box(tab), before.tabs[i])), "no tab moved");
-      require(menu.querySelector('[role="tab"][aria-selected="true"]').dataset.slimeTab === "animals", "the pressed tab is the chosen one");
+      require(menu.querySelector('[role="tab"][aria-selected="true"]').dataset.slimeTab === "blue", "the pressed tab is the chosen one");
       require(shown.every(button => button.getAttribute("aria-pressed") === "false"), "the face that is now is not in this group, so none is marked");
     }
     return { check: name, tabs: tabs.length, slimes: shown.length };

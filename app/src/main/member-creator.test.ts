@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { beforeEach, expect, test, vi } from "vitest";
 import { openMemberCreator } from "./member-creator";
-import { SLIME_GROUPS } from "./slime";
+import { newMemberSlime, SLIME_GROUPS, slimeGroupOf } from "./slime";
 import { t } from "./i18n";
 import type { Member, NewMember } from "./types";
 
@@ -20,12 +20,12 @@ beforeEach(() => { document.body.innerHTML = ""; vi.clearAllMocks(); });
 
 test("it is one small dialog: the head, the slime, the name, the shared picker, then 取消 and 建立, and nothing else", () => {
   const { $, dialog } = open();
-  const order = [".mb-dlg-head", ".cr-face", "#mb-new-name", ".cr-picker .mb-slime-tabs", ".cr-picker .mb-slime-panels", ".mb-dlg-act"].map(selector => $(selector));
+  const order = [".mb-dlg-head", ".cr-face", "#mb-new-name", ".cr-picker .mb-slime-panels", ".cr-picker .mb-slime-tabs", ".mb-dlg-act"].map(selector => $(selector));
   order.slice(1).forEach((element, at) => expect(order[at]!.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy());
   expect($(".mb-dlg-head h2").textContent).toBe(t("members.newMember"));
   expect($(".mb-dlg-head").querySelector('[data-dlg="close"]')).not.toBeNull();
   expect($(".cr-face svg.slime")).not.toBeNull();
-  // The picker is the popover's own component: its tabs, in its order, six groups.
+  // The picker is the popover's own component: the slimes, then its swatches in its order, eleven colours.
   expect([...dialog.el.querySelectorAll<HTMLElement>('.cr-picker [role="tab"]')].map(tab => tab.dataset.slimeTab)).toEqual([...SLIME_GROUPS]);
   expect($(".cr-name")).toBe($("#mb-new-name"));
   expect([...dialog.el.querySelectorAll(".mb-dlg-act .btn")].map(button => button.textContent)).toEqual([t("common.cancel"), t("members.create")]);
@@ -35,12 +35,15 @@ test("it is one small dialog: the head, the slime, the name, the shared picker, 
   expect($<HTMLInputElement>("#mb-new-name").placeholder).toBe(t("members.name"));
 });
 
-test("it opens on the group of the slime that is chosen, with that one marked", () => {
+test("it opens on the colour of the slime that is chosen, with that one marked", () => {
   const { $ } = open();
   const chosen = $<HTMLElement>('.cr-picker [role="tab"][aria-selected="true"]');
-  expect(chosen.dataset.slimeTab).toBe("colors");
-  expect($('.cr-picker [data-slime-group="colors"]').hasAttribute("data-active")).toBe(true);
-  expect(document.querySelectorAll('.cr-picker [aria-pressed="true"]')).toHaveLength(1);
+  // Two members are there, so the third colour's first slime: one colour further on for each.
+  expect(chosen.dataset.slimeTab).toBe(slimeGroupOf(newMemberSlime(2)));
+  expect($(`.cr-picker [data-slime-group="${chosen.dataset.slimeTab}"]`).hasAttribute("data-active")).toBe(true);
+  const marked = [...document.querySelectorAll<HTMLElement>('.cr-picker [aria-pressed="true"]')];
+  expect(marked).toHaveLength(1);
+  expect(`slime:${marked[0]!.dataset.slimeCharacter}`).toBe(newMemberSlime(2));
 });
 
 test("there is nothing to press until it has a name, and a taken name is not sent", async () => {
@@ -61,12 +64,12 @@ test("there is nothing to press until it has a name, and a taken name is not sen
   expect($<HTMLElement>(".field-error").hidden).toBe(true);
 });
 
-test("a tab shows its group and moves nothing, a slime is drawn large and is the member's, and only one is chosen", async () => {
+test("a swatch shows its colour and moves nothing, a slime is drawn large and is the member's, and only one is chosen", async () => {
   const { $, dialog, type, create } = open({ groupId: 2 });
-  const before = $(".cr-face").innerHTML;
-  $<HTMLElement>('[role="tab"][data-slime-tab="characters"]').click();
-  expect($('[data-slime-group="characters"]').hasAttribute("data-active")).toBe(true);
-  expect($('[data-slime-group="colors"]').hasAttribute("inert")).toBe(true);
+  const before = $(".cr-face").innerHTML, first = $<HTMLElement>('.cr-picker [role="tab"][aria-selected="true"]').dataset.slimeTab!;
+  $<HTMLElement>('[role="tab"][data-slime-tab="purple"]').click();
+  expect($('[data-slime-group="purple"]').hasAttribute("data-active")).toBe(true);
+  expect($(`[data-slime-group="${first}"]`).hasAttribute("inert")).toBe(true);
   expect($(".cr-face").innerHTML).toBe(before);
   $('[data-slime-character="horn-lavender"]').click();
   expect($('[data-slime-character="horn-lavender"]').getAttribute("aria-pressed")).toBe("true");

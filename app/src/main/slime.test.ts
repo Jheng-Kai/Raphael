@@ -5,9 +5,9 @@ import { afterEach, expect, test, vi } from "vitest";
 import { faceHTML } from "./members";
 import { GAZE_ROWS, PROP_ROWS, celCount, eyePath, gazeRows, loopState } from "./slime-motion";
 import { crownedId, crownPrimary } from "./crown";
-import { catalogs } from "./i18n";
-import { defaultSlimeAvatar, followSlimeRoster, handOver, isSlimeAvatar, parseSlime, pickSlime, seasonalHat, setSlimeState, slimeCharactersHTML, slimeColorOf, slimeFaceHTML, slimePickerHTML, slimeSVG, type SlimeState } from "./slime";
-import type { SlimeCharacter, SlimeColor } from "./slime";
+import { catalogs, getLocale, setLocale } from "./i18n";
+import { defaultSlimeAvatar, followSlimeRoster, GAZE_REACH, gazeToward, isDark, handOver, isSlimeAvatar, newMemberSlime, parseSlime, pickSlime, seasonalHat, setSlimeState, SLIME_GROUPS, slimeCharactersHTML, slimeFaceHTML, slimeGroupName, slimeGroupOf, slimeGroupSwatch, slimePickerHTML, slimeSVG, type SlimeState } from "./slime";
+import type { SlimeCharacter, SlimeGroup } from "./slime";
 
 const css = readFileSync(resolve(__dirname, "slime.css"), "utf8");
 const keyframes = css.split("@keyframes ").slice(1).map(chunk => {
@@ -30,95 +30,100 @@ catalogPicker.innerHTML = slimePickerHTML(null, same);
 const catalogButtons = [...catalogPicker.querySelectorAll<HTMLElement>("[data-slime-character]")];
 const catalogIds = catalogButtons.map(button => button.dataset.slimeCharacter as SlimeCharacter);
 const originalIds = ["blue-plain", "horn-lavender", "streaks-charcoal", "horns-red", "small-horns-pink", "horn-sash-blue", "mustache-gray", "goggles-green", "cap-green", "bowtie-green", "tuft-pink", "horns-blue", "wolf-star", "frill-periwinkle", "tusks-tan", "sprout-mint", "headband-brown", "mask-cornflower", "collar-indigo", "sash-crimson", "bowtie-pearl", "bowtie-purple", "necktie-amber", "wings-yellow"];
+// The archetypes earlier builds offered under tabs of their kinds, now each under a colour.
+const archetypeIds = ["oni-red", "oni-indigo", "kijin-ivory", "demon-wings", "demon-tail", "dragon-storm", "dragon-ember", "dragon-ice", "fairy-wings", "fairy-flower", "beast-fangs", "beast-mane", "knight-helm", "knight-plume", "paladin", "ranger-hood", "archer-feather", "mage-star", "sage-scroll", "alchemist-flask", "maid-apron", "butler-silver", "witch-moon", "wizard-cap", "golem-stone", "phoenix-feather", "cat-ears", "dog-ears", "rabbit-ears", "fox-ears", "bear-ears", "panda", "frog", "axolotl", "bee", "penguin", "turtle", "octopus", "fire", "water", "earth", "wind", "snow", "thunder", "rainbow", "cloud", "cherry-blossom", "autumn-leaf", "pumpkin", "strawberry", "lemon", "mushroom", "chef-hat", "gardener", "artist", "medic", "sailor", "astronaut", "detective", "mechanic", "ribbon-bell", "parcel", "candle", "music-note"];
 const catalogStates: SlimeState[] = ["idle", "thinking", "working", "searching", "computer", "waiting", "blocked", "done", "error", "sleeping", "arriving"];
-const groupIds = ["characters", "fantasy", "animals", "nature", "everyday", "colors"] as const;
-const colorButtons = [...catalogPicker.querySelectorAll<HTMLElement>("[data-slime-color]")];
-const colorIds = colorButtons.map(button => button.dataset.slimeColor as SlimeColor);
+const groupIds = ["black", "brown", "red", "orange", "yellow", "green", "teal", "blue", "purple", "pink", "gray"] as const;
+const inGroup = (group: string): string[] => [...catalogPicker.querySelectorAll<HTMLElement>(`[data-slime-group="${group}"] [data-slime-character]`)].map(button => button.dataset.slimeCharacter!);
 
-test("every character belongs to one labeled group, in the owner's order without reordering its slimes", () => {
+test("the picker is eleven colours, each with characters of its own, and no plain colour (R-SLIME-PICK-01)", () => {
   const groups = [...catalogPicker.querySelectorAll<HTMLElement>("[data-slime-group]")];
   expect(groups.map(group => group.dataset.slimeGroup)).toEqual(groupIds);
-  expect(groups.map(group => group.querySelectorAll('[role="menuitem"]').length)).toEqual([24, 26, 12, 14, 12, colorIds.length]);
-  // 角色 is the first set of slimes and no one else; the archetypes, the red oni first, have their own tab.
-  const inGroup = (group: string): string[] => [...catalogPicker.querySelectorAll<HTMLElement>(`[data-slime-group="${group}"] [data-slime-character]`)].map(button => button.dataset.slimeCharacter!);
-  expect(inGroup("characters")).toEqual(originalIds);
-  expect(inGroup("fantasy")[0]).toBe("oni-red");
-  expect(inGroup("fantasy").slice(-1)).toEqual(["phoenix-feather"]);
+  expect(SLIME_GROUPS).toEqual(groupIds);
+  // Nothing counts them: a colour holds as many as are drawn for it, and none is empty.
+  for (const group of groups) expect(group.querySelectorAll('[role="menuitem"]').length, group.dataset.slimeGroup).toBeGreaterThan(0);
+  expect(catalogPicker.querySelector("[data-slime-color]")).toBeNull();
+  // Each slime stands under its own colour, and the picker holds every character the app draws.
+  for (const group of groupIds) for (const id of inGroup(group)) expect(slimeGroupOf(`slime:${id}`), id).toBe(group);
   const ungrouped = document.createElement("div");
   ungrouped.innerHTML = slimeCharactersHTML(null, same);
-  expect(catalogIds).toEqual([...ungrouped.querySelectorAll<HTMLElement>("[data-slime-character]")].map(button => button.dataset.slimeCharacter));
-  expect(catalogButtons.every(button => groupIds.slice(0, -1).includes(button.closest<HTMLElement>("[data-slime-group]")!.dataset.slimeGroup as typeof groupIds[number]))).toBe(true);
+  expect([...catalogIds].sort()).toEqual([...ungrouped.querySelectorAll<HTMLElement>("[data-slime-character]")].map(button => button.dataset.slimeCharacter!).sort());
   for (const [index, group] of groups.entries()) {
-    // A tab names it, so there is no heading inside.
+    // A swatch names it, so there is no heading inside.
     expect(group.getAttribute("role")).toBe("tabpanel");
     expect(group.getAttribute("aria-labelledby")).toBe(`slime-tab-${groupIds[index]!}`);
     expect(group.querySelector("h1, h2, h3, h4")).toBeNull();
+    expect(slimeGroupSwatch(groupIds[index]!)).toMatch(/^#[0-9A-F]{6}$/);
     for (const [locale, messages] of Object.entries(catalogs)) {
-      const label = messages[`slime.group.${groupIds[index]!}`];
+      const label = (messages as Record<string, string>)[`slime.family.${groupIds[index]!}`]!;
       expect(label.trim(), `${locale}:${groupIds[index]}`).not.toBe("");
-      expect(label).not.toMatch(/\uFFFD|\?{2,}|^slime\./);
+      expect(label).not.toMatch(/�|\?{2,}|^slime\./);
     }
   }
   expect(pickSlime(groups[0]!)).toBeNull();
 });
 
-test.each(colorIds)("plain colour %s has a localized name and round-trips through selection and saved avatars", id => {
-  const button = colorButtons.find(button => button.dataset.slimeColor === id)!;
-  for (const [locale, messages] of Object.entries(catalogs)) {
-    const label = messages[`slime.color.${id}`];
-    expect(label.trim(), `${locale}:${id}`).not.toBe("");
-    expect(label).not.toMatch(/\uFFFD|\?{2,}|^slime\./);
+test("the picker still offers every face earlier builds offered, each once, the first set at the head of each colour in its own order", () => {
+  expect(new Set(catalogIds).size).toBe(catalogIds.length);
+  for (const id of [...originalIds, ...archetypeIds]) expect(catalogIds, id).toContain(id);
+  for (const group of groupIds) {
+    const ids = inGroup(group), firsts = originalIds.filter(id => ids.includes(id));
+    expect(ids.slice(0, firsts.length), group).toEqual(firsts);
   }
-  expect(button.getAttribute("aria-label")).toContain(button.title);
-  expect(button.closest<HTMLElement>("[data-slime-group]")!.dataset.slimeGroup).toBe("colors");
-  expect(parseSlime(`slime:color:${id}`)).toEqual({ color: id });
-  expect(pickSlime(button)).toBe(`slime:color:${id}`);
-  expect(button.getAttribute("aria-pressed")).toBe("true");
-  expect(catalogPicker.querySelectorAll('[aria-pressed="true"]')).toHaveLength(1);
-  const selected = document.createElement("div");
-  selected.innerHTML = slimePickerHTML(`slime:color:${id}`, same);
-  expect(selected.querySelector<HTMLElement>('[aria-pressed="true"]')!.dataset.slimeColor).toBe(id);
 });
 
-test("the expanded palette preserves the original colours, remains distinct and joins the default rotation except grey", () => {
-  const original = ["sky", "lavender", "coral", "tangerine", "ochre", "leaf", "teal", "ocean", "orchid", "charcoal"];
-  expect(colorIds.slice(0, original.length)).toEqual(original);
-  expect(colorIds.length).toBeGreaterThanOrEqual(20);
-  expect(new Set(colorIds).size).toBe(colorIds.length);
-  const colors = colorIds.map(id => slimeColorOf({ id: 1, avatar: `slime:color:${id}` }));
-  expect(colors.slice(0, original.length)).toEqual(["#1EA7FD", "#905AFB", "#FC2C3E", "#F9670E", "#F69412", "#14C370", "#13B8A3", "#1884FC", "#FB3499", "#777777"]);
-  expect(new Set(colors).size).toBe(colorIds.length);
-  for (const color of colors.slice(original.length)) {
-    const channels = color.slice(1).match(/../g)!.map(channel => parseInt(channel, 16));
-    expect(Math.max(...channels) - Math.min(...channels), color).toBeGreaterThanOrEqual(60);
-    expect(Math.max(...channels), color).toBeGreaterThanOrEqual(120);
-    expect(Math.min(...channels), color).toBeLessThanOrEqual(180);
+test("a member without a face of its own still wears a plain colour, and the picker opens on the colour nearest it with nothing marked", () => {
+  const plainFaces = [...new Set(Array.from({ length: 40 }, (_, id) => defaultSlimeAvatar(id)))];
+  expect(plainFaces.length).toBeGreaterThanOrEqual(19);
+  for (const avatar of plainFaces) {
+    expect(parseSlime(avatar)).toEqual({ color: avatar.slice("slime:color:".length) });
+    const host = document.createElement("div");
+    host.innerHTML = slimePickerHTML(avatar, same);
+    expect(host.querySelector('[aria-pressed="true"]'), avatar).toBeNull();
+    expect(host.querySelector<HTMLElement>("[data-slime-group][data-active]")!.dataset.slimeGroup, avatar).toBe(slimeGroupOf(avatar));
   }
-  const expected = colorIds.filter(id => id !== "charcoal").map(id => `slime:color:${id}`);
-  expect(Array.from({ length: expected.length }, (_, id) => defaultSlimeAvatar(id))).toEqual(expected);
-  expect(Array.from({ length: expected.length }, (_, id) => defaultSlimeAvatar(-id))).toEqual(expected);
-  expect(new Set(colors.map((_, id) => slimeColorOf({ id })))).toEqual(new Set(colors.filter((_, index) => colorIds[index] !== "charcoal")));
+  expect(slimeGroupOf("slime:color:sky")).toBe("blue");
+  expect(slimeGroupOf("slime:color:charcoal")).toBe("gray");
+  expect(slimeGroupOf("preset:old")).toBe("black");
 });
 
 test.each(Object.entries({ azure: "sky", mint: "teal", sunny: "ochre", coral: "coral", rose: "orchid", lilac: "lavender", slate: "charcoal", fox: "tangerine", sprout: "leaf", crown: "ochre" }))("legacy colour alias %s keeps its original meaning", (alias, color) => {
   expect(parseSlime(`slime:${alias}`)).toEqual({ color });
 });
 
-test("the expanded catalog preserves the original choices and adds at least sixty descriptive looks", () => {
-  expect(catalogIds.slice(0, originalIds.length)).toEqual(originalIds);
-  expect(catalogIds.length).toBeGreaterThanOrEqual(originalIds.length + 60);
-  expect(new Set(catalogIds).size).toBe(catalogIds.length);
-  for (const id of catalogIds.slice(originalIds.length)) expect(id).toMatch(/^[a-z]+(?:-[a-z]+)*$/);
+test("a new member in the maker starts from a character, one colour further on for each member already there", () => {
+  const starts = Array.from({ length: 22 }, (_, count) => newMemberSlime(count));
+  expect(starts.slice(0, 11).map(avatar => slimeGroupOf(avatar))).toEqual(groupIds);
+  expect(starts.every(avatar => catalogIds.includes(avatar.slice("slime:".length) as SlimeCharacter))).toBe(true);
+  expect(new Set(starts).size).toBe(22);
 });
 
-test.each(catalogIds)("every picker choice has localized labels and a persistent round trip: %s", id => {
-  const button = catalogButtons.find(button => button.dataset.slimeCharacter === id)!;
-  for (const [locale, messages] of Object.entries(catalogs)) {
-    const label = messages[`slime.${id}`];
-    expect(label, `${locale}:slime.${id}`).toBeTypeOf("string");
-    expect(label.trim(), `${locale}:slime.${id}`).not.toBe("");
-    expect(label, `${locale}:slime.${id}`).not.toMatch(/\uFFFD|\?{2,}|^slime\./);
+test("a slime has no name: no tooltip, and a screen reader hears its colour and its place", () => {
+  const previous = getLocale();
+  const host = document.createElement("div");
+  try {
+    for (const locale of Object.keys(catalogs)) {
+      setLocale(locale);
+      host.innerHTML = slimePickerHTML(null, same);
+      for (const group of host.querySelectorAll("[data-slime-group]")) {
+        const names = [...group.querySelectorAll("[data-slime-character]")].map(button => {
+          const name = button.getAttribute("aria-label") ?? "";
+          expect(button.hasAttribute("title")).toBe(false);
+          expect(name).toContain(slimeGroupName(group.getAttribute("data-slime-group") as SlimeGroup));
+          expect(name.trim()).not.toBe("");
+          expect(name).not.toMatch(/\uFFFD|\?{2,}|^slime\./);
+          return name;
+        });
+        expect(new Set(names).size, `${locale}:${group.id}`).toBe(names.length);
+      }
+    }
+  } finally {
+    setLocale(previous);
   }
+});
+
+test.each(catalogIds)("every picker choice has a persistent round trip: %s", id => {
+  const button = catalogButtons.find(button => button.dataset.slimeCharacter === id)!;
   const saved = pickSlime(button);
   expect(saved).toBe(`slime:${id}`);
   expect(parseSlime(saved)).toEqual({ character: id });
@@ -157,12 +162,11 @@ test("no two characters share both their colour and their complete costume", () 
     const signature = [svg.style.getPropertyValue("--slime-color"), svg.querySelector(".slime-back")?.innerHTML ?? "", svg.querySelector(".slime-marks")!.innerHTML].join("|");
     expect(signatures.get(signature), id).toBeUndefined();
     signatures.set(signature, id);
-    if (!originalIds.includes(id)) {
-      for (const mark of svg.querySelectorAll(".slime-marks, .slime-back")) {
-        expect(mark.querySelector("text, image, linearGradient, radialGradient, [stroke]")).toBeNull();
-      }
-      expect(svg.querySelector(".slime-marks path, .slime-back path"), id).not.toBeNull();
+    for (const mark of svg.querySelectorAll(".slime-marks, .slime-back")) {
+      expect(mark.querySelector("text, image, linearGradient, radialGradient")).toBeNull();
     }
+    const shapes = svg.querySelectorAll(":is(.slime-marks, .slime-back) :is(path, circle, rect)");
+    if (id !== "blue-plain") expect(shapes.length, id).toBeGreaterThan(0);
   }
 });
 
@@ -221,7 +225,7 @@ test('thinking cels avoid transient transform wrappers that inflate collection w
   expect(host.querySelector('.slime-loop .slime-correction, .slime-loop .slime-counterturn')).toBeNull();
 });
 
-afterEach(() => { vi.useRealTimers(); document.body.innerHTML = ""; });
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); document.body.innerHTML = ""; });
 
 test.each(["offscreen", "hidden", "collapsed", "unchanged"])("%s slimes receive state without transform reads", mode => {
   const panel = document.createElement(mode === "collapsed" ? "details" : "div");
@@ -260,13 +264,27 @@ test("every character is the one slime: the same body, and only its marks differ
   expect([...bodies][0]).toBeTruthy();
 });
 
-test("The lavender horn slime is lavender and a horn, and no hair", () => {
+test("the lavender slime keeps its one horn on the shared body", () => {
   const lavender = slimeSVG({ character: "horn-lavender" }, plain);
   expect(lavender).toContain("--slime-color:#905AFB");
   expect(lavender).toContain("#363140");
-  const bare = slimeSVG({ character: "blue-plain" }, plain);
-  // The resting vector carries the horn once.
-  expect(lavender.match(/<path /g)!.length).toBe(bare.match(/<path /g)!.length + 1);
+  const bare = slimeSVG({ color: "sky" }, plain);
+  const host = document.createElement("div");
+  host.innerHTML = lavender;
+  expect(host.querySelector('.slime-marks path[fill="#363140"]')?.getAttribute("d")).toContain("M 44 34 C 45 25");
+  // One path more than a plain slime, besides the dark theme's rim round the dark horn.
+  const own = (html: string): number => { const box = document.createElement("div"); box.innerHTML = html; return [...box.querySelectorAll("path")].filter(path => !path.closest(".slime-rim")).length; };
+  expect(own(lavender)).toBe(own(bare) + 1);
+  expect(host.querySelector(".slime-rim path[fill=\"#363140\"]")).not.toBeNull();
+});
+
+test.each(["turtle", "butler-silver"] as const)("an opaque mask covers the resting and moving face of %s", character => {
+  const host = document.createElement("div");
+  for (const moving of [false, true]) {
+    host.innerHTML = slimeSVG({ character }, { ...plain, moving, state: "working" });
+    expect(host.querySelector(".slime-surface[data-slime-mask] .slime-marks path")).not.toBeNull();
+    if (moving) expect(host.querySelector("[data-slime-mask] .slime-cel-eye")).not.toBeNull();
+  }
 });
 
 test("what earlier builds stored still draws", () => {
@@ -299,8 +317,8 @@ test("one press chooses one slime, in a menu that shows it", () => {
   expect(pressed()).toEqual(["horn-lavender"]);
   expect(pickSlime(document.querySelector<HTMLElement>('[data-slime-character="small-horns-pink"]')!)).toBe("slime:small-horns-pink");
   expect(pressed()).toEqual(["small-horns-pink"]);
-  expect(pickSlime(document.querySelector<HTMLElement>('[data-slime-color="teal"]')!)).toBe("slime:color:teal");
-  expect(pressed()).toEqual(["teal"]);
+  expect(pickSlime(document.querySelector<HTMLElement>('[data-slime-character="dragon-ice"]')!)).toBe("slime:dragon-ice");
+  expect(pressed()).toEqual(["dragon-ice"]);
   expect(pickSlime(document.createElement("button"))).toBeNull();
 });
 
@@ -863,11 +881,98 @@ test("the core takes every slime the picker offers: its rule for a slime's name 
   expect(avatar, "the core's rule for an avatar").toBeTruthy();
   // The Python rule as JavaScript: an f-string's doubled braces are single ones, and its one variable is the name's rule.
   const rule = new RegExp(`^(?:${avatar!.replace(/\{\{/g, "{").replace(/\}\}/g, "}").split("{_SLIME_NAME}").join(name!)})$`);
-  const offered = [...catalogButtons, ...colorButtons].map(button => pickSlime(button)!);
-  expect(offered).toHaveLength(catalogIds.length + colorIds.length);
+  const offered = [...catalogButtons.map(button => pickSlime(button)!), ...Array.from({ length: 40 }, (_, id) => defaultSlimeAvatar(id))];
+  expect(offered).toHaveLength(catalogIds.length + 40);
   expect(offered.filter(saved => !rule.test(saved))).toEqual([]);
   // The names that were refused are among them, and what is no slime's name is still refused.
   expect(offered).toContain("slime:oni-red");
   expect(offered.filter(saved => saved.includes("-")).length).toBeGreaterThan(30);
   for (const bad of ["slime:", "slime:-red", "slime:oni-", "slime:oni--red", "slime:Oni-Red", "slime:oni red", "slime:../x", "slime:a:b:c"]) expect(rule.test(bad), bad).toBe(false);
+});
+
+test("a face's eyes turn toward the pointer and never past their reach; a face whose button the pointer is on follows it across that button", () => {
+  expect(gazeToward(0, 0, 40)).toEqual({ x: 0, y: 0 });
+  expect(gazeToward(-1000, 0, 40)).toEqual({ x: -GAZE_REACH.x, y: 0 });
+  const below = gazeToward(300, 400, 40);
+  expect(below.x).toBeGreaterThan(0);
+  expect(below.y).toBeGreaterThan(0);
+  expect(Math.abs(below.x)).toBeLessThanOrEqual(GAZE_REACH.x);
+  expect(Math.abs(below.y)).toBeLessThanOrEqual(GAZE_REACH.y);
+  // Anywhere in the window: a pointer near the slime is met nearly eye to eye.
+  expect(gazeToward(4, 0, 40).x).toBeLessThan(0.5);
+  // On its own button: half a slime off its middle is already the full reach.
+  expect(gazeToward(20, 0, 40, 0.5)).toEqual({ x: GAZE_REACH.x, y: 0 });
+});
+
+/** Moves the pointer onto `target` at (x, y), as a mouse does, and lets the frame that answers it run. */
+function pointAt(target: Element, x: number, y: number): void {
+  target.dispatchEvent(new PointerEvent("pointermove", { clientX: x, clientY: y, pointerType: "mouse", bubbles: true }));
+  vi.advanceTimersToNextFrame();
+}
+
+test("a face in the member list looks at the pointer while the pointer is on its row, and is as before once it leaves the row", () => {
+  vi.useFakeTimers({ toFake: ["requestAnimationFrame"] });
+  try {
+    document.body.innerHTML = `<div class="mb-item"><button class="mb-row">${slimeSVG({ character: "horns-red" }, { now: plain.now })}<span class="mb-row-main">紅</span></button></div><p id="away">外面</p>`;
+    const face = document.querySelector<HTMLElement>(".slime-surface")!;
+    face.getBoundingClientRect = () => ({ left: 100, top: 100, width: 40, height: 40, right: 140, bottom: 140, x: 100, y: 100, toJSON: () => ({}) }) as DOMRect;
+    // On the row's words, to the right of the slime: the face looks right.
+    pointAt(document.querySelector(".mb-row-main")!, 300, 120);
+    expect(face.hasAttribute("data-slime-gazing")).toBe(true);
+    expect(parseFloat(face.style.getPropertyValue("--slime-gaze-x"))).toBe(GAZE_REACH.x);
+    // Off the row: the face is as before (its glance aside, its look back under the row's own hover).
+    pointAt(document.querySelector("#away")!, 300, 120);
+    expect(face.hasAttribute("data-slime-gazing")).toBe(false);
+    expect(face.style.getPropertyValue("--slime-gaze-x")).toBe("");
+  } finally {
+    vi.useRealTimers();
+    document.body.innerHTML = "";
+  }
+  const css = readFileSync(resolve(__dirname, "slime.css"), "utf8");
+  expect(css).toContain('.slime-surface[data-slime-gazing] .slime[data-state="idle"] .slime-follow { translate: var(--slime-gaze-x, 0px) var(--slime-gaze-y, 0px); }');
+});
+
+test("a picker's choice looks only while the pointer is on it; a face anywhere else follows the pointer wherever it is", () => {
+  vi.useFakeTimers({ toFake: ["requestAnimationFrame"] });
+  try {
+    document.body.innerHTML = `<div class="mb-slime-characters">${slimeCharactersHTML(null, same, "", "red")}</div><div id="elsewhere">${slimeSVG({ character: "horns-red" }, { now: plain.now })}</div><p id="away">外面</p>`;
+    const box = () => ({ left: 100, top: 100, width: 40, height: 40, right: 140, bottom: 140, x: 100, y: 100, toJSON: () => ({}) }) as DOMRect;
+    for (const surface of document.querySelectorAll<HTMLElement>(".slime-surface")) surface.getBoundingClientRect = box;
+    const choice = document.querySelector<HTMLElement>("[data-slime-character] .slime-surface")!;
+    const elsewhere = document.querySelector<HTMLElement>("#elsewhere .slime-surface")!;
+    pointAt(document.querySelector("#away")!, 120, 700);
+    expect(choice.hasAttribute("data-slime-gazing")).toBe(false);
+    expect(elsewhere.hasAttribute("data-slime-gazing")).toBe(true);
+    expect(parseFloat(elsewhere.style.getPropertyValue("--slime-gaze-y"))).toBeGreaterThan(0);
+    pointAt(choice.querySelector("svg")!, 104, 120);
+    expect(choice.hasAttribute("data-slime-gazing")).toBe(true);
+    expect(parseFloat(choice.style.getPropertyValue("--slime-gaze-x"))).toBeLessThan(0);
+    document.dispatchEvent(new PointerEvent("pointerout", { relatedTarget: null }));
+    vi.advanceTimersToNextFrame();
+    expect(document.querySelectorAll("[data-slime-gazing]")).toHaveLength(0);
+  } finally {
+    vi.useRealTimers();
+    document.body.innerHTML = "";
+  }
+});
+
+test("a dark slime carries the mark of the light rim the dark theme draws round it; a bright one does not", () => {
+  expect(isDark("#2A3046")).toBe(true);
+  expect(isDark("#3DB5FF")).toBe(false);
+  expect(slimeSVG({ character: "penguin" }, { now: plain.now })).toContain("data-slime-dark");
+  expect(slimeSVG({ character: "blue-plain" }, { now: plain.now })).not.toContain("data-slime-dark");
+  expect(css).toMatch(/:root\[data-theme="dark"\] \.slime-rim \{ display: inline; \}/);
+  // The rim is the whole outline: the silhouette carries the hair behind (a ponytail) as well as the body.
+  expect(slimeSVG({ character: "penguin" }, { now: plain.now })).toMatch(/<g class="slime-rim">[\s\S]*M 37 31 Q 30 17[\s\S]*<\/g>/);
+  expect(slimeSVG({ character: "blue-plain" }, { now: plain.now })).not.toContain("slime-rim");
+});
+
+test("a bright slime that wears something dark gets the rim round what it wears, not round its body", () => {
+  const red = slimeSVG({ character: "horns-red" }, { now: plain.now });
+  const rim = red.match(/<g class="slime-rim">([\s\S]*?)<\/g><\/g><\/g><path|<g class="slime-rim">[\s\S]*?(?=<path d="M 8 70)/)?.[0] ?? "";
+  expect(red).toContain('<g class="slime-rim">');
+  // The dark horns are in the rim; the body outline is not, so the red dome keeps no line of its own.
+  expect(red.slice(red.indexOf('<g class="slime-rim">'), red.indexOf('class="slime-body"'))).toContain("#2B2430");
+  expect(rim).not.toContain("M 8 70 C 8 51");
+  expect(slimeSVG({ character: "small-horns-pink" }, { now: plain.now })).not.toContain("slime-rim");
 });

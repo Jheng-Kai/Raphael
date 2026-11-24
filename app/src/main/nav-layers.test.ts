@@ -149,7 +149,7 @@ describe.each(navInputs)("%s layer navigation", input => {
     const dialog = openMemberCreator({ taken: [], groupId: null, create: vi.fn() });
     const name = dialog.el.querySelector<HTMLInputElement>("#mb-new-name")!;
     name.value = "Robin";
-    const characters = dialog.el.querySelector<HTMLButtonElement>('[data-slime-tab="characters"]')!;
+    const characters = dialog.el.querySelector<HTMLButtonElement>('[data-slime-tab="purple"]')!;
     characters.click();
     characters.focus();
     try {

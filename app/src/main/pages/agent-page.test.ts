@@ -59,9 +59,10 @@ function deferred<T>() {
 }
 
 let send: (event: MainEvent) => void = () => {};
+let lastApp: AppContext;
 
 function mount() {
-  const app = {
+  const app = lastApp = {
     go: vi.fn(),
     device: () => ({ dictation_mode: "hold" }),
     onEvent(handler: (event: MainEvent) => void) {
@@ -121,6 +122,24 @@ test("a sure page gesture appends a draft and sends nothing until the owner subm
   expect(api.agentAskText).toHaveBeenCalledExactlyOnceWith("My existing draft\nPage-provided words", [], 0, expect.any(Object));
   expect(note.hidden).toBe(true);
   agent.hide(); Reflect.deleteProperty(navigator, "userActivation");
+});
+
+test("/usage typed whole is the app's own command: it opens Settings › 用量 and sends nothing", async () => {
+  api.agentHistoryList.mockResolvedValue({ turns: [] });
+  api.agentAskText.mockResolvedValue(undefined);
+  const agent = mount(); await flush();
+  const input = agent.el.querySelector<HTMLTextAreaElement>(".cmp-input")!;
+  const form = agent.el.querySelector<HTMLFormElement>("form.composer")!;
+  input.value = " /Usage "; input.dispatchEvent(new Event("input", { bubbles: true }));
+  form.requestSubmit(); await flush();
+  expect(lastApp.go).toHaveBeenCalledExactlyOnceWith("settings", "usage");
+  expect(api.agentAskText).not.toHaveBeenCalled();
+  expect(input.value).toBe("");
+  // Words after it make it a message, sent as typed.
+  input.value = "/usage please"; input.dispatchEvent(new Event("input", { bubbles: true }));
+  form.requestSubmit(); await flush();
+  expect(api.agentAskText).toHaveBeenCalledExactlyOnceWith("/usage please", [], 0, expect.any(Object));
+  agent.hide();
 });
 
 test("a dictated correction is learned as the message goes, not when its answer ends, and once", async () => {

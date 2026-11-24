@@ -2,27 +2,31 @@
 // small pill tabs, and under it only the open group's slimes. The panels stand on one another in one place (slime.ts
 // `slimePickerHTML`), so a press on a tab changes what shows and nothing about the size or the place of the picker.
 
-import { chipSteps } from "./chip-scroll";
 import { t } from "./i18n";
 import { clearLayerForward } from "./nav-history";
-import { SLIME_GROUPS, slimeGroupName, slimeGroupOf, slimePickerHTML as slimePanelsHTML, type SlimeGroup } from "./slime";
-import { tabs } from "./ui";
+import { SLIME_GROUPS, slimeGroupName, slimeGroupOf, slimeGroupSwatch, slimePickerHTML as slimePanelsHTML, type SlimeGroup } from "./slime";
+import { esc } from "./ui";
 
-/** The tab row: the groups in their order, exactly one chosen, in a chip row that scrolls when the tabs do not all fit. */
+/**
+ * The tab row: the colour families as a row of swatches, as a colour row is (R-SLIME-PICK-01), exactly one chosen with a
+ * ring. A swatch carries no words: its family's name is its accessible name and its tooltip.
+ */
 export function slimeTabsHTML(open: SlimeGroup): string {
-  const row = tabs(
-    SLIME_GROUPS.map(group => ({ id: group, label: slimeGroupName(group),
-      attrs: ` id="slime-tab-${group}" data-slime-tab="${group}" aria-controls="slime-panel-${group}" tabindex="${group === open ? 0 : -1}"` })),
-    open,
-    { label: t("settings.avatar"), kind: "nav", className: "mb-slime-tablist", attrs: " data-chip-scroll" },
-  );
-  return `<div class="mb-slime-tabs" data-chip-row>${row}${chipSteps()}</div>`;
+  const one = (group: SlimeGroup): string => {
+    const on = group === open, name = esc(slimeGroupName(group));
+    return `<button type="button" class="mb-slime-family" role="tab" aria-selected="${on}" aria-label="${name}" title="${name}" id="slime-tab-${group}" data-slime-tab="${group}"` +
+      ` aria-controls="slime-panel-${group}" tabindex="${on ? 0 : -1}" style="--family:${slimeGroupSwatch(group)}"><span class="mb-family-dot" aria-hidden="true"></span></button>`;
+  };
+  return `<div class="mb-slime-tabs"><div class="mb-slime-tablist" role="tablist" aria-label="${esc(t("settings.avatar"))}">${SLIME_GROUPS.map(one).join("")}</div></div>`;
 }
 
-/** The whole picker: the tab row, then the panels, opening on the group that holds the face it starts from. */
+/**
+ * The whole picker, laid out as a colour picker is: the slimes of the open family, then the row of swatches under them, and
+ * nothing above (R-SLIME-PICK-01). It opens on the family that holds the face it starts from.
+ */
 export function slimePickerHTML(avatar: string | null | undefined, esc: (text: string) => string): string {
   const open = slimeGroupOf(avatar);
-  return slimeTabsHTML(open) + `<div class="mb-slime-panels">${slimePanelsHTML(avatar, esc, open)}</div>`;
+  return `<div class="mb-slime-panels">${slimePanelsHTML(avatar, esc, open)}</div>` + slimeTabsHTML(open);
 }
 
 /** Shows `group`: its tab is the chosen one and its panel the open one. Nothing is measured, so nothing moves. */
@@ -44,9 +48,10 @@ export function selectSlimeTab(root: ParentNode, group: string, focus = false): 
 }
 
 /**
- * The keys of the picker (the popover gives them first): Left and Right move between the tabs and open the one they reach,
- * Home and End go to the first and the last, Down goes into the open group and Up comes back to its tab. The slimes keep the
- * popover's own keys otherwise (Up and Down step through them, Escape closes), now over the open group alone.
+ * The keys of the picker (the popover gives them first): Left and Right move between the swatches and open the one they
+ * reach, Home and End go to the first and the last, Up goes into the open family above (to the chosen slime, else its last)
+ * and Down to its first. The slimes keep the popover's own keys otherwise (Up and Down step through them and on to the
+ * chosen swatch, Escape closes), now over the open family alone.
  */
 export function slimeKeys(root: HTMLElement, event: KeyboardEvent): boolean {
   const target = event.target;
@@ -65,13 +70,13 @@ export function slimeKeys(root: HTMLElement, event: KeyboardEvent): boolean {
     }
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       const pressed = grid.find(button => button.getAttribute("aria-pressed") === "true");
-      (event.key === "ArrowDown" ? pressed ?? grid[0] : grid[grid.length - 1])?.focus();
+      (event.key === "ArrowUp" ? pressed ?? grid[grid.length - 1] : grid[0])?.focus();
       return true;
     }
     return false;
   }
   if (!grid.includes(target) || !chosen) return false;
-  const ring = [chosen, ...grid], at = ring.indexOf(target);
+  const ring = [...grid, chosen], at = ring.indexOf(target);
   if (event.key === "ArrowDown") ring[(at + 1) % ring.length]!.focus();
   else if (event.key === "ArrowUp") ring[(at - 1 + ring.length) % ring.length]!.focus();
   else if (event.key === "Home") grid[0]!.focus();

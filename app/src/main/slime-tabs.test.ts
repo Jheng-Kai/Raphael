@@ -1,13 +1,13 @@
 // @vitest-environment happy-dom
-// The slime picker of a member's face: a row of tabs for the groups, and only the open group's slimes under it, in a place whose
-// size a press on a tab does not change.
+// The slime picker of a member's face: the open colour's slimes, and under them a row of colour swatches that choose the
+// colour, in a place whose size a press on a swatch does not change.
 import { beforeEach, expect, test, vi } from "vitest";
 
 vi.mock("./api", () => ({ core: vi.fn(), avatarPick: vi.fn(), avatarSave: vi.fn(), avatarClear: vi.fn(), avatarGet: vi.fn() }));
 
-import { setLocale, t } from "./i18n";
+import { setLocale } from "./i18n";
 import { openMemberAvatarMenu } from "./member-avatar-menu";
-import { SLIME_GROUPS, slimeGroupOf } from "./slime";
+import { defaultSlimeAvatar, SLIME_GROUPS, slimeGroupName, slimeGroupOf, slimeGroupSwatch } from "./slime";
 import { closeMenu } from "./ui";
 import type { Member, MemberPatch } from "./types";
 
@@ -36,19 +36,23 @@ beforeEach(() => {
   setLocale("zh-TW");
 });
 
-test("the groups are tabs in one row, in their order, in the app's pill tabs and its chip row", () => {
+test("the colours are swatches in one tablist under the slimes, in their order, each named by its colour alone (R-SLIME-PICK-01)", () => {
   const picker = open("slime:color:sky");
-  const row = picker.querySelector<HTMLElement>("[data-chip-row] > [data-chip-scroll]")!;
+  const row = picker.querySelector<HTMLElement>(".mb-slime-tabs > .mb-slime-tablist")!;
   expect(row.getAttribute("role")).toBe("tablist");
-  expect(row.classList.contains("tabs")).toBe(true);
   expect(tabsOf(picker).map(tab => tab.parentElement)).toEqual(tabsOf(picker).map(() => row));
-  expect(tabsOf(picker).map(tab => tab.textContent)).toEqual(SLIME_GROUPS.map(group => t(`slime.group.${group}`)));
-  expect(tabsOf(picker).every(tab => tab.classList.contains("tab"))).toBe(true);
+  // The slimes come first and the swatches under them, as a colour picker is laid out.
+  const panels = picker.querySelector(".mb-slime-panels")!;
+  expect(panels.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(tabsOf(picker).map(tab => tab.dataset.slimeTab)).toEqual([...SLIME_GROUPS]);
+  expect(tabsOf(picker).map(tab => tab.getAttribute("aria-label"))).toEqual(SLIME_GROUPS.map(group => slimeGroupName(group)));
+  // A swatch carries no words: its colour is its face, its name its tooltip.
+  expect(tabsOf(picker).every(tab => tab.textContent === "" && tab.title === tab.getAttribute("aria-label"))).toBe(true);
+  expect(tabsOf(picker).map(tab => tab.style.getPropertyValue("--family"))).toEqual(SLIME_GROUPS.map(group => slimeGroupSwatch(group)));
   // Exactly one is chosen, and it is the one that is the tab stop.
   expect(chosen(picker)).toHaveLength(1);
   expect(tabsOf(picker).filter(tab => tab.tabIndex === 0)).toEqual(tabsOf(picker).filter(tab => tab.getAttribute("aria-selected") === "true"));
-  // Each tab controls the panel of its group, which it names, and no heading stands inside a panel.
+  // Each swatch controls the panel of its colour, which it names, and no heading stands inside a panel.
   for (const tab of tabsOf(picker)) {
     const panel = picker.querySelector<HTMLElement>(`#${tab.getAttribute("aria-controls")}`)!;
     expect(panel.getAttribute("role")).toBe("tabpanel");
@@ -58,92 +62,91 @@ test("the groups are tabs in one row, in their order, in the app's pill tabs and
 });
 
 test.each([
-  ["slime:color:sky", "colors"],
-  ["slime:streaks-charcoal", "characters"],
-  ["slime:oni-red", "fantasy"],
-  ["slime:phoenix-feather", "fantasy"],
-  ["slime:cherry-blossom", "nature"],
-  ["slime:cloud", "nature"],
-  ["slime:parcel", "everyday"],
-])("it opens on the group that holds the face now: %s is in %s, and the face is marked there", (avatar, group) => {
+  ["slime:color:sky", "blue"],
+  ["slime:streaks-charcoal", "gray"],
+  ["slime:oni-red", "red"],
+  ["slime:phoenix-feather", "red"],
+  ["slime:cherry-blossom", "pink"],
+  ["slime:cloud", "teal"],
+  ["slime:parcel", "yellow"],
+])("it opens on the colour that holds the face now: %s is in %s", (avatar, group) => {
   expect(slimeGroupOf(avatar)).toBe(group);
   const picker = open(avatar);
   expect(chosen(picker)).toEqual([group]);
   expect(openPanel(picker)).toEqual([group]);
+  // A character is marked where it stands; a plain colour is offered nowhere, so nothing is marked.
   const marked = [...picker.querySelectorAll<HTMLElement>('[aria-pressed="true"]')];
-  expect(marked).toHaveLength(1);
-  expect(marked[0]!.closest("[data-slime-group]")!.getAttribute("data-slime-group")).toBe(group);
+  expect(marked).toHaveLength(avatar.startsWith("slime:color:") ? 0 : 1);
+  for (const one of marked) expect(one.closest("[data-slime-group]")!.getAttribute("data-slime-group")).toBe(group);
 });
 
-test("a member without a face of its own opens on the group of its default colour; a face the picker does not list, on the first", () => {
-  expect(chosen(open(""))).toEqual(["colors"]);
+test("a member without a face of its own opens on the colour of its default face; a face the picker does not know, on the first", () => {
+  expect(chosen(open(""))).toEqual([slimeGroupOf(defaultSlimeAvatar(3))]);
   expect(slimeGroupOf("preset:old")).toBe(SLIME_GROUPS[0]);
 });
 
-test("pressing a tab swaps the grid and leaves the picker's size, place and tab row as they were", () => {
+test("pressing a swatch swaps the slimes and leaves the picker's size, place and swatch row as they were", () => {
   const picker = open("slime:color:sky");
   const before = { style: picker.getAttribute("style"), cls: picker.className, row: picker.querySelector(".mb-slime-tabs")!.outerHTML.replace(/aria-selected="\w+"|tabindex="-?\d"/g, ""), panels: picker.querySelectorAll("[data-slime-group]").length };
-  const animals = tabsOf(picker).find(tab => tab.dataset.slimeTab === "animals")!;
-  animals.click();
-  expect(chosen(picker)).toEqual(["animals"]);
-  expect(openPanel(picker)).toEqual(["animals"]);
-  // The others are out of the keys' and the pointer's way, not removed: the place is still as big as the largest.
+  const green = tabsOf(picker).find(tab => tab.dataset.slimeTab === "green")!;
+  green.click();
+  expect(chosen(picker)).toEqual(["green"]);
+  expect(openPanel(picker)).toEqual(["green"]);
+  // The others are out of the keys' and the pointer's way, not removed: the place is still as big as before.
   expect([...picker.querySelectorAll("[data-slime-group]")].filter(panel => panel.hasAttribute("inert")).length).toBe(SLIME_GROUPS.length - 1);
   expect(picker.getAttribute("style")).toBe(before.style);
   expect(picker.className).toBe(before.cls);
   expect(picker.querySelector(".mb-slime-tabs")!.outerHTML.replace(/aria-selected="\w+"|tabindex="-?\d"/g, "")).toBe(before.row);
   expect(picker.querySelectorAll("[data-slime-group]").length).toBe(before.panels);
-  // The menu is still the same one, open.
+  // The menu is still the same one, open, and the colour shows its eight slimes.
   expect(document.getElementById("app-popover")).toBe(picker);
-  // Its slimes are what the group holds, and the face that is now is not marked in this group.
+  expect(picker.querySelectorAll("[data-slime-group][data-active] [data-slime-character]")).toHaveLength(8);
   expect(picker.querySelector("[data-slime-group][data-active] [aria-pressed='true']")).toBeNull();
-  expect(picker.querySelector("[data-slime-group][data-active] [data-slime-character]")).not.toBeNull();
 });
 
-test("a pick still updates the face, and leaves the picker open on the group it was made in", () => {
+test("a pick still updates the face, and leaves the picker open on the colour it was made in", () => {
   const picker = open("slime:color:sky");
-  tabsOf(picker).find(tab => tab.dataset.slimeTab === "animals")!.click();
+  tabsOf(picker).find(tab => tab.dataset.slimeTab === "green")!.click();
   const slime = picker.querySelector<HTMLElement>("[data-slime-group][data-active] [data-slime-character]")!;
   slime.click();
   expect(update).toHaveBeenCalledExactlyOnceWith(3, { avatar: `slime:${slime.dataset.slimeCharacter}` });
   expect(document.getElementById("app-popover")).toBe(picker);
   expect(slime.getAttribute("aria-pressed")).toBe("true");
   expect(picker.querySelectorAll('[aria-pressed="true"]')).toHaveLength(1);
-  expect(chosen(picker)).toEqual(["animals"]);
+  expect(chosen(picker)).toEqual(["green"]);
 });
 
-test("Left and Right move between the tabs and open the one they reach; Escape closes", () => {
+test("Left and Right move between the swatches and open the one they reach; Escape closes", () => {
   const picker = open("slime:color:sky");
   const all = tabsOf(picker);
   const start = all.findIndex(tab => tab.getAttribute("aria-selected") === "true");
-  expect(document.activeElement).toBe(all[start]);
+  all[start]!.focus();
   key(all[start]!, "ArrowLeft");
   expect(chosen(picker)).toEqual([SLIME_GROUPS[start - 1]!]);
   expect(document.activeElement).toBe(all[start - 1]);
   expect(openPanel(picker)).toEqual([SLIME_GROUPS[start - 1]!]);
   key(all[start - 1]!, "ArrowRight");
-  key(all[start]!, "ArrowRight"); // past the last: round to the first
+  key(all[0]!, "Home");
   expect(chosen(picker)).toEqual([SLIME_GROUPS[0]!]);
-  key(all[0]!, "End");
+  key(all[0]!, "ArrowLeft"); // before the first: round to the last
   expect(chosen(picker)).toEqual([SLIME_GROUPS[SLIME_GROUPS.length - 1]!]);
   key(document.activeElement!, "Escape");
   expect(document.getElementById("app-popover")).toBeNull();
 });
 
-test("Down goes from the tab into the open group, Up and Down step over its slimes alone, and Up comes back to the tab", () => {
+test("Up goes from a swatch into the open colour, Up and Down step over its slimes and back to the swatch", () => {
   const picker = open("slime:cherry-blossom");
   const tab = tabsOf(picker).find(item => item.getAttribute("aria-selected") === "true")!;
   const grid = [...picker.querySelectorAll<HTMLElement>("[data-slime-group][data-active] button")];
-  // The seasons and the food stand with nature: eight elements and six of the seasons.
-  expect(grid.length).toBe(14);
-  key(tab, "ArrowDown");
+  expect(grid.length).toBe(8);
+  tab.focus();
+  key(tab, "ArrowUp");
   expect(document.activeElement).toBe(grid.find(button => button.getAttribute("aria-pressed") === "true"));
   key(document.activeElement!, "End");
   expect(document.activeElement).toBe(grid[grid.length - 1]);
-  key(document.activeElement!, "ArrowDown"); // round: the tab, then the slimes again
+  key(document.activeElement!, "ArrowDown"); // round: the swatch, then the slimes again
   expect(document.activeElement).toBe(tab);
   key(tab, "ArrowDown");
-  key(document.activeElement!, "Home");
   expect(document.activeElement).toBe(grid[0]);
   key(grid[0]!, "ArrowUp");
   expect(document.activeElement).toBe(tab);

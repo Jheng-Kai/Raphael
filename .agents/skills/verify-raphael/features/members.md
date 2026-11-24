@@ -258,14 +258,16 @@ member sets it up there, with a card for a token, and share answers with a templ
 member-avatar, slime-picker, slime-picker-tab, work-messaging-setup, work-messaging-pairing, messaging-paired-aligned. The sidebar plus is the member creation entry; verify the
 complete flow for creation changes.
 
-A member's face is a slime (R-UI-116): its picker in
-the details panel and on the settings page shows the slimes alone, with no 生成 tab and no picture drawn by an image
-model. It is one row of tabs, the groups in their order (角色, 奇幻, 動物, 自然, 生活, 純色; the slimes in 角色 are told apart by how they look) as the app's small pill tabs in a
-chip row (`slime-tabs.ts`), and under it only the open group's slimes with no heading. It opens on the group that holds
-the face now, with that face marked. The groups stand on one another in one cell, so the picker is one size and a press on
-a tab moves nothing; Left and Right move between tabs, Down goes into the group and Up back to the tab. Scenes:
-`slime-picker` (tabs in one row above the grid, one chosen, inside the window, no heading), `slime-picker-tab` (presses
-another tab and compares the picker's, the place's and every tab's box before and after), `member-avatar`. A picture
+A member's face is a slime (R-UI-116, R-SLIME-PICK-01): its picker in
+the details panel, on the settings page and in the maker shows the slimes alone, with no 生成 tab and no picture drawn by an image
+model. It is laid out as a colour picker (`slime-tabs.ts`): the open colour's slimes, four across and large, and under them
+eleven colour swatches in two centred rows of six and five, one chosen with a ring, each named by its colour only in its
+tooltip and accessible name. The 88 faces share a dome. Horns, hair, tools and markings identify the character. Five opaque masks cover the eyes in both static and animated poses. The labels describe those cues, and each saved avatar key keeps its colour and position. A member wearing a plain
+colour opens the picker on the nearest colour. The colours stand on one another in one cell, so the picker is one size and a press on a swatch moves nothing; Left
+and Right move between swatches, Up goes into the colour and Down to its first slime. Scenes: `slime-picker` (slimes above the
+swatches, one chosen, inside the window, no heading), `slime-picker-tab` (presses another swatch and compares the picker's, the
+place's and every swatch's box before and after), `slime-characters-large` (every slime at 72 px, a row per colour),
+`member-avatar`. A picture
 drawn earlier still shows where it is the face (`mb-av-pic`, from `avatar_url`). Under the pointer the
 face itself dims along its outline (a slime's base and hat included, never a circle that leaves corners) with a white
 pencil in its middle. Scenes: member-face-hover, slime-picker, slime-picker-tab.
@@ -295,7 +297,7 @@ npm run look -- sidebar-folders member-text --theme both --width 1120,720,1920x1
 npm run look -- member-delete-ask member-delete member-conversation-sections --theme both --width 1120,720,1920x1080
 npm run look -- member-maker member-maker-chosen member-maker-made member-maker-enter member-maker-greeting member-maker-taken member-maker-escape member-maker-x member-maker-cancel opener-toggle-member-maker shortcut-new-in-composer --theme both --width 1120,720,1920x1080
 npm run look -- slime-states slime-picker slime-sizes slime-gallery slime-motion-idle slime-motion-busy slime-motion-moments slime-motion-change slime-sharp slime-pointer slime-cost --theme both --width 1120,720,1920x1080
-npm run look -- member-face-hover slime-picker slime-picker-tab --theme both --width 1120,720,1920x1080
+npm run look -- member-face-hover slime-picker slime-picker-tab slime-characters-large --theme both --width 1120,720,1920x1080
 npm run look -- slime-places slime-places-settings busy-team-calm --theme both --width 1120,720,1920x1080
 ```
 
@@ -311,8 +313,8 @@ and about 560 px high at most 600, nothing scrolling inside. Top to bottom: the 
 (96 px), the name (centred placeholder 名字, the only field), the same tabbed picker as a member's face popover
 (`slime-tabs.ts`, one component with two consumers: the dialog stands it in a `.menu.mb-avpop.cr-picker`
 wrapper and takes off only the popover's chrome), and 取消 / 建立 at the right (建立 disabled until a name).
-It opens on the group of the slime chosen at the start (a plain slime by the number of members, so 純色).
-It asks only for a name: no template button, no store tab, no colour row (the page it replaced was a whole
+It opens on the colour of the character chosen at the start by the number of members.
+It asks only for a name, with no template button or store tab (the page it replaced was a whole
 content-area page with every slime in eight columns, and the store and 範本 rode in it; the store and the
 templates are reached from the sidebar's + › 商店, R-STORE-08). `member-maker-box` and `member-maker-tab`
 measure it before and after a tab press, `member-maker-enter`, `-escape`, `-x`, `-cancel` and
