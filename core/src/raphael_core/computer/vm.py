@@ -201,6 +201,9 @@ class Target:
     screens: int = 1
     container: str = ""
     projects: tuple = field(default=(), compare=False)
+    # The guest paths of the project mounts that are writable. By design none is (R-COMP-PROJECT-01): this only records what a
+    # container of an earlier release still has, until it is made again at an idle start.
+    writable: tuple = field(default=(), compare=False)
 
     @property
     def unit(self):
@@ -260,9 +263,10 @@ def limits_match(host, target):
             and SHARED_CPUS[0] <= nano // 1_000_000_000 <= SHARED_CPUS[1])
 
 
-def mount_arg(path, destination=GUEST, *, remote=False):
+def mount_arg(path, destination=GUEST, *, remote=False, readonly=False):
     stream = io.StringIO(newline="")
-    csv.writer(stream, lineterminator="").writerow(["type=volume" if remote else "type=bind", f"source={path}", f"target={destination}"])
+    csv.writer(stream, lineterminator="").writerow(["type=volume" if remote else "type=bind", f"source={path}",
+                                                    f"target={destination}", *(["readonly"] if readonly else [])])
     return stream.getvalue()
 
 
@@ -295,7 +299,10 @@ def run_args(target, owner, password, *, tz=None, size=None):
         "--cap-drop", "ALL", "--cap-add", "SETUID", "--cap-add", "SETGID", "--shm-size", "512m",
         "--mount", mount_arg(target.workspace, remote=bool(target.remote)),
         *(["--mount", mount_arg(target.shared, SHARED, remote=bool(target.remote))] if target.shared else []),
-        *(arg for destination, source in target.projects for arg in ("--mount", mount_arg(source, destination))),
+        # A project is read-only in the computer, whoever runs a command there (R-COMP-PROJECT-01): the one container is every
+        # member's, so a mount that one member may write is one every member's command may write.
+        *(arg for destination, source in target.projects
+          for arg in ("--mount", mount_arg(source, destination, readonly=destination not in target.writable))),
         "-e", f"VNC_PW={password}",
         "-e", f"TZ={zone}",
         # Tools handle Chinese and Japanese file names only under a UTF-8 locale; the image's default is POSIX.
@@ -389,11 +396,17 @@ def mounts_match(mounts, configured, target):
     expected = {GUEST: target.workspace, **({SHARED: target.shared} if target.shared else {}), **dict(target.projects)}
     if len(mounts) != len(expected) or len(configured) != len(expected):
         return False
+    projects = dict(target.projects)
     for destination, source in expected.items():
         actual = next((m for m in mounts if m.get("Destination") == destination), {})
         request = next((m for m in configured if m.get("Target", m.get("Destination")) == destination), {})
         kind = "volume" if target.remote else "bind"
-        if actual.get("Type") != kind or actual.get("RW") is not True or request.get("Type") != kind or request.get("ReadOnly"):
+        if actual.get("Type") != kind or request.get("Type") != kind:
+            return False
+        if destination in projects and destination not in target.writable:
+            if actual.get("RW") is not False or request.get("ReadOnly", True) is not True:
+                return False
+        elif actual.get("RW") is not True or request.get("ReadOnly"):
             return False
         if target.remote:
             if actual.get("Name") != str(source) or request.get("Source", actual.get("Name")) != str(source):
@@ -412,7 +425,7 @@ def previous_mounts(raw, target):
     configured = host.get("Mounts", raw.get("Mounts", []))
     if not isinstance(configured, list):
         return target
-    projects = []
+    projects, writable = [], []
     for mount in configured:
         if not isinstance(mount, dict):
             return target
@@ -427,7 +440,9 @@ def previous_mounts(raw, target):
         if target.remote or not source.is_absolute() or not name or "/" in name or name in (".", ".."):
             return target
         projects.append((guest, source))
-    return replace(target, projects=tuple(projects))
+        if mount.get("ReadOnly") is not True and mount.get("RW") is not False:
+            writable.append(guest)
+    return replace(target, projects=tuple(projects), writable=tuple(writable))
 
 
 def known_previous(raw, target, owner):
@@ -1234,7 +1249,7 @@ class LocalVm:
         self.mounted_projects[target.physical] = mounted.projects
         dropped = self.dropped_project_mounts.get(target.physical)
         mounts_stale = dict(mounted.projects) != dict(target.projects) and (
-            mounted.projects or dropped != dict(target.projects))
+            mounted.projects or dropped != dict(target.projects)) or set(mounted.writable) != set(target.writable)
         running = raw.get("State", {}).get("Running") is True
         ready = False
         screens_pending = False
@@ -1480,7 +1495,7 @@ class LocalVm:
 
     def _recent_start(self, target):
         kept = self.running.get(target.physical)
-        if kept and kept[1] == (self._start_signature(), target.projects) and 0 <= self.clock() - kept[0] < PREFLIGHT_S:
+        if kept and kept[1] == (self._start_signature(), target.projects, target.writable) and 0 <= self.clock() - kept[0] < PREFLIGHT_S:
             return self.seat_status(target, kept[2])
         return None
 
@@ -1500,7 +1515,7 @@ class LocalVm:
             self.invalidate(target)
             state = await self._prepare_start(target)
             if state.get("ready"):
-                self.running[target.physical] = self.clock(), (self._start_signature(), target.projects), dict(state)
+                self.running[target.physical] = self.clock(), (self._start_signature(), target.projects, target.writable), dict(state)
                 # Ready means running on the current image (`compatible`): older layers are no longer needed by it.
                 self.clean_soon(target)
             return state
@@ -1633,7 +1648,8 @@ class LocalVm:
             return None
         previous = previous_mounts(raw, target)
         image_id = await self.image(target)
-        if previous.projects != target.projects and image_id and compatible(raw, previous, self.owner, image_id):
+        if ((previous.projects != target.projects or set(previous.writable) != set(target.writable))
+                and image_id and compatible(raw, previous, self.owner, image_id)):
             return previous
         return None
 
@@ -1650,7 +1666,7 @@ class LocalVm:
             host["PortBindings"] = {"6901/tcp": [{"HostIp": "127.0.0.1", "HostPort": ""}]}
         # `previous` carries the remote binding repair, so an old remote computer of a previous layer still upgrades.
         prior = previous_mounts(previous, target)
-        mounts_changed = dict(prior.projects) != dict(target.projects)
+        mounts_changed = dict(prior.projects) != dict(target.projects) or set(prior.writable) != set(target.writable)
         mount_upgrade = mounts_changed and compatible(previous, prior, self.owner, image_id)
         image_upgrade = known_previous(previous, prior, self.owner) and (raw.get("Image") != image_id or target.container == "shared")
         if (not raw or not image_id or not (mount_upgrade or image_upgrade or legacy_remote and raw.get("Image") == image_id
@@ -2101,11 +2117,48 @@ print(base64.b64encode(data).decode())
         except ValueError:
             raise VmError("file_unavailable") from None
 
+    @staticmethod
+    def project_place(target, path):
+        """(the project's folder on the PC, the path below it) of a path of the computer under one of its project mounts."""
+        if isinstance(path, str):
+            for guest, source in target.projects:
+                if path.startswith(guest + "/"):
+                    return Path(source), path[len(guest) + 1:]
+        return None
+
+    @staticmethod
+    def project_write(request, folder, relative):
+        """A file tool's write under a project, made on the PC and not in the computer, where the project is read-only
+        (R-COMP-PROJECT-01): the same helper over the same bytes, only where the caller allowed it (`allowed`, the guest
+        folders it may write in when it was not asked about; none when the owner said yes to this very change), and with
+        no link followed below the project's folder."""
+        from . import files_guest
+        allowed = request.get("allowed")
+        if allowed is not None and not any(request["path"] == place or request["path"].startswith(place.rstrip("/") + "/")
+                                           for place in allowed):
+            return {"error": "outside"}
+        root = str(folder).replace("\\", "/").rstrip("/")
+        parts = [part for part in relative.split("/") if part]
+        if not parts or any(part in (".", "..") for part in parts):
+            return {"error": "EINVAL"}
+        if os.name == "nt":
+            from .. import work_area
+            try:
+                work_area.absolute("/".join([root, *parts]))
+            except work_area.PathRefused:
+                return {"error": "EINVAL"}
+            if any(set(part) & set(':*?"<>|') for part in parts):
+                return {"error": "EINVAL"}
+        return files_guest.handle({**{key: value for key, value in request.items() if key != "allowed"},
+                                   "path": "/".join([root, *parts]), "roots": [root]})
+
     async def file_request(self, target, request, *, answer_bytes=0):
         """One request to the guest's file helper (`files_guest.py`) for a member's file tools: `read` (a path's kind,
         size, sha256 and first `limit` bytes) or `write` (a whole file, only over what the caller last saw). The request
         and the file's bytes go over stdin; `answer_bytes` is how many file bytes the answer may carry."""
         from . import files_guest
+        if request.get("action") == "write" and (project := self.project_place(target, request.get("path"))) is not None:
+            return await asyncio.to_thread(self.project_write, request, *project)
         source = Path(files_guest.__file__).read_text(encoding="utf-8")
         payload = json.dumps({**request, "roots": [GUEST, SHARED, *(guest for guest, _ in target.projects)]}).encode("utf-8")
         args = exec_args(target, ["timeout", "--signal=TERM", "--kill-after=1", "55", "/opt/venv/bin/python", "-c", source],

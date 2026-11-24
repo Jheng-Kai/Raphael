@@ -9,6 +9,7 @@ write to the work folder even through a link made inside the computer. The fake 
 
 import base64
 import json
+import os
 
 import pytest
 
@@ -42,6 +43,27 @@ async def computer(tmp_path, conn):
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path / "attachments"), bridge=Bridge)
     await hub.prepare()
     return hub, runtime, settings, project, guest
+
+
+@pytest.fixture
+async def two_projects(tmp_path, conn):
+    """A member's own computer with two projects bound into it (read-only there, like every project), none chosen yet."""
+    settings = SettingsStore(conn)
+    settings.set("computer_vm_mode", "per-bot")
+    first, second = tmp_path / "first", tmp_path / "second"
+    for folder in (first, second):
+        folder.mkdir()
+    settings.set("project_folders", [str(first), str(second)])
+    runtime = GuestRuntime(tmp_path / "guest")
+    vm = LocalVm(tmp_path / "data", settings=settings, runner=runtime, clock=lambda: 0)
+    target = await vm.seat()
+    guests = {source: guest for guest, source in target.projects}
+    for source, guest in guests.items():
+        runtime.folders[guest] = source
+    runtime.raw = container(vm, target, runtime)
+    hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path / "attachments"), bridge=Bridge)
+    await hub.prepare()
+    return hub, runtime, settings, (first, second), (guests[first], guests[second])
 
 
 def key_of(hub, name):
@@ -83,10 +105,11 @@ async def test_a_write_onto_the_pc_outside_the_work_folder_is_refused_without_a_
     assert made.ok and (runtime.folders[GUEST] / "a.txt").read_text() == "x"
     inside = await call(hub, "write_file", "auto", path="b.txt", content="y")
     assert inside.ok and (project / "b.txt").read_text() == "y"
-    # What the owner said yes to is made where it was asked, and the helper was not told to hold it.
+    # What the owner said yes to is made where it was asked, and the helper was not told to hold it. The work folder is a
+    # project, read-only in the computer, so its write was made on the PC and never reached the computer's helper.
     requests = [json.loads(kwargs["input"]) for args, kwargs in runtime.calls if kwargs.get("input")]
     held = [request for request in requests if request["action"] == "write"]
-    assert "allowed" not in held[0] and held[1]["allowed"] == [guest]
+    assert len(held) == 1 and "allowed" not in held[0] and held[0]["path"] == f"{GUEST}/a.txt"
 
 
 async def test_the_card_of_a_computers_write_names_where_it_lands(computer):
@@ -193,3 +216,92 @@ async def test_the_host_computers_writes_are_asked_about_through_the_one_hub_and
         assert not hub.firm_for_call(key, {"path": str(project / "a.txt"), "content": "x"})
         assert hub.landing(key, {"path": "sub/../a.txt", "content": "x"}, 1) == {"path": str(project / "a.txt")}
     assert hub.landing(key, {"path": "../x.txt"}, 1) == {"path": str(project.parent / "x.txt")}
+
+
+# --- a project is read-only in the computer; its chosen member writes it through the file tools (R-COMP-PROJECT-01) ----------
+
+
+def _link_folder(link, target):
+    """A folder link as a person makes one without special rights: a junction on Windows, a symbolic link elsewhere."""
+    if os.name == "nt":
+        import _winapi
+        _winapi.CreateJunction(str(target), str(link))
+    else:
+        os.symlink(target, link, target_is_directory=True)
+
+
+def guest_writes(runtime):
+    return [json.loads(kwargs["input"]) for args, kwargs in runtime.calls if kwargs.get("input")
+            if json.loads(kwargs["input"])["action"] == "write"]
+
+
+async def test_a_chosen_project_is_written_on_the_pc_and_the_computers_own_helper_never_writes_it(two_projects):
+    hub, runtime, settings, (first, second), (first_guest, second_guest) = two_projects
+    settings.set("member_work_folder", {"0": str(first)})
+    made = await call(hub, "write_file", "auto", path=f"{first_guest}/sub/a.txt", content="x")
+    assert made.ok and (first / "sub" / "a.txt").read_text() == "x"
+    read = await call(hub, "read_file", "auto", path=f"{first_guest}/sub/a.txt")
+    assert read.ok
+    edited = await call(hub, "edit_file", "auto", path=f"{first_guest}/sub/a.txt", old_string="x", new_string="y")
+    assert edited.ok and (first / "sub" / "a.txt").read_text() == "y"
+    assert guest_writes(runtime) == []  # the mount is read-only: nothing was sent for the computer to write
+
+
+async def test_a_project_the_member_did_not_choose_is_written_only_on_the_owners_yes_in_every_case(two_projects):
+    hub, runtime, settings, (first, second), (first_guest, second_guest) = two_projects
+    settings.set("member_work_folder", {"0": str(first)})
+    assert tiers(hub, f"{first_guest}/a.txt") == [Tier.T0]
+    assert tiers(hub, f"{second_guest}/a.txt", f"{second_guest}/sub/../a.txt") == [Tier.T3] * 2
+    assert hub.firm_for_call(key_of(hub, "write_file"), {"path": f"{second_guest}/a.txt", "content": "x"})
+    refused = await call(hub, "write_file", "auto", path=f"{second_guest}/a.txt", content="x")
+    assert refused.kind == "approval_required" and not (second / "a.txt").exists()
+    edit_refused = await call(hub, "edit_file", "auto", path=f"{second_guest}/a.txt", old_string="", new_string="x")
+    assert edit_refused.kind == "approval_required" and not (second / "a.txt").exists()
+    made = await call(hub, "write_file", "user", path=f"{second_guest}/a.txt", content="x")
+    assert made.ok and (second / "a.txt").read_text() == "x"
+    assert guest_writes(runtime) == []
+
+
+async def test_with_no_project_chosen_every_project_is_asked_about(two_projects):
+    hub, runtime, settings, (first, second), (first_guest, second_guest) = two_projects
+    assert tiers(hub, f"{first_guest}/a.txt", f"{second_guest}/a.txt") == [Tier.T3] * 2
+    for guest, folder in ((first_guest, first), (second_guest, second)):
+        refused = await call(hub, "write_file", "auto", path=f"{guest}/a.txt", content="x")
+        assert refused.kind == "approval_required" and not (folder / "a.txt").exists()
+
+
+async def test_a_project_taken_off_the_list_leaves_the_member_choosing_nothing(two_projects):
+    # Issue 312: a work folder that is not a remembered project is no work folder, so the listed one is not either.
+    hub, runtime, settings, (first, second), (first_guest, second_guest) = two_projects
+    settings.set("member_work_folder", {"0": str(first)})
+    assert tiers(hub, f"{first_guest}/a.txt", f"{second_guest}/a.txt") == [Tier.T0, Tier.T3]
+    settings.set("project_folders", [str(second)])
+    assert settings.get("member_work_folder") == {}
+    assert tiers(hub, f"{second_guest}/a.txt") == [Tier.T3]
+
+
+async def test_a_link_inside_a_project_is_never_followed_by_a_write_on_the_pc(two_projects, tmp_path):
+    hub, runtime, settings, (first, second), (first_guest, second_guest) = two_projects
+    settings.set("member_work_folder", {"0": str(first)})
+    _link_folder(first / "door", second)
+    refused = await call(hub, "write_file", "auto", path=f"{first_guest}/door/a.txt", content="x")
+    assert not refused.ok and not (second / "a.txt").exists()
+    assert not (await call(hub, "write_file", "user", path=f"{first_guest}/door/a.txt", content="x")).ok
+    assert not (second / "a.txt").exists()
+
+
+async def test_the_owners_yes_to_a_project_write_is_the_door_in_allow_all_only(two_projects, conn):
+    hub, runtime, settings, (first, second), (first_guest, second_guest) = two_projects
+    settings.set("member_work_folder", {"0": str(first)})
+    key = key_of(hub, "write_file")
+    other = {"path": f"{second_guest}/a.txt", "content": "x"}
+    for mode in ("direct", "ask", "plan"):
+        settings.set("action_mode", mode)
+        gate = ToolGate(hub, conn=conn)
+        assert gate.needs_confirmation(key, other) and gate.firm_confirmation(key, other)
+    settings.set("action_mode", "bypass")
+    gate = ToolGate(hub, conn=conn)
+    assert not gate.firm_confirmation(key, other)
+    with vm_scope(("turn", 0, 1), turn_id=7):
+        made = await gate.call_plugin(key, other)
+    assert made.ok and (second / "a.txt").read_text() == "x"

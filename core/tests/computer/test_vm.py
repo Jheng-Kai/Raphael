@@ -86,7 +86,7 @@ def container(vm, target, runtime):
     if target.shared:
         raw["Mounts"].append({"Type": "bind", "Source": str(target.shared), "Destination": "/home/cua/team", "RW": True})
     for guest, source in target.projects:
-        raw["Mounts"].append({"Type": "bind", "Source": str(source), "Destination": guest, "RW": True})
+        raw["Mounts"].append({"Type": "bind", "Source": str(source), "Destination": guest, "RW": guest in target.writable})
     if target.remote:
         for mount, source in zip(raw["Mounts"], [target.workspace, target.shared]):
             mount.update(Type="volume", Name=str(source), Source="/engine/volumes/" + str(source))
@@ -627,7 +627,7 @@ def test_reuse_checks_original_host_mount_without_engine_path_translation(deskto
     assert not compatible(runtime.raw, target, vm.owner, runtime.image_id)
 
 
-async def test_projects_mount_read_write_and_rebuild_only_at_idle_start(conn, tmp_path, monkeypatch):
+async def test_projects_mount_read_only_and_rebuild_only_at_idle_start(conn, tmp_path, monkeypatch):
     settings = SettingsStore(conn)
     settings.set("computer_vm_mode", "per-bot")
     runtime = Runtime()
@@ -659,12 +659,13 @@ async def test_projects_mount_read_write_and_rebuild_only_at_idle_start(conn, tm
     assert vm._recent_start(target) is None
     expected = container(vm, target, runtime)["Mounts"]
     assert mounts_match(expected, expected, target)
-    expected[-1]["RW"] = False
+    assert [mount["RW"] for mount in expected[-2:]] == [False, False]
+    expected[-1]["RW"] = True
     assert not mounts_match(expected, expected, target)
     args = run_args(target, vm.owner, "synthetic")
     mounts = [next(csv.reader([args[i + 1]])) for i, arg in enumerate(args) if arg == "--mount"]
-    assert mounts[-2:] == [["type=bind", f"source={one}", "target=/home/cua/projects/Repo"],
-                          ["type=bind", f"source={two}", f"target={second_guest}"]]
+    assert mounts[-2:] == [["type=bind", f"source={one}", "target=/home/cua/projects/Repo", "readonly"],
+                          ["type=bind", f"source={two}", f"target={second_guest}", "readonly"]]
     runtime.calls.clear()
     vm.active[original.key] = 1
     with pytest.raises(VmError, match="busy"):
@@ -693,6 +694,44 @@ async def test_projects_mount_read_write_and_rebuild_only_at_idle_start(conn, tm
     settings.set("project_folders", [str(two)])
     reopened = LocalVm(vm.root, settings=SettingsStore(conn), runner=runtime)
     assert reopened.target().projects == ((second_guest, two),)
+
+
+async def test_a_container_that_still_mounts_a_project_writable_is_made_again_only_when_idle(conn, tmp_path, monkeypatch):
+    # An earlier release bound every project read-write (issues 312 and 315). It is no incompatible computer, and it is not
+    # made again under a member's running command: it keeps working until the next idle start, which makes it read-only.
+    settings = SettingsStore(conn)
+    settings.set("computer_vm_mode", "per-bot")
+    runtime = Runtime()
+    vm = LocalVm(tmp_path / "data", settings=settings, runner=runtime, clock=lambda: 0)
+    project = tmp_path / "Repo"
+    project.mkdir()
+    settings.set("project_folders", [str(project)])
+    target = vm.target()
+    guest = target.projects[0][0]
+    runtime.raw = container(vm, replace(target, writable=(guest,)), runtime)
+    assert runtime.raw["Mounts"][-1]["RW"] is True
+    assert not compatible(runtime.raw, target, vm.owner, runtime.image_id)
+    state = await vm.status(target, probe=False)
+    assert state["state"] == "running" and state["mounts_stale"]
+
+    vm.busy = lambda key: True
+    with pytest.raises(VmError, match="busy"):
+        await vm.start(target)
+    kept = await vm.running_project_mounts(target)
+    assert kept is not None and kept.writable == (guest,) and kept.projects == target.projects
+    assert not (await vm.status(kept, probe=False)).get("mounts_stale")
+    assert not any(args[0] in ("stop", "rm") for args, _ in runtime.calls)
+
+    async def create(created, zone):
+        runtime.raw = container(vm, created, runtime)
+        return Result(0)
+    monkeypatch.setattr(vm, "create", create)
+    vm.busy = lambda key: False
+    assert (await vm.start(target))["ready"]
+    assert [args for args, _ in runtime.calls if args[0] in ("stop", "rm")] == [["stop", "--time", "10", target.name],
+                                                                                 ["rm", target.name]]
+    assert runtime.raw["Mounts"][-1]["RW"] is False
+    assert not (await vm.status(target, probe=False)).get("mounts_stale")
 
 
 @pytest.mark.parametrize("action", ["stop", "sweep", "capacity"])
