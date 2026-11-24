@@ -745,12 +745,12 @@ class VmTools:
         if self.host_computer and key in self.host_computer.routes:
             return self.host_computer.tier_for_call(key, arguments) if self.tier_of(key) is not None else None
         if self.is_computer_tool(key) and self.firm_for_call(key, arguments):
-            return Tier.T3  # a write onto the owner's PC outside the work folder: asked in every mode, never waived
+            return Tier.T3  # a write onto the owner's PC outside the work folder: asked in every mode but 全部允許, never waived
         # The hub knows nothing about computer tools, so it must not be asked about them.
         return self.tier_of(key) if key in (COMPUTER_STATUS_KEY, SUGGEST_COMPUTER_KEY) or self.is_computer_tool(key) else self.delegate.tier_for_call(key, arguments)
 
     def firm_for_call(self, key, arguments):
-        """Whether this call is asked about in every permission mode (`ToolGate.firm_confirmation`): a write of the host
+        """Whether this call is asked about in every permission mode but 全部允許 (`ToolGate.firm_confirmation`): a write of the host
         computer's file tools, or of the member's own computer's, onto a folder of the owner's PC outside the member's work
         folder (R-FILE-06)."""
         if self.host_computer and key in self.host_computer.routes:
@@ -1289,7 +1289,9 @@ class VmTools:
                         arguments = {**arguments, "path": self.member_file_path(target, arguments.get("path", "."), member)}
                     # A write that was not asked about is held to the work folder in the computer too, where a link made
                     # inside it could lead onto the PC; one the owner said yes to is made where it was asked.
-                    limit = (self.guest_area(target, member)[1] if tool.name in GUEST_WRITES and not outside_write else None)
+                    # In 全部允許 the owner said yes to every place already (the door handed "user").
+                    limit = (self.guest_area(target, member)[1]
+                             if tool.name in GUEST_WRITES and not outside_write and not self.vm.full_permission() else None)
                     result = await file_tools.call(self.vm, target, tool.name, arguments, self.file_reads,
                                                    self._file_run(target, member, owner, turn), checkpoint,
                                                    history if tool.name == "file_history" else None, allowed=limit)

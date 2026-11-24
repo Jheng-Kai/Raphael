@@ -2,8 +2,9 @@
 
 A folder bound into the computer (the member's folder, the team's, a project) is a folder of the owner's PC; the rest of
 the computer is the computer's own. A write onto a bound folder that is not the member's work folder is the owner's yes in
-every mode, and the computer's own helper holds an unasked write to the work folder even through a link made inside the
-computer. The fake docker answers the helper by running it (`files_guest.handle`) on folders of the test.
+every mode but 全部允許 (which is that yes, handed to the tool by the door), and the computer's own helper holds an unasked
+write to the work folder even through a link made inside the computer. The fake docker answers the helper by running it
+(`files_guest.handle`) on folders of the test.
 """
 
 import base64
@@ -12,7 +13,8 @@ import json
 import pytest
 
 from raphael_core.brain.settings import SettingsStore
-from raphael_core.agent.policy import Tier
+from raphael_core.agent.gate import ToolGate
+from raphael_core.agent.policy import Action, Tier
 from raphael_core.computer import files_guest
 from raphael_core.computer.host_computer import HostComputerTools
 from raphael_core.computer.vm import GUEST, SHARED, LocalVm
@@ -93,6 +95,60 @@ async def test_the_card_of_a_computers_write_names_where_it_lands(computer):
     assert hub.landing(key_of(hub, "write_file"), {"path": f"{guest}/../../workspace/a.txt"}, 0) == {"path": f"{GUEST}/a.txt"}
     assert hub.landing(key_of(hub, "write_file"), {"path": "a.txt"}, 0) == {"path": f"{guest}/a.txt"}
     assert hub.landing(key_of(hub, "read_file"), {"path": "a.txt"}, 0) is None
+
+
+@pytest.mark.parametrize("mode", ["direct", "ask", "plan"])
+async def test_a_write_onto_the_pc_outside_the_work_folder_is_asked_by_the_door_in_every_mode_but_allow_all(computer, conn, mode):
+    hub, runtime, settings, project, guest = computer
+    settings.set("member_work_folder", {"0": str(project)})
+    settings.set("action_mode", mode)
+    gate = ToolGate(hub, conn=conn)
+    key = key_of(hub, "write_file")
+    outside = {"path": f"{GUEST}/a.txt", "content": "x"}
+    assert gate.needs_confirmation(key, outside) and gate.firm_confirmation(key, outside)
+    with vm_scope(("turn", 0, 1), turn_id=7):
+        refused = await gate.call_plugin(key, outside)
+    assert not refused.ok and not (runtime.folders[GUEST] / "a.txt").exists()
+
+
+async def test_allow_all_writes_onto_the_pc_outside_the_work_folder_with_no_card(computer, conn):
+    hub, runtime, settings, project, guest = computer
+    settings.set("member_work_folder", {"0": str(project)})
+    settings.set("action_mode", "bypass")
+    gate = ToolGate(hub, conn=conn)
+    key = key_of(hub, "write_file")
+    outside, inside = {"path": f"{GUEST}/a.txt", "content": "x"}, {"path": "b.txt", "content": "y"}
+    assert not gate.needs_confirmation(key, outside) and not gate.firm_confirmation(key, outside)
+    with vm_scope(("turn", 0, 1), turn_id=7):
+        made = await gate.call_plugin(key, outside)
+        near = await gate.call_plugin(key, inside)
+    assert made.ok and (runtime.folders[GUEST] / "a.txt").read_text() == "x"
+    assert near.ok and (project / "b.txt").read_text() == "y"
+    # The owner said yes to every place, so the helper is told to hold nothing, not even a link made inside the computer.
+    requests = [json.loads(kwargs["input"]) for args, kwargs in runtime.calls if kwargs.get("input")]
+    held = [request for request in requests if request["action"] == "write"]
+    assert held and all("allowed" not in request for request in held)
+
+
+async def test_allow_all_asks_nothing_of_the_host_computers_outside_writes(tmp_path, conn):
+    settings = SettingsStore(conn)
+    project = tmp_path / "project"
+    project.mkdir()
+    settings.set("project_folders", [str(project)])
+    settings.set("member_work_folder", {"1": str(project)})
+    vm = LocalVm(tmp_path / "data", settings=settings)
+    hub = VmTools(EmptyHub(), vm, attachments=None, conn=conn)
+    hub.host_computer = HostComputerTools(vm, conn, BROWSER_OPEN)
+    key = next(tool.key for tool in hub.host_computer.offered(1) if tool.name == "write_file")
+    outside = {"path": str(tmp_path / "other.txt"), "content": "x"}
+    gate = ToolGate(hub, conn=conn)
+    with vm_scope(("turn", 1, 2), turn_id=1):
+        for mode in ("direct", "ask", "plan"):
+            settings.set("action_mode", mode)
+            assert gate.needs_confirmation(key, outside) and gate.firm_confirmation(key, outside), mode
+        settings.set("action_mode", "bypass")
+        assert not gate.needs_confirmation(key, outside) and not gate.firm_confirmation(key, outside)
+        assert gate._door(Action(key, outside), None) == "user"
 
 
 def test_the_helper_holds_an_unasked_write_to_the_work_folder_even_through_a_link_made_in_the_computer(tmp_path):

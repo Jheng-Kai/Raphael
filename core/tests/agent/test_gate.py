@@ -225,6 +225,26 @@ def test_allow_all_does_not_open_the_owners_pc_to_the_worker(conn):
             gate.check(Action(name, {}), None, worker=True)
 
 
+def test_allow_all_asks_only_for_what_is_no_permission_to_give(conn):
+    # 全部允許 is the owner's yes to deletions and to writes outside the work folder; reading Raphael's own data and the
+    # cards only the owner can fill stay asked, and every other mode asks for the deletions as before.
+    from raphael_core.brain.settings import SettingsStore
+    settings = SettingsStore(conn)
+    deletions = (("member_delete", {"id": 5}), ("routine_delete", {"id": 1}), ("remove_key", {"key": "K"}), ("management_batch", {}))
+    floors = (("mcp:computer/fill_card", {}), ("mcp:s/read_file", {"path": "C:/data/raphael.db"}))
+    gate = ToolGate(FakeHub(read_file="T0"), conn=conn)
+    for mode in ("direct", "ask", "plan"):
+        settings.set("action_mode", mode)
+        assert all(gate.firm_confirmation(name, args) for name, args in (*deletions, *floors)), mode
+    settings.set("action_mode", "bypass")
+    assert all(gate.firm_confirmation(name, args) for name, args in floors)
+    assert not any(gate.firm_confirmation(name, args) for name, args in deletions)
+    assert all(gate.destructive_change(name, args) for name, args in deletions)
+    assert not any(gate.needs_confirmation(name, args) for name, args in deletions)
+    with pytest.raises(NotApproved):
+        gate.check(Action("mcp:s/read_file", {"path": "C:/data/raphael.db"}), None)
+
+
 def test_opening_is_refused_to_the_worker_whatever_the_tier():
     gate = ToolGate()
     assert gate.tier("open") is Tier.T1

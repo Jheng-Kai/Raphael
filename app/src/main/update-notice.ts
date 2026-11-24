@@ -11,9 +11,13 @@ export function updateNoticeHTML(view: api.UpdateView | null, busy = false): str
   const waiting = view?.state === "waiting";
   const label = waiting ? t("update.waiting") : busy ? t("update.downloading")
     : view?.state === "error" ? updateErrorText(view.error) : t("update.found", { p0: version });
-  const action = waiting ? t("update.cancel") : t("update.now");
+  // A press restarts the app into the new version, so the action says so: 重新啟動以更新, never a bare 更新. That action is
+  // long in some languages (Zum Aktualisieren neu starten), so a found release shows only its number beside it and names
+  // itself whole (新版本 2.4.0) to the tooltip and the screen reader.
+  const action = waiting ? t("update.cancel") : t("update.restart");
+  const shown = waiting || busy || view?.state === "error" ? label : version;
   return `<button type="button" class="nav sidebar-update-btn" data-update-now aria-label="${esc(label + " " + action)}" title="${esc(label)}"${busy ? " disabled" : ""}>${ico(waiting ? "x" : "download")}` +
-    `<span class="nav-t"${waiting ? " data-update-waiting" : ""}>${esc(label)}</span><span class="sidebar-update-act">${esc(action)}</span></button>`;
+    `<span class="nav-t"${waiting ? " data-update-waiting" : ""}>${esc(shown)}</span><span class="sidebar-update-act">${esc(action)}</span></button>`;
 }
 
 export function mountUpdateNotice(slot: HTMLElement): () => void {

@@ -124,21 +124,35 @@ async def test_one_change_keeps_its_own_card_of_one_line(setup, client):
     assert not team.members.member_exists(only.id)
 
 
-@pytest.mark.parametrize("decision", ["deny", "approve", "replaced_before_approval"])
-async def test_a_non_primary_members_key_removal_requires_owner_yes_for_that_revision_even_in_bypass(setup, client, decision):
+def key_vault(rig, team, mode):
+    """A non-primary member with a private program key kept in a vault the service reads, in the permission `mode`."""
     from raphael_core.brain.settings import SettingsStore
     from raphael_core.computer.vault_entries import VaultEntries
     from raphael_core.connectors.secret_cards import SecretCards
     from raphael_core.integrations.vault import MemoryVault
 
-    rig, team = setup
     speaker = member(team, name="Program operator")
-    SettingsStore(rig.conn).set("action_mode", "bypass")
+    SettingsStore(rig.conn).set("action_mode", mode)
     vault = VaultEntries(MemoryVault(), conn=rig.conn)
     rig.service._secret_cards = SecretCards(rig.conn, None)
     rig.service._secret_cards.logins = vault
-    name = "PROGRAM_KEY"
-    vault.put_key(speaker.id, name, "program", "synthetic-fixture")
+    vault.put_key(speaker.id, "PROGRAM_KEY", "program", "synthetic-fixture")
+    return speaker, vault, "PROGRAM_KEY"
+
+
+async def test_allow_all_removes_a_members_private_key_with_no_card(setup, client):
+    rig, team = setup
+    speaker, vault, name = key_vault(rig, team, "bypass")
+    credential = vault.key_entry(speaker.id, name)["credential"]
+    client.chats = [chat("", use("remove_key", {"key": name})), live_said("Done.")]
+    done = await typed(rig, "Delete my expired program key.", speaker.id)
+    assert done["status"] == "done" and vault.key_entry(speaker.id, name) is None and not vault.vault.has(credential)
+
+
+@pytest.mark.parametrize("decision", ["deny", "approve", "replaced_before_approval"])
+async def test_a_non_primary_members_key_removal_requires_owner_yes_for_that_revision(setup, client, decision):
+    rig, team = setup
+    speaker, vault, name = key_vault(rig, team, "direct")
     credential = vault.key_entry(speaker.id, name)["credential"]
     client.chats = [chat("", use("remove_key", {"key": name})), live_said("Waiting."), live_said("Done.")]
     asked = await typed(rig, "Delete my expired program key.", speaker.id)

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, expect, test, vi } from "vitest";
-import { setLocale } from "./i18n";
+import { setLocale, t } from "./i18n";
 
 const api = vi.hoisted(() => ({ updateControl: vi.fn() }));
 vi.mock("./api", () => api);
@@ -9,14 +9,20 @@ const { mountUpdateNotice, updateNoticeHTML } = await import("./update-notice");
 const flush = async (): Promise<void> => { for (let i = 0; i < 5; i++) await Promise.resolve(); };
 afterEach(() => { setLocale("zh-TW"); document.body.innerHTML = ""; api.updateControl.mockReset(); });
 
-test("a new version is one row at the bottom left with its number and 更新; nothing when there is none", () => {
+test("a new version is one row at the bottom left with its number and 重新啟動以更新 in every language, and nothing when there is none", () => {
   setLocale("zh-TW");
   expect(updateNoticeHTML(null)).toBe("");
   expect(updateNoticeHTML({ state: "idle", version: "", notes: "", error: "", installed: "" })).toBe("");
   const html = updateNoticeHTML({ state: "found", version: "1.3.0", notes: "", error: "", installed: "" });
-  expect(html).toContain("新版本 1.3.0");
-  expect(html).toContain('class="sidebar-update-act">更新<');
+  expect(html).toContain('aria-label="新版本 1.3.0 重新啟動以更新"');
+  expect(html).toContain('<span class="nav-t">1.3.0</span><span class="sidebar-update-act">重新啟動以更新<');
   expect(updateNoticeHTML({ state: "installing", version: "1.3.0", notes: "", error: "", installed: "" })).toBe("");
+  setLocale("en");
+  expect(updateNoticeHTML({ state: "ready", version: "1.3.0", notes: "", error: "", installed: "" })).toContain('class="sidebar-update-act">Restart to update<');
+  for (const locale of ["ja", "de", "zh-CN"] as const) {
+    setLocale(locale);
+    expect(updateNoticeHTML({ state: "ready", version: "1.3.0", notes: "", error: "", installed: "" })).toContain(`class="sidebar-update-act">${t("update.restart")}<`);
+  }
 });
 
 test("the row reads the updater, and a press installs now", async () => {

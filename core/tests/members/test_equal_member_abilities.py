@@ -58,11 +58,8 @@ async def test_template_createagent_creates_members_and_same_events_for_both_con
     assert events[0] == events[1]
 
 
-@pytest.mark.parametrize("brain", ["api", "cli"])
-@pytest.mark.parametrize("mode", ["ask", "plan", "direct", "bypass"])
-@pytest.mark.parametrize("approved", [False, True])
-async def test_nonprimary_delete_waits_for_exact_owner_yes(setup, client, monkeypatch, brain, mode, approved):
-    rig, team = setup
+def delete_a_member(rig, team, client, monkeypatch, brain, mode):
+    """A non-primary member is asked to delete another in the permission `mode`, by an API model or a CLI brain."""
     team.members.register(rig.rpc)
     actor = team.members.store.create_member(name="Coordinator", role="Coordinate")
     target = team.members.store.create_member(name="Remove me", role="Review")
@@ -76,6 +73,23 @@ async def test_nonprimary_delete_waits_for_exact_owner_yes(setup, client, monkey
             await loop._tool("delete", "member_delete", args)
             loop._queue.put_nowait(Outcome("done", final="Deletion settled."))
         monkeypatch.setattr(CliLoop, "_work", work)
+    return actor, target
+
+
+@pytest.mark.parametrize("brain", ["api", "cli"])
+async def test_allow_all_deletes_a_member_with_no_card(setup, client, monkeypatch, brain):
+    rig, team = setup
+    actor, target = delete_a_member(rig, team, client, monkeypatch, brain, "bypass")
+    result = await typed(rig, "Delete the member Remove me", actor.id, language="en")
+    assert result["status"] == "done" and team.members.store.member(target.id) is None
+
+
+@pytest.mark.parametrize("brain", ["api", "cli"])
+@pytest.mark.parametrize("mode", ["ask", "plan", "direct"])
+@pytest.mark.parametrize("approved", [False, True])
+async def test_nonprimary_delete_waits_for_exact_owner_yes(setup, client, monkeypatch, brain, mode, approved):
+    rig, team = setup
+    actor, target = delete_a_member(rig, team, client, monkeypatch, brain, mode)
     result = await typed(rig, "Delete the member Remove me", actor.id, language="en")
     assert result["status"] == "confirm" and result["confirm"]["tier"] == "T3"
     assert team.members.store.member(target.id) is not None
@@ -96,7 +110,17 @@ async def test_colleague_exchange_has_no_management_catalog_and_cannot_create_ev
     assert not result.ok and team.members.find("Forbidden") is None
 
 
-@pytest.mark.parametrize("mode", ["ask", "plan", "direct", "bypass"])
+async def test_allow_all_lets_the_legacy_creation_alias_set_tools_with_no_yes(setup):
+    rig, team = setup
+    actor = team.members.store.create_member(name="Coordinator", role="Coordinate")
+    rig.settings.set("action_mode", "bypass")
+    args = {"name": "Limited helper", "role": "Research", "tools": ["gmail"]}
+    made = await rig.service.team_tool(team.members.speaker(actor.id), "create_member", args, language="en", ledger=None,
+                                      session_id="legacy", owner_interactive=True)
+    assert made.ok and team.members.store.by_name(args["name"]).tools == ("gmail",)
+
+
+@pytest.mark.parametrize("mode", ["ask", "plan", "direct"])
 async def test_legacy_creation_alias_keeps_permission_changes_behind_exact_yes(setup, mode):
     from raphael_core.agent.policy import Action, Confirmations, Tier
     rig, team = setup

@@ -2132,8 +2132,8 @@ class BackgroundService:
             system += FULL_PERMISSION
         if task.scope == "private":
             system += ("\nMember management tools are found with find_tools and called with use_tool. Use member_create, member_update and "
-                       "member_routine tools instead of reading or changing Raphael's database or core files. "
-                       "Changes to members wait for the owner's approval card, even in allow-all mode.")
+                       "member_routine tools instead of reading or changing Raphael's database or core files."
+                       + ("" if self._gate.full_permission else " Changes to members wait for the owner's approval card."))
         if task.mode:
             # What this one task must deliver is the task's own, like the team above: among the rules it gave
             # every piece of work a prefix of its own, where a member's work otherwise shares one.

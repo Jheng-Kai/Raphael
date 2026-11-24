@@ -1204,7 +1204,10 @@ class TaskRun:
         tier = gate.tier_now(ref.key, arguments)
         firm = gate.firm_confirmation(ref.key, arguments)
         from ..agent.harness_tools import CONNECTION_TOOLS
-        judged = firm or ref.name == CREATE_MEMBER or ref.name in CALENDAR_WRITES or ref.name == "manage_connection"
+        # A change that cannot be undone is judged by the owner's rules in every mode: in 全部允許 nothing asks about it
+        # any more (`firm` is false), but a rule that forbids still does.
+        judged = (firm or gate.destructive_change(ref.key, arguments) or ref.name == CREATE_MEMBER
+                  or ref.name in CALENDAR_WRITES or ref.name == "manage_connection")
         try:
             if not judged:
                 gate.check(Action(ref.key, arguments), None, worker=True)

@@ -1127,6 +1127,19 @@ export function checkRendered(name, context = {}) {
     require(section.querySelector('[data-k="auto-update"]').getAttribute("aria-checked") === (name === "app-update-auto" ? "true" : "false"), "the switch reflects whether background checks are enabled");
     return {check:name};
   }
+  if (name === "sidebar-update") {
+    // R-APP-UPDATE-01: the sidebar's release says what a press does, 重新啟動以更新 (its words in every language), whole
+    // beside the version number.
+    const button = document.querySelector(".side .sidebar-update-btn"), act = button?.querySelector(".sidebar-update-act"), label = button?.querySelector(".nav-t");
+    const zh = document.documentElement.lang === "zh-TW";
+    require(visible(button) && (!zh || button.getAttribute("aria-label") === "新版本 1.1.0 重新啟動以更新"), "the sidebar shows the release and names it and its press whole to a screen reader");
+    if (visible(act)) {
+      const box = button.getBoundingClientRect(), actBox = act.getBoundingClientRect();
+      require((!zh || act.textContent === "重新啟動以更新") && act.scrollWidth <= act.clientWidth + 1 && actBox.right <= box.right + 0.5, "the restart action stands whole inside the button");
+      require(label.textContent === "1.1.0" && label.scrollWidth <= label.clientWidth + 1, "the version number beside it is whole");
+    }
+    return {check:name};
+  }
   if (name === 'desktop-updating') {
     // R-COMP-UPDATE-01: an update of the computer's image says so in one line under the screen, with how long it may
     // take; the screen stays bare (R-UI-93), cannot be pressed, and nothing is a notice or a toast.
@@ -8739,8 +8752,13 @@ export function checkRendered(name, context = {}) {
   if (name === "permission-menu") {
     const card = document.querySelector("#app-popover.cb-menu > .cb-card.cb-modes"), rows = [...(card?.querySelectorAll(".cb-row[data-mode]") ?? [])];
     require(card, "the permission choice is the same card as the model menu");
-    require(rows.map(row => row.dataset.mode).join() === "direct,ask,plan,bypass", "four modes");
+    // R-PERM-MODES-01: from the safest to the least safe, each with its icon and its whole line on what it does.
+    require(rows.map(row => row.dataset.mode).join() === "ask,plan,direct,bypass", "four modes, 手動 first and 全部允許 last");
     require(rows.every(row => row.getAttribute("role") === "radio" && row.querySelector(".cb-name b")?.textContent.trim() && row.querySelector(".cb-name small")?.textContent.trim()), "each says what it does");
+    require(rows.every(row => { const icon = row.querySelector(":scope > svg.i"), small = row.querySelector(".cb-name small"); return visible(icon) && icon.getBoundingClientRect().right <= row.querySelector(".cb-name").getBoundingClientRect().left && small.scrollWidth <= small.clientWidth + 1; }), "each leads with its icon and its line is never cut");
+    require(new Set(rows.map(row => row.querySelector(":scope > svg.i").innerHTML)).size === 4, "four different icons");
+    const control = document.querySelector(".cmp-mode");
+    require(control.querySelector("svg.i").innerHTML === rows.find(row => row.dataset.mode === control.dataset.mode).querySelector(":scope > svg.i").innerHTML, "the control wears its mode's icon");
     require(card.querySelector(".cb-head h3")?.textContent.trim(), "the card has its title");
     require(new Set(rows.map(row => Math.round(row.querySelector(".cb-name b").getBoundingClientRect().left))).size === 1, "the names line up on the left");
     const chosen = rows.filter(row => row.getAttribute("aria-checked") === "true");
@@ -8751,7 +8769,18 @@ export function checkRendered(name, context = {}) {
     const popover = document.querySelector("#app-popover").getBoundingClientRect(), box = document.querySelector(".composer").getBoundingClientRect();
     require(popover.left >= box.left - 1, `the card stays over the conversation: it begins at ${Math.round(popover.left)}, the composer at ${Math.round(box.left)}`);
     return { check: name };
-  }  if (name === "chooser-chatgpt") {
+  }
+  if (name === "permission-bypass-confirm") {
+    // R-PERM-MODES-01: 全部允許 is entered only through the app's red delete dialog, which says plainly what members then do
+    // without asking and the risk it brings; nothing is saved before its button.
+    const dialog = document.querySelector(".mb-confirm.mb-delete"), danger = dialog?.querySelector('[data-dlg="delete"]');
+    require(visible(dialog) && !document.querySelector("#app-popover"), "the menu gave way to the delete dialog");
+    require(dialog.textContent.includes("開啟全部允許？") && dialog.textContent.includes("成員執行任何操作前都不會先問你") && dialog.textContent.includes("資料遺失或外洩的風險"), "it says what the mode does and the risk");
+    require(danger?.textContent.trim() === "全部允許" && document.activeElement === dialog.querySelector('[data-dlg="cancel"]'), "the red button names the mode, and the focus starts on Cancel");
+    require(!window.__look.calls.some(call => call.method === "settings.set" && call.params?.key === "action_mode"), "nothing is saved before the press");
+    return { check: name };
+  }
+  if (name === "chooser-chatgpt") {
     const rail = [...document.querySelectorAll(".model-chooser [data-source]")], chatgpt = document.querySelector('.model-chooser [data-source="chatgpt"]');
     require(rail[0] === chatgpt, "first in the rail");
     require(chatgpt.closest("section") === document.querySelector('.model-chooser [data-source="cli:codex"]').closest("section"), "under the subscriptions, with the CLIs");

@@ -1,9 +1,9 @@
-"""R-FILE-06: a member writes in its work folder, and a write anywhere else is the owner's yes, in every permission mode.
+"""R-FILE-06: a member writes in its work folder, and a write anywhere else is the owner's yes, in every permission mode but 全部允許.
 
 The work folder is the project the owner chose for the member, and only that; with none chosen it is the member's own folder
 and the team's. The tools that write (the owner's file tools, a command's named files) are asked about through the door's
-firm confirmation, which 全部允許 does not waive, and the tool itself refuses a call that came without that yes. The files are
-real ones in the test's folder; the brain is a fake.
+firm confirmation, and the tool itself refuses a call that came without that yes. 全部允許 is that yes: nothing asks there, and
+the door hands the tool the owner's yes itself. The files are real ones in the test's folder; the brain is a fake.
 """
 
 import os
@@ -22,6 +22,8 @@ from .test_local_commands import local_hub
 from .test_narration import chat, typed
 from .test_owner_files import _link_folder
 from .test_owner_pc_reach import MODES
+
+ASKING = [mode for mode in MODES if mode != "bypass"]  # the modes in which the owner is asked before a write leaves the work folder
 from .test_service import make_rig  # noqa: F401
 
 WRITE = "mcp:owner_files/write_file"
@@ -177,24 +179,26 @@ def test_a_short_8_3_name_of_the_project_is_the_project(place):
     assert tier(place, str(place.other / "a.md")) == Tier.T3
 
 
-# --- what the owner is asked, in every mode ------------------------------------------------------------------------------
+# --- what the owner is asked, in every mode but 全部允許 --------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("mode", MODES)
-def test_a_write_outside_the_work_folder_is_asked_in_every_permission_mode(place, mode):
+def test_a_write_outside_the_work_folder_is_asked_in_every_permission_mode_but_allow_all(place, mode):
     choose(place)
     place.settings.set("action_mode", mode)
     gate = ToolGate(place.hub, conn=place.conn)
     outside = args(place.other / "a.md")
-    assert gate.needs_confirmation(WRITE, outside) and gate.tier(WRITE, outside) == Tier.T3
-    assert gate.firm_confirmation(WRITE, outside) and not gate.waived(Action(WRITE, outside))
-    # Inside the work folder 全部允許 asks nothing, as before: the only question it adds is the one about leaving.
+    assert gate.tier(WRITE, outside) == Tier.T3 and not gate.waived(Action(WRITE, outside))
+    # 全部允許 is the owner's yes to leaving the folder: nothing asks. Every other mode asks, firmly (no Always waives it).
+    assert gate.needs_confirmation(WRITE, outside) is (mode != "bypass")
+    assert gate.firm_confirmation(WRITE, outside) is (mode != "bypass")
     assert gate.needs_confirmation(WRITE, args(place.project / "a.md")) is (mode != "bypass")
 
 
-async def test_the_door_refuses_an_outside_write_that_came_without_the_owners_yes_even_in_allow_all(place):
+@pytest.mark.parametrize("mode", ASKING)
+async def test_the_door_refuses_an_outside_write_that_came_without_the_owners_yes(place, mode):
     choose(place)
-    place.settings.set("action_mode", "bypass")
+    place.settings.set("action_mode", mode)
     gate = ToolGate(place.hub, conn=place.conn)
     outside = args(place.other / "a.md")
     refused = await gate.call_plugin(WRITE, outside)
@@ -223,10 +227,21 @@ async def test_allow_all_still_writes_inside_the_work_folder_without_a_card(make
     assert done["status"] != "confirm" and (place.project / "note.md").read_text() == "hello\n"
 
 
-async def test_allow_all_asks_before_a_write_outside_the_work_folder_and_not_a_no(make_rig, client, conn, place):
+async def test_allow_all_writes_outside_the_work_folder_without_a_card(make_rig, client, conn, place):
     choose(place)
     rig = make_rig(plugins=place.hub, gate=ToolGate(place.hub, conn=conn), permissions=PermissionCards(conn))
     rig.settings.set("action_mode", "bypass")
+    target = place.other / "note.md"
+    client.chats = [chat("Saving.", ("owner_files__write_file", args(target, "hello\n"))), chat('{"text":"Saved."}')]
+    done = await typed(rig, "Save a note")
+    assert done["status"] != "confirm" and target.read_text() == "hello\n"
+
+
+@pytest.mark.parametrize("mode", ["direct", "ask"])
+async def test_a_write_outside_the_work_folder_asks_before_it_is_made_and_not_a_no(make_rig, client, conn, place, mode):
+    choose(place)
+    rig = make_rig(plugins=place.hub, gate=ToolGate(place.hub, conn=conn), permissions=PermissionCards(conn))
+    rig.settings.set("action_mode", mode)
     target = place.other / "note.md"
     client.chats = [chat("Saving.", ("owner_files__write_file", args(target, "hello\n"))), chat('{"text":"Not saved."}')]
     asked = await typed(rig, "Save a note")
@@ -267,19 +282,19 @@ def outside_command(place):
 
 @pytest.mark.parametrize("commands", ["ask", "always"])
 @pytest.mark.parametrize("mode", MODES)
-def test_a_command_that_names_a_file_outside_the_work_folder_is_asked_in_every_mode(place, mode, commands):
+def test_a_command_that_names_a_file_outside_the_work_folder_is_asked_in_every_mode_but_allow_all(place, mode, commands):
     choose(place)
     place.settings.set("action_mode", mode)
     place.settings.set("local_commands_mode", commands)
     gate = ToolGate(place.hub, conn=place.conn)
     outside = outside_command(place)
     assert place.hub.shell_outside(outside) and place.hub.tier_for_call(EXEC, outside) == Tier.T3
-    assert gate.needs_confirmation(EXEC, outside) and gate.firm_confirmation(EXEC, outside)
+    assert gate.needs_confirmation(EXEC, outside) is (mode != "bypass") and gate.firm_confirmation(EXEC, outside) is (mode != "bypass")
     inside = {"command": f"Set-Content -Path '{(place.project / 'a.txt').as_posix()}' -Value hello"}
     assert not place.hub.shell_outside(inside) and not gate.firm_confirmation(EXEC, inside)
 
 
-@pytest.mark.parametrize("mode", ["ask", "bypass"])
+@pytest.mark.parametrize("mode", ["ask", "direct"])
 async def test_a_command_that_names_a_file_outside_is_not_run_without_the_owners_yes(place, mode):
     choose(place)
     place.settings.set("action_mode", mode)
@@ -305,15 +320,38 @@ async def test_a_command_with_nothing_to_ask_about_runs_as_it_did_in_allow_all(p
     assert place.host.execute.await_count == 3
 
 
-async def test_a_command_outside_the_work_folder_is_not_run_where_no_card_can_be_shown_even_in_allow_all(place):
+async def test_allow_all_runs_a_command_that_names_a_file_outside_the_work_folder_with_no_card(place):
     choose(place)
     place.settings.set("action_mode", "bypass")
+    place.settings.set("local_commands_mode", "ask")
+    gate = ToolGate(place.hub, conn=place.conn)
+    assert (await gate.call_plugin(EXEC, outside_command(place))).ok
+    assert place.host.execute.await_count == 1
+
+
+@pytest.mark.parametrize("mode", ["direct", "ask"])
+async def test_a_command_outside_the_work_folder_is_not_run_where_no_card_can_be_shown(place, mode):
+    choose(place)
+    place.settings.set("action_mode", mode)
     token = _CONTEXT.set((("chat", 0, 1), False, False, "session", False, 0))  # a phone: no card to answer
     try:
         refused = await place.hub.call(EXEC, outside_command(place), approver="user")
     finally:
         _CONTEXT.reset(token)
-    assert refused.kind == "approval_required" and place.host.execute.await_count == 0
+    assert not refused.ok and refused.kind in ("approval_required", "presence_required") and place.host.execute.await_count == 0
+
+
+async def test_allow_all_runs_a_command_outside_the_work_folder_where_no_card_can_be_shown(place):
+    # A routine, a phone or Telegram: nobody sits at a card, and the owner said yes to every place by choosing 全部允許.
+    choose(place)
+    place.settings.set("action_mode", "bypass")
+    gate = ToolGate(place.hub, conn=place.conn)
+    token = _CONTEXT.set((("task", 7), False, False, "", False, 0))
+    try:
+        made = await gate.call_plugin(EXEC, outside_command(place))
+    finally:
+        _CONTEXT.reset(token)
+    assert made.ok and place.host.execute.await_count == 1
 
 
 def test_a_relative_target_is_taken_from_the_folder_the_command_runs_in(place):

@@ -2653,7 +2653,7 @@ class AgentService:
                 system += ("\nEvery member has the same owner-private management tools. Find them with find_tools when needed "
                            "and call them with use_tool. "
                            "They manage members, folders, group chats, conversations, connections, models and settings. "
-                           "Destructive and permission changes always wait for the owner's approval.")
+                           + ("" if self._gate.full_permission else "Destructive and permission changes always wait for the owner's approval."))
                 system += "\nTemplate CreateAgent instructions map to member_create (legacy alias: create_member)."
             message_args = dict(
                 question=labelled_lines(ask.exchange_speakers[0], ask.text) if ask.exchange_speakers else ask.text,
@@ -3234,7 +3234,8 @@ class AgentService:
 
     def _asks(self, call: PlannedCall, screening: Screening) -> bool:
         """Whether the owner is asked before `call` is made: the tier, the switch that asks first, a rule or the
-        screening says so (the owner's 全部允許 mode waives all of them but the firm ones)."""
+        screening says so (the owner's 全部允許 mode waives all of them but the two floors that are no permission:
+        reading Raphael's own data and the cards only the owner can fill, `ToolGate.firm_confirmation`)."""
         tier = self._tier_now(call)
         return tier is not None and (not self._gate.full_permission or self._gate.firm_confirmation(call.tool.key, call.arguments)) and needs_yes(
             tier >= Tier.T2 or self._gate.mode_asks(call.tool.key, call.arguments), screening, firm=tier >= Tier.T3)
@@ -3275,13 +3276,13 @@ class AgentService:
 
     def _held(self, ask: _Ask, call: PlannedCall, screening: Screening) -> bool:
         """Whether a change of the management chat is held for the card at the end of the turn: one that cannot be
-        undone (also in the owner's 全部允許 mode), and any other that is asked now. The team proposals (members and
-        folders: `BATCH_TOOLS`, which the owner edits) keep their own card."""
+        undone (not in the owner's 全部允許 mode, whose name is their yes to it), and any other that is asked now. The
+        team proposals (members and folders: `BATCH_TOOLS`, which the owner edits) keep their own card."""
         from ..management import destructive
 
         if not self._stageable(ask, call):
             return False
-        if destructive(call.tool.key, call.arguments, self._settings.get("history_retention_days")):
+        if not self._gate.full_permission and destructive(call.tool.key, call.arguments, self._settings.get("history_retention_days")):
             return True
         return call.tool.key not in BATCH_TOOLS and self._asks(call, screening)
 
@@ -3361,10 +3362,10 @@ class AgentService:
         lines: list[str] = []
         report: list[dict] = []
         for index, call in enumerate(followup.batch):
-            part = approval.covering(index)
+            part = approval.covering(index) if approval is not None else None
             line = pending.action.args["lines"][index]
             try:
-                result = await self._make_call(ask, call, part, ledger, part.action, steps=steps)
+                result = await self._make_call(ask, call, part, ledger, part.action if part is not None else None, steps=steps)
             except Exception as exc:  # one change must not stop the others
                 logger.warning("A change on a card of several failed: %s", type(exc).__name__)
                 result = ToolResult(call.tool.key, False, None, "error")
@@ -4056,7 +4057,12 @@ class AgentService:
                 if self._secret_cards is None or self._secret_cards.logins is None:
                     raise HarnessToolError("unavailable")
                 try:
-                    removed = self._secret_cards.logins.remove_member_key(ask.speaker.id, args.get("key"), expected=args.get("entry"))
+                    expected = args.get("entry")
+                    if expected is None:
+                        # Nothing was held for a card (全部允許): the key as it is now is the one deleted.
+                        current = self._secret_cards.logins.private_key_entry(ask.speaker.id, args.get("key"))
+                        expected = current["id"] if current else None
+                    removed = self._secret_cards.logins.remove_member_key(ask.speaker.id, args.get("key"), expected=expected)
                 except Exception:
                     raise HarnessToolError("unavailable") from None
                 if not removed:

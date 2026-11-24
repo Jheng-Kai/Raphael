@@ -30,8 +30,8 @@ separate site sign-ins. Docker on another host uses its own volumes.
 R-FILE-06: a member writes in its work folder only, the project chosen in the composer
 alone, or with none chosen its own folder and the team folder. A file tool of the host
 computer, of the Docker computer (on a folder bound from the PC), of the owner's file
-tools, or a command that names a file elsewhere asks the owner's yes card in every
-permission mode, 全部允許 included, and a no writes nothing; a command's own programs are
+tools, or a command that names a file elsewhere asks the owner's yes card in 自動, 手動
+and 計畫, and a no writes nothing; in 全部允許 it is made with no card (R-AG-35); a command's own programs are
 not read, and the mounts of the Docker computer stay read-write. Core only (no screen
 changes): `core/tests/agent/test_write_boundary.py`, `core/tests/computer/test_shell_writes.py`,
 `core/tests/computer/test_write_boundary_computer.py`.

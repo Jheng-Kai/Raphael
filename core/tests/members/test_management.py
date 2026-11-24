@@ -68,10 +68,9 @@ def sample(schema):
 DESTRUCTIVE = [item.name for item in ACTIONS if item.destructive] + ["manage_connection", "settings_update"]
 
 
-@pytest.mark.parametrize("mode", ["ask", "plan", "direct", "bypass"])
-@pytest.mark.parametrize("name", DESTRUCTIVE)
-async def test_every_destructive_row_shows_a_card_and_waits_for_the_exact_yes(setup, client, mode, name):
-    rig, team = setup
+def trap_destructive_row(rig, team, client, mode, name):
+    """The destructive row `name` as the model calls it in `mode`, with its write trapped at the existing service boundary: the
+    production offer, loop, card, gate and member authorization stay real. No external state is touched."""
     team.members.register(rig.rpc)
     item = REGISTRY[name]
     args = sample(item.schema)
@@ -89,13 +88,27 @@ async def test_every_destructive_row_shows_a_card_and_waits_for_the_exact_yes(se
     async def connection(*_):
         return await perform(args)
 
-    # Trap the existing service boundary; the production offer, loop, card,
-    # gate and member authorization remain real. No external state is touched.
     rig.rpc._handlers[item.rpc] = perform
     rig.service._connection_tool = connection
     public_name, _ = publish(name, args)
     client.chats = [chat("Find the requested action.", ("find_tools", {"query": public_name})),
                     chat("Requested change.", use(*publish(name, args))), live_said("Finished.")]
+    return args, writes
+
+
+@pytest.mark.parametrize("name", DESTRUCTIVE)
+async def test_allow_all_runs_every_destructive_row_with_no_card(setup, client, name):
+    rig, team = setup
+    args, writes = trap_destructive_row(rig, team, client, "bypass", name)
+    done = await typed(rig, "Apply this requested change", 0, language="en")
+    assert done["status"] == "done" and len(writes) == 1, (name, done)
+
+
+@pytest.mark.parametrize("mode", ["ask", "plan", "direct"])
+@pytest.mark.parametrize("name", DESTRUCTIVE)
+async def test_every_destructive_row_shows_a_card_and_waits_for_the_exact_yes(setup, client, mode, name):
+    rig, team = setup
+    args, writes = trap_destructive_row(rig, team, client, mode, name)
     asked = await typed(rig, "Apply this requested change", 0, language="en")
     assert asked["status"] == "confirm", (name, asked)
     assert asked["confirm"]["tier"] == "T3"
@@ -138,12 +151,13 @@ async def test_server_refuses_each_destructive_row_without_an_exact_consumed_gat
         await rig.service.admin_tool(0, name, args, interactive=True)
 
 
+@pytest.mark.parametrize("mode", ["direct", "bypass"])
 @pytest.mark.parametrize("name", DESTRUCTIVE)
-def test_destructive_management_cannot_be_waived_by_allow_all_or_a_narrow_always_rule(rig, name):
+def test_destructive_management_cannot_be_waived_by_a_narrow_always_rule(rig, name, mode):
     from types import SimpleNamespace
     from raphael_core.brain.settings import SettingsStore
 
-    SettingsStore(rig.conn).set("action_mode", "bypass")
+    SettingsStore(rig.conn).set("action_mode", mode)
     safety = SimpleNamespace(rules=SimpleNamespace(always_allows=lambda _: True))
     gate = ToolGate(conn=rig.conn, safety=safety)
     args = sample(REGISTRY[name].schema)
@@ -152,9 +166,40 @@ def test_destructive_management_cannot_be_waived_by_allow_all_or_a_narrow_always
     if name == "settings_update":
         args = {"key": "history_retention_days", "value": 1}
     action = Action(name, args)
-    assert gate.tier_now(name, args).name == "T3" and not gate.waived(action)
-    with pytest.raises(NotApproved):
-        gate.check(action, None)
+    assert not gate.waived(action)
+    if mode == "direct":
+        assert gate.tier_now(name, args).name == "T3"
+        with pytest.raises(NotApproved):
+            gate.check(action, None)
+
+
+@pytest.mark.parametrize("name", DESTRUCTIVE)
+def test_allow_all_is_the_owners_yes_to_destructive_management(rig, name):
+    from raphael_core.brain.settings import SettingsStore
+
+    SettingsStore(rig.conn).set("action_mode", "bypass")
+    gate = ToolGate(conn=rig.conn)
+    args = sample(REGISTRY[name].schema)
+    if name == "manage_connection":
+        args["operation"] = "disconnect"
+    if name == "settings_update":
+        args = {"key": "history_retention_days", "value": 1}
+    assert not gate.firm_confirmation(name, args) and gate.destructive_change(name, args)
+    assert not gate.needs_confirmation(name, args) and gate._door(Action(name, args), None) == "user"
+
+
+@pytest.mark.parametrize("name", DESTRUCTIVE)
+async def test_allow_all_authorizes_a_destructive_row_at_the_server(rig, name):
+    from raphael_core.brain.settings import SettingsStore
+
+    item = REGISTRY[name]
+    args = sample(item.schema)
+    if name == "manage_connection":
+        args["operation"] = "disconnect"
+    if name == "settings_update":
+        args = {"key": "history_retention_days", "value": 1}
+    SettingsStore(rig.conn).set("action_mode", "bypass")
+    rig.service.authorize_management(0, name, args, interactive=True)  # the mode is the yes: nothing to spend
 
 
 def test_retention_uses_the_real_forever_and_immediate_delete_semantics():
@@ -311,7 +356,7 @@ async def test_primary_can_approve_its_own_deletion_and_leave_a_receipt_with_the
     team.members.register(rig.rpc)
     primary = member(team, name="Coordinator")
     team.members.store.set_primary(primary.id)
-    rig.settings.set("action_mode", "bypass")
+    rig.settings.set("action_mode", "direct")
     client.chats = [chat("Delete this member.", use("member_delete", {"id": primary.id})), live_said("Waiting for your yes."), live_said("Deleted.")]
     asked = await typed(rig, "Delete Coordinator", primary.id, language="en")
     assert asked["status"] == "confirm" and "Coordinator" in asked["confirm"]["text"]

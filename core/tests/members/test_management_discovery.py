@@ -198,10 +198,7 @@ async def test_owner_request_is_carried_out_by_use_tool_with_the_list_unchanged(
                     assert not (await rpc("tools/call", {"name": "use_tool", "arguments": {"name": name, "arguments": args}}))["isError"]
             yield Event("final", "Finished.")
         monkeypatch.setattr(Driver, "run", run)
-    result = await typed(rig, text, 0, language="en")
-    if change == "folder":
-        assert result["status"] == "confirm" and not check()
-        result = await rig.confirm(result["confirm"]["id"])
+    result = await typed(rig, text, 0, language="en")  # 全部允許: even the folder's deletion asks no card
     assert result["status"] == "done" and check()
     assert offered and all(names == offered[0] for names in offered)
 

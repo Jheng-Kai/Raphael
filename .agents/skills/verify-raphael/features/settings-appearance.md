@@ -82,10 +82,11 @@ npm run look -- profile appearance dictation tools safety models about settings-
 ## Signed updates
 
 Time zone and project folders keep their regrouped owner rows. Updates are available in About and the sidebar.
+The sidebar's release row names its press 重新啟動以更新 (Restart to update in every locale), whole beside the version.
 A newer database also offers an update directly from its startup notice.
 
 ```powershell
-npm run look -- about-no-updater-key update-found update-ready update-auto settings-owner about --theme both --width 1120,720,1920x1080
+npm run look -- about-no-updater-key update-found update-ready sidebar-update update-auto settings-owner about --theme both --width 1120,720,1920x1080
 ```
 
 With a compiled public key, About checks https://github.com/Jheng-Kai/Raphael/releases/latest/download/latest.json on opening.

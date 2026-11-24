@@ -96,8 +96,19 @@ async def test_native_cli_read_still_opens_a_card_in_allow_all(setup, client, mo
     assert len(cards) == 3
 
 
-@pytest.mark.parametrize("mode", ["ask", "plan", "direct", "bypass"])
-async def test_owner_approval_is_required_to_change_a_member_connection_list_in_every_mode(setup, client, mode):
+async def test_allow_all_changes_a_member_connection_list_with_no_card(setup, client):
+    from agent.test_narration import chat, use
+    rig, team = setup
+    team.members.register(rig.rpc)
+    member = team.members.store.create_member(name="Writer", role="Write", tools=["gmail"])
+    rig.settings.set("action_mode", "bypass")
+    client.chats = [chat("", use("member_update", {"id": member.id, "tools": ["gmail", "notion"]})), live_said("Updated.")]
+    result = await typed(rig, "Change the Writer member tools", 0, language="en")
+    assert result["status"] == "done" and team.members.store.member(member.id).tools == ("gmail", "notion")
+
+
+@pytest.mark.parametrize("mode", ["ask", "plan", "direct"])
+async def test_owner_approval_is_required_to_change_a_member_connection_list_in_every_mode_but_allow_all(setup, client, mode):
     from agent.test_narration import chat, use
     rig, team = setup
     team.members.register(rig.rpc)
@@ -111,6 +122,22 @@ async def test_owner_approval_is_required_to_change_a_member_connection_list_in_
     assert team.members.store.member(member.id).tools == ("gmail", "notion")
 
 
+async def test_real_background_management_callback_needs_no_approval_in_allow_all(setup):
+    from raphael_core.agent.history import AgentHistory
+    rig, team = setup
+    team.members.register(rig.rpc)
+    actor = team.members.store.create_member(name="Reviewer", role="Review")
+    target = team.members.store.create_member(name="Writer", role="Write")
+    rig.settings.set("action_mode", "bypass")
+    origin = AgentHistory(rig.conn).add(session_id="background", question="", route="worker", source="worker",
+                                       member_id=actor.id, prefix="", text="", status="running")
+    task = SimpleNamespace(member_id=actor.id, turn_id=origin, session_id="background", text="Update Writer personality",
+                           language="en", scope="private", room_id=None)
+    args = {"id": target.id, "personality": "Calm and precise"}
+    result = await rig.service.background_owner_tool(task, "member_update", args)
+    assert result.ok and team.members.store.member(target.id).personality == args["personality"]
+
+
 async def test_real_background_management_callback_accepts_an_approved_nonprimary_actor(setup):
     from raphael_core.agent.history import AgentHistory
     from raphael_core.agent.policy import Action, Confirmations, Tier
@@ -118,7 +145,7 @@ async def test_real_background_management_callback_accepts_an_approved_nonprimar
     team.members.register(rig.rpc)
     actor = team.members.store.create_member(name="Reviewer", role="Review")
     target = team.members.store.create_member(name="Writer", role="Write")
-    rig.settings.set("action_mode", "bypass")
+    rig.settings.set("action_mode", "direct")
     origin = AgentHistory(rig.conn).add(session_id="background", question="", route="worker", source="worker",
                                        member_id=actor.id, prefix="", text="", status="running")
     task = SimpleNamespace(member_id=actor.id, turn_id=origin, session_id="background", text="Update Writer personality",
