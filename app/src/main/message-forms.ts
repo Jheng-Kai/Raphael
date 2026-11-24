@@ -96,7 +96,9 @@ function forecastHTML(form: Forecast): string {
       `<span class="wx-low">${esc(degrees(d.low))}</span>${bar}<span class="wx-high">${esc(degrees(d.high))}</span></div>`;
   }).join("");
   parts.push(`<section class="wx-part"><h4>${esc(t("forms.daily"))}</h4><div class="wx-days">${days}</div></section>`);
-  const foot = [form.units, form.source].filter(Boolean).join(" · ");
+  // A unit written as a letter (the weather tool's `C`) is named as a degree at the foot, as a weather app says it.
+  const unit = /^[cf]$/i.test(form.units.trim()) ? `°${form.units.trim().toUpperCase()}` : form.units;
+  const foot = [unit, form.source].filter(Boolean).join(" · ");
   parts.push(`<footer class="wx-foot"><span>${esc(foot)}</span>${form.updated ? `<span>${esc(t("forms.updated", { p0: form.updated }))}</span>` : ""}</footer>`);
   return parts.join("");
 }

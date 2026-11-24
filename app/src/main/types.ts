@@ -145,6 +145,8 @@ export interface CliBrain {
   /** The CLI's own sign-in is open in its console now, and how the last one ended (`done`, or `stopped` when the console closed first). */
   signing_in?: boolean;
   login_result?: "done" | "stopped" | null;
+  /** The core's word that this CLI's last run was refused for its sign-in and nothing since says it is back (R-CLI-SIGNIN-06). */
+  sign_in_lost?: "expired" | "signed_out" | null;
 }
 
 export interface CliModel {

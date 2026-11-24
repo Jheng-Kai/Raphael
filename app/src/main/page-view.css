@@ -2,11 +2,11 @@
    were when the owner goes back; the composer stays below, so a change can be asked for where the page is read. There is no
    scrim and no ×: the way back is the round arrow in the conversation header (members.css, styles.css `.pgv-back`).
    The page (R-PAGE-08) is the whole area right of the sidebar:
-   the details panel is folded while it stands, the header's centre is the page's own pill, Share is at the right, and the area
-   scrolls as one with no frame around the page.
-   It (R-PAGE-11) runs to the window's foot and the composer floats over it at its usual place and width, on its own surface,
-   with no band behind it. The page can scroll its last line clear above the composer (page-view.ts measures what
-   floats there: `--pgv-dock`, the composer's dock, and `--pgv-say`, the answer line over it). */
+   the details panel is folded while it stands, the header's centre is the page's own pill and Share is at the right. A report
+   scrolls as one in that area; an HTML page does not: its frame is the page's own window (R-PAGE-10) and the page scrolls in it.
+   The area (R-PAGE-11) runs to the window's foot and the composer floats over it at its usual place and width, on its own surface,
+   with no band behind it. What floats there (page-view.ts measures it: `--pgv-dock`, the composer's dock, and `--pgv-say`, the
+   answer line over it) is `--pgv-under`: a report scrolls its last line clear above it, and an HTML page's frame ends above it. */
 .ra-stage.is-page { --pgv-under: calc(var(--pgv-dock, 0px) + var(--sp-1) + var(--pgv-say, 0px) + var(--sp-2)); display: grid; grid-template-rows: minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr); }
 /* The voice flyer is the one thing that stays beside them: the thread's own "hearing" line is hidden with the thread, so it is the
    only sign left that the owner is heard (voice-mode.ts). It stands over the page, takes no pointer there (the
@@ -44,21 +44,17 @@
    an open page that page's own button (a report's 存成檔案) or nothing. The member's share waits until the thread is back. */
 .mb-chat[data-conversation-page] .mb-head [data-act="share-member"] { display: none; }
 
-/* An HTML page: the whole area under the header, scrolling as one, and
-   edge to edge (R-PAGE-10): the page is as wide as the area, with no side margin, frame, corner or edge, so its own background reaches the sidebar and the window's
-   right edge, and (R-PAGE-11) the area runs to the window's foot under the composer, which floats over it. Only the top keeps a slim band
-   the height of the header row: the page scrolls under it and fades out as the thread does. The iframe is as tall as the page says (the
-   page's own height messages), at least as tall as the area down to the window's foot, so a page made to fill a screen fills it, under the
-   composer too, and a longer one is read by scrolling the area. */
-.pgv-page { min-height: 0; overflow-x: hidden; overflow-y: auto; scrollbar-width: none; padding: var(--row-lead) 0 0; scroll-padding-top: var(--row-lead); scroll-padding-bottom: var(--pgv-under); mask-image: linear-gradient(to bottom, transparent calc(var(--row-lead) - 36px), var(--text) var(--row-lead)); }
-.pgv-page::-webkit-scrollbar { display: none; }
+/* An HTML page: the whole area, edge to edge (R-PAGE-10): the page is as wide as the area, with no side margin, frame, corner or edge, so its own
+   background reaches the sidebar and the window's right edge. The frame is the page's own window, as a browser gives one: it fills the area from
+   under the header's band (`--row-lead`) down to just above the composer's row (`--pgv-under`), and the page scrolls in it, so `100vh`, sticky
+   and fixed parts and columns that scroll apart work as in a browser. The area itself does not scroll and nothing scrolls under the band,
+   so there is no fade there. Behind the composer's row (R-PAGE-11) the area shows the page's own background (`--pgv-bg`, which the page says;
+   the area's own without one), so the page still reads as running to the window's foot. */
+.pgv-page { position: relative; box-sizing: border-box; min-height: 0; overflow: hidden; padding: var(--row-lead) 0 var(--pgv-under, 0px); background: var(--content); }
+.pgv-page::before { content: ""; position: absolute; inset: var(--row-lead) 0 0; background: var(--pgv-bg, var(--content)); pointer-events: none; }
 .pgv-page:focus { outline: none; }
-.pgv-frame-box { position: relative; width: 100%; height: max(var(--pgv-h, 320px), 100%); }
+.pgv-frame-box { position: relative; width: 100%; height: 100%; }
 .pgv-frame-box > .pg-frame { position: absolute; inset: 0; width: 100%; height: 100%; }
-/* How far the area scrolls past the page's end: just enough for its last line to stand clear above the composer (and the answer line
-   over it), and nothing for a page that already ends above them. It is room after the frame, never a taller frame: a page that is as
-   tall as its window (100vh) would say it is taller each time and grow without end. (100% is the box: the page's height or the area's.) */
-.pgv-frame-box::after { content: ""; position: absolute; top: 100%; left: 0; width: 1px; height: max(0px, calc(var(--pgv-h, 320px) + var(--pgv-under) - 100%)); pointer-events: none; }
 
 /* The header's centre, while a page stands: its mark and its title as one soft pill (the member's pill is put away
    and comes back with the thread). It is no control: the page's way out is the arrow. */

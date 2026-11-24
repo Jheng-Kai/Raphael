@@ -118,7 +118,6 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
   let library: LibraryRef[] = [];
   let commands: Loaded<MemberCommand[]> = "loading";
   let toolChoices: Loaded<ToolChoices> = "loading";
-  let ownFolder = "";
   let skillText: { id: number; skill: MemberSkill; text: string; original: string; revision?: string } | "loading" | null = null;
   let skillBusy = false;
   let command: { id: number | null; name: string; description: string; template: string } = { id: null, name: "", description: "", template: "" };
@@ -134,18 +133,16 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     const mine = ++epoch, id = host.member().id;
     // Each read is its own: one that fails (or a core that has not got it) leaves the others to answer.
     const read = <T>(call: () => Promise<T>): Promise<T> => Promise.resolve().then(call);
-    const [skillList, commandList, tools, folder] = await Promise.allSettled([
+    const [skillList, commandList, tools] = await Promise.allSettled([
       read(() => api.membersSkillsList(id)),
       read(() => api.membersCommandsList(id)),
       read(() => api.membersToolChoices()),
-      read(() => api.memberFolder(id)),
     ]);
     if (mine !== epoch || id !== host.member().id || el.hidden) return;
     if (skillList.status === "fulfilled") { skills = skillList.value?.skills ?? []; library = skillList.value?.library ?? []; }
     else if (!Array.isArray(skills)) skills = "failed";
     if (commandList.status === "fulfilled") commands = commandList.value?.commands ?? []; else if (!Array.isArray(commands)) commands = "failed";
     if (tools.status === "fulfilled" && tools.value) { toolChoices = tools.value; rememberAppLogos(tools.value.connections); } else if (typeof toolChoices !== "object") toolChoices = "failed";
-    if (folder.status === "fulfilled" && folder.value) ownFolder = folder.value.path;
     draw();
   }
 
@@ -240,15 +237,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
         `${tg(toolOn(member.tools, app.id), app.name, ` data-ms="tool" data-id="${esc(app.id)}" data-k="ms-tool:${esc(app.id)}"`)}</div>`).join("") || muted(t("memberSettings.noTools"));
     }
     return section("", rows, "", "ms-tools") +
-      section("", row(t("members.profile.draft"), tg(member.draft_first ?? true, t("members.profile.draft"), ' data-ms="draft" data-k="ms-draft"')), "", "ms-draft") +
-      foldersHTML(member);
-  }
-
-  function foldersHTML(member: Member): string {
-    const label = t("projectFolders.memberNamed", { p0: member.name });
-    const open = iconBtn("folder", label, ' data-ms="folder-open" data-k="ms-folder-open"');
-    const path = ownFolder ? `<small class="owner-data">${esc(ownFolder)}</small>` : "";
-    return section("", `<div class="ms-row ms-folder"><span class="ms-label ms-path">${esc(label)}${path}</span>${open}</div>`, "", "ms-folder");
+      section("", row(t("members.profile.draft"), tg(member.draft_first ?? true, t("members.profile.draft"), ' data-ms="draft" data-k="ms-draft"')), "", "ms-draft");
   }
 
   /** What the chosen kind holds. */
@@ -406,7 +395,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     // Another member, or the picture taken off, ends a move of the cover that was under way.
     if (reposition && (!sameMember || member.cover?.kind !== "image")) { reposition = null; delete cover.dataset.repositioning; }
     const face = faceHTML(member, 96).replace(/--slime-(?:delay|since):[^;"\s]+;?| data-slime-mounted="[\d.]+"/g, "");
-    const signature = JSON.stringify([stableMember(member), face, view, category, [...editing], [...saving], adding, skills, library, commands, toolChoices, ownFolder, skillText, skillBusy, command, getLocale(),
+    const signature = JSON.stringify([stableMember(member), face, view, category, [...editing], [...saving], adding, skills, library, commands, toolChoices, skillText, skillBusy, command, getLocale(),
       reposition ? reposition.from : null]);
     if (drawn === signature) return;
     drawn = signature;
@@ -642,7 +631,6 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
       case "draft": void host.update(member.id, { draft_first: !(member.draft_first ?? true) }); break;
       case "notify": void host.update(member.id, { notify: !(member.notify ?? false) }); break;
       case "tool": void toggleTool(act.dataset.id ?? ""); break;
-      case "folder-open": void api.openMemberFolder(member.id).catch(error => toaster.info(describeError(error))); break;
     }
   });
 

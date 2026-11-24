@@ -4,6 +4,7 @@ Open-Meteo is an httpx.MockTransport and OpenRouter a fake, so no test touches t
 """
 
 import asyncio
+import json
 import logging
 from datetime import datetime, timedelta, timezone
 
@@ -12,6 +13,7 @@ import pytest
 
 from raphael_core.agent import tools as tools_module
 from raphael_core.agent.ledger import Ledger
+from raphael_core.answer_forms import forms_plain_text
 from raphael_core.agent.tools import (
     SEARCH_PLUGINS,
     SKIES,
@@ -164,8 +166,36 @@ async def test_the_weather_is_the_place_now_today_and_tomorrow(tools, meteo):
         ],
         "source": "Open-Meteo",
         "updated": "14:00",
+        "card": '```forecast\n{"place":"Taipei","units":"C","now":{"temp":24.1,"condition":"partly cloudy"},'
+                '"days":[{"day":"2026-10-20","condition":"overcast","high":27.3,"low":21.0,"rain":40},'
+                '{"day":"2026-10-21","condition":"slight rain","high":26.0,"low":20.5,"rain":70}],'
+                '"source":"Open-Meteo","updated":"14:00"}\n```',
+        "card_use": tools_module.CARD_USE,
     }
     assert result.error is None
+
+
+async def test_the_weather_hands_the_whole_forecast_form_ready_to_reply_with(tools):
+    """A member that wrote the form itself kept two days and no hours; the tool's card has every part it read (R-FORM-03)."""
+    data = (await tools.weather("台中", "zh-TW")).data
+    assert data["card_use"] == tools_module.CARD_USE
+    card = data["card"]
+    assert card.startswith("```forecast\n") and card.endswith("\n```")
+    form = json.loads(card.split("\n")[1])
+    assert form["place"] == "台中"  # what the owner called it, not the place the search found
+    assert form["units"] == "C"
+    assert form["now"] == {"temp": 24.1, "condition": "partly cloudy", "feels": 25.4, "humidity": 74, "wind": "18 km/h"}
+    assert form["hours"] == [{"time": "14:00", "condition": "partly cloudy", "temp": 24.1, "rain": 30},
+                             {"time": "15:00", "condition": "slight rain", "temp": 23.5, "rain": 40}]  # an hour with no temperature is left out
+    assert [day["day"] for day in form["days"]] == [day["date"] for day in data["days"]]
+    assert (form["source"], form["updated"]) == ("Open-Meteo", "14:00")
+    assert forms_plain_text(card) != card  # the app draws it: the checks every form passes take it
+
+
+async def test_a_forecast_with_no_whole_day_has_no_card(tools, meteo):
+    meteo.forecast = {"current": {"temperature_2m": 18.0, "weather_code": 0}, "daily": {"time": ["2026-10-20"], "temperature_2m_max": [20.0]}}
+    data = (await tools.weather("Taipei", "en")).data
+    assert "card" not in data and "card_use" not in data
 
 
 async def test_the_weather_adds_feels_like_humidity_wind_hours_days_source_and_time(tools):

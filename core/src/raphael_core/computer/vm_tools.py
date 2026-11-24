@@ -27,6 +27,8 @@ from ..agent.policy import Tier
 from ..integrations.audit import AuditLog
 from ..services.attachments import Attachment, MAX_FILE_BYTES, sniff_ok
 from ..agent.data_floor import DataFloor
+from .. import work_area
+from ..folders import choice
 from .vm import GUEST, SHARED, VmError, engine_start_allowed
 from .vm_bridge import CuaBridge, call_driver_tool
 from .owner_files import KEPT_WORDS, MAC_PRIVATE, kept_place, place as owner_place
@@ -40,6 +42,7 @@ from . import seat_view
 from . import file_tools
 from . import checkpoints as checkpoint_store
 from .file_tools import FILE_READS, FILE_TOOLS, FileReads
+from .owner_files import WRITES
 from ..worker.computer_verification import meaningful_expectation
 
 _SCOPE = ContextVar("computer_scope", default=None)
@@ -53,6 +56,15 @@ _WOKE = ContextVar("computer_woke", default=None)
 # Whose tool call is starting a sleeping computer right now: (member id, tool name). Unset for every other start.
 _WAKE = ContextVar("computer_wake", default=None)
 logger = logging.getLogger(__name__)
+# The tools of a member's computer that write a file at a path it names (R-FILE-06), and what a refused one says.
+GUEST_WRITES = ("write_file", "edit_file")
+OUTSIDE_GUEST = ("This path is on the owner's PC outside your work folder, so it is written only after the owner says yes to "
+                 "this exact change. It was not written. Save it in your work folder, or ask the owner.")
+
+
+def _under(path, root):
+    root = root.rstrip("/")
+    return path == root or path.startswith(root + "/")
 
 
 def plain_read(command):
@@ -732,8 +744,72 @@ class VmTools:
     def tier_for_call(self, key, arguments):
         if self.host_computer and key in self.host_computer.routes:
             return self.host_computer.tier_for_call(key, arguments) if self.tier_of(key) is not None else None
+        if self.is_computer_tool(key) and self.firm_for_call(key, arguments):
+            return Tier.T3  # a write onto the owner's PC outside the work folder: asked in every mode, never waived
         # The hub knows nothing about computer tools, so it must not be asked about them.
         return self.tier_of(key) if key in (COMPUTER_STATUS_KEY, SUGGEST_COMPUTER_KEY) or self.is_computer_tool(key) else self.delegate.tier_for_call(key, arguments)
+
+    def firm_for_call(self, key, arguments):
+        """Whether this call is asked about in every permission mode (`ToolGate.firm_confirmation`): a write of the host
+        computer's file tools, or of the member's own computer's, onto a folder of the owner's PC outside the member's work
+        folder (R-FILE-06)."""
+        if self.host_computer and key in self.host_computer.routes:
+            return self.host_computer.firm_for_call(key, arguments)
+        tool = self.tools.get(key)
+        if tool is None or not isinstance(arguments, dict):
+            return False
+        scope = _SCOPE.get()
+        if scope and scope[0] == "turn":
+            member = scope[1]
+        else:
+            from .local_tools import _CONTEXT
+            member = _CONTEXT.get()[5]
+        try:
+            return self.guest_outside(tool.name, arguments, member, self.vm.mounted_target(self.vm.target(member)))
+        except (VmError, OSError, ValueError):
+            return False
+
+    def guest_area(self, target, member):
+        """(the folders of the computer that are folders of the owner's PC, the ones `member` may write in without asking):
+        the chosen project alone, else its own folder and the team's. Anything else in the computer is the computer's."""
+        reaching = [GUEST, SHARED, *(guest for guest, _ in target.projects)]
+        chosen = choice(self.vm.settings, member) if self.vm.settings is not None else None
+        return reaching, [self.vm.guest_work_folder(target, member)] if chosen else [self.vm.guest_workspace(target), SHARED]
+
+    def landing(self, key, arguments, member):
+        """The path a write of a computer's file tools lands at, as its card shows it to the owner (the arguments to put in
+        place of those written), or None for any other call: not the words the member wrote (`..`, a relative name, `~`),
+        but where the write goes. A call it cannot place is shown as written."""
+        try:
+            if self.host_computer and key in self.host_computer.routes:
+                tool = self.host_computer.routes[key][1]
+                if tool.name in WRITES:
+                    return {"path": work_area.shown(self.host_computer.path(member, arguments.get("path", "")))}
+                return None
+            tool = self.tools.get(key)
+            if tool is None or tool.name not in (*GUEST_WRITES, "browser_download"):
+                return None
+            field = "destination_root" if tool.name == "browser_download" else "path"
+            target = self.vm.mounted_target(self.vm.target(member))
+            path = arguments[field].strip()
+            if tool.name != "browser_download" and (self.host_computer is not None and target.container or target.projects):
+                path = self.member_file_path(target, path, member)
+            return {field: work_area.shown(file_tools.guest_path(path))}
+        except (VmError, OSError, ValueError, KeyError, AttributeError):
+            return None
+
+    def guest_outside(self, name, arguments, member, target):
+        """Whether this write lands, as its path is written, on a folder of the owner's PC that is not the member's work
+        folder. Where a link made inside the computer leads is judged in the computer (`files_guest.confined`)."""
+        raw = arguments.get("destination_root" if name == "browser_download" else "path")
+        if name not in (*GUEST_WRITES, "browser_download") or not isinstance(raw, str) or not raw.strip() or "\x00" in raw:
+            return False
+        path = raw.strip()
+        if name != "browser_download" and (self.host_computer is not None and target.container or target.projects):
+            path = self.member_file_path(target, path, member)
+        where = file_tools.guest_path(path)
+        reaching, allowed = self.guest_area(target, member)
+        return any(_under(where, root) for root in reaching) and not any(_under(where, folder) for folder in allowed)
 
     def kind_of(self, server, name):
         if server == "computer":
@@ -1066,6 +1142,9 @@ class VmTools:
                     return PluginResult(False, "takeover_reason_required", TAKEOVER_REASON_REQUIRED)
                 result = PluginResult(False, "bad_arguments")
                 return result
+            outside_write = self.guest_outside(tool.name, arguments, member, target)
+            if outside_write and approver != "user":
+                return PluginResult(False, "approval_required", OUTSIDE_GUEST)
             if tool.name == "vault_entries":
                 choices = self.logins.choices(member) if self.logins and hasattr(self.logins, "choices") else []
                 return PluginResult(True, text=json.dumps({"entries": choices}, ensure_ascii=False))
@@ -1208,9 +1287,12 @@ class VmTools:
                     if ((self.host_computer is not None and target.container or target.projects)
                             and tool.name != "file_history"):
                         arguments = {**arguments, "path": self.member_file_path(target, arguments.get("path", "."), member)}
+                    # A write that was not asked about is held to the work folder in the computer too, where a link made
+                    # inside it could lead onto the PC; one the owner said yes to is made where it was asked.
+                    limit = (self.guest_area(target, member)[1] if tool.name in GUEST_WRITES and not outside_write else None)
                     result = await file_tools.call(self.vm, target, tool.name, arguments, self.file_reads,
                                                    self._file_run(target, member, owner, turn), checkpoint,
-                                                   history if tool.name == "file_history" else None)
+                                                   history if tool.name == "file_history" else None, allowed=limit)
                 elif tool.name == "attach_file":
                     path = arguments["path"]
                     if self.host_computer is not None and target.container or target.projects:

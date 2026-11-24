@@ -11,36 +11,20 @@ export function mountComposerFolder(
 ): { draw(): void; add(): void; shown(): boolean } {
   let settings: BrainSettings | null = null, generation = 0, menu: HTMLElement | null = null;
   let details = new Map<string, FolderInfo>();
-  const memberPaths = new Map<number, string>();
-  const pathReads = new Map<number, Promise<void>>();
   const paths = (): string[] => settings?.project_folders ?? [];
-  const ownName = (): string => t("projectFolders.memberNamed", { p0: member().name });
   const selected = (): string | null => {
     const chosen = settings?.member_work_folder?.[member().id];
     return chosen && paths().includes(chosen) ? chosen : null;
   };
 
-  function readMemberPath(id: number): Promise<void> {
-    const pending = pathReads.get(id);
-    if (pending) return pending;
-    const read = Promise.resolve().then(() => api.memberFolder(id)).then(({ path }) => {
-      memberPaths.set(id, path);
-      if (id === member().id) draw();
-    }).catch(() => {}).finally(() => { pathReads.delete(id); });
-    pathReads.set(id, read);
-    return read;
-  }
-
   function draw(): void {
-    const id = member().id;
-    if (settings && !memberPaths.has(id)) void readMemberPath(id);
     const path = selected(), info = path ? details.get(path) : undefined;
-    // The member's own folder, the default, keeps the button's short word (選擇資料夾): the composer's row has room for it
-    // beside the permission and the model at every width; the menu names the folder whole.
+    // With no project the member works where it always does, a place the owner never needs to see: the button keeps its
+    // short word (選擇資料夾) and no row names or shows that folder.
     const label = path ? info?.name ?? folderName(path) : t("composerFolder.pick");
     button.hidden = settings === null;
     button.querySelector("span")!.textContent = label;
-    button.setAttribute("aria-label", t("composerFolder.label", { p0: path ?? (memberPaths.get(id) || label) }));
+    button.setAttribute("aria-label", path ? t("composerFolder.label", { p0: path }) : label);
     branch.hidden = !info?.git;
     branch.querySelector("span")!.textContent = info?.branch || t("projectFolders.detached");
     branch.setAttribute("aria-label", t("projectFolders.branchNamed", { p0: info?.branch || t("projectFolders.detached") }));
@@ -102,7 +86,7 @@ export function mountComposerFolder(
     const title = t("projectFolders.title");
     const html = (): string => {
       const picked = selected();
-      const rows = pickRow(0, ownName(), picked === null, memberPaths.get(id)) + projects.map((path, index) =>
+      const rows = pickRow(0, t("composerFolder.none"), picked === null) + projects.map((path, index) =>
         pickRow(index + 1, details.get(path)?.name ?? folderName(path), path === picked, path, details.get(path))).join("");
       const addRow = `<div class="cb-list cb-actions"><button type="button" role="menuitem" class="cb-row cb-action" data-project-pick="-1"><span class="cb-icon" aria-hidden="true">${ico("plus")}</span><span class="cb-name"><b>${esc(t("writeFolders.add"))}</b></span></button></div>`;
       return card(title, rows, addRow);
@@ -111,7 +95,7 @@ export function mountComposerFolder(
       if (index === -1) add();
       else save(current => chooseProject(current, id, projects[index - 1] ?? null));
     });
-    void Promise.all([readMemberPath(id), refreshProjects()]).then(() => {
+    void refreshProjects().then(() => {
       if (popover.isConnected && id === member().id) patchHTML(popover, html());
     });
   });

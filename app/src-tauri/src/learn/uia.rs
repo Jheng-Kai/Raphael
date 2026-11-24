@@ -929,6 +929,16 @@ impl WatchedField for UiaField {
             _ => None,
         }
     }
+
+    /// A keyboard source or a terminal knows the send itself: Enter, or the input row cleared. A
+    /// focus move or the end of the minute is not one.
+    fn submitted(&self) -> Option<bool> {
+        match &self.mode {
+            ReadMode::Terminal { tracker, .. } => Some(tracker.is_sent()),
+            ReadMode::Keys => Some(self.keys.as_ref().is_some_and(Keystrokes::is_complete)),
+            _ => None,
+        }
+    }
 }
 
 impl UiaField {

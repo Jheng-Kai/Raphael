@@ -966,6 +966,37 @@ def test_the_helper_does_not_pass_on_growth_that_only_follows_its_frame():
     assert _HELPER.index("framed = innerHeight;") < _HELPER.index("post('height', {height})")
 
 
+def test_the_helper_tells_the_window_the_pages_own_background_as_a_plain_colour():
+    # R-PAGE-10: the window paints it behind the composer's row, so a page whose frame ends above the composer still reads as running to
+    # the window's foot. The first non-transparent computed background of the body, then of the root, said once the page is parsed and
+    # again once it has loaded (its style sheets may come late); the window takes only rgb() or rgba(), so the helper converts any other
+    # notation and says an empty colour for none.
+    from raphael_core.agent.pages import _HELPER
+    assert "const tell = () => post('background', {color: background()});" in _HELPER
+    assert "addEventListener('DOMContentLoaded', tell, {once: true});" in _HELPER
+    assert "addEventListener('load', tell, {once: true});" in _HELPER
+    background = _HELPER[_HELPER.index("const background = () => {"):_HELPER.index("const tell = ")]
+    assert background.index("document.body") < background.index("document.documentElement")
+    assert "getComputedStyle(root).backgroundColor" in background
+    # A transparent one is none; a colour in another notation goes through a canvas, so only rgb()/rgba() text is ever sent.
+    plain = _HELPER[_HELPER.index("const plain = value => {"):_HELPER.index("const background = () => {")]
+    assert "if (!(a > 0)) return '';" in plain and "getImageData" in plain
+    assert "'rgb(' +" in plain and "'rgba(' +" in plain
+    # The helper is a Python string: a backslash in it would be an escape of Python's, not of the page's script.
+    assert "\\" not in _HELPER
+
+
+async def test_the_page_a_window_gets_carries_the_helper_that_says_its_background(conn):
+    from raphael_core.agent.pages import _HELPER
+    page = stored(conn, title="Daily lesson", html=LESSON)
+    host = PageHost(PageStore(conn))
+    try:
+        body = (await fetch(await host.url(page["id"], "dark"))).split("\r\n\r\n", 1)[1]
+    finally:
+        await host.aclose()
+    assert "post('background', {color: background()})" in body and body.index(_HELPER) < body.index("<header>")
+
+
 # A member's page shaped like a daily lesson: a Google Fonts style sheet in its head, its words built by its own script at
 # the end of its body. The words are made up.
 LESSON = ('<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">'

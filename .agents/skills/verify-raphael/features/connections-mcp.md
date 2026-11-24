@@ -62,7 +62,8 @@ categories (全部, 溝通, 生產力, 開發 and so on), with no count of what 
   (`pressThrough`). A page that draws itself again from under a press loses it, so `load()` draws only when the reading changes what the dialog drew (`drawn`).
 - 「✓ 已連結」 of a main-view row is pressable (the row opens the app's page from anywhere but 連結): `connected-owner-state-press`, check `app-state-press`.
   On an app's own page it stays words: its destination would be the page itself.
-- An app's page replaces the view. The shared round back and close buttons, the mark on a 56 px white tile and the name share the header centre line. Below it is 「連結」 (white, round) or, when connected, 「✓ 已連結」 with its ⋯ before its rightmost switch; a paragraph; accounts; for a connected app
+- An app's page replaces the view. The shared round back and close buttons stand alone on the header's centre line. On the row under it are the mark on a 56 px white tile, the name and,
+  ending the row on the same centre line, 「連結」 (white, round) or, when connected, 「✓ 已連結」 with its ⋯ before its rightmost switch; a paragraph; accounts; for a connected app
   a 工具 card (kind switches, the folded tool list); a 資訊 card (提供者, 類別, 登入方式, 伺服器, 工具) of 38 px rows; the latest actions and
   the 試用, sign-in and refresh buttons. After a sign-in from a page the page stays and shows the connected state.
 - The colour rule for everything that floats (R-FLOAT-01, with the dialog layer `--dialog` of R-FLOAT-03): `--float`, `--float-edge`, `--float-ctl`, `--float-hover`, `--float-sel`,

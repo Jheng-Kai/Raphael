@@ -44,14 +44,18 @@ beforeEach(() => {
   api.pickOutputFolder.mockResolvedValue(null);
 });
 
-test("the composer lists the member folder first and remembers projects with their branches", async () => {
+test("the composer offers only projects with their branches, and no project keeps the member where it always works", async () => {
   await mount();
-  // The default keeps the short word on the button; the menu names the member's folder whole.
+  // With no project the button keeps its short word, and nothing names or shows the member's own folder.
   expect(find("#folder").textContent).toBe("選擇資料夾");
+  expect(find("#folder").getAttribute("aria-label")).toBe("選擇資料夾");
   expect(find("#branch").hidden).toBe(true);
   find("#folder").click(); await flush();
-  expect(rows().map(row => row.querySelector("b")!.textContent)).toEqual(["日文老師的資料夾", "Repo", "Notes"]);
-  expect(rows()[0].textContent).toContain(own);
+  expect(rows().map(row => row.querySelector("b")!.textContent)).toEqual(["不指定資料夾", "Repo", "Notes"]);
+  expect(document.querySelector("#app-popover")!.textContent).not.toContain(own);
+  expect(document.querySelector("#app-popover")!.textContent).not.toContain("日文老師");
+  expect(rows()[0].querySelector("small")).toBeNull();
+  expect(api.memberFolder).not.toHaveBeenCalled();
   expect(rows()[0].getAttribute("aria-checked")).toBe("true");
   expect(rows()[1].querySelector(".project-branch")!.textContent).toBe("main");
   expect(rows()[2].querySelector(".project-branch")).toBeNull();
@@ -62,17 +66,6 @@ test("the composer lists the member folder first and remembers projects with the
   find("#folder").click(); await flush(); await choose(0);
   expect(api.settingsSet).toHaveBeenLastCalledWith("member_work_folder", { "7": plain });
   expect(find("#branch").hidden).toBe(true);
-});
-
-test("the open folder card fills in the member path when the core answers", async () => {
-  let answer!: (folder: { path: string }) => void;
-  api.memberFolder.mockReturnValue(new Promise(resolve => { answer = resolve; }));
-  await mount();
-  find("#folder").click();
-  expect(rows()[0].textContent).not.toContain(own);
-  answer({ path: own });
-  await flush();
-  expect(rows()[0].textContent).toContain(own);
 });
 
 test("the branch card switches local branches and shows Git's refusal", async () => {

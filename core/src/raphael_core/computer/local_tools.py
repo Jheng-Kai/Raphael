@@ -17,13 +17,17 @@ from ..agent.permissions import owner_screen as reaches_owner_screen, qualifies
 from ..agent.policy import UNATTENDED_WAIT_S, Tier
 from ..agent.data_floor import DataFloor, WRITE_REFUSAL
 from ..brain.settings import SettingsStore
+from ..folders import work_folder
 from ..integrations.audit import AuditLog
+from .. import work_area
+from . import shell_writes
 from .local_host import LocalHost, Output
 from .local_patterns import DANGEROUS_PATTERNS, MAC_DANGEROUS_PATTERNS
 from .file_tools import VmError
 from .on_screen import launches_on_screen
 from .owner_files import DEFINITIONS as OWNER_FILE_DEFINITIONS, READS as OWNER_FILE_READS, SERVER as OWNER_FILES, OwnerFileTools
 from .owner_files import WRITES as OWNER_FILE_WRITES, place as owner_place
+from . import owner_files as owner_module
 
 LOCAL_PREFIX = "mcp:local/"
 BACKGROUND_WAIT_S = UNATTENDED_WAIT_S
@@ -36,6 +40,9 @@ _CONTEXT = ContextVar("local_command_context", default=(None, True, False, "", F
 ON_SCREEN = ("Nothing was run: this command would show something on the owner's screen, and only a quick question shows "
              "anything there. Open pages, programs and files on your own computer with its tools. To run a program and "
              "read what it prints, run it directly, without opening a window.")
+OUTSIDE_COMMAND = ("Nothing was run: this command writes outside your work folder, which needs the owner's yes on a card "
+                   "for this exact command, and none was given or this conversation cannot show one. Write inside your work "
+                   "folder, or tell the owner plainly.")
 NO_CARD = ("Nothing was run: a local command needs the owner's yes on a card, and this conversation cannot show one. "
            "Tell the owner plainly that it can be asked for in a private conversation in the app.")
 # These patterns are best effort, not a shell parser or sandbox. The owner card is the real gate.
@@ -114,7 +121,7 @@ def card_arguments(key, arguments):
     if owner_file_tool(key) not in OWNER_FILE_WRITES or not isinstance(arguments.get("path"), str):
         return arguments
     try:
-        return {**arguments, "path": owner_place(arguments["path"])}
+        return {**arguments, "path": work_area.shown(owner_place(arguments["path"]))}
     except (VmError, OSError, ValueError):
         return arguments
 
@@ -239,11 +246,14 @@ class LocalTools:
 
     def tier_for_call(self, key, arguments):
         if (name := owner_file_tool(key)) is not None:
-            # A read asks nothing; a write outside the owner's folders is refused in `call`, so nothing asks for it.
+            # A read asks nothing. A write inside the member's work folder asks as any change does (T2); one outside it
+            # is T3 and firm (`firm_for_call`): the owner is asked in every mode, and no Always for the tool waives it
+            # (R-FILE-06). A path that cannot be written at all (a device, a place of keys) is refused in `call`.
             schema = OWNER_FILE_DEFINITIONS[name]["parameters"]
-            if name in OWNER_FILE_READS or not Draft202012Validator(schema).is_valid(arguments) or not self.owner_files.writable(arguments, _CONTEXT.get()[5]):
+            if name in OWNER_FILE_READS or not Draft202012Validator(schema).is_valid(arguments):
                 return Tier.T0
-            return Tier.T2
+            reach = self.owner_files.reach(arguments, _CONTEXT.get()[5])
+            return Tier.T2 if reach == "inside" else Tier.T3 if reach == "outside" else Tier.T0
         if not is_local(key):
             return getattr(self.delegate, "tier_for_call", lambda k, a: self.delegate.tier_of(k))(key, arguments)
         schema = JOB_SCHEMA if key.endswith("/local_job") else EXEC_SCHEMA
@@ -253,7 +263,36 @@ class LocalTools:
                 or not _CONTEXT.get()[2] or shows_on_screen(key, arguments)
                 or self._task_install(arguments)):
             return Tier.T0
+        if self.shell_outside(arguments):
+            return Tier.T3
         return Tier.T2 if self.requires_approval(arguments) else Tier.T0
+
+    def firm_for_call(self, key, arguments):
+        """Whether this call is asked about in every permission mode, 全部允許 included (`ToolGate.firm_confirmation`): a
+        write of the owner's file tools outside the member's work folder, and a command that names a file outside it
+        (R-FILE-06). It is what `tier_for_call` calls T3 here, so the door and the question say the same."""
+        if owner_file_tool(key) in OWNER_FILE_WRITES or key == tool_key("local", "local_exec"):
+            return self.tier_for_call(key, arguments) == Tier.T3
+        firm = getattr(self.delegate, "firm_for_call", None)
+        return callable(firm) and firm(key, arguments) is True
+
+    def shell_outside(self, arguments):
+        """The files this command names that are outside the member's work folder (`shell_writes`): none for a command
+        that names none, whatever else the program it starts may write. It runs in the folder the owner chose for the
+        member unless it says another, and a relative target is taken from there."""
+        if not isinstance(arguments.get("command"), str):
+            return []
+        member, home = _CONTEXT.get()[5], owner_module._home()
+        roots = work_area.area(self.settings, member, self.owner_files.member_folders)
+        cwd = arguments.get("cwd")
+        try:
+            if cwd is None:
+                start = str(work_folder(self.settings, member, self.owner_files.member_folders))
+            else:
+                start = work_area.resolved(cwd, None, home) if isinstance(cwd, str) and (os.path.isabs(cwd) or cwd.startswith("~")) else None
+        except work_area.PathRefused:
+            start = None
+        return shell_writes.writes(arguments["command"], start, roots, home=home)
 
     def kind_of(self, server, name):
         if server == OWNER_FILES:
@@ -316,6 +355,8 @@ class LocalTools:
                 return PluginResult(False, "secret_store", "Reading secret stores is refused.")
             if not self.enabled:
                 return PluginResult(False, "disabled", "Local commands are disabled in this test environment.")
+            if self.shell_outside(arguments) and (approver != "user" or not present):
+                return PluginResult(False, "approval_required", OUTSIDE_COMMAND)
             if approver == "none" or self.requires_approval(arguments) and approver != "user":
                 return result
             timeout = min(arguments.get("timeout_seconds", DEFAULT_TIMEOUT_S), MAX_TIMEOUT_S)
@@ -356,7 +397,7 @@ class LocalTools:
         result = await self.owner_files.call(name, arguments, approver=approver, run=owner or ("task", task_id),
                                              member_id=_CONTEXT.get()[5])
         self.audit.add(server=OWNER_FILES, tool=name, tier=self.tier_of(key).name, approver=approver,
-                       outcome="ok" if result.ok else "blocked" if result.kind in ("kept", "not_writable", "approval_required",
+                       outcome="ok" if result.ok else "blocked" if result.kind in ("kept", "approval_required",
                                                                                      "protected_data") else "error", task_id=task_id)
         return result
 

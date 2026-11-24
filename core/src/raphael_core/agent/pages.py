@@ -139,7 +139,8 @@ THEME = {
 FONT = '"Inter","Noto Sans TC","PingFang TC","Microsoft JhengHei UI","Microsoft JhengHei",system-ui,sans-serif'
 
 
-# A page open in the whole area is as tall as its content (up to 20000 px, R-PAGE-08): the area scrolls, the frame does not.
+# A page open in the whole area is shown as a browser shows it (R-PAGE-10): its frame is the page's window and the page scrolls in it.
+# The height it says only sizes its card in the thread; the background it says is what the window paints behind the composer's row.
 _HELPER = "<script>" + FRAME_NAVIGATION + """
 (() => {
   const post = (type, data) => parent.postMessage({raphaelPage: 1, type, ...data}, '*');
@@ -210,6 +211,30 @@ _HELPER = "<script>" + FRAME_NAVIGATION + """
   // Where the owner is reading: the window keeps it, so a page changed while open comes back to the same place.
   let scrolling = 0;
   addEventListener('scroll', () => { if (!scrolling) scrolling = requestAnimationFrame(() => { scrolling = 0; post('scroll', {y: Math.round(scrollY)}); }); }, {passive: true});
+  // The page's own background (R-PAGE-10): the window paints it behind the composer's row, so the page still reads as running to the
+  // window's foot. The first computed background colour of the body that is not transparent, then of the root, as a plain rgb() or
+  // rgba() (nothing else is ever sent; a colour in another notation is converted), or an empty one when the page has none.
+  const plain = value => {
+    // (This text is a Python string: no backslash may stand in it.)
+    let parts = /^rgba?[(][^)]*[)]$/.test(value) ? value.slice(value.indexOf('(') + 1, -1).split(/[ ,/]+/).filter(Boolean).map(Number) : null;
+    if (!parts || parts.length < 3 || parts.some(Number.isNaN)) {
+      try { const paint = document.createElement('canvas').getContext('2d'); paint.fillStyle = value; paint.fillRect(0, 0, 1, 1);
+        const [r, g, b, a] = paint.getImageData(0, 0, 1, 1).data; parts = [r, g, b, a / 255]; } catch { return ''; }
+    }
+    const [r, g, b, a = 1] = parts, byte = n => Math.max(0, Math.min(255, Math.round(n)));
+    if (!(a > 0)) return '';
+    return a >= 1 ? 'rgb(' + byte(r) + ', ' + byte(g) + ', ' + byte(b) + ')' : 'rgba(' + byte(r) + ', ' + byte(g) + ', ' + byte(b) + ', ' + Math.round(a * 1000) / 1000 + ')';
+  };
+  const background = () => {
+    for (const root of [document.body, document.documentElement]) {
+      const color = root ? plain(getComputedStyle(root).backgroundColor) : '';
+      if (color) return color;
+    }
+    return '';
+  };
+  const tell = () => post('background', {color: background()});
+  addEventListener('DOMContentLoaded', tell, {once: true});
+  addEventListener('load', tell, {once: true});
   // The page has the keys once the owner pressed in it: Escape there goes back to the conversation as it does outside,
   // unless it only drops an input method's candidate (WebKit, on macOS, marks that Escape with keyCode 229 alone).
   addEventListener('keydown', event => { if (event.key === 'Escape' && !event.defaultPrevented && !event.isComposing && event.keyCode !== 229) post('escape', {}); });

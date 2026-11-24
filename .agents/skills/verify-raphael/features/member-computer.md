@@ -27,6 +27,15 @@ shown in the Computer panel by default.
 Local Docker and Chrome share the member workspace and team folder while retaining
 separate site sign-ins. Docker on another host uses its own volumes.
 
+R-FILE-06: a member writes in its work folder only, the project chosen in the composer
+alone, or with none chosen its own folder and the team folder. A file tool of the host
+computer, of the Docker computer (on a folder bound from the PC), of the owner's file
+tools, or a command that names a file elsewhere asks the owner's yes card in every
+permission mode, 全部允許 included, and a no writes nothing; a command's own programs are
+not read, and the mounts of the Docker computer stay read-write. Core only (no screen
+changes): `core/tests/agent/test_write_boundary.py`, `core/tests/computer/test_shell_writes.py`,
+`core/tests/computer/test_write_boundary_computer.py`.
+
 Opening a page opens the Computer tab on that same page. The page fills the frame
 under the [host browser toolbar](#host-browser-toolbar). A takeover card appears only while a member waits for the owner for
 an owner-only step. The reason stays on the card, while the thread shows the member's own words.
@@ -1898,9 +1907,9 @@ every turn and task, every source and brain (API, and CLI through its MCP list) 
   start inside them (each app's container on a Mac would ask the owner). A denied file on a Mac names System Settings ›
   Privacy & Security › Files and Folders or Full Disk Access.
 - Writes (T2, kind write) reach a member's own shared folder, the team folder and each remembered project. Kept
-  paths, the data floor and read-before-edit still apply. The composer lists the member's own folder first and
-  projects in added order. The checked row sets the working location. Add folder is the native picker. In member
-  settings, the member's own folder is one row that opens it in the file manager.
+  paths, the data floor and read-before-edit still apply. The composer lists 「不指定資料夾」 first and
+  projects in added order. The checked row sets the working location; with none the member works where it always
+  does, and no row, label or setting names, shows or opens a member's own folder. Add folder is the native picker.
 - Git branches are visible beside the project and on the separate branch button. Its card checks the current ref
   and lists local branches. If Git is unavailable, a branch read from HEAD has no switch choices. Git's refusal
   appears in the toast. Core Git calls disable hooks and fsmonitor. Repositories with their own filters
@@ -1916,10 +1925,10 @@ Offline checks cover the migration, permissions, prompts, temporary Git reposito
 See [General](settings-appearance.md#project-folders-in-general) for adding, cancelling and removing projects.
 
 ```powershell
-npm run look -- member-own-folder composer-folder composer-folder-menu composer-folder-added composer-folder-many composer-branch composer-row-narrow composer-row-language composer-row-owner --theme both --width 1120,720,1920x1080
+npm run look -- member-no-own-folder composer-folder composer-folder-menu composer-folder-added composer-folder-many composer-branch composer-row-narrow composer-row-language composer-row-owner --theme both --width 1120,720,1920x1080
 ```
 
-Compare the composer controls with the permission control and the member's folder row with other tool rows.
+Compare the composer controls with the permission control.
 Native picker, file-manager opening and the Linux bind mounts require real acceptance.
 
 

@@ -71,13 +71,16 @@ def test_every_turn_and_task_lists_the_reads_and_nothing_of_the_owners_screen(co
         assert not listed & PC_TOOLS  # the hidden commands are listed too (R-PC-02); the screen is a quick question's
 
 
-def test_reads_ask_nothing_and_a_write_asks_only_inside_the_owners_folders(conn, home, files):
+def test_reads_ask_nothing_and_a_write_asks_in_the_work_folder_and_firmly_outside_it(conn, home, files):
     settings = SettingsStore(conn)
     settings.set("project_folders", [str(home / "Documents")])
+    settings.set("member_work_folder", {"0": str(home / "Documents")})
     assert files.tier_for_call("mcp:owner_files/read_file", {"path": "~/.ssh/id_ed25519"}) == Tier.T0
     assert files.tier_for_call("mcp:owner_files/write_file", {"path": "~/Documents/a.md", "content": "x"}) == Tier.T2
-    # Outside the folders a write is refused when called, so nothing asks the owner for it.
-    assert files.tier_for_call("mcp:owner_files/write_file", {"path": "~/Desktop/a.md", "content": "x"}) == Tier.T0
+    # Outside the work folder the owner is asked in every mode, and nothing waives it (R-FILE-06); a place of keys is
+    # refused when called, so nothing asks for it.
+    assert files.tier_for_call("mcp:owner_files/write_file", {"path": "~/Desktop/a.md", "content": "x"}) == Tier.T3
+    assert files.tier_for_call("mcp:owner_files/write_file", {"path": "~/.ssh/config", "content": "x"}) == Tier.T0
     assert files.kind_of("owner_files", "grep") == "read" and files.kind_of("owner_files", "edit_file") == "write"
 
 
@@ -163,8 +166,8 @@ async def test_a_home_reached_through_a_link_keeps_its_places_of_keys(conn, link
     matched = await call(files, "grep", {"pattern": "PRIVATE|ship", "output_mode": "content"})
     assert "plan.md" in matched.text and "PRIVATE" not in matched.text
     SettingsStore(conn).set("project_folders", [str(linked_home)])
-    written = await call(files, "write_file", {"path": "~/.ssh/config", "content": "Host leak\n"})
-    assert not written.ok and written.kind == "not_writable"
+    written = await call(files, "write_file", {"path": "~/.ssh/config", "content": "Host leak\n"}, approver="user")
+    assert not written.ok and written.kind == "kept"
 
 
 async def test_a_place_of_keys_reached_through_a_link_is_kept_as_asked_and_where_it_leads(home, files, tmp_path):
@@ -240,15 +243,16 @@ async def test_a_search_for_raphaels_database_by_name_is_made_and_finds_none_of_
 # --- writing ---------------------------------------------------------------------------------------------------------
 
 
-async def test_writing_is_only_inside_the_owners_folders(conn, home, files):
+async def test_writing_without_a_yes_is_only_inside_the_work_folder(conn, home, files):
     settings = SettingsStore(conn)
     refused = await call(files, "write_file", {"path": "~/Documents/new.md", "content": "hello"})
-    assert not refused.ok and refused.kind == "not_writable"
+    assert not refused.ok and refused.kind == "approval_required"
     settings.set("project_folders", [str(home / "Documents" / "notes")])
     outside = await call(files, "write_file", {"path": "~/Documents/new.md", "content": "hello"})
-    assert not outside.ok and outside.kind == "not_writable" and str(home / "Documents" / "notes") in outside.text
+    assert not outside.ok and outside.kind == "approval_required"
     assert not (home / "Documents" / "new.md").exists()
-    # A project is writable. Existing files still need to be read before an edit.
+    # A project the owner chose for the member is its work folder. Existing files still need to be read before an edit.
+    settings.set("member_work_folder", {"0": str(home / "Documents" / "notes")})
     made = await call(files, "write_file", {"path": "~/Documents/notes/new.md", "content": "hello\n"})
     assert made.ok and (home / "Documents" / "notes" / "new.md").read_text(encoding="utf-8") == "hello\n"
     unread = await call(files, "edit_file", {"path": "~/Documents/notes/plan.md", "old_string": "then rest", "new_string": "then sleep"})
@@ -256,28 +260,32 @@ async def test_writing_is_only_inside_the_owners_folders(conn, home, files):
     await call(files, "read_file", {"path": "~/Documents/notes/plan.md"})
     edited = await call(files, "edit_file", {"path": "~/Documents/notes/plan.md", "old_string": "then rest", "new_string": "then sleep"})
     assert edited.ok and "then sleep" in (home / "Documents" / "notes" / "plan.md").read_text(encoding="utf-8")
-    # A kept place inside a write folder still takes no write.
+    # A kept place inside the work folder still takes no write, with or without a yes.
     settings.set("project_folders", [str(home / "project")])
-    secret = await call(files, "write_file", {"path": "~/project/.env", "content": "TOKEN=leak"})
+    settings.set("member_work_folder", {"0": str(home / "project")})
+    secret = await call(files, "write_file", {"path": "~/project/.env", "content": "TOKEN=leak"}, approver="user")
     assert not secret.ok and (home / "project" / ".env").read_text(encoding="utf-8") == "TOKEN=ship\n"
 
 
-async def test_each_member_can_write_its_own_folder_team_and_projects(conn, home, files):
+async def test_each_member_writes_its_own_folder_and_the_team_or_the_project_chosen_for_it(conn, home, files):
     settings = SettingsStore(conn)
     team = home / "team"
     files.owner_files.member_folders = lambda member: (home / f"member-{member}", team)
     settings.set("project_folders", [str(home / "project")])
-    for path in ("~/member-0/notes/a.md", "~/team/a.md", "~/project/a.md"):
-        written = await call(files, "write_file", {"path": path, "content": "a\n"})
-        assert written.ok
-    for path in ("~/member-7/a.md", "~/Documents/a.md"):
+    # No project chosen: the member's own folder and the team's, and no other folder without a yes.
+    for path in ("~/member-0/notes/a.md", "~/team/a.md"):
+        assert (await call(files, "write_file", {"path": path, "content": "a\n"})).ok
+    for path in ("~/member-7/a.md", "~/Documents/a.md", "~/project/a.md"):
         refused = await call(files, "write_file", {"path": path, "content": "a\n"})
-        assert not refused.ok and refused.kind == "not_writable"
+        assert not refused.ok and refused.kind == "approval_required", path
     token = _CONTEXT.set((("chat", 7, 2), False, True, "session", False, 7))
     try:
+        # Another member, with a project chosen: that project alone.
+        settings.set("member_work_folder", {"7": str(home / "project")})
         assert (await call(files, "write_file", {"path": "~/project/seven.md", "content": "a\n"})).ok
-        refused = await call(files, "write_file", {"path": "~/member-0/hidden.md", "content": "a\n"})
-        assert refused.kind == "not_writable"
+        for path in ("~/member-0/hidden.md", "~/member-7/own.md", "~/team/seven.md"):
+            refused = await call(files, "write_file", {"path": path, "content": "a\n"})
+            assert refused.kind == "approval_required", path
         assert (await call(files, "read_file", {"path": "~/member-0/notes/a.md"})).ok
     finally:
         _CONTEXT.reset(token)
@@ -314,6 +322,7 @@ def test_projects_and_work_folders_validate_members_and_paths(conn, home):
 
 async def test_a_write_that_was_not_approved_is_not_made(conn, home, files):
     SettingsStore(conn).set("project_folders", [str(home / "Documents")])
+    SettingsStore(conn).set("member_work_folder", {"0": str(home / "Documents")})
     result = await call(files, "write_file", {"path": "~/Documents/x.md", "content": "x"}, approver="none")
     assert not result.ok and result.kind == "approval_required" and not (home / "Documents" / "x.md").exists()
 
@@ -361,6 +370,7 @@ async def test_the_card_for_a_write_names_the_file_that_will_be_written(make_rig
     # The member wrote a path through a folder link; the owner approves the place the write lands, where `writable` judged.
     rig = rig_with_files(make_rig, conn)
     rig.settings.set("project_folders", [str(home / "Documents")])
+    rig.settings.set("member_work_folder", {"0": str(home / "Documents")})
     _link_folder(home / "Desk", home / "Documents")
     landing = os.path.realpath(home / "Documents" / "new.md")
     client.chats = [chat("Saving.", ("owner_files__write_file", {"path": "~/Desk/new.md", "content": "hello\n"}))]

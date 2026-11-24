@@ -208,6 +208,8 @@ class HostBrowser:
         self.process = self.cdp = None
         self.process_tree = None
         self.tabs, self.downloads = {}, {}
+        # Where a finished download is placed for a member (`HostComputerTools.download_folder`); its tab's folder without it.
+        self.download_to = None
         self.owned_targets = {}
         self.startup_url = None
         self.current = {}
@@ -482,6 +484,8 @@ class HostBrowser:
             download = self.downloads.pop(guid, None)
             if download and params["state"] == "completed":
                 member, workspace, name = download
+                if self.download_to is not None:
+                    workspace = self.download_to(member)
                 task = asyncio.create_task(asyncio.to_thread(self._place_download, guid, workspace, name))
                 self.transfers[task] = member
                 task.add_done_callback(self.transfers.pop)

@@ -197,12 +197,59 @@ async def test_host_writes_use_work_roots_and_need_an_explicit_yes_elsewhere(tmp
     assert floor.access(key, {**args, "path": str(tools.folders(1)[0] / "notes.txt")}) is None
     assert floor.access(key, {**args, "path": str(tools.browser.profile / "Preferences")}) == "write"
     outside = {"path": str(tmp_path / "other.txt"), "content": "approved"}
-    assert tools.tier_for_call(key, outside) == Tier.T2
+    assert tools.tier_for_call(key, outside) == Tier.T3 and tools.firm_for_call(key, outside)
+    assert not tools.firm_for_call(key, args)
     assert (await tools.file_call(1, "write_file", outside, "auto", work)).kind == "approval_required"
     assert (await tools.file_call(1, "write_file", outside, "user", work)).ok
     assert Path(outside["path"]).read_text() == "approved"
     profile = {"path": str(tools.browser.profile / "DevToolsActivePort")}
     assert (await tools.file_call(1, "read_file", profile, "user", work)).kind == "protected_data"
+
+
+async def test_host_writes_in_a_chosen_project_reach_only_that_project(tmp_path, conn):
+    settings = SettingsStore(conn)
+    project, other = tmp_path / "project", tmp_path / "other"
+    project.mkdir()
+    other.mkdir()
+    settings.set("project_folders", [str(project), str(other)])
+    settings.set("member_work_folder", {"1": str(project)})
+    tools = HostComputerTools(LocalVm(tmp_path / "data", settings=settings), conn, BROWSER_OPEN)
+    key = next(tool.key for tool in tools.offered(1) if tool.name == "write_file")
+    work = ("turn", 1, 2)
+    inside = {"path": str(project / "a.txt"), "content": "kept"}
+    assert tools.tier_for_call(key, inside) == Tier.T0 and not tools.firm_for_call(key, inside)
+    assert (await tools.file_call(1, "write_file", inside, "auto", work)).ok
+    # Its own folder, the team folder and another remembered project are outside it now.
+    own, team = tools.folders(1)
+    for folder in (own, team, other):
+        refused = {"path": str(folder / "b.txt"), "content": "no"}
+        assert tools.tier_for_call(key, refused) == Tier.T3 and tools.firm_for_call(key, refused), folder
+        assert (await tools.file_call(1, "write_file", refused, "auto", work)).kind == "approval_required"
+        assert not (folder / "b.txt").exists()
+    # A relative name is taken from the project, and `..` out of it is outside.
+    assert tools.tier_for_call(key, {"path": "c.txt", "content": "x"}) == Tier.T0
+    assert tools.tier_for_call(key, {"path": "../other/c.txt", "content": "x"}) == Tier.T3
+    # The owner's yes is the way to another place; a member without a project chosen keeps to its own folder and the team's.
+    assert (await tools.file_call(1, "write_file", {"path": str(other / "b.txt"), "content": "yes"}, "user", work)).ok
+    assert (other / "b.txt").read_text() == "yes"
+    assert tools.tier_for_call(key, {"path": str(own / "d.txt"), "content": "x"}) == Tier.T3
+    assert tools.tier_for_call(key, {"path": "d.txt", "content": "x"}, ) == Tier.T0
+    settings.set("member_work_folder", {})
+    assert tools.tier_for_call(key, {"path": str(own / "d.txt"), "content": "x"}) == Tier.T0
+    assert tools.tier_for_call(key, {"path": str(team / "d.txt"), "content": "x"}) == Tier.T0
+    assert tools.tier_for_call(key, {"path": str(project / "d.txt"), "content": "x"}) == Tier.T3
+
+
+async def test_a_download_is_placed_in_the_work_folder_the_member_has(tmp_path, conn):
+    settings = SettingsStore(conn)
+    project = tmp_path / "project"
+    project.mkdir()
+    settings.set("project_folders", [str(project)])
+    tools = HostComputerTools(LocalVm(tmp_path / "data", settings=settings), conn, BROWSER_OPEN)
+    assert tools.browser.download_to == tools.download_folder
+    assert tools.download_folder(1) == tools.folders(1)[0]
+    settings.set("member_work_folder", {"1": str(project)})
+    assert tools.browser.download_to(1) == Path(os.path.realpath(project))
 
 
 async def test_certificate_handoff_keeps_the_origin_and_tab_for_an_existing_private_task(tmp_path, conn, monkeypatch):

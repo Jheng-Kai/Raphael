@@ -116,8 +116,11 @@
 .cs-connected > .cs-top { margin-bottom: var(--sp-4); }
 .cs-connected > .cs-top > .cs-back { margin-block: 0; }
 .cs-head { display: flex; align-items: center; gap: var(--sp-3); }
-.cs-head h2.big { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .cs-join, .svc-switch-row { display: flex; justify-content: flex-end; align-items: center; gap: var(--sp-2); margin-top: var(--sp-2); }
+/* An app's mark, its name and what it does now (連結, or 已連結 with its ⋯ and switch) on one row under the back (R-APPS-02). */
+.cs-app { display: flex; align-items: center; gap: var(--sp-3); margin-top: var(--sp-3); }
+.cs-app > h2.big { flex: 1; min-width: 0; margin: 0; overflow-wrap: anywhere; }
+.cs-app > .cs-join { flex: none; margin-top: 0; }
 .cs-wait { font-size: var(--fs-sm); color: var(--accent-text); }
 .cs-desc { margin: var(--sp-4) 0 0; font-size: var(--fs-sm); line-height: 1.6; color: var(--text-2); text-wrap: pretty; }
 .cs-needs { margin: var(--sp-3) 0 0; font-size: var(--fs-sm); line-height: 1.55; color: var(--text-2); text-wrap: pretty; }

@@ -28,6 +28,7 @@ Nothing here logs a city, a question or an answer.
 """
 
 import asyncio
+import json
 import logging
 import re
 from collections.abc import Callable
@@ -231,6 +232,40 @@ def _compact(entries: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in entries.items() if value is not None}
 
 
+CARD_USE = "Put card in the reply as it is, its condition words in the owner's language: it draws this whole forecast."
+
+
+def forecast_card(data: dict[str, Any]) -> str | None:
+    """The forecast form (R-FORM-03) of what the weather tool read, whole and ready to reply with: now, the hours and the
+    days, the source and the time. A member that wrote the form itself kept only a day or two; this one has every part.
+    None when the days are too few to make a valid form."""
+    from ..answer_forms import forms_plain_text
+
+    days = [_compact({"day": day["date"], "condition": day["sky"], "high": day["high_c"], "low": day["low_c"],
+                      "rain": day.get("rain_chance_percent")})
+            for day in data.get("days", ()) if all(key in day for key in ("date", "sky", "high_c", "low_c"))]
+    place = data.get("asked_for") or data.get("city")
+    if not days or not isinstance(place, str):
+        return None
+    form: dict[str, Any] = {"place": place, "units": "C"}
+    now = data.get("now") or {}
+    if "temperature_c" in now and "sky" in now:
+        wind = now.get("wind_kmh")
+        form["now"] = _compact({"temp": now["temperature_c"], "condition": now["sky"], "feels": now.get("feels_like_c"),
+                                "humidity": now.get("humidity_percent"),
+                                "wind": None if wind is None else f"{round(wind)} km/h"})
+    hours = [_compact({"time": hour["time"], "condition": hour["sky"], "temp": hour["temperature_c"],
+                       "rain": hour.get("rain_chance_percent")})
+             for hour in data.get("hours", ()) if all(key in hour for key in ("time", "sky", "temperature_c"))]
+    if hours:
+        form["hours"] = hours
+    form["days"] = days
+    form.update(_compact({"source": data.get("source"), "updated": data.get("updated")}))
+    card = "```forecast\n" + json.dumps(form, ensure_ascii=False, separators=(",", ":")) + "\n```"
+    # Only a form the app draws is handed on: one the checks refuse would stand in the reply as its source.
+    return card if forms_plain_text(card) != card else None
+
+
 class Tools:
     """The tools. `client` is the OpenRouter client (for the search). `http` is the httpx client
     for Open-Meteo, which the caller then owns; without one the tools make their own on first use
@@ -424,6 +459,9 @@ class Tools:
         updated = _clock(current.get("time")) if isinstance(current, dict) else None
         if updated:
             data["updated"] = updated  # the place's own local time of the reading
+        card = forecast_card(data)
+        if card:
+            data["card"], data["card_use"] = card, CARD_USE
         return data
 
     # --- the web --------------------------------------------------------------------------------

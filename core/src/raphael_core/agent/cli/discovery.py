@@ -1,6 +1,7 @@
 """CLI availability and credential-file existence, never credential contents."""
 
 import asyncio
+import logging
 import os
 import re
 import shutil
@@ -15,6 +16,8 @@ from .records import workspace_root
 from .terminal_login import TerminalSignIn
 from .models import runnable_model, claude_cli_models, claude_models, codex_models, antigravity_models, find_model
 from ...brain.model_ref import CLI_NAMES as NAMES
+
+logger = logging.getLogger(__name__)
 
 # Claude Code keeps its sign-in on a Mac in the login Keychain, as a password item of this name, not in a file.
 CLAUDE_KEYCHAIN_SERVICE = "Claude Code-credentials"
@@ -83,6 +86,9 @@ DISCOVERY_TTL_S = 60
 # A CLI whose sign-in was refused is not asked to start a routine again for this long, unless its credentials change or a
 # sign-in finishes first: after that the next run asks the CLI itself, so a sign-in done anywhere is found out (R-CLI-SIGNIN-03).
 SIGNIN_LOST_S = 30 * 60
+# While a CLI's sign-in is lost its credentials are looked at this often, so a sign-in done anywhere ends the notice; nothing
+# is looked at while no sign-in is lost (R-CLI-SIGNIN-06).
+SIGNIN_WATCH_S = 10
 
 
 def brain_ref(value):
@@ -205,8 +211,12 @@ class CliBrains:
         self._signing = {}
         self._signed = {}
         self._cancelled = set()
-        # A CLI that refused its sign-in during a run: name -> (cause, when, credential stamp).
+        # A CLI that refused its sign-in during a run: name -> (cause, when, credential stamp). The routine gate forgets it after
+        # `SIGNIN_LOST_S`; the notice (`sign_in_cause`) stays until something says the sign-in is back.
         self._lost = {}
+        self._lost_watch = None
+        # Told the name of a CLI whose sign-in came back: the cleanup of the failures it left (background service).
+        self.on_back = []
         self._previous = None
         self._lock = asyncio.Lock()
         self._watcher = None
@@ -318,25 +328,81 @@ class CliBrains:
 
     def sign_in_lost(self, name, cause):
         """A run of this CLI was refused for its sign-in (`expired` or `signed_out`): routines that start next are not run
-        into the same refusal (`sign_in_missing`)."""
-        if name in NAMES and cause in ("expired", "signed_out"):
-            self._lost[name] = (cause, self._clock(), self._credential_stamp(name))
+        into the same refusal (`sign_in_missing`), and the app says so until it is back (`sign_in_cause`). The app is told
+        once, when it becomes lost (or its cause changes), not at every refused run."""
+        if name not in NAMES or cause not in ("expired", "signed_out"):
+            return
+        before = self._lost.get(name)
+        self._lost[name] = (cause, self._clock(), self._credential_stamp(name))
+        if before is None or before[0] != cause:
+            self._changed()
+        self._watch_lost()
 
     def sign_in_back(self, name):
-        """A run of this CLI took its turn, or its sign-in finished: it is signed in."""
-        self._lost.pop(name, None)
+        """A run of this CLI took its turn: it is signed in. Says so (once) only when it was lost."""
+        self._came_back(name)
+
+    def sign_in_cause(self, name):
+        """`expired` or `signed_out` while this CLI's last run was refused for its sign-in and nothing since says it is back (a
+        run that was answered, a sign-in that finished, other credential files); `SIGNIN_LOST_S` does not end it."""
+        lost = self._lost.get(name)
+        return lost[0] if lost else None
 
     def sign_in_missing(self, name):
-        """`expired` or `signed_out` while this CLI's last run was refused for its sign-in and nothing since says it is back
-        (a sign-in that finished, a run that was answered, other credential files, or `SIGNIN_LOST_S`), else None."""
+        """What the routine gate asks: `sign_in_cause`, but None once `SIGNIN_LOST_S` has passed so the next routine asks
+        the CLI itself, and None (and back) when its credential files have changed."""
         lost = self._lost.get(name)
         if lost is None:
             return None
         cause, at, stamp = lost
-        if self._clock() - at >= SIGNIN_LOST_S or self._credential_stamp(name) != stamp:
-            del self._lost[name]
+        if self._credential_stamp(name) != stamp:
+            self._came_back(name)
             return None
-        return cause
+        return None if self._clock() - at >= SIGNIN_LOST_S else cause
+
+    def _changed(self):
+        self._previous = None
+        if self.notify:
+            self.notify("brains.changed", {})
+
+    def _came_back(self, name, *, always=False):
+        """This CLI's sign-in stands again. The app is told and the cleanup runs when it was lost, or when `always` (a sign-in
+        finished in the app's console, which may follow a restart that forgot the record)."""
+        held = self._lost.pop(name, None) is not None
+        if held:
+            self._changed()
+        if held or always:
+            for callback in list(self.on_back):
+                try:
+                    callback(name)
+                except Exception as error:  # the CLI's path never fails for what follows its sign-in
+                    logger.warning("The cleanup after a CLI sign-in failed: %s", type(error).__name__)
+
+    def _watch_lost(self):
+        """Look at the credentials of the CLIs that are lost about every `SIGNIN_WATCH_S`; none while nothing is lost."""
+        if self._lost_watch is not None or not self._lost:
+            return
+        try:
+            self._lost_watch = asyncio.get_running_loop().create_task(self._watch_lost_loop())
+        except RuntimeError:
+            self._lost_watch = None  # no loop (a plain call): the next refused run starts it
+
+    async def _watch_lost_loop(self):
+        try:
+            while self._lost:
+                await asyncio.sleep(SIGNIN_WATCH_S)
+                await self.check_lost()
+        finally:
+            self._lost_watch = None
+
+    async def check_lost(self):
+        """One look at the credentials of every CLI that is lost, off the loop (a Mac's stamp may ask the Keychain): a
+        changed stamp means its sign-in was done somewhere."""
+        for name in list(self._lost):
+            stamp = await asyncio.to_thread(self._credential_stamp, name)
+            lost = self._lost.get(name)
+            if lost is not None and stamp != lost[2]:
+                self._came_back(name)
 
     def disconnected(self, name):
         if self.settings is not None:
@@ -433,7 +499,8 @@ class CliBrains:
         item = {"id": name, "name": NAMES[name], "installed": bool(command),
                 "logged_in": logged_in, "disconnected": disconnected, "available": available,
                 "login_command": LOGIN[name], "models": models,
-                "signing_in": self._signing_in(name), "login_result": self._signed.get(name)}
+                "signing_in": self._signing_in(name), "login_result": self._signed.get(name),
+                "sign_in_lost": self.sign_in_cause(name)}
         if command:
             cached = self._versions.get(name)
             if cached and self._clock() < cached[0] and cached[1] == tuple(command):
@@ -629,7 +696,7 @@ class CliBrains:
             done = code == 0 and (name != "gemini" or self.logged_in(name) is True)
             self._signed[name] = "done" if done else "stopped"
             if done:
-                self.sign_in_back(name)
+                self._came_back(name, always=True)
                 self._reconnect(name)
                 self._fill_models(name)
         self._previous = None
@@ -652,6 +719,9 @@ class CliBrains:
             self._watcher = None
 
     async def aclose(self):
+        if self._lost_watch:
+            self._lost_watch.cancel()
+            await asyncio.gather(self._lost_watch, return_exceptions=True)
         if self._model_refresh:
             self._model_refresh.cancel()
             await asyncio.gather(self._model_refresh, return_exceptions=True)

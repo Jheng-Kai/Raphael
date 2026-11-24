@@ -118,13 +118,14 @@ import {
   requestRerun,
   requestStop,
   safeMediaSrc,
+  signinOf,
   stepsOpen,
   turnHTML,
   wantsRefresh,
 } from "../timeline";
 import type { PageArgument, AgentQuestion, AgentTurn, AppContext, CliBrainId, GroupDraft, MemberDraft, MessageQuote, OwnerQuestion, Page, TurnAttachment, WireAttachment } from "../types";
 import { closeAndPress } from "../dismissals";
-import { closeMenu, copyButton, esc, ico, iconButton, openMenu, patchHTML, toaster } from "../ui";
+import { btn, closeMenu, copyButton, esc, ico, iconButton, openMenu, patchHTML, toaster } from "../ui";
 import { askInChat } from "../chat-ask";
 import { createRoomPane, currentRoomId, openGroupChat, roomExists } from "../group-chats";
 import { bindActionMode, bindComposerRow, bindPageComposer, composerHTML, drawTaskSlot } from "../chat-composer";
@@ -419,6 +420,14 @@ export function createAgent(app: AppContext, places?: {
   quotaHost.hidden = true;
   let quotas: { provider: string; reset_at_ms: number | null }[] = [];
   let quotaTimer: ReturnType<typeof setTimeout> | undefined;
+  /**
+   * The subscription CLIs whose sign-in the core says is lost (`brains.cli` `sign_in_lost`, R-CLI-SIGNIN-06): each is one
+   * line above the composer with the button that mends it, whatever turns came after the failure, until the core says
+   * the sign-in is back. A routine's failed run has no button of its own, so this line is where it is mended.
+   */
+  let signinLost: { cli: CliBrainId; name: string; cause: "expired" | "signed_out" }[] = [];
+  /** The lines' sign-in phases share the replies' map (`state.signin`) under a key of their own per CLI, never a turn's id. */
+  const SIGNIN_KEYS: Record<CliBrainId, number> = { claude: -1, codex: -2, gemini: -3 };
   const conversationId = (): number | undefined => chosenConversations.get(memberId());
   function statusConversationOpened(): void {
     if (!visible || roomPane.active || members.settings.isOpen() || pagesHost.shown()) return;
@@ -535,13 +544,38 @@ export function createAgent(app: AppContext, places?: {
     const names: Record<string, string> = { codex: "Codex", claude: "Claude", gemini: "Antigravity" };
     const time = (ms: number): string => new Intl.DateTimeFormat(getLocale(), { hour: "numeric", minute: "2-digit" })
       .formatToParts(new Date(ms)).map(part => part.type === "dayPeriod" ? `${part.value} ` : part.value).join("").trim();
-    patchHTML(quotaHost, quotas.map(q => `<span class="quota-chip" role="status">${ico("clock")}<span>${esc(t("chat.quota", { p0: names[q.provider] ?? q.provider }))}${q.reset_at_ms ? esc(t("chat.quotaReset", { p0: time(q.reset_at_ms) })) : ""}</span></span>`).join(""));
-    quotaHost.hidden = quotas.length === 0;
+    // The newest reply's own sign-in button (R-CLI-SIGNIN-02) already mends its CLI: that CLI's line waits until it is gone.
+    const newest = turns.find(turn => turn.id === latestAnsweredId()), mended = newest ? signinOf(newest)?.cli : undefined;
+    const lost = signinLost.filter(item => item.cli !== mended);
+    patchHTML(quotaHost, quotas.map(q => `<span class="quota-chip" role="status">${ico("clock")}<span>${esc(t("chat.quota", { p0: names[q.provider] ?? q.provider }))}${q.reset_at_ms ? esc(t("chat.quotaReset", { p0: time(q.reset_at_ms) })) : ""}</span></span>`).join("") +
+      lost.map(signinChipHTML).join(""));
+    quotaHost.hidden = quotas.length === 0 && lost.length === 0;
     if (quotaHost.hidden) quotaHost.remove();
     else if (quotaHost.nextElementSibling !== composer) composer.before(quotaHost);
     const next = Math.min(...quotas.map(q => q.reset_at_ms ?? Infinity));
     if (Number.isFinite(next)) quotaTimer = setTimeout(drawQuotas, Math.min(2_147_483_647, Math.max(1, next - now)));
   }
+  function signinChipHTML(item: { cli: CliBrainId; name: string; cause: "expired" | "signed_out" }): string {
+    const phase = state.signin.get(SIGNIN_KEYS[item.cli]);
+    const words = phase === "waiting" ? t("brains.signinWaiting") : phase === "done" ? t("brains.signinDone") : phase === "stopped" ? t("brains.signinFailed")
+      : t(item.cause === "expired" ? "brains.signinLost" : "brains.signinNone", { p0: item.name });
+    const button = phase === "waiting" ? btn(esc(t("common.cancel")), "sm", ` data-act="notice-signin-cancel" data-cli="${item.cli}"`)
+      : phase === "done" ? "" : btn(esc(t(item.cause === "expired" ? "conn.relogin" : "brains.signinFirst")), "sm", ` data-act="notice-signin" data-cli="${item.cli}"`);
+    return `<div class="quota-chip signin-chip" role="status" data-cli="${item.cli}" data-phase="${phase ?? "idle"}">${ico("alert")}<span>${esc(words)}</span>${button}</div>`;
+  }
+  async function readSignin(): Promise<void> {
+    try {
+      const { clis } = await api.brainsCli();
+      signinLost = clis.flatMap(row => row.sign_in_lost === "expired" || row.sign_in_lost === "signed_out" ? [{ cli: row.id, name: row.name, cause: row.sign_in_lost }] : []);
+      drawQuotas();
+    } catch { /* The lines keep what was last known until the core answers again. */ }
+  }
+  quotaHost.addEventListener("click", event => {
+    const act = (event.target as Element).closest<HTMLElement>("[data-act]"), cli = act?.dataset.cli as CliBrainId | undefined;
+    if (!act || !cli || !(cli in SIGNIN_KEYS)) return;
+    if (act.dataset.act === "notice-signin") void signin.start(SIGNIN_KEYS[cli], cli);
+    else if (act.dataset.act === "notice-signin-cancel") void signin.cancel(SIGNIN_KEYS[cli], cli);
+  });
   async function readQuotas(): Promise<void> {
     try { const result = await api.core<{ quotas: typeof quotas }>("quota.list"); if (Array.isArray(result?.quotas)) { quotas = result.quotas; drawQuotas(); } } catch { /* Preserve the last known reset until reconnection. */ }
   }
@@ -653,14 +687,18 @@ export function createAgent(app: AppContext, places?: {
   const regenerating = new Set<number>();
   // The sign-in button under a failed reply (cli-signin.ts): a finished sign-in sends the question again, once, only while
   // that reply is still the latest and nothing else is under way.
+  // The line above the composer does the same for the newest reply that failed on its CLI; a task's run (a routine's) is
+  // run again by the core when the sign-in is back, and its failed turn leaves the history (R-CLI-SIGNIN-06).
   const signin = createCliSignin({
     phases: state.signin,
-    redraw: () => { if (visible) render(); },
-    retry: async turnId => {
+    redraw: () => { drawQuotas(); if (visible) render(); },
+    retry: async key => {
+      const cli = (Object.keys(SIGNIN_KEYS) as CliBrainId[]).find(name => SIGNIN_KEYS[name] === key);
+      const turnId = cli ? look().regenerateTurnId : key;
       const turn = turns.find(item => item.id === turnId);
-      if (!turn || turn.status !== "error" || look().regenerateTurnId !== turnId) return;
-      const again = signinRetry(turn);
-      if (again.kind === "rerun") await rerunTask(again.task); else await regenerateTurn(turn);
+      if (!turn || turn.status !== "error" || look().regenerateTurnId !== turn.id || (cli && signinOf(turn)?.cli !== cli)) { void readSignin(); return; }
+      if (signinRetry(turn).kind === "ask") await regenerateTurn(turn);
+      void readSignin();
     },
   });
   const measureAllMessages = messagePreviewMeasure(thread);
@@ -1247,6 +1285,7 @@ export function createAgent(app: AppContext, places?: {
       if (bubbleEdit?.key !== draftKey() || !edited || ownerEditFor(edited) !== "bubble") { state.bubbleEditing = null; bubbleEdit = null; }
     }
     drawComposer();
+    if (signinLost.length) drawQuotas();
     // An open conversation between members follows the turns it is read from, and closes with its conversation.
     if (peer) queueMicrotask(() => peer?.update());
     stage.setAttribute("aria-busy", String(pending));
@@ -3272,6 +3311,7 @@ export function createAgent(app: AppContext, places?: {
     if (event.type === "ConversationsChanged") { conversationsDirty.add(event.member_id); staleHistory.set(event.member_id, (staleHistory.get(event.member_id) ?? 0) + 1); conversationChange(event.member_id); }
     if (event.type === "AgentTurn") { conversationsDirty.add(event.member_id ?? RAPHAEL_ID); conversationChange(event.member_id ?? RAPHAEL_ID); if (voiceDraft?.member === (event.member_id ?? RAPHAEL_ID)) voiceDraft = null; }
     if (event.type === "QuotaChanged") void readQuotas();
+    if (event.type === "BrainsChanged") void readSignin();
     if (event.type === "MembersChanged") slashMenu.invalidate();
     if (wantsRefresh(event)) {
       // a turn of another thread changes only that member's row
@@ -3471,6 +3511,7 @@ export function createAgent(app: AppContext, places?: {
         if (leavingSettings) members.readCurrent();
       }
       void readQuotas();
+      void readSignin();
       // A draft goes into the field at once; the composer may then move (the empty page has it
       // under Raphael, the thread under the turns) or give way to a question, which takes the
       // focus away: it is given back once each of those is known.

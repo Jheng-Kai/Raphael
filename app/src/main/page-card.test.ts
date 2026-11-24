@@ -360,16 +360,20 @@ test("an open page runs under the composer: the view says how tall the composer'
   expect(stage.style.getPropertyValue("--pgv-say")).toBe("");
 });
 
-test("the page runs to the window's foot under a floating composer: the dock is no band and takes no pointer, and the room past the page is room, never a taller frame", () => {
+test("the page runs to the window's foot under a floating composer: the dock is no band and takes no pointer, and the page's frame ends above it, the page's own background behind it", () => {
   const css = readFileSync(join(__dirname, "page-view.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
   expect(css).toContain(".ra-stage.is-page > .pgv { grid-area: 1 / 1 / 3 / 2; }");
   expect(css).toMatch(/\.ra-stage\.is-page > \.ra-dock \{[^}]*z-index: 2;[^}]*background: none;[^}]*pointer-events: none;/);
   expect(css).toContain(".ra-stage.is-page > .ra-dock > * { pointer-events: auto; }");
   // The thread hidden under the page keeps its own row beside the composer, so its place does not move.
   expect(css).toContain(".ra-stage.is-page > .ra-scroll { grid-area: 1 / 1; visibility: hidden; }");
-  // The frame is as tall as the page says or the area, never taller by the composer's room: a page as tall as its window would grow without end.
-  expect(css).toContain(".pgv-frame-box { position: relative; width: 100%; height: max(var(--pgv-h, 320px), 100%); }");
-  expect(css).toMatch(/\.pgv-frame-box::after \{[^}]*position: absolute;[^}]*top: 100%;[^}]*height: max\(0px, calc\(var\(--pgv-h, 320px\) \+ var\(--pgv-under\) - 100%\)\);/);
+  // The frame is the page's own window (R-PAGE-10): it fills the area from under the header's band to just above the composer's row, and
+  // the page scrolls in it, so the area has no scroll, no growth from the page's height and no room after the frame.
+  expect(css).toMatch(/\.pgv-page \{[^}]*overflow: hidden;[^}]*padding: var\(--row-lead\) 0 var\(--pgv-under, 0px\);/);
+  expect(css).toContain(".pgv-frame-box { position: relative; width: 100%; height: 100%; }");
+  expect(css).not.toMatch(/--pgv-h\b|pgv-frame-box::after/);
+  // Behind the composer's row the area shows the page's own background, below the header's band; the area's own without one.
+  expect(css).toMatch(/\.pgv-page::before \{[^}]*inset: var\(--row-lead\) 0 0;[^}]*background: var\(--pgv-bg, var\(--content\)\);/);
   expect(css).toMatch(/\.ra-stage\.is-page \.rp-scroll \{[^}]*padding-bottom: var\(--pgv-under\);/);
   // The answer line floats just over the composer, on its own surface, and takes no pointer from the page.
   expect(css).toMatch(/\.pgv-status \{[^}]*position: absolute;[^}]*bottom: calc\(var\(--pgv-dock, 0px\) \+ var\(--sp-1\)\);[^}]*pointer-events: none;/);
@@ -423,21 +427,20 @@ test("a page in the conversation's place has no dialog: its css has no scrim, no
   expect(source.match(/openDialog\(/g)).toHaveLength(1);
 });
 
-test("a page is as tall in the whole area as it says (past its card's 2400 px), the card follows once it is back", async () => {
+test("an open page's frame is the page's window: it is no taller for what the page says, and the card follows once it is back", async () => {
   const { thread, frame, stage } = mount();
   await flush();
   const card = thread.querySelector<HTMLElement>(".pg-card")!;
   loaded(frame);
   thread.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
   const box = stage.querySelector<HTMLElement>(".pgv-frame-box")!;
-  // Until it says, the box is as tall as its card was; then as tall as the page, the area scrolling and not the page.
-  expect(box.style.getPropertyValue("--pgv-h")).toBe("400px");
-  fromFrame(frame, { raphaelPage: 1, type: "height", height: 243.4 });
-  expect(box.style.getPropertyValue("--pgv-h")).toBe("244px");
-  fromFrame(frame, { raphaelPage: 1, type: "height", height: 9000 });
-  expect(box.style.getPropertyValue("--pgv-h")).toBe("9000px");
-  fromFrame(frame, { raphaelPage: 1, type: "height", height: 99999 });
-  expect(box.style.getPropertyValue("--pgv-h")).toBe("20000px");
+  // The page scrolls in its frame as in a browser (R-PAGE-10): what it says its height is never sizes the frame there.
+  for (const height of [243.4, 9000, 99999]) {
+    fromFrame(frame, { raphaelPage: 1, type: "height", height });
+    expect(box.style.getPropertyValue("--pgv-h")).toBe("");
+    expect(box.getAttribute("style")).toBeNull();
+    expect(stage.querySelector<HTMLElement>(".pgv-page")!.style.getPropertyValue("--pgv-h")).toBe("");
+  }
   // The card keeps its own height while the page is out, and takes the page's up to its own bound once it is back.
   expect(card.style.getPropertyValue("--pg-h")).toBe("400px");
   back().click();
@@ -446,34 +449,68 @@ test("a page is as tall in the whole area as it says (past its card's 2400 px), 
   expect(card.style.getPropertyValue("--pg-h")).toBe("300px");
 });
 
-test("the area scrolls, not the page: where the owner read is kept for the next time, and the page's own scroll tells nothing", async () => {
+test("where the owner read is kept from the page's own scroll messages: it is put back there when the page opens again, and the card shows the top", async () => {
   const { thread, frame, stage } = mount();
   await flush();
   loaded(frame);
   const posted = vi.mocked(frame.contentWindow!.postMessage);
   thread.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
+  // Nothing was read yet: the page stays at its top and is told nothing.
+  expect(posted).not.toHaveBeenCalled();
+  // The area does not scroll (the page does, in its frame), so its own scroll is no reading place.
   const area = stage.querySelector<HTMLElement>(".pgv-page")!;
-  area.scrollTop = 520;
+  area.scrollTop = 99;
   area.dispatchEvent(new Event("scroll"));
-  // A scroll the page reports of itself (it has none to make: it is as tall as it says) is not where the owner is reading.
-  fromFrame(frame, { raphaelPage: 1, type: "scroll", y: 7 });
+  fromFrame(frame, { raphaelPage: 1, type: "scroll", y: 520.4 });
+  fromFrame(frame, { raphaelPage: 1, type: "scroll", y: "far" });
   back().click();
-  // The card shows the page from its top without the page being told anything: the frame in a card is as tall as its page.
-  expect(posted).not.toHaveBeenCalled();
+  // Going back, the card shows the page's top again.
+  expect(posted).toHaveBeenCalledOnce();
+  expect(posted).toHaveBeenLastCalledWith({ raphaelPage: 1, type: "scroll-to", y: 0 }, "*");
+  // A scroll the card's frame reports is not where the owner is reading.
+  fromFrame(frame, { raphaelPage: 1, type: "scroll", y: 0 });
   thread.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
-  expect(stage.querySelector<HTMLElement>(".pgv-page")!.scrollTop).toBe(520);
-  expect(posted).not.toHaveBeenCalled();
+  expect(posted).toHaveBeenCalledTimes(2);
+  expect(posted).toHaveBeenLastCalledWith({ raphaelPage: 1, type: "scroll-to", y: 520 }, "*");
+  // A frame that had to load again is told once it has.
+  frame.dispatchEvent(new Event("load"));
+  expect(posted).toHaveBeenCalledTimes(3);
+  expect(posted).toHaveBeenLastCalledWith({ raphaelPage: 1, type: "scroll-to", y: 520 }, "*");
   back().click();
 });
 
-test("a page changed while it stands in the whole area loads beside it, takes its place once it has drawn, and the area keeps its scroll: one card, one frame, nothing closes", async () => {
+test("a page says what its background is: only a plain rgb() or rgba() colour is painted behind the composer's row, and it is gone with the page", async () => {
+  const { thread, frame, stage } = mount();
+  await flush();
+  loaded(frame);
+  thread.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
+  const area = stage.querySelector<HTMLElement>(".pgv-page")!;
+  const say = (color: unknown): string => { fromFrame(frame, { raphaelPage: 1, type: "background", color }); return area.style.getPropertyValue("--pgv-bg"); };
+  expect(area.style.getPropertyValue("--pgv-bg")).toBe("");
+  expect(say("rgb(247, 241, 227)")).toBe("rgb(247, 241, 227)");
+  expect(say("rgba(10, 10, 10, 0.5)")).toBe("rgba(10, 10, 10, 0.5)");
+  // Nothing else gets into the app's style: not a name, a gradient, a url, a var(), a declaration or a second property.
+  for (const bad of ["red", "#fff", "url(http://x/y.png)", "var(--text)", "rgb(1, 2, 3); background: url(x)", "rgb(1, 2, 3) url(x)", "rgb(0 0 0 / 50%)", "rgba(1, 2, 3, 2)", "rgb(1, 2, 3, )", "linear-gradient(red, blue)", "rgb(1, 2, 3)}body{x:y", "rgb(1,2,3)\n", 5, null, { color: "rgb(1, 2, 3)" }]) expect(say(bad)).toBe("");
+  expect(say("rgb(1,2,3)")).toBe("rgb(1,2,3)");
+  // The page that says none (a transparent one) leaves the area its own.
+  expect(say(null)).toBe("");
+  // What the page said stays with it: open again, the area is painted at once.
+  say("rgb(20, 30, 40)");
+  back().click();
+  thread.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
+  expect(stage.querySelector<HTMLElement>(".pgv-page")!.style.getPropertyValue("--pgv-bg")).toBe("rgb(20, 30, 40)");
+  back().click();
+});
+
+test("a page changed while it stands in the whole area loads beside it, takes its place once it has drawn, scrolled to where the owner was reading: one card, one frame, nothing closes", async () => {
   const { thread, frame, pages, stage } = mount();
   await flush();
   loaded(frame);
   thread.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
-  const area = stage.querySelector<HTMLElement>(".pgv-page")!, box = stage.querySelector<HTMLElement>(".pgv-frame-box")!;
-  area.scrollTop = 420;
-  area.dispatchEvent(new Event("scroll"));
+  const area = stage.querySelector<HTMLElement>(".pgv-page")!;
+  fromFrame(frame, { raphaelPage: 1, type: "scroll", y: 420 });
+  fromFrame(frame, { raphaelPage: 1, type: "background", color: "rgb(1, 2, 3)" });
+  expect(area.style.getPropertyValue("--pgv-bg")).toBe("rgb(1, 2, 3)");
   vi.mocked(api.pagesOpen).mockResolvedValueOnce({ ...opened, url: "http://127.0.0.1:9/p/changed?theme=light", rev: 1 });
   thread.querySelector<HTMLElement>(".pg-card")!.dataset.pageRev = "1";
   pages.sync();
@@ -487,17 +524,23 @@ test("a page changed while it stands in the whole area loads beside it, takes it
   expect(next.style.visibility).toBe("hidden");
   expect(next.hasAttribute("inert")).toBe(false);
   Object.defineProperty(next, "contentWindow", { value: { postMessage: vi.fn() }, configurable: true });
-  // It says how tall it is while it loads; that is the height it takes its place with. Nothing is told to scroll: the area stays where it was.
+  // It says how tall it is (for its card) and what its background is while it loads; the area keeps the old page's until it takes its place.
   fromFrame(next, { raphaelPage: 1, type: "height", height: 1500 });
-  expect(box.style.getPropertyValue("--pgv-h")).toBe("400px");
-  next.dispatchEvent(new Event("load"));
+  fromFrame(next, { raphaelPage: 1, type: "background", color: "rgb(9, 8, 7)" });
+  fromFrame(next, { raphaelPage: 1, type: "scroll", y: 3 });
+  expect(area.style.getPropertyValue("--pgv-bg")).toBe("rgb(1, 2, 3)");
   expect(next.contentWindow!.postMessage).not.toHaveBeenCalled();
+  // Once loaded it is scrolled to where the owner was reading, before it shows.
+  next.dispatchEvent(new Event("load"));
+  expect(next.contentWindow!.postMessage).toHaveBeenCalledWith({ raphaelPage: 1, type: "scroll-to", y: 420 }, "*");
   expect(frame.isConnected).toBe(true);
   await new Promise(resolve => setTimeout(resolve, 300));
   expect([...stage.querySelectorAll(".pgv iframe")]).toEqual([next]);
   expect(next.style.visibility).toBe("");
-  expect(box.style.getPropertyValue("--pgv-h")).toBe("1500px");
-  expect(area.scrollTop).toBe(420);
+  expect(area.style.getPropertyValue("--pgv-bg")).toBe("rgb(9, 8, 7)");
+  // Where the owner reads is still the page's own word, and the card follows the changed page's height once it is back.
+  fromFrame(next, { raphaelPage: 1, type: "scroll", y: 430 });
+  expect(thread.querySelector<HTMLElement>(".pg-card")!.style.getPropertyValue("--pg-h")).toBe("400px");
   expect(stage.classList.contains("is-page") && !stage.querySelector<HTMLElement>(".pgv")!.hidden).toBe(true);
   expect(thread.querySelectorAll(".pg-card")).toHaveLength(1);
   // Going back, the card holds the changed page.

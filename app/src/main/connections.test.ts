@@ -763,13 +763,18 @@ describe("the page of a connected app", () => {
     expect(dom(appPage("nope")).querySelector(".cs-page")).toBeNull();
   });
 
-  test("the head has the mark on a white tile, the name, its state, its switch and its menu, and no button to connect", () => {
+  test("the head has the back alone, then one row of the mark on a white tile, the name, its state, its menu and its switch, and no button to connect", () => {
     const head = page(groupPage("ab12")).querySelector(".cs-head")!;
-    expect(head.querySelector(".cs-tile.lg .logo-mono.xl")).not.toBeNull();
-    const title = head.querySelector("h2.big")!;
+    expect(head.querySelector('[data-conn="back"]')).not.toBeNull();
+    expect(head.querySelector(".cs-tile, h2")).toBeNull();
+    const row = head.nextElementSibling!;
+    expect(row.classList.contains("cs-app")).toBe(true);
+    expect(row.querySelector(":scope > .cs-tile.lg .logo-mono.xl")).not.toBeNull();
+    const title = row.querySelector(":scope > h2.big")!;
     expect(title.textContent).toBe("Notion");
     expect(title.id).toBe("cs-page-title");
-    const join = head.parentElement!.querySelector(".cs-join")!;
+    const join = row.querySelector(":scope > .cs-join")!;
+    expect(row.lastElementChild).toBe(join);
     expect(join.querySelector(".cs-state")!.textContent).toBe("已連結");
     const toggle = join.querySelector<HTMLElement>('[role="switch"]')!;
     expect(toggle.getAttribute("aria-checked")).toBe("true");

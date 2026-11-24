@@ -1511,11 +1511,10 @@ export function checkRendered(name, context = {}) {
     }
     return {check:name};
   }
-  if (name === "member-own-folder") {
-    const section = document.querySelector('.ms-pane [data-k="ms-folder"]');
-    require(visible(section) && section.querySelectorAll(".ms-row").length === 1, "the member sees one folder row");
-    require(section.querySelector("small").textContent === "C:\\Raphael\\members\\1", "the member's own shared path is shown");
-    require(window.__look.calls.some(call => call.command === "open_team_file" && call.path === "member-folder:1"), "the folder control asks the shell to open it");
+  if (name === "member-no-own-folder") {
+    const pane = document.querySelector('.ms-pane:not([hidden])');
+    require(visible(pane) && visible(pane.querySelector('[data-k="ms-draft"]')), "the member's tools are on screen");
+    require(!pane.querySelector('[data-k="ms-folder"], [data-ms="folder-open"]') && !pane.textContent.includes("C:\\Raphael\\members"), "no row names, shows or opens the member's own folder");
     return {check:name};
   }
   if (name === "composer-folder") {
@@ -1549,9 +1548,10 @@ export function checkRendered(name, context = {}) {
   if (name === "composer-folder-menu") {
     const card = document.querySelector('#app-popover .cb-folders'), rows = [...card.querySelectorAll('[role="radio"]')];
     require(visible(card) && card.querySelector('.cb-head h3').textContent === "專案資料夾", "the folders use the existing composer card");
-    require(rows.length === 3 && rows[0].textContent.includes("的資料夾") && rows[1].querySelector(".project-branch").textContent === "main", "the shared folder is first and Git projects show their branch");
+    require(rows.length === 3 && rows[0].querySelector("b").textContent === "不指定資料夾" && !rows[0].querySelector("small") && rows[1].querySelector(".project-branch").textContent === "main", "「不指定資料夾」 comes first with no path, then the projects, Git ones with their branch");
+    require(!card.textContent.includes("的資料夾") && !card.textContent.includes("C:\\Raphael\\members"), "no row names or shows a member's own folder");
     require(rows.map(row => row.getAttribute("aria-checked")).join() === "false,true,false", "the selected project is checked");
-    require(rows.every(row => { const path = row.querySelector('.cb-name small'); return visible(path) && path.scrollWidth <= path.clientWidth + 1; }), "each row shows its whole path");
+    require(rows.slice(1).every(row => { const path = row.querySelector('.cb-name small'); return visible(path) && path.scrollWidth <= path.clientWidth + 1; }), "each project shows its whole path");
     require(visible(card.querySelector('[data-project-pick="-1"]')), "the picker action stays below the project list");
     return {check:name};
   }
@@ -4606,14 +4606,15 @@ export function checkRendered(name, context = {}) {
     return { check: name, lights: Object.keys(seen) };
   }
   if (name === "page-window-height" || name === "page-window-stable") {
-    // R-PAGE-12: a page sized by its window says its height once, near the area's, and the frame stays there.
-    const box = document.querySelector(".pgv-frame-box"), area = document.querySelector(".pgv-page");
-    const height = parseFloat(box?.style.getPropertyValue("--pgv-h") ?? "");
-    require(height > 0, "the page said its height");
-    require(height < area.clientHeight * 1.5, `the page stops near its own height: ${height} px for an area of ${area.clientHeight}`);
+    // R-PAGE-10, R-PAGE-12: a page sized by its window opens in a frame that is the page's window (the area under the header's band, down to just
+    // above the composer's row), and the frame stays that size: what the page says its height is sizes nothing there, so it cannot grow on.
+    const box = document.querySelector(".pgv-frame-box"), area = document.querySelector(".pgv-page"), areaStyle = getComputedStyle(area);
+    const height = box.getBoundingClientRect().height, window_ = area.clientHeight - parseFloat(areaStyle.paddingTop) - parseFloat(areaStyle.paddingBottom);
+    require(height > 0 && Math.abs(height - window_) <= 1, `the frame is the page's window: ${height} px for ${window_}`);
+    require(!box.hasAttribute("style") && !area.style.getPropertyValue("--pgv-h"), "what the page says its height is sizes nothing in the whole area");
     if (name === "page-window-height") { window.__pageWindowHeight = height; return { check: name, height }; }
     require(height === window.__pageWindowHeight, `it never grows on: ${window.__pageWindowHeight} px, then ${height} px`);
-    require(area.scrollHeight < area.clientHeight * 2, `the area has an end: ${area.scrollHeight} px to scroll in ${area.clientHeight}`);
+    require(area.scrollHeight <= area.clientHeight + 1, `the area has no scroll of its own: ${area.scrollHeight} px in ${area.clientHeight}`);
     return { check: name, height };
   }
   if (name === "sidebar-light-steady") {
@@ -5450,6 +5451,34 @@ export function checkRendered(name, context = {}) {
     require(document.querySelectorAll('[data-act="manage-usage"]').length === 1, "only the failed reply carries it");
     return { check: name };
   }
+  if (name.startsWith("cli-signin-line")) {
+    // A CLI's lost sign-in after newer turns (R-CLI-SIGNIN-06): one line above the composer, in its column, with one small button.
+    const chips = [...document.querySelectorAll(".signin-chip")].filter(visible);
+    const composer = document.querySelector(".ra-dock > .composer");
+    require(!document.querySelector(".turn-signin"), "no reply carries a sign-in button");
+    if (name === "cli-signin-line-done") {
+      require(chips.length === 0, "the line left once the sign-in was back");
+      require(!window.__look.calls.some(call => call.command === "agent_ask_text"), "no question was sent: the newest reply had not failed");
+      return { check: name };
+    }
+    require(chips.length === 1 && visible(composer), `one line above a visible composer (${chips.length})`);
+    const [chip] = chips, box = chip.getBoundingClientRect(), field = composer.getBoundingClientRect();
+    require(box.bottom <= field.top + 1 && Math.abs(box.left - field.left) <= 2 && box.width <= field.width + 1, "it stands right above the composer, in its column");
+    require(document.documentElement.scrollWidth <= innerWidth, "nothing runs out sideways");
+    const buttons = [...chip.querySelectorAll("button")].filter(visible), words = chip.querySelector(":scope > span")?.textContent.trim();
+    require(buttons.length === 1 && buttons[0].classList.contains("sm") && buttons[0].getBoundingClientRect().height <= 30, "one small button");
+    require(Math.abs(buttons[0].getBoundingClientRect().right - box.right) <= 16, "the button closes the line at its right");
+    if (name === "cli-signin-line") {
+      require(words === "Claude Code 的登入已過期", `the line names the tool and the cause: ${words}`);
+      require(buttons[0].dataset.act === "notice-signin" && buttons[0].textContent.trim() === "重新登入", `重新登入: ${buttons[0].textContent}`);
+    } else {
+      require(words === "請在開啟的視窗完成登入", `the waiting line: ${words}`);
+      require(buttons[0].textContent.trim() === "取消", "only 取消 while the window is open");
+      const started = window.__look.calls.filter(call => call.method === "brains.cli_login" && call.params.again === true && call.params.id === "claude");
+      require(started.length === 1, `Claude Code's own sign-in started once, again (${started.length})`);
+    }
+    return { check: name, words };
+  }
   if (name.startsWith("chat-cli-signin")) {
     // A reply that failed for want of its subscription CLI's sign-in (R-CLI-SIGNIN-01/02): the core's one sentence that names the tool
     // and the true cause, and under it the one button that mends it, where the owner is. Never the old sentence that named two causes.
@@ -5466,6 +5495,7 @@ export function checkRendered(name, context = {}) {
     require(buttons.every(button => button.classList.contains("btn") && button.classList.contains("sm")), "its buttons are the app's small buttons");
     require(buttons.every(button => button.getBoundingClientRect().height <= 30 && button.getBoundingClientRect().width <= 140), "each button is sized to its words");
     require(document.querySelectorAll(".turn-signin").length === 1 && !document.querySelector("[data-missing-repair]"), "one strip, and no second 開啟設定 beside it");
+    require(!visible(document.querySelector(".signin-chip")), "the newest reply's button stands for the lost sign-in: no second line above the composer");
     const cause = document.querySelector("[data-cause]")?.dataset.cause;
     const note = strip.querySelector(".signin-note");
     const phase = strip.dataset.phase ?? "idle";
@@ -7862,8 +7892,9 @@ export function checkRendered(name, context = {}) {
     const memberShare = pane.querySelector('.mb-head [data-act="share-member"]');
     require(!memberShare || !visible(memberShare), "the member's share waits while a page stands in the thread's place");
     // The area, since R-PAGE-10 (the page as a browser shows a file): the whole view right of the sidebar to the window's right edge,
-    // and the page edge to edge in it, with no margin, frame, corner or edge of its own, scrolling as a whole. Since R-PAGE-11 it runs to the
-    // window's foot and the composer floats over it.
+    // and the page edge to edge in it, with no margin, frame, corner or edge of its own. The frame is the page's window: it fills the area from
+    // under the header's band down to just above the composer's row, and the page scrolls in it. Since R-PAGE-11 the area runs to the
+    // window's foot, shows the page's own background behind the composer's row, and the composer floats over it.
     const areaBox = area.getBoundingClientRect(), shown = box.getBoundingClientRect(), side = document.querySelector("#nav")?.getBoundingClientRect();
     const frameBox = frame.getBoundingClientRect();
     require((!side || areaBox.left >= side.right - 1) && Math.abs(areaBox.left - paneBox.left) <= 1 && Math.abs(areaBox.right - paneBox.right) <= 1, `the area is the whole view beside the sidebar: ${Math.round(areaBox.left)}-${Math.round(areaBox.right)} of ${Math.round(paneBox.left)}-${Math.round(paneBox.right)}`);
@@ -7871,12 +7902,18 @@ export function checkRendered(name, context = {}) {
     require(Math.abs(frameBox.right - innerWidth) <= 1, `and reaches the window's right edge: ${Math.round(frameBox.right)} of ${innerWidth}`);
     const boxStyle = getComputedStyle(box), areaStyle = getComputedStyle(area);
     require(parseFloat(boxStyle.borderRadius) === 0 && boxStyle.borderTopWidth === "0px" && boxStyle.overflow === "visible" && boxStyle.boxShadow === "none" && boxStyle.maxWidth === "none", "no frame: no corner, edge, clip or width cap around the page");
-    require(parseFloat(areaStyle.paddingLeft) === 0 && parseFloat(areaStyle.paddingRight) === 0 && parseFloat(areaStyle.paddingBottom) === 0, "the area has no side or bottom padding");
-    require(areaStyle.overflowY === "auto" && area.contains(box), "the whole area scrolls");
-    require(shown.height >= area.clientHeight - parseFloat(areaStyle.paddingTop) - parseFloat(areaStyle.paddingBottom) - 1, `the page is at least as tall as the area: ${Math.round(shown.height)}`);
-    // It runs to the window's foot with the composer standing over it, and at rest the page itself is drawn under the composer.
+    require(parseFloat(areaStyle.paddingLeft) === 0 && parseFloat(areaStyle.paddingRight) === 0, "the area has no side padding");
+    // The area does not scroll (the page scrolls in its frame), and nothing scrolls under the band, so there is no fade there.
+    require(areaStyle.overflowY === "hidden" && areaStyle.maskImage === "none" && area.scrollHeight <= area.clientHeight + 1 && area.contains(box), `the area does not scroll: ${areaStyle.overflowY}, ${area.scrollHeight} in ${area.clientHeight}`);
+    const bandRoom = parseFloat(areaStyle.paddingTop), footRoom = parseFloat(areaStyle.paddingBottom);
+    require(Math.abs(shown.top - (areaBox.top + bandRoom)) <= 1 && Math.abs(shown.bottom - (areaBox.bottom - footRoom)) <= 1, `the frame fills the area from under the header's band to above the composer's row: ${Math.round(shown.top)}-${Math.round(shown.bottom)} of ${Math.round(areaBox.top)}-${Math.round(areaBox.bottom)}`);
+    require(bandRoom >= arrow.bottom - areaBox.top - 1 && footRoom > 0, `the band holds the header's buttons and the composer's row is kept clear: ${bandRoom} px, ${footRoom} px`);
+    // It runs to the window's foot with the composer standing over it; the frame ends above the composer's row, and behind that row the area shows the page's own background.
     const { composerBox } = pageUnderComposer(stage, area);
-    if (area.scrollTop === 0) require(frameBox.bottom >= areaBox.bottom - 1 && frameBox.top < composerBox.top, `the page is drawn under the composer, to the window's foot: ${Math.round(frameBox.bottom)} of ${Math.round(areaBox.bottom)}`);
+    require(frameBox.bottom <= composerBox.top - 0.5, `the page's window ends above the composer: ${Math.round(frameBox.bottom)} against ${Math.round(composerBox.top)}`);
+    const behind = getComputedStyle(area, "::before"), say = area.style.getPropertyValue("--pgv-bg");
+    require(/^rgba?\(/.test(behind.backgroundColor) && behind.backgroundColor !== "rgba(0, 0, 0, 0)" && Math.abs(parseFloat(behind.top) - bandRoom) <= 1 && Math.abs(parseFloat(behind.height) - (areaBox.height - bandRoom)) <= 1, `the page's own background is under the composer's row, from the band to the window's foot: ${behind.backgroundColor}, ${behind.top}, ${behind.height}`);
+    require(!say || /^rgba?\(\d+, \d+, \d+(, [\d.]+)?\)$/.test(say), `what the page said is a plain colour: ${say}`);
     require(!view.querySelector(".pgv-title"), "the title is the pill's, not a line of the page");
     require(view.querySelector(".pgv-status")?.hidden !== false || name !== "page-inplace", "nothing waits under the page before anything is sent");
     require(document.documentElement.scrollWidth <= innerWidth, "nothing runs out sideways");
@@ -8078,17 +8115,19 @@ export function checkRendered(name, context = {}) {
     const area = view && (report ? view.querySelector(".rp-scroll") : view.querySelector(".pgv-page"));
     require(stage.classList.contains("is-page") && !view.hidden && area, "a page stands in the conversation's place");
     const { areaBox, dockBox, composerBox } = pageUnderComposer(stage, area);
-    require(area.scrollHeight - area.scrollTop - area.clientHeight <= 1, `the page is read to its end: ${Math.round(area.scrollTop)} of ${area.scrollHeight - area.clientHeight}`);
+    // A report is read to its end by scrolling the area; an HTML page scrolls in its own frame (the scene waits for that), and its area does not scroll.
+    if (report) require(area.scrollHeight - area.scrollTop - area.clientHeight <= 1, `the page is read to its end: ${Math.round(area.scrollTop)} of ${area.scrollHeight - area.clientHeight}`);
+    else require(area.scrollHeight <= area.clientHeight + 1 && area.scrollTop === 0, `the area does not scroll: ${area.scrollHeight} in ${area.clientHeight}`);
     const line = view.querySelector(".pgv-status:not([hidden]) > *"), say = line && visible(line) ? line.getBoundingClientRect() : null;
     const floor = Math.min(composerBox.top, say?.top ?? Infinity);
-    // The page's own last line: an HTML page's is where the page it holds ends (the height it says), a report's its last section's foot.
+    // The page's own last line: an HTML page's window ends above the composer (and the answer line over it), a report's last section's foot stands clear of them.
     const box = view.querySelector(".pgv-frame-box");
     const end = report ? Math.max(...[...view.querySelectorAll(".rp-body > .rp-sec")].filter(visible).map(section => section.getBoundingClientRect().bottom))
-      : box.getBoundingClientRect().top + parseFloat(box.style.getPropertyValue("--pgv-h"));
-    require(Number.isFinite(end) && end <= floor - 4, `its last line stands clear above the composer${say ? " and the answer over it" : ""}: ${Math.round(end)} against ${Math.round(floor)}`);
-    // Scrolled exactly far enough: past its end only a gap (a report keeps its own foot under its last section).
+      : box.getBoundingClientRect().bottom;
+    require(Number.isFinite(end) && end <= floor - (report ? 4 : 0.5), `its last line stands clear above the composer${say ? " and the answer over it" : ""}: ${Math.round(end)} against ${Math.round(floor)}`);
+    // Scrolled exactly far enough: past its end only a gap (a report keeps its own foot under its last section; an HTML page's window ends a gap above the row).
     const room = report ? 2 * parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--sp-6")) + 48 : 48;
-    if (area.scrollTop > 0) require(floor - end <= room, `with no more than a gap's room past it: ${Math.round(floor - end)} px`);
+    if (!report || area.scrollTop > 0) require(floor - end <= room, `with no more than a gap's room past it: ${Math.round(floor - end)} px`);
     // A press on the composer is the composer's; beside it and under it, the page's (an HTML page's frame, or the report).
     const middle = document.elementFromPoint((composerBox.left + composerBox.right) / 2, composerBox.top + 12);
     require(middle && composer.contains(middle), `a press on the composer is the composer's: ${middle?.className || middle?.tagName}`);
@@ -8214,6 +8253,22 @@ export function checkRendered(name, context = {}) {
     const calls = window.__look.calls.filter(call => call.command === "report_save");
     require(calls.length === 0, "nothing is saved by looking");
     return { check: name, column: Math.round(column), aside };
+  }
+  if (name === "page-rail") {
+    // R-PAGE-10, R-PAGE-11: the page's window is the area from under the header's band to just above the composer's row, so a rail one window
+    // tall (and its buttons at its foot) is whole above the composer; behind that row the area shows the page's own background, which the page said.
+    const stage = document.querySelector(".page-agent .ra-stage"), view = stage.querySelector(":scope > .pgv"), area = view.querySelector(".pgv-page"), frame = view.querySelector(".pgv-frame-box iframe");
+    require(stage.classList.contains("is-page") && frame && visible(frame) && area, "the page is open in the conversation's place");
+    const { composerBox, areaBox } = pageUnderComposer(stage, area), box = frame.getBoundingClientRect(), style = getComputedStyle(area);
+    require(box.bottom <= composerBox.top - 0.5 && box.bottom >= composerBox.top - 64, `the page's window ends just above the composer: ${Math.round(box.bottom)} against ${Math.round(composerBox.top)}`);
+    require(Math.abs(box.top - (areaBox.top + parseFloat(style.paddingTop))) <= 1 && Math.abs(box.height - (areaBox.height - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom))) <= 1, `it fills the area under the band: ${Math.round(box.top)}, ${Math.round(box.height)}`);
+    const dark = document.documentElement.dataset.theme === "dark", said = area.style.getPropertyValue("--pgv-bg");
+    require(said === (dark ? "rgb(27, 23, 16)" : "rgb(246, 239, 224)"), `the page said its own background and the area paints it: ${said}`);
+    require(getComputedStyle(area, "::before").backgroundColor === said, `behind the composer's row: ${getComputedStyle(area, "::before").backgroundColor}`);
+    const behind = document.elementFromPoint((composerBox.left + composerBox.right) / 2, (composerBox.bottom + areaBox.bottom) / 2);
+    require(behind && area.contains(behind) && behind !== frame && !stage.querySelector(":scope > .ra-dock").contains(behind), `under the composer is the area, not the page's window: ${behind?.className || behind?.tagName}`);
+    require(area.scrollHeight <= area.clientHeight + 1 && area.scrollTop === 0, "the area does not scroll: the article scrolls in the page's window");
+    return { check: name, window: [Math.round(box.top), Math.round(box.bottom)], composer: Math.round(composerBox.top), background: said };
   }
   if (name === "page-base") {
     // An HTML page that writes no style of its own, opened in the conversation's place: since R-PAGE-10 its frame is the whole area, edge to edge
@@ -9258,7 +9313,7 @@ export function checkRendered(name, context = {}) {
     return { check: name, rows: rows.length };
   }
   if (name === "connectors-slack-detail") {
-    const title = connectModal()?.querySelector('.cs-page .cs-head h2');
+    const title = connectModal()?.querySelector('.cs-page .cs-app h2');
     require(visible(title) && title.textContent.trim() === 'Slack', "Slack's detail page is open");
     return { check: name };
   }
@@ -9351,10 +9406,14 @@ export function checkRendered(name, context = {}) {
     require(visible(page) && visible(back) && back.tagName === 'BUTTON', "an app's page has a round back button");
     require(page.querySelector('.cs-vh')?.getBoundingClientRect().width <= 2, "the dialog's title is for a screen reader only");
     require(visible(close) && close.parentElement === back.parentElement, "the dialog's round close stands on the app's title row");
-    const head = page.querySelector('.cs-head'), tile = head.querySelector('.cs-tile.lg'), tileBox = tile.getBoundingClientRect(), nameNode = head.querySelector('h2.big');
+    const head = page.querySelector('.cs-head'), row = page.querySelector('.cs-app'), tile = row.querySelector('.cs-tile.lg'), tileBox = tile.getBoundingClientRect(), nameNode = row.querySelector('h2.big');
+    require(!head.querySelector('.cs-tile, h2') && tileBox.top >= back.getBoundingClientRect().bottom, "the back stands alone on the first row, the app's mark and name on the row under it");
+    require(Math.abs(tileBox.left - back.getBoundingClientRect().left) <= 12, "the mark starts at the back's left edge");
     require(Math.round(tileBox.width) === 56 && Math.round(tileBox.height) === 56 && getComputedStyle(tile).backgroundColor === 'rgb(255, 255, 255)', "the mark is on a white rounded tile of 56 px");
     require(nameNode.getBoundingClientRect().left > tileBox.right && Math.abs((nameNode.getBoundingClientRect().top + nameNode.getBoundingClientRect().bottom) - (tileBox.top + tileBox.bottom)) <= 4, "the name is beside the tile");
-    const actions = page.querySelector('.cs-join'), join = actions.querySelector('[data-conn="join"]'), state = actions.querySelector('.cs-state');
+    const actions = row.querySelector(':scope > .cs-join'), join = actions.querySelector('[data-conn="join"]'), state = actions.querySelector('.cs-state');
+    const actionsBox = actions.getBoundingClientRect(), rowBox = row.getBoundingClientRect();
+    require(Math.abs((actionsBox.top + actionsBox.bottom) - (tileBox.top + tileBox.bottom)) <= 4 && Math.abs(actionsBox.right - rowBox.right) <= 1, "what the app does now ends the same row, at its right, on the mark's centre line");
     if (name === "connect-app-connected") {
       require(!join && visible(state) && state.textContent.includes('已連結'), "a connected app shows its connected state in the place of 連結");
       require(visible(actions.querySelector('[data-k="cs-dlg-enable"]')) && actions.lastElementChild?.matches('[data-k="cs-dlg-enable"]') && visible(actions.querySelector('[data-conn="server-menu"]')), "with its switch and its ⋯ in that same place");
@@ -11010,7 +11069,7 @@ export function checkRendered(name, context = {}) {
         require(rows.size <= 3 && rows.size < kinds.length, `a narrow page's kinds are pills that wrap, not a tall list (${rows.size} rows)`);
       }
       for (const item of kinds) require(item.querySelector("span").scrollWidth <= item.querySelector("span").clientWidth + 1, `${item.dataset.cat} shows its whole name`);
-      const expected = { soul: ["ms-personality", "ms-instructions"], skills: ["ms-skills", "ms-library", "ms-commands"], tools: ["ms-tools", "ms-draft", "ms-folders"], notify: ["ms-notify"] }[category];
+      const expected = { soul: ["ms-personality", "ms-instructions"], skills: ["ms-skills", "ms-library", "ms-commands"], tools: ["ms-tools", "ms-draft"], notify: ["ms-notify"] }[category];
       const sections = [...pane.querySelectorAll(".ms-section[data-k]")].filter(visible).map(section => section.dataset.k);
       require(sections.join() === expected.join(), `${category} shows ${expected.join()} (${sections.join()})`);
       for (const section of pane.querySelectorAll(".ms-section[data-k]")) {
@@ -12409,6 +12468,22 @@ export function checkFrame(name) {
     require(style(".kpis b").fontSize === "28px" && style(".kpis").display === "grid", "figures in tiles of large numbers");
     require(style("blockquote").borderInlineStartWidth === "3px" && style("code").backgroundColor === words.surface, "a quote with its rule, code on the surface");
     return { check: name, dark, width: innerWidth, table: table.display, tracks };
+  }
+  // R-PAGE-10: the frame is the page's own window, as in a browser: a rail one window tall and sticky stays while the article scrolls, and its
+  // buttons at its foot are in the window, which ends above the composer (the app's own check, `page-rail`, measures that end).
+  if (name === "page-rail") {
+    const rail = document.querySelector(".rail"), rect = rail.getBoundingClientRect(), article = document.querySelector("article").getBoundingClientRect();
+    require(scrollY > 300 && article.top < -300, `the article has scrolled inside the page's window: ${Math.round(scrollY)} px`);
+    require(Math.abs(rect.top) <= 1 && Math.abs(rect.height - innerHeight) <= 1, `the rail is as tall as the window and stays at its top: ${Math.round(rect.top)}, ${Math.round(rect.height)} of ${innerHeight}`);
+    require(document.documentElement.scrollHeight > innerHeight * 2, `the page is much taller than its window: ${document.documentElement.scrollHeight} of ${innerHeight}`);
+    for (const id of ["hide", "copy"]) {
+      const button = document.getElementById(id).getBoundingClientRect();
+      require(button.top >= rect.top && button.bottom <= innerHeight + 0.5 && button.bottom > innerHeight - 80 && button.width > 40, `the button ${id} is in the window, at the rail's foot: ${Math.round(button.top)}-${Math.round(button.bottom)} of ${innerHeight}`);
+    }
+    const hide = document.getElementById("hide").getBoundingClientRect(), copy = document.getElementById("copy").getBoundingClientRect();
+    require(hide.bottom <= copy.top + 1, "the two buttons stand one over the other");
+    require(document.documentElement.scrollWidth <= innerWidth + 1, "nothing runs out sideways");
+    return { check: name, scrolled: Math.round(scrollY), window: innerHeight, buttons: [Math.round(hide.top), Math.round(copy.bottom)] };
   }
   throw new Error(`Unknown frame check: ${name}`);
 }

@@ -982,6 +982,7 @@ class AgentService:
         # as a turn of its own when the task stops running without reading it (R-QUEUE-11).
         background.owner_read = self._steered
         background.owner_unread = self._given_back
+        background.turn_removed = self._turn_removed
         # The connections to the plugins' servers, kept for a short while: a second question about
         # the same service does not start it again.
         self._pool = McpPool(idle_s=PLUGIN_IDLE_S)
@@ -1793,6 +1794,12 @@ class AgentService:
         """The turn ids of the messages background tasks were handed and hold unread (`BackgroundService.words_held`)."""
         held = getattr(self._background, "words_held", None)
         return held() if callable(held) else set()
+
+    def _turn_removed(self, turn):
+        """The background took a finished turn out of the history (the failed runs a CLI sign-in refused): its conversation
+        forgets what it summed up, as when the owner deletes a turn."""
+        self._conversation_of(turn.member_id, turn.conversation_id).clear_summary()
+        self._forget_cli_thread(turn.conversation_id)
 
     def _given_back(self, turn_ids):
         """A background task stopped running without reading the messages `turn_ids` handed to it: each conversation they
@@ -4792,7 +4799,12 @@ class AgentService:
         waits in `_followups`."""
         language = ask.language
         arguments = card_arguments(call.tool.key, call.arguments)
-        shown = preview(arguments)
+        landing = getattr(self._plugins, "landing", None)
+        if callable(landing) and isinstance(placed := landing(call.tool.key, call.arguments, ask.speaker.id), dict):
+            arguments = {**arguments, **placed}  # a computer's write shows the place it lands, not the path as written
+        # What cannot be undone is asked about with the whole of what it is given (a write outside the work folder names its
+        # file at the end of a long path), not with the overlay's short line.
+        shown = preview(arguments, CARD_PREVIEW_CHARS) if (self._tier_now(call) or Tier.T0) >= Tier.T3 else preview(arguments)
         question = phrase(
             language,
             "confirm_plugin",

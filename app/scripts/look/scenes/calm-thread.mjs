@@ -2,6 +2,7 @@ import { scene, member, wait, waitGone, click, check, cliSigninEnds } from "./st
 
 const SIGNIN = '.chat-message[data-reply] > .turn-signin [data-act="cli-signin"]';
 const CANCEL = '.chat-message[data-reply] > .turn-signin [data-act="cli-signin-cancel"]';
+const LINE = '.signin-chip [data-act="notice-signin"]';
 
 export default [
   scene("calm-thread", "Synthetic zh-TW routine failure at 07:00 and owner retry at 08:00", [member(1), wait('.tn[data-id="8102"]'), check("calm-thread")], {calmThread:true}),
@@ -20,4 +21,10 @@ export default [
       click(CANCEL), wait(SIGNIN), click(SIGNIN), wait(CANCEL), cliSigninEnds("claude", "stopped"), wait('.turn-signin[data-phase="stopped"]'), check("chat-cli-signin-stopped"),
       click(SIGNIN), wait(CANCEL), cliSigninEnds("claude", "done"), wait('.turn-signin[data-phase="done"]'), waitGone(CANCEL), check("chat-cli-signin-done")],
     {cliSignin:"expired", askUntilAnswered:true}),
+  // A sign-in lost under an earlier reply, with newer turns after it (a routine's run has no button of its own): the line above
+  // the composer says so with 重新登入 whatever came after, and leaves when the sign-in is back (R-CLI-SIGNIN-06).
+  scene("chat-cli-line", "Claude Code's lost sign-in stands above the composer with 重新登入 after newer turns", [member(1), wait(LINE), check("cli-signin-line")], {cliSigninLine:true}),
+  scene("chat-cli-line-done", "Pressing the line's 重新登入 waits beside 取消, and the line leaves once the sign-in is back",
+    [member(1), wait(LINE), click(LINE), wait('.signin-chip [data-act="notice-signin-cancel"]'), check("cli-signin-line-waiting"),
+      cliSigninEnds("claude", "done"), waitGone(".signin-chip"), check("cli-signin-line-done")], {cliSigninLine:true}),
 ];

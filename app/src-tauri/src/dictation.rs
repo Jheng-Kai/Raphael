@@ -6903,10 +6903,12 @@ mod tests {
         core.script("dictionary.learn", Ok(json!({"learned": ["手提電話"]})));
         let core = Arc::new(core);
         let overlay = Arc::new(FakeOverlay::default());
-        // The field: the pasted text, the user's fix, then the box cleared by sending.
+        // The field: the pasted text, the user's fix (read twice: it settled), then the box
+        // cleared by sending.
         let fixed = pasted.replacen("首機", "手提電話", 1);
         let probe = Arc::new(FakeProbe::reading(vec![
             text(pasted),
+            text(&fixed),
             text(&fixed),
             text(""),
             text("never read"),
@@ -6948,7 +6950,7 @@ mod tests {
         );
         assert_eq!(
             probe.reads(),
-            3,
+            4,
             "the field is not read after it was cleared"
         );
         assert_eq!(probe.asked.lock().unwrap()[0].process_name, "LINE.exe");

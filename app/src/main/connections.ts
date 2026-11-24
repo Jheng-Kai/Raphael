@@ -769,9 +769,9 @@ function toolsHTML(g: ConnectionGroup, v: ConnectionsView, busy: boolean, loggin
 }
 
 /**
- * An app's page, in the dialog's place: a back chevron (the dialog's own × is at the other corner), the app's mark on a white tile with its
- * name and, at the right, 「連結」 (or, when it is connected, its state, its switch and its ⋯), a paragraph on it, then what is known of it in
- * bordered cards: its tools, and its information. It is the page of an app of the catalog, of a connected one, and of a server of the owner's own.
+ * An app's page, in the dialog's place: a back chevron alone on the first row (the dialog's own × at the other corner), then on one
+ * row the app's mark on a white tile, its name and, at the right, 「連結」 (or, when it is connected, its state, its ⋯ and its switch),
+ * a paragraph on it, then what is known of it in bordered cards: its tools, and its information. It is the page of an app of the catalog, of a connected one, and of a server of the owner's own.
  */
 function appPageHTML(s: StoreService | undefined, g: ConnectionGroup | undefined, v: ConnectionsView, close: string): string {
   const name = g?.name ?? s!.name;
@@ -787,7 +787,8 @@ function appPageHTML(s: StoreService | undefined, g: ConnectionGroup | undefined
     : loggingIn
       ? `<span class="cs-wait" role="status">${esc(t(s!.auth === "none" ? "conn.connecting" : "conn.loggingIn"))}</span>` + btn(esc(t("conn.cancel")), "cs-connect", ' data-conn="cancel-login"')
       : btn(esc(t("conn.connect")), "pri cs-connect", ` data-conn="join" data-id="${esc(s!.id)}"`);
-  const head = `<header class="cs-head">${backHTML()}${tileHTML(mark, "lg")}<h2 class="big" id="cs-page-title">${esc(name)}</h2>${close}</header>`;
+  const head = `<header class="cs-head">${backHTML()}${close}</header>`;
+  const title = `<div class="cs-app">${tileHTML(mark, "lg")}<h2 class="big" id="cs-page-title">${esc(name)}</h2><div class="cs-join">${action}</div></div>`;
   const about = `<p class="cs-desc">${linkedText(g?.description || (s ? words(s.about) : t("conn.customServer")))}</p>`;
   const secrets = g ? [...g.env, ...g.headers] : [];
   // What signing in asks of the owner, said once, in a line, where the old page said it twice.
@@ -827,7 +828,7 @@ function appPageHTML(s: StoreService | undefined, g: ConnectionGroup | undefined
       (secrets.length ? `<span>${ico("lock")}<span class="code">${esc(secrets.join(", "))}</span></span>` : "") + `</div>`
     : "";
   return (
-    `<div class="cs-summary">${head}<div class="cs-join">${action}</div></div>` + about + lead + alert + loginErrorHTML(v, key) + dialogNoticeHTML(v) +
+    `<div class="cs-summary">${head}${title}</div>` + about + lead + alert + loginErrorHTML(v, key) + dialogNoticeHTML(v) +
     (g ? accountsHTML(g) : "") +
     (tryItems ? `<section class="cs-sec"><h3>${esc(t("conn.try"))}</h3><ul class="cs-say">${tryItems}</ul></section>` : "") +
     (g ? toolsHTML(g, v, busy, loggingIn) : "") +

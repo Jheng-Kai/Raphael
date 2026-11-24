@@ -116,6 +116,17 @@ test("a full forecast draws now, the hours ahead, rain chances, the week's range
   } finally { vi.useRealTimers(); }
 });
 
+test("the forecast's foot names its unit as a degree", () => {
+  const foot = (units: string): string => {
+    const root = document.createElement("div");
+    root.innerHTML = replyContentHTML(fence("forecast", { place: "台中", units, source: "Open-Meteo", days: [{ day: "2026-11-24", condition: "小雨", high: 22, low: 15 }] }));
+    return root.querySelector(".wx-foot")!.textContent!;
+  };
+  expect(foot("C")).toBe("°C · Open-Meteo");
+  expect(foot("f")).toBe("°F · Open-Meteo");
+  expect(foot("°C")).toBe("°C · Open-Meteo");
+});
+
 test("the sky of a condition is read in the languages a reply is written in", () => {
   expect(["Thunderstorm", "雷陣雨", "Snow", "小雪", "Light rain", "陣雨", "Fog", "霧", "Partly cloudy", "晴時多雲", "Overcast", "陰天", "Clear", "晴れ"].map(word => skyOf(word)))
     .toEqual(["storm", "storm", "snow", "snow", "rain", "rain", "fog", "fog", "partly", "partly", "cloud", "cloud", "clear", "clear"]);

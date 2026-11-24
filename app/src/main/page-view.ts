@@ -5,10 +5,10 @@
 // What the member answers to a message written while a page is open shows under the page: a line while it works, then
 // the first words of its reply, which the arrow brings in full.
 // The open page (R-PAGE-08) is the whole area right of the sidebar: the header's centre becomes the page's own pill (its mark and
-// title) while it stands, its Share button is at the right, and the area scrolls as one.
+// title) while it stands and its Share button is at the right; a report scrolls as one in that area, an HTML page in its own frame.
 // The page (R-PAGE-11) runs to the window's
 // foot and the composer floats over it: the view measures what stands over the page's foot (the composer's dock
-// and the answer line over it) so the page can scroll its last line clear of them.
+// and the answer line over it) so a report can scroll its last line clear of them, and an HTML page's frame ends above them.
 import { rememberLayerBack } from "./nav-history";
 import { bindNavLayer } from "./nav-layers";
 import "./page-view.css";
@@ -114,7 +114,7 @@ export function mountPageView(stage: HTMLElement, shell?: PageShell): PageView {
   const schedule = (): void => { if (!frame) frame = requestAnimationFrame(drawStatus); };
 
   /** The page runs under the composer to the window's foot (R-PAGE-11): the dock's height places the answer line just over the
-   *  composer, and the two together are how far the page can scroll past its end, so its last line can be read above them. */
+   *  composer, and the two together are the room a report scrolls past its end and where an HTML page's frame ends. */
   function measureFoot(): void {
     if (!current) return;
     const set = (name: string, px: number): void => {

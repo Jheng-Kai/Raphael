@@ -9,11 +9,11 @@ const GIVE_UP_MS = 10 * 60_000;
 
 /**
  * What a finished sign-in sends again for the failed reply it was pressed under: the work of a task, a routine's run
- * included, is run again by the core (the reply's own Run again), because its question is the routine's title and no
- * one's words; any other reply asks its question again.
+ * included, is run again by the core itself when the sign-in is back (R-CLI-SIGNIN-06), because its question is the
+ * routine's title and no one's words, so the window sends nothing for it; any other reply asks its question again.
  */
-export function signinRetry(turn: AgentTurn): { kind: "rerun"; task: number } | { kind: "ask" } {
-  return turn.task && RERUNNABLE.has(turn.task.state) ? { kind: "rerun", task: turn.task.id } : { kind: "ask" };
+export function signinRetry(turn: AgentTurn): { kind: "core" } | { kind: "ask" } {
+  return turn.task && RERUNNABLE.has(turn.task.state) ? { kind: "core" } : { kind: "ask" };
 }
 
 export interface CliSigninHost {

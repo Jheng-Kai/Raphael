@@ -333,7 +333,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     const authored = element.matches(".key-context .key-name, .cs-info-row .v, .modal-body .data-record > .data-record-text, .project-path, .ms-path, .owner-data, .template-path, .lib-title, .thread :is(.message-text, .message-code code, .message-table td, .message-table th) mark[data-find-match]") || element.closest("textarea, .checkpoint summary, .checkpoint pre code, .checkpoint-uncovered li");
     const strings = authored ? [] : [...element.childNodes].filter(node => node.nodeType === 3).map(node => node.textContent);
     // Project controls carry the owner's paths, names and Git refs in accessible labels.
-    for (const attribute of ["aria-label", "title", "placeholder"]) if (element.hasAttribute(attribute) && !element.matches(".cmp-work, [data-act=project-menu], [data-ms=folder-open]")) strings.push(element.getAttribute(attribute));
+    for (const attribute of ["aria-label", "title", "placeholder"]) if (element.hasAttribute(attribute) && !element.matches(".cmp-work, [data-act=project-menu]")) strings.push(element.getAttribute(attribute));
     for (const value of strings) for (const match of value.matchAll(keyPattern)) {
       // Explicit JSON path examples are provider field names, not untranslated catalogue keys.
       if (element.matches('code[data-json-paths]') && /^(?:data|event)\./.test(match[1])) continue;

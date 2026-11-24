@@ -168,8 +168,22 @@ export function installMock(fixture, config = {}, target = window) {
     const row = data.clis.find(item => item.id === cli);
     // An expired session still has its credentials; a CLI that was never signed in or is not there is not available.
     Object.assign(row, { installed: cause !== "not_installed", logged_in: cause === "expired", available: cause === "expired" });
+    // The core remembers a refused sign-in (R-CLI-SIGNIN-06): the newest reply's own button stands for it, so no line above the composer.
+    if (cause !== "not_installed") row.sign_in_lost = cause;
     // `reacted`: the failed reply also carries a reaction, to see where it stands with the button under the bubble.
     if (variant.reacted) latest.reactions = { 1: ["👎"] };
+  }
+  // An earlier reply failed because Claude Code's sign-in ran out, and a newer one was answered after it (a routine's run at
+  // 07:00, the owner's question at 08:00): no reply carries a button, so the line above the composer mends it (R-CLI-SIGNIN-06).
+  if (variant.cliSigninLine) {
+    const failed = data.turns.filter(turn => turn.member_id === 1 && turn.conversation_id === 11).sort((a, b) => b.id - a.id)[0];
+    const sentence = "Claude Code 的登入已過期。", answer = "現在是早上 8 點 12 分。";
+    Object.assign(failed, { status: "error", text: sentence, model: "cli:claude", failure: { kind: "auth_expired", provider: "cli:claude", resets_at: null, cause: "expired" },
+      messages: [{ seq: 1, kind: "reply", text: sentence, at_ms: failed.created_at_ms }], task: null });
+    const at = failed.created_at_ms + 60 * 60_000;
+    data.turns.push({ ...structuredClone(failed), id: Math.max(0, ...data.turns.map(turn => turn.id)) + 1, session_id: "after-signin-lost", question: "現在幾點？", status: "done", text: answer,
+      model: "@openrouter:gpt-6-sol", failure: null, created_at_ms: at, messages: [{ seq: 1, kind: "reply", text: answer, at_ms: at }], reactions: undefined });
+    Object.assign(data.clis.find(item => item.id === "claude"), { name: "Claude Code", installed: true, logged_in: true, available: true, sign_in_lost: "expired" });
   }
   // The member settings page (member-settings.ts): two connections that are on.
   if (variant.memberSettings) {
@@ -1150,7 +1164,7 @@ export function installMock(fixture, config = {}, target = window) {
   // The CLI's sign-in console ended (`done`, or `stopped` when it was closed first), as `brains.cli` then tells.
   state.cliSigninEnds = (id, outcome) => {
     const cli = data.clis.find(item => item.id === id);
-    Object.assign(cli, { signing_in: false, login_result: outcome }, outcome === "done" ? { logged_in: true, available: true } : {});
+    Object.assign(cli, { signing_in: false, login_result: outcome }, outcome === "done" ? { logged_in: true, available: true, sign_in_lost: null } : {});
     notify("BrainsChanged", {});
   };
   // What the owner could see of the open conversation's place, frame by frame (`scrollTimeline`): a place seen once is the
@@ -1456,9 +1470,10 @@ export function installMock(fixture, config = {}, target = window) {
         // What the core serves of an HTML page that writes no style of its own: the page with the app's base style in front of it,
         // made by the core itself for each theme before the run (runner.mjs `pageBaseDocuments`).
         // `pageWindow`: a page laid out as a screen, a side column one window tall plus its padding (R-PAGE-12).
+        // `pageRail`: a sticky rail one window tall with its buttons at its foot beside a long article (R-PAGE-10).
         // A checklist as the core serves it: with nothing left on it, or with what the owner left on it (R-PAGE-14).
         if (p.id === "page-state") return { url: `data:text/html;charset=utf-8,${encodeURIComponent(data.pageStateDocs[variant.pageState === "saved" ? "saved" : "fresh"][p.theme === "dark" ? "dark" : "light"])}`, title: "出發前清單", rev: 1, height: 420, source: "html", server: null };
-        if (p.id === "page-base") return { url: `data:text/html;charset=utf-8,${encodeURIComponent((variant.pageWindow ? data.pageWindowDocs : data.pageBaseDocs)[p.theme === "dark" ? "dark" : "light"])}`, title: "東京行程候選清單", rev: 1, height: 900, source: "html", server: null };
+        if (p.id === "page-base") return { url: `data:text/html;charset=utf-8,${encodeURIComponent((variant.pageRail ? data.pageRailDocs : variant.pageWindow ? data.pageWindowDocs : data.pageBaseDocs)[p.theme === "dark" ? "dark" : "light"])}`, title: "東京行程候選清單", rev: 1, height: 900, source: "html", server: null };
         // Not a file of the dev server, which would write its own client into the page.
         // A page its member changed (`state.updatePage`) is another page: the news page's last heading, the product's price.
         if (p.id === "page-news") return { url: `data:text/html;charset=utf-8,${encodeURIComponent(data.pageNewsHtml.replace("__THEME__", p.theme === "dark" ? "dark" : "").replace("練習問題", (state.pageRevs[p.id] ?? 1) > 1 ? "練習問題（已更新）" : "練習問題"))}`, title: "每日新聞日文學習 2026-11-11", rev: state.pageRevs[p.id] ?? 1, height: 900, source: "html", server: null };

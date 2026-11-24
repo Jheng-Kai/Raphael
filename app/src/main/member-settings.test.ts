@@ -125,15 +125,11 @@ describe("the page of a member", () => {
     expect(page.el.querySelector('[data-cat="routines"], [data-cat="messaging"], .member-msg, [data-cat="model"], [data-cat="voice"], [data-cat="general"], [data-slot="model"]')).toBeNull();
   });
 
-  test("member settings show only its own folder and open it", async () => {
+  test("member settings never show or open the member's own folder", async () => {
     await open(3);
-    const section = $('[data-k="ms-folder"]');
-    expect(section.querySelectorAll(".ms-row")).toHaveLength(1);
-    expect(section.textContent).toContain("日文老師的資料夾");
-    expect(section.textContent).toContain("C:\\Raphael\\members\\3");
-    expect(section.querySelectorAll("button")).toHaveLength(1);
-    await press('[data-ms="folder-open"]');
-    expect(api.openMemberFolder).toHaveBeenCalledExactlyOnceWith(3);
+    expect(page.el.querySelector('[data-k="ms-folder"], [data-ms="folder-open"]')).toBeNull();
+    expect(page.el.textContent).not.toContain("C:\\Raphael\\members\\3");
+    expect(api.memberFolder).not.toHaveBeenCalled();
   });
 
   test("Raphael has the same kinds as every member, and only its name and role are not typed", async () => {

@@ -202,7 +202,8 @@ async def test_always_still_asks_for_dangerous_and_subscription_commands(local, 
     hub, host, gate = local
     hub.settings.set("local_commands_mode", "always")
     args = {"command": command}
-    assert gate.tier_now("mcp:local/local_exec", args) == Tier.T2
+    # A deletion that names a place outside the work folder is T3 and firm (R-FILE-06), still asked about.
+    assert gate.tier_now("mcp:local/local_exec", args) >= Tier.T2 and gate.needs_confirmation("mcp:local/local_exec", args)
     assert not (await gate.call_plugin("mcp:local/local_exec", args)).ok
     host.execute.assert_not_awaited()
 

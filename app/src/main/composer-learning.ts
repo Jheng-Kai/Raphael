@@ -1,6 +1,9 @@
 /// <reference lib="es2022.intl" />
 // Only explicitly delivered dictation seeds learning. Ordinary typing, restored messages and
 // clipboard pastes do not. Dictation evidence stays in memory for at most 60 seconds.
+// Learning compares exactly two texts: the dictated stretch as it was pasted and the same stretch
+// as the message was SENT. Nothing typed on the way (a typo, an input method's half-composed word)
+// is kept, so no intermediate state can reach the dictionary; a message never sent learns nothing.
 import * as api from "./api";
 export interface Correction { before: string; after: string }
 
@@ -8,6 +11,12 @@ export interface Correction { before: string; after: string }
 export function composerCorrections(before: string, after: string): Correction[] {
   return before && before !== after && before.length <= 20_000 && after.length <= 20_000
     ? [{ before, after }] : [];
+}
+
+/** Whether `text` still holds the dictated stretch between the same text before and after it. */
+function surrounds(baseline: DictationBaseline, text: string): boolean {
+  return text.length <= 20_000 && text.length >= baseline.prefix.length + baseline.suffix.length
+    && text.startsWith(baseline.prefix) && text.endsWith(baseline.suffix);
 }
 
 export class ComposerLearning {
@@ -29,32 +38,31 @@ export class ComposerLearning {
     this.timer = setTimeout(() => {
       // Retry drafts can hold this object too. Erase their evidence at the same deadline.
       baseline.text = baseline.prefix = baseline.suffix = "";
-      baseline.edits?.splice(0);
       if (this.baseline === baseline) { this.baseline = undefined; this.timer = undefined; }
     }, 60_000 - (Date.now() - baseline.at));
   }
   clear(): void {
     clearTimeout(this.timer);
-    if (this.baseline) { this.baseline.text = this.baseline.prefix = this.baseline.suffix = ""; this.baseline.edits?.splice(0); }
+    if (this.baseline) this.baseline.text = this.baseline.prefix = this.baseline.suffix = "";
     this.baseline = undefined; this.timer = undefined;
   }
+  /** Drops the evidence once the text around the dictated stretch changed. The text in between is
+   *  never recorded: only the field's final text is compared, at the send. */
   observe(text: string): void {
     const baseline = this.baseline;
     if (!baseline) return;
-    if (!text.startsWith(baseline.prefix) || !text.endsWith(baseline.suffix) || text.length > 20_000) { this.clear(); return; }
-    const after = text.slice(baseline.prefix.length, text.length - baseline.suffix.length);
-    const edits = baseline.edits ??= [], before = edits[edits.length - 1]?.after ?? baseline.text;
-    if (before === after) return;
-    if (edits.length >= 128 || edits.reduce((size, edit) => size + edit.before.length + edit.after.length, 0) + before.length + after.length > 256_000) { this.clear(); return; }
-    edits.push({ before, after });
+    if (!surrounds(baseline, text)) this.clear();
   }
+  /** The one pair to learn at the send: the dictated stretch as pasted against the same stretch in
+   *  the message as it is sent. Nothing when the stretch is unchanged, was deleted, or the text
+   *  around it changed; the evidence is spent either way. */
   take(text: string): Correction[] {
-    this.observe(text);
     const baseline = this.baseline;
     // Keep the deadline's erasure alive for any pending-send retry snapshot.
     this.baseline = undefined; this.timer = undefined;
-    if (!baseline || Date.now() - baseline.at >= 60_000 || !text.startsWith(baseline.prefix) || !text.endsWith(baseline.suffix)) return [];
-    return baseline.edits?.length ? [...baseline.edits] : [];
+    if (!baseline || Date.now() - baseline.at >= 60_000 || !surrounds(baseline, text)) return [];
+    const after = text.slice(baseline.prefix.length, text.length - baseline.suffix.length);
+    return after.trim() ? composerCorrections(baseline.text, after) : [];
   }
 }
 
@@ -71,7 +79,13 @@ export function bindComposerLearning(input: HTMLTextAreaElement): ComposerLearni
     if (Date.now() > awaited.until) awaited = undefined;
     else if (input.value.includes(awaited.text)) { learning.seed(input.value, awaited.text); awaited = undefined; }
   };
-  input.addEventListener("input", () => { seedWhenShown(); learning.observe(input.value); });
+  // An input method's half-composed text is neither a paste to find nor an edit: it settles when the
+  // composition ends, and only the text at the send is ever compared.
+  input.addEventListener("compositionend", () => { seedWhenShown(); learning.observe(input.value); });
+  input.addEventListener("input", event => {
+    if ((event as InputEvent).isComposing) return;
+    seedWhenShown(); learning.observe(input.value);
+  });
   input.addEventListener("dictation-pasted", event => {
     const text: unknown = (event as CustomEvent).detail;
     if (typeof text !== "string" || !text) return;
@@ -81,7 +95,7 @@ export function bindComposerLearning(input: HTMLTextAreaElement): ComposerLearni
   return learning;
 }
 
-export interface DictationBaseline { text: string; prefix: string; suffix: string; at: number; edits?: Correction[] }
+export interface DictationBaseline { text: string; prefix: string; suffix: string; at: number }
 
 export async function learnComposerCorrections(corrections: Correction[]): Promise<void> {
   if (!corrections.length) return;
