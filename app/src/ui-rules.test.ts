@@ -184,6 +184,9 @@ describe("buttons", () => {
         `styles.css: :is(.page-agent .mb-det-head, .page-agent .mb-head .ra-tools, .page-agent .mb-head .mb-head-l, .page-agent .mb-head .room-picker, .mb-dlg-head, .cs-dlg-head, .lb-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock, .ms-bar, .ms-cover) .btn.icon${state}`,
         `styles.css: .page-agent .cmp-bar .btn.cmp-attach${state}`,
       ]),
+      // The calendar's all-day strip shows its full click target on hover and press (R-CAL-08).
+      "automations.css: .au-all-day-row > .btn.icon.au-band-toggle:hover:not(:disabled)",
+      "automations.css: .au-all-day-row > .btn.icon.au-band-toggle:active:not(:disabled)",
       // The larger view's collapse control keeps the window strip's hover (R-COMP-PERF-07).
       'desktop-viewer.css: .window-chrome > .btn.icon[data-desktop="collapse"]:is(:hover, :active):not(:disabled)',
       'desktop-viewer.css: .window-chrome > .btn.icon[data-desktop="collapse"]:active:not(:disabled)',

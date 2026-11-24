@@ -1915,6 +1915,7 @@ export const ru = {
   "auto.view": "Вид",
   "cal.google": "Google Календарь",
   "cal.title": "Добавить название",
+  "cal.showAllDay": "Показать события на весь день",
   "cal.ends": "Конец",
   "cal.notes": "Заметки",
   "cal.deleteAsk": "Нажмите ещё раз для удаления",

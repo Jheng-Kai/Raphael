@@ -1915,6 +1915,7 @@ export const es = {
   "auto.view": "Vista",
   "cal.google": "Google Calendar",
   "cal.title": "Añadir título",
+  "cal.showAllDay": "Mostrar eventos de todo el día",
   "cal.ends": "Termina",
   "cal.notes": "Notas",
   "cal.deleteAsk": "Pulsa otra vez para eliminar",

@@ -977,6 +977,13 @@ describe("rendered look checks", () => {
     const { audit } = productAudit('<nav class="side"><button class="btn icon sidebar-tool" style="border:0;background:gray"></button></nav><button class="btn icon" style="border:0;background:gray"></button>');
     expect(audit().productRules.filter(item => item.rule === 'R-UI-16')).toHaveLength(1);
   });
+  it("allows the all-day strip to have a surface only on hover or press (R-CAL-08)", () => {
+    const { window, audit } = productAudit('<div class="au-all-day-row"><button class="btn icon au-band-toggle" style="border:0;background:gray"></button></div>');
+    const toggle = window.document.querySelector('button'), matches = toggle.matches.bind(toggle);
+    expect(audit().productRules.filter(rule => rule.rule === 'R-UI-16')).toHaveLength(1);
+    vi.spyOn(toggle, 'matches').mockImplementation(selector => selector === '.au-all-day-row > .au-band-toggle:is(:hover, :active):not(:disabled)' || matches(selector));
+    expect(audit().productRules.filter(rule => rule.rule === 'R-UI-16')).toHaveLength(0);
+  });
   it("lets the guide's pair of round buttons keep their grey surface, and no other icon (R-UI-16)", () => {
     const { audit } = productAudit('<div class="ob-foot"><div class="action-row ob-actions ob-pair"><button class="btn icon" style="border:0;background:gray"></button><button class="btn icon pri" style="border:0;background:gray"></button></div></div><button class="btn icon" style="border:0;background:gray"></button>');
     expect(audit().productRules.filter(item => item.rule === 'R-UI-16')).toHaveLength(1);

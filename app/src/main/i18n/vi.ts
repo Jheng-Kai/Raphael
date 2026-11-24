@@ -1915,6 +1915,7 @@ export const vi = {
   "auto.view": "Chế độ xem",
   "cal.google": "Lịch Google",
   "cal.title": "Thêm tiêu đề",
+  "cal.showAllDay": "Hiện các sự kiện cả ngày",
   "cal.ends": "Kết thúc",
   "cal.notes": "Ghi chú",
   "cal.deleteAsk": "Nhấn lần nữa để xóa",

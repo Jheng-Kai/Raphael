@@ -1722,6 +1722,7 @@ export const ja = {
   "cal.own": "予定",
   "cal.google": "Google カレンダー",
   "cal.title": "タイトルを追加",
+  "cal.showAllDay": "終日の予定をすべて表示",
   "cal.ends": "終了",
   "cal.notes": "メモ",
   "cal.edit": "編集",

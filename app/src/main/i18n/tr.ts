@@ -1915,6 +1915,7 @@ export const tr = {
   "auto.view": "Görünüm",
   "cal.google": "Google Takvim",
   "cal.title": "Başlık ekle",
+  "cal.showAllDay": "Tüm gün etkinliklerini göster",
   "cal.ends": "Biter",
   "cal.notes": "Notlar",
   "cal.deleteAsk": "Silmek için yeniden basın",

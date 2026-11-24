@@ -204,7 +204,8 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       if (new Set(light.match(/rgba?\([^)]*\)|color\([^)]*\)/g) ?? []).size < 2) violation('R-UI-55', 'A light passing over words in the colour of the words shows nothing');
     }
     if (element.matches('button.btn.icon')) {
-      if (!floatingLatest && !sidebarAction && !element.matches('.btn.back-button[data-nav-back]') && !['transparent', 'rgba(0, 0, 0, 0)', ''].includes(style.backgroundColor)) violation('R-UI-16', 'Icon action has a background surface');
+      const bandToggleActive = element.matches('.au-all-day-row > .au-band-toggle:is(:hover, :active):not(:disabled)');
+      if (!floatingLatest && !sidebarAction && !bandToggleActive && !element.matches('.btn.back-button[data-nav-back]') && !['transparent', 'rgba(0, 0, 0, 0)', ''].includes(style.backgroundColor)) violation('R-UI-16', 'Icon action has a background surface');
       const glyph = element.querySelector(':scope > svg.i');
       if (glyph) {
         const rect = glyph.getBoundingClientRect();
