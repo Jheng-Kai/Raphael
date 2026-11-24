@@ -2,8 +2,7 @@
 import { isTopLayer, registerDismissal } from "./dismissals";
 import { t } from "./i18n";
 import { copyButton, esc, headerCloseButton, iconButton } from "./ui";
-import { copyPicture } from "./picture-message";
-import * as api from "./api";
+import { copyStoredPicture } from "./picture-message";
 
 let closing: (() => void) | null = null;
 export const closeMediaLightbox = (): void => { closing?.(); };
@@ -59,6 +58,6 @@ export function openMediaLightbox(button: HTMLElement, src: string): void {
   const copy = id ? iconButton("copy", t("chat.copyImage"), ' data-lb="copy"', "lb-copy") : "";
   const card = openLightbox(button, title, `<img class="lb-img" src="${esc(src)}" alt="${esc(title)}">${copy}`);
   card.querySelector<HTMLElement>('[data-lb="copy"]')?.addEventListener("click", event => {
-    void copyButton(event.currentTarget as HTMLElement, () => copyPicture(() => api.core<{ mime: string; data: string }>("attachments.get", { id })));
+    void copyButton(event.currentTarget as HTMLElement, () => copyStoredPicture(id, title || undefined));
   });
 }

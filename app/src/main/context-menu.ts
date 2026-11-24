@@ -95,15 +95,18 @@ export function installContextMenus(doc: Document = document): () => void {
     if (claimed) return;
     const found = overflowAt(event.target);
     if (!found) return;
-    if (event.button !== 2) {
-      // The key makes a right click that has no button of the mouse behind it, and no point of its own: the menu stands
-      // under its ⋯, or in the row when that is not drawn.
-      const box = found.row.getBoundingClientRect();
-      pressOverflow(found.button, found.button.getClientRects().length > 0 ? undefined : { x: box.left + 16, y: box.top + box.height / 2 });
-    } else if (pressed === null || Math.hypot(event.clientX - pressed.x, event.clientY - pressed.y) <= DRAG_PX) {
-      pointed = event.target instanceof Element ? event.target : null;
-      try { pressOverflow(found.button, { x: event.clientX, y: event.clientY }); } finally { pointed = null; }
-    }
+    // What the menu is about: where the right click landed, or what has the focus when the key opens it.
+    pointed = event.target instanceof Element ? event.target : null;
+    try {
+      if (event.button !== 2) {
+        // The key makes a right click that has no button of the mouse behind it, and no point of its own: the menu stands
+        // under its ⋯, or in the row when that is not drawn.
+        const box = found.row.getBoundingClientRect();
+        pressOverflow(found.button, found.button.getClientRects().length > 0 ? undefined : { x: box.left + 16, y: box.top + box.height / 2 });
+      } else if (pressed === null || Math.hypot(event.clientX - pressed.x, event.clientY - pressed.y) <= DRAG_PX) {
+        pressOverflow(found.button, { x: event.clientX, y: event.clientY });
+      }
+    } finally { pointed = null; }
   };
   doc.addEventListener("pointerdown", onPress, true);
   doc.addEventListener("contextmenu", onMenu);

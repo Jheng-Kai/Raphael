@@ -299,3 +299,13 @@ test("the row's menu knows what the right click landed on while it opens, and no
   expect(seen).toBe(word);
   expect(contextMenuTarget()).toBeNull();
 });
+
+test("the menu the key opens knows what has the focus, as a right click knows where it landed", () => {
+  let seen: Element | null | undefined;
+  const more = document.querySelector<HTMLElement>('[data-conversation-more="a"]')!;
+  more.addEventListener("click", () => { seen = contextMenuTarget(); }, { once: true });
+  const word = document.querySelector("#open-a")!;
+  menuKey(word);
+  expect(seen).toBe(word);
+  expect(contextMenuTarget()).toBeNull();
+});

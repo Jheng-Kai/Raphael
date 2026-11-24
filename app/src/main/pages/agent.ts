@@ -68,7 +68,7 @@ import { openUnread, unreadInTail, unreadLine } from "../unread-divider";
 import { measureMessagePreviews, messagePreviewMeasure } from "../message-preview";
 import { messageTooltip } from "../message-tooltip";
 import { quoteHTML, selectionQuote } from "../message-quote";
-import { copyPicture, mediaPicture, mediaVideo, pictureQuote } from "../picture-message";
+import { copyStoredPicture, mediaPicture, mediaVideo, pictureQuote } from "../picture-message";
 import { contextMenuTarget } from "../context-menu";
 import { ReplyPacing } from "../reply-pacing";
 import { avatarHTML, currentAvatar, onAvatarChange } from "../avatar";
@@ -2292,7 +2292,7 @@ export function createAgent(app: AppContext, places?: {
     const pending = outgoing.find(item => item.requestId === control.closest<HTMLElement>("[data-session]")?.dataset.session);
     if (!source && !pending) return;
     const picture = source?.picture;
-    try { await copyButton(control, picture ? () => copyPicture(() => api.core<{ mime: string; data: string }>("attachments.get", { id: picture.id })) : source ? messagePlainText(source.text, source.markdown) : pending!.text); }
+    try { await copyButton(control, picture ? () => copyStoredPicture(picture.id ?? "", picture.name) : source ? messagePlainText(source.text, source.markdown) : pending!.text); }
     catch (err) { toaster.info(describeError(err)); }
   }
 
@@ -2321,7 +2321,9 @@ export function createAgent(app: AppContext, places?: {
     const pointedFile = contextMenuTarget()?.closest<HTMLElement>(".attachment-picture[data-attachment], .attachment-file[data-act=\"attachment-open\"][data-id]");
     const pointedId = pointedFile && message?.contains(pointedFile) ? (pointedFile.dataset.attachment ?? pointedFile.dataset.id ?? "") : "";
     const pointedPicture = !!pointedId && pointedFile!.classList.contains("attachment-picture");
-    if (pointedId) items.push({ id: "copy-attachment", label: t(pointedPicture ? "chat.copyImage" : "chat.copyFile"), icon: "copy" });
+    const pointedName = pointedFile?.querySelector(".me-file-t")?.textContent ?? pointedFile?.dataset.title ?? undefined;
+    // A picture the member sent is the message itself: its own Copy below copies it, so it is not offered twice.
+    if (pointedId && !(pointedPicture && source?.picture)) items.push({ id: "copy-attachment", label: t(pointedPicture ? "chat.copyImage" : "chat.copyFile"), icon: "copy" });
     if (source) items.push({ id: "reply", label: t("chat.reply"), icon: "reply" });
     if (!source?.video) items.push({ id: "copy", label: t(source?.picture ? "chat.copyImage" : "chat.copy"), icon: "copy" });
     // No 「查看過程」: how a reply was worked out is not shown.
@@ -2334,7 +2336,7 @@ export function createAgent(app: AppContext, places?: {
     const reactions = source && !owner && message?.querySelector('[data-act="react-message"]') ? ownReaction(source.turn.reactions?.[source.key]) : null;
     openActions(control, items, pick => {
       if (pick === "copy-attachment") {
-        const copied = pointedPicture ? copyPicture(() => api.core<{ mime: string; data: string }>("attachments.get", { id: pointedId })) : api.copyAttachment(pointedId);
+        const copied = pointedPicture ? copyStoredPicture(pointedId, pointedName) : api.copyAttachment(pointedId, pointedName);
         void copied.catch(error => toaster.info(describeError(error)));
       } else if (pick === "regenerate") void regenerate(control);
       else if (pick === "reply") replyMessage(control);

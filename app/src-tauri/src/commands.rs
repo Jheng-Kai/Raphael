@@ -2123,16 +2123,22 @@ pub async fn open_attachment(app: AppHandle, webview: Webview, id: String) -> Re
     launch_link(path)
 }
 
-/// Put a stored attachment on the clipboard as a file, for the owner's 「複製」 on a file they sent. The core stays the
-/// authority over what an ID is; the shell copies only the one file it names.
+/// Put a stored attachment on the clipboard as a file, for the owner's 「複製」 on a file or picture in a message. The core
+/// stays the authority over what an ID is and makes the copy under the name it was sent with (`name` is the one shown,
+/// used when the store kept none); the shell puts only that one file on the clipboard.
 #[tauri::command]
-pub async fn copy_attachment(app: AppHandle, webview: Webview, id: String) -> Result<(), String> {
+pub async fn copy_attachment(
+    app: AppHandle,
+    webview: Webview,
+    id: String,
+    name: Option<String>,
+) -> Result<(), String> {
     require_main(&webview)?;
     let core = app
         .try_state::<Arc<CoreProcess>>()
         .ok_or(CORE_NOT_RUNNING)?;
     let result = core
-        .call("attachments.path", json!({"id": id}))
+        .call("attachments.copy", json!({"id": id, "name": name}))
         .await
         .map_err(|_| "attachment unavailable".to_owned())?;
     let path = result
@@ -2846,6 +2852,7 @@ mod tests {
                 "agent_voice_composed",
                 "attachment_source",
                 "clipboard_text",
+                "copy_attachment",
                 "core_call",
                 "device_computer_app_remove",
                 "device_settings_get",
