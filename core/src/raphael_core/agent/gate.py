@@ -124,15 +124,28 @@ class ToolGate:
         return self._plugins
 
     def firm_confirmation(self, name, arguments) -> bool:
+        """Whether this call is asked about by a question of its own, whatever its tier or the owner's Always. Two floors
+        ask in every mode, 全部允許 included, because they are not permissions to give: reading Raphael's own data (the
+        owner's consent for that call) and the cards only the owner can fill (`*/fill_card`). The rest is
+        `destructive_change`: asked in every mode but 全部允許, whose very name is the owner's yes to those."""
+        if self.data_floor.access(name, arguments) == "read" or name.endswith("/fill_card"):
+            return True
+        return not self.full_permission and self.destructive_change(name, arguments)
+
+    def destructive_change(self, name, arguments) -> bool:
+        """A call that cannot be undone, or that reaches beyond the member's own place: deleting, changing a member's tools,
+        importing a local skill, disconnecting, shortening the history kept, a routine's changes to the team, removing a
+        private key, and a write outside the member's work folder (R-FILE-06). The owner is asked about it in the modes that
+        ask (自動, 手動, 計畫); in 全部允許 nothing asks (`firm_confirmation`), but the owner's rules that forbid still judge it."""
         from ..management import destructive, background_requires_approval
         retention = self._settings.get("history_retention_days") if self._settings else None
-        return (self.data_floor.access(name, arguments) == "read" or background_requires_approval(name, arguments)
-                or name.endswith("/fill_card") or name in ("routine_delete", REMOVE_KEY, "management_batch")
+        return (background_requires_approval(name, arguments)
+                or name in ("routine_delete", REMOVE_KEY, "management_batch")
                 or destructive(name, arguments, retention) or self._outside_work_folder(name, arguments))
 
     def _outside_work_folder(self, name, arguments) -> bool:
         """A tool call that writes, moves or deletes outside the member's work folder: the hub that offers the tool says
-        so (`firm_for_call`), and the owner is asked in every mode (R-FILE-06). A hub that cannot say, or a call it cannot
+        so (`firm_for_call`), and the owner is asked in every mode but 全部允許 (R-FILE-06). A hub that cannot say, or a call it cannot
         read, is not outside; a hub that fails while judging it is, so a doubt asks."""
         firm = getattr(self._plugins, "firm_for_call", None)
         if not callable(firm) or not name.startswith("mcp:"):
@@ -154,8 +167,9 @@ class ToolGate:
 
     @property
     def full_permission(self) -> bool:
-        """Allow ordinary steps without extra questions. Firm destructive management
-        and owner-only cards still require the owner; explicit denials remain forbidden."""
+        """全部允許: nothing asks the owner for permission, deletions and writes outside the work folder included. What stays
+        is not a permission: reading Raphael's own data (their consent for that call), the cards only the owner can fill
+        (sign-ins, secrets, payment), and every refusal (the data floor's writes, the owner's Never rules, R-PC-01)."""
         return self._settings is not None and self._settings.get("action_mode") == "bypass"
 
     # --- the registry ---------------------------------------------------------------------------
@@ -231,7 +245,8 @@ class ToolGate:
         undone: its questions of the tier T2 and of the global 先詢問 switch are waived. The rules that ask
         and forbid are the screening's (`screen`), which every path asks before it makes a call that
         changes something."""
-        if self.data_floor.access(action.tool, action.args) is not None or self.firm_confirmation(action.tool, action.args):
+        if (self.data_floor.access(action.tool, action.args) is not None or self.firm_confirmation(action.tool, action.args)
+                or self.destructive_change(action.tool, action.args)):
             return False
         if action.tool.startswith("mcp:local/"):
             return False
@@ -270,9 +285,10 @@ class ToolGate:
         self.check(action, approval)
 
     def check_management_batch(self, action: Action, approval: Approval | None) -> None:
-        """One single-use approval covers exactly the listed administrative changes, as the owner read them on one card
-. A list that holds anything else is refused, and so is a
-        team proposal (members and folders, `BATCH_TOOLS`) unless it cannot be undone: those keep their editable card."""
+        """One single-use approval covers exactly the listed administrative changes, as the owner read them on one card.
+        A list that holds anything else is refused, and so is a team proposal (members and folders, `BATCH_TOOLS`) unless it
+        cannot be undone: those keep their editable card. In 全部允許 the mode itself is the owner's yes, so the door asks
+        for no approval here (`firm_confirmation`)."""
         from .team_admin import BATCH_TOOLS, STAGED_TOOLS
 
         operations = action.args.get("operations")

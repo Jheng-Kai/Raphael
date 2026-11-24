@@ -122,10 +122,8 @@ async def test_background_cli_observes_owner_connection_changes_without_manageme
     assert background.task(identifier).state == "done"
 
 
-@pytest.mark.parametrize("mode", ["ask", "plan", "direct", "bypass"])
-@pytest.mark.parametrize("approved", [False, True])
-async def test_background_own_routine_delete_always_waits_and_names_the_routine(wired_connections, mode, approved):
-    agent, background = wired_connections
+async def routine_delete_task(agent, background, mode):
+    """A background task of the first Bot asked to delete its own routine, in the permission `mode`."""
     agent.settings.set("action_mode", mode)
     routine = (await agent.call("routines.create", {"member_id": 0, "title": "Morning report", "prompt": "Read the report",
                                                   "schedule": {"kind": "daily", "time": "09:00"}}))["routine"]
@@ -134,6 +132,22 @@ async def test_background_own_routine_delete_always_waits_and_names_the_routine(
     origin = agent.history.add(session_id="routine-background", question="Delete Morning report", route="delegate", prefix="", text="", status="running", source="app",
         conversation_id=agent.service.conversations.main())
     background.service.attach_turn(identifier, origin)
+    return identifier, routine
+
+
+async def test_allow_all_deletes_a_background_members_own_routine_with_no_question(wired_connections):
+    agent, background = wired_connections
+    identifier, routine = await routine_delete_task(agent, background, "bypass")
+    await until(lambda: background.task(identifier).state in ("done", "failed"))
+    assert background.task(identifier).state == "done" and not background.service.waiting_questions()
+    assert not agent.service._team.store.routine(routine["id"])
+
+
+@pytest.mark.parametrize("mode", ["ask", "plan", "direct"])
+@pytest.mark.parametrize("approved", [False, True])
+async def test_background_own_routine_delete_waits_and_names_the_routine(wired_connections, mode, approved):
+    agent, background = wired_connections
+    identifier, routine = await routine_delete_task(agent, background, mode)
     await until(lambda: background.task(identifier).state in ("waiting", "done", "failed"))
     assert background.task(identifier).state == "waiting"
     [question] = background.service.waiting_questions()
@@ -145,8 +159,9 @@ async def test_background_own_routine_delete_always_waits_and_names_the_routine(
     assert bool(agent.service._team.store.routine(routine["id"])) != approved
 
 
-@pytest.mark.parametrize("operation", ["disable", "enable", "tool_disable", "tool_enable", "disconnect"])
-async def test_managed_app_changes_use_the_existing_connector_policy(make_rig, client, tmp_path, conn, operation):
+@pytest.mark.parametrize("operation,mode", [(operation, "bypass") for operation in ("disable", "enable", "tool_disable", "tool_enable", "disconnect")]
+                         + [("disconnect", "direct")])
+async def test_managed_app_changes_use_the_existing_connector_policy(make_rig, client, tmp_path, conn, operation, mode):
     from test_connectors import connected
     from raphael_core.connectors.service import COMPOSIO_SERVER, META_EXECUTE
     _, managed, hub, _, _ = await connected(tmp_path, conn)
@@ -160,13 +175,13 @@ async def test_managed_app_changes_use_the_existing_connector_policy(make_rig, c
     team = MembersService(conn, tmp_path, background=FakeBackground(conn))
     rig = make_rig(plugins=hub, secret_cards=SecretCards(conn, hub), team=team)
     team.register(rig.rpc)
-    rig.settings.set("action_mode", "bypass")
+    rig.settings.set("action_mode", mode)
     client.chats = [chat("Change.", use("manage_connection", {"connection": entry.id, "operation": operation, "tool": "GMAIL_FETCH_EMAILS"})), chat("Changed.")]
-    if operation == "disconnect":
+    if operation == "disconnect" and mode != "bypass":
         # R-AG-MGMT-02: the change is held until the turn is in and asked on one card; the yes then goes on with a model call of its own.
         client.chats.insert(1, chat("Asked."))
     asked = await typed(rig, "Change sample app access")
-    if operation == "disconnect":
+    if operation == "disconnect" and mode != "bypass":
         assert asked["status"] == "confirm" and entry.id in asked["confirm"]["text"]
         asked = await rig.confirm(asked["confirm"]["id"])
     assert asked["text"] == "Changed."

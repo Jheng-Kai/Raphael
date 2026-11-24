@@ -2161,7 +2161,9 @@ class MembersService:
             validate(arguments, schema)
             item, values = resolve(name, arguments)
             validate(values, item.schema)
-            if destructive(name, arguments, self._settings.get("history_retention_days")) or background_requires_approval(name, arguments):
+            if ((destructive(name, arguments, self._settings.get("history_retention_days")) or background_requires_approval(name, arguments))
+                    and self._settings.get("action_mode") != "bypass"):
+                # In 全部允許 the mode itself is the owner's yes to these (the door, `ToolGate.firm_confirmation`, asks no card).
                 # The legacy alias names the same exact creation, never a broader permission.
                 aliases = (name, "create_member") if name == "member_create" else (name,)
                 if (not isinstance(approval, Approval) or not approval.spent

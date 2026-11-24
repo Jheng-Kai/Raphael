@@ -92,12 +92,25 @@ async def test_own_resources_are_persisted_by_existing_services(setup):
     assert "amber notebooks" in team.memory.own(own.id).read()
 
 
-async def test_nonprimary_self_delete_still_shows_yes_card_in_bypass_mode(setup, client):
+async def test_allow_all_deletes_its_own_command_with_no_card(setup, client):
     rig, team = setup
     team.members.register(rig.rpc)
     own = member(team)
     command = await team.members.admin_tool(own.id, "member_command_save", {"member_id": own.id, "name": "draft", "template": "Draft {input}"}, interactive=True)
     rig.settings.set("action_mode", "bypass")
+    args = {"member_id": own.id, "id": command["command"]["id"]}
+    client.chats = [chat("Find my tools", ("find_tools", {"query": "member_manage"})),
+                    chat("Delete the command", use(*publish("member_command_delete", args))), live_said("Deleted.")]
+    result = await typed(rig, "Delete your draft command", own.id, language="en")
+    assert result["status"] == "done" and team.members.capabilities.commands(own.id) == []
+
+
+async def test_nonprimary_self_delete_still_shows_yes_card_in_direct_mode(setup, client):
+    rig, team = setup
+    team.members.register(rig.rpc)
+    own = member(team)
+    command = await team.members.admin_tool(own.id, "member_command_save", {"member_id": own.id, "name": "draft", "template": "Draft {input}"}, interactive=True)
+    rig.settings.set("action_mode", "direct")
     args = {"member_id": own.id, "id": command["command"]["id"]}
     client.chats = [chat("Find my tools", ("find_tools", {"query": "member_manage"})),
                     chat("Delete the command", use(*publish("member_command_delete", args))), live_said("Deleted.")]

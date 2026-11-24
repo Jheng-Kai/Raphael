@@ -247,8 +247,8 @@ class LocalTools:
     def tier_for_call(self, key, arguments):
         if (name := owner_file_tool(key)) is not None:
             # A read asks nothing. A write inside the member's work folder asks as any change does (T2); one outside it
-            # is T3 and firm (`firm_for_call`): the owner is asked in every mode, and no Always for the tool waives it
-            # (R-FILE-06). A path that cannot be written at all (a device, a place of keys) is refused in `call`.
+            # is T3 and firm (`firm_for_call`): the owner is asked in every mode but 全部允許, and no Always for the tool
+            # waives it (R-FILE-06). A path that cannot be written at all (a device, a place of keys) is refused in `call`.
             schema = OWNER_FILE_DEFINITIONS[name]["parameters"]
             if name in OWNER_FILE_READS or not Draft202012Validator(schema).is_valid(arguments):
                 return Tier.T0
@@ -268,9 +268,9 @@ class LocalTools:
         return Tier.T2 if self.requires_approval(arguments) else Tier.T0
 
     def firm_for_call(self, key, arguments):
-        """Whether this call is asked about in every permission mode, 全部允許 included (`ToolGate.firm_confirmation`): a
-        write of the owner's file tools outside the member's work folder, and a command that names a file outside it
-        (R-FILE-06). It is what `tier_for_call` calls T3 here, so the door and the question say the same."""
+        """Whether this call is asked about in every permission mode but 全部允許 (`ToolGate.firm_confirmation`): a write of the
+        owner's file tools outside the member's work folder, and a command that names a file outside it (R-FILE-06). It is
+        what `tier_for_call` calls T3 here, so the door and the question say the same."""
         if owner_file_tool(key) in OWNER_FILE_WRITES or key == tool_key("local", "local_exec"):
             return self.tier_for_call(key, arguments) == Tier.T3
         firm = getattr(self.delegate, "firm_for_call", None)
@@ -355,7 +355,9 @@ class LocalTools:
                 return PluginResult(False, "secret_store", "Reading secret stores is refused.")
             if not self.enabled:
                 return PluginResult(False, "disabled", "Local commands are disabled in this test environment.")
-            if self.shell_outside(arguments) and (approver != "user" or not present):
+            # Only the owner's yes of this very command reaches a file outside the work folder: 全部允許 is that yes, present
+            # or not (the door hands "user"); in every other mode a call with no one to ask was refused above.
+            if self.shell_outside(arguments) and approver != "user":
                 return PluginResult(False, "approval_required", OUTSIDE_COMMAND)
             if approver == "none" or self.requires_approval(arguments) and approver != "user":
                 return result

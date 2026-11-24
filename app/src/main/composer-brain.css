@@ -15,6 +15,9 @@
 .cb-check { display: inline-grid; flex: none; place-items: center; width: 16px; height: 16px; color: var(--accent-text); }
 .cb-check .i { width: 16px; height: 16px; }
 .menu .cb-row:disabled { opacity: 0.5; cursor: default; }
+/* Each permission mode leads with its icon, and its line on what it does is read whole: it wraps rather than cuts. */
+.cb-modes .cb-row > .i { flex: none; width: 18px; height: 18px; color: var(--text-2); }
+.cb-modes .cb-name small { white-space: normal; }
 /* The way back on the left, the title in the middle of the card whatever the length of either. */
 .cb-head { display: grid; flex: none; grid-template-columns: 32px minmax(0, 1fr) 32px; align-items: center; margin-bottom: var(--sp-2); }
 .cb-head h3 { display: flex; grid-column: 2; align-items: center; justify-content: center; gap: var(--sp-2); min-width: 0; margin: 0; color: var(--text); font-size: var(--fs-sm); font-weight: var(--weight-semibold); }

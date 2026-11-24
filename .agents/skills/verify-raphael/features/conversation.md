@@ -1225,13 +1225,19 @@ A jump lights nothing (R-UI-118): opening a conversation focuses the composer, w
 the same black shadow focused or not (no white halo in the dark theme), and a search result or report opens its
 turn in the middle of the view with no tint. Scenes: `chat`, `search-target`.
 
+The composer's permission control lists its four modes from the safest to the least safe, each with its own icon and one
+whole line: 手動, 計畫, 自動, 全部允許 (R-PERM-MODES-01). The control wears the chosen mode's icon. Choosing 全部允許 opens the
+app's red delete dialog, which says plainly that members then ask before no action (deleting, sending, writing outside the
+project folder) and that this raises the risk of data loss or leaks; only its red button saves the mode. Scenes: `mode`,
+`mode-bypass-confirm`.
+
 ## Driving it with look
 
 ```powershell
 npm run look -- composer-task-stop chat running running-motion empty details raphael-details details-closed --theme both --width 1120,720,1920x1080
 npm run look -- quick-conversation-list quick-conversation quick-question-result quick-formal-isolation quick-stop --theme both --width 1120,720,1920x1080
 npm run look -- live-scenario-owner-view --theme both --width 1120,720,1920x1080
-npm run look -- composer mode actions reply search search-target tooltip slash-commands --theme both --width 1120,720,1920x1080
+npm run look -- composer mode mode-bypass-confirm actions reply search search-target tooltip slash-commands --theme both --width 1120,720,1920x1080
 npm run look -- member-composer-empty member-text member-composer-hover conversation-notice --theme both --width 1120,720,1920x1080
 npm run look -- composer-learn member-composer-learn room-composer-learn --theme both --width 1120,720,1920x1080
 npm run look -- plain-bot-chat centred-system-events --theme both --width 1120,720,1920x1080

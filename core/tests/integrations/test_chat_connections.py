@@ -143,24 +143,25 @@ async def asyncio_sleep_for_resume(rig):
         await asyncio.wait_for(asyncio.gather(*list(tasks)), timeout=5)
 
 
-@pytest.mark.parametrize("operation", ["disable", "tool_disable", "disconnect"])
-async def test_chat_revocation_changes_next_model_offer_and_refuses_an_old_alias(chat_rig, client, operation):
+@pytest.mark.parametrize("operation,mode", [("disable", "bypass"), ("tool_disable", "bypass"), ("disconnect", "bypass"), ("disconnect", "direct")])
+async def test_chat_revocation_changes_next_model_offer_and_refuses_an_old_alias(chat_rig, client, operation, mode):
     rig, hub, keys = chat_rig
     await hub._add({"name": "Sample", "transport": "http", "url": "https://example.invalid/mcp"})
     server = hub._config.servers()[0]
     await hub._refresh({"id": server.id})
     await hub._set_enabled({"id": server.id, "enabled": True})
-    rig.settings.set("action_mode", "bypass")
+    rig.settings.set("action_mode", mode)
     async def after(**kwargs):
         names = {d["function"]["name"] for d in kwargs["tools"]}
         assert "Sample__look" not in names, kwargs["messages"]
         return chat("Old cached call.", use("Sample__look", {"topic": "sample"}))
     client.chats = [chat("Change access.", use("manage_connection", {"connection": server.id, "operation": operation, "tool": "look"})), after, chat("Access was revoked."), chat("Access was revoked.")]
-    if operation == "disconnect":
-        # R-AG-MGMT-02: a disconnect is held until the turn is in and the owner says yes, so the old alias is tried after it.
+    if operation == "disconnect" and mode != "bypass":
+        # R-AG-MGMT-02: a disconnect is held until the turn is in and the owner says yes, so the old alias is tried after it
+        # (全部允許 is that yes already: it is made at once).
         client.chats.insert(1, chat("Asked."))
     result = await typed(rig, "Turn off Sample access")
-    if operation == "disconnect":
+    if operation == "disconnect" and mode != "bypass":
         assert result["status"] == "confirm" and hub.offered()
         result = await rig.confirm(result["confirm"]["id"])
     assert result["text"] == "Access was revoked."

@@ -3,7 +3,7 @@
 A member works in one place. With a project chosen (`folders.choice`) that is the project, and only the project: its own
 folder and the team's are outside it. With none chosen it is the member's own folder and the team folder. A tool that
 writes, moves, deletes or creates a file outside that area never does it silently: the owner's yes on a card is asked in
-every permission mode, 全部允許 included (the door's firm confirmation, `ToolGate.firm_confirmation`).
+every permission mode but 全部允許, whose name is that yes (the door's firm confirmation, `ToolGate.firm_confirmation`).
 
 Every path is judged where it really is, never as it was written: absolute, `.` and `..` taken out, links and junctions
 followed, Windows' long and device prefixes (a question mark or a dot after two slashes) reduced to the drive path they

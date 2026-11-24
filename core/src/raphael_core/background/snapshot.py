@@ -32,7 +32,7 @@ The task may use:
   before; what it writes after reading what services return goes in marked (`memory.store`).
 - shared team work tools (`agent.team`), including `ask_member` when there is someone to ask.
   Every member has the same management catalog in an interactive owner-private chat.
-  Private background member management requires an explicit owner approval card.
+  Private background member management requires an explicit owner approval card (none in 全部允許, the owner's yes).
 
 A task of a member has the same built-in abilities; connection tools follow its current
 owner-selected allowlist (`Speaker.uses_plugin`).

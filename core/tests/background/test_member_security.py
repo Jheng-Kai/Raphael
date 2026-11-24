@@ -2,6 +2,7 @@
 
 import pytest
 
+from raphael_core.agent.policy import Action
 from raphael_core.agent.speaker import Speaker
 from raphael_core.agent.tools import ToolResult
 from raphael_core.background.snapshot import take_snapshot
@@ -32,10 +33,8 @@ async def test_background_rechecks_connection_grant_at_execution(rig, allowed):
     assert speaker.uses_plugin(f"mcp:{server}/look") == (allowed is None)
 
 
-@pytest.mark.parametrize("routine", [False, True])
-@pytest.mark.parametrize("mode", ["ask", "plan", "direct", "bypass"])
-async def test_background_profile_update_waits_for_exact_owner_approval(make_rig, tmp_path, routine, mode):
-    rig = make_rig()
+def profile_update_task(rig, tmp_path, mode, routine, replies):
+    """A background task asked to change a member's personality, in the permission `mode`; the model's `replies` follow its call."""
     rig.service._settings.set("action_mode", mode)
     members = MembersService(rig.conn, tmp_path, background=rig.service, memory=None)
     members.register(rig.rpc)
@@ -45,19 +44,37 @@ async def test_background_profile_update_waits_for_exact_owner_approval(make_rig
 
     async def execute(task, name, arguments, *, approval=None, action=None):
         with background_management(task.member_id):
-            rig.gate.check_for(action, name, arguments, approval)
+            rig.gate.check_for(action or Action(name, arguments), name, arguments, approval)
             data = await members.admin_tool(task.member_id, name, arguments, approval=approval)
         writes.append(data)
         return ToolResult(name, True, data)
 
     rig.service.use_owner_tools(execute)
     arguments = {"id": target.id, "personality": "Calm and precise"}
-    rig.client.replies = [turn("", [use("member_update", arguments, "profile")])]
+    rig.client.replies = [turn("", [use("member_update", arguments, "profile")]), *replies]
     task_id = rig.service.submit(session_id="s", text="Update the Writer member personality", language="en",
                                  model="fake/model", routine_id=1 if routine else None)
     from raphael_core.agent.history import AgentHistory
     origin = AgentHistory(rig.conn, rig.wall).add(session_id="s", question="Change personality", route="routine", prefix="", text="", status="running")
     rig.service.attach_turn(task_id, origin)
+    return members, target, arguments, writes, task_id
+
+
+@pytest.mark.parametrize("routine", [False, True])
+async def test_allow_all_lets_a_background_run_change_the_team_with_no_question(make_rig, tmp_path, routine):
+    rig = make_rig()
+    members, target, arguments, writes, task_id = profile_update_task(
+        rig, tmp_path, "bypass", routine, [report("Personality updated.")])
+    await until(lambda: rig.task(task_id).state == "done")
+    assert members.store.member(target.id).personality == arguments["personality"] and len(writes) == 1
+    assert not [p for m, p in rig.notifications if m == "background.question"]
+
+
+@pytest.mark.parametrize("routine", [False, True])
+@pytest.mark.parametrize("mode", ["ask", "plan", "direct"])
+async def test_background_profile_update_waits_for_exact_owner_approval(make_rig, tmp_path, routine, mode):
+    rig = make_rig()
+    members, target, arguments, writes, task_id = profile_update_task(rig, tmp_path, mode, routine, [])
     await until(lambda: rig.task(task_id).state == "waiting")
     assert not writes and members.store.member(target.id).personality != arguments["personality"]
     with background_management(0), pytest.raises(RpcError):

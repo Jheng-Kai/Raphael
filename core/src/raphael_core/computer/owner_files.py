@@ -606,8 +606,9 @@ class OwnerFileTools:
                 if approver == "none":
                     return PluginResult(False, "approval_required", "This change needs the owner's approval in the app. "
                                         "Wait for that approval before trying it again.")
-                # Outside the work folder the door asked the owner in every mode (`ToolGate.firm_confirmation`): a
-                # yes of this very change is the only way here, and a call that came without one is not made.
+                # Outside the work folder the door asked the owner in every mode but 全部允許 (`ToolGate.firm_confirmation`,
+                # which hands "user" there): a yes of this very change is the only way here, and a call that came without
+                # one is not made.
                 if self.reach(arguments, member_id) == "outside" and approver != "user":
                     return PluginResult(False, "approval_required", OUTSIDE_WORDS)
             path = arguments.get("path")

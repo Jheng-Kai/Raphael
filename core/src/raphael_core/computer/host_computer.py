@@ -222,7 +222,7 @@ class HostComputerTools:
         if tool.name in WRITES:
             try:
                 path = self.path(member, arguments.get("path", ""))
-                # Inside the work folder nothing asks; outside it is T3 and firm (`firm_for_call`): a yes in every mode.
+                # Inside the work folder nothing asks; outside it is T3 and firm (`firm_for_call`): a yes in every mode but 全部允許.
                 # A private place or a place of keys is refused by `file_call` whatever is said, so nothing asks for it.
                 if self.private_path(path, member) or kept_place(str(path)) or self.write_reach(path, member) == "inside":
                     return Tier.T0

@@ -16,6 +16,7 @@ import type { WireAttachment } from "./types";
 import { closeMenu, esc, ico, iconButton, openPopover, patchHTML, sendGlyph, toaster } from "./ui";
 import { openMediaLightbox } from "./media-lightbox";
 import { chipSteps } from "./chip-scroll";
+import { confirmDelete } from "./member-dialogs";
 import "./agent.css";
 
 /** `recording`: the owner is speaking into this composer and the button that ends it sends what was said. */
@@ -80,7 +81,7 @@ export function composerHTML(folder = false): string {
   return `<div class="cmp-quote" hidden></div><div class="cmp-files" data-chip-row><div class="cmp-file" data-chip-scroll hidden></div>${chipSteps()}</div><div class="cmp-row">` +
     `<div class="cmp-field"><textarea class="cmp-input" rows="1" autocomplete="off" enterkeyhint="send"></textarea><div class="cmp-mirror" aria-hidden="true"></div></div>` +
     `<div class="cmp-bar"><button type="button" class="btn cmp-attach"${folder ? ' aria-haspopup="menu" aria-expanded="false"' : ' data-act="attach"'}>${ico("plus")}</button>` +
-    `<button type="button" class="btn sm cmp-mode" aria-haspopup="menu" aria-expanded="false">${ico("shield")}<span></span></button>` +
+    `<button type="button" class="btn sm cmp-mode" aria-haspopup="menu" aria-expanded="false" data-mode="direct">${ico(MODES.direct.icon)}<span></span></button>` +
     (folder ? `<button type="button" class="btn sm cmp-work cmp-folder" aria-haspopup="menu" aria-expanded="false" hidden>${ico("folder")}<span class="owner-data"></span></button>` +
       `<button type="button" class="btn sm cmp-work cmp-branch" aria-haspopup="menu" aria-expanded="false" hidden>${ico("gitBranch")}<span class="owner-data"></span></button>` : "") +
     `<span class="cmp-model"></span>` +
@@ -91,11 +92,13 @@ export function composerHTML(folder = false): string {
 
 const MODE_CHANGED = "raphael:action-mode";
 type ActionMode = "direct" | "ask" | "plan" | "bypass";
+// From the safest to the least safe (R-PERM-MODES-01), each with its own icon and one line on what it does: 手動 asks
+// before every change, 計畫 shows a plan first, 自動 asks only when there is a risk, 全部允許 never stops to ask.
 const MODES = {
-  direct: { name: "chat.modeDirect", hint: "chat.modeDirectHint" },
-  ask: { name: "chat.modeAsk", hint: "chat.modeAskHint" },
-  plan: { name: "chat.modePlan", hint: "chat.modePlanHint" },
-  bypass: { name: "chat.modeBypass", hint: "chat.modeBypassHint" },
+  ask: { name: "chat.modeAsk", hint: "chat.modeAskHint", icon: "hand" },
+  plan: { name: "chat.modePlan", hint: "chat.modePlanHint", icon: "scroll" },
+  direct: { name: "chat.modeDirect", hint: "chat.modeDirectHint", icon: "zap" },
+  bypass: { name: "chat.modeBypass", hint: "chat.modeBypassHint", icon: "warning" },
 } as const;
 /** The one global choice of what a member may do without asking, named where the owner writes. */
 export function bindActionMode(button: HTMLElement): void {
@@ -104,6 +107,16 @@ export function bindActionMode(button: HTMLElement): void {
   const draw = (): void => {
     button.querySelector("span")!.textContent = name(mode);
     button.setAttribute("aria-label", `${t("chat.beforeAct")}: ${name(mode)}`);
+    // The control wears the chosen mode's icon, as its row in the menu does.
+    if (button.dataset.mode !== mode) {
+      button.dataset.mode = mode;
+      const icon = button.querySelector("svg");
+      if (icon) icon.outerHTML = ico(MODES[mode].icon);
+    }
+  };
+  const choose = (value: ActionMode): void => {
+    mode = value; draw();
+    void api.core("settings.set", { key: "action_mode", value }).then(() => window.dispatchEvent(new Event(MODE_CHANGED))).catch(error => toaster.info(describeError(error)));
   };
   const read = async (): Promise<void> => {
     try { mode = (await api.core<{ settings: { action_mode?: ActionMode } }>("settings.get"))?.settings?.action_mode ?? "direct"; draw(); }
@@ -111,7 +124,7 @@ export function bindActionMode(button: HTMLElement): void {
   };
   // The same card as the model beside it (composer-brain.ts): its title, then each mode with what it does.
   const rows = (): string => (Object.keys(MODES) as ActionMode[]).map(value =>
-    `<button type="button" role="radio" class="cb-row" data-mode="${value}" aria-checked="${value === mode}"><span class="cb-name"><b>${esc(name(value))}</b><small>${esc(t(MODES[value].hint))}</small></span>` +
+    `<button type="button" role="radio" class="cb-row" data-mode="${value}" aria-checked="${value === mode}">${ico(MODES[value].icon)}<span class="cb-name"><b>${esc(name(value))}</b><small>${esc(t(MODES[value].hint))}</small></span>` +
     `${value === mode ? `<span class="cb-check" aria-hidden="true">${ico("check")}</span>` : ""}</button>`).join("");
   let menu: HTMLElement | null = null;
   button.addEventListener("click", event => {
@@ -126,8 +139,12 @@ export function bindActionMode(button: HTMLElement): void {
       const row = (picked.target as Element).closest<HTMLElement>("[data-mode]");
       if (!row) return;
       const value = row.dataset.mode as ActionMode;
-      mode = value; draw(); closeMenu(); button.focus({ preventScroll: true });
-      void api.core("settings.set", { key: "action_mode", value }).then(() => window.dispatchEvent(new Event(MODE_CHANGED))).catch(error => toaster.info(describeError(error)));
+      closeMenu(); button.focus({ preventScroll: true });
+      if (value !== "bypass" || mode === "bypass") { choose(value); return; }
+      // 全部允許 lets members do anything without a question, so it is entered only through the app's red delete dialog,
+      // which says what it opens and what still asks; Cancel, Esc or a click outside keeps the mode as it was.
+      void confirmDelete("", { words: { title: t("chat.bypassConfirmTitle"), hint: t("chat.bypassConfirmHint"), action: t("chat.bypassConfirmAction") } })
+        .then(yes => { if (yes) choose("bypass"); if (button.isConnected) button.focus({ preventScroll: true }); });
     });
     menu.querySelector<HTMLElement>('[aria-checked="true"]')?.focus({ preventScroll: true });
   });
