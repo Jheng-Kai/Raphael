@@ -29,6 +29,11 @@ def refetchable(origin, source):
     return True
 
 
+def restore_file(backup, path):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    backup.rename(path)
+
+
 def taken_by(conn, member, stored):
     """A name that is taken, in words, and the package that holds it. A switched-off skill keeps its name (#313), so the
     owner is told where it is and that it is off, to remove that one skill."""
@@ -233,7 +238,7 @@ class SkillPackages:
             if access is not None:
                 self.validate_access(access)
             key, ids = self._publish(member, source, origin, label, access, name, key, old, prepared, root, temp, local,
-                                     enabled, skill, skill_switches)
+                                     enabled, skill, skill_switches, len(documents) == 1)
         finally:
             await asyncio.to_thread(shutil.rmtree, temp)
         stamp = datetime.now().isoformat()
@@ -259,15 +264,18 @@ class SkillPackages:
             raise
 
     def _publish(self, member, source, origin, label, access, name, key, old, prepared, root, temp, local,
-                 enabled, skill, skill_switches):
+                 enabled, skill, skill_switches, single=None):
+        # What was imported decides a new package's defaults (a single skill is open to all, a package is not), never what
+        # is left of it after a taken name was skipped (#313).
+        single = len(prepared) == 1 if single is None else single
         ids = []
         with ExitStack() as rollback:
             with self.conn:
                 if member == SHARED and key is None:
                     key = "pack:" + uuid.uuid4().hex
-                    default = "all" if len(prepared) == 1 else []
+                    default = "all" if single else []
                     self.conn.execute("INSERT INTO skill_packages(key,name,source,origin,access) VALUES (?,?,?,?,?)",
-                                      (key, name or (prepared[0][0].rsplit(":", 1)[-1] if len(prepared) == 1 else label), source, origin,
+                                      (key, name or (prepared[0][0].rsplit(":", 1)[-1] if single else label), source, origin,
                                        json.dumps(default if access is None else access)))
                 for index, (stored, desc, skill_source, _, _) in enumerate(prepared):
                     existing = old.pop(stored.casefold(), None)
@@ -342,15 +350,44 @@ class SkillPackages:
             raise MemberError("not_found", "no such skill in this package")
         home = self.cap.homes.home(SHARED)
         if plugin is None:
-            return home / "skills", home / "skills" / str(skill_id), len(skills)
+            return home / "skills", home / "skills" / str(skill_id), len(skills), []
         part = self.conn.execute("SELECT set_kind,set_key FROM member_skills WHERE id=?", (skill_id,)).fetchone()
-        inside = part["set_key"] if part["set_kind"] == "skill" else ".raphael-commands/" + part["set_key"]
-        return home / "skill-sets", home / plugin["folder"] / inside, len(skills)
+        base = home / plugin["folder"]
+        if part["set_kind"] != "skill":
+            return home / "skill-sets", base / ".raphael-commands" / part["set_key"], len(skills), []
+        # A skill may hold another skill's folder (skills/outer/inner/SKILL.md): that one keeps its own files.
+        nested = [base / r["set_key"] for r in self.conn.execute(
+            "SELECT set_key FROM member_skills WHERE set_id=? AND set_kind='skill' AND id<>?", (plugin["id"], skill_id))
+            if r["set_key"].startswith(part["set_key"] + "/")]
+        return home / "skill-sets", base / part["set_key"], len(skills), nested
+
+    def _remove_own_files(self, folder, nested, temp, rollback):
+        """Move the files of `folder` that lie outside every folder of `nested` into `temp`, undoing it with `rollback`."""
+        folder = self.cap.homes.safe(folder)
+        if not nested:
+            self._backup(folder, temp, rollback)
+            return
+        skip = [self.cap.homes.safe(path) for path in nested]
+        moved = []
+        for path in sorted(p for p in folder.rglob("*") if p.is_file()):
+            if any(path.is_relative_to(other) for other in skip):
+                continue
+            backup = Path(temp) / f"old-file-{len(moved)}"
+            path.rename(backup)
+            rollback.callback(restore_file, backup, path)
+            moved.append(path.parent)
+        # The emptied folders go with it; a folder that still holds a nested skill stays.
+        for parent in sorted({d for path in moved for d in (path, *path.parents) if d.is_relative_to(folder)},
+                             key=lambda d: len(d.parts), reverse=True):
+            try:
+                parent.rmdir()
+            except OSError:
+                pass
 
     async def delete_skill_async(self, key, skill_id):
         """Remove one skill of a package (its files too) and leave the others; the package's view is returned, or None
         when it was the last skill and the package went with it."""
-        root, folder, count = self._skill_delete_inputs(key, skill_id)
+        root, folder, count, nested = self._skill_delete_inputs(key, skill_id)
         if count == 1:
             await self.delete_async(key)
             return None
@@ -361,7 +398,7 @@ class SkillPackages:
                 raise MemberError("not_found", "the skill library changed during removal")
             with ExitStack() as rollback:
                 with self.conn:
-                    self._backup(self.cap.homes.safe(folder), temp, rollback)
+                    self._remove_own_files(folder, nested, temp, rollback)
                     self.conn.execute("DELETE FROM member_skills WHERE id=? AND package_key=?", (skill_id, key))
                 rollback.pop_all()
         finally:

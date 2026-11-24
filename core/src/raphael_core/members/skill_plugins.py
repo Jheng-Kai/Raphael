@@ -111,6 +111,19 @@ def component_paths(manifest, kind):
     return [kind, *[relative_path(p) for p in extra]]
 
 
+def without_skipped(files, parts, gone):
+    """The plugin's files minus those of the skipped parts. A file belongs to the deepest skill folder that holds it, so a
+    skill nested in a skipped one (skills/outer/inner/SKILL.md) keeps its own files (#313)."""
+    folders = [str(PurePosixPath(part["key"]).parent) for part in parts if part["kind"] == "skill"]
+    dropped = {str(PurePosixPath(part["key"]).parent) for part in gone if part["kind"] == "skill"}
+    commands = {part["key"] for part in gone if part["kind"] == "command"}
+
+    def owner(path):
+        return max((f for f in folders if path.startswith(f + "/")), key=len, default=None)
+
+    return {path: data for path, data in files.items() if path not in commands and owner(path) not in dropped}
+
+
 def plugin_parts(files, *, existing_names=None):
     from .capabilities import MAX_SKILL_BYTES, skill_metadata
     from .skill_names import unique_skill_name
@@ -503,13 +516,12 @@ class PluginSets:
                 raise MemberError("taken", message)
             refused = refused or message
             skipped.append({"name": name, "held_by": package})
-            gone.append(part["key"] if part["kind"] == "command" else str(PurePosixPath(part["key"]).parent))
+            gone.append(part)
         if not left and refused:
             raise MemberError("taken", refused)
         if skipped:
+            files = without_skipped(files, parts, gone)
             parts = left
-            files = {path: data for path, data in files.items()
-                     if not any(path == folder or path.startswith(folder + "/") for folder in gone)}
         # A moved component keeps its switch and id. An in-place rename also keeps
         # its path identity, unless the old name belongs to another new component.
         by_name = {row["name"].casefold(): row for row in old.values()}
@@ -572,7 +584,8 @@ class PluginSets:
                 self.conn.execute("UPDATE skill_sets SET name=?,version=?,source=?,description=?,folder=?,metadata=? WHERE id=?", (*values, identifier))
             else:
                 identifier = self.conn.execute("INSERT INTO skill_sets(name,version,source,description,folder,metadata,identity) VALUES (?,?,?,?,?,?,?)", (*values, plan.identity)).lastrowid
-            if access is None and not previous and len(plan.components) == 1:
+            # What was imported decides the default, not what is left of it after a taken name was skipped (#313).
+            if access is None and not previous and len(plan.components) + len(plan.skipped) == 1:
                 access = "all"
             if previous:
                 # Free both unique names before applying moves and renames in this transaction.

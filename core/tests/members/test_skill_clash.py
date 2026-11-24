@@ -127,3 +127,75 @@ async def test_a_plugin_with_taken_skill_names_imports_the_rest_and_names_each_h
     with pytest.raises(RpcError, match=r'taken: a skill named desk:\w+ already exists in the package "desk"'):
         await rig.call("skills.library.import", {"plugin": True, "source": "local:" + str(third)})
     assert len((await rig.call("skills.library.list", {}))["packages"]) == 2
+
+async def test_a_package_that_loses_skills_to_taken_names_stays_closed_like_a_package(rig):
+    # A single skill is open to the whole team; a package is not, even when taken names leave it one skill (#313).
+    single = (await rig.call("skills.library.import", {"text": document("tdd")}))["package"]
+    assert single["access"] == "all"
+    made = await rig.call("skills.library.import", pack("tdd", "lint", name="more.zip"))
+    assert made["skipped"] == [{"name": "tdd", "held_by": "tdd"}]
+    assert [s["name"] for s in made["package"]["skills"]] == ["lint"]
+    assert made["package"]["access"] == []
+    assert (await packages(rig))["more.zip"]["access"] == []
+    # Named access is still honoured.
+    named = await rig.call("skills.library.import", {**pack("tdd", "plan", name="named.zip"), "access": "all"})
+    assert named["package"]["access"] == "all"
+
+
+def plugin_at(cap, tmp_path, market, files, name="desk"):
+    """An installed plugin folder holding `files` (path -> text) beside its manifest."""
+    cap.skill_home = tmp_path / "synthetic-home"
+    folder = cap.skill_home / f".claude/plugins/cache/{market}/{name}/1.0.0"
+    for relative, text in {".claude-plugin/plugin.json": json.dumps({"name": name, "version": "1.0.0"}), **files}.items():
+        path = folder / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+    return "local:" + str(folder)
+
+
+async def test_a_plugin_that_loses_skills_to_taken_names_stays_closed_like_a_package(rig, tmp_path):
+    cap = rig.service.capabilities
+    first = (await rig.call("skills.library.import", {"plugin": True, "source": "local:" + str(desk(cap, tmp_path, "one"))}))["package"]
+    assert first["access"] == []
+    second = desk(cap, tmp_path, "two", extra=("extra",))
+    made = await rig.call("skills.library.import", {"plugin": True, "source": "local:" + str(second)})
+    assert len(made["skipped"]) == 2
+    assert [s["name"] for s in made["package"]["skills"]] == ["extra"]
+    assert made["package"]["access"] == []
+    # A plugin that really is one skill is still open to all.
+    solo = plugin_at(cap, tmp_path, "solo", {"skills/only/SKILL.md": document("only")}, name="solo")
+    assert (await rig.call("skills.library.import", {"plugin": True, "source": solo}))["package"]["access"] == "all"
+
+
+NESTED = {"skills/outer/SKILL.md": document("outer"), "skills/outer/notes.md": "outer notes",
+          "skills/outer/inner/SKILL.md": document("inner"), "skills/outer/inner/data.txt": "inner data"}
+
+
+async def test_deleting_a_skill_keeps_the_skill_nested_in_its_folder_whole(rig, tmp_path):
+    cap = rig.service.capabilities
+    made = (await rig.call("skills.library.import", {"plugin": True, "source": plugin_at(cap, tmp_path, "m", NESTED)}))["package"]
+    root = cap.plugin_root(int(made["key"][4:]))
+    answer = await rig.call("skills.library.delete", {"key": made["key"], "skill": skill_id(made, "outer")})
+    assert [s["name"] for s in answer["package"]["skills"]] == ["inner"]
+    assert not (root / "skills/outer/SKILL.md").exists() and not (root / "skills/outer/notes.md").exists()
+    assert (root / "skills/outer/inner/SKILL.md").is_file() and (root / "skills/outer/inner/data.txt").read_text() == "inner data"
+    assert [s["name"] for s in cap.skills(-1)] == ["inner"]
+    # The nested skill alone can be deleted too, and takes only its own folder.
+    again = (await rig.call("skills.library.import", {"plugin": True, "source": plugin_at(cap, tmp_path, "n", NESTED, name="desk2")}))["package"]
+    other = cap.plugin_root(int(again["key"][4:]))
+    left = await rig.call("skills.library.delete", {"key": again["key"], "skill": skill_id(again, "inner")})
+    assert [s["name"] for s in left["package"]["skills"]] == ["outer"]
+    assert (other / "skills/outer/SKILL.md").is_file() and (other / "skills/outer/notes.md").is_file()
+    assert not (other / "skills/outer/inner").exists()
+
+
+async def test_a_skipped_skill_does_not_take_the_files_of_the_skill_nested_in_it(rig, tmp_path):
+    cap = rig.service.capabilities
+    await rig.call("skills.library.import", {"plugin": True, "source": plugin_at(cap, tmp_path, "m", {"skills/outer/SKILL.md": document("outer")})})
+    made = await rig.call("skills.library.import", {"plugin": True, "source": plugin_at(cap, tmp_path, "n", NESTED)})
+    assert made["skipped"] == [{"name": "desk:outer", "held_by": "desk"}]
+    assert [s["name"] for s in made["package"]["skills"]] == ["inner"]
+    root = cap.plugin_root(int(made["package"]["key"][4:]))
+    assert not (root / "skills/outer/SKILL.md").exists() and not (root / "skills/outer/notes.md").exists()
+    assert (root / "skills/outer/inner/SKILL.md").is_file() and (root / "skills/outer/inner/data.txt").read_text() == "inner data"
+    assert made["package"]["access"] == []
