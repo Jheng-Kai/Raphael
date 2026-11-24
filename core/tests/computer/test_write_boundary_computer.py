@@ -357,3 +357,60 @@ async def test_a_project_write_is_refused_when_its_real_place_is_not_below_the_p
     request = {"action": "write", "path": f"{first_guest}/a.txt", "data": "eA==", "expected": "absent"}
     assert LocalVm.project_write(request, first, "a.txt") == {"error": "outside"}
     assert _files(first, second) == []
+
+
+class Chosen:
+    """A project folder as the owner chose it, whatever this host's own path type would make of its text."""
+
+    def __init__(self, text):
+        self.text = text
+
+    def __str__(self):
+        return self.text
+
+
+def _watch_the_host_root(monkeypatch, system):
+    """Run `project_write` as `system` with no disk: what the real-path check was given, and what the helper was handed."""
+    seen = {"real": [], "helper": []}
+    monkeypatch.setattr(files_guest.os, "name", system)
+    monkeypatch.setattr(os.path, "realpath", lambda path, *args, **kwargs: seen["real"].append(str(path)) or str(path))
+    monkeypatch.setattr(files_guest, "handle", lambda request: seen["helper"].append(request) or {"ok": True})
+    return seen
+
+
+def test_a_project_folder_whose_name_holds_a_backslash_is_the_host_root_as_it_is(monkeypatch):
+    # On macOS and Linux a backslash is a letter of a name. Turned into a separator it would name another folder, and a
+    # write would land there when that folder exists.
+    seen = _watch_the_host_root(monkeypatch, "posix")
+    request = {"action": "write", "path": "/home/cua/projects/p/x.txt", "data": "eA==", "expected": "absent"}
+    assert LocalVm.project_write(request, Chosen("/work/a\\b"), "x.txt") == {"ok": True}
+    assert seen["real"][0] == "/work/a\\b"
+    [handed] = seen["helper"]
+    assert handed["roots"] == ["/work/a\\b"] and handed["path"] == "/work/a\\b/x.txt"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="a backslash is a separator on Windows")
+async def test_a_write_under_a_folder_with_a_backslash_in_its_name_stays_in_that_folder(two_projects, tmp_path):
+    hub, runtime, settings, (first, second), (first_guest, second_guest) = two_projects
+    plain = tmp_path / "a" / "b"  # the folder the name would become if its backslash were a separator
+    plain.mkdir(parents=True)
+    odd = tmp_path / "a\\b"
+    odd.mkdir()
+    answer = LocalVm.project_write({"action": "write", "path": f"{first_guest}/x.txt", "data": "eA==", "expected": "absent"},
+                                   odd, "x.txt")
+    assert "error" not in answer and (odd / "x.txt").read_bytes() == b"x"
+    assert _files(plain, first, second) == []
+
+
+def test_a_drive_root_chosen_as_a_project_stays_the_drive_root(monkeypatch):
+    # `D:` alone is the drive's current folder, not its root.
+    seen = _watch_the_host_root(monkeypatch, "nt")
+    request = {"action": "write", "path": "/home/cua/projects/d/x.txt", "data": "eA==", "expected": "absent"}
+    assert LocalVm.project_write(request, Chosen("D:\\"), "sub/x.txt") == {"ok": True}
+    assert seen["real"][0] == "D:/"
+    [handed] = seen["helper"]
+    assert handed["roots"] == ["D:/"] and handed["path"] == "D:/sub/x.txt"
+    # A folder of the drive keeps its own name, with Windows' separator the one the helper splits on.
+    seen["helper"].clear()
+    assert LocalVm.project_write(request, Chosen("D:\\work\\p"), "x.txt") == {"ok": True}
+    assert seen["helper"][0]["roots"] == ["D:/work/p"] and seen["helper"][0]["path"] == "D:/work/p/x.txt"
