@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { mountDesktopTimeline } from "../../src/main/desktop-timeline";
 import { memberAccent } from "../../src/main/owner-bubble";
-import { slimeCharactersHTML, slimeColorOf, slimeColorsHTML } from "../../src/main/slime";
+import { slimeCharactersHTML, slimeColorOf } from "../../src/main/slime";
 import { auditDocument, failedChecks } from "./audit.mjs";
 import { checkRendered } from "./checks.mjs";
 import { scenes } from "./scenes/index.mjs";
@@ -804,8 +804,10 @@ describe("rendered look checks", () => {
     window.document.documentElement.dataset.theme = theme;
     window.document.head.innerHTML = `<style>${resolvedRGB(css)}</style>`;
     const picker = window.document.createElement("div");
-    picker.innerHTML = slimeCharactersHTML(null, value => value) + slimeColorsHTML(null, value => value);
-    const colours = [...picker.querySelectorAll("button")].map(button => slimeColorOf({ id: 1, avatar: button.dataset.slimeCharacter ? `slime:${button.dataset.slimeCharacter}` : `slime:color:${button.dataset.slimeColor}` }));
+    picker.innerHTML = slimeCharactersHTML(null, value => value);
+    // Every slime the picker offers, and the plain colours a member without a face of its own wears.
+    const colours = [...[...picker.querySelectorAll("button")].map(button => slimeColorOf({ id: 1, avatar: `slime:${button.dataset.slimeCharacter}` })),
+      ...new Set(Array.from({ length: 40 }, (_, id) => slimeColorOf({ id })))];
     expect(colours.length).toBeGreaterThan(20);
     vi.stubGlobal("document", window.document);
     vi.stubGlobal("Element", window.Element);

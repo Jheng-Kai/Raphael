@@ -6,7 +6,7 @@ import "./member-creator.css";
 import { t } from "./i18n";
 import { type Dialog, openDialog } from "./member-dialogs";
 import { cleanName, isMemberNameTaken } from "./members";
-import { defaultSlimeAvatar, pickSlime, slimeFaceHTML } from "./slime";
+import { newMemberSlime, pickSlime, slimeFaceHTML } from "./slime";
 import { selectSlimeTab, slimeKeys, slimePickerHTML } from "./slime-tabs";
 import type { Member, NewMember } from "./types";
 import { btn, esc } from "./ui";
@@ -23,7 +23,7 @@ export interface MemberCreatorOptions {
 }
 
 export function openMemberCreator(o: MemberCreatorOptions): Dialog {
-  const initialAvatar = defaultSlimeAvatar(o.taken.length);
+  const initialAvatar = newMemberSlime(o.taken.length);
   let avatar = initialAvatar;
   let busy = false;
   let hop: ReturnType<typeof setTimeout> | undefined;

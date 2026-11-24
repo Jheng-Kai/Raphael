@@ -74,7 +74,7 @@ test("mouse Back keeps the member maker draft and Forward restores the clean mak
   const options = { groupId: null, taken: [], create: vi.fn() };
   const maker = openMemberCreator(options);
   maker.el.querySelector<HTMLInputElement>("#mb-new-name")!.value = "Robin";
-  maker.el.querySelector<HTMLButtonElement>('[data-slime-tab="characters"]')!.click();
+  maker.el.querySelector<HTMLButtonElement>('[data-slime-tab="purple"]')!.click();
   const stop = installNavInput(window, stepOpenLayer);
   try {
     sendNavInput("mouse", "back");
@@ -87,6 +87,6 @@ test("mouse Back keeps the member maker draft and Forward restores the clean mak
     expect(maker.el.isConnected).toBe(false);
     sendNavInput("mouse", "forward");
     expect(maker.el.isConnected).toBe(true);
-    expect(document.querySelector('.cr-dialog [data-slime-tab="characters"]')?.getAttribute("aria-selected")).toBe("true");
+    expect(document.querySelector('.cr-dialog [data-slime-tab="purple"]')?.getAttribute("aria-selected")).toBe("true");
   } finally { stop(); maker.close(); }
 });
