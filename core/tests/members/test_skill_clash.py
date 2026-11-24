@@ -1,6 +1,8 @@
 """One skill of a team package can be deleted alone, and a name that is taken says who holds it (#313)."""
 
 import json
+import os
+import subprocess
 
 import pytest
 
@@ -199,3 +201,87 @@ async def test_a_skipped_skill_does_not_take_the_files_of_the_skill_nested_in_it
     assert not (root / "skills/outer/SKILL.md").exists() and not (root / "skills/outer/notes.md").exists()
     assert (root / "skills/outer/inner/SKILL.md").is_file() and (root / "skills/outer/inner/data.txt").read_text() == "inner data"
     assert made["package"]["access"] == []
+
+
+# A GitHub plugin may record a skill as skills/Outer and the skill nested in it as skills/outer/inner: both pass the import
+# checks, and Windows keeps them in one folder tree, so folders are compared ignoring case (#313).
+MIXED_CASE = {".claude-plugin/plugin.json": json.dumps({"name": "desk", "version": "1.0.0"}),
+              "skills/Outer/SKILL.md": document("outer"), "skills/Outer/notes.md": "outer notes",
+              "skills/Outer/inner/data.txt": "inner data",
+              "skills/outer/inner/SKILL.md": document("inner"), "skills/outer/inner/more.txt": "inner more"}
+
+
+def install_mixed_case(cap):
+    return cap.install_set("github:owner/desk", {k: v.encode() for k, v in MIXED_CASE.items()}, marketplace="market")
+
+
+def readable(root, relative):
+    """The text at `relative` under `root`, whichever case the folder names were created in."""
+    here = root
+    for part in relative.split("/"):
+        here = next((p for p in here.iterdir() if p.name.casefold() == part.casefold()), here / part)
+    return here.read_text() if here.is_file() else None
+
+
+async def test_deleting_a_skill_keeps_a_nested_skill_whose_folder_differs_only_in_case(rig):
+    cap = rig.service.capabilities
+    plugin = install_mixed_case(cap)
+    root = cap.plugin_root(plugin["id"])
+    made = (await packages(rig))["desk"]
+    answer = await rig.call("skills.library.delete", {"key": made["key"], "skill": skill_id(made, "outer")})
+    assert [s["name"] for s in answer["package"]["skills"]] == ["inner"]
+    assert readable(root, "skills/outer/notes.md") is None and readable(root, "skills/outer/SKILL.md") is None
+    assert readable(root, "skills/outer/inner/SKILL.md") is not None
+    assert readable(root, "skills/outer/inner/data.txt") == "inner data"
+    assert readable(root, "skills/outer/inner/more.txt") == "inner more"
+    assert [s["name"] for s in cap.skills(-1)] == ["inner"]
+
+
+async def test_a_skipped_skill_keeps_the_files_of_a_nested_skill_whose_folder_differs_only_in_case(rig, tmp_path):
+    cap = rig.service.capabilities
+    await rig.call("skills.library.import", {"plugin": True, "source": plugin_at(cap, tmp_path, "m", {"skills/outer/SKILL.md": document("outer")})})
+    made = install_mixed_case(cap)
+    assert made["skipped"] == [{"name": "desk:outer", "held_by": "desk"}]
+    # The first plugin still holds outer; the second one brought only inner.
+    assert sorted(s["name"] for s in cap.skills(-1)) == ["inner", "outer"]
+    root = cap.plugin_root(made["id"])
+    assert readable(root, "skills/outer/SKILL.md") is None and readable(root, "skills/outer/notes.md") is None
+    assert readable(root, "skills/outer/inner/SKILL.md") is not None
+    assert readable(root, "skills/outer/inner/data.txt") == "inner data"
+    assert readable(root, "skills/outer/inner/more.txt") == "inner more"
+
+
+def link_to(link, target, kind):
+    """Make `link` point at the folder `target` as a symlink or, on Windows, a junction; skip when the system refuses."""
+    if kind == "symlink":
+        try:
+            os.symlink(target, link, target_is_directory=True)
+        except (OSError, NotImplementedError) as error:
+            pytest.skip(f"symlinks are not available here: {error}")
+    elif os.name != "nt":
+        pytest.skip("junctions exist only on Windows")
+    else:
+        done = subprocess.run(["cmd", "/c", "mklink", "/J", str(link), str(target)], capture_output=True, text=True)
+        if done.returncode:
+            pytest.skip(f"junctions are not available here: {done.stdout}{done.stderr}")
+
+
+@pytest.mark.parametrize("kind", ["symlink", "junction"])
+async def test_deleting_a_skill_never_follows_a_link_inside_its_folder(rig, tmp_path, kind):
+    cap = rig.service.capabilities
+    made = (await rig.call("skills.library.import", {"plugin": True, "source": plugin_at(cap, tmp_path, "m", NESTED)}))["package"]
+    root = cap.plugin_root(int(made["key"][4:]))
+    outside = tmp_path / "outside"
+    (outside / "deep").mkdir(parents=True)
+    (outside / "keep.txt").write_text("keep")
+    (outside / "deep" / "keep.txt").write_text("keep deep")
+    link_to(root / "skills/outer/shortcut", outside, kind)
+    link_to(root / "skills/outer/inner/own-shortcut", outside, kind)
+    answer = await rig.call("skills.library.delete", {"key": made["key"], "skill": skill_id(made, "outer")})
+    assert [s["name"] for s in answer["package"]["skills"]] == ["inner"]
+    # What the link pointed at is untouched, and the link of the deleted skill is gone with it.
+    assert (outside / "keep.txt").read_text() == "keep" and (outside / "deep" / "keep.txt").read_text() == "keep deep"
+    assert not os.path.lexists(root / "skills/outer/shortcut") and not (root / "skills/outer/notes.md").exists()
+    # The nested skill keeps everything, its own link included.
+    assert (root / "skills/outer/inner/data.txt").read_text() == "inner data"
+    assert os.path.lexists(root / "skills/outer/inner/own-shortcut")

@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 import shutil
 import tempfile
 import uuid
@@ -12,6 +13,7 @@ from pathlib import Path
 from ..bots.homes import atomic, redact_secrets
 from .capabilities import MAX_SKILL_BYTES, skill_metadata, skill_urls
 from .skill_library import SHARED, stage_files
+from .skill_plugins import folded_path, inside_folder
 from .skill_sources import validate_files
 from .skills import skill_plugin, stored_skill_name
 from .store import MemberError
@@ -356,10 +358,28 @@ class SkillPackages:
         if part["set_kind"] != "skill":
             return home / "skill-sets", base / ".raphael-commands" / part["set_key"], len(skills), []
         # A skill may hold another skill's folder (skills/outer/inner/SKILL.md): that one keeps its own files.
+        # Paths are compared ignoring case: Windows keeps skills/Outer and skills/outer/inner in one folder tree.
         nested = [base / r["set_key"] for r in self.conn.execute(
             "SELECT set_key FROM member_skills WHERE set_id=? AND set_kind='skill' AND id<>?", (plugin["id"], skill_id))
-            if r["set_key"].startswith(part["set_key"] + "/")]
+            if folded_path(r["set_key"]).startswith(folded_path(part["set_key"]) + "/")]
         return home / "skill-sets", base / part["set_key"], len(skills), nested
+
+    @staticmethod
+    def _own_entries(folder, skip):
+        """The files and links under `folder`, outside every folder of `skip`. A link or junction is listed as itself and never
+        entered, so what it points to (maybe outside the library) is neither read nor moved."""
+        found = []
+        pending = [folder]
+        while pending:
+            with os.scandir(pending.pop()) as entries:
+                for entry in sorted(entries, key=lambda e: e.name):
+                    if any(inside_folder(entry.path, other) for other in skip):
+                        continue
+                    if entry.is_symlink() or entry.is_junction() or not entry.is_dir(follow_symlinks=False):
+                        found.append(Path(entry.path))
+                    else:
+                        pending.append(entry.path)
+        return sorted(found)
 
     def _remove_own_files(self, folder, nested, temp, rollback):
         """Move the files of `folder` that lie outside every folder of `nested` into `temp`, undoing it with `rollback`."""
@@ -369,9 +389,7 @@ class SkillPackages:
             return
         skip = [self.cap.homes.safe(path) for path in nested]
         moved = []
-        for path in sorted(p for p in folder.rglob("*") if p.is_file()):
-            if any(path.is_relative_to(other) for other in skip):
-                continue
+        for path in self._own_entries(folder, skip):
             backup = Path(temp) / f"old-file-{len(moved)}"
             path.rename(backup)
             rollback.callback(restore_file, backup, path)

@@ -111,14 +111,27 @@ def component_paths(manifest, kind):
     return [kind, *[relative_path(p) for p in extra]]
 
 
+def folded_path(path):
+    """A path as Windows (and macOS) compare it: separators normalised, case ignored. A GitHub plugin can hold skills/Outer and
+    skills/outer/inner, which both pass the import checks yet share one directory tree there (#313)."""
+    return str(path).replace("\\", "/").casefold()
+
+
+def inside_folder(path, folder):
+    """Whether `path` is `folder` or lies under it, compared with folded_path."""
+    path, folder = folded_path(path), folded_path(folder)
+    return path == folder or path.startswith(folder + "/")
+
+
 def without_skipped(files, parts, gone):
     """The plugin's files minus those of the skipped parts. A file belongs to the deepest skill folder that holds it, so a
-    skill nested in a skipped one (skills/outer/inner/SKILL.md) keeps its own files (#313)."""
-    folders = [str(PurePosixPath(part["key"]).parent) for part in parts if part["kind"] == "skill"]
-    dropped = {str(PurePosixPath(part["key"]).parent) for part in gone if part["kind"] == "skill"}
+    skill nested in a skipped one (skills/outer/inner/SKILL.md) keeps its own files (#313). Folders are compared ignoring case."""
+    folders = [folded_path(PurePosixPath(part["key"]).parent) for part in parts if part["kind"] == "skill"]
+    dropped = {folded_path(PurePosixPath(part["key"]).parent) for part in gone if part["kind"] == "skill"}
     commands = {part["key"] for part in gone if part["kind"] == "command"}
 
     def owner(path):
+        path = folded_path(path)
         return max((f for f in folders if path.startswith(f + "/")), key=len, default=None)
 
     return {path: data for path, data in files.items() if path not in commands and owner(path) not in dropped}
