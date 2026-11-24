@@ -7060,6 +7060,20 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, menuLeft: box.left, characterX: expected, delta: Math.abs(box.left - expected) };
   }
+  if (name === "slash-app-first") {
+    // R-SLASH-APP-01: the app's own command stands first under 內建, before the member's commands and skills.
+    const rows = [...document.querySelectorAll('#app-popover.slash-menu [data-value]')];
+    require(rows[0]?.dataset.value === "app:usage" && rows[0].textContent.includes("/usage") && rows[0].textContent.includes("打開用量"), "/usage leads the slash menu with what it does");
+    require(document.querySelector('#app-popover.slash-menu').textContent.includes("內建"), "it stands under 內建");
+    return { check: name };
+  }
+  if (name === "slash-usage-opened") {
+    // Choosing it ran it: Settings › 用量 is open, the draft holds no /usage and nothing was sent.
+    require(visible(document.querySelector('[data-usage-tab="overview"]')), "Settings › 用量 is open");
+    require(![...document.querySelectorAll('.composer textarea')].some(input => input.value.includes("/usage")), "the draft holds no /usage");
+    require(!window.__look.calls.some(call => /^agent\.ask/.test(call.method ?? call.command ?? "")), "nothing was sent to a member");
+    return { check: name };
+  }
   if (name === "mention-menu-signin-pick") {
     // Pressing an app that is not signed in is a way to its sign-in, not an address: the typed @ goes, the connect dialog opens.
     const composer = [...document.querySelectorAll('.composer textarea')].find(visible);

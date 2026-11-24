@@ -425,6 +425,8 @@ export const vi = {
   "members.profile.commands": "Lệnh",
   "members.panelCommands": "Lệnh",
   "completion.skills": "Kỹ năng",
+  "completion.app": "Tích hợp",
+  "slash.usage": "Mở mức dùng: còn lại, thời điểm đặt lại và tín dụng",
   "template.review.skills": "Kỹ năng",
   "members.profile.skillsTitle": "Kỹ năng",
   "members.panelSkills": "Kỹ năng",

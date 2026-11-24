@@ -425,6 +425,8 @@ export const it = {
   "members.profile.commands": "Comandi",
   "members.panelCommands": "Comandi",
   "completion.skills": "Competenze",
+  "completion.app": "Integrati",
+  "slash.usage": "Apri utilizzo: cosa resta, quando si azzera e crediti",
   "template.review.skills": "Competenze",
   "members.profile.skillsTitle": "Competenze",
   "members.panelSkills": "Competenze",

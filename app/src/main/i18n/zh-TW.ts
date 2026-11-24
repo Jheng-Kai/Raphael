@@ -347,6 +347,8 @@ export const zhTW = {
   "completion.kindApp": "應用程式",
   "completion.commands": "指令",
   "completion.skills": "技能",
+  "completion.app": "內建",
+  "slash.usage": "打開用量：剩餘額度、重置時間和點數",
   "media.image": "畫圖",
   "media.video": "做影片",
   "media.unset": "未設定",

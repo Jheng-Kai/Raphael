@@ -348,6 +348,8 @@ export const ja = {
   "completion.kindApp": "アプリ",
   "completion.commands": "コマンド",
   "completion.skills": "スキル",
+  "completion.app": "組み込み",
+  "slash.usage": "使用量を開く：残り、リセット時刻、クレジット",
   "media.image": "画像を描く",
   "media.video": "動画を作る",
   "media.unset": "未設定",

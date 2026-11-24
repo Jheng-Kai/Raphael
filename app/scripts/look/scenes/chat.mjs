@@ -292,6 +292,8 @@ export default [
     [member(1), wait('.exchange-event'), check("bot-exchange-count")], { colleagues: 2 }),
   scene("bot-exchange-expanded", "The line opens the two members' conversation on what was asked",
     [member(1), wait('.exchange-event'), click('.exchange-event .event-count'), wait('.mb-chat:not([hidden]) > .peer-chat'), check("bot-exchange-expanded")], { colleagues: 2 }),
+  scene("slash-usage", "The app's /usage leads the slash menu under 內建", [type(".composer textarea", "/"), wait('.slash-menu [data-value="app:usage"]'), check("slash-app-first"), check("slash-commands")], { commands: [{ id: 1, member_id: 0, name: "review", description: "整理研究重點", template: "整理研究重點" }] }),
+  scene("slash-usage-opened", "Choosing /usage opens Settings › 用量 and sends nothing", [type(".composer textarea", "/usa"), wait('.slash-menu [data-value="app:usage"]'), click('.slash-menu [data-value="app:usage"]'), wait('[data-usage-tab="overview"]'), check("slash-usage-opened")]),
   scene("slash-commands", "Slash command menu follows the slash character", [type(".composer textarea", "/"), wait(".slash-menu"), check("slash-commands")], { commands: [{ id: 1, member_id: 0, name: "review", description: "整理研究重點", template: "整理研究重點" }] }),
   scene("slash-many", "Thirty skills under a / are one list that scrolls, as the @ menu: no 下一頁", [type(".composer textarea", "/"), wait(".slash-menu"), check("slash-many"), check("slash-commands")],
     { skills: Array.from({ length: 30 }, (_, index) => ({ id: 300 + index, member_id: 0, name: `skill-${index}`, slash_name: `skill-${index}`, description: `整理第 ${index + 1} 類資料，寫成可以直接使用的摘要與清單`, enabled: true, source: "owner" })) }),

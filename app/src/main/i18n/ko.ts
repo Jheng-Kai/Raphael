@@ -425,6 +425,8 @@ export const ko = {
   "members.profile.commands": "명령",
   "members.panelCommands": "명령",
   "completion.skills": "스킬",
+  "completion.app": "기본",
+  "slash.usage": "사용량 열기: 남은 양, 재설정 시간, 크레딧",
   "template.review.skills": "스킬",
   "members.profile.skillsTitle": "스킬",
   "members.panelSkills": "스킬",

@@ -425,6 +425,8 @@ export const ptBR = {
   "members.profile.commands": "Comandos",
   "members.panelCommands": "Comandos",
   "completion.skills": "Habilidades",
+  "completion.app": "Integrados",
+  "slash.usage": "Abrir uso: o que resta, quando reinicia e créditos",
   "template.review.skills": "Habilidades",
   "members.profile.skillsTitle": "Habilidades",
   "members.panelSkills": "Habilidades",

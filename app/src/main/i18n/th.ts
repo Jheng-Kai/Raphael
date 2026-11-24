@@ -425,6 +425,8 @@ export const th = {
   "members.profile.commands": "คำสั่ง",
   "members.panelCommands": "คำสั่ง",
   "completion.skills": "ทักษะ",
+  "completion.app": "ในตัว",
+  "slash.usage": "เปิดการใช้งาน: ที่เหลือ เวลารีเซ็ต และเครดิต",
   "template.review.skills": "ทักษะ",
   "members.profile.skillsTitle": "ทักษะ",
   "members.panelSkills": "ทักษะ",

@@ -425,6 +425,8 @@ export const de = {
   "members.profile.commands": "Befehle",
   "members.panelCommands": "Befehle",
   "completion.skills": "Fähigkeiten",
+  "completion.app": "Integriert",
+  "slash.usage": "Nutzung öffnen: Verbleibendes, Zurücksetzung und Guthaben",
   "template.review.skills": "Fähigkeiten",
   "members.profile.skillsTitle": "Fähigkeiten",
   "members.panelSkills": "Fähigkeiten",

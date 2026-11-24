@@ -425,6 +425,8 @@ export const fr = {
   "members.profile.commands": "Commandes",
   "members.panelCommands": "Commandes",
   "completion.skills": "Compétences",
+  "completion.app": "Intégrées",
+  "slash.usage": "Ouvrir l’utilisation : ce qui reste, la réinitialisation et les crédits",
   "template.review.skills": "Compétences",
   "members.profile.skillsTitle": "Compétences",
   "members.panelSkills": "Compétences",

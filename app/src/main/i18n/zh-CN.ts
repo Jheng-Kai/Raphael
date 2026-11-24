@@ -425,6 +425,8 @@ export const zhCN = {
   "members.profile.commands": "指令",
   "members.panelCommands": "指令",
   "completion.skills": "技能",
+  "completion.app": "内置",
+  "slash.usage": "打开用量：剩余额度、重置时间和点数",
   "template.review.skills": "技能",
   "members.profile.skillsTitle": "技能",
   "members.panelSkills": "技能",

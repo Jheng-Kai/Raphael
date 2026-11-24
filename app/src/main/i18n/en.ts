@@ -348,6 +348,8 @@ export const en = {
   "completion.kindApp": "App",
   "completion.commands": "Commands",
   "completion.skills": "Skills",
+  "completion.app": "Built-in",
+  "slash.usage": "Open usage: what is left, when it resets, and credits",
   "media.image": "Draw images",
   "media.video": "Make videos",
   "media.unset": "Not set",

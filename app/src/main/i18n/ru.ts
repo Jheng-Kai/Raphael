@@ -425,6 +425,8 @@ export const ru = {
   "members.profile.commands": "Команды",
   "members.panelCommands": "Команды",
   "completion.skills": "Навыки",
+  "completion.app": "Встроенные",
+  "slash.usage": "Открыть использование: остаток, сброс и кредиты",
   "template.review.skills": "Навыки",
   "members.profile.skillsTitle": "Навыки",
   "members.panelSkills": "Навыки",

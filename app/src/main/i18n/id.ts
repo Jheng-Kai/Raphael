@@ -425,6 +425,8 @@ export const id = {
   "members.profile.commands": "Perintah",
   "members.panelCommands": "Perintah",
   "completion.skills": "Keterampilan",
+  "completion.app": "Bawaan",
+  "slash.usage": "Buka penggunaan: sisa, waktu reset, dan kredit",
   "template.review.skills": "Keterampilan",
   "members.profile.skillsTitle": "Keterampilan",
   "members.panelSkills": "Keterampilan",

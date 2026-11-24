@@ -55,6 +55,7 @@ import { closeMediaLightbox, openMediaLightbox } from "../media-lightbox";
 import { keepReadingPlace } from "../reading-place";
 import { wholeLinks } from "../composer-links";
 import { mountSlashMenu } from "../slash-menu";
+import { appCommandOf, runAppCommand } from "../app-commands";
 import { getLocale, onLocaleChange, t } from "../i18n";
 
 import { plainReplies } from "../../shared/anime";
@@ -616,7 +617,8 @@ export function createAgent(app: AppContext, places?: {
   const input = composer.querySelector<HTMLTextAreaElement>(".cmp-input")!;
   const pageDraft = bindPageComposer(input);
   const correctionLearning = bindComposerLearning(input);
-  const slashMenu = mountSlashMenu(input, { memberId, scope: app, changed: () => { presentationVersion++; render(); } });
+  const slashMenu = mountSlashMenu(input, { memberId, scope: app, changed: () => { presentationVersion++; render(); },
+    appCommand: command => runAppCommand(command, (page, argument) => app.go(page, argument)) });
   const attachButton = composer.querySelector<HTMLElement>(".cmp-attach")!;
   bindActionMode(composer.querySelector<HTMLElement>(".cmp-mode")!);
   composerFolder = mountComposerFolder(composer.querySelector<HTMLElement>(".cmp-folder")!, composer.querySelector<HTMLElement>(".cmp-branch")!,
@@ -1655,6 +1657,16 @@ export function createAgent(app: AppContext, places?: {
     // A file still being read is not sent: Enter does nothing until it is in, as the button is not offered (R-ATTACH-04).
     if (attaching || files.some(file => file.pending)) return;
     if (missingFiles.length > 0) { toaster.info(t("chat.reattach")); return; }
+    // An app command typed whole (`/usage`) is the app's to run: nothing is sent and no model is asked (R-SLASH-APP-01).
+    const command = !files.length && !composerQuote && replacing === undefined ? appCommandOf(input.value) : null;
+    if (command) {
+      clearTimeout(draftTimer); discardComposerDraft(composerKey);
+      input.value = "";
+      input.dispatchEvent(new Event("composer-draft-restored"));
+      fit();
+      runAppCommand(command, (page, argument) => app.go(page, argument));
+      return;
+    }
     const text = typedQuestion(wholeLinks(input.value), files.length > 0);
     if (text === null) {
       if (input.value.trim() !== "") toaster.info(t("agent.tooLong"));

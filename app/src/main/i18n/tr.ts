@@ -425,6 +425,8 @@ export const tr = {
   "members.profile.commands": "Komutlar",
   "members.panelCommands": "Komutlar",
   "completion.skills": "Beceriler",
+  "completion.app": "Yerleşik",
+  "slash.usage": "Kullanımı aç: kalan, sıfırlanma zamanı ve krediler",
   "template.review.skills": "Beceriler",
   "members.profile.skillsTitle": "Beceriler",
   "members.panelSkills": "Beceriler",
