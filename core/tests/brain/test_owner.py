@@ -58,6 +58,23 @@ def test_prompt_names_host_and_docker_work_folders(conn, tmp_path):
     assert told(9, target)["work_folder"] == "/home/cua/workspace"
 
 
+def test_the_prompt_says_a_chosen_project_is_read_only_in_the_computer(conn, tmp_path):
+    settings = SettingsStore(conn)
+    work, team, own = (tmp_path / name for name in ("work", "team", "own"))
+    for path in (work, team, own):
+        path.mkdir()
+    settings.set("project_folders", [str(work)])
+    settings.set("member_work_folder", {"4": str(work)})
+    target = Target("4", "synthetic", own, team, projects=project_mounts(settings.get("project_folders")))
+
+    def says(member, computer=None):
+        return owner_context(settings, member, folders=lambda _: (own, team), target=computer).split("<owner_context>")[0]
+
+    assert "read-only to commands in your computer" in says(4, target)
+    assert "local command tool" in says(4, target)
+    assert "read-only" not in says(4) and "read-only" not in says(9, target)  # the PC's own tools, and no project chosen
+
+
 def test_a_removed_project_falls_back_to_the_members_own_folder(conn, tmp_path):
     settings = SettingsStore(conn)
     chosen, own, team = (tmp_path / name for name in ("project", "own", "team"))

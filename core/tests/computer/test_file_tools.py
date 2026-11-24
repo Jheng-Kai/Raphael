@@ -45,6 +45,8 @@ class GuestRuntime(Runtime):
         if args[0] == "exec" and "-c" in args and args[args.index("-c") + 1].startswith(HELPER):
             self.calls.append((args, kwargs))
             request = json.loads(kwargs["input"])
+            if request["action"] == "write" and request["path"].startswith("/home/cua/projects/"):
+                return Result(0, json.dumps({"error": "EROFS"}))  # a project is mounted read-only (R-COMP-PROJECT-01)
             request.update(path=self.host(request["path"]), roots=[str(self.folders[root]) for root in request["roots"]])
             if "allowed" in request:
                 request["allowed"] = [self.host(folder) for folder in request["allowed"]]
