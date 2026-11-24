@@ -2145,14 +2145,20 @@ print(base64.b64encode(data).decode())
         if allowed is not None and not any(request["path"] == place or request["path"].startswith(place.rstrip("/") + "/")
                                            for place in allowed):
             return {"error": "outside"}
-        root = str(folder).replace("\\", "/").rstrip("/")
+        # The project's folder exactly as the owner chose it: a backslash is a letter of a name on macOS and Linux, and a
+        # drive root stays one (`D:/`, never `D:`, which is the drive's current folder). Only Windows' own separator
+        # becomes the one the guest helper splits on.
+        root = str(folder)
+        if os.name == "nt":
+            root = root.replace("\\", "/")
+        prefix = root if root.endswith("/") else root + "/"
         parts = [part for part in relative.split("/") if part]
         if not parts or any(part in (".", "..") for part in parts):
             return {"error": "EINVAL"}
         if os.name == "nt":
             from .. import work_area
             try:
-                work_area.absolute("/".join([root, *parts]))
+                work_area.absolute(prefix + "/".join(parts))
             except work_area.PathRefused:
                 return {"error": "EINVAL"}
             # The computer sees these as plain letters of a name, Windows does not: a backslash is a separator
@@ -2171,7 +2177,7 @@ print(base64.b64encode(data).decode())
         if target == real or not files_guest.under(target, real):
             return {"error": "outside"}
         return files_guest.handle({**{key: value for key, value in request.items() if key != "allowed"},
-                                   "path": "/".join([root, *parts]), "roots": [root]})
+                                   "path": prefix + "/".join(parts), "roots": [root]})
 
     async def file_request(self, target, request, *, answer_bytes=0):
         """One request to the guest's file helper (`files_guest.py`) for a member's file tools: `read` (a path's kind,
