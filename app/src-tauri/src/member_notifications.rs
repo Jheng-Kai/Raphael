@@ -19,13 +19,9 @@ fn notice_from(event: &Notification, language: &str) -> Option<MemberNotice> {
     if event.method != "member.notice" || !event.params.get("notify")?.as_bool()? {
         return None;
     }
-    let member_id = event.params.get("member_id")?.as_u64()?;
+    event.params.get("member_id")?.as_u64()?;
     let name = event.params.get("name")?.as_str()?.trim();
-    if member_id == 0
-        || name.is_empty()
-        || name.chars().count() > 160
-        || name.chars().any(char::is_control)
-    {
+    if name.is_empty() || name.chars().count() > 160 || name.chars().any(char::is_control) {
         return None;
     }
     let body = match (event.params.get("kind")?.as_str()?, language) {
@@ -158,6 +154,17 @@ mod tests {
     }
 
     #[test]
+    fn raphael_uses_the_same_explicit_desktop_opt_in() {
+        for kind in ["finished", "needs_input"] {
+            let mut notice = event(kind);
+            notice.params["member_id"] = json!(0);
+            assert!(notice_from(&notice, "en").is_some());
+            notice.params["notify"] = json!(false);
+            assert!(notice_from(&notice, "en").is_none());
+        }
+    }
+
+    #[test]
     fn only_explicit_opt_in_and_known_member_notices_are_accepted() {
         for kind in ["finished", "needs_input"] {
             assert!(notice_from(&event(kind), "en").is_some());
@@ -168,7 +175,6 @@ mod tests {
             ("notify", json!(null)),
             ("notify", json!(1)),
             ("kind", json!("failed")),
-            ("member_id", json!(0)),
             ("member_id", json!(-1)),
             ("name", json!("  ")),
             ("name", json!("Ada\nprivate")),

@@ -130,6 +130,7 @@ from ..brain.spend import SpendTracker
 from ..clock import wall_clock_ms
 from ..failures import Failure, KINDS as FAILURE_KINDS
 from ..members.activity import Activity, current, member_turn
+from ..members.store import notification_enabled
 from ..own_calendar import OwnCalendar
 from ..protocol import BUSY, INVALID_PARAMS, NOT_FOUND, RpcError, invalid_params
 from ..memory.store import UNCONFIRMED, MemorySnapshot
@@ -1623,6 +1624,7 @@ class BackgroundService:
             {
                 "task_id": task.id,
                 "state": task.state,
+                "notify": notification_enabled(self._metrics_conn, task.member_id),
                 "prefix": task.report_prefix or "",
                 "text": task.report_text or "",
             },
@@ -2587,6 +2589,7 @@ class BackgroundService:
                 "prefix": prefix,
                 "text": text,
                 "expires_at_ms": question.expires_at_ms,
+                "notify": notification_enabled(self._metrics_conn, member_id),
                 "notice": {"prefix": PREFIXES[language].notice, "text": self._notice(language, member_id)},
             },
         )
@@ -2686,6 +2689,7 @@ class BackgroundService:
         """Everyone who waits for the owner now, in order: what the app reminds of."""
         waiting = sorted([*self.waiting_questions(), *self.owner_questions.pending()], key=lambda question: question.get("created_at_ms") or 0)
         return {"waiting": [{"id": question["id"], "member_id": question["member_id"], "room_id": question.get("room_id"),
+                             "notify": notification_enabled(self._metrics_conn, question["member_id"]),
                              "member_name": (self._member_name(question["member_id"]) if self._member_name and question["member_id"] else None) or ""}
                             for question in waiting]}
 
@@ -3411,7 +3415,8 @@ class BackgroundService:
         if not task.quiet and not silent:
             self._notify(
                 "worker.report",
-                {"task_id": task.id, "state": state, "prefix": prefix, "text": fit_text(text, task.language)[0]},
+                {"task_id": task.id, "state": state, "prefix": prefix, "text": fit_text(text, task.language)[0],
+                 "notify": notification_enabled(self._metrics_conn, task.member_id)},
             )
         self._changed(task.id, state, ending=True)
         self._deliver_handoffs()

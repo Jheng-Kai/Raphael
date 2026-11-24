@@ -431,7 +431,13 @@ fn took(elapsed: std::time::Duration) -> String {
 pub(super) use native::check;
 
 #[cfg(not(windows))]
-pub(super) fn check(_window: &tauri::WebviewWindow, _hwnd: isize, _placement: Option<Placement>) {}
+pub(super) fn check(
+    _window: &tauri::WebviewWindow,
+    _hwnd: isize,
+    _placement: Option<Placement>,
+    _: (),
+) {
+}
 
 #[cfg(windows)]
 mod native {
@@ -531,8 +537,12 @@ mod native {
         window: &WebviewWindow,
         hwnd: isize,
         placement: Option<Placement>,
+        visible: std::sync::Arc<std::sync::atomic::AtomicBool>,
     ) {
         let posted = window.with_webview(move |webview| {
+            if !visible.load(std::sync::atomic::Ordering::Acquire) {
+                return;
+            }
             let Some(_checking) = Checking::start() else {
                 log::debug!("overlay: a window check is already running");
                 return;
@@ -540,7 +550,7 @@ mod native {
             let started = Instant::now();
             let controller = webview.controller();
             let hwnd = HWND(hwnd as *mut c_void);
-            // SAFETY: `hwnd` is the overlay window, which lives as long as the app, and this runs
+            // SAFETY: `hwnd` is the overlay window and this runs
             // on the main thread, which owns it and the controller.
             let sight = unsafe { look(hwnd, placement, Some(&controller)) };
             let wrong = problems(&sight);

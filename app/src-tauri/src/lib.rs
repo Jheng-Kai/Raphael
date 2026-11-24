@@ -210,6 +210,7 @@ pub fn run() {
             commands::floating_controls,
             overlay::overlay_subscribe,
             overlay::overlay_log,
+            overlay::overlay_frame,
             overlay::overlay_confirm,
             overlay::overlay_cancel,
             commands::core_call,

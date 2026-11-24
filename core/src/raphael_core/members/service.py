@@ -110,6 +110,7 @@ from . import skill_sources
 from .schedule import Schedule, first_eligible_slot, next_run
 from .covers import Covers, selection as cover_selection
 from .store import (
+    notification_enabled,
     ROUTINE_RUN_STATUS_SQL,
     PROFILE_FIELDS,
     Group,
@@ -403,6 +404,7 @@ class MembersService:
             "members.template": self._member_template,
             "members.mark_all_read": self._mark_all_read,
             "members.list": self._list,
+            "members.notification_enabled": self._notification_enabled,
             "members.create": self._create,
             "members.greet": self._greet,
             "members.update": self._update,
@@ -606,9 +608,11 @@ class MembersService:
             return
         self._notice(member, kind)
 
+    async def _notification_enabled(self, params: dict) -> dict:
+        return {"notify": notification_enabled(self._conn, _whole(params, "member_id"))}
+
     def _notice(self, member: Member | Speaker, kind: str) -> None:
-        enabled = self._settings.get("raphael_notify") if member.id == 0 else member.notify
-        if enabled and self._notify is not None:
+        if self._notify is not None and notification_enabled(self._conn, member.id):
             self._notify("member.notice", {"member_id": member.id, "name": member.name or RAPHAEL_NAMES[self._language()],
                                           "kind": kind, "notify": True})
 

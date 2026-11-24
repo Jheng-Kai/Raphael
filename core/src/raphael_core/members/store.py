@@ -35,6 +35,7 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from ..agent.speaker import Speaker, is_raphael_name
+from ..brain.settings import SettingsStore
 from ..clock import wall_clock_ms
 from ..slime_ids import current_avatar
 from .schedule import Schedule, ScheduleError, parse_schedule
@@ -389,6 +390,14 @@ def _routine(row: sqlite3.Row) -> Routine | None:
         return None
     data["enabled"] = bool(data["enabled"])
     return Routine(**data)
+
+
+def notification_enabled(conn: sqlite3.Connection, member_id: int) -> bool:
+    """Whether this identity may surface an owner notification outside its conversation."""
+    if member_id == 0:
+        return bool(SettingsStore(conn).get("raphael_notify"))
+    row = conn.execute("SELECT notify FROM members WHERE id = ?", (member_id,)).fetchone()
+    return row is not None and bool(row[0])
 
 
 class MemberStore:
