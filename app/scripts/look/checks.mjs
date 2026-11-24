@@ -6746,6 +6746,16 @@ export function checkRendered(name, context = {}) {
     require(!visible(document.querySelector("#ask")) && !visible(document.querySelector("#overlay-stop")), "an answer to read has no buttons");
     return { check: name, text: line.textContent };
   }
+  if (name === "overlay-frame-ack") {
+    // In a real browser the page answers the native frame probe; on 2026-11-24 it threw "Illegal invocation" instead, the
+    // recovery took the overlay for frozen and reloaded and hid it during every dictation.
+    const calls = window.__look.calls;
+    const acks = calls.filter(call => call.command === "overlay_frame" && call.id === 990001);
+    const failed = calls.filter(call => call.command === "overlay_log" && String(call.message ?? "").includes('"frameprobe" event failed'));
+    require(failed.length === 0, `the frame probe failed in the page: ${JSON.stringify(failed[0] ?? null).slice(0, 200)}`);
+    require(acks.length === 1 && acks[0].hidden === false, `the page answers the frame probe once, shown (${JSON.stringify(acks)})`);
+    return { check: name, acks: acks.length };
+  }
   if (name === "overlay-mic-quiet" || name === "overlay-mic-heard") {
     const line = [...document.querySelectorAll('.sub-line')].find(visible);
     if (name === "overlay-mic-quiet") require(line && line.textContent.includes("未收到聲音"), `the muted microphone is said beside the emblem (${line?.textContent ?? "no line"})`);

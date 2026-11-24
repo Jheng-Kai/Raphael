@@ -2506,6 +2506,8 @@ export function installMock(fixture, config = {}, target = window) {
       if (command === "learned_layout" || command === "learned_finish") return;
       if (command === "floating_controls") return;
       if (command === "overlay_log") return;
+      // The page answering the native frame probe (recovery.rs); the check overlay-frame-ack reads it from the calls.
+      if (command === "overlay_frame") return;
       if (command === "overlay_confirm") return;
       if (command === "overlay_cancel") { state.overlayChannel?.onmessage({type:"hide"});return; }
       // The composer's words, files and quote handed to the recording the voice button is ending: taken.

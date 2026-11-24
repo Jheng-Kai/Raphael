@@ -26,6 +26,9 @@ export default [{
   // A muted microphone is said beside the listening emblem a second into the recording (dictation.rs `on_sound`).
   ...scene("overlay-mic-quiet", "A recording whose microphone gives no sound says so beside the listening emblem while it goes on", [
     { action: "advance-time", ms: 1500 }, check("overlay-mic-quiet"),
+    // The native side asks whether the page still paints (recovery.rs); a probe never answered reloads and hides the overlay.
+    { action: "overlay-event", event: { type: "frameprobe", id: 990001, hidden: false, watch_end: false } },
+    { action: "advance-time", ms: 300 }, check("overlay-frame-ack"),
   ], { overlayEvents: [
     { type: "settings", px: 96, subtitles: "on", language: "zh-TW" },
     { type: "show", mode: "listening" },
