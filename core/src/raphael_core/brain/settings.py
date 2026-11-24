@@ -301,7 +301,8 @@ def checked(key: str, value: Any) -> tuple[str, Any]:
     """The key and the value that setting `key` to `value` saves, or the error `SettingsStore.set`
     raises for them (see there). Nothing is saved."""
     if key == "first_bot_profile":
-        limits = {"name": 16, "role": 24, "personality": 2000, "instructions": 2000}
+        # `avatar` is the slime the owner dressed the first Bot in (`slime:<id>`, "" for the first blue slime).
+        limits = {"name": 16, "role": 24, "personality": 2000, "instructions": 2000, "avatar": 64}
         if not isinstance(value, dict) or set(value) - set(limits):
             raise ValueError("Invalid first Bot profile")
         if any(not isinstance(text, str) or len(text.strip()) > limits[field] or "\x00" in text
@@ -309,7 +310,16 @@ def checked(key: str, value: Any) -> tuple[str, Any]:
             raise ValueError("Invalid first Bot profile text")
         if "name" in value and not value["name"].strip():
             raise ValueError("The first Bot needs a name")
-        return key, {field: text.strip() for field, text in value.items()}
+        profile = {field: text.strip() for field, text in value.items()}
+        if profile.get("avatar"):
+            from ..members.store import MemberError, clean_avatar
+            if not profile["avatar"].startswith("slime:"):
+                raise ValueError("The first Bot wears a slime")
+            try:
+                profile["avatar"] = clean_avatar(profile["avatar"])
+            except MemberError as error:
+                raise ValueError(str(error)) from None
+        return key, profile
     if key == "raphael_tools":
         from ..members.store import MemberError, clean_tools
         try:

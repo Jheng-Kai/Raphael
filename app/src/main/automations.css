@@ -214,15 +214,17 @@ div.handoff-event > .event-line { min-width: 0; max-width: 100%; }
 .au-all-day-row { grid-column: 1 / -1; display: grid; grid-template-columns: 52px repeat(var(--au-days), minmax(0, 1fr)); grid-template-rows: repeat(var(--au-rows), 22px); row-gap: 2px; padding-bottom: var(--sp-1); }
 .au-all-day-label { grid-column: 1; grid-row: 1 / -1; padding-top: 2px; font-size: var(--fs-2xs); line-height: 18px; color: var(--text-3); text-align: center; white-space: nowrap; }
 .au-all-day { grid-row: 1 / -1; min-width: 0; margin-bottom: calc(-1 * var(--sp-1)); border-left: 1px solid var(--line); }
-/* Opened with 「還有 N 個」, the band shows every all-day item and has no scroll of its own: the page scrolls. Only the day names stay at the top, the band and the hours move under them. */
+/* When open, the band shows every all-day item and has no scroll of its own: the page scrolls. Only the day names stay at the top, the band and the hours move under them. */
 .au-grid-head.is-open { display: contents; }
 .au-grid-head.is-open > .au-day-head, .au-grid-head.is-open > span:first-child { position: sticky; top: 0; z-index: 4; background: var(--content); box-shadow: 0 1px 0 var(--line); }
 .au-grid-head.is-open > .au-all-day-row { border-bottom: 1px solid var(--line); }
-/* The band's button keeps its focus ring inside its own box, so the ring is whole at the band's edge and the count keeps its width. */
-.au-all-day-row > .btn.cal-more:focus-visible { outline-offset: -2px; }
-/* The open band's one 收合: a chevron in the margin under the time zone, on its last row. */
-.au-all-day-row > .btn.icon.cal-fold { justify-self: center; align-self: center; justify-content: center; width: 22px; height: 22px; min-height: 22px; padding: 0; color: var(--text-2); }
-.au-all-day-row > .btn.icon.cal-fold .i { width: 16px; height: 16px; }
+.au-all-day-row.has-toggle > :is(.au-all-day-label, .au-all-day) { grid-row-end: -2; }
+.au-all-day-row.has-toggle > .au-all-day { margin-bottom: 0; }
+.au-all-day-row > .btn.icon.au-band-toggle { grid-column: 2 / -1; grid-row: -2; align-self: center; width: 100%; height: 20px; min-height: 20px; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text-2); }
+.au-all-day-row > .btn.icon.au-band-toggle:hover:not(:disabled) { background: var(--hover); }
+.au-all-day-row > .btn.icon.au-band-toggle:active:not(:disabled) { background: var(--pressed); }
+.au-all-day-row > .btn.icon.au-band-toggle:focus-visible { outline-offset: -2px; }
+.au-band-toggle .i { width: 16px; height: 16px; }
 .au-event { z-index: 1; min-width: 0; }
 .au-day-col > .au-event { position: absolute; }
 .au-bar { position: relative; margin: 0 3px 0 2px; }
@@ -238,8 +240,9 @@ div.handoff-event > .event-line { min-width: 0; max-width: 100%; }
 .au-draft { z-index: 3; pointer-events: none; }
 .au-draft .cal-chip.btn { box-shadow: var(--pop); cursor: default; }
 .cal-chip.btn.is-past { opacity: 0.6; }
-.cal-chip.is-own.btn.is-past, .cal-chip.is-own.btn.is-past:hover:not(:disabled) { opacity: 1; background: var(--surface-2); color: var(--text-2); }
-.cal-chip.is-own.btn.is-past:active:not(:disabled) { background: var(--pressed); }
+.cal-chip.is-own.btn.is-past { --own-bar: var(--text-3); opacity: 1; background: color-mix(in srgb, var(--text) 6%, var(--content)); color: var(--text-2); }
+.cal-chip.is-own.btn.is-past:hover:not(:disabled) { background: color-mix(in srgb, var(--text) 12%, var(--content)); }
+.cal-chip.is-own.btn.is-past:active:not(:disabled) { background: color-mix(in srgb, var(--text) 18%, var(--content)); }
 /* The event whose panel is open, or that a link opened, lifts when its details are open; a ring stays keyboard focus's (R-UI-31). */
 .cal-chip.is-home-focus, .cal-chip[aria-current="true"] { z-index: 2; box-shadow: var(--pop); }
 .cal-chip.is-event.is-home-focus, .cal-chip.is-event[aria-current="true"] { box-shadow: inset 0 0 0 1px var(--btn-edge), var(--pop); }

@@ -29,6 +29,9 @@
 
 /* The two views of the dialog: the page that comes in slides from the side it is reached from (180 ms) */
 .svc-view { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); }
+/* Only the head keeps the close column; what is under it takes the dialog's whole width, so it stands in the middle with
+   the same margin on both sides instead of leaning left. */
+.cs-dialog:not(.pv-editor) .svc-view > :not(.cs-dlg-head) { margin-right: calc(-1 * var(--close-gutter)); }
 .svc-view.slide-in { animation: svc-in 0.18s ease-out; }
 .svc-view.slide-out { animation: svc-out 0.18s ease-out; }
 @keyframes svc-in { from { opacity: 0; transform: translateX(14px); } }

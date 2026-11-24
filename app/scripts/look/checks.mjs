@@ -2,6 +2,42 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.checkVisibility() && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  // R-UI-182: a dialog's page scrolls under its header, which holds the close (and the way back) at the top of the body and
+  // keeps them pressable at its bottom. A page too short to scroll gets a tall spacer under its header for the test, so a
+  // header that would scroll away fails on every page and not only on the ones a fixture makes long. A page whose height is
+  // the dialog's and that scrolls inside a list of its own (Connect apps) never moves its header: the body cannot scroll
+  // even with the spacer, and the close must still stand where it was and take a press.
+  const headHoldsOnScroll = (body, close, others = []) => {
+    let holder = close.parentElement;
+    while (holder && holder !== body && getComputedStyle(holder).position !== 'sticky') holder = holder.parentElement;
+    require(holder && holder !== body, `the header holding the close is sticky (${close.parentElement?.className} in ${close.parentElement?.parentElement?.className})`);
+    let spacer = null;
+    if (body.scrollHeight <= body.clientHeight + 40) {
+      spacer = document.createElement('div');
+      spacer.style.height = `${body.clientHeight * 2}px`;
+      holder.parentElement.append(spacer);
+    }
+    const before = body.scrollTop, start = close.getBoundingClientRect().top, scrolls = body.scrollHeight > body.clientHeight + 1;
+    body.scrollTop = body.scrollHeight;
+    const press = control => { const r = control.getBoundingClientRect(), at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return at === control || control.contains(at); };
+    const after = close.getBoundingClientRect().top, bodyTop = body.getBoundingClientRect().top, scrolled = body.scrollTop;
+    const pressable = [close, ...others].filter(control => control && visible(control)).map(press);
+    body.scrollTop = before;
+    spacer?.remove();
+    require((scrolled > 0 || !scrolls) && Math.abs(after - start) <= 1 && after >= bodyTop - 1 && pressable.every(Boolean),
+      `scrolled to the bottom, the close and the way back still stand at the top and take a press (close ${Math.round(start)}→${Math.round(after)}, body top ${Math.round(bodyTop)}, scrolls ${scrolls}, scrolled ${scrolled}, pressable ${pressable})`);
+  };
+  // R-UI-181: each row of a list is as tall as what it holds: its face and words lie inside it and never reach the next row.
+  const rowsWhole = rows => {
+    let previous = null;
+    for (const row of rows) {
+      const box = row.getBoundingClientRect(), parts = [...row.querySelectorAll(':scope > *')].filter(visible).map(part => part.getBoundingClientRect());
+      const top = Math.min(...parts.map(part => part.top)), bottom = Math.max(...parts.map(part => part.bottom));
+      require(top >= box.top - 1 && bottom <= box.bottom + 1, `${row.textContent.trim().slice(0, 24)} holds its face and words (${Math.round(top)}-${Math.round(bottom)} in ${Math.round(box.top)}-${Math.round(box.bottom)})`);
+      require(!previous || box.top >= previous.bottom - 1, `${row.textContent.trim().slice(0, 24)} starts under the row before it`);
+      previous = box;
+    }
+  };
   const tokenColour = (element, token) => {
     const probe = document.createElement("i");
     probe.style.color = "var(" + token + ")";
@@ -599,6 +635,7 @@ export function checkRendered(name, context = {}) {
       const head = pane.closest('.set-content').querySelector('.set-head');
       require(head.querySelector('h1#set-title')?.textContent.trim() === '團隊技能' &&
         visible(head.querySelector('.close-button')), 'the list keeps its Team skills title and shared close');
+      if (name === 'skill-library') headHoldsOnScroll(head.closest('.modal-body'), head.querySelector('.close-button'));
       require(visible(pane) && pane.querySelectorAll('[data-skl="import-go"]').length === 1 && pane.firstElementChild?.matches('.skl-import'), 'the importer is the first card of the tab, with one 匯入');
       require(!pane.querySelector('.skl-head, .skl-drop-hint') && !pane.previousElementSibling?.matches?.('p'), 'nothing is written between the tab name and its first card');
       const box = pane.getBoundingClientRect();
@@ -668,18 +705,8 @@ export function checkRendered(name, context = {}) {
       require(actionBoxes[0].right <= actionBoxes[1].left && actionBoxes[1].right <= actionBoxes[2].left,
         'access and the update button are visibly left of the switch');
       require(document.querySelector('.modal-scrim .modal-body').scrollTop === 0, 'the page opens at its top');
-      {
-        // A plugin with many skills scrolls under its title: at the bottom the way back, the title and the close stay at the top.
-        const body = document.querySelector('.modal-scrim .modal-body');
-        if (body.scrollHeight > body.clientHeight + 40) {
-          const top = close.getBoundingClientRect().top;
-          body.scrollTop = body.scrollHeight;
-          const press = control => { const r = control.getBoundingClientRect(), at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return at === control || control.contains(at); };
-          const ok = Math.abs(close.getBoundingClientRect().top - top) <= 1 && press(close) && press(back) && press(title);
-          body.scrollTop = 0;
-          require(ok, "scrolled to the bottom of the plugin, its way back, title and close still stand at the top and take a press");
-        }
-      }
+      // A plugin with many skills scrolls under its title: at the bottom the way back, the title and the close stay at the top.
+      headHoldsOnScroll(document.querySelector('.modal-scrim .modal-body'), close, [back, title]);
       require(document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, 'the window does not scroll sideways');
     }
     if (name === 'nav-side-plugin') {
@@ -700,6 +727,10 @@ export function checkRendered(name, context = {}) {
       const left = back.getBoundingClientRect().left;
       for (const part of [quote, doc]) require(Math.abs(part.getBoundingClientRect().left - left) <= 1, 'the quote and the document line up with the way back');
       require(!page.querySelector('[data-skl="skill-more"]') && document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, 'no ⋯, and the window does not scroll sideways');
+      // A long document scrolls under the skill's header: the way back, its name and the close stay at the top (R-UI-182).
+      const close = head.querySelector('.close-button');
+      require(visible(close) && page.querySelectorAll('.close-button').length === 1, "one shared close stands in the skill's header");
+      headHoldsOnScroll(document.querySelector('.modal-scrim .modal-body'), close, [back, title]);
     }
     if (name === 'skill-library-right-click') {
       const picks = [...document.querySelectorAll('.mb-menu [data-pick]')].map(item => item.dataset.pick);
@@ -1306,7 +1337,7 @@ export function checkRendered(name, context = {}) {
       require(dropdown.textContent === '這台電腦' && !visible(setup) && !visible(maintenance) && !visible(status), 'watching this computer shows the choice alone');
     } else if (name === 'desktop-computer-choice-missing') {
       const explanation = setup.querySelector('span'), style = getComputedStyle(help);
-      require(dropdown.textContent === '虛擬機（本機）' && visible(setup) && explanation.textContent === '尚未安裝 Docker' && help.textContent === '請 Raphael 安裝', 'a missing Docker has one explanation and one ask action');
+      require(dropdown.textContent === '虛擬機（本機）' && visible(setup) && explanation.textContent === '尚未安裝 Docker' && help.textContent === `請 ${window.__look.data.members.find(member => member.id === 1).name} 安裝`, 'a missing Docker has one explanation and one ask action, of the member whose computer it is, by its name');
       require(setup.querySelectorAll('button').length === 1 && help.matches(':hover') && style.backgroundColor === 'rgba(0, 0, 0, 0)' && style.borderTopWidth === '0px', 'the action remains plain text under the pointer');
       require(Math.abs(explanation.getBoundingClientRect().bottom - help.getBoundingClientRect().bottom) <= 3 && help.getBoundingClientRect().right <= bounds.right + 1, 'the Docker explanation and action fit on one line');
       require(!panel.querySelector('iframe[src]'), 'the unavailable virtual machine has no stream');
@@ -1326,7 +1357,8 @@ export function checkRendered(name, context = {}) {
     const style = getComputedStyle(button), footer = button.parentElement.getBoundingClientRect();
     require(card.querySelector('.card-title').textContent === '這件事需要虛擬機' && card.querySelector('.card-body').textContent.includes('終端機'), 'the card names the step that needs the virtual machine');
     require(card.querySelectorAll('.card-close').length === 1 && card.querySelectorAll('.card-actions button').length === 1, 'one close and one action');
-    require(shownText(button) === (name.endsWith('installed') ? '改用虛擬機' : '請 Raphael 協助安裝'), 'the action matches Docker availability');
+    // The install is asked of the first member, the chief of staff, by the name the owner gave it.
+    require(shownText(button) === (name.endsWith('installed') ? '改用虛擬機' : `請 ${window.__look.data.members.find(member => member.id === 0).name} 協助安裝`), 'the action matches Docker availability');
     require(button.matches(':hover') && style.backgroundColor !== 'rgba(0, 0, 0, 0)' && Math.abs(button.getBoundingClientRect().width - footer.width) <= 1, 'the whole action row lights up');
     return { check: name, action: shownText(button) };
   }
@@ -4070,6 +4102,9 @@ export function checkRendered(name, context = {}) {
       const drawing = surface.querySelector('svg.slime .slime-marks');
       if (!drawing || !drawing.children.length) continue;
       marked++;
+      if (surface.hasAttribute("data-slime-mask")) {
+        require(getComputedStyle(surface.querySelector(".slime-eyes")).stroke === "none", "the opaque mask covers the resting eyes");
+      }
       require(!surface.querySelector('.slime-idle, .slime-loop, .slime-drop'), "idle uses one resting vector without droplets");
       require(!surface.getAnimations({subtree:true}).some(animation => animation.playState === 'running'), "idle has no running animation");
       for (const part of drawing.querySelectorAll('path,circle,ellipse')) require(getComputedStyle(part).visibility === 'visible', "the resting vector wears its costume");
@@ -5324,6 +5359,61 @@ export function checkRendered(name, context = {}) {
     require(ink.bottom <= card.bottom && left.bottom <= card.bottom && left.left >= card.left && ink.right <= card.right, "both stay inside the card");
     return { back: left, ink };
   };
+  if (name === "onboarding-slime-waits" || name === "onboarding-slime") {
+    // The first slime: the owner dresses and names the member who is their chief of staff from then on. The slime large in
+    // the middle, its name in the guide's own pill field, the members' slime picker under it,
+    // and the foot's pair, whose way on waits for a name: the one thing the guide asks of everyone.
+    const card = document.querySelector('.ob-card').getBoundingClientRect();
+    const title = document.querySelector('.ob-col > h2');
+    require(title && parseFloat(getComputedStyle(title).fontSize) >= 28 && title.textContent === "為你的第一隻史萊姆取名字", `the headline asks for its name (${title?.textContent})`);
+    require(!document.querySelector('.ob-sub, .ob-floaters'), "no line of purpose and no floating slimes: the slime being made is the picture");
+    const face = document.querySelector('.ob-first-face .slime-surface');
+    const faceBox = face?.getBoundingClientRect();
+    require(visible(face) && faceBox.width >= 100 && Math.abs((faceBox.left + faceBox.right) / 2 - (card.left + card.right) / 2) <= 2, `the slime stands large in the middle of the card (${Math.round(faceBox?.width ?? 0)} px)`);
+    const field = document.querySelector('#ob-first-name'), fieldBox = field?.closest('.field')?.getBoundingClientRect();
+    require(visible(field) && field.maxLength === 16 && field.getAttribute('aria-label') && fieldBox.top >= faceBox.bottom, "its name is a field under it, as long as the core takes");
+    const picker = document.querySelector('.ob-first-picker'), pickerBox = picker?.getBoundingClientRect();
+    require(visible(picker) && picker.querySelector('[role="tablist"]') && picker.querySelectorAll('.mb-slime-group[data-active] [data-slime-character], .mb-slime-group[data-active] [data-slime-color]').length >= 6, "the members' slime picker stands under the name, its tabs and its slimes");
+    require(pickerBox.top >= fieldBox.bottom && pickerBox.left >= card.left && pickerBox.right <= card.right, "the picker stays inside the card, under the name");
+    require(getComputedStyle(picker).boxShadow === 'none' && getComputedStyle(picker).position === 'static', "the picker stands in the column without the popover's chrome");
+    requireStepPair(card, false);
+    const next = document.querySelector('.ob-foot [data-ob="next"]');
+    if (name === "onboarding-slime-waits") {
+      require(field.value === "", "the built-in name is never put in the field: the name is the owner's to give");
+      require(next.disabled, "the way on waits for a name");
+      const pressed = picker.querySelector('[aria-pressed="true"]');
+      require(pressed?.dataset.slimeCharacter === "blue-plain", "its look starts as the first blue slime");
+    } else {
+      require(field.value.trim() !== "" && !next.disabled, "with a name the way on is open");
+      const pressed = picker.querySelector('[aria-pressed="true"]');
+      const colour = element => element?.querySelector('.slime-surface')?.style.getPropertyValue('--slime-color') ?? element?.style.getPropertyValue('--slime-color');
+      require(pressed && pressed.dataset.slimeCharacter !== "blue-plain" && face.style.getPropertyValue('--slime-color') === colour(pressed), "the slime pressed is the one it wears at once");
+    }
+    return { check: name };
+  }
+  if (name === "first-slime-named") {
+    // After the guide the first member is the slime the owner made: its name and its face in the sidebar's top row and
+    // as the conversation's name, never the built-in Raphael.
+    const data = window.__look.data, first = data.members.find(member => member.id === 0);
+    require(first.name === "小藍" && first.avatar === "slime:horns-red", `the core kept the name and the slime (${first.name}, ${first.avatar})`);
+    const row = document.querySelector('.sidebar [data-member="0"], [data-member="0"].mb-row');
+    require(visible(row) && row.textContent.includes("小藍") && !row.textContent.includes("拉斐爾"), "the sidebar's first row is called by the name the owner gave");
+    const slime = row.querySelector('.slime-surface');
+    require(slime && slime.style.getPropertyValue('--slime-color').toLowerCase() !== "#3db5ff", "and wears the slime the owner chose, not the first blue one");
+    return { check: name };
+  }
+  if (name === "member-settings-raphael-restyled") {
+    // The chief of staff changes its look as every member does: its own picker, and the face it wears everywhere follows.
+    const first = window.__look.data.members.find(member => member.id === 0);
+    require(first.avatar === "slime:horns-red", `the first member wears the slime pressed (${first.avatar})`);
+    const face = document.querySelector('.ms-pane .ms-face .slime-surface');
+    const pressed = document.querySelector('#app-popover [data-slime-character="horns-red"]');
+    require(visible(face) && pressed?.getAttribute('aria-pressed') === "true", "the picker shows the slime it now wears");
+    require(face.style.getPropertyValue('--slime-color') === pressed.querySelector('.slime-surface').style.getPropertyValue('--slime-color'), "its settings face wears it at once");
+    const row = document.querySelector('[data-member="0"].mb-row .slime-surface');
+    require(row && row.style.getPropertyValue('--slime-color') === face.style.getPropertyValue('--slime-color'), "its sidebar row wears it too");
+    return { check: name };
+  }
   if (name === "onboarding-back-hover" || name === "onboarding-back-focus") {
     // The way back of a step's pair: a round button on a quiet grey of its own, one step lighter under
     // the pointer, with no edge; the keyboard shows the app's usual ring on it, and it comes before the primary.
@@ -6746,6 +6836,16 @@ export function checkRendered(name, context = {}) {
     require(!visible(document.querySelector("#ask")) && !visible(document.querySelector("#overlay-stop")), "an answer to read has no buttons");
     return { check: name, text: line.textContent };
   }
+  if (name === "overlay-frame-ack") {
+    // In a real browser the page answers the native frame probe. When it threw "Illegal invocation" instead, the recovery
+    // took the overlay for frozen and reloaded and hid it during every dictation.
+    const calls = window.__look.calls;
+    const acks = calls.filter(call => call.command === "overlay_frame" && call.id === 990001);
+    const failed = calls.filter(call => call.command === "overlay_log" && String(call.message ?? "").includes('"frameprobe" event failed'));
+    require(failed.length === 0, `the frame probe failed in the page: ${JSON.stringify(failed[0] ?? null).slice(0, 200)}`);
+    require(acks.length === 1 && acks[0].hidden === false, `the page answers the frame probe once, shown (${JSON.stringify(acks)})`);
+    return { check: name, acks: acks.length };
+  }
   if (name === "overlay-mic-quiet" || name === "overlay-mic-heard") {
     const line = [...document.querySelectorAll('.sub-line')].find(visible);
     if (name === "overlay-mic-quiet") require(line && line.textContent.includes("未收到聲音"), `the muted microphone is said beside the emblem (${line?.textContent ?? "no line"})`);
@@ -7059,6 +7159,20 @@ export function checkRendered(name, context = {}) {
       require(first && first.getBoundingClientRect().left - itemBox.left <= 12 && (!lead || lead.childElementCount > 0), "a completion starts at the row padding with its face, mark or text");
     }
     return { check: name, menuLeft: box.left, characterX: expected, delta: Math.abs(box.left - expected) };
+  }
+  if (name === "slash-app-first") {
+    // R-SLASH-APP-01: the app's own command stands first under 內建, before the member's commands and skills.
+    const rows = [...document.querySelectorAll('#app-popover.slash-menu [data-value]')];
+    require(rows[0]?.dataset.value === "app:usage" && rows[0].textContent.includes("/usage") && rows[0].textContent.includes("打開用量"), "/usage leads the slash menu with what it does");
+    require(document.querySelector('#app-popover.slash-menu').textContent.includes("內建"), "it stands under 內建");
+    return { check: name };
+  }
+  if (name === "slash-usage-opened") {
+    // Choosing it ran it: Settings › 用量 is open, the draft holds no /usage and nothing was sent.
+    require(visible(document.querySelector('[data-usage-tab="overview"]')), "Settings › 用量 is open");
+    require(![...document.querySelectorAll('.composer textarea')].some(input => input.value.includes("/usage")), "the draft holds no /usage");
+    require(!window.__look.calls.some(call => /^agent\.ask/.test(call.method ?? call.command ?? "")), "nothing was sent to a member");
+    return { check: name };
   }
   if (name === "mention-menu-signin-pick") {
     // Pressing an app that is not signed in is a way to its sign-in, not an address: the typed @ goes, the connect dialog opens.
@@ -7498,7 +7612,7 @@ export function checkRendered(name, context = {}) {
   if (name === "calendar-more-focus") {
     const toggle = document.activeElement;
     require(toggle?.dataset.au === "all-day-toggle", "the keyboard stays on the button it pressed, whichever way the band went");
-    return { check: name, words: toggle.textContent, expanded: toggle.getAttribute('aria-expanded') };
+    return { check: name, label: toggle.getAttribute('aria-label'), expanded: toggle.getAttribute('aria-expanded') };
   }
   if (name === "calendar-more-month") {
     const cell = document.querySelector('[data-month-day="2026-10-24"] .cal-more:not([hidden])');
@@ -7521,42 +7635,36 @@ export function checkRendered(name, context = {}) {
     require(band.scrollHeight <= band.clientHeight + 1 && getComputedStyle(band).overflowY === 'visible' && getComputedStyle(head).overflowY === 'visible', "the band has no scrollbar of its own");
     for (const chip of chips) { const box = chip.getBoundingClientRect(), edge = band.getBoundingClientRect(); require(box.bottom <= edge.bottom + 1 && box.height > 0, "no chip of the band is cut off by its edge"); }
     for (const [index, chip] of chips.entries()) for (const other of chips.slice(index + 1)) require(!overlapping(chip.getBoundingClientRect(), other.getBoundingClientRect()), "no two chips of the band overlap");
-    for (const toggle of toggles) {
-      require(toggle.tagName === 'BUTTON' && !toggle.disabled && toggle.tabIndex >= 0 && visible(toggle) && toggle.getAttribute('aria-controls') === band.id, "the toggle is a real button a keyboard reaches, and it names what it opens");
-      require(toggle.getBoundingClientRect().bottom <= band.getBoundingClientRect().bottom + 1 && toggle.scrollWidth <= toggle.clientWidth + 1, "the toggle stands whole inside the band");
-      for (const chip of chips) require(!overlapping(toggle.getBoundingClientRect(), chip.getBoundingClientRect()), "the toggle covers no chip");
+    const hidden = columns.some(column => expected(column).length > standing(column).length);
+    require(!band.querySelector('.cal-more, [data-au="open-day"]'), "the day and week band uses only the shared chevron");
+    require(toggles.length === Number(open || hidden), "the band has one toggle when open or when it hides items");
+    const toggle = toggles[0];
+    if (toggle) {
+      require(toggle.matches('button.au-band-toggle') && !toggle.disabled && toggle.tabIndex >= 0 && visible(toggle) && toggle.getAttribute('aria-controls') === band.id, "the shared toggle is a real button that names the band");
+      require(toggle.getAttribute('aria-expanded') === String(open) && toggle.getAttribute('aria-label') === (open ? '收合' : '展開全天事項'), "the accessible state and label match the band");
+      const icon = toggle.querySelector('svg'), at = toggle.getBoundingClientRect(), edge = band.getBoundingClientRect();
+      const first = columns[0].getBoundingClientRect(), last = columns.at(-1).getBoundingClientRect(), label = band.querySelector('.au-all-day-label').getBoundingClientRect();
+      require(icon && !toggle.textContent.trim() && Math.abs(icon.getBoundingClientRect().left + icon.getBoundingClientRect().width / 2 - (at.left + at.width / 2)) <= 1, "the toggle contains only a centered chevron");
+      require(Math.abs(at.left - first.left) <= 1 && Math.abs(at.right - last.right) <= 1 && at.height === 20, "the toggle is a 20px strip spanning every day column");
+      require(at.top >= Math.max(...columns.map(column => column.getBoundingClientRect().bottom), label.bottom) && Math.abs(at.top - (edge.top + (state.rows - 1) * pitch + 1)) <= 1, "the final row belongs to the toggle below the day cells and time zone");
+      for (const chip of chips) require(!overlapping(at, chip.getBoundingClientRect()), "the toggle covers no chip");
     }
-    // The whole range opens and folds together (R-CAL-08): open, every day shows every item it has and one 「收合」 stands in the
-    // margin under the time zone, on the band's last row; folded, each day draws three rows and counts what it hides.
-    require(open === toggles.some(toggle => toggle.getAttribute('aria-expanded') === 'true'), "the band's head is open exactly while the band is");
     if (open) {
-      const fold = toggles[0], at = fold.getBoundingClientRect(), first = columns[0].getBoundingClientRect(), label = band.querySelector('.au-all-day-label').getBoundingClientRect();
-      require(toggles.length === 1 && fold.getAttribute('aria-expanded') === 'true' && fold.getAttribute('aria-label') === '收合' && fold.querySelector('svg'), "open, one 「收合」 folds the whole band");
-      require(at.right <= first.left + 1 && at.bottom <= band.getBoundingClientRect().bottom + 1 && at.top >= label.bottom - 1, "the 「收合」 stands in the margin, under the time zone");
-      require(fold.style.gridRow === band.dataset.rows, "the 「收合」 is on the band's last row");
       for (const column of columns) {
         const key = column.dataset.allDay, wanted = expected(column), seen = new Set(standing(column).map(chip => chip.dataset.entry));
         require(wanted.length === seen.size && wanted.every(item => seen.has(item.id)), `every item of ${key} is in the band: ${seen.size} of ${wanted.length}`);
       }
       const tallest = Math.max(...[...band.querySelectorAll('.au-bar:not(.au-draft)')].map(node => Number.parseInt(node.style.gridRowStart, 10)));
-      require(Number(band.dataset.rows) >= tallest, "the band is as tall as its tallest day");
-    } else for (const column of columns) {
-      const key = column.dataset.allDay, wanted = expected(column), here = standing(column), toggle = toggles.find(item => item.dataset.date === key);
-      const words = toggle?.textContent.match(/^還有 (\d+) 個$/);
-      require(new Set(here.map(chip => chip.closest('.au-bar').style.gridRow)).size <= 3, `${key} is folded to three rows at most`);
-      if (wanted.length > here.length) require(words && toggle.getAttribute('aria-expanded') === 'false' && Number(words[1]) === wanted.length - here.length, `${key} counts the items it hides: ${wanted.length - here.length}`);
-      else require(!toggle, `${key} has nothing hidden and no button`);
+      require(state.rows === tallest + 1, "the band fits its tallest day and the toggle row");
+    } else {
+      require(state.rows <= 3 + Number(hidden) && (!hidden || state.rows === 4), "the folded band uses up to three item rows and one row for the toggle when needed");
     }
     if (name === "calendar-more-cross") {
       // One bar crosses Saturday and Sunday: with the week open it is drawn once and whole across both days.
       const pieces = chips.filter(chip => chip.textContent.includes("週末專案 D")), sunday = columns.find(column => column.dataset.allDay === "2026-10-25");
       require(pieces.length === 1 && !pieces[0].closest('.au-bar').classList.contains('ends-after') && standing(sunday).includes(pieces[0]), "the bar across Saturday and Sunday is drawn once and whole");
     }
-    if (name === "calendar-more-fold") {
-      const thursday = toggles.find(toggle => toggle.dataset.date === "2026-10-22");
-      require(thursday && document.activeElement === thursday && thursday.getAttribute('aria-expanded') === 'false', "folding returns the keyboard to the 「還有 N 個」 that opened it");
-    }
-    if (name === "calendar-more-one") require(document.activeElement === toggles[0], "after opening, the keyboard is on the 「收合」");
+    if (name === "calendar-more-fold" || name === "calendar-more-one") require(toggle && document.activeElement === toggle, "focus stays on the shared toggle after activation");
     if (open) {
       // Every chip is in the document and, once scrolled to, whole and under the pointer (the day names that stay on top do not cover it).
       const port = scroll.getBoundingClientRect(), top = port.top + Math.max(...[...head.querySelectorAll('.au-day-head')].map(day => day.getBoundingClientRect().height));
@@ -7583,14 +7691,12 @@ export function checkRendered(name, context = {}) {
       scroll.scrollTop = 0;
       return { check: name, items: chips.length, rows: state.rows, growth };
     }
-    // Folded: three rows at most, each day's button says how many are left and nothing else is hidden (checked per day above).
-    require(!band.querySelector('[data-au="open-day"]'), "the band's count is no link to the day it already shows");
     if (name === "calendar-more-folded") window.__look.calendarMore = state;
     else {
       const before = window.__look.calendarMore;
       require(before && state.rows === before.rows && Math.abs(state.hoursTop - before.hoursTop) <= 1 && Math.abs(state.bandHeight - before.bandHeight) <= 1, "folded again, the band and the hours are where they were");
     }
-    return { check: name, toggles: toggles.map(toggle => toggle.textContent), chips: chips.length, rows: state.rows };
+    return { check: name, label: toggle?.getAttribute('aria-label'), chips: chips.length, rows: state.rows };
   }
   // A new event's draft and the ghost of a drag say their time from start to end where the chip has room for it, and their start alone where it has not (R-UI-142); the whole range then stands in the tooltip.
   if (name === "calendar-draft-time") {
@@ -8887,9 +8993,9 @@ export function checkRendered(name, context = {}) {
     require(whole.top >= 0 && whole.bottom <= innerHeight && whole.left >= 0 && whole.right <= innerWidth, "the whole dialog stands in the window");
     // Nothing scrolls inside it.
     for (const part of [dialog, dialog.querySelector(".mb-dlg-body"), panels, picker]) require(part.scrollHeight <= part.clientHeight + 1 && part.scrollWidth <= part.clientWidth + 1, `nothing scrolls inside (.${part.className.split(" ")[0]} ${part.scrollHeight} of ${part.clientHeight})`);
-    // The order: head, large slime, name, tabs, grid, footer, each directly under the one before.
-    const head = dialog.querySelector(".mb-dlg-head"), order = [head, faceBox, nameField, picker.querySelector(".mb-slime-tabs"), panels, foot].map(part => part.getBoundingClientRect());
-    order.slice(1).forEach((below, at) => require(below.top >= order[at].bottom - 1, `the order is head, slime, name, tabs, grid, footer (part ${at + 1} starts above part ${at} ends)`));
+    // The order: head, large slime, name, grid, swatches, footer, each directly under the one before (R-SLIME-PICK-01).
+    const head = dialog.querySelector(".mb-dlg-head"), order = [head, faceBox, nameField, panels, picker.querySelector(".mb-slime-tabs"), foot].map(part => part.getBoundingClientRect());
+    order.slice(1).forEach((below, at) => require(below.top >= order[at].bottom - 1, `the order is head, slime, name, grid, swatches, footer (part ${at + 1} starts above part ${at} ends)`));
     require(head.querySelector("h2").textContent.trim() === "新增角色" && visible(head.querySelector('[data-dlg="close"]')), "the title at the left and the × at the right");
     require(head.querySelector("h2").getBoundingClientRect().left < head.querySelector('[data-dlg="close"]').getBoundingClientRect().left, "the title is left of the ×");
     // The preview is large and in the middle; the name is directly under it and centred.
@@ -8900,15 +9006,14 @@ export function checkRendered(name, context = {}) {
     require(getComputedStyle(nameField).textAlign === "center" && nameField.placeholder === "名字" && (nameField.maxLength === -1 || nameField.maxLength >= 100), "centred text, a placeholder in the window's language, and no cut shorter than the core's 100-character name");
     require(Math.abs(n.left - (bodyBox.left + pad)) <= 1 && Math.abs(n.right - (bodyBox.right - pad)) <= 1, "the name field fills the body's inner width");
     require(dialog.querySelectorAll("input, textarea").length === 1 && !dialog.querySelector('img, input[type="file"], [data-dlg="templates"], [data-tab], [data-pick]'), "it asks only for a name: no template button, no store tab, no pictures");
-    // The tabs fill the dialog's inner width: nothing blank at their right, six slimes across.
-    const first = tabs[0].getBoundingClientRect(), last = tabs[tabs.length - 1].getBoundingClientRect();
-    require(tabs.length === 6 && tabs.every(tab => visible(tab) && Math.abs(tab.getBoundingClientRect().top - first.top) <= 1), "six tabs in one row");
-    require(Math.abs(first.left - n.left) <= 2 && Math.abs(last.right - n.right) <= 2, `the tabs reach both inner edges as the name field does (${Math.round(first.left - n.left)} and ${Math.round(last.right - n.right)} px)`);
+    // The eleven swatches stand in two centred rows, six and then five, under the slimes; the slimes four across.
+    const tops = [...new Set(tabs.map(tab => Math.round(tab.getBoundingClientRect().top)))];
+    require(tabs.length === 11 && tops.length === 2 && tabs.filter(tab => Math.round(tab.getBoundingClientRect().top) === tops[0]).length === 6, "eleven swatches, six and then five");
     const open = [...picker.querySelectorAll("[data-slime-group]")].filter(panel => getComputedStyle(panel).visibility !== "hidden" && !panel.hasAttribute("inert"));
     require(open.length === 1 && open[0].dataset.slimeGroup === picker.querySelector('[role="tab"][aria-selected="true"]').dataset.slimeTab, "only the chosen tab's slimes show");
     const shown = [...open[0].querySelectorAll("button")], cells = shown.map(button => button.getBoundingClientRect());
     require(shown.length > 0 && shown.every(visible), "the open group's slimes are all there");
-    require(new Set(cells.map(cell => Math.round(cell.left))).size === Math.min(6, shown.length), "six slimes across");
+    require(new Set(cells.map(cell => Math.round(cell.left))).size === Math.min(4, shown.length), "four slimes across");
     require(cells.every(cell => cell.left >= n.left - 8 && cell.right <= n.right + 8), "the grid stays inside the dialog's inner edges");
     require(picker.querySelectorAll('[aria-pressed="true"]').length === 1, "exactly one slime is chosen");
     require(getComputedStyle(picker).position === "static" && getComputedStyle(picker).boxShadow === "none", "the picker lost the popover's chrome inside the dialog");
@@ -8918,13 +9023,14 @@ export function checkRendered(name, context = {}) {
     require(!document.querySelector(".mb-scrim ~ .mb-scrim") && document.querySelectorAll(".cr-dialog").length === 1, "one dialog");
     if (name === "member-maker") {
       require(start.disabled && !cancel.disabled && document.activeElement === nameField, "the name has the focus and there is nothing to press yet");
-      require(picker.querySelector('[role="tab"][aria-selected="true"]').dataset.slimeTab === "colors", "it opens on the group of the slime that is chosen");
+      const chosenTab = picker.querySelector('[role="tab"][aria-selected="true"]').dataset.slimeTab;
+      require(picker.querySelector(`[data-slime-group="${chosenTab}"] [aria-pressed="true"]`), `it opens on the family of the slime that is chosen (${chosenTab})`);
     } else if (name === "member-maker-tab") {
       const before = window.__look.makerBox, same = (a, b) => a.length === b.length && a.every((v, i) => Math.abs(v - b[i]) <= 0.6);
       require(before, "the dialog was measured before the press");
       require(same(box(dialog), before.dialog) && same(box(faceBox), before.face) && same(box(nameField), before.name) && same(box(picker), before.picker) && same(box(panels), before.panels) && same(box(foot), before.foot), "a tab press moved and resized nothing");
       require(tabs.every((tab, i) => same(box(tab), before.tabs[i])), "no tab moved");
-      require(picker.querySelector('[role="tab"][aria-selected="true"]').dataset.slimeTab === "characters", "the pressed tab is the chosen one");
+      require(picker.querySelector('[role="tab"][aria-selected="true"]').dataset.slimeTab === "purple", "the pressed tab is the chosen one");
       require(face.outerHTML === window.__look.makerFace, "a tab changes no slime: the large one is as it was");
     } else if (name === "member-maker-chosen") {
       require(!start.disabled, "a name makes 建立 pressable");
@@ -9492,7 +9598,7 @@ export function checkRendered(name, context = {}) {
     require(window.__look.data.members.find(row => row.id === 1)?.avatar === "slime:horn-lavender", "the member keeps it");
     // The slimes alone: no tab that draws a picture (R-UI-116); its tabs are the kinds of slime.
     require(!menu.querySelector('[data-avp-tab], [data-avp-pane], textarea, input'), "the picker is the slimes alone, with no 生成");
-    require(menu.querySelector('[role="tab"][aria-selected="true"]')?.dataset.slimeTab === "characters", "it stands on the group of the chosen slime");
+    require(menu.querySelector('[role="tab"][aria-selected="true"]')?.dataset.slimeTab === "purple", "it stands on the family of the chosen slime");
     const whole = menu.getBoundingClientRect();
     require(whole.top >= 0 && whole.bottom <= innerHeight && whole.left >= 0 && whole.right <= innerWidth, `the whole picker stands in the window (${Math.round(whole.bottom)} of ${innerHeight})`);
     require(menu.scrollHeight <= menu.clientHeight + 1, "the picker has no scroll of its own");
@@ -9506,12 +9612,14 @@ export function checkRendered(name, context = {}) {
     const look = { shadow: style.boxShadow, fill: style.backgroundColor }; chosen.remove();
     require(look.shadow === "none" && look.fill !== chosenFill, `no ring or chosen fill on the chosen slime: ${look.shadow} / ${look.fill}`);
     const face = document.querySelector('.mb-panel-identity [data-det="avatar"]').getBoundingClientRect(), box = menu.getBoundingClientRect();
+    const panel = document.querySelector(".mb-det:not([hidden])").getBoundingClientRect();
+    require(box.left >= panel.left + 4 && box.right <= panel.right - 4, "the portrait menu fits inside the details panel with a gutter");
     const centred = Math.abs((box.left + box.right) / 2 - (face.left + face.right) / 2) <= 2 || box.left <= 9 || box.right >= innerWidth - 9;
     require(box.top >= face.bottom - 1 && centred, `the picker is under the middle of the face: face ${Math.round(face.left)}-${Math.round(face.right)}, menu ${Math.round(box.left)}-${Math.round(box.right)}`);
     return { check: name };
   }
   if (name === "slime-picker-shape" || name === "slime-picker-box" || name === "slime-picker-tab") {
-    // The picker is a row of tabs above the open group's slimes, one size for every group (a control just pressed never moves).
+    // The swatches sit below the open group's slimes and stay in place when another group opens.
     const menu = document.querySelector(".mb-avpop");
     require(menu, "the picker is open");
     const tabs = [...menu.querySelectorAll('[role="tab"]')], panels = menu.querySelector(".mb-slime-panels");
@@ -9520,12 +9628,21 @@ export function checkRendered(name, context = {}) {
       window.__look.pickerBox = { menu: box(menu), panels: box(panels), tabs: tabs.map(box) };
       return { check: name };
     }
-    // 角色 is the story's characters alone; the archetypes from the red oni onward have the tab after it.
-    require(tabs.map(tab => tab.dataset.slimeTab).join() === "characters,fantasy,animals,nature,everyday,colors" && menu.querySelector('[role="tablist"]'), `the groups are tabs of one tablist (${tabs.map(tab => tab.dataset.slimeTab).join()})`);
-    require(menu.querySelectorAll('[data-slime-group="characters"] button').length === 24 && menu.querySelector('[data-slime-group="fantasy"] button')?.dataset.slimeCharacter === "oni-red", "角色 holds the story's 24 characters, and the red oni leads the next tab");
+    // R-SLIME-PICK-01: eleven colour swatches, each holding eight characters, including the earlier archetypes.
+    require(tabs.map(tab => tab.dataset.slimeTab).join() === "black,brown,red,orange,yellow,green,teal,blue,purple,pink,gray" && menu.querySelector('[role="tablist"]'), `the colours are tabs of one tablist (${tabs.map(tab => tab.dataset.slimeTab).join()})`);
+    require(tabs.every(tab => !tab.textContent.trim() && tab.getAttribute("aria-label") && visible(tab.querySelector(".mb-family-dot"))), "each tab is a swatch with its colour's name as its accessible name");
+    const counts = tabs.map(tab => menu.querySelectorAll(`[data-slime-group="${tab.dataset.slimeTab}"] [data-slime-character]`).length);
+    require(counts.every(count => count === 8) && !menu.querySelector("[data-slime-color]"), `each colour holds eight characters and nothing else (${counts.join()})`);
+    require(new Set([...menu.querySelectorAll("[data-slime-character]")].map(button => button.dataset.slimeCharacter)).size === 88, "eighty-eight characters in all, each once");
     require(tabs.filter(tab => tab.getAttribute("aria-selected") === "true").length === 1, "exactly one tab is chosen");
-    require(tabs.every(tab => visible(tab)) && tabs.every(tab => Math.abs(tab.getBoundingClientRect().top - tabs[0].getBoundingClientRect().top) <= 1), "the tabs stand in one row");
-    require(tabs.every(tab => tab.getBoundingClientRect().bottom <= panels.getBoundingClientRect().top + 1), "the tabs are above the slimes");
+    // Two centred rows, six swatches and then five, as a colour picker's are.
+    const rowTops = [...new Set(tabs.map(tab => Math.round(tab.getBoundingClientRect().top)))];
+    const perRow = rowTops.map(top => tabs.filter(tab => Math.round(tab.getBoundingClientRect().top) === top));
+    require(tabs.every(tab => visible(tab)) && perRow.map(row => row.length).join() === "6,5", `the swatches stand six and then five (${perRow.map(row => row.length).join()})`);
+    const middle = row => (row[0].getBoundingClientRect().left + row[row.length - 1].getBoundingClientRect().right) / 2;
+    require(Math.abs(middle(perRow[0]) - middle(perRow[1])) <= 1.5, "both rows are centred on one line");
+    require(tabs.every(tab => tab.getBoundingClientRect().top >= panels.getBoundingClientRect().bottom - 1), "the swatches stand under the slimes, and nothing stands above them");
+    require(menu.firstElementChild === panels || menu.firstElementChild?.contains(panels), "the slimes come first");
     const whole = menu.getBoundingClientRect();
     require(whole.top >= 0 && whole.bottom <= innerHeight && whole.left >= 0 && whole.right <= innerWidth, `the picker stands inside the window (${Math.round(whole.bottom)} of ${innerHeight})`);
     require(tabs.every(tab => tab.getBoundingClientRect().right <= whole.right + 1) || menu.querySelector("[data-chip-row][data-more-after], [data-chip-row][data-more-before]"), "the tabs fit the picker, or the chip row scrolls with its arrows");
@@ -9538,16 +9655,12 @@ export function checkRendered(name, context = {}) {
     require(!menu.querySelector("h1, h2, h3, h4"), "no heading inside the grid: the tab says it");
     const shown = [...open[0].querySelectorAll("button")];
     require(shown.length > 0 && shown.every(visible), "the group's slimes are all there");
-    // As wide as its row of tabs and no wider: the last tab
-    // ends at the picker's edge, and so does the grid under it.
-    const tabsPad = parseFloat(getComputedStyle(menu.querySelector('.mb-slime-tabs')).paddingRight), lastTab = tabs[tabs.length - 1].getBoundingClientRect();
-    require(menu.querySelector("[data-chip-row][data-more-after]") || Math.abs((whole.right - lastTab.right) - (tabs[0].getBoundingClientRect().left - whole.left)) <= 1.5, `nothing is left blank at the right of the tabs: the row ends as far from the right edge as it starts from the left (${Math.round(whole.right - lastTab.right)} and ${Math.round(tabs[0].getBoundingClientRect().left - whole.left)} px)`);
-    require(whole.width <= 521, `the picker is no wider than its tabs need (${Math.round(whole.width)} px)`);
+    require(whole.width <= 521, `the picker is no wider than its slimes need (${Math.round(whole.width)} px)`);
     const cells = shown.map(button => button.getBoundingClientRect()), columns = new Set(cells.map(cell => Math.round(cell.left))).size;
     require(cells.every(cell => cell.left >= whole.left + 1 && cell.right <= whole.right - 1), "the slimes stay inside the picker");
-    require(shown[0].matches('[data-slime-color]') ? columns === 6 : columns === Math.min(6, shown.length), `the slimes and the colours stand six across (${columns})`);
-    require(whole.right - Math.max(...cells.map(cell => cell.right)) <= 28 || shown.length < 6, `the grid reaches the picker's right edge as the tabs do (${Math.round(whole.right - Math.max(...cells.map(cell => cell.right)))} px short)`);
-    require(whole.width <= 320 || document.documentElement.lang !== "zh-TW", `six two-character tabs make a picker about 298 px wide (${Math.round(whole.width)} px)`);
+    require(columns === Math.min(4, shown.length), `the slimes stand four across, large, as a shape picker's do (${columns})`);
+    require(whole.right - Math.max(...cells.map(cell => cell.right)) <= 28 || shown.length < 4, `the grid reaches the picker's right edge as the tabs do (${Math.round(whole.right - Math.max(...cells.map(cell => cell.right)))} px short)`);
+    require(whole.width <= 320 || document.documentElement.lang !== "zh-TW", `four large slimes across make a picker about 290 px wide (${Math.round(whole.width)} px)`);
     require(panels.scrollHeight <= panels.clientHeight + 1, `the largest group fits without scrolling (${panels.scrollHeight} of ${panels.clientHeight})`);
     if (name === "slime-picker-tab") {
       const before = window.__look.pickerBox;
@@ -9556,7 +9669,7 @@ export function checkRendered(name, context = {}) {
       require(same(box(menu), before.menu), `the picker did not move or change size: ${box(menu)} / ${before.menu}`);
       require(same(box(panels), before.panels), "the place of the slimes did not change");
       require(tabs.every((tab, i) => same(box(tab), before.tabs[i])), "no tab moved");
-      require(menu.querySelector('[role="tab"][aria-selected="true"]').dataset.slimeTab === "animals", "the pressed tab is the chosen one");
+      require(menu.querySelector('[role="tab"][aria-selected="true"]').dataset.slimeTab === "blue", "the pressed tab is the chosen one");
       require(shown.every(button => button.getAttribute("aria-pressed") === "false"), "the face that is now is not in this group, so none is marked");
     }
     return { check: name, tabs: tabs.length, slimes: shown.length };
@@ -9666,20 +9779,9 @@ export function checkRendered(name, context = {}) {
     const box = close.getBoundingClientRect(), hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
     require(close === hit || close.contains(hit), "rounded corners do not clip the close control");
     // A long page scrolls under its header: at the bottom the close, and a way back if there is one, still stand at the top.
+    // A short page is made long for the test (R-UI-182).
     const body = modal.querySelector(".modal-body");
-    let scrolledTested = false;
-    if (body && body.scrollHeight > body.clientHeight + 40) {
-      const before = body.scrollTop, start = close.getBoundingClientRect().top;
-      body.scrollTop = body.scrollHeight;
-      const reachable = control => { if (!control || !visible(control)) return true; const r = control.getBoundingClientRect(), at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return at === control || control.contains(at); };
-      const back = modal.querySelector(".modal-body header .back-button");
-      const after = close.getBoundingClientRect().top, bodyTop = body.getBoundingClientRect().top;
-      const stays = after >= bodyTop - 1 && after <= start + 1 && reachable(close) && reachable(back);
-      const detail = `close ${Math.round(start)}→${Math.round(after)}, body top ${Math.round(bodyTop)}, scrolled ${body.scrollTop}, reachable ${reachable(close)}/${reachable(back)}, head ${close.parentElement?.className} ${getComputedStyle(close.parentElement).position} parent ${close.parentElement?.parentElement?.className} ${getComputedStyle(close.parentElement.parentElement).overflow}/${getComputedStyle(close.parentElement.parentElement).display}`;
-      body.scrollTop = before;
-      require(stays, `scrolled to the bottom, the close and the way back still stand at the top and take a press (${detail})`);
-      scrolledTested = true;
-    }
+    if (body?.contains(close)) headHoldsOnScroll(body, close, [modal.querySelector(".modal-body header .back-button")]);
     // The settings: flat tabs, no group names, no search and no line under a tab's name.
     const scrim = modal.closest('.modal-scrim');
     if (!scrim.hasAttribute('data-standalone')) {
@@ -9688,7 +9790,7 @@ export function checkRendered(name, context = {}) {
       require(!scrim.querySelector('.nav-group, #set-search'), "the tabs sit flat, with no group names and no search");
       require(!scrim.querySelector('.set-purpose'), "a tab is its name alone, with no line under it");
     }
-    return { check: name, radius: getComputedStyle(modal).borderTopLeftRadius, scrolledTested };
+    return { check: name, radius: getComputedStyle(modal).borderTopLeftRadius };
   }
   if (name === "sidebar-hidden-folder-closed" || name === "sidebar-hidden-folder") if (matchMedia('(max-width: 859px)').matches) return {check:name,compact:true};
   if (name === "sidebar-hidden-folder-closed") {
@@ -10053,6 +10155,8 @@ export function checkRendered(name, context = {}) {
         const b = button.getBoundingClientRect();
         require(b.left >= box.left && b.right <= box.right && b.height >= 40, `${button.textContent.trim()} is a whole row inside the window`);
       }
+      // With more characters than the list shows at once, the rows keep their height and the list scrolls (R-UI-181).
+      rowsWhole(choices);
       require(writes.length === 0 && tiles().join() === "0,3,1", "nothing is written before a member is pressed");
       return { check: name, choices: choices.length };
     }
@@ -10114,6 +10218,8 @@ export function checkRendered(name, context = {}) {
         const b = button.getBoundingClientRect();
         require(b.left >= box.left && b.right <= box.right && b.height >= 40, `${button.textContent.trim()} is a whole row inside the window`);
       }
+      // With more characters than the list shows at once, the rows keep their height and the list scrolls (R-UI-181).
+      rowsWhole(choices);
       require(sets.length === 0 && data.primaryId === 1, "nothing is set before 設為主要 is pressed");
       return { check: name, choices: choices.length, picked: picked[0].dataset.id };
     }
@@ -10989,7 +11095,8 @@ export function checkRendered(name, context = {}) {
     const pane = document.querySelector(".ms-pane");
     const chat = document.querySelector(".page-agent .mb-chat");
     const view = pane.dataset.view;
-    const raphael = !pane.querySelector("#ms-name");
+    // The first member's page: its name field is member 0's (a view of its own has no name field at all).
+    const raphael = (pane.querySelector("#ms-name")?.dataset.member ?? "0") === "0";
     // The details panel folds away while the page is open and comes back as it was once the page is left.
     if (name === "member-settings-back") {
       require(!visible(pane) && visible(chat) && visible(chat.querySelector(".composer")), "the conversation is where the page was");
@@ -11138,7 +11245,9 @@ export function checkRendered(name, context = {}) {
         require(switches.length === 1 && visible(switches[0]), "notifications are one switch");
       }
       if (raphael) {
-        require(visible(pane.querySelector(".ms-static")) && !pane.querySelector("#ms-name, #ms-role"), "Raphael's name is not typed here");
+        // The first member's name is the owner's, typed in place as every member's; its role is the chief's and has no field.
+        const firstName = pane.querySelector("#ms-name");
+        require(visible(firstName) && !pane.querySelector("#ms-role") && firstName.getBoundingClientRect().left <= face.getBoundingClientRect().left + 8, "the first member's name is in place under the face, with no role field");
       } else {
         const memberName = pane.querySelector("#ms-name"), role = pane.querySelector("#ms-role");
         require(visible(memberName) && visible(role) && memberName.getBoundingClientRect().left <= face.getBoundingClientRect().left + 8, "the name and the role are in place under the face");

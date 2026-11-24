@@ -67,8 +67,16 @@ export async function baseline(page, revision) {
 }
 
 /** Runs in the page. `rows` are `{ label, cells: [{ size, slime, state, at, then, after, caption, hat, icon }] }`: a cell draws `slime` in `state` held `at` ms into its motion, and with `then` changes state there and is held `after` ms later. */
-export async function slimeBoard(rows, columns = 1) {
-  const { slimeSVG, handOver } = await import("/src/main/slime.ts");
+export async function slimeBoard(rows, columns = 1, centered = false) {
+  const { slimeSVG, handOver, SLIME_GROUPS, slimeGroupName, slimeCharactersHTML } = await import("/src/main/slime.ts");
+  // `{ picker: cell }`: a row for each colour of the picker, with the characters the app puts under it, so the board never keeps a list of its own.
+  if (!Array.isArray(rows)) {
+    const holder = document.createElement("div");
+    rows = SLIME_GROUPS.map(group => {
+      holder.innerHTML = slimeCharactersHTML(null, text => text, "", group);
+      return { label: slimeGroupName(group), cells: [...holder.querySelectorAll("[data-slime-character]")].map(button => ({ ...rows.picker, slime: { character: button.dataset.slimeCharacter } })) };
+    });
+  }
   const { ico } = await import("/src/main/ui.ts");
   const offSeason = new Date(2000, 5, 1), hats = new Date(2026, 9, 31);
   // A strip admitted some milliseconds after a change of state starts that far into its loop (a negative delay, slime.ts admitStrips), so that it
@@ -87,7 +95,13 @@ export async function slimeBoard(rows, columns = 1) {
   board.className = "look-slime-board";
   // On a Mac the board starts under the traffic lights macOS draws at the top left (traffic-lights.mjs).
   board.style.cssText = `position:fixed;inset:0;z-index:100000;overflow:hidden;display:grid;grid-template-columns:repeat(${columns},minmax(0,1fr));align-content:start;gap:6px;padding:${document.documentElement.dataset.platform === "macos" ? 40 : 8}px 8px 8px;background:var(--content);color:var(--text-3);font-size:11px;line-height:12px`;
-  board.innerHTML = rows.map(({ label, cells, paddingTop = 0 }) => `<div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:6px;padding-top:${paddingTop}px"><span style="flex:none;width:44px;color:var(--text-2)">${label ?? ""}</span>${cells.map(cell =>
+  if (centered) {
+    board.style.gridTemplateColumns = "minmax(0, max-content)";
+    board.style.justifyContent = "center";
+    board.style.alignContent = "safe center";
+  }
+  const labelStyle = centered ? "align-self:center;width:34px;font-size:14px;line-height:18px;color:var(--text)" : "width:44px;color:var(--text-2)";
+  board.innerHTML = rows.map(({ label, cells, paddingTop = 0 }) => `<div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:6px;padding-top:${paddingTop}px"><span style="flex:none;${labelStyle}">${label ?? ""}</span>${cells.map(cell =>
     `<span style="display:grid;justify-items:center;gap:2px;flex:none">${cell.icon ? ico("search").replace('<svg ', `<svg style="width:${cell.size}px;height:${cell.size}px" `) : `<span class="av mb-av mb-av-slime" style="--av:${cell.size}px${cell.height ? `;height:${cell.height}px` : ""}">${slimeSVG(cell.slime, { now: cell.hat ? hats : offSeason, state: cell.state, moving: !cell.still })}</span>`}${cell.caption === undefined ? "" : `<small style="height:12px;font-size:10px">${cell.caption}</small>`}</span>`).join("")}</div>`).join("");
   document.body.append(board);
   const svgs = [...board.querySelectorAll("svg.slime")], cells = rows.flatMap(row => row.cells.filter(cell => !cell.icon));
@@ -282,31 +296,48 @@ export async function idleCost(page, seconds, revision) {
 }
 
 /**
- * A resting member's slime in the list (a moving face, R-SLIME-01) no longer wiggles under the pointer: it glances aside at rest
- * and looks back at you while the pointer is on it, and glances aside again when the pointer has gone. A press squashes it until it is let go, with the
- * control standing still. (A picture does neither: slime.css `:not([data-slime-still])`, proved by slime-places.)
+ * A resting member's slime in the list (a moving face, R-SLIME-01) no longer wiggles under the pointer: while the pointer is
+ * on the slime its eyes follow it (R-SLIME-PICK-01), meeting you at its middle and looking down and to the right at its lower
+ * right; off the slime, on the row's words, it is as before. A press squashes it until it is let go, with the control
+ * standing still.
  */
 export async function slimePointer(page, selector) {
   const row = await page.waitForSelector(selector, { visible: true });
   const box = await row.boundingBox();
   const read = () => row.evaluate(host => {
-    const svg = host.querySelector("svg.slime"), rect = host.getBoundingClientRect(), surface = svg.closest(".slime-surface");
+    const svg = host.querySelector("svg.slime"), rect = host.getBoundingClientRect(), surface = svg.closest(".slime-surface"), face = surface.getBoundingClientRect();
     const glance = getComputedStyle(svg.querySelector(".slime-follow")).translate;
-    return { state: svg.dataset.state, picture: surface.hasAttribute("data-slime-still"), wiggling: svg.classList.contains("is-delighted") || surface.getAnimations({ subtree: true }).some(animation => animation.animationName === "slime-delight"), scale: getComputedStyle(surface).scale, glance, looksBack: glance === "none" || glance.split(" ").every(part => parseFloat(part) === 0), top: rect.top, height: rect.height };
+    const [x = 0, y = 0] = glance === "none" ? [] : glance.split(" ").map(parseFloat);
+    return { state: svg.dataset.state, picture: surface.hasAttribute("data-slime-still"), wiggling: svg.classList.contains("is-delighted") || surface.getAnimations({ subtree: true }).some(animation => animation.animationName === "slime-delight"), scale: getComputedStyle(surface).scale, glance, x, y, looksBack: Math.abs(x) < 0.6 && Math.abs(y) < 0.6, top: rect.top, height: rect.height, middle: { x: face.left + face.width / 2, y: face.top + face.height / 2 } };
   });
   const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+  const leave = () => page.evaluate(() => document.dispatchEvent(new PointerEvent("pointerout", { bubbles: true, relatedTarget: null })));
+  const aside = glance => /^-?3px -0.5px$/.test(glance);
+  await leave();
+  await pause(400);
   const rest = await read();
   if (rest.state !== "idle" || rest.picture) throw new Error(`The member's slime is not a resting, moving face in the list: ${JSON.stringify(rest)}`);
-  if (rest.looksBack) throw new Error("A resting slime already looks at you without the pointer");
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  if (!aside(rest.glance)) throw new Error(`A resting slime without the pointer does not glance aside: ${rest.glance}`);
+  await page.mouse.move(rest.middle.x, rest.middle.y);
   await pause(400);
   const hovering = await read();
   if (hovering.wiggling) throw new Error("A slime under the pointer wiggles, which the owner took away on 2026-11-07");
-  if (!hovering.looksBack) throw new Error(`A slime under the pointer does not look back: ${hovering.glance}`);
+  if (!hovering.looksBack) throw new Error(`A slime under the pointer does not meet your eyes: ${hovering.glance}`);
+  const size = await row.evaluate(host => host.querySelector(".slime-surface").getBoundingClientRect().width);
+  await page.mouse.move(rest.middle.x + size * 0.4, rest.middle.y + size * 0.4);
+  await pause(400);
+  const toward = await read();
+  if (!(toward.x > 1 && toward.y > 0.5)) throw new Error(`A slime does not look down and right at the pointer on its lower right: ${toward.glance}`);
+  await page.mouse.move(box.x + box.width - 12, box.y + box.height / 2);
+  await pause(400);
+  const off = await read();
+  if (off.x === toward.x && off.y === toward.y) throw new Error(`A slime still follows the pointer once it has left the slime: ${off.glance}`);
+  // Off the row too (its own look back under the pointer is the row's), then out of the window.
   await page.mouse.move(0, 0);
+  await leave();
   await pause(400);
   const away = await read();
-  if (away.glance !== rest.glance) throw new Error(`A slime does not glance aside again when the pointer has gone: ${rest.glance} -> ${away.glance}`);
+  if (!aside(away.glance)) throw new Error(`A slime does not glance aside again when the pointer has left the window: ${away.glance}`);
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
   await pause(200);
@@ -321,5 +352,5 @@ export async function slimePointer(page, selector) {
   const released = await read();
   if (!["none", "1", "1 1"].includes(released.scale)) throw new Error(`A released slime does not come back: scale ${released.scale}`);
   await row.dispose();
-  return { check: "slime-pointer", glance: rest.glance, looksBack: hovering.glance, pressed: pressed.scale };
+  return { check: "slime-pointer", glance: rest.glance, looksBack: hovering.glance, toward: toward.glance, pressed: pressed.scale };
 }

@@ -157,6 +157,13 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     // the way on a circle of the accent.
     const sidebarAction = element.matches(".side .btn.icon, .page-agent .mb-det-head .btn.icon, .page-agent .mb-head :is(.ra-tools, .mb-head-l, .room-picker) .btn.icon, :is(.mb-dlg-head, .cs-dlg-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock) .btn.icon, .btn.icon.close-button, .ob-foot .ob-pair > .btn.icon, .ms-cover > .btn.icon.ms-cover-btn, .ms-bar > .btn.icon.ms-back");
     const violation = (rule, reason) => productRules.push({ ...description, rule, reason });
+    // R-UI-181: a row of a scrolling list is as tall as what it holds. A list capped in height with more rows than it shows
+    // sized them down to their buttons' min-height, and each row's face and words ran over the next one's.
+    if (element.matches('button') && !/auto|scroll|hidden|clip/.test(style.overflowY) && element.parentElement && /auto|scroll/.test(win.getComputedStyle(element.parentElement).overflowY)) {
+      const parts = [...element.children].filter(child => visible(child) && !['absolute', 'fixed'].includes(win.getComputedStyle(child).position)).map(child => child.getBoundingClientRect());
+      const spill = Math.max(0, ...parts.map(part => Math.max(box.top - part.top, part.bottom - box.bottom)));
+      if (spill > 1) violation('R-UI-181', `A row of a scrolling list is shorter than what it holds: its content runs ${Math.round(spill)}px past its edge`);
+    }
     if (element.matches('button:disabled[title], [aria-disabled="true"][title]')) {
       const title = element.getAttribute('title')?.trim();
       const label = element.getAttribute('aria-label')?.trim() || element.textContent.trim();
@@ -197,7 +204,8 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       if (new Set(light.match(/rgba?\([^)]*\)|color\([^)]*\)/g) ?? []).size < 2) violation('R-UI-55', 'A light passing over words in the colour of the words shows nothing');
     }
     if (element.matches('button.btn.icon')) {
-      if (!floatingLatest && !sidebarAction && !element.matches('.btn.back-button[data-nav-back]') && !['transparent', 'rgba(0, 0, 0, 0)', ''].includes(style.backgroundColor)) violation('R-UI-16', 'Icon action has a background surface');
+      const bandToggleActive = element.matches('.au-all-day-row > .au-band-toggle:is(:hover, :active):not(:disabled)');
+      if (!floatingLatest && !sidebarAction && !bandToggleActive && !element.matches('.btn.back-button[data-nav-back]') && !['transparent', 'rgba(0, 0, 0, 0)', ''].includes(style.backgroundColor)) violation('R-UI-16', 'Icon action has a background surface');
       const glyph = element.querySelector(':scope > svg.i');
       if (glyph) {
         const rect = glyph.getBoundingClientRect();

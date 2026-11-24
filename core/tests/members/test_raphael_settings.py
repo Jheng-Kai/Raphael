@@ -75,7 +75,8 @@ async def test_mixed_request_commits_all_settings_and_one_change_event(rig):
     assert SettingsStore(rig.conn).get("raphael_draft_first") is False
 
 
-@pytest.mark.parametrize("patch", [{"unexpected": 1}, {"name": "Pinned"}, {"notify": 1}, {"draft_first": "yes"},
+# The window may name and dress the first Bot (its name and slime are the owner's); its role is the chief's, never typed there.
+@pytest.mark.parametrize("patch", [{"unexpected": 1}, {"role": "Pinned"}, {"avatar": "file:x.png"}, {"name": "  "}, {"notify": 1}, {"draft_first": "yes"},
     {"tools": "srv-1"}, {"tools": ["bad\x00id"]}, {"instructions": "x" * 2001}, {"personality": "x" * 2001},
     {"cover_position": 20}, {"cover": "pattern:dots", "cover_position": 20}])
 async def test_invalid_mixed_request_never_partially_writes(rig, patch):
@@ -240,3 +241,59 @@ async def test_invalid_cover_positions_preserve_image_and_other_settings(rig, bu
     assert caught.value.code == INVALID_PARAMS and caught.value.data["kind"] == "cover"
     view = next(item for item in (await rig.call("members.list"))["members"] if item["id"] == identifier)
     assert view["cover"] == original and view["personality"] == ""
+
+
+async def test_the_owner_names_and_dresses_the_first_bot_who_is_their_chief_of_staff(rig):
+    # The first-run guide and the member settings page: the first slime's name and look are the owner's, as every member's.
+    result = await rig.call("members.update", {"id": 0, "name": "  小藍 ", "avatar": "slime:horns-red"})
+    assert (result["member"]["name"], result["member"]["avatar"]) == ("小藍", "slime:horns-red")
+    assert SettingsStore(rig.conn).get("first_bot_profile") == {"name": "小藍", "avatar": "slime:horns-red"}
+    rig.language = "ja"
+    view = (await rig.call("members.list"))["members"][0]
+    assert (view["id"], view["name"], view["avatar"]) == (0, "小藍", "slime:horns-red")
+    speaker = rig.service.speaker(0)
+    assert (speaker.id, speaker.name) == (0, "小藍")
+    # It answers to the name it was given, and to Raphael's, the app's own.
+    assert rig.service.find("小藍").id == 0 and rig.service.find("Raphael").id == 0
+    assert [found.id for found in rig.service.named_in("請小藍看一下")] == [0]
+    assert rig.service.team_context(0, "en")["members"][0]["name"] == "小藍"
+
+
+async def test_the_first_bot_wears_a_slime_and_nothing_else(rig):
+    for avatar in ("file:picture.png", "preset:chibi-01", "slime:../x"):
+        with pytest.raises(RpcError):
+            await rig.call("members.update", {"id": 0, "avatar": avatar})
+    assert SettingsStore(rig.conn).get("first_bot_profile") == {}
+    # "" is the first blue slime again.
+    await rig.call("members.update", {"id": 0, "avatar": "slime:horns-red"})
+    await rig.call("members.update", {"id": 0, "avatar": ""})
+    assert (await rig.call("members.list"))["members"][0]["avatar"] == ""
+
+
+async def test_a_member_never_takes_the_name_the_owner_gave_the_first_bot_nor_the_first_bot_another_members(rig):
+    await rig.call("members.update", {"id": 0, "name": "小藍"})
+    with pytest.raises(RpcError):
+        await rig.call("members.create", {"name": "小藍"})
+    await rig.call("members.create", {"name": "Alice"})
+    with pytest.raises(RpcError):
+        await rig.call("members.update", {"id": 0, "name": "alice"})
+    assert rig.service.first_bot_profile()["name"] == "小藍"
+
+
+async def test_the_chief_of_staff_restyles_itself_through_its_own_management_tool(rig):
+    # A draft of the first Bot carries its slime like any member's, and applying it keeps it in the profile.
+    await rig.call("members.update", {"id": 0, "name": "小藍", "avatar": "slime:horns-red"})
+    await rig.service.admin_tool(0, "member_update", {"id": 0, "avatar_preset": "slime:wings-yellow"}, interactive=True)
+    assert rig.service.first_bot_profile() == {"name": "小藍", "avatar": "slime:wings-yellow"}
+    await rig.service.admin_tool(0, "member_update", {"id": 0, "name": "小藍", "blurb": "", "group": "", "avatar_preset": "slime:wings-yellow",
+                                                      "role": "", "personality": "Calm."}, interactive=True)
+    assert rig.service.first_bot_profile()["avatar"] == "slime:wings-yellow"
+
+
+def test_the_persona_calls_the_first_bot_by_the_name_the_owner_gave_it():
+    from raphael_core.agent.persona import _raphael_persona
+    from raphael_core.agent.speaker import Speaker
+
+    assert "You are Raphael, the analytical intelligence" in _raphael_persona(Speaker())
+    named = _raphael_persona(Speaker(name="小藍"))
+    assert "You are 小藍, the analytical intelligence" in named and "You are Raphael" not in named

@@ -17,6 +17,7 @@ from raphael_core.agent.speaker import Speaker
 from raphael_core.agent.tools import ToolResult
 from raphael_core.background.run import NO_ANSWER, NO_ANSWER_BEFORE, OWNER_SAID_NO, OWNER_SAID_NO_BEFORE
 from raphael_core.background.service import QUESTION_WAIT_S, continued
+from raphael_core.brain.settings import SettingsStore
 from raphael_core.protocol import INVALID_PARAMS, RpcError
 
 from .conftest import ARGUMENT, TASK_TEXT, Clock, call, report, turn, until, use
@@ -93,6 +94,21 @@ async def test_a_call_that_needs_a_yes_pauses_the_task_with_its_question(make_ri
     # The app is told the task moved on, and that no task runs while it waits.
     last = rig.changes()[-1]
     assert (last["state"], last["running"]) == ("waiting", False)
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+async def test_owner_notification_flag_follows_raphael_on_questions_and_reports(make_rig, plugins, conn, enabled):
+    SettingsStore(conn).set("raphael_notify", enabled)
+    rig = make_rig()
+    await plugins.connect(note="T2")
+    note_then_report(rig)
+    asked = await paused(rig, rig.submit())
+    assert asked["notify"] is enabled
+    [waiting] = (await rig.rpc.call("background.waiting.list"))["waiting"]
+    assert waiting["notify"] is enabled
+    await rig.rpc.call("background.answer", {"task_id": asked["task_id"], "question_id": asked["question_id"], "approved": True})
+    [done] = await rig.wait_for_reports()
+    assert done["notify"] is enabled
 
 
 async def test_a_paused_task_does_not_hold_the_worker(make_rig, plugins, calls, clock):

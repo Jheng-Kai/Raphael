@@ -240,14 +240,20 @@ describe("Raphael's panel", () => {
     expect(api.routinesList).toHaveBeenCalledWith(0);
   });
 
-  test("its picture is changed here: from the PC, nothing of presets", async () => {
+  test("its picture is changed here: the members' slimes, the one it wears pressed, and a picture from the PC", async () => {
     current = 0;
     const panel = mount();
     await flush();
     panel.el.querySelector<HTMLElement>('[data-det="avatar"]')!.click();
-    expect([...document.querySelectorAll("#app-popover button")].map((b) => b.textContent)).toEqual(["從電腦選…"]);
+    // The first member is dressed as every member is: it wears the first blue slime until the owner chose another.
+    expect(document.querySelector('#app-popover [data-slime-character="blue-plain"]')!.getAttribute("aria-pressed")).toBe("true");
+    document.querySelector<HTMLElement>('#app-popover [data-slime-character="horns-red"]')!.click();
+    await flush();
+    expect(host.update).toHaveBeenCalledWith(0, { avatar: "slime:horns-red" });
+    const fromPc = [...document.querySelectorAll<HTMLElement>("#app-popover .menu-action")];
+    expect(fromPc.map((b) => b.textContent)).toEqual(["從電腦選…"]);
     api.avatarPick.mockResolvedValue(null);
-    document.querySelector<HTMLElement>("#app-popover button")!.click();
+    fromPc[0]!.click();
     await flush();
     expect(api.avatarPick).toHaveBeenCalled();
   });
@@ -263,16 +269,17 @@ test("a member's face is the button of its picture picker, with a pencil under t
   expect(panel.el.querySelector(".mb-panel-identity > small")!.textContent).toBe("N2 嚴格版");
 });
 
-test("a member's face picker offers the slimes alone, in tabs of their kinds, with no tab that draws a picture", async () => {
+test("a member's face picker offers the slimes alone, under a swatch for each colour, with no tab that draws a picture", async () => {
   const panel = mount(); await flush();
   panel.el.querySelector<HTMLElement>('[data-det="avatar"]')!.click();
   const picker = document.querySelector<HTMLElement>("#app-popover")!;
   expect(picker.classList.contains("mb-avpop")).toBe(true);
   expect(picker.querySelectorAll("[data-slime-character], [data-slime-color]").length).toBeGreaterThan(0);
   expect(picker.querySelector("[data-avp-tab], [data-avp-pane], textarea, input")).toBeNull();
-  // The tabs are the kinds of slime, one chosen, and none of them draws a picture.
+  // The tabs are the colours of the slimes, one chosen, and none of them draws a picture.
   const tabs = [...picker.querySelectorAll<HTMLElement>('[role="tab"]')];
-  expect(tabs.map(tab => tab.dataset.slimeTab)).toEqual(["characters", "fantasy", "animals", "nature", "everyday", "colors"]);
+  expect(tabs.map(tab => tab.dataset.slimeTab)).toEqual(["black", "brown", "red", "orange", "yellow", "green", "teal", "blue", "purple", "pink", "gray"]);
+  expect(picker.querySelector("[data-slime-color]")).toBeNull();
   expect(tabs.filter(tab => tab.getAttribute("aria-selected") === "true")).toHaveLength(1);
 });
 

@@ -22,6 +22,8 @@ export const LATIN_NAMES = ["Raphael", "Docker", "Docker Desktop", "Google", "Gm
 LATIN_NAMES.push("1Password");
 // The shell a host repair is pasted into on Windows is named as Windows names it.
 LATIN_NAMES.push("PowerShell");
+// The app's own slash commands (app-commands.ts) are typed as they are in every language, as Claude Code's are.
+LATIN_NAMES.push("usage");
 // The keys as a Mac names them (keys.ts on macOS): 右 Option, Control, Command, Return; and the Mac itself.
 LATIN_NAMES.push("Option", "Control", "Command", "Return", "Mac");
 

@@ -38,6 +38,17 @@
    (slime.ts `moving`); this holds it even where a rule below would reach it. */
 .slime-surface[data-slime-still], .slime-surface[data-slime-still] * { animation: none !important; transition: none !important; }
 .slime-surface[data-slime-still] .slime[data-state="idle"] .slime-follow { translate: var(--slime-aside, -3px) -0.5px; }
+/* In the dark theme a dark slime has a thin light rim round its whole outline (its body, hair, horns, wings and hat): it
+   stands on a light silhouette of itself, stroked the same width at every size (slime.ts `.slime-rim`). A drop shadow
+   would do it too, but it would be painted again on every frame of a moving slime (R-PERF-01). */
+.slime-rim { display: none; }
+:root[data-theme="dark"] .slime-rim { display: inline; }
+.slime-rim :is(path, circle, rect, ellipse) { fill: var(--text-2); stroke: var(--text-2); stroke-width: 1.6px; vector-effect: non-scaling-stroke; }
+/* A moving dark slime's strips carry no silhouette (it would be drawn again in every cel): their body is stroked instead. */
+:root[data-theme="dark"] .slime-surface[data-slime-dark] .slime-cel-body { stroke: var(--text-2); stroke-width: 1.6px; paint-order: stroke fill; vector-effect: non-scaling-stroke; }
+/* A face in the member list or a picker looks at the pointer while the pointer is on it (slime.ts `gaze`); it eases there. */
+.slime-surface[data-slime-gazing] .slime[data-state="idle"] .slime-follow { translate: var(--slime-gaze-x, 0px) var(--slime-gaze-y, 0px); }
+.slime-surface[data-slime-still][data-slime-gazing] .slime-follow { transition: translate 220ms cubic-bezier(0.25, 0.8, 0.3, 1) !important; }
 .slime-in-between { translate: var(--slime-dx) var(--slime-dy); rotate: var(--slime-angle); scale: var(--slime-wide) var(--slime-high); }
 .slime-in-between > .slime-counterturn { rotate: var(--slime-counterangle); }
 
@@ -371,34 +382,31 @@ html[data-window-hidden] *, html[data-window-hidden] *::before, html[data-window
   .slime[data-state="arriving"] .slime-motion { scale: 1.12 .82; }
 }
 
-/* The picture menu: a row of tabs for the groups, then six choices across for the open one, with plain colours last. The
-   groups stand on one another in one cell, so the place is as big as the largest group and a press on a tab moves nothing
-   (a control just pressed never moves). Where the largest group does not fit the window, only the place scrolls; the tabs
-   stay.
-   The menu is as wide as its row of tabs and no wider (no empty space right of the tabs): the tabs hug their words and their row sets the width (six
-   tabs, about 300 px in Chinese), the slimes stand in six tracks that share it, and the
-   last tab and the last slime end at the same edge. In a language whose tabs are shorter than six slimes the tabs spread
-   to that edge; where they are longer than the menu may be, the row scrolls by its arrows. */
-/* The picker keeps one size in every window: its cells and gaps do not grow with the pane as the page's own do, so a large
-   window does not make it wide again. */
-.menu.mb-avpop:has(.mb-slime-tabs) { --pa-u: 0px; --pa-preset: 40px; display: flex; flex-direction: column; overflow: hidden; width: max-content; max-width: min(520px, calc(100vw - 16px)); }
-.mb-slime-tabs { flex: none; padding: 2px calc(6px + 4 * var(--pa-u)) 4px; }
-.mb-slime-tabs > .mb-slime-tablist { display: flex; flex-wrap: nowrap; justify-content: space-between; width: 100%; }
-.menu.mb-avpop .mb-slime-tablist .tab { width: auto; flex: 0 0 auto; }
+/* The picture menu is a shape picker with a colour row (R-SLIME-PICK-01): the open colour's eight slimes four
+   across, large, and under them the eleven swatches. The colours stand on one another in one cell, so a press on a swatch
+   moves nothing (a control just pressed never moves); where they do not fit the window, only the place scrolls and the
+   swatches stay. The picker keeps one size in every window: its cells
+   and gaps do not grow with the pane as the page's own do. */
+.menu.mb-avpop:has(.mb-slime-tabs) { --pa-u: 0px; --pa-preset: 60px; display: flex; flex-direction: column; overflow: hidden; width: max-content; max-width: min(520px, calc(100vw - 16px)); }
+/* The swatches take the width the slimes give: their row adds nothing to the picker's width (`contain`), so it wraps. */
+.mb-slime-tabs { flex: none; contain: inline-size; padding: var(--sp-2) calc(6px + 4 * var(--pa-u)) 4px; }
+/* Eleven swatches in two centred rows, six and then five, as a colour picker's are. */
+.mb-slime-tabs > .mb-slime-tablist { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--sp-2) var(--sp-2); width: 100%; }
+/* A colour is a swatch: the chosen one wears a ring, and nothing else marks it. */
+.mb-slime-tablist > .mb-slime-family { display: inline-grid; flex: none; place-items: center; width: 36px; min-width: 36px; height: 36px; min-height: 36px; margin: 0; padding: 0; border: 0; border-radius: var(--r-pill); background: transparent; }
+.mb-slime-tablist > .mb-slime-family[aria-selected="true"] { box-shadow: inset 0 0 0 2px var(--text); }
+/* A hairline keeps the black swatch seen on the dark theme and the gray one on the light. */
+/* A plain dot with a crisp edge: a hairline over its edge blended into the colour and made it look soft. */
+.mb-family-dot { width: 28px; height: 28px; border-radius: var(--r-pill); background: var(--family); }
 .mb-slime-panels { display: grid; grid-template-columns: minmax(0, 1fr); flex: 1 1 auto; min-height: 0; overflow-x: hidden; overflow-y: auto; }
 .mb-slime-group { grid-area: 1 / 1; min-width: 0; }
 .mb-slime-group:not([data-active]) { visibility: hidden; }
-.mb-presets.mb-slime-characters { grid-template-columns: repeat(6, minmax(var(--pa-preset), 1fr)); justify-items: center; padding-top: 4px; padding-bottom: 2px; }
+.mb-presets.mb-slime-characters { grid-template-columns: repeat(4, minmax(var(--pa-preset), 1fr)); justify-items: center; padding-top: 4px; padding-bottom: 2px; }
 .menu.mb-avpop .mb-preset-slime { overflow: visible; border-radius: var(--r-md); }
 /* A press changes the picture and nothing more: no ring stays on the chosen one. */
-.menu.mb-avpop :is(.mb-preset-slime, .mb-slime-color)[aria-pressed="true"] { box-shadow: none; }
-.menu.mb-avpop .mb-preset-slime[aria-pressed="true"] { background: transparent; }
-.menu.mb-avpop .mb-preset-slime[aria-pressed="true"]:hover { background: var(--hover); }
-/* The colours stand in the slimes' own six tracks, each dot in the middle of a cell as tall as a slime's. */
-.mb-slime-colors { display: grid; grid-template-columns: repeat(6, minmax(var(--pa-preset), 1fr)); gap: calc(6px + 4 * var(--pa-u)); padding: 4px calc(6px + 4 * var(--pa-u)) calc(6px + 4 * var(--pa-u)); justify-items: center; align-items: center; }
-.mb-slime-colors > .mb-slime-color { margin-block: calc(var(--pa-preset) * 0.19); }
-.menu.mb-avpop .mb-slime-color { width: calc(var(--pa-preset) * 0.62); height: calc(var(--pa-preset) * 0.62); min-height: 0; padding: 0; border-radius: var(--r-pill); background: var(--slime-color); box-shadow: 0 0 0 2px transparent; }
-.menu.mb-avpop .mb-slime-color:hover { background: var(--slime-color); box-shadow: 0 0 0 2px var(--hover-edge); }
+.menu.mb-avpop .mb-preset-slime[aria-pressed="true"] { box-shadow: none; background: transparent; }
+/* Nothing is drawn behind a slime under the pointer either: a press picks it, and its face alone answers. */
+.menu.mb-avpop .mb-preset-slime:is(:hover, :active) { background: transparent; }
 
 
 /* Sampled SVG poses stay sharp; only whole-frame HTML translations loop at small sizes. */
@@ -470,3 +478,6 @@ html[data-window-hidden] *, html[data-window-hidden] *::before, html[data-window
   .av.mb-av.mb-av-slime { contain: none; overflow: visible; clip-path: inset(-120px); }
   .slime-surface { contain: layout; overflow: visible; clip-path: inset(-100cqw); }
 }
+
+/* Opaque masks cover the eyes in both the resting vector and sampled poses. */
+.slime-surface[data-slime-mask] :is(.slime-eyes, .slime-cel-eye) { stroke: none; }

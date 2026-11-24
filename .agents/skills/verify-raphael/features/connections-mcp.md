@@ -114,7 +114,7 @@ Three layers in every dialog (R-FLOAT-03): the outermost, outside the dialog, is
 ```powershell
 npm run look -- connect-icons --theme both --width 1120,720,1920x1080
 npm run look -- member-settings-tools mention-menu-open connect-icons connect-apps-connected-marks connect-apps connect-app-oauth connector-slack connector-key connector-google-steps foot-apps-three foot-starter-apps --theme both --width 1120,720,1920x1080
-npm run look -- profile appearance models dictation tools safety about usage model-choices-answer model-choices-local quick-model-menu cli-account-menu member-maker slime-picker template-preview template-review-pages connections-command --theme both --width 1120,720,1920x1080
+npm run look -- profile appearance models dictation tools safety about usage model-choices-answer model-choices-local quick-model-menu cli-account-menu member-maker template-preview template-review-pages connections-command --theme both --width 1120,720,1920x1080
 ```
 
 Scene changes of the same round: the scenes of the connected list start with `[data-conn="connected"]` (`plugins-installed`,

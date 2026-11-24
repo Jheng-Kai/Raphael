@@ -1,4 +1,6 @@
 // @vitest-environment happy-dom
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
 const api = vi.hoisted(() => ({ core: vi.fn(), membersList: vi.fn(), pickOutputFolder: vi.fn() }));
 vi.mock("./api", () => api);
@@ -151,6 +153,40 @@ test.each(navInputs)("a step back with %s returns from a package's page to the l
   pressLayer(input);
   expect(root.querySelector(".skl-page")).toBeNull();
   expect(root.scrollTop).toBe(90);
+});
+
+test("every page of Team skills keeps its close in a header the shared sticky rule holds at the top (R-UI-182)", async () => {
+  // A plugin's skill page drew its header straight in the page, which the shared rule did not name: its header and close
+  // scrolled away with a long document and the dialog could not be closed. Each page is drawn as Settings draws it.
+  const rule = /\.modal-scrim \.modal-body :is\(([^)]*)\)\s*\{\s*position:\s*sticky/.exec(readFileSync(join(__dirname, "styles.css"), "utf8"));
+  const sticky = rule![1]!.split(",").map(part => `.modal-scrim .modal-body ${part.trim()}`);
+  const { root } = await setup((method, params) => method === "members.skills.read" ? { text: `# ${params.id}` } : {});
+  root.className = "set-content";
+  const scrim = document.createElement("div"), body = document.createElement("div");
+  scrim.className = "modal-scrim";
+  body.className = "modal-body";
+  scrim.append(body);
+  document.body.append(scrim);
+  body.append(root);
+  const held = (): string => {
+    const closes = root.querySelectorAll(".close-button");
+    expect(closes).toHaveLength(1);
+    for (let node = closes[0]!.parentElement; node && node !== body; node = node.parentElement) if (sticky.some(selector => node!.matches(selector))) return node.className;
+    return "";
+  };
+  expect(held(), "the list").not.toBe("");
+  press(root, '[data-skl="open"][data-key="pack:2"]');
+  expect(held(), "a package's page").not.toBe("");
+  press(root, '[data-skl="open-skill"][data-id="4"]');
+  await settle();
+  expect(root.querySelector(".skl-doc-page")).not.toBeNull();
+  expect(held(), "a plugin's skill page").not.toBe("");
+  press(root, '[data-skl="back"]');
+  press(root, '[data-skl="back"]');
+  press(root, '[data-skl="open-skill"][data-key="skill:3"]');
+  await settle();
+  expect(root.querySelector(".skl-doc-page h1#set-title")?.textContent).toBe("會議紀錄");
+  expect(held(), "a skill alone").not.toBe("");
 });
 
 test("the back arrow and Esc return to the list where it was left, with the focus on the package's row", async () => {

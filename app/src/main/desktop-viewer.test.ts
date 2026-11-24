@@ -164,7 +164,7 @@ test("interjects the computer choice and follows the member to the newly active 
   expect(panel().querySelector("[data-desktop-permission]")).toBeNull();
 });
 
-test("only a Docker choice shows the missing-Docker line and asks Raphael through the existing intent", async () => {
+test("only a Docker choice shows the missing-Docker line and asks the member, by its name, through the existing intent", async () => {
   const hostState: DesktopState = {...running, transport:"host"};
   const missing: DesktopState = {state:"absent", ready:false, control:"member", transport:"docker", error:"docker_missing"};
   panelOpen = true;
@@ -179,8 +179,9 @@ test("only a Docker choice shows the missing-Docker line and asks Raphael throug
   expect(computerChoice().textContent).toBe("虛擬機（本機）");
   expect(frame().src).toContain("/chrome/host.html");
   const help = panel().querySelector<HTMLButtonElement>("[data-docker-help]")!;
-  expect(help.textContent).toBe("請 Raphael 安裝");
-  expect(help.parentElement!.textContent).toBe("尚未安裝 Docker 請 Raphael 安裝");
+  // The member whose computer this is installs it, and the button calls it by its own name.
+  expect(help.textContent).toBe("請 小晴 安裝");
+  expect(help.parentElement!.textContent).toBe("尚未安裝 Docker 請 小晴 安裝");
   expect(panel().querySelector('[data-act="docker-download"]')).toBeNull();
   help.click(); help.click(); await flush();
   expect(api.agentAskText).toHaveBeenCalledExactlyOnceWith(t("memberComputer.setup"), [], 1, {intent:"setup-docker"});

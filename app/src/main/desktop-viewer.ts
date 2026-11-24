@@ -343,7 +343,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     patchHTML(status, showStatus ? `<span data-computer-state-text>${esc(statusText)}</span>` : "");
     const dockerMissing = transport === "docker" && selectedState?.error === "docker_missing";
     paint(setup, "hidden", !dockerMissing);
-    patchHTML(setup, dockerMissing ? `<span>${esc(t("memberComputer.dockerRequired"))}</span> ${btn(esc(t("memberComputer.setupHelp")), "desktop-docker-help", " data-docker-help")}` : "");
+    patchHTML(setup, dockerMissing ? `<span>${esc(t("memberComputer.dockerRequired"))}</span> ${btn(esc(t("memberComputer.setupHelp", { p0: options.name() })), "desktop-docker-help", " data-docker-help")}` : "");
     if (options.chooseComputer) {
       const label = t("memberComputer.mode");
       patchHTML(choice, sel([{ value: "idle", label }, ...choices()], selectedValue(), label,

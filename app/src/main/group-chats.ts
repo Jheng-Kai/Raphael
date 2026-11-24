@@ -51,6 +51,7 @@ import type { WireAttachment, HandoffView } from "./types";
 import type { AppContext, MembersList, Room, RoomMessage, RoomExchange, MainEvent } from "./types";
 import { btn, closeMenu, copyButton, esc, ico, iconButton, openMenu, openPopover, patchHTML, sel, toaster } from "./ui";
 import "./automations.css";
+import { firstBotName } from "./first-bot";
 
 /** Why a member's room reply never came, by the core's reason for its blocked intent. */
 const BLOCKED = {
@@ -480,7 +481,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
         return `<li class="tn room-intent-blocked" role="status">${eventLineHTML(t("rooms.intentBlocked",{p0:NAME,p1:t(BLOCKED[intent.reason as keyof typeof BLOCKED]??"rooms.blockedWorker")}),faceOf(intent.recipient_id,name),name)}</li>`;
       }
       if("task" in entry){
-        return `<li class="tn handoff-row">${roomHandoffHTML(tasks, (id, fallback) => { const member = person(id) ?? { id, name: id === 0 ? t("agent.title") : fallback }; return { name: member.name || fallback, face: faceHTML(member, 20) }; })}</li>`;
+        return `<li class="tn handoff-row">${roomHandoffHTML(tasks, (id, fallback) => { const member = person(id) ?? { id, name: id === 0 ? firstBotName() : fallback }; return { name: member.name || fallback, face: faceHTML(member, 20) }; })}</li>`;
       }
       const m=entry.message;
       if (m.kind === "report" && m.report) return `<li class="tn" data-room-message="${m.id}">${roomReportHTML(m)}</li>`;
@@ -558,7 +559,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   el.querySelector('[data-room-menu]')!.addEventListener('click',e=>{if(room)roomActions(e.currentTarget as HTMLElement,room,()=>void refresh(),close);});
   el.addEventListener('click',e=>{const target=(e.target as Element).closest<HTMLElement>('[data-room-act],[data-act]');if(!target)return;const act=target.dataset.roomAct??target.dataset.act;if(["turn","copy-message","copy-picture","copy-code","attachment-open","attachment-image","older"].includes(act??""))e.stopPropagation();
     if(act==="private-work") openMemberThread(_app,Number(target.dataset.member),Number(target.dataset.turn));
-    else if(act==="peer-chat"){peer?.close();peer=openPeerChat(el,target,()=>handoffs,(id,fallback)=>{const member=person(id)??{id,name:id===0?t("agent.title"):fallback};return{name:member.name||fallback,face:faceHTML(member,28),accent:nameAccent(member)};},()=>{peer=null;});}
+    else if(act==="peer-chat"){peer?.close();peer=openPeerChat(el,target,()=>handoffs,(id,fallback)=>{const member=person(id)??{id,name:id===0?firstBotName():fallback};return{name:member.name||fallback,face:faceHTML(member,28),accent:nameAccent(member)};},()=>{peer=null;});}
     else if(act==="members"&&room)void editRoomMembers(room,()=>void refresh());
     else if(act==="expand-message") {
       e.stopPropagation();

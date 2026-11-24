@@ -47,6 +47,7 @@ import { pluginLogoURL } from "./plugins-data";
 import { genericGlyph } from "./service-mark";
 import type { AgentStep, AgentTask, AgentTurn, CliBrainId, MainEvent, MediaPayload, MessageQuote, TurnAttachment } from "./types";
 import { btn, esc, ico, iconBtn } from "./ui";
+import { firstBotName } from "./first-bot";
 
 /** The small turning ring of something under way. */
 const SPINNER = `<span class="spin" aria-hidden="true"></span>`;
@@ -1258,7 +1259,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
   // What a colleague said to this member is one line that opens the two members' conversation (exchange-line.ts):
   // the request and the answer are read there, not under the line. Only a card that waits for the owner stays here.
   if (handed) {
-    const name = turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title");
+    const name = turn.member_id ? look.memberName?.(turn.member_id) : firstBotName();
     const cards = permissionCardsHTML(turn, look.answerable, true, name) + ownerQuestionsHTML(turn, true) + connectorCardsHTML(turn) + secretCardsHTML(turn) + chatCardsHTML(turn) + computerCardsHTML(turn) +
       permissionCardsHTML(turn, look.answerable, false, name) + ownerQuestionsHTML(turn, false);
     return `<li class="tn" data-id="${id}" data-status="${esc(turn.status)}"${live ? ' data-live="true"' : ""}>` + receivedLineHTML(turn, look) +
@@ -1270,7 +1271,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
   // A draft handed to this chat (`route` "draft") is a card, and what it is told is for the model, not for the page.
   const textAnswer = turn.status === "confirm" || settledDraft || turn.route === "draft" || !turn.text.trim()
     ? "" : messageBlockHTML(turn, "reply", turn.text, turn.created_at_ms, query, state, true, regenerate, true, true, turn.id === look.signinTurnId);
-  const name = turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title");
+  const name = turn.member_id ? look.memberName?.(turn.member_id) : firstBotName();
   // Owner messages and exchanges that joined the work stand inside its line (threadItems): the turn's own words open its first stretch,
   // and only its last one holds what ends the turn.
   const part = look.part, first = part?.from === undefined && part?.owner !== "answer", ends = part?.until === undefined;

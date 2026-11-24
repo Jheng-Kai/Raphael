@@ -1,11 +1,10 @@
 //! The overlay window: Raphael's emblem, reports, answers and questions in the bottom-right
 //! corner.
 //!
-//! The window is created once, at start-up. It is transparent, never takes focus, lets the mouse
-//! click through, stays on top and stays out of the taskbar and Alt+Tab. It is **never shown or
-//! hidden again**: when tao shows a window it calls `ShowWindow(SW_SHOW)`, which focuses it, and
-//! the next paste would go to the wrong place. "Hidden" means that the page (`overlay.html`)
-//! draws nothing and stops its animation loop; the empty window stays where it is.
+//! The window is transparent, never takes focus, lets the mouse click through, and stays on top
+//! and out of the taskbar and Alt+Tab. Normally the page draws nothing to hide itself. When that
+//! frame fails to arrive on Windows, the watchdog can hide the HWND and show it without activating
+//! it, then recover the renderer independently of the dictation controller.
 //!
 //! Only physical pixels reported as live controls take the mouse. A light cursor poll runs
 //! while those controls exist; a held button keeps its release. Clicking is not activating: the window has
@@ -28,6 +27,8 @@
 
 mod frame;
 pub(crate) mod mouse;
+#[cfg(any(windows, test))]
+mod recovery;
 // The screen and sight diagnostics read Windows' own state.
 #[cfg_attr(not(windows), allow(dead_code))]
 mod screen;
@@ -148,6 +149,16 @@ pub enum OverlayEvent {
     CancelKey { reset: bool },
     /// The page reports this revision after applying the preceding scene.
     Mouse { revision: u64 },
+    /// Acknowledge the preceding scene after it has had a chance to paint.
+    #[cfg(any(windows, test))]
+    FrameProbe {
+        id: u64,
+        hidden: bool,
+        watch_end: bool,
+        /// Asked again about a caption whose time was extended: the page drew it before, so a page that has cleared it
+        /// answers "hidden" at once instead of waiting to see it first.
+        again: bool,
+    },
     /// The emblem appears (the appear animation) and shows `mode`. A `line` (sent only when there
     /// is one) is Raphael's greeting to a question, written beside the emblem while it listens; a
     /// dictation shows the emblem alone.
@@ -373,6 +384,8 @@ pub(crate) fn takes_clicks(event: &OverlayEvent) -> Option<bool> {
         | OverlayEvent::CancelKey { .. }
         | OverlayEvent::Mouse { .. }
         | OverlayEvent::Avatar => None,
+        #[cfg(any(windows, test))]
+        OverlayEvent::FrameProbe { .. } => None,
     }
 }
 
@@ -395,6 +408,8 @@ struct Bus {
     /// Whether "no page is listening" has been logged since the last page subscribed. An event
     /// that waits is normal at start-up, but one during a dictation means the emblem cannot show.
     backlog_warned: bool,
+    #[cfg(windows)]
+    recovery: recovery::Recovery,
 }
 
 impl OverlayEvent {
@@ -402,6 +417,8 @@ impl OverlayEvent {
     fn kind(&self) -> &'static str {
         match self {
             OverlayEvent::Mouse { .. } => "mouse",
+            #[cfg(any(windows, test))]
+            OverlayEvent::FrameProbe { .. } => "frameprobe",
             OverlayEvent::Show { .. } => "show",
             OverlayEvent::Mode { .. } => "mode",
             OverlayEvent::Level { .. } => "level",
@@ -432,6 +449,8 @@ impl Bus {
             },
             backlog: VecDeque::new(),
             backlog_warned: false,
+            #[cfg(windows)]
+            recovery: recovery::Recovery::default(),
         }
     }
 
@@ -440,6 +459,10 @@ impl Bus {
             self.settings = event.clone();
         }
         let kind = event.kind();
+        #[cfg(any(windows, test))]
+        if matches!(event, OverlayEvent::FrameProbe { .. }) && self.subscribers.is_empty() {
+            return;
+        }
         if self.subscribers.is_empty() {
             match event {
                 // Replayed to a new page as `self.settings`, and a loudness reading or a progress
@@ -483,6 +506,18 @@ impl Bus {
             });
     }
 
+    fn publish_scene(&mut self, event: OverlayEvent) {
+        #[cfg(windows)]
+        let probe = self
+            .recovery
+            .track(&event, Instant::now(), !self.subscribers.is_empty());
+        self.publish(event);
+        #[cfg(windows)]
+        if let Some(probe) = probe {
+            self.publish(probe);
+        }
+    }
+
     fn subscribe(&mut self, label: &str, channel: Channel<OverlayEvent>) {
         self.subscribers.retain(|(known, _)| known != label);
         let mut alive = channel.send(self.settings.clone()).is_ok();
@@ -501,19 +536,25 @@ impl Bus {
 
 // ---------- the overlay ----------
 
-/// The overlay window and the pages that listen to it. Make it once with [`Overlay::create`],
-/// keep it in the app state as `Arc<Overlay>`, and drive it through [`OverlayApi`].
+#[derive(Clone)]
+struct NativeWindow {
+    window: WebviewWindow,
+    hwnd: Option<isize>,
+    mouse: Arc<mouse::Mouse>,
+    #[cfg(windows)]
+    visible: Arc<AtomicBool>,
+}
+
+/// The overlay and its event stream live in app state across WebView2 window replacements.
 pub struct Overlay {
     app: AppHandle,
-    window: WebviewWindow,
-    /// The window's handle, which never changes, for the checks that run on the main thread;
-    /// `None` where there is none.
-    hwnd: Option<isize>,
+    window: Mutex<Option<NativeWindow>>,
+    #[cfg(windows)]
+    watchdog_posted: AtomicBool,
     /// The emblem's diameter in logical pixels, which sets the size of the window.
     emblem_px: AtomicU32,
     question_open: AtomicBool,
     bus: Mutex<Bus>,
-    mouse: Arc<mouse::Mouse>,
     /// When the window was created, and when it was last checked (ms after that): a long
     /// recording has no other event, and another window may come over the emblem meanwhile.
     born: Instant,
@@ -537,7 +578,25 @@ impl Overlay {
         subtitles: &str,
         language: &str,
     ) -> tauri::Result<Arc<Self>> {
-        // Visible from the start: see the module documentation for why it is never shown later.
+        let window = Self::create_window(app, true)?;
+        let overlay = Arc::new(Overlay {
+            app: app.clone(),
+            window: Mutex::new(Some(window)),
+            #[cfg(windows)]
+            watchdog_posted: AtomicBool::new(false),
+            emblem_px: AtomicU32::new(emblem_px),
+            question_open: AtomicBool::new(false),
+            bus: Mutex::new(Bus::new(emblem_px, subtitles, language)),
+            born: Instant::now(),
+            last_sight_ms: AtomicU64::new(0),
+        });
+        overlay.place_window();
+        #[cfg(windows)]
+        overlay.watch_frames();
+        Ok(overlay)
+    }
+
+    fn create_window(app: &AppHandle, visible: bool) -> tauri::Result<NativeWindow> {
         let window = WebviewWindowBuilder::new(
             app,
             crate::OVERLAY_WINDOW,
@@ -555,6 +614,7 @@ impl Overlay {
                 .and_then(|main| main.theme().ok()),
         )
         .focused(false)
+        .visible(visible)
         .resizable(false)
         .no_redirection_bitmap(true)
         .data_directory(crate::webview_data_dir(app)?)
@@ -576,19 +636,156 @@ impl Overlay {
         }
 
         let mouse = app.state::<mouse::Windows>().register(&window);
-        let overlay = Arc::new(Overlay {
-            app: app.clone(),
+        Ok(NativeWindow {
             window,
             hwnd,
-            emblem_px: AtomicU32::new(emblem_px),
-            question_open: AtomicBool::new(false),
-            bus: Mutex::new(Bus::new(emblem_px, subtitles, language)),
             mouse,
-            born: Instant::now(),
-            last_sight_ms: AtomicU64::new(0),
+            #[cfg(windows)]
+            visible: Arc::new(AtomicBool::new(visible)),
+        })
+    }
+
+    fn current_window(&self) -> Option<NativeWindow> {
+        lock(&self.window).clone()
+    }
+
+    #[cfg(windows)]
+    fn watch_frames(self: &Arc<Self>) {
+        let weak = Arc::downgrade(self);
+        tauri::async_runtime::spawn(async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                let Some(overlay) = weak.upgrade() else {
+                    return;
+                };
+                if !lock(&overlay.bus).recovery.due(Instant::now())
+                    || overlay.watchdog_posted.swap(true, Ordering::AcqRel)
+                {
+                    continue;
+                }
+                let next = overlay.clone();
+                if overlay
+                    .app
+                    .run_on_main_thread(move || {
+                        next.recover_frame();
+                        next.watchdog_posted.store(false, Ordering::Release);
+                    })
+                    .is_err()
+                {
+                    return;
+                }
+            }
         });
-        overlay.place_window();
-        Ok(overlay)
+    }
+
+    #[cfg(windows)]
+    fn recover_frame(self: &Arc<Self>) {
+        use recovery::Action;
+
+        let action = lock(&self.bus).recovery.tick(Instant::now());
+        let native = self.current_window();
+        if matches!(action, Some(Action::Expire)) {
+            let mut bus = lock(&self.bus);
+            if bus.recovery.native_hidden() && !bus.recovery.has_scene() {
+                bus.publish(OverlayEvent::Hide);
+            }
+        }
+        if action == Some(Action::Recreate) {
+            log::warn!("overlay recovery: replacing the overlay window");
+            lock(&self.bus).subscribers.clear();
+            if let Some(native) = native {
+                native.set_visible(false);
+                if let Err(err) = native.window.destroy() {
+                    log::warn!("overlay recovery: could not destroy the window: {err}");
+                    return;
+                }
+                *lock(&self.window) = None;
+            }
+            self.recreate_window();
+            return;
+        }
+        let Some(native) = native else { return };
+        match action {
+            Some(Action::Show) => {
+                native.set_visible(true);
+                self.keep_in_sight(self.place_window());
+                log::info!("overlay recovery: restored the window for a new scene");
+            }
+            Some(Action::Probe) => {
+                let mut bus = lock(&self.bus);
+                if let Some(event) = bus.recovery.probe_event() {
+                    bus.publish(event);
+                }
+            }
+            Some(Action::Hide | Action::Expire) => {
+                native.set_visible(false);
+                log::warn!("overlay recovery: hid the window natively after a missing frame");
+            }
+            Some(Action::Nudge) => {
+                log::warn!("overlay recovery: nudging the WebView2 renderer");
+                native.set_visible(false);
+                native.set_visible(true);
+                if let Err(err) = native.window.with_webview(|webview| {
+                    // SAFETY: this runs on the WebView2 controller's owning thread.
+                    if let Err(err) = unsafe { webview.controller().NotifyParentWindowPositionChanged() } {
+                        log::warn!("overlay recovery: could not notify the renderer of its parent window: {err}");
+                    }
+                }) {
+                    log::warn!("overlay recovery: could not reach the webview controller: {err}");
+                }
+                let mut bus = lock(&self.bus);
+                if let Some(event) = bus.recovery.probe_event() {
+                    bus.publish(event);
+                }
+            }
+            Some(Action::Reload) => {
+                log::warn!("overlay recovery: reloading the webview page");
+                lock(&self.bus).subscribers.clear();
+                if let Err(err) = native.window.reload() {
+                    log::warn!("overlay recovery: reload failed: {err}");
+                }
+            }
+            Some(Action::Recreate) | None => {}
+        }
+    }
+
+    #[cfg(windows)]
+    fn recreate_window(self: &Arc<Self>) {
+        let overlay = self.clone();
+        // Building a WebView2 window from an event callback can deadlock. Let Tauri dispatch
+        // creation to its event loop from a worker after the previous label has been removed.
+        tauri::async_runtime::spawn_blocking(move || {
+            let deadline = Instant::now() + std::time::Duration::from_secs(2);
+            while overlay
+                .app
+                .get_webview_window(crate::OVERLAY_WINDOW)
+                .is_some()
+            {
+                if Instant::now() >= deadline {
+                    log::warn!("overlay recovery: the old window did not close");
+                    return;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(20));
+            }
+            let native = match Self::create_window(&overlay.app, false) {
+                Ok(native) => native,
+                Err(err) => {
+                    log::warn!("overlay recovery: could not recreate the window: {err}");
+                    return;
+                }
+            };
+            let owner = overlay.clone();
+            if let Err(err) = overlay.app.run_on_main_thread(move || {
+                *lock(&owner.window) = Some(native.clone());
+                owner.place_window();
+                if !lock(&owner.bus).recovery.native_hidden() {
+                    native.set_visible(true);
+                }
+                log::info!("overlay recovery: recreated the window");
+            }) {
+                log::warn!("overlay recovery: could not install the replacement window: {err}");
+            }
+        });
     }
 
     /// Raphael's picture changed: the page asks for the new one.
@@ -598,6 +795,17 @@ impl Overlay {
 
     pub fn cancel_key(&self, reset: bool) {
         self.publish(OverlayEvent::CancelKey { reset });
+    }
+
+    /// A caption owns this Escape. Confirm its vanish or hide natively on timeout.
+    #[cfg(windows)]
+    pub fn dismiss_caption(&self) -> bool {
+        let mut bus = lock(&self.bus);
+        if !bus.recovery.is_caption() {
+            return false;
+        }
+        bus.publish_scene(OverlayEvent::Hide);
+        true
     }
 
     /// A new emblem size changes the window's size, so it is put in its corner again.
@@ -626,27 +834,32 @@ impl Overlay {
         if let Some(question) = question
             && self.question_open.swap(question, Ordering::Relaxed) != question
         {
-            self.place_window();
+            self.place_and_keep_in_sight();
         }
+        let native = self.current_window();
         let mut bus = lock(&self.bus);
         // Finite captions can expire entirely in the page, without a native hide.
         // Keep those Low throughout; live recording and questions use Normal.
-        match &event {
-            OverlayEvent::Hide
-            | OverlayEvent::Complete
-            | OverlayEvent::Notice { .. }
-            | OverlayEvent::Learned { .. }
-            | OverlayEvent::Say { .. } => crate::webview_power::low_memory(&self.window, true),
-            OverlayEvent::Show { .. }
-            | OverlayEvent::Mode { .. }
-            | OverlayEvent::Ask(_)
-            | OverlayEvent::Operate { .. } => {
-                crate::webview_power::low_memory(&self.window, false);
+        if let Some(native) = &native {
+            match &event {
+                OverlayEvent::Hide
+                | OverlayEvent::Complete
+                | OverlayEvent::Notice { .. }
+                | OverlayEvent::Learned { .. }
+                | OverlayEvent::Say { .. } => {
+                    crate::webview_power::low_memory(&native.window, true)
+                }
+                OverlayEvent::Show { .. }
+                | OverlayEvent::Mode { .. }
+                | OverlayEvent::Ask(_)
+                | OverlayEvent::Operate { .. } => {
+                    crate::webview_power::low_memory(&native.window, false);
+                }
+                _ => {}
             }
-            _ => {}
         }
-        let revision = takes_clicks(&event).map(|_| self.mouse.clear());
-        bus.publish(event);
+        let revision = takes_clicks(&event).and_then(|_| native.map(|native| native.mouse.clear()));
+        bus.publish_scene(event);
         if let Some(revision) = revision {
             bus.publish(OverlayEvent::Mouse { revision });
         }
@@ -654,9 +867,20 @@ impl Overlay {
 
     fn subscribe(&self, label: &str, channel: Channel<OverlayEvent>) {
         let mut bus = lock(&self.bus);
-        let revision = self.mouse.clear();
+        #[cfg(windows)]
+        if let Some(scene) = bus.recovery.replay(Instant::now()) {
+            bus.backlog = scene.iter().cloned().collect();
+        }
         bus.subscribe(label, channel);
-        bus.publish(OverlayEvent::Mouse { revision });
+        if let Some(mouse) = self.app.state::<mouse::Windows>().get(label) {
+            bus.publish(OverlayEvent::Mouse {
+                revision: mouse.clear(),
+            });
+        }
+        #[cfg(windows)]
+        if let Some(probe) = bus.recovery.probe_event() {
+            bus.publish(probe);
+        }
     }
 
     /// Puts the window in its corner of the primary monitor's work area, where the taskbar or the
@@ -690,20 +914,37 @@ impl Overlay {
         let target = placement.window;
         // Compare with where the window really is: Windows itself moves windows when the
         // screens change.
-        let position = self.window.outer_position()?;
-        let size = self.window.outer_size()?;
+        let Some(native) = self.current_window() else {
+            return Ok(placement);
+        };
+        let position = native.window.outer_position()?;
+        let size = native.window.outer_size()?;
         if (position.x, position.y, size.width, size.height)
             == (target.x, target.y, target.w as u32, target.h as u32)
         {
             return Ok(placement);
         }
-        self.window
+        native
+            .window
             .set_size(PhysicalSize::new(target.w as u32, target.h as u32))?;
-        self.window
+        native
+            .window
             .set_position(PhysicalPosition::new(target.x, target.y))?;
         // tao rebuilds the extended window style whenever it changes flags or the size.
-        apply_passive_style(&self.window);
+        apply_passive_style(&native.window);
         Ok(placement)
+    }
+
+    /// Schedule geometry and visibility checks without making hotkeys wait on the UI thread.
+    fn place_and_keep_in_sight(&self) {
+        let app = self.app.clone();
+        if let Err(err) = self.app.run_on_main_thread(move || {
+            if let Some(overlay) = app.try_state::<Arc<Overlay>>() {
+                overlay.keep_in_sight(overlay.place_window());
+            }
+        }) {
+            log::warn!("could not schedule overlay placement: {err}");
+        }
     }
 
     /// Checks on the main thread that the person can see the window that the emblem is about to
@@ -712,11 +953,22 @@ impl Overlay {
     fn keep_in_sight(&self, placement: Option<Placement>) {
         self.last_sight_ms
             .store(self.elapsed_ms(), Ordering::Relaxed);
-        if let Some(hwnd) = self.hwnd {
-            sight::check(&self.window, hwnd, placement);
+        #[cfg(windows)]
+        if lock(&self.bus).recovery.native_hidden() {
+            return;
+        }
+        let Some(native) = self.current_window() else {
+            return;
+        };
+        if let Some(hwnd) = native.hwnd {
+            // Only Windows watches whether the page should be seen; elsewhere the check takes no such flag.
+            #[cfg(windows)]
+            sight::check(&native.window, hwnd, placement, native.visible.clone());
+            #[cfg(not(windows))]
+            sight::check(&native.window, hwnd, placement);
         }
         #[cfg(target_os = "macos")]
-        crate::macos::window::keep_in_front(&self.window);
+        crate::macos::window::keep_in_front(&native.window);
     }
 
     /// [`Self::keep_in_sight`], at most every [`SIGHT_EVERY_MS`]: for the events that keep coming
@@ -740,16 +992,34 @@ impl Overlay {
     }
 }
 
+#[cfg(windows)]
+impl NativeWindow {
+    fn set_visible(&self, visible: bool) {
+        self.visible.store(visible, Ordering::Release);
+        use windows::Win32::{
+            Foundation::HWND,
+            UI::WindowsAndMessaging::{SW_HIDE, SW_SHOWNOACTIVATE, ShowWindow},
+        };
+        if let Some(hwnd) = self.hwnd {
+            // SAFETY: called on the window's thread, while its native window is alive.
+            unsafe {
+                let _ = ShowWindow(
+                    HWND(hwnd as *mut _),
+                    if visible { SW_SHOWNOACTIVATE } else { SW_HIDE },
+                );
+            }
+        }
+    }
+}
+
 impl OverlayApi for Overlay {
     fn show(&self, mode: Mode) {
-        let placement = self.place_window();
-        self.keep_in_sight(placement);
+        self.place_and_keep_in_sight();
         self.publish(OverlayEvent::Show { mode, line: None });
     }
 
     fn greet(&self, line: &str) {
-        let placement = self.place_window();
-        self.keep_in_sight(placement);
+        self.place_and_keep_in_sight();
         self.publish(OverlayEvent::Show {
             mode: Mode::Listening,
             line: Some(line.to_owned()),
@@ -759,7 +1029,7 @@ impl OverlayApi for Overlay {
     fn set_mode(&self, mode: Mode) {
         // Another topmost window may have come over the emblem since it appeared: the person
         // must see it think and count up to 100 %.
-        self.keep_in_sight(self.place_window());
+        self.place_and_keep_in_sight();
         self.publish(OverlayEvent::Mode {
             mode,
             quiet: false,
@@ -840,7 +1110,7 @@ impl OverlayApi for Overlay {
     }
 
     fn progress(&self, progress: Progress) {
-        self.keep_in_sight(self.place_window());
+        self.place_and_keep_in_sight();
         self.publish(OverlayEvent::Progress(progress));
     }
 }
@@ -949,6 +1219,25 @@ pub fn overlay_log(webview: Webview, level: String, message: String) -> Result<(
 }
 
 /// How a page message of `level` is logged: unknown levels count as warnings.
+#[tauri::command]
+pub fn overlay_frame(
+    app: AppHandle,
+    webview: Webview,
+    id: u64,
+    hidden: bool,
+) -> Result<(), String> {
+    crate::commands::ensure_caller(webview.label(), crate::OVERLAY_WINDOW)?;
+    #[cfg(windows)]
+    if let Some(overlay) = app.try_state::<Arc<Overlay>>()
+        && lock(&overlay.bus).recovery.frame(id, hidden)
+    {
+        log::info!("overlay recovery: animation frames resumed");
+    }
+    #[cfg(not(windows))]
+    let _ = (app, id, hidden);
+    Ok(())
+}
+
 fn page_log_level(level: &str) -> log::Level {
     match level {
         "info" => log::Level::Info,
@@ -1091,6 +1380,7 @@ mod tests {
         let production = source.split("#[cfg(test)]").next().unwrap();
         for name in [
             "overlay_subscribe",
+            "overlay_frame",
             "overlay_log",
             "overlay_confirm",
             "overlay_cancel",
@@ -1139,6 +1429,7 @@ mod tests {
             [
                 "overlay_cancel",
                 "overlay_confirm",
+                "overlay_frame",
                 "overlay_log",
                 "overlay_subscribe"
             ]
@@ -1575,7 +1866,7 @@ mod tests {
                 .and_then(|rest| rest.split("\n    }\n").next())
                 .unwrap();
             assert!(
-                body.contains("self.place_window()") && body.contains("self.keep_in_sight("),
+                body.contains("self.place_and_keep_in_sight()"),
                 "{method} must place the window and keep it in sight"
             );
         }

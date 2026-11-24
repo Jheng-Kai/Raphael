@@ -11,7 +11,9 @@
 .mb-panel-row-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-3); font-size: var(--fs-2xs); font-weight: 400; }
 .mb-panel-back.btn { display: flex; align-items: center; gap: var(--sp-1); padding: 3px 0; border: 0; background: transparent; }
 .mb-chat-picker { max-width: 480px; }
-.mb-chat-choices { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); margin-top: var(--sp-3); max-height: 52vh; overflow-x: hidden; overflow-y: auto; }
+/* Each row is as tall as its face and words (R-UI-181): with more members than fit in the capped list, rows of the default
+   size shrank to their buttons' min-height and each one's words ran over the next. */
+.mb-chat-choices { display: grid; grid-template-columns: minmax(0, 1fr); grid-auto-rows: max-content; gap: var(--sp-1); margin-top: var(--sp-3); max-height: 52vh; overflow-x: hidden; overflow-y: auto; }
 .mb-chat-choice.btn { display: flex; justify-content: flex-start; align-items: center; gap: var(--sp-3); width: 100%; text-align: left; border: 0; background: transparent; padding: var(--sp-2); }
 .mb-chat-choice > span:last-child, .mb-chat-choice > .mb-chat-text { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); min-width: 0; }
 .mb-chat-choice small { color: var(--text-3); }

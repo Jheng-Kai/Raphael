@@ -8,8 +8,10 @@ import { completionAnchor } from "./text-position";
 import { closeMenu, matchingChoices, menuIsOpenFor, openMenu, type Choice } from "./ui";
 import { findsName } from "./find-match";
 import { slashTrigger, type SlashTrigger } from "./completion-trigger";
+import { APP_COMMAND_VALUE, APP_COMMANDS, type AppCommand } from "./app-commands";
 
-export interface SlashMenuOptions { memberId(): number; scope?: object; changed?(): void }
+/** `appCommand`: the app's own commands are offered first, and choosing one runs it at once (app-commands.ts). */
+export interface SlashMenuOptions { memberId(): number; scope?: object; changed?(): void; appCommand?(command: AppCommand): void }
 export interface SlashMenu {
   refresh(fromEvent?: boolean): Promise<void>;
   /** The member's skills or commands may have changed: they are read again when the menu is next wanted (at once if it is open). */
@@ -43,6 +45,14 @@ export function mountSlashMenu(input: HTMLTextAreaElement | HTMLInputElement, op
     if (!shown.length) { close(); return; }
     const caret = start + 1 + query.length;
     openMenu(input, shown, "", value => {
+      if (value.startsWith(APP_COMMAND_VALUE) && options.appCommand) {
+        // An app command runs at once: the word it was typed as leaves the draft, and nothing is sent.
+        input.value = input.value.slice(0, start) + input.value.slice(caret).replace(/^\s/u, "");
+        input.setSelectionRange(start, start);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        options.appCommand(value.slice(APP_COMMAND_VALUE.length) as AppCommand);
+        return;
+      }
       // Only the word under the caret is replaced: what stands before and after it stays as it was.
       const rest = input.value.slice(caret), gap = /^\s/u.test(rest) ? "" : " ", at = start + value.length + 2;
       input.value = `${input.value.slice(0, start)}/${value}${gap}${rest}`;
@@ -54,9 +64,13 @@ export function mountSlashMenu(input: HTMLTextAreaElement | HTMLInputElement, op
   function indexChoices(): void {
     locale = getLocale();
     const commandGroup = t("completion.commands"), skillGroup = t("completion.skills");
+    // The app's commands come first, and a member's command or skill of the same name gives way to them (R-SLASH-APP-01).
+    const app = options.appCommand ? Object.keys(APP_COMMANDS) as AppCommand[] : [];
+    const free = (name: string): boolean => !app.includes(name.toLowerCase() as AppCommand);
     choices = [
-      ...commands.map(command => ({ value: command.name, label: "/" + command.name, desc: command.description, group: commandGroup })),
-      ...skills.filter(skill => skill.enabled).map(skill => ({ value: skill.slash_name ?? skill.name, label: "/" + (skill.slash_name ?? skill.name), desc: skill.description,
+      ...app.map(command => ({ value: APP_COMMAND_VALUE + command, label: "/" + command, desc: t(APP_COMMANDS[command]), aliases: [command], group: t("completion.app") })),
+      ...commands.filter(command => free(command.name)).map(command => ({ value: command.name, label: "/" + command.name, desc: command.description, group: commandGroup })),
+      ...skills.filter(skill => skill.enabled && free(skill.slash_name ?? skill.name)).map(skill => ({ value: skill.slash_name ?? skill.name, label: "/" + (skill.slash_name ?? skill.name), desc: skill.description,
         aliases: [skill.name], source: skill.plugin, group: skillGroup })),
     ];
   }

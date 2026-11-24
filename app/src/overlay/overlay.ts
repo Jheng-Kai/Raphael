@@ -1,8 +1,8 @@
 // The overlay page: the emblem in the bottom-right corner and Raphael's subtitles.
 //
 // Rust (overlay.rs) sends events on a channel that this page opens once. The window itself is
-// transparent, click-through and never hidden: "hidden" here means the page draws nothing and
-// the animation loop (see emblem.ts) is stopped. A question shows its confirmation card; stopping the
+// transparent and click-through. The page normally hides by drawing nothing and stopping its
+// animation loop (see emblem.ts). Windows can also hide the window when the page stops painting. A question shows its confirmation card; stopping the
 // work is done in the app, and two Escapes still cancel it here. Only the measured live controls take the
 // mouse (overlay/mouse.rs).
 //
@@ -25,7 +25,7 @@ import type { ProgressReport, Stage } from "./progress";
 import { ProgressArc } from "./progress";
 import { COMPLETION_MS, formatProgress, progressPercent } from "./progress-caption";
 import { WAITING_LINE_MS, nextWaitingLine } from "./waiting-lines";
-import { EntranceTimer, FrameWatch, describeError, guardHandler, subscribeWithRetry, type LogLevel, type PageLog } from "./diagnostics";
+import { EntranceTimer, FrameAcknowledgements, FrameWatch, describeError, guardHandler, subscribeWithRetry, type LogLevel, type PageLog } from "./diagnostics";
 
 /** The language of every subtitle: the interface language of the app. */
 export type UiLanguage = UiLocale;
@@ -49,6 +49,7 @@ export type AskTier = "T2" | "T3";
 export type OverlayEvent =
   | { type: "mouse"; revision: number }
   | { type: "cancelkey"; reset: boolean }
+  | { type: "frameprobe"; id: number; hidden: boolean; watch_end: boolean; again?: boolean }
   /** `line`: Raphael's greeting to a question, beside the emblem while it listens. A dictation has none. */
   | { type: "show"; mode: Mode; line?: string }
   /**
@@ -811,6 +812,10 @@ async function start(): Promise<void> {
     expected: () => controller.expectsPaint,
   });
   const entrance = new EntranceTimer(pageLog, () => document.visibilityState);
+  const frameAcks = new FrameAcknowledgements(
+    () => !controller.expectsPaint && phase() === "hidden",
+    (id, hidden) => { void invoke("overlay_frame", { id, hidden }).catch(() => {}); },
+  );
 
   // The texture comes first, so that no event meets a half-ready emblem. Without the file the
   // load fails and the plain vector ring is drawn.
@@ -828,6 +833,10 @@ async function start(): Promise<void> {
   // Read afresh each time: the controller changes the phase while it handles an event.
   const phase = (): string => emblem.phase;
   const handle = guardHandler((event) => {
+    if (event.type === "frameprobe") {
+      frameAcks.probe(event.id, event.hidden, event.watch_end, event.again === true);
+      return;
+    }
     if (event.type === "mouse") { mouse.reset(event.revision); return; }
     if (event.type === "cancelkey") { if(event.reset)gesture.clear();else gesture.press();return; }
     if (event.type === "settings" && isLanguage(event.language)) { language=event.language; document.documentElement.lang=language; labelStop(language); }

@@ -21,14 +21,21 @@ import { onLocaleChange, getLocale, t } from "./i18n";
 import { openMemberAvatarMenu } from "./member-avatar-menu";
 import type { MessageKey } from "./i18n/zh-TW";
 import { pickPicture, readPicture } from "./member-dialogs";
-import { PERSONALITY_MAX, RAPHAEL_ID, ROLE_MAX, cleanName, faceHTML, isMemberNameTaken, stableMember } from "./members";
+import { FIRST_BOT_NAME_MAX, PERSONALITY_MAX, RAPHAEL_ID, ROLE_MAX, cleanName, faceHTML, isMemberNameTaken, memberSlime, stableMember } from "./members";
 import { entryIcon } from "./service-mark";
 import { rememberAppLogos } from "./app-logos";
 import { connectedApps, toolOn, toolsAfterToggle, type ToolChoices } from "./member-tools";
 import { skillOriginLabel } from "./skill-source";
 import { slimeColorOf } from "./slime";
+import { FIRST_SLIME } from "./first-bot";
 import type { AppContext, LibraryRef, Member, MemberCommand, MemberPatch, MemberSkill, MembersList } from "./types";
 import { type IconName, actionRow, btn, closeMenu, esc, ico, iconBtn, backButton as roundBackButton, iconButton, openConfirmMenu, openMenuOnArrow, openPopover, patchHTML, tg, toaster } from "./ui";
+
+/** The page's tint: the member's slime colour, the first blue slime keeping the theme's own blue (`--raphael-color`). */
+function memberTint(member: Member): string {
+  const slime = memberSlime(member);
+  return member.id === RAPHAEL_ID && slime === FIRST_SLIME ? "var(--raphael-color)" : slimeColorOf({ id: member.id, avatar: slime });
+}
 
 export interface MemberSettingsHost {
   app: AppContext;
@@ -159,10 +166,10 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
   function idHTML(member: Member): string {
     // A press on the face opens the picker (slimes, 生成) at once, as the panel's does; under the pointer a pencil shows on it.
     const face = `<button type="button" class="btn mb-face-edit ms-face" data-ms="avatar" data-k="ms-face" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(t("members.changeAvatar"))}">${faceHTML(member, 96)}<span class="mb-face-pencil" aria-hidden="true">${ico("pencil")}</span></button>`;
-    // Raphael's name is not the owner's to change here, nor has it a role.
-    if (member.id === RAPHAEL_ID) return face + `<b class="ms-name ms-static">${esc(member.name)}</b>`;
-    return face +
-      `<input class="mb-edit ms-name" id="ms-name" data-member="${member.id}" type="text" value="${esc(member.name)}" aria-label="${esc(t("members.name"))}" autocomplete="off" spellcheck="false">` +
+    const name = `<input class="mb-edit ms-name" id="ms-name" data-member="${member.id}" type="text"${member.id === RAPHAEL_ID ? ` maxlength="${FIRST_BOT_NAME_MAX}"` : ""} value="${esc(member.name)}" aria-label="${esc(t("members.name"))}" autocomplete="off" spellcheck="false">`;
+    // The first member's name is the owner's, as they gave it in the guide; its role is the chief's, never typed.
+    if (member.id === RAPHAEL_ID) return face + name;
+    return face + name +
       `<input class="mb-edit ms-role" id="ms-role" data-member="${member.id}" type="text" maxlength="${ROLE_MAX}" value="${esc(member.role)}" placeholder="${esc(t("members.role"))}" aria-label="${esc(t("members.role"))}" autocomplete="off" spellcheck="false">`;
   }
 
@@ -319,7 +326,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
   /** The cover's choices: its patterns as small covers in the member's colour, a picture from this PC, and taking a picture off. */
   function openCoverMenu(anchor: HTMLElement, member: Member): void {
     const current = coverPattern(member);
-    const tint = member.id === RAPHAEL_ID ? "var(--raphael-color)" : slimeColorOf(member);
+    const tint = memberTint(member);
     const swatches = COVER_PATTERNS.map((id, at) =>
       `<button type="button" role="menuitemradio" aria-checked="${id === current}" tabindex="-1" class="ms-swatch" data-cover="${id}" aria-label="${esc(t("memberSettings.coverPattern", { p0: at + 1 }))}"><span class="ms-cover" data-pattern="${id}"></span></button>`).join("");
     const action = (act: string, label: string): string => `<button type="button" role="menuitem" tabindex="-1" class="menu-action" data-cover-act="${act}"><span class="mt">${esc(label)}</span></button>`;
@@ -402,7 +409,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     el.dataset.view = view.kind;
     el.setAttribute("aria-label", t("computer.settings"));
     backButton.title = t("chooser.back"); backButton.setAttribute("aria-label", backButton.title);
-    el.style.setProperty("--ms-tint", member.id === RAPHAEL_ID ? "var(--raphael-color)" : slimeColorOf(member));
+    el.style.setProperty("--ms-tint", memberTint(member));
     cover.dataset.pattern = coverPattern(member);
     patchHTML(cover, coverHTML(member));
     const focused = document.activeElement as HTMLElement | null;
@@ -539,13 +546,13 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
   async function saveField(input: HTMLInputElement | HTMLTextAreaElement): Promise<void> {
     const member = host.list()?.members.find(item => item.id === Number(input.dataset.member)) ?? (host.member().id === Number(input.dataset.member) ? host.member() : null);
     if (!member) return;
-    // Raphael's name and role are not the owner's to type; its personality and instructions are, as everyone's.
-    if (member.id === RAPHAEL_ID && (input.id === "ms-name" || input.id === "ms-role")) return;
+    // The first member's role is not the owner's to type; its name, personality and instructions are, as everyone's.
+    if (member.id === RAPHAEL_ID && input.id === "ms-role") return;
     if (input.id === "ms-name") {
       const value = cleanName(input.value);
       if (value === member.name) { input.value = member.name; return; }
       const others = (host.list()?.members ?? []).filter(other => other.id !== member.id).map(other => other.name);
-      const taken = value !== "" && isMemberNameTaken(value, others);
+      const taken = value !== "" && isMemberNameTaken(value, others, member.id === RAPHAEL_ID);
       if (value === "" || taken) {
         if (taken) toaster.info(t("members.nameTaken", { p0: value }));
         input.value = member.name;

@@ -233,8 +233,13 @@ export function cropDialog(url: string): Promise<AvatarCrop | null> {
   });
 }
 
+/** How many times 從電腦選… has started: a slime saved meanwhile must not clear a picture being chosen. */
+let pictureChoices = 0;
+export const pictureChoicesStarted = (): number => pictureChoices;
+
 /** 從電腦選…: the file dialog, the crop dialog, then the copy kept. */
 export async function changeRaphaelAvatar(): Promise<void> {
+  pictureChoices++;
   let url: string | null;
   try {
     url = await api.avatarPick();

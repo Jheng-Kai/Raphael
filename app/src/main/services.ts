@@ -322,9 +322,10 @@ function subViewHTML(entry: (typeof CAPABILITIES)[number], service: string, v: S
   const inUse = !!row?.chosen && on;
   const idle = v.busy !== null;
   const why = whyOf(entry.kind, service);
-  // The button says what it does: 「改用 Brave」, or 「使用中」 once it is the one.
+  // The button says what it does: 「改用 Brave」, or 「使用中」 once it is the one. The page is short, so the row is
+  // not sticky: inside the dialog's close column a sticky bar stood as a box of another colour above the edge.
   const acts = actionRow({
-    cls: "svc-acts", sticky: true,
+    cls: "svc-acts",
     primary: { label: esc(inUse ? t("services.inUse") : t("services.useThis", { p0: name })), attrs: ` data-svc="use" data-service="${esc(service)}" data-k="svc-use"${inUse || !row?.usable || idle ? " disabled" : ""}` },
   });
   return head + (why ? `<p class="cs-desc svc-why">${esc(why)}</p>` : "") + fields + (entry.kind === "vision" && service === VISION_SAME && !row?.usable ? noticeHTML("sameVision") : "") + acts;

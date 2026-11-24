@@ -2,7 +2,7 @@
 
 ## A member's colour on its switches
 
-R-UI-147: a member's theme is not only its message bubble; the toggle buttons take its colour too. A member's colour is its slime's (`owner-bubble.ts` `memberColor`; Raphael's is its blue). The conversation
+R-UI-147: a member's theme is not only its message bubble; the toggle buttons take its colour too. A member's colour is its slime's (`owner-bubble.ts` `memberColor`; the first member's is that of the slime the owner dressed it in, the first blue slime's until then). The conversation
 already wears it on the owner's bubble and on send, stop and the computer (`--member-bubble`, `--member-accent` on `.mb-chat`).
 `memberSwitch` (owner-bubble.ts) turns the same colour into the track of a switch that is on, its outline and its knob:
 `drawFaces` in pages/agent.ts sets `--member-switch`, `--member-accent` and `--member-knob` and the mark `data-member-switch`
@@ -47,7 +47,7 @@ the owner's picture (`members.set_cover`, `members.update {cover}`), changed fro
 icon at the cover's lower right whose menu shows the patterns as small covers and 從電腦選…; the picture
 stays put under the pointer and cannot be dragged out of the window, as no picture in the app can (R-UI-119); then the
 face large across the cover's lower edge with the panel's dim-and-pencil edit (the same picker), the
-name and the role typed in place (Raphael's name is not typed). Under them the settings are kinds in a
+name and the role typed in place (the first member's name is typed too, at most 16 characters; its role is the chief's and has no field). Under them the settings are kinds in a
 column on the left, as Settings' own, each an icon and a name, and only the chosen kind is shown beside
 it; a page narrower than 680 px puts the
 kinds in a row of small pills that wrap above it. What the panel beside the page shows (routines,
@@ -58,11 +58,11 @@ connected app with its own mark and a switch over the member's `tools` list, the
 waits in a ⋯ behind a second press; commands), 個性與指示 (personality and instructions, R-PANEL-07: two quiet rows of
 their words, whole, each with a pencil; a press opens a field in the row's place that is as tall as its words, Enter on
 one line, Ctrl+Enter or leaving it saves without a word (a spinner for the pencil meanwhile), Escape restores; nothing written is one quiet line of
-what could stand there; Raphael's too), 通知 (one switch). The model is chosen at the composer
+what could stand there; Raphael's too), 通知 (one switch, R-NOTIFY-01). The model is chosen at the composer
 alone, members have no voice (the release has none), and the group is the sidebar's. A cover picture moves up and
 down: 調整位置 in the cover's menu, then the picture follows the pointer and 取消 / 儲存位置
-stand where the change icon was (`members.update {cover_position}`, 0 to 100, 50 by default). Raphael's name and
-role are not typed. A kind with one section has no name over its list. There is no 編輯 button anywhere: edits are
+stand where the change icon was (`members.update {cover_position}`, 0 to 100, 50 by default). The first member's
+role is not typed. A kind with one section has no name over its list. There is no 編輯 button anywhere: edits are
 pencils, adds are pluses.
 
 Inspect every contact sheet and, at light 720 and dark 1120, the full images of member-settings,
@@ -72,8 +72,20 @@ face edit with the panel's. The old scene names are kept and now drive the page:
 details-commands, details-notify, raphael-skills, member-edit, speaker-draft-member,
 speaker-draft-chief, member-draft-switch and primary-contact-set.
 
+## The chief of staff's own name and slime (R-CHIEF-01)
+
+Member 0 is the owner's first slime, named and dressed in the first-run guide ([onboarding](onboarding.md)): its chief of staff
+from then on. Its name and slime are the owner's as every member's are (`first_bot_profile` in the core: `name`, `avatar`):
+its panel and settings page open the members' slime picker on the slime it wears (with 從電腦選… for the owner's own picture,
+which a chosen slime replaces), and its name is typed in place. Every place that knows only the id names and draws it from
+the last roster (first-bot.ts, remembered by `membersList`): cards, reminders, lines between members, usage, calendar
+chips. Raphael stays the app's and the voice's name (dictation, the bottom-right voice and quick question, hotkeys, the app's
+own messages), and Raphael's names still reach member 0. An install from before keeps Raphael, name and blue slime.
+`member-settings-raphael-slime` opens member 0's settings, presses its face and the red horned slime, and checks
+(`member-settings-raphael-restyled`) that the core kept it and that the settings face and the sidebar row wear it.
+
 ```powershell
-npm run look -- member-settings-skill-row-hover member-settings-switch-hover member-settings member-settings-raphael member-settings-skills member-settings-tools member-settings-notify member-settings-field member-persona-empty member-persona-filled member-persona-mixed member-persona-long member-persona-editing member-persona-editing-long member-persona-saved member-persona-escape member-settings-skill member-settings-command member-settings-cover member-settings-cover-picture member-settings-back-hover member-settings-back member-settings-back-bottom member-settings-back-kept details member-panel-library member-face-hover --theme both --width 1120,720,1920x1080
+npm run look -- member-settings-skill-row-hover member-settings-switch-hover member-settings member-settings-raphael member-settings-raphael-slime member-settings-skills member-settings-tools member-settings-notify member-settings-field member-persona-empty member-persona-filled member-persona-mixed member-persona-long member-persona-editing member-persona-editing-long member-persona-saved member-persona-escape member-settings-skill member-settings-command member-settings-cover member-settings-cover-picture member-settings-back-hover member-settings-back member-settings-back-bottom member-settings-back-kept details member-panel-library member-face-hover --theme both --width 1120,720,1920x1080
 ```
 
 `member-settings-skills` waits for the assigned team skills section to appear, then checks the order of the skills,
@@ -86,8 +98,11 @@ switch on the fill; the details panel's routine rows too. The look audit fails a
 
 Members have no voice and there are no voice calls: see [Conversation](conversation.md#no-voice).
 The voice-memo and read-aloud switches, the reply Play/Pause control and the transcript are gone; a member's
-notifications are the settings page's 通知 switch. Selected scene: details-notify; unit coverage asserts no memo control
-or toggle.
+notifications are the settings page's 通知 switch. Off keeps completion and reply requests in the
+conversation: no overlay caption, notice or moved approval card, no app reminder toast, and no OS
+toast. Unread and sidebar status still update. Desktop quick-ask replies stay on the overlay.
+Raphael and other members default to off. Selected scenes: details-notify and member-settings-notify.
+Unit coverage checks the delivery gates. Native delivery and WebView2 recovery need Windows acceptance.
 
 ## Member panel tabs
 
@@ -243,14 +258,16 @@ member sets it up there, with a card for a token, and share answers with a templ
 member-avatar, slime-picker, slime-picker-tab, work-messaging-setup, work-messaging-pairing, messaging-paired-aligned. The sidebar plus is the member creation entry; verify the
 complete flow for creation changes.
 
-A member's face is a slime (R-UI-116): its picker in
-the details panel and on the settings page shows the slimes alone, with no 生成 tab and no picture drawn by an image
-model. It is one row of tabs, the groups in their order (角色, 奇幻, 動物, 自然, 生活, 純色; the slimes in 角色 are told apart by how they look) as the app's small pill tabs in a
-chip row (`slime-tabs.ts`), and under it only the open group's slimes with no heading. It opens on the group that holds
-the face now, with that face marked. The groups stand on one another in one cell, so the picker is one size and a press on
-a tab moves nothing; Left and Right move between tabs, Down goes into the group and Up back to the tab. Scenes:
-`slime-picker` (tabs in one row above the grid, one chosen, inside the window, no heading), `slime-picker-tab` (presses
-another tab and compares the picker's, the place's and every tab's box before and after), `member-avatar`. A picture
+A member's face is a slime (R-UI-116, R-SLIME-PICK-01): its picker in
+the details panel, on the settings page and in the maker shows the slimes alone, with no 生成 tab and no picture drawn by an image
+model. It is laid out as a colour picker (`slime-tabs.ts`): the open colour's slimes, four across and large, and under them
+eleven colour swatches in two centred rows of six and five, one chosen with a ring, each named by its colour only in its
+tooltip and accessible name. The 88 faces share a dome. Horns, hair, tools and markings identify the character. Five opaque masks cover the eyes in both static and animated poses. The labels describe those cues, and each saved avatar key keeps its colour and position. A member wearing a plain
+colour opens the picker on the nearest colour. The colours stand on one another in one cell, so the picker is one size and a press on a swatch moves nothing; Left
+and Right move between swatches, Up goes into the colour and Down to its first slime. Scenes: `slime-picker` (slimes above the
+swatches, one chosen, inside the window, no heading), `slime-picker-tab` (presses another swatch and compares the picker's, the
+place's and every swatch's box before and after), `slime-characters-large` (every slime at 72 px, a row per colour),
+`member-avatar`. A picture
 drawn earlier still shows where it is the face (`mb-av-pic`, from `avatar_url`). Under the pointer the
 face itself dims along its outline (a slime's base and hat included, never a circle that leaves corners) with a white
 pencil in its middle. Scenes: member-face-hover, slime-picker, slime-picker-tab.
@@ -280,7 +297,7 @@ npm run look -- sidebar-folders member-text --theme both --width 1120,720,1920x1
 npm run look -- member-delete-ask member-delete member-conversation-sections --theme both --width 1120,720,1920x1080
 npm run look -- member-maker member-maker-chosen member-maker-made member-maker-enter member-maker-greeting member-maker-taken member-maker-escape member-maker-x member-maker-cancel opener-toggle-member-maker shortcut-new-in-composer --theme both --width 1120,720,1920x1080
 npm run look -- slime-states slime-picker slime-sizes slime-gallery slime-motion-idle slime-motion-busy slime-motion-moments slime-motion-change slime-sharp slime-pointer slime-cost --theme both --width 1120,720,1920x1080
-npm run look -- member-face-hover slime-picker slime-picker-tab --theme both --width 1120,720,1920x1080
+npm run look -- member-face-hover slime-picker slime-picker-tab slime-characters-large --theme both --width 1120,720,1920x1080
 npm run look -- slime-places slime-places-settings busy-team-calm --theme both --width 1120,720,1920x1080
 ```
 
@@ -296,8 +313,8 @@ and about 560 px high at most 600, nothing scrolling inside. Top to bottom: the 
 (96 px), the name (centred placeholder 名字, the only field), the same tabbed picker as a member's face popover
 (`slime-tabs.ts`, one component with two consumers: the dialog stands it in a `.menu.mb-avpop.cr-picker`
 wrapper and takes off only the popover's chrome), and 取消 / 建立 at the right (建立 disabled until a name).
-It opens on the group of the slime chosen at the start (a plain slime by the number of members, so 純色).
-It asks only for a name: no template button, no store tab, no colour row (the page it replaced was a whole
+It opens on the colour of the character chosen at the start by the number of members.
+It asks only for a name, with no template button or store tab (the page it replaced was a whole
 content-area page with every slime in eight columns, and the store and 範本 rode in it; the store and the
 templates are reached from the sidebar's + › 商店, R-STORE-08). `member-maker-box` and `member-maker-tab`
 measure it before and after a tab press, `member-maker-enter`, `-escape`, `-x`, `-cancel` and
@@ -328,7 +345,7 @@ behavior remains in the shared editors and controllers.
 
 ## Gotchas
 
-Fixture member 1 is 小晴 with conversation 11; Raphael has special avatar behavior.
+Fixture member 1 is 小晴 with conversation 11; member 0 (拉斐爾 in the fixture) wears the first blue slime until a scene dresses it.
 Skills/commands/voices have empty fixture collections. Seed resources before claiming
 populated-resource flows. Native avatar picking/cropping, files, audio output and
 provider behavior need native evidence. A dialog screenshot does not prove saving.
@@ -431,10 +448,10 @@ A pinned tile (the large faces at the top; R-UI-122) has the same family of menu
 Raphael's row has no destructive menu wherever it moves; an ordinary primary keeps its member menu at the top. Raphael can be chosen again from another member's primary picker. The primary holds the chief capability, is required in new or edited rooms and writes their single wrap-up. Existing rooms missing a newly selected chief require membership adjustment; in-flight work is not replayed. Opening the Conversation page and Alt+Space quick questions retain their existing thread behavior; this change only exchanges display positions.
 
 ```powershell
-npm run look -- members-expanded sidebar-folders member-row-menu sidebar-tile-menu sidebar-tile-picker sidebar-tile-replaced primary-contact-column primary-contact-menu primary-contact-picker primary-contact-set primary-room-picker primary-room-members primary-calendar-members primary-room-chief --theme both --width 1120,720,1920x1080
+npm run look -- members-expanded sidebar-folders member-row-menu sidebar-tile-menu sidebar-tile-picker sidebar-tile-replaced primary-contact-column primary-contact-menu primary-contact-picker primary-contact-picker-long primary-contact-set primary-room-picker primary-room-members primary-calendar-members primary-room-chief --theme both --width 1120,720,1920x1080
 ```
 
-`primary-contact-column` and `primary-contact-strip` check the exchanged positions, Raphael's emblem and localized name tooltips; only the sidebar chief has a star. `member-row-menu` asserts the grouped row menu, its hairlines and the red 刪除 last. `primary-contact-menu` opens Raphael's menu while it is the primary and asserts 換成其他角色 last, after a hairline; `primary-contact-picker` opens it from 小晴's menu while it is the primary, excludes it while offering Raphael, and after 小森 is clicked has one checked choice, 取消 immediately before 設為主要 and no write before confirmation. `primary-contact-set` asserts one `members.set_primary` call, the updated top row, badge-free details and no room/task/conversation mutation. The board scene also checks top-card visibility before/after fit, natural panel heights and no overlap. Member/new-conversation/mention/calendar/routine/room scenes assert the exchanged order; room choices require the current chief and routine selection stays unchanged. The member-picker driver uses the compact picker when available and the real new-conversation picker at wide widths.
+`primary-contact-column` and `primary-contact-strip` check the exchanged positions, Raphael's emblem and localized name tooltips; only the sidebar chief has a star. `member-row-menu` asserts the grouped row menu, its hairlines and the red 刪除 last. `primary-contact-menu` opens Raphael's menu while it is the primary and asserts 換成其他角色 last, after a hairline; `primary-contact-picker` opens it from 小晴's menu while it is the primary, excludes it while offering Raphael, and after 小森 is clicked has one checked choice, 取消 immediately before 設為主要 and no write before confirmation. `primary-contact-picker-long` opens the same window over fifteen characters, more than its list shows at once: every row keeps its face, name and words inside it and starts under the row before (R-UI-181), as `sidebar-tile-picker` asserts for the tile's picker. `primary-contact-set` asserts one `members.set_primary` call, the updated top row, badge-free details and no room/task/conversation mutation. The board scene also checks top-card visibility before/after fit, natural panel heights and no overlap. Member/new-conversation/mention/calendar/routine/room scenes assert the exchanged order; room choices require the current chief and routine selection stays unchanged. The member-picker driver uses the compact picker when available and the real new-conversation picker at wide widths.
 
 The IPC double keeps `primaryId` as the core keeps the flag: the list's `team_context.primary_id` says it, a hidden or deleted primary is Raphael again, and a hidden member cannot be chosen. Unit cases cover default/explicit Raphael, valid and absent primary IDs, grouped/pinned/ungrouped slots, source immutability, details drafts, picker identities and restricted mentions.
 

@@ -35,6 +35,7 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from ..agent.speaker import Speaker, is_raphael_name
+from ..brain.settings import SettingsStore
 from ..clock import wall_clock_ms
 from ..slime_ids import current_avatar
 from .schedule import Schedule, ScheduleError, parse_schedule
@@ -391,6 +392,14 @@ def _routine(row: sqlite3.Row) -> Routine | None:
     return Routine(**data)
 
 
+def notification_enabled(conn: sqlite3.Connection, member_id: int) -> bool:
+    """Whether this identity may surface an owner notification outside its conversation."""
+    if member_id == 0:
+        return bool(SettingsStore(conn).get("raphael_notify"))
+    row = conn.execute("SELECT notify FROM members WHERE id = ?", (member_id,)).fetchone()
+    return row is not None and bool(row[0])
+
+
 class MemberStore:
     """The tables of the members (see the module). `now_ms` is the wall clock."""
 
@@ -535,9 +544,22 @@ class MemberStore:
         ).fetchone()
         return None if row is None else _member(row)
 
+    def _first_bot_name(self) -> str:
+        """The name the owner gave the first Bot (member 0), "" while it has its built-in one."""
+        try:
+            row = self._conn.execute("SELECT value FROM settings WHERE key = 'first_bot_profile'").fetchone()
+            profile = json.loads(row[0]) if row else {}
+        except (sqlite3.OperationalError, TypeError, ValueError):
+            return ""
+        name = profile.get("name") if isinstance(profile, dict) else None
+        return name if isinstance(name, str) else ""
+
     def _check_name(self, name: str, member_id: int | None) -> None:
         if is_raphael_name(name):
             raise MemberError("taken", "that name is Raphael's")
+        first = self._first_bot_name()
+        if first and " ".join(name.split()).casefold() == first.casefold():
+            raise MemberError("taken", "the first Bot has that name")
         other = self.by_name(name)
         if other is not None and other.id != member_id:
             raise MemberError("taken", "another member has that name")

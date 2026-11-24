@@ -21,6 +21,7 @@ import { eventRead } from './event-read';
 import { describeError } from "./format";
 import { currentRoomId, openNewGroupChat, openRoomsMenu } from "./group-chats";
 import { getLocale, onLocaleChange, t } from "./i18n";
+import { onAvatarChange } from "./avatar";
 import type { MentionField } from "./mention-field";
 import type { MentionTarget } from "./mention-text";
 import { bindComposerMentions, mentionTargets } from "./team-mentions";
@@ -670,6 +671,9 @@ export function createMembers(host: MembersHost): MembersShell {
     void previewTemplateFile(String((event as CustomEvent<string>).detail ?? ""), createMember, null, () => {});
   });
   onLocaleChange(() => { drawAll(); });
+  // The owner's picture stands for the first member everywhere, and the roster does not say when it comes or goes: a read that
+  // finds the same roster draws nothing, so the faces are drawn again here.
+  onAvatarChange(() => { if (list !== null) drawAll(); });
   // A group chat comes where the conversation is: the settings page gives way to it.
   window.addEventListener("raphael:open-room", () => { panelBeforeSettings = null; settings.close(); });
   details.el.hidden = !open;
