@@ -26,7 +26,8 @@ test.each([true, false])("a virtual-machine suggestion has one close button and 
   expect(host.querySelector(".card-title")!.textContent).toBe(t("memberComputer.suggestionTitle"));
   expect(host.querySelector(".card-body")!.textContent).toBe("The package needs a shell.");
   const action = host.querySelector<HTMLButtonElement>(".computer-suggestion-action")!;
-  expect(action.textContent).toBe(t(installed ? "memberComputer.suggestionSwitch" : "memberComputer.suggestionInstall"));
+  // The install is asked of the first member, by the name the owner gave it.
+  expect(action.textContent).toBe(installed ? t("memberComputer.suggestionSwitch") : t("memberComputer.suggestionInstall", { p0: t("agent.title") }));
   const handoff = vi.fn();
   api.core.mockResolvedValue(installed ? {} : { setup: true });
   expect(chatCardAction(action, handoff)).toBe(true);

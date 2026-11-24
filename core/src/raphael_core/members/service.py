@@ -435,7 +435,8 @@ class MembersService:
     def speaker(self, member_id: int) -> Speaker | None:
         if member_id == 0:
             tools = self._settings.get("raphael_tools")
-            return Speaker(**self.first_bot_profile(), draft_first=self._settings.get("raphael_draft_first"),
+            profile = {field: text for field, text in self.first_bot_profile().items() if field != "avatar"}
+            return Speaker(**profile, draft_first=self._settings.get("raphael_draft_first"),
                            tools=None if tools is None else frozenset(tools),
                            capabilities=frozenset({"chief"}) if self.store.is_chief(member_id) else frozenset())
         return self.store.speaker(member_id)
@@ -465,14 +466,16 @@ class MembersService:
         if not folded:
             return []
         found = []
-        for member in self.store.members():
-            name = member.name.casefold()
+        # The first Bot by the name the owner gave it (its built-in names are `names_raphael`'s).
+        first = self.first_bot_profile().get("name", "")
+        for member_id, name in ([(0, first)] if first else []) + [(member.id, member.name) for member in self.store.members()]:
+            name = name.casefold()
             if _ASCII_WORD.fullmatch(name):
                 hit = re.search(rf"(?<![a-z0-9]){re.escape(name)}(?![a-z0-9])", folded)
             else:
                 hit = len(name) >= 2 and name in folded
             if hit:
-                found.append(self.speaker(member.id))
+                found.append(self.speaker(member_id))
         return found
 
     def has_members(self) -> bool:
@@ -1353,7 +1356,7 @@ class MembersService:
             cover = self._covers.reposition(member_id, params["cover_position"])
         return cover
 
-    def _update_raphael(self, params: dict, *, profile_fields=("personality", "instructions")) -> dict:
+    def _update_raphael(self, params: dict, *, profile_fields=("name", "avatar", "personality", "instructions")) -> dict:
         from ..brain.settings import checked
 
         preferences = {"tools": "raphael_tools", "notify": "raphael_notify", "draft_first": "raphael_draft_first"}
@@ -2236,14 +2239,17 @@ class MembersService:
                 for field in ("blurb", "group", "avatar_preset"):
                     if params.get(field) == "":
                         params.pop(field)
-                if set(params) - {"id", "name", "role", "personality", "instructions", "cover", "cover_position", "tools", "notify", "draft_first", *preferences}:
+                # The first Bot wears a slime as every member does, kept in its profile.
+                if "avatar_preset" in params:
+                    params["avatar"] = params.pop("avatar_preset")
+                if set(params) - {"id", "name", "role", "personality", "instructions", "avatar", "cover", "cover_position", "tools", "notify", "draft_first", *preferences}:
                     raise invalid_params("This field is not editable for the first Bot")
                 # Validate the whole request before any profile/preference write.
                 for field, setting in preferences.items():
                     if field in params:
                         checked(setting, params[field])
                 self._update_raphael({key: value for key, value in params.items() if key not in preferences},
-                                     profile_fields=("name", "role", "personality", "instructions"))
+                                     profile_fields=("name", "role", "personality", "instructions", "avatar"))
                 for field, setting in preferences.items():
                     if field in params:
                         await self._management_rpc("settings.set", {"key": setting, "value": params[field]})

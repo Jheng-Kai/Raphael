@@ -7,6 +7,7 @@ import { faceHTML } from "./members";
 import { openMemberThread } from "./team-navigation";
 import type { AppContext } from "./types";
 import { btn, esc, ico, toaster } from "./ui";
+import { firstBotName } from "./first-bot";
 
 interface Waiting { id: string; member_id: number; member_name?: string; room_id?: number | null }
 
@@ -35,7 +36,7 @@ export function mountQuestionReminder(app: AppContext, memberFace: (id: number, 
       const place = item.room_id ? ` data-question-room="${item.room_id}"` : ` data-question-member="${item.member_id}"`;
       const face = memberFace(item.member_id, 22) || faceHTML({ id: item.member_id, name: item.member_name || "" }, 22);
       toaster.notice(() => {
-        const label = esc(t("reminder.waiting", { p0: item.member_name || t("agent.title") }));
+        const label = esc(t("reminder.waiting", { p0: item.member_name || firstBotName() }));
         return btn(`${face}<span class="question-reminder-text">${label}</span>${ico("right")}`, "question-reminder", `${place} aria-label="${label}"`);
       }, "question-reminder-toast");
     }

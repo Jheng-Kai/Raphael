@@ -17,6 +17,7 @@ import { connectionMarkHTML } from "./secret-card";
 import { serviceIconOf } from "./service-icons";
 import type { AgentTurn, OwnerQuestion, PermissionCard } from "./types";
 import { btn, esc, ico } from "./ui";
+import { firstBotName } from "./first-bot";
 
 const plain = (key: MessageKey): string => (t as (key: MessageKey) => string)(key);
 
@@ -46,10 +47,10 @@ export function permissionStateText(card: PermissionCard): string {
 
 /** The destination app, or the computer when the step is on it. */
 const localCard = (card: PermissionCard): boolean => card.kind === "local_access" || card.kind === "local_command";
-const nameOf = (card: PermissionCard): string => card.kind === "tool" ? card.service || t("cards.connectedApps") : localCard(card) && card.service ? card.service === "Raphael" ? t("agent.title") : card.service : t("card.pcTitle");
+const nameOf = (card: PermissionCard): string => card.kind === "tool" ? card.service || t("cards.connectedApps") : localCard(card) && card.service ? card.service === "Raphael" ? firstBotName() : card.service : t("card.pcTitle");
 
 /** The core's known administration headings describe an action; arbitrary tool questions keep the generic title. */
-export function approvalCopy(text: string, name = t("agent.title")): { title: string; body: string } {
+export function approvalCopy(text: string, name = firstBotName()): { title: string; body: string } {
   const lead = text.split("\n")[0].trim();
   const create = /^(建立角色|建立成員|Create member|メンバーを作成)$/.test(lead);
   const known = create || /^(更新設定|永久刪除這個角色和它的所有資料|匯入技能|儲存指令|更新成員|永久刪除成員及其所有資料|建立群組|重新命名群組|匯入成員技能|儲存成員指令|建立例行任務|更新例行任務|刪除例行任務|Update member|Permanently delete member and all its data|Create group|Rename group|Import member skills|Save member command|Create routine|Update routine|Delete routine|メンバーを更新|メンバーと全データを完全に削除|グループを作成|グループ名を変更|スキルをインポート|コマンドを保存|定期タスクを作成|定期タスクを更新|定期タスクを削除)$/.test(lead);
@@ -87,7 +88,7 @@ function denyCloseHTML(card: PermissionCard, answerable: boolean): string {
 export function permissionCardHTML(card: PermissionCard, answerable = true, memberName?: string): string {
   if (isComposioTool(card.service, card.tool)) card = { ...card, summary: composioText(card.summary, card.tool, "tool") };
   const waiting = waitsForYes(card);
-  const actor = memberName || (localCard(card) ? nameOf(card) : t("agent.title"));
+  const actor = memberName || (localCard(card) ? nameOf(card) : firstBotName());
   const payment = card.kind === "tool" && card.tool === "fill_card";
   const body = waiting ? payment ? card.summary : localCard(card) ? t(card.kind === "local_access" ? "local.consent" : "cards.localReview") : card.reason || undefined : undefined;
   let title = t("cards.useApp", { p0: actor, p1: nameOf(card) });

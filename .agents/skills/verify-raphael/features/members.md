@@ -2,7 +2,7 @@
 
 ## A member's colour on its switches
 
-R-UI-147: a member's theme is not only its message bubble; the toggle buttons take its colour too. A member's colour is its slime's (`owner-bubble.ts` `memberColor`; Raphael's is its blue). The conversation
+R-UI-147: a member's theme is not only its message bubble; the toggle buttons take its colour too. A member's colour is its slime's (`owner-bubble.ts` `memberColor`; the first member's is that of the slime the owner dressed it in, the first blue slime's until then). The conversation
 already wears it on the owner's bubble and on send, stop and the computer (`--member-bubble`, `--member-accent` on `.mb-chat`).
 `memberSwitch` (owner-bubble.ts) turns the same colour into the track of a switch that is on, its outline and its knob:
 `drawFaces` in pages/agent.ts sets `--member-switch`, `--member-accent` and `--member-knob` and the mark `data-member-switch`
@@ -47,7 +47,7 @@ the owner's picture (`members.set_cover`, `members.update {cover}`), changed fro
 icon at the cover's lower right whose menu shows the patterns as small covers and 從電腦選…; the picture
 stays put under the pointer and cannot be dragged out of the window, as no picture in the app can (R-UI-119); then the
 face large across the cover's lower edge with the panel's dim-and-pencil edit (the same picker), the
-name and the role typed in place (Raphael's name is not typed). Under them the settings are kinds in a
+name and the role typed in place (the first member's name is typed too, at most 16 characters; its role is the chief's and has no field). Under them the settings are kinds in a
 column on the left, as Settings' own, each an icon and a name, and only the chosen kind is shown beside
 it; a page narrower than 680 px puts the
 kinds in a row of small pills that wrap above it. What the panel beside the page shows (routines,
@@ -61,8 +61,8 @@ one line, Ctrl+Enter or leaving it saves without a word (a spinner for the penci
 what could stand there; Raphael's too), 通知 (one switch). The model is chosen at the composer
 alone, members have no voice (the release has none), and the group is the sidebar's. A cover picture moves up and
 down: 調整位置 in the cover's menu, then the picture follows the pointer and 取消 / 儲存位置
-stand where the change icon was (`members.update {cover_position}`, 0 to 100, 50 by default). Raphael's name and
-role are not typed. A kind with one section has no name over its list. There is no 編輯 button anywhere: edits are
+stand where the change icon was (`members.update {cover_position}`, 0 to 100, 50 by default). The first member's
+role is not typed. A kind with one section has no name over its list. There is no 編輯 button anywhere: edits are
 pencils, adds are pluses.
 
 Inspect every contact sheet and, at light 720 and dark 1120, the full images of member-settings,
@@ -72,8 +72,20 @@ face edit with the panel's. The old scene names are kept and now drive the page:
 details-commands, details-notify, raphael-skills, member-edit, speaker-draft-member,
 speaker-draft-chief, member-draft-switch and primary-contact-set.
 
+## The chief of staff's own name and slime (R-CHIEF-01)
+
+Member 0 is the owner's first slime, named and dressed in the first-run guide ([onboarding](onboarding.md)): its chief of staff
+from then on. Its name and slime are the owner's as every member's are (`first_bot_profile` in the core: `name`, `avatar`):
+its panel and settings page open the members' slime picker on the slime it wears (with 從電腦選… for the owner's own picture,
+which a chosen slime replaces), and its name is typed in place. Every place that knows only the id names and draws it from
+the last roster (first-bot.ts, remembered by `membersList`): cards, reminders, lines between members, usage, calendar
+chips. Raphael stays the app's and the voice's name (dictation, the bottom-right voice and quick question, hotkeys, the app's
+own messages), and Raphael's names still reach member 0. An install from before keeps Raphael, name and blue slime.
+`member-settings-raphael-slime` opens member 0's settings, presses its face and the red horned slime, and checks
+(`member-settings-raphael-restyled`) that the core kept it and that the settings face and the sidebar row wear it.
+
 ```powershell
-npm run look -- member-settings-skill-row-hover member-settings-switch-hover member-settings member-settings-raphael member-settings-skills member-settings-tools member-settings-notify member-settings-field member-persona-empty member-persona-filled member-persona-mixed member-persona-long member-persona-editing member-persona-editing-long member-persona-saved member-persona-escape member-settings-skill member-settings-command member-settings-cover member-settings-cover-picture member-settings-back-hover member-settings-back member-settings-back-bottom member-settings-back-kept details member-panel-library member-face-hover --theme both --width 1120,720,1920x1080
+npm run look -- member-settings-skill-row-hover member-settings-switch-hover member-settings member-settings-raphael member-settings-raphael-slime member-settings-skills member-settings-tools member-settings-notify member-settings-field member-persona-empty member-persona-filled member-persona-mixed member-persona-long member-persona-editing member-persona-editing-long member-persona-saved member-persona-escape member-settings-skill member-settings-command member-settings-cover member-settings-cover-picture member-settings-back-hover member-settings-back member-settings-back-bottom member-settings-back-kept details member-panel-library member-face-hover --theme both --width 1120,720,1920x1080
 ```
 
 `member-settings-skills` waits for the assigned team skills section to appear, then checks the order of the skills,
@@ -328,7 +340,7 @@ behavior remains in the shared editors and controllers.
 
 ## Gotchas
 
-Fixture member 1 is 小晴 with conversation 11; Raphael has special avatar behavior.
+Fixture member 1 is 小晴 with conversation 11; member 0 (拉斐爾 in the fixture) wears the first blue slime until a scene dresses it.
 Skills/commands/voices have empty fixture collections. Seed resources before claiming
 populated-resource flows. Native avatar picking/cropping, files, audio output and
 provider behavior need native evidence. A dialog screenshot does not prove saving.

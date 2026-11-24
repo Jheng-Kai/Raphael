@@ -16,6 +16,7 @@ import { faceHTML, RAPHAEL_ID } from "./members";
 import type { MembersList } from "./types";
 import { type Choice, btn, esc, sel, tabs } from "./ui";
 import type { UsageAnalytics, UsageBreakdown, UsageRange, UsageSeries } from "./usage-analytics-types";
+import { firstBotName } from "./first-bot";
 
 export type CostGroup = "purpose" | "model" | "provider";
 export type MessageGroup = "model" | "source";
@@ -131,7 +132,7 @@ function peopleHTML(v: UsageAnalysisView, data: UsageAnalytics, names: UsageAnal
   const shown = v.allPeople ? people : people.slice(0, MOST_PEOPLE);
   const rows = shown.map((person) => {
     const known = v.people.get(person.id);
-    const name = known?.name || (person.id === RAPHAEL_ID ? t("agent.title") : person.name);
+    const name = known?.name || (person.id === RAPHAEL_ID ? firstBotName() : person.name);
     const model = person.models[0]?.model;
     return `<tr data-ua-person="${person.id}"><th scope="row"><span class="ua-who">${faceHTML(known ?? { id: person.id, name }, 22)}<span>${esc(name)}</span></span></th>` +
       `<td class="num">${esc(count(person.turns))}</td><td class="num">${esc(formatUsd(person.cost_usd))}</td>` +

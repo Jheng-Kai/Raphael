@@ -139,6 +139,7 @@ import { VoiceMode } from "../voice-mode";
 import { mountDesktopViewer } from "../desktop-viewer";
 import "../agent.css";
 import "../members.css";
+import { firstBotName } from "../first-bot";
 
 /** How many turns one load brings. */
 const PAGE_SIZE = 50;
@@ -648,7 +649,7 @@ export function createAgent(app: AppContext, places?: {
   askCard.className = "ask-card-host";
   askCard.hidden = true;
   askCard.setAttribute("role", "group");
-  askCard.innerHTML = cardHTML({ title: t("cards.permission", { p0: t("agent.title") }), status: "waiting", statusText: cardPromptText("permission"), cls: "ask-card",
+  askCard.innerHTML = cardHTML({ title: t("cards.permission", { p0: firstBotName() }), status: "waiting", statusText: cardPromptText("permission"), cls: "ask-card",
     body: t("perm.title"),
     // A local command is shown itself, never behind a disclosure: the owner allows what they can read.
     content: `<pre class="local-command ask-cmd" hidden></pre>` + cardDisclosureHTML("approval", `<p class="ask-q card-body"></p>`),
@@ -925,7 +926,7 @@ export function createAgent(app: AppContext, places?: {
     const brand: Record<string, string> = { telegram: "Telegram", slack: "Slack", discord: "Discord" };
     // While a question card waits the field says it takes the answer, or anything else (what is written closes the card, unanswered).
     const asked = questionWaits(turns, pendingQuestions?.member === memberId() && pendingQuestions.conversation === conversationId() ? pendingQuestions.questions : []);
-    const words = setup ? t("chat.askAboutSetup", { p0: brand[setup] ?? setup }) : asked ? t("ownerQuestion.type") : inRaphael() ? t("home.askRaphael") : memberPlaceholder(members.member().name);
+    const words = setup ? t("chat.askAboutSetup", { p0: brand[setup] ?? setup }) : asked ? t("ownerQuestion.type") : memberPlaceholder(members.member().name);
     if (input.placeholder !== words) input.placeholder = words;
     if (input.getAttribute("aria-label") !== words) input.setAttribute("aria-label", words);
     empty.classList.toggle("is-member", !inRaphael());
@@ -1078,7 +1079,7 @@ export function createAgent(app: AppContext, places?: {
     askCard.dataset.id = q.id;
     askCard.dataset.tier = q.tier;
     askText.textContent = q.text;
-    const asker = inRaphael() ? t("agent.title") : members.nameOf(memberId());
+    const asker = inRaphael() ? members.member().name || firstBotName() : members.nameOf(memberId());
     // The core asks a local command as its word (本機指令) and, on the next lines, the command itself.
     const [lead = "", ...rest] = q.text.split("\n");
     const command = lead.trim() === t("local.title") ? rest.join("\n").trim() : "";

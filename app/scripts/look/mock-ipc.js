@@ -619,7 +619,8 @@ export function installMock(fixture, config = {}, target = window) {
     turn.messages.push({ seq: 99, kind: "event", text: JSON.stringify(data.p02MeetingEvent), at_ms: data.now });
   }
   // Raphael as its emblem, with no picture of the owner's in its place.
-  if (variant.emblem) data.avatar = null;
+  // A first run has no picture of the owner's own for the first member: the guide's slime is its face.
+  if (variant.emblem || variant.onboarding) data.avatar = null;
   if (variant.peerChat) {
     // Raphael asked 小晴 twenty minutes ago and now, and 小森 once in between: today's line opens only Raphael ⇄ 小晴 (R-UI-72).
     // Yesterday's exchange with 小晴 is another conversation with its own line, so it is not in this one.
@@ -2641,6 +2642,8 @@ export function installMock(fixture, config = {}, target = window) {
       if (command === "device_settings_get") return copy(data.device);
       if (command === "device_settings_set") { Object.assign(data.device, args.patch); notify("DeviceSettings", { settings: copy(data.device) }); return copy(data.device); }
       if (command === "avatar_get") return copy(data.avatar);
+      // As the shell: the owner's own picture is deleted and the first member wears its slime again.
+      if (command === "avatar_clear") { data.avatar = null; return null; }
       if (command === "agent_question_open") return copy(adminQuestion ?? permission?.question ?? null);
       if (command === "agent_question_answer" && permission) {
         if (args.id !== permission.question.id) throw new Error("Unknown permission question");
