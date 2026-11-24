@@ -292,6 +292,22 @@ describe("the first slime", () => {
     expect(api.membersUpdate).toHaveBeenCalledTimes(1);
   });
 
+  test("a save that ends after the owner went back, and came here again, does not move the new visit on", async () => {
+    let saved!: (value: unknown) => void;
+    api.membersUpdate.mockReturnValue(new Promise(resolve => { saved = resolve; }));
+    await open();
+    await press('[data-ob="next"]');
+    nameFirst("Mochi");
+    await press('[data-ob="next"]');
+    await press('.ob-foot [data-ob="back"]');
+    expect(root.dataset.step).toBe("welcome");
+    await press('[data-ob="next"]');
+    expect(root.dataset.step).toBe("slime");
+    saved({ member: { id: 0 } });
+    await flush();
+    expect(root.dataset.step).toBe("slime");
+  });
+
   test("forward by the mouse past the first slime keeps a changed name first, as the way on does", async () => {
     await open();
     await toTools();

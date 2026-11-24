@@ -48,6 +48,7 @@ import { createAgent } from "./agent";
 import { openDialog } from "../member-dialogs";
 import { openGroupChat } from "../group-chats";
 import { closeMenu } from "../ui";
+import { setAvatar } from "../avatar";
 import { resetAsks } from "../chat-ask";
 import { describeError } from "../format";
 import { clearLayerForward } from "../nav-history";
@@ -276,6 +277,18 @@ test.each(["member", "page", "room"])("the first unseen turn has its own stable 
   if (leave === "page") { agent.hide(); agent.show(); await flush(); }
   if (leave === "room") { await openGroupChat(1); await flush(); await pick(3); }
   expect(document.querySelector('.thread-new')).toBeNull();
+  agent.hide();
+});
+
+test("the owner's picture coming or going draws the first member's face again where the roster did not change", async () => {
+  api.membersList.mockImplementation(async () => structuredClone(LIST));
+  const agent = mount(); await flush();
+  const face = (): Element | null => document.querySelector('.mb-row[data-member="0"] .av-custom');
+  expect(face()).toBeNull();
+  setAvatar({ url: "data:image/png;base64,AAAA", crop: { x: 0, y: 0, zoom: 1 } }); await flush();
+  expect(face()).not.toBeNull();
+  setAvatar(null); await flush();
+  expect(face()).toBeNull();
   agent.hide();
 });
 

@@ -16,11 +16,12 @@ export function openMemberAvatarMenu(anchor: HTMLElement, member: Member, update
       slimes: true,
       current: firstBotSlime(member.avatar),
       // A slime chosen stands in place of the owner's picture, which would hide it. The slime is saved first and the picture
-      // goes only once it is: a save that fails keeps the owner's picture. Clearing the picture says so (onAvatarChange),
-      // and the page reloads the roster and draws the new slime everywhere.
+      // goes only once it is: a save that fails keeps the owner's picture, and a picture chosen while it was saving is the
+      // newer choice and stays. Clearing the picture says so (onAvatarChange), and every face is drawn again.
       onSlime: (avatar) => void (async () => {
+        const picture = currentAvatar();
         if (!(await update(member.id, { avatar }))) return;
-        if (currentAvatar() !== null) await resetRaphaelAvatar();
+        if (picture !== null && currentAvatar() === picture) await resetRaphaelAvatar();
       })(),
       onComputer: () => void changeRaphaelAvatar(),
       more: currentAvatar() !== null ? [{ label: t("settings.avatarReset"), run: () => void resetRaphaelAvatar() }] : [],

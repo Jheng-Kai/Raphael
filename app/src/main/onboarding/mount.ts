@@ -69,8 +69,10 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
     step: direction => {
       if (finishing) return true;
       const show = (): void => { steps.step(direction, step => { flow = { ...flow, step }; render(); }); };
-      // Forward past the first slime keeps its name and slime first, as the way on does; with no name it stays.
-      if (flow.step === "slime" && direction !== "back") void keepFirst().then(kept => { if (kept && flow.step === "slime") show(); });
+      // Forward past the first slime keeps its name and slime first, as the way on does; with no name it stays. A step
+      // meanwhile (back, or back and here again) is a new visit, and the save does not move it on.
+      const at = flow;
+      if (flow.step === "slime" && direction !== "back") void keepFirst().then(kept => { if (kept && flow === at) show(); });
       else show();
       return true;
     },
@@ -338,9 +340,11 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
       return;
     }
     if (flow.step === "slime") {
+      const at = flow;
       if (!(await keepFirst())) return;
-      // The save took a moment: a step back meanwhile is where the owner is now, and the save does not undo it.
-      if (flow.step !== "slime") return;
+      // The save took a moment: a step meanwhile (back, or back and here again) is where the owner is now, and this save
+      // does not move it on. Every step is a new flow, so the same one means the same visit.
+      if (flow !== at) return;
     }
     goNext();
   }

@@ -44,6 +44,9 @@ pub(super) struct Recovery {
     expires: Option<Instant>,
     /// When the caption on screen came: it is not extended past `CAPTION_HARD_LIMIT` from then.
     caption_since: Option<Instant>,
+    /// The probe a caption's extension replaced. The page may have cleared the caption and said so to that probe just
+    /// before the new one came, and then it never answers the new one: its "hidden" still counts.
+    extended_from: Option<u64>,
     native_hidden: bool,
     replay: bool,
     refresh: bool,
@@ -148,6 +151,7 @@ impl Recovery {
             _ => None,
         };
         self.refresh = !self.scene.is_empty() && self.native_hidden;
+        self.extended_from = None;
         self.serial += 1;
         let wait = if subscribed { FRAME_WAIT } else { PAGE_WAIT };
         // A replacement with the same visibility cannot postpone an existing recovery step.
@@ -184,9 +188,10 @@ impl Recovery {
     }
 
     pub(super) fn frame(&mut self, id: u64, hidden: bool) -> bool {
-        if self.serial != id {
+        if self.serial != id && !(hidden && self.extended_from == Some(id)) {
             return false;
         }
+        self.extended_from = None;
         if self.scene.is_empty() && !hidden {
             return false;
         }
@@ -211,15 +216,18 @@ impl Recovery {
 
     pub(super) fn tick(&mut self, now: Instant) -> Option<Action> {
         // A caption read a page at a time can outlast its first time (a long answer took about 28 s): while its page still
-        // answers it is given more, up to the hard limit; a page that does not answer goes down the recovery below.
-        if self.expires.is_some_and(|end| now >= end)
+        // answers it is given more, up to the hard limit; a page that does not answer goes down the recovery below. One the
+        // recovery already hid natively is not asked again: it expires.
+        if let Some(since) = self
+            .caption_since
+            .filter(|since| now < *since + CAPTION_HARD_LIMIT)
+            && self.expires.is_some_and(|end| now >= end)
             && self.is_caption()
             && self.probe.is_none()
-            && self
-                .caption_since
-                .is_some_and(|since| now < since + CAPTION_HARD_LIMIT)
+            && !self.native_hidden
         {
-            self.expires = Some(now + CAPTION_LIMIT);
+            self.expires = Some((now + CAPTION_LIMIT).min(since + CAPTION_HARD_LIMIT));
+            self.extended_from = Some(self.serial);
             self.serial += 1;
             self.probe = Some(Probe {
                 id: self.serial,
@@ -387,6 +395,99 @@ mod tests {
             state.tick(now + CAPTION_LIMIT + FRAME_WAIT),
             Some(Action::Nudge)
         );
+    }
+
+    #[test]
+    fn a_hidden_answer_to_the_probe_an_extension_replaced_still_clears_the_caption() {
+        let now = Instant::now();
+        let mut state = Recovery::default();
+        state.track(
+            &OverlayEvent::Say {
+                prefix: "Answer".into(),
+                text: "Hello".into(),
+            },
+            now,
+            true,
+        );
+        state.frame(1, false);
+        assert_eq!(state.tick(now + CAPTION_LIMIT), Some(Action::Probe));
+        // The page cleared the caption and told the first probe just before the second one came; it never answers that.
+        state.frame(1, true);
+        assert!(!state.is_caption());
+        assert_eq!(state.tick(now + CAPTION_LIMIT + FRAME_WAIT), None);
+        assert!(!state.native_hidden());
+    }
+
+    #[test]
+    fn an_old_hidden_answer_does_not_clear_a_newer_caption() {
+        let now = Instant::now();
+        let mut state = Recovery::default();
+        let say = |text: &str| OverlayEvent::Say {
+            prefix: "Answer".into(),
+            text: text.into(),
+        };
+        state.track(&say("first"), now, true);
+        state.frame(1, false);
+        assert_eq!(state.tick(now + CAPTION_LIMIT), Some(Action::Probe));
+        state.track(&say("second"), now + CAPTION_LIMIT, true);
+        assert!(!state.frame(1, true));
+        assert!(state.is_caption());
+    }
+
+    #[test]
+    fn a_caption_the_recovery_hid_is_not_asked_again_and_expires() {
+        let now = Instant::now();
+        let mut state = Recovery::default();
+        state.track(
+            &OverlayEvent::Say {
+                prefix: "Answer".into(),
+                text: "Hello".into(),
+            },
+            now,
+            true,
+        );
+        let mut at = now + FRAME_WAIT;
+        assert_eq!(state.tick(at), Some(Action::Nudge));
+        at += NUDGE_WAIT;
+        assert_eq!(state.tick(at), Some(Action::Reload));
+        at += PAGE_WAIT;
+        assert_eq!(state.tick(at), Some(Action::Recreate));
+        at += PAGE_WAIT;
+        assert_eq!(state.tick(at), Some(Action::Hide));
+        assert!(state.native_hidden());
+        assert_eq!(state.tick(now + CAPTION_LIMIT), Some(Action::Expire));
+        assert!(!state.is_caption());
+    }
+
+    #[test]
+    fn an_extended_caption_ends_at_the_hard_limit() {
+        let now = Instant::now();
+        let mut state = Recovery::default();
+        state.track(
+            &OverlayEvent::Say {
+                prefix: "Answer".into(),
+                text: "Hello".into(),
+            },
+            now,
+            true,
+        );
+        state.frame(1, false);
+        let mut at = now + CAPTION_LIMIT;
+        while state.tick(at) == Some(Action::Probe) {
+            let id = match state.probe_event() {
+                Some(OverlayEvent::FrameProbe { id, .. }) => id,
+                _ => panic!("no probe"),
+            };
+            state.frame(id, false);
+            assert!(
+                state
+                    .expires
+                    .is_some_and(|end| end <= now + CAPTION_HARD_LIMIT)
+            );
+            at = state.expires.unwrap();
+        }
+        assert!(at <= now + CAPTION_HARD_LIMIT);
+        assert!(state.native_hidden());
     }
 
     #[test]

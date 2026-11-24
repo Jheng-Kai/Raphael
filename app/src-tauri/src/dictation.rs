@@ -2741,6 +2741,11 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
     /// the session ended meanwhile.
     /// Whether the member's 「完成或需要回覆時通知我」 is on, as the core says now (off when it does not say in time).
     async fn member_notifies(&self, member: u64) -> bool {
+        self.notify_switch(member).await.unwrap_or(false)
+    }
+
+    /// The member's notify switch as the core says it, or `None` when it does not say in time.
+    async fn notify_switch(&self, member: u64) -> Option<bool> {
         tokio::time::timeout(
             Duration::from_millis(500),
             self.core
@@ -2750,11 +2755,12 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
         .ok()
         .and_then(Result::ok)
         .and_then(|result| result.get("notify").and_then(Value::as_bool))
-        .unwrap_or(false)
     }
 
     /// `notify_member` is the member of an app-typed turn: while its question waits, its notify switch is read again
     /// every second, so a switch turned off after the card came keeps the card off the overlay when the person leaves.
+    /// The read runs beside the wait, so a slow core never holds up an answer, the time or the overlay following the
+    /// window; a read that does not come in time keeps the switch as it was.
     async fn await_answer(
         &self,
         id: &str,
@@ -2778,6 +2784,9 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
             ticks.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
             ticks
         });
+        let mut reading: Option<
+            std::pin::Pin<Box<dyn std::future::Future<Output = Option<bool>> + Send + '_>>,
+        > = None;
         let answer = loop {
             tokio::select! {
                 answer = &mut wait => break answer.unwrap_or(Answer::NO),
@@ -2786,9 +2795,14 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
                     break Answer::NO;
                 }
                 () = next_tick(&mut front) => self.follow_front(id),
-                () = next_tick(&mut switch) => {
+                () = next_tick(&mut switch), if reading.is_none() => {
                     if let Some(member) = notify_member {
-                        let notify = self.member_notifies(member).await;
+                        reading = Some(Box::pin(self.notify_switch(member)));
+                    }
+                }
+                read = async { reading.as_mut().expect("a read in flight").await }, if reading.is_some() => {
+                    reading = None;
+                    if let Some(notify) = read {
                         lock(&self.state).notify_overlay = notify;
                     }
                 }
