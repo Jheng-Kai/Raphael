@@ -368,3 +368,18 @@ async def test_the_database_keeps_the_record_of_computers_the_app_made(conn):
     assert conn.execute("SELECT COUNT(*) FROM computer_data").fetchone()[0] == 0
     columns = [row[1] for row in conn.execute("PRAGMA table_info(computer_data)")]
     assert columns == ["host", "key", "owed", "attempts"]
+
+
+async def test_a_deleted_member_leaves_no_folder_in_the_shared_computers_workspace(rig, vm, engine):
+    """#314: the card says the member and all its data are deleted for good; its own folder in the shared computer's
+    workspace goes too, and so do folders earlier builds left for members already deleted. Others' folders stay."""
+    one, two = await made(rig, "A"), await made(rig, "B")
+    gone, kept = vm.shared_member_folder(one.id), vm.shared_member_folder(two.id)
+    orphan = vm.shared_members_folder() / "0123456789abcdef"
+    unrelated = vm.shared_members_folder() / "notes"
+    for folder in (gone, kept, orphan, unrelated):
+        folder.mkdir(parents=True)
+        (folder / "work.txt").write_text("a file")
+    assert await delete(rig, one.id) == {"deleted": True}
+    assert not gone.exists() and not orphan.exists()
+    assert (kept / "work.txt").read_text() == "a file" and (unrelated / "work.txt").exists()

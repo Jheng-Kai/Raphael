@@ -1096,6 +1096,14 @@ class LocalVm:
         self.targets[target.key] = target
         return target
 
+    def shared_members_folder(self):
+        """Where the members' own folders of the shared computer on this PC are: one per member, named by its key."""
+        return self.target_for("", "shared").workspace / "members"
+
+    def shared_member_folder(self, member_id):
+        """A member's own folder in the shared computer's workspace on this PC (#314)."""
+        return self.shared_members_folder() / self.key_for("", member_id)
+
     def shared_target(self, host, member, screen):
         return replace(self.target_for(host, "shared"), key=self.key_for(host, member),
                        container="shared", screen=screen, screens=6)

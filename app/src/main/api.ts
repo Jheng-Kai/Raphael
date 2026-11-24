@@ -661,6 +661,8 @@ export async function subscribeMainEvents(handler: (event: MainEvent) => void): 
 
 /** Open only an opaque stored attachment, never a path supplied by a page. */
 export const openAttachment = (id: string): Promise<void> => invoke("open_attachment", { id });
+/** The stored file of `id` on the clipboard as a file, for a paste in Explorer, Finder or a chat. */
+export const copyAttachment = (id: string): Promise<void> => invoke("copy_attachment", { id });
 /**
  * A stored picture's, video's or sound's URL in the shell's own media protocol (media_protocol.rs): the shell grants that one
  * id after the core resolves it, and serves it under this stable URL with a year-long immutable cache lifetime. Ask through

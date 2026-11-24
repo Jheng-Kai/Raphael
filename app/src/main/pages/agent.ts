@@ -69,6 +69,7 @@ import { measureMessagePreviews, messagePreviewMeasure } from "../message-previe
 import { messageTooltip } from "../message-tooltip";
 import { quoteHTML, selectionQuote } from "../message-quote";
 import { copyPicture, mediaPicture, mediaVideo, pictureQuote } from "../picture-message";
+import { contextMenuTarget } from "../context-menu";
 import { ReplyPacing } from "../reply-pacing";
 import { avatarHTML, currentAvatar, onAvatarChange } from "../avatar";
 import "../background-questions.css";
@@ -2316,6 +2317,11 @@ export function createAgent(app: AppContext, places?: {
     const owner = !source || source.key === "question";
     const message = control.closest<HTMLElement>(".chat-message");
     const items: Parameters<typeof openActions>[1][number][] = [];
+    // A right click on a picture or a file in the message copies that one (the picture as an image, the file as a file).
+    const pointedFile = contextMenuTarget()?.closest<HTMLElement>(".attachment-picture[data-attachment], .attachment-file[data-act=\"attachment-open\"][data-id]");
+    const pointedId = pointedFile && message?.contains(pointedFile) ? (pointedFile.dataset.attachment ?? pointedFile.dataset.id ?? "") : "";
+    const pointedPicture = !!pointedId && pointedFile!.classList.contains("attachment-picture");
+    if (pointedId) items.push({ id: "copy-attachment", label: t(pointedPicture ? "chat.copyImage" : "chat.copyFile"), icon: "copy" });
     if (source) items.push({ id: "reply", label: t("chat.reply"), icon: "reply" });
     if (!source?.video) items.push({ id: "copy", label: t(source?.picture ? "chat.copyImage" : "chat.copy"), icon: "copy" });
     // No 「查看過程」: how a reply was worked out is not shown.
@@ -2327,7 +2333,10 @@ export function createAgent(app: AppContext, places?: {
     if (ownerAct === "cancel") items.push({ id: "cancel", label: t("common.cancel"), icon: "x" });
     const reactions = source && !owner && message?.querySelector('[data-act="react-message"]') ? ownReaction(source.turn.reactions?.[source.key]) : null;
     openActions(control, items, pick => {
-      if (pick === "regenerate") void regenerate(control);
+      if (pick === "copy-attachment") {
+        const copied = pointedPicture ? copyPicture(() => api.core<{ mime: string; data: string }>("attachments.get", { id: pointedId })) : api.copyAttachment(pointedId);
+        void copied.catch(error => toaster.info(describeError(error)));
+      } else if (pick === "regenerate") void regenerate(control);
       else if (pick === "reply") replyMessage(control);
       else if (pick === "edit") void editMessage(control);
       else if (pick === "cancel") void cancelMessage(control);

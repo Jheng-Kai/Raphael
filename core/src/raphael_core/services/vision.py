@@ -105,6 +105,17 @@ class Vision:
                 return selected, None
         return model, sees
 
+    def ready(self) -> bool:
+        """Whether an image can be looked at now: a model is chosen (or the answer model stands in), it is not known to be
+        blind, and the provider that serves it is set up. The same test `_ask` makes before it calls, so self_check never
+        says ready when a look would answer not_configured (#316)."""
+        model, sees = self.model()
+        if not model or sees is False:
+            return False
+        if isinstance(self._client, ProviderRouter):
+            return bool(self._client.available(model))
+        return True
+
     async def look(
         self, images: Sequence[Attachment | str], question: str, ledger: Ledger
     ) -> dict:

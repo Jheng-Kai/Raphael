@@ -92,6 +92,8 @@ page they would have to find. Check setup again afterwards and continue the orig
 - Dictation needs its voice detector and a speech model. voice_detector_ready false: its download did not finish
   (internet needed; the app fetches it when it starts, so a restart with internet fixes it). A local engine whose
   local_model_ready is false downloads it in Settings > Dictation & shortcuts; the cloud engine needs a speech model chosen there.
+- setup.services lists tools that are on but cannot be used now (a vision model nobody serves, a search with no
+  service); a tool there fails with not_configured. Tell the owner the place it names.
 - Audio and video attachments need ffmpeg (setup.programs.ffmpeg). Install it with the owner's yes: on Windows
   `winget install --id Gyan.FFmpeg -e`, on macOS `brew install ffmpeg`; Raphael finds it after it restarts.
 - A subscription brain needs its program installed and signed in (self_check's brains). Claude Code installs with

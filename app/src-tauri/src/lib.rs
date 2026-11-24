@@ -234,6 +234,7 @@ pub fn run() {
             commands::open_external_url,
             commands::clipboard_text,
             commands::open_attachment,
+            commands::copy_attachment,
             commands::attachment_source,
             updates::update_control,
             commands::open_team_file,

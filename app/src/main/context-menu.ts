@@ -68,6 +68,10 @@ export function uncoveredOverflows(root: ParentNode = document): HTMLElement[] {
   });
 }
 
+let pointed: Element | null = null;
+/** What the right click that is opening a row's menu landed on (an attachment in a message, say); null otherwise. */
+export const contextMenuTarget = (): Element | null => pointed;
+
 /** A right button that moved further than this (px) between its press and its release was dragged: a drag, not a click. */
 const DRAG_PX = 4;
 
@@ -95,7 +99,8 @@ export function installContextMenus(doc: Document = document): () => void {
       const box = found.row.getBoundingClientRect();
       pressOverflow(found.button, found.button.getClientRects().length > 0 ? undefined : { x: box.left + 16, y: box.top + box.height / 2 });
     } else if (pressed === null || Math.hypot(event.clientX - pressed.x, event.clientY - pressed.y) <= DRAG_PX) {
-      pressOverflow(found.button, { x: event.clientX, y: event.clientY });
+      pointed = event.target instanceof Element ? event.target : null;
+      try { pressOverflow(found.button, { x: event.clientX, y: event.clientY }); } finally { pointed = null; }
     }
   };
   doc.addEventListener("pointerdown", onPress, true);
