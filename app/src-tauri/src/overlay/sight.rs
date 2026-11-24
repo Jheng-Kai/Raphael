@@ -431,13 +431,7 @@ fn took(elapsed: std::time::Duration) -> String {
 pub(super) use native::check;
 
 #[cfg(not(windows))]
-pub(super) fn check(
-    _window: &tauri::WebviewWindow,
-    _hwnd: isize,
-    _placement: Option<Placement>,
-    _: (),
-) {
-}
+pub(super) fn check(_window: &tauri::WebviewWindow, _hwnd: isize, _placement: Option<Placement>) {}
 
 #[cfg(windows)]
 mod native {
