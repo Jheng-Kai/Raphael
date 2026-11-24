@@ -205,6 +205,25 @@ class ServiceHub:
     def pdf_service(self) -> str:
         return _setting(self._settings, "pdf_service", PDF_OPTIONS)
 
+    def setup_gaps(self) -> list[dict[str, str]]:
+        """The tools the owner has on that cannot be used now, for self_check's setup (#316): which one, what it lacks and
+        where in Settings it is set up. A tool that is off is not a gap: it is not used at all."""
+        where = "Settings > Tools"
+        gaps: list[dict[str, str]] = []
+        if self.enabled("vision") and not self.vision.ready():
+            gaps.append({"tool": "vision", "missing": "model", "where": f"{where} > See images"})
+        if self.enabled("search") and self.search_service() == "none":
+            gaps.append({"tool": "search", "missing": "service", "where": f"{where} > Search the web"})
+        for tool, options, service, label in (("read", READ_OPTIONS, self.read_service(), "Read web pages"),
+                                              ("pdf", PDF_OPTIONS, self.pdf_service(), "Read PDFs")):
+            if not self.enabled(tool):
+                continue
+            option = next((entry for entry in options if entry.id == service), None)
+            lacks_key = option is not None and option.needs_key and not self._keys.has(service)
+            if lacks_key or (service == "openrouter" and not self._openrouter_ready()):
+                gaps.append({"tool": tool, "missing": "key", "where": f"{where} > {label}"})
+        return gaps
+
     def enabled(self, capability: str) -> bool:
         """Whether the owner has `capability` ("search", "read", "vision" or "pdf") on. A
         capability that is off is not used at all, whatever service is chosen for it. A setting

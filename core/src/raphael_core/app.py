@@ -1736,7 +1736,9 @@ class App(Router):
         return {"computer": await setup_facts.computer(self.vm),
                 "dictation": setup_facts.dictation(self.agent._settings.get("stt_engine"), self._speech.engine_name,
                                                    self.manager.is_ready, VAD_MODEL),
-                "programs": setup_facts.programs()}
+                "programs": setup_facts.programs(),
+                # Tools that are on but cannot be used now (a vision model nobody serves, a search with no service): #316.
+                "services": self.services.setup_gaps()}
 
     async def _models_status(self, params: dict) -> dict:
         engine = self._speech.engine_name
