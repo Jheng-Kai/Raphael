@@ -29,6 +29,22 @@ def refetchable(origin, source):
     return True
 
 
+def taken_by(conn, member, stored):
+    """A name that is taken, in words, and the package that holds it. A switched-off skill keeps its name (#313), so the
+    owner is told where it is and that it is off, to remove that one skill."""
+    row = conn.execute(
+        "SELECT s.enabled, p.enabled AS package_enabled, COALESCE(t.name,p.name) AS package FROM member_skills s "
+        "LEFT JOIN skill_packages p ON p.key=s.package_key LEFT JOIN skill_sets t ON t.id=s.set_id "
+        "WHERE s.member_id=? AND s.name=? COLLATE NOCASE", (member, stored)).fetchone()
+    text = f"a skill named {stored} already exists"
+    package = row["package"] if row and row["package"] else ""
+    if package:
+        text += f' in the package "{package}"'
+        if not row["enabled"] or row["package_enabled"] == 0:
+            text += " (switched off)"
+    return text, package
+
+
 class SkillPackages:
     def __init__(self, capabilities):
         self.cap = capabilities
@@ -127,8 +143,9 @@ class SkillPackages:
                               (skill["enabled"], skill["id"], key))
 
     async def install(self, member, documents, source, origin, label, *, access=None, name=None, key=None,
-                      required_skill=None, local=None, enabled=None, skill=None, skill_switches=None):
-        """Write a complete snapshot before publishing its folders and rows."""
+                      required_skill=None, local=None, enabled=None, skill=None, skill_switches=None, skipped=None):
+        """Write a complete snapshot before publishing its folders and rows. A new import of several skills skips each
+        skill whose name is taken and appends it to `skipped` (its name and who holds it); the rest is installed."""
         self.cap.check(member)
         if access is not None:
             self.validate_access(access)
@@ -147,6 +164,8 @@ class SkillPackages:
 
         prepared = []
         plugin_manifest = False
+        skipping = key is None and not local and len(documents) > 1
+        refused = None
         for skill_source, files in documents:
             plugin_manifest |= getattr(files, "plugin_manifest", False)
             skipped_links = getattr(files, "skipped_links", [])
@@ -173,7 +192,13 @@ class SkillPackages:
             stored = stored_skill_name(slug, skill_plugin(text, skill_source))
             if stored.casefold() in taken:
                 if slug == skill_metadata(text)[0]:
-                    raise MemberError("taken", f"a skill named {slug} already exists")
+                    message, package = taken_by(self.conn, member, stored)
+                    if not skipping:
+                        raise MemberError("taken", message)
+                    refused = refused or message
+                    if skipped is not None:
+                        skipped.append({"name": stored, "held_by": package})
+                    continue
                 plugin = skill_plugin(text, skill_source)
                 prefix = stored[:-len(slug)].casefold()
                 slug = unique_skill_name(slug, {name[len(prefix):] for name in taken if name.startswith(prefix)})
@@ -194,6 +219,8 @@ class SkillPackages:
         if required_skill is not None and not any(
                 old[name.casefold()]["id"] == required_skill for name, *_ in prepared if name.casefold() in old):
             raise MemberError("not_found", "the refreshed package no longer has that skill")
+        if not prepared and refused:
+            raise MemberError("taken", refused)
         if not prepared:
             raise MemberError("not_found", "no SKILL.md found")
         revision = self.cap.skill_revision()
@@ -308,6 +335,39 @@ class SkillPackages:
         finally:
             await asyncio.to_thread(shutil.rmtree, temp)
         await self.cap._mirror_async(SHARED)
+
+    def _skill_delete_inputs(self, key, skill_id):
+        row, skills, plugin = self._view_inputs(key)
+        if type(skill_id) is not int or skill_id not in {s["id"] for s in skills}:
+            raise MemberError("not_found", "no such skill in this package")
+        home = self.cap.homes.home(SHARED)
+        if plugin is None:
+            return home / "skills", home / "skills" / str(skill_id), len(skills)
+        part = self.conn.execute("SELECT set_kind,set_key FROM member_skills WHERE id=?", (skill_id,)).fetchone()
+        inside = part["set_key"] if part["set_kind"] == "skill" else ".raphael-commands/" + part["set_key"]
+        return home / "skill-sets", home / plugin["folder"] / inside, len(skills)
+
+    async def delete_skill_async(self, key, skill_id):
+        """Remove one skill of a package (its files too) and leave the others; the package's view is returned, or None
+        when it was the last skill and the package went with it."""
+        root, folder, count = self._skill_delete_inputs(key, skill_id)
+        if count == 1:
+            await self.delete_async(key)
+            return None
+        revision = self.cap.skill_revision()
+        temp = await stage_files(self._make_staging, root, discard=shutil.rmtree)
+        try:
+            if self.cap.skill_revision() != revision:
+                raise MemberError("not_found", "the skill library changed during removal")
+            with ExitStack() as rollback:
+                with self.conn:
+                    self._backup(self.cap.homes.safe(folder), temp, rollback)
+                    self.conn.execute("DELETE FROM member_skills WHERE id=? AND package_key=?", (skill_id, key))
+                rollback.pop_all()
+        finally:
+            await asyncio.to_thread(shutil.rmtree, temp)
+        await self.cap._mirror_async(SHARED)
+        return await self.view_async(key)
 
     def _make_staging(self, root):
         root = self.cap.homes.safe(root)

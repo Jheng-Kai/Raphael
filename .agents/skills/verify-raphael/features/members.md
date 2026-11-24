@@ -956,7 +956,8 @@ the round back button. The source, description and equal-height skill rows line 
 See [the Settings feature map](settings-appearance.md#團隊技能-r-skill-17) for the layout and Details scenes.
 
 The owner RPCs are `skills.library.list`, `import`, `update` and `delete` under the
-same prefix. Refresh replaces the source snapshot, preserves retained switches
+same prefix; `delete` with `skill` removes one skill of a package, and an import of several skills
+leaves out those whose names are taken and lists them as `skipped`. Refresh replaces the source snapshot, preserves retained switches
 and removes obsolete files. Local import and refresh copy files without execution.
 Member prompts, slash expansion, native skills and document/reference reads share
 the same package and skill visibility check. See R-SKILL-15 and R-SKILL-16.

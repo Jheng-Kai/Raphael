@@ -409,3 +409,23 @@ async def test_an_import_on_a_card_that_leaves_a_linked_file_out_names_it_to_the
     assert (await rig.confirm(asked["confirm"]["id"]))["status"] == "done"
     shown = brain.continued().replace("\\", "")
     assert "skipped_references" in shown and "../../../elsewhere.md" in shown and "outside_plugin" in shown
+
+
+async def test_a_card_to_delete_one_skill_of_a_package_names_that_skill_and_deletes_only_it(setup, brain):
+    from raphael_core.management import publish
+
+    rig, team = setup
+    pair = "---\nname: {}\ndescription: A skill\n---\nBody."
+    from .test_skill_packages import archive, upload
+
+    made = (await rig.call("skills.library.import", upload("tools.zip", archive(
+        [(f"{n}/SKILL.md", pair.format(n).encode()) for n in ("tdd", "review")]))))["package"]
+    tdd = next(s["id"] for s in made["skills"] if s["name"] == "tdd")
+    brain(publish("member_library_delete", {"key": made["key"], "skill": tdd}), then="Removed.")
+    asked = await typed(rig, "Remove the tdd skill", 0)
+    assert asked["status"] == "confirm"
+    assert "tdd" in asked["confirm"]["text"] and "review" not in asked["confirm"]["text"]
+    done = await rig.confirm(asked["confirm"]["id"])
+    assert done["status"] == "done"
+    left = (await rig.call("skills.library.list", {}))["packages"]
+    assert [s["name"] for s in left[0]["skills"]] == ["review"]
