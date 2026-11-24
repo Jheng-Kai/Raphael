@@ -6,11 +6,16 @@ const NUDGE_WAIT: Duration = Duration::from_secs(1);
 // The page loads textures before subscribing. Allow that startup work after navigation.
 const PAGE_WAIT: Duration = Duration::from_secs(4);
 const CAPTION_LIMIT: Duration = Duration::from_millis(crate::agent::SAY_MAX_MS);
+/// A caption whose page still answers is given more time at its end, a long answer being read a page at a time: never
+/// more than this in all, so a caption that never clears still goes.
+const CAPTION_HARD_LIMIT: Duration = Duration::from_secs(120);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Action {
     Show,
     Hide,
+    /// Ask the page whether it still paints the caption whose time is up (its time was extended meanwhile).
+    Probe,
     Nudge,
     Reload,
     Recreate,
@@ -37,6 +42,8 @@ pub(super) struct Recovery {
     probe: Option<Probe>,
     scene: Vec<OverlayEvent>,
     expires: Option<Instant>,
+    /// When the caption on screen came: it is not extended past `CAPTION_HARD_LIMIT` from then.
+    caption_since: Option<Instant>,
     native_hidden: bool,
     replay: bool,
     refresh: bool,
@@ -123,6 +130,13 @@ impl Recovery {
             _ => return None,
         }
 
+        self.caption_since = match event {
+            OverlayEvent::Say { .. }
+            | OverlayEvent::Notice { .. }
+            | OverlayEvent::Learned { .. }
+            | OverlayEvent::Complete => Some(now),
+            _ => None,
+        };
         self.expires = match event {
             OverlayEvent::Say { .. }
             | OverlayEvent::Notice { .. }
@@ -196,6 +210,24 @@ impl Recovery {
     }
 
     pub(super) fn tick(&mut self, now: Instant) -> Option<Action> {
+        // A caption read a page at a time can outlast its first time (a long answer took about 28 s): while its page still
+        // answers it is given more, up to the hard limit; a page that does not answer goes down the recovery below.
+        if self.expires.is_some_and(|end| now >= end)
+            && self.is_caption()
+            && self.probe.is_none()
+            && self
+                .caption_since
+                .is_some_and(|since| now < since + CAPTION_HARD_LIMIT)
+        {
+            self.expires = Some(now + CAPTION_LIMIT);
+            self.serial += 1;
+            self.probe = Some(Probe {
+                id: self.serial,
+                deadline: now + FRAME_WAIT,
+                stage: Stage::Frame,
+            });
+            return Some(Action::Probe);
+        }
         if self.expires.is_some_and(|end| now >= end) {
             self.track(&OverlayEvent::Hide, now, true);
             self.native_hidden = true;
@@ -293,9 +325,68 @@ mod tests {
         );
         state.frame(1, false);
         assert!(state.is_caption());
-        assert_eq!(state.tick(now + CAPTION_LIMIT), Some(Action::Expire));
+        // Each time its time is up the page is asked, answers, and the caption is given more, until the hard limit.
+        let mut at = now + CAPTION_LIMIT;
+        while at < now + CAPTION_HARD_LIMIT {
+            assert_eq!(state.tick(at), Some(Action::Probe));
+            let id = match state.probe_event() {
+                Some(OverlayEvent::FrameProbe { id, .. }) => id,
+                _ => panic!("no probe"),
+            };
+            state.frame(id, false);
+            at += CAPTION_LIMIT;
+        }
+        assert_eq!(state.tick(at), Some(Action::Expire));
         assert!(state.native_hidden());
         assert!(!state.is_caption());
+    }
+
+    #[test]
+    fn a_long_caption_whose_page_answers_is_not_cut_at_its_first_time() {
+        let now = Instant::now();
+        let mut state = Recovery::default();
+        state.track(
+            &OverlayEvent::Say {
+                prefix: "Answer".into(),
+                text: "a long answer read a page at a time".into(),
+            },
+            now,
+            true,
+        );
+        state.frame(1, false);
+        assert_eq!(state.tick(now + CAPTION_LIMIT), Some(Action::Probe));
+        assert!(!state.native_hidden());
+        assert!(state.is_caption());
+        // The page goes on and clears it by itself, about 28 s in: nothing is hidden natively.
+        let id = match state.probe_event() {
+            Some(OverlayEvent::FrameProbe { id, .. }) => id,
+            _ => panic!("no probe"),
+        };
+        state.frame(id, false);
+        state.frame(id, true);
+        assert!(!state.is_caption());
+        assert_eq!(state.tick(now + Duration::from_secs(28)), None);
+        assert!(!state.native_hidden());
+    }
+
+    #[test]
+    fn a_caption_whose_page_stops_answering_goes_down_the_recovery() {
+        let now = Instant::now();
+        let mut state = Recovery::default();
+        state.track(
+            &OverlayEvent::Say {
+                prefix: "Answer".into(),
+                text: "Hello".into(),
+            },
+            now,
+            true,
+        );
+        state.frame(1, false);
+        assert_eq!(state.tick(now + CAPTION_LIMIT), Some(Action::Probe));
+        assert_eq!(
+            state.tick(now + CAPTION_LIMIT + FRAME_WAIT),
+            Some(Action::Nudge)
+        );
     }
 
     #[test]

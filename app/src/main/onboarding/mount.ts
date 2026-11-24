@@ -337,7 +337,11 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
       await finish();
       return;
     }
-    if (flow.step === "slime" && !(await keepFirst())) return;
+    if (flow.step === "slime") {
+      if (!(await keepFirst())) return;
+      // The save took a moment: a step back meanwhile is where the owner is now, and the save does not undo it.
+      if (flow.step !== "slime") return;
+    }
     goNext();
   }
 
