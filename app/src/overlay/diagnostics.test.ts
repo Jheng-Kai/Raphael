@@ -333,3 +333,22 @@ test("an entrance is timed once, and a timing whose frames never came gives way 
   timer.start();
   expect(frames.pending).toBe(2);
 });
+
+test("a probe made with the page's own frames acknowledges, the browser's function called with the window as its this", () => {
+  const queue: FrameRequestCallback[] = [];
+  // As WebView2 does: requestAnimationFrame called as a method of another object throws "Illegal invocation".
+  vi.stubGlobal("requestAnimationFrame", function (this: unknown, callback: FrameRequestCallback): number {
+    if (this !== undefined && this !== globalThis) throw new TypeError("Illegal invocation");
+    queue.push(callback);
+    return queue.length;
+  });
+  try {
+    const acknowledge = vi.fn();
+    const probe = new FrameAcknowledgements(() => false, acknowledge);
+    expect(() => probe.probe(7, false, false)).not.toThrow();
+    for (let i = 0; i < 3 && queue.length; i++) queue.shift()!(i * 16);
+    expect(acknowledge).toHaveBeenCalledWith(7, false);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});

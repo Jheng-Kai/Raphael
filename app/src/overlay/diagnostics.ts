@@ -182,7 +182,9 @@ export class FrameAcknowledgements {
   constructor(
     private readonly hidden: () => boolean,
     private readonly acknowledge: (id: number, hidden: boolean) => void,
-    private readonly nextFrame: (callback: FrameRequestCallback) => unknown = requestAnimationFrame,
+    // Called through a wrapper: the browser's own function, kept as a method of this object and called as one, throws
+    // "Illegal invocation" (this is not the window), and no probe was ever acknowledged on 2026-11-24.
+    private readonly nextFrame: (callback: FrameRequestCallback) => unknown = (callback) => requestAnimationFrame(callback),
   ) {}
 
   probe(id: number, waitForHidden: boolean, watchEnd: boolean): void {
