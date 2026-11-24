@@ -43,6 +43,37 @@ test("a frame probe waits for a render opportunity and for the caption to clear"
   expect(queue).toHaveLength(0);
 });
 
+test("asked again about an extended caption, a page that already cleared it answers hidden, one still showing it answers visible", () => {
+  const queue: FrameRequestCallback[] = [];
+  const acknowledge = vi.fn();
+  let hidden = false;
+  const probe = new FrameAcknowledgements(() => hidden, acknowledge, callback => queue.push(callback));
+  const frame = () => queue.shift()!(0);
+  // The caption went between the old probe's two hidden frames, and the new probe replaced it: the new one answers.
+  probe.probe(1, false, true);
+  frame();
+  frame();
+  hidden = true;
+  frame();
+  probe.probe(2, false, true, true);
+  frame(); // the old probe's frame, which ends it
+  frame();
+  frame();
+  expect(acknowledge).toHaveBeenLastCalledWith(2, true);
+  // Still on screen: visible first, then hidden when it goes.
+  acknowledge.mockClear();
+  queue.length = 0;
+  hidden = false;
+  probe.probe(3, false, true, true);
+  frame();
+  frame();
+  expect(acknowledge).toHaveBeenLastCalledWith(3, false);
+  hidden = true;
+  frame();
+  frame();
+  expect(acknowledge).toHaveBeenLastCalledWith(3, true);
+});
+
 test("a newer hidden probe discards the old probe and waits through the vanish", () => {
   const queue: FrameRequestCallback[] = [];
   const acknowledge = vi.fn();

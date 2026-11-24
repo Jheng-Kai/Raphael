@@ -49,7 +49,7 @@ export type AskTier = "T2" | "T3";
 export type OverlayEvent =
   | { type: "mouse"; revision: number }
   | { type: "cancelkey"; reset: boolean }
-  | { type: "frameprobe"; id: number; hidden: boolean; watch_end: boolean }
+  | { type: "frameprobe"; id: number; hidden: boolean; watch_end: boolean; again?: boolean }
   /** `line`: Raphael's greeting to a question, beside the emblem while it listens. A dictation has none. */
   | { type: "show"; mode: Mode; line?: string }
   /**
@@ -834,7 +834,7 @@ async function start(): Promise<void> {
   const phase = (): string => emblem.phase;
   const handle = guardHandler((event) => {
     if (event.type === "frameprobe") {
-      frameAcks.probe(event.id, event.hidden, event.watch_end);
+      frameAcks.probe(event.id, event.hidden, event.watch_end, event.again === true);
       return;
     }
     if (event.type === "mouse") { mouse.reset(event.revision); return; }

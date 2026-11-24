@@ -3829,6 +3829,8 @@ mod tests {
         gate: Option<(String, Arc<Notify>)>,
         /// The calls made with a time of their own (`call_within`), and that time.
         timeouts: Mutex<Vec<(String, Duration)>>,
+        /// While set, a read of a member's notify switch never answers.
+        notify_hangs: std::sync::atomic::AtomicBool,
     }
 
     impl FakeCore {
@@ -3893,6 +3895,9 @@ mod tests {
     impl CoreApi for FakeCore {
         async fn call(&self, method: &str, params: Value) -> Result<Value, RpcError> {
             if method == "members.notification_enabled" {
+                if self.notify_hangs.load(std::sync::atomic::Ordering::SeqCst) {
+                    std::future::pending::<()>().await;
+                }
                 return self
                     .results
                     .lock()
@@ -11717,6 +11722,25 @@ mod tests {
             "{:?}",
             c.overlay().events()
         );
+    }
+
+    #[tokio::test]
+    async fn a_notify_read_that_does_not_come_in_time_keeps_the_switch_as_it_was() {
+        let core = agent_core(question("c-1", 30_000));
+        core.script("agent.confirm", Ok(answer("Answer", "Done")));
+        let (c, front) = with_front(controller(core, FakePaster::pasting("chrome.exe")), true);
+        let task = c.ask_typed("please ask").unwrap();
+        until_stage(&c, AgentStage::Asking).await;
+        // From now on the core does not say in time: the switch stays on, as it was read when the turn began.
+        c.core()
+            .notify_hangs
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        tokio::time::sleep(NOTIFY_POLL * 2).await;
+        set_front(&front, false);
+        tokio::time::sleep(FRONT_POLL * 2).await;
+        assert!(!c.overlay().events().is_empty());
+        c.on_confirm_in_app("c-1", true);
+        task.await.unwrap();
     }
 
     #[tokio::test]

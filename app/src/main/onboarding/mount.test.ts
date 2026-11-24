@@ -306,6 +306,8 @@ describe("the first slime", () => {
     saved({ member: { id: 0 } });
     await flush();
     expect(root.dataset.step).toBe("slime");
+    // The name can be changed again once the save is done.
+    expect(root.querySelector<HTMLInputElement>("#ob-first-name")!.disabled).toBe(false);
   });
 
   test("forward by the mouse past the first slime keeps a changed name first, as the way on does", async () => {
