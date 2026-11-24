@@ -191,6 +191,17 @@ async def test_deleting_a_skill_keeps_the_skill_nested_in_its_folder_whole(rig, 
     assert not (other / "skills/outer/inner").exists()
 
 
+async def test_a_skill_whose_folder_is_gone_from_the_disk_can_still_be_deleted(rig, tmp_path):
+    """Removed by hand, its folder has nothing left to move: the record goes all the same."""
+    import shutil
+    cap = rig.service.capabilities
+    made = (await rig.call("skills.library.import", {"plugin": True, "source": plugin_at(cap, tmp_path, "g", NESTED)}))["package"]
+    root = cap.plugin_root(int(made["key"][4:]))
+    shutil.rmtree(root / "skills/outer")
+    answer = await rig.call("skills.library.delete", {"key": made["key"], "skill": skill_id(made, "outer")})
+    assert [s["name"] for s in answer["package"]["skills"]] == ["inner"]
+
+
 async def test_a_skipped_skill_does_not_take_the_files_of_the_skill_nested_in_it(rig, tmp_path):
     cap = rig.service.capabilities
     await rig.call("skills.library.import", {"plugin": True, "source": plugin_at(cap, tmp_path, "m", {"skills/outer/SKILL.md": document("outer")})})

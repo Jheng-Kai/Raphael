@@ -387,6 +387,9 @@ class SkillPackages:
         if not nested:
             self._backup(folder, temp, rollback)
             return
+        # A folder already gone from the disk (removed by hand) has nothing to move: its record still goes.
+        if not folder.is_dir():
+            return
         skip = [self.cap.homes.safe(path) for path in nested]
         moved = []
         for path in self._own_entries(folder, skip):
