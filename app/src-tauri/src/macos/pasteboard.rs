@@ -57,6 +57,26 @@ pub fn text() -> Option<String> {
     })
 }
 
+/// Puts the file at `path` on the general pasteboard as a file (its file URL), as Finder's copy does: a paste in
+/// Finder, a chat or any program that takes files gets the file itself.
+pub fn copy_file(path: &str) -> Result<(), String> {
+    autoreleasepool(|_| {
+        let pasteboard = general();
+        let path = NSString::from_str(path);
+        let url_class: &AnyClass = class!(NSURL);
+        // SAFETY: NSURL's class constructor with an NSString path; it answers nil for no path.
+        let url: Option<Retained<AnyObject>> = unsafe { msg_send![url_class, fileURLWithPath: &*path] };
+        let url = url.ok_or_else(|| "no file to copy".to_owned())?;
+        let array_class: &AnyClass = class!(NSArray);
+        // SAFETY: NSArray's class constructor with one object.
+        let list: Retained<AnyObject> = unsafe { msg_send![array_class, arrayWithObject: &*url] };
+        // SAFETY: NSPasteboard's clearContents and writeObjects: with an array of NSURLs.
+        let _: isize = unsafe { msg_send![&*pasteboard, clearContents] };
+        let written: bool = unsafe { msg_send![&*pasteboard, writeObjects: &*list] };
+        if written { Ok(()) } else { Err("the pasteboard refused the file".to_owned()) }
+    })
+}
+
 /// The general pasteboard's change count now: it goes up with every write to it, even one of
 /// what it held already, so a count that stays is a copy that brought nothing.
 pub fn current_change_count() -> isize {

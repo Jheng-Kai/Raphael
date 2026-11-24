@@ -47,7 +47,8 @@ use windows::Win32::System::Memory::{
 };
 use windows::Win32::System::Ole::{
     CF_BITMAP, CF_DSPBITMAP, CF_DSPENHMETAFILE, CF_DSPMETAFILEPICT, CF_DSPTEXT, CF_ENHMETAFILE,
-    CF_GDIOBJLAST, CF_METAFILEPICT, CF_OWNERDISPLAY, CF_PALETTE, CF_PRIVATEFIRST, CF_UNICODETEXT,
+    CF_GDIOBJLAST, CF_HDROP, CF_METAFILEPICT, CF_OWNERDISPLAY, CF_PALETTE, CF_PRIVATEFIRST,
+    CF_UNICODETEXT,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     CopyImage, CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GWLP_USERDATA,
@@ -78,6 +79,7 @@ const CLASS_NAME: PCWSTR = w!("RaphaelClipboardSession");
 const UNICODETEXT: u32 = CF_UNICODETEXT.0 as u32;
 const BITMAP: u32 = CF_BITMAP.0 as u32;
 const ENHMETAFILE: u32 = CF_ENHMETAFILE.0 as u32;
+const HDROP: u32 = CF_HDROP.0 as u32;
 
 /// Registered formats, each holding a `u32`, that keep the clipboard's content out of clipboard
 /// history (Win+V), the cloud clipboard and clipboard managers.
@@ -399,6 +401,51 @@ pub fn read_text(max_chars: usize) -> Result<Option<String>, String> {
         }
     }
     Err(format!("could not open the clipboard: {error}"))
+}
+
+/// Puts `files` on the clipboard as files (`CF_HDROP`), as Explorer's copy does: a paste in Explorer, a chat or any
+/// program that takes files gets the files themselves. The owner's own copy, so nothing keeps it out of the history.
+/// `owner` is the main window: a clipboard emptied without one refuses the data that follows.
+pub fn copy_files(owner: isize, files: &[&str]) -> Result<(), String> {
+    if files.is_empty() {
+        return Err("no file to copy".to_owned());
+    }
+    let data = hdrop_block(files);
+    let mut error = String::new();
+    for attempt in 0..OPEN_ATTEMPTS {
+        if attempt > 0 {
+            std::thread::sleep(OPEN_RETRY);
+        }
+        // SAFETY: the clipboard is closed again when `_opened` ends, on this thread.
+        match unsafe { OpenClipboard(Some(HWND(owner as *mut core::ffi::c_void))) } {
+            Ok(()) => {
+                let _opened = Opened(PhantomData);
+                unsafe { EmptyClipboard() }.map_err(|e| format!("could not empty the clipboard: {e}"))?;
+                let block = unsafe { global_from(data.as_slice()) }.ok_or("out of memory")?;
+                return if unsafe { give(HDROP, block) } {
+                    Ok(())
+                } else {
+                    Err("could not put the file on the clipboard".to_owned())
+                };
+            }
+            Err(e) => error = e.to_string(),
+        }
+    }
+    Err(format!("could not open the clipboard: {error}"))
+}
+
+/// A `CF_HDROP` block: a DROPFILES header (the list right after it, wide characters) and a double-NUL-terminated
+/// UTF-16 list of `files`.
+fn hdrop_block(files: &[&str]) -> Vec<u8> {
+    let mut data = Vec::new();
+    for field in [20u32, 0, 0, 0, 1] {
+        data.extend(field.to_le_bytes()); // pFiles, pt.x, pt.y, fNC, fWide
+    }
+    for file in files {
+        data.extend(file.encode_utf16().chain([0]).flat_map(u16::to_le_bytes));
+    }
+    data.extend([0, 0]);
+    data
 }
 
 /// The clipboard's `CF_UNICODETEXT`, which must be open: nothing when absent, or bigger than `max_chars` could be.
