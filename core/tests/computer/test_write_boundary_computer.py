@@ -305,3 +305,55 @@ async def test_the_owners_yes_to_a_project_write_is_the_door_in_allow_all_only(t
     with vm_scope(("turn", 0, 1), turn_id=7):
         made = await gate.call_plugin(key, other)
     assert made.ok and (second / "a.txt").read_text() == "x"
+
+
+def _files(*folders):
+    return sorted(str(path.relative_to(folder)) for folder in folders for path in folder.rglob("*") if path.is_file())
+
+
+async def test_a_name_the_computer_reads_as_plain_letters_cannot_take_a_project_write_out_of_the_project(two_projects, tmp_path):
+    # The computer sees a backslash as a letter of a name, finds no such file and lets the write through unasked; Windows
+    # reads it as a separator. The host resolves the real place itself and refuses (no card) what is not below the project.
+    hub, runtime, settings, (first, second), (first_guest, second_guest) = two_projects
+    settings.set("member_work_folder", {"0": str(first)})
+    (first / "sub").mkdir()
+    nt = os.name == "nt"
+    for name in (rf"sub\..\..\{second.name}\a.txt",  # climbs out to the sibling project
+                 r"sub\..\..\a.txt",  # climbs out to the folder that holds both
+                 r"\\host\share\a.txt",  # a UNC name
+                 r"C:\a.txt", "C:a.txt",  # a drive, absolute or relative to the drive's folder
+                 "a.txt:stream", "a.txt::$DATA", r"sub:x\a.txt",  # an alternate data stream
+                 "a.txt.", "sub./a.txt", "sub /a.txt", ".. /a.txt", "..../a.txt"):  # Windows trims a trailing dot or space
+        refused = await call(hub, "write_file", "auto", path=f"{first_guest}/{name}", content="x")
+        assert not refused.ok or not nt, name
+        assert _files(second) == [] and not (tmp_path / "a.txt").exists(), name
+        if nt:
+            assert _files(first) == [], name
+    assert guest_writes(runtime) == []
+
+
+async def test_a_dot_dot_or_an_absolute_path_is_the_owners_yes_and_never_a_write_below_the_project(two_projects):
+    hub, runtime, settings, (first, second), (first_guest, second_guest) = two_projects
+    settings.set("member_work_folder", {"0": str(first)})
+    for path in (f"{first_guest}/../{second_guest.rsplit('/', 1)[1]}/a.txt", f"{second_guest}/a.txt", "/etc/a.txt"):
+        refused = await call(hub, "write_file", "auto", path=path, content="x")
+        assert not refused.ok and _files(first, second) == [], path
+    # The host's own door, asked directly: a request that names a place outside is refused whatever the gate said.
+    for relative in ("../a.txt", "sub/../../a.txt", "./a.txt", ""):
+        answer = LocalVm.project_write({"action": "write", "path": f"{first_guest}/{relative}", "data": "eA==", "expected": "absent"},
+                                       first, relative)
+        assert "error" in answer and _files(first, second) == [], relative
+
+
+async def test_a_project_write_is_refused_when_its_real_place_is_not_below_the_project(two_projects, tmp_path, monkeypatch):
+    # Whatever a name looks like to the gate and to this host's rules, where it really lands decides.
+    hub, runtime, settings, (first, second), (first_guest, second_guest) = two_projects
+    real = os.path.realpath
+
+    def moved(path, *args, **kwargs):
+        path = real(path, *args, **kwargs)
+        return str(second / "a.txt") if path.endswith("a.txt") and path.startswith(str(first)) else path
+    monkeypatch.setattr(os.path, "realpath", moved)
+    request = {"action": "write", "path": f"{first_guest}/a.txt", "data": "eA==", "expected": "absent"}
+    assert LocalVm.project_write(request, first, "a.txt") == {"error": "outside"}
+    assert _files(first, second) == []
