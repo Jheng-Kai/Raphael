@@ -708,6 +708,12 @@ impl Overlay {
                 self.keep_in_sight(self.place_window());
                 log::info!("overlay recovery: restored the window for a new scene");
             }
+            Some(Action::Probe) => {
+                let mut bus = lock(&self.bus);
+                if let Some(event) = bus.recovery.probe_event() {
+                    bus.publish(event);
+                }
+            }
             Some(Action::Hide | Action::Expire) => {
                 native.set_visible(false);
                 log::warn!("overlay recovery: hid the window natively after a missing frame");

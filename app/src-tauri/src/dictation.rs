@@ -2573,17 +2573,9 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
         loop {
             // A question asked from the overlay, dictation or the desktop is answered where it was asked; only an
             // app-typed one follows the member's notify switch. Set on every turn so one typed turn never mutes the next.
-            let notify = if source == Some(TYPED_SOURCE) {
-                tokio::time::timeout(
-                    Duration::from_millis(500),
-                    self.core
-                        .call("members.notification_enabled", json!({"member_id": member})),
-                )
-                .await
-                .ok()
-                .and_then(Result::ok)
-                .and_then(|result| result.get("notify").and_then(Value::as_bool))
-                .unwrap_or(false)
+            let typed = source == Some(TYPED_SOURCE);
+            let notify = if typed {
+                self.member_notifies(member).await
             } else {
                 true
             };
@@ -2596,7 +2588,10 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
             };
             asked += 1;
             // A question is on screen. Only YES goes through; everything else is a NO.
-            let Some(answer) = self.await_answer(id, &prompt, answer).await else {
+            let Some(answer) = self
+                .await_answer(id, &prompt, answer, typed.then_some(member))
+                .await
+            else {
                 return;
             };
             let mut params = json!({ "id": prompt.id, "approved": answer.approved });
@@ -2744,11 +2739,28 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
     /// window's card ([`Self::on_answer`]), Esc, or the time the question was given. Meanwhile the
     /// overlay follows the main window ([`Self::follow_front`]). Returns the answer, or `None` if
     /// the session ended meanwhile.
+    /// Whether the member's 「完成或需要回覆時通知我」 is on, as the core says now (off when it does not say in time).
+    async fn member_notifies(&self, member: u64) -> bool {
+        tokio::time::timeout(
+            Duration::from_millis(500),
+            self.core
+                .call("members.notification_enabled", json!({"member_id": member})),
+        )
+        .await
+        .ok()
+        .and_then(Result::ok)
+        .and_then(|result| result.get("notify").and_then(Value::as_bool))
+        .unwrap_or(false)
+    }
+
+    /// `notify_member` is the member of an app-typed turn: while its question waits, its notify switch is read again
+    /// every second, so a switch turned off after the card came keeps the card off the overlay when the person leaves.
     async fn await_answer(
         &self,
         id: &str,
         prompt: &AskPrompt,
         mut wait: oneshot::Receiver<Answer>,
+        notify_member: Option<u64>,
     ) -> Option<Answer> {
         // A click must not take the focus from the app the person is typing into. The overlay
         // cannot be activated, in theory; if it was in practice, the log says so.
@@ -2761,6 +2773,11 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
             ticks.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
             ticks
         });
+        let mut switch = notify_member.map(|_| {
+            let mut ticks = tokio::time::interval(NOTIFY_POLL);
+            ticks.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            ticks
+        });
         let answer = loop {
             tokio::select! {
                 answer = &mut wait => break answer.unwrap_or(Answer::NO),
@@ -2769,6 +2786,12 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
                     break Answer::NO;
                 }
                 () = next_tick(&mut front) => self.follow_front(id),
+                () = next_tick(&mut switch) => {
+                    if let Some(member) = notify_member {
+                        let notify = self.member_notifies(member).await;
+                        lock(&self.state).notify_overlay = notify;
+                    }
+                }
             }
         };
         // An answer from the main window was given in it: the window has the focus because the
@@ -3273,6 +3296,9 @@ fn stole_focus(before: Option<&Target>, after: Option<&Target>, own_pid: u32) ->
 }
 
 /// The next tick of `ticks`, or never when there are none: the controller has no window to follow.
+/// How often a waiting question of an app-typed turn reads its member's notify switch again.
+const NOTIFY_POLL: Duration = Duration::from_secs(1);
+
 async fn next_tick(ticks: &mut Option<tokio::time::Interval>) {
     match ticks {
         Some(ticks) => {

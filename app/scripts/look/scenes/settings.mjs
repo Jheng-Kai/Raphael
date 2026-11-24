@@ -27,7 +27,8 @@ const keysDialog = [...settings("dictation"), click('.modal-scrim [data-act="key
 const pasteRecorded = [...keysDialog, click('.kd-dialog [data-field="paste_last_keys"]'), wait(".kd-dialog [data-recording]"),
   { action: "key", key: "F8", ctrl: true }, waitGone(".kd-dialog [data-recording]")];
 // The first slime (the guide's step 1): the owner names it and dresses it in the red horned slime; its way on waits for the name.
-const named = [click('[data-ob="next"]'), wait('#ob-first-name'), type('#ob-first-name', '小藍'), click('.ob-first-picker [data-slime-character="horns-red"]'), click('[data-ob="next"]')];
+const pickFirstSlime = [click('.ob-first-picker [data-slime-tab="red"]'), click('.ob-first-picker [data-slime-character="horns-red"]')];
+const named = [click('[data-ob="next"]'), wait('#ob-first-name'), type('#ob-first-name', '小藍'), ...pickFirstSlime, click('[data-ob="next"]')];
 export default [
   scene("nav-layer-settings", "Back closes Settings from Usage analysis and Forward restores analysis", [
     ...analysis, navKey("back"), check("nav-settings-closed"),
@@ -248,7 +249,7 @@ export default [
   scene("dictation-notice", "Dictation connection notice", dictation("overview"), { problem: true }),
   scene("conversation-notice", "Conversation connection notice", [], { problem: true }),
   scene("onboarding", "First-run welcome: Raphael's emblem, its name, one promise, the language dropdown and one wide black pill", [wait('#ob:not([hidden]) [data-ob="next"]'), wait('.ob-emblem canvas.ob-emb'), check("guide-window-fixed"), check("onboarding-welcome")], { onboarding: true }),
-  scene("onboarding-slime", "First-run step 1: the first slime large, its name the one thing asked (the way on waits for it), the members' slime picker under it; a press dresses it at once", [click('[data-ob="next"]'), wait('#ob-first-name'), wait('.ob-first-picker [data-slime-character="blue-plain"][aria-pressed="true"]'), check("onboarding-slime-waits"), type('#ob-first-name', '小藍'), click('.ob-first-picker [data-slime-character="horns-red"]'), wait('.ob-foot [data-ob="next"]:not([disabled])'), check("onboarding-slime")], { onboarding: true }),
+  scene("onboarding-slime", "First-run step 1: the first slime large, its name the one thing asked (the way on waits for it), the members' slime picker under it; a press dresses it at once", [click('[data-ob="next"]'), wait('#ob-first-name'), wait('.ob-first-picker [data-slime-character="blue-plain"][aria-pressed="true"]'), check("onboarding-slime-waits"), type('#ob-first-name', '小藍'), ...pickFirstSlime, wait('.ob-foot [data-ob="next"]:not([disabled])'), check("onboarding-slime")], { onboarding: true }),
   scene("onboarding-tools", "First-run step 2: the AI tools as a store of one-row tiles, a search box, 熱門 the same for everyone, then each kind by name",[...named, wait('[data-ob-tools] [data-item="claude"].on .ob-tick'), check("onboarding-tools")], { onboarding: true }),
   scene("onboarding-back-hover", "First-run step 2: the round way back of the foot's pair takes a lighter surface under the pointer", [...named, wait('.ob-foot [data-ob="back"]'), hover('.ob-foot [data-ob="back"]'), check("onboarding-back-hover")], { onboarding: true }),
   scene("onboarding-back-focus", "First-run step 2: Shift+Tab from the primary lands on the round way back, with the app's focus ring", [...named, wait('.ob-foot [data-ob="back"]'), { action: "focus", selector: '.ob-foot [data-ob="next"]' }, { ...key("Tab"), shift: true }, check("onboarding-back-focus")], { onboarding: true }),
