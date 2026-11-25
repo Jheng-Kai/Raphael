@@ -186,10 +186,10 @@ class HostComputerTools:
         return False
 
     def write_reach(self, path, member):
-        """Whether a write at the resolved `path` is "inside" the member's work folder (the chosen project alone, else its
-        own folder and the team's) or "outside" it, where only the owner's yes on a card lets it be made (R-FILE-06)."""
-        roots = work_area.area(self.vm.settings, member, self.vm.local_folders)
-        return "inside" if work_area.inside(str(path), roots) else "outside"
+        """Where a write at the resolved `path` lands (`work_area.reach`): "inside" the member's work folder (the chosen
+        project alone, else its own folder and the team's), in a remembered "project" that is not its own (never written),
+        or "outside" it, where only the owner's yes on a card lets it be made (R-FILE-06)."""
+        return work_area.reach(self.vm.settings, member, str(path), self.vm.local_folders)
 
     def download_folder(self, member):
         """Where a page's download is placed: the member's work folder (the chosen project, else its own folder)."""
@@ -223,8 +223,10 @@ class HostComputerTools:
             try:
                 path = self.path(member, arguments.get("path", ""))
                 # Inside the work folder nothing asks; outside it is T3 and firm (`firm_for_call`): a yes in every mode but 全部允許.
-                # A private place or a place of keys is refused by `file_call` whatever is said, so nothing asks for it.
-                if self.private_path(path, member) or kept_place(str(path)) or self.write_reach(path, member) == "inside":
+                # A private place, a place of keys or a project that is not the member's is refused by `file_call` whatever is
+                # said, so nothing asks for it.
+                if (self.private_path(path, member) or kept_place(str(path))
+                        or self.write_reach(path, member) in (work_area.INSIDE, work_area.PROJECT)):
                     return Tier.T0
                 return Tier.T3
             except (VmError, OSError, AttributeError, ValueError):
@@ -245,8 +247,12 @@ class HostComputerTools:
             return PluginResult(False, "protected_data", WRITE_REFUSAL)
         if kept_place(str(path)):
             return PluginResult(False, "kept", "This private system folder is unavailable.")
-        if name in WRITES and (approver == "none" or self.write_reach(path, member) == "outside" and approver != "user"):
-            return PluginResult(False, "approval_required", "This write requires the owner's approval.")
+        if name in WRITES:
+            reach = self.write_reach(path, member)
+            if reach == work_area.PROJECT:
+                return PluginResult(False, "forbidden", work_area.UNCHOSEN_WORDS)
+            if approver == "none" or reach == work_area.OUTSIDE and approver != "user":
+                return PluginResult(False, "approval_required", "This write requires the owner's approval.")
         if name in ("glob", "grep"):
             from .owner_files import glob_files, grep_files
             guard = self.files.guard()

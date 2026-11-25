@@ -198,6 +198,14 @@ def under(path, root):
     return path == root or path.startswith(root + os.sep)
 
 
+def refusing(request):
+    """Whether a write lands in one of the `refused` folders (the mounts of the owner's projects that are not the member's),
+    as its path is written or where its links lead: refused whatever the owner said."""
+    path = request["path"]
+    return any(under(where, folder) for where in (os.path.normpath(path), os.path.realpath(path))
+               for folder in request.get("refused") or ())
+
+
 def confined(request):
     """False when a write lands in one of the bind mounts (`roots`) outside the folders it may write in (`allowed`, named
     by a request that was not asked about): judged by the path as it is written and by where its links lead, so a link made
@@ -217,6 +225,8 @@ def write(request):
     its sha256, or "absent" for a new file); parent folders are made. The completed temporary file is linked into a
     free name or renamed over the old file, keeping its mode, so a reader never sees half a file."""
     data = base64.b64decode(request["data"], validate=True)
+    if refusing(request):
+        return {"error": "unchosen"}
     if not confined(request):
         return {"error": "outside"}
     folder, name = locate(request["path"], request["roots"], create=True)

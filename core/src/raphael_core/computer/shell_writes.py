@@ -13,7 +13,7 @@ that does the writing (python x.py, npm install, a .ps1) names no target and pas
 import os
 import re
 
-from ..work_area import PathRefused, inside, resolved
+from ..work_area import PROJECT, PathRefused, inside, resolved
 
 DEST, ALL, COPY = "dest", "all", "copy"
 # What each command does to the paths it is given: DEST changes the one it names (-Path, -FilePath, -LiteralPath or its
@@ -173,9 +173,18 @@ def _options(arguments):
 def writes(command, cwd, roots, *, windows=None, home=None, depth=0):
     """The targets of `command` that are outside `roots`, as the words that named them ("<variable>" for one that cannot be
     read). `cwd` is the folder the command starts in (None: unknown, so a relative target is outside)."""
+    return classify(command, cwd, lambda path: "inside" if inside(path, roots) else "outside",
+                    windows=windows, home=home, depth=depth)[1]
+
+
+def classify(command, cwd, reach, *, windows=None, home=None, depth=0):
+    """(the targets of `command` in a project that is not the member's, the other targets outside its work folder), as the
+    words that named them ("<variable>" for one that cannot be read). `reach` says where a resolved path is: "inside" the
+    work folder, in a "project" that is not the member's, or "outside" (`work_area.reach`). `cwd` is the folder the command
+    starts in (None: unknown, so a relative target is outside)."""
     windows = os.name == "nt" if windows is None else windows
     home = home or os.path.expanduser("~")
-    outside = []
+    outside, projects = [], []
     here = cwd
 
     def judge(token, folder):
@@ -199,7 +208,10 @@ def writes(command, cwd, roots, *, windows=None, home=None, depth=0):
             if relative and folder is None:
                 outside.append(text)
                 return
-            if not inside(resolved(text, folder, home), roots):
+            where = reach(resolved(text, folder, home))
+            if where == PROJECT:
+                projects.append(text)
+            elif where != "inside":
                 outside.append(text)
         except PathRefused:
             outside.append(text)
@@ -235,8 +247,10 @@ def writes(command, cwd, roots, *, windows=None, home=None, depth=0):
         if name in SHELLS and depth < DEPTH:
             for position, token in enumerate(rest[:-1]):
                 if token.text.lower() in SHELL_FLAGS:
-                    outside += writes(" ".join(item.text for item in rest[position + 1:]), here, roots,
+                    nested = classify(" ".join(item.text for item in rest[position + 1:]), here, reach,
                                       windows=windows, home=home, depth=depth + 1)
+                    projects += nested[0]
+                    outside += nested[1]
                     break
             continue
         positional, named = _options(rest)
@@ -274,4 +288,4 @@ def writes(command, cwd, roots, *, windows=None, home=None, depth=0):
             found = positional[1:]
         for token in found:
             judge(token, here)
-    return outside
+    return projects, outside

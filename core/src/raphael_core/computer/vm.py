@@ -2176,7 +2176,7 @@ print(base64.b64encode(data).decode())
             return {"error": "EINVAL"}
         if target == real or not files_guest.under(target, real):
             return {"error": "outside"}
-        return files_guest.handle({**{key: value for key, value in request.items() if key != "allowed"},
+        return files_guest.handle({**{key: value for key, value in request.items() if key not in ("allowed", "refused")},
                                    "path": prefix + "/".join(parts), "roots": [root]})
 
     async def file_request(self, target, request, *, answer_bytes=0):

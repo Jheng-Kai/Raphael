@@ -585,16 +585,17 @@ class OwnerFileTools:
         return protected
 
     def reach(self, arguments, member_id=0):
-        """Where a write's path is: "inside" the member's work folder (`work_area.area`: the chosen project alone, else its
-        own folder and the team's), "outside" it, or None for a path that cannot be written at all (not a path, a device,
-        a place that holds keys)."""
+        """Where a write's path is (`work_area.reach`): "inside" the member's work folder (the chosen project alone, else its
+        own folder and the team's), in a remembered "project" that is not its own (never written, so nothing asks for it),
+        "outside" (the owner's yes), or None for a path that cannot be written at all (not a path, a device, a place that
+        holds keys)."""
         try:
             path = place(arguments.get("path"))
             if kept_place(arguments["path"]):
                 return None
         except (VmError, OSError, ValueError):
             return None
-        return "inside" if work_area.inside(path, work_area.area(self.settings, member_id, self.member_folders)) else "outside"
+        return work_area.reach(self.settings, member_id, path, self.member_folders)
 
     def writable(self, arguments, member_id=0):
         """Whether a write's path is inside the member's work folder: written without a card."""
@@ -603,6 +604,9 @@ class OwnerFileTools:
     async def call(self, name, arguments, *, approver, run, member_id=0):
         try:
             if name in WRITES:
+                # A project that is not the member's is never written: not on a yes, not in 全部允許, from no turn or task.
+                if self.reach(arguments, member_id) == work_area.PROJECT:
+                    return PluginResult(False, "forbidden", work_area.UNCHOSEN_WORDS)
                 if approver == "none":
                     return PluginResult(False, "approval_required", "This change needs the owner's approval in the app. "
                                         "Wait for that approval before trying it again.")

@@ -275,9 +275,13 @@ async def test_each_member_writes_its_own_folder_and_the_team_or_the_project_cho
     # No project chosen: the member's own folder and the team's, and no other folder without a yes.
     for path in ("~/member-0/notes/a.md", "~/team/a.md"):
         assert (await call(files, "write_file", {"path": path, "content": "a\n"})).ok
-    for path in ("~/member-7/a.md", "~/Documents/a.md", "~/project/a.md"):
+    for path in ("~/member-7/a.md", "~/Documents/a.md"):
         refused = await call(files, "write_file", {"path": path, "content": "a\n"})
         assert not refused.ok and refused.kind == "approval_required", path
+    # A remembered project is none of a member's own: it is never written, with a yes either (R-FILE-06).
+    for approver in ("auto", "user"):
+        refused = await call(files, "write_file", {"path": "~/project/a.md", "content": "a\n"}, approver=approver)
+        assert not refused.ok and refused.kind == "forbidden" and not (home / "project" / "a.md").exists()
     token = _CONTEXT.set((("chat", 7, 2), False, True, "session", False, 7))
     try:
         # Another member, with a project chosen: that project alone.

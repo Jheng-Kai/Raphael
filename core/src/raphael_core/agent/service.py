@@ -408,7 +408,7 @@ def _plugin_outcome(result: PluginResult) -> str:
         return "ok"
     if result.kind == "timeout":
         return "timeout"
-    if result.kind in ("blocked", "changed", "gone", "approval_required", "secret_store"):
+    if result.kind in ("blocked", "changed", "gone", "approval_required", "secret_store", "forbidden"):
         return "blocked"
     if result.kind == "cancelled":
         return "cancelled"

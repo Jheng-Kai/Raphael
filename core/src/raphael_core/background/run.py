@@ -195,7 +195,7 @@ def _outcome_of(result: PluginResult) -> str:
         return "timeout"
     if result.kind == "cancelled":  # sent, and the connection ended: it may have been made
         return "cancelled"
-    if result.kind in ("blocked", "changed", "gone", "approval_required", "secret_store"):
+    if result.kind in ("blocked", "changed", "gone", "approval_required", "secret_store", "forbidden"):
         return "blocked"
     return "error"
 
