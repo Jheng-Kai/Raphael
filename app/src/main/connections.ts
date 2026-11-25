@@ -1190,16 +1190,20 @@ export function createConnections(host: ConnectionsHost): Connections {
       const write = keyWrite.catch(() => undefined).then(() => api.connectorsSetKey(value));
       keyWrite = write;
       await write;
-      if (mine !== keySaves) return;
-      configured = true; keyOpen = false;
+      // The key is saved whether or not its dialog is still open: what the page shows follows it either way.
+      configured = true;
+      if (mine === keySaves) keyOpen = false;
       if (replacing) {
-        // A key in the place of another: the core forgot the apps of the old one and its catalog. A read of the catalog
-        // still on its way is of the old key, and the old apps go even if the connections cannot be read again.
+        // A key in the place of another: the core forgot the apps of an old key and its catalog (the same key again keeps
+        // them). A read of the catalog still on its way is of the old key; the core's connections then say which apps are
+        // left, even when the list of the connections cannot be read again.
         catalogLoads++;
-        if (Array.isArray(groups)) groups = groups.filter(g => g.source !== "composio");
-        managed = managed.filter(c => c.kind !== "composio");
         composioCatalog = "loading";
         await load();
+        if (Array.isArray(groups)) {
+          const left = groups.filter(g => g.source !== "composio" || managed.some(c => c.id === g.id));
+          if (left.length !== groups.length) { groups = left; refresh(); }
+        }
       } else await loadCatalog();
     } catch (error) {
       if (mine !== keySaves) return;

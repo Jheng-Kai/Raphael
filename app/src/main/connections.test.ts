@@ -1999,6 +1999,41 @@ describe("what the dialog does", () => {
     } finally { await done(); }
   });
 
+  test("a new key saved while its dialog was closed still takes the old apps off the page, and the same key again keeps them (#320)", async () => {
+    const gmail = { id: "composio:gmail", kind: "composio", name: "Gmail", description: "", logo: "", status: "ACTIVE", enabled: true, accounts: [{ id: "a1", status: "ACTIVE" }], enabled_tools: [], disabled_tools: [] };
+    const hasGmail = (c: ReturnType<typeof createConnections>): boolean => { const g = c.view().groups; return Array.isArray(g) && g.some(x => x.id === "composio:gmail"); };
+    api.connectorsStatus.mockResolvedValue({ connectors: [gmail], composio_configured: true, google_configured: false });
+    const c = createConnections(host);
+    await c.load();
+    await settle();
+    expect(hasGmail(c)).toBe(true);
+    api.toolsetsList.mockRejectedValue(new Error("network"));
+    c.click(button("configure-composio"));
+    const { document, done } = await mounted(c);
+    try {
+      const field = document.querySelector<HTMLInputElement>("#conn-key")!;
+      // The same key again: the core keeps its apps, and so does the page.
+      field.value = "comp_same";
+      api.connectorsSetKey.mockResolvedValueOnce({ configured: true });
+      c.click(button("save-key"));
+      await settle(); await settle(); await settle();
+      expect(hasGmail(c)).toBe(true);
+      // Another key, and the dialog closed before the core answers: the old apps still leave the page.
+      c.click(button("configure-composio"));
+      field.value = "comp_other";
+      let answer!: (value: unknown) => void;
+      api.connectorsSetKey.mockReturnValueOnce(new Promise((resolve) => { answer = resolve; }));
+      c.click(button("save-key"));
+      await settle();
+      c.click(button("close"));
+      api.connectorsStatus.mockResolvedValue({ connectors: [], composio_configured: true, google_configured: false });
+      answer({ configured: true });
+      await settle(); await settle(); await settle();
+      expect(hasGmail(c)).toBe(false);
+      expect(c.view().keyOpen).toBe(false);
+    } finally { await done(); }
+  });
+
   test("an app that is already connected is not joined again", async () => {
     const c = createConnections(host);
     await c.load();

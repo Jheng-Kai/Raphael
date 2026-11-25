@@ -120,6 +120,8 @@ class ConnectorsService:
         # The list of apps outlives a run: `now` is monotonic and means nothing next time, so the file holds `wall` time.
         self._catalog_path, self._wall = directory / CATALOG_FILE, wall
         self._catalog_read = False  # whether the file was looked at since the key last changed
+        # Counts the keys saved: a list fetched with an earlier key is never kept once another key took its place (#320).
+        self._key_generation = 0
         self._catalog_renewal: asyncio.Task | None = None
         self.vault = vault
         self.hub = integrations
@@ -419,6 +421,7 @@ class ConnectorsService:
         return await self._fetch_catalog(before)
 
     async def _fetch_catalog(self, before):
+        generation = self._key_generation
         try:
             items, slugs, cursors = [], set(), set()
             cursor, count, truncated = None, 0, False
@@ -458,11 +461,14 @@ class ConnectorsService:
             result = {"items": items, "categories": categories, "next_cursor": None,
                       "total_items": len(items), "truncated": truncated, "stale": False,
                       "stores_tool_payloads": True, "payload_retention_days": 365}
+            if generation != self._key_generation:
+                # Fetched with the key that was replaced meanwhile: given to the one who asked, never kept or saved.
+                return result
             self._store_catalog = (self.now(), result)
             await asyncio.to_thread(self._save_catalog, result)
             return result
         except ConnectorFailure:
-            if before:
+            if before and generation == self._key_generation:
                 return {**before[1], "stale": True}
             raise
 
@@ -540,6 +546,7 @@ class ConnectorsService:
             if self.vault.filled(KEY):
                 return {"configured": True}
         if key != before:
+            self._key_generation += 1
             self._remove_managed(COMPOSIO_SERVER)
             self.store.session_id, self.store.config_version = "", None
             self._multi_account_session = ""

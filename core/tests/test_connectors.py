@@ -1066,6 +1066,31 @@ async def test_store_catalog_pages_cache_expiry_and_failed_refresh_are_atomic(tm
     assert (await router.call("connectors.catalog"))["error"] == "missing_key"
 
 
+async def test_a_store_catalog_fetched_with_a_replaced_key_is_never_kept(tmp_path, conn):
+    # #320: the owner replaces the Composio key while the list of the old key is still on its way.
+    gate, keys = asyncio.Event(), []
+    async def response(request):
+        key = request.headers.get("x-api-key")
+        keys.append(key)
+        if key == "old":
+            await gate.wait()
+        if request.url.path.endswith("/categories"):
+            return httpx.Response(200, json={"items": []})
+        return httpx.Response(200, json={"items": [{"slug": f"{key}-app", "meta": {}}]})
+    router, service, hub, vault = setup_service(tmp_path, conn, response)
+    vault.set("connectors:composio:key", "old")
+    old = asyncio.create_task(router.call("connectors.catalog"))
+    await asyncio.sleep(0.05)
+    assert await router.call("connectors.set_key", {"key": "new"}) == {"configured": True}
+    gate.set()
+    await old  # the one who asked gets what it asked for, and nothing more
+    assert service._store_catalog is None
+    assert not (tmp_path / "connectors-catalog.json").exists()
+    fresh = await router.call("connectors.catalog")
+    assert [item["slug"] for item in fresh["items"]] == ["new-app"]
+    assert keys.count("new") >= 2  # the probe of the new key, then its own list
+
+
 def _catalog_responder(listed, mode, requests, gate=None):
     async def response(request):
         requests.append(request.url.path)
