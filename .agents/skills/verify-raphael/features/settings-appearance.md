@@ -447,8 +447,13 @@ the pointer moved away, so the pictures show a chosen row as it stays. Removing 
 presses: ⋯ (or a right click), 移除, which asks 「確定移除這筆資料？」 in its own place in the
 same menu (`ActionItem.ask`), and that item again; no second menu opens.
 
+Every entry's 編輯 changes its private values too (R-VAULT-07, the owner 2026-11-25): the fields start empty and masked,
+each saying that empty keeps what is saved, and only what is typed is sent (`vault-edit-values`). A saved Composio key is
+the vault's first key, the whole team's, and its 編輯 is the key alone (`vault-composio-key`, `vault-composio-edit`,
+R-CONNECT-05).
+
 ```powershell
-npm run look -- vault-list vault-filter vault-entry-menu vault-entry-remove-ask vault-new-login vault-new-contact vault-new-card vault-sharing vault-import-preview vault-card-permission calm-thread --theme both --width 1120,720,1920x1080
+npm run look -- vault-list vault-filter vault-entry-menu vault-entry-remove-ask vault-new-login vault-new-contact vault-new-card vault-sharing vault-import-preview vault-card-permission vault-edit-values vault-composio-key vault-composio-edit calm-thread --theme both --width 1120,720,1920x1080
 ```
 
 Selected scenes: vault-list, vault-filter, vault-entry-menu, vault-entry-remove-ask, vault-new-login, vault-new-contact,

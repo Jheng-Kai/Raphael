@@ -469,8 +469,6 @@ function keyDialogHTML(v: ConnectionsView): string {
   return `<div class="cs-scrim" data-conn="scrim" data-dialog="composio-key"><div class="cs-dialog" id="cs-dialog" role="dialog" aria-modal="true" aria-labelledby="cs-dlg-title" tabindex="-1" data-trap>` +
     `<div class="cs-dlg-head">${composioMark()}<h2 class="cs-dlg-name" id="cs-dlg-title">Composio</h2><span class="sp"></span>${closeButton()}</div>` +
     `<div class="cs-key-form"><label for="conn-key">${esc(t("plugins.keyPrompt"))}</label><p class="note">${esc(t("missing.composioGuide"))}</p>` +
-    // A new key drops the apps connected through the old one (the core forgets them): said before it is saved, not after.
-    (v.configured && (v.composioApps || Array.isArray(v.groups) && v.groups.some(g => g.source === "composio")) ? `<p class="note" data-k="key-replace-note">${esc(t("conn.keyReplaceNote"))}</p>` : "") +
     `<input class="field" type="password" id="conn-key" autocomplete="new-password" spellcheck="false"${v.keyBusy ? " disabled" : ""}${v.keyError ? ' aria-invalid="true" aria-describedby="conn-key-error"' : ""}>` +
     (v.keyError ? `<p id="conn-key-error" role="alert">${esc(keyErrorMessage(v.keyError))}</p>` : "") + dialogNoticeHTML(v) +
     actionRow({ primary: { label: esc(t("plugins.saveKey")), attrs: ` data-conn="save-key"${v.keyBusy ? " disabled" : ""}` } }) + `</div></div></div>`;
@@ -559,12 +557,6 @@ function connectedGroups(v: ConnectionsView): ConnectionGroup[] {
 }
 
 /** The quiet chip at the top right: up to four marks, overlapped, and how many apps are connected. It opens the list of them. */
-/** The gear beside the chip, once a Composio key is saved: it opens the key's form, where a new key takes the old one's place
- *  (#320). The view and everything else stay as they are; with no key the row at the end of the list adds one. */
-function keySettingsHTML(v: ConnectionsView): string {
-  return v.configured === true ? iconButton("gear", t("conn.keySettings"), ' data-conn="configure-composio" data-k="cs-key-settings"') : "";
-}
-
 function haveChipHTML(v: ConnectionsView): string {
   if (!Array.isArray(v.groups) || !v.groups.length) return "";
   const count = connectedCount(v.inventory);
@@ -920,7 +912,7 @@ export function connectionsHTML(v: ConnectionsView, heading = "", close = ""): s
   }
   // The connected apps could not be read: the chip that would open them says so instead, with the way to read them again.
   const unread = v.groups === "failed" ? `<div class="alert core-note">${st("err", t("conn.loadFailed"))}${btn(esc(t("plugins.retry")), "sm", ' data-conn="retry-connections"')}</div>` : "";
-  return `<div class="cs cs-apps"><header class="cs-top">${heading}${haveChipHTML(v)}${keySettingsHTML(v)}${close}</header>${unread}${barHTML(v)}${chipsHTML(v)}` +
+  return `<div class="cs cs-apps"><header class="cs-top">${heading}${haveChipHTML(v)}${close}</header>${unread}${barHTML(v)}${chipsHTML(v)}` +
     `<div class="cs-results" data-cs-scroll><div class="cs-body" data-cs-body>${bodyHTML(v)}</div></div></div>` + key;
 }
 
@@ -979,6 +971,8 @@ export interface Connections {
   navView(): string;
   /** Shows the view `navView` named; an app that is gone leaves the list it was in. */
   showNavView(key: string): void;
+  /** The Composio key was replaced or removed in Settings › 安全 › 保管箱: the connections and the catalog are read again. */
+  keyReplaced(): Promise<void>;
 }
 
 export function createConnections(host: ConnectionsHost): Connections {
@@ -1178,6 +1172,24 @@ export function createConnections(host: ConnectionsHost): Connections {
     refresh();
   }
 
+  /** A key in the place of another, saved here or in Settings › 安全 › 保管箱 (#320), or the key removed there: the core
+   *  forgot the apps of an old key and its catalog (the same key again keeps them). A read of the catalog still on its way is
+   *  of the old key; the core's connections then say which apps are left, even when the list of the connections cannot be
+   *  read again. */
+  async function keyReplaced(): Promise<void> {
+    catalogLoads++;
+    composioCatalog = "loading";
+    const reads = statusReads;
+    await load();
+    // Without the core's word the old apps go (a new key is what is saved nearly always; the next read brings back what
+    // the same key kept).
+    if (statusReads === reads) managed = managed.filter(c => c.kind !== "composio");
+    if (Array.isArray(groups)) {
+      const left = groups.filter(g => g.source !== "composio" || managed.some(c => c.id === g.id));
+      if (left.length !== groups.length) { groups = left; refresh(); }
+    }
+  }
+
   async function saveKey(): Promise<void> {
     const input = (host.root ?? document).querySelector<HTMLInputElement>("#conn-key");
     if (!input?.value.trim() || keyBusy) return;
@@ -1196,22 +1208,8 @@ export function createConnections(host: ConnectionsHost): Connections {
       // The key is saved whether or not its dialog is still open: what the page shows follows it either way.
       configured = true;
       if (mine === keySaves) keyOpen = false;
-      if (replacing) {
-        // A key in the place of another: the core forgot the apps of an old key and its catalog (the same key again keeps
-        // them). A read of the catalog still on its way is of the old key; the core's connections then say which apps are
-        // left, even when the list of the connections cannot be read again.
-        catalogLoads++;
-        composioCatalog = "loading";
-        const reads = statusReads;
-        await load();
-        // Without the core's word the old apps go (a new key is what is saved nearly always; the next read brings back
-        // what the same key kept).
-        if (statusReads === reads) managed = managed.filter(c => c.kind !== "composio");
-        if (Array.isArray(groups)) {
-          const left = groups.filter(g => g.source !== "composio" || managed.some(c => c.id === g.id));
-          if (left.length !== groups.length) { groups = left; refresh(); }
-        }
-      } else await loadCatalog();
+      if (replacing) await keyReplaced();
+      else await loadCatalog();
     } catch (error) {
       if (mine !== keySaves) return;
       const kind = error instanceof Error ? error.message : "";
@@ -1903,5 +1901,5 @@ export function createConnections(host: ConnectionsHost): Connections {
     };
   }
 
-  return { view, load, click, input, key, menuFor, painted, scrolled, followEvent, reset, restoreList, navView, showNavView, relogin };
+  return { view, load, click, input, key, menuFor, painted, scrolled, followEvent, reset, restoreList, navView, showNavView, relogin, keyReplaced };
 }

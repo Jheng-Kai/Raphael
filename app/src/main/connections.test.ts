@@ -197,44 +197,15 @@ describe("the one view", () => {
     expect(connectionsHTML(view({ configured: null }))).not.toContain("configure-composio");
   });
 
-  test("once a Composio key is saved a gear beside the chip opens its form, whatever the catalog's state, and nothing else moves (#320)", () => {
+  test("once a Composio key is saved Connect apps offers no setting for it: it is replaced in Settings › 安全 › 保管箱 (#320)", () => {
     for (const composioCatalog of [[], "loading", "failed"] as const) {
       const d = dom(connectionsHTML(view({ configured: true, composioCatalog: composioCatalog as ConnectionsView["composioCatalog"] }), "<h1>連結應用程式</h1>", '<button class="modal-x"></button>'));
-      const gears = d.querySelectorAll('[data-k="cs-key-settings"]');
-      expect(gears).toHaveLength(1);
-      const gear = gears[0]!;
-      expect(gear.closest(".cs-top")).not.toBeNull();
-      expect(gear.getAttribute("aria-label")).toBe(t("conn.keySettings"));
-      expect(gear.getAttribute("data-conn")).toBe("configure-composio");
-      // In the header the gear stands after the chip and before the close button.
-      const header = [...d.querySelector(".cs-top")!.children];
-      expect(header.indexOf(gear)).toBe(header.length - 2);
-      expect(header.indexOf(d.querySelector('[data-conn="connected"]')!)).toBe(header.indexOf(gear) - 1);
-      // The view itself is as it was: no row of Composio at the end of the list, a failed read still offers its retry.
-      expect(d.querySelector(".cs-composio-setup")).toBeNull();
-      expect(d.querySelector('[data-conn="retry-store"]') !== null).toBe(composioCatalog === "failed");
+      expect(d.querySelector('[data-conn="configure-composio"], [data-k="cs-key-settings"], .cs-composio-setup')).toBeNull();
+      // The header is the title, the chip of the connected apps and the close, as before.
+      expect([...d.querySelector(".cs-top")!.children].map(child => child.localName === "h1" ? "h1" : child.getAttribute("data-conn") ?? child.className)).toEqual(["h1", "connected", "modal-x"]);
     }
-    // No key yet: no gear, the row at the end of the list adds one. Not known yet: neither.
-    const none = dom(connectionsHTML(view({ configured: false })));
-    expect(none.querySelector('[data-k="cs-key-settings"]')).toBeNull();
-    expect(none.querySelector('.cs-composio-setup [data-conn="configure-composio"]')).not.toBeNull();
-    expect(dom(connectionsHTML(view({ configured: null }))).querySelector('[data-k="cs-key-settings"]')).toBeNull();
-    // An app's page and the list of the connected apps have their own headers, without it.
-    expect(dom(groupPage("ab12", { configured: true })).querySelector('[data-k="cs-key-settings"]')).toBeNull();
-    expect(dom(connectedList({ configured: true })).querySelector('[data-k="cs-key-settings"]')).toBeNull();
-  });
-
-  test("the key dialog over a saved key says the apps connected through Composio must be connected again, and only then", () => {
-    const composio: ConnectionGroup = { ...GROUPS[0]!, id: "composio:gmail", source: "composio" };
-    const note = (over: Partial<ConnectionsView>): string | null | undefined =>
-      dom(connectionsHTML(view({ keyOpen: true, ...over }))).querySelector('[data-k="key-replace-note"]')?.textContent;
-    expect(note({ configured: true, groups: [...GROUPS, composio] })).toBe(t("conn.keyReplaceNote"));
-    expect(note({ configured: true, groups: GROUPS })).toBeUndefined();
-    expect(note({ configured: false, groups: [...GROUPS, composio] })).toBeUndefined();
-    // The field never shows the saved key: it starts empty, as a password field.
-    const field = dom(connectionsHTML(view({ keyOpen: true, configured: true }))).querySelector<HTMLInputElement>("#conn-key")!;
-    expect(field.type).toBe("password");
-    expect(field.getAttribute("value")).toBeNull();
+    // No key yet: the row at the end of the list still adds the first one.
+    expect(dom(connectionsHTML(view({ configured: false }))).querySelector('.cs-composio-setup [data-conn="configure-composio"]')).not.toBeNull();
   });
 
   test("the key dialog of Composio stands over the view and over a page, and is the only modal dialog", () => {
@@ -1896,7 +1867,7 @@ describe("what the dialog does", () => {
     expect(ownGoogleEntry("google").server_id).toBe("google");
   });
 
-  test("the gear opens the key form over the saved key, and a new key reads the connections and the catalog again (#320)", async () => {
+  test("a new key saved over the saved one reads the connections and the catalog again (#320)", async () => {
     const c = createConnections(host);
     await c.load();
     await settle();
@@ -1974,29 +1945,27 @@ describe("what the dialog does", () => {
     } finally { await done(); }
   });
 
-  test("with the connections unread the key form still says the Composio apps go, and a new key drops them from the page (#320)", async () => {
+  test("a key replaced in the vault, with the connections unread, still takes the Composio apps off the page and reads the catalog again (#320)", async () => {
     const gmail = { id: "composio:gmail", kind: "composio", name: "Gmail", description: "", logo: "", status: "ACTIVE", enabled: true, accounts: [{ id: "a1", status: "ACTIVE" }], enabled_tools: [], disabled_tools: [] };
     api.connectorsStatus.mockResolvedValue({ connectors: [gmail], composio_configured: true, google_configured: false });
     const c = createConnections(host);
     await c.load();
     await settle();
     expect(c.view().composioApps).toBe(true);
-    // The list of the connections fails from here on: the core's word that Composio apps are connected still tells the form.
+    expect(api.connectorsCatalog).toHaveBeenCalledTimes(1);
+    // Settings › 安全 › 保管箱 saved a new key; the list of the connections fails from here on.
     api.toolsetsList.mockRejectedValue(new Error("network"));
-    c.click(button("configure-composio"));
-    const shown = dom(connectionsHTML({ ...c.view(), groups: "failed" }));
-    expect(shown.querySelector('[data-k="key-replace-note"]')!.textContent).toBe(t("conn.keyReplaceNote"));
-    const { document, done } = await mounted(c);
-    try {
-      document.querySelector<HTMLInputElement>("#conn-key")!.value = "comp_new";
-      api.connectorsSetKey.mockResolvedValueOnce({ configured: true });
-      api.connectorsStatus.mockResolvedValue({ connectors: [], composio_configured: true, google_configured: false });
-      c.click(button("save-key"));
-      await settle(); await settle(); await settle();
-      const groups = c.view().groups;
-      expect(Array.isArray(groups) && groups.some(g => g.source === "composio")).toBe(false);
-      expect(c.view().composioApps).toBe(false);
-    } finally { await done(); }
+    api.connectorsStatus.mockResolvedValue({ connectors: [], composio_configured: true, google_configured: false });
+    await c.keyReplaced();
+    await settle();
+    const groups = c.view().groups;
+    expect(Array.isArray(groups) && groups.some(g => g.source === "composio")).toBe(false);
+    expect(c.view().composioApps).toBe(false);
+    expect(api.connectorsCatalog).toHaveBeenCalledTimes(2);
+    // The key removed there: Connect apps knows Composio is no longer set up.
+    api.connectorsStatus.mockResolvedValue({ connectors: [], composio_configured: false, google_configured: false });
+    await c.keyReplaced();
+    expect(c.view().configured).toBe(false);
   });
 
   test("a new key saved while its dialog was closed still takes the old apps off the page, and the same key again keeps them (#320)", async () => {

@@ -380,15 +380,15 @@ While no Composio key is set the view ends with one row (the mark, 「還沒有 
 sentence are inside the dialog's visible part without scrolling, and that the list's last app is above it at the end of the list. At 720 wide the sentence is
 two lines; inspect it there and in `--locale fr` (the longest sentence) and `--locale id`.
 
-A saved Composio key can be replaced (R-CONNECT-05, #320). Once a key is saved the header has a gear after the chip of
-the connected apps and before Close, and the list gains nothing (`composio-key-gear` in `plugins-store-key-gear`). The gear
-opens the empty password form, which says the Composio apps must be connected again; a new key closes it and the core
-forgets the old apps (`composio-key-replace`, `composio-key-replaced` in `plugins-store-key-update`). A conversation's card
-that failed with `key_refused` opens the same form through the gear (`card-key-refused-repair`; `composioKeyRefused`
-makes the mock answer `connectors.catalog` with `auth`, which the page shows as the failed read it always showed).
+A saved Composio key is kept and replaced in Settings › 安全 › 保管箱, not in Connect apps (R-CONNECT-05, #320; the owner,
+2026-11-25). Connect apps keeps only its row that adds a first key. The vault lists the key first as 「Composio」 of the whole
+team (`vault-composio-key`); its 編輯 is the key alone in an empty password field that says the Composio apps must be
+connected again (`vault-composio-edit`). A conversation's card that failed with `key_refused` opens that form
+(`card-key-refused-repair`; `composioKeyRefused` makes the mock answer `connectors.catalog` with `auth`). A key saved or
+removed there makes Connect apps read its connections and catalog again (`keyReplaced`, unit tests only).
 
 ```powershell
-npm run look -- plugins-store-key-gear plugins-store-key-update card-key-refused-repair plugins-store-key --theme both --width 1120,720,1920x1080
+npm run look -- vault-composio-key vault-composio-edit card-key-refused-repair plugins-store-key --theme both --width 1120,720,1920x1080
 ```
 The fixture has four representative built-ins from the repository catalog. The
 configured Store scenes add 360 synthetic entries with multiple category

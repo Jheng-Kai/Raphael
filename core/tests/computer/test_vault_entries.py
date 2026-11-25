@@ -114,6 +114,170 @@ async def test_metadata_edit_does_not_read_or_replace_credentials(conn):
     assert not entries.choices(9)
 
 
+def owner_router(entries):
+    handlers = {}
+    class Router:
+        def register(self, name, handler): handlers[name] = handler
+    entries.register(Router())
+    return handlers["vault.update"]
+
+
+def stored(entries, identifier):
+    row = entries.conn.execute("SELECT credential FROM vault_entries WHERE id=?", (identifier,)).fetchone()
+    return json.loads(entries.vault.values[row[0]])
+
+
+def row_of(entries, identifier):
+    return tuple(entries.conn.execute("SELECT id,kind,label,hint,origin,members,credential FROM vault_entries WHERE id=?", (identifier,)).fetchone())
+
+
+async def test_replacing_a_login_password_keeps_the_username_and_the_entry(conn):
+    entries = VaultEntries(Vault(), conn=conn)
+    identifier = entries.put({"kind": "login", "label": "Shop", "hint": "Buying", "origin": "https://shop.example", "members": [0],
+                              "values": {"username": "private-user", "password": "old-password"}})
+    update, before = owner_router(entries), row_of(entries, identifier)
+    assert await update({"id": identifier, "values": {"password": "new-password", "username": ""}}) == {"updated": True}
+    assert stored(entries, identifier) == {"username": "private-user", "password": "new-password"}
+    assert row_of(entries, identifier) == before and len(entries.vault.values) == 1
+    assert entries.entry(0, identifier, "login")[1]["password"] == "new-password"
+    # The username alone, with the label and hint in the same call.
+    await update({"id": identifier, "label": "Shop 2", "hint": "Other", "members": "all", "values": {"username": "other-user"}})
+    assert stored(entries, identifier) == {"username": "other-user", "password": "new-password"}
+    assert [(r["label"], r["hint"], r["members"]) for r in entries.entries()] == [("Shop 2", "Other", "all")]
+
+
+async def test_replacing_one_card_field_keeps_the_others(conn):
+    entries = VaultEntries(Vault(), conn=conn)
+    identifier = entries.put({"kind": "card", "label": "Company", "values": CARD})
+    await owner_router(entries)({"id": identifier, "values": {"number": "5500000000000004"}})
+    assert stored(entries, identifier) == CARD | {"number": "5500000000000004"}
+
+
+async def test_a_contact_can_have_some_fields_replaced(conn):
+    entries = VaultEntries(Vault(), conn=conn)
+    identifier = entries.put({"kind": "contact", "label": "Travel", "values": CONTACT})
+    await owner_router(entries)({"id": identifier, "values": {"phone": "new-phone", "email": "new-email", "name": ""}})
+    assert stored(entries, identifier) == CONTACT | {"phone": "new-phone", "email": "new-email"}
+
+
+async def test_a_login_saved_from_a_sign_in_card_can_have_its_password_replaced(conn):
+    entries = VaultEntries(Vault(), conn=conn)
+    reference = entries.reference(4, "https://example.com/login")
+    entries.save(reference, json.dumps({"username": "card-user", "password": "card-password"}), member=4, site="https://example.com")
+    assert entries.entries()[0]["id"] == reference
+    await owner_router(entries)({"id": reference, "values": {"password": "changed-password"}})
+    assert json.loads(entries.vault.values["computer-login:" + reference]) == {"username": "card-user", "password": "changed-password"}
+    assert entries.load(4, "https://example.com", reference)["password"] == "changed-password"
+    assert [r["members"] for r in entries.entries()] == [[4]]
+
+
+async def test_a_key_value_is_replaced_under_the_same_entry_and_plain_mark(conn):
+    entries = VaultEntries(Vault(), conn=conn)
+    secret = entries.put_key(3, "API_KEY", "the API", "old-key-value-1")
+    plain = entries.put_key(3, "JIRA_SITE", "the site", "old", secret=False)
+    update, before, before_plain = owner_router(entries), row_of(entries, secret), row_of(entries, plain)
+    await update({"id": secret, "values": {"value": "new-key-value-2"}})
+    await update({"id": plain, "values": {"value": "new"}})
+    assert row_of(entries, secret) == before and row_of(entries, plain) == before_plain and before_plain[4] == "plain"
+    assert entries.key_values(3, ["API_KEY", "JIRA_SITE"]) == ({"API_KEY": "new-key-value-2", "JIRA_SITE": "new"}, [])
+    assert "new" not in entries.values.get(3, set()) and len(entries.vault.values) == 2
+
+
+async def test_empty_values_keep_what_is_saved_and_never_read_it_for_a_metadata_edit(conn):
+    entries = VaultEntries(Vault(), conn=conn)
+    login = entries.put({"kind": "login", "label": "Shop", "origin": "https://shop.example", "values": {"username": "u", "password": "p"}})
+    key = entries.put_key(0, "API_KEY", "the API", "kept-key-value")
+    update, before = owner_router(entries), dict(entries.vault.values)
+    entries.vault.get = lambda *_: pytest.fail("A change that names no new value read a private value")
+    for values in ({}, {"username": "", "password": ""}, {"password": ""}):
+        await update({"id": login, "values": values})
+    await update({"id": key, "label": "API_KEY", "hint": "now", "members": [0], "values": {"value": ""}})
+    assert entries.vault.values == before and {r["hint"] for r in entries.entries()} == {"", "now"}
+
+
+@pytest.mark.parametrize("values", [
+    {"unknown": "x"}, {"username": 5}, {"password": None}, "text", ["password"], {"password": "x" * 401},
+])
+async def test_a_refused_value_change_changes_nothing_and_names_no_value(conn, values):
+    from raphael_core.protocol import RpcError
+    entries = VaultEntries(Vault(), conn=conn)
+    identifier = entries.put({"kind": "login", "label": "Shop", "hint": "keep", "origin": "https://shop.example", "values": {"username": "u", "password": "p"}})
+    update, before, rows = owner_router(entries), dict(entries.vault.values), row_of(entries, identifier)
+    with pytest.raises(RpcError) as raised:
+        await update({"id": identifier, "label": "Changed", "hint": "changed", "members": [0], "values": values})
+    assert "vault_values" in repr(raised.value) and "xxxxx" not in repr(raised.value)
+    assert entries.vault.values == before and row_of(entries, identifier) == rows
+
+
+async def test_a_refused_value_change_covers_every_kind_and_a_bad_target(conn):
+    from raphael_core.protocol import RpcError
+    entries = VaultEntries(Vault(), conn=conn)
+    card = entries.put({"kind": "card", "label": "Company", "values": CARD})
+    key = entries.put_key(0, "API_KEY", "the API", "kept-key-value")
+    contact = entries.put({"kind": "contact", "label": "Travel", "values": CONTACT})
+    update, before = owner_router(entries), dict(entries.vault.values)
+    for target, values in ((contact, {"address": "a" * 400, "phone": "b" * 400, "email": "c" * 400}), (key, {"value": " padded "}), (key, {"value": "line\nbreak"}), (key, {"value": "nul\x00key"}),
+                           (key, {"value": "k" * 1100}), (key, {"other": "x"}), (key, {"value": 5}),
+                           (card, {"value": "x"}), (card, {"number": "9" * 401}), ("missing", {"password": "x"})):
+        with pytest.raises(RpcError):
+            await update({"id": target, "values": values})
+    assert entries.vault.values == before
+    await update({"id": card, "values": {"cvc": "999"}})
+    assert stored(entries, card) == CARD | {"cvc": "999"}
+    # A stored credential that cannot be read is refused, never replaced blindly.
+    entries.vault.values["computer-entry:" + card] = "not json"
+    with pytest.raises(RpcError):
+        await update({"id": card, "values": {"number": "1"}})
+    entries.vault.values.pop("computer-entry:" + key)
+    with pytest.raises(RpcError):
+        await update({"id": key, "values": {"value": "new-key-value"}})
+    assert entries.vault.values == {"computer-entry:" + card: "not json", "computer-entry:" + contact: before["computer-entry:" + contact]}
+
+
+async def test_values_and_metadata_change_together_or_not_at_all(conn):
+    from raphael_core.protocol import RpcError
+    entries = VaultEntries(Vault(), conn=conn)
+    identifier = entries.put({"kind": "contact", "label": "Travel", "hint": "one", "values": CONTACT})
+    update, before = owner_router(entries), dict(entries.vault.values)
+    change = {"id": identifier, "label": "Other", "hint": "two", "members": "all", "values": {"phone": "new-phone"}}
+    # Bad metadata with good values: nothing is written.
+    with pytest.raises(RpcError):
+        await update(change | {"label": ""})
+    assert entries.vault.values == before and entries.entries()[0]["hint"] == "one"
+    # A vault that refuses the write: the metadata stays as it was.
+    original = entries.vault.set
+    def refuse(*_): raise RuntimeError("private-phone refused")
+    entries.vault.set = refuse
+    with pytest.raises(RpcError) as raised:
+        await update(change)
+    assert "private-phone" not in repr(raised.value)
+    assert entries.entries()[0]["label"] == "Travel" and entries.vault.values == before
+    # A failure after the value was written puts the old value back.
+    entries.vault.set = original
+    entries.conn.execute("CREATE TRIGGER refuse_update BEFORE UPDATE ON vault_entries BEGIN SELECT RAISE(ABORT, 'no'); END")
+    with pytest.raises(RpcError):
+        await update(change)
+    assert entries.vault.values == before and entries.entries()[0]["label"] == "Travel"
+
+
+async def test_new_values_are_scrubbed_for_a_reader_already_on_the_computer(conn):
+    entries = VaultEntries(Vault(), conn=conn)
+    login = entries.put({"kind": "login", "label": "Shop", "origin": "https://shop.example", "values": {"username": "reader-user", "password": "old-password"}})
+    key = entries.put_key(0, "API_KEY", "the API", "old-key-value")
+    short = entries.put_key(0, "SHORT_KEY", "the other API", "old")
+    plain = entries.put_key(0, "JIRA_SITE", "the site", "old-site-name", secret=False)
+    entries.preload(7)
+    assert entries.redact(7, "x new-password y") == "x new-password y"
+    update = owner_router(entries)
+    await update({"id": login, "values": {"password": "new-password"}})
+    await update({"id": key, "values": {"value": "new-key-value"}})
+    await update({"id": short, "values": {"value": "tiny"}})
+    await update({"id": plain, "values": {"value": "new-site-name"}})
+    assert entries.redact(7, "a new-password b new-key-value c") == "a [private] b [private] c"
+    assert entries.redact(7, "old-password") == "[private]"  # earlier values stay registered
+    assert entries.redact(7, "tiny new-site-name") == "tiny new-site-name"
+
+
 async def test_shared_login_revocation_between_fields_stops_before_the_password(desktop, conn, tmp_path):
     vm, target, _ = desktop
     filled = []

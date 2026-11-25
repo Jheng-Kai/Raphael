@@ -909,6 +909,23 @@ export function checkRendered(name, context = {}) {
       require(!window.__look.calls.some(call => call.method === 'vault.remove'), 'nothing is removed before the second press');
     }
     else if (name === 'vault-filter') require(vault.querySelectorAll('.vault-row').length === 1 && vault.textContent.includes('公司差旅卡'), 'card filter selects only cards');
+    // #320: the Composio key is kept in the vault as the whole team's key; Connect apps keeps no setting for it.
+    else if (name === 'vault-composio-key') {
+      const rows = [...vault.querySelectorAll('.vault-row')];
+      require(rows[0]?.dataset.vaultRow === 'composio' && rows[0].textContent.includes('Composio') && rows[0].textContent.includes('整個團隊'), 'the Composio key is the first row, the whole team\'s');
+      require(visible(rows[0].querySelector('[data-vault="menu"]')), 'its ⋯ is there to change or remove it');
+    } else if (name === 'vault-composio-edit') {
+      const form = vault.querySelector('[data-vault-system="composio"]'), field = form?.querySelector('#vault-value-value');
+      require(visible(form) && visible(field) && field.type === 'password' && field.value === '', "the Composio key's form is open with an empty password field: the saved key is never shown");
+      require(!form.querySelector('#vault-label, #vault-hint, [data-k="vault-access"]'), 'it has no name, hint or access to change');
+      require(visible(form.querySelector('[data-k="vault-composio-note"]')), 'it says first that the apps connected through Composio must be connected again');
+      require(document.activeElement === field, 'the field has the focus');
+    } else if (name === 'vault-edit-values') {
+      const fields = [...vault.querySelectorAll('.vault-editor [id^="vault-value-"]')];
+      require(fields.length === 2 && fields.every(input => input.type === 'password' && input.value === '' && input.placeholder.includes('不變更就留空')),
+        'an edit shows the private fields empty and masked, each saying that empty keeps what is saved');
+      require(visible(vault.querySelector('#vault-label')) && vault.querySelector('#vault-label').value.length > 0, 'the name is there to change, filled in');
+    }
     else if (name === 'vault-sharing') {
       require(vault.querySelectorAll('[data-vault-member]').length >= 2 && vault.querySelector('#vault-label').value === '出差聯絡資料', 'sharing preserves form input');
       const chosen = vaultPicks('.vault-members', true);
@@ -10513,42 +10530,13 @@ export function checkRendered(name, context = {}) {
   }
   // #320: once a Composio key is saved, a gear in the header (after the chip, before the close button) opens its form. The
   // view under it is as it was: no row of Composio at the end of the list.
-  if (name === "composio-key-gear") {
-    const gears = [...document.querySelectorAll('[data-k="cs-key-settings"]')];
-    require(gears.length === 1 && visible(gears[0]), `one gear is drawn (${gears.length})`);
-    const gear = gears[0], header = gear.closest('.cs-top');
-    require(header && gear.dataset.conn === 'configure-composio' && (gear.getAttribute('aria-label') ?? '').trim().length > 0, "the gear is in the header, named, and opens the key's form");
-    const box = gear.getBoundingClientRect(), close = header.querySelector('.modal-x, [data-k="cs-close"]'), chip = header.querySelector('[data-conn="connected"]');
-    if (close && visible(close)) {
-      const c = close.getBoundingClientRect();
-      require(box.right <= c.left + 1 && Math.abs((box.top + box.bottom) / 2 - (c.top + c.bottom) / 2) < 2, "the gear stands before the close button, on its line");
-    }
-    if (chip && visible(chip)) require(chip.getBoundingClientRect().right <= box.left + 1, "the gear comes after the chip of the connected apps");
-    require(box.width >= 24 && box.width <= 40 && Math.abs(box.width - box.height) < 2, `the gear is a round icon button of the header's size (${Math.round(box.width)}×${Math.round(box.height)})`);
-    require(!document.querySelector('.cs-composio-setup'), "no row of Composio is added to the list");
-    return { check: name, size: Math.round(box.width) };
-  }
-  if (name === "composio-key-replace") {
-    const dialog = document.querySelector('#cs-dialog');
-    require(visible(dialog) && dialog.getAttribute('role') === 'dialog', "the key dialog of Composio is open");
-    const field = dialog.querySelector('#conn-key');
-    require(visible(field) && field.type === 'password' && field.value === '', "its field is an empty password field: the saved key is never shown");
-    require(document.activeElement === field, "the field has the focus");
-    const note = dialog.querySelector('[data-k="key-replace-note"]');
-    require(visible(note) && note.textContent.trim().length > 0, "it says before the save that the apps connected through Composio must be connected again");
-    const box = dialog.getBoundingClientRect();
-    for (const part of [field, note, dialog.querySelector('[data-conn="save-key"]')]) {
-      const r = part.getBoundingClientRect();
-      require(r.left >= box.left - 1 && r.right <= box.right + 1 && r.top >= box.top - 1 && r.bottom <= box.bottom + 1, "every part of the form is inside the dialog");
-    }
-    return { check: name };
-  }
-  if (name === "composio-key-replaced") {
-    require(!document.querySelector('#cs-dialog'), "the dialog closed on the save");
-    require(visible(document.querySelector('[data-k="cs-key-settings"]')) && !document.querySelector('.cs-composio-setup'), "the gear is back in the header and the list is as it was");
-    require(!window.__look.data.managedConnectors.some(c => c.kind === "composio"), "the core forgot the apps of the old key");
-    require(!document.querySelector('[data-k^="cs-open:composio:"]'), "no app of the old key is listed as connected");
-    return { check: name };
+  // A menu with nothing under its heading draws the heading alone: no line, no gap under it.
+  if (name === "menu-head-alone") {
+    const menu = document.querySelector(".menu"), head = menu?.querySelector(".menu-head");
+    require(visible(head) && !menu.querySelector(".menu-choice, .menu-action, .menu-sep"), "the menu holds its heading alone");
+    const style = getComputedStyle(head);
+    require(parseFloat(style.borderBottomWidth) === 0 && parseFloat(style.marginBottom) === 0, `no line under the heading (${style.borderBottomWidth} ${style.borderBottomStyle})`);
+    return { check: name, words: head.textContent.trim() };
   }
   // A price is made of parts joined by 「 · 」, each one a number with its unit ("輸入 $2.00 / 輸出 $12 約每百萬字"). A part is never broken
   // across lines while a line of the row could hold it: a line ends between parts, so no number is parted from its unit and no line

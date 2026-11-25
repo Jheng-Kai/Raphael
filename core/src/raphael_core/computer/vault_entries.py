@@ -218,6 +218,61 @@ class VaultEntries(LoginVault):
     def remember(self, member, values):
         self.values.setdefault(member, set()).update(v for v in values.values() if v)
 
+    def plan_values(self, identifier, values):
+        """Check a change of the private values of one entry and return what `apply_values` writes, or None when the change
+        names no new value. A field given as a non-empty string replaces that field; an empty string or a field left out
+        keeps the current value. Nothing is written here, and no error carries a value."""
+        row = self.conn.execute("SELECT kind,origin,credential FROM vault_entries WHERE id=?", (identifier,)).fetchone()
+        if row is None:
+            raise ValueError("entry_missing")
+        kind = row["kind"]
+        fields = ("value",) if kind == "key" else FIELDS.get(kind)
+        if (fields is None or not isinstance(values, dict) or not set(values) <= set(fields)
+                or any(not isinstance(v, str) for v in values.values())):
+            raise ValueError("invalid_values")
+        given = {field: v for field, v in values.items() if v}
+        if not given:
+            return None
+        if kind == "key":
+            value = given["value"]
+            if value != value.strip() or any(ord(ch) < 32 or ord(ch) == 127 for ch in value):
+                raise ValueError("invalid_key")
+        elif any(len(v) > 400 for v in given.values()):
+            raise ValueError("invalid_values")
+        raw = self.vault.get(row["credential"])
+        try:
+            current = json.loads(raw) if raw else None
+        except (TypeError, ValueError):
+            current = None
+        if not isinstance(current, dict) or set(current) != set(fields) or any(not isinstance(v, str) for v in current.values()):
+            raise ValueError("invalid_entry")
+        merged = current | given
+        if kind == "login" and not all(merged.values()) or kind not in ("login", "key") and not any(merged.values()):
+            raise ValueError("empty_values")
+        encoded = json.dumps(merged, ensure_ascii=False)
+        if len(encoded.encode("utf-16-le")) > 2000:
+            raise SecretTooLong("The value is longer than the Credential Manager can hold")
+        # A key marked as no secret is never registered for scrubbing; a short secret key is kept but never scrubbed.
+        scrub = row["origin"] != PLAIN and (kind != "key" or redactable_program_key(merged["value"]))
+        return {"credential": row["credential"], "previous": raw, "encoded": encoded, "values": merged, "scrub": scrub}
+
+    def apply_values(self, plan):
+        """Write a checked change under the entry's own credential name."""
+        self.vault.set(plan["credential"], plan["encoded"])
+
+    def revert_values(self, plan):
+        try:
+            self.vault.set(plan["credential"], plan["previous"])
+        except Exception:
+            logger.warning("A vault value could not be restored after a failed update")
+
+    def scrub_values(self, plan):
+        """Existing readers may already have seen this computer; protect all later reads immediately. Values that were
+        registered before stay registered, which only hides more."""
+        if plan["scrub"]:
+            for holder in list(self.values):
+                self.remember(holder, plan["values"])
+
     def entry(self, member, reference, kind):
         row = self.conn.execute("SELECT * FROM vault_entries WHERE id=? AND kind=?", (reference, kind)).fetchone()
         if row is None:
@@ -320,16 +375,39 @@ class VaultEntries(LoginVault):
         async def update(p):
             row = next((r for r in self.entries() if r["id"] == p.get("id")), None)
             label, hint, members = p.get("label"), p.get("hint", ""), p.get("members")
-            if row and row["kind"] == "key" and not key_name_ok(label):
-                raise invalid_params("vault_metadata")
-            if (not row or not isinstance(label, str) or not label.strip() or len(label) > 200
-                    or not isinstance(hint, str) or len(hint) > 240 or "\n" in hint or "\r" in hint
-                    or not (members == "all" or isinstance(members, list) and members
-                            and all(type(m) is int and m >= 0 and (m == 0 or self.conn.execute("SELECT 1 FROM members WHERE id=?", (m,)).fetchone()) for m in members))):
-                raise invalid_params("vault_metadata")
-            with self.conn:
-                self.conn.execute("UPDATE vault_entries SET label=?,hint=?,members=? WHERE id=?",
-                                  (label.strip(), hint.strip(), json.dumps(members), row["id"]))
+            # `values` (owner only: this RPC is never a model tool) changes private values; it may come alone or with the metadata.
+            plan, metadata = None, True
+            if p.get("values") is not None:
+                try:
+                    plan = self.plan_values(p.get("id"), p["values"])
+                except Exception:
+                    raise invalid_params("vault_values") from None
+                metadata = any(key in p for key in ("label", "hint", "members"))
+            if metadata:
+                if row and row["kind"] == "key" and not key_name_ok(label):
+                    raise invalid_params("vault_metadata")
+                if (not row or not isinstance(label, str) or not label.strip() or len(label) > 200
+                        or not isinstance(hint, str) or len(hint) > 240 or "\n" in hint or "\r" in hint
+                        or not (members == "all" or isinstance(members, list) and members
+                                and all(type(m) is int and m >= 0 and (m == 0 or self.conn.execute("SELECT 1 FROM members WHERE id=?", (m,)).fetchone()) for m in members))):
+                    raise invalid_params("vault_metadata")
+            # Everything is checked before the first write; a failed write of the values changes nothing.
+            if plan:
+                try:
+                    self.apply_values(plan)
+                except Exception:
+                    raise invalid_params("vault_values") from None
+            if metadata:
+                try:
+                    with self.conn:
+                        self.conn.execute("UPDATE vault_entries SET label=?,hint=?,members=? WHERE id=?",
+                                          (label.strip(), hint.strip(), json.dumps(members), row["id"]))
+                except Exception:
+                    if plan:
+                        self.revert_values(plan)
+                    raise invalid_params("vault_metadata") from None
+            if plan:
+                self.scrub_values(plan)
             return {"updated": True}
         async def preview(p):
             try:

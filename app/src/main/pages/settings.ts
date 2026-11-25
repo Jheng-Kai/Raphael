@@ -277,7 +277,8 @@ export function createSettings(app: AppContext): SettingsPage {
   });
   app.onEvent((event) => connections.followEvent(event));
   const rules = createRules({ visible: () => visible && pane === "safety", redraw: () => render(), undo: app.undo });
-  const vault = createVault(el, () => { if (visible && pane === "safety") render(); });
+  // A Composio key replaced or removed in the vault: Connect apps reads its connections and catalog again (#320).
+  const vault = createVault(el, () => { if (visible && pane === "safety") render(); }, () => { void connections.keyReplaced(); });
   const skillLibrary = createSkillLibrary(el, () => { if (visible && pane === "skills") render(); }, () => body);
   const services = createServices({ root: el, visible: () => visible && pane === "tools", redraw: () => render(), brain: () => brain, changeSetting: (key, value) => changeBrain(key, value) });
   const cliBrains = createCliBrains({ visible: () => visible, redraw: () => render() });
@@ -1403,7 +1404,13 @@ export function createSettings(app: AppContext): SettingsPage {
         } else if (target === "store") {
           await connections.load();
           if (mine !== loads || !visible) return;
-          if (resource === "composio" || resource === "google") el.querySelector<HTMLButtonElement>('[data-conn="configure-composio"]')?.click();
+          const add = el.querySelector<HTMLButtonElement>('[data-conn="configure-composio"]');
+          if (add && (resource === "composio" || resource === "google")) add.click();
+          else if (resource === "composio" && connections.view().configured) {
+            // A saved key that Composio refused is replaced where saved keys are kept: 安全 › 保管箱 (#320).
+            openPane("safety");
+            await vault.editComposio();
+          }
         } else if (target === "relogin") {
           // `repair:relogin:composio:<slug>`: the notice of a lost connection signs in to that app again, on its own page.
           await connections.load();

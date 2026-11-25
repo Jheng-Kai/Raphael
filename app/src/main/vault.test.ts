@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, expect, it, vi } from "vitest";
-const api = vi.hoisted(() => ({ core: vi.fn(), membersList: vi.fn() }));
+const api = vi.hoisted(() => ({ core: vi.fn(), membersList: vi.fn(), connectorsStatus: vi.fn(), connectorsSetKey: vi.fn() }));
 vi.mock("./api", () => api);
 import { createVault, vaultHTML, type VaultEntry } from "./vault";
 import { closeMenu } from "./ui";
@@ -12,7 +12,7 @@ const entries: VaultEntry[] = [
 ];
 afterEach(() => { closeMenu(); document.body.replaceChildren(); vi.resetAllMocks(); });
 const setup = async () => {
-  api.membersList.mockResolvedValue({ members: [{ id: 1, name: "Member" }] });
+  api.connectorsStatus.mockResolvedValue({ connectors: [], composio_configured: false, google_configured: false }); api.membersList.mockResolvedValue({ members: [{ id: 1, name: "Member" }] });
   api.core.mockImplementation(async method => method === "vault.list" ? { entries } : {});
   const root = document.createElement("div"); document.body.append(root);
   const controller = createVault(root, () => { root.innerHTML = vaultHTML(controller.view()); });
@@ -58,7 +58,7 @@ it("keeps typed private values when selecting member access and saves chosen IDs
 });
 
 it("lists the members to choose as rows with no box: the face on the left, pressed and checked at the right when chosen", async () => {
-  api.membersList.mockResolvedValue({ members: [{ id: 1, name: "Member", avatar: "file:1.png", avatar_url: "data:image/png;base64,AAAA" }] });
+  api.connectorsStatus.mockResolvedValue({ connectors: [], composio_configured: false, google_configured: false }); api.membersList.mockResolvedValue({ members: [{ id: 1, name: "Member", avatar: "file:1.png", avatar_url: "data:image/png;base64,AAAA" }] });
   api.core.mockImplementation(async method => method === "vault.list" ? { entries } : {});
   const root = document.createElement("div"); document.body.append(root);
   const controller = createVault(root, () => { root.innerHTML = vaultHTML(controller.view()); });
@@ -111,7 +111,7 @@ it("confirms only checked preview entries and cancels transient previews on clos
 });
 
 it("lists a key a member asked for, filters it like the other entries, and offers no way to type one in here", async () => {
-  api.membersList.mockResolvedValue({ members: [{ id: 1, name: "Member" }] });
+  api.connectorsStatus.mockResolvedValue({ connectors: [], composio_configured: false, google_configured: false }); api.membersList.mockResolvedValue({ members: [{ id: 1, name: "Member" }] });
   const withKey: VaultEntry[] = [...entries, { id: "key", kind: "key", label: "OPENROUTER_API_KEY", hint: "Price script", origin: "", members: [1] }];
   api.core.mockImplementation(async method => method === "vault.list" ? { entries: withKey } : {});
   const root = document.createElement("div"); document.body.append(root);
@@ -145,4 +145,101 @@ it("removes an entry in three presses: ⋯, 移除 that asks in its own place, t
 it("shows no Keys tab until a member has asked for a key", async () => {
   const { root } = await setup();
   expect(root.querySelector('[data-vault="filter"][data-kind="key"]')).toBeNull();
+});
+
+it("edits every entry's private values: its fields start empty, say that empty keeps the value, and only what is typed is sent", async () => {
+  const { root } = await setup();
+  click(root, '[data-vault="menu"][data-id="login"]');
+  const editItem = document.querySelector<HTMLElement>('.menu [data-pick="edit"]')!;
+  expect(editItem.textContent).toBe("編輯");
+  editItem.click();
+  const username = root.querySelector<HTMLInputElement>("#vault-value-username")!, password = root.querySelector<HTMLInputElement>("#vault-value-password")!;
+  expect([username.type, password.type]).toEqual(["password", "password"]);
+  expect([username.value, password.value]).toEqual(["", ""]);
+  expect(password.placeholder).toBe("密碼（不變更就留空）");
+  expect(password.getAttribute("aria-label")).toBe("密碼");
+  password.value = "new-secret";
+  click(root, '[data-vault="save"]');
+  await vi.waitFor(() => expect(api.core).toHaveBeenCalledWith("vault.update", expect.objectContaining({ id: "login", values: { password: "new-secret" } })));
+  await vi.waitFor(() => expect(root.querySelector(".vault-editor")).toBeNull());
+  // Nothing typed: the values stay as saved and none are sent.
+  click(root, '[data-vault="menu"][data-id="card"]');
+  document.querySelector<HTMLElement>('.menu [data-pick="edit"]')!.click();
+  expect(root.querySelectorAll("[id^='vault-value-']")).toHaveLength(4);
+  click(root, '[data-vault="save"]');
+  await vi.waitFor(() => expect(api.core.mock.calls.filter(([method]) => method === "vault.update")).toHaveLength(2));
+  expect(api.core.mock.calls.filter(([method]) => method === "vault.update")[1]![1]).not.toHaveProperty("values");
+});
+
+it("edits a key's value as its other fields, and never offers to type a new key in here", async () => {
+  api.connectorsStatus.mockResolvedValue({ connectors: [], composio_configured: false, google_configured: false }); api.membersList.mockResolvedValue({ members: [{ id: 1, name: "Member" }] });
+  const withKey: VaultEntry[] = [...entries, { id: "key", kind: "key", label: "OPENROUTER_API_KEY", hint: "Price script", origin: "", members: [1] }];
+  api.core.mockImplementation(async method => method === "vault.list" ? { entries: withKey } : {});
+  const root = document.createElement("div"); document.body.append(root);
+  const controller = createVault(root, () => { root.innerHTML = vaultHTML(controller.view()); });
+  await controller.load();
+  click(root, '[data-vault="menu"][data-id="key"]');
+  document.querySelector<HTMLElement>('.menu [data-pick="edit"]')!.click();
+  const value = root.querySelector<HTMLInputElement>("#vault-value-value")!;
+  expect(value.type).toBe("password");
+  value.value = "sk-new";
+  click(root, '[data-vault="save"]');
+  await vi.waitFor(() => expect(api.core).toHaveBeenCalledWith("vault.update", expect.objectContaining({ id: "key", label: "OPENROUTER_API_KEY", values: { value: "sk-new" } })));
+});
+
+it("lists the Composio key as a key of the whole team, replaces it through Composio's own check, and removes it with a question that says what goes (#320)", async () => {
+  const gmail = { id: "composio:gmail", kind: "composio", name: "Gmail", description: "", logo: "", status: "ACTIVE", enabled: true, accounts: [], enabled_tools: [], disabled_tools: [] };
+  api.membersList.mockResolvedValue({ members: [{ id: 1, name: "Member" }] });
+  api.connectorsStatus.mockResolvedValue({ connectors: [gmail], composio_configured: true, google_configured: false });
+  api.core.mockImplementation(async method => method === "vault.list" ? { entries } : {});
+  const root = document.createElement("div"); document.body.append(root);
+  const changed = vi.fn();
+  const controller = createVault(root, () => { root.innerHTML = vaultHTML(controller.view()); }, changed);
+  await controller.load();
+  const row = root.querySelector('[data-vault-row="composio"]')!;
+  expect(row.textContent).toContain("Composio");
+  expect(row.textContent).toContain("整個團隊");
+  click(root, '[data-vault="filter"][data-kind="key"]');
+  expect([...root.querySelectorAll(".vault-row")].map(item => item.getAttribute("data-vault-row"))).toEqual(["composio"]);
+  // Its form is the key alone: no name, hint or access to change; it says the apps must be connected again.
+  click(root, '[data-vault="menu"][data-id="composio"]');
+  document.querySelector<HTMLElement>('.menu [data-pick="edit"]')!.click();
+  const form = root.querySelector('[data-vault-system="composio"]')!;
+  expect(form.querySelector("#vault-label, #vault-hint, [data-k='vault-access']")).toBeNull();
+  expect(form.querySelector('[data-k="vault-composio-note"]')).not.toBeNull();
+  const field = form.querySelector<HTMLInputElement>("#vault-value-value")!;
+  expect([field.type, field.value]).toEqual(["password", ""]);
+  // A key Composio refuses is said in words, and nothing changes.
+  api.connectorsSetKey.mockRejectedValueOnce(new Error("auth"));
+  field.value = "comp_bad";
+  click(root, '[data-vault="save"]');
+  await vi.waitFor(() => expect(root.querySelector('[role="alert"]')?.textContent).toContain("Composio"));
+  expect(changed).not.toHaveBeenCalled();
+  // A good key is saved and Connect apps is told.
+  api.connectorsSetKey.mockResolvedValueOnce({ configured: true });
+  root.querySelector<HTMLInputElement>("#vault-value-value")!.value = " comp_good ";
+  click(root, '[data-vault="save"]');
+  await vi.waitFor(() => expect(changed).toHaveBeenCalledTimes(1));
+  expect(api.connectorsSetKey).toHaveBeenLastCalledWith("comp_good");
+  expect(root.querySelector('[data-vault-system="composio"]')).toBeNull();
+  // Removing it asks what it ends, then removes the key.
+  click(root, '[data-vault="menu"][data-id="composio"]');
+  const remove = document.querySelector<HTMLElement>('.menu [data-pick="remove"]')!;
+  remove.click();
+  expect(remove.textContent).toBe("移除後，透過 Composio 連結的應用程式都會中斷。確定移除？");
+  api.connectorsSetKey.mockResolvedValueOnce({ configured: false });
+  remove.click();
+  await vi.waitFor(() => expect(api.connectorsSetKey).toHaveBeenLastCalledWith(""));
+  await vi.waitFor(() => expect(changed).toHaveBeenCalledTimes(2));
+  expect(api.core).not.toHaveBeenCalledWith("vault.remove", expect.anything());
+});
+
+it("opens the Composio key's form when a card leads here, and nothing without a saved key (#320)", async () => {
+  const { root, controller } = await setup();
+  await controller.editComposio();
+  expect(root.querySelector('[data-vault-system="composio"]')).toBeNull();
+  api.connectorsStatus.mockResolvedValue({ connectors: [], composio_configured: true, google_configured: false });
+  await controller.editComposio();
+  expect(root.querySelector('[data-vault-system="composio"] #vault-value-value')).not.toBeNull();
+  expect(root.querySelector('[data-k="vault-composio-note"]')).toBeNull();
 });
