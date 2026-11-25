@@ -1,4 +1,4 @@
-import { scene, click, wait, waitGone, check, scroll, member, rightClick, settings } from "./steps.mjs";
+import { scene, click, wait, waitGone, check, member, rightClick, settings } from "./steps.mjs";
 
 // R-UI-44: a right click anywhere on a row opens the menu of its ⋯, at the pointer. Each scene presses the real right button,
 // checks that the menu is the one a click on the ⋯ opens (it closes on the way), and presses again so that the picture shows it.
@@ -7,10 +7,6 @@ const rightClicked = (target, steps = []) => [...steps, rightClick(target), wait
 const details = [member(1), { action: "open-details" }];
 const keyed = [{ action: "focus", selector: '.mb-col [data-member="2"]' }, { action: "key", key: "F10", shift: true }, wait("#app-popover")];
 
-// R-UI-56: what destroys waits in a ⋯. Its press closes the menu and asks in the red dialog and destroys nothing; only the dialog's red button does it.
-const item = '#app-popover [data-pick]';
-const asked = more => [click(more), wait(item), check("confirm-menu-label"), click(item), wait(".mb-delete"), check("confirm-menu-asks")];
-const confirmed = more => [...asked(more), click('.mb-delete [data-dlg="delete"]'), waitGone(".mb-delete")];
 const paired = { messaging: { connected: true, enabled: true, running: true, error: null, bot: { username: "raph_bot" }, allowed: [{ user_id: "42", name: "小晴" }], pending: [] } };
 // Raphael's Telegram is in its panel.
 const raphaelBots = [member(0), { action: "open-details" }, wait('.mb-panel-suggest [data-msg-kind="telegram"] [data-msg="expand"]')];

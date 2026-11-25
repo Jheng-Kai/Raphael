@@ -5330,23 +5330,6 @@ export function checkRendered(name, context = {}) {
     require(!pane.querySelector('[data-ms="skill-undo"]') && !/復原|undo/i.test(pane.textContent), "the list has no way to bring the skill back");
     return { check: name };
   }
-  if (name === "confirm-menu-label" || name === "confirm-menu-asks") {
-    // R-UI-56: the item in the ⋯ names what it destroys; its press closes the menu and the red dialog asks.
-    const destroying = ["secrets.clear_openrouter_key", "history.clear", "agent.history.clear"];
-    require(!window.__look.calls.some(call => destroying.includes(call.method)), "nothing is destroyed before the red button");
-    if (name === "confirm-menu-label") {
-      const item = document.querySelector('#app-popover [data-pick]');
-      require(visible(item) && item.classList.contains("danger"), "the ⋯ opens a danger item");
-      require(document.querySelector('[data-overflow][aria-expanded="true"]'), "the menu belongs to a ⋯ button");
-      require(!item.hasAttribute("data-asking") && !/^確定/.test(item.textContent.trim()), `the item keeps its own words: ${item.textContent.trim()}`);
-    } else {
-      const dialog = document.querySelector(".mb-dialog.mb-delete");
-      require(visible(dialog) && !document.querySelector("#app-popover"), "the menu closed and the red dialog asks");
-      const buttons = [...dialog.querySelectorAll(".mb-dlg-act .btn, .action-row .btn")];
-      require(buttons.length === 2 && buttons[0].textContent === "取消" && buttons[1].classList.contains("danger"), "the dialog has 取消 and a red button");
-    }
-    return { check: name };
-  }
   if (name === "messaging-user-removed") {
     require(window.__look.calls.some(call => call.method === "messaging.telegram.remove_user" && call.params.user_id === "42"), "the person was removed through the core");
     return { check: name };
