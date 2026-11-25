@@ -3516,8 +3516,14 @@ class BackgroundService:
         files = await self._original_files(earlier) if earlier is not None and old.mode is None else []
         # Everything is looked at again once the files are read: the history or the tasks may have been cleared, the member
         # deleted, or a second request may have come in meanwhile. Nothing is started for what is gone.
+        # A cleared database can hand an id to a different row, so the rows are compared by what identifies them, not by their ids.
         current = self._store.get(old.id)
-        if current is None or current.state not in RERUNNABLE or (earlier is not None and self._history.get(earlier.id) is None):
+        again = self._history.get(earlier.id) if earlier is not None else None
+        if (current is None or current.state not in RERUNNABLE
+                or (current.created_at_ms, current.session_id, current.text, current.turn_id, current.member_id, current.routine_id)
+                != (old.created_at_ms, old.session_id, old.text, old.turn_id, old.member_id, old.routine_id)
+                or earlier is not None and (again is None or (again.created_at_ms, again.session_id, again.question, again.member_id, again.conversation_id)
+                                            != (earlier.created_at_ms, earlier.session_id, earlier.question, earlier.member_id, earlier.conversation_id))):
             raise RpcError(NOT_FOUND, "There is no such task")
         if self._speaker(old.member_id) is None:
             raise RpcError(NOT_FOUND, "The member of that task is gone")
