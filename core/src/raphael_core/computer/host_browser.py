@@ -1,9 +1,12 @@
 """Raphael's Chrome, with member-owned tabs and tab-local input."""
 
 import asyncio
+import errno
 import json
 import logging
 import os
+import platform
+import plistlib
 import re
 import secrets
 import shutil
@@ -109,6 +112,233 @@ def chrome_executable():
     return None
 
 
+DOWNLOADS = Path(".raphael") / "downloads"  # where a page's download is placed in the member's work folder (#331)
+IGNORE = "# Raphael's own files, such as members' downloads.\n*\n"
+# Where a folder can be opened relative to another, each folder of `.raphael/downloads` is opened from the one before it
+# and never through a link, so nothing can swap a link in between a check and the write (macOS and Linux).
+HANDLES = (hasattr(os, "O_NOFOLLOW") and hasattr(os, "O_DIRECTORY")
+           and {os.open, os.mkdir, os.unlink} <= os.supports_dir_fd)
+FOLDER = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+NEW_FILE = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
+
+
+def place_by_handle(workspace, name, data):
+    folders = [os.open(workspace, FOLDER)]
+    try:
+        for part in DOWNLOADS.parts:
+            with suppress(FileExistsError):
+                os.mkdir(part, dir_fd=folders[-1])
+            folders.append(os.open(part, FOLDER, dir_fd=folders[-1]))  # a link here fails to open (O_NOFOLLOW)
+            if part == DOWNLOADS.parts[0]:
+                try:
+                    ignore = os.open(".gitignore", NEW_FILE, 0o644, dir_fd=folders[-1])
+                except FileExistsError:
+                    continue
+                try:
+                    with os.fdopen(ignore, "w", encoding="utf-8") as file:
+                        file.write(IGNORE)
+                except OSError:
+                    # Half written, it would stand in for the whole one forever: gone, the next download writes it again.
+                    with suppress(OSError):
+                        os.unlink(".gitignore", dir_fd=folders[-1])
+                    raise
+        for index in range(1000):
+            candidate = name if not index else f"{index}-{name}"
+            try:
+                output = os.open(candidate, NEW_FILE, 0o644, dir_fd=folders[-1])
+            except FileExistsError:
+                continue
+            try:
+                with os.fdopen(output, "wb") as file:
+                    shutil.copyfileobj(data, file)
+            except OSError:
+                with suppress(OSError):
+                    os.unlink(candidate, dir_fd=folders[-1])
+                raise
+            return workspace / DOWNLOADS / candidate
+        return None
+    finally:
+        for folder in folders:
+            os.close(folder)
+
+
+def opened_in(file, folder):
+    """Whether the file just created is in `folder`, as its open handle says on Windows: a link or junction swapped in
+    after the folders were checked is seen there, before anything is written."""
+    if os.name != "nt":
+        return Path(os.path.realpath(file.name)).parent == folder
+    import ctypes
+    import msvcrt
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.GetFinalPathNameByHandleW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_uint32, ctypes.c_uint32]
+    kernel.GetFinalPathNameByHandleW.restype = ctypes.c_uint32
+    buffer = ctypes.create_unicode_buffer(32768)
+    length = kernel.GetFinalPathNameByHandleW(msvcrt.get_osfhandle(file.fileno()), buffer, len(buffer), 0)
+    if not 0 < length < len(buffer):
+        return False
+    final = buffer.value
+    final = "\\\\" + final[8:] if final.startswith("\\\\?\\UNC\\") else final.removeprefix("\\\\?\\")
+    return os.path.normcase(os.path.dirname(final)) == os.path.normcase(str(folder))
+
+
+def created(path):
+    """A new file at `path`, open for writing, and how to remove it again. Windows removes it through its own handle, so
+    no link or junction swapped in since can lead the removal to another file. Elsewhere this placer runs only under
+    test (every folder there opens relative to another), and the removal checks the path still leads to the file."""
+    if os.name != "nt":
+        file = path.open("xb")
+        made = os.fstat(file.fileno())
+
+        def remove():
+            with suppress(OSError):
+                there = os.stat(path)
+                if (there.st_dev, there.st_ino) == (made.st_dev, made.st_ino):
+                    os.unlink(path)
+
+        return file, remove
+    import ctypes
+    import msvcrt
+    from ctypes import wintypes
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD,
+                                   wintypes.DWORD, wintypes.HANDLE]
+    kernel.CreateFileW.restype = wintypes.HANDLE
+    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel.SetFileInformationByHandle.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD]
+    kernel.SetFileInformationByHandle.restype = wintypes.BOOL
+    # GENERIC_WRITE | DELETE | FILE_READ_ATTRIBUTES, shared for reading, CREATE_NEW, FILE_ATTRIBUTE_NORMAL.
+    handle = kernel.CreateFileW(str(path), 0x40000000 | 0x00010000 | 0x80, 0x1, None, 1, 0x80, None)
+    if handle is None or handle == ctypes.c_void_p(-1).value:
+        error = ctypes.get_last_error()
+        if error in (80, 183):  # ERROR_FILE_EXISTS, ERROR_ALREADY_EXISTS
+            raise FileExistsError(errno.EEXIST, os.strerror(errno.EEXIST), str(path))
+        raise ctypes.WinError(error)
+    try:
+        descriptor = msvcrt.open_osfhandle(handle, os.O_WRONLY | os.O_BINARY)
+    except OSError:
+        kernel.CloseHandle(handle)
+        raise
+    file = os.fdopen(descriptor, "wb")
+
+    class Disposition(ctypes.Structure):
+        _fields_ = [("DeleteFile", wintypes.BOOLEAN)]
+
+    def remove():
+        # FileDispositionInfo: the file this handle opened goes when the handle closes, wherever its path now leads.
+        kernel.SetFileInformationByHandle(msvcrt.get_osfhandle(file.fileno()), 4, ctypes.byref(Disposition(True)),
+                                          ctypes.sizeof(Disposition))
+
+    return file, remove
+
+
+def create_in(folder, name, write):
+    """A new file `name` in `folder`, by path: True once written whole, False when the name is taken, None when it was
+    created where a link swapped in since leads (removed again, nothing written there). A failed write removes the
+    half-written file, which would otherwise stand for the whole one."""
+    try:
+        file, remove = created(folder / name)
+    except FileExistsError:
+        return False
+    with file:
+        if not opened_in(file, folder):
+            remove()
+            return None
+        try:
+            write(file)
+            file.flush()
+        except OSError:
+            remove()
+            raise
+    return True
+
+
+def place_by_path(workspace, name, data):
+    """Windows, which opens no folder relative to another: each folder is checked to be no link or junction, and each
+    created file to be in its folder before anything is written."""
+    folder = workspace / DOWNLOADS
+    for part in (folder.parent, folder):
+        if part.is_symlink() or part.is_junction():
+            return None
+        part.mkdir(exist_ok=True)
+        if part.resolve() != part:
+            return None
+    if create_in(folder.parent, ".gitignore", lambda file: file.write(IGNORE.encode())) is None:
+        return None
+    for index in range(1000):
+        candidate = name if not index else f"{index}-{name}"
+        placed = create_in(folder, candidate, lambda file: shutil.copyfileobj(data, file))
+        if placed is None:
+            return None
+        if placed:
+            return folder / candidate
+    return None
+
+
+def headless_chrome():
+    """Whether Raphael's Chrome runs with no window at all (#308). Windows hides it on a desktop of its own
+    (`DesktopChrome`), where it draws as any shown window does. A Mac has no such desktop: it keeps every window on a
+    screen and a Chrome it starts takes the front, so there Chrome runs in its own headless mode, the whole Chrome with no
+    window, as OpenMausBot runs its browser. The view streams it as before (`Screencast`) and the owner works it there.
+    RAPHAEL_MAC_HEADED=1 brings the old window back, to compare on a Mac."""
+    return sys.platform == "darwin" and os.environ.get("RAPHAEL_MAC_HEADED") != "1"
+
+
+def mac_chrome_version(executable):
+    """The installed Chrome's version from its app bundle (`Info.plist`), read without starting it: "" when it cannot be."""
+    try:
+        with open(Path(executable).parents[1] / "Info.plist", "rb") as file:
+            version = plistlib.load(file).get("CFBundleShortVersionString", "")
+    except (OSError, IndexError, ValueError, plistlib.InvalidFileException):
+        return ""
+    return version if isinstance(version, str) and re.fullmatch(r"\d+(?:\.\d+){1,3}", version) else ""
+
+
+def mac_user_agent(version):
+    """The user agent of the ordinary Chrome of a Mac (Chrome reports its major version and a fixed macOS version), so a
+    page sees no HeadlessChrome in a request: a site that refuses headless browsers, Google's sign-in first, sees Chrome."""
+    return (f"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) "
+            f"Chrome/{version.split('.')[0]}.0.0.0 Safari/537.36")
+
+
+def mac_user_agent_metadata(version):
+    """What `navigator.userAgentData` and the client hints say, as the ordinary Chrome of a Mac says it: its brands
+    without HeadlessChrome."""
+    major = version.split(".")[0]
+    return {
+        "brands": [{"brand": "Google Chrome", "version": major}, {"brand": "Chromium", "version": major},
+                   {"brand": "Not_A Brand", "version": "24"}],
+        "fullVersionList": [{"brand": "Google Chrome", "version": version}, {"brand": "Chromium", "version": version},
+                            {"brand": "Not_A Brand", "version": "24.0.0.0"}],
+        "fullVersion": version, "platform": "macOS", "platformVersion": "",
+        "architecture": "arm" if platform.machine() == "arm64" else "x86", "model": "", "mobile": False,
+        "bitness": "64", "wow64": False,
+    }
+
+
+def window_arguments(mac_version):
+    """Where Chrome's window goes off Windows: none in headless (with the Mac's user agent when its version is known),
+    else far off every screen, which Linux keeps."""
+    if headless_chrome():
+        return ["--headless=new", *([f"--user-agent={mac_user_agent(mac_version)}"] if mac_version else [])]
+    return ["--window-position=-32000,-32000"]
+
+
+def dialog_message(message):
+    """A dialog's message as the member and the owner see it: whole up to 2000 characters, else its first and last
+    thousand around a mark, with how many characters are left out between them, so that no long text pushes what it
+    asks out of sight. The safety check reads the whole message (`Tab.dialog_text`)."""
+    if len(message) <= 2000:
+        return {"message": message}
+    return {"message": f"{message[:1000]}\n…\n{message[-1000:]}", "omitted": len(message) - 2000}
+
+
+def startup_pages(startup_url):
+    """The pages Chrome opens at its start: the startup marker, and a blank tab left unowned that keeps a windowed Chrome
+    alive when the last member tab closes, even when that closure comes from the page. Headless Chrome takes one page only
+    (on more it exits at once: "Multiple targets are not supported in headless mode") and stays alive with none."""
+    return [startup_url] if headless_chrome() else [startup_url, "about:blank"]
+
+
 def page_url(value):
     try:
         url = urlsplit(value)
@@ -194,6 +424,11 @@ class Tab:
     main_frame: str = ""
     viewport: tuple = (0, 0)
     document: int = 0
+    # The JavaScript dialog that blocks the page (#336), set while it is open: Chrome holds every script and input of the
+    # page until the dialog is answered, which a headless Chrome never draws.
+    dialog: dict | None = None
+    dialog_text: str | None = ""  # its whole message for the safety check (None: too long to judge); `dialog` shows its ends
+    dialog_opened: asyncio.Event = field(default_factory=asyncio.Event, repr=False)
 
     @property
     def view(self):
@@ -212,10 +447,12 @@ class HostBrowser:
         self.download_to = None
         self.owned_targets = {}
         self.startup_url = None
+        self.mac_version = ""  # the installed Chrome's version where it runs headless (`headless_chrome`)
         self.current = {}
         self.owner_closed = {}
         self.owner_closed_current = {}
         self.transfers = {}
+        self.placed = {}  # member -> the downloads placed since its last Chrome result (#331)
         self.held = {}
         self.handback = {}
         self.acknowledgements = set()
@@ -396,14 +633,13 @@ class HostBrowser:
                 "--window-size=1280,900", "--disable-backgrounding-occluded-windows",
                 "--disable-renderer-backgrounding", "--disable-background-timer-throttling",
             ]
-            # Leave a blank startup tab unowned. It keeps Chrome alive when the
-            # last member tab closes, even when that closure comes from the page.
-            pages = [self.startup_url, "about:blank"]
+            pages = startup_pages(self.startup_url)
+            self.mac_version = mac_chrome_version(executable) if headless_chrome() else ""
             if os.name == "nt":
                 self.process = DesktopChrome([*argv, *pages])
             else:
                 self.process = await asyncio.create_subprocess_exec(
-                    *argv, "--window-position=-32000,-32000", *pages, stdin=asyncio.subprocess.DEVNULL,
+                    *argv, *window_arguments(self.mac_version), *pages, stdin=asyncio.subprocess.DEVNULL,
                     stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL, start_new_session=True)
             self.process_tree = ChromeProcessTree(self.process)
             if isinstance(self.process, DesktopChrome):
@@ -473,6 +709,22 @@ class HostBrowser:
                 if tab.session == session:
                     tab.refs.clear()
                     tab.frames.discard(params["frameId"])
+        elif method == "Page.javascriptDialogOpening":
+            for tab in self.tabs.values():
+                if tab.session == session:
+                    kind, message = params.get("type", "alert"), str(params.get("message", ""))
+                    tab.dialog_text = message if len(message) <= 200_000 else None
+                    tab.dialog = {"dialog_id": secrets.token_hex(6), "type": kind, **dialog_message(message),
+                                  **({"default_prompt": str(params.get("defaultPrompt", ""))[:2000]}
+                                     if kind == "prompt" else {})}
+                    tab.dialog_opened.set()
+                    break
+        elif method == "Page.javascriptDialogClosed":
+            for tab in self.tabs.values():
+                if tab.session == session:
+                    tab.dialog = None
+                    tab.dialog_opened.clear()
+                    break
         elif method == "Browser.downloadWillBegin":
             guid, frame = params["guid"], params["frameId"]
             for tab in self.tabs.values():
@@ -489,6 +741,7 @@ class HostBrowser:
                 task = asyncio.create_task(asyncio.to_thread(self._place_download, guid, workspace, name))
                 self.transfers[task] = member
                 task.add_done_callback(self.transfers.pop)
+                task.add_done_callback(lambda done: self._placed(member, workspace, done))
 
     def _page_target(self, info):
         target = info["targetId"]
@@ -575,35 +828,37 @@ class HostBrowser:
             with suppress(BrowserError, OSError, TimeoutError):
                 await cdp.call("Page.screencastFrameAck", {"sessionId": frame}, session=session)
 
+    def _placed(self, member, workspace, task):
+        if not task.cancelled() and task.exception() is None and (path := task.result()) is not None:
+            self.placed.setdefault(member, []).append(path.relative_to(workspace).as_posix())
+
+    def take_downloads(self, member):
+        """The downloads placed for the member since it was last told, as paths in its work folder."""
+        return self.placed.pop(member, [])
+
     def _place_download(self, guid, workspace, suggested):
+        """Place a finished download in `.raphael/downloads` of the work folder (#331), never at its root: a page can start
+        a download without a click, and a file such as conftest.py or a Makefile at a project's root runs with the
+        project's next test or build. A `.gitignore` there keeps the folder out of git, a link there is never followed,
+        and a name in use gets a numbered name. Returns the placed path, or None."""
         name = re.sub(r'[\x00-\x1f<>:"/\\|?*]', "_", suggested)[:180].strip(" .")
         if not name or re.fullmatch(r"(?i)(CON|PRN|AUX|NUL|COM[0-9¹²³]|LPT[0-9¹²³])(?:\..*)?", name):
             name = "download"
         if not re.fullmatch(r"[0-9a-f-]{36}", guid):
-            return
+            return None
         source = self.staging / guid
         try:
             if workspace.resolve() != workspace or source.is_symlink():
-                return
+                return None
             workspace.mkdir(parents=True, exist_ok=True)
-            for index in range(1000):
-                path = workspace / (name if not index else f"{index}-{name}")
-                with source.open("rb") as data:
-                    try:
-                        output = path.open("xb")
-                    except FileExistsError:
-                        continue
-                    try:
-                        with output:
-                            shutil.copyfileobj(data, output)
-                    except OSError:
-                        path.unlink(missing_ok=True)
-                        raise
+            with source.open("rb") as data:
+                placed = (place_by_handle if HANDLES else place_by_path)(workspace, name, data)
+            if placed is not None:
                 source.unlink()
-                return
+            return placed
         except OSError:
             # Chrome keeps the staged file if it could not be placed in the work folder.
-            return
+            return None
 
     async def _take_startup_target(self):
         url, self.startup_url = self.startup_url, None
@@ -668,6 +923,14 @@ class HostBrowser:
             self._update_page(tab, title=info.get("title"), url=info.get("url"))
         try:
             await self.command(tab, "Page.enable")
+            if headless_chrome():
+                # No window holds the focus in headless: each page is told it has it, and it names itself as the ordinary
+                # Chrome of a Mac in navigator.userAgentData too (the request's user agent is set at the start).
+                await self.command(tab, "Emulation.setFocusEmulationEnabled", {"enabled": True})
+                if self.mac_version:
+                    await self.command(tab, "Emulation.setUserAgentOverride", {
+                        "userAgent": mac_user_agent(self.mac_version),
+                        "userAgentMetadata": mac_user_agent_metadata(self.mac_version)})
             await self.resize(tab, *VIEWPORT)
             tree = await self.command(tab, "Page.getFrameTree")
             frame = tree["frameTree"]["frame"]
@@ -706,6 +969,15 @@ class HostBrowser:
         current = self.selected(tab.member)
         if current is None or not self.member_blocked(current) or self.member_blocked(tab):
             self.select(tab)
+
+    async def answer_dialog(self, tab, dialog, accept, text=None):
+        """Answer the JavaScript dialog that blocks the tab (#336): the member's browser_dialog, or the owner in the view."""
+        await self.command(tab, "Page.handleJavaScriptDialog",
+                           {"accept": accept, **({"promptText": text} if text is not None else {})})
+        if tab.dialog is dialog:  # unless Chrome already reported it closed and another opened
+            tab.dialog = None
+            tab.dialog_opened.clear()
+        tab.refs.clear()
 
     async def command(self, tab, method, params=None):
         cdp = self.cdp

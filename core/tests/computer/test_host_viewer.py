@@ -14,7 +14,7 @@ import pytest
 from raphael_core.computer import host_page
 from raphael_core.agent.history import AgentHistory
 from raphael_core.computer.handback import HandbackCards
-from raphael_core.computer.host_browser import ChromeProcessTree, HostBrowser, Tab, chrome_executable
+from raphael_core.computer.host_browser import ChromeProcessTree, HostBrowser, Tab, chrome_executable, headless_chrome
 from raphael_core.computer.host_computer import HostComputerTools
 from raphael_core.computer.host_view import Screencast
 from raphael_core.computer.viewer import DesktopViewer
@@ -336,6 +336,38 @@ async def test_idle_screencast_starts_and_restarts_with_a_screenshot(tmp_path):
                         await frame_for(lines, tab, (1280, 900))
                 await expect_eventually(lambda: not tab.cast.watchers)
         assert [call[0] for call in cdp.calls].count("Page.captureScreenshot") == 2
+    finally:
+        await viewer.aclose()
+        await browser.aclose()
+
+
+async def test_the_owner_answers_a_dialog_in_the_view_only_while_holding_the_tab(tmp_path):
+    # A headless Chrome never draws a JavaScript dialog: the view shows it, and the owner answers it under the lease (#336).
+    viewer, browser = host_viewer(tmp_path)
+    cdp = browser.cdp = Cdp(browser)
+    cdp.socket = SimpleNamespace(port=12345)
+    tab = fake_tab(browser, 1, 10)
+    params = {"member_id": 1, "conversation_id": 10}
+    try:
+        opened = await viewer.open(params)
+        base = opened["url"].removesuffix("host.html")
+        origin = {"Origin": viewer.origin}
+        async with httpx.AsyncClient(trust_env=False, timeout=5) as client, host_frames(client, base) as lines:
+            await frame_for(lines, tab)
+            browser._event("Page.javascriptDialogOpening", {"type": "prompt", "message": "Enter the code",
+                                                            "defaultPrompt": ""}, tab.session)
+            reads = len(cdp.calls)
+            dialog = (await client.get(base + "host-browser")).json()["dialog"]
+            assert (dialog["type"], dialog["message"], dialog["default_prompt"]) == ("prompt", "Enter the code", "")
+            assert not any(call[0] == "Page.getNavigationHistory" for call in cdp.calls[reads:])
+            answer = {"action": "dialog", "tab": tab.id, "dialog": dialog["dialog_id"], "accept": True, "text": "482913"}
+            assert (await client.post(base + "host-browser", json=answer, headers=origin)).status_code == 403
+            assert (await viewer.control({**opened, "held": True}))["control"] == "owner"
+            for wrong in ({"dialog": "old"}, {"text": 7}, {"accept": False}):
+                assert (await client.post(base + "host-browser", json={**answer, **wrong}, headers=origin)).status_code == 403
+            assert (await client.post(base + "host-browser", json=answer, headers=origin)).status_code == 204
+            assert ("Page.handleJavaScriptDialog", {"accept": True, "promptText": "482913"}, tab.session) in cdp.calls
+            assert tab.dialog is None and "dialog" not in (await client.get(base + "host-browser")).json()
     finally:
         await viewer.aclose()
         await browser.aclose()
@@ -831,6 +863,40 @@ def windows_on_desktop(pid, desktop=None):
     return visible, user.GetForegroundWindow()
 
 
+def windows_on_screen(pid):
+    """How many windows macOS shows on a screen for a process. Only each window's owner is read, which needs no screen
+    recording permission."""
+    import ctypes as c
+    import ctypes.util
+
+    foundation = c.CDLL(ctypes.util.find_library("CoreFoundation"))
+    graphics = c.CDLL(ctypes.util.find_library("CoreGraphics"))
+    graphics.CGWindowListCopyWindowInfo.restype = c.c_void_p
+    graphics.CGWindowListCopyWindowInfo.argtypes = [c.c_uint32, c.c_uint32]
+    foundation.CFArrayGetCount.restype = c.c_long
+    foundation.CFArrayGetCount.argtypes = [c.c_void_p]
+    foundation.CFArrayGetValueAtIndex.restype = c.c_void_p
+    foundation.CFArrayGetValueAtIndex.argtypes = [c.c_void_p, c.c_long]
+    foundation.CFDictionaryGetValue.restype = c.c_void_p
+    foundation.CFDictionaryGetValue.argtypes = [c.c_void_p, c.c_void_p]
+    foundation.CFNumberGetValue.restype = c.c_bool
+    foundation.CFNumberGetValue.argtypes = [c.c_void_p, c.c_long, c.c_void_p]  # CFNumberType is a CFIndex
+    foundation.CFRelease.argtypes = [c.c_void_p]
+    owner = c.c_void_p.in_dll(graphics, "kCGWindowOwnerPID").value
+    windows = graphics.CGWindowListCopyWindowInfo(1, 0)  # kCGWindowListOptionOnScreenOnly
+    assert windows
+    try:
+        found = 0
+        for index in range(foundation.CFArrayGetCount(windows)):
+            value = foundation.CFDictionaryGetValue(foundation.CFArrayGetValueAtIndex(windows, index), owner)
+            number = c.c_int64()
+            if value and foundation.CFNumberGetValue(value, 4, c.byref(number)) and number.value == pid:  # SInt64
+                found += 1
+        return found
+    finally:
+        foundation.CFRelease(windows)
+
+
 @pytest.mark.skipif(chrome_executable() is None or bool(os.environ.get("CI")), reason="Google Chrome is unavailable or this is CI")
 async def test_native_headed_chrome_streams_off_the_owner_desktop(tmp_path):
     viewer, browser = host_viewer(tmp_path.resolve())
@@ -860,6 +926,13 @@ async def test_native_headed_chrome_streams_off_the_owner_desktop(tmp_path):
                     private, _ = windows_on_desktop(pid, browser.process.desktop)
                     interactive, foreground = windows_on_desktop(pid)
                     assert private and not interactive and foreground not in private
+                elif headless_chrome():
+                    # A Mac runs it with no window at all (#308), and the page still sees the ordinary Chrome of a Mac.
+                    # (Chrome's product string says Chrome/ in its headless mode too, so the screen is asked instead.)
+                    assert windows_on_screen(browser.process.pid) == 0
+                    brands = await browser.command(tab, "Runtime.evaluate", {
+                        "expression": "navigator.userAgentData.brands.map(brand => brand.brand).join()", "returnByValue": True})
+                    assert "Headless" not in brands["result"]["value"]
                 else:
                     bounds = (await browser.cdp.call("Browser.getWindowForTarget", {"targetId": tab.target}))["bounds"]
                     assert bounds["left"] + bounds["width"] < 0 and bounds["top"] + bounds["height"] < 0

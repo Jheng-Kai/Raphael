@@ -406,7 +406,9 @@ async def test_first_work_reuses_only_the_marked_chrome_startup_page(tmp_path):
             return {"targetId": "new"}
         if method == "Target.attachToTarget":
             return {"sessionId": params["targetId"]}
-        if method in ("Page.enable", "Emulation.setDeviceMetricsOverride"):
+        # A headless Chrome on a Mac also gets the focus and user-agent emulation on each tab (R-COMP-HOST-02).
+        if method in ("Page.enable", "Emulation.setDeviceMetricsOverride", "Emulation.setFocusEmulationEnabled",
+                      "Emulation.setUserAgentOverride"):
             return {}
         assert method == "Page.getFrameTree"
         return {"frameTree": {"frame": {"id": session}}}
@@ -598,11 +600,15 @@ async def test_chrome_has_scoped_tabs_page_input_private_forms_and_downloads(tmp
             data, images = await host_page.snapshot(browser, one, {"include_screenshot": True})
             assert data["owner_needed"] == "sign_in" and not images
             assert not await host_page.navigate(browser, two, url + "/download")
+            # A download lands in .raphael/downloads, never at the work folder's root (#331), and git ignores it there.
+            placed = root / "two" / ".raphael" / "downloads" / "report.txt"
             async with asyncio.timeout(10):
-                while not (root / "two" / "report.txt").is_file():
+                while not placed.is_file():
                     await asyncio.sleep(0.05)
                 await asyncio.gather(*browser.transfers)
-            assert (root / "two" / "report.txt").read_text() == "download contents"
+            assert placed.read_text() == "download contents" and not (root / "two" / "report.txt").exists()
+            assert (root / "two" / ".raphael" / ".gitignore").read_text().splitlines()[-1] == "*"
+            assert browser.take_downloads(2) == [".raphael/downloads/report.txt"] and browser.take_downloads(2) == []
             await browser.close_tab(one)
             listing = await browser.cdp.call("Target.getTargets")
             targets = {item["targetId"] for item in listing["targetInfos"] if item["type"] == "page"}

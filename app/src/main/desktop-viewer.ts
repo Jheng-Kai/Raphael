@@ -412,7 +412,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     paintWallpaper(wallpaper);
     // The small picture is a card in the conversation; the larger view and the Computer tab are the stream itself.
     const hostView = state?.transport === "host";
-    browserToolbar.draw(hostView && running ? browserModel : undefined);
+    browserToolbar.draw(hostView && running ? browserModel : undefined, owner);
     askFrames(!!running && connected && !!inline && !expanded && !owner && (hostView || !pending()));
     const preview = lastFrames.get(member());
     const picture = running && !stalled && (!connected || !hostView && inline && !expanded) ? preview : undefined;
@@ -635,7 +635,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     if (event.data?.type !== 'raphael-desktop') return;
     if (event.data.state === "browser" && state?.transport === "host") {
       browserModel = event.data.model;
-      browserToolbar.draw(browserModel);
+      browserToolbar.draw(browserModel, state?.control === "owner");
       return;
     }
     if (event.data.state === "browser-action") {
@@ -649,7 +649,8 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     }
     if (event.data.state === 'interactive') {
       interactive = panel.hasAttribute('data-expanded') && !watching && event.data.held === true && state?.control === 'owner';
-      if (interactive) clearTakeTimer();
+      // The page focuses its own input once the lease is confirmed: an open dialog takes the keys back.
+      if (interactive) { clearTakeTimer(); browserToolbar.focusDialog(); }
       if (interactive && clickedAt) panel.dataset.controlLatencyMs = String(performance.now() - clickedAt);
     } else if (event.data.state === 'input-accepted') {
       if (interactive && clickedAt) { panel.dataset.acceptedInputLatencyMs = String(performance.now() - clickedAt); clickedAt = 0; }
@@ -811,7 +812,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
       update(next);
       const canInput = held && panel.hasAttribute('data-expanded') && next.control === 'owner';
       send(canInput);
-      if (canInput && visible && document.activeElement !== frame) frame.focus({ preventScroll:true });
+      if (canInput && visible && !browserToolbar.focusDialog() && document.activeElement !== frame) frame.focus({ preventScroll:true });
       if (canInput && !interactive) takeTimer = setTimeout(() => {
         takeTimer = undefined;
         if (session === opened && state?.control === 'owner' && !interactive) void takeFailed(opened);

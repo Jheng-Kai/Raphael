@@ -1,10 +1,14 @@
 import { t, getLocale } from "./i18n";
-import { btn, esc, ico, iconButton, patchHTML, type IconName } from "./ui";
+import { actionRow, btn, esc, ico, iconButton, patchHTML, type IconName } from "./ui";
 
 interface BrowserTab { id: string; title: string; url: string; favicon: string }
-export interface HostBrowserModel { tabs: BrowserTab[]; shown: string; back: boolean; forward: boolean }
-type Action = "select" | "close" | "new" | "back" | "forward" | "reload" | "navigate";
-export interface HostBrowserAction { action: Action; tab: string; url?: string }
+/** A JavaScript dialog that holds the shown page: a headless Chrome never draws it, so the view does (#336). */
+export interface HostDialog { dialog_id: string; type: "alert" | "confirm" | "prompt" | "beforeunload"; message: string; omitted?: number; default_prompt?: string }
+export interface HostBrowserModel { tabs: BrowserTab[]; shown: string; back: boolean; forward: boolean; dialog?: HostDialog }
+type Action = "select" | "close" | "new" | "back" | "forward" | "reload" | "navigate" | "dialog";
+export interface HostBrowserAction { action: Action; tab: string; url?: string; dialog?: string; accept?: boolean; text?: string }
+
+let dialogIds = 0;
 
 export function mountHostBrowserToolbar(screen: HTMLElement, send: (action: HostBrowserAction, id: number) => void) {
   const bar = document.createElement("div");
@@ -15,6 +19,16 @@ export function mountHostBrowserToolbar(screen: HTMLElement, send: (action: Host
     '<input class="host-browser-address" type="text" inputmode="url" dir="ltr" autocomplete="off" spellcheck="false" maxlength="8192"></div>' +
     '<p class="host-browser-error" role="status" hidden></p>';
   screen.prepend(bar);
+  // The page's dialog sits over the page, under the toolbar; only the owner holding the tab answers it.
+  const card = document.createElement("div");
+  card.className = "host-browser-dialog";
+  card.setAttribute("role", "alertdialog");
+  card.hidden = true;
+  const cardId = `host-browser-dialog-${++dialogIds}`;
+  card.setAttribute("aria-labelledby", `${cardId}-from`);
+  card.setAttribute("aria-describedby", `${cardId}-message`);
+  screen.append(card);
+  let dialogDrawn = "", dialogShown = "", dialogAction: number | undefined, lastHolding = false;
   const strip = bar.querySelector<HTMLElement>(".host-browser-strip")!;
   const add = bar.querySelector<HTMLElement>(".host-browser-add")!;
   const history = bar.querySelector<HTMLElement>(".host-browser-history")!;
@@ -50,11 +64,69 @@ export function mountHostBrowserToolbar(screen: HTMLElement, send: (action: Host
     failed = show;
   }
 
-  function draw(next: HostBrowserModel | undefined): void {
+  function drawDialog(dialog: HostDialog | undefined, url: string, holding: boolean): void {
+    screen.toggleAttribute("data-host-dialog", !!dialog);
+    card.hidden = !dialog;
+    // Watching, it is only read: a press on it is a press on the page, which opens the larger view to take control.
+    card.toggleAttribute("data-readonly", !holding);
+    if (!dialog) { dialogDrawn = dialogShown = ""; dialogAction = undefined; return; }
+    const signature = JSON.stringify([dialog, url, holding, getLocale()]);
+    if (signature === dialogDrawn) return;
+    dialogDrawn = signature;
+    const fresh = dialog.dialog_id !== dialogShown;
+    const typed = fresh ? dialog.default_prompt ?? "" : card.querySelector<HTMLInputElement>(".host-browser-dialog-answer")?.value ?? "";
+    dialogShown = dialog.dialog_id;
+    if (fresh) dialogAction = undefined;
+    let site = url;
+    try { site = new URL(url).host || url; } catch { /* the address as written */ }
+    const off = holding && dialogAction === undefined ? "" : " disabled";
+    card.innerHTML = `<p class="host-browser-dialog-from" id="${cardId}-from">${esc(t("browser.dialogFrom", { p0: site }))}</p>` +
+      `<p class="host-browser-dialog-message" id="${cardId}-message">${esc(dialog.message)}</p>` +
+      // A long message keeps both its ends; what is left out between them is said, never silently cut.
+      (dialog.omitted ? `<p class="host-browser-dialog-omitted">${esc(t("browser.dialogOmitted", { p0: new Intl.NumberFormat(getLocale()).format(dialog.omitted) }))}</p>` : "") +
+      (dialog.type === "prompt" ? `<input class="host-browser-dialog-answer" type="text" maxlength="2000" autocomplete="off" spellcheck="false" aria-label="${esc(t("browser.dialogAnswer"))}"${off}>` : "") +
+      (holding ? "" : `<p class="host-browser-dialog-hint">${esc(t("browser.dialogTakeOver"))}</p>`) +
+      actionRow({
+        secondary: dialog.type === "alert" ? "" : btn(esc(t("browser.dialogCancel")), "", ` data-dialog-answer="dismiss"${off}`),
+        primary: { label: esc(t("browser.dialogOk")), attrs: ` data-dialog-answer="accept"${off}` },
+      });
+    const answer = card.querySelector<HTMLInputElement>(".host-browser-dialog-answer");
+    if (answer) answer.value = typed;
+    if (holding && !off && (fresh || !card.contains(document.activeElement))) {
+      (answer ?? card.querySelector<HTMLButtonElement>('[data-dialog-answer="accept"]'))?.focus({ preventScroll: true });
+    }
+  }
+
+  function answerDialog(accept: boolean): void {
+    const dialog = model?.dialog;
+    if (!model || !dialog || dialogAction !== undefined || card.querySelector("[data-dialog-answer]:disabled")) return;
+    const text = card.querySelector<HTMLInputElement>(".host-browser-dialog-answer")?.value;
+    dialogAction = ++actionId;
+    for (const control of card.querySelectorAll<HTMLButtonElement | HTMLInputElement>("button, input")) control.disabled = true;
+    send({ action: "dialog", tab: model.shown, dialog: dialog.dialog_id, accept, ...(accept && text !== undefined ? { text } : {}) }, dialogAction);
+  }
+
+  card.addEventListener("click", event => {
+    const button = (event.target as Element).closest<HTMLButtonElement>("[data-dialog-answer]");
+    if (button && !button.disabled) answerDialog(button.dataset.dialogAnswer === "accept");
+  });
+  card.addEventListener("keydown", event => {
+    if (event.isComposing || event.keyCode === 229 || (event.key !== "Enter" && event.key !== "Escape")) return;
+    // The view's own Escape folds it, and its keys reach the page: these two answer the dialog instead.
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.key === "Escape") answerDialog(false);
+    else if (!(event.target as Element).matches("button")) answerDialog(true);
+    else (event.target as HTMLButtonElement).click();
+  });
+
+  function draw(next: HostBrowserModel | undefined, holding = false): void {
     const shown = next?.tabs.find(tab => tab.id === next.shown);
-    const signature = JSON.stringify([next, getLocale()]);
+    const signature = JSON.stringify([next, getLocale(), holding]);
     if (signature === drawn) return;
     drawn = signature;
+    lastHolding = holding;
+    drawDialog(shown ? next?.dialog : undefined, shown?.url ?? "", holding);
     if (next?.shown !== model?.shown || !shown) {
       editing = false;
       actionId++;
@@ -135,7 +207,21 @@ export function mountHostBrowserToolbar(screen: HTMLElement, send: (action: Host
 
   return {
     draw,
+    /** With the page's dialog to answer, the owner's keys go to it rather than to the page: whether it took them. */
+    focusDialog(): boolean {
+      if (card.hidden || card.hasAttribute("data-readonly")) return false;
+      if (!card.contains(document.activeElement)) {
+        [...card.querySelectorAll<HTMLInputElement | HTMLButtonElement>('.host-browser-dialog-answer, [data-dialog-answer="accept"]')]
+          .find(control => !control.disabled)?.focus({ preventScroll: true });
+      }
+      return true;
+    },
     result(id: number, ok: boolean): void {
+      if (id === dialogAction) {
+        // Answered, the next read has no dialog; refused (the tab was handed back meanwhile), it can be answered again.
+        if (!ok) { dialogAction = undefined; dialogDrawn = ""; drawDialog(model?.dialog, model?.tabs.find(tab => tab.id === model?.shown)?.url ?? "", lastHolding); }
+        return;
+      }
       if (id !== actionId || id !== navigationId) return;
       showError(!ok);
       if (ok) { editing = false; address.blur(); }

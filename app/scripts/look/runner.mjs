@@ -186,7 +186,13 @@ export async function run(options) {
       const host = hostFixture = {
         model: { shown: hostTabs === "popup" ? "popup" : "library", back: hostTabs === "popup", forward: false,
           tabs: fixture.hostBrowserTabs.filter(tab => hostTabs === "many" ? tab.id !== "popup" : tab.id === "library" ||
-            tab.id === "agenda" || hostTabs === "popup" && tab.id === "popup") },
+            tab.id === "agenda" || hostTabs === "popup" && tab.id === "popup"),
+          // A page's JavaScript dialog, which a headless Chrome never draws (#336).
+          ...(scene.fixture?.hostDialog ? { dialog: { dialog_id: "look-dialog", type: scene.fixture.hostDialog,
+            ...(scene.fixture.hostDialog === "prompt" ? { message: "請輸入寄到手機的 6 位數驗證碼，完成後頁面會繼續。", default_prompt: "" }
+              // Past 2000 characters the core keeps the first and last thousand and says how many are left out.
+              : { message: `${"以下是這筆訂單的條款與退貨說明，請閱讀後再繼續。".repeat(50).slice(0, 1000)}\n…\n${
+                (("退貨須在七天內提出申請，運費由買方負擔。").repeat(60) + "確定要付款 NT$1,200 嗎？").slice(-1000)}`, omitted: 1712 }) } } : {}) },
         responses: new Set(),
       };
       const runtimeErrors = [];
@@ -239,6 +245,7 @@ export async function run(options) {
             if (request.method() === "POST") {
               const { action, tab, url: address } = JSON.parse(request.postData());
               if (action === "select" || action === "navigate") host.model.shown = tab;
+              if (action === "dialog") delete host.model.dialog;
               if (action === "navigate") host.model.tabs = host.model.tabs.map(row => row.id === tab ? { ...row, url: address } : row);
               if (action === "close") {
                 host.model.tabs = host.model.tabs.filter(row => row.id !== tab);

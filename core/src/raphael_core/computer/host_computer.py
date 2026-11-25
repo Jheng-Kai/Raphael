@@ -37,7 +37,17 @@ VIEWPORT_TOOLS = {
     "scroll": ("Scroll the page at x,y from the screenshot.", "x y direction amount by", "x y direction"),
 }
 PAGE_ACTIONS = {"browser_click", "browser_type", "browser_select"}
-INPUT_ACTIONS = (VIEWPORT_TOOLS.keys() - {"get_desktop_state"}) | PAGE_ACTIONS
+INPUT_ACTIONS = (VIEWPORT_TOOLS.keys() - {"get_desktop_state"}) | PAGE_ACTIONS | {"browser_dialog"}
+BROWSER_DIALOG = {
+    "description": "Inspect, accept or dismiss the JavaScript dialog (alert, confirm, prompt or leave page) that blocks a "
+                   "tab. Accept or dismiss needs the dialog_id a result reported.",
+    "parameters": {"type": "object", "properties": {
+        "action": {"type": "string", "enum": ["inspect", "accept", "dismiss"]},
+        "dialog_id": {"type": "string", "maxLength": 64},
+        "prompt_text": {"type": "string", "maxLength": 2000, "description": "The answer, only to accept a prompt."},
+        "tab_id": {"type": "string", "description": "Tab ID from browser_tabs. Omit to use the shown tab."},
+    }, "required": ["action"], "additionalProperties": False},
+}
 HOST_TAKEOVER = {**TAKEOVER["parameters"], "properties": {
     **TAKEOVER["parameters"]["properties"],
     "reason": {"type": "string", "enum": [*REASONS, "certificate"]},
@@ -59,6 +69,10 @@ WORDS = {
     "browser_page_changed": "The page changed after the last read. Read it again for current controls.",
     "browser_action_refused": "Chrome could not perform this action on the selected page element.",
     "browser_field_refused": "Chrome could not type into or select a value in that field.",
+    "browser_dialog_changed": "The dialog changed. Use browser_dialog with action inspect for the current one.",
+    "browser_dialog_text": "prompt_text only answers a prompt dialog that is being accepted.",
+    "browser_dialog_private": "This dialog asks for a sign-in, code or payment, which only the owner gives. Dismiss it "
+                              "and ask the owner.",
     "bad_path": "The requested work file path is invalid.",
     "browser_navigation_waiting": "Chrome is still waiting for this page. If a native certificate or key prompt is blocking it, use request_takeover with reason: certificate.",
     "browser_owner_approval_required": "The owner must approve the exact outward action before it can run.",
@@ -115,6 +129,7 @@ class HostComputerTools:
                                      "close": {**BROWSER_TABS["parameters"]["properties"]["show"]},
                                  }, "not": {"required": ["show", "close"]},
                              }},
+            "browser_dialog": BROWSER_DIALOG,
             "request_takeover": {"parameters": HOST_TAKEOVER, "description": TAKEOVER["description"] + " Use certificate for a certificate prompt."},
             **{name: {**DEFINITIONS[name], "description": DEFINITION_WORDS[name]} for name in READS | WRITES},
         })
@@ -192,7 +207,8 @@ class HostComputerTools:
         return work_area.reach(self.vm.settings, member, str(path), self.vm.local_folders)
 
     def download_folder(self, member):
-        """Where a page's download is placed: the member's work folder (the chosen project, else its own folder)."""
+        """The work folder whose `.raphael/downloads` takes a page's download: the chosen project, else the member's own
+        folder."""
         if self.vm.settings is None:
             return self.folders(member)[0]
         from ..folders import work_folder
@@ -312,7 +328,8 @@ class HostComputerTools:
                     if returned is None:
                         raise BrowserError("browser_tab_changed")
                     async with browser.action_lock(returned):
-                        data, blocks = await host_page.snapshot(browser, returned, {})
+                        data, blocks = await HostComputerTools.guarded(
+                            returned, lambda: host_page.snapshot(browser, returned, {}))
                 finally:
                     if browser.handback.get(member) is tab:
                         browser.handback.pop(member)
@@ -320,6 +337,8 @@ class HostComputerTools:
                     data["status"] = "owner_step_still_needed"
                 else:
                     data["status"] = "owner_finished"
+            if placed := browser.take_downloads(member):
+                data = {**data, "downloads": placed}
             return PluginResult(True, "tab_closed" if data.get("status") == "tab_closed" else None,
                                 text=json.dumps(data, ensure_ascii=False), blocks=blocks)
         except (BrowserError, VmError) as error:
@@ -390,8 +409,10 @@ class HostComputerTools:
                 announce()
             tab.work, tab.turn_id, tab.conversation, tab.finished = work, turn_id, conversation, False
             if recovering:
-                data, blocks = await host_page.snapshot(browser, tab, {})
+                data, blocks = await HostComputerTools.guarded(tab, lambda: host_page.snapshot(browser, tab, {}))
                 browser.owner_closed_current.pop(member, None)
+                if data.get("status") == "dialog_open":
+                    return data, blocks, tab, None
                 data.update(status="tab_closed",
                             note="The owner closed the previous tab. Use the current tab below or open the page again. "
                                  "The requested action was not performed. Read the page before using a ref or coordinates.")
@@ -412,6 +433,39 @@ class HostComputerTools:
 
     @staticmethod
     async def page_call(browser, tab, name, arguments, approver):
+        """One page tool on the tab, which stops waiting for Chrome once a JavaScript dialog blocks the page (#336)."""
+        if name == "browser_dialog":
+            return await host_page.dialog_action(browser, tab, arguments, approver), []
+        return await HostComputerTools.guarded(tab, lambda: HostComputerTools.page_work(browser, tab, name, arguments, approver))
+
+    @staticmethod
+    async def guarded(tab, start):
+        """Run the page work `start()` makes, unless a JavaScript dialog blocks the tab or opens meanwhile: Chrome answers
+        no script or input of a page until its dialog is answered, so the dialog is reported instead (#336)."""
+        if tab.dialog is not None:
+            return host_page.dialog_blocked(tab, opened_now=False), []
+        work = asyncio.ensure_future(start())
+        opened = asyncio.ensure_future(tab.dialog_opened.wait())
+        try:
+            await asyncio.wait({work, opened}, return_when=asyncio.FIRST_COMPLETED)
+        except BaseException:
+            work.cancel()
+            raise
+        finally:
+            opened.cancel()
+        if tab.dialog is None:
+            return await work
+        if work.done():
+            if work.exception() is None:
+                data, blocks = work.result()
+                return {**data, "dialog": tab.dialog}, blocks
+        else:
+            # The page answers Chrome's pending commands only once the dialog closes; their replies are then dropped.
+            work.cancel()
+        return host_page.dialog_blocked(tab, opened_now=True), []
+
+    @staticmethod
+    async def page_work(browser, tab, name, arguments, approver):
         if name == "request_takeover":
             return {"owner_needed": arguments["reason"], "detail": takeover_detail(arguments)}, []
         if name in ("browser_open", "browser_navigate"):
@@ -422,7 +476,8 @@ class HostComputerTools:
                     raise
                 return {"target_id": tab.id, "tab_id": tab.id, "owner_needed": "certificate"}, []
             if not navigated:
-                return {"status": "download_started", "target_id": tab.id, "tab_id": tab.id}, []
+                return {"status": "download_started", "target_id": tab.id, "tab_id": tab.id,
+                        "note": "Chrome saves it in .raphael/downloads in your work folder; a later result names the file."}, []
         if name == "browser_click" and ("x" in arguments or "y" in arguments):
             return await host_page.viewport_action(browser, tab, "click", arguments, approver), []
         if name in PAGE_ACTIONS:
