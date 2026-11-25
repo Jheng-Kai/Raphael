@@ -164,11 +164,26 @@ CODE_BESIDE_A_COMMAND = [
     "python3 -c \"print(1 << 2)\"\nopen -a Calculator", "python3 -c 'x = 1 <<EOF'\nopen -a Calculator\nEOF",
     "cd x && open -a App", "open -a Calculator", "python3 - <<'EOF' | sh\nopen -a Calculator\nEOF",
     "python3 - <<'EOF'\nopen(p)\nEOF\nxdg-open https://example.com",
+    # An unquoted delimiter: the shell runs the substitutions in the body before the program gets it.
+    "python3 - <<EOF\nprint(1)\n$(open -a Calculator)\nEOF", "python3 - <<EOF\nprint(1)\n`open -a Calculator`\nEOF",
+    "cat > x.py <<-EOF\n\tprint($(open https://example.com))\n\tEOF", "python3 - <<EOF\nx = $(echo $(open -a Calculator))\nEOF",
+    # Several heredocs on a line: each has its own receiver.
+    "python3 - <<A; bash <<B\nopen(p)\nA\nopen -a Calculator\nB", "python3 - <<'A'; sh <<'B'\nprint(1)\nA\nopen -a Calculator\nB",
+    "cat <<'A' > x.py; zsh <<'B'\nopen(p)\nA\nopen -a Calculator\nB",
+    # A shell's own argument is read like the same command typed on its own.
+    "zsh -c 'bash <<EOF\nopen -a Calculator\nEOF'", "bash -c 'python3 - <<EOF\n$(open -a Calculator)\nEOF'",
+]
+# Program text beside a shell's heredoc or an unquoted delimiter without substitutions is still program text.
+MORE_CODE_IS_NOT_A_COMMAND = [
+    "python3 - <<EOF\nopen(p)\nprint(\\$(open -a X))\nEOF", "python3 - <<EOF\nprint(1)\nopen(p)\nEOF",
+    "python3 - <<'A'; python3 - <<'B'\nopen(p)\nA\nopen(q)\nB", "python3 - <<'A' <<'B'\nopen(p)\nA\nopen(q)\nB",
+    "zsh -c 'python3 - <<EOF\nopen(p)\nEOF'", "sh -c \"python3 - <<'EOF'\nopen(p)\nEOF\"",
+    "python3 - <<'EOF' > out.txt\nopen(p)\nEOF",
 ]
 
 
 @pytest.mark.parametrize("platform", ["darwin", "linux", "win32"])
-@pytest.mark.parametrize("command", CODE_IS_NOT_A_COMMAND)
+@pytest.mark.parametrize("command", CODE_IS_NOT_A_COMMAND + MORE_CODE_IS_NOT_A_COMMAND)
 def test_a_programs_own_code_in_a_heredoc_is_not_taken_for_a_command_that_opens_something(command, platform):
     from raphael_core.computer.on_screen import launches_on_screen, on_screen_fragment
     assert not launches_on_screen(command, platform) and on_screen_fragment(command, platform) == ""

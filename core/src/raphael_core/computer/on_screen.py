@@ -52,7 +52,9 @@ _SINKS = frozenset({"cat", "tee"})
 # Words in front of a program that do not change what it is.
 _WRAPPERS = frozenset({"sudo", "env", "exec", "command", "time", "nohup", "uv", "poetry", "pipenv", "run"})
 # `<<TAG`, `<<-TAG`, `<<'TAG'`, `<<"TAG"`, `<<\TAG`, never a here-string (`<<<`).
-_HEREDOC = re.compile(r"""(?<!<)<<(?!<)(?P<tab>-?)[ \t]*(?:'(?P<q1>[^'\r\n]+)'|"(?P<q2>[^"\r\n]+)"|\\?(?P<bare>[A-Za-z_]\w*))""")
+_HEREDOC = re.compile(r"""(?<!<)<<(?!<)(?P<tab>-?)[ \t]*(?:'(?P<q1>[^'\r\n]+)'|"(?P<q2>[^"\r\n]+)"|(?P<esc>\\)?(?P<bare>[A-Za-z_]\w*))""")
+# Where the statement a heredoc belongs to ends on its line.
+_STATEMENT_END = re.compile(r";|&&|\r|\n")
 _FRAGMENT = 80
 # The flag after which a shell's own command follows: cmd /c, powershell -Command, sh -c.
 _RUNS = frozenset({"/c", "/k", "/r", "-c", "-command", "-commandwithargs"})
@@ -116,6 +118,7 @@ def _launches(command: str, mac: bool, *, quoted_commands: bool = False) -> str:
             return match[0]
         return " "
 
+    command = _without_script_bodies(command)  # also what a shell's `-c` payload holds
     if found := _API.search(_STRING.sub(mask_string, command)):
         return found[0]
     for part, invoked in _parts(command):
@@ -140,13 +143,37 @@ def _programs(text: str) -> list[str]:
     return programs
 
 
-def _receives(before: str, after: str) -> str:
-    """What a heredoc is for, given the line's words before and after it: `data` (an interpreter's script, a file being
-    written) or `commands` (a shell reads it, or what follows on the line would run what the program prints)."""
-    receiver, later = _programs(before)[-1:], _programs(after)
-    if not receiver or any(program in _RUNNERS for program in receiver + later):
+def _receives(receiver: list[str], after: str) -> str:
+    """What a heredoc is for, given its receiving program and the words after it in its statement: `data` (an
+    interpreter's script, a file being written) or `commands` (a shell reads it, or what follows would run what the
+    program prints)."""
+    if not receiver or any(program in _RUNNERS for program in receiver + _programs(after)):
         return "commands"
     return "data" if _INTERPRETER.fullmatch(receiver[0]) or receiver[0] in _SINKS else "commands"
+
+
+def _substitutions(body: str) -> list[str]:
+    """The commands an unquoted heredoc's shell would run in its body: `$(…)` and backticks that are not escaped."""
+    found, index = [], 0
+    while index < len(body):
+        char = body[index]
+        if char == "\\":
+            index += 2
+        elif char == "`":
+            end = body.find("`", index + 1)
+            end = len(body) if end < 0 else end
+            found.append(body[index + 1:end])
+            index = end + 1
+        elif body.startswith("$(", index):
+            depth, end = 1, index + 2
+            while end < len(body) and depth:
+                depth += (body[end] == "(") - (body[end] == ")")
+                end += 1
+            found.append(body[index + 2:end - (1 if depth == 0 else 0)])
+            index += 2  # a substitution inside another is read again
+        else:
+            index += 1
+    return found
 
 
 def _without_script_bodies(command: str) -> str:
@@ -162,9 +189,14 @@ def _without_script_bodies(command: str) -> str:
         markers = [m for m in _HEREDOC.finditer(line) if blanked.startswith("<<", m.start())]
         if not markers:
             continue
-        # What stands before and after the markers on the line: `python3 -`, and a `| sh` that would run the output.
-        data = _receives(blanked[:markers[0].start()], blanked[markers[-1].end():]) == "data"
-        for marker in markers:
+        receiver, previous = [], 0
+        for number, marker in enumerate(markers):
+            # Each heredoc has its own receiver: the words since the last one (or the line's start) and what follows in its
+            # statement (a `| sh` would run what the program prints).
+            receiver = _programs(blanked[previous:marker.start()])[-1:] or receiver
+            rest = blanked[marker.end():markers[number + 1].start() if number + 1 < len(markers) else None]
+            after = rest[:stop.start()] if (stop := _STATEMENT_END.search(rest)) else rest
+            previous = marker.end()
             tag = marker["q1"] or marker["q2"] or marker["bare"]
             for end in range(index, len(lines)):
                 closing = lines[end].rstrip("\r\n")
@@ -172,8 +204,11 @@ def _without_script_bodies(command: str) -> str:
                     break
             else:
                 break
-            if not data:
+            if _receives(receiver, after) == "commands":
                 kept.extend(lines[index:end + 1])
+            elif not (marker["q1"] or marker["q2"] or marker["esc"]):
+                # An unquoted delimiter: the shell runs the substitutions before the program sees its text.
+                kept.extend(f"{command}\n" for command in _substitutions("".join(lines[index:end])))
             index = end + 1
     return "".join(kept)
 
@@ -182,7 +217,7 @@ def on_screen_fragment(command: str, platform: str = sys.platform) -> str:
     """The part of `command`, run on the owner's PC (`platform` is its `sys.platform`), that would show something on its
     screen, on one line and shortened for a refusal; an empty string when nothing would."""
     mac = platform == "darwin"
-    found = _launches(_without_script_bodies(command), mac, quoted_commands=mac)
+    found = _launches(command, mac, quoted_commands=mac)
     text = " ".join(re.sub(r"[\x00-\x1f\x7f]", " ", found).split())
     if not found:
         return ""
