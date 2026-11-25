@@ -659,7 +659,11 @@ class BackgroundService:
                 if task.routine_id is not None:
                     from ..members.service import _line
                     said = _line((turn.text or turn.detail or "").strip().split("\n\n")[0])
-                    self._metrics_conn.execute("UPDATE routines SET last_error='' WHERE id=? AND last_error=?", (task.routine_id, said))
+                    # Only the routine's latest run says its error: an older failure's words never clear a newer one's.
+                    self._metrics_conn.execute(
+                        "UPDATE routines SET last_error='' WHERE id=? AND last_error=? AND NOT EXISTS ("
+                        "SELECT 1 FROM worker_tasks WHERE routine_id=? AND id>? AND COALESCE(rerun_of,0)<>?)",
+                        (task.routine_id, said, task.routine_id, task.id, task.id))
             deleted = self._history.delete(turn.id)
         except sqlite3.Error as exc:
             logger.warning("Could not take a failed run out of the history: %s", type(exc).__name__)
@@ -3475,6 +3479,10 @@ class BackgroundService:
             raise RpcError(NOT_FOUND, "There is no such task")
         if old.state not in RERUNNABLE or not old.text.strip():
             raise invalid_params("only a task that did not finish can run again")
+        if self._metrics_conn.execute("SELECT 1 FROM worker_tasks WHERE rerun_of=? LIMIT 1", (old.id,)).fetchone():
+            # A second request for the same failure (a double press, a retry of the call) starts nothing: the first one's
+            # attempt is the one to run again, and the failed turn it replaced is gone.
+            raise invalid_params("this task was already run again")
         earlier = self._history.get(old.turn_id) if old.turn_id else None
         if old.scope != "private" and earlier is None:
             raise invalid_params("the scoped task source is unavailable")
@@ -3508,7 +3516,8 @@ class BackgroundService:
             routine_run = old.routine_id is not None and earlier is not None and earlier.route == "routine"
             turn_id = history.add(
                 session_id=f'work:{new_id}' if old.mode == 'work' else old.session_id,
-                question=earlier.question if routine_run else '' if old.mode == 'work' else old.text,
+                # The owner's message stands as it was sent (what it said, not the instruction it expanded to), with its quote and files.
+                question=earlier.question if routine_run or earlier is not None and old.mode != 'work' else '' if old.mode == 'work' else old.text,
                 route="routine" if routine_run else "worker" if old.mode == "work" else "delegate",
                 prefix=PREFIXES[old.language].understood if speaker.is_raphael and not routine_run else "",
                 text="" if routine_run or old.mode == "work" else phrase(old.language, "handoff"),
@@ -3522,6 +3531,7 @@ class BackgroundService:
                 room_id=earlier.room_id if earlier is not None else None,
                 thread_id=earlier.thread_id if earlier is not None else None,
                 source_turn_id=earlier.source_turn_id if earlier is not None else None,
+                **({"quote": earlier.quote, "attachments": earlier.attachments or ()} if earlier is not None and not routine_run and old.mode != 'work' else {}),
             )
             self._store.attach_turn(new_id, turn_id)
             if routine_run:

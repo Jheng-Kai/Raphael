@@ -214,6 +214,48 @@ async def test_the_failed_message_of_a_task_leaves_the_history_when_it_is_run_ag
     assert [row[0] for row in conn.execute("SELECT id FROM agent_turns WHERE session_id='s1'")] == [rig.task(new).turn_id]
 
 
+async def test_a_task_run_again_keeps_everything_the_owner_sent(make_rig, conn):
+    """The new attempt's turn repeated `old.text`, the expanded instruction, with no quote and no files, and once the old turn
+    was gone the conversation could not find the file again: it carries the message as it was sent."""
+    from raphael_core.agent.attachment_inputs import earlier_files
+
+    rig = make_rig()
+    history = AgentHistory(conn, rig.wall)
+    quote = {"text": "the total is wrong", "author": "Raphael"}
+    files = [{"name": "invoice.pdf", "mime": "application/pdf", "id": "stored-invoice", "size": 12}]
+    rig.service._closing = True
+    turn_id = history.add(session_id="s1", question="/review this file", route="delegate", prefix="Understood", text=phrase("en", "handoff"),
+                          status="done", source="app", quote=quote, attachments=files)
+    old = rig.submit("Review the attached file and list what is wrong.")
+    rig.service.attach_turn(old, turn_id)
+    rig.service._queue.clear()
+    rig.service._closing = False
+    finish(rig, old, "failed", "x")
+    rig.client.replies = [report("Again.")]
+    new = (await rig.rpc.call("worker.rerun", {"task_id": old}))["task_id"]
+    row = history.get(rig.task(new).turn_id)
+    assert (row.question, row.quote, row.attachments) == ("/review this file", quote, files)
+    assert earlier_files([row], []) == [{"name": "invoice.pdf", "mime": "application/pdf", "id": "stored-invoice"}]
+    await rig.wait_for_reports()
+
+
+async def test_a_second_request_to_run_a_failed_task_again_starts_nothing(make_rig, conn):
+    rig = make_rig()
+    rig.service._closing = True
+    old, old_turn, history = hand_over(rig, conn)
+    rig.service._queue.clear()
+    rig.service._closing = False
+    finish(rig, old, "failed", "x")
+    rig.client.replies = [report("Once.")]
+    first = (await rig.rpc.call("worker.rerun", {"task_id": old}))["task_id"]
+    with pytest.raises(RpcError) as error:
+        await rig.rpc.call("worker.rerun", {"task_id": old})
+    assert error.value.code == INVALID_PARAMS
+    assert [row[0] for row in conn.execute("SELECT id FROM worker_tasks WHERE rerun_of=?", (old,))] == [first]
+    assert [row[0] for row in conn.execute("SELECT id FROM agent_turns WHERE session_id='s1'")] == [rig.task(first).turn_id]
+    await rig.wait_for_reports()
+
+
 async def test_a_refused_rerun_keeps_the_failure_it_would_have_replaced(make_rig, conn):
     rig = make_rig()
     rig.service._closing = True
