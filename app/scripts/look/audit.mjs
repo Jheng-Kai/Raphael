@@ -77,6 +77,10 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     // above it. What has scrolled under the composer's row is covered on purpose, as under the top row; a control of the row itself is not.
     const foot = top.closest?.('.ra-stage.is-page > .ra-dock');
     if (foot && !foot.contains(element)) return null;
+    // R-UI-182: a long Settings page scrolls under its header (the way back, the title, the close), which stays at the top. What has
+    // scrolled under that header is covered on purpose; a control of the header itself is not.
+    const head = top.closest?.('.modal-scrim .modal-body :is(.set-content > .set-head, .cs > .cs-top, .cs-page > .cs-head, .skl-page > .skl-pack, .skl-page > .set-head, .vault-page > .set-head)');
+    if (head && !head.contains(element)) return null;
     const layer = fixedLayer(top);
     return layer && !layer.contains(element) ? null : top;
   };
