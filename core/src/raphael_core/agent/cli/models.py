@@ -211,22 +211,34 @@ def agy_models(output, settings):
     return list(families.values())
 
 
-async def antigravity_models(command, environ, settings):
-    child = Child([*command, "models"], environ=environ)
+# How `agy models` refuses when it has no sign-in to list them with: "Please sign in to view available models.", "You are not
+# logged into Antigravity.", or "Authentication expired. Please log back in." for one it can no longer use.
+AGY_SIGNED_OUT = re.compile(r"please sign in|not (?:logged|signed) in|log back in|sign in again", re.I)
+
+
+async def antigravity_models(command, environ, settings, *, gemini_dir=None, cwd=None):
+    """Antigravity's models, asked in `gemini_dir` when one is given (`--gemini_dir`, the folder a member's run uses) with the
+    owner's own home, so its sign-in is read where agy keeps it. Raises ValueError `signed_out` when agy says it has no sign-in,
+    whatever its exit code (its own verdict, R-CLI-SIGNIN-07), and `model_list_unavailable` for any other failure, an empty
+    list included: only models listed say it is signed in."""
+    child = Child([*command, *([f"--gemini_dir={gemini_dir}"] if gemini_dir else []), "models"], environ=environ, cwd=cwd)
+    output = bytearray()
     try:
         async with asyncio.timeout(12):
             await child.start()
-            output = bytearray()
             while chunk := await child.process.stdout.read(65536):
                 output.extend(chunk)
                 if len(output) > 2_000_000:
                     raise ValueError("model_list_unavailable")
             await child.process.wait()
-            if child.process.returncode:
-                raise ValueError("model_list_unavailable")
-            return agy_models(output.decode("utf-8-sig", errors="replace"), settings)
     finally:
         await child.kill()
+    listed = output.decode("utf-8-sig", errors="replace")
+    models = agy_models(listed, settings) if not child.process.returncode else []
+    if not models:
+        said = listed + (child.stderr_tail or b"").decode("utf-8", errors="replace")
+        raise ValueError("signed_out" if AGY_SIGNED_OUT.search(said) else "model_list_unavailable")
+    return models
 
 
 async def codex_models(command, environ, config_path):

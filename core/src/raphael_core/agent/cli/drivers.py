@@ -312,11 +312,14 @@ class Driver:
                     command += ["-c", f"{key}={toml_value(value)}"]
             elif self.name == "gemini":
                 # Google's Antigravity CLI (`agy`; Gemini CLI was retired). It reads MCP servers and
-                # rules only from its home folder, so it runs with a private home inside the
-                # member's workspace: Raphael's server and the persona are there, the owner's own
-                # agy settings are never touched, and the login (in the OS store) still applies.
+                # rules only from its Gemini folder, so it runs with a private one inside the member's
+                # workspace (`--gemini_dir`): Raphael's server and the persona are there, and the owner's
+                # own agy settings are never touched. Its home stays the owner's: agy reads its sign-in
+                # from the system's store through it (a Mac's login Keychain is found under $HOME), so a
+                # private home signed every run out (R-CLI-SIGNIN-07).
                 home = antigravity_home(cwd or str(files.path), endpoint, token, system, computer_endpoint=computer_endpoint)
-                command += ["--input-format", "stream-json", "--output-format", "stream-json", "-p="]
+                command += [f"--gemini_dir={home / '.gemini'}",
+                            "--input-format", "stream-json", "--output-format", "stream-json", "-p="]
                 if self.model:
                     command += ["--model", self.model]
                 if session:
@@ -327,8 +330,6 @@ class Driver:
                 self.native_skills = [{"type": "skill", "name": skill["name"], "path": path}
                                       for skill, path in zip(loaded_skills, skill_paths)]
                 environ["RAPHAEL_MCP_TOKEN"] = token
-            elif self.name == "gemini":
-                environ["USERPROFILE"] = environ["HOME"] = str(home)
             self.child = Child(command, environ=environ, cwd=child_cwd)
             self.native_diagnostic("launch", {"brain": self.name, "executable": self.command[0], "model": self.model,
                 "cwd": child_cwd, "home": environ.get("HOME"), "profile": environ.get("USERPROFILE"),
@@ -727,9 +728,9 @@ async def codex_home(workspace, environ, *, owner=None):
 
 
 def antigravity_home(workspace, endpoint, token, system, *, computer_endpoint=None):
-    """The private home Antigravity runs with, inside the member's private workspace: Raphael's MCP
-    server (its tools allowed and nothing else, since print mode denies every other permission),
-    and the persona as the home's global rules."""
+    """The folder holding the private Gemini folder Antigravity runs with (`--gemini_dir`), inside the
+    member's private workspace: Raphael's MCP server (its tools allowed and nothing else, since print
+    mode denies every other permission), and the persona as the folder's global rules."""
     home = Path(workspace) / "home"
     gemini = home / ".gemini"
     (gemini / "config").mkdir(parents=True, exist_ok=True)

@@ -31,12 +31,15 @@ EXPIRED = [
     ("codex", {"message": "Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again."}),
     # Antigravity.
     ("gemini", "Authentication failed: your session has expired. Please sign in again."),
+    ("gemini", "Authentication expired. Please log back in."),
 ]
 SIGNED_OUT = [
     ("claude", {"error": "Not logged in · Please run /login"}),
     ("claude", "Not logged in"),
     ("codex", "Not logged in. Run `codex login` to sign in."),
     ("gemini", "You are not signed in."),
+    # What agy 1.5 says when it finds no sign-in where it keeps one (live, a Mac run with a private home).
+    ("gemini", "error getting token source: You are not logged into Antigravity."),
 ]
 OTHER = [
     ("claude", {"error": "Prompt is too long"}, "context_overflow"),
@@ -438,30 +441,63 @@ def test_the_keychain_is_asked_for_attributes_alone(monkeypatch):
     assert discovery_module.keychain_stamp() is None
 
 
-def test_antigravitys_sign_in_in_windows_credential_manager_is_a_sign_in(tmp_path):
-    """R-CLI-SIGNIN-05 (#283): Antigravity CLI 1.5 on Windows keeps its Google sign-in in Credential Manager, not in
-    ~/.gemini; the item being there is the sign-in, and its LastWritten time moves the credential stamp."""
-    item = [133_000_000]
-    brains = CliBrains(home=tmp_path, environ={}, commands={"gemini": ["agy"]}, credentials=lambda: item[0])
+@pytest.mark.parametrize("stamp", ['"mdat"<timedate>=0x3230  "20261125114948Z\\000"', 133_000_000],
+                         ids=["mac-keychain", "windows-credential-manager"])
+def test_antigravitys_sign_in_in_the_systems_store_is_a_sign_in(tmp_path, stamp):
+    """R-CLI-SIGNIN-05 (#283): Antigravity CLI 1.5 keeps its Google sign-in in the system's store, the Keychain on a Mac and
+    Credential Manager on Windows, never in ~/.gemini; the item being there is the sign-in, a look stands for KEYCHAIN_TTL_S,
+    and its date moves the credential stamp. The same on both: a signed-in agy reads 未登入 on neither."""
+    now = [100.0]
+    item = [stamp]
+    looks = []
+    def credentials():
+        looks.append(now[0])
+        return item[0]
+    brains = CliBrains(home=tmp_path, environ={}, commands={"gemini": ["agy"]}, clock=lambda: now[0], credentials=credentials)
     assert brains.logged_in("gemini") is True and brains.available("gemini")
+    assert brains.logged_in("gemini") is True and len(looks) == 1  # the look stands
     brains.sign_in_lost("gemini", "expired")
     assert brains.sign_in_missing("gemini") == "expired"
-    item[0] = 133_000_001  # signed in again in a terminal
+    item[0] = f"{stamp} again"  # signed in again in a terminal
     assert brains.sign_in_missing("gemini") is None
     item[0] = None  # signed out
+    now[0] += discovery_module.KEYCHAIN_TTL_S
     assert brains.logged_in("gemini") is False and not brains.available("gemini")
-    # Credential Manager is Antigravity's alone here: the other CLIs keep files.
-    item[0] = 133_000_002
+    # The store holds Antigravity's sign-in alone here: the other CLIs keep files.
+    item[0] = stamp
     assert brains.logged_in("codex") is False
 
 
-def test_only_the_owners_own_home_on_windows_asks_credential_manager(tmp_path, monkeypatch):
+def test_only_the_owners_own_home_asks_the_systems_store_for_antigravity(tmp_path, monkeypatch):
+    """R-CLI-SIGNIN-05: the Keychain on a Mac, Credential Manager on Windows, and nothing for a home that is not the owner's."""
     monkeypatch.setattr(discovery_module.sys, "platform", "win32")
     assert discovery_module.owners_credentials(tmp_path) is None
     assert discovery_module.owners_credentials(None) is discovery_module.credential_stamp
     monkeypatch.setattr(discovery_module.sys, "platform", "darwin")
+    assert discovery_module.owners_credentials(tmp_path) is None
+    assert discovery_module.owners_credentials(None) is discovery_module.antigravity_keychain_stamp
+    assert discovery_module.credential_stamp() is None  # Credential Manager is asked only on Windows
+    monkeypatch.setattr(discovery_module.sys, "platform", "linux")
     assert discovery_module.owners_credentials(None) is None
-    assert discovery_module.credential_stamp() is None
+
+
+def test_the_keychain_is_asked_for_antigravitys_item_by_its_service_and_account_alone(monkeypatch):
+    """R-CLI-SIGNIN-05: agy's item is the password item of service `gemini` and account `antigravity`; its attributes alone
+    are asked for, never its secret (no `-g` or `-w`)."""
+    calls = []
+    class Found:
+        returncode = 0
+        stdout = '    "acct"<blob>="antigravity"\n    "mdat"<timedate>=0x3230  "20261125114948Z\\000"\n    "svce"<blob>="gemini"\n'
+    monkeypatch.setattr(discovery_module.subprocess, "run", lambda args, **kwargs: calls.append(args) or Found())
+    assert "20261125114948Z" in discovery_module.antigravity_keychain_stamp()
+    assert calls == [["/usr/bin/security", "find-generic-password", "-s", "gemini", "-a", "antigravity"]]
+    assert not {"-g", "-w"} & set(calls[0])
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="the Keychain is a Mac's")
+def test_the_keychain_without_the_item_says_none():
+    """Asking for an item nobody wrote finds nothing; only attributes are ever asked for, never a secret."""
+    assert discovery_module.keychain_stamp("raphael-test-no-such-item", "nobody") is None
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Credential Manager is Windows'")
