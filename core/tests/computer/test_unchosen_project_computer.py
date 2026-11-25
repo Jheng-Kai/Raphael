@@ -328,7 +328,7 @@ def test_a_parameter_written_with_a_colon_or_cut_short_names_the_file_it_names(t
 def _folders(tmp_path):
     project, other, own = (tmp_path / name for name in ("project", "other", "own"))
     for folder in (project, other, own):
-        folder.mkdir()
+        folder.mkdir(exist_ok=True)
     settings = Settings([project, other], chosen=project)
 
     def reach(path):
@@ -457,7 +457,7 @@ def test_sed_edits_in_place_every_input_file_when_an_option_gives_the_script(tmp
                    "-e 's/a/b/'", "-e s/a/b/", "--expression 's/a/b/'", "-f x.sed", "--file x.sed", "-ne p"):
         for flag in ("-i", "-i.bak", "--in-place=.bak"):
             assert told(f"sed {flag} {script} {there}/a.txt")[0] == [f"{there}/a.txt"], (flag, script)
-            assert told(f"sed {flag} {script} {there}/a.txt {there}/c.txt")[0] == [f"{there}/a.txt", f"{there}/c.txt"], (flag, script)
+            assert sorted(told(f"sed {flag} {script} {there}/a.txt {there}/c.txt")[0]) == sorted([f"{there}/a.txt", f"{there}/c.txt"]), (flag, script)
             assert told(f"sed {flag} {script} {here}/a.txt {there}/c.txt")[0] == [f"{there}/c.txt"], (flag, script)
     # With no option for the script the first word is it.
     assert told(f"sed -i.bak 's/a/b/' {there}/a.txt {there}/c.txt")[0] == [f"{there}/a.txt", f"{there}/c.txt"]
@@ -500,13 +500,15 @@ def test_a_cmdlet_that_reads_a_path_is_not_taken_to_write_it_when_the_parameter_
     assert told(f"Copy-Item a.txt -Des:{there}/b.txt")[0] == [f"{there}/b.txt"]
 
 
-def test_a_target_given_by_a_cut_short_name_leaves_the_word_beside_it_to_be_the_content(tmp_path):
+def test_a_target_given_by_a_cut_short_name_still_judges_the_word_beside_it_as_the_reading_by_words_always_did(tmp_path):
     told, here, there = _told(tmp_path)
+    # Known false refusal, accepted: the lone word beside a target given by a cut-short name is the content, and the reading by
+    # words (unchanged since it was first made) takes it for the target. Over-judging is allowed; missing a write is not.
     for command in (f"Set-Content -Pa:{here}/out.txt {there}/a.txt", f"Set-Content -Pat:{here}/out.txt {there}/a.txt",
                     f"Set-Content -Lit:{here}/out.txt {there}/a.txt", f"Add-Content -PSP:{here}/out.txt {there}/a.txt",
                     f"Out-File -Pat:{here}/out.txt {there}/a.txt", f"Set-Content {there}/a.txt -Pa:{here}/out.txt",
                     f"Clear-Content -Lit:{here}/out.txt {there}/a.txt", f"Start-Transcript -OutputD:{here}/t {there}/a.txt"):
-        assert told(command) == ([], []), command
+        assert told(command)[0] == [f"{there}/a.txt"], command
     # The target in the other project is the write, whatever words are beside it.
     for command in (f"Set-Content -Pa:{there}/out.txt {here}/a.txt", f"Set-Content -Lit:{there}/out.txt x", f"Out-File -Pat:{there}/o x"):
         assert told(command)[0], command
@@ -515,3 +517,81 @@ def test_a_target_given_by_a_cut_short_name_leaves_the_word_beside_it_to_be_the_
     # And a name written out, as it always was.
     assert told(f"Set-Content -Path {here}/out.txt {there}/a.txt") == ([], [])
     assert told(f"New-Item -Pa:{there} -Name a.txt")[0]
+
+
+# --- round six: the union of the reading by words and the additions -----------------------------------------------------------
+
+
+def test_the_answer_is_the_union_of_the_old_reading_and_the_additions_by_construction(tmp_path):
+    from raphael_core.computer import shell_writes
+    told, here, there = _told(tmp_path)
+    project, other, own, reach = _folders(tmp_path)
+    for command in (f"Set-Content -Pa:{here}/out.txt {there}/a.txt", f"sed -i.bak -e=s/a/b/ {there}/a.txt", f"Remove-Item {there}/a, {there}/b",
+                    f"Copy-Item -LiteralPath {here}/a {there}/d", f"echo hi > {there}/o; Set-Content -Pat:{there}/x y", "echo hi"):
+        classic = shell_writes._classic_classify(command, str(project), reach, home=str(tmp_path / "home"))
+        both = shell_writes.classify(command, str(project), reach, home=str(tmp_path / "home"))
+        assert set(classic[0]) <= set(both[0]) and set(classic[1]) <= set(both[1]), command
+        assert both[0][:len(classic[0])] == classic[0] and both[1][:len(classic[1])] == classic[1], command  # the old answer first
+
+
+def test_what_the_codex_reviews_found_missed_is_judged(tmp_path):
+    told, here, there = _told(tmp_path)
+    # A comma array, written with and without spaces, after a parameter or not.
+    for command in (f"Set-Content -Pat:{here}/a.txt, {there}/b.txt x", f"Set-Content -Pat:{here}/a.txt,{there}/b.txt x",
+                    f"Set-Content -Path {here}/a.txt, {there}/b.txt x", f"Set-Content -Path:{here}/a.txt,{there}/b.txt x",
+                    f"Remove-Item {here}/a.txt, {there}/b.txt", f"Remove-Item {here}/a.txt,{there}/b.txt", f"Remove-Item -LP {here}/a, {there}/b",
+                    f"Out-File -FilePath {here}/a, {there}/b", f"Set-Content {here}/a ,{there}/b x", f"Move-Item -Path {here}/a, {there}/b {here}/c",
+                    f"Add-Content -LiteralPath:{here}/a,{there}/b -Value:x"):
+        assert f"{there}/b.txt" in told(command)[0] or f"{there}/b" in told(command)[0], command
+    # What is a value in the array is not a path (`-Value a, b`), and an array of the own project is nothing.
+    assert told(f"Set-Content -Path {here}/a.txt -Value 'x, y'") == ([], [])
+    assert told(f"Remove-Item {here}/a, {here}/b") == ([], [])
+    # BSD's -l takes no argument, GNU's takes one: both readings are made, and the in-place flag after it is judged.
+    for command in (f"sed -l -i '' 's/a/b/' {there}/a.txt", f"sed -li 's/a/b/' {there}/a.txt", f"sed -l 5 -i 's/a/b/' {there}/a.txt",
+                    f"sed -l -i.bak 's/a/b/' {there}/a.txt", f"sed -nli 's/a/p/p' {there}/a.txt", f"sed -l -i -e 's/a/b/' {there}/a.txt"):
+        assert told(command)[0] == [f"{there}/a.txt"], command
+    # A source given by name leaves the word beside it as the destination, for a copy, an archive and a transfer.
+    for command in (f"Copy-Item -LiteralPath {here}/a {there}/d", f"Copy-Item -Path {here}/a {there}/d", f"Copy-Item -PSPath {here}/a {there}/d",
+                    f"Copy-Item -Path:{here}/a {there}/d", f"Expand-Archive -LiteralPath {here}/z.zip {there}/o",
+                    f"Compress-Archive -LiteralPath {here}/src {there}/o.zip", f"Compress-Archive -Path {here}/src {there}/o.zip",
+                    f"Start-BitsTransfer -Source:https://example.com/x {there}/dest", f"Start-BitsTransfer -Source https://example.com/x {there}/dest",
+                    f"Copy-Item -Path {here}/a -Destination {there}/d"):
+        assert told(command)[0], command
+    assert told(f"Copy-Item -LiteralPath {there}/a {here}/d") == ([], [])  # its source in the other project is only read
+    # The backup template of GNU sed's -i goes where it says, whatever directory the file is in.
+    for command in (f"sed -i'{there}/*.bak' 's/a/b/' {here}/a.txt", f"sed --in-place='{there}/*.bak' 's/a/b/' {here}/a.txt",
+                    f"sed -i'{there}/bak.*' -e 's/a/b/' {here}/a.txt", f"sed -i'../other/*.bak' 's/a/b/' {here}/a.txt"):
+        assert told(command)[0], command
+    assert told(f"sed -i'*.bak' 's/a/b/' {here}/a.txt") == ([], [])  # next to the file, as the file is
+    assert told(f"sed -i'bak/*' 's/a/b/' {here}/a.txt") == ([], [])  # a folder of the own project
+
+
+def test_the_old_reading_is_kept_whole_and_the_new_one_never_judges_less(tmp_path):
+    from raphael_core.computer import shell_writes
+    project, other, own, reach = _folders(tmp_path)
+    there, here = other.as_posix(), project.as_posix()
+    commands = [
+        # every command of the properties above, and what the reviews of the later versions found
+        f"Set-Content {there}/a.txt x -Fi:*.txt", f"Set-Content -Pa:{here}/b.txt {there}/a.txt", f"sed -i:.bak 's/a/b/' {there}/a.txt",
+        f"sed -i -e s1 -e s2 {there}/a.txt {there}/c.txt", f"sed -i '' 's/a/b/' {there}/a.txt", f"sed -i .bak 's/a/b/' {there}/a.txt",
+        f"Copy-Item -Pat:{there}/a.txt -Des:{here}/out.txt", f"Copy-Item -LiteralPath {here}/a {there}/d", f"Set-Content -Pat:{here}/a.txt, {there}/b.txt x",
+        f"sed -l -i '' 's/a/b/' {there}/a.txt", f"sed -i'{there}/*.bak' 's/a/b/' {here}/a.txt", f"cp -t {there} a.txt", f"mv a {there}/b", f"tee -a {there}/a",
+        f"tar -C {there} -xf z.tar", f"curl -o {there}/f https://example.com", f"rm -rf {there}/a", f"dd if=a of={there}/f",
+        f"Rename-Item -Lit:{there}/a.txt b.txt", f"Rename-Item {there}/a.txt -NewName b.txt", f"Move-Item {there}/a.txt c.txt",
+        f"Expand-Archive -LiteralPath {here}/z.zip {there}/o", f"echo hi > {there}/a; echo ho >> b", f"cd {there}; echo hi > a", "Remove-Item $path",
+        f"powershell -Command \"Set-Content -Pat:{here}/a.txt, {there}/b.txt x\"", f"git clone https://example.com/x.git {there}/x",
+    ]
+    for command in commands:
+        for cwd in (project, other):
+            classic = shell_writes._classic_classify(command, str(cwd), reach, home=str(tmp_path / "home"))
+            old = old_classify(tmp_path, command, cwd, reach)
+            assert classic == old, command  # kept whole: the very answer of the version it was kept from
+            both = shell_writes.classify(command, str(cwd), reach, home=str(tmp_path / "home"))
+            assert set(old[0]) <= set(both[0]) and set(old[1]) <= set(both[1]), (command, old, both)
+    # And what the versions between answered, kept as they were (hard-coded): nothing of it is lost.
+    told, _, _ = _told(tmp_path)
+    assert told(f"Set-Content {there}/a.txt x -Fi:*.txt")[0] == [f"{there}/a.txt"]  # round four, A
+    assert told(f"sed -i:.bak 's/a/b/' {there}/a.txt")[0] == [f"{there}/a.txt"]  # round four, B
+    assert told(f"sed -i.bak -e 's/a/b/' {there}/a.txt {there}/c.txt")[0] == [f"{there}/a.txt", f"{there}/c.txt"]  # round five
+    assert told(f"Copy-Item -Pat:{here}/a.txt -Des:{there}/out.txt")[0] == [f"{there}/out.txt"]  # round five
+    assert told(f"Copy-Item -Pat:{there}/a.txt -Des:{here}/out.txt") == ([], [])  # the old reading found nothing here, and nothing is added

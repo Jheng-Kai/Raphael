@@ -170,20 +170,6 @@ def name_of(token):
     return base[:-4] if base.endswith(".exe") else base
 
 
-def parameter(key):
-    """The parameters a name written after a dash stands for, as PowerShell reads it: the name itself when it is one that is
-    known, else every known path parameter it is the beginning of (any unambiguous beginning is accepted: -Lit, -Pa, -Fi, -Des),
-    else the known value parameter it is the beginning of. Where more than one path parameter fits (-Des is Destination and
-    DestinationPath, -Out is OutFile, Output...), the value is given to each, so that it is judged whichever the command means.
-    Empty when it is none of them."""
-    if key in PATH_PARAMS or key in VALUE_PARAMS:
-        return [key]
-    if len(key) < 2:
-        return []
-    paths = sorted(name for name in PATH_PARAMS if name.startswith(key))
-    return paths or sorted(name for name in VALUE_PARAMS if name.startswith(key))[:1]
-
-
 def _path_like(value):
     """Whether the value of a parameter that nobody knows looks like a path written (a folder, a drive, `~`, `.`), and not an
     address or a plain word."""
@@ -223,14 +209,15 @@ SED_LONG = ("binary", "debug", "expression", "file", "follow-symlinks", "in-plac
             "quiet", "silent", "regexp-extended", "separate", "sandbox", "unbuffered", "version", "help", "posix")
 
 
-def sed_words(words):
-    """(whether sed edits in place, whether its script comes from an option, the words that are not options) as GNU sed reads
-    its words: the options end at `--`; `-i` takes the rest of its word as the suffix (`-i.bak`, `-ie`), and may follow other
+def sed_words(words, l_takes_argument=True):
+    """(whether sed edits in place, whether its script comes from an option, the words that are not options, the suffixes of the
+    in-place edit) as GNU sed reads its words (`-l` takes the next word as GNU's `-l N`; BSD's `-l` takes none, so the reading
+    is made both ways, `l_takes_argument` and not): the options end at `--`; `-i` takes the rest of its word as the suffix (`-i.bak`, `-ie`), and may follow other
     letters (`-ni`); `-e` and `-f` (and `--expression`, `--file`, each cut short to a name that is only theirs) take the rest of
     their word, or the next word, as the script or the file of it, which is no operand and no flag; `--in-place[=SUFFIX]` is the
     long form. BSD's suffix word (`-i .bak`, `-i ''`) is left among the words, as it always was."""
     in_place = scripted = False
-    operands, index, options = [], 0, True
+    operands, suffixes, index, options = [], [], 0, True
     while index < len(words):
         word = words[index]
         text = word.text
@@ -240,11 +227,12 @@ def sed_words(words):
         elif text == "--":
             options = False
         elif text[1] == "-":
-            name, equals, _ = text[2:].partition("=")
+            name, equals, suffix = text[2:].partition("=")
             matches = [long for long in SED_LONG if name and long.startswith(name)]
             if len(matches) == 1:
                 if matches[0] == "in-place":
                     in_place = True
+                    suffixes.append(suffix)
                 elif matches[0] in ("expression", "file"):
                     scripted = True
                     index += 0 if equals or index >= len(words) else 1
@@ -254,12 +242,15 @@ def sed_words(words):
             for position, letter in enumerate(text[1:], 1):
                 if letter == "i":
                     in_place = True
+                    suffixes.append(text[position + 1:])
                     break
+                if letter == "l" and not l_takes_argument:
+                    continue
                 if letter in "efl":
                     scripted = scripted or letter != "l"
                     index += 0 if text[position + 1:] or index >= len(words) else 1
                     break
-    return in_place, scripted, operands
+    return in_place, scripted, operands, suffixes
 
 
 def powershell_paths(arguments, writes):
@@ -328,8 +319,10 @@ def writes(command, cwd, roots, *, windows=None, home=None, depth=0):
                     windows=windows, home=home, depth=depth)[1]
 
 
-def classify(command, cwd, reach, *, windows=None, home=None, depth=0):
-    """(the targets of `command` in a project that is not the member's, the other targets outside its work folder), as the
+def _classic_classify(command, cwd, reach, *, windows=None, home=None, depth=0):
+    """The reading of a command that `classify` began with, as it was (9a542a3cc), kept whole and unchanged: everything the later
+    readings add is in `_extra_classify`, and the answer is the union of the two, so a later change can never miss what this
+    one finds. (The targets of `command` in a project that is not the member's, the other targets outside its work folder), as the
     words that named them ("<variable>" for one that cannot be read). `reach` says where a resolved path is: "inside" the
     work folder, in a "project" that is not the member's, or "outside" (`work_area.reach`). `cwd` is the folder the command
     starts in (None: unknown, so a relative target is outside)."""
@@ -398,7 +391,7 @@ def classify(command, cwd, reach, *, windows=None, home=None, depth=0):
         if name in SHELLS and depth < DEPTH:
             for position, token in enumerate(rest[:-1]):
                 if token.text.lower() in SHELL_FLAGS:
-                    nested = classify(" ".join(item.text for item in rest[position + 1:]), here, reach,
+                    nested = _classic_classify(" ".join(item.text for item in rest[position + 1:]), here, reach,
                                       windows=windows, home=home, depth=depth + 1)
                     projects += nested[0]
                     outside += nested[1]
@@ -407,10 +400,8 @@ def classify(command, cwd, reach, *, windows=None, home=None, depth=0):
         positional, named = _options(rest)
         kind = WRITERS.get(name)
         found = []
-        given, maybe = powershell_paths(rest, written(name)) if name in POWERSHELL else ([], [])
         if kind == DEST:
-            # A target given by a parameter, however it is written, leaves the words beside it to be the content.
-            found = [*(item for key in SOURCE_PARAMS for item in named.get(key, [])), *given]
+            found = [item for key in SOURCE_PARAMS for item in named.get(key, [])]
             if name == "start-transcript":
                 found += named.get("outputdirectory") or []
             found = found or positional[:1]
@@ -425,16 +416,14 @@ def classify(command, cwd, reach, *, windows=None, home=None, depth=0):
             found = renamed(positional, named)
         elif kind == COPY:
             found = [*(named.get("destination") or [])] or (positional[-1:] if len(positional) > 1 else [Token(".")])
-        elif name in WEB:
+        elif name in ("invoke-webrequest", "iwr", "invoke-restmethod", "irm"):
             found = named.get("outfile") or []
         elif name in ("curl", "wget"):
             found = [*(named.get("o") or []), *(named.get("output") or [])]
             if name == "curl" and "O" in {token.text.lstrip("-") for token in rest}:
                 found.append(Token("."))
-        elif name in ("expand-archive", "compress-archive"):
+        elif name == "expand-archive":
             found = named.get("destinationpath") or positional[1:2]
-        elif name == "start-bitstransfer":
-            found = named.get("destination") or positional[1:2]
         elif name == "tar":
             found = [rest[at + 1] for at, token in enumerate(rest[:-1]) if token.text in ("-C", "--directory")]
         elif name == "git" and positional and positional[0].text == "clone":
@@ -443,13 +432,170 @@ def classify(command, cwd, reach, *, windows=None, home=None, depth=0):
             found = positional[1:2] or [Token(".")]
         elif name == "dd":
             found = [Token(token.text[3:], token.dynamic) for token in rest if token.text.startswith("of=")]
-        elif name == "sed":
-            in_place, scripted, operands = sed_words(rest)
-            if in_place:
-                # The first word that is no option is the script, unless an option gave it; a word that is empty names nothing.
-                found = [word for word in (operands if scripted else operands[1:]) if word.text]
-        if name in POWERSHELL:
-            found = [*found, *(token for token in (*given, *maybe) if not any(token is item for item in found))]
+        elif name == "sed" and "i" in named:
+            found = positional[1:]
         for token in found:
             judge(token, here)
     return projects, outside
+
+
+def _comma_pieces(arguments):
+    """The pieces of the words of a PowerShell command that are an array written with commas (`-Path a, b`, `a,b`): each piece is a
+    path it may be given, and the reading by words sees only the first. A value of a parameter that is a value is none."""
+    pieces, open_array, skip = [], False, False
+    for token in arguments:
+        text = token.text
+        if skip:
+            skip = False
+            continue
+        value = text
+        if len(text) > 1 and text[0] == "-" and not text[1:].isdigit():
+            key, colon, tail = text.lstrip("-").partition(":")
+            if key.lower() in VALUE_PARAMS:
+                skip = not colon
+                open_array = False
+                continue
+            if not (colon and tail):
+                open_array = False
+                continue
+            value = tail
+        if "," in value or open_array:
+            pieces += [Token(piece.strip(), token.dynamic) for piece in value.split(",") if piece.strip()]
+        open_array = value.endswith(",")
+    return pieces
+
+
+COPY_LIKE = ("copy-item", "cpi", "copy-itemproperty", "expand-archive", "compress-archive", "start-bitstransfer")
+SOURCE_NAMES = ("path", "literalpath", "pspath", "lp", "filepath", "source")
+DESTINATION_NAMES = ("destination", "destinationpath")
+
+
+def _names(named, wanted):
+    """Whether one of the names a parameter was written with is, or is the beginning of, one of the `wanted`."""
+    return any(key in wanted or (len(key) >= 2 and any(name.startswith(key) for name in wanted)) for key in named)
+
+
+def extra_targets(name, rest):
+    """The words a command names as paths it writes that the reading by words (`_classic_classify`) does not take for them: the
+    parameters of PowerShell written `-Name:value` or cut short, its arrays written with commas, a copy, an archive and a
+    transfer whose source is given by name and whose destination is the lone word beside it, sed's edit in place however its
+    options are written (and the directory of its backup), each only ever one more to judge."""
+    positional, named = _options(rest)
+    found = []
+    if name in POWERSHELL:
+        given, maybe = powershell_paths(rest, written(name))
+        found += [*given, *maybe, *_comma_pieces(rest)]
+        if name in COPY_LIKE:
+            if _names(named, SOURCE_NAMES) and not _names(named, DESTINATION_NAMES):
+                # `-LiteralPath src dest`: the word beside the source is where it goes (and, where a name the reading by words
+                # does not know (-Source) leaves its value among the words, the last one is).
+                found += [*positional[:1], *positional[-1:]]
+            elif name in ("expand-archive", "compress-archive", "start-bitstransfer") and not _names(named, DESTINATION_NAMES):
+                found += positional[1:2]
+    elif name == "sed":
+        for takes in (True, False):
+            in_place, scripted, operands, suffixes = sed_words(rest, takes)
+            if not in_place:
+                continue
+            files = [word for word in (operands if scripted else operands[1:]) if word.text]
+            found += files
+            for suffix in suffixes:
+                # `-i'dir/*.bak'`: a backup is made where the template says, wherever the file is.
+                if "/" in suffix or "\\" in suffix:
+                    for word in files:
+                        base = re.split(r"[\\/]", word.text)[-1]
+                        backup = suffix.replace("*", base) if "*" in suffix else base + suffix
+                        found.append(Token(backup, word.dynamic))
+                        if not (os.path.isabs(backup) or os.path.splitdrive(backup)[0] or backup.startswith(("~", "/", "\\"))):
+                            found.append(Token(word.text[:len(word.text) - len(base)] + backup, word.dynamic))  # or in the file's folder
+    return found
+
+
+def _extra_classify(command, cwd, reach, *, windows=None, home=None, depth=0):
+    """(projects, outside) of the targets the additions find (`extra_targets`): the same reading of where the command runs, of a
+    `cd` and of the shells it starts as `_classic_classify` has, and nothing that reading already finds is taken away by it."""
+    windows = os.name == "nt" if windows is None else windows
+    home = home or os.path.expanduser("~")
+    outside, projects = [], []
+    here = cwd
+
+    def judge(token, folder):
+        text = token.text
+        if text.lower() in NOTHING:
+            return
+        if token.dynamic:
+            outside.append(text or "<variable>")
+            return
+        if text in ("", "."):
+            text = "."
+        if text.startswith("~") and text not in ("~",) and not text.startswith(("~/", "~\\")):
+            outside.append(text)
+            return
+        prefix = 4 if text[:4] in ("\\\\?\\", "\\\\.\\") else 0
+        wild = re.search(r"[*?\[]", text[prefix:])
+        if wild:
+            text = os.path.dirname(text[:prefix + wild.start()] + "x") or "."
+        try:
+            relative = not (os.path.isabs(text) or text.startswith(("~", "\\", "/")) or os.path.splitdrive(text)[0])
+            if relative and folder is None:
+                outside.append(text)
+                return
+            where = reach(resolved(text, folder, home))
+            if where == PROJECT:
+                projects.append(text)
+            elif where != "inside":
+                outside.append(text)
+        except PathRefused:
+            outside.append(text)
+
+    for segment in split(command, windows):
+        redirect = [index for index, token in enumerate(segment) if token.redirect]
+        words = [token for index, token in enumerate(segment) if not token.redirect and index - 1 not in redirect]
+        while words and (words[0].text.lower() in PREFIXES or re.fullmatch(r"[A-Za-z_]\w*=.*", words[0].text)
+                         or words[0].text in ("&", ".")):
+            words = words[1:]
+        if not words:
+            continue
+        name = name_of(words[0].text)
+        rest = words[1:]
+        if name in CHANGE_DIRECTORY:
+            positional, named = _options(rest)
+            positional = [token for token in positional if token.text.lower() != "/d"]
+            target = (named.get("path") or named.get("literalpath") or positional or [None])[0]
+            if target is None or target.dynamic or target.text.startswith("-"):
+                here = None
+            else:
+                try:
+                    here = resolved(target.text, here, home) if here is not None or os.path.isabs(target.text) else None
+                except PathRefused:
+                    here = None
+            continue
+        if name in SHELLS and depth < DEPTH:
+            for position, token in enumerate(rest[:-1]):
+                if token.text.lower() in SHELL_FLAGS:
+                    nested = _extra_classify(" ".join(item.text for item in rest[position + 1:]), here, reach,
+                                             windows=windows, home=home, depth=depth + 1)
+                    projects += nested[0]
+                    outside += nested[1]
+                    break
+            continue
+        for token in extra_targets(name, rest):
+            judge(token, here)
+    return projects, outside
+
+
+def classify(command, cwd, reach, *, windows=None, home=None, depth=0):
+    """(the targets of `command` in a project that is not the member's, the other targets outside its work folder), as the words
+    that named them ("<variable>" for one that cannot be read). `reach` says where a resolved path is: "inside" the work
+    folder, in a "project" that is not the member's, or "outside" (`work_area.reach`). `cwd` is the folder the command starts
+    in (None: unknown, so a relative target is outside).
+
+    The answer is the union of two readings: the one by words that was always made (`_classic_classify`, unchanged), and the
+    additions (`_extra_classify`). Whatever a reading finds stays found; the additions may judge more than the command writes
+    (a word beside a named target is judged as it always was), never less. It is a best effort and no sandbox: what a program
+    that a command starts writes is not seen."""
+    options = dict(windows=windows, home=home, depth=depth)
+    projects, outside = _classic_classify(command, cwd, reach, **options)
+    more_projects, more_outside = _extra_classify(command, cwd, reach, **options)
+    return ([*projects, *(text for text in dict.fromkeys(more_projects) if text not in projects)],
+            [*outside, *(text for text in dict.fromkeys(more_outside) if text not in outside)])
