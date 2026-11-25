@@ -277,6 +277,8 @@ async def test_an_older_failure_run_again_never_clears_the_error_of_a_newer_run(
     tasks = []
     for number in range(2):
         shown = history.add(session_id=f"routine:{routine_id}", question="Inbox check", route="routine", prefix="", text="", status="running", source="routine")
+        with conn:
+            conn.execute("INSERT INTO routine_runs(routine_id,started,status,turn_id,trigger_json) VALUES (?,?,'running',?,'{}')", (routine_id, rig.wall(), shown))
         rig.client.replies = [turn("", [use("nothing_like_it", {}, f"c{number}")])]
         task_id = routine_run(rig, "Look at the inbox", routine_id=routine_id)
         rig.service.attach_turn(task_id, shown)
@@ -295,6 +297,8 @@ async def test_an_older_failure_run_again_never_clears_the_error_of_a_newer_run(
         conn.execute("INSERT INTO routines(member_id,title,prompt,schedule,created_at_ms) VALUES (0,'Other','Look','{}',0)")
     other = conn.execute("SELECT MAX(id) FROM routines").fetchone()[0]
     shown = history.add(session_id=f"routine:{other}", question="Other", route="routine", prefix="", text="", status="running", source="routine")
+    with conn:
+        conn.execute("INSERT INTO routine_runs(routine_id,started,status,turn_id,trigger_json) VALUES (?,?,'running',?,'{}')", (other, rig.wall(), shown))
     rig.client.replies = [turn("", [use("nothing_like_it", {}, "c9")])]
     alone = routine_run(rig, "Look", routine_id=other)
     rig.service.attach_turn(alone, shown)
@@ -306,6 +310,33 @@ async def test_an_older_failure_run_again_never_clears_the_error_of_a_newer_run(
     rig.client.replies = [report("Done.")]
     await rig.service._rerun({"task_id": alone})
     assert conn.execute("SELECT last_error FROM routines WHERE id=?", (other,)).fetchone()[0] == ""
+
+
+async def test_a_newer_run_refused_before_a_worker_took_it_still_keeps_its_error(make_rig, conn):
+    """The newer run has a run row and no task: the routine's error is still its, with the same words as the older failure's."""
+    from raphael_core.members.service import _line
+
+    rig = make_rig()
+    history = AgentHistory(conn, rig.wall)
+    with conn:
+        conn.execute("INSERT INTO routines(member_id,title,prompt,schedule,created_at_ms) VALUES (0,'Inbox check','Look at the inbox','{}',0)")
+    routine_id = conn.execute("SELECT MAX(id) FROM routines").fetchone()[0]
+    shown = history.add(session_id=f"routine:{routine_id}", question="Inbox check", route="routine", prefix="", text="", status="running", source="routine")
+    with conn:
+        conn.execute("INSERT INTO routine_runs(routine_id,started,status,turn_id,trigger_json) VALUES (?,?,'running',?,'{}')", (routine_id, rig.wall(), shown))
+    rig.client.replies = [turn("", [use("nothing_like_it", {}, "c1")])]
+    task_id = routine_run(rig, "Look at the inbox", routine_id=routine_id)
+    rig.service.attach_turn(task_id, shown)
+    assert (await ended(rig, task_id)).state == "failed"
+    failed = history.get(shown)
+    said = _line((failed.text or failed.detail or "").strip().split(chr(10) * 2)[0])
+    refused = history.add(session_id=f"routine:{routine_id}", question="Inbox check", route="routine", prefix="", text=said, status="error", source="routine")
+    with conn:
+        conn.execute("INSERT INTO routine_runs(routine_id,started,status,turn_id,trigger_json) VALUES (?,?,'error',?,'{}')", (routine_id, rig.wall(), refused))
+        conn.execute("UPDATE routines SET last_error=? WHERE id=?", (said, routine_id))
+    rig.client.replies = [report("Done.")]
+    await rig.service._rerun({"task_id": task_id})
+    assert conn.execute("SELECT last_error FROM routines WHERE id=?", (routine_id,)).fetchone()[0] == said
 
 
 async def test_a_page_the_run_waited_at_still_counts_as_made_when_the_run_goes_on(make_rig, conn):
