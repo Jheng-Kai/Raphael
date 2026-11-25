@@ -8,7 +8,7 @@ const waiting = { action: "main-event", event: { type: "MemberActivity", member_
 export default [
   scene("status-light-idle", "With no member at work the light is one dim dot, and the title pill has no dot of its own", [member(1), wait('.mb-head [data-act="status"]'), check("status-light-idle")]),
   // The owner, 2026-11-25: with nobody at work the list says so in its heading alone, with no line under it.
-  scene("status-light-idle-open", "Opened with nobody at work, the list is its heading 「沒有人在工作」 alone, with no line under it", [member(1), wait('.mb-head [data-act="status"]'), click('.mb-head [data-act="status"]'), wait(".menu .menu-head"), check("menu-head-alone")]),
+  scene("status-light-idle-open", "Opened with nobody at work, the list is its heading 「沒有人在工作」 alone, with no line under it", [member(1), wait('.mb-head [data-act="status"]'), click('.mb-head [data-act="status"]'), wait(".menu .menu-head"), check("menu-head-alone")], { noNews: true }),
   scene("status-light-list", "Waiting for the owner comes first, finished next, and working last", [member(1), wait('.mb-head [data-act="status"]'), working, waiting, wait('.mb-head [data-act="status"][data-level="needs"]'), click('.mb-head [data-act="status"]'), wait(".menu .menu-choice"), check("status-light-list")], { sidebarLights: { 3: "done" } }),
   scene("status-light-dot", "News in the list puts a small dot at the icon's top right, the warning colour for one waiting for the owner", [member(1), wait('.mb-head [data-act="status"]'), working, waiting, wait('.mb-head [data-act="status"][data-dot="needs"]'), check("status-light-dot")]),
   scene("status-light-seen", "Two finished conversations keep the dot until both are opened", [

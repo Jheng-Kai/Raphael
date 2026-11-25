@@ -932,7 +932,9 @@ export function checkRendered(name, context = {}) {
       require(chosen.length === 1 && chosen[0].dataset.vaultMember === '1', `the member pressed is the one chosen (${chosen.map(row => row.dataset.vaultMember).join(',')})`);
     }
     else {
-      require(vault.querySelectorAll('.vault-row').length === 3 && vault.textContent.includes('出差用公司卡'), 'all kinds and hints appear');
+      // Three entries of the fixture, and the Composio key first while one is saved (#320).
+      const rows = vault.querySelectorAll('.vault-row').length, composio = window.__look.data.composioConfigured ? 1 : 0;
+      require(rows === 3 + composio && vault.textContent.includes('出差用公司卡'), `all kinds and hints appear (${rows} rows)`);
       const about = vault.querySelector(':scope > p.dim'), lines = new Map();
       for (let offset = 0; offset < about.firstChild.textContent.length; offset++) {
         if (!about.firstChild.textContent[offset].trim()) continue;

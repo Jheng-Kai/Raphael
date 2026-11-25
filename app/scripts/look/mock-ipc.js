@@ -444,6 +444,8 @@ export function installMock(fixture, config = {}, target = window) {
     data.members[1].last_at = data.now;
     data.messages.push({ ...data.messages.at(-1), id: Math.max(...data.messages.map(message => message.id)) + 1, room_id: data.rooms[0].id, text: "週五計畫已準備完成", created: data.now, status: "done" });
   }
+  // `noNews`: nobody works, waits or has finished anything unread, so the status list is empty (「沒有人在工作」).
+  if (variant.noNews) for (const member of data.members) Object.assign(member, { unread: false, unread_kind: null, unread_threads: [], waiting: false, waiting_cards: [], activity: null });
   // The one light of a row (sidebar-light.ts): `sidebarLights` maps a member id to what that member is in. A member that
   // thinks has said nothing, so it has no news; one that waits for the owner has news too, which its orange question outranks.
   if (variant.sidebarLights) {
