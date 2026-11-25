@@ -254,3 +254,9 @@ async def test_a_switch_stuck_in_one_repository_never_holds_up_another(conn, rep
             await folders.switch_branch(settings, {"path": str(repository), "branch": "draft"})
     finally:
         stuck.release()
+
+
+def test_two_spellings_of_one_repository_share_its_switch_lock(repository):
+    (repository / "sub").mkdir()
+    assert folders._switch_lock(str(repository)) is folders._switch_lock(str(repository / "sub" / ".."))
+    assert folders._switch_lock(str(repository)) is not folders._switch_lock(str(repository.parent))

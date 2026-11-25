@@ -26,8 +26,14 @@ _switching_guard = threading.Lock()
 
 
 def _switch_lock(path):
+    # The real folder decides the lock, so two spellings of one repository (`Repo`, `Repo\sub\..`, a junction to it)
+    # share it.
+    try:
+        key = path_key(os.path.realpath(path))
+    except (OSError, ValueError):
+        key = path_key(path)
     with _switching_guard:
-        return _switching.setdefault(path_key(path), threading.Lock())
+        return _switching.setdefault(key, threading.Lock())
 PROJECTS = "/home/cua/projects"
 PROJECT_LIMIT = 50
 
