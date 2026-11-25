@@ -447,7 +447,7 @@ the pointer moved away, so the pictures show a chosen row as it stays. Removing 
 presses: ⋯ (or a right click), 移除, which asks 「確定移除這筆資料？」 in its own place in the
 same menu (`ActionItem.ask`), and that item again; no second menu opens.
 
-Every entry's 編輯 changes its private values too (R-VAULT-07, the owner 2026-11-25): the fields start empty and masked,
+Every entry's 編輯 changes its private values too (R-VAULT-07): the fields start empty and masked,
 each saying that empty keeps what is saved, and only what is typed is sent (`vault-edit-values`). A saved Composio key is
 the vault's first key, the whole team's, and its 編輯 is the key alone (`vault-composio-key`, `vault-composio-edit`,
 R-CONNECT-05).

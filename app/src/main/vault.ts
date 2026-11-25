@@ -54,7 +54,7 @@ const membersHTML = (members: VaultView["members"], chosen: (id: number) => bool
 export function vaultHTML(v: VaultView): string {
   const access = (current: "all" | number[] = "all"): string => `<div class="vault-access"><span>${esc(word("access"))}</span>${sel([{ value: "all", label: word("everyone") }, { value: "chosen", label: word("chosen") }], v.access, word("access"), ' data-k="vault-access"')}</div>` +
     (v.access === "chosen" ? membersHTML(v.members, id => current !== "all" && current.includes(id)) : "");
-  // Every entry can be changed (the owner, 2026-11-25), its private values too: they are never shown, so an edit's fields
+  // Every entry can be changed, its private values too: they are never shown, so an edit's fields
   // start empty and a field left empty keeps what is saved.
   const privateInputs = (kind: EntryKind, editing: boolean): string => privateFields[kind].map(field =>
     fieldHTML(editing ? t("vault.keepBlank", { p0: word(field) }) : word(field), "", { id: `vault-value-${field}`, type: "password", label: word(field) })).join("");

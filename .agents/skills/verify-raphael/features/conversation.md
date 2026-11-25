@@ -662,7 +662,7 @@ Neither a member's nor a group's top row has a search button; Ctrl+F (⌘F) open
 bar. The title pill draws no dot, and its arrow shows on a hover only while the details panel is closed (R-HEAD-02).
 
 ```powershell
-npm run look -- status-light-idle status-light-list status-light-dot status-light-seen status-light-pill-open top-row-find top-row-room-find conversation-share --theme both --width 1120,720,1920x1080
+npm run look -- status-light-idle status-light-idle-open status-light-list status-light-dot status-light-seen status-light-pill-open top-row-find top-row-room-find conversation-share --theme both --width 1120,720,1920x1080
 ```
 
 ## A waiting card read out of sight
