@@ -534,6 +534,18 @@ def test_the_answer_is_the_union_of_the_old_reading_and_the_additions_by_constru
         assert both[0][:len(classic[0])] == classic[0] and both[1][:len(classic[1])] == classic[1], command  # the old answer first
 
 
+def test_an_addition_that_fails_never_takes_away_the_classic_reading(tmp_path, monkeypatch):
+    from raphael_core.computer import shell_writes
+    project, other, own, reach = _folders(tmp_path)
+    command = f"echo ok > {other}/classic.txt; Out-File -FileP:{other}/extra.txt"
+    classic = shell_writes._classic_classify(command, str(project), reach, home=str(tmp_path / "home"))
+    assert classic[0]  # the classic reading finds the write into the other project
+    def broken(*args, **kwargs):
+        raise RuntimeError("an addition broke")
+    monkeypatch.setattr(shell_writes, "_extra_classify", broken)
+    assert shell_writes.classify(command, str(project), reach, home=str(tmp_path / "home")) == classic
+
+
 def test_what_the_codex_reviews_found_missed_is_judged(tmp_path):
     told, here, there = _told(tmp_path)
     # A comma array, written with and without spaces, after a parameter or not.

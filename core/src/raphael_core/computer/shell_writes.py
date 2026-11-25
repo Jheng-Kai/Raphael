@@ -10,10 +10,13 @@ target it cannot read (a variable, a subexpression, `%VAR%`) counts as outside, 
 that does the writing (python x.py, npm install, a .ps1) names no target and passes.
 """
 
+import logging
 import os
 import re
 
 from ..work_area import PROJECT, PathRefused, inside, resolved
+
+logger = logging.getLogger(__name__)
 
 DEST, ALL, COPY, RENAME = "dest", "all", "copy", "rename"
 # What each command does to the paths it is given: DEST changes the one it names (-Path, -FilePath, -LiteralPath or its
@@ -596,6 +599,10 @@ def classify(command, cwd, reach, *, windows=None, home=None, depth=0):
     that a command starts writes is not seen."""
     options = dict(windows=windows, home=home, depth=depth)
     projects, outside = _classic_classify(command, cwd, reach, **options)
-    more_projects, more_outside = _extra_classify(command, cwd, reach, **options)
+    try:
+        more_projects, more_outside = _extra_classify(command, cwd, reach, **options)
+    except Exception as exc:  # the additions never take away the reading that was always made
+        logger.warning("The additional reading of a command failed: %s", type(exc).__name__)
+        more_projects, more_outside = [], []
     return ([*projects, *(text for text in dict.fromkeys(more_projects) if text not in projects)],
             [*outside, *(text for text in dict.fromkeys(more_outside) if text not in outside)])
