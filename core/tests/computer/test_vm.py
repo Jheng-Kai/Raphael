@@ -1590,7 +1590,10 @@ else:
     if name=='claude':
         config=json.loads(Path(sys.argv[sys.argv.index('--mcp-config')+1]).read_text())
     else:
-        config=json.loads((Path(os.environ['HOME'])/'.gemini/config/mcp_config.json').read_text())
+        # Antigravity keeps the owner's home (its sign-in is in the system store) and reads Raphael's server from
+        # the private Gemini folder it is given, never from the owner's own.
+        gemini_dir=next(arg.split('=', 1)[1] for arg in sys.argv if arg.startswith('--gemini_dir='))
+        config=json.loads((Path(gemini_dir)/'config/mcp_config.json').read_text())
     Path(record).write_text(json.dumps(config))
     if name=='claude': send({'type':'result','subtype':'success','result':'done'})
     else: send({'event':'result','result':{'status':'SUCCESS','response':'done'}})
