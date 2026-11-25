@@ -214,6 +214,8 @@ export const it = {
   "projectFolders.branches": "Rami",
   "projectFolders.branchNamed": "Ramo: {p0}",
   "projectFolders.detached": "HEAD scollegato",
+  "projectFolders.switchSlow": "Git ha impiegato troppo a cambiare ramo. Il ramo mostrato è quello attuale della cartella.",
+  "projectFolders.switchFilters": "Questo progetto usa filtri Git propri. Cambia ramo nel tuo terminale.",
   "writeFolders.add": "Aggiungi cartella",
   "composerFolder.pick": "Scegli cartella", "composerFolder.none": "Nessuna cartella di progetto", "composerFolder.label": "Cartella dei file: {p0}",
   "composerPlus.label": "Aggiungi file, app e altro",

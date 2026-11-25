@@ -214,6 +214,8 @@ export const vi = {
   "projectFolders.branches": "Nhánh",
   "projectFolders.branchNamed": "Nhánh: {p0}",
   "projectFolders.detached": "HEAD tách rời",
+  "projectFolders.switchSlow": "Git chuyển nhánh quá lâu. Nhánh đang hiển thị là nhánh hiện tại của thư mục.",
+  "projectFolders.switchFilters": "Dự án này dùng bộ lọc Git riêng. Hãy chuyển nhánh trong terminal của bạn.",
   "writeFolders.add": "Thêm thư mục",
   "composerFolder.pick": "Chọn thư mục", "composerFolder.none": "Không chọn thư mục dự án", "composerFolder.label": "Thư mục lưu tệp: {p0}",
   "composerPlus.label": "Thêm tệp, ứng dụng và hơn thế",

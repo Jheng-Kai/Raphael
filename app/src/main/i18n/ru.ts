@@ -214,6 +214,8 @@ export const ru = {
   "projectFolders.branches": "Ветки",
   "projectFolders.branchNamed": "Ветка: {p0}",
   "projectFolders.detached": "Отсоединённый HEAD",
+  "projectFolders.switchSlow": "Git слишком долго переключал ветку. Показана ветка, на которой папка сейчас.",
+  "projectFolders.switchFilters": "В этом проекте свои фильтры Git. Переключите ветку в своём терминале.",
   "writeFolders.add": "Добавить папку",
   "composerFolder.pick": "Выбрать папку", "composerFolder.none": "Без папки проекта", "composerFolder.label": "Папка для файлов: {p0}",
   "composerPlus.label": "Добавить файлы, приложения и другое",

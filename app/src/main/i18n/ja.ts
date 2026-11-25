@@ -190,6 +190,8 @@ export const ja = {
   "projectFolders.branches": "ブランチ",
   "projectFolders.branchNamed": "ブランチ：{p0}",
   "projectFolders.detached": "分離 HEAD",
+  "projectFolders.switchSlow": "Git の切り替えが時間内に終わりませんでした。表示中のブランチはフォルダーの現在のブランチです。",
+  "projectFolders.switchFilters": "このプロジェクトは独自の Git フィルターを使っています。ブランチはご自身のターミナルで切り替えてください。",
   "writeFolders.add": "フォルダーを追加",
   "composerFolder.pick": "フォルダーを選択", "composerFolder.none": "フォルダを指定しない", "composerFolder.label": "保存フォルダー：{p0}",
   "composerPlus.label": "ファイルやアプリなどを追加",

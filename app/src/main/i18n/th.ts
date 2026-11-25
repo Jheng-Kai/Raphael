@@ -214,6 +214,8 @@ export const th = {
   "projectFolders.branches": "สาขา",
   "projectFolders.branchNamed": "สาขา: {p0}",
   "projectFolders.detached": "HEAD แบบแยก",
+  "projectFolders.switchSlow": "Git ใช้เวลาสลับนานเกินไป สาขาที่แสดงคือสาขาปัจจุบันของโฟลเดอร์",
+  "projectFolders.switchFilters": "โปรเจกต์นี้ใช้ตัวกรอง Git ของตัวเอง โปรดสลับสาขาในเทอร์มินัลของคุณเอง",
   "writeFolders.add": "เพิ่มโฟลเดอร์",
   "composerFolder.pick": "เลือกโฟลเดอร์", "composerFolder.none": "ไม่ระบุโฟลเดอร์", "composerFolder.label": "โฟลเดอร์เก็บไฟล์: {p0}",
   "composerPlus.label": "เพิ่มไฟล์ แอป และอื่น ๆ",

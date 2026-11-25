@@ -214,6 +214,8 @@ export const ptBR = {
   "projectFolders.branches": "Ramificações",
   "projectFolders.branchNamed": "Ramificação: {p0}",
   "projectFolders.detached": "HEAD desanexado",
+  "projectFolders.switchSlow": "O Git demorou demais para trocar. A ramificação exibida é a atual da pasta.",
+  "projectFolders.switchFilters": "Este projeto usa filtros próprios do Git. Troque de ramificação no seu próprio terminal.",
   "writeFolders.add": "Adicionar pasta",
   "composerFolder.pick": "Escolher pasta", "composerFolder.none": "Nenhuma pasta de projeto", "composerFolder.label": "Pasta dos arquivos: {p0}",
   "composerPlus.label": "Adicionar arquivos, aplicativos e mais",

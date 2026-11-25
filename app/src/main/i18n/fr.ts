@@ -214,6 +214,8 @@ export const fr = {
   "projectFolders.branches": "Branches",
   "projectFolders.branchNamed": "Branche : {p0}",
   "projectFolders.detached": "HEAD détachée",
+  "projectFolders.switchSlow": "Git a mis trop de temps à changer de branche. La branche affichée est celle où se trouve le dossier.",
+  "projectFolders.switchFilters": "Ce projet utilise ses propres filtres Git. Changez de branche dans votre propre terminal.",
   "writeFolders.add": "Ajouter un dossier",
   "composerFolder.pick": "Choisir un dossier", "composerFolder.none": "Aucun dossier de projet", "composerFolder.label": "Dossier des fichiers : {p0}",
   "composerPlus.label": "Ajouter des fichiers, des applications et plus",

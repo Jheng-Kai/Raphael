@@ -190,6 +190,8 @@ export const en = {
   "projectFolders.branches": "Branches",
   "projectFolders.branchNamed": "Branch: {p0}",
   "projectFolders.detached": "Detached HEAD",
+  "projectFolders.switchSlow": "Git took too long to switch. The branch shown is the one the folder is on now.",
+  "projectFolders.switchFilters": "This project runs its own Git filters. Switch branches in your own terminal.",
   "writeFolders.add": "Add folder",
   "composerFolder.pick": "Choose folder", "composerFolder.none": "No project folder", "composerFolder.label": "Folder for files: {p0}",
   "composerPlus.label": "Add files, apps and more",

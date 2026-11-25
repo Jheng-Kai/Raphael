@@ -214,6 +214,8 @@ export const de = {
   "projectFolders.branches": "Branches",
   "projectFolders.branchNamed": "Branch: {p0}",
   "projectFolders.detached": "Losgelöster HEAD",
+  "projectFolders.switchSlow": "Git hat zu lange zum Wechseln gebraucht. Angezeigt wird der Branch, auf dem der Ordner jetzt ist.",
+  "projectFolders.switchFilters": "Dieses Projekt nutzt eigene Git-Filter. Wechseln Sie den Branch in Ihrem eigenen Terminal.",
   "writeFolders.add": "Ordner hinzufügen",
   "composerFolder.pick": "Ordner auswählen", "composerFolder.none": "Kein Projektordner", "composerFolder.label": "Ordner für Dateien: {p0}",
   "composerPlus.label": "Dateien, Apps und mehr hinzufügen",

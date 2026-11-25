@@ -214,6 +214,8 @@ export const zhCN = {
   "projectFolders.branches": "分支",
   "projectFolders.branchNamed": "分支：{p0}",
   "projectFolders.detached": "分离的 HEAD",
+  "projectFolders.switchSlow": "Git 太久没有完成切换，现在显示的是文件夹实际所在的分支。",
+  "projectFolders.switchFilters": "这个项目设置了自己的 Git 过滤器，请在你自己的终端里切换分支。",
   "writeFolders.add": "添加文件夹",
   "composerFolder.pick": "选择文件夹", "composerFolder.none": "不指定文件夹", "composerFolder.label": "存放文件夹：{p0}",
   "composerPlus.label": "添加文件、应用程序等",

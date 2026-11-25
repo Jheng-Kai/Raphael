@@ -6,12 +6,20 @@ import os
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from .protocol import RpcError, INTERNAL_ERROR, INVALID_PARAMS, invalid_params
 
 GIT_SECONDS = 5
+# A checkout writes every file that differs and may fetch large files (LFS), so it gets far longer than a read. A switch
+# cut short by a read's limit had often already happened, and the owner was told it failed.
+SWITCH_SECONDS = 120
+SWITCH_SLOW = "Git did not finish switching branches in time"
+SWITCH_FILTERS = "This repository runs its own Git filters. Switch branches in your own terminal."
+# One switch at a time: a second one started meanwhile would meet the first one's index lock.
+_switching = threading.Lock()
 PROJECTS = "/home/cua/projects"
 PROJECT_LIMIT = 50
 
@@ -162,10 +170,15 @@ def info(path, deadline):
     executable = shutil.which("git")
     if not executable:
         return {**result, "branch": head_branch(folder)}
-    current = _git(executable, folder, deadline, "branch", "--show-current")
-    local = _git(executable, folder, deadline, "for-each-ref", "--format=%(refname:short)", "refs/heads")
-    return {**result, "branch": current.stdout.strip() if current.returncode == 0 else head_branch(folder),
-            "branches": local.stdout.splitlines() if local.returncode == 0 else []}
+    # One Git call lists the branches and marks the current one: `%(HEAD)` is `*` there and a space elsewhere (neither
+    # can start a branch name). Starting Git can take a second on a busy PC, so every call saved counts.
+    local = _git(executable, folder, deadline, "for-each-ref", "--format=%(HEAD)%(refname:short)", "refs/heads")
+    if local.returncode:
+        return {**result, "branch": head_branch(folder)}
+    lines = [line for line in local.stdout.splitlines() if len(line) > 1]
+    current = next((line[1:] for line in lines if line.startswith("*")), "")
+    # A detached HEAD and a branch with no commit yet are marked nowhere; HEAD itself names the second.
+    return {**result, "branch": current or head_branch(folder), "branches": [line[1:] for line in lines]}
 
 
 def _switch(path, branch, deadline):
@@ -177,7 +190,7 @@ def _switch(path, branch, deadline):
     if filters.returncode not in (0, 1):
         raise invalid_params("Git could not read the repository's filters")
     if any(line.partition("\t")[0] in ("local", "worktree") for line in filters.stdout.splitlines()):
-        raise invalid_params("This repository runs its own Git filters. Switch branches in your own terminal.")
+        raise invalid_params(SWITCH_FILTERS)
     result = _git(executable, path, deadline, "switch", "--", branch)
     if result.returncode:
         lines = (result.stderr.strip() or result.stdout.strip()).splitlines()
@@ -191,11 +204,14 @@ def _switch(path, branch, deadline):
                 "branch": head_branch(path), "branches": []}
 
 
-async def _in_thread(call, *args):
+async def _in_thread(call, *args, seconds=None, slow="Git did not respond within five seconds", grace=0):
+    # `grace` lets the thread's own deadline end a call first, so that the answer says what Git did rather than
+    # leaving it running unseen.
+    seconds = GIT_SECONDS if seconds is None else seconds
     try:
-        return await asyncio.wait_for(asyncio.to_thread(call, *args, time.monotonic() + GIT_SECONDS), GIT_SECONDS)
+        return await asyncio.wait_for(asyncio.to_thread(call, *args, time.monotonic() + seconds), seconds + grace)
     except (TimeoutError, subprocess.TimeoutExpired):
-        raise RpcError(INTERNAL_ERROR, "Git did not respond within five seconds") from None
+        raise RpcError(INTERNAL_ERROR, slow) from None
     except OSError:
         raise RpcError(INTERNAL_ERROR, "The folder could not be read") from None
 
@@ -219,11 +235,16 @@ async def switch_branch(settings, params):
     if not isinstance(branch, str) or not branch or len(branch) > 1000 or any(ord(char) < 32 for char in branch):
         raise invalid_params("Choose a local branch")
     # Require a local branch, avoiding Git's remote guessing and special previous-branch syntax.
-    return await _in_thread(_switch_local, path, branch)
+    return await _in_thread(_switch_local, path, branch, seconds=SWITCH_SECONDS, slow=SWITCH_SLOW, grace=5)
 
 
 def _switch_local(path, branch, deadline):
-    folder = info(path, deadline)
-    if branch not in folder["branches"]:
-        raise invalid_params("Choose an available local branch")
-    return _switch(path, branch, deadline)
+    if not _switching.acquire(timeout=max(0.0, deadline - time.monotonic())):
+        raise TimeoutError
+    try:
+        folder = info(path, deadline)
+        if branch not in folder["branches"]:
+            raise invalid_params("Choose an available local branch")
+        return _switch(path, branch, deadline)
+    finally:
+        _switching.release()

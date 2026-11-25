@@ -214,6 +214,8 @@ export const tr = {
   "projectFolders.branches": "Dallar",
   "projectFolders.branchNamed": "Dal: {p0}",
   "projectFolders.detached": "Ayrık HEAD",
+  "projectFolders.switchSlow": "Git'in geçişi çok uzun sürdü. Gösterilen dal, klasörün şu anki dalı.",
+  "projectFolders.switchFilters": "Bu proje kendi Git filtrelerini kullanıyor. Dalı kendi terminalinizde değiştirin.",
   "writeFolders.add": "Klasör ekle",
   "composerFolder.pick": "Klasör seç", "composerFolder.none": "Proje klasörü yok", "composerFolder.label": "Dosya klasörü: {p0}",
   "composerPlus.label": "Dosya, uygulama ve daha fazlasını ekle",

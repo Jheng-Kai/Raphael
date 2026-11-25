@@ -214,6 +214,8 @@ export const id = {
   "projectFolders.branches": "Cabang",
   "projectFolders.branchNamed": "Cabang: {p0}",
   "projectFolders.detached": "HEAD terlepas",
+  "projectFolders.switchSlow": "Git terlalu lama berpindah. Cabang yang ditampilkan adalah cabang folder saat ini.",
+  "projectFolders.switchFilters": "Proyek ini menjalankan filter Git sendiri. Pindah cabang di terminal Anda sendiri.",
   "writeFolders.add": "Tambah folder",
   "composerFolder.pick": "Pilih folder", "composerFolder.none": "Tanpa folder proyek", "composerFolder.label": "Folder file: {p0}",
   "composerPlus.label": "Tambah berkas, aplikasi, dan lainnya",

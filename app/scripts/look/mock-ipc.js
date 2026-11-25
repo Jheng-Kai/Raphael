@@ -1586,6 +1586,8 @@ export function installMock(fixture, config = {}, target = window) {
       case "folders.switch_branch":
         projectBranch = p.branch;
         notify("SettingsChanged");
+        // Git switched, then the answer came too late (a slow PC): the button must re-read the branch the folder is on.
+        if (variant.branchSwitchSlow) throw new Error("[-32603] Git did not finish switching branches in time");
         return { path: p.path, name: p.path.split("\\").pop(), exists: true, git: true, branch: projectBranch, branches: ["draft", "main"] };
       case "settings.get": return { settings: data.settings };
       // A question opening later is not there at the first read, as one that opens while the owner is elsewhere.
