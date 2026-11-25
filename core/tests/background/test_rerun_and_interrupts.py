@@ -239,6 +239,31 @@ async def test_a_task_run_again_keeps_everything_the_owner_sent(make_rig, conn):
     await rig.wait_for_reports()
 
 
+async def test_the_worker_of_a_rerun_receives_the_files_of_the_original_hand_off(make_rig, conn, tmp_path):
+    """Only the screen showed the file again: the new task was handed no attachment, and with the old turn gone nothing else
+    held it, so the worker could not see the file the owner attached."""
+    from raphael_core.services.attachment_store import AttachmentStore
+    from raphael_core.services.attachments import checked
+
+    rig = make_rig()
+    store = AttachmentStore(tmp_path / "attachments")
+    rig.service.use_attachment_store(store)
+    history = AgentHistory(conn, rig.wall)
+    saved = store.save(checked("invoice.txt", "text/plain", b"INVOICE-TOTAL-4242"))
+    rig.service._closing = True
+    turn_id = history.add(session_id="s1", question="review invoice.txt", route="delegate", prefix="Understood", text=phrase("en", "handoff"),
+                          status="done", source="app", attachments=[saved.metadata()])
+    old = rig.submit("review invoice.txt")
+    rig.service.attach_turn(old, turn_id)
+    rig.service._queue.clear()
+    rig.service._closing = False
+    finish(rig, old, "failed", "x")
+    rig.client.replies = [report("Reviewed.")]
+    await rig.rpc.call("worker.rerun", {"task_id": old})
+    await rig.wait_for_reports()
+    assert "INVOICE-TOTAL-4242" in rig.client.chat_calls[0]["messages"][1]["content"]
+
+
 async def test_a_second_request_to_run_a_failed_task_again_starts_nothing(make_rig, conn):
     rig = make_rig()
     rig.service._closing = True
