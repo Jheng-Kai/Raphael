@@ -293,6 +293,42 @@ async def test_a_rerun_waiting_for_its_files_starts_nothing_once_the_history_was
     assert rig.client.chat_calls == []
 
 
+async def test_a_rerun_waiting_for_its_files_starts_nothing_for_a_new_task_that_took_the_old_ids(make_rig, conn):
+    """Once the rows were cleared a new task and turn can get the old ids again: they are another message's, not the one asked for."""
+    rig = make_rig()
+    rig.service._closing = True
+    old, old_turn, history = hand_over(rig, conn)
+    rig.service._queue.clear()
+    finish(rig, old, "failed", "x")
+    reading, release = asyncio.Event(), asyncio.Event()
+
+    async def slow_read(origin):
+        reading.set()
+        await release.wait()
+        return []
+
+    rig.service._original_files = slow_read
+    rig.client.replies = [report("Should never run.")]
+    asked = asyncio.ensure_future(rig.service._rerun({"task_id": old}))
+    await asyncio.wait_for(reading.wait(), 5)
+    history.delete(old_turn)
+    rig.service._store.delete(old)
+    reused_turn = history.add(session_id="s2", question="another message", route="delegate", prefix="Understood", text=phrase("en", "handoff"),
+                              status="done", source="voice")
+    reused = rig.submit("another task")
+    rig.service.attach_turn(reused, reused_turn)
+    rig.service._queue.clear()
+    finish(rig, reused, "failed", "x")
+    assert (reused, reused_turn) == (old, old_turn), "the ids were handed out again"
+    rig.service._closing = False
+    release.set()
+    with pytest.raises(RpcError) as error:
+        await asked
+    assert error.value.code == NOT_FOUND
+    assert conn.execute("SELECT COUNT(*) FROM worker_tasks WHERE rerun_of IS NOT NULL").fetchone()[0] == 0
+    assert rig.client.chat_calls == []
+
+
 async def test_a_second_request_to_run_a_failed_task_again_starts_nothing(make_rig, conn):
     rig = make_rig()
     rig.service._closing = True
