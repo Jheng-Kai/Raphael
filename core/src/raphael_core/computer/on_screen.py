@@ -55,6 +55,8 @@ _WRAPPERS = frozenset({"sudo", "env", "exec", "command", "time", "nohup", "uv", 
 _HEREDOC = re.compile(r"""(?<!<)<<(?!<)(?P<tab>-?)[ \t]*(?:'(?P<q1>[^'\r\n]+)'|"(?P<q2>[^"\r\n]+)"|(?P<esc>\\)?(?P<bare>[A-Za-z_]\w*))""")
 # Where the statement a heredoc belongs to ends on its line.
 _STATEMENT_END = re.compile(r";|&&|\r|\n")
+# A line that ends in an odd number of backslashes continues on the next.
+_CONTINUED = re.compile(r"(?<!\\)(?:\\\\)*\\$")
 # What separates one command from the next between two heredocs of a line.
 _BOUNDARY = re.compile(r"[;&|\r\n]")
 _FRAGMENT = 80
@@ -184,9 +186,18 @@ def _without_script_bodies(command: str) -> str:
     lines = command.splitlines(keepends=True)
     kept, index = [], 0
     while index < len(lines):
-        line = lines[index]
-        kept.append(line)
-        index += 1
+        # A logical line: what a backslash and a newline join (outside quotes) is one line to the shell, so its receiver and
+        # what follows are read whole; the body starts after it.
+        pieces = []
+        while True:
+            line = lines[index].rstrip("\r\n")
+            kept.append(lines[index])
+            index += 1
+            joined = index < len(lines) and _CONTINUED.search(_blank_strings(line))
+            pieces.append(line[:-1] + " " if joined else line)
+            if not joined:
+                break
+        line = "".join(pieces)
         blanked = _blank_strings(line)
         markers = [m for m in _HEREDOC.finditer(line) if blanked.startswith("<<", m.start())]
         if not markers:
