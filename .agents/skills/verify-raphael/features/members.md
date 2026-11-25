@@ -91,9 +91,9 @@ the head, so the slime seemed to wear two; a nested rotated and scaled transform
 mark has, and it is gone. The crown is no longer part of the dark rim either, so there is one copy to place. A character with no crown of its own takes the crown
 where its spot says (`CROWN_SPOTS`); no character draws a crown as part of its art, so none is replaced. Scenes: `slime-crown`
 (every character at 72 px, a row for each colour of the picker), `slime-crown-small` (every character at 40 and 28 px),
-`slime-crown-states` and `slime-crown-states-more` (four characters at 72 and 40 px in each state), `slime-crown-moves` and
-`slime-crown-moves-more` (a headband slime through the motion of each state) and `slime-crown-change` (each change of state);
-each board fits the window at every width, and the check `slime-crown` fails for a face that lies outside it, `member-settings-raphael-crown`
+`slime-crown-states`, `slime-crown-states-more` and `slime-crown-states-last` (five characters at 96 and 40 px in each state), `slime-crown-moves` and
+`slime-crown-moves-more` (a headband slime at 56 px through the motion of each state) and `slime-crown-change` (each change of state);
+each board fits the window at every width, and the check `slime-crown` fails unless the board holds exactly the faces it was asked for (`data-samples`), each with a size and inside the window, `member-settings-raphael-crown`
 (the settings face and the sidebar row after the chief is dressed in the brown headband slime) and `onboarding-slime-crown`
 (the guide's large first slime); the checks `slime-crown` and `chief-crown` require exactly one crown on the painted drawing, no
 transform of its own, none in the rim, its middle within the body's width and on its upper half, and no crown on a face that is
@@ -102,7 +102,7 @@ owner's screenshot (the crown moved by what a rotation and scale about the middl
 has to be looked at once in a WKWebView.
 
 ```powershell
-npm run look -- slime-crown slime-crown-small slime-crown-states slime-crown-states-more slime-crown-moves slime-crown-moves-more slime-crown-change member-settings-raphael-crown onboarding-slime-crown --theme both --width 1120,720,1920x1080
+npm run look -- slime-crown slime-crown-small slime-crown-states slime-crown-states-more slime-crown-states-last slime-crown-moves slime-crown-moves-more slime-crown-change member-settings-raphael-crown onboarding-slime-crown --theme both --width 1120,720,1920x1080
 ```
 
 ```powershell

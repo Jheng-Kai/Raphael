@@ -4117,10 +4117,14 @@ export function checkRendered(name, context = {}) {
     return {check:name,width:Math.round(box.width),rows:rows.length};
   }
   if (name === "slime-crown") {
-    const surfaces = [...document.querySelectorAll('.look-slime-board .slime-surface')];
-    require(surfaces.length >= 24, `every slime asked for is on the board: ${surfaces.length}`);
-    // Every sample is in the screenshot: a face (its whole box) outside the window is not shown, and the board clips it.
-    const outside = surfaces.filter(surface => { const box = (surface.closest('.mb-av-slime') ?? surface).getBoundingClientRect(); return box.width > 0 && (box.left < -0.5 || box.top < -0.5 || box.right > innerWidth + 0.5 || box.bottom > innerHeight + 0.5); });
+    const surfaces = [...document.querySelectorAll('.look-slime-board .slime-surface')], asked = Number(document.querySelector('.look-slime-board')?.dataset.samples);
+    // Exactly the faces the scene drew its board with (the board counts its own cells), every one of them in the screenshot: a face whose box is empty, or
+    // that lies outside the window, is not shown (the board clips it).
+    require(asked > 0 && surfaces.length === asked, `the board draws ${surfaces.length} slimes of the ${asked} it was asked for`);
+    const boxes = surfaces.map(surface => (surface.closest('.mb-av-slime') ?? surface).getBoundingClientRect());
+    const empty = [...boxes, ...surfaces.map(surface => surface.getBoundingClientRect())].filter(box => !(box.width > 0 && box.height > 0));
+    require(!empty.length, `${empty.length} of ${surfaces.length} slimes have no size`);
+    const outside = boxes.filter(box => box.left < -0.5 || box.top < -0.5 || box.right > innerWidth + 0.5 || box.bottom > innerHeight + 0.5);
     require(!outside.length, `${outside.length} of ${surfaces.length} slimes lie outside the ${innerWidth}x${innerHeight} window and are not in the screenshot`);
     for (const [index, surface] of surfaces.entries()) {
       const issues = crownIssues(surface);
