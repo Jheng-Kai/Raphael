@@ -146,7 +146,8 @@ export function installMock(fixture, config = {}, target = window) {
     const first = make(8101, start.getTime()), last = make(8102, start.getTime() + (variant.calmThread === "days" ? 86400000 : 3600000));
     first.source = "routine"; first.question = sample.routine; first.messages = []; first.routine = {...data.routines.find(routine => routine.member_id === 1),title:sample.routine};
     last.task = null;
-    data.turns = data.turns.filter(turn => turn.member_id !== 1).concat(first, last);
+    // A routine's failed run alone, for the Run again that replaces it (`worker.rerun`).
+    data.turns = data.turns.filter(turn => turn.member_id !== 1).concat(variant.routineRerun ? [first] : [first, last]);
   }
   // A member's latest reply failed on ChatGPT's usage limit: the reply leads with Manage usage.
   if (variant.usageLimit) {
@@ -1972,6 +1973,21 @@ export function installMock(fixture, config = {}, target = window) {
         for (const turn of data.turns.filter(item => item.task?.id === p.task_id)) turn.task.state = "cancelled";
         notify("WorkerChanged");
         return { cancelled: true };
+      }
+      // Run again, as the core answers it: the failed turn leaves the history and the new attempt takes a turn of its own,
+      // a routine's run still the routine's. `routineRerun` makes the new attempt fail again, to show that one failure alone.
+      case "worker.rerun": {
+        const old = data.turns.find(item => item.task?.id === p.task_id);
+        if (!old) throw new Error("There is no such task");
+        const id = Math.max(...data.turns.map(item => item.id)) + 1, at = data.now + 1000;
+        const failed = variant.routineRerun === "again";
+        data.turns = data.turns.filter(item => item !== old).concat({ ...structuredClone(old), id, session_id: `rerun-${id}`, created_at_ms: at, status: failed ? "error" : "running",
+          text: failed ? data.calmSample.failure : "", messages: failed ? [] : [{ seq: 1, kind: "progress", text: data.calmSample.retry, at_ms: at }], steps: [],
+          task: { id: id + 100, state: failed ? "failed" : "running", started_at_ms: at, finished_at_ms: failed ? at + 1000 : null } });
+        notify("AgentTurn", { turn_id: old.id, member_id: old.member_id });
+        notify("AgentTurn", { turn_id: id, member_id: old.member_id });
+        notify("WorkerChanged");
+        return { task_id: id + 100 };
       }
       case "agent.react": {
         const turn = data.turns.find(item=>item.id===p.turn_id && (item.member_id ?? 0)===(p.member_id ?? 0));

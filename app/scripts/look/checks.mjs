@@ -1314,6 +1314,28 @@ export function checkRendered(name, context = {}) {
     require(getComputedStyle(thread.querySelector('[data-id="8102"] .message-actions:has(.rerun)')).opacity === '1', 'latest failed action is visible without hover');
     return {check:name,...count};
   }
+  if (name.startsWith('routine-rerun')) {
+    const failure = 'Codex CLI 在回答完成前停止了。', progress = '先查近 3 小時的收件匣';
+    const turns = [...document.querySelectorAll('.tn[data-id]')];
+    const shown = turns.map(turn => turn.textContent).join('\n');
+    const reruns = window.__look.calls.filter(call => call.method === 'worker.rerun');
+    if (name === 'routine-rerun-before') {
+      require(turns.length === 1 && shown.includes(failure) && turns[0].querySelector('.rerun'), 'the failed routine run stands alone with its Run again');
+      return {check:name};
+    }
+    require(reruns.length === 1, 'Run again asks the core once');
+    require(!turns.some(turn => turn.dataset.id === '8101'), 'the failed run is no longer drawn');
+    require(turns.length === 1, `one run is drawn, the newest: ${turns.map(turn => turn.dataset.id)}`);
+    if (name === 'routine-rerun') {
+      require(shown.includes(progress) && !shown.includes(failure), 'the new attempt shows its progress and the old failure is gone');
+      require(!document.querySelector('.tn .rerun'), 'a run under way has no Run again');
+    } else {
+      require(shown.split(failure).length === 2, 'only the newest failure is drawn, once');
+      require(turns[0].querySelector('.rerun'), 'the newest failure keeps its Run again');
+      require(!shown.includes(progress), 'the progress of the first attempt is not left behind');
+    }
+    return {check:name, drawn:turns.map(turn => turn.dataset.id)};
+  }
   if (name === 'computer-header-layout' || name.startsWith('desktop-computer-choice')) {
     const header = document.querySelector('.desktop-location-header');
     require(visible(header), 'the member panel header is visible');
