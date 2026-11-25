@@ -230,3 +230,27 @@ async def test_a_switch_past_its_own_limit_says_so_and_frees_the_next_switch(con
     assert folders.head_branch(repository) == "main"
     monkeypatch.setattr(folders, "SWITCH_SECONDS", 30)
     assert (await folders.switch_branch(settings, {"path": str(repository), "branch": "draft"}))["branch"] == "draft"
+
+
+async def test_a_branch_name_with_a_unicode_line_break_stays_one_branch(repository):
+    name = "feature review"
+    subprocess.run(["git", "-C", str(repository), "branch", name], check=True, capture_output=True)
+    found = await folders.folder_info({"path": str(repository)})
+    assert found["branch"] == "main" and found["branches"] == ["draft", name, "main"]
+
+
+async def test_a_switch_stuck_in_one_repository_never_holds_up_another(conn, repository, tmp_path, monkeypatch):
+    # On Windows a Git killed at its limit can leave a child holding its pipes, and the waiting thread keeps its lock.
+    other = tmp_path / "Other"
+    shutil.copytree(repository, other)
+    settings = SettingsStore(conn)
+    settings.set("project_folders", [str(repository), str(other)])
+    stuck = folders._switch_lock(str(repository))
+    stuck.acquire()
+    try:
+        assert (await folders.switch_branch(settings, {"path": str(other), "branch": "draft"}))["branch"] == "draft"
+        monkeypatch.setattr(folders, "SWITCH_SECONDS", 0.3)
+        with pytest.raises(RpcError, match=folders.SWITCH_SLOW):
+            await folders.switch_branch(settings, {"path": str(repository), "branch": "draft"})
+    finally:
+        stuck.release()

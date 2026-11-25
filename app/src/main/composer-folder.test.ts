@@ -98,6 +98,17 @@ test("a switch whose answer failed shows the branch Git really left the folder o
   expect([...document.querySelectorAll(".toast")].map(toast => toast.textContent).join(" ")).toContain("自己的 Git 過濾器");
 });
 
+test("a failed switch whose re-read also fails keeps the branch button to try again", async () => {
+  settings.member_work_folder = { "3": repo };
+  await mount();
+  find("#branch").click(); await flush();
+  api.folderInfo.mockRejectedValue(new Error("[-32603] Git did not respond within five seconds"));
+  api.switchBranch.mockRejectedValueOnce(new Error("[-32603] Git did not finish switching branches in time"));
+  await choose(0); await flush();
+  expect(find("#branch").hidden).toBe(false);
+  expect(find("#branch").textContent).toBe("main");
+});
+
 test("a second branch press while Git still switches starts nothing", async () => {
   settings.member_work_folder = { "3": repo };
   await mount();
