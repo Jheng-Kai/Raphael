@@ -390,7 +390,7 @@ def test_what_the_classifier_judged_before_the_colon_form_it_still_judges(tmp_pa
     project, other, own, reach = _folders(tmp_path)
     there, here = other.as_posix(), project.as_posix()
     commands = [
-        f"Set-Content {there}/a.txt x -Fi:*.txt", f"Set-Content {there}/a.txt x -Fi:{here}/b.txt", f"Set-Content -Pa:{here}/b.txt {there}/a.txt",
+        f"Set-Content {there}/a.txt x -Fi:*.txt", f"Set-Content {there}/a.txt x -Fi:{here}/b.txt", f"Set-Content -Pa:{there}/b.txt {here}/a.txt",
         f"sed -i:.bak 's/a/b/' {there}/a.txt", f"sed -i.bak 's/a/b/' {there}/a.txt", f"sed -i -e 's/a/b/' {there}/a.txt {there}/c.txt",
         f"sed -ibak 's/a/b/' {there}/a.txt", f"sed -ie 's/a/b/' {there}/a.txt", f"sed -ni 's/a/p/p' {there}/a.txt", f"sed -Ei.bak 's/a+/b/' {there}/a.txt",
         f"sed --in-place 's/a/b/' {there}/a.txt", f"sed --in-place=.bak 's/a/b/' {there}/a.txt", f"sed -i '' 's/a/b/' {there}/a.txt",
@@ -406,7 +406,11 @@ def test_what_the_classifier_judged_before_the_colon_form_it_still_judges(tmp_pa
         f"Remove-Item {there}/a.txt -Force:$true -Recurse", f"Out-File -FilePath:{there}/a.txt", f"New-Item {there}/a.txt -Value:x",
         f"Invoke-WebRequest https://example.com/x -OutFile {there}/f", f"Expand-Archive z.zip {there}", f"Expand-Archive z.zip -DestinationPath:{there}",
         "echo hi > out.txt", f"echo hi > {own.as_posix()}/a.txt", "Remove-Item $path", "Set-Content -Pa:$target x", "cp a $dest",
+        f"sed -i.bak -e 's/a/b/' {there}/a.txt", f"sed -i -e s1 -e s2 {there}/a.txt {there}/c.txt", f"sed -i -f x.sed {there}/a.txt",
+        f"Copy-Item a.txt -Des:{there}/b.txt", f"Move-Item -Pa:{there}/a.txt c.txt", f"Compress-Archive a {there}/o.zip",
     ]
+    # Not here: a parameter given by name that is only a target (-Pa:), with a lone word beside it. The old reading took that word for the
+    # target; it is the content (`Set-Content -Pa:out.txt value`), which is what is judged now (`test_a_target_given_by_a_cut_short_name_...`).
     for command in commands:
         old_projects, old_outside = old_classify(tmp_path, command, project, reach)
         projects, outside = classify(command, str(project), reach, home=str(tmp_path / "home"))
@@ -432,3 +436,82 @@ def test_sed_edits_the_files_it_names_in_place_whichever_way_the_flag_is_written
     for command in (f"sed 's/a/b/' {there}/a.txt", f"sed -n 's/a/p/p' {there}/a.txt", f"sed -e 's/a/b/' {there}/a.txt",
                     f"sed -Ee 's/a+/b/' {there}/a.txt", f"sed --quiet 's/a/p/p' {there}/a.txt"):
         assert told(command) == ([], []), command
+
+
+# --- round five ---------------------------------------------------------------------------------------------------------------
+
+
+def _told(tmp_path):
+    from raphael_core.computer.shell_writes import classify
+    project, other, own, reach = _folders(tmp_path)
+
+    def told(command, cwd=project):
+        return classify(command, str(cwd), reach, home=str(tmp_path / "home"))
+
+    return told, project.as_posix(), other.as_posix()
+
+
+def test_sed_edits_in_place_every_input_file_when_an_option_gives_the_script(tmp_path):
+    told, here, there = _told(tmp_path)
+    for script in ("-e=s/a/b/", "-es/a/b/", "--expression=s/a/b/", "--expr=s/a/b/", "-f=x.sed", "-fx.sed", "--file=x.sed", "--fi=x.sed",
+                   "-e 's/a/b/'", "-e s/a/b/", "--expression 's/a/b/'", "-f x.sed", "--file x.sed", "-ne p"):
+        for flag in ("-i", "-i.bak", "--in-place=.bak"):
+            assert told(f"sed {flag} {script} {there}/a.txt")[0] == [f"{there}/a.txt"], (flag, script)
+            assert told(f"sed {flag} {script} {there}/a.txt {there}/c.txt")[0] == [f"{there}/a.txt", f"{there}/c.txt"], (flag, script)
+            assert told(f"sed {flag} {script} {here}/a.txt {there}/c.txt")[0] == [f"{there}/c.txt"], (flag, script)
+    # With no option for the script the first word is it.
+    assert told(f"sed -i.bak 's/a/b/' {there}/a.txt {there}/c.txt")[0] == [f"{there}/a.txt", f"{there}/c.txt"]
+    assert told(f"sed -i {there}/a.txt")[0] == []  # a lone word is the script
+
+
+def test_sed_reads_the_flag_only_among_the_options(tmp_path):
+    told, here, there = _told(tmp_path)
+    # `ihello` is the script of -e and `-i.bak` after `--` is a file: neither is the flag, and nothing is edited in place.
+    for command in (f"sed -eihello {there}/a.txt {there}/b.txt > {here}/out", f"sed -e ihello {there}/a.txt > {here}/out",
+                    f"sed -- 's/a/b/' {there}/x -i.bak > {here}/out", f"sed -f -i.bak {there}/a.txt > {here}/out",
+                    f"sed --expression=-i.bak {there}/a.txt > {here}/out", f"sed -n -e 's/i/p/' {there}/a.txt"):
+        assert told(command) == ([], []), command
+    # While a flag before them still is one.
+    assert told(f"sed -i -- 's/a/b/' {there}/x")[0] == [f"{there}/x"]
+    assert told(f"sed -ne p -i {there}/a.txt")[0] == [f"{there}/a.txt"]
+
+
+def test_a_cmdlet_that_reads_a_path_is_not_taken_to_write_it_when_the_parameter_is_cut_short(tmp_path):
+    told, here, there = _told(tmp_path)
+    # A copy, an archive, a download and a transfer write their destination and read their source.
+    for command in (f"Copy-Item -Pat:{there}/a.txt -Des:{here}/out.txt", f"Copy-Item -Lit:{there}/a.txt -Dest:{here}/out.txt",
+                    f"Copy-Item -Path:{there}/a.txt -Des:{here}/out.txt", f"Expand-Archive -Pat:{there}/z.zip -DestinationP:{here}/o",
+                    f"Expand-Archive -Lit:{there}/z.zip -Des:{here}/o", f"Compress-Archive -Pat:{there}/src -DestinationP:{here}/o.zip",
+                    f"Compress-Archive {there}/src {here}/o.zip", f"Invoke-WebRequest https://example.com/x -OutF:{here}/f",
+                    f"Start-BitsTransfer -Sou:{there}/a -Des:{here}/b", f"Start-BitsTransfer {there}/a {here}/b",
+                    f"Copy-ItemProperty -Pat:{there}/a -Name n -Des:{here}/b"):
+        assert told(command) == ([], []), command
+    # ... and the destination in the other project is a write there.
+    for command in (f"Copy-Item -Pat:{here}/a.txt -Des:{there}/out.txt", f"Expand-Archive -Pat:{here}/z.zip -Des:{there}/o",
+                    f"Expand-Archive -Pat:{here}/z.zip -DestinationP:{there}/o", f"Compress-Archive -Pat:{here}/src -DestinationP:{there}/o.zip",
+                    f"Compress-Archive {here}/src {there}/o.zip", f"Start-BitsTransfer {here}/a {there}/b",
+                    f"Invoke-WebRequest https://example.com/x -OutF:{there}/f", f"Copy-ItemProperty -Pat:{here}/a -Name n -Des:{there}/b"):
+        assert told(command)[0], command
+    # A move, a rename and a delete change every path they are given.
+    for command in (f"Move-Item -Pat:{there}/a.txt -Des:{here}/b", f"Move-Item -Pat:{here}/a.txt -Des:{there}/b",
+                    f"Remove-Item -Pat:{there}/a.txt", f"Rename-Item -Lit:{there}/a.txt b.txt", f"Rename-Item -Pat:{there}/a.txt -New:b.txt"):
+        assert told(command)[0], command
+    # What it is cut short to may be more than one thing: both are judged (-Des is Destination and DestinationPath).
+    assert told(f"Copy-Item a.txt -Des:{there}/b.txt")[0] == [f"{there}/b.txt"]
+
+
+def test_a_target_given_by_a_cut_short_name_leaves_the_word_beside_it_to_be_the_content(tmp_path):
+    told, here, there = _told(tmp_path)
+    for command in (f"Set-Content -Pa:{here}/out.txt {there}/a.txt", f"Set-Content -Pat:{here}/out.txt {there}/a.txt",
+                    f"Set-Content -Lit:{here}/out.txt {there}/a.txt", f"Add-Content -PSP:{here}/out.txt {there}/a.txt",
+                    f"Out-File -Pat:{here}/out.txt {there}/a.txt", f"Set-Content {there}/a.txt -Pa:{here}/out.txt",
+                    f"Clear-Content -Lit:{here}/out.txt {there}/a.txt", f"Start-Transcript -OutputD:{here}/t {there}/a.txt"):
+        assert told(command) == ([], []), command
+    # The target in the other project is the write, whatever words are beside it.
+    for command in (f"Set-Content -Pa:{there}/out.txt {here}/a.txt", f"Set-Content -Lit:{there}/out.txt x", f"Out-File -Pat:{there}/o x"):
+        assert told(command)[0], command
+    # A name that may be a filter (-Fi) is not a target given: the first word still is.
+    assert told(f"Set-Content {there}/a.txt x -Fi:*.txt")[0] == [f"{there}/a.txt"]
+    # And a name written out, as it always was.
+    assert told(f"Set-Content -Path {here}/out.txt {there}/a.txt") == ([], [])
+    assert told(f"New-Item -Pa:{there} -Name a.txt")[0]

@@ -38,6 +38,8 @@ SOURCE_PARAMS = ("filepath", "literalpath", "pspath", "lp", "path")
 VALUE_PARAMS = {"newname", "value", "encoding", "filter", "include", "exclude", "itemtype", "stream", "inputobject", "width",
                 "delimiter", "credential", "type", "name", "headers", "uri", "body", "method", "contenttype", "useragent",
                 "timeoutsec"}
+# Parameters that only name what a cmdlet reads: a name cut short to one of them is no target, whatever its value looks like.
+READ_PARAMS = {"source", "infile", "container"}
 SHELLS = {"powershell", "pwsh", "cmd", "bash", "sh", "zsh", "wsl", "ksh", "dash"}
 SHELL_FLAGS = {"-c", "-command", "/c", "/k", "-lc", "-ic"}
 CHANGE_DIRECTORY = {"cd", "chdir", "set-location", "sl", "pushd", "push-location"}
@@ -191,25 +193,84 @@ def _path_like(value):
 # The cmdlets of PowerShell that write, move, copy, delete or make files, and the aliases that are PowerShell's own (`cp`, `mv`, `rm`,
 # `tee` and the like are unix tools too, and keep the reading they always had).
 POWERSHELL = {"out-file", "set-content", "add-content", "clear-content", "tee-object", "new-item", "export-csv", "export-clixml",
-              "start-transcript", "remove-item", "rename-item", "move-item", "copy-item", "expand-archive", "invoke-webrequest",
-              "invoke-restmethod", "sc", "ac", "clc", "ni", "ri", "rni", "mi", "cpi", "iwr", "irm", "ren", "del", "erase", "rd", "md"}
+              "start-transcript", "remove-item", "rename-item", "move-item", "copy-item", "expand-archive", "compress-archive",
+              "invoke-webrequest", "invoke-restmethod", "start-bitstransfer", "copy-itemproperty",
+              "sc", "ac", "clc", "ni", "ri", "rni", "mi", "cpi", "iwr", "irm", "ren", "del", "erase", "rd", "md"}
+WEB = ("invoke-webrequest", "iwr", "invoke-restmethod", "irm")
 
 
-def edits_in_place(words):
-    """Whether sed's words ask for an edit in place with the suffix attached, which the reading of `-i` alone misses: GNU's
-    `-i.bak`, `-ibak`, the letter among others (`-ni`, `-Ei.bak`) and `--in-place[=SUFFIX]`. Only ever more targets: the
-    reading of `-i` (and BSD's `-i ''` and `-i .bak`) stays as it was."""
-    return any(re.fullmatch(r"-[A-Za-z]*i.*|--in-place(?:=.*)?", word.text) for word in words)
+def written(name):
+    """The parameters of a PowerShell cmdlet whose values it changes, from what the reading of its kind takes (the one table):
+    a copy, a download, an archive and a transfer write their destination and only read their source; a move, a rename and a
+    delete change every path they are given; the cmdlets that put content somewhere write the path they are given."""
+    if name in ("expand-archive", "compress-archive"):
+        return {"destinationpath"}
+    if name in WEB:
+        return {"outfile"}
+    if name in ("start-bitstransfer", "copy-itemproperty"):
+        return {"destination"}
+    kind = WRITERS.get(name)
+    if kind == COPY:
+        return {"destination"}
+    if kind in (ALL, RENAME):
+        return set(PATH_PARAMS)
+    if kind == DEST:
+        return {*SOURCE_PARAMS, "outputdirectory"}
+    return set()
 
 
-def powershell_paths(arguments):
-    """More words to judge as paths written, for a PowerShell cmdlet: the value of a parameter given as `-Name:value` (or
-    `-Name: value`) that is cut short to the beginning of a path parameter (-Lit, -Pa, -Fi, -Des), or that nobody knows and whose
-    value looks like a path. PowerShell binds a name cut short by its own parameters, which this does not know, so a name
-    that fits more than one (-Fi is Filter and FilePath) gives its value as one more candidate and takes nothing away: the
-    words the command always named stay judged. A name that is known, whether it names a path (read as it always was) or a value,
-    adds nothing."""
-    found, index = [], 0
+SED_LONG = ("binary", "debug", "expression", "file", "follow-symlinks", "in-place", "line-length", "null-data", "zero-terminated",
+            "quiet", "silent", "regexp-extended", "separate", "sandbox", "unbuffered", "version", "help", "posix")
+
+
+def sed_words(words):
+    """(whether sed edits in place, whether its script comes from an option, the words that are not options) as GNU sed reads
+    its words: the options end at `--`; `-i` takes the rest of its word as the suffix (`-i.bak`, `-ie`), and may follow other
+    letters (`-ni`); `-e` and `-f` (and `--expression`, `--file`, each cut short to a name that is only theirs) take the rest of
+    their word, or the next word, as the script or the file of it, which is no operand and no flag; `--in-place[=SUFFIX]` is the
+    long form. BSD's suffix word (`-i .bak`, `-i ''`) is left among the words, as it always was."""
+    in_place = scripted = False
+    operands, index, options = [], 0, True
+    while index < len(words):
+        word = words[index]
+        text = word.text
+        index += 1
+        if not options or len(text) < 2 or text[0] != "-":
+            operands.append(word)
+        elif text == "--":
+            options = False
+        elif text[1] == "-":
+            name, equals, _ = text[2:].partition("=")
+            matches = [long for long in SED_LONG if name and long.startswith(name)]
+            if len(matches) == 1:
+                if matches[0] == "in-place":
+                    in_place = True
+                elif matches[0] in ("expression", "file"):
+                    scripted = True
+                    index += 0 if equals or index >= len(words) else 1
+                elif matches[0] == "line-length":
+                    index += 0 if equals or index >= len(words) else 1
+        else:
+            for position, letter in enumerate(text[1:], 1):
+                if letter == "i":
+                    in_place = True
+                    break
+                if letter in "efl":
+                    scripted = scripted or letter != "l"
+                    index += 0 if text[position + 1:] or index >= len(words) else 1
+                    break
+    return in_place, scripted, operands
+
+
+def powershell_paths(arguments, writes):
+    """(the paths a cmdlet is given by a parameter written `-Name:value` (or `-Name: value`) and cut short to a beginning that is
+    only of one of the parameters it `written`s, the paths it may be given by one that fits more than one or that nobody knows
+    but whose value looks like a path). PowerShell binds a name cut short by its own parameters, which this does not know, so
+    the second kind (-Fi is Filter and FilePath) is one more candidate and takes nothing away: the words the command always
+    named stay judged. The first kind is the target, as a name written out is. A parameter that only reads (a source) and a name
+    that is known (read as it always was) add nothing."""
+    given, maybe, index = [], [], 0
+    arguments = list(arguments)
     while index < len(arguments):
         token, text = arguments[index], arguments[index].text
         index += 1
@@ -226,9 +287,13 @@ def powershell_paths(arguments):
             index += 1
         else:
             continue
-        if any(name in PATH_PARAMS for name in parameter(key)) or (not parameter(key) and _path_like(candidate.text)):
-            found.append(candidate)
-    return found
+        paths = [name for name in PATH_PARAMS if name.startswith(key)] if len(key) >= 2 else []
+        values = [name for name in (*VALUE_PARAMS, *READ_PARAMS) if name.startswith(key)] if len(key) >= 2 else []
+        if paths and not values and all(name in writes for name in paths):
+            given.append(candidate)
+        elif any(name in writes for name in paths) or (not paths and not values and _path_like(candidate.text)):
+            maybe.append(candidate)
+    return given, maybe
 
 
 def _options(arguments):
@@ -342,8 +407,10 @@ def classify(command, cwd, reach, *, windows=None, home=None, depth=0):
         positional, named = _options(rest)
         kind = WRITERS.get(name)
         found = []
+        given, maybe = powershell_paths(rest, written(name)) if name in POWERSHELL else ([], [])
         if kind == DEST:
-            found = [item for key in SOURCE_PARAMS for item in named.get(key, [])]
+            # A target given by a parameter, however it is written, leaves the words beside it to be the content.
+            found = [*(item for key in SOURCE_PARAMS for item in named.get(key, [])), *given]
             if name == "start-transcript":
                 found += named.get("outputdirectory") or []
             found = found or positional[:1]
@@ -358,14 +425,16 @@ def classify(command, cwd, reach, *, windows=None, home=None, depth=0):
             found = renamed(positional, named)
         elif kind == COPY:
             found = [*(named.get("destination") or [])] or (positional[-1:] if len(positional) > 1 else [Token(".")])
-        elif name in ("invoke-webrequest", "iwr", "invoke-restmethod", "irm"):
+        elif name in WEB:
             found = named.get("outfile") or []
         elif name in ("curl", "wget"):
             found = [*(named.get("o") or []), *(named.get("output") or [])]
             if name == "curl" and "O" in {token.text.lstrip("-") for token in rest}:
                 found.append(Token("."))
-        elif name == "expand-archive":
+        elif name in ("expand-archive", "compress-archive"):
             found = named.get("destinationpath") or positional[1:2]
+        elif name == "start-bitstransfer":
+            found = named.get("destination") or positional[1:2]
         elif name == "tar":
             found = [rest[at + 1] for at, token in enumerate(rest[:-1]) if token.text in ("-C", "--directory")]
         elif name == "git" and positional and positional[0].text == "clone":
@@ -374,10 +443,13 @@ def classify(command, cwd, reach, *, windows=None, home=None, depth=0):
             found = positional[1:2] or [Token(".")]
         elif name == "dd":
             found = [Token(token.text[3:], token.dynamic) for token in rest if token.text.startswith("of=")]
-        elif name == "sed" and ("i" in named or edits_in_place(rest)):
-            found = positional[1:]
+        elif name == "sed":
+            in_place, scripted, operands = sed_words(rest)
+            if in_place:
+                # The first word that is no option is the script, unless an option gave it; a word that is empty names nothing.
+                found = [word for word in (operands if scripted else operands[1:]) if word.text]
         if name in POWERSHELL:
-            found = [*found, *(token for token in powershell_paths(rest) if not any(token is item for item in found))]
+            found = [*found, *(token for token in (*given, *maybe) if not any(token is item for item in found))]
         for token in found:
             judge(token, here)
     return projects, outside
