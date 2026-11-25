@@ -2,6 +2,27 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.checkVisibility() && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  // The chief's crown (issue 327): one crown on the head of the slime that is painted, whichever engine draws it. `painted` is the drawing
+  // that is seen (the vector, or the cel a strip shows), so a second crown in the dark rim or in a hidden drawing is not counted away.
+  const crownIssues = surface => {
+    const svg = surface.querySelector('svg.slime');
+    if (!svg) return ['no slime is drawn'];
+    const painted = globalThis.__lookPaintedSlime?.(svg) ?? { body: svg.querySelector('.slime-body'), marks: [...svg.querySelectorAll('.slime-marks .slime-mark')] };
+    const crowns = painted.marks.flatMap(mark => [...mark.querySelectorAll('.slime-crown')]);
+    const issues = [];
+    if (crowns.length !== 1) issues.push(`${crowns.length} crowns are painted`);
+    if (svg.querySelectorAll('.slime-crown').length !== 1) issues.push(`${svg.querySelectorAll('.slime-crown').length} crowns are in the drawing`);
+    const crown = crowns[0];
+    if (!crown) return issues;
+    if (crown.matches('[transform]') || crown.querySelector('[transform]')) issues.push('the crown carries a transform of its own');
+    const body = painted.body?.getBoundingClientRect(), mark = crown.getBoundingClientRect();
+    if (body && body.width > 0 && mark.width > 0) {
+      const slack = body.width * 0.12;
+      if (mark.left < body.left - slack || mark.right > body.right + slack) issues.push(`the crown is off the body's width (${Math.round(mark.left - body.left)}..${Math.round(mark.right - body.left)} of ${Math.round(body.width)})`);
+      if (mark.bottom < body.top || mark.top > body.top + body.height * 0.5) issues.push(`the crown is not on the head (${Math.round(mark.top - body.top)}..${Math.round(mark.bottom - body.top)} of ${Math.round(body.height)} down)`);
+    }
+    return issues;
+  };
   // R-UI-182: a dialog's page scrolls under its header, which holds the close (and the way back) at the top of the body and
   // keeps them pressable at its bottom. A page too short to scroll gets a tall spacer under its header for the test, so a
   // header that would scroll away fails on every page and not only on the ones a fixture makes long. A page whose height is
@@ -4121,6 +4142,29 @@ export function checkRendered(name, context = {}) {
     require(getComputedStyle(rows[0]).backgroundColor!=='rgba(0, 0, 0, 0)'&&getComputedStyle(rows[1]).backgroundColor==='rgba(0, 0, 0, 0)','the first row, which Enter opens, carries the soft fill');
     require(visible(add)&&add.getBoundingClientRect().bottom<=box.bottom+1&&add.getBoundingClientRect().top>=rows.at(-1).getBoundingClientRect().top,'新增角色 stands at the foot of the card');
     return {check:name,width:Math.round(box.width),rows:rows.length};
+  }
+  if (name === "slime-crown") {
+    const surfaces = [...document.querySelectorAll('.look-slime-board .slime-surface')];
+    require(surfaces.length >= 50, `every slime asked for is on the board: ${surfaces.length}`);
+    for (const [index, surface] of surfaces.entries()) {
+      const issues = crownIssues(surface);
+      require(!issues.length, `slime ${index} (${surface.dataset.state}): ${issues.join("; ")}`);
+    }
+    return { check: name, surfaces: surfaces.length };
+  }
+  if (name === "chief-crown") {
+    // The chief's faces (member 0) wear the one crown on their head, and nobody else's face wears one.
+    const chief = ['.mb-chief', '.mb-pinned .mb-tile[data-member="0"]', '.ms-pane .ms-face', '.ob-first-face', '.mb-panel-identity'];
+    const faces = [...document.querySelectorAll(chief.map(place => `${place} .slime-surface`).join(', '))].filter(visible);
+    require(faces.length >= (document.querySelector('.ms-pane .ms-face .slime-surface') ? 2 : 1), `the chief's faces are on screen: ${faces.length}`);
+    for (const [index, surface] of faces.entries()) {
+      const issues = crownIssues(surface);
+      require(!issues.length, `the chief's face ${index} (${surface.closest('[class]')?.className}): ${issues.join("; ")}`);
+    }
+    const memberOf = surface => surface.dataset.slimeStill ?? surface.querySelector('svg.slime')?.dataset.slimeMember;
+    const others = [...document.querySelectorAll('.slime-surface')].filter(surface => surface.querySelector('.slime-crown') && memberOf(surface) !== '0');
+    require(!others.length, `${others.length} faces wear a crown that are not the chief's`);
+    return { check: name, faces: faces.length };
   }
   if (name === "slime-marks-at-rest") {
     const surfaces = [...document.querySelectorAll('.look-slime-board .slime-surface[data-state="idle"]')].filter(visible);

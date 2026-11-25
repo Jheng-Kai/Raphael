@@ -84,6 +84,25 @@ own messages), and Raphael's names still reach member 0. An install from before 
 `member-settings-raphael-slime` opens member 0's settings, presses its face and the red horned slime, and checks
 (`member-settings-raphael-restyled`) that the core kept it and that the settings face and the sidebar row wear it.
 
+The chief's slime wears one gold crown, drawn once on its head wherever its face is drawn (`crownMark` in `slime.ts`). Its points
+are worked out into the drawing's own units and written as plain coordinates inside `.slime-crown`, which carries no `transform`
+of its own. On a Mac the marker once floated to the right of a brown headband slime while the dark rim's copy of it stayed on
+the head, so the slime seemed to wear two; a nested rotated and scaled transform is the one thing the crown had that no other
+mark has, and it is gone. The crown is no longer part of the dark rim either, so there is one copy to place. A character with no crown of its own takes the crown
+where its spot says (`CROWN_SPOTS`); no character draws a crown as part of its art, so none is replaced. Scenes: `slime-crown`
+(every character at 72, 40 and 28 px, and five characters at 96 and 40 px in every state), `slime-crown-moves` and
+`slime-crown-change` (a headband slime through the motion of each state and each change of state), `member-settings-raphael-crown`
+(the settings face and the sidebar row after the chief is dressed in the brown headband slime) and `onboarding-slime-crown`
+(the guide's large first slime); the checks `slime-crown` and `chief-crown` require exactly one crown on the painted drawing, no
+transform of its own, none in the rim, its middle within the body's width and on its upper half, and no crown on a face that is
+not member 0's. The look harness draws in Chromium, which never showed the displacement: the cause is reasoned from the
+owner's screenshot (the crown moved by what a rotation and scale about the middle of the drawing would give), and the placement
+has to be looked at once in a WKWebView.
+
+```powershell
+npm run look -- slime-crown slime-crown-moves slime-crown-change member-settings-raphael-crown onboarding-slime-crown --theme both --width 1120,720,1920x1080
+```
+
 ```powershell
 npm run look -- member-settings-skill-row-hover member-settings-switch-hover member-settings member-settings-raphael member-settings-raphael-slime member-settings-skills member-settings-tools member-settings-notify member-settings-field member-persona-empty member-persona-filled member-persona-mixed member-persona-long member-persona-editing member-persona-editing-long member-persona-saved member-persona-escape member-settings-skill member-settings-command member-settings-cover member-settings-cover-picture member-settings-back-hover member-settings-back member-settings-back-bottom member-settings-back-kept details member-panel-library member-face-hover --theme both --width 1120,720,1920x1080
 ```
