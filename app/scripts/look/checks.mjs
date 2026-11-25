@@ -652,7 +652,7 @@ export function checkRendered(name, context = {}) {
     const rowOf = key => document.querySelector(`.skl-pack[data-skl-pack="${key}"]`);
     const accessOf = key => rowOf(key)?.querySelector('.skl-access span')?.textContent.trim();
     // A package's page stands in the list's place (R-SKILL-17): it has no importer of its own.
-    const onPage = ['skill-library-open', 'skill-library-page-top', 'skill-library-skill-page', 'skill-library-doc-alone'].includes(name);
+    const onPage = ['skill-library-open', 'skill-library-page-top', 'skill-library-skill-page', 'skill-library-doc-alone', 'skill-library-page-remove'].includes(name);
     if (name !== 'member-skills-library' && !onPage) {
       const pane = document.querySelector('.modal-scrim .skl');
       require(pane?.getAttribute('aria-label') === '團隊技能', 'the Settings section names Team skills');
@@ -741,7 +741,7 @@ export function checkRendered(name, context = {}) {
       const back = head.querySelector('[data-skl="back"]'), title = head.querySelector('h1#set-title');
       require(back.matches('.back-link') && document.activeElement === back && title?.textContent.trim() === (alone ? '會議紀錄' : 'poteto-mode'), "the way back has the focus, beside the skill's name");
       const controls = [...head.querySelectorAll('.skl-page-actions .ctl > button')].filter(visible).map(control => control.dataset.skl);
-      require(controls.join(',') === (alone ? 'access,toggle' : 'skill'), `its controls: its own switch, or a skill alone its package's (${controls})`);
+      require(controls.join(',') === (alone ? 'access,remove,toggle' : 'skill-remove,skill'), `its controls: its trash and its own switch, or a skill alone its package's (${controls})`);
       const quote = page.querySelector('.skl-about'), doc = page.querySelector('.skl-doc');
       require(visible(quote) && quote.querySelector('p')?.textContent.length > 10 && (!alone || quote.querySelector('.skl-source')), 'a quote of its words, with where it came from for a skill alone');
       require(visible(doc) && doc.querySelector('.ans') && !doc.textContent.includes('description:') && (alone || doc.querySelector('.message-code')), 'its document is drawn as Markdown, without its front matter');
