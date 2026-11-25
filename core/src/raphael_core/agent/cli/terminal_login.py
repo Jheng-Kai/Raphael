@@ -4,6 +4,7 @@ Windows starts the sign-in in a console of its own and waits for that process. A
 process: the sign-in runs in a Terminal window, from a small script in a private folder, which writes its
 shell's process id when it starts and its exit code when the CLI ends. `TerminalSignIn` reads those files:
 `wait` blocks until the code is there, `poll` says whether it is, and `terminate` ends the script's shell.
+`release` leaves a window whose sign-in was found while the CLI goes on in it (Antigravity) to the owner.
 The window starts the person's own shell environment, so the script unsets the API keys a subscription
 sign-in must not see (`process.API_KEYS`), as `subscription_env` leaves them out on Windows.
 """
@@ -31,6 +32,7 @@ class TerminalSignIn:
         self.folder = Path(tempfile.mkdtemp(prefix="raphael-sign-in-"))
         self._code_file, self._pid_file = self.folder / "code", self.folder / "pid"
         self._timeout_s, self._poll_s = timeout_s, poll_s
+        self._released = False
         self._ended = threading.Event()
         self.returncode: int | None = None
         script = self.folder / "sign-in.command"
@@ -56,13 +58,19 @@ class TerminalSignIn:
     def wait(self) -> int:
         waited = 0.0
         while self.poll() is None:
-            if waited >= self._timeout_s:
+            if waited >= self._timeout_s and not self._released:
                 self.terminate()
                 break
             if self._ended.wait(self._poll_s):
                 break
             waited += self._poll_s
         return self.returncode if self.returncode is not None else 1
+
+    def release(self) -> None:
+        """The sign-in was found while the CLI goes on in the window (Antigravity stays open on its conversation after
+        one): the window is the owner's now. The time a sign-in may take no longer ends it, and its folder still goes when
+        it ends."""
+        self._released = True
 
     def terminate(self) -> None:
         if self.returncode is not None:

@@ -427,10 +427,14 @@ if name == "claude":
     send({"type":"result", "subtype":"success", "result":"Hello", "usage":{"input_tokens":4,"output_tokens":2}})
 elif name == "gemini":
     assert sys.argv[sys.argv.index("--conversation") + 1] == "previous"
-    home = os.environ["USERPROFILE"]
-    config = json.load(open(os.path.join(home, ".gemini", "config", "mcp_config.json"), encoding="utf-8"))
+    # Its private Gemini folder is named by --gemini_dir and its home stays the owner's, where agy reads its sign-in from
+    # the system's store (R-CLI-SIGNIN-07).
+    folder = next(arg.partition("=")[2] for arg in sys.argv if arg.startswith("--gemini_dir="))
+    assert os.environ["HOME"] == os.environ["USERPROFILE"] == os.environ["RAPHAEL_TEST_OWNER"]
+    assert not os.path.abspath(folder).startswith(os.path.abspath(os.environ["RAPHAEL_TEST_OWNER"]))
+    config = json.load(open(os.path.join(folder, "config", "mcp_config.json"), encoding="utf-8"))
     assert config["mcpServers"]["raphael"]["headers"]["Authorization"] == "Bearer ephemeral"
-    assert open(os.path.join(home, ".gemini", "GEMINI.md"), encoding="utf-8").read() == "persona"
+    assert open(os.path.join(folder, "GEMINI.md"), encoding="utf-8").read() == "persona"
     assert json.loads(sys.stdin.readline())["message"]["content"] == "question"
     send({"event":"init", "conversation_id":"next", "init":{}})
     send({"event":"step_update", "step_update":{"step_type":"tool", "state":"ACTIVE", "tool_name":"call_mcp_tool"}})
@@ -478,7 +482,11 @@ else:
         permissions.append(value)
         return "once"
 
-    driver = Driver(name, [sys.executable, str(script), name], model="chosen-model", effort="high", environ={**os.environ, "OPENAI_API_KEY": "never-child"})
+    environ = {**os.environ, "OPENAI_API_KEY": "never-child"}
+    if name == "gemini":
+        owner = str(tmp_path / "owner")
+        environ.update(HOME=owner, USERPROFILE=owner, RAPHAEL_TEST_OWNER=owner)
+    driver = Driver(name, [sys.executable, str(script), name], model="chosen-model", effort="high", environ=environ)
     session = "raphael-codex-v1:previous" if name == "codex" else "previous"
     events = [event async for event in driver.run(user="question", system="persona", endpoint="http://127.0.0.1:1/mcp", token="ephemeral", session=session, permission=permission)]
     assert any(event.kind == "text_delta" and event.text == "Hello" for event in events)
@@ -620,19 +628,19 @@ async def test_discovery_reports_changes_without_reading_credentials(tmp_path, m
     script = tmp_path / "version.py"
     script.write_text("print('fake 1.0')", encoding="utf-8")
     changed = []
-    brains = CliBrains(home=tmp_path, environ={}, commands={"gemini": [sys.executable, str(script)]}, notify=lambda *args: changed.append(args))
+    brains = CliBrains(home=tmp_path, environ={}, commands={"codex": [sys.executable, str(script)]}, notify=lambda *args: changed.append(args))
     # Authentication discovery is independent of asynchronous model-catalog notifications.
     monkeypatch.setattr(brains, "_needs_models", lambda _name: False)
-    assert (await brains.list())["clis"][2]["logged_in"] is False
-    (tmp_path / ".gemini").mkdir()
-    credentials = tmp_path / ".gemini" / "oauth_creds.json"
+    assert (await brains.list())["clis"][1]["logged_in"] is False
+    (tmp_path / ".codex").mkdir()
+    credentials = tmp_path / ".codex" / "auth.json"
     credentials.touch()
     read_text = Path.read_text
     def forbid_read(path, *args, **kwargs):
         assert path.name not in ("auth.json", "oauth_creds.json", "google_accounts.json", ".credentials.json", "credentials.json")
         return read_text(path, *args, **kwargs)
     monkeypatch.setattr(Path, "read_text", forbid_read)
-    assert (await brains.list())["clis"][2]["logged_in"] is True
+    assert (await brains.list())["clis"][1]["logged_in"] is True
     assert changed == [("brains.changed", {})]
     await brains.aclose()
 
@@ -735,7 +743,7 @@ class SignInProcess:
 
     def __init__(self, code=0, held=True):
         import threading
-        self.code, self.ended, self.stopped = None, threading.Event(), False
+        self.code, self.ended, self.stopped, self.released = None, threading.Event(), False, False
         if not held:
             self.finish(code)
 
@@ -753,6 +761,9 @@ class SignInProcess:
     def terminate(self):
         self.stopped = True
         self.finish(1)
+
+    def release(self):
+        self.released = True
 
 
 def test_login_launches_only_the_unwrapped_command_in_a_visible_console(tmp_path, monkeypatch):
@@ -806,7 +817,8 @@ async def test_disconnect_purges_raphael_credentials_hides_models_and_reconnects
     home = tmp_path / "home"
     claude_cred = home / ".claude" / ".credentials.json"
     codex_cred = home / ".codex" / "auth.json"
-    gemini_cred = home / ".gemini" / "google_accounts.json"
+    gemini_cred = home / ".gemini" / "GEMINI.md"  # the owner's own Gemini folder, never touched
+    gemini_item = ["stamp"]
     for path, content in ((claude_cred, "user-claude"), (codex_cred, "user-codex"), (gemini_cred, "user-gemini")):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
@@ -832,6 +844,7 @@ async def test_disconnect_purges_raphael_credentials_hides_models_and_reconnects
         commands={"claude": cmd, "codex": cmd, "gemini": cmd},
         notify=lambda method, payload: events.append((method, payload)),
         settings=settings,
+        credentials=lambda: gemini_item[0],
     )
     monkeypatch.setattr(brains, "_needs_models", lambda _name: False)
     brains._models["codex"] = [{"id": "cli:codex:gpt-5", "name": "GPT-5", "is_default": True}]
@@ -873,7 +886,7 @@ async def test_disconnect_purges_raphael_credentials_hides_models_and_reconnects
         assert reconnected["claude"]["available"] is True and reconnected["claude"]["models"]
         assert reconnected["codex"]["available"] is True
 
-        gemini_cred.unlink()
+        gemini_item[0] = None  # signed out of Antigravity
         if os.name == "nt":
             monkeypatch.setattr(discovery.subprocess, "Popen", fake_popen)
             assert brains.login("gemini") == {"started": True}
@@ -909,6 +922,108 @@ def test_failed_login_does_not_reconnect_or_launch_an_uninstalled_cli(tmp_path, 
     with pytest.raises(ValueError, match="cli_missing"):
         brains.login("codex")
     assert brains.disconnected("codex")
+
+def antigravity_sign_in(tmp_path, monkeypatch, *, signed_in, item, look_s=0.01):
+    """Brains whose Antigravity sign-in opens a held fake window on either system (a Terminal window on a Mac, a console on
+    Windows), with a fake `agy` that says whether it is `signed_in` and the stored item in `item`."""
+    from raphael_core.agent.cli import discovery
+    from .test_cli_models import fake_agy
+
+    made = []
+    window = lambda *args, **kwargs: made.append(SignInProcess()) or made[-1]  # noqa: E731
+    # Only the sign-in's window is faked: off Windows asyncio starts its processes with Popen too.
+    if sys.platform == "darwin":
+        monkeypatch.setattr(discovery, "TerminalSignIn", window)
+    else:
+        monkeypatch.setattr(discovery.subprocess, "Popen", window)
+    monkeypatch.setattr(discovery, "SIGNIN_LOOK_S", look_s)
+    brains = CliBrains(home=tmp_path, environ={}, commands={"gemini": fake_agy(tmp_path, signed_in=signed_in)},
+                       credentials=lambda: item[0])
+    back = []
+    brains.on_back.append(back.append)
+    return brains, made, back
+
+
+async def _settled(brains, name="gemini", seconds=10):
+    deadline = asyncio.get_running_loop().time() + seconds
+    while brains._signed.get(name) is None or brains._signing_in(name):
+        assert asyncio.get_running_loop().time() < deadline, "the sign-in was never settled"
+        await asyncio.sleep(0.01)
+    return brains._signed[name]
+
+
+@pytest.mark.skipif(os.name != "nt" and sys.platform != "darwin", reason="a sign-in window is a Mac's or Windows'")
+async def test_antigravitys_sign_in_is_found_in_the_system_store_while_its_window_stays_open(tmp_path, monkeypatch):
+    """R-CLI-SIGNIN-08: `agy` signs in on its own screen and stays open on its conversation, so the app never waited the
+    sign-in out. Its item written anew in the Keychain or Credential Manager is the sign-in, the same on both systems: done,
+    the failures it left are cleaned up, and the window is left open to the owner."""
+    item = [None]
+    brains, made, back = antigravity_sign_in(tmp_path, monkeypatch, signed_in=False, item=item)
+    try:
+        assert brains.login("gemini") == {"started": True}
+        row = (await brains.list())["clis"][2]
+        assert row["signing_in"] is True and row["login_result"] is None
+        await asyncio.sleep(0.2)  # agy is asked and says it is not signed in yet: still under way
+        assert brains._signing_in("gemini") and made[0].code is None
+        item[0] = "20261125114948Z"  # the owner signed in: agy wrote its item
+        assert await _settled(brains) == "done"
+        assert made[0].released and not made[0].stopped and made[0].code is None, "the window is the owner's to close"
+        assert back == ["gemini"] and brains.logged_in("gemini") is True
+        row = (await brains.list())["clis"][2]
+        assert row["signing_in"] is False and row["login_result"] == "done" and row["available"] is True
+    finally:
+        await brains.aclose()
+
+
+@pytest.mark.skipif(os.name != "nt" and sys.platform != "darwin", reason="a sign-in window is a Mac's or Windows'")
+async def test_antigravitys_sign_in_kept_where_no_item_says_is_found_by_asking_agy(tmp_path, monkeypatch):
+    """R-CLI-SIGNIN-08: a sign-in too large for the system's store is kept in agy's own file, and no item changes; agy
+    itself saying it is signed in finds it."""
+    brains, made, back = antigravity_sign_in(tmp_path, monkeypatch, signed_in=True, item=[None])
+    try:
+        brains.login("gemini")
+        assert await _settled(brains) == "done"
+        assert made[0].released and not made[0].stopped and back == ["gemini"]
+        assert brains.logged_in("gemini") is True and brains._verdict["gemini"] == (True, None)
+    finally:
+        await brains.aclose()
+
+
+@pytest.mark.skipif(os.name != "nt" and sys.platform != "darwin", reason="a sign-in window is a Mac's or Windows'")
+@pytest.mark.parametrize("signed", [True, False])
+async def test_antigravitys_window_closed_is_judged_by_its_sign_in_not_its_exit(tmp_path, monkeypatch, signed):
+    """R-CLI-SIGNIN-08: the owner closing agy's window ends it with a failure code whether they signed in or not: a sign-in
+    that is there is done, none is stopped."""
+    item = [None]
+    brains, made, back = antigravity_sign_in(tmp_path, monkeypatch, signed_in=False, item=item, look_s=60)
+    try:
+        brains.login("gemini")
+        if signed:
+            item[0] = "20261125114948Z"
+        made[0].finish(1)  # the window was closed
+        assert await _settled(brains) == ("done" if signed else "stopped")
+        assert back == (["gemini"] if signed else [])
+    finally:
+        await brains.aclose()
+
+
+def test_a_released_mac_window_is_never_ended_by_the_sign_in_time(tmp_path):
+    """R-CLI-SIGNIN-08: once Antigravity's sign-in is found the Terminal window is the owner's, and the time a sign-in may
+    take no longer ends what runs in it; its end is still read, and its folder still goes."""
+    import threading
+    from raphael_core.agent.cli.terminal_login import TerminalSignIn
+    ok = lambda args, **kwargs: subprocess.CompletedProcess(args, 0)  # noqa: E731
+    window = TerminalSignIn(["agy"], opener=ok, timeout_s=0.02, poll_s=0.01)
+    window.release()
+    ended = []
+    follow = threading.Thread(target=lambda: ended.append(window.wait()))
+    follow.start()
+    follow.join(0.2)
+    assert follow.is_alive() and window.poll() is None, "the time a sign-in may take ended it"
+    (window.folder / "code").write_text("0\n", encoding="utf-8")
+    follow.join(5)
+    assert ended == [0] and not window.folder.exists()
+
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows priority classes")
 async def test_a_cli_brain_gives_way_to_the_owners_window(monkeypatch):

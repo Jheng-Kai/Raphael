@@ -811,13 +811,18 @@ The turn's failure has `cause` for a `cli:` provider: `expired` 「Claude Code �
 opens). The button (`cli-signin.ts`) starts the CLI's own sign-in through `brains.cli_login` with `again` (a session that
 ran out keeps its credentials, so the plain call would only reconnect it), then reads `brains.cli` until the console's
 process ended: `signing_in` and `login_result` (`done` or `stopped`) come from the process, never from a credential file.
+Antigravity has no sign-in command and `agy` stays open on its conversation after signing in, so for it they come from the
+sign-in itself (R-CLI-SIGNIN-08): its item in the Keychain or Credential Manager written anew, or agy saying it is signed in,
+settles `done` while its window stays open, and a window closed first is `done` or `stopped` by the same look, never by its
+exit code. Which sign-in counts and how a run reads it are R-CLI-SIGNIN-05 and R-CLI-SIGNIN-07 (core tests only, no scene).
 While the window is open the reply says to finish there beside 「取消」; a window closed first says 「沒有完成登入」 and keeps
 the button; a finished sign-in says 「已登入，正在重新送出」 and sends the question again once (the reply's own 重新產生
 path), only while that reply is the newest answer. An API model's refused key shows the provider's 開啟設定 and no sign-in
 button; a room or routine run records the same cause (`cli_login_expired`, `cli_login`, `cli_missing`) with no button.
 The mock holds a sign-in console open until the scene's `cli-signin-ends` step, so every state is seen in order.
 Native acceptance with a real expired session is the owner's: close the CLI's own sign-in window to see the stopped state,
-and finish it to see the question go again.
+and finish it to see the question go again. For Antigravity, sign in in `agy`'s window and leave it open: the reply says
+signed in within seconds, on a Mac and on Windows alike.
 
 A lost sign-in is not only the newest reply's (R-CLI-SIGNIN-06): a routine's failed run never carries the button, and a newer
 turn takes it away from an older reply. While the core says a CLI's sign-in is lost (`brains.cli` `sign_in_lost`, read when the

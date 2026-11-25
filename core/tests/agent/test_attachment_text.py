@@ -67,6 +67,11 @@ async def test_api_turn_receives_article_without_requesting_a_tool(setup, client
     assert not rig.history.steps([result["turn_id"]]).get(result["turn_id"])
 
 
+def signed_in_antigravity(rig):
+    """Antigravity keeps its sign-in in the system's store (R-CLI-SIGNIN-05): a fake item stands for it, never a file."""
+    rig.service._cli_brains._credentials = lambda: "signed in"
+
+
 @pytest.mark.parametrize("name", ["codex", "claude", "gemini"])
 @pytest.mark.parametrize("member_id", [0, 1])
 async def test_cli_turn_receives_article_without_requesting_a_tool(setup, tmp_path, client, name, member_id):
@@ -92,7 +97,7 @@ else:
     else: send({"event":"result", "result":{"status":"SUCCESS", "response":"Article received"}})
 '''.replace("NAME", repr(name)).replace("RECORD", repr(str(record))), name=name)
     if name == "gemini":
-        (rig.service._cli_brains.home / ".gemini" / "oauth_creds.json").touch()
+        signed_in_antigravity(rig)
     result = await rig.call("agent.ask", payload(member_id))
     assert result["text"] == "Article received"
     assert_article(json.loads(record.read_text(encoding="utf-8")))
@@ -201,7 +206,7 @@ assert '<tool_result untrusted="true"' in content
 assert "data:image" not in content
 print(json.dumps({"event":"result", "result":{"status":"SUCCESS", "response":"Image received"}}), flush=True)
 ''', name="gemini")
-    (rig.service._cli_brains.home / ".gemini" / "oauth_creds.json").touch()
+    signed_in_antigravity(rig)
     request = payload(who.id)
     request["attachments"].append({"name": "bird.png", "mime": "image/png",
         "data": base64.b64encode(b"\x89PNG\r\n\x1a\nsynthetic").decode()})
