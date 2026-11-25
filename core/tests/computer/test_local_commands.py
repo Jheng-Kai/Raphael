@@ -171,12 +171,17 @@ CODE_BESIDE_A_COMMAND = [
     "python3 - <<A; bash <<B\nopen(p)\nA\nopen -a Calculator\nB", "python3 - <<'A'; sh <<'B'\nprint(1)\nA\nopen -a Calculator\nB",
     "cat <<'A' > x.py; zsh <<'B'\nopen(p)\nA\nopen -a Calculator\nB",
     # A shell's own argument is read like the same command typed on its own.
+    # A pipeline continued over a backslash and a newline is one line: the shell on the next physical line reads the body.
+    "cat <<'EOF' \\\n| bash\nopen -a Calculator\nEOF", "cat <<'EOF' \\\n  | sh -s\nopen https://example.com\nEOF",
+    "python3 - <<'EOF' \\\r\n| bash\r\nopen -a Calculator\r\nEOF\r\n", "cat <<'EOF' \\\n\\\n| bash\nopen -a Calculator\nEOF",
     "dash -c 'open -a Calculator'", "ksh -c 'open https://example.com'", "dash <<'EOF'\nopen -a Calculator\nEOF",
     "cat <<'A' | python3 - <<'B' | sh\nx\nA\nopen(p)\nB\nopen -a Calculator",
     "zsh -c 'bash <<EOF\nopen -a Calculator\nEOF'", "bash -c 'python3 - <<EOF\n$(open -a Calculator)\nEOF'",
 ]
 # Program text beside a shell's heredoc or an unquoted delimiter without substitutions is still program text.
 MORE_CODE_IS_NOT_A_COMMAND = [
+    "python3 - <<'EOF' \\\n  --flag\nopen(p)\nEOF", "cat <<'EOF' \\\n  > read.py\nopen(p)\nEOF",
+    "python3 - <<'EOF' \\\r\n  > out.txt\r\nopen(p)\r\nEOF\r\n", "python3 - <<'EOF' \\\\\nopen(p)\nEOF",
     "cat <<'FIRST' - <<'SECOND'\ntext\nFIRST\nopen(p)\nSECOND", "python3 - <<'A' - <<'B'\nopen(p)\nA\nopen(q)\nB",
     "dash -c 'ls'", "ksh -c 'echo open'",
     "python3 - <<EOF\nopen(p)\nprint(\\$(open -a X))\nEOF", "python3 - <<EOF\nprint(1)\nopen(p)\nEOF",
