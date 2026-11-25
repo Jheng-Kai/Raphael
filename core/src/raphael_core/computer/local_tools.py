@@ -24,7 +24,7 @@ from . import shell_writes
 from .local_host import LocalHost, Output
 from .local_patterns import DANGEROUS_PATTERNS, MAC_DANGEROUS_PATTERNS
 from .file_tools import VmError
-from .on_screen import launches_on_screen
+from .on_screen import launches_on_screen, on_screen_fragment
 from .owner_files import DEFINITIONS as OWNER_FILE_DEFINITIONS, READS as OWNER_FILE_READS, SERVER as OWNER_FILES, OwnerFileTools
 from .owner_files import WRITES as OWNER_FILE_WRITES, place as owner_place
 from . import owner_files as owner_module
@@ -40,6 +40,14 @@ _CONTEXT = ContextVar("local_command_context", default=(None, True, False, "", F
 ON_SCREEN = ("Nothing was run: this command would show something on the owner's screen, and only a quick question shows "
              "anything there. Open pages, programs and files on your own computer with its tools. To run a program and "
              "read what it prints, run it directly, without opening a window.")
+
+
+def on_screen_refusal(command):
+    """The refusal of a command that would show something on the owner's screen, naming the fragment that did it (R-PC-06),
+    or None when it would not."""
+    return f"{ON_SCREEN} The part that looks like opening something: `{fragment}`." if (fragment := on_screen_fragment(command)) else None
+
+
 OUTSIDE_COMMAND = ("Nothing was run: this command writes outside your work folder, which needs the owner's yes on a card "
                    "for this exact command, and none was given or this conversation cannot show one. Write inside your work "
                    "folder, or tell the owner plainly.")
@@ -331,7 +339,7 @@ class LocalTools:
                 return PluginResult(False, "assigned_computer_required", INSTALL_IN_VM)
             if shows_on_screen(key, arguments):
                 # Whatever the permission mode, 全部允許 included: what is seen is shown on the member's own computer.
-                return PluginResult(False, "shows_on_screen", ON_SCREEN)
+                return PluginResult(False, "shows_on_screen", on_screen_refusal(arguments["command"]) or ON_SCREEN)
             access = self.data_floor.access(key, arguments)
             if access == "write":
                 return PluginResult(False, "protected_data", WRITE_REFUSAL)

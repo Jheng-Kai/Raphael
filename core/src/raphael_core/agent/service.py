@@ -121,8 +121,7 @@ from raphael_core.ui_words import ui_word, with_ui_words
 import asyncio
 import copy
 from pathlib import Path
-from ..computer.local_tools import INSTALL_IN_VM, ON_SCREEN, ask_context, card_arguments, command_context, command_of, installs_software, is_local
-from ..computer.on_screen import launches_on_screen
+from ..computer.local_tools import INSTALL_IN_VM, ask_context, card_arguments, command_context, command_of, installs_software, is_local, on_screen_refusal
 import hashlib
 import json
 import logging
@@ -3419,8 +3418,8 @@ class AgentService:
         if (command := command_of(args)) and not self._owner_screen(ask):
             if getattr(self._plugins, "enforces_computer_choice", False) is True and installs_software(command):
                 return ToolOutcome(False, "assigned_computer_required", instruction=INSTALL_IN_VM)
-            if launches_on_screen(command):
-                return ToolOutcome(False, "shows_on_screen", instruction=ON_SCREEN)
+            if refusal := on_screen_refusal(command):
+                return ToolOutcome(False, "shows_on_screen", instruction=refusal)
         if ask.declined:  # the owner said no in this request: the CLI's own actions wait for a new one
             return ToolOutcome(False, "declined", instruction=DECLINED_NOTE)
         screening = await self._gate.screen(Proposed("cli_permission", "CLI native action", summarize(args)), language=ask.language, ledger=ledger)
