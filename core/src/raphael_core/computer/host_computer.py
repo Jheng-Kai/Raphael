@@ -3,6 +3,7 @@
 import asyncio
 import json
 from collections import Counter
+from contextlib import suppress
 from pathlib import Path
 
 from jsonschema import Draft202012Validator
@@ -50,7 +51,8 @@ BROWSER_DIALOG = {
 }
 BROWSER_UPLOAD = {
     "description": "Give a page's open file chooser files from your work folder, as choosing them in Chrome's dialog "
-                   "would. A result reports the chooser and its chooser_id once the page opens one. The owner approves.",
+                   "would. A result reports the chooser and its chooser_id once the page opens one. The owner approves "
+                   "each upload.",
     "parameters": {"type": "object", "properties": {
         "chooser_id": {"type": "string", "maxLength": 64},
         "paths": {"type": "array", "items": {"type": "string", "maxLength": 4096}, "minItems": 1, "maxItems": 20,
@@ -413,7 +415,7 @@ class HostComputerTools:
                                  "The requested action was not performed. Read the page before using a ref or coordinates.")
                 return data, blocks, tab, None
             if name == "browser_upload":
-                data, blocks = await self.upload(member, browser, tab, arguments), []
+                data, blocks = await self.upload(member, browser, tab, arguments, approver), []
             else:
                 data, blocks = await self.page_call(browser, tab, name, arguments, approver)
             if name == "browser_open":
@@ -434,6 +436,11 @@ class HostComputerTools:
         """One page tool on the tab, which stops waiting for Chrome once a JavaScript dialog blocks the page (#336)."""
         if name == "browser_dialog":
             return await host_page.dialog_action(browser, tab, arguments, approver), []
+        if name in ("browser_open", "browser_navigate") and tab.auth is not None:
+            # Going elsewhere leaves the sign-in prompt the page asked for, as cancelling it would; a prompt the new
+            # page asks for is then reported afresh.
+            with suppress(BrowserError):
+                await browser.answer_auth(tab, tab.auth, None)
         return await HostComputerTools.guarded(tab, lambda: HostComputerTools.page_work(browser, tab, name, arguments, approver))
 
     @staticmethod
@@ -476,9 +483,12 @@ class HostComputerTools:
                    **({"file_chooser": tab.chooser} if tab.chooser is not None else {})}
         return {**data, **prompts}, blocks
 
-    async def upload(self, member, browser, tab, arguments):
+    async def upload(self, member, browser, tab, arguments, approver):
         """browser_upload: files of the member's work folder for the page's open file chooser. Each is a regular file in
-        the work folder, never a private place, a place of keys or a link out of it; the owner approved the call (T2)."""
+        the work folder, never a private place, a place of keys or a link out of it. Files leave for the site, so the
+        owner's yes for this very call is needed, as for an outward click, whatever lets other page input run (T2)."""
+        if approver != "user":
+            raise BrowserError("browser_owner_approval_required")
         chooser = tab.chooser
         if chooser is None or arguments["chooser_id"] != chooser["chooser_id"]:
             raise BrowserError("browser_chooser_changed")

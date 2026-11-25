@@ -32,7 +32,7 @@ NotAllowedError, so the page offers its other ways in. The site's own sign-in pr
 authentication) is reported to the member at once as sign_in_prompt and waits for the owner; a
 proxy's is refused and an unanswered one is cancelled after 5 minutes. A page's file chooser is
 reported as file_chooser: the member answers it with browser_upload (work-folder files only, with
-the owner's approval). On a Mac the headless screen is the Mac's own, never 800 × 600.
+the owner's yes for each upload). On a Mac the headless screen is the Mac's own, never 800 × 600.
 Every member owns its tabs across turns and tasks,
 including tabs the owner opens with Add and popups. Every tab has its own action
 lock. The member checks browser_tabs before opening another copy and uses the tab

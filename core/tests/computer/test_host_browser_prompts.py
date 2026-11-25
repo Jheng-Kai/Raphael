@@ -160,6 +160,18 @@ async def test_a_navigation_that_meets_a_sign_in_prompt_reports_it_at_once(tmp_p
         browser._forget_tab(tab)
 
 
+async def test_going_elsewhere_cancels_the_sign_in_prompt_the_page_left(tmp_path, monkeypatch):
+    browser, tab = prompt_tab(tmp_path)
+    browser._event("Fetch.authRequired", challenge("left"), "session")
+
+    async def page_work(browser, tab, name, arguments, approver):
+        return {"tab_id": tab.id}, []
+
+    monkeypatch.setattr(HostComputerTools, "page_work", staticmethod(page_work))
+    data, _ = await HostComputerTools.page_call(browser, tab, "browser_navigate", {"url": "https://example.test/"}, "user")
+    assert data == {"tab_id": tab.id} and tab.auth is None and cancel("left") in browser.cdp.calls
+
+
 async def test_browser_upload_gives_the_chooser_work_files_only(tmp_path, conn):
     tools = HostComputerTools(LocalVm(tmp_path, settings=SettingsStore(conn)), conn, BROWSER_OPEN)
     assert tools.base_tier("browser_upload") == Tier.T2 and "browser_upload" in tools.definitions
@@ -175,8 +187,12 @@ async def test_browser_upload_gives_the_chooser_work_files_only(tmp_path, conn):
     browser._event("Page.fileChooserOpened", {"frameId": "frame", "mode": "selectSingle", "backendNodeId": 7}, "session")
     chooser = tab.chooser
 
-    async def upload(*paths, chooser_id=chooser["chooser_id"]):
-        return await tools.upload(1, browser, tab, {"chooser_id": chooser_id, "paths": list(paths)})
+    async def upload(*paths, chooser_id=chooser["chooser_id"], approver="user"):
+        return await tools.upload(1, browser, tab, {"chooser_id": chooser_id, "paths": list(paths)}, approver)
+
+    # Files leave for the site: only the owner's yes for this very upload lets them go, as for an outward click.
+    with pytest.raises(BrowserError, match="browser_owner_approval_required"):
+        await upload("report.pdf", approver="auto")
 
     with pytest.raises(BrowserError, match="browser_chooser_changed"):
         await upload("report.pdf", chooser_id="old")
