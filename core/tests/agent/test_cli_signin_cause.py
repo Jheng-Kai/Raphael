@@ -364,6 +364,49 @@ async def test_nothing_looks_at_the_credentials_while_no_sign_in_is_lost(tmp_pat
         await brains.aclose()
 
 
+async def test_a_sign_in_done_outside_the_app_shows_within_seconds_while_the_app_is_used(tmp_path, monkeypatch):
+    """R-CLI-SIGNIN-09: while the app is used, a CLI that is installed but not signed in has its credentials looked at every
+    few seconds off the loop, so a sign-in in the owner's own terminal shows at once; a signed-in CLI is not looked at."""
+    import threading
+    monkeypatch.setattr(discovery_module, "SIGNED_OUT_WATCH_S", 0.01)
+    events = []
+    brains = CliBrains(home=tmp_path, environ={}, commands={"codex": ["codex.exe"]},
+                       notify=lambda *event: events.append(event))
+    looks = []
+    real = brains._credential_stamp
+    brains._credential_stamp = lambda name: looks.append((name, threading.get_ident())) or real(name)
+    main = threading.get_ident()
+    try:
+        listed = await brains.list()
+        assert next(item for item in listed["clis"] if item["id"] == "codex")["logged_in"] is False
+        await _until(lambda: len(looks) >= 2)
+        assert {name for name, _ in looks} == {"codex"}, "only the installed CLI that is not signed in"
+        assert all(thread != main for _, thread in looks), "off the event loop"
+        (tmp_path / ".codex").mkdir()
+        (tmp_path / ".codex" / "auth.json").write_text("{}")
+        await _until(lambda: ("brains.changed", {}) in events)
+        assert next(item for item in brains._previous["clis"] if item["id"] == "codex")["logged_in"] is True
+        await asyncio.sleep(0.05)
+        looks.clear()
+        await asyncio.sleep(0.1)
+        assert looks == [], "a signed-in CLI is not looked at"
+    finally:
+        await brains.aclose()
+
+
+async def test_a_cli_not_signed_in_is_no_longer_looked_at_once_the_app_is_left(tmp_path, monkeypatch):
+    monkeypatch.setattr(discovery_module, "SIGNED_OUT_WATCH_S", 0.01)
+    monkeypatch.setattr(discovery_module, "SIGNED_OUT_WATCH_FOR_S", 0.05)
+    brains = CliBrains(home=tmp_path, environ={}, commands={"codex": ["codex.exe"]})
+    try:
+        await brains.list()
+        assert brains._watcher is not None
+        brains._last_used -= 600  # left for longer than the minute's read is kept up
+        await _until(lambda: brains._watcher is None)
+    finally:
+        await brains.aclose()
+
+
 async def test_a_sign_in_that_finished_in_the_apps_console_cleans_up_even_with_no_record(tmp_path, monkeypatch):
     from raphael_core.agent.cli import discovery
     from .test_cli_brains import SignInProcess

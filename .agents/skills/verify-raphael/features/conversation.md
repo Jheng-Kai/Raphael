@@ -815,6 +815,9 @@ Antigravity has no sign-in command and `agy` stays open on its conversation afte
 sign-in itself (R-CLI-SIGNIN-08): its item in the Keychain or Credential Manager written anew, or agy saying it is signed in,
 settles `done` while its window stays open, and a window closed first is `done` or `stopped` by the same look, never by its
 exit code. Which sign-in counts and how a run reads it are R-CLI-SIGNIN-05 and R-CLI-SIGNIN-07 (core tests only, no scene).
+A sign-in done outside the app (the owner's own terminal, another app) shows within seconds while the app is used: a CLI
+installed but not signed in has its credential stamp looked at every 3 s, and a change reads the CLIs and tells the app
+(R-CLI-SIGNIN-09, core tests; live: `codex logout`, then `codex login` in a terminal, with Settings open).
 While the window is open the reply says to finish there beside 「取消」; a window closed first says 「沒有完成登入」 and keeps
 the button; a finished sign-in says 「已登入，正在重新送出」 and sends the question again once (the reply's own 重新產生
 path), only while that reply is the newest answer. An API model's refused key shows the provider's 開啟設定 and no sign-in
