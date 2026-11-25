@@ -1,7 +1,7 @@
 // The owner's safety rules in Settings control which actions Raphael asks about, allows or
 // denies (the core's agent/safety.py). A framed add action follows the draft and verdict menu.
-// Each saved row offers editing and deletion in its overflow menu. Deletion retains the
-// ten-second Undo period; rules are always read and have no opt-out switch.
+// Each saved row has a pencil that edits it and a trash that asks in the red dialog before it deletes (Settings has no
+// right click and no ⋯); rules are always read and have no opt-out switch.
 //
 // `rulesHTML` draws it from a snapshot (pure, so its rules can be tested without a browser);
 // `createRules` holds the state and does what the buttons say, through the core's `safety.rules.*`
@@ -10,10 +10,9 @@
 import { core } from "./api";
 import { describeError } from "./format";
 import { getLocale, t } from "./i18n";
-import { openActions } from "./member-column";
+import { confirmDelete } from "./member-dialogs";
 import type { MessageKey } from "./i18n/zh-TW";
 import { type Choice, actionRow, btn, esc, iconButton, note, sel, st } from "./ui";
-import type { Undoable } from "./undo";
 
 export type Verdict = "ask" | "allow" | "deny";
 
@@ -85,7 +84,7 @@ export interface RulesView {
   status: SafetyRule[] | "loading" | "failed";
   draft: RuleDraft;
   editing: RuleEditor | null;
-  /** Deleted, and waiting out their 10 s of 「復原」: not drawn. */
+  /** Being deleted (the core has not answered yet): not drawn. */
   hidden: readonly number[];
 }
 
@@ -117,7 +116,8 @@ function ruleRow(v: RulesView, rule: SafetyRule): string {
     `<span class="rules-what">${esc(rule.action)}</span>` +
     `<span class="rules-how">${esc(verdictLabel(rule.verdict))}</span>` +
     `<span class="rules-tools">` +
-    iconButton("more", t("members.more", { p0: rule.action }), ` data-rule="more" data-id="${rule.id}" aria-haspopup="menu" aria-expanded="false"${off}`) +
+    iconButton("pencil", t("rules.edit", { p0: rule.action }), ` data-rule="edit" data-id="${rule.id}"${off}`) +
+    iconButton("trash", t("rules.delete", { p0: rule.action }), ` data-rule="delete" data-id="${rule.id}"${off}`) +
     `</span></div>`
   );
 }
@@ -152,7 +152,6 @@ export function rulesHTML(v: RulesView): string {
 export interface RulesHost {
   visible(): boolean;
   redraw(): void;
-  undo: Pick<Undoable, "begin">;
 }
 
 export interface RulesPanel {
@@ -266,25 +265,23 @@ export function createRules(host: RulesHost): RulesPanel {
     }
   }
 
-  function remove(id: number): void {
+  /** The trash: the red dialog asks first, and only its red button deletes; a refused delete reads the list again. */
+  async function remove(id: number): Promise<void> {
     const rule = rules().find((r) => r.id === id);
     if (!rule) return;
+    if (!(await confirmDelete(rule.action, { words: { title: t("confirm.deleteTitle", { p0: rule.action }), hint: t("rules.deleteHint"), action: t("members.delete") } }))) return;
     if (editing?.id === id) editing = null;
     hidden = [...hidden, id];
     redraw();
-    host.undo.begin({
-      message: t("rules.deleted"),
-      commit: async () => {
-        await core("safety.rules.delete", { id });
-        hidden = hidden.filter((n) => n !== id);
-        if (typeof status === "object") status = status.filter((r) => r.id !== id);
-        redraw();
-      },
-      restore: () => {
-        hidden = hidden.filter((n) => n !== id);
-        redraw();
-      },
-    });
+    try {
+      await core("safety.rules.delete", { id });
+      if (typeof status === "object") status = status.filter((r) => r.id !== id);
+    } catch {
+      await load();
+    } finally {
+      hidden = hidden.filter((n) => n !== id);
+      redraw();
+    }
   }
 
   function menuFor(k: string): { choices: Choice[]; current: string; pick: (value: string) => void } | null {
@@ -318,11 +315,6 @@ export function createRules(host: RulesHost): RulesPanel {
     if (!button) return false;
     const id = Number(button.dataset.id);
     switch (button.dataset.rule) {
-      case "more": {
-        const rule = status !== "loading" && status !== "failed" ? status.find(rule => rule.id === id) : undefined;
-        if (rule) openActions(button, [{ id: "edit", label: t("rules.edit", { p0: rule.action }), icon: "pencil" }, { id: "delete", label: t("rules.delete", { p0: rule.action }), icon: "trash" }], choice => { if (choice === "edit") edit(id); else remove(id); });
-        return true;
-      }
       case "add":
         void add();
         return true;
@@ -330,7 +322,7 @@ export function createRules(host: RulesHost): RulesPanel {
         edit(id);
         return true;
       case "delete":
-        remove(id);
+        void remove(id);
         return true;
       case "cancel":
         cancelEdit();

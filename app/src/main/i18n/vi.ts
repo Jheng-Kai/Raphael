@@ -1667,7 +1667,7 @@ export const vi = {
   "rules.editLabel": "Nội dung của “{p0}”",
   "rules.none": "Không có quy tắc",
   "rules.loadFailed": "Không thể tải quy tắc an toàn. Mở lại trang; khởi động lại Raphael nếu vẫn còn lỗi.",
-  "rules.deleted": "Đã xóa 1 quy tắc",
+  "rules.deleteHint": "Quy tắc sẽ không còn áp dụng và không thể hoàn tác.",
   "rules.err.empty": "Hãy viết việc muốn làm",
   "rules.err.too_long": "Tối đa 80 ký tự",
   "rules.err.duplicate": "Quy tắc này đã có",

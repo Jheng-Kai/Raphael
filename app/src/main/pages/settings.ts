@@ -42,8 +42,7 @@ import {
   toggleTranscriptionLanguage,
 } from "../languages";
 import { openShortcutEditor } from "../shortcut-editor";
-import { openConfirmMenu } from "../member-column";
-import type { Dialog } from "../member-dialogs";
+import { type Dialog, confirmDelete } from "../member-dialogs";
 import { isTopLayer, registerDismissal } from "../dismissals";
 import { type ModelPicker, type ModelPickerLook, type PickerRole, mountModelPicker, priceHTML, replacementNotices, splitEffort, withFavorite } from "../model-picker";
 import { createServices } from "../services";
@@ -276,7 +275,7 @@ export function createSettings(app: AppContext): SettingsPage {
     askConnect: (slug, name) => { app.go("agent", "raphael"); askInChat(RAPHAEL_ID, `connect-app:${slug}`, name); },
   });
   app.onEvent((event) => connections.followEvent(event));
-  const rules = createRules({ visible: () => visible && pane === "safety", redraw: () => render(), undo: app.undo });
+  const rules = createRules({ visible: () => visible && pane === "safety", redraw: () => render() });
   // A Composio key replaced or removed in the vault: Connect apps reads its connections and catalog again (#320).
   const vault = createVault(el, () => { if (visible && pane === "safety") render(); }, () => { void connections.keyReplaced(); });
   const skillLibrary = createSkillLibrary(el, () => { if (visible && pane === "skills") render(); }, () => body);
@@ -1114,16 +1113,15 @@ export function createSettings(app: AppContext): SettingsPage {
           if (path !== null) changeProjects(current => rememberProject(current, path));
         }).catch(error => toaster.info(describeError(error)));
         break;
-      case "project-menu": {
+      case "project-remove": {
         const button = target.closest<HTMLElement>("[data-project]")!;
         const path = brain?.project_folders?.[Number(button.dataset.project)];
         if (path === undefined) break;
-        if (menuIsOpenFor(button)) { closeMenu(); break; }
-        // A destructive item (R-UI-56): red, it closes the menu and asks in the red dialog; only its red button removes.
-        openConfirmMenu(button, {
-          label: t("projectFolders.remove"), ask: { title: t("confirm.removeTitle", { p0: projectDetails.get(path)?.name ?? folderName(path) }), hint: t("projectFolders.removeHint"), action: t("projectFolders.remove") },
-          run: () => changeProjects(async current => (await api.settingsSet("project_folders",
-            (current.project_folders ?? []).filter(project => project !== path))).settings),
+        // The row's trash (R-UI-56): the red dialog asks, and only its red button removes the folder from the list.
+        const name = projectDetails.get(path)?.name ?? folderName(path);
+        void confirmDelete(name, { words: { title: t("confirm.removeTitle", { p0: name }), hint: t("projectFolders.removeHint"), action: t("projectFolders.remove") } }).then(yes => {
+          if (yes) changeProjects(async current => (await api.settingsSet("project_folders",
+            (current.project_folders ?? []).filter(project => project !== path))).settings);
         });
         break;
       }

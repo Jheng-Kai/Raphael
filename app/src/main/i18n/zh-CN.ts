@@ -1667,7 +1667,7 @@ export const zhCN = {
   "rules.editLabel": "「{p0}」的内容",
   "rules.none": "没有规则",
   "rules.loadFailed": "目前无法读取安全规则，请重新打开此页，若仍然失败请重新启动拉斐尔。",
-  "rules.deleted": "已删除 1 条规则",
+  "rules.deleteHint": "删除后，这条规则就不再生效，也无法恢复。",
   "rules.err.empty": "请写下想做的事",
   "rules.err.too_long": "最多 80 个字",
   "rules.err.duplicate": "已经有这条规则",

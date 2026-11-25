@@ -1667,7 +1667,7 @@ export const id = {
   "rules.editLabel": "Teks “{p0}”",
   "rules.none": "Tidak ada aturan",
   "rules.loadFailed": "Aturan keamanan tidak dapat dimuat. Buka kembali halaman; mulai ulang Raphael jika berlanjut.",
-  "rules.deleted": "1 aturan dihapus",
+  "rules.deleteHint": "Aturan ini tidak berlaku lagi, dan tidak bisa dibatalkan.",
   "rules.err.empty": "Tulis apa yang ingin dilakukan",
   "rules.err.too_long": "Maksimal 80 karakter",
   "rules.err.duplicate": "Aturan ini sudah ada",

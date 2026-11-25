@@ -113,6 +113,9 @@ export default [
   scene("chatgpt-signed-in", "A signed-in ChatGPT account shows its email and its unplug", [...settings("models"), scroll(".cli-accounts"), click('[data-chatgpt="sign-in"]'), wait("[data-chatgpt-disconnect]")]),
   scene("cli-account-disconnect-ask", "A connected CLI's card has the unplugged plug, no ⋯: it asks in the red dialog before it disconnects", [...cliAsk, check("cli-account-disconnect-ask")]),
   // Settings has no right click: a CLI's card in 模型 opens its menu only from its ⋯.
+  // Settings has no ⋯: a rule's row has its pencil and its trash, and the trash asks in the red dialog (no 復原 toast).
+  scene("safety-rules-icons", "Each safety rule has a pencil and a trash on its row, never a ⋯", [...settings("safety"), wait(".rules-row"), scroll(".rules"), check("safety-rules-icons")], { safetyRules: true }),
+  scene("safety-rule-delete-dialog", "A rule's trash asks in the red dialog naming the rule; Settings stays open and nothing is deleted yet", [...settings("safety"), wait(".rules-row"), scroll(".rules"), click('.rules-row [data-rule="delete"][data-id="2"]'), wait(".mb-dialog.mb-delete"), check("safety-rule-delete-dialog")], { safetyRules: true }),
   scene("settings-cli-no-right-click", "A right click on a CLI's card in 模型 opens no menu: 中斷連線 is its unplug", [...settings("models"), scroll(".cli-accounts"), rightClick('.cli-card:has([data-cli-disconnect="codex"]) .nm'), check("no-menu-open")]),
   scene("cli-account-disconnected", "Disconnect only in Raphael and offer reconnection", [...cliDisconnected, check("cli-account-disconnected")]),
   scene("cli-account-reconnected", "Reconnect a signed-in CLI without starting login", [...cliDisconnected, click('[data-cli="codex"]'), wait('[data-cli-disconnect="codex"]'), check("cli-account-reconnected")]),

@@ -2073,7 +2073,12 @@ export function installMock(fixture, config = {}, target = window) {
       case "memory.update": data.memoryFiles = { ...data.memoryFiles, [memoryFile(p)]: p.text }; return memoryDocument(p);
       case "memory.clear": data.memoryFiles = { ...data.memoryFiles, [memoryFile(p)]: "" }; return { cleared: true };
       case "memory.summary_clear": data.memorySummary = null; return { cleared: true };
-      case "safety.rules.list": return { rules: data.safetyRules };
+      case "safety.rules.list": {
+        // `safetyRules`: three of the owner's rules, so that their rows (a pencil, a trash) are seen.
+        if (variant.safetyRules && !data.safetyRules.length) data.safetyRules = [{ id: 1, action: "付款結帳", verdict: "ask", position: 1 }, { id: 2, action: "刪除檔案", verdict: "ask", position: 2 }, { id: 3, action: "在社群網站發文", verdict: "deny", position: 3 }];
+        return { rules: data.safetyRules };
+      }
+      case "safety.rules.delete": data.safetyRules = data.safetyRules.filter(rule => rule.id !== p.id); return { deleted: true };
       case "routines.list": {
         if (variant.missingRoutines) throw new Error("Synthetic routines read failure");
         const events=routineEventChoices;

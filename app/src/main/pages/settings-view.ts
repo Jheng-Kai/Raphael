@@ -418,9 +418,9 @@ function projectFolderRows(v: SettingsView): string {
   const rows = (v.brain?.project_folders ?? []).map((path, index) => {
     const info = v.projectDetails?.get(path), name = info?.name ?? folderName(path);
     const description = `<span class="project-path owner-data">${esc(path)}</span>${branchLabel(info)}`;
-    const more = iconBtn("more", t("members.more", { p0: name }),
-      ` data-act="project-menu" data-project="${index}" data-k="project-menu:${index}" aria-haspopup="menu" aria-expanded="false"`);
-    return row(`<span class="owner-data">${esc(name)}</span>`, description, more, { attrs: ' data-row="project-folder"' });
+    // Settings has no right click and no ⋯: the row's one action is its trash, which asks in the red dialog.
+    const remove = iconBtn("trash", `${t("projectFolders.remove")} ${name}`, ` data-act="project-remove" data-project="${index}" data-k="project-remove:${index}"`);
+    return row(`<span class="owner-data">${esc(name)}</span>`, description, remove, { attrs: ' data-row="project-folder"' });
   });
   const disabled = v.brain === null ? " disabled" : "";
   rows.push(row("", "", btn(ico("plus") + esc(t("writeFolders.add")), "sm",

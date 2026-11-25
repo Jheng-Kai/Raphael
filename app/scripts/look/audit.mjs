@@ -85,7 +85,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
   // question that replaces a row or a button in its own place), and a vault entry's own page, which does the same; what is
   // being composed (a message's attachments and quote, Raphael's member drafts); and a favourite's star, which destroys nothing.
   const destroyWords = /^(?:確定)?(?:全部)?(?:清除|刪除|移除)|^(?:clear|delete|remove)\b|消去|削除/i;
-  const destroyMayStand = '[role="menu"], .menu, .cs-dialog, .mb-dialog, .vault-page, .skl-page, .composer, .draft-panel, .mp-star';
+  const destroyMayStand = '[role="menu"], .menu, .cs-dialog, .mb-dialog, .vault-page, .skl-page, .modal-scrim:not([data-standalone]) :is(.rules-row, [data-row="project-folder"]), .composer, .draft-panel, .mp-star';
   const destroysInTheOpen = button => {
     const name = (button.getAttribute('aria-label') || button.textContent).trim();
     // R-MP-02 names these two counted, confirmed Settings actions explicitly.
@@ -295,7 +295,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       const custom = element.hasAttribute('data-tooltip') || (element.getAttribute('aria-describedby') ?? '').split(/\s+/).some(id => doc.getElementById(id)?.getAttribute('role') === 'tooltip');
       if (custom && (element.hasAttribute('title') || element.querySelector('svg title'))) violation('R-UI-26', 'Custom and native tooltip coexist');
     }
-    if (element.matches('button.danger, button[data-row-action="delete"], button[data-row-action="rename"]') && !element.closest('[role="menu"], .menu, .action-row, .set-head') && element.closest('.mp-resource, .mb-routine, .mb-tool-row, .au-room-row, .mem-row, .rule-row, .rules-row, .word-row, .wrow, .history-row, .hrow, .mb-rt, .row, [role="listitem"]'))
+    if (element.matches('button.danger, button[data-row-action="delete"], button[data-row-action="rename"]') && !element.closest('[role="menu"], .menu, .action-row, .set-head, .modal-scrim:not([data-standalone]) :is(.rules-row, [data-row="project-folder"])') && element.closest('.mp-resource, .mb-routine, .mb-tool-row, .au-room-row, .mem-row, .rule-row, .rules-row, .word-row, .wrow, .history-row, .hrow, .mb-rt, .row, [role="listitem"]'))
       violation('R-UI-11', 'Visible list-row delete or rename action');
     if (element.matches('button') && destroysInTheOpen(element)) violation('R-UI-56', 'A button that clears, deletes or removes stands open on the page');
     if (element.matches('button.btn')) {

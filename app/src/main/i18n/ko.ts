@@ -1667,7 +1667,7 @@ export const ko = {
   "rules.editLabel": "「{p0}」 내용",
   "rules.none": "규칙 없음",
   "rules.loadFailed": "안전 규칙을 불러오지 못했습니다. 페이지를 다시 열고 계속되면 Raphael을 다시 시작하세요.",
-  "rules.deleted": "규칙 1개를 삭제했습니다",
+  "rules.deleteHint": "삭제하면 이 규칙이 더 이상 적용되지 않으며 되돌릴 수 없습니다.",
   "rules.err.empty": "하려는 일을 적어 주세요",
   "rules.err.too_long": "최대 80자",
   "rules.err.duplicate": "이미 있는 규칙입니다",

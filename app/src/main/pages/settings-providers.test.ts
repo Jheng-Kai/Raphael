@@ -190,6 +190,19 @@ test.each(navInputs)("Back on a vault page with a private draft asks whether to 
   expect(closeSettings).not.toHaveBeenCalled();
 });
 
+test("a press on a vault page's title with a change not saved asks once, and one 不儲存 leaves the page", async () => {
+  await mount("safety");
+  click('[data-vault="new"]');
+  click('#app-popover [data-value="contact"]');
+  page.el.querySelector<HTMLInputElement>("#vault-value-address")!.value = "typed";
+  click(".vault-page-head h1");
+  expect(document.querySelectorAll(".mb-dialog.vault-unsaved")).toHaveLength(1);
+  click('.vault-unsaved [data-dlg="discard"]');
+  expect(document.querySelector(".vault-unsaved")).toBeNull();
+  expect(page.el.querySelector(".vault-page")).toBeNull();
+  expect(page.el.querySelector(".vault-list")).not.toBeNull();
+});
+
 test.each(navInputs)("Back closes Settings and Forward restores the selected Usage tab with %s", async input => {
   await mount("usage");
   click('[data-usage-tab="analysis"]');
@@ -979,17 +992,16 @@ test("General removes only the selected project and adds a picked folder", async
   await mount("general");
   await flush();
   expect(page.el.querySelector('[data-row="project-folder"] .project-branch')?.textContent).toBe("main");
-  click('[data-project="0"]');
-  // 移除 asks in the red dialog: the menu closes, Cancel does nothing, and only the red button removes.
-  click("#app-popover [data-pick]");
+  // Each row has its trash and no ⋯: it asks in the red dialog with no menu first, Cancel does nothing, and only the red button removes.
+  expect(page.el.querySelector('[data-row="project-folder"] [data-overflow], [data-act="project-menu"]')).toBeNull();
+  click('[data-act="project-remove"][data-project="0"]');
   expect(document.getElementById("app-popover")).toBeNull();
   expect(document.querySelector(".mb-delete h2")?.textContent).toBe("Remove Repo?");
   expect(api.settingsSet).not.toHaveBeenCalled();
   click('.mb-delete [data-dlg="cancel"]');
   await flush();
   expect(api.settingsSet).not.toHaveBeenCalled();
-  click('[data-project="0"]');
-  click("#app-popover [data-pick]");
+  click('[data-act="project-remove"][data-project="0"]');
   click('.mb-delete [data-dlg="delete"]');
   await flush();
   expect(api.settingsSet).toHaveBeenLastCalledWith("project_folders", [notes]);

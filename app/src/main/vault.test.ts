@@ -217,11 +217,11 @@ it("opens an entry's page with its values as saved, masked behind an eye, and sa
   await vi.waitFor(() => expect(api.core).toHaveBeenCalledWith("vault.update", expect.objectContaining({ id: "contact", exact: true, values: { ...saved.contact, phone: "" } })));
 });
 
-it("goes back to the list from the title or its arrow, and forgets what the page held", async () => {
+it("goes back to the list from its arrow, and forgets what the page held", async () => {
   const { root, controller } = await setup();
   await openPage(root, "card");
   expect(controller.paged()).toBe(true);
-  click(root, '.vault-page-head h1');
+  click(root, '.vault-page-head [data-k="vault-back"]');
   expect(root.querySelector(".vault-page")).toBeNull();
   expect(controller.paged()).toBe(false);
   expect(controller.view().values).toBeUndefined();
@@ -306,7 +306,7 @@ it("keeps 儲存 in the page's header, never under the fields, and asks before a
   await openPage(root, "login");
   // The header holds the way back, the title, the trash and 儲存; nothing stands below the fields.
   const head = root.querySelector<HTMLElement>(".vault-page > .set-head")!;
-  expect([...head.querySelectorAll<HTMLElement>("[data-vault]")].map(el => el.dataset.vault)).toEqual(["cancel", "cancel", "remove", "save"]);
+  expect([...head.querySelectorAll<HTMLElement>("[data-vault]")].map(el => el.dataset.vault)).toEqual(["cancel", "remove", "save"]);
   expect(root.querySelector(".vault-form .vault-actions, .vault-form [data-vault='save']")).toBeNull();
   // Nothing changed: the way back leaves at once.
   click(root, '.vault-page-head [data-k="vault-back"]');
@@ -319,6 +319,9 @@ it("keeps 儲存 in the page's header, never under the fields, and asks before a
   const dialog = document.querySelector<HTMLElement>(".mb-dialog.vault-unsaved")!;
   expect(dialog.querySelector("h2")!.textContent).toBe("要儲存變更嗎？");
   expect([...dialog.querySelectorAll<HTMLElement>(".mb-dlg-act .btn")].map(b => b.textContent)).toEqual(["不儲存", "儲存"]);
+  // A second way out pressed while it asks opens no second dialog.
+  controller.leave();
+  expect(document.querySelectorAll(".vault-unsaved")).toHaveLength(1);
   click(dialog, '[data-dlg="close"]');
   expect(root.querySelector<HTMLInputElement>("#vault-value-password")!.value).toBe("typed");
   expect(api.core).not.toHaveBeenCalledWith("vault.update", expect.anything());

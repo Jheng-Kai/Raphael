@@ -1667,7 +1667,7 @@ export const th = {
   "rules.editLabel": "ข้อความของ “{p0}”",
   "rules.none": "ไม่มีกฎ",
   "rules.loadFailed": "โหลดกฎความปลอดภัยไม่ได้ เปิดหน้าอีกครั้ง หากยังมีปัญหาให้เริ่ม Raphael ใหม่",
-  "rules.deleted": "ลบกฎ 1 ข้อแล้ว",
+  "rules.deleteHint": "กฎนี้จะไม่มีผลอีก และย้อนกลับไม่ได้",
   "rules.err.empty": "เขียนสิ่งที่อยากทำ",
   "rules.err.too_long": "ไม่เกิน 80 อักขระ",
   "rules.err.duplicate": "มีกฎนี้อยู่แล้ว",

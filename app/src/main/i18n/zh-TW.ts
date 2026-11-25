@@ -1428,7 +1428,7 @@ export const zhTW = {
   "rules.editLabel": "「{p0}」的內容",
   "rules.none": "沒有規則",
   "rules.loadFailed": "目前無法讀取安全規則，請重新開啟此頁，若仍然失敗請重新啟動拉斐爾。",
-  "rules.deleted": "已刪除 1 條規則",
+  "rules.deleteHint": "刪除後，這條規則就不再生效，也無法復原。",
   "rules.err.empty": "請寫下想做的事",
   "rules.err.too_long": "最多 80 個字",
   "rules.err.duplicate": "已經有這條規則",

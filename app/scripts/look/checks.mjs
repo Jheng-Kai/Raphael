@@ -1800,10 +1800,26 @@ export function checkRendered(name, context = {}) {
     }
     return {check: name, switches: switches.length};
   }
+  if (name === "safety-rules-icons") {
+    const rows = [...document.querySelectorAll('.rules-row')];
+    require(rows.length === 3 && rows.every(row => visible(row.querySelector('[data-rule="edit"] svg')) && visible(row.querySelector('[data-rule="delete"].danger svg')) && !row.querySelector('[data-rule="more"], [data-overflow]')),
+      "each rule has its pencil and its red trash on its row, and no ⋯");
+    const tools = rows.map(row => row.querySelector('.rules-tools').getBoundingClientRect());
+    require(tools.every(box => Math.abs(box.right - tools[0].right) <= 1), "the icons end on one line at the right of the rows");
+    return {check:name};
+  }
+  if (name === "safety-rule-delete-dialog") {
+    const dialog = document.querySelector('.mb-dialog.mb-delete');
+    require(visible(dialog) && dialog.querySelector('h2').textContent === '刪除「刪除檔案」？', "the red dialog names the rule");
+    require([...dialog.querySelectorAll('.mb-dlg-act .btn')].map(b => b.textContent.trim()).join('|') === '取消|刪除', "取消 then a red 刪除");
+    require(!document.querySelector('#app-popover') && visible(document.querySelector('.modal-scrim .rules')), "no menu came first, and Settings stays open behind it");
+    require(!window.__look.calls.some(call => call.method === 'safety.rules.delete'), "nothing is deleted before the red button");
+    return {check:name};
+  }
   if (name === "project-folders-settings") {
     const rows = [...document.querySelectorAll('[data-row="project-folder"]')];
-    require(rows.length === 2 && rows.every(row => visible(row.querySelector(".project-path")) && visible(row.querySelector('[data-act="project-menu"]'))),
-      "each remembered project has its own visible path and menu");
+    require(rows.length === 2 && rows.every(row => visible(row.querySelector(".project-path")) && visible(row.querySelector('[data-act="project-remove"].danger svg')) && !row.querySelector('[data-overflow], [data-act="project-menu"]')),
+      "each remembered project has its own visible path and its trash, no ⋯");
     require(rows[0].querySelector(".project-branch").textContent === "main" && !rows[1].querySelector(".project-branch"), "Git projects show the current branch");
     require(visible(document.querySelector('[data-act="project-add"]')), "the native picker is at the foot");
     return {check:name};

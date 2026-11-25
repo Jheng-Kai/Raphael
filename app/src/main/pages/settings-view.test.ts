@@ -313,7 +313,7 @@ describe("the rules for every tab, in every language", () => {
 });
 
 describe("一般", () => {
-  test("General shows remembered projects with their paths, branches and a menu per project", () => {
+  test("General shows remembered projects with their paths, branches and a trash per project, never a ⋯", () => {
     const path = "C:\\Owner\\Repo";
     const brainSettings = { ...brain, project_folders: [path, "D:\\Notes"] };
     const projectDetails = new Map([[path, { name: "Repo", path, exists: true, git: true, branch: "main", branches: ["main"] }]]);
@@ -323,7 +323,8 @@ describe("一般", () => {
     expect(html).toContain("D:\\Notes");
     expect(html).toContain('class="project-branch owner-data"');
     expect(html).toContain("main</small>");
-    expect(html.match(/data-act="project-menu"/g)).toHaveLength(2);
+    expect(html.match(/data-act="project-remove"/g)).toHaveLength(2);
+    expect(html).not.toMatch(/data-act="project-menu"|data-overflow/);
     expect(html).toContain('data-act="project-add"');
     expect(paneHTML(view({ pane: "agent" }))).not.toContain('data-row="project-folder"');
   });

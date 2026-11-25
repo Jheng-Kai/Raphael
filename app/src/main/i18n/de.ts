@@ -1667,7 +1667,7 @@ export const de = {
   "rules.editLabel": "Wortlaut von „{p0}“",
   "rules.none": "Keine Regeln",
   "rules.loadFailed": "Sicherheitsregeln konnten nicht geladen werden. Öffnen Sie die Seite erneut; starten Sie bei anhaltenden Problemen Raphael neu.",
-  "rules.deleted": "1 Regel gelöscht",
+  "rules.deleteHint": "Die Regel gilt dann nicht mehr. Das lässt sich nicht rückgängig machen.",
   "rules.err.empty": "Schreib auf, was es tun will",
   "rules.err.too_long": "Höchstens 80 Zeichen",
   "rules.err.duplicate": "Diese Regel ist bereits vorhanden",

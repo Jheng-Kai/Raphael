@@ -1667,7 +1667,7 @@ export const tr = {
   "rules.editLabel": "“{p0}” metni",
   "rules.none": "Kural yok",
   "rules.loadFailed": "Güvenlik kuralları yüklenemedi. Sayfayı yeniden açın; sorun sürerse Raphael'i yeniden başlatın.",
-  "rules.deleted": "1 kural silindi",
+  "rules.deleteHint": "Kural artık uygulanmaz ve bu geri alınamaz.",
   "rules.err.empty": "Ne yapmak istediğini yazın",
   "rules.err.too_long": "En fazla 80 karakter",
   "rules.err.duplicate": "Bu kural zaten var",

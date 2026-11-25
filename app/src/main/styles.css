@@ -1008,7 +1008,7 @@ button.ob-tile:hover:not(:disabled) .ob-get { background: var(--pressed); }
 /* No row, list item or card draws a ⋯: a right click on it, or Shift+F10 and the Menu key,
    opens its menu (context-menu.ts presses the button, which stays in the page for that). A message keeps its ⋯ beside the
    bubble; a dialog's or the computer's header keeps its own. */
-:is([data-member-more], [data-group-more], [data-conversation-more], [data-room-more], [data-room-menu], [data-panel-task-menu], [data-det="routine-menu"], [data-dlg="routine-menu"], [data-res="skill-menu"], [data-res="command-menu"], [data-act="key-menu"], [data-rule="more"], [data-vault="menu"], [data-act="word-menu"], [data-act="history-menu"], [data-act="computer-menu"], [data-au="event-more"], [data-msg="user-menu"])[data-overflow]:not(.modal-scrim [data-overflow]) { display: none; }
+:is([data-member-more], [data-group-more], [data-conversation-more], [data-room-more], [data-room-menu], [data-panel-task-menu], [data-det="routine-menu"], [data-dlg="routine-menu"], [data-res="skill-menu"], [data-res="command-menu"], [data-act="key-menu"], [data-vault="menu"], [data-act="word-menu"], [data-act="history-menu"], [data-act="computer-menu"], [data-au="event-more"], [data-msg="user-menu"])[data-overflow]:not(.modal-scrim [data-overflow]) { display: none; }
 /* Settings keep their ⋯ beside what they act on: an account's sign-out, a key's removal, a rule's menu. */
 /* The round edge buttons: the panel's back, settings and close, the icons of a conversation's
    header, a dialog's close and the composer's attach are an icon in a soft round button, a little lighter under the

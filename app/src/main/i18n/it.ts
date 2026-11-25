@@ -1667,7 +1667,7 @@ export const it = {
   "rules.editLabel": "Testo di «{p0}»",
   "rules.none": "Nessuna regola",
   "rules.loadFailed": "Impossibile caricare le regole di sicurezza. Riapri la pagina; riavvia Raphael se il problema persiste.",
-  "rules.deleted": "1 regola eliminata",
+  "rules.deleteHint": "La regola smette di valere e non si può annullare.",
   "rules.err.empty": "Scrivi cosa vuole fare",
   "rules.err.too_long": "Massimo 80 caratteri",
   "rules.err.duplicate": "Questa regola esiste già",

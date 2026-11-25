@@ -79,7 +79,7 @@ function pageHTML(v: VaultView, close: string): string {
   const remove = editing ? iconButton("trash", word("remove"), ' data-vault="remove"') : "";
   // 儲存 stands in the page's header, which stays in sight as the page scrolls (as Team skills' controls do), never under
   // a long list of members.
-  const head = `<header class="set-head vault-page-head"><span class="back-title" data-vault="cancel">${backButton(word("back"), ' data-vault="cancel" data-k="vault-back"', "back-link")}` +
+  const head = `<header class="set-head vault-page-head"><span class="back-title">${backButton(word("back"), ' data-vault="cancel" data-k="vault-back"', "back-link")}` +
     `<h1 class="vault-page-name" id="set-title" tabindex="-1" data-title-back>${esc(title)}</h1></span><span class="sp"></span>${remove}` +
     btn(esc(word("save")), "sm pri vault-save", ' data-vault="save" data-k="vault-save"') + `${close}</header>`;
   const access = (): string => `<div class="vault-access"><span>${esc(word("access"))}</span>${sel([{ value: "all", label: word("everyone") }, { value: "chosen", label: word("chosen") }], v.access, word("access"), ' data-k="vault-access"')}</div>` +
@@ -221,11 +221,16 @@ export function createVault(root: HTMLElement, redraw: () => void, onComposioCha
    * Leaves the page: at once when nothing changed; else a dialog asks whether to save first (儲存 / 不儲存), and its ×
    * stays on the page. `then` runs once the page is left.
    */
+  let asking = false;
   const leave = (then: () => void = () => {}): void => {
     if (!dirty()) { close(); redraw(); then(); return; }
+    // One question at a time: a second way out pressed while it is open asks nothing more.
+    if (asking) return;
+    asking = true;
     openDialog({
       title: t("vault.unsavedTitle"), body: `<p>${esc(t("vault.unsavedHint"))}</p>`, describedByBody: true, cls: "mb-confirm vault-unsaved",
       actions: { secondary: btn(esc(t("vault.discard")), "", ' data-dlg="discard"'), primary: { label: esc(word("save")), attrs: ' data-dlg="save"' } },
+      onClose: () => { asking = false; },
       onAct(act, _target, dialog) {
         dialog.close();
         if (act === "discard") { close(); redraw(); then(); }

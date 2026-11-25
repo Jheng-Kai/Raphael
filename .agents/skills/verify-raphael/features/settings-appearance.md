@@ -156,7 +156,7 @@ npm run look -- desktop-host-local desktop-host-error settings-owner --theme bot
 
 ## Project folders in General
 
-The project list uses one row per folder, with its full path and Git branch. The ⋯ menu offers Remove, which asks in the red dialog (「移除「name」？」; the folder and its files are not deleted).
+The project list uses one row per folder, with its full path and Git branch. Its trash (no ⋯: Settings has no right click) asks in the red dialog (「移除「name」？」; the folder and its files are not deleted).
 Add folder opens the native picker at the foot of the list. The settings accept up to 50 distinct projects. See [Daily work](daily-work.md#native-project-folder-choice)
 for the native checks and [Member computer](member-computer.md#the-owners-files-read-everywhere-write-in-the-owners-folders-r-pc-04-r-pc-05)
 for the composer and Docker paths.
@@ -376,7 +376,13 @@ This owner decision supersedes the former Settings > Raphael pane and its earlie
 scene names. General owns the owner profile and weather city.
 Dictation & shortcuts groups dictation, paste, cancel and Ask Raphael shortcuts.
 Tools owns shared search, page reading, images, PDFs and their keys (no voice service);
-Safety owns shared safety rules, local command policy and always-allowed apps.
+Safety owns shared safety rules, local command policy and always-allowed apps. Each rule's row has a pencil that edits it
+and a trash that asks in the red dialog (「刪除「rule」？」) and deletes it at once, with no 復原 toast; no ⋯.
+
+```powershell
+npm run look -- safety-rules-icons safety-rule-delete-dialog --theme both --width 1120,720,1920x1080
+```
+
 Navigation groups are Basics, Team, Integrations and Account. Every pane retains
 its localized purpose as explicitly requested by this brief (a scoped R-UI-02
 exception); Tools and Safety explicitly apply to every member.

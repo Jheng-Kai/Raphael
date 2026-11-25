@@ -1667,7 +1667,7 @@ export const ptBR = {
   "rules.editLabel": "Texto de “{p0}”",
   "rules.none": "Sem regras",
   "rules.loadFailed": "Não foi possível carregar as regras de segurança. Reabra a página; reinicie o Raphael se persistir.",
-  "rules.deleted": "1 regra excluída",
+  "rules.deleteHint": "A regra deixa de valer, e isso não pode ser desfeito.",
   "rules.err.empty": "Escreva o que quer fazer",
   "rules.err.too_long": "No máximo 80 caracteres",
   "rules.err.duplicate": "Esta regra já existe",

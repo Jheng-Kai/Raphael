@@ -1429,7 +1429,7 @@ export const ja = {
   "rules.editLabel": "「{p0}」の内容",
   "rules.none": "ルールはありません",
   "rules.loadFailed": "安全ルールを読み込めません。ページを開き直し、解決しなければ再起動してください。",
-  "rules.deleted": "ルールを 1 件削除しました",
+  "rules.deleteHint": "削除すると、このルールは適用されなくなり、元に戻せません。",
   "rules.err.empty": "やりたいことを書いてください",
   "rules.err.too_long": "80 文字までです",
   "rules.err.duplicate": "このルールはすでにあります",

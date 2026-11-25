@@ -32,7 +32,7 @@ const unseenKeys = [
 // These notices contain a recovery, navigation or undo action.
 const actionKeys = [
   "agent.title", "conn.lost", "conn.relogin", "dictionary.023", "history.020",
-  "keychain.askAgain", "keychain.refused", "models.choose", "reminder.waiting", "rules.deleted", "ui.001",
+  "keychain.askAgain", "keychain.refused", "models.choose", "reminder.waiting", "ui.001",
 ];
 // These existing lookup tables supply details for those failures and notices.
 const lookupKeys = [

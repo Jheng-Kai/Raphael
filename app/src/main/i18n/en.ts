@@ -1429,7 +1429,7 @@ export const en = {
   "rules.editLabel": "The words of 「{p0}」",
   "rules.none": "No rules",
   "rules.loadFailed": "Safety rules could not be loaded. Reopen the page; restart Raphael if it continues.",
-  "rules.deleted": "1 rule deleted",
+  "rules.deleteHint": "The rule stops applying, and this can't be undone.",
   "rules.err.empty": "Write what it wants to do",
   "rules.err.too_long": "80 characters at most",
   "rules.err.duplicate": "This rule is there already",
