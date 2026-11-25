@@ -1,7 +1,7 @@
 import { scene, click, hover, type, wait, settings, scroll, check, rightClick } from "./steps.mjs";
 
 const list = [...settings("safety"), wait('.vault-row'), scroll('.vault')];
-const editor = kind => [...list, click('[data-vault="new"]'), click(`.menu [data-value="${kind}"]`), wait('#vault-label'), scroll('.vault-editor')];
+const editor = kind => [...list, click('[data-vault="new"]'), click(`.menu [data-value="${kind}"]`), wait('#vault-label'), scroll('.vault-form')];
 const preview = [...list, { action: "upload", selector: '#vault-file', path: 'scripts/look/fixtures/vault-import.csv' }, wait('[data-vault-import]'), scroll('.vault-editor')];
 export default [
   scene('vault-list', 'Shared vault entries, owner hints and member access in Safety', [...list, check('vault-list')]),
@@ -17,6 +17,6 @@ export default [
   scene('vault-composio-edit', 'The Composio key\'s page is the key alone, as saved and masked, with its eye, its trash and the note that the Composio apps must be connected again', [...list, click('[data-vault="edit"][data-id="composio"]'), wait('[data-vault-system="composio"] #vault-value-value'), check('vault-composio-edit')], { composioConfigured: true }),
   scene('vault-edit-values', 'The eye beside a value shows it as text and hides it again; the others stay masked', [...list, click('[data-vault="edit"][data-id="sample-login"]'), wait('.vault-form #vault-value-password'), click('[data-vault="reveal"][data-field="password"]'), check('vault-edit-values')]),
   // Settings has no right click: on a vault row or a rule nothing opens.
-  scene('settings-no-right-click', 'A right click on a vault row or a safety rule in Settings opens no menu', [...list, rightClick('[data-vault-row="sample-login"]'), check('settings-no-menu'), rightClick('.rules-row'), check('settings-no-menu')]),
+  scene('settings-no-right-click', 'A right click on a vault row or anywhere in Safety opens no menu', [...list, rightClick('[data-vault-row="sample-login"]'), check('no-menu-open'), rightClick('.vault-heading h2'), check('no-menu-open')]),
   scene('vault-card-permission', 'Even Allow all requires a card naming the merchant, amount and card label', [wait('[data-permission-card]'), check('vault-payment'), check('card-shell')], { permissionCard: 'tool', vaultPayment: true }),
 ];

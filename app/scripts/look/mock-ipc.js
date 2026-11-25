@@ -1461,9 +1461,7 @@ export function installMock(fixture, config = {}, target = window) {
         if (!entry) return { ok: false, error: "vault_values" };
         return { values: { login: { username: "look@example.test", password: "look-synthetic-password" }, contact: { name: "測試聯絡人", address: "台北市測試路 1 號", phone: "0912000000", email: "contact@example.test" },
           card: { name: "測試持卡人", number: "4111111111111111", expiry: "12/30", cvc: "123" }, key: { value: "look-synthetic-key" } }[entry.kind] };
-      }
-      case "connectors.reveal_key": return { key: data.composioConfigured ? "look-synthetic-composio-key" : "" };
-      case "vault.preview": return data.vaultImportPreview;
+      }      case "vault.preview": return data.vaultImportPreview;
       case "vault.cancel": return { cancelled: true };
       case "vault.import": return { saved: p.ids.length, remaining: 0 };
       case "vault.add": { const { values, ...metadata } = p; data.vaultEntries.push({ id: "new-synthetic-entry", ...metadata }); return { id: "new-synthetic-entry" }; }
@@ -2209,6 +2207,8 @@ export function installMock(fixture, config = {}, target = window) {
         // A sign-in given up leaves no account (R-ACCT-01): the core gives back a waiting one older than ten minutes when the list is read.
         for (const c of data.managedConnectors) c.accounts = c.accounts?.filter(a => !a.stale);
         return { connectors: data.managedConnectors, composio_configured: data.composioConfigured, google_configured: true };
+      // The vault's page shows the saved Composio key masked behind an eye: a synthetic one.
+      case "connectors.reveal_key": return { key: data.composioConfigured ? "look-synthetic-composio-key" : "" };
       case "connectors.remove_account": {
         const entry = data.managedConnectors.find(c => c.id === p.id);
         const account = entry?.accounts.find(a => a.id === p.account_id);

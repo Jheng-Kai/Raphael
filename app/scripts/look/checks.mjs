@@ -916,8 +916,6 @@ export function checkRendered(name, context = {}) {
       require(visible(ask) && ask.textContent.trim() === '確定移除這筆資料？', 'the first press of the trash asks in its own place');
       require(ask.scrollWidth <= ask.clientWidth + 1, 'the question fits its button');
       require(!window.__look.calls.some(call => call.method === 'vault.remove'), 'nothing is removed before the second press');
-    } else if (name === 'settings-no-menu') {
-      require(!document.querySelector('#app-popover'), 'a right click in Settings opens no menu');
     }
     else if (name === 'vault-filter') require(vault.querySelectorAll('.vault-row').length === 1 && vault.textContent.includes('公司差旅卡'), 'card filter selects only cards');
     // #320: the Composio key is kept in the vault as the whole team's key; Connect apps keeps no setting for it.
@@ -926,7 +924,8 @@ export function checkRendered(name, context = {}) {
       require(rows[0]?.dataset.vaultRow === 'composio' && rows[0].textContent.includes('Composio') && rows[0].textContent.includes('整個團隊'), 'the Composio key is the first row, the whole team\'s');
       require(visible(rows[0].querySelector('[data-vault="edit"]')) && !vault.querySelector('[data-overflow]'), 'its pencil is there to change or remove it, and no row has a ⋯');
     } else if (name === 'vault-composio-edit') {
-      const form = vault.querySelector('[data-vault-system="composio"]'), field = form?.querySelector('#vault-value-value');
+      // The page itself carries the mark (it is the vault's section).
+      const form = vault.closest('[data-vault-system="composio"]') ?? vault.querySelector('[data-vault-system="composio"]'), field = form?.querySelector('#vault-value-value');
       require(visible(form) && visible(field) && field.type === 'password' && field.value.length > 0, "the Composio key's page shows the saved key, masked");
       require(visible(form.querySelector('[data-vault="reveal"]')) && visible(form.querySelector('.vault-page-head [data-vault="remove"]')), 'with its eye and its trash');
       require(!form.querySelector('#vault-label, #vault-hint, [data-k="vault-access"]'), 'it has no name, hint or access to change');
@@ -10545,6 +10544,11 @@ export function checkRendered(name, context = {}) {
   }
   // #320: once a Composio key is saved, a gear in the header (after the chip, before the close button) opens its form. The
   // view under it is as it was: no row of Composio at the end of the list.
+  // Settings has no right click: after one, no menu is open.
+  if (name === "no-menu-open") {
+    require(!document.querySelector("#app-popover, .menu"), "a right click in Settings opens no menu");
+    return { check: name };
+  }
   // A menu with nothing under its heading draws the heading alone: no line, no gap under it.
   if (name === "menu-head-alone") {
     const menu = document.querySelector(".menu"), head = menu?.querySelector(".menu-head");

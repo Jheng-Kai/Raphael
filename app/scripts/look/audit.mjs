@@ -81,10 +81,11 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     return layer && !layer.contains(element) ? null : top;
   };
   // R-UI-56: what clears, deletes or removes waits in a ⋯ and the right click of its row. Keep the places it may stand explicit:
-  // the menu itself; a dialog about that one thing, which confirms or edits it; a local model's inline question; what is being
-  // composed (a message's attachments and quote, Raphael's member drafts); and a favourite's star, which destroys nothing.
+  // the menu itself; a dialog about that one thing, which confirms or edits it, and a vault entry's own page, which does the
+  // same; a local model's inline question; what is being composed (a message's attachments and quote, Raphael's member
+  // drafts); and a favourite's star, which destroys nothing.
   const destroyWords = /^(?:確定)?(?:全部)?(?:清除|刪除|移除)|^(?:clear|delete|remove)\b|消去|削除/i;
-  const destroyMayStand = '[role="menu"], .menu, .cs-dialog, .mb-dialog, .lm-confirm, .composer, .draft-panel, .mp-star';
+  const destroyMayStand = '[role="menu"], .menu, .cs-dialog, .mb-dialog, .vault-page, .lm-confirm, .composer, .draft-panel, .mp-star';
   const destroysInTheOpen = button => {
     const name = (button.getAttribute('aria-label') || button.textContent).trim();
     // R-MP-02 names these two counted, confirmed Settings actions explicitly.

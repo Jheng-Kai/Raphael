@@ -112,6 +112,8 @@ export default [
     click('.cb-menu [data-cb-source="cli:claude"]'), wait('.cb-menu [data-model="cli:claude:claude-haiku-5-5"]'), check("composer-claude-alias-row"), check("composer-claude-alias")], { claudeAlias: true }),
   scene("chatgpt-signed-in", "A signed-in ChatGPT account shows its email and a menu", [...settings("models"), scroll(".cli-accounts"), click('[data-chatgpt="sign-in"]'), wait("[data-chatgpt-menu]")]),
   scene("cli-account-menu", "Connected CLI account row actions", [...cliMenu, check("cli-account-menu")]),
+  // Settings has no right click: a CLI's card in 模型 opens its menu only from its ⋯.
+  scene("settings-cli-no-right-click", "A right click on a CLI's card in 模型 opens no menu: 中斷連線 waits in its ⋯", [...settings("models"), scroll(".cli-accounts"), rightClick('.cli-card:has([data-cli-menu="codex"]) .nm'), check("no-menu-open")]),
   scene("cli-account-disconnected", "Disconnect only in Raphael and offer reconnection", [...cliDisconnected, check("cli-account-disconnected")]),
   scene("cli-account-reconnected", "Reconnect a signed-in CLI without starting login", [...cliDisconnected, click('[data-cli="codex"]'), wait('[data-cli-menu="codex"]'), check("cli-account-reconnected")]),
   ...["minimize", "maximize", "close"].map(control => scene(`window-hover-${control}`, `Transparent ${control} caption hover`, [{ action: "window-control", control }])),
