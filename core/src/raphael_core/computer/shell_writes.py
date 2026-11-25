@@ -168,6 +168,26 @@ def name_of(token):
     return base[:-4] if base.endswith(".exe") else base
 
 
+def parameter(key):
+    """The parameters a name written after a dash stands for, as PowerShell reads it: the name itself when it is one that is
+    known, else every known path parameter it is the beginning of (any unambiguous beginning is accepted: -Lit, -Pa, -Fi, -Des),
+    else the known value parameter it is the beginning of. Where more than one path parameter fits (-Des is Destination and
+    DestinationPath, -Out is OutFile, Output...), the value is given to each, so that it is judged whichever the command means.
+    Empty when it is none of them."""
+    if key in PATH_PARAMS or key in VALUE_PARAMS:
+        return [key]
+    if len(key) < 2:
+        return []
+    paths = sorted(name for name in PATH_PARAMS if name.startswith(key))
+    return paths or sorted(name for name in VALUE_PARAMS if name.startswith(key))[:1]
+
+
+def _path_like(value):
+    """Whether the value of a parameter that nobody knows looks like a path written (a folder, a drive, `~`, `.`), and not an
+    address or a plain word."""
+    return bool(re.search(r"[\\/]|^[A-Za-z]:|^~|^\.", value)) and not re.match(r"[A-Za-z][A-Za-z0-9+.-]*://", value)
+
+
 def _options(arguments):
     """(the positional arguments, {parameter: value}) of a command's tokens, a parameter being a word that starts with `-`
     (or `/` for cmd's copy) and is not a number. A parameter takes the next word when it is one that names a path or a value."""
@@ -180,7 +200,17 @@ def _options(arguments):
         elif len(text) > 1 and text[0] == "-" and not text[1:].isdigit() and not token.redirect:
             key, colon, value = text.lstrip("-").lower().partition(":")
             if colon and value:
-                named.setdefault(key, []).append(Token(value, token.dynamic))
+                # `-Name:value`. A name cut short is the parameter it begins; a parameter nobody knows, with a value that
+                # looks like a path, is judged as a path written (the file is named whatever the parameter is called).
+                names = parameter(key) or (["path", "destination"] if _path_like(value) else [key])
+                for name in names:
+                    named.setdefault(name, []).append(Token(value, token.dynamic))
+            elif colon and parameter(key):
+                # `-Name: value`: the next word is the value.
+                if index + 1 < len(arguments) and not arguments[index + 1].redirect:
+                    for name in parameter(key):
+                        named.setdefault(name, []).append(arguments[index + 1])
+                    index += 1
             elif key in PATH_PARAMS or key in VALUE_PARAMS:
                 if index + 1 < len(arguments) and not arguments[index + 1].redirect:
                     named.setdefault(key, []).append(arguments[index + 1])

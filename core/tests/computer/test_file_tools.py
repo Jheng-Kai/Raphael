@@ -52,6 +52,8 @@ class GuestRuntime(Runtime):
                 request["allowed"] = [self.host(folder) for folder in request["allowed"]]
             if "refused" in request:
                 request["refused"] = [self.host(folder) for folder in request["refused"]]
+            if "inside" in request:
+                request["inside"] = [self.host(folder) for folder in request["inside"]]
             return Result(0, json.dumps(files_guest.handle(request)))
         return await super().__call__(args, **kwargs)
 

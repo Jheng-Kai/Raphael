@@ -280,3 +280,43 @@ def test_every_name_powershell_gives_a_parameter_that_names_a_file_names_the_fil
     for command in (f"Rename-Item -PSPath {here}/a.txt -NewName b.txt", f"Rename-Item -LP {here}/a.txt -NewName b.txt",
                     f"Set-Content -PSPath {here}/a.txt -Value x", f"Remove-Item -LP {here}/a.txt", f"Move-Item -PSPath {here}/a.txt {here}/c.txt"):
         assert told(command, other) == ([], []), command
+
+
+# --- round three: the colon form and the parameters cut short ---------------------------------------------------------------
+
+
+def test_a_parameter_written_with_a_colon_or_cut_short_names_the_file_it_names(tmp_path):
+    from raphael_core.computer.shell_writes import classify
+    project, other, own = (tmp_path / name for name in ("project", "other", "own"))
+    for folder in (project, other, own):
+        folder.mkdir()
+    settings = Settings([project, other], chosen=project)
+
+    def told(command, cwd=project):
+        reach = lambda path: work_area.reach(settings, 0, path, lambda member: (own, tmp_path / "team"))
+        return classify(command, str(cwd), reach, home=str(tmp_path / "home"))
+
+    there, here = other.as_posix(), project.as_posix()
+    for command in (
+            *(f"Rename-Item {flag}:{there}/a.txt b.txt" for flag in ("-Lit", "-LiteralP", "-PSP", "-Pa", "-PSPath", "-LP", "-Path", "-LiteralPath")),
+            f"Rename-Item {there}/a.txt -New:b.txt", f"Rename-Item {there}/a.txt -NewN:b.txt", f"Rename-Item -Lit:{there}/a.txt -NewName:b.txt",
+            *(f"Set-Content {flag}:{there}/a.txt x" for flag in ("-Pa", "-Lit", "-PSP", "-Fi", "-FileP")),
+            *(f"Set-Content {flag}:{there}/a.txt -Value:x" for flag in ("-Path", "-LP")),
+            f"Out-File -Fi:{there}/a.txt", f"Out-File -FilePath:{there}/a.txt",
+            f"Copy-Item a.txt -Des:{there}/b.txt", f"Copy-Item a.txt -Dest:{there}/b.txt", f"Copy-Item a.txt -Destination:{there}/b.txt",
+            f"Expand-Archive z.zip -DestinationP:{there}", f"Expand-Archive z.zip -Des:{there}",
+            f"Invoke-WebRequest https://example.com/x -Out:{there}/f", f"Invoke-WebRequest https://example.com/x -OutF:{there}/f",
+            f"Remove-Item -Pa:{there}/a.txt", f"Remove-Item -Lit:{there}/a.txt", f"Move-Item -Pa:{there}/a.txt c.txt",
+            f"New-Item -Pa:{there} -Name a.txt", f"New-Item -Path:{there}/a.txt",
+            # A parameter nobody knows with a value that looks like a path is judged as a written path.
+            f"Set-Content -Fnord:{there}/a.txt x", f"Remove-Item -Whatever:{there}/a.txt",
+            f"Remove-Item -Pa: {there}/a.txt", f"Rename-Item -Lit: {there}/a.txt b.txt",
+    ):
+        assert told(command)[0], command
+    # What names nothing refused names nothing: the member's own project, a value that is no path, a flag that is no path.
+    for command in (f"Rename-Item -Lit:{here}/a.txt b.txt", f"Set-Content -Pa:{here}/a.txt -Value:x -Force:$true -Encoding:utf8",
+                    f"Set-Content {here}/a.txt -Value:{there} -Encoding:utf8", "Remove-Item a.txt -ErrorAction:Stop -Force:$true",
+                    f"Invoke-WebRequest -Uri:https://example.com/a/b -OutFile:{here}/f", "Invoke-WebRequest -Proxy:http://proxy:8080 https://example.com"):
+        assert told(command) == ([], []), command
+    # A colon form that cannot be read still asks, as a target it cannot read always did.
+    assert told("Set-Content -Pa:$target x")[1]

@@ -399,16 +399,17 @@ class Files:
         if self.guard is not None and (verdict := self.guard()[0]) is not None:
             raise Refused(*verdict)  # a refused call makes no checkpoint (R-FILE-03)
         await self.checkpoint()
+        inside = None
         if self.guard is not None:
             # Decided again against what is true now (the checkpoint takes time), and once more on the PC itself just before
             # the bytes are written (`LocalVm.file_request`).
-            verdict, allowed, refused = self.guard()
+            verdict, allowed, refused, inside = self.guard()
             if verdict is not None:
                 raise Refused(*verdict)
         answer = await self.vm.file_request(self.target, {"action": "write", "path": path, "expected": expected,
                                                           "data": base64.b64encode(data).decode(),
                                                           **({} if allowed is None else {"allowed": allowed}),
-                                                          **({"refused": refused} if refused else {})},
+                                                          **({"refused": refused, "inside": inside or []} if refused else {})},
                                             **({} if self.guard is None else {"recheck": lambda: self.guard()[0]}))
         if answer.get("error") == "refused":
             raise Refused(*answer["verdict"])

@@ -199,11 +199,12 @@ def under(path, root):
 
 
 def refusing(request):
-    """Whether a write lands in one of the `refused` folders (the mounts of the owner's projects that are not the member's),
-    as its path is written or where its links lead: refused whatever the owner said."""
+    """Whether a write lands in one of the `refused` folders (the owner's projects that are not the member's, where the computer
+    sees them), as its path is written or where its links lead: refused whatever the owner said, but never a place inside the
+    member's own work folder (`inside`), which wins where a refused folder holds it."""
     path = request["path"]
-    return any(under(where, folder) for where in (os.path.normpath(path), os.path.realpath(path))
-               for folder in request.get("refused") or ())
+    return any(under(where, folder) and not any(under(where, work) for work in request.get("inside") or ())
+               for where in (os.path.normpath(path), os.path.realpath(path)) for folder in request.get("refused") or ())
 
 
 def confined(request):
