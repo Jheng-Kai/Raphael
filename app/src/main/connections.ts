@@ -112,6 +112,8 @@ export interface ConnectionsView {
   /** Built-in services, loaded independently from the optional managed catalog. */
   catalog: StoreService[] | "loading" | "failed";
   composioCatalog: StoreService[] | "loading" | "failed";
+  /** Apps are connected through Composio, as the core says even when the list of the connections could not be read. */
+  composioApps?: boolean;
   /** The owner's apps as the core counts them: the number on the chip at the top is its count, the one of the sidebar and the roster. */
   inventory: InventoryView;
   /** Which section each row took when this visit first read it. */
@@ -468,7 +470,7 @@ function keyDialogHTML(v: ConnectionsView): string {
     `<div class="cs-dlg-head">${composioMark()}<h2 class="cs-dlg-name" id="cs-dlg-title">Composio</h2><span class="sp"></span>${closeButton()}</div>` +
     `<div class="cs-key-form"><label for="conn-key">${esc(t("plugins.keyPrompt"))}</label><p class="note">${esc(t("missing.composioGuide"))}</p>` +
     // A new key drops the apps connected through the old one (the core forgets them): said before it is saved, not after.
-    (v.configured && Array.isArray(v.groups) && v.groups.some(g => g.source === "composio") ? `<p class="note" data-k="key-replace-note">${esc(t("conn.keyReplaceNote"))}</p>` : "") +
+    (v.configured && (v.composioApps || Array.isArray(v.groups) && v.groups.some(g => g.source === "composio")) ? `<p class="note" data-k="key-replace-note">${esc(t("conn.keyReplaceNote"))}</p>` : "") +
     `<input class="field" type="password" id="conn-key" autocomplete="new-password" spellcheck="false"${v.keyBusy ? " disabled" : ""}${v.keyError ? ' aria-invalid="true" aria-describedby="conn-key-error"' : ""}>` +
     (v.keyError ? `<p id="conn-key-error" role="alert">${esc(keyErrorMessage(v.keyError))}</p>` : "") + dialogNoticeHTML(v) +
     actionRow({ primary: { label: esc(t("plugins.saveKey")), attrs: ` data-conn="save-key"${v.keyBusy ? " disabled" : ""}` } }) + `</div></div></div>`;
@@ -985,6 +987,8 @@ export function createConnections(host: ConnectionsHost): Connections {
   let category = "";
   let keyOpen = false;
   let keySaves = 0;
+  /** The latest key sent to the core, so that the next one is written after it. */
+  let keyWrite: Promise<unknown> = Promise.resolve();
   let keyBusy = false;
   let keyError: ConnectionsView["keyError"] = "";
   let managed: ManagedConnector[] = [];
@@ -1050,7 +1054,7 @@ export function createConnections(host: ConnectionsHost): Connections {
 
   const view = (): ConnectionsView => ({
     configured, categories, category, keyOpen, keyBusy, keyError,
-    groups, catalog, composioCatalog, inventory, placed, audit, screen, search, shown, recommendedAll, open, toolsOpen, auditOpen, confirmingDisconnect: confirming, busy, login, loginError, dialogNotice, form, now: Date.now(),
+    groups, catalog, composioCatalog, composioApps: managed.some(c => c.kind === "composio"), inventory, placed, audit, screen, search, shown, recommendedAll, open, toolsOpen, auditOpen, confirmingDisconnect: confirming, busy, login, loginError, dialogNotice, form, now: Date.now(),
   });
 
   /** The dialog's scrolling list. */
@@ -1180,12 +1184,23 @@ export function createConnections(host: ConnectionsHost): Connections {
     const replacing = configured === true;
     keyBusy = true; keyError = ""; redraw();
     try {
-      await api.connectorsSetKey(key);
+      // One key is written at a time, in the order they were saved: a key saved after the dialog was closed and opened
+      // again waits for the one still being checked, so the last key saved is the one kept.
+      const value = key;
+      const write = keyWrite.catch(() => undefined).then(() => api.connectorsSetKey(value));
+      keyWrite = write;
+      await write;
       if (mine !== keySaves) return;
       configured = true; keyOpen = false;
-      // A key in the place of another: the core forgot the apps of the old one and its catalog, so both are read again.
-      if (replacing) { composioCatalog = "loading"; await load(); }
-      else await loadCatalog();
+      if (replacing) {
+        // A key in the place of another: the core forgot the apps of the old one and its catalog. A read of the catalog
+        // still on its way is of the old key, and the old apps go even if the connections cannot be read again.
+        catalogLoads++;
+        if (Array.isArray(groups)) groups = groups.filter(g => g.source !== "composio");
+        managed = managed.filter(c => c.kind !== "composio");
+        composioCatalog = "loading";
+        await load();
+      } else await loadCatalog();
     } catch (error) {
       if (mine !== keySaves) return;
       const kind = error instanceof Error ? error.message : "";

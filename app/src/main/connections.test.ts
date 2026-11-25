@@ -1921,6 +1921,84 @@ describe("what the dialog does", () => {
     } finally { await done(); }
   });
 
+  test("a read of the catalog still on its way when a new key is saved is of the old key, and the new key's catalog is read (#320)", async () => {
+    let oldCatalog!: (value: unknown) => void;
+    api.connectorsCatalog.mockReturnValueOnce(new Promise((resolve) => { oldCatalog = resolve; }));
+    const c = createConnections(host);
+    void c.load();
+    await settle(); await settle();
+    expect(api.connectorsCatalog).toHaveBeenCalledTimes(1);
+    c.click(button("configure-composio"));
+    const { document, done } = await mounted(c);
+    try {
+      document.querySelector<HTMLInputElement>("#conn-key")!.value = "comp_new";
+      api.connectorsSetKey.mockResolvedValueOnce({ configured: true });
+      api.connectorsCatalog.mockResolvedValue({ categories: [], items: [{ slug: "zapapp", name: "Zapapp", description: "", logo: "", categories: [], needs: "sign_in", no_auth: false }] });
+      let status!: (value: unknown) => void;
+      api.connectorsStatus.mockReturnValueOnce(new Promise((resolve) => { status = resolve; }));
+      c.click(button("save-key"));
+      await settle();
+      // The old key's list arrives after the save and before the connections are read again: it is not taken.
+      oldCatalog({ categories: [], items: [{ slug: "oldapp", name: "Oldapp", description: "", logo: "", categories: [], needs: "sign_in", no_auth: false }] });
+      await settle();
+      status({ connectors: [], composio_configured: true, google_configured: false });
+      await settle(); await settle();
+      expect(api.connectorsCatalog).toHaveBeenCalledTimes(2);
+      expect((c.view().composioCatalog as StoreService[]).map(s => s.id)).toEqual(["zapapp"]);
+    } finally { await done(); }
+  });
+
+  test("a key saved after the dialog was closed and opened again is written after the one still being checked (#320)", async () => {
+    const c = createConnections(host);
+    await c.load();
+    await settle();
+    c.click(button("configure-composio"));
+    const { document, done } = await mounted(c);
+    try {
+      const field = document.querySelector<HTMLInputElement>("#conn-key")!;
+      let first!: (value: unknown) => void;
+      api.connectorsSetKey.mockReturnValueOnce(new Promise((resolve) => { first = resolve; })).mockResolvedValueOnce({ configured: true });
+      field.value = "comp_first";
+      c.click(button("save-key"));
+      await settle();
+      c.click(button("close"));
+      c.click(button("configure-composio"));
+      field.value = "comp_second";
+      c.click(button("save-key"));
+      await settle();
+      // The second waits: the core still checks the first, and would otherwise keep whichever answers last.
+      expect(api.connectorsSetKey.mock.calls.map(call => call[0])).toEqual(["comp_first"]);
+      first({ configured: true });
+      await settle(); await settle(); await settle();
+      expect(api.connectorsSetKey.mock.calls.map(call => call[0])).toEqual(["comp_first", "comp_second"]);
+    } finally { await done(); }
+  });
+
+  test("with the connections unread the key form still says the Composio apps go, and a new key drops them from the page (#320)", async () => {
+    const gmail = { id: "composio:gmail", kind: "composio", name: "Gmail", description: "", logo: "", status: "ACTIVE", enabled: true, accounts: [{ id: "a1", status: "ACTIVE" }], enabled_tools: [], disabled_tools: [] };
+    api.connectorsStatus.mockResolvedValue({ connectors: [gmail], composio_configured: true, google_configured: false });
+    const c = createConnections(host);
+    await c.load();
+    await settle();
+    expect(c.view().composioApps).toBe(true);
+    // The list of the connections fails from here on: the core's word that Composio apps are connected still tells the form.
+    api.toolsetsList.mockRejectedValue(new Error("network"));
+    c.click(button("configure-composio"));
+    const shown = dom(connectionsHTML({ ...c.view(), groups: "failed" }));
+    expect(shown.querySelector('[data-k="key-replace-note"]')!.textContent).toBe(t("conn.keyReplaceNote"));
+    const { document, done } = await mounted(c);
+    try {
+      document.querySelector<HTMLInputElement>("#conn-key")!.value = "comp_new";
+      api.connectorsSetKey.mockResolvedValueOnce({ configured: true });
+      api.connectorsStatus.mockResolvedValue({ connectors: [], composio_configured: true, google_configured: false });
+      c.click(button("save-key"));
+      await settle(); await settle(); await settle();
+      const groups = c.view().groups;
+      expect(Array.isArray(groups) && groups.some(g => g.source === "composio")).toBe(false);
+      expect(c.view().composioApps).toBe(false);
+    } finally { await done(); }
+  });
+
   test("an app that is already connected is not joined again", async () => {
     const c = createConnections(host);
     await c.load();
