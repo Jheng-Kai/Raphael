@@ -1558,6 +1558,8 @@ export const ko = {
   "setup.errComposio": "사용 가능한 Composio 키가 없거나 유효하지 않아 아직 앱을 추가할 수 없습니다.",
   "store.title": "스토어",
   "conn.loadFailed": "연결을 읽지 못했습니다.",
+  "conn.keyReplaceNote": "키를 교체하면 Composio로 연결한 앱을 다시 연결해야 합니다.",
+  "conn.keySettings": "Composio API 키 업데이트",
   "conn.loading": "불러오는 중…",
   "conn.emptyInstalled": "연결된 앱이 없습니다. 앱을 선택하고 “연결”을 누르세요.",
   "conn.noMatch": "일치하는 항목 없음",

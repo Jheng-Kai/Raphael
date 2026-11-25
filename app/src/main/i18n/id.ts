@@ -1558,6 +1558,8 @@ export const id = {
   "setup.errComposio": "Tidak ada kunci Composio yang berfungsi (hilang atau tidak valid lagi), jadi aplikasi belum dapat ditambahkan.",
   "store.title": "Toko",
   "conn.loadFailed": "Koneksi tidak dapat dibaca.",
+  "conn.keyReplaceNote": "Setelah kunci diganti, aplikasi yang terhubung lewat Composio perlu dihubungkan lagi.",
+  "conn.keySettings": "Perbarui kunci API Composio",
   "conn.loading": "Memuat…",
   "conn.emptyInstalled": "Belum ada aplikasi terhubung. Pilih aplikasi lalu tekan Hubungkan.",
   "conn.noMatch": "Tidak ada yang cocok",

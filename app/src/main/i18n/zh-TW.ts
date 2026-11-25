@@ -1285,6 +1285,8 @@ export const zhTW = {
   "conn.search": "搜尋",
   "conn.addMenu": "新增",
   "conn.loadFailed": "無法讀取連接。",
+  "conn.keyReplaceNote": "換成新的金鑰後，透過 Composio 連結的應用程式要重新連結。",
+  "conn.keySettings": "更新 Composio API 金鑰",
   "conn.loading": "讀取中…",
   "conn.emptyInstalled": "尚未連結任何應用程式，請選擇一個應用程式並按「連結」。",
   "conn.noMatch": "沒有符合的項目",

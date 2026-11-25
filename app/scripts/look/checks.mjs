@@ -10492,6 +10492,45 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, row: where(frame), lines: lines.length, reach };
   }
+  // #320: once a Composio key is saved, a gear in the header (after the chip, before the close button) opens its form. The
+  // view under it is as it was: no row of Composio at the end of the list.
+  if (name === "composio-key-gear") {
+    const gears = [...document.querySelectorAll('[data-k="cs-key-settings"]')];
+    require(gears.length === 1 && visible(gears[0]), `one gear is drawn (${gears.length})`);
+    const gear = gears[0], header = gear.closest('.cs-top');
+    require(header && gear.dataset.conn === 'configure-composio' && (gear.getAttribute('aria-label') ?? '').trim().length > 0, "the gear is in the header, named, and opens the key's form");
+    const box = gear.getBoundingClientRect(), close = header.querySelector('.modal-x, [data-k="cs-close"]'), chip = header.querySelector('[data-conn="connected"]');
+    if (close && visible(close)) {
+      const c = close.getBoundingClientRect();
+      require(box.right <= c.left + 1 && Math.abs((box.top + box.bottom) / 2 - (c.top + c.bottom) / 2) < 2, "the gear stands before the close button, on its line");
+    }
+    if (chip && visible(chip)) require(chip.getBoundingClientRect().right <= box.left + 1, "the gear comes after the chip of the connected apps");
+    require(box.width >= 24 && box.width <= 40 && Math.abs(box.width - box.height) < 2, `the gear is a round icon button of the header's size (${Math.round(box.width)}×${Math.round(box.height)})`);
+    require(!document.querySelector('.cs-composio-setup'), "no row of Composio is added to the list");
+    return { check: name, size: Math.round(box.width) };
+  }
+  if (name === "composio-key-replace") {
+    const dialog = document.querySelector('#cs-dialog');
+    require(visible(dialog) && dialog.getAttribute('role') === 'dialog', "the key dialog of Composio is open");
+    const field = dialog.querySelector('#conn-key');
+    require(visible(field) && field.type === 'password' && field.value === '', "its field is an empty password field: the saved key is never shown");
+    require(document.activeElement === field, "the field has the focus");
+    const note = dialog.querySelector('[data-k="key-replace-note"]');
+    require(visible(note) && note.textContent.trim().length > 0, "it says before the save that the apps connected through Composio must be connected again");
+    const box = dialog.getBoundingClientRect();
+    for (const part of [field, note, dialog.querySelector('[data-conn="save-key"]')]) {
+      const r = part.getBoundingClientRect();
+      require(r.left >= box.left - 1 && r.right <= box.right + 1 && r.top >= box.top - 1 && r.bottom <= box.bottom + 1, "every part of the form is inside the dialog");
+    }
+    return { check: name };
+  }
+  if (name === "composio-key-replaced") {
+    require(!document.querySelector('#cs-dialog'), "the dialog closed on the save");
+    require(visible(document.querySelector('[data-k="cs-key-settings"]')) && !document.querySelector('.cs-composio-setup'), "the gear is back in the header and the list is as it was");
+    require(!window.__look.data.managedConnectors.some(c => c.kind === "composio"), "the core forgot the apps of the old key");
+    require(!document.querySelector('[data-k^="cs-open:composio:"]'), "no app of the old key is listed as connected");
+    return { check: name };
+  }
   // A price is made of parts joined by 「 · 」, each one a number with its unit ("輸入 $2.00 / 輸出 $12 約每百萬字"). A part is never broken
   // across lines while a line of the row could hold it: a line ends between parts, so no number is parted from its unit and no line
   // holds a lone character. Measured from the client rects of each part's own text, where the price is shown in the model chooser's rows

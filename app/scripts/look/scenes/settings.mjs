@@ -172,6 +172,14 @@ export default [
     ...store, { action: "settle-motion" }, check("plugins-store-settled"), check("plugins-store-groups"),
   ], { pluginsMany: true }), motion: true },
   scene("plugins-store-key", "Built-in services with optional Composio setup", [...store, wait('[data-conn="configure-composio"]'), check("plugins-store"), check("plugins-store-rows"), check("composio-foot")], { composioConfigured: false }),
+  // #320: once a key is saved, a gear in the header opens its form; the view itself is as it was.
+  scene("plugins-store-key-gear", "A saved Composio key adds a gear after the chip of the connected apps, before Close, and nothing to the list", [
+    ...store, wait('[data-k="cs-key-settings"]'), check("composio-key-gear"), check("plugins-store-rows"),
+  ], { composioConfigured: true }),
+  scene("plugins-store-key-update", "The gear opens the same secure key form, empty, saying the Composio apps must be connected again; a new key closes it", [
+    ...connections, wait('[data-k="cs-key-settings"]'), click('[data-k="cs-key-settings"]'), wait("#conn-key"), check("composio-key-replace"),
+    type("#conn-key", "look-synthetic-new-key"), click('[data-conn="save-key"]'), waitGone("#conn-key"), wait('[data-k="cs-key-settings"]'), check("composio-key-replaced"),
+  ], { composioConfigured: true }),
   scene("plugins-store-key-openrouter", "An OpenRouter key gets an actionable, value-free Composio error", [
     ...connections, wait('[data-conn="configure-composio"]'), click('[data-conn="configure-composio"]'), wait('#conn-key'),
     type('#conn-key', 'sk-or-look-synthetic'), click('[data-conn="save-key"]'), wait('.cs-key-form [role="alert"]'), check("plugins-key-openrouter"), check("plugins-store-rows"), check("composio-foot"),

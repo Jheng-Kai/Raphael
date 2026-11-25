@@ -379,6 +379,17 @@ While no Composio key is set the view ends with one row (the mark, 「還沒有 
 `plugins-store-key-openrouter`, `plugins-store-key-consumer` and `plugins-connecting` (R-CONNECT-04) and measures that the whole row and every line of its
 sentence are inside the dialog's visible part without scrolling, and that the list's last app is above it at the end of the list. At 720 wide the sentence is
 two lines; inspect it there and in `--locale fr` (the longest sentence) and `--locale id`.
+
+A saved Composio key can be replaced (R-CONNECT-05, #320). Once a key is saved the header has a gear after the chip of
+the connected apps and before Close, and the list gains nothing (`composio-key-gear` in `plugins-store-key-gear`). The gear
+opens the empty password form, which says the Composio apps must be connected again; a new key closes it and the core
+forgets the old apps (`composio-key-replace`, `composio-key-replaced` in `plugins-store-key-update`). A conversation's card
+that failed with `key_refused` opens the same form through the gear (`card-key-refused-repair`; `composioKeyRefused`
+makes the mock answer `connectors.catalog` with `auth`, which the page shows as the failed read it always showed).
+
+```powershell
+npm run look -- plugins-store-key-gear plugins-store-key-update card-key-refused-repair plugins-store-key --theme both --width 1120,720,1920x1080
+```
 The fixture has four representative built-ins from the repository catalog. The
 configured Store scenes add 360 synthetic entries with multiple category
 memberships and a duplicate. Broad-group chips and local search operate on the

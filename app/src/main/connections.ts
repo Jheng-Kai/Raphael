@@ -467,6 +467,8 @@ function keyDialogHTML(v: ConnectionsView): string {
   return `<div class="cs-scrim" data-conn="scrim" data-dialog="composio-key"><div class="cs-dialog" id="cs-dialog" role="dialog" aria-modal="true" aria-labelledby="cs-dlg-title" tabindex="-1" data-trap>` +
     `<div class="cs-dlg-head">${composioMark()}<h2 class="cs-dlg-name" id="cs-dlg-title">Composio</h2><span class="sp"></span>${closeButton()}</div>` +
     `<div class="cs-key-form"><label for="conn-key">${esc(t("plugins.keyPrompt"))}</label><p class="note">${esc(t("missing.composioGuide"))}</p>` +
+    // A new key drops the apps connected through the old one (the core forgets them): said before it is saved, not after.
+    (v.configured && Array.isArray(v.groups) && v.groups.some(g => g.source === "composio") ? `<p class="note" data-k="key-replace-note">${esc(t("conn.keyReplaceNote"))}</p>` : "") +
     `<input class="field" type="password" id="conn-key" autocomplete="new-password" spellcheck="false"${v.keyBusy ? " disabled" : ""}${v.keyError ? ' aria-invalid="true" aria-describedby="conn-key-error"' : ""}>` +
     (v.keyError ? `<p id="conn-key-error" role="alert">${esc(keyErrorMessage(v.keyError))}</p>` : "") + dialogNoticeHTML(v) +
     actionRow({ primary: { label: esc(t("plugins.saveKey")), attrs: ` data-conn="save-key"${v.keyBusy ? " disabled" : ""}` } }) + `</div></div></div>`;
@@ -555,6 +557,12 @@ function connectedGroups(v: ConnectionsView): ConnectionGroup[] {
 }
 
 /** The quiet chip at the top right: up to four marks, overlapped, and how many apps are connected. It opens the list of them. */
+/** The gear beside the chip, once a Composio key is saved: it opens the key's form, where a new key takes the old one's place
+ *  (#320). The view and everything else stay as they are; with no key the row at the end of the list adds one. */
+function keySettingsHTML(v: ConnectionsView): string {
+  return v.configured === true ? iconButton("gear", t("conn.keySettings"), ' data-conn="configure-composio" data-k="cs-key-settings"') : "";
+}
+
 function haveChipHTML(v: ConnectionsView): string {
   if (!Array.isArray(v.groups) || !v.groups.length) return "";
   const count = connectedCount(v.inventory);
@@ -910,7 +918,7 @@ export function connectionsHTML(v: ConnectionsView, heading = "", close = ""): s
   }
   // The connected apps could not be read: the chip that would open them says so instead, with the way to read them again.
   const unread = v.groups === "failed" ? `<div class="alert core-note">${st("err", t("conn.loadFailed"))}${btn(esc(t("plugins.retry")), "sm", ' data-conn="retry-connections"')}</div>` : "";
-  return `<div class="cs cs-apps"><header class="cs-top">${heading}${haveChipHTML(v)}${close}</header>${unread}${barHTML(v)}${chipsHTML(v)}` +
+  return `<div class="cs cs-apps"><header class="cs-top">${heading}${haveChipHTML(v)}${keySettingsHTML(v)}${close}</header>${unread}${barHTML(v)}${chipsHTML(v)}` +
     `<div class="cs-results" data-cs-scroll><div class="cs-body" data-cs-body>${bodyHTML(v)}</div></div></div>` + key;
 }
 
@@ -1169,12 +1177,15 @@ export function createConnections(host: ConnectionsHost): Connections {
     const mine = ++keySaves;
     let key = input.value.trim();
     input.value = "";
+    const replacing = configured === true;
     keyBusy = true; keyError = ""; redraw();
     try {
       await api.connectorsSetKey(key);
       if (mine !== keySaves) return;
       configured = true; keyOpen = false;
-      await loadCatalog();
+      // A key in the place of another: the core forgot the apps of the old one and its catalog, so both are read again.
+      if (replacing) { composioCatalog = "loading"; await load(); }
+      else await loadCatalog();
     } catch (error) {
       if (mine !== keySaves) return;
       const kind = error instanceof Error ? error.message : "";

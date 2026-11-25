@@ -1558,6 +1558,8 @@ export const fr = {
   "setup.errComposio": "Aucune clé Composio fonctionnelle (absente ou invalide), donc aucune application ne peut encore être ajoutée.",
   "store.title": "Boutique",
   "conn.loadFailed": "Impossible de lire les connexions.",
+  "conn.keyReplaceNote": "Après le remplacement de la clé, les apps connectées via Composio doivent être reconnectées.",
+  "conn.keySettings": "Mettre à jour la clé API Composio",
   "conn.loading": "Chargement…",
   "conn.emptyInstalled": "Aucune application n’est connectée. Choisissez-en une et appuyez sur Connecter.",
   "conn.noMatch": "Aucun résultat",

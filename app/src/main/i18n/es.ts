@@ -1558,6 +1558,8 @@ export const es = {
   "setup.errComposio": "No hay clave Composio válida (falta o caducó), así que aún no se pueden añadir apps.",
   "store.title": "Tienda",
   "conn.loadFailed": "No se pudieron leer las conexiones.",
+  "conn.keyReplaceNote": "Después de reemplazar la clave, las apps conectadas mediante Composio deben conectarse de nuevo.",
+  "conn.keySettings": "Actualizar la clave API de Composio",
   "conn.loading": "Cargando…",
   "conn.emptyInstalled": "No hay aplicaciones conectadas. Elige una y pulsa Conectar.",
   "conn.noMatch": "Sin coincidencias",

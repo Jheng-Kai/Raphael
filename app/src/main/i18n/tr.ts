@@ -1558,6 +1558,8 @@ export const tr = {
   "setup.errComposio": "Çalışan Composio anahtarı yok (eksik veya geçersiz), bu yüzden henüz uygulama eklenemez.",
   "store.title": "Mağaza",
   "conn.loadFailed": "Bağlantılar okunamadı.",
+  "conn.keyReplaceNote": "Anahtarı değiştirdikten sonra Composio üzerinden bağlanan uygulamaların yeniden bağlanması gerekir.",
+  "conn.keySettings": "Composio API anahtarını güncelle",
   "conn.loading": "Yükleniyor…",
   "conn.emptyInstalled": "Bağlı uygulama yok. Bir uygulama seçip Bağla düğmesine basın.",
   "conn.noMatch": "Eşleşme yok",

@@ -1286,6 +1286,8 @@ export const en = {
   "conn.search": "Search",
   "conn.addMenu": "Add",
   "conn.loadFailed": "Could not read the connections.",
+  "conn.keyReplaceNote": "After you replace the key, apps connected through Composio need to be connected again.",
+  "conn.keySettings": "Update Composio API key",
   "conn.loading": "Loading…",
   "conn.emptyInstalled": "No apps are connected. Choose an app and press Connect.",
   "conn.noMatch": "Nothing matches",

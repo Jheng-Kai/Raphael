@@ -1558,6 +1558,8 @@ export const vi = {
   "setup.errComposio": "Không có khóa Composio hoạt động (thiếu hoặc hết hiệu lực), nên chưa thêm được ứng dụng.",
   "store.title": "Kho ứng dụng",
   "conn.loadFailed": "Không đọc được kết nối.",
+  "conn.keyReplaceNote": "Sau khi thay khóa, các ứng dụng kết nối qua Composio cần được kết nối lại.",
+  "conn.keySettings": "Cập nhật khóa API Composio",
   "conn.loading": "Đang tải…",
   "conn.emptyInstalled": "Chưa kết nối ứng dụng nào. Hãy chọn một ứng dụng và nhấn Kết nối.",
   "conn.noMatch": "Không có kết quả",

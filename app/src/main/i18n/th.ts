@@ -1558,6 +1558,8 @@ export const th = {
   "setup.errComposio": "ไม่มีคีย์ Composio ที่ใช้ได้ (ขาดหรือไม่ถูกต้องแล้ว) จึงยังเพิ่มแอปไม่ได้",
   "store.title": "ร้านค้า",
   "conn.loadFailed": "อ่านการเชื่อมต่อไม่ได้",
+  "conn.keyReplaceNote": "หลังเปลี่ยนคีย์ แอปที่เชื่อมต่อผ่าน Composio ต้องเชื่อมต่อใหม่",
+  "conn.keySettings": "อัปเดตคีย์ API ของ Composio",
   "conn.loading": "กำลังโหลด…",
   "conn.emptyInstalled": "ยังไม่ได้เชื่อมต่อแอปใด เลือกแอปแล้วกด เชื่อมต่อ",
   "conn.noMatch": "ไม่พบรายการตรงกัน",

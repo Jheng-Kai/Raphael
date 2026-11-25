@@ -1558,6 +1558,8 @@ export const ptBR = {
   "setup.errComposio": "Não há chave Composio funcional (ausente ou inválida), então ainda não é possível adicionar apps.",
   "store.title": "Loja",
   "conn.loadFailed": "Não foi possível ler as conexões.",
+  "conn.keyReplaceNote": "Depois de substituir a chave, os apps conectados pelo Composio precisam ser conectados de novo.",
+  "conn.keySettings": "Atualizar a chave de API do Composio",
   "conn.loading": "Carregando…",
   "conn.emptyInstalled": "Nenhum aplicativo conectado. Escolha um e toque em Conectar.",
   "conn.noMatch": "Nada corresponde",

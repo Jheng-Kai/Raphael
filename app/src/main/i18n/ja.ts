@@ -1286,6 +1286,8 @@ export const ja = {
   "conn.search": "検索",
   "conn.addMenu": "追加",
   "conn.loadFailed": "接続を読み込めません。",
+  "conn.keyReplaceNote": "キーを変更すると、Composio 経由で接続したアプリはもう一度接続する必要があります。",
+  "conn.keySettings": "Composio API キーを更新",
   "conn.loading": "読み込み中…",
   "conn.emptyInstalled": "接続されたアプリはありません。アプリを選んで「連携」を押してください。",
   "conn.noMatch": "一致するものがありません",

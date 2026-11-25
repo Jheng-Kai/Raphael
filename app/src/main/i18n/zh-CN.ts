@@ -1558,6 +1558,8 @@ export const zhCN = {
   "setup.errComposio": "还没有可用的 Composio 密钥（没有，或已失效），所以现在不能加入任何应用程序。",
   "store.title": "商店",
   "conn.loadFailed": "无法读取连接。",
+  "conn.keyReplaceNote": "换成新的密钥后，通过 Composio 连接的应用需要重新连接。",
+  "conn.keySettings": "更新 Composio API 密钥",
   "conn.loading": "读取中…",
   "conn.emptyInstalled": "尚未链接任何应用程序，请选择一个应用程序并点“链接”。",
   "conn.noMatch": "没有符合的项目",

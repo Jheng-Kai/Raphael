@@ -1558,6 +1558,8 @@ export const de = {
   "setup.errComposio": "Kein funktionierender Composio-Schlüssel (fehlt oder ungültig), daher können noch keine Apps hinzugefügt werden.",
   "store.title": "Store",
   "conn.loadFailed": "Verbindungen konnten nicht gelesen werden.",
+  "conn.keyReplaceNote": "Nach dem Ersetzen des Schlüssels müssen über Composio verbundene Apps neu verbunden werden.",
+  "conn.keySettings": "Composio-API-Schlüssel aktualisieren",
   "conn.loading": "Wird geladen…",
   "conn.emptyInstalled": "Keine Apps verbunden. Wähle eine App und tippe auf Verbinden.",
   "conn.noMatch": "Keine Treffer",

@@ -2210,6 +2210,8 @@ export function installMock(fixture, config = {}, target = window) {
       }
       case "connectors.catalog": {
         if (!data.composioConfigured) return { ok: false, error: "missing_key" };
+        // `composioKeyRefused`: Composio refuses the saved key (revoked) until a new one is saved (#320).
+        if (variant.composioKeyRefused && !state.composioKeyReplaced) return { ok: false, error: "auth" };
         return { items: data.pluginCatalog, categories: data.pluginCategories, next_cursor: null };
       }
       case "connectors.categories": return { items: data.pluginCategories };
@@ -2221,6 +2223,8 @@ export function installMock(fixture, config = {}, target = window) {
       case "connectors.set_key": {
         if (p.key.startsWith("sk-or-")) return { ok: false, error: "openrouter_key" };
         if (p.key.startsWith("ck_")) return { ok: false, error: "consumer_key" };
+        // A key in the place of another: the core forgets the apps connected through the old one (ConnectorsService.set_key).
+        if (data.composioConfigured) { data.managedConnectors = data.managedConnectors.filter(c => c.kind !== "composio"); state.composioKeyReplaced = true; }
         data.composioConfigured = true; return { configured: true };
       }
       case "connectors.set_tools": {

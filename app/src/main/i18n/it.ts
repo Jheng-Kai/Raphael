@@ -1558,6 +1558,8 @@ export const it = {
   "setup.errComposio": "Non c’è una chiave Composio funzionante (manca o non è più valida), quindi non si possono aggiungere app.",
   "store.title": "Store",
   "conn.loadFailed": "Impossibile leggere le connessioni.",
+  "conn.keyReplaceNote": "Dopo aver sostituito la chiave, le app collegate tramite Composio vanno ricollegate.",
+  "conn.keySettings": "Aggiorna la chiave API di Composio",
   "conn.loading": "Caricamento…",
   "conn.emptyInstalled": "Nessuna app connessa. Scegline una e premi Connetti.",
   "conn.noMatch": "Nessuna corrispondenza",
