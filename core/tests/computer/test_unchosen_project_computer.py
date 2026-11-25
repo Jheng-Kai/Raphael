@@ -320,3 +320,115 @@ def test_a_parameter_written_with_a_colon_or_cut_short_names_the_file_it_names(t
         assert told(command) == ([], []), command
     # A colon form that cannot be read still asks, as a target it cannot read always did.
     assert told("Set-Content -Pa:$target x")[1]
+
+
+# --- round four: the colon form and short parameters only ever add to what is judged ----------------------------------------
+
+
+def _folders(tmp_path):
+    project, other, own = (tmp_path / name for name in ("project", "other", "own"))
+    for folder in (project, other, own):
+        folder.mkdir()
+    settings = Settings([project, other], chosen=project)
+
+    def reach(path):
+        return work_area.reach(settings, 0, path, lambda member: (own, tmp_path / "team"))
+
+    return project, other, own, reach
+
+
+def test_an_ambiguous_short_parameter_keeps_the_target_the_command_names(tmp_path):
+    from raphael_core.computer.shell_writes import classify
+    project, other, own, reach = _folders(tmp_path)
+    there = other.as_posix()
+    # -Fi is Filter or FilePath: PowerShell binds the Filter and the file named is the first word. Both are judged.
+    assert classify(f"Set-Content {there}/a.txt x -Fi:*.txt", str(project), reach, home=str(tmp_path / "home"))[0] == [f"{there}/a.txt"]
+    assert classify(f"Set-Content {there}/a.txt x -Fi:{there}/b.txt", str(project), reach, home=str(tmp_path / "home"))[0] == [f"{there}/a.txt", f"{there}/b.txt"]
+    assert classify(f"Remove-Item {there}/a.txt -Fi:*.log", str(project), reach, home=str(tmp_path / "home"))[0] == [f"{there}/a.txt"]
+
+
+def test_a_unix_tools_flag_with_a_colon_is_read_as_it_always_was(tmp_path):
+    from raphael_core.computer.shell_writes import classify
+    project, other, own, reach = _folders(tmp_path)
+    there = other.as_posix()
+    # sed -i:.bak keeps its in-place flag: the file it edits is judged, and `.bak` is no path.
+    for command in (f"sed -i:.bak 's/a/b/' {there}/a.txt", f"sed -i 's/a/b/' {there}/a.txt"):
+        assert classify(command, str(project), reach, home=str(tmp_path / "home")) == ([f"{there}/a.txt"], []), command
+    # The suffix attached to the flag is the in-place edit it is: judged now, as it was not before (and nothing it judged is lost).
+    assert classify(f"sed -i.bak 's/a/b/' {there}/a.txt", str(project), reach, home=str(tmp_path / "home")) == ([f"{there}/a.txt"], [])
+    # The unix tools that PowerShell has aliases for keep their own reading, with no colon form and no short parameter.
+    for command in (f"cp -t:x {there}/a.txt", f"mv -Pa:{there}/a.txt b", f"tee -Lit:{there}/a.txt", f"rm -Pa:{there}/a.txt"):
+        assert classify(command, str(project), reach, home=str(tmp_path / "home")) == old_classify(tmp_path, command, project, reach), command
+
+
+def old_classify(tmp_path, command, cwd, reach):
+    """What the classifier of before the colon form said (`9a542a3cc`, the commit that read every alias), loaded as a module of
+    its own."""
+    return _old_classifier().classify(command, str(cwd), reach, home=str(tmp_path / "home"))
+
+
+def _old_classifier():
+    import importlib.util
+    import subprocess
+    import sys
+    if "old_shell_writes" in sys.modules:
+        return sys.modules["old_shell_writes"]
+    shown = subprocess.run(["git", "show", "9a542a3cc:core/src/raphael_core/computer/shell_writes.py"], capture_output=True,
+                           text=True, encoding="utf-8", cwd=os.path.dirname(__file__))
+    if shown.returncode:
+        pytest.skip("the commit this compares with is not in this clone")
+    spec = importlib.util.spec_from_loader("old_shell_writes", loader=None)
+    module = importlib.util.module_from_spec(spec)
+    exec(compile(shown.stdout.replace("from ..work_area import", "from raphael_core.work_area import"), "old_shell_writes.py", "exec"),
+         module.__dict__)
+    sys.modules["old_shell_writes"] = module
+    return module
+
+
+def test_what_the_classifier_judged_before_the_colon_form_it_still_judges(tmp_path):
+    from raphael_core.computer.shell_writes import classify
+    project, other, own, reach = _folders(tmp_path)
+    there, here = other.as_posix(), project.as_posix()
+    commands = [
+        f"Set-Content {there}/a.txt x -Fi:*.txt", f"Set-Content {there}/a.txt x -Fi:{here}/b.txt", f"Set-Content -Pa:{here}/b.txt {there}/a.txt",
+        f"sed -i:.bak 's/a/b/' {there}/a.txt", f"sed -i.bak 's/a/b/' {there}/a.txt", f"sed -i -e 's/a/b/' {there}/a.txt {there}/c.txt",
+        f"sed -ibak 's/a/b/' {there}/a.txt", f"sed -ie 's/a/b/' {there}/a.txt", f"sed -ni 's/a/p/p' {there}/a.txt", f"sed -Ei.bak 's/a+/b/' {there}/a.txt",
+        f"sed --in-place 's/a/b/' {there}/a.txt", f"sed --in-place=.bak 's/a/b/' {there}/a.txt", f"sed -i '' 's/a/b/' {there}/a.txt",
+        f"sed -i .bak 's/a/b/' {there}/a.txt", f"sed -n 's/a/p/p' {there}/a.txt", f"sed -e 's/a/b/' {there}/a.txt", f"sed 's/a/b/' a.txt > {there}/b.txt",
+        f"cp -t:x {there}/a.txt", f"cp -t {there} a.txt", f"cp -r a {there}/", f"mv a.txt {there}/b.txt", f"mv -Pa:{there}/a.txt b",
+        f"tee -a {there}/a.txt", f"tee -Lit:{there}/a.txt", f"tar -C {there} -xf z.tar", f"tar --directory {there} -xf z.tar",
+        f"curl -o {there}/f https://example.com/x", f"curl -O https://example.com/x", f"wget -O {there}/f https://example.com/x",
+        f"rm -rf {there}/a", f"rm -f {there}/a.txt", f"rm -Pa:{there}/a.txt", f"touch {there}/a.txt", f"mkdir -p {there}/d", f"chmod -R 755 {there}",
+        f"dd if=a of={there}/f", f"git clone https://example.com/x.git {there}/x", f"git init {there}/x", f"echo hi > {there}/a.txt",
+        f"echo hi >> {there}/a.txt; echo ho > b.txt", f"cd {there}; echo hi > a.txt", f"powershell -Command \"Set-Content {there}/a.txt x -Fi:*.txt\"",
+        f"Rename-Item {there}/a.txt b.txt", f"Rename-Item -Path {there}/a.txt -NewName b.txt", f"Rename-Item {there}/a.txt -NewN:b.txt",
+        f"Move-Item {there}/a.txt c.txt", f"Copy-Item a.txt {there}/b.txt", f"Copy-Item a.txt -Destination:{there}/b.txt",
+        f"Remove-Item {there}/a.txt -Force:$true -Recurse", f"Out-File -FilePath:{there}/a.txt", f"New-Item {there}/a.txt -Value:x",
+        f"Invoke-WebRequest https://example.com/x -OutFile {there}/f", f"Expand-Archive z.zip {there}", f"Expand-Archive z.zip -DestinationPath:{there}",
+        "echo hi > out.txt", f"echo hi > {own.as_posix()}/a.txt", "Remove-Item $path", "Set-Content -Pa:$target x", "cp a $dest",
+    ]
+    for command in commands:
+        old_projects, old_outside = old_classify(tmp_path, command, project, reach)
+        projects, outside = classify(command, str(project), reach, home=str(tmp_path / "home"))
+        assert set(old_projects) <= set(projects) and set(old_outside) <= set(outside), (command, (old_projects, old_outside), (projects, outside))
+
+
+def test_sed_edits_the_files_it_names_in_place_whichever_way_the_flag_is_written(tmp_path):
+    from raphael_core.computer.shell_writes import classify
+    project, other, own, reach = _folders(tmp_path)
+    there, here = other.as_posix(), project.as_posix()
+
+    def told(command, cwd=project):
+        return classify(command, str(cwd), reach, home=str(tmp_path / "home"))
+
+    # GNU: the suffix attached to -i, the letter among others, the long form; BSD: the suffix as a word of its own, or empty.
+    for flag in ("-i", "-i.bak", "-ibak", "-ie", "-ni", "-Ei.bak", "--in-place", "--in-place=.bak", "-i ''", "-i .bak", '-i ""'):
+        command = f"sed {flag} 's/a/b/' {there}/a.txt"
+        assert told(command)[0] == [f"{there}/a.txt"], command
+        assert told(f"sed {flag} -e 's/a/b/' {there}/a.txt {there}/c.txt")[0] == [f"{there}/a.txt", f"{there}/c.txt"], command
+        assert told(f"sed {flag} 's/a/b/' a.txt {there}/c.txt")[0] == [f"{there}/c.txt"], command
+        assert told(f"sed {flag} 's/a/b/' {here}/a.txt") == ([], []), command
+    # Without the flag sed only reads its files.
+    for command in (f"sed 's/a/b/' {there}/a.txt", f"sed -n 's/a/p/p' {there}/a.txt", f"sed -e 's/a/b/' {there}/a.txt",
+                    f"sed -Ee 's/a+/b/' {there}/a.txt", f"sed --quiet 's/a/p/p' {there}/a.txt"):
+        assert told(command) == ([], []), command

@@ -188,6 +188,49 @@ def _path_like(value):
     return bool(re.search(r"[\\/]|^[A-Za-z]:|^~|^\.", value)) and not re.match(r"[A-Za-z][A-Za-z0-9+.-]*://", value)
 
 
+# The cmdlets of PowerShell that write, move, copy, delete or make files, and the aliases that are PowerShell's own (`cp`, `mv`, `rm`,
+# `tee` and the like are unix tools too, and keep the reading they always had).
+POWERSHELL = {"out-file", "set-content", "add-content", "clear-content", "tee-object", "new-item", "export-csv", "export-clixml",
+              "start-transcript", "remove-item", "rename-item", "move-item", "copy-item", "expand-archive", "invoke-webrequest",
+              "invoke-restmethod", "sc", "ac", "clc", "ni", "ri", "rni", "mi", "cpi", "iwr", "irm", "ren", "del", "erase", "rd", "md"}
+
+
+def edits_in_place(words):
+    """Whether sed's words ask for an edit in place with the suffix attached, which the reading of `-i` alone misses: GNU's
+    `-i.bak`, `-ibak`, the letter among others (`-ni`, `-Ei.bak`) and `--in-place[=SUFFIX]`. Only ever more targets: the
+    reading of `-i` (and BSD's `-i ''` and `-i .bak`) stays as it was."""
+    return any(re.fullmatch(r"-[A-Za-z]*i.*|--in-place(?:=.*)?", word.text) for word in words)
+
+
+def powershell_paths(arguments):
+    """More words to judge as paths written, for a PowerShell cmdlet: the value of a parameter given as `-Name:value` (or
+    `-Name: value`) that is cut short to the beginning of a path parameter (-Lit, -Pa, -Fi, -Des), or that nobody knows and whose
+    value looks like a path. PowerShell binds a name cut short by its own parameters, which this does not know, so a name
+    that fits more than one (-Fi is Filter and FilePath) gives its value as one more candidate and takes nothing away: the
+    words the command always named stay judged. A name that is known, whether it names a path (read as it always was) or a value,
+    adds nothing."""
+    found, index = [], 0
+    while index < len(arguments):
+        token, text = arguments[index], arguments[index].text
+        index += 1
+        if len(text) < 2 or text[0] != "-" or text[1:].isdigit() or token.redirect:
+            continue
+        key, colon, value = text.lstrip("-").partition(":")
+        key = key.lower()  # the value keeps its case: on a disk that tells cases apart it names another file
+        if not colon or key in PATH_PARAMS or key in VALUE_PARAMS:
+            continue
+        if value:
+            candidate = Token(value, token.dynamic)
+        elif index < len(arguments) and not arguments[index].redirect:
+            candidate = arguments[index]  # `-Name: value`
+            index += 1
+        else:
+            continue
+        if any(name in PATH_PARAMS for name in parameter(key)) or (not parameter(key) and _path_like(candidate.text)):
+            found.append(candidate)
+    return found
+
+
 def _options(arguments):
     """(the positional arguments, {parameter: value}) of a command's tokens, a parameter being a word that starts with `-`
     (or `/` for cmd's copy) and is not a number. A parameter takes the next word when it is one that names a path or a value."""
@@ -200,17 +243,7 @@ def _options(arguments):
         elif len(text) > 1 and text[0] == "-" and not text[1:].isdigit() and not token.redirect:
             key, colon, value = text.lstrip("-").lower().partition(":")
             if colon and value:
-                # `-Name:value`. A name cut short is the parameter it begins; a parameter nobody knows, with a value that
-                # looks like a path, is judged as a path written (the file is named whatever the parameter is called).
-                names = parameter(key) or (["path", "destination"] if _path_like(value) else [key])
-                for name in names:
-                    named.setdefault(name, []).append(Token(value, token.dynamic))
-            elif colon and parameter(key):
-                # `-Name: value`: the next word is the value.
-                if index + 1 < len(arguments) and not arguments[index + 1].redirect:
-                    for name in parameter(key):
-                        named.setdefault(name, []).append(arguments[index + 1])
-                    index += 1
+                named.setdefault(key, []).append(Token(value, token.dynamic))
             elif key in PATH_PARAMS or key in VALUE_PARAMS:
                 if index + 1 < len(arguments) and not arguments[index + 1].redirect:
                     named.setdefault(key, []).append(arguments[index + 1])
@@ -341,8 +374,10 @@ def classify(command, cwd, reach, *, windows=None, home=None, depth=0):
             found = positional[1:2] or [Token(".")]
         elif name == "dd":
             found = [Token(token.text[3:], token.dynamic) for token in rest if token.text.startswith("of=")]
-        elif name == "sed" and "i" in named:
+        elif name == "sed" and ("i" in named or edits_in_place(rest)):
             found = positional[1:]
+        if name in POWERSHELL:
+            found = [*found, *(token for token in powershell_paths(rest) if not any(token is item for item in found))]
         for token in found:
             judge(token, here)
     return projects, outside
