@@ -826,8 +826,26 @@ class VmTools:
     def guest_unchosen(self, target, member):
         """The mounts in the computer of the remembered projects that are not the member's chosen one: a link made inside the
         computer never leads a write there (`files_guest.confined`), whatever the owner said."""
-        loose = {path_key(folder) for folder in work_area.unchosen(self.vm.settings, member)}
-        return [guest for guest, source in target.projects if path_key(source) in loose]
+        refused = []
+        for folder in work_area.unchosen(self.vm.settings, member):
+            try:
+                real = work_area.resolved(folder)
+            except work_area.PathRefused:
+                continue
+            # Inside the work folder where it is on the PC (a project inside the chosen one, or inside the team folder when
+            # none is chosen) it is not refused.
+            if work_area.reach(self.vm.settings, member, real, self.vm.local_folders) != work_area.PROJECT:
+                continue
+            refused += [guest for guest, source in target.projects if path_key(source) == path_key(folder)]
+            # A project inside the member's workspace or the team folder is reached through their mounts too.
+            for guest, root in (() if target.remote else ((GUEST, target.workspace), (SHARED, target.shared))):
+                try:
+                    relative = os.path.relpath(real, work_area.resolved(str(root))) if root is not None else ".."
+                except (ValueError, work_area.PathRefused):
+                    continue
+                if relative != ".." and not relative.startswith(".." + os.sep) and not os.path.isabs(relative):
+                    refused.append(guest if relative == "." else guest + "/" + relative.replace(os.sep, "/"))
+        return list(dict.fromkeys(refused))
 
     def guest_reach_of(self, target, member, where):
         """Where a write at `where` (a path of the computer, `file_tools.guest_path`) lands on the owner's PC: "project" (a

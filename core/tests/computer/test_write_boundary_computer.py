@@ -618,3 +618,64 @@ async def test_the_audit_of_a_refused_project_write_in_the_computer_is_blocked_a
     assert (await call(hub, "write_file", "user", path=f"{GUEST}/b.txt", content="x")).kind == "forbidden"
     rows = conn.execute("SELECT outcome FROM tool_audit WHERE server='computer' AND tool='write_file'").fetchall()
     assert [row[0] for row in rows] == ["blocked", "blocked"]
+
+
+# --- round two --------------------------------------------------------------------------------------------------------------
+
+
+async def test_the_helper_is_told_the_refused_projects_inside_the_workspace_and_the_team_folder_as_guest_paths(computer):
+    hub, runtime, settings, project, guest = computer
+    target = hub.vm.mounted_target(hub.vm.target(0))
+    in_team, in_workspace = target.shared / "inner", hub.vm.member_workspace(target) / "deep" / "inner"
+    for folder in (in_team, in_workspace):
+        folder.mkdir(parents=True)
+    settings.set("project_folders", [str(project), str(in_team), str(in_workspace)])
+    settings.set("member_work_folder", {"0": str(project)})
+    refused = hub.guest_unchosen(target, 0)
+    assert f"{SHARED}/inner" in refused and f"{GUEST}/deep/inner" in refused
+    settings.set("action_mode", "bypass")
+    assert (await call(hub, "write_file", "user", path=f"{GUEST}/b.txt", content="y")).ok
+    assert {f"{SHARED}/inner", f"{GUEST}/deep/inner"} <= set(guest_writes(runtime)[-1]["refused"])
+    # With none chosen they are inside the work folder, as they are where they are on the PC: not refused.
+    settings.set("member_work_folder", {})
+    refused = hub.guest_unchosen(target, 0)
+    assert f"{SHARED}/inner" not in refused and f"{GUEST}/deep/inner" not in refused and guest in refused
+
+
+async def test_a_choice_changed_while_the_place_is_prepared_on_the_pc_decides_the_write(two_projects, monkeypatch):
+    import asyncio
+    hub, runtime, settings, (first, second), (first_guest, second_guest) = two_projects
+    settings.set("member_work_folder", {"0": str(first)})
+    settings.set("action_mode", "bypass")
+    thread, changed = asyncio.to_thread, []
+
+    async def to_thread(function, *arguments, **keywords):
+        result = await thread(function, *arguments, **keywords)
+        if getattr(function, "__name__", "") in ("project_ready", "project_write") and not changed:
+            changed.append(True)  # the owner chooses the other project while the write is being prepared on the PC
+            settings.set("member_work_folder", {"0": str(second)})
+        return result
+
+    monkeypatch.setattr(asyncio, "to_thread", to_thread)
+    refused = await call(hub, "write_file", "user", path=f"{first_guest}/a.txt", content="x")
+    assert changed and refused.kind == "forbidden" and work_area.UNCHOSEN_WORDS in refused.text
+    assert not (first / "a.txt").exists()
+
+
+async def test_a_refused_write_makes_no_checkpoint(two_projects, monkeypatch):
+    hub, runtime, settings, (first, second), (first_guest, second_guest) = two_projects
+    settings.set("member_work_folder", {"0": str(first)})
+    settings.set("action_mode", "bypass")
+    started, checkpoints = hub._started, []
+
+    async def starting(*arguments, **keywords):
+        settings.set("member_work_folder", {"0": str(second)})  # chosen while the computer starts
+        return await started(*arguments, **keywords)
+
+    async def checkpoint(*arguments):
+        checkpoints.append(arguments)
+
+    monkeypatch.setattr(hub, "_started", starting)
+    monkeypatch.setattr(hub, "_checkpoint", checkpoint)
+    refused = await call(hub, "write_file", "user", path=f"{first_guest}/a.txt", content="x")
+    assert refused.kind == "forbidden" and checkpoints == [] and not (first / "a.txt").exists()

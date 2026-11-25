@@ -30,7 +30,10 @@ WRITERS = {
 }
 # Parameters whose value is a path that is written, wherever the command takes them.
 PATH_PARAMS = {"path", "filepath", "literalpath", "destination", "outfile", "destinationpath", "lp", "pspath", "o",
-               "output", "outputfile"}
+               "output", "outputfile", "outputdirectory"}
+# The parameters that name the file a cmdlet changes, under every name PowerShell gives them: -Path, -LiteralPath and its aliases
+# -PSPath and -LP, and -FilePath (Out-File, Tee-Object).
+SOURCE_PARAMS = ("filepath", "literalpath", "pspath", "lp", "path")
 # Parameters whose value is not a path, so that it is not taken for one.
 VALUE_PARAMS = {"newname", "value", "encoding", "filter", "include", "exclude", "itemtype", "stream", "inputobject", "width",
                 "delimiter", "credential", "type", "name", "headers", "uri", "body", "method", "contenttype", "useragent",
@@ -146,7 +149,7 @@ def renamed(positional, named):
     """The paths a rename changes: the file it names, anything else it is given, and the new name. A new name that is only a
     name is in the folder of the file (PowerShell and cmd rename it there, whatever folder the command runs in); a name with a
     folder in it, or one that cannot be read, is judged as it is written, from the folder the command runs in."""
-    paths = [*(named.get("path") or []), *(named.get("literalpath") or [])]
+    paths = [item for key in SOURCE_PARAMS for item in named.get(key, [])]
     source, rest = (paths[:1], list(positional)) if paths else (positional[:1], list(positional[1:]))
     new, rest = (named["newname"][:1], rest) if named.get("newname") else (rest[:1], rest[1:])
     found = [*source, *rest]
@@ -277,7 +280,9 @@ def classify(command, cwd, reach, *, windows=None, home=None, depth=0):
         kind = WRITERS.get(name)
         found = []
         if kind == DEST:
-            found = [*(named.get("filepath") or []), *(named.get("literalpath") or []), *(named.get("path") or [])]
+            found = [item for key in SOURCE_PARAMS for item in named.get(key, [])]
+            if name == "start-transcript":
+                found += named.get("outputdirectory") or []
             found = found or positional[:1]
             if name in ("new-item", "ni") and named.get("name"):
                 folder = [token for token in found] or [Token(".")]

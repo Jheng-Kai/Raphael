@@ -341,3 +341,16 @@ async def test_a_command_naming_an_unchosen_project_is_refused_before_the_owner_
     done = await typed(rig, "Save a note")
     assert done["status"] != "confirm" and place.host.execute.await_count == 0
     assert not (place.other / "out.txt").exists()
+
+
+# --- round two: the audit of a refusal in a conversation ---------------------------------------------------------------------
+
+
+async def test_a_refusal_before_any_question_is_audited_as_a_call_that_was_not_made(make_rig, client, conn, place):
+    choose(place)
+    rig = make_rig(plugins=place.hub, gate=ToolGate(place.hub, conn=conn), permissions=PermissionCards(conn))
+    rig.settings.set("action_mode", "ask")
+    client.chats = [chat("Saving.", ("owner_files__write_file", args(place.other / "note.md", "hello\n"))), chat('{"text":"Not saved."}')]
+    await typed(rig, "Save a note")
+    rows = conn.execute("SELECT outcome FROM tool_audit WHERE server='owner_files' AND tool='write_file'").fetchall()
+    assert [row[0] for row in rows] == ["blocked"] and not (place.other / "note.md").exists()

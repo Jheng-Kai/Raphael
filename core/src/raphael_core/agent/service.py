@@ -3688,6 +3688,7 @@ class AgentService:
             for index, words in refusing.items():
                 call = calls[index]
                 ask.steps.append(self._step("tool", call.tool.name, call.tool.server, "blocked", time.perf_counter(), "forbidden"))
+                self._gate.record_unrun(call.tool.key, outcome="blocked")  # the audit of a call that was not made
                 results.append(ToolResult(_label(call), False, None, "forbidden", instruction=words))
             kept = [index for index in range(len(calls)) if index not in refusing]
             calls = [calls[index] for index in kept]

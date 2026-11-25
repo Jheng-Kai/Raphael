@@ -239,3 +239,44 @@ def test_a_rename_happens_in_the_folder_of_the_file_it_names(tmp_path):
     for command in (f"Move-Item {here}/a.txt b.txt", f"mv {here}/a.txt b.txt", f"Copy-Item {here}/a.txt b.txt", f"cp {here}/a.txt b.txt"):
         assert told(command, other)[0] == ["b.txt"], command
         assert told(command, project) == ([], []), command
+
+
+# --- round two: every name of a path parameter ------------------------------------------------------------------------------
+
+
+def test_every_name_powershell_gives_a_parameter_that_names_a_file_names_the_file_a_command_changes(tmp_path):
+    from raphael_core.computer.shell_writes import classify
+    project, other, own = (tmp_path / name for name in ("project", "other", "own"))
+    for folder in (project, other, own):
+        folder.mkdir()
+    settings = Settings([project, other], chosen=project)
+
+    def told(command, cwd):
+        reach = lambda path: work_area.reach(settings, 0, path, lambda member: (own, tmp_path / "team"))
+        return classify(command, str(cwd), reach, home=str(tmp_path / "home"))
+
+    there, here = other.as_posix(), project.as_posix()
+    # The file is in the project that is not the member's; the command runs in the member's own.
+    for command in (
+            # A rename: -Path, -LiteralPath and its aliases -PSPath and -LP, the same whatever way they are written.
+            *(f"Rename-Item {flag} {there}/a.txt -NewName b.txt" for flag in ("-Path", "-LiteralPath", "-PSPath", "-LP", "-pspath", "-lp")),
+            f"Rename-Item -PSPath:{there}/a.txt -NewName b.txt", f"rni -LP {there}/a.txt b.txt", f"Rename-Item -NewName b.txt -PSPath {there}/a.txt",
+            *(f"Rename-Item {flag} {there}/a.txt -NewName b.txt" for flag in ("-Pa", "-Lit", "-PSP")),  # a name cut short
+            # The cmdlets that move, delete, make or write by -Path name the same file by -LiteralPath, -PSPath and -LP.
+            *(f"Move-Item {flag} {there}/a.txt c.txt" for flag in ("-Path", "-LiteralPath", "-PSPath", "-LP")),
+            *(f"Remove-Item {flag} {there}/a.txt" for flag in ("-Path", "-LiteralPath", "-PSPath", "-LP")),
+            *(f"Set-Content {flag} {there}/a.txt -Value x" for flag in ("-Path", "-LiteralPath", "-PSPath", "-LP")),
+            *(f"Add-Content {flag} {there}/a.txt -Value x" for flag in ("-LiteralPath", "-PSPath", "-LP")),
+            *(f"Clear-Content {flag} {there}/a.txt" for flag in ("-LiteralPath", "-PSPath", "-LP")),
+            *(f"Out-File {flag} {there}/a.txt" for flag in ("-FilePath", "-Path", "-LiteralPath", "-PSPath", "-LP")),
+            *(f"Export-Csv {flag} {there}/a.csv" for flag in ("-Path", "-LiteralPath", "-PSPath", "-LP")),
+            *(f"Tee-Object {flag} {there}/a.txt" for flag in ("-FilePath", "-LiteralPath", "-PSPath", "-LP")),
+            *(f"New-Item {flag} {there} -Name a.txt" for flag in ("-Path", "-PSPath", "-LP")),
+            f"Start-Transcript -OutputDirectory {there}", f"Start-Transcript -LiteralPath {there}/t.txt",
+            f"Copy-Item a.txt -Destination {there}/b.txt", f"Expand-Archive z.zip -DestinationPath {there}",
+    ):
+        assert told(command, project)[0], command
+    # The same names for a file of the member's own project, from a command that runs in the other one, name nothing refused.
+    for command in (f"Rename-Item -PSPath {here}/a.txt -NewName b.txt", f"Rename-Item -LP {here}/a.txt -NewName b.txt",
+                    f"Set-Content -PSPath {here}/a.txt -Value x", f"Remove-Item -LP {here}/a.txt", f"Move-Item -PSPath {here}/a.txt {here}/c.txt"):
+        assert told(command, other) == ([], []), command
