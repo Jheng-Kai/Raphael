@@ -302,6 +302,8 @@ export interface FieldOptions {
   type?: "text" | "password";
   invalid?: boolean;
   disabled?: boolean;
+  /** The most characters the field takes. */
+  max?: number;
 }
 
 export function fieldHTML(placeholder: string, value = "", o: FieldOptions = {}): string {
@@ -311,7 +313,7 @@ export function fieldHTML(placeholder: string, value = "", o: FieldOptions = {})
     (o.pre ? `<span class="pre">${esc(o.pre)}</span>` : "") +
     `<input ${o.id ? `id="${o.id}" ` : ""}type="${o.type ?? "text"}" value="${esc(value)}" placeholder="${esc(placeholder)}" ` +
     `aria-label="${esc(o.label ?? placeholder)}"${o.num ? ' inputmode="decimal"' : ""}${o.invalid ? ' aria-invalid="true"' : ""} ` +
-    `autocomplete="off" spellcheck="false"${o.disabled ? " disabled" : ""}></label>`
+    `autocomplete="off" spellcheck="false"${o.max ? ` maxlength="${o.max}"` : ""}${o.disabled ? " disabled" : ""}></label>`
   );
 }
 

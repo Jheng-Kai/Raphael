@@ -2,8 +2,12 @@
 // What a picture a member sent is as a message (R-UI-156): which media are pictures, how a reply quotes one and shows the
 // quote, and the clipboard write that copies the picture itself.
 import { afterEach, expect, test, vi } from "vitest";
+
+vi.mock("./api", () => ({ core: vi.fn(), copyAttachment: vi.fn(async () => {}) }));
+
+import * as api from "./api";
 import { quoteHTML } from "./message-quote";
-import { copyPicture, mediaPicture, pictureQuote, quotedPicture } from "./picture-message";
+import { copyPicture, copyStoredPicture, mediaPicture, pictureQuote, quotedPicture } from "./picture-message";
 import { pictureActionsHTML, messageActionsHTML } from "./timeline";
 
 const ID = `${"b".repeat(32)}.png`;
@@ -68,4 +72,13 @@ test("copying a picture hands the clipboard one PNG item at once, and fails plai
   expect(await blob.text()).toBe("png bytes");
   vi.stubGlobal("ClipboardItem", undefined);
   await expect(copyPicture(async () => ({ mime: "image/png", data: "" }))).rejects.toThrow();
+});
+
+test("a stored picture too large to read whole is copied as its file, under its name", async () => {
+  const items: Record<string, Promise<Blob>>[] = [];
+  vi.stubGlobal("ClipboardItem", class { constructor(item: Record<string, Promise<Blob>>) { items.push(item); } });
+  vi.stubGlobal("navigator", { clipboard: { write: vi.fn(async () => { await items[0]!["image/png"]; }) } });
+  vi.mocked(api.core).mockRejectedValue(new Error("large attachments require streaming"));
+  await copyStoredPicture(ID, "office.png");
+  expect(api.copyAttachment).toHaveBeenCalledWith(ID, "office.png");
 });

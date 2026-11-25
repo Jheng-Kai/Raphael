@@ -47,8 +47,8 @@ export function createAutomationsPage(app: AppContext): Page {
   let focusedHomeItem = "", detailOnLoad = false, createOnLoad = false;
   let visible = false, awake = false, loads = 0, pending = true;
   let resetPosition = true;
-  /** The days of one range (view and first day) whose all-day column shows every item, each open by itself; any other range folds them again. */
-  let band: { range: string; days: Set<string>; from?: string } = { range: "", days: new Set<string>() };
+  /** The range whose all-day band is open, keyed by view and first day. */
+  let band = "";
   let timer: ReturnType<typeof setInterval> | undefined;
   let tools: HTMLElement | null = null;
   let draft: EventDraft | null = null;
@@ -189,8 +189,9 @@ export function createAutomationsPage(app: AppContext): Page {
 
   function barHTML(entry: CalendarEntry, column: number, span: number, row: number, startsBefore: boolean, endsAfter: boolean): string {
     const label = labelOf(entry), focused = entry.id === focusedHomeItem ? " is-home-focus" : "";
+    const past = entry.kind === "own" && entry.end <= Date.now() ? " is-past" : "";
     return `<div class="au-event au-bar${startsBefore ? " starts-before" : ""}${endsAfter ? " ends-after" : ""}" data-wrap="${esc(entry.id)}" style="grid-column:${column + 2}/span ${span};grid-row:${row + 1}">` +
-      chipHTML(entry, `is-line au-all-day-event${focused}`, entryAttrs(entry, label), { clock: false, face: entry.rhythm ? 20 : 0 }) + moreOf(entry) +
+      chipHTML(entry, `is-line au-all-day-event${focused}${past}`, entryAttrs(entry, label), { clock: false, face: entry.rhythm ? 20 : 0 }) + moreOf(entry) +
       (entry.kind === "own" && entry.allDay && !endsAfter ? `<i class="au-bar-edge" data-edge="right"></i>` : "") + `</div>`;
   }
   function chipOfSegment(part: Segment): string {
@@ -216,29 +217,25 @@ export function createAutomationsPage(app: AppContext): Page {
     const days = Array.from({ length: n }, (_, i) => shiftDay(start, i));
     const zone = Intl.DateTimeFormat(getLocale(), { timeZoneName: "shortOffset" }).formatToParts(now).find(p => p.type === "timeZoneName")?.value ?? "";
     const folded = allDayBars(entries, days);
-    // The whole range opens and folds together (R-CAL-08): an all-day item may cross several days, and an open band
-    // shows every item of every day, each bar whole.
-    const open = band.range === bandKey(start) && band.days.size > 0 && folded.more.some(n => n > 0);
-    const { bars, more, used, bottoms } = open ? allDayBars(entries, days, Infinity) : folded;
+    const hasOverflow = folded.more.some(n => n > 0);
+    const open = hasOverflow && band === bandKey(start);
+    const { bars, used, bottoms } = open ? allDayBars(entries, days, Infinity) : folded;
     const draftColumn = draft?.allDay ? days.findIndex(day => dateKey(day) === dateKey(new Date(draft!.start))) : -1;
-    // Folded, each day with items left counts them on the row under the three it draws; the band is as tall as its tallest day.
-    const heights = days.map((_, i) => (more[i]! > 0 ? used + 1 : bottoms[i]!) + (i === draftColumn ? 1 : 0));
-    const foldedHeights = days.map((_, i) => (folded.more[i]! > 0 ? folded.used + 1 : folded.bottoms[i]!) + (i === draftColumn ? 1 : 0));
-    const rows = Math.max(open ? 2 : 1, ...heights), foldedRows = Math.max(1, ...foldedHeights);
-    // Open, one 收合 folds it all, in the band's own margin at its last row, under the time zone.
-    const toggle = open ? iconButton("up", t("common.showLess"), ` data-au="all-day-toggle" aria-expanded="true" aria-controls="au-all-day-band" style="grid-column:1;grid-row:${rows}"`, "cal-fold") : days.map((day, i) => {
-      const key = dateKey(day), place = `data-date="${key}" aria-controls="au-all-day-band" style="grid-column:${i + 2};grid-row:${used + 1}"`;
-      return more[i]! > 0 ? btn(esc(t("overview.moreEvents", { p0: more[i]! })), "cal-more", ` data-au="all-day-toggle" aria-expanded="false" ${place}`) : "";
-    }).join("");
+    const foldedDraftRow = draftColumn < 0 ? 0 : (folded.more[draftColumn] ? folded.used : folded.bottoms[draftColumn]!) + 1;
+    const draftRow = open && draftColumn >= 0 ? bottoms[draftColumn]! + 1 : foldedDraftRow;
+    const toggleRows = Number(hasOverflow);
+    const rows = Math.max(1, used, draftRow) + toggleRows;
+    const foldedRows = Math.max(1, folded.used, foldedDraftRow) + toggleRows;
+    const toggle = hasOverflow ? iconButton(open ? "up" : "down", t(open ? "common.showLess" : "cal.showAllDay"),
+      ` data-au="all-day-toggle" aria-expanded="${open}" aria-controls="au-all-day-band"`, "au-band-toggle") : "";
     const heads = days.map(day => {
       const key = dateKey(day), label = day.toLocaleDateString(getLocale(), { month: "long", day: "numeric", weekday: "long" });
       return `<div class="au-day-head${key === today ? " is-today" : ""}"${key === today ? ' aria-current="date"' : ""}><span>${esc(dayName(day.getDay()))}</span>${btn(String(day.getDate()), "au-day-num", ` data-au="open-day" data-date="${key}" aria-label="${esc(label)}"`)}</div>`;
     }).join("");
-    const allDay = `<div class="au-all-day-row" id="au-all-day-band" data-rows="${rows}" data-folded-rows="${foldedRows}" style="--au-rows:${rows}"><span class="au-all-day-label"${open ? ` style="grid-row:1 / ${rows}"` : ""}>${esc(zone)}</span>` +
+    const allDay = `<div class="au-all-day-row${hasOverflow ? " has-toggle" : ""}" id="au-all-day-band" data-rows="${rows}" data-folded-rows="${foldedRows}" style="--au-rows:${rows}"><span class="au-all-day-label">${esc(zone)}</span>` +
       days.map((day, i) => `<div class="au-all-day" data-all-day="${dateKey(day)}" style="grid-column:${i + 2}"></div>`).join("") +
       bars.map(bar => barHTML(bar.entry, bar.column, bar.span, bar.row, bar.startsBefore, bar.endsAfter)).join("") +
-      toggle +
-      (draftColumn >= 0 ? `<div class="au-event au-bar au-draft" style="grid-column:${draftColumn + 2};grid-row:${heights[draftColumn]}"><span class="cal-chip btn is-own is-line"><span class="cal-chip-copy"><b>${esc(draftTitle())}</b></span></span></div>` : "") + `</div>`;
+      (draftColumn >= 0 ? `<div class="au-event au-bar au-draft" style="grid-column:${draftColumn + 2};grid-row:${draftRow}"><span class="cal-chip btn is-own is-line"><span class="cal-chip-copy"><b>${esc(draftTitle())}</b></span></span></div>` : "") + toggle + `</div>`;
     return `<div class="au-calendar-scroll"><div class="au-grid${n === 1 ? " is-one-day" : ""}" style="--au-days:${n}"><div class="au-grid-head${open ? " is-open" : ""}"><span></span>${heads}${allDay}</div>` +
       `<div class="au-hours">${Array.from({ length: 24 }, (_, h) => `<div>${h ? `<span>${String(h).padStart(2, "0")}:00</span>` : ""}</div>`).join("")}</div>` +
       days.map(day => {
@@ -275,7 +272,7 @@ export function createAutomationsPage(app: AppContext): Page {
     const scroll = el.querySelector<HTMLElement>(".au-calendar-scroll");
     const previousHour = scroll && !resetPosition ? scroll.scrollTop / hourHeight() : null;
     const { start, n, end } = range();
-    if (band.range !== bandKey(start)) band = { range: "", days: new Set() };
+    if (band !== bandKey(start)) band = "";
     const all = entriesIn(start, end), entries = all.filter(entry => !hidden.has(entry.source));
     shown = new Map(entries.map(entry => [entry.id, entry]));
     wasNarrow = narrow();
@@ -424,19 +421,15 @@ export function createAutomationsPage(app: AppContext): Page {
     else if (act === "event-more") { const entry = shown.get(target.dataset.entry!); if (entry) askToDelete(target, entry); }
     else if (act === "open-day") {
       // A month's 「還有 N 個」 lands on a day that shows all of it: the band of the day view is already open.
+      const day = localDay(target.dataset.date!);
       choosePeriod("day");
-      if (target.classList.contains("cal-more")) band = { range: `day:${target.dataset.date}`, days: new Set([target.dataset.date!]) };
-      navigate(localDay(target.dataset.date!));
+      if (target.classList.contains("cal-more")) band = bandKey(day);
+      navigate(day);
     }
     else if (act === "all-day-toggle") {
-      // Any day's 「還有 N 個」 opens the whole range, and its one 「收合」 folds it all (R-CAL-08).
-      const key = bandKey(range().start), opening = target.getAttribute("aria-expanded") !== "true";
-      const from = opening ? target.dataset.date : band.range === key ? band.from : undefined;
-      band = { range: key, days: opening ? new Set([from!]) : new Set(), from };
+      band = target.getAttribute("aria-expanded") === "true" ? "" : bandKey(range().start);
       resetPosition = true; draw();
-      // The keyboard goes to 「收合」 once opened, and back to the 「還有 N 個」 it pressed once folded.
-      const toggles = [...el.querySelectorAll<HTMLElement>('[data-au="all-day-toggle"]')];
-      (toggles.find(item => opening || item.dataset.date === from) ?? toggles[0])?.focus({ preventScroll: true });
+      el.querySelector<HTMLElement>('[data-au="all-day-toggle"]')?.focus({ preventScroll: true });
     }
     else if (act === "source") {
       const key = target.dataset.source!;

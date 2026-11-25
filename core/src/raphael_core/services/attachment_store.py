@@ -7,6 +7,7 @@ import mmap
 import mimetypes
 import re
 import os
+import shutil
 import time
 import uuid
 from dataclasses import replace
@@ -27,6 +28,19 @@ OPENABLE = frozenset("""
     mp4 webm mov m4v mkv avi wmv ogv
     zip 7z rar tar gz bz2 xz
 """.split())
+# A name Windows will not take as a file name, whatever its extension.
+RESERVED = re.compile(r"(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])(\..*)?", re.IGNORECASE)
+
+
+def clipboard_name(*names):
+    """The first of `names` that makes a plain file name, made safe as one component; None when none does."""
+    for name in names:
+        if not isinstance(name, str):
+            continue
+        clean = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", name.replace("\\", "/").rsplit("/", 1)[-1]).strip(" .")
+        if clean and not RESERVED.fullmatch(clean):
+            return clean[:MAX_NAME_CHARS]
+    return None
 
 
 class AttachmentStore:
@@ -66,6 +80,7 @@ class AttachmentStore:
     def register(self, router):
         router.register("attachments.get", self.get)
         router.register("attachments.path", self.open_path)
+        router.register("attachments.copy", self.copy_path)
         router.register("attachments.upload", self.upload)
         router.register("attachments.info", self.info)
 
@@ -159,6 +174,36 @@ class AttachmentStore:
             meta = json.loads(path.with_name(path.name + ".json").read_text(encoding="utf-8"))
             return {"mime": meta["mime"], "data": base64.b64encode(path.read_bytes()).decode("ascii")}
         return await asyncio.to_thread(read)
+
+    async def copy_path(self, params):
+        """A copy of the stored file under the name it was sent with, for the clipboard: pasted into a folder, it is that
+        file. Copying runs nothing, so any type may be copied (opening keeps its own list). Only the latest copy is kept: the
+        clipboard holds one of ours at a time, and the one before it stays until the next copy, as it may still be being
+        pasted (or the clipboard still holds it when this copy fails). The name is the stored one, else the one shown
+        (`name`), never a path."""
+        path = self.path(params.get("id"))
+        try:
+            stored = json.loads(path.with_name(path.name + ".json").read_text(encoding="utf-8")).get("name")
+        except (OSError, ValueError, AttributeError):
+            stored = None
+        name = clipboard_name(stored, params.get("name")) or path.name
+
+        def make():
+            folder = self.checked_root() / "clipboard"
+            target = folder / uuid.uuid4().hex / name
+            target.parent.mkdir(parents=True)
+            try:
+                shutil.copyfile(path, target)
+            except OSError:
+                shutil.rmtree(target.parent, ignore_errors=True)
+                raise
+            earlier = sorted((entry for entry in folder.iterdir() if entry != target.parent),
+                             key=lambda entry: entry.stat().st_mtime_ns, reverse=True)
+            for entry in earlier[1:]:
+                shutil.rmtree(entry, ignore_errors=True)
+            return str(target)
+
+        return {"path": await asyncio.to_thread(make)}
 
     async def open_path(self, params):
         """The stored file's path and the type it was stored as: the shell serves a picture, a video or a sound by its id

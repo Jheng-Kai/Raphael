@@ -1,5 +1,11 @@
 # Raphael product rules: conversation and members
 
+## Member notifications
+
+| ID | Date | Rule | Check | Force | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-NOTIFY-01 | 2026-11-24 | The member's notification switch, including Raphael's, controls whether work completed or a reply needed is surfaced outside its conversation. Off suppresses desktop overlay captions and notices, app-typed YES/NO cards moving to the overlay, in-app reminder toasts and OS toasts. Conversation replies, cards, unread dots and sidebar state still update. A desktop quick question or dictation receives its reply on the surface where it was asked (R-AG-05). | pytest, cargo, vitest | hard | core/tests/background/test_questions.py::test_owner_notification_flag_follows_raphael_on_questions_and_reports; app/src-tauri/src/background.rs::only_opted_in_background_events_reach_the_overlay; app/src-tauri/src/dictation.rs::an_opted_out_typed_answer_and_confirmation_stay_in_the_conversation; app/src-tauri/src/member_notifications.rs::raphael_uses_the_same_explicit_desktop_opt_in; app/src/main/question-reminder.test.ts |
+
 How a member answers: the core loop, replies, memory, models, CLI brains, the queue and handoffs. Part of [the product rules](../RULES.md); a rule's ID is unique across every file.
 
 ## Continue when a skill cannot load
@@ -215,7 +221,7 @@ A conversation's next call finds what its last one sent already cached. ARCHITEC
 | --- | --- | --- | --- | --- | --- |
 | R-AG-PARITY-01 | 2026-11-04 | Raphael, ordinary members and the current primary contact share neutral work-tool definitions and one capability statement on API, CLI and worker paths. Roles describe work/output, never rank or a hidden tool list. Only owner management in the primary contact's interactive private chat, coordination duties and Raphael quick voice entry listed in agent/capabilities.py may differ. Own models, grants and approvals remain authoritative. | pytest | hard | core/tests/agent/test_speaker_parity.py; core/tests/members/test_capability_parity.py; core/tests/background/test_private_self_lane.py |
 | R-AG-PARITY-02 | 2026-11-04 | Any private foreground speaker can hand long work to itself through the existing durable lane, retaining the source conversation, chosen model, stage idempotency and cancellation tree. Workers cannot recursively self-handoff. | pytest | hard | core/tests/background/test_private_self_lane.py |
-| R-AG-PARITY-03 | 2026-11-04 | Raphael retains owner instructions in quick/API/CLI/worker/routine prompts, has the same default-on draft preference as members, and receives complete background reports with a derived short overlay caption. The former member-length limit is superseded by R-UI-50; receipts in detail never replace visible results. Identity 0 never enters new-member setup when the primary moves. Snapshots retain real roles beside coordination duty. | pytest, vitest, deferred look | hard | core/tests/agent/test_answers.py; core/tests/members/test_service.py; app/src/main/member-details.test.ts; features/speaker-parity.md |
+| R-AG-PARITY-03 | 2026-11-04 | Raphael retains owner instructions in quick/API/CLI/worker/routine prompts, has the same default-on draft preference as members, and receives complete background reports, with a derived short overlay caption only when its notification switch is on. App-typed answers also reach the overlay only with the switch on (R-NOTIFY-01). The former member-length limit is superseded by R-UI-50; receipts in detail never replace visible results. Identity 0 never enters new-member setup when the primary moves. Snapshots retain real roles beside coordination duty. | pytest, vitest, deferred look | hard | core/tests/agent/test_answers.py; core/tests/members/test_service.py; app/src/main/member-details.test.ts; features/speaker-parity.md |
 
 ## A model's link to a file it delivered
 

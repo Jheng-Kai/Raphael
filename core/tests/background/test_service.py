@@ -54,7 +54,8 @@ async def test_a_task_is_carried_out_step_by_step_and_reported(make_rig, plugins
     await look_twice_then_report(rig)
     task_id = rig.submit()
     [done] = await rig.wait_for_reports()
-    assert done == {"task_id": task_id, "state": "done", "prefix": "Notice", "text": "All looked up."}
+    # The member's notify switch rides with the report (R-NOTIFY-01); it is off by default.
+    assert done == {"task_id": task_id, "state": "done", "prefix": "Notice", "text": "All looked up.", "notify": False}
 
     task = rig.task(task_id)
     assert (task.state, task.report_text, task.report_detail) == ("done", "All looked up.", "Two things were found.")

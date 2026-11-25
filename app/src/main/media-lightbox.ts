@@ -1,7 +1,8 @@
 // A picture of a conversation, large, over the page; and the app's own full screen of a video (media-player.ts).
 import { isTopLayer, registerDismissal } from "./dismissals";
 import { t } from "./i18n";
-import { esc, headerCloseButton } from "./ui";
+import { copyButton, esc, headerCloseButton, iconButton } from "./ui";
+import { copyStoredPicture } from "./picture-message";
 
 let closing: (() => void) | null = null;
 export const closeMediaLightbox = (): void => { closing?.(); };
@@ -52,5 +53,12 @@ export function openLightbox(origin: HTMLElement, label: string, body: string, o
 /** Only the picture, as large as the window allows, with its close button inside it. */
 export function openMediaLightbox(button: HTMLElement, src: string): void {
   const title = button.dataset.title ?? "";
-  openLightbox(button, title, `<img class="lb-img" src="${esc(src)}" alt="${esc(title)}">`);
+  // A picture with a stored file can be copied from here, as from its message's menu.
+  const id = button.dataset.attachment ?? button.querySelector<HTMLElement>("[data-attachment]")?.dataset.attachment ?? "";
+  const copy = id ? iconButton("copy", t("chat.copyImage"), ' data-lb="copy"', "lb-copy") : "";
+  const card = openLightbox(button, title, `<img class="lb-img" src="${esc(src)}" alt="${esc(title)}">${copy}`);
+  card.querySelector<HTMLElement>('[data-lb="copy"]')?.addEventListener("click", event => {
+    const name = button.querySelector("img")?.getAttribute("alt") || title || undefined;
+    void copyButton(event.currentTarget as HTMLElement, () => copyStoredPicture(id, name));
+  });
 }

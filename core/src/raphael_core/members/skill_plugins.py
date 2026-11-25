@@ -12,7 +12,7 @@ import os
 import re
 import shutil
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from urllib.parse import quote, urlsplit
 
@@ -109,6 +109,32 @@ def component_paths(manifest, kind):
     if not isinstance(extra, list) or any(not isinstance(p, str) for p in extra):
         raise MemberError("source", "unsupported plugin component paths")
     return [kind, *[relative_path(p) for p in extra]]
+
+
+def folded_path(path):
+    """A path as Windows (and macOS) compare it: separators normalised, case ignored. A GitHub plugin can hold skills/Outer and
+    skills/outer/inner, which both pass the import checks yet share one directory tree there (#313)."""
+    return str(path).replace("\\", "/").casefold()
+
+
+def inside_folder(path, folder):
+    """Whether `path` is `folder` or lies under it, compared with folded_path."""
+    path, folder = folded_path(path), folded_path(folder)
+    return path == folder or path.startswith(folder + "/")
+
+
+def without_skipped(files, parts, gone):
+    """The plugin's files minus those of the skipped parts. A file belongs to the deepest skill folder that holds it, so a
+    skill nested in a skipped one (skills/outer/inner/SKILL.md) keeps its own files (#313). Folders are compared ignoring case."""
+    folders = [folded_path(PurePosixPath(part["key"]).parent) for part in parts if part["kind"] == "skill"]
+    dropped = {folded_path(PurePosixPath(part["key"]).parent) for part in gone if part["kind"] == "skill"}
+    commands = {part["key"] for part in gone if part["kind"] == "command"}
+
+    def owner(path):
+        path = folded_path(path)
+        return max((f for f in folders if path.startswith(f + "/")), key=len, default=None)
+
+    return {path: data for path, data in files.items() if path not in commands and owner(path) not in dropped}
 
 
 def plugin_parts(files, *, existing_names=None):
@@ -339,6 +365,7 @@ class PluginInstall:
     access: str | list | None
     servers: list
     revision: tuple
+    skipped: list = field(default_factory=list)
 
 
 class PluginSets:
@@ -451,7 +478,7 @@ class PluginSets:
             raise
         self._discard_previous_set(plan)
         self._mirror(SHARED)
-        return self.plugin_sets(identifier)[0]
+        return {**self.plugin_sets(identifier)[0], **({"skipped": plan.skipped} if plan.skipped else {})}
 
     async def _install_set_async(self, source, files, *, enabled=None, skill=None, **options):
         plan = self._plan_set(source, files, **options)
@@ -464,7 +491,8 @@ class PluginSets:
         installed = self._plugin_set_inputs(identifier)
         await asyncio.to_thread(self._discard_previous_set, plan)
         await self._mirror_async(SHARED)
-        return (await asyncio.to_thread(self._plugin_set_views, installed))[0]
+        view = (await asyncio.to_thread(self._plugin_set_views, installed))[0]
+        return {**view, **({"skipped": plan.skipped} if plan.skipped else {})}
 
     def _plan_set(self, source, files, *, marketplace="", target=None, access=None, expected_id=None,
                   require_new=False, required_skill=None):
@@ -486,10 +514,27 @@ class PluginSets:
         _, parts = plugin_parts(files, existing_names={key: row["name"].partition(":")[2] for key, row in old.items()})
         own = self.conn.execute("SELECT name FROM member_skills WHERE member_id=-1 AND (set_id IS NULL OR set_id IS NOT ?)", (previous["id"] if previous else None,))
         taken = {r[0].casefold() for r in own}
+        from .skill_packages import taken_by
+
+        # A new plugin installs what it can: a skill whose name is taken is left out and reported with who holds it (#313).
+        # A refresh keeps its skills as they were, so a clash there still refuses it.
+        skipped, refused, left, gone = [], None, [], []
         for part in parts:
             name = stored_skill_name(part["name"], manifest["name"])
-            if name.casefold() in taken:
-                raise MemberError("taken", f"a skill named {name} already exists")
+            if name.casefold() not in taken:
+                left.append(part)
+                continue
+            message, package = taken_by(self.conn, SHARED, name)
+            if previous:
+                raise MemberError("taken", message)
+            refused = refused or message
+            skipped.append({"name": name, "held_by": package})
+            gone.append(part)
+        if not left and refused:
+            raise MemberError("taken", refused)
+        if skipped:
+            files = without_skipped(files, parts, gone)
+            parts = left
         # A moved component keeps its switch and id. An in-place rename also keeps
         # its path identity, unless the old name belongs to another new component.
         by_name = {row["name"].casefold(): row for row in old.values()}
@@ -514,7 +559,7 @@ class PluginSets:
                 raise MemberError("source", "reserved plugin metadata path")
             checked[path] = data
         return PluginInstall(identity, manifest, previous, old, retained, components, checked,
-                             source, marketplace, target, access, mcp_servers(files, manifest), self.skill_revision())
+                             source, marketplace, target, access, mcp_servers(files, manifest), self.skill_revision(), skipped)
 
     def _write_set(self, plan):
         root = self.homes.safe(self.homes.home(SHARED) / "skill-sets")
@@ -552,7 +597,8 @@ class PluginSets:
                 self.conn.execute("UPDATE skill_sets SET name=?,version=?,source=?,description=?,folder=?,metadata=? WHERE id=?", (*values, identifier))
             else:
                 identifier = self.conn.execute("INSERT INTO skill_sets(name,version,source,description,folder,metadata,identity) VALUES (?,?,?,?,?,?,?)", (*values, plan.identity)).lastrowid
-            if access is None and not previous and len(plan.components) == 1:
+            # What was imported decides the default, not what is left of it after a taken name was skipped (#313).
+            if access is None and not previous and len(plan.components) + len(plan.skipped) == 1:
                 access = "all"
             if previous:
                 # Free both unique names before applying moves and renames in this transaction.

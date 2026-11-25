@@ -172,7 +172,7 @@ Press the owner's face at the sidebar's foot, then 行事曆. No sidebar row sta
 - **Top bar:** 今天, the arrows, the title, and on the right the view dropdown (日 週 月) in the shared menu.
 - **Left rail:** 建立, the month with its own arrows and today marked, then what the calendar shows with a check for each: 行程, each member's routines, Google when connected. A check hides that source and is remembered. A member's row still drags onto a slot to start a routine. Keep awake stands at its foot, and the line about Google above it.
 - **Week and day:** weekday over a big date with today filled, an all-day row, an hour gutter, thin lines, a red line and dot at the time now. It opens scrolled near now. Date numbers open that day.
-- **Chips:** time and title, sized by duration, side by side when overlapping (R-UI-65). An own event is ink, a routine its member's slime colour with the member's 20px face, a Google event an outline with Google's mark. Side by side a chip gives up its face to its words. A routine's occurrence has no length and is drawn an hour long. A failed or waiting run's mark stands in a corner (beside the time, or the foot corner under a face), so the title keeps its lines; titles balance their two lines. The event whose panel is open, or that Home opened, lifts with a shadow; a ring stays keyboard focus's (R-UI-31).
+- **Chips:** time and title, sized by duration, side by side when overlapping (R-UI-65). Own events, drafts and drag previews use a neutral tint and a 3px left bar. Past own events use a softer tint, bar and title. A routine uses its member's slime colour with the member's 20px face. A Google event uses an outline and Google's mark. Side by side a chip gives up its face to its words. A routine's occurrence has no length and is drawn an hour long. A failed or waiting run's mark stands in a corner (beside the time, or the foot corner under a face), so the title keeps its lines; titles balance their two lines. The event whose panel is open, or that Home opened, lifts with a shadow; a ring stays keyboard focus's (R-UI-31).
 - **Panels:** the form or detail stands beside its slot or event, on the right, else on the left while that stays on the calendar; a slot too wide for either side (the day view) has it centred over it, never over the rail or the sidebar. The notes grow with their words up to six lines, with no drag grip.
 - **Make:** click a slot for the small form beside it, drag over a range to set the time, or 建立 for the same form. It holds the title, start, end, all-day and notes, and 改成例行任務 for what repeats. Enter or 儲存 saves and draws it. A press outside closes a form with nothing typed; one that holds words stays until 取消 or Escape.
 - **Read and change:** click an event for its time, notes and who added it, the pencil and the ⋯ that holds delete, which asks once more. Right click reaches the same menu. Drag moves an own event, its bottom edge resizes it; an all-day bar moves by days and its right edge stretches it; in a month a chip moves to another day. Routine and Google entries are read and say where they come from; a routine opens to read, and its member changes it in the conversation.
@@ -269,23 +269,21 @@ Title priority review: calendar-rhythm-week, calendar-rhythm-day and calendar-rh
 
 ## A busy day: every all-day item in reach
 
-R-CAL-07. The all-day band of the day and week view draws three rows and one button per day that has more, 「還有 N 個」,
-N being the items not drawn. Pressing any of them opens the whole band in place (R-CAL-08): every day shows every all-day item it
-has, a bar across days stays whole, the hours move down by what the band grew and keep their height, the day names stay on top, the
-page scrolls, there is no scrollbar of the band's own. Open, one 「收合」 (a chevron icon button, `.cal-fold`, in the margin under
-the time zone on the band's last row) folds it all, and no day has a button of its own. Focus goes to 「收合」 after opening and back
-to the 「還有 N 個」 that opened it after folding. It is the same toggle for Tab, Enter and Space, with aria-expanded, and the choice
-(`band` in `pages/automations.ts`: the view and first day of the range, and the date that opened it) is folded again on any other
-day or week. `allDayBars(entries, days, rows, open)` in `calendar-view.ts` lays it out (`rows = Infinity` for the open band; its
-`open` set of single days, with bars cut where a folded day hides them, is no longer used by the page). A month's
-count (a separate `.cal-more`, still `data-au="open-day"`) opens that day in the day view with the band already open. The words are
-`overview.moreEvents` and `common.showLess`, both in the fifteen languages. The gutter's `+8` is the time zone (GMT+8) and is no count.
-Fixture: `calendarManyAllDay: N` puts N all-day items on 24 October 2026; `calendarBusyWeek` puts five on Thursday the 22nd, four bars across
-Saturday and Sunday and four on Saturday (R-CAL-08). Checks: calendar-more-folded (the count equals the hidden items),
-calendar-more-open (every item in the document, scrolled to and pressable, the hours moved by the band's growth, the first timed event and
-the last hour reachable; open: every day holds every item and one 收合 stands in the margin on the last row; folded: three rows and a count per day),
-calendar-more-closed, calendar-more-month, calendar-more-focus, calendar-more-one (Thursday's count opens the whole week, focus on 收合),
-calendar-more-cross (the Saturday-to-Sunday bar drawn once and whole), calendar-more-fold (the one 收合 folds the week, focus on Thursday's count).
+R-CAL-07 and R-CAL-08. The day and week all-day band shows up to three rows of items when folded. If any item is hidden,
+one 20px chevron strip spans all date columns on the final row. The strip is the same control in both states, below the items
+and the time zone. It keeps focus after either action and exposes aria-expanded and aria-controls. Its accessible labels
+(`cal.showAllDay` and `common.showLess`) are translated in all fifteen locales. Pressing the strip anywhere toggles the band.
+
+The open band uses `allDayBars(entries, days, Infinity)` to draw every item in the range and keep multi-day bars whole.
+The hours move by the band's growth and keep their height. The calendar scrolls under the sticky day headings. The open state
+is keyed to the view and first day of the visible range and resets when that range changes. The month retains its separate
+`.cal-more` button and `overview.moreEvents` count, which opens the selected day with its band expanded.
+
+Fixture: `calendarManyAllDay: N` puts N all-day items on 24 October 2026. `calendarBusyWeek` adds five items on Thursday the
+22nd, four bars across Saturday and Sunday, and four more on Saturday. The calendar-more checks confirm the strip geometry,
+folded height and labels, that every open item is reachable, that the hours keep their size, and that closing restores the
+folded layout. The week scenes confirm focus stays on the shared control and the Saturday-to-Sunday bar stays whole.
+The keyboard scene uses Tab, Enter and Space. The month scenes check the count and the jump to the expanded day.
 
 ```powershell
 npm run look -- automations-more-day automations-more-day-open automations-more-day-closed automations-more-week automations-more-many automations-more-sixty automations-more-month-cell automations-more-month automations-more-keyboard automations-more-week-one automations-more-week-cross automations-more-week-fold automations-month-busy automations-all-day automations-busy-day --theme both --width 1120,720,1920x1080

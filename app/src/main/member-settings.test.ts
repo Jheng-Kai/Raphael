@@ -132,11 +132,17 @@ describe("the page of a member", () => {
     expect(api.memberFolder).not.toHaveBeenCalled();
   });
 
-  test("Raphael has the same kinds as every member, and only its name and role are not typed", async () => {
+  test("the first member has the same kinds as every member: its name is the owner's to type, only its role is not", async () => {
     await open(0);
-    expect(page.el.querySelector("#ms-name, #ms-role")).toBeNull();
-    expect($(".ms-name").textContent).toBe("拉斐爾");
+    expect(page.el.querySelector("#ms-role")).toBeNull();
+    const name = $<HTMLInputElement>("#ms-name");
+    expect(name.value).toBe("拉斐爾");
+    expect(name.maxLength).toBe(16);
     expect(page.el.style.getPropertyValue("--ms-tint")).toBe("var(--raphael-color)");
+    // A name typed is saved on leaving the field, as every member's is.
+    name.value = "小藍";
+    blur(name); await flush();
+    expect(host.update).toHaveBeenCalledWith(0, { name: "小藍" });
     expect(kinds()).toEqual(["tools", "skills", "soul", "notify"]);
     expect(api.membersToolChoices).toHaveBeenCalled();
     expect(api.membersSkillsList).toHaveBeenCalledWith(0);

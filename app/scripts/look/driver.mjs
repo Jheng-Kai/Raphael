@@ -665,7 +665,7 @@ export async function perform(page, step, evidenceDirectory) {
       break;
     case "slime-board": {
       await page.evaluate(`globalThis.__lookPaintedSlime = ${paintedSlime}`);
-      return await page.evaluate(slimeBoard, step.rows, step.columns);
+      return await page.evaluate(slimeBoard, step.rows, step.columns, step.centered);
     }
     case "slime-parts": return await page.evaluate(slimeParts);
     case "slime-sharp": {

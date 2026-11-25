@@ -4,18 +4,19 @@ import { esc } from "./ui";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { LIGHT_WORDS_RATIO, memberAccent, memberColor, memberSwitch, nameAccent, ownerBubble } from "./owner-bubble";
-import { RAPHAEL_COLOR, slimeCharactersHTML, slimeColorOf, slimeColorsHTML } from "./slime";
+import { RAPHAEL_COLOR, slimeCharactersHTML, slimeColorOf } from "./slime";
 
 const WORDS = { light: "#ffffff", dark: "#0a0a0a" };
 const channel = (value: number): number => value / 255 <= 0.03928 ? value / 255 / 12.92 : ((value / 255 + 0.055) / 1.055) ** 2.4;
 const light = (hex: string): number => [1, 3, 5].reduce((sum, at, i) => sum + [0.2126, 0.7152, 0.0722][i]! * channel(parseInt(hex.slice(at, at + 2), 16)), 0);
 const ratio = (a: string, b: string): number => (Math.max(light(a), light(b)) + 0.05) / (Math.min(light(a), light(b)) + 0.05);
 
+/** Every slime the picker offers, and the plain colours a member without a face of its own wears. */
 function everySlime(): string[] {
   const host = document.createElement("div");
-  host.innerHTML = slimeCharactersHTML(null, esc) + slimeColorsHTML(null, esc);
-  return [...host.querySelectorAll<HTMLElement>("button")].map(button =>
-    slimeColorOf({ id: 1, avatar: button.dataset.slimeCharacter ? `slime:${button.dataset.slimeCharacter}` : `slime:color:${button.dataset.slimeColor}` }));
+  host.innerHTML = slimeCharactersHTML(null, esc);
+  const characters = [...host.querySelectorAll<HTMLElement>("button")].map(button => slimeColorOf({ id: 1, avatar: `slime:${button.dataset.slimeCharacter}` }));
+  return [...characters, ...new Set(Array.from({ length: 40 }, (_, id) => slimeColorOf({ id })))];
 }
 
 test("every character and colour makes a bubble whose words read", () => {

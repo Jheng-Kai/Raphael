@@ -4,12 +4,13 @@
 // preview says, how a routine's schedule is said, what a member's picture is, and what a group's
 // 看的地方 are made of.
 //
-// A member's face is a slime (slime.ts), whatever an older build stored for it. Raphael's face is
-// the emblem or its picture (avatar.ts).
+// A member's face is a slime (slime.ts), whatever an older build stored for it. The first member's is the slime the
+// owner dressed it in (first-bot.ts), or its picture (avatar.ts).
 
 import { zoneLabel } from "./timezones";
 import { presenceAttrs, slimeFaceHTML } from "./slime";
 import { avatarHTML, currentAvatar } from "./avatar";
+import { firstBotName, firstBotSlime } from "./first-bot";
 import { catalogs, t } from "./i18n";
 import { esc, ico } from "./ui";
 import { formatClock, formatDate } from "./format";
@@ -51,7 +52,8 @@ export const RAPHAEL_ID = 0;
 export const memberRole = (member: { id: number; role?: string; chief?: boolean }): string =>
   (member.chief ?? member.id === RAPHAEL_ID) ? t("rooms.chief") : member.role ?? "";
 
-/** The longest name, role, instructions and group name the core takes (members.* and groups.*). */
+/** The longest name, role, instructions and group name the core takes (members.* and groups.*); the first member's name is shorter. */
+export const FIRST_BOT_NAME_MAX = 16;
 export const ROLE_MAX = 24;
 export const PERSONALITY_MAX = 2000;
 export const GROUP_NAME_MAX = 24;
@@ -62,10 +64,14 @@ export const memberPlaceholder = (name: string): string => t("members.placeholde
 /** A one-line field (a member's name or role, or a group's name) as the core stores it: trimmed, with inner whitespace collapsed. */
 export const cleanName = (value: string): string => value.trim().replace(/\s+/g, " ");
 
-/** Whether `name` is already taken by another member or matches Raphael's reserved name in any language. */
-export function isMemberNameTaken(name: string, taken: readonly string[]): boolean {
+/**
+ * Whether `name` is already taken by another member or matches Raphael's reserved name in any language. The first member
+ * (`first`) may keep or take Raphael's name: the app and its voice are called so, and the first slime was until the owner
+ * named it.
+ */
+export function isMemberNameTaken(name: string, taken: readonly string[], first = false): boolean {
   const key = cleanName(name).toLocaleLowerCase();
-  const reserved = Object.values(catalogs).map((c) => cleanName(c["nav.agent"]).toLocaleLowerCase());
+  const reserved = first ? [] : Object.values(catalogs).map((c) => cleanName(c["nav.agent"]).toLocaleLowerCase());
   return reserved.includes(key) || taken.some((other) => cleanName(other).toLocaleLowerCase() === key);
 }
 
@@ -101,12 +107,12 @@ export function memberSections(list: MembersList, query = "", firstId = RAPHAEL_
   return sections.filter((section) => (searching || section.group === null ? section.members.length > 0 : true));
 }
 
-/** Raphael as the list gives it, or a stand-in with its name before the list is read. */
+/** The first member as the list gives it, or a stand-in with the name of the last list before this one is read. */
 export function raphaelOf(list: MembersList | null): Member {
   const found = list?.members.find((member) => member.id === RAPHAEL_ID);
   return (
     found ?? {
-      id: RAPHAEL_ID, name: t("agent.title"), role: "", instructions: "", avatar: "", group_id: null, model: "", tools: null,
+      id: RAPHAEL_ID, name: firstBotName(), role: "", instructions: "", avatar: "", group_id: null, model: "", tools: null,
       position: -1, created: 0, unread: false, waiting: false, preview: "", last_at: null,
     }
   );
@@ -196,13 +202,14 @@ export const isPictureUrl = (url: unknown): url is string => typeof url === "str
 /** The placeholder's character: the first of the name (a whole character, an emoji too), or nothing. */
 export const initialOf = (name: string): string => Array.from(name.trim())[0] ?? "";
 
-/** Raphael's slime in the main window: the very first one, the cute blue slime. */
-export const RAPHAEL_SLIME = "slime:blue-plain";
+/** The slime a member wears: its own, the first member's being the one the owner dressed it in (first-bot.ts). */
+export const memberSlime = (member: { id: number; avatar?: string | null }): string | null | undefined =>
+  member.id === RAPHAEL_ID ? firstBotSlime(member.avatar) : member.avatar;
 
 /**
- * A face at `size` px: a member's slime; for Raphael the owner's own picture when one is chosen (avatar.ts), else the
- * first blue slime. His emblem shows only in voice (the voice screen and its button, avatar.ts). Decorative: whoever
- * shows it names it.
+ * A face at `size` px: a member's slime; for the first member the owner's own picture when one is chosen (avatar.ts),
+ * else the slime the owner dressed it in, the first blue slime until then. Raphael's emblem shows only in voice (the
+ * voice screen and its button, avatar.ts). Decorative: whoever shows it names it.
  *
  * A face is a picture of the slime unless `moving`. Exactly two places move: a member's row in the left list, and the
  * conversation's thinking line.
@@ -211,7 +218,7 @@ export const RAPHAEL_SLIME = "slime:blue-plain";
 export function faceHTML(member: { id: number; name: string; avatar?: string | null; avatar_url?: string | null }, size: number, o: { moving?: boolean; cls?: string } = {}): string {
   if (member.id === RAPHAEL_ID) {
     if (currentAvatar()) return avatarHTML({ size, cls: o.cls, still: !o.moving }).replace("<span", `<span${presenceAttrs(member.id)}`);
-    return slimeFaceHTML({ ...member, avatar: RAPHAEL_SLIME }, size, o.cls, o.moving);
+    return slimeFaceHTML({ ...member, avatar: firstBotSlime(member.avatar) }, size, o.cls, o.moving);
   }
   // A generated member picture replaces the slime face.
   if (member.avatar?.startsWith("file:") && member.avatar_url?.startsWith("data:image/"))

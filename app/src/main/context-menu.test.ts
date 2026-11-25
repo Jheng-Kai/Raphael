@@ -4,7 +4,7 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { OVERFLOW_ROWS, installContextMenus, overflowAt, uncoveredOverflows } from "./context-menu";
+import { OVERFLOW_ROWS, contextMenuTarget, installContextMenus, overflowAt, uncoveredOverflows } from "./context-menu";
 import { closeMenu, iconButton, openPopover } from "./ui";
 
 /** A menu of two items per ⋯, the way `openActions` draws one: the item labels name the row. */
@@ -287,4 +287,25 @@ describe("no ⋯ is left without its right click", () => {
     expect(uncoveredOverflows(document)).toHaveLength(2);
     expect(overflowAt(document.getElementById("open-a"))!.button.dataset.conversationMore).toBe("a");
   });
+});
+
+test("the row's menu knows what the right click landed on while it opens, and nothing after", () => {
+  let seen: Element | null | undefined;
+  const more = document.querySelector<HTMLElement>('[data-conversation-more="a"]')!;
+  more.addEventListener("click", () => { seen = contextMenuTarget(); }, { once: true });
+  const word = document.querySelector("#open-a")!;
+  rightClick(word);
+  // A picture or a file in a message is offered to copy this way (pages/agent.ts `messageMenu`).
+  expect(seen).toBe(word);
+  expect(contextMenuTarget()).toBeNull();
+});
+
+test("the menu the key opens knows what has the focus, as a right click knows where it landed", () => {
+  let seen: Element | null | undefined;
+  const more = document.querySelector<HTMLElement>('[data-conversation-more="a"]')!;
+  more.addEventListener("click", () => { seen = contextMenuTarget(); }, { once: true });
+  const word = document.querySelector("#open-a")!;
+  menuKey(word);
+  expect(seen).toBe(word);
+  expect(contextMenuTarget()).toBeNull();
 });

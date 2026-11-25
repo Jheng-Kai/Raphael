@@ -1,7 +1,8 @@
 // The guide in the main window: it takes the place of the pages on a first run, and opens again
 // over them from the settings. flow.ts says which screen is next, screens.ts draws it; this file
-// holds the state and does what the buttons say, through the core and the app. It has three
-// choices to offer after the welcome, each done where it is shown and the same way as in Settings:
+// holds the state and does what the buttons say, through the core and the app. After the welcome the owner
+// dresses and names their first slime (member 0, their chief of staff from then on: `members.update`), then
+// has three choices, each done where it is shown and the same way as in Settings:
 // the AI tools (the account controller of Settings > Models and the OpenRouter key), the services
 // (the store of Connect apps), and the abilities the members share (Settings > Tools).
 //
@@ -24,12 +25,16 @@ import { composioKeyProblem, ownServerApps, ownServerForm } from "../connections
 import { openConnectionSetup } from "../connection-setup";
 import { modelPickerHTML, mountModelPicker, type ModelPickerLook } from "../model-picker";
 import { createServices, servicesHTML as abilityRowsHTML } from "../services";
+import { FIRST_SLIME } from "../first-bot";
+import { cleanName, isMemberNameTaken } from "../members";
+import { pickSlime } from "../slime";
+import { selectSlimeTab, slimeKeys } from "../slime-tabs";
 import type { AppContext, BrainSettings, MainEvent, ModelCatalog, StoreService } from "../types";
 import { actionRow, closeMenu, esc, backButton, iconButton, openMenuOnArrow, toaster } from "../ui";
 import { SERVICES_WAIT_MS, mergeServices, within } from "./helpers";
 import { type FlowState, initialState, isLast, reduce } from "./flow";
 import {
-  type ComposioView, DEMOS, abilitiesHTML, demoAsk, demoReply, emptyComposioView, servicesHTML, servicesListHTML, toolsHTML, toolsListHTML, welcomeHTML,
+  type ComposioView, DEMOS, abilitiesHTML, demoAsk, demoReply, emptyComposioView, firstFaceHTML, firstSlimeHTML, servicesHTML, servicesListHTML, toolsHTML, toolsListHTML, welcomeHTML,
 } from "./screens";
 
 /** The emblem's diameter on the welcome, in px (its canvas is 1.3 times larger, so that its rays have room). */
@@ -62,7 +67,13 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
   bindNavLayer(root, () => {}, {
     active: () => !destroyed,
     step: direction => {
-      if (!finishing) steps.step(direction, step => { flow = { ...flow, step }; render(); });
+      if (finishing) return true;
+      const show = (): void => { steps.step(direction, step => { flow = { ...flow, step }; render(); }); };
+      // Forward past the first slime keeps its name and slime first, as the way on does; with no name it stays. A step
+      // meanwhile (back, or back and here again) is a new visit, and the save does not move it on.
+      const at = flow;
+      if (flow.step === "slime" && direction !== "back") void keepFirst().then(kept => { if (kept && flow === at) show(); });
+      else show();
       return true;
     },
   });
@@ -74,6 +85,14 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
 
   /** What the AI tools' search box holds. */
   let toolsQuery = "";
+
+  // The first slime: the name typed and the slime chosen, and what the core last kept of them (read once from the roster:
+  // a name the owner already gave stands in the field; the built-in one never does, the name is theirs to give).
+  let firstName = "";
+  let firstSlime = FIRST_SLIME;
+  let firstKept: { name: string; avatar: string } | null = null;
+  let firstRead = false;
+  let firstSaving = false;
 
   // the services
   let services: StoreService[] | "loading" | "failed" = "loading";
@@ -155,6 +174,8 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
     switch (flow.step) {
       case "welcome":
         return welcomeHTML();
+      case "slime":
+        return firstSlimeHTML({ name: firstName, avatar: firstSlime, busy: firstSaving });
       case "tools":
         return toolsHTML(accounts.view(), accountsError(), providers.view(), toolsQuery);
       case "services":
@@ -174,7 +195,9 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
    * nothing comes after it. The welcome has nowhere to go back to and is its one wide pill alone.
    */
   function footHTML(): string {
-    const next = ` data-ob="next"${finishing ? " disabled" : ""}`;
+    // The first slime's way on waits for its name: the one thing the guide asks of everyone.
+    const waiting = finishing || (flow.step === "slime" && (firstSaving || !cleanName(firstName)));
+    const next = ` data-ob="next"${waiting ? " disabled" : ""}`;
     if (flow.step === "welcome") {
       return actionRow({ cls: "ob-actions", primary: { label: esc(t("onboarding.start")), attrs: next } });
     }
@@ -282,6 +305,9 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
     switch (flow.step) {
       case "welcome":
         break;
+      case "slime":
+        void readFirst();
+        break;
       case "tools":
         accounts.start();
         void providers.load();
@@ -313,7 +339,62 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
       await finish();
       return;
     }
+    if (flow.step === "slime") {
+      const at = flow;
+      if (!(await keepFirst())) return;
+      // The save took a moment: a step meanwhile (back, or back and here again) is where the owner is now, and this save
+      // does not move it on. Every step is a new flow, so the same one means the same visit.
+      if (flow !== at) return;
+    }
     goNext();
+  }
+
+  // ---------- the first slime ----------
+
+  /** The first member as the roster has it, once: a name the owner gave before (the guide shown again) is in the field. */
+  async function readFirst(): Promise<void> {
+    if (firstRead) return;
+    firstRead = true;
+    try {
+      const first = (await api.membersList()).members.find((member) => member.id === 0);
+      if (destroyed || !first) return;
+      firstKept = { name: first.name, avatar: first.avatar ?? "" };
+      if (!firstName && !isMemberNameTaken(first.name, [])) firstName = first.name;
+      if (first.avatar?.startsWith("slime:") && firstSlime === FIRST_SLIME) firstSlime = first.avatar;
+    } catch {
+      return; // the step works without it: what is typed is sent all the same
+    }
+    if (destroyed || flow.step !== "slime") return;
+    // The redraw keeps what the field holds, so the name read goes into the field first.
+    const field = root.querySelector<HTMLInputElement>("#ob-first-name");
+    if (field && !field.value) field.value = firstName;
+    repaintBody();
+    paintFoot();
+  }
+
+  /** Keeps the name and the slime as member 0's; false when the core refused, which was said, and the step stays. */
+  async function keepFirst(): Promise<boolean> {
+    const name = cleanName(firstName);
+    if (!name || firstSaving) return false;
+    if (firstKept && firstKept.name === name && (firstKept.avatar || FIRST_SLIME) === firstSlime) return true;
+    firstSaving = true;
+    paintFoot();
+    try {
+      await api.membersUpdate(0, { name, avatar: firstSlime });
+      firstKept = { name, avatar: firstSlime };
+      return !destroyed;
+    } catch (err) {
+      toaster.info(describeError(err));
+      return false;
+    } finally {
+      firstSaving = false;
+      if (!destroyed && flow.step === "slime") {
+        paintFoot();
+        // A visit drawn while the save ran drew the name field closed: it opens again with the save.
+        const field = root.querySelector<HTMLInputElement>("#ob-first-name");
+        if (field) field.disabled = false;
+      }
+    }
   }
 
   function back(): void {
@@ -555,6 +636,19 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
     }
     if (flow.step === "tools" && providers.click(target)) return;
     if (flow.step === "abilities" && abilities.click(target)) return;
+    // The first slime's picker: a tab shows its group in the place the others stand in; a slime is worn at once.
+    const picker = flow.step === "slime" ? target.closest<HTMLElement>(".ob-first-picker") : null;
+    if (picker) {
+      const press = target.closest<HTMLElement>("button");
+      if (!press || firstSaving) return;
+      if (press.dataset.slimeTab) { selectSlimeTab(picker, press.dataset.slimeTab); return; }
+      const slime = pickSlime(press);
+      if (!slime) return;
+      firstSlime = slime;
+      const face = root.querySelector<HTMLElement>("[data-ob-face]");
+      if (face) face.innerHTML = firstFaceHTML(firstSlime);
+      return;
+    }
 
     const button = target.closest<HTMLElement>("[data-ob]");
     switch (button?.dataset.ob) {
@@ -616,11 +710,24 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
     if (destroyed) return;
     if (flow.step === "tools" && providers.key(e)) return;
     if (flow.step === "abilities" && abilities.key(e)) return;
+    const picker = flow.step === "slime" ? root.querySelector<HTMLElement>(".ob-first-picker") : null;
+    if (picker && slimeKeys(picker, e)) { e.preventDefault(); return; }
+    // Enter in the name goes on, as the way on does.
+    if (flow.step === "slime" && e.key === "Enter" && !e.isComposing && (e.target as HTMLElement | null)?.id === "ob-first-name") {
+      e.preventDefault();
+      void next();
+      return;
+    }
     openMenuOnArrow(e);
   }, { signal });
   root.addEventListener("input", (e) => {
     if (destroyed || !(e.target instanceof HTMLInputElement)) return;
     if (flow.step === "tools") providers.input(e.target);
+    if (flow.step === "slime" && e.target.id === "ob-first-name") {
+      const ready = !!cleanName(firstName);
+      firstName = e.target.value;
+      if (ready !== !!cleanName(firstName)) paintFoot();
+    }
     // The search narrows the tiles where they stand: the field keeps its caret, and the page its place.
     if (flow.step === "tools" && e.target.id === "ob-tools-find") {
       toolsQuery = e.target.value;

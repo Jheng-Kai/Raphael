@@ -329,3 +329,15 @@ for line in sys.stdin:
     assert notice == {"type": "skill_unavailable", "name": "broken", "reason": "not_found"}
     assert len(json.loads(record.read_text(encoding="utf-8"))) == 2
     assert cap.plugin_sets()[0]["id"] == installed["id"]
+
+
+def test_skipped_parts_are_matched_to_their_files_ignoring_case_and_separators():
+    # skills/Outer is skipped while skills/outer/inner stays: Windows keeps both in one folder tree, so the files of the
+    # Outer folder go and every file under the nested skill's folder stays, whatever case its path was recorded in (#313).
+    parts = [{"kind": "skill", "key": "skills/Outer/SKILL.md"}, {"kind": "skill", "key": "skills/outer/inner/SKILL.md"}]
+    files = {path: b"" for path in ("skills/Outer/SKILL.md", "skills/Outer/notes.md", "skills/OUTER/inner/data.txt",
+                                    "skills/outer/inner/SKILL.md", "skills/outer/Inner/more.txt", "skills/other/SKILL.md")}
+    kept = plugins.without_skipped(files, parts, parts[:1])
+    assert sorted(kept) == ["skills/OUTER/inner/data.txt", "skills/other/SKILL.md", "skills/outer/Inner/more.txt", "skills/outer/inner/SKILL.md"]
+    assert plugins.inside_folder(r"skills\OUTER\inner\x.txt", "skills/outer/inner") and plugins.inside_folder("Skills/A", "skills/a")
+    assert not plugins.inside_folder("skills/outer2/x", "skills/outer")

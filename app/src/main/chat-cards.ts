@@ -14,6 +14,7 @@ import { connectionMarkHTML } from "./secret-card";
 import { slimeFaceHTML } from "./slime";
 import type { AgentTurn, PairingCard, TemplateCard } from "./types";
 import { btn, copyButton, esc, ico, toaster } from "./ui";
+import { firstBotName } from "./first-bot";
 
 const PLATFORM = { telegram: "Telegram", slack: "Slack", discord: "Discord" } as const;
 /** Where each bot is made: fixed here, never taken from a card (commands.rs allows only these). */
@@ -76,7 +77,7 @@ export function chatCardsHTML(turn: AgentTurn): string {
     statusText: pending ? t("cards.needsYou") : undefined, statusInHeading: true,
     content: `<p class="card-body">${esc(suggestion.reason)}</p>`,
     close: waitingCloseHTML(` data-act="computer-suggestion-dismiss"${attrs}`, t("common.close")),
-    actions: pending ? btn(`<span>${esc(t(suggestion.installed ? "memberComputer.suggestionSwitch" : "memberComputer.suggestionInstall"))}</span>${ico("right")}`,
+    actions: pending ? btn(`<span>${esc(suggestion.installed ? t("memberComputer.suggestionSwitch") : t("memberComputer.suggestionInstall", { p0: firstBotName() }))}</span>${ico("right")}`,
       "sm computer-suggestion-action", ` data-act="computer-suggestion-${suggestion.installed ? "switch" : "setup"}"${attrs}`) : "",
     cls: "computer-suggestion-card",
   }) : "";

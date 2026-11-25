@@ -558,9 +558,10 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
    of its header. */
 .modal-body { --close-gutter: calc(36px + var(--sp-5)); padding-right: calc(var(--sp-4) + var(--close-gutter)); }
 .modal-scrim[data-standalone] .modal-body { padding-right: calc(var(--sp-4) + var(--close-gutter)); }
-/* A long page scrolls under its header: the back button, the title and the close stay where they are, on the dialog's own
-   colour, and a hairline shows under them only once something has scrolled beneath. */
-.modal-scrim .modal-body :is(.set-content > .set-head, .cs > .cs-top, .cs-page > .cs-head, .skl-page > .skl-pack) { position: sticky; top: 0; z-index: 3;
+/* A long page scrolls under its header (R-UI-182): the back button, the title and the close stay where they are, on the
+   dialog's own colour, and a hairline shows under them only once something has scrolled beneath. A plugin's skill page
+   has its header straight in the page, a package's page and a skill alone inside the package's wrapper. */
+.modal-scrim .modal-body :is(.set-content > .set-head, .cs > .cs-top, .cs-page > .cs-head, .skl-page > .skl-pack, .skl-page > .set-head) { position: sticky; top: 0; z-index: 3;
   --head-cover: inset 0 0 0 100vmax var(--dialog), 0 calc(-1 * var(--body-top)) 0 var(--dialog);
   box-shadow: var(--head-cover); animation: set-head-edge linear both; animation-timeline: scroll(nearest block); animation-range: 0 12px; }
 @keyframes set-head-edge { from { box-shadow: var(--head-cover), 0 1px 0 transparent; } to { box-shadow: var(--head-cover), 0 var(--sp-3) 0 var(--dialog), 0 calc(var(--sp-3) + 1px) 0 var(--line); } }
@@ -806,6 +807,14 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 @media (prefers-reduced-motion: reduce) { .ob-demo-reply { opacity: 1; transition: none; } .ob-caret { display: none; } }
 .ob-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; margin: 0; }
 .ob-main { margin-top: var(--sp-5); }
+/* The first slime: its face large in the middle, its name under it in the guide's own pill field, and the members' slime
+   picker under that (slime.css), stood in the column with only the popover's chrome taken off, as 新增角色 stands it. */
+.ob[data-step="slime"] .ob-col { width: min(100%, 520px); }
+.ob-first { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: var(--sp-3); margin-top: var(--sp-4); }
+.ob-first-face { display: flex; align-items: center; justify-content: center; height: 112px; }
+.ob-find.ob-first-name { width: 100%; margin-bottom: 0; }
+.ob-first-name .field input { text-align: center; }
+.ob .menu.mb-avpop.ob-first-picker:has(.mb-slime-tabs) { position: static; z-index: auto; max-height: none; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
 /* The language at the card's top left, a quiet pill: a globe, its own name, a chevron. */
 .ob-lang { position: absolute; top: var(--sp-4); left: var(--sp-4); z-index: 2; }
 .lang-btn.btn { gap: 6px; min-height: var(--h-ctl-sm); padding: 0 var(--sp-2) 0 calc(var(--sp-2) + 2px); border: 0; border-radius: var(--r-pill); background: transparent; font-size: var(--fs-xs); color: var(--text-2); }

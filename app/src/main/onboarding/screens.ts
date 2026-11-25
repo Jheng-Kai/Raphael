@@ -13,9 +13,11 @@ import { providerMark } from "../provider-marks";
 import { type ProvidersView, description, emptyProvidersView, providersAddHTML } from "../providers";
 import type { ProviderKind, StoreService } from "../types";
 import { slimeFaceHTML } from "../slime";
+import { slimePickerHTML } from "../slime-tabs";
+import { FIRST_BOT_NAME_MAX } from "../members";
 import { btn, esc, fieldHTML, ico, st } from "../ui";
 
-export type GuideStep = "welcome" | "tools" | "services" | "abilities";
+export type GuideStep = "welcome" | "slime" | "tools" | "services" | "abilities";
 
 /** A slime floating by a step's title: who it is, where (from the column's left or right edge, and down from the
  * title's top) and how large. */
@@ -24,7 +26,7 @@ interface Floater { avatar: string; side: "left" | "right"; x: number; y: number
  * The team's own characters float by each step's title: different ones on
  * every step, never in the same places.
  */
-const FLOATERS: Record<Exclude<GuideStep, "welcome">, readonly Floater[]> = {
+const FLOATERS: Record<Exclude<GuideStep, "welcome" | "slime">, readonly Floater[]> = {
   tools: [
     { avatar: "slime:goggles-green", side: "left", x: 2, y: 2, px: 42 },
     { avatar: "slime:horn-lavender", side: "right", x: 4, y: 40, px: 36 },
@@ -43,14 +45,14 @@ const FLOATERS: Record<Exclude<GuideStep, "welcome">, readonly Floater[]> = {
 };
 
 /** The decoration around a title: it takes no room and no part in the reading order. */
-function floaters(step: Exclude<GuideStep, "welcome">): string {
+function floaters(step: Exclude<GuideStep, "welcome" | "slime">): string {
   const one = (floater: Floater, index: number): string =>
     `<span class="ob-fl" style="${floater.side}:${floater.x}%;top:${floater.y}px">${slimeFaceHTML({ id: -1 - index, avatar: floater.avatar }, floater.px)}</span>`;
   return `<div class="ob-floaters" aria-hidden="true">${FLOATERS[step].map(one).join("")}</div>`;
 }
 
 /** The title of a screen; what the step is for is the choice itself, never a line under it. */
-export const head = (title: string, step?: Exclude<GuideStep, "welcome">): string => (step ? floaters(step) : "") + `<h2 tabindex="-1">${esc(title)}</h2>`;
+export const head = (title: string, step?: Exclude<GuideStep, "welcome" | "slime">): string => (step ? floaters(step) : "") + `<h2 tabindex="-1">${esc(title)}</h2>`;
 
 /** A check in a small black square, on a tile that is chosen or ready; `word` is what a reader hears. */
 const tick = (word: string): string => `<span class="ob-tick" role="img" aria-label="${esc(word)}">${ico("check")}</span>`;
@@ -100,6 +102,34 @@ export function welcomeHTML(): string {
     `<div class="ob-demo"><p class="ob-sr">${esc(t("onboarding.demoSummary"))}</p>` +
     `<p class="ob-demo-ask" aria-hidden="true"><span data-ob-typed>${esc(demoAsk(DEMOS[0]))}</span><span class="ob-caret"></span></p>` +
     `<p class="ob-demo-reply" aria-hidden="true" data-ob-reply>${esc(demoReply(DEMOS[0]))}</p></div>`
+  );
+}
+
+// ---------- the first slime ----------
+
+/** The size of the first slime on its step: larger than any face of the app, it is the one being made. */
+export const FIRST_FACE_PX = 112;
+
+/** The first slime as the step has it: the name typed so far and the slime chosen. */
+export interface FirstSlimeView { name: string; avatar: string; busy: boolean }
+
+/** The face alone, which a press in the picker draws again (wearing the chief's crown: it is id 0, the primary). */
+export const firstFaceHTML = (avatar: string): string => slimeFaceHTML({ id: 0, avatar }, FIRST_FACE_PX);
+
+/**
+ * The owner's first slime, who is their chief of staff from then on: the slime large, its name under it (the one thing
+ * asked: the way on waits for it), and under that the members' own slime picker (slime-tabs.ts), the same one the member
+ * settings and 新增角色 open. Its look starts as the first blue slime; nothing about it is Raphael's unless the owner says so.
+ */
+export function firstSlimeHTML(v: FirstSlimeView): string {
+  return (
+    head(t("onboarding.slimeTitle")) +
+    `<div class="ob-main ob-first">` +
+    `<div class="ob-first-face" data-ob-face>${firstFaceHTML(v.avatar)}</div>` +
+    `<div class="ob-find ob-first-name">${fieldHTML(t("members.name"), v.name, { id: "ob-first-name", max: FIRST_BOT_NAME_MAX, disabled: v.busy })}</div>` +
+    // The picker's rules belong to `.menu.mb-avpop` (slime.css); the step stands it in the column and takes off only the popover's chrome.
+    `<div class="menu mb-avpop ob-first-picker" role="group" aria-label="${esc(t("settings.avatar"))}">${slimePickerHTML(v.avatar, esc)}</div>` +
+    `</div>`
   );
 }
 

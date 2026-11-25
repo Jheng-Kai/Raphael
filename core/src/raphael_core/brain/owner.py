@@ -33,6 +33,11 @@ def owner_context(settings: SettingsStore, member_id: int = 0, *, folders=defaul
             profile["branch"] = branch
         tools = "computer file tools" if target is not None else "owner_files"
         instructions = f"\nSave deliverables to work_folder with {tools}, or export and attach. Run Git with the command tool."
+        if target is not None and chosen:
+            # Docker mounts every project read-only (R-COMP-PROJECT-01): the computer's own commands cannot change it.
+            instructions = (f"\nSave deliverables to work_folder with {tools}, or export and attach. work_folder is read-only "
+                            "to commands in your computer: change its files with the file tools, and run Git there with the "
+                            "local command tool.")
     elif not any(profile.values()):
         return ""
     data = json.dumps(profile, ensure_ascii=False, separators=(",", ":")).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")

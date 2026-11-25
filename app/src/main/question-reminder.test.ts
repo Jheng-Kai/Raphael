@@ -34,7 +34,7 @@ beforeEach(async () => {
 });
 
 test("says once who waits, with a way there, unless it is on screen", async () => {
-  waiting({ id: "a", member_id: 3, member_name: "小森", room_id: 7 });
+  waiting({ id: "a", member_id: 3, notify: true, member_name: "小森", room_id: 7 });
   await moved();
   expect(toasts()).toHaveLength(1);
   expect(toasts()[0].textContent).toContain("小森 等你回答");
@@ -51,8 +51,20 @@ test("says once who waits, with a way there, unless it is on screen", async () =
   expect(toasts()).toHaveLength(0);
 });
 
+test("only opted-in identities get a question reminder", async () => {
+  waiting(
+    { id: "raphael", member_id: 0, notify: false },
+    { id: "member", member_id: 3, notify: false },
+    { id: "missing", member_id: 4 },
+    { id: "opted-in", member_id: 5, notify: true },
+  );
+  await moved();
+  expect(toasts()).toHaveLength(1);
+  expect(toasts()[0].querySelector("[data-question-member='5']")).not.toBeNull();
+});
+
 test("a member's question opens that member", async () => {
-  waiting({ id: "b", member_id: 3, member_name: "小森", room_id: null });
+  waiting({ id: "b", member_id: 3, notify: true, member_name: "小森", room_id: null });
   await moved();
   toasts()[0].querySelector<HTMLElement>("[data-question-member]")!.click();
   expect(open.member).toHaveBeenCalledWith(expect.anything(), 3);
@@ -61,7 +73,7 @@ test("a member's question opens that member", async () => {
 test("what was waiting when the app opened is in the sidebar, not a toast", async () => {
   document.body.innerHTML = "";
   events = [];
-  waiting({ id: "old", member_id: 3, member_name: "小森", room_id: null });
+  waiting({ id: "old", member_id: 3, notify: true, member_name: "小森", room_id: null });
   mountQuestionReminder({ onEvent: (handler: (event: MainEvent) => void) => events.push(handler) } as unknown as AppContext, memberFace);
   await flush();
   expect(toasts()).toHaveLength(0);

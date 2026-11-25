@@ -5,7 +5,7 @@ const linked = selector => paste(selector, { text: `${LONG_LINK}\n這是用來�
 const twoPictures = [room(1), paste("#room-message", { image: "clipboard.png" }), wait(".au-room-pane .composer .cmp-chip img.cmp-thumb"), dropFile(".au-room-pane .ra-stage", "dropped.png"), wait('.au-room-pane .composer .cmp-chip + .cmp-chip')];
 // 新增角色, opened from the sidebar's + menu; 小綠 lives in the 角色 tab, the colours' tab being where a new dialog opens.
 const makerOpen = [{ action: "member-column", collapsed: false }, click('[data-col="add"]'), click('#app-popover [data-pick="member"]'), wait(".cr-dialog")];
-const makerGoggles = [click('.cr-dialog [data-slime-tab="characters"]'), click('.cr-dialog [data-slime-character="goggles-green"]'), type("#mb-new-name", "小綠")];
+const makerGoggles = [click('.cr-dialog [data-slime-tab="green"]'), click('.cr-dialog [data-slime-character="goggles-green"]'), type("#mb-new-name", "小綠")];
 
 export const learnedSkill = member_id => ({ id: 31, member_id, name: "research-summary", description: "整理研究摘要並核對來源", enabled: true, source: "learned", provenance: "learned", learned_at: "2026-10-29T10:00:00", updated_at: "2026-10-29T10:00:00", text: "---\nname: research-summary\ndescription: 整理研究摘要並核對來源\n---\n## When to use\nUse for a research summary.\n## Procedure\nCheck and compare sources.\n## Pitfalls\nCheck publication dates.\n## Verification\nReopen each cited source." });
 export const sharedSourceSkill = { id: 32, member_id: -1, name: "來源核對", description: "核對引用資料與發布日期", enabled: true, source: "local:C:/Synthetic/.codex/skills/source-check" };
@@ -254,6 +254,7 @@ export default [
   scene("primary-contact-menu", "The primary's own menu (Raphael's) ends with 換成其他角色 after a hairline, without a star", [{ action: "member-column", collapsed: false }, click('.mb-col [data-member-more="0"]'), wait('#app-popover [data-pick="primary"]'), check("primary-menu")]),
   scene("member-row-menu", "A member's row menu is grouped: 釘選, 移到分組, 標為未讀 | 編輯 | 分享為範本 | 隱藏, 刪除 in red", [{ action: "member-column", collapsed: false }, click('.mb-col [data-member-more="2"]'), wait('#app-popover [data-pick="delete"]'), check("member-menu")]),
   scene("primary-contact-picker", "換成其他角色 in 小晴's menu opens 選擇主要聯絡對象: Raphael and the other members as buttons, and choosing 小森 readies the primary action", [...primaryMenu(1), click('.mb-primary-picker [data-id="2"]'), check("primary-picker")], { primaryMember: 1 }),
+  scene("primary-contact-picker-long", "With fifteen characters, more than the list shows at once, every row of 選擇主要聯絡對象 keeps its face, name and words whole and the list scrolls", [...primaryMenu(1), click('.mb-primary-picker [data-id="2"]'), check("primary-picker")], { primaryMember: 1, sidebarDrag: true }),
   scene("member-no-own-folder", "Member settings never show or open the member's own folder", [...msFolders, check("member-no-own-folder")], { projectFolders: true }),
   scene("composer-folder", "The work folder and its branch sit after the permission control", [member(1), wait('.page-agent .composer .cmp-branch:not([hidden])'), check("composer-folder"), check("composer-row-fits")], { projectFolders: true, projectSelected: true }),
   scene("composer-folder-menu", "「不指定資料夾」 comes first, followed by projects and their branches; no member's own folder", [member(1), wait('.page-agent .composer .cmp-branch:not([hidden])'), click('.page-agent .composer .cmp-folder'), wait('#app-popover .cb-folders [data-project-pick="1"] small'), wait('#app-popover .cb-folders .project-branch'), check("composer-folder-menu")], { projectFolders: true, projectSelected: true }),
@@ -292,6 +293,8 @@ export default [
     [member(1), wait('.exchange-event'), check("bot-exchange-count")], { colleagues: 2 }),
   scene("bot-exchange-expanded", "The line opens the two members' conversation on what was asked",
     [member(1), wait('.exchange-event'), click('.exchange-event .event-count'), wait('.mb-chat:not([hidden]) > .peer-chat'), check("bot-exchange-expanded")], { colleagues: 2 }),
+  scene("slash-usage", "The app's /usage leads the slash menu under 內建", [type(".composer textarea", "/"), wait('.slash-menu [data-value="app:usage"]'), check("slash-app-first"), check("slash-commands")], { commands: [{ id: 1, member_id: 0, name: "review", description: "整理研究重點", template: "整理研究重點" }] }),
+  scene("slash-usage-opened", "Choosing /usage opens Settings › 用量 and sends nothing", [type(".composer textarea", "/usa"), wait('.slash-menu [data-value="app:usage"]'), click('.slash-menu [data-value="app:usage"]'), wait('[data-usage-tab="overview"]'), check("slash-usage-opened")]),
   scene("slash-commands", "Slash command menu follows the slash character", [type(".composer textarea", "/"), wait(".slash-menu"), check("slash-commands")], { commands: [{ id: 1, member_id: 0, name: "review", description: "整理研究重點", template: "整理研究重點" }] }),
   scene("slash-many", "Thirty skills under a / are one list that scrolls, as the @ menu: no 下一頁", [type(".composer textarea", "/"), wait(".slash-menu"), check("slash-many"), check("slash-commands")],
     { skills: Array.from({ length: 30 }, (_, index) => ({ id: 300 + index, member_id: 0, name: `skill-${index}`, slash_name: `skill-${index}`, description: `整理第 ${index + 1} 類資料，寫成可以直接使用的摘要與清單`, enabled: true, source: "owner" })) }),
@@ -325,12 +328,12 @@ export default [
   // 新增角色 is one small dialog over the dimmed window: the slime, the name, the shared picker, 取消 and 建立.
   scene("member-maker", "新增角色 is a small centred dialog: the large slime, the name under it, the tabbed picker, 取消 and a 建立 that waits for a name", [...makerOpen, check("member-maker")]),
   scene("nav-layer-maker", "Back keeps an unsaved member name, then closes the clean maker. Forward restores its avatar tab", [
-    ...makerOpen, type("#mb-new-name", "Robin"), click('.cr-dialog [data-slime-tab="characters"]'),
-    wait('.cr-dialog [data-slime-tab="characters"][aria-selected="true"]'), sideButton("back"), check("nav-maker-draft"),
+    ...makerOpen, type("#mb-new-name", "Robin"), click('.cr-dialog [data-slime-tab="gray"]'),
+    wait('.cr-dialog [data-slime-tab="gray"][aria-selected="true"]'), sideButton("back"), check("nav-maker-draft"),
     type("#mb-new-name", ""), sideButton("back"), waitGone(".cr-dialog"),
-    sideButton("forward"), wait('.cr-dialog [data-slime-tab="characters"][aria-selected="true"]'),
+    sideButton("forward"), wait('.cr-dialog [data-slime-tab="gray"][aria-selected="true"]'),
   ]),
-  scene("member-maker-chosen", "A tab moves nothing, a slime changes the large one, a name makes 建立 pressable", [...makerOpen, check("member-maker-box"), click('.cr-dialog [data-slime-tab="characters"]'), check("member-maker-tab"), click('.cr-dialog [data-slime-character="horn-lavender"]'), type("#mb-new-name", "小葵"), check("member-maker-chosen")]),
+  scene("member-maker-chosen", "A tab moves nothing, a slime changes the large one, a name makes 建立 pressable", [...makerOpen, check("member-maker-box"), click('.cr-dialog [data-slime-tab="purple"]'), check("member-maker-tab"), click('.cr-dialog [data-slime-character="horn-lavender"]'), type("#mb-new-name", "小葵"), check("member-maker-chosen")]),
   scene("member-maker-made", "建立 opens the member, which speaks first and asks what it is for", [...makerOpen, ...makerGoggles, click('.cr-dialog [data-dlg="create"]'), waitGone(".cr-dialog"), { action: "wait-text", selector: ".page-agent .ra-body", text: "小綠" }, check("member-maker-made")]),
   scene("member-maker-enter", "Enter in the name makes the member as 建立 does", [...makerOpen, ...makerGoggles, key("Enter"), waitGone(".cr-dialog"), { action: "wait-text", selector: ".page-agent .ra-body", text: "小綠" }, check("member-maker-made")]),
   scene("member-maker-greeting", "While its own model writes the greeting, the new member is typing and nothing is put in the owner's mouth", [...makerOpen, ...makerGoggles, click('.cr-dialog [data-dlg="create"]'), waitGone(".cr-dialog"), check("member-maker-greeting")], { greetingPending: true }),

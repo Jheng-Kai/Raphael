@@ -743,8 +743,9 @@ FLOOR_AGAIN = (" This is the second refusal: do not try another command or path.
 # What the team skill library answered, as a member is told it (members/service.py `_library_error`): its kind, its own
 # words and, where one is clear, the next step. Such an answer is a state of the library, never a wrong argument.
 _LIBRARY_NEXT = {
-    "taken": (" A skill with this name is already in the library, possibly switched off. Read member_library_list, then "
-              "remove that package (member_library_delete) or refresh it (member_library_update) instead of importing it again."),
+    "taken": (" A skill with this name is already in the library, possibly switched off; the answer names the package that "
+              "holds it. Read member_library_list, then remove that one skill or that package (member_library_delete) or "
+              "refresh the package (member_library_update) instead of importing it again."),
 }
 
 
@@ -6930,7 +6931,7 @@ class AgentService:
             diagnostic = diagnostic or classify(kind, record=False)
             return self._finish(ask, route, "negative", diagnostic.sentence(self._model_name(model), ask.language), ledger, status="error", failure=failure)
         if diagnostic is not None:
-            name = RAPHAEL_NAMES[ask.language] if ask.speaker.is_raphael else ask.speaker.name
+            name = (ask.speaker.name or RAPHAEL_NAMES[ask.language]) if ask.speaker.is_raphael else ask.speaker.name
             return self._finish(ask, route, "negative", diagnostic.sentence(name, ask.language), ledger, status="error", failure=failure)
         if kind == "monthly_budget":
             text = monthly_budget_notice(ask.language, self._settings.get("monthly_limit_usd"))

@@ -1,16 +1,16 @@
-// The order of the guide, as pure rules: a welcome and three steps that are each a choice (the AI
-// tools to think with, the services to connect, the abilities members have), what 「繼續」 and
-// 「返回」 do, and how far along the bar is. Nothing here touches the window or the core (mount.ts
+// The order of the guide, as pure rules: a welcome, the first slime (its look and its name: the owner's chief of staff
+// from then on), and three steps that are each a choice (the AI tools to think with, the services to connect, the
+// abilities members have), what 「繼續」 and 「返回」 do, and how far along the bar is. Nothing here touches the window or the core (mount.ts
 // does); `reduce` takes a state and an event and gives the next state, so every rule can be tested
 // without a browser.
 //
-// Every step can be gone past without choosing: connecting, signing in and switching are done where
-// they are shown and never undone by going on or back.
+// Every choice can be gone past without choosing: connecting, signing in and switching are done where they are shown
+// and never undone by going on or back. The first slime only asks for a name (its look starts as the first blue slime).
 
-export type StepId = "welcome" | "tools" | "services" | "abilities";
+export type StepId = "welcome" | "slime" | "tools" | "services" | "abilities";
 
 /** The screens, in order. */
-export const STEPS: readonly StepId[] = ["welcome", "tools", "services", "abilities"];
+export const STEPS: readonly StepId[] = ["welcome", "slime", "tools", "services", "abilities"];
 
 export interface FlowState {
   step: StepId;

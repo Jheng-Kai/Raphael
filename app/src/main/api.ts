@@ -7,6 +7,7 @@ import { Channel, convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { withWindowHotkeyPause } from "./window-hotkeys";
 import { IS_MAC } from "../shared/platform";
 import { crownPrimary } from "./crown";
+import { rememberFirstBot } from "./first-bot";
 import { fillPictures } from "./member-pictures";
 import { optionalReadsOpen, trackCoreCall } from "./startup-reads";
 import type { DesktopState, DesktopSession } from "./desktop-viewer";
@@ -306,6 +307,7 @@ export const agentVoice = (edge: "down" | "up", memberId = 0, conversationId?: n
 export const membersList = async (uiLanguage?: string): Promise<MembersList> => {
   const list = await core<MembersList>("members.list", uiLanguage ? { ui_language: uiLanguage } : {});
   crownPrimary(list);
+  rememberFirstBot(list);
   return list;
 };
 /**
@@ -317,7 +319,7 @@ export const membersCreate = (member: NewMember): Promise<{ member: Member; rout
   member.template ? core("members.template", { action: "import", ...member }) : core("members.create", member);
 /** Restarts a greeting before the owner has written to this member. */
 export const membersGreet = (id: number): Promise<{ turn_id: number }> => core("members.greet", { id });
-/** Changes a member (never Raphael: the core refuses id 0 with the kind `raphael`). */
+/** Changes a member; the first one (id 0) takes its name, slime, personality and instructions, and the core refuses the rest with the kind `raphael`. */
 export const membersUpdate = (id: number, patch: MemberPatch): Promise<{ member: Member }> => core("members.update", { id, ...patch });
 /** Deletes a member with its conversation, its memory and its routines. The page asks the owner first. */
 export const membersDelete = (id: number): Promise<{ deleted: boolean }> => core("members.delete", { id });
@@ -659,6 +661,9 @@ export async function subscribeMainEvents(handler: (event: MainEvent) => void): 
 
 /** Open only an opaque stored attachment, never a path supplied by a page. */
 export const openAttachment = (id: string): Promise<void> => invoke("open_attachment", { id });
+/** The stored file of `id` on the clipboard as a file, for a paste in Explorer, Finder or a chat. */
+/** Puts a stored attachment on the clipboard as a file, under the name it was sent with (`name`: the one shown). */
+export const copyAttachment = (id: string, name?: string): Promise<void> => invoke("copy_attachment", { id, name: name ?? null });
 /**
  * A stored picture's, video's or sound's URL in the shell's own media protocol (media_protocol.rs): the shell grants that one
  * id after the core resolves it, and serves it under this stable URL with a year-long immutable cache lifetime. Ask through

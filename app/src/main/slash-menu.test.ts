@@ -254,3 +254,29 @@ test('thirty skills are one list that scrolls, as the @ menu: no pages and no �
   expect(document.querySelector('.slash-menu')!.textContent).not.toMatch(/下一頁|上一頁/);
   menu.destroy();
 });
+
+test("the app's own commands come first, a member's command of the same name gives way, and choosing one runs it with nothing sent", async () => {
+  vi.mocked(membersCommandsList).mockResolvedValue({ commands: [...commands, { id: 3, name: 'usage', description: 'My own usage', template: '{input}' }] });
+  const input = document.createElement('textarea'); document.body.append(input); input.focus();
+  const ran: string[] = [];
+  const menu = mountSlashMenu(input, { memberId: () => 7, appCommand: command => ran.push(command) });
+  type(input, 'note /'); await flush();
+  const rows = [...document.querySelectorAll<HTMLElement>('.slash-menu [data-value]')];
+  expect(rows[0]!.dataset.value).toBe('app:usage');
+  expect(rows[0]!.textContent).toContain('/usage');
+  expect(rows[0]!.textContent).toContain('打開用量');
+  expect(rows.filter(row => row.textContent?.includes('My own usage'))).toHaveLength(0);
+  expect(rows.map(row => row.dataset.value)).toEqual(['app:usage', 'review', 'research']);
+  type(input, 'note /usa'); await flush();
+  document.querySelector<HTMLElement>('.slash-menu [data-value="app:usage"]')!.click();
+  expect(ran).toEqual(['usage']);
+  expect(input.value).toBe('note ');
+  menu.destroy();
+});
+
+test("a menu with no app commands to run offers none", async () => {
+  const { input, menu } = setup();
+  type(input, '/'); await flush();
+  expect(document.querySelector('.slash-menu [data-value^="app:"]')).toBeNull();
+  menu.destroy();
+});

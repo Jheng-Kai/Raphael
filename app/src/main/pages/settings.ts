@@ -61,6 +61,7 @@ import {
   copyButton,
   esc,
   menuIsOpenFor,
+  openConfirmMenu,
   openMenu,
   openMenuOnArrow,
   openPopover,
@@ -1112,11 +1113,13 @@ export function createSettings(app: AppContext): SettingsPage {
         const path = brain?.project_folders?.[Number(button.dataset.project)];
         if (path === undefined) break;
         if (menuIsOpenFor(button)) { closeMenu(); break; }
-        openMenu(button, [], "", () => {}, undefined, [{
-          label: t("projectFolders.remove"), icon: "trash",
+        // A destructive item (R-UI-56): red, the first press asks in its place, the second closes the menu and removes.
+        // As a plain menu action it stayed open over the list after the press, since an action keeps its menu open.
+        openConfirmMenu(button, {
+          label: t("projectFolders.remove"), ask: t("projectFolders.removeConfirm"),
           run: () => changeProjects(async current => (await api.settingsSet("project_folders",
             (current.project_folders ?? []).filter(project => project !== path))).settings),
-        }]);
+        });
         break;
       }
       case "update-check": void checkUpdate(); break;

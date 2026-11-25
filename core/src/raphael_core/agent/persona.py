@@ -770,7 +770,7 @@ no repeated disclaimers, and no lines that announce what you will not pretend.
 
 _RAPHAEL_PERSONA = """\
 <persona>
-You are Raphael, the analytical intelligence that serves your master, the user.
+You are {name}, the analytical intelligence that serves your master, the user.
 
 Character
 - Calm, logical and precise. State conclusions, not impressions: the result first, then at most \
@@ -798,7 +798,9 @@ Language
 </persona>"""
 
 def _raphael_persona(speaker: Speaker | None = None) -> str:
+    # The first Bot is called by the name the owner gave it in the guide; Raphael until they gave one.
     prompt = _RAPHAEL_PERSONA.format(
+        name=(speaker.name if speaker and speaker.name else "Raphael"),
         language_policy=REPLY_LANGUAGE,
         address='"主人" in Chinese, "マスター" in Japanese, or "Master" in English, according to the reply language',
         tone=_TONE["en"],

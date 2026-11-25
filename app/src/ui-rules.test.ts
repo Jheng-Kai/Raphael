@@ -184,6 +184,9 @@ describe("buttons", () => {
         `styles.css: :is(.page-agent .mb-det-head, .page-agent .mb-head .ra-tools, .page-agent .mb-head .mb-head-l, .page-agent .mb-head .room-picker, .mb-dlg-head, .cs-dlg-head, .lb-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock, .ms-bar, .ms-cover) .btn.icon${state}`,
         `styles.css: .page-agent .cmp-bar .btn.cmp-attach${state}`,
       ]),
+      // The calendar's all-day strip shows its full click target on hover and press (R-CAL-08).
+      "automations.css: .au-all-day-row > .btn.icon.au-band-toggle:hover:not(:disabled)",
+      "automations.css: .au-all-day-row > .btn.icon.au-band-toggle:active:not(:disabled)",
       // The larger view's collapse control keeps the window strip's hover (R-COMP-PERF-07).
       'desktop-viewer.css: .window-chrome > .btn.icon[data-desktop="collapse"]:is(:hover, :active):not(:disabled)',
       'desktop-viewer.css: .window-chrome > .btn.icon[data-desktop="collapse"]:active:not(:disabled)',
@@ -403,4 +406,21 @@ test("a Settings section's title stands on its card's left edge: no stylesheet i
     }
   }
   expect(inset).toEqual([]);
+});
+
+test("a grid that scrolls inside a capped height sizes its rows by their content (R-UI-181)", () => {
+  // 選擇主要聯絡對象 listed twenty members in a list capped at 52vh: rows of the default size shrank to the buttons'
+  // min-height once the members did not fit, and every name ran over the description above it. A row as tall as its
+  // content never shrinks; the list scrolls instead.
+  const squashable: string[] = [];
+  for (const file of mainFiles.filter((f) => f.endsWith(".css"))) {
+    const css = read(file).replace(/\/\*[\s\S]*?\*\//g, "");
+    for (const [, selectors, body] of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const grid = /(?:^|;)\s*display\s*:\s*grid\b/.test(body!);
+      const capped = /(?:^|;)\s*max-height\s*:\s*(?!none\b)[^;]+/.test(body!);
+      const scrolls = /(?:^|;)\s*overflow(?:-y)?\s*:\s*(?:[\w-]+\s+)?(?:auto|scroll)\b/.test(body!);
+      if (grid && capped && scrolls && !/grid-auto-rows\s*:\s*(?:max-content|min-content)\b/.test(body!)) squashable.push(`${rel(file)}: ${selectors!.trim()}`);
+    }
+  }
+  expect(squashable).toEqual([]);
 });

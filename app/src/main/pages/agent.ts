@@ -55,6 +55,7 @@ import { closeMediaLightbox, openMediaLightbox } from "../media-lightbox";
 import { keepReadingPlace } from "../reading-place";
 import { wholeLinks } from "../composer-links";
 import { mountSlashMenu } from "../slash-menu";
+import { appCommandOf, runAppCommand } from "../app-commands";
 import { getLocale, onLocaleChange, t } from "../i18n";
 
 import { plainReplies } from "../../shared/anime";
@@ -67,7 +68,8 @@ import { openUnread, unreadInTail, unreadLine } from "../unread-divider";
 import { measureMessagePreviews, messagePreviewMeasure } from "../message-preview";
 import { messageTooltip } from "../message-tooltip";
 import { quoteHTML, selectionQuote } from "../message-quote";
-import { copyPicture, mediaPicture, mediaVideo, pictureQuote } from "../picture-message";
+import { copyStoredPicture, mediaPicture, mediaVideo, pictureQuote } from "../picture-message";
+import { contextMenuTarget } from "../context-menu";
 import { ReplyPacing } from "../reply-pacing";
 import { avatarHTML, currentAvatar, onAvatarChange } from "../avatar";
 import "../background-questions.css";
@@ -139,6 +141,7 @@ import { VoiceMode } from "../voice-mode";
 import { mountDesktopViewer } from "../desktop-viewer";
 import "../agent.css";
 import "../members.css";
+import { firstBotName } from "../first-bot";
 
 /** How many turns one load brings. */
 const PAGE_SIZE = 50;
@@ -616,7 +619,8 @@ export function createAgent(app: AppContext, places?: {
   const input = composer.querySelector<HTMLTextAreaElement>(".cmp-input")!;
   const pageDraft = bindPageComposer(input);
   const correctionLearning = bindComposerLearning(input);
-  const slashMenu = mountSlashMenu(input, { memberId, scope: app, changed: () => { presentationVersion++; render(); } });
+  const slashMenu = mountSlashMenu(input, { memberId, scope: app, changed: () => { presentationVersion++; render(); },
+    appCommand: command => runAppCommand(command, (page, argument) => app.go(page, argument)) });
   const attachButton = composer.querySelector<HTMLElement>(".cmp-attach")!;
   bindActionMode(composer.querySelector<HTMLElement>(".cmp-mode")!);
   composerFolder = mountComposerFolder(composer.querySelector<HTMLElement>(".cmp-folder")!, composer.querySelector<HTMLElement>(".cmp-branch")!,
@@ -648,7 +652,7 @@ export function createAgent(app: AppContext, places?: {
   askCard.className = "ask-card-host";
   askCard.hidden = true;
   askCard.setAttribute("role", "group");
-  askCard.innerHTML = cardHTML({ title: t("cards.permission", { p0: t("agent.title") }), status: "waiting", statusText: cardPromptText("permission"), cls: "ask-card",
+  askCard.innerHTML = cardHTML({ title: t("cards.permission", { p0: firstBotName() }), status: "waiting", statusText: cardPromptText("permission"), cls: "ask-card",
     body: t("perm.title"),
     // A local command is shown itself, never behind a disclosure: the owner allows what they can read.
     content: `<pre class="local-command ask-cmd" hidden></pre>` + cardDisclosureHTML("approval", `<p class="ask-q card-body"></p>`),
@@ -925,7 +929,7 @@ export function createAgent(app: AppContext, places?: {
     const brand: Record<string, string> = { telegram: "Telegram", slack: "Slack", discord: "Discord" };
     // While a question card waits the field says it takes the answer, or anything else (what is written closes the card, unanswered).
     const asked = questionWaits(turns, pendingQuestions?.member === memberId() && pendingQuestions.conversation === conversationId() ? pendingQuestions.questions : []);
-    const words = setup ? t("chat.askAboutSetup", { p0: brand[setup] ?? setup }) : asked ? t("ownerQuestion.type") : inRaphael() ? t("home.askRaphael") : memberPlaceholder(members.member().name);
+    const words = setup ? t("chat.askAboutSetup", { p0: brand[setup] ?? setup }) : asked ? t("ownerQuestion.type") : memberPlaceholder(members.member().name);
     if (input.placeholder !== words) input.placeholder = words;
     if (input.getAttribute("aria-label") !== words) input.setAttribute("aria-label", words);
     empty.classList.toggle("is-member", !inRaphael());
@@ -1078,7 +1082,7 @@ export function createAgent(app: AppContext, places?: {
     askCard.dataset.id = q.id;
     askCard.dataset.tier = q.tier;
     askText.textContent = q.text;
-    const asker = inRaphael() ? t("agent.title") : members.nameOf(memberId());
+    const asker = inRaphael() ? members.member().name || firstBotName() : members.nameOf(memberId());
     // The core asks a local command as its word (本機指令) and, on the next lines, the command itself.
     const [lead = "", ...rest] = q.text.split("\n");
     const command = lead.trim() === t("local.title") ? rest.join("\n").trim() : "";
@@ -1655,6 +1659,16 @@ export function createAgent(app: AppContext, places?: {
     // A file still being read is not sent: Enter does nothing until it is in, as the button is not offered (R-ATTACH-04).
     if (attaching || files.some(file => file.pending)) return;
     if (missingFiles.length > 0) { toaster.info(t("chat.reattach")); return; }
+    // An app command typed whole (`/usage`) is the app's to run: nothing is sent and no model is asked (R-SLASH-APP-01).
+    const command = !files.length && !composerQuote && replacing === undefined ? appCommandOf(input.value) : null;
+    if (command) {
+      clearTimeout(draftTimer); discardComposerDraft(composerKey);
+      input.value = "";
+      input.dispatchEvent(new Event("composer-draft-restored"));
+      fit();
+      runAppCommand(command, (page, argument) => app.go(page, argument));
+      return;
+    }
     const text = typedQuestion(wholeLinks(input.value), files.length > 0);
     if (text === null) {
       if (input.value.trim() !== "") toaster.info(t("agent.tooLong"));
@@ -2278,7 +2292,7 @@ export function createAgent(app: AppContext, places?: {
     const pending = outgoing.find(item => item.requestId === control.closest<HTMLElement>("[data-session]")?.dataset.session);
     if (!source && !pending) return;
     const picture = source?.picture;
-    try { await copyButton(control, picture ? () => copyPicture(() => api.core<{ mime: string; data: string }>("attachments.get", { id: picture.id })) : source ? messagePlainText(source.text, source.markdown) : pending!.text); }
+    try { await copyButton(control, picture ? () => copyStoredPicture(picture.id ?? "", picture.name) : source ? messagePlainText(source.text, source.markdown) : pending!.text); }
     catch (err) { toaster.info(describeError(err)); }
   }
 
@@ -2303,6 +2317,14 @@ export function createAgent(app: AppContext, places?: {
     const owner = !source || source.key === "question";
     const message = control.closest<HTMLElement>(".chat-message");
     const items: Parameters<typeof openActions>[1][number][] = [];
+    // A right click on a picture or a file in the message copies that one (the picture as an image, the file as a file).
+    const pointedFile = contextMenuTarget()?.closest<HTMLElement>(".attachment-picture[data-attachment], .attachment-file[data-act=\"attachment-open\"][data-id]");
+    const pointedId = pointedFile && message?.contains(pointedFile) ? (pointedFile.dataset.attachment ?? pointedFile.dataset.id ?? "") : "";
+    const pointedPicture = !!pointedId && pointedFile!.classList.contains("attachment-picture");
+    // The name it was sent with, as shown: a file's line, a picture's own alt.
+    const pointedName = (pointedFile?.querySelector(".me-file-t")?.textContent ?? pointedFile?.querySelector("img")?.getAttribute("alt")) || undefined;
+    // A picture the member sent is the message itself: its own Copy below copies it, so it is not offered twice.
+    if (pointedId && !(pointedPicture && source?.picture)) items.push({ id: "copy-attachment", label: t(pointedPicture ? "chat.copyImage" : "chat.copyFile"), icon: "copy" });
     if (source) items.push({ id: "reply", label: t("chat.reply"), icon: "reply" });
     if (!source?.video) items.push({ id: "copy", label: t(source?.picture ? "chat.copyImage" : "chat.copy"), icon: "copy" });
     // No 「查看過程」: how a reply was worked out is not shown.
@@ -2314,7 +2336,10 @@ export function createAgent(app: AppContext, places?: {
     if (ownerAct === "cancel") items.push({ id: "cancel", label: t("common.cancel"), icon: "x" });
     const reactions = source && !owner && message?.querySelector('[data-act="react-message"]') ? ownReaction(source.turn.reactions?.[source.key]) : null;
     openActions(control, items, pick => {
-      if (pick === "regenerate") void regenerate(control);
+      if (pick === "copy-attachment") {
+        const copied = pointedPicture ? copyStoredPicture(pointedId, pointedName) : api.copyAttachment(pointedId, pointedName);
+        void copied.catch(error => toaster.info(describeError(error)));
+      } else if (pick === "regenerate") void regenerate(control);
       else if (pick === "reply") replyMessage(control);
       else if (pick === "edit") void editMessage(control);
       else if (pick === "cancel") void cancelMessage(control);

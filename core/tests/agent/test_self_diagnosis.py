@@ -304,13 +304,16 @@ async def test_self_check_reports_what_this_computer_lacks_for_a_feature(make_ri
 
     async def facts():
         return {"computer": {"host": "this_pc", "state": "docker_missing", "download": "https://www.docker.com/products/docker-desktop/"},
-                "dictation": {"engine": "cloud", "voice_detector_ready": True}, "programs": {"ffmpeg": False}}
+                "dictation": {"engine": "cloud", "voice_detector_ready": True}, "programs": {"ffmpeg": False},
+                "services": [{"tool": "vision", "missing": "model", "where": "Settings > Tools > Services > Images"}]}
 
     rig.service.setup_facts = facts
     client.chats = [chat("Checking.", ("self_check", {})), chat('{"text":"Checked."}')]
     await typed(rig)
     sent = json.dumps(client.chat_calls[-1]["messages"], ensure_ascii=False)
     assert "docker_missing" in sent and "docker-desktop" in sent and '\\"ffmpeg\\": false' in sent
+    # #316: a tool that is on but cannot be used is in the setup, with where to set it up.
+    assert "Settings > Tools > Services > Images" in sent
 
     async def broken():
         raise OSError("no engine")

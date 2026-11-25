@@ -2123,6 +2123,49 @@ pub async fn open_attachment(app: AppHandle, webview: Webview, id: String) -> Re
     launch_link(path)
 }
 
+/// Put a stored attachment on the clipboard as a file, for the owner's 「複製」 on a file or picture in a message. The core
+/// stays the authority over what an ID is and makes the copy under the name it was sent with (`name` is the one shown,
+/// used when the store kept none); the shell puts only that one file on the clipboard.
+#[tauri::command]
+pub async fn copy_attachment(
+    app: AppHandle,
+    webview: Webview,
+    id: String,
+    name: Option<String>,
+) -> Result<(), String> {
+    require_main(&webview)?;
+    let core = app
+        .try_state::<Arc<CoreProcess>>()
+        .ok_or(CORE_NOT_RUNNING)?;
+    let result = core
+        .call("attachments.copy", json!({"id": id, "name": name}))
+        .await
+        .map_err(|_| "attachment unavailable".to_owned())?;
+    let path = result
+        .get("path")
+        .and_then(Value::as_str)
+        .ok_or("attachment unavailable")?
+        .to_owned();
+    #[cfg(windows)]
+    {
+        let owner = webview
+            .window()
+            .hwnd()
+            .map_err(|e| format!("no window to copy from: {e}"))?
+            .0 as isize;
+        crate::paste::copy_clipboard_files(owner, &[path.as_str()])
+    }
+    #[cfg(target_os = "macos")]
+    {
+        crate::macos::pasteboard::copy_file(&path)
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        let _ = path;
+        Err("copying a file is not supported on this system".to_owned())
+    }
+}
+
 /// Resolve an opaque stored ID and grant the main window that one file under the `raphael-media`
 /// protocol. The core stays the authority over what an ID is; Rust only serves the exact file and
 /// servable type it named, and the window gets the ID back to build a stable, cacheable URL from.
@@ -2809,6 +2852,7 @@ mod tests {
                 "agent_voice_composed",
                 "attachment_source",
                 "clipboard_text",
+                "copy_attachment",
                 "core_call",
                 "device_computer_app_remove",
                 "device_settings_get",

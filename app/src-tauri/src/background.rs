@@ -73,6 +73,9 @@ pub enum Effect {
 
 /// The report in `worker.report`'s params; None when it has no prefix to say it with.
 pub fn parse_report(params: &Value) -> Option<Report> {
+    if !params.get("notify")?.as_bool()? {
+        return None;
+    }
     let prefix = params.get("prefix")?.as_str()?.trim();
     let text = params.get("text")?.as_str()?;
     (!prefix.is_empty()).then(|| Report {
@@ -85,7 +88,7 @@ pub fn parse_report(params: &Value) -> Option<Report> {
 /// The overlay's notice in `background.question`'s params: only when the question opens
 /// (`state` "waiting"), and only with a prefix to say it with.
 pub fn parse_notice(params: &Value) -> Option<Report> {
-    if params.get("state")?.as_str()? != "waiting" {
+    if !params.get("notify")?.as_bool()? || params.get("state")?.as_str()? != "waiting" {
         return None;
     }
     let notice = params.get("notice")?;
@@ -303,12 +306,27 @@ mod tests {
     // ---- reading the core's notifications ----
 
     #[test]
+    fn only_opted_in_background_events_reach_the_overlay() {
+        for notify in [Value::Null, json!(false), json!("true")] {
+            assert!(
+                parse_report(&json!({"notify": notify, "prefix": "Report", "text": "Done"}))
+                    .is_none()
+            );
+            assert!(
+                parse_notice(&json!({"notify": notify, "state": "waiting",
+                "notice": {"prefix": "Notice", "text": "Needs input"}}))
+                .is_none()
+            );
+        }
+    }
+
+    #[test]
     fn a_report_has_a_prefix_and_words() {
-        let params = json!({"task_id": 3, "state": "done", "prefix": "告", "text": "三項待辦。"});
+        let params = json!({"task_id": 3, "state": "done", "notify": true, "prefix": "告", "text": "三項待辦。"});
         assert_eq!(parse_report(&params), Some(report("告", "三項待辦。")));
         // an acknowledgement may have no words besides its prefix
         assert_eq!(
-            parse_report(&json!({"prefix": "了", "text": ""})),
+            parse_report(&json!({"notify": true, "prefix": "了", "text": ""})),
             Some(report("了", ""))
         );
     }
@@ -318,10 +336,10 @@ mod tests {
         for params in [
             json!({}),
             json!({"text": "x"}),
-            json!({"prefix": "告"}),
-            json!({"prefix": "  ", "text": "x"}),
-            json!({"prefix": 1, "text": "x"}),
-            json!({"prefix": "告", "text": null}),
+            json!({"notify": true, "prefix": "告"}),
+            json!({"notify": true, "prefix": "  ", "text": "x"}),
+            json!({"notify": true, "prefix": 1, "text": "x"}),
+            json!({"notify": true, "prefix": "告", "text": null}),
             json!("report"),
         ] {
             assert_eq!(parse_report(&params), None, "{params}");
@@ -342,7 +360,7 @@ mod tests {
         assert_eq!(
             effect_of(&notification(
                 WORKER_REPORT,
-                json!({"prefix": "告", "text": "完成。"})
+                json!({"notify": true, "prefix": "告", "text": "完成。"})
             )),
             Effect::Say(report("告", "完成。"))
         );
@@ -365,7 +383,7 @@ mod tests {
 
     #[test]
     fn a_question_of_the_background_is_told_once_when_it_opens() {
-        let opened = json!({"task_id": 3, "question_id": "q", "member_id": 0, "state": "waiting",
+        let opened = json!({"task_id": 3, "question_id": "q", "member_id": 0, "state": "waiting", "notify": true,
                             "prefix": "問", "text": "是否讓「Notes」執行「note」？",
                             "notice": {"prefix": "告", "text": "有一件事等你處理。"}});
         assert_eq!(
@@ -375,8 +393,8 @@ mod tests {
         for ended in [
             json!({"task_id": 3, "question_id": "q", "state": "approved"}),
             json!({"task_id": 3, "question_id": "q", "state": "waiting"}),
-            json!({"state": "waiting", "notice": {"prefix": "", "text": "x"}}),
-            json!({"state": "waiting", "notice": {"prefix": "告", "text": " "}}),
+            json!({"state": "waiting", "notify": true, "notice": {"prefix": "", "text": "x"}}),
+            json!({"state": "waiting", "notify": true, "notice": {"prefix": "告", "text": " "}}),
         ] {
             assert_eq!(
                 effect_of(&notification(BACKGROUND_QUESTION, ended.clone())),

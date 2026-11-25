@@ -20,6 +20,7 @@ import { onLocaleChange, t } from "./i18n";
 import type { MainEvent, PermissionCard } from "./types";
 import { permissionCardHTML } from "./permission-card";
 import { esc, toaster } from "./ui";
+import { firstBotName } from "./first-bot";
 
 /** A question that waits, as `background.questions.list` gives it. */
 export interface BackgroundQuestion {
@@ -56,7 +57,7 @@ const RAPHAEL: Asker = {
 
 /** One shared card, scoped to its originating member, with controls disabled during the answer. */
 export function backgroundQuestionHTML(q: BackgroundQuestion, busy = false, asker: Asker = RAPHAEL): string {
-  if (q.permission) return `<div data-bgq-card="${esc(q.id)}" data-task="${q.task_id}">${permissionCardHTML(q.permission, !busy, asker.name || t("agent.title"))}</div>`;
+  if (q.permission) return `<div data-bgq-card="${esc(q.id)}" data-task="${q.task_id}">${permissionCardHTML(q.permission, !busy, asker.name || firstBotName())}</div>`;
   const off = busy ? " disabled" : "";
   const ids = ` data-task="${q.task_id}" data-id="${esc(q.id)}"`;
   return cardHTML({ title: asker.name ? t("cards.permission", { p0: asker.name }) : t("perm.title"), status: "waiting", body: q.text,

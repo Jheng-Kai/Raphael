@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { mountDesktopTimeline } from "../../src/main/desktop-timeline";
 import { memberAccent } from "../../src/main/owner-bubble";
-import { slimeCharactersHTML, slimeColorOf, slimeColorsHTML } from "../../src/main/slime";
+import { slimeCharactersHTML, slimeColorOf } from "../../src/main/slime";
 import { auditDocument, failedChecks } from "./audit.mjs";
 import { checkRendered } from "./checks.mjs";
 import { scenes } from "./scenes/index.mjs";
@@ -125,6 +125,25 @@ describe("rendered look checks", () => {
       otherBox = rect(210, 48, 36, 36);
       expect(violations()).toEqual([]);
       otherBox = rect(110, 6, 36, 36);
+      expect(violations()).toEqual([]);
+    } finally { browser.happyDOM.abort(); }
+  });
+  it("rejects a row of a scrolling list squashed below its face and words", () => {
+    const browser = new Window();
+    const { document: doc } = browser;
+    doc.body.innerHTML = '<div class="list" style="overflow-y: auto"><button class="btn row"><span class="face"></span><span class="words">小晴</span></button></div>';
+    const [row] = doc.querySelectorAll("button"), [face, words] = row.children;
+    const rect = (left, top, width, height) => ({ left, right: left + width, top, bottom: top + height, width, height });
+    for (const node of doc.querySelectorAll("*")) node.getBoundingClientRect = () => rect(0, 0, 400, 300);
+    row.getBoundingClientRect = () => rect(0, 100, 400, 30);
+    face.getBoundingClientRect = () => rect(8, 98, 34, 34);
+    let wordsBox = rect(50, 95, 300, 40);
+    words.getBoundingClientRect = () => wordsBox;
+    const violations = () => auditDocument(doc, { width: 720, height: 480 }).productRules.filter(item => item.rule === "R-UI-181");
+    try {
+      expect(violations()).toHaveLength(1);
+      wordsBox = rect(50, 104, 300, 22);
+      face.getBoundingClientRect = () => rect(8, 100, 30, 30);
       expect(violations()).toEqual([]);
     } finally { browser.happyDOM.abort(); }
   });
@@ -804,8 +823,10 @@ describe("rendered look checks", () => {
     window.document.documentElement.dataset.theme = theme;
     window.document.head.innerHTML = `<style>${resolvedRGB(css)}</style>`;
     const picker = window.document.createElement("div");
-    picker.innerHTML = slimeCharactersHTML(null, value => value) + slimeColorsHTML(null, value => value);
-    const colours = [...picker.querySelectorAll("button")].map(button => slimeColorOf({ id: 1, avatar: button.dataset.slimeCharacter ? `slime:${button.dataset.slimeCharacter}` : `slime:color:${button.dataset.slimeColor}` }));
+    picker.innerHTML = slimeCharactersHTML(null, value => value);
+    // Every slime the picker offers, and the plain colours a member without a face of its own wears.
+    const colours = [...[...picker.querySelectorAll("button")].map(button => slimeColorOf({ id: 1, avatar: `slime:${button.dataset.slimeCharacter}` })),
+      ...new Set(Array.from({ length: 40 }, (_, id) => slimeColorOf({ id })))];
     expect(colours.length).toBeGreaterThan(20);
     vi.stubGlobal("document", window.document);
     vi.stubGlobal("Element", window.Element);
@@ -957,6 +978,13 @@ describe("rendered look checks", () => {
   it("allows the specified round sidebar action surface while rejecting unrelated icon surfaces", () => {
     const { audit } = productAudit('<nav class="side"><button class="btn icon sidebar-tool" style="border:0;background:gray"></button></nav><button class="btn icon" style="border:0;background:gray"></button>');
     expect(audit().productRules.filter(item => item.rule === 'R-UI-16')).toHaveLength(1);
+  });
+  it("allows the all-day strip to have a surface only on hover or press (R-CAL-08)", () => {
+    const { window, audit } = productAudit('<div class="au-all-day-row"><button class="btn icon au-band-toggle" style="border:0;background:gray"></button></div>');
+    const toggle = window.document.querySelector('button'), matches = toggle.matches.bind(toggle);
+    expect(audit().productRules.filter(rule => rule.rule === 'R-UI-16')).toHaveLength(1);
+    vi.spyOn(toggle, 'matches').mockImplementation(selector => selector === '.au-all-day-row > .au-band-toggle:is(:hover, :active):not(:disabled)' || matches(selector));
+    expect(audit().productRules.filter(rule => rule.rule === 'R-UI-16')).toHaveLength(0);
   });
   it("lets the guide's pair of round buttons keep their grey surface, and no other icon (R-UI-16)", () => {
     const { audit } = productAudit('<div class="ob-foot"><div class="action-row ob-actions ob-pair"><button class="btn icon" style="border:0;background:gray"></button><button class="btn icon pri" style="border:0;background:gray"></button></div></div><button class="btn icon" style="border:0;background:gray"></button>');

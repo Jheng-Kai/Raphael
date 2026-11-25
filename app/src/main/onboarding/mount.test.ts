@@ -24,6 +24,8 @@ const api = vi.hoisted(() => ({
   mainWindowForward: vi.fn(),
   brainsCliLogin: vi.fn(),
   openExternalUrl: vi.fn(),
+  membersList: vi.fn(),
+  membersUpdate: vi.fn(),
 }));
 vi.mock("../api", () => api);
 // The picker of the window's language answers at once with the language the test names.
@@ -73,6 +75,18 @@ const open = async (): Promise<void> => {
   await flush();
 };
 const text = (selector: string): string => root.querySelector(selector)?.textContent ?? "";
+/** The first slime's name, typed as the owner types it (its way on waits for one). */
+const nameFirst = (name: string): void => {
+  const field = root.querySelector<HTMLInputElement>("#ob-first-name")!;
+  field.value = name;
+  field.dispatchEvent(new Event("input", { bubbles: true }));
+};
+/** From the welcome past the first slime, named, to the AI tools. */
+const toTools = async (): Promise<void> => {
+  await press('[data-ob="next"]');
+  nameFirst("Mochi");
+  await press('[data-ob="next"]');
+};
 
 test.each(navInputs)("%s can retrace guide steps, and back at the first step leaves the guide where it is", async input => {
   await open();
@@ -82,7 +96,7 @@ test.each(navInputs)("%s can retrace guide steps, and back at the first step lea
   pressLayer(input);
   expect(root.dataset.step).toBe("welcome");
   pressLayer(input, "forward");
-  expect(root.dataset.step).toBe("tools");
+  expect(root.dataset.step).toBe("slime");
   pressLayer(input);
   pressLayer(input);
   // One stray press never skips the first-run guide (R-NAV-02).
@@ -110,6 +124,8 @@ beforeEach(() => {
   api.settingsGet.mockResolvedValue({ settings: {} });
   api.settingsSet.mockResolvedValue({ settings: { web_read_enabled: false } });
   api.mainWindowForward.mockResolvedValue(undefined);
+  api.membersList.mockResolvedValue({ members: [{ id: 0, name: "Raphael", avatar: "" }], groups: [] });
+  api.membersUpdate.mockResolvedValue({ member: { id: 0 } });
 });
 afterEach(() => {
   root.replaceChildren();
@@ -144,7 +160,7 @@ describe("the guide", () => {
 
   test("walks the three choices in order in one card, with no progress bar and no side", async () => {
     await open();
-    await press('[data-ob="next"]');
+    await toTools();
     expect(root.dataset.step).toBe("tools");
     expect(root.querySelectorAll(".ob-card")).toHaveLength(1);
     expect(root.querySelector(".ob-card canvas.ob-emb")).toBeNull();
@@ -165,7 +181,8 @@ describe("the guide", () => {
     // The welcome's row is its one worded pill, not the steps' pair.
     expect(root.querySelector(".ob-foot .ob-actions")!.classList.contains("ob-pair")).toBe(false);
     expect(text('[data-ob="next"]')).toBe("Start");
-    for (const step of ["tools", "services", "abilities"]) {
+    for (const step of ["slime", "tools", "services", "abilities"]) {
+      if (step === "tools") nameFirst("Mochi");
       await press('[data-ob="next"]');
       expect(root.dataset.step).toBe(step);
       // Exactly two controls, the way back first and the primary after it (also the tab order), in the row that keeps
@@ -194,12 +211,16 @@ describe("the guide", () => {
 
   test("the back button goes back one step, and the way on keeps its name", async () => {
     await open();
-    await press('[data-ob="next"]');
+    await toTools();
     await press('[data-ob="next"]');
     expect(root.dataset.step).toBe("services");
     expect(root.querySelector('[data-ob="next"]')!.getAttribute("aria-label")).toBe("Next");
     await press('.ob-foot [data-ob="back"]');
     expect(root.dataset.step).toBe("tools");
+    await press('.ob-foot [data-ob="back"]');
+    expect(root.dataset.step).toBe("slime");
+    // What was typed stays when the owner comes back to it.
+    expect(root.querySelector<HTMLInputElement>("#ob-first-name")!.value).toBe("Mochi");
     await press('.ob-foot [data-ob="back"]');
     expect(root.dataset.step).toBe("welcome");
     expect(root.querySelector('[data-ob="back"]')).toBeNull();
@@ -207,7 +228,8 @@ describe("the guide", () => {
 
   test("a first run saves onboarded once, on the last step, and tells who opened it", async () => {
     await open();
-    for (let i = 0; i < 3; i++) await press('[data-ob="next"]');
+    await toTools();
+    for (let i = 0; i < 2; i++) await press('[data-ob="next"]');
     expect(setDevice).not.toHaveBeenCalled();
     expect(root.querySelector('[data-ob="next"]')!.getAttribute("aria-label")).toBe("Start using Raphael");
     await press('[data-ob="next"]');
@@ -220,16 +242,110 @@ describe("the guide", () => {
   test("a failed save keeps the guide open and says why", async () => {
     setDevice.mockRejectedValue(new Error("disk full"));
     await open();
-    for (let i = 0; i < 4; i++) await press('[data-ob="next"]');
+    await toTools();
+    for (let i = 0; i < 3; i++) await press('[data-ob="next"]');
     expect(done).not.toHaveBeenCalled();
     expect(root.querySelector('[data-ob="next"]')!.hasAttribute("disabled")).toBe(false);
+  });
+});
+
+describe("the first slime", () => {
+  test("its name is the owner's to give: the built-in one is never in the field, and the way on waits for one", async () => {
+    await open();
+    await press('[data-ob="next"]');
+    expect(root.dataset.step).toBe("slime");
+    expect(root.querySelector("h2")!.textContent).toBe("Name your first slime");
+    const field = root.querySelector<HTMLInputElement>("#ob-first-name")!;
+    expect(field.value).toBe("");
+    expect(field.maxLength).toBe(16);
+    const next = (): HTMLButtonElement => root.querySelector<HTMLButtonElement>('[data-ob="next"]')!;
+    expect(next().disabled).toBe(true);
+    nameFirst("   ");
+    expect(next().disabled).toBe(true);
+    nameFirst("Mochi");
+    expect(next().disabled).toBe(false);
+    expect(root.querySelector(".ob-first-face .slime-surface")).not.toBeNull();
+  });
+
+  test("its look starts as the first blue slime, and a press in the members' picker dresses it at once", async () => {
+    await open();
+    await press('[data-ob="next"]');
+    expect(root.querySelector('.ob-first-picker [aria-pressed="true"]')!.getAttribute("data-slime-character")).toBe("blue-plain");
+    const before = root.querySelector(".ob-first-face")!.innerHTML;
+    await press('.ob-first-picker [data-slime-character="horns-red"]');
+    expect(root.querySelector(".ob-first-face")!.innerHTML).not.toBe(before);
+    expect(root.querySelector('.ob-first-picker [data-slime-character="horns-red"]')!.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  test("the way on keeps the name and the slime as the first member's, the chief of staff, and Enter does the same", async () => {
+    await open();
+    await press('[data-ob="next"]');
+    await press('.ob-first-picker [data-slime-character="horns-red"]');
+    nameFirst("  Mochi  ");
+    root.querySelector<HTMLInputElement>("#ob-first-name")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await flush();
+    expect(api.membersUpdate).toHaveBeenCalledWith(0, { name: "Mochi", avatar: "slime:horns-red" });
+    expect(root.dataset.step).toBe("tools");
+    // Back and on again with nothing changed sends nothing again.
+    await press('.ob-foot [data-ob="back"]');
+    await press('[data-ob="next"]');
+    expect(api.membersUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  test("a save that ends after the owner went back, and came here again, does not move the new visit on", async () => {
+    let saved!: (value: unknown) => void;
+    api.membersUpdate.mockReturnValue(new Promise(resolve => { saved = resolve; }));
+    await open();
+    await press('[data-ob="next"]');
+    nameFirst("Mochi");
+    await press('[data-ob="next"]');
+    await press('.ob-foot [data-ob="back"]');
+    expect(root.dataset.step).toBe("welcome");
+    await press('[data-ob="next"]');
+    expect(root.dataset.step).toBe("slime");
+    saved({ member: { id: 0 } });
+    await flush();
+    expect(root.dataset.step).toBe("slime");
+    // The name can be changed again once the save is done.
+    expect(root.querySelector<HTMLInputElement>("#ob-first-name")!.disabled).toBe(false);
+  });
+
+  test("forward by the mouse past the first slime keeps a changed name first, as the way on does", async () => {
+    await open();
+    await toTools();
+    pressLayer("mouse");
+    expect(root.dataset.step).toBe("slime");
+    nameFirst("Kiri");
+    pressLayer("mouse", "forward");
+    await flush();
+    expect(api.membersUpdate).toHaveBeenLastCalledWith(0, { name: "Kiri", avatar: "slime:blue-plain" });
+    expect(root.dataset.step).toBe("tools");
+  });
+
+  test("a refused name keeps the step and says why", async () => {
+    api.membersUpdate.mockRejectedValue(new Error("the core is not running"));
+    await open();
+    await toTools();
+    expect(root.dataset.step).toBe("slime");
+    expect(root.querySelector<HTMLButtonElement>('[data-ob="next"]')!.disabled).toBe(false);
+  });
+
+  test("a name the owner already gave stands in the field, and its slime in the picker", async () => {
+    api.membersList.mockResolvedValue({ members: [{ id: 0, name: "Mochi", avatar: "slime:horns-red" }], groups: [] });
+    await open();
+    await press('[data-ob="next"]');
+    expect(root.querySelector<HTMLInputElement>("#ob-first-name")!.value).toBe("Mochi");
+    expect(root.querySelector('.ob-first-picker [aria-pressed="true"]')!.getAttribute("data-slime-character")).toBe("horns-red");
+    await press('[data-ob="next"]');
+    expect(api.membersUpdate).not.toHaveBeenCalled();
+    expect(root.dataset.step).toBe("tools");
   });
 });
 
 describe("step 1: the AI tools", () => {
   test("shows the accounts as the settings do, and asks for no OpenRouter key of its own", async () => {
     await open();
-    await press('[data-ob="next"]');
+    await toTools();
     expect([...root.querySelectorAll(".ob-tile")].map((el) => (el as HTMLElement).dataset.item)).toEqual(["chatgpt", "claude", "codex", "gemini"]);
     expect(root.querySelector('[data-item="claude"].on .ob-tick')).not.toBeNull();
     expect(root.querySelector('#ob-key-input, [data-ob="key-replace"]')).toBeNull();
@@ -238,7 +354,7 @@ describe("step 1: the AI tools", () => {
 
   test("the search narrows the tools in place and keeps its caret", async () => {
     await open();
-    await press('[data-ob="next"]');
+    await toTools();
     const find = root.querySelector<HTMLInputElement>("#ob-tools-find")!;
     find.value = "clau";
     find.dispatchEvent(new Event("input", { bubbles: true }));
@@ -249,7 +365,7 @@ describe("step 1: the AI tools", () => {
   test("a command-line tool that is installed but signed out connects through the account controller", async () => {
     api.brainsCliLogin.mockResolvedValue({ started: true });
     await open();
-    await press('[data-ob="next"]');
+    await toTools();
     await press('[data-cli="codex"]');
     expect(api.brainsCliLogin).toHaveBeenCalledWith("codex");
   });
@@ -257,7 +373,7 @@ describe("step 1: the AI tools", () => {
   test("a tool that is not installed opens its install page", async () => {
     api.openExternalUrl.mockResolvedValue(undefined);
     await open();
-    await press('[data-ob="next"]');
+    await toTools();
     await press('[data-cli="gemini"]');
     expect(api.openExternalUrl).toHaveBeenCalledWith(expect.stringContaining("antigravity"));
   });
@@ -266,7 +382,7 @@ describe("step 1: the AI tools", () => {
 describe("step 2: the services", () => {
   const toServices = async (): Promise<void> => {
     await open();
-    await press('[data-ob="next"]');
+    await toTools();
     await press('[data-ob="next"]');
   };
 
@@ -421,7 +537,8 @@ describe("step 2: the services", () => {
 describe("step 3: the abilities", () => {
   const toAbilities = async (): Promise<void> => {
     await open();
-    for (let i = 0; i < 3; i++) await press('[data-ob="next"]');
+    await toTools();
+    for (let i = 0; i < 2; i++) await press('[data-ob="next"]');
   };
 
   test("each ability is Settings › Tools' own row: what it uses now and its switch, which changes the same setting", async () => {
