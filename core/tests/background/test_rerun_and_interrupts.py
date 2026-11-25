@@ -264,6 +264,35 @@ async def test_the_worker_of_a_rerun_receives_the_files_of_the_original_hand_off
     assert "INVOICE-TOTAL-4242" in rig.client.chat_calls[0]["messages"][1]["content"]
 
 
+async def test_a_rerun_waiting_for_its_files_starts_nothing_once_the_history_was_cleared(make_rig, conn):
+    rig = make_rig()
+    rig.service._closing = True
+    old, old_turn, history = hand_over(rig, conn)
+    rig.service._queue.clear()
+    rig.service._closing = False
+    finish(rig, old, "failed", "x")
+    reading, release = asyncio.Event(), asyncio.Event()
+
+    async def slow_read(origin):
+        reading.set()
+        await release.wait()
+        return []
+
+    rig.service._original_files = slow_read
+    rig.client.replies = [report("Should never run.")]
+    asked = asyncio.ensure_future(rig.service._rerun({"task_id": old}))
+    await asyncio.wait_for(reading.wait(), 5)
+    history.delete(old_turn)  # what a clear of the history and the tasks leaves
+    rig.service._store.delete(old)
+    release.set()
+    with pytest.raises(RpcError) as error:
+        await asked
+    assert error.value.code == NOT_FOUND
+    assert conn.execute("SELECT COUNT(*) FROM worker_tasks").fetchone()[0] == 0
+    assert conn.execute("SELECT COUNT(*) FROM agent_turns").fetchone()[0] == 0
+    assert rig.client.chat_calls == []
+
+
 async def test_a_second_request_to_run_a_failed_task_again_starts_nothing(make_rig, conn):
     rig = make_rig()
     rig.service._closing = True

@@ -653,10 +653,12 @@ class BackgroundService:
 
     def _is_latest_run(self, turn_id: int, routine_id: int) -> bool:
         """Whether the routine's run that has this turn is its newest, by the routine's own run rows: a run refused before a worker
-        took it has a row and no task, and is still a newer run."""
-        return self._metrics_conn.execute(
-            "SELECT 1 FROM routine_runs WHERE routine_id=? AND id>(SELECT MAX(id) FROM routine_runs WHERE turn_id=?) LIMIT 1",
-            (routine_id, turn_id)).fetchone() is None
+        took it has a row and no task, and is still a newer run. A run whose row is gone (a recovery already cleaned it) is never
+        the latest."""
+        row = self._metrics_conn.execute("SELECT MAX(id) FROM routine_runs WHERE routine_id=? AND turn_id=?", (routine_id, turn_id)).fetchone()
+        if row is None or row[0] is None:
+            return False
+        return self._metrics_conn.execute("SELECT 1 FROM routine_runs WHERE routine_id=? AND id>? LIMIT 1", (routine_id, row[0])).fetchone() is None
 
     def _remove_failed_turn(self, task: Task, turn: Turn, latest: bool | None = None) -> None:
         """Take one finished failed run's turn out of the history, and the app is told as when a turn is deleted. `latest` says
@@ -3512,6 +3514,13 @@ class BackgroundService:
             raise RpcError(NOT_FOUND, "The member of that task is gone")
         model = self._text_setting("agent_model")
         files = await self._original_files(earlier) if earlier is not None and old.mode is None else []
+        # Everything is looked at again once the files are read: the history or the tasks may have been cleared, the member
+        # deleted, or a second request may have come in meanwhile. Nothing is started for what is gone.
+        current = self._store.get(old.id)
+        if current is None or current.state not in RERUNNABLE or (earlier is not None and self._history.get(earlier.id) is None):
+            raise RpcError(NOT_FOUND, "There is no such task")
+        if self._speaker(old.member_id) is None:
+            raise RpcError(NOT_FOUND, "The member of that task is gone")
         if self._metrics_conn.execute("SELECT 1 FROM worker_tasks WHERE rerun_of=? LIMIT 1", (old.id,)).fetchone():
             raise invalid_params("this task was already run again")  # a second request came in while the files were read
         try:
