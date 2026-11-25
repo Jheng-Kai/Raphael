@@ -121,9 +121,6 @@
 .model-chooser .lm-row .btn.pri:active:not(:disabled) { background: var(--accent-pressed); border-color: var(--accent-pressed); }
 .model-chooser .lm-row .btn:focus-visible { box-shadow: none; }
 :where(:root[data-keys]) .model-chooser .lm-row .btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-.lm-confirm { flex: 1; display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); padding: var(--sp-3); border-radius: var(--r-md); background: var(--hover); }
-.lm-ask { flex: 1 1 160px; min-width: 0; font-size: var(--fs-sm); line-height: 1.4; }
-.model-chooser .lm-confirm .btn { margin: 0; }
 
 .mp-star { position: absolute; right: 8px; top: 26px; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; width: 24px; height: 28px; color: var(--text-3); background: transparent; border: 0; border-radius: var(--r-sm); }
 .mp-star:hover { background: transparent; color: var(--text); }

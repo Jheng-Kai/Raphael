@@ -180,13 +180,16 @@ export function openDialog(o: DialogOptions): Dialog {
   return dialog;
 }
 
+/** The words of the red confirmation dialog: the question about that one thing, what happens, and the red button's action. */
+export interface ConfirmWords { title: string; hint: string; action: string }
+
 /**
  * Confirms deletion or history clearing with the app's one delete dialog: a small box with the
  * title, one sentence and one row of two equal buttons, Cancel then a red Delete, no × and no lines (members.css `.mb-delete`).
  * A member's own says that the member and its conversation go for good. Nothing is asked about what the deletion also clears
  * (a member's computer is the app's to remove, without a word to the owner). The focus starts on Cancel, so Enter never deletes.
  */
-export function confirmDelete(name: string, options: { clearHistory?: boolean; member?: boolean; words?: { title: string; hint: string; action: string } } = {}): Promise<boolean> {
+export function confirmDelete(name: string, options: { clearHistory?: boolean; member?: boolean; words?: ConfirmWords } = {}): Promise<boolean> {
   return new Promise((resolve) => {
     let answer = false;
     openDialog({

@@ -1461,7 +1461,8 @@ export function installMock(fixture, config = {}, target = window) {
         if (!entry) return { ok: false, error: "vault_values" };
         return { values: { login: { username: "look@example.test", password: "look-synthetic-password" }, contact: { name: "測試聯絡人", address: "台北市測試路 1 號", phone: "0912000000", email: "contact@example.test" },
           card: { name: "測試持卡人", number: "4111111111111111", expiry: "12/30", cvc: "123" }, key: { value: "look-synthetic-key" } }[entry.kind] };
-      }      case "vault.preview": return data.vaultImportPreview;
+      }
+      case "vault.preview": return data.vaultImportPreview;
       case "vault.cancel": return { cancelled: true };
       case "vault.import": return { saved: p.ids.length, remaining: 0 };
       case "vault.add": { const { values, ...metadata } = p; data.vaultEntries.push({ id: "new-synthetic-entry", ...metadata }); return { id: "new-synthetic-entry" }; }

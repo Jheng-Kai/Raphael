@@ -3,15 +3,16 @@
 // has the model's name, the languages it knows, its size, a line on what it is for and its state:
 // 未下載, 下載中 42%, 已下載, 備援 (the model behind the cloud) or 使用中. A model that is not downloaded has a 下載
 // button that starts at once (the row shows its size, and 取消 takes over while it downloads); a
-// downloaded one that is not in use can be deleted, after asking in the row.
+// downloaded one that is not in use can be deleted, after asking in the red dialog (`deleteWords`).
 //
 // This file only draws and counts. The picker keeps the open tab and the question being asked,
 // and the settings page does the downloading and holds the progress of it.
 
 import { GB, MB } from "./format";
 import { t } from "./i18n";
+import type { ConfirmWords } from "./member-dialogs";
 import type { LocalModel } from "./types";
-import { actionRow, btn, esc, iconButton } from "./ui";
+import { btn, esc, iconButton } from "./ui";
 
 /** What the local tab is drawn from. */
 export interface LocalView {
@@ -23,12 +24,6 @@ export interface LocalView {
   fallback?: string | null;
   /** The download under way: bytes done of bytes in all (0 while the size is not known). */
   download: { name: string; done: number; total: number } | null;
-}
-
-/** A question the row of `name` asks before it does anything. */
-export interface LocalConfirm {
-  kind: "delete";
-  name: string;
 }
 
 export type LocalState =
@@ -106,31 +101,20 @@ export function faceTitle(view: LocalView): string | null {
   return `${t("picker.tabLocal")} · ${model?.title ?? view.active}`;
 }
 
-/** The question before a deletion; the fallback's adds who backs up the cloud afterwards, if anyone. */
-function deleteQuestion(model: LocalModel, view: LocalView): string {
-  const ask = t("local.confirmDelete", { p0: model.title, p1: formatSize(model.size) });
-  if (model.name !== view.fallback || view.models === "loading" || view.models === "failed") return ask;
+/** The words of the red dialog before a deletion; the fallback's adds who backs up the cloud afterwards, if anyone. */
+export function deleteWords(model: LocalModel, view: LocalView): ConfirmWords {
+  const hint = t("local.deleteHint");
+  const words = { title: t("local.confirmDelete", { p0: model.title, p1: formatSize(model.size) }), action: t("local.delete") };
+  if (model.name !== view.fallback || view.models === "loading" || view.models === "failed") return { ...words, hint };
   const next = view.models.find((other) => other.ready && other.name !== model.name);
-  return `${ask}${next ? t("local.afterNext", { p0: next.title }) : t("local.afterNone")}`;
+  return { ...words, hint: `${hint}${next ? t("local.afterNext", { p0: next.title }) : t("local.afterNone")}` };
 }
 
-function rowHTML(model: LocalModel, view: LocalView, confirm: LocalConfirm | null, selectionOnly: boolean): string {
+function rowHTML(model: LocalModel, view: LocalView, selectionOnly: boolean): string {
   const state = localState(model, view);
   const busy = view.download !== null;
   const size = formatSize(model.size);
   const open = `<div class="lm-row" data-name="${esc(model.name)}">`;
-  if (confirm?.name === model.name) {
-    const text = deleteQuestion(model, view);
-    return (
-      `${open}<div class="lm-confirm" role="group" aria-label="${esc(text)}"><span class="lm-ask">${esc(text)}</span>` +
-      actionRow({
-        cls: "lm-confirm-actions",
-        destructive: { label: esc(t("local.delete")), kind: "sm", attrs: ` data-act="confirm" data-name="${esc(model.name)}"` },
-        secondary: btn(esc(t("local.cancel")), "sm", ` data-act="dismiss" data-name="${esc(model.name)}"`),
-      }) +
-      `</div></div>`
-    );
-  }
   const languages = languagesText(model.languages);
   const note = NOTES[model.note]?.() ?? "";
   const sub = [languages, size, note].filter(Boolean).join(" · ");
@@ -155,9 +139,9 @@ function rowHTML(model: LocalModel, view: LocalView, confirm: LocalConfirm | nul
   return `${open}${main}${action}</div>`;
 }
 
-/** The rows of the local tab, with the question being asked in one of them. */
-export function localListHTML(view: LocalView, confirm: LocalConfirm | null, selectionOnly = false): string {
+/** The rows of the local tab. */
+export function localListHTML(view: LocalView, selectionOnly = false): string {
   if (view.models === "loading") return `<p class="mp-empty" role="status">${esc(t("common.loading"))}</p>`;
   if (view.models === "failed" || Array.isArray(view.models) && !view.models.length) return `<p class="mp-empty" role="status">${esc(t("local.unavailable"))}</p>`;
-  return view.models.map((model) => rowHTML(model, view, confirm, selectionOnly)).join("");
+  return view.models.map((model) => rowHTML(model, view, selectionOnly)).join("");
 }

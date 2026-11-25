@@ -2,7 +2,8 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { closeAndPress, registerDismissal } from "./dismissals";
 import { openDialog } from "./member-dialogs";
-import { closeMenu, openConfirmMenu, openMenu, pressOverflow } from "./ui";
+import { openConfirmMenu } from "./member-column";
+import { closeMenu, openMenu, pressOverflow } from "./ui";
 
 const disposers: (() => void)[] = [];
 afterEach(() => {
@@ -208,15 +209,14 @@ test("a right click on a scrim closes the dialog and is spent: the row behind it
   expect(opened).not.toHaveBeenCalled();
 });
 
-test("a press outside an 'are you sure' step abandons it and goes on to what it pressed", () => {
+test("a press outside the menu of a destroying item leaves it without asking and goes on to what it pressed", () => {
   const anchor = document.createElement("button"), other = document.createElement("button"), act = vi.fn(), run = vi.fn();
   document.body.append(anchor, other); other.addEventListener("click", act);
-  openConfirmMenu(anchor, { label: "Delete", ask: "Really?", run });
-  const item = document.querySelector<HTMLElement>("[data-confirm-item]")!;
-  item.click();
-  expect(item.textContent).toContain("Really?");
+  openConfirmMenu(anchor, { label: "Delete", ask: { title: "Delete it?", hint: "This cannot be undone.", action: "Delete" }, run });
+  expect(document.querySelector("#app-popover [data-pick]")?.textContent).toBe("Delete");
   press(other);
   expect(document.getElementById("app-popover")).toBeNull();
+  expect(document.querySelector(".mb-delete")).toBeNull();
   expect(run).not.toHaveBeenCalled();
   expect(act).toHaveBeenCalledTimes(1);
 });

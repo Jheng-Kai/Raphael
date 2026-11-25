@@ -372,7 +372,6 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 .action-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--sp-2); min-width: 0; }
 .action-destructive { display: flex; margin-inline-end: auto; }
 .action-row.is-sticky { position: sticky; bottom: 0; z-index: 2; padding-block: var(--sp-3); border-top: 1px solid var(--line); background: var(--panel); }
-.lm-confirm-actions { flex: 1 1 100%; }
 .keys { display: inline-flex; align-items: center; gap: var(--sp-1); color: var(--text-3); font-size: var(--fs-xs); }
 code, pre, samp { font-family: var(--mono); }
 /* A sideways row of chips: an arrow and a fade stand only at an end with more chips behind it (chip-scroll.ts). */
@@ -555,8 +554,8 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .set-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); min-height: 36px; }
 /* A long page scrolls under its header (R-UI-182): the back button, the title and the close stay where they are, on the
    dialog's own colour, and a hairline shows under them only once something has scrolled beneath. A plugin's skill page
-   has its header straight in the page, a package's page and a skill alone inside the package's wrapper. */
-.modal-scrim .modal-body :is(.set-content > .set-head, .cs > .cs-top, .cs-page > .cs-head, .skl-page > .skl-pack, .skl-page > .set-head) { position: sticky; top: 0; z-index: 3;
+   has its header straight in the page, a package's page and a skill alone inside the package's wrapper; a vault entry's page keeps its 儲存 there. */
+.modal-scrim .modal-body :is(.set-content > .set-head, .cs > .cs-top, .cs-page > .cs-head, .skl-page > .skl-pack, .skl-page > .set-head, .vault-page > .set-head) { position: sticky; top: 0; z-index: 3;
   --head-cover: inset 0 0 0 100vmax var(--dialog), 0 calc(-1 * var(--body-top)) 0 var(--dialog);
   box-shadow: var(--head-cover); animation: set-head-edge linear both; animation-timeline: scroll(nearest block); animation-range: 0 12px; }
 @keyframes set-head-edge { from { box-shadow: var(--head-cover), 0 1px 0 transparent; } to { box-shadow: var(--head-cover), 0 var(--sp-3) 0 var(--dialog), 0 calc(var(--sp-3) + 1px) 0 var(--line); } }
@@ -1009,7 +1008,7 @@ button.ob-tile:hover:not(:disabled) .ob-get { background: var(--pressed); }
 /* No row, list item or card draws a ⋯: a right click on it, or Shift+F10 and the Menu key,
    opens its menu (context-menu.ts presses the button, which stays in the page for that). A message keeps its ⋯ beside the
    bubble; a dialog's or the computer's header keeps its own. */
-:is([data-member-more], [data-group-more], [data-conversation-more], [data-room-more], [data-room-menu], [data-panel-task-menu], [data-det="routine-menu"], [data-dlg="routine-menu"], [data-res="skill-menu"], [data-res="command-menu"], [data-act="key-menu"], [data-rule="more"], [data-vault="menu"], [data-act="word-menu"], [data-act="history-menu"], [data-act="computer-menu"], [data-cli-menu], [data-chatgpt-menu], [data-au="event-more"], [data-msg="user-menu"])[data-overflow]:not(.modal-scrim [data-overflow]) { display: none; }
+:is([data-member-more], [data-group-more], [data-conversation-more], [data-room-more], [data-room-menu], [data-panel-task-menu], [data-det="routine-menu"], [data-dlg="routine-menu"], [data-res="skill-menu"], [data-res="command-menu"], [data-act="key-menu"], [data-rule="more"], [data-vault="menu"], [data-act="word-menu"], [data-act="history-menu"], [data-act="computer-menu"], [data-au="event-more"], [data-msg="user-menu"])[data-overflow]:not(.modal-scrim [data-overflow]) { display: none; }
 /* Settings keep their ⋯ beside what they act on: an account's sign-out, a key's removal, a rule's menu. */
 /* The round edge buttons: the panel's back, settings and close, the icons of a conversation's
    header, a dialog's close and the composer's attach are an icon in a soft round button, a little lighter under the

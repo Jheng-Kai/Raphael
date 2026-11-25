@@ -2,7 +2,7 @@
 // right-clicked anywhere on it, at the pointer, and for the focused item from the keyboard (Shift+F10, the Menu
 // key): the very same menu, since the button itself is pressed and its own handler runs. Anywhere else the
 // browser's menu (reload, back, ...) has no place in an app, so nothing opens. Settings is the one exception: in any of
-// its panes a right click opens nothing (a CLI's 中斷連線 in 模型 included); its ⋯ open only when pressed. Connect apps,
+// its panes a right click opens nothing; its ⋯ open only when pressed (a CLI's or ChatGPT's card has none: its unplug). Connect apps,
 // drawn in the same window on its own, is not Settings.
 //
 // `OVERFLOW_ROWS` is the one table of them. A ⋯ drawn without a line here fails context-menu.test.ts, and so does a
@@ -38,8 +38,6 @@ export const OVERFLOW_ROWS: readonly OverflowRow[] = [
   { more: '[data-act="history-menu"]', row: ".hrow" },
   { more: '[data-conn="server-menu"]', row: ".cs-page .cs-summary" },
   { more: '[data-conn="account-menu"]', row: ".cs-acct" },
-  { more: "[data-cli-menu]", row: ".cli-card" },
-  { more: "[data-chatgpt-menu]", row: "[data-chatgpt-card]" },
   { more: '[data-act="more-message"]', row: ".chat-message" },
   { more: '[data-au="event-more"]', row: ".au-event" },
   { more: '[data-pop="more"]', row: ".au-pop-detail" },

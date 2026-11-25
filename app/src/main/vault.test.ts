@@ -4,6 +4,7 @@ const api = vi.hoisted(() => ({ core: vi.fn(), membersList: vi.fn(), connectorsS
 vi.mock("./api", () => api);
 import { createVault, vaultHTML, type VaultEntry } from "./vault";
 import { closeMenu } from "./ui";
+import { stepOpenLayer } from "./dismissals";
 
 const entries: VaultEntry[] = [
   { id: "login", kind: "login", label: "<Travel>", hint: "Travel only", origin: "https://travel.example", members: "all" },
@@ -51,7 +52,7 @@ it("escapes labels and hints while preserving filter counts", async () => {
   expect(root.querySelector('[data-kind="login"] .n')?.textContent).toBe("1");
 });
 
-it("sends private fields only on save and removes them from the DOM and view on cancel", async () => {
+it("sends private fields only on save and removes them from the DOM and view once the page is left without saving", async () => {
   const { root, controller } = await setup();
   click(root, '[data-vault="new"]'); click(document, '.menu [data-value="contact"]');
   const input = root.querySelector<HTMLInputElement>("#vault-value-address")!;
@@ -60,7 +61,9 @@ it("sends private fields only on save and removes them from the DOM and view on 
   expect(JSON.stringify(controller.view())).not.toContain("private-address");
   expect(api.core.mock.calls.every(([method]) => method === "vault.list")).toBe(true);
   click(root, '[data-vault="cancel"]');
+  click(document, '.vault-unsaved [data-dlg="discard"]');
   expect(root.innerHTML).not.toContain("private-address");
+  expect(JSON.stringify(controller.view())).not.toContain("private-address");
   expect(root.querySelector("#vault-value-address")).toBeNull();
 });
 
@@ -145,17 +148,24 @@ it("lists a key a member asked for, filters it like the other entries, and offer
   closeMenu();
 });
 
-it("removes an entry from its page: the trash asks in its own place, and the second press removes", async () => {
+it("removes an entry from its page: the trash asks in the red dialog deleting a member uses, and only its red button removes", async () => {
   const { root } = await setup();
   await openPage(root, "contact");
   const trash = root.querySelector<HTMLElement>('.vault-page-head [data-vault="remove"]')!;
   expect(trash.getAttribute("aria-label")).toBe("移除");
   trash.click();
-  // The first press asks in the trash's place; nothing is removed yet.
-  const ask = root.querySelector<HTMLElement>('.vault-page-head [data-vault="remove"][data-asking="true"]')!;
-  expect(ask.textContent).toBe("確定移除這筆資料？");
+  // The dialog names the entry and says what goes; the trash stays a trash, and nothing is removed yet.
+  const dialog = document.querySelector<HTMLElement>(".mb-dialog.mb-delete")!;
+  expect(dialog.querySelector("h2")!.textContent).toBe("移除「Work」？");
+  expect(dialog.querySelector(".mb-dlg-body")!.textContent).toBe("移除後，成員就不能再使用這筆資料，也無法復原。");
+  expect(root.querySelector("[data-asking]")).toBeNull();
+  // 取消 keeps the entry and its page.
+  click(dialog, '[data-dlg="cancel"]');
+  await Promise.resolve();
   expect(api.core).not.toHaveBeenCalledWith("vault.remove", expect.anything());
-  ask.click();
+  expect(root.querySelector(".vault-page")).not.toBeNull();
+  trash.click();
+  click(document, '.mb-delete [data-dlg="delete"]');
   await vi.waitFor(() => expect(api.core).toHaveBeenCalledWith("vault.remove", { id: "contact" }));
   await vi.waitFor(() => expect(root.querySelector(".vault-page")).toBeNull());
   // The list has no ⋯ and no menu: each row's pencil opens its page.
@@ -271,10 +281,11 @@ it("lists the Composio key as a key of the whole team, shows it masked, replaces
   // Removing it asks what it ends, then removes the key.
   await openPage(root, "composio");
   root.querySelector<HTMLElement>('.vault-page-head [data-vault="remove"]')!.click();
-  const ask = root.querySelector<HTMLElement>('.vault-page-head [data-vault="remove"][data-asking="true"]')!;
-  expect(ask.textContent).toBe("移除後，透過 Composio 連結的應用程式都會中斷。確定移除？");
+  const dialog = document.querySelector<HTMLElement>(".mb-dialog.mb-delete")!;
+  expect(dialog.querySelector("h2")!.textContent).toBe("移除「Composio」？");
+  expect(dialog.querySelector(".mb-dlg-body")!.textContent).toBe("移除後，透過 Composio 連結的應用程式都會中斷，之後需要重新填入金鑰並連結。");
   api.connectorsSetKey.mockResolvedValueOnce({ configured: false });
-  ask.click();
+  click(dialog, '[data-dlg="delete"]');
   await vi.waitFor(() => expect(api.connectorsSetKey).toHaveBeenLastCalledWith(""));
   await vi.waitFor(() => expect(changed).toHaveBeenCalledTimes(2));
   expect(api.core).not.toHaveBeenCalledWith("vault.remove", expect.anything());
@@ -288,4 +299,72 @@ it("opens the Composio key's page when a card leads here, and nothing without a 
   await controller.editComposio();
   expect(root.querySelector<HTMLInputElement>('[data-vault-system="composio"] #vault-value-value')!.value).toBe("comp_saved");
   expect(root.querySelector('[data-k="vault-composio-note"]')).toBeNull();
+});
+
+it("keeps 儲存 in the page's header, never under the fields, and asks before a change that is not saved is left", async () => {
+  const { root, controller } = await setup();
+  await openPage(root, "login");
+  // The header holds the way back, the title, the trash and 儲存; nothing stands below the fields.
+  const head = root.querySelector<HTMLElement>(".vault-page > .set-head")!;
+  expect([...head.querySelectorAll<HTMLElement>("[data-vault]")].map(el => el.dataset.vault)).toEqual(["cancel", "cancel", "remove", "save"]);
+  expect(root.querySelector(".vault-form .vault-actions, .vault-form [data-vault='save']")).toBeNull();
+  // Nothing changed: the way back leaves at once.
+  click(root, '.vault-page-head [data-k="vault-back"]');
+  expect(root.querySelector(".vault-page")).toBeNull();
+  expect(document.querySelector(".vault-unsaved")).toBeNull();
+  // A changed value: the way back asks. Its × stays on the page with what was typed.
+  await openPage(root, "login");
+  root.querySelector<HTMLInputElement>("#vault-value-password")!.value = "typed";
+  click(root, '.vault-page-head [data-k="vault-back"]');
+  const dialog = document.querySelector<HTMLElement>(".mb-dialog.vault-unsaved")!;
+  expect(dialog.querySelector("h2")!.textContent).toBe("要儲存變更嗎？");
+  expect([...dialog.querySelectorAll<HTMLElement>(".mb-dlg-act .btn")].map(b => b.textContent)).toEqual(["不儲存", "儲存"]);
+  click(dialog, '[data-dlg="close"]');
+  expect(root.querySelector<HTMLInputElement>("#vault-value-password")!.value).toBe("typed");
+  expect(api.core).not.toHaveBeenCalledWith("vault.update", expect.anything());
+  // 儲存 saves it, then leaves; and whatever was to follow (another pane, Settings closing) follows.
+  const then = vi.fn();
+  controller.leave(then);
+  click(document, '.vault-unsaved [data-dlg="save"]');
+  await vi.waitFor(() => expect(api.core).toHaveBeenCalledWith("vault.update", expect.objectContaining({ id: "login", values: { username: "ada@example.test", password: "typed" } })));
+  await vi.waitFor(() => expect(then).toHaveBeenCalledTimes(1));
+  expect(root.querySelector(".vault-page")).toBeNull();
+  // A changed name, then 不儲存: nothing is sent, and the page is left.
+  await openPage(root, "contact");
+  root.querySelector<HTMLInputElement>("#vault-label")!.value = "Renamed";
+  expect(controller.dirty()).toBe(true);
+  controller.leave(then);
+  click(document, '.vault-unsaved [data-dlg="discard"]');
+  expect(then).toHaveBeenCalledTimes(2);
+  expect(root.querySelector(".vault-page")).toBeNull();
+  expect(api.core.mock.calls.filter(([method]) => method === "vault.update")).toHaveLength(1);
+});
+
+it("a step back (a side button, Alt+Left) leaves an entry's page, and asks first when it holds a change", async () => {
+  const { root, controller } = await setup();
+  await openPage(root, "card");
+  controller.painted();
+  expect(stepOpenLayer("back")).toBe(true);
+  expect(root.querySelector(".vault-page")).toBeNull();
+  await openPage(root, "card");
+  controller.painted();
+  root.querySelector<HTMLInputElement>("#vault-value-cvc")!.value = "999";
+  expect(stepOpenLayer("back")).toBe(true);
+  expect(document.querySelector(".vault-unsaved")).not.toBeNull();
+  expect(root.querySelector(".vault-page")).not.toBeNull();
+});
+
+it("draws a page again with what was typed when Settings is drawn again for another reason", async () => {
+  const { root, controller } = await setup();
+  await openPage(root, "contact");
+  root.querySelector<HTMLInputElement>("#vault-value-phone")!.value = "0999";
+  root.querySelector<HTMLInputElement>("#vault-hint")!.value = "Typed hint";
+  controller.keep();
+  root.innerHTML = vaultHTML(controller.view());
+  expect(root.querySelector<HTMLInputElement>("#vault-value-phone")!.value).toBe("0999");
+  expect(root.querySelector<HTMLInputElement>("#vault-hint")!.value).toBe("Typed hint");
+  // Left without saving, nothing typed stays.
+  controller.leave();
+  click(document, '.vault-unsaved [data-dlg="discard"]');
+  expect(controller.view().draft).toBeNull();
 });

@@ -1129,11 +1129,12 @@ describe("rendered look checks", () => {
     // The ⋯ and the menu it opens are where they belong, and the Settings window is still a page.
     expect(rule('<div class="row"><button class="btn icon" data-overflow aria-label="「共同記憶」的選項"></button></div><div class="menu" role="menu"><button role="menuitem" class="danger">全部清除</button></div>')).toEqual([]);
     expect(rule('<div class="modal" role="dialog"><div class="row"><button class="btn danger">清除</button></div></div>')).toEqual(['清除']);
-    // A dialog about one thing, a model's own question, what is being composed, and words that destroy nothing.
+    // A question that replaces a row in its own place is no dialog: the red confirmation dialog asks instead.
+    expect(rule('<div class="lm-row"><div class="lm-confirm"><button class="btn danger">刪除</button></div></div>')).toEqual(['刪除']);
+    // A dialog about one thing, what is being composed, and words that destroy nothing.
     for (const allowed of [
       '<div class="mb-dialog" role="dialog"><button class="btn danger">刪除例行任務</button></div>',
       '<div class="cs-dialog" role="dialog"><button class="btn danger">移除</button></div>',
-      '<div class="lm-row"><div class="lm-confirm"><button class="btn danger">刪除</button></div></div>',
       '<div class="composer"><button class="chip-x" aria-label="移除檔案"></button></div>',
       '<section class="draft-panel"><button class="btn icon" aria-label="移除 小葵"></button></section>',
       '<button class="mp-star" aria-label="Remove from favourites: Luna"></button>',

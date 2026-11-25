@@ -221,10 +221,19 @@ test("a package deleted from its own page leaves for the list, and a reset start
   const { root, library } = await setup(() => ({ deleted: true }));
   press(root, '[data-skl="open"][data-key="set:1"]');
   press(root, '.skl-page-actions [data-skl="more"][data-key="set:1"]');
-  // 刪除 asks in its own place: the second press deletes.
+  // 刪除 asks in the red dialog naming the package: Cancel deletes nothing, its red button does.
   const remove = () => document.querySelector<HTMLElement>('[data-pick="delete"]')!;
   remove().click();
+  expect(document.getElementById("app-popover")).toBeNull();
+  expect(document.querySelector(".mb-delete h2")?.textContent).toBe("移除「pstack」？");
+  expect(document.querySelector(".mb-delete .mb-dlg-body")?.textContent).toBe("移除後就不能再用它，也無法復原。");
+  expect(document.querySelector('.mb-delete [data-dlg="delete"]')?.textContent).toBe("刪除");
+  document.querySelector<HTMLElement>('.mb-delete [data-dlg="cancel"]')!.click();
+  await settle();
+  expect(api.core).not.toHaveBeenCalledWith("skills.library.delete", expect.anything());
+  press(root, '.skl-page-actions [data-skl="more"][data-key="set:1"]');
   remove().click();
+  document.querySelector<HTMLElement>('.mb-delete [data-dlg="delete"]')!.click();
   await settle();
   expect(api.core).toHaveBeenCalledWith("skills.library.delete", { key: "set:1" });
   expect(root.querySelector(".skl-page")).toBeNull();
@@ -339,11 +348,11 @@ test("a cause the core names leads its message and is said in words", async () =
   expect(root.querySelector(".skl-import")).not.toBeNull();
 });
 
-const removeSkill = async (): Promise<void> => {
-  // 刪除 asks in its own place: the second press deletes.
-  const remove = () => document.querySelector<HTMLElement>('[data-pick="delete"]')!;
-  remove().click();
-  remove().click();
+const removeSkill = async (name: string): Promise<void> => {
+  // 刪除 asks in the red dialog: only its red button deletes.
+  document.querySelector<HTMLElement>('[data-pick="delete"]')!.click();
+  expect(document.querySelector(".mb-delete h2")?.textContent).toBe(`移除「${name}」？`);
+  document.querySelector<HTMLElement>('.mb-delete [data-dlg="delete"]')!.click();
   await settle();
 };
 
@@ -352,7 +361,7 @@ test("one skill of a plugin is deleted alone, asked as a whole package's delete 
   const { root } = await setup(method => method === "skills.library.delete" ? { deleted: true, package: left } : {});
   press(root, '[data-skl="open"][data-key="set:1"]');
   press(root, '.skl-skill[data-library-skill="2"] [data-skl="skill-more"]');
-  await removeSkill();
+  await removeSkill("look");
   expect(api.core).toHaveBeenCalledWith("skills.library.delete", { key: "set:1", skill: 2 });
   expect(api.core).not.toHaveBeenCalledWith("skills.library.delete", { key: "set:1" });
   expect(root.querySelector('.skl-page[data-skl-page="set:1"]')).not.toBeNull();
@@ -365,14 +374,14 @@ test("a skill deleted from its own page returns to its plugin, and the last skil
   press(root, '[data-skl="open"][data-key="set:1"]');
   press(root, '[data-skl="open-skill"][data-id="3"]');
   press(root, '.skl-doc-page [data-skl="skill-more"][data-id="3"]');
-  await removeSkill();
+  await removeSkill("judge");
   expect(api.core).toHaveBeenCalledWith("skills.library.delete", { key: "set:1", skill: 3 });
   expect(root.querySelector(".skl-doc-page")).toBeNull();
   expect(root.querySelector('.skl-page[data-skl-page="set:1"]')).not.toBeNull();
   // The core answers without a package when the skill was its package's last: the package is gone from the list.
   answer = { deleted: true };
   press(root, '.skl-skill[data-library-skill="2"] [data-skl="skill-more"]');
-  await removeSkill();
+  await removeSkill("look");
   expect(root.querySelector(".skl-page")).toBeNull();
   expect(root.querySelector('.skl-pack[data-skl-pack="set:1"]')).toBeNull();
 });
@@ -382,7 +391,7 @@ test("a refused delete of one skill says why and reloads the library", async () 
   const info = vi.spyOn(toaster, "info").mockImplementation(() => {});
   press(root, '[data-skl="open"][data-key="set:1"]');
   press(root, '.skl-skill[data-library-skill="1"] [data-skl="skill-more"]');
-  await removeSkill();
+  await removeSkill("verify");
   expect(info).toHaveBeenCalledWith("裡面找不到 SKILL.md。");
   expect(root.querySelectorAll(".skl-skill")).toHaveLength(3);
 });

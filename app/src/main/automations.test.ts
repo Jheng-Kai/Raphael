@@ -475,15 +475,23 @@ describe("the calendar's own events",()=>{
   expect(document.querySelector('.au-pop-editor')).toBeNull();
   page.hide();
  });
- test("an own event shows its time, notes and who added it, with edit, and delete only in its ⋯, asking once more",async()=>{
+ test("an own event shows its time, notes and who added it, with edit, and delete only in its ⋯, asking in the red dialog",async()=>{
   const page=await open([own(4,"Dentist",at(14),at(15),{notes:"Bring card",added_by:2,name:"Bob",member_id:2})],"calendar-week:2026-10-24");
   click('[data-entry="own:4"][data-au="entry"]');
   const panel=document.querySelector('.au-pop-detail')!;
   expect(panel.textContent).toContain("14:00 – 15:00");expect(panel.textContent).toContain("Bring card");expect(panel.textContent).toContain("Added by Bob");
   expect([...panel.querySelectorAll('button')].filter(button=>/delete/i.test(button.textContent??""))).toEqual([]);
   click('.au-pop-detail [data-pop="more"]');
-  click('#app-popover [data-confirm-item]');expect(api.calendarDelete).not.toHaveBeenCalled();
-  click('#app-popover [data-confirm-item]');await flush();
+  click('#app-popover [data-pick]');
+  expect(document.getElementById("app-popover")).toBeNull();
+  expect(document.querySelector('.mb-delete h2')?.textContent).toBe("Delete Dentist?");
+  expect(document.querySelector('.mb-delete [data-dlg="delete"]')?.textContent).toBe("Delete");
+  expect(api.calendarDelete).not.toHaveBeenCalled();
+  click('.mb-delete [data-dlg="cancel"]');await flush();
+  expect(document.querySelector('.mb-delete')).toBeNull();expect(api.calendarDelete).not.toHaveBeenCalled();
+  expect(page.el.querySelector('[data-entry="own:4"]')).not.toBeNull();
+  click('.au-pop-detail [data-pop="more"]');click('#app-popover [data-pick]');
+  click('.mb-delete [data-dlg="delete"]');await flush();
   expect(api.calendarDelete).toHaveBeenCalledWith(4);
   expect(document.querySelector('.au-pop-detail')).toBeNull();
   expect(page.el.querySelector('[data-entry="own:4"]')).toBeNull();

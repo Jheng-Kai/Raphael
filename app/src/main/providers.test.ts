@@ -394,15 +394,21 @@ test.each([
   expect(api.providersTest).toHaveBeenCalledWith("p3");
 });
 
-test("removing a provider asks a second time before removing the connection", async () => {
+test("removing a provider asks in the red dialog before removing the connection", async () => {
   const panel = mount(); await panel.load();
   click('[data-pv="open"]'); await flush();
   click('[data-pv="remove"]');
   expect(api.providersRemove).not.toHaveBeenCalled();
-  expect(root.querySelector('[data-pv="remove"]')?.textContent).toBe("Remove provider?");
+  expect(root.querySelector('[data-pv="remove"]')?.textContent).toBe("Remove");
+  expect(document.querySelector(".mb-delete h2")?.textContent).toBe("Remove OpenAI?");
+  expect(document.querySelector(".mb-delete .mb-dlg-body")?.textContent).toBe(t("providers.removeHint"));
+  document.querySelector<HTMLElement>('.mb-delete [data-dlg="cancel"]')!.click(); await flush();
+  expect(api.providersRemove).not.toHaveBeenCalled();
+  expect(root.querySelector('[role="dialog"]')).not.toBeNull();
   api.providersRemove.mockResolvedValue({ removed: true });
   api.providersList.mockResolvedValue({ providers: [] });
-  click('[data-pv="remove"]'); await flush();
+  click('[data-pv="remove"]');
+  document.querySelector<HTMLElement>('.mb-delete [data-dlg="delete"]')!.click(); await flush();
   expect(api.providersRemove).toHaveBeenCalledWith("p3");
   expect(root.querySelector('[role="dialog"]')).toBeNull();
   expect(root.querySelectorAll(".pv > .pv-grid > .pv-card")).toHaveLength(1);
@@ -490,15 +496,15 @@ test("failed saves show a safe error and preserve public drafts without retainin
   expect(root.innerHTML).not.toContain("write-only-secret");
 });
 
-test("the remove confirmation expires after the existing five-second confirmation window", async () => {
-  vi.useFakeTimers();
+test("Escape on the remove question removes nothing and leaves the provider open", async () => {
   const panel = mount(); await panel.load();
   click('[data-pv="open"]'); await flush();
   click('[data-pv="remove"]');
-  await vi.advanceTimersByTimeAsync(5001);
-  expect(root.querySelector('[data-pv="remove"]')?.textContent).toBe("Remove");
-  click('[data-pv="remove"]');
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+  await flush();
+  expect(document.querySelector(".mb-delete")).toBeNull();
   expect(api.providersRemove).not.toHaveBeenCalled();
+  expect(root.querySelector('[role="dialog"]')).not.toBeNull();
   panel.reset();
 });
 

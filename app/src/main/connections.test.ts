@@ -1133,7 +1133,7 @@ describe("the rules for this dialog", () => {
     connectionsHTML(view({ search: "lin" })),
     connectionsHTML(view({ login: { target: "linear", name: "Linear" } })),
     connectionsHTML(view({ configured: false })),
-    groupPage("ab12", { confirmingDisconnect: "ab12", auditOpen: true }),
+    groupPage("ab12", { auditOpen: true }),
     groupPage("ab12", { toolsOpen: true }),
     groupPage("ab12", { groups: [{ ...notes, status: "error", error: "auth" }] }),
     appPage("linear", { loginError: { target: "linear", kind: "denied" } }),
@@ -2333,17 +2333,20 @@ describe("what the dialog does", () => {
       c.reset();
     });
 
-    test("the last connected account is the app: removing it asks the app's own disconnect question, not another", async () => {
+    test("the last connected account is the app: removing it asks the app's own disconnect question in the red dialog, not another", async () => {
       const c = await openGmail([{ id: "a1", status: "ACTIVE", label: "Work" }, { id: "a3", status: "INITIATED" }]);
       const { done } = await mounted(c);
       try {
+        vi.mocked(confirmDelete).mockResolvedValueOnce(false);
         c.click(button("account-remove", { id: "composio:gmail", account: "a1" }));
         await settle();
-        expect(confirmDelete).not.toHaveBeenCalled();
+        expect(confirmDelete).toHaveBeenCalledExactlyOnceWith("Gmail", { words: { title: "中斷連線 Gmail？", hint: "重新連線之前，就不能再使用它。", action: "中斷連線" } });
         expect(api.connectorsRemoveAccount).not.toHaveBeenCalled();
-        expect(c.view().confirmingDisconnect).toBe("composio:gmail"); // the app's own two presses
-        c.click(button("disconnect", { id: "composio:gmail" }));
+        expect(api.connectorsDisconnect).not.toHaveBeenCalled(); // Cancel did nothing
+        c.click(button("account-remove", { id: "composio:gmail", account: "a1" }));
         await settle();
+        expect(confirmDelete).toHaveBeenCalledTimes(2);
+        expect(api.connectorsRemoveAccount).not.toHaveBeenCalled();
         expect(api.connectorsDisconnect).toHaveBeenCalledWith("composio:gmail");
       } finally { await done(); c.reset(); }
     });
@@ -2398,28 +2401,24 @@ describe("what the dialog does", () => {
     expect(api.integrationsRefresh).toHaveBeenCalledWith("ab12");
   });
 
-  test("disconnects on the second press without a toast after successful revocation", async () => {
-    vi.useFakeTimers();
-    try {
-      const c = createConnections(host);
-      await c.load();
-      c.click(button("open", { id: "ab12" }));
-      c.click(button("disconnect", { id: "ab12" }));
-      expect(c.view().confirmingDisconnect).toBe("ab12");
-      expect(api.integrationsDisconnect).not.toHaveBeenCalled();
-      vi.advanceTimersByTime(5100);
-      expect(c.view().confirmingDisconnect).toBeNull();
-      api.toolsetsList.mockResolvedValue({ groups: [custom] });
-      c.click(button("disconnect", { id: "ab12" }));
-      c.click(button("disconnect", { id: "ab12" }));
-      await vi.advanceTimersByTimeAsync(0);
-      expect(api.integrationsDisconnect).toHaveBeenCalledTimes(1);
-      expect(api.integrationsDisconnect).toHaveBeenCalledWith("ab12");
-      expect(c.view().open).toBeNull();
-      expect(toaster.info).not.toHaveBeenCalled();
-    } finally {
-      vi.useRealTimers();
-    }
+  test("disconnects only when the red dialog's button is pressed, without a toast after successful revocation", async () => {
+    const c = createConnections(host);
+    await c.load();
+    c.click(button("open", { id: "ab12" }));
+    vi.mocked(confirmDelete).mockClear();
+    vi.mocked(confirmDelete).mockResolvedValueOnce(false);
+    c.click(button("disconnect", { id: "ab12" }));
+    await settle();
+    expect(confirmDelete).toHaveBeenCalledExactlyOnceWith("Notion", { words: { title: "刪除「Notion」？", hint: "此操作無法復原。", action: "刪除" } });
+    expect(api.integrationsDisconnect).not.toHaveBeenCalled(); // Cancel, Escape and the scrim do nothing
+    expect(c.view().open).not.toBeNull();
+    api.toolsetsList.mockResolvedValue({ groups: [custom] });
+    c.click(button("disconnect", { id: "ab12" }));
+    await settle();
+    expect(api.integrationsDisconnect).toHaveBeenCalledTimes(1);
+    expect(api.integrationsDisconnect).toHaveBeenCalledWith("ab12");
+    expect(c.view().open).toBeNull();
+    expect(toaster.info).not.toHaveBeenCalled();
   });
 
   test("says where to revoke access if it was not revoked by the provider", async () => {
@@ -2428,7 +2427,6 @@ describe("what the dialog does", () => {
     const c = createConnections(host);
     await c.load();
     c.click(button("open", { id: "ab12" }));
-    c.click(button("disconnect", { id: "ab12" }));
     c.click(button("disconnect", { id: "ab12" }));
     await settle();
     expect(toaster.info).toHaveBeenCalledExactlyOnceWith(t("conn.revokeInApp", { p0: "Notion" }));
@@ -2532,13 +2530,12 @@ describe("what the dialog does", () => {
     });
   });
 
-  test("leaving the dialog drops the form, the page, the search, the category and a pending disconnect, but not a login that is under way", async () => {
+  test("leaving the dialog drops the form, the page, the search and the category, but not a login that is under way", async () => {
     api.integrationsConnect.mockReturnValue(new Promise(() => undefined));
     const c = createConnections(host);
     await c.load();
     c.click(button("connected"));
     c.click(button("open", { id: "ab12" }));
-    c.click(button("disconnect", { id: "ab12" }));
     c.click(button("join", { id: "linear" }));
     c.menuFor("conn-add")!.pick("custom");
     c.input(input("conn-name", "Half"));
@@ -2546,7 +2543,7 @@ describe("what the dialog does", () => {
     c.input(input("conn-search", "lin"));
     c.click(button("store-group", { id: "finance" }));
     c.reset();
-    expect(c.view()).toMatchObject({ screen: "apps", open: null, toolsOpen: false, auditOpen: false, form: null, confirmingDisconnect: null, search: "", category: "", keyOpen: false });
+    expect(c.view()).toMatchObject({ screen: "apps", open: null, toolsOpen: false, auditOpen: false, form: null, search: "", category: "", keyOpen: false });
     expect(c.view().login).not.toBeNull();
     expect(JSON.stringify(c.view())).not.toContain("TOPSECRET");
   });

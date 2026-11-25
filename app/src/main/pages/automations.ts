@@ -14,7 +14,8 @@ import { openRoutineView } from "../routine-view";
 import { dateKey, localDay, monthDays, monthGrid, monthLabel, shiftDay } from "../schedule-picker";
 import type { AppContext, Member, Page, Routine, RoutineRun } from "../types";
 import type { GoogleCalendarState, HomeItem } from "../home-types";
-import { btn, closeMenu, esc, ico, iconButton, openConfirmMenu, openMenu, openPopover, sel, tg, toaster } from "../ui";
+import { openConfirmMenu } from "../member-column";
+import { btn, closeMenu, esc, ico, iconButton, openMenu, openPopover, sel, tg, toaster } from "../ui";
 import "../members.css";
 import "../automations.css";
 
@@ -352,7 +353,7 @@ export function createAutomationsPage(app: AppContext): Page {
   }
   function askToDelete(button: HTMLElement, entry: CalendarEntry): void {
     openConfirmMenu(button, {
-      label: t("cal.delete"), ask: t("cal.deleteAsk"),
+      label: t("cal.delete"), ask: { title: t("confirm.deleteTitle", { p0: entry.title }), hint: t("members.deleteHint"), action: t("cal.delete") },
       run: () => {
         closePanel();
         items = items.filter(item => item.id !== entry.id); draw();

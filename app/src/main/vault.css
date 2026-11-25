@@ -20,12 +20,11 @@
 .vault-copy strong, .vault-copy small, .vault-copy p { overflow-wrap: anywhere; margin: 0; }
 .vault-copy small { color: var(--text-3); }
 .vault-copy p { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* An entry's own page, in Safety's place: the way back and its title, its 移除 and the dialog's close on one row; then each
+/* An entry's own page, in Safety's place: the way back and its title, its trash, 儲存 and the dialog's close on one row; then each
    value with its label above it, the private ones masked behind an eye. */
 .vault.vault-page { margin-block: 0; }
 .vault-page-head .sp { flex: 1; }
 .modal-body .vault-page-head .back-title > h1 { min-width: 0; padding: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.vault-page-head .vault-remove-ask { flex: none; }
 .vault-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); margin-top: var(--sp-5); }
 .vault-form > p { margin: 0; }
 .vault-secret { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }

@@ -172,7 +172,7 @@ test.each(navInputs)("navigation in the key recorder never records a navigation 
   expect(recorded).not.toHaveBeenCalled();
 });
 
-test.each(navInputs)("Back protects a private vault draft and leaves Settings open with %s", async input => {
+test.each(navInputs)("Back on a vault page with a private draft asks whether to save it and leaves Settings open with %s", async input => {
   await mount("safety");
   click('[data-vault="new"]');
   click('#app-popover [data-value="contact"]');
@@ -181,10 +181,12 @@ test.each(navInputs)("Back protects a private vault draft and leaves Settings op
   pressLayer(input, "forward");
   expect(field.value).toBe("unsaved");
   pressLayer(input);
+  // The page stays with what was typed, under the dialog that asks; 不儲存 leaves the page, and Settings stays open.
   expect(field.value).toBe("unsaved");
-  expect(document.activeElement).toBe(field);
-  click('[data-vault="cancel"]');
-  expect(page.el.querySelector(".vault-editor")).toBeNull();
+  expect(document.querySelector(".mb-dialog.vault-unsaved")).not.toBeNull();
+  click('.vault-unsaved [data-dlg="discard"]');
+  expect(page.el.querySelector(".vault-page")).toBeNull();
+  expect(page.el.innerHTML).not.toContain("unsaved");
   expect(closeSettings).not.toHaveBeenCalled();
 });
 
@@ -498,14 +500,14 @@ test("models opens Models with no tabs inside and no saved fallback settings, an
   expect(api.settingsSet).not.toHaveBeenCalled();
 });
 
-test("settings delegates the CLI row menu and refreshes an open model chooser on disconnect", async () => {
+test("settings delegates the CLI's unplug and refreshes an open model chooser on disconnect", async () => {
   const claude = { id: "claude", name: "Claude Code", installed: true, logged_in: true, available: true, disconnected: false, models: [{ id: "cli:claude:sonnet", name: "Claude Sonnet" }], login_command: "claude auth login" };
   api.brainsCli.mockResolvedValue({ clis: [claude] });
   await mount();
-  click('[data-cli-menu="claude"]');
-  expect(document.querySelector('#app-popover.mb-menu [data-pick="disconnect"]')?.textContent).toContain("Disconnect");
+  click('[data-cli-disconnect="claude"]');
+  expect(document.querySelector('.mb-delete [data-dlg="delete"]')?.textContent).toContain("Disconnect");
   api.brainsCli.mockResolvedValue({ clis: [{ ...claude, available: false, disconnected: true, models: [] }] });
-  click('#app-popover [data-pick="disconnect"]'); await flush();
+  click('.mb-delete [data-dlg="delete"]'); await flush();
   expect(api.brainsCliDisconnect).toHaveBeenCalledExactlyOnceWith("claude");
   expect(page.el.querySelector('[data-cli="claude"]')?.textContent).toBe("Connect");
   // A subscription disconnected is no longer offered (it holds no choice here), and comes back once it is connected again.
@@ -946,14 +948,14 @@ test("連接其他來源 from a feature's choice lists only the ways that can do
   click('[data-model-picker="stt"] .mp-trigger');
   click('[data-dlg="sources"]'); await flush();
   expect(listed()).toEqual(["openai"]);
-  expect(document.querySelector("#pv-dialog [data-chatgpt], #pv-dialog [data-cli], #pv-dialog [data-cli-menu]")).toBeNull();
+  expect(document.querySelector("#pv-dialog [data-chatgpt], #pv-dialog [data-cli], #pv-dialog [data-cli-disconnect]")).toBeNull();
   expect(document.querySelector("#pv-dialog .pv-for")!.textContent).toContain("Speech to text");
   click('[data-pv="close"]'); await flush();
   click('[data-model-picker="cleanup"] .mp-trigger');
   click('[data-dlg="sources"]'); await flush();
   expect(listed()).toEqual(["openai", "anthropic", "ollama"]);
   expect(document.querySelector("#pv-dialog [data-chatgpt]")).not.toBeNull();
-  expect(document.querySelector("#pv-dialog [data-cli], #pv-dialog [data-cli-menu]")).toBeNull();
+  expect(document.querySelector("#pv-dialog [data-cli], #pv-dialog [data-cli-disconnect]")).toBeNull();
 });
 
 test("a provider change told while Settings is closed is read at once, so a source found after start is there when it opens", async () => {
@@ -978,10 +980,17 @@ test("General removes only the selected project and adds a picked folder", async
   await flush();
   expect(page.el.querySelector('[data-row="project-folder"] .project-branch')?.textContent).toBe("main");
   click('[data-project="0"]');
-  // 移除 asks in place: the first press turns it into the question, the second removes, and the menu closes.
-  click("#app-popover [data-confirm-item]");
+  // 移除 asks in the red dialog: the menu closes, Cancel does nothing, and only the red button removes.
+  click("#app-popover [data-pick]");
+  expect(document.getElementById("app-popover")).toBeNull();
+  expect(document.querySelector(".mb-delete h2")?.textContent).toBe("Remove Repo?");
   expect(api.settingsSet).not.toHaveBeenCalled();
-  click("#app-popover [data-confirm-item]");
+  click('.mb-delete [data-dlg="cancel"]');
+  await flush();
+  expect(api.settingsSet).not.toHaveBeenCalled();
+  click('[data-project="0"]');
+  click("#app-popover [data-pick]");
+  click('.mb-delete [data-dlg="delete"]');
   await flush();
   expect(api.settingsSet).toHaveBeenLastCalledWith("project_folders", [notes]);
   expect(document.getElementById("app-popover")).toBeNull();

@@ -156,7 +156,7 @@ npm run look -- desktop-host-local desktop-host-error settings-owner --theme bot
 
 ## Project folders in General
 
-The project list uses one row per folder, with its full path and Git branch. The ⋯ menu offers Remove.
+The project list uses one row per folder, with its full path and Git branch. The ⋯ menu offers Remove, which asks in the red dialog (「移除「name」？」; the folder and its files are not deleted).
 Add folder opens the native picker at the foot of the list. The settings accept up to 50 distinct projects. See [Daily work](daily-work.md#native-project-folder-choice)
 for the native checks and [Member computer](member-computer.md#the-owners-files-read-everywhere-write-in-the-owners-folders-r-pc-04-r-pc-05)
 for the composer and Docker paths.
@@ -195,7 +195,8 @@ npm run look -- quick-model-menu quick-effort-menu quick-model-selection --theme
 
 Owner profile/preferences, themes, models/providers, dictation, assistant,
 messaging, data management and About. Usage and MCP have separate maps.
-Subscription accounts share the room row-action menu: disconnect disables a CLI only
+A connected subscription account's card has one action, the unplugged plug (no ⋯, never a trash): it asks in the red
+dialog (「中斷連線 Codex？」, that signing in again is needed, 取消 and a red 中斷連線), and its red button disconnects a CLI only
 inside Raphael, removes its models, and leaves a framed Connect action. Reconnect reuses
 an existing CLI login. Caption icon controls keep transparent hover/pressed surfaces (R-UI-16). Close uses
 the error foreground; glyph contrast and keyboard focus are checked.
@@ -221,7 +222,7 @@ upload and crop an image; the resulting face appears on the footer and outgoing 
 npm run look -- profile appearance appearance-menu appearance-keyboard models dictation tools safety about theme-clarity --theme both --width 1120,720
 npm run look -- sidebar sidebar-search sidebar-group-avatar-pair sidebar-group-avatar-four chat appearance appearance-menu appearance-keyboard desktop-takeover-owner foot-account-calendar dictation-dictionary theme-clarity --theme both --width 1120,720,1920x1080
 npm run look -- appearance --theme both --width 1120,720,1920x1080 --locale ja
-npm run look -- chatgpt-signed-out chatgpt-signed-in chooser-chatgpt-signed-out chooser-chatgpt-signed-in chooser-claude-models chooser-claude-older cli-account-menu cli-account-disconnected cli-account-reconnected window-hover-minimize window-hover-maximize window-hover-restore window-hover-close window-hover-modal --theme both --width 1120,720,1920x1080
+npm run look -- chatgpt-signed-out chatgpt-signed-in chooser-chatgpt-signed-out chooser-chatgpt-signed-in chooser-claude-models chooser-claude-older cli-account-disconnect-ask settings-cli-no-right-click cli-account-disconnected cli-account-reconnected window-hover-minimize window-hover-maximize window-hover-restore window-hover-close window-hover-modal --theme both --width 1120,720,1920x1080
 npm run look -- model-choices-answer model-choices-cleanup model-choices-stt model-choices-local model-choices-local-selected settings-local-stt --theme both --width 1120,720,1920x1080
 ```
 
@@ -447,18 +448,20 @@ the pointer moved away, so the pictures show a chosen row as it stays. Each row 
 Settings has no right click (`settings-no-right-click`). The pencil opens the entry's own page in Safety's place
 (`vault-entry-page`): the way back and its title, its trash and the dialog's close on one row; every value as saved,
 masked, with an eye that shows it and hides it again (`vault-edit-values`); the owner deletes a value, types the new
-one and saves, and the whole set is sent exactly. The trash asks 「確定移除這筆資料？」 in its own place and the second
-press removes (`vault-entry-remove-ask`).
+one and saves, and the whole set is sent exactly. The trash asks in the red confirmation dialog of a member's deletion
+(「移除「name」？」, 取消 and a red 移除) and only its red button removes (`vault-entry-remove-dialog`). 儲存 stands in the page's header between the trash and the close, which stays at the top
+as a long page scrolls (`vault-save-in-sight`); leaving the page with a change not saved, by its way back, a step back,
+Escape, the close or another pane, asks 「要儲存變更嗎？」 with 不儲存 and 儲存 (`vault-unsaved-dialog`).
 
 Every entry's private values can be changed on its page (R-VAULT-07). A saved Composio key is the vault's first key,
 the whole team's, and its page is the key alone, as saved and masked (`vault-composio-key`, `vault-composio-edit`,
 R-CONNECT-05).
 
 ```powershell
-npm run look -- vault-list vault-filter vault-entry-page vault-entry-remove-ask settings-no-right-click vault-new-login vault-new-contact vault-new-card vault-sharing vault-import-preview vault-card-permission vault-edit-values vault-composio-key vault-composio-edit calm-thread --theme both --width 1120,720,1920x1080
+npm run look -- vault-list vault-filter vault-entry-page vault-entry-remove-dialog vault-save-in-sight vault-unsaved-dialog settings-no-right-click vault-new-login vault-new-contact vault-new-card vault-sharing vault-import-preview vault-card-permission vault-edit-values vault-composio-key vault-composio-edit calm-thread --theme both --width 1120,720,1920x1080
 ```
 
-Selected scenes: vault-list, vault-filter, vault-entry-page, vault-entry-remove-ask, settings-no-right-click, vault-new-login, vault-new-contact,
+Selected scenes: vault-list, vault-filter, vault-entry-page, vault-entry-remove-dialog, vault-save-in-sight, vault-unsaved-dialog, settings-no-right-click, vault-new-login, vault-new-contact,
 vault-new-card, vault-sharing, vault-import-preview, vault-card-permission,
 calm-thread on the merged thread layout. Run both themes at
 1120,720,1920x1080. Inspect all contact sheets and each new scene at light 720

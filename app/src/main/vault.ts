@@ -4,6 +4,8 @@ import { t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
 import { backButton, btn, esc, fieldHTML, ico, iconBtn, iconButton, openMenu, sel, tabs } from "./ui";
 import { faceHTML } from "./members";
+import { confirmDelete, openDialog } from "./member-dialogs";
+import { bindNavLayer } from "./nav-layers";
 // The rows to choose from are the group dialog's (`.room-row`, automations.css).
 import "./automations.css";
 import "./vault.css";
@@ -25,8 +27,8 @@ export interface VaultView {
   values?: Record<string, string> | null;
   /** The private fields whose eye is pressed: drawn as text. */
   revealed?: string[];
-  /** The page's 移除 was pressed once: the second press removes. */
-  confirmingRemove?: boolean;
+  /** What the page's fields hold now, kept so that a redraw (an error) never loses what was typed; null: as saved. */
+  draft?: Record<string, string> | null;
 }
 export const emptyVaultView = (): VaultView => ({ entries: [], members: [], filter: "all", loaded: false, error: "", busy: false, editing: null, kind: null, access: "all", preview: null });
 /** The kinds the owner adds here by hand: a key is saved only from the card a member shows (`request_secret`), and listed, edited and removed here. */
@@ -40,7 +42,7 @@ const words = {
   new: "vault.new", empty: "vault.empty", label: "vault.label", hint: "vault.hint", site: "vault.site",
   everyone: "vault.everyone", chosen: "vault.chosen", access: "vault.access", username: "vault.username", password: "vault.password",
   name: "vault.name", address: "vault.address", phone: "vault.phone", email: "vault.email", number: "vault.number", expiry: "vault.expiry", cvc: "vault.cvc",
-  save: "vault.save", edit: "vault.edit", remove: "vault.remove", removeConfirm: "vault.removeConfirm", cancel: "vault.cancel",
+  save: "vault.save", edit: "vault.edit", remove: "vault.remove", cancel: "vault.cancel",
   import: "vault.import", preview: "vault.preview", previewAbout: "vault.previewAbout", error: "vault.error", cardNotice: "vault.cardNotice", busy: "vault.busy",
   value: "vault.key", show: "vault.showValue", hide: "vault.hideValue", back: "chooser.back",
 } as const satisfies Record<string, MessageKey>;
@@ -71,28 +73,29 @@ const labelledHTML = (label: string, value: string, id: string): string =>
  *  title, its 移除 and the dialog's close; every value as saved, masked behind its eye; who may use it; 儲存. */
 function pageHTML(v: VaultView, close: string): string {
   const editing = v.editing, kind = v.kind!, composio = editing?.system === "composio";
-  const values = v.values ?? {}, shown = new Set(v.revealed ?? []);
+  // What the fields hold: what was typed since (kept across a redraw), else what is saved.
+  const draft = v.draft ?? null, values = { ...(v.values ?? {}), ...(draft ?? {}) }, shown = new Set(v.revealed ?? []);
   const title = composio ? "Composio" : editing ? editing.label : `${word("new")} · ${word(kind)}`;
-  const remove = !editing ? "" : v.confirmingRemove
-    ? btn(esc(composio ? t("vault.composioRemoveConfirm") : word("removeConfirm")), "sm danger vault-remove-ask", ' data-vault="remove" data-asking="true"')
-    : iconButton("trash", word("remove"), ' data-vault="remove"');
+  const remove = editing ? iconButton("trash", word("remove"), ' data-vault="remove"') : "";
+  // 儲存 stands in the page's header, which stays in sight as the page scrolls (as Team skills' controls do), never under
+  // a long list of members.
   const head = `<header class="set-head vault-page-head"><span class="back-title" data-vault="cancel">${backButton(word("back"), ' data-vault="cancel" data-k="vault-back"', "back-link")}` +
-    `<h1 class="vault-page-name" id="set-title" tabindex="-1" data-title-back>${esc(title)}</h1></span><span class="sp"></span>${remove}${close}</header>`;
+    `<h1 class="vault-page-name" id="set-title" tabindex="-1" data-title-back>${esc(title)}</h1></span><span class="sp"></span>${remove}` +
+    btn(esc(word("save")), "sm pri vault-save", ' data-vault="save" data-k="vault-save"') + `${close}</header>`;
   const access = (): string => `<div class="vault-access"><span>${esc(word("access"))}</span>${sel([{ value: "all", label: word("everyone") }, { value: "chosen", label: word("chosen") }], v.access, word("access"), ' data-k="vault-access"')}</div>` +
     (v.access === "chosen" ? membersHTML(v.members, id => editing?.members !== "all" && !!editing?.members.includes(id)) : "");
   const status = (v.error ? `<p role="alert" class="notice">${esc(v.error)}</p>` : "") + (v.busy ? `<p role="status">${esc(word("busy"))}</p>` : "");
-  const save = `<div class="vault-actions">${action("cancel")}${action("save", "save", "pri")}</div>`;
   if (editing && v.values === null) return `<section class="vault vault-page" aria-labelledby="set-title">${head}${status}<p class="dim">${esc(word("busy"))}</p></section>`;
   const body = composio
     ? `<p class="dim">${esc(t("missing.composioGuide"))}</p>` +
       (v.composioApps ? `<p class="dim" data-k="vault-composio-note">${esc(t("conn.keyReplaceNote"))}</p>` : "") +
       secretHTML("value", t("plugins.keyPrompt"), values.value ?? "", shown.has("value"))
-    : labelledHTML(word("label"), editing?.label ?? "", "vault-label") + labelledHTML(word("hint"), editing?.hint ?? "", "vault-hint") +
+    : labelledHTML(word("label"), draft?.label ?? editing?.label ?? "", "vault-label") + labelledHTML(word("hint"), draft?.hint ?? editing?.hint ?? "", "vault-hint") +
       (kind === "login" ? (editing ? (editing.origin ? `<div class="vault-secret"><span class="vault-field-label">${esc(word("site"))}</span><p class="vault-site">${esc(editing.origin)}</p></div>` : "")
-        : labelledHTML(word("site"), "", "vault-origin")) : "") +
+        : labelledHTML(word("site"), draft?.origin ?? "", "vault-origin")) : "") +
       (editing || kind !== "key" ? privateFields[kind].map(field => secretHTML(field, word(field), values[field] ?? "", shown.has(field))).join("") : "") +
       access() + (kind === "card" ? `<p class="dim">${esc(word("cardNotice"))}</p>` : "");
-  return `<section class="vault vault-page" aria-labelledby="set-title"${composio ? ' data-vault-system="composio"' : ""}>${head}${status}<div class="vault-form" data-trap>${body}${save}</div></section>`;
+  return `<section class="vault vault-page" aria-labelledby="set-title"${composio ? ' data-vault-system="composio"' : ""}>${head}${status}<div class="vault-form" data-trap>${body}</div></section>`;
 }
 
 /** Safety's vault: the list of entries, each with its pencil; or, while one is open, that entry's page (`close` is the
@@ -119,7 +122,6 @@ export function vaultHTML(v: VaultView, close = ""): string {
 export function createVault(root: HTMLElement, redraw: () => void, onComposioChanged: () => void = () => {}) {
   const state = emptyVaultView();
   let epoch = 0;
-  let removeTimer: ReturnType<typeof setTimeout> | undefined;
   const load = async (): Promise<void> => {
     const request = ++epoch;
     try {
@@ -138,23 +140,38 @@ export function createVault(root: HTMLElement, redraw: () => void, onComposioCha
   const close = (): void => {
     root.querySelectorAll<HTMLInputElement>("[id^='vault-value-']").forEach(input => { input.value = ""; });
     if (state.preview) void core("vault.cancel", { token: state.preview.token }).catch(() => {});
-    clearTimeout(removeTimer);
     state.preview = null; state.kind = null; state.editing = null; state.error = ""; state.access = "all";
-    state.values = undefined; state.revealed = []; state.confirmingRemove = false;
+    state.values = undefined; state.revealed = []; state.draft = null;
   };
   const selectedMembers = (): "all" | number[] => state.access === "all" ? "all" : Array.from(root.querySelectorAll<HTMLElement>('[data-vault-member][aria-pressed="true"]')).map(el => Number(el.dataset.vaultMember));
   const typed = (id: string): string => root.querySelector<HTMLInputElement>(`#vault-${id}`)?.value ?? "";
-  /** What is typed in the page's private fields now, so that a redraw (an error, an eye) never loses it. */
+  const fieldsOf = (): readonly string[] => !state.kind ? [] : state.editing?.system ? ["value"] : privateFields[state.kind];
+  /** What the page's fields hold now. */
+  const current = (): Record<string, string> => Object.fromEntries(fieldsOf().map(field => [field, typed(`value-${field}`)]));
+  /** Keeps what is typed in the view, so that a redraw (an error, another part of Settings drawn again) never loses it; only
+   *  from a page whose fields are drawn, never from the list or the moment before them. */
   const keepTyped = (): void => {
-    if (!state.kind) return;
-    const fields = state.editing?.system ? ["value"] : privateFields[state.kind];
-    state.values = Object.fromEntries(fields.map(field => [field, typed(`value-${field}`)]));
+    if (!state.kind || state.values === null || !root.querySelector(".vault-form")) return;
+    state.draft = { ...current(), ...(state.editing?.system ? {} : { label: typed("label"), hint: typed("hint"), origin: typed("origin") }) };
   };
-  const run = async (operation: () => Promise<unknown>): Promise<void> => {
+  /** Whether the page holds a change that is not saved: a value, the name, the hint, the site or who may use it. */
+  const dirty = (): boolean => {
+    if (!state.kind || state.values === null || !root.querySelector(".vault-form")) return false;
+    const entry = state.editing, before = state.values ?? {}, now = current();
+    if (fieldsOf().some(field => (now[field] ?? "") !== (before[field] ?? ""))) return true;
+    if (entry?.system) return false;
+    if (typed("label") !== (entry?.label ?? "") || typed("hint") !== (entry?.hint ?? "") || (!entry && typed("origin") !== "")) return true;
+    const was = entry?.members ?? "all", chosen = selectedMembers();
+    const key = (members: "all" | number[]): string => members === "all" ? "all" : [...members].sort((a, b) => a - b).join(",");
+    return key(was) !== key(chosen);
+  };
+  const run = async (operation: () => Promise<unknown>): Promise<boolean> => {
     state.busy = true; state.error = "";
-    try { await operation(); }
+    let done = false;
+    try { await operation(); done = true; }
     catch { state.error = word("error"); }
     finally { state.busy = false; redraw(); }
+    return done;
   };
   /** Opens an entry's page with its values as saved (masked); the Composio key is read from the connectors. */
   const open = async (id: string): Promise<void> => {
@@ -173,42 +190,60 @@ export function createVault(root: HTMLElement, redraw: () => void, onComposioCha
     root.querySelector<HTMLElement>(entry.system ? "#vault-value-value" : "#vault-label")?.focus();
   };
   /** A new Composio key, checked by Composio before it is kept (`connectors.set_key`); its refusal is said in words. */
-  const saveComposio = (): void => {
+  const saveComposio = async (): Promise<boolean> => {
     const key = typed("value-value").trim();
     keepTyped();
-    if (!key) { root.querySelector<HTMLInputElement>("#vault-value-value")?.focus(); return; }
+    if (!key) { root.querySelector<HTMLInputElement>("#vault-value-value")?.focus(); return false; }
+    if (key === (state.values?.value ?? "")) { close(); redraw(); return true; }
     state.busy = true; state.error = ""; redraw();
-    void connectorsSetKey(key)
-      .then(async () => { close(); onComposioChanged(); await load(); })
-      .catch(error => { state.error = composioKeyProblem(error instanceof Error ? error.message : ""); })
-      .finally(() => { state.busy = false; redraw(); });
+    try {
+      await connectorsSetKey(key);
+      close(); onComposioChanged(); await load();
+      return true;
+    } catch (error) {
+      state.error = composioKeyProblem(error instanceof Error ? error.message : "");
+      return false;
+    } finally { state.busy = false; redraw(); }
   };
-  const save = (): void => {
-    if (!state.kind) return;
-    if (state.editing?.system === "composio") { saveComposio(); return; }
-    const kind = state.kind, before = state.values ?? {};
+  /** Saves the page and goes back to the list; false when it was refused (the page stays, with what was typed). */
+  const save = async (): Promise<boolean> => {
+    if (!state.kind) return false;
+    if (state.editing?.system === "composio") return saveComposio();
+    const kind = state.kind, before = state.values ?? {}, values = current();
     keepTyped();
-    const values = state.values ?? {};
     const changed = privateFields[kind].some(field => (values[field] ?? "") !== (before[field] ?? ""));
     const params = { kind, label: typed("label"), hint: typed("hint"), origin: typed("origin"), members: selectedMembers(),
       // An edit sends the whole of its values, exactly as they now stand, and only when one changed.
       ...(state.editing ? { id: state.editing.id, ...(changed ? { values, exact: true } : {}) } : kind === "key" ? {} : { values }) };
-    void run(async () => { await core(state.editing ? "vault.update" : "vault.add", params); close(); await load(); });
+    return run(async () => { await core(state.editing ? "vault.update" : "vault.add", params); close(); await load(); });
   };
+  /**
+   * Leaves the page: at once when nothing changed; else a dialog asks whether to save first (儲存 / 不儲存), and its ×
+   * stays on the page. `then` runs once the page is left.
+   */
+  const leave = (then: () => void = () => {}): void => {
+    if (!dirty()) { close(); redraw(); then(); return; }
+    openDialog({
+      title: t("vault.unsavedTitle"), body: `<p>${esc(t("vault.unsavedHint"))}</p>`, describedByBody: true, cls: "mb-confirm vault-unsaved",
+      actions: { secondary: btn(esc(t("vault.discard")), "", ' data-dlg="discard"'), primary: { label: esc(word("save")), attrs: ' data-dlg="save"' } },
+      onAct(act, _target, dialog) {
+        dialog.close();
+        if (act === "discard") { close(); redraw(); then(); }
+        else if (act === "save") void save().then(saved => { if (saved) then(); });
+      },
+    });
+  };
+  /** The trash: the red dialog that deleting a member uses asks first; only its red button removes. */
   const remove = (): void => {
     const entry = state.editing;
     if (!entry) return;
-    if (!state.confirmingRemove) {
-      // The first press asks in its own place; the question is forgotten after a few seconds (R-UI-56).
-      keepTyped();
-      state.confirmingRemove = true; redraw();
-      clearTimeout(removeTimer);
-      removeTimer = setTimeout(() => { if (state.editing === entry && state.confirmingRemove) { keepTyped(); state.confirmingRemove = false; redraw(); } }, 4000);
-      return;
-    }
-    clearTimeout(removeTimer);
-    if (entry.system === "composio") void run(async () => { await connectorsSetKey(""); close(); onComposioChanged(); await load(); });
-    else void run(async () => { await core("vault.remove", { id: entry.id }); close(); await load(); });
+    keepTyped();
+    const composio = entry.system === "composio";
+    void confirmDelete(entry.label, { words: { title: t("vault.removeTitle", { p0: entry.label }), hint: t(composio ? "vault.composioRemoveHint" : "vault.removeHint"), action: word("remove") } }).then(yes => {
+      if (!yes || state.editing !== entry) return;
+      if (composio) void run(async () => { await connectorsSetKey(""); close(); onComposioChanged(); await load(); });
+      else void run(async () => { await core("vault.remove", { id: entry.id }); close(); await load(); });
+    });
   };
   root.addEventListener("click", event => {
     const target = (event.target as Element).closest<HTMLElement>("[data-vault], [data-k='vault-access']");
@@ -241,11 +276,11 @@ export function createVault(root: HTMLElement, redraw: () => void, onComposioCha
     else if (name === "new") openMenu(target, kinds.map(value => ({ value, label: word(value) })), "", value => {
       close(); state.kind = value as EntryKind; state.values = {}; redraw(); root.querySelector<HTMLInputElement>("#vault-label")?.focus();
     });
-    else if (name === "cancel") { close(); redraw(); }
+    else if (name === "cancel") leave();
     else if (name === "edit") void open(target.dataset.id!);
     else if (name === "remove") remove();
     else if (name === "import") root.querySelector<HTMLInputElement>("#vault-file")?.click();
-    else if (name === "save") save();
+    else if (name === "save") void save();
     else if (name === "confirm" && state.preview) {
       const params = { token: state.preview.token, members: selectedMembers(), ids: Array.from(root.querySelectorAll<HTMLElement>('[data-vault-import][aria-pressed="true"]')).map(row => Number(row.dataset.vaultImport)) };
       void run(async () => { const result = await core<{ saved: number; remaining: number }>("vault.import", params); close(); if (result.remaining) state.error = t("vault.partial", { count: result.saved }); await load(); });
@@ -267,6 +302,24 @@ export function createVault(root: HTMLElement, redraw: () => void, onComposioCha
   });
   return {
     view: (): VaultView => state, load, reset: (): void => { epoch++; close(); },
+    /** Whether the open page holds a change that is not saved. */
+    dirty,
+    /** Keeps what the open page's fields hold before Settings is drawn again for another reason. */
+    keep: keepTyped,
+    /** Leaves the open page, asking first whether to save a change (Settings' close, Escape and other panes come here). */
+    leave,
+    /** After each drawing: an entry's page is a step of its own, so a step back (a side button, Alt+Left) leaves it, asking first
+     *  about a change; while it saves, the step waits. */
+    painted(): void {
+      const page = root.querySelector<HTMLElement>(".vault-page");
+      if (page) bindNavLayer(page, () => leave(), { step: direction => {
+        if (direction !== "back") return false;
+        if (state.busy) return true;
+        if (!dirty()) return false;
+        leave();
+        return true;
+      } });
+    },
     /** Whether an entry's page is open: Safety then shows that page alone. */
     paged: (): boolean => state.kind !== null,
     /** Opens the Composio key's page (a card whose sign-in Composio refused leads here); nothing without a saved key. */

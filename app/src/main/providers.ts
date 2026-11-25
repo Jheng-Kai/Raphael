@@ -4,9 +4,10 @@ import { keepEditedField } from "./nav-layers";
 import * as api from "./api";
 import { isTopLayer, registerDismissal } from "./dismissals";
 import { t } from "./i18n";
+import { confirmDelete } from "./member-dialogs";
 import { providerMark } from "./provider-marks";
 import type { MainEvent, ModelProvider, ProviderKind, ProviderField, ProviderPatch, ProviderModel, ProviderTest } from "./types";
-import { DISCONNECT_CONFIRM_MS, btn, esc, fieldHTML, ico, backButton, headerCloseButton, openMenu, sel } from "./ui";
+import { btn, esc, fieldHTML, ico, backButton, headerCloseButton, openMenu, sel } from "./ui";
 import { findsName } from "./find-match";
 
 export interface ProvidersView {
@@ -25,12 +26,11 @@ export interface ProvidersView {
   role?: string;
   accountSet?: boolean;
   fieldValues?: Partial<Record<"region" | "location", string>>;
-  confirming: boolean;
   dirty: boolean;
   canSave?: boolean;
   testing?: boolean;
 }
-export const emptyProvidersView = (): ProvidersView => ({ providers: [], kinds: [], state: "loading", busy: false, open: null, error: null, result: null, models: [], query: "", confirming: false, dirty: false });
+export const emptyProvidersView = (): ProvidersView => ({ providers: [], kinds: [], state: "loading", busy: false, open: null, error: null, result: null, models: [], query: "", dirty: false });
 
 const kindOf = (v: ProvidersView): ProviderKind | undefined => v.kinds.find((k) => k.kind === v.open?.kind);
 const providerOf = (v: ProvidersView): ModelProvider | undefined => v.providers.find((p) => p.id === v.open?.id);
@@ -123,7 +123,7 @@ function dialogHTML(v: ProvidersView, lead = ""): string {
     `<div class="pv-model-list">${modelsHTML(v)}</div></section></div></div>` +
     `<div class="pv-feedback">${feedbackHTML(v)}</div>` +
     `<div class="pv-footer">` +
-    (v.open.id ? btn(esc(t(v.confirming ? "providers.confirmRemove" : "providers.remove")), "danger", ` data-pv="remove" data-k="pv-remove"${disabled}`) : "") +
+    (v.open.id ? btn(esc(t("providers.remove")), "danger", ` data-pv="remove" data-k="pv-remove"${disabled}`) : "") +
     `<div class="pv-footer-actions">${btn(esc(t("providers.test")), "", ` data-pv="test" data-k="pv-test"${v.busy || !v.open.id || v.dirty ? " disabled" : ""}`)}` +
     btn(esc(t("providers.save")), "pri", ` data-pv="save" data-k="pv-save"${v.busy || !v.canSave ? " disabled" : ""}`) + `</div></div></div></div>`;
 }
@@ -180,7 +180,6 @@ export function createProviders(host: ProvidersHost) {
   let modelLoads = 0;
   let accountDraft: string | null = null;
   let accountReads = 0;
-  let confirmTimer: ReturnType<typeof setTimeout> | null = null;
   function syncForm() {
     const kind = kindOf(state), open = state.open;
     if (!kind || !open) return;
@@ -229,7 +228,7 @@ export function createProviders(host: ProvidersHost) {
       stopOutside = registerDismissal(() => host.root.querySelector<HTMLElement>("#pv-dialog"), close, () => !state.busy, undefined,
         {
           step: direction => {
-            if (state.busy || state.confirming) return true;
+            if (state.busy) return true;
             if (direction !== "back") return false;
             const panel = host.root.querySelector("#pv-dialog")!;
             if (keepEditedField(panel, ".pv-field input, .pv-field textarea") || state.dirty) return true;
@@ -265,28 +264,23 @@ export function createProviders(host: ProvidersHost) {
     redraw();
   }
   function show(kind: string, id: string | null) {
-    clearConfirmation();
     accountDraft = null; accountReads++;
     modelLoads++;
     state = { ...state, adding: id === null, open: { kind, id, replacing: false }, error: null, result: null, testing: false, canSave: false, models: [], query: "", dirty: false, accountSet: false, fieldValues: {} };
     redraw(); host.root.querySelector<HTMLElement>("#pv-dialog")?.focus();
     if (id) void loadModels(id);
   }
-  function clearConfirmation() {
-    if (confirmTimer !== null) clearTimeout(confirmTimer);
-    confirmTimer = null; state.confirming = false;
-  }
   function close() {
     const from = state.open;
     const adding = state.adding;
     accountDraft = null; accountReads++; state.accountSet = false;
-    clearConfirmation(); modelLoads++; state.open = null; state.adding = false; state.kindQuery = ""; state.role = ""; redraw();
+    modelLoads++; state.open = null; state.adding = false; state.kindQuery = ""; state.role = ""; redraw();
     if (adding) host.root.querySelector<HTMLElement>('[data-pv="directory"]')?.focus();
     else [...host.root.querySelectorAll<HTMLElement>('button[data-pv="open"]')].find((el) => el.dataset.id === from?.id)?.focus();
   }
   function directory(role = state.role ?? "") {
     const from = state.open?.kind;
-    accountDraft = null; accountReads++; modelLoads++; clearConfirmation();
+    accountDraft = null; accountReads++; modelLoads++;
     state = { ...state, adding: true, open: null, error: null, result: null, models: [], accountSet: false, fieldValues: {}, dirty: false, role };
     redraw();
     const previous = [...host.root.querySelectorAll<HTMLElement>('[data-pv="add"]')].find((el) => el.dataset.id === from);
@@ -301,12 +295,11 @@ export function createProviders(host: ProvidersHost) {
     const open = state.open;
     const id = open?.id;
     if (!id || state.busy) return;
-    if (!state.confirming) {
-      state.confirming = true;
-      confirmTimer = setTimeout(() => { clearConfirmation(); redraw(); }, DISCONNECT_CONFIRM_MS);
-      redraw(); return;
-    }
-    clearConfirmation(); state.busy = true; state.error = null; redraw();
+    const name = providerOf(state)?.name ?? kindOf(state)?.name ?? "";
+    // The red dialog asks (R-UI-56); the provider is removed only by its red button.
+    if (!(await confirmDelete(name, { words: { title: t("confirm.removeTitle", { p0: name }), hint: t("providers.removeHint"), action: t("providers.remove") } }))) return;
+    if (state.open !== open || state.busy) return;
+    state.busy = true; state.error = null; redraw();
     try {
       const result = await api.providersRemove(id);
       if (!result.removed) throw new Error("not_removed");
@@ -415,7 +408,6 @@ export function createProviders(host: ProvidersHost) {
       const button = target.closest<HTMLElement>("[data-pv]");
       if (!button) return false;
       if (button instanceof HTMLButtonElement && button.disabled) return true;
-      if (button.dataset.pv !== "remove") clearConfirmation();
       if (button.dataset.pv === "directory") directory();
       if (button.dataset.pv === "back") backToDirectory(button.closest("#pv-dialog")!);
       if (button.dataset.pv === "enable") void enable(button.dataset.id!);
@@ -507,7 +499,7 @@ export function createProviders(host: ProvidersHost) {
     reset(): void {
       stopOutside?.(); stopOutside = null;
       accountDraft = null; accountReads++; state.accountSet = false;
-      loads++; modelLoads++; clearConfirmation(); state.open = null; state.adding = false; state.kindQuery = ""; state.error = null; state.result = null;
+      loads++; modelLoads++; state.open = null; state.adding = false; state.kindQuery = ""; state.error = null; state.result = null;
       for (const input of host.root.querySelectorAll<HTMLInputElement>('.pv-field input[type="password"]')) input.value = "";
       for (const area of host.root.querySelectorAll<HTMLTextAreaElement>(".pv-field textarea")) area.value = "";
     },

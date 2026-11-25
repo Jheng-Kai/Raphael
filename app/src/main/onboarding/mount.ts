@@ -630,7 +630,7 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
     if (target.closest(".sel")) return;
 
     // ChatGPT and the command-line accounts: the same controller, and the same buttons, as Settings > Models.
-    if (flow.step === "tools" && target.closest("button[data-chatgpt], button[data-cli]")) {
+    if (flow.step === "tools" && target.closest("button[data-chatgpt], button[data-cli], button[data-chatgpt-disconnect], button[data-cli-disconnect]")) {
       void accounts.click(target);
       return;
     }

@@ -1,6 +1,6 @@
 // The local tab of the speech-to-text picker without its page: what each model of the catalogue
 // shows (name, languages, size, a line on what it is for and its state), the confirmations before a
-// download or a deletion, and the progress of a download. The popover around it is tried in the app.
+// download or a deletion (the red dialog's words), and the progress of a download. The popover around it is tried in the app.
 
 import { afterEach, describe, expect, test } from "vitest";
 import { setLocale } from "./i18n";
@@ -9,6 +9,7 @@ import {
   faceTitle,
   formatSize,
   languagesText,
+  deleteWords,
   localListHTML,
   localState,
   stateText,
@@ -91,7 +92,7 @@ describe("the state of a model", () => {
 
 describe("the list", () => {
   test("shows every model with its name, languages, size, what it is for and its state", () => {
-    const html = localListHTML(view(), null);
+    const html = localListHTML(view());
     const row = rowOf(html, "sensevoice");
     expect(row).toContain("SenseVoice");
     expect(row).toContain("中文、英文、日文、韓文、粵語 · 163 MB · 速度最快");
@@ -104,18 +105,18 @@ describe("the list", () => {
   });
 
   test("keeps the order of the catalogue", () => {
-    const html = localListHTML(view(), null);
+    const html = localListHTML(view());
     const at = MODELS.map((m) => html.indexOf(`data-name="${m.name}"`));
     expect(at).toEqual([...at].sort((a, b) => a - b));
   });
 
   test("a row says all of it to a screen reader", () => {
-    const row = rowOf(localListHTML(view(), null), "sensevoice");
+    const row = rowOf(localListHTML(view()), "sensevoice");
     expect(row).toContain('aria-label="SenseVoice, 中文、英文、日文、韓文、粵語, 163 MB, 速度最快, 未下載"');
   });
 
   test("the model in use is marked, and only a downloaded one that is not in use can be deleted", () => {
-    const html = localListHTML(view(), null);
+    const html = localListHTML(view());
     expect(rowOf(html, "qwen3-asr")).toContain('aria-current="true"');
     expect(rowOf(html, "qwen3-asr")).not.toContain('data-act="local-menu"');
     expect(rowOf(html, "sensevoice")).not.toContain('data-act="local-menu"');
@@ -127,19 +128,19 @@ describe("the list", () => {
   });
 
   test("with the cloud in use no model is in use, and the downloaded ones can be deleted", () => {
-    const html = localListHTML(view({ active: null }), null);
+    const html = localListHTML(view({ active: null }));
     expect(html).not.toContain("aria-current");
     expect(rowOf(html, "qwen3-asr")).toContain('data-act="local-menu"');
   });
 
   test("every action is a real button, never a word to click", () => {
-    const html = localListHTML(view({ download: { name: "sensevoice", done: 1, total: 2 } }), { kind: "delete", name: "paraformer-zh" });
+    const html = localListHTML(view({ download: { name: "sensevoice", done: 1, total: 2 } }));
     for (const tag of html.match(/<[a-z]+ [^>]*data-act="[^"]+"[^>]*>/g) ?? []) expect(tag.startsWith("<button type=\"button\"")).toBe(true);
     expect(html.match(/data-act=/g)!.length).toBeGreaterThan(3);
   });
 
   test("the name of a model from the core is escaped", () => {
-    const html = localListHTML(view({ models: [{ ...sense, title: "<img src=x>" }] }), null);
+    const html = localListHTML(view({ models: [{ ...sense, title: "<img src=x>" }] }));
     expect(html).not.toContain("<img");
     expect(html).toContain("&lt;img src=x&gt;");
   });
@@ -147,35 +148,40 @@ describe("the list", () => {
 
 describe("a model that is not downloaded", () => {
   test("has a button that downloads it at once, named with the size, and no question", () => {
-    const row = rowOf(localListHTML(view(), null), "sensevoice");
+    const row = rowOf(localListHTML(view()), "sensevoice");
     expect(row).toMatch(/<button type="button" class="btn sm" data-act="download" data-name="sensevoice" aria-label="下載 SenseVoice（163 MB）">下載<\/button>/);
     expect(row).toContain('data-act="use"');
-    expect(row).not.toContain('data-act="confirm"');
+    expect(row).not.toContain("lm-confirm");
   });
 
   test("the button speaks the language of the window", () => {
     setLocale("en");
-    const row = rowOf(localListHTML(view(), null), "breeze-asr-25");
+    const row = rowOf(localListHTML(view()), "breeze-asr-25");
     expect(row).toContain('aria-label="Download Breeze-ASR-25 (1.8 GB)">Download</button>');
   });
 
   test("a downloaded model has no download button", () => {
-    expect(rowOf(localListHTML(view(), null), "paraformer-zh")).not.toContain('data-act="download"');
+    expect(rowOf(localListHTML(view()), "paraformer-zh")).not.toContain('data-act="download"');
   });
 
   test("while another model downloads, nothing else can be downloaded", () => {
-    const html = localListHTML(view({ download: { name: "breeze-asr-25", done: 1, total: 4 } }), null);
+    const html = localListHTML(view({ download: { name: "breeze-asr-25", done: 1, total: 4 } }));
     expect(html).not.toContain('data-act="download"');
     expect(rowOf(html, "breeze-asr-25")).toMatch(/data-act="cancel"[^>]*>取消<\/button>/);
   });
 });
 
 describe("deleting a model", () => {
-  test("asks first, and says what it frees", () => {
-    const row = rowOf(localListHTML(view(), { kind: "delete", name: "paraformer-zh" }), "paraformer-zh");
-    expect(row).toContain("刪除 Paraformer（釋出 227 MB）？");
-    expect(row).toMatch(/data-act="confirm"[^>]*>刪除<\/button>/);
-    expect(row).toMatch(/data-act="dismiss"[^>]*>取消<\/button>/);
+  test("is asked in the red dialog, whose words say what it frees and that it comes back by downloading", () => {
+    expect(deleteWords(paraformer, view())).toEqual({
+      title: "刪除 Paraformer（釋出 227 MB）？", hint: "要再使用，得重新下載。", action: "刪除",
+    });
+  });
+
+  test("the row never asks in its own place", () => {
+    const row = rowOf(localListHTML(view()), "paraformer-zh");
+    expect(row).toContain('data-act="local-menu"');
+    expect(row).not.toMatch(/lm-confirm|data-act="confirm"|data-act="dismiss"/);
   });
 });
 
@@ -197,33 +203,35 @@ describe("the model that backs up the cloud", () => {
   });
 
   test("shows the word in its row, and can still be deleted", () => {
-    const row = rowOf(localListHTML(backup, null), "qwen3-asr");
+    const row = rowOf(localListHTML(backup), "qwen3-asr");
     expect(row).toContain("備援");
     expect(row).not.toContain("已下載");
     expect(row).toContain('data-act="local-menu"');
   });
 
-  test("asks about deleting it with half a sentence more: another model takes over", () => {
-    const row = rowOf(localListHTML(backup, { kind: "delete", name: "qwen3-asr" }), "qwen3-asr");
-    expect(row).toContain("刪除 Qwen3-ASR（釋出 879 MB）？之後改由 Paraformer 備援。");
+  test("the dialog's hint has half a sentence more: another model takes over", () => {
+    expect(deleteWords(qwen, backup)).toEqual({
+      title: "刪除 Qwen3-ASR（釋出 879 MB）？", hint: "要再使用，得重新下載。之後改由 Paraformer 備援。", action: "刪除",
+    });
   });
 
   test("or the cloud has nothing to fall back on", () => {
     const only = view({ active: null, fallback: "qwen3-asr", models: [qwen, sense] });
-    const row = rowOf(localListHTML(only, { kind: "delete", name: "qwen3-asr" }), "qwen3-asr");
-    expect(row).toContain("刪除 Qwen3-ASR（釋出 879 MB）？之後雲端失敗時無法改用本機。");
+    expect(deleteWords(qwen, only).hint).toBe("要再使用，得重新下載。之後雲端失敗時無法改用本機。");
     setLocale("en");
-    expect(rowOf(localListHTML(only, { kind: "delete", name: "qwen3-asr" }), "qwen3-asr")).toContain("Delete Qwen3-ASR (frees 879 MB)? A cloud failure then cannot fall back to local.");
-    expect(rowOf(localListHTML(backup, { kind: "delete", name: "qwen3-asr" }), "qwen3-asr")).toContain("Paraformer will be the fallback.");
+    expect(deleteWords(qwen, only)).toEqual({
+      title: "Delete Qwen3-ASR (frees 879 MB)?", hint: "To use it again, it has to be downloaded again. A cloud failure then cannot fall back to local.", action: "Delete",
+    });
+    expect(deleteWords(qwen, backup).hint).toContain("Paraformer will be the fallback.");
     setLocale("ja");
-    expect(rowOf(localListHTML(only, { kind: "delete", name: "qwen3-asr" }), "qwen3-asr")).toContain("以後クラウドが失敗してもローカルに切り替わりません。");
-    expect(rowOf(localListHTML(backup, { kind: "delete", name: "qwen3-asr" }), "qwen3-asr")).toContain("以後はParaformerが予備になります。");
+    expect(deleteWords(qwen, only).hint).toContain("以後クラウドが失敗してもローカルに切り替わりません。");
+    expect(deleteWords(qwen, backup).hint).toContain("以後はParaformerが予備になります。");
   });
 
   test("the question about another model has no such half sentence", () => {
-    const row = rowOf(localListHTML(backup, { kind: "delete", name: "paraformer-zh" }), "paraformer-zh");
-    expect(row).toContain("刪除 Paraformer（釋出 227 MB）？");
-    expect(row).not.toContain("備援");
+    const words = deleteWords(paraformer, backup);
+    expect(words.title).toBe("刪除 Paraformer（釋出 227 MB）？");
+    expect(words.hint).not.toContain("備援");
   });
 });
 
@@ -231,7 +239,7 @@ describe("a download", () => {
   const busy = view({ download: { name: "sensevoice", done: 41_000_000, total: 163_002_883 } });
 
   test("shows its progress as a bar and a percentage, and can be cancelled", () => {
-    const row = rowOf(localListHTML(busy, null), "sensevoice");
+    const row = rowOf(localListHTML(busy), "sensevoice");
     expect(row).toContain("下載中 25%");
     expect(row).toContain('role="progressbar"');
     expect(row).toContain('aria-valuenow="25"');
@@ -241,13 +249,13 @@ describe("a download", () => {
   });
 
   test("after the last byte it is being installed, and the bar is full", () => {
-    const row = rowOf(localListHTML(view({ download: { name: "sensevoice", done: 163_002_883, total: 163_002_883 } }), null), "sensevoice");
+    const row = rowOf(localListHTML(view({ download: { name: "sensevoice", done: 163_002_883, total: 163_002_883 } })), "sensevoice");
     expect(row).toContain("安裝中…");
     expect(row).toContain('style="width:100%"');
   });
 
   test("other models can not be chosen meanwhile", () => {
-    const html = localListHTML(busy, null);
+    const html = localListHTML(busy);
     expect(rowOf(html, "breeze-asr-25")).toMatch(/data-act="use"[^>]*disabled/);
     expect(rowOf(html, "paraformer-zh")).not.toContain('data-act="local-menu"');
   });
@@ -255,8 +263,8 @@ describe("a download", () => {
 
 describe("while there is no catalogue", () => {
   test("says it is being read, or that it cannot be had", () => {
-    expect(localListHTML(view({ models: "loading" }), null)).toContain("正在載入…");
-    expect(localListHTML(view({ models: "failed" }), null)).toContain("目前無法取得本機語音模型清單，請重新開啟語音模型選單，仍然失敗時重新啟動拉斐爾。");
+    expect(localListHTML(view({ models: "loading" }))).toContain("正在載入…");
+    expect(localListHTML(view({ models: "failed" }))).toContain("目前無法取得本機語音模型清單，請重新開啟語音模型選單，仍然失敗時重新啟動拉斐爾。");
   });
 });
 

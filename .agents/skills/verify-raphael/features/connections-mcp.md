@@ -114,7 +114,7 @@ Three layers in every dialog (R-FLOAT-03): the outermost, outside the dialog, is
 ```powershell
 npm run look -- connect-icons --theme both --width 1120,720,1920x1080
 npm run look -- member-settings-tools mention-menu-open connect-icons connect-apps-connected-marks connect-apps connect-app-oauth connector-slack connector-key connector-google-steps foot-apps-three foot-starter-apps --theme both --width 1120,720,1920x1080
-npm run look -- profile appearance models dictation tools safety about usage model-choices-answer model-choices-local quick-model-menu cli-account-menu member-maker template-preview template-review-pages connections-command --theme both --width 1120,720,1920x1080
+npm run look -- profile appearance models dictation tools safety about usage model-choices-answer model-choices-local quick-model-menu cli-account-disconnect-ask member-maker template-preview template-review-pages connections-command --theme both --width 1120,720,1920x1080
 ```
 
 Scene changes of the same round: the scenes of the connected list start with `[data-conn="connected"]` (`plugins-installed`,
@@ -134,7 +134,7 @@ A sign-in cancelled half way can be removed, so no useless accounts pile up, and
 - An app's accounts card (a Composio app): each row is a person, a name, a status and a quiet ⋯ (no 帳號名稱 button). The ⋯ opens 重新命名
   and then 移除 in red. A row that is not connected (等待登入, 已過期, 已撤銷, 失敗, 未啟用) is removed at once; a connected one asks the app's
   delete question first (「移除「name」？」, one sentence, 取消 and a red 移除); the last connected account is the app, so its 移除 is the app's own
-  two-press disconnect (the menu then says 「確定中斷？」). 加入另一個帳號 is unchanged.
+  disconnect (the red dialog asks 「中斷連線 Gmail？」 with 取消 and a red 中斷連線; no menu changes its words). 加入另一個帳號 is unchanged.
 - For R-ACCT-05, sign in to two Gmail accounts, open the Gmail page from Connect apps and check that each account row
   shows Gmail and its provider address. Use the first row's menu to remove it and check that the second remains connected.
   In a member turn, `connections_list` and the Composio execution tool identify both active accounts by their IDs and
@@ -294,7 +294,7 @@ panel, never here; the dialog has no skills section, no import button and no ski
 rows. Every row has a bare service mark (or a generic plug),
 name, one-line description, switch and detail chevron. Managed bridge
 servers are not duplicate rows. Tool switches are grouped by write/read in the
-detail. Disconnect lives in the detail overflow with a second-press confirmation.
+detail. Disconnect (a custom server: delete) lives in the detail overflow and asks in the red dialog (`connections-delete`, `connector-uninstalled`).
 Custom MCP add/edit/test, command/HTTP, JSON paste and local discovery stay reachable.
 
 The rows sit under two headings: 應用程式 (their tools can be called now) and 尚未連結
@@ -529,11 +529,12 @@ connector disconnection asks to disconnect. Security and secret-storage notices 
 
 ## Right click on a connection (R-UI-44)
 
-A custom server's ⋯ sits in the header of its dialog, and a subscription account's ⋯ on its card in Settings › 模型; a right click anywhere on the header or the card
-opens that menu at the pointer (測試, 編輯伺服器, 刪除; 中斷連線), the one the ⋯ opens. See [Members](members.md) for the rule and its table.
+A custom server's ⋯ sits in the header of its dialog; a right click anywhere on the header opens that menu at the pointer (測試, 編輯伺服器, 刪除), the
+one the ⋯ opens. A subscription account's card in Settings › 模型 has no ⋯: its one action is the unplugged plug, which asks in the red dialog before it
+disconnects, and Settings has no right click. See [Members](members.md) for the rule and its table.
 
 ```powershell
-npm run look -- context-menu-connection context-menu-cli-account --theme both --width 1120,720,1920x1080
+npm run look -- context-menu-connection settings-cli-no-right-click --theme both --width 1120,720,1920x1080
 ```
 
 ## Dialog feedback and unobstructed actions

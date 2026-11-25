@@ -389,13 +389,13 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
       if (access === "all") { closeMenu(); anchor.focus({ preventScroll: true }); }
     });
   };
-  /** The right click's menu on a package's row or page: 更新 when it has a source, and 刪除, asked in place. */
+  /** The right click's menu on a package's row or page: 更新 when it has a source, and 刪除, asked in the red dialog. */
   const more = (anchor: HTMLElement, key: string): void => {
     const p = byKey(key);
     if (!p) return;
     openActions(anchor, [
       ...(p.updatable ? [{ id: "refresh", label: t("skillLib.update"), icon: "refresh" as const }] : []),
-      { id: "delete", label: t("skillLib.remove"), icon: "trash", ask: t("skillLib.removeAsk") },
+      { id: "delete", label: t("skillLib.remove"), icon: "trash", ask: { title: t("confirm.removeTitle", { p0: p.name }), hint: t("skillLib.removeHint"), action: t("skillLib.remove") } },
     ], picked => {
       if (picked === "refresh") void refresh(key);
       else void core("skills.library.delete", { key })
@@ -414,11 +414,12 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
     else if (key && state.skill !== null && !byKey(key)?.skills.some(skill => skill.id === state.skill)) backFromSkill();
     else redraw();
   };
-  /** The right click's menu on a skill of a plugin: 刪除 alone, asked in place, as a whole package's is. The package stays,
+  /** The right click's menu on a skill of a plugin: 刪除 alone, asked in the red dialog, as a whole package's is. The package stays,
    *  unless it was its last skill. */
   const moreSkill = (anchor: HTMLElement, key: string, id: number): void => {
-    if (!byKey(key)?.skills.some(skill => skill.id === id)) return;
-    openActions(anchor, [{ id: "delete", label: t("skillLib.remove"), icon: "trash", ask: t("skillLib.removeAsk") }], () => {
+    const known = byKey(key)?.skills.find(skill => skill.id === id);
+    if (!known) return;
+    openActions(anchor, [{ id: "delete", label: t("skillLib.remove"), icon: "trash", ask: { title: t("confirm.removeTitle", { p0: known.name }), hint: t("skillLib.removeHint"), action: t("skillLib.remove") } }], () => {
       void core<{ package?: LibraryPackage }>("skills.library.delete", { key, skill: id })
         .then(answer => {
           if (answer?.package) replace(answer.package);
