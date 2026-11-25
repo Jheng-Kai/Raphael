@@ -189,6 +189,8 @@ export const zhTW = {
   "projectFolders.branches": "分支",
   "projectFolders.branchNamed": "分支：{p0}",
   "projectFolders.detached": "分離的 HEAD",
+  "projectFolders.switchSlow": "Git 太久沒有完成切換，現在顯示的是資料夾實際所在的分支。",
+  "projectFolders.switchFilters": "這個專案設定了自己的 Git 過濾器，請在你自己的終端機切換分支。",
   "writeFolders.add": "加入資料夾",
   "composerFolder.pick": "選擇資料夾", "composerFolder.none": "不指定資料夾", "composerFolder.label": "存放資料夾：{p0}",
   "composerPlus.label": "加入檔案、應用程式與更多",

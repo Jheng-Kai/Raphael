@@ -1631,6 +1631,11 @@ export function checkRendered(name, context = {}) {
     if (name === "composer-branch-switched") require(window.__look.calls.some(call => call.method === "folders.switch_branch" && call.params.branch === "draft"), "the branch choice reached the core");
     return {check:name};
   }
+  if (name === "composer-branch-slow") {
+    require(document.querySelector(".toast")?.textContent.includes("Git 太久沒有完成切換"), "a switch answered too late is said in the owner's words");
+    require(document.querySelector(".page-agent .composer .cmp-branch")?.textContent.trim() === "draft", "the button shows the branch the folder is really on");
+    return {check:name};
+  }
   if (name.startsWith("composer-plus-")) {
     // R-UI-166: the composer's + opens one menu of what can be added; its apps and skills are submenus of switches that are the member's own settings.
     const box = element => element.getBoundingClientRect(), plus = document.querySelector('.page-agent .composer .cmp-attach');

@@ -20,6 +20,8 @@ import { coveredByTrafficLights, drawTrafficLights, trafficLights } from "./traf
 export const LATIN_NAMES = ["Raphael", "Docker", "Docker Desktop", "Google", "Gmail", "Calendar", "Composio", "OpenRouter", "OpenAI", "ChatGPT", "Anthropic", "Claude", "Codex", "Gemini", "GPT", "Telegram", "Slack", "Discord", "Notion", "GitHub", "Mobbin", "MCP", "API", "URL", "CLI", "SSH", "STT", "PDF", "WAV", "CSV", "JSON", "US", "KB", "MB", "GB", "GMT", "AM", "PM", "Alt", "AltGr", "Ctrl", "Shift", "Space", "Esc", "Enter", "Tab", "Win", "Windows", "Fn", "Edge", "Chrome", "macOS", "Whisper", "Tailscale", "Funnel", "Cloudflare", "Tunnel", "ngrok", "Webhook", "HMAC", "SHA", "Signature", "Simple", "Icons", "Bearer", "mcpServers", "Ollama", "Linear", "BotFather", "newbot", "English", "MIT", "JPG", "WebP", "GIF", "UTF", "Big", "txt", "px", "token", "Claude Code", "Opus", "Sonnet", "Antigravity", "KEY=value", "Settings → Project Settings → API Keys"];
 
 LATIN_NAMES.push("1Password");
+// A project's branches are Git's, named as Git names itself (the branch card's notices).
+LATIN_NAMES.push("Git");
 // The shell a host repair is pasted into on Windows is named as Windows names it.
 LATIN_NAMES.push("PowerShell");
 // The app's own slash commands (app-commands.ts) are typed as they are in every language, as Claude Code's are.

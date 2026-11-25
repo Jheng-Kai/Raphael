@@ -214,6 +214,8 @@ export const ko = {
   "projectFolders.branches": "브랜치",
   "projectFolders.branchNamed": "브랜치: {p0}",
   "projectFolders.detached": "분리된 HEAD",
+  "projectFolders.switchSlow": "Git 전환이 너무 오래 걸렸습니다. 표시된 브랜치는 폴더의 현재 브랜치입니다.",
+  "projectFolders.switchFilters": "이 프로젝트는 자체 Git 필터를 사용합니다. 브랜치는 직접 터미널에서 전환하세요.",
   "writeFolders.add": "폴더 추가",
   "composerFolder.pick": "폴더 선택", "composerFolder.none": "폴더 지정 안 함", "composerFolder.label": "저장 폴더: {p0}",
   "composerPlus.label": "파일, 앱 등 추가",

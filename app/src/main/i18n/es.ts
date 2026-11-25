@@ -214,6 +214,8 @@ export const es = {
   "projectFolders.branches": "Ramas",
   "projectFolders.branchNamed": "Rama: {p0}",
   "projectFolders.detached": "HEAD separado",
+  "projectFolders.switchSlow": "Git tardó demasiado en cambiar. La rama que se muestra es la actual de la carpeta.",
+  "projectFolders.switchFilters": "Este proyecto usa sus propios filtros de Git. Cambia de rama en tu propia terminal.",
   "writeFolders.add": "Añadir carpeta",
   "composerFolder.pick": "Elegir carpeta", "composerFolder.none": "Sin carpeta de proyecto", "composerFolder.label": "Carpeta de archivos: {p0}",
   "composerPlus.label": "Añadir archivos, aplicaciones y más",
