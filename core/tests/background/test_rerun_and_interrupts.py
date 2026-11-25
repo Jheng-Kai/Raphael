@@ -10,6 +10,7 @@ from raphael_core.agent.history import AgentHistory
 from raphael_core.agent.persona import phrase
 from raphael_core.background.run import RunLimits
 from raphael_core.background.service import _prompts
+from raphael_core.background.tasks import Refused
 from raphael_core.brain.settings import SettingsStore
 from raphael_core.protocol import INVALID_PARAMS, NOT_FOUND, RpcError
 
@@ -191,6 +192,45 @@ async def test_a_task_that_did_not_finish_can_be_run_again(make_rig, conn, state
     )  # fmt: skip
     assert turn_row.text == "Second time."  # completed by the report like any other
     assert rig.task(new).text == TASK_TEXT and rig.task(new).session_id == "s1"
+
+
+@pytest.mark.parametrize("state", ["interrupted", "cancelled", "limit", "failed"])
+async def test_the_failed_message_of_a_task_leaves_the_history_when_it_is_run_again(make_rig, conn, state):
+    """The retry icon under a failed hand-off left the failure where it was and drew the new attempt below it: the message
+    of the attempt it replaces is taken out of the stored history, and told as when a turn is deleted."""
+    rig = make_rig()
+    rig.service._closing = True
+    old, old_turn, history = hand_over(rig, conn)
+    rig.service._queue.clear()
+    rig.service._closing = False
+    finish(rig, old, state, "x")
+    rig.client.replies = [report("Second time.")]
+    rig.notifications.clear()
+    new = (await rig.rpc.call("worker.rerun", {"task_id": old}))["task_id"]
+    assert history.get(old_turn) is None
+    assert ("agent.turn", {"turn_id": old_turn, "member_id": 0, "failure": None}) in rig.notifications
+    await rig.wait_for_reports()
+    assert history.get(rig.task(new).turn_id).text == "Second time."
+    assert [row[0] for row in conn.execute("SELECT id FROM agent_turns WHERE session_id='s1'")] == [rig.task(new).turn_id]
+
+
+async def test_a_refused_rerun_keeps_the_failure_it_would_have_replaced(make_rig, conn):
+    rig = make_rig()
+    rig.service._closing = True
+    old, old_turn, history = hand_over(rig, conn)
+    rig.service._queue.clear()
+    rig.service._closing = False
+    finish(rig, old, "failed", "x")
+    original = rig.service.submit
+
+    def refuse(**_):
+        raise Refused("worker_disabled")
+
+    rig.service.submit = refuse
+    with pytest.raises(RpcError):
+        await rig.rpc.call("worker.rerun", {"task_id": old})
+    rig.service.submit = original
+    assert history.get(old_turn) is not None
 
 
 @pytest.mark.parametrize("state", ["done", "queued", "running"])

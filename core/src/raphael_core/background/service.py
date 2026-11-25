@@ -3533,6 +3533,10 @@ class BackgroundService:
             if exchange_id is not None:
                 with self._metrics_conn:
                     self._metrics_conn.execute('UPDATE agent_turns SET session_id=? WHERE id=?',(f'handoff:{turn_id}',exchange_id))
+            # The new attempt stands in the place of the one it repeats: the failure it answers leaves the history (a reload
+            # must not bring it back), so the owner reads the newest attempt alone, and if that fails too, only its failure.
+            if earlier is not None and old.mode is None and earlier.scope == "private" and old.scope == "private":
+                self._remove_failed_turn(old, earlier)
         except sqlite3.Error as exc:
             logger.warning("Could not write the turn of a rerun: %s", type(exc).__name__)
         self._changed(new_id, QUEUED)
