@@ -1,0 +1,263 @@
+"""What blocked a member on Raphael Chrome in the Mac test of 2026-11-25: a JavaScript dialog that held the page (#336),
+an HTML select a ref could not choose (#329), and a download placed at the root of the owner's project (#331)."""
+
+import asyncio
+import contextlib
+import os
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+from raphael_core.computer import host_browser, host_page
+from raphael_core.computer.host_browser import BrowserError, HostBrowser, Tab, chrome_executable
+from raphael_core.computer.host_computer import HostComputerTools
+
+NATIVE = pytest.mark.skipif(chrome_executable() is None or bool(os.environ.get("CI")),
+                            reason="Google Chrome is unavailable or this is CI")
+
+
+def dialog_tab(tmp_path):
+    browser = HostBrowser(tmp_path / "profile")
+    tab = Tab("tab", "target", "session", 1, tmp_path)
+    browser.tabs[tab.id] = tab
+    return browser, tab
+
+
+def open_dialog(browser, kind="alert", message="Saved", **extra):
+    browser._event("Page.javascriptDialogOpening", {"type": kind, "message": message, **extra}, "session")
+
+
+async def test_a_dialog_that_opens_during_a_call_ends_the_wait_at_once(tmp_path):
+    # Chrome answers no command of a page while its dialog is open: the call reports the dialog instead of timing out.
+    browser, tab = dialog_tab(tmp_path)
+    held = asyncio.get_running_loop().create_future()
+
+    async def call(method, params=None, *, session=None):
+        assert session == "session"
+        return await held
+
+    browser.cdp = SimpleNamespace(call=call)
+    work = asyncio.create_task(HostComputerTools.page_call(browser, tab, "get_browser_state", {}, "user"))
+    await asyncio.sleep(0.05)
+    assert not work.done()
+    open_dialog(browser, "confirm", "Delete the draft?")
+    async with asyncio.timeout(1):
+        data, blocks = await work
+    assert data["status"] == "dialog_open" and blocks == []
+    assert data["dialog"]["type"] == "confirm" and data["dialog"]["message"] == "Delete the draft?"
+    assert "browser_dialog" in data["note"]
+    # Every later page tool says the same without sending Chrome anything, until the dialog is answered.
+    again, _ = await HostComputerTools.page_call(browser, tab, "click", {"x": 10, "y": 10}, "user")
+    assert again["status"] == "dialog_open" and again["dialog"] == data["dialog"]
+    held.cancel()
+
+
+async def test_browser_dialog_answers_only_the_reported_dialog(tmp_path):
+    browser, tab = dialog_tab(tmp_path)
+    sent = []
+
+    async def call(method, params=None, *, session=None):
+        sent.append((method, params))
+        return {}
+
+    browser.cdp = SimpleNamespace(call=call)
+    assert (await host_page.dialog_action(browser, tab, {"action": "inspect"}, "user"))["dialog"] is None
+    assert (await host_page.dialog_action(browser, tab, {"action": "accept"}, "user"))["status"] == "no_dialog"
+    open_dialog(browser, "prompt", "Name the copy", defaultPrompt="Draft")
+    dialog = (await host_page.dialog_action(browser, tab, {"action": "inspect"}, "user"))["dialog"]
+    assert dialog["default_prompt"] == "Draft"
+    with pytest.raises(BrowserError, match="browser_dialog_changed"):
+        await host_page.dialog_action(browser, tab, {"action": "accept", "dialog_id": "old"}, "user")
+    result = await host_page.dialog_action(
+        browser, tab, {"action": "accept", "dialog_id": dialog["dialog_id"], "prompt_text": "Copy 2"}, "user")
+    assert result["status"] == "dialog_accepted" and tab.dialog is None and not tab.dialog_opened.is_set()
+    assert sent == [("Page.handleJavaScriptDialog", {"accept": True, "promptText": "Copy 2"})]
+    browser._event("Page.javascriptDialogClosed", {"result": True}, "session")
+    open_dialog(browser, "confirm", "Leave the page?")
+    with pytest.raises(BrowserError, match="browser_dialog_text"):
+        await host_page.dialog_action(
+            browser, tab, {"action": "accept", "dialog_id": tab.dialog["dialog_id"], "prompt_text": "yes"}, "user")
+    result = await host_page.dialog_action(browser, tab, {"action": "dismiss", "dialog_id": tab.dialog["dialog_id"]}, "user")
+    assert result["status"] == "dialog_dismissed" and sent[-1] == ("Page.handleJavaScriptDialog", {"accept": False})
+
+
+@pytest.mark.parametrize(("kind", "message", "text"), [
+    ("prompt", "Enter your password to continue", "hunter2"), ("confirm", "Pay $40 now?", None),
+    # Past the 2000 characters a result shows, the payment is still read.
+    ("confirm", "Context. " * 300 + "Pay $40 now?", None),
+], ids=["password", "payment", "payment-past-what-is-shown"])
+async def test_a_dialog_that_asks_for_the_owners_step_is_never_accepted(tmp_path, kind, message, text):
+    # A headless dialog has no window the owner could answer: a sign-in or payment answer is refused, and it can be dismissed.
+    browser, tab = dialog_tab(tmp_path)
+    sent = []
+
+    async def call(method, params=None, *, session=None):
+        sent.append(method)
+        return {}
+
+    browser.cdp = SimpleNamespace(call=call)
+    open_dialog(browser, kind, message)
+    accept = {"action": "accept", "dialog_id": tab.dialog["dialog_id"], **({"prompt_text": text} if text else {})}
+    with pytest.raises(BrowserError, match="browser_dialog_private"):
+        await host_page.dialog_action(browser, tab, accept, "user")
+    assert sent == []
+    await host_page.dialog_action(browser, tab, {"action": "dismiss", "dialog_id": tab.dialog["dialog_id"]}, "user")
+    assert sent == ["Page.handleJavaScriptDialog"]
+
+
+def test_the_dialog_tool_is_offered_and_asks_like_page_input():
+    assert HostComputerTools.base_tier("browser_dialog") == HostComputerTools.base_tier("browser_click")
+
+
+def staged(browser, guid, data=b"page data"):
+    browser.staging.mkdir(parents=True, exist_ok=True)
+    (browser.staging / guid).write_bytes(data)
+
+
+GUID = "0f5c2a1e-7d64-4b8a-9a51-3c2e8f6d1b70"
+
+
+def test_a_download_lands_in_raphaels_own_folder_never_at_the_projects_root(tmp_path):
+    # A page can start a download with no click; at a project's root, conftest.py or a Makefile runs with its next build.
+    browser = HostBrowser(tmp_path / "profile")
+    project = (tmp_path / "project").resolve()
+    project.mkdir()
+    (project / "conftest.py").write_text("# the owner's\n")
+    staged(browser, GUID, b"import os")
+    placed = browser._place_download(GUID, project, "conftest.py")
+    assert placed == project / ".raphael" / "downloads" / "conftest.py"
+    assert placed.read_bytes() == b"import os" and (project / "conftest.py").read_text() == "# the owner's\n"
+    assert (project / ".raphael" / ".gitignore").read_text().splitlines()[-1] == "*"
+    second = GUID[:-1] + "1"
+    staged(browser, second, b"again")
+    assert browser._place_download(second, project, "conftest.py").name == "1-conftest.py"
+    assert (project / ".raphael" / "downloads" / "conftest.py").read_bytes() == b"import os"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="making a symbolic link needs a privilege on Windows")
+@pytest.mark.parametrize("link", [".raphael", ".raphael/downloads"])
+@pytest.mark.parametrize("by_handle", [True, False], ids=["by-handle", "by-path"])
+def test_a_projects_own_raphael_link_is_never_followed(tmp_path, monkeypatch, link, by_handle):
+    if by_handle and not host_browser.HANDLES:
+        pytest.skip("this system opens no folder relative to another")
+    monkeypatch.setattr(host_browser, "HANDLES", by_handle)
+    browser = HostBrowser(tmp_path / "profile")
+    project, elsewhere = (tmp_path / "project").resolve(), (tmp_path / "elsewhere").resolve()
+    (project / link).parent.mkdir(parents=True)
+    elsewhere.mkdir()
+    (project / link).symlink_to(elsewhere, target_is_directory=True)
+    staged(browser, GUID)
+    assert browser._place_download(GUID, project, "authorized_keys") is None
+    assert list(elsewhere.iterdir()) == [] and (browser.staging / GUID).exists()
+
+
+def test_a_download_is_placed_the_same_way_where_no_folder_opens_relative_to_another(tmp_path, monkeypatch):
+    # Windows places by path, checking each folder for a link or junction.
+    monkeypatch.setattr(host_browser, "HANDLES", False)
+    test_a_download_lands_in_raphaels_own_folder_never_at_the_projects_root(tmp_path)
+
+
+async def test_a_member_is_told_where_each_download_was_placed(tmp_path):
+    browser = HostBrowser(tmp_path / "profile")
+    project = (tmp_path / "project").resolve()
+    tab = Tab("tab", "target", "session", 3, project)
+    tab.frames.add("frame")
+    browser.tabs[tab.id] = tab
+    staged(browser, GUID)
+    browser._event("Browser.downloadWillBegin", {"guid": GUID, "frameId": "frame", "suggestedFilename": "report.txt"}, None)
+    browser._event("Browser.downloadProgress", {"guid": GUID, "state": "completed"}, None)
+    await asyncio.gather(*browser.transfers)
+    await asyncio.sleep(0)
+    assert browser.take_downloads(3) == [".raphael/downloads/report.txt"] and browser.take_downloads(3) == []
+
+
+PAGE = b"""<title>Blockers</title>
+<select id="plain"><option value="">Please select an option</option><option value="1">Option 1</option>
+<option value="2">Option 2</option></select>
+<label>Size <select id="sized"><option value="s">Small</option><option value="l">Large</option></select></label>
+<button id="alert" onclick="alert('Saved'); document.title = 'after alert'">Alert</button>
+<button id="confirm" onclick="document.body.dataset.confirmed = confirm('Delete the draft?')">Confirm</button>
+<button id="prompt" onclick="document.body.dataset.answer = prompt('Name the copy', 'Draft')">Prompt</button>"""
+
+
+async def serve(reader, writer):
+    try:
+        with contextlib.suppress(asyncio.IncompleteReadError, ConnectionError):
+            await reader.readuntil(b"\r\n\r\n")
+            writer.write(b"HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Type: text/html\r\n"
+                         + f"Content-Length: {len(PAGE)}\r\n\r\n".encode() + PAGE)
+            await writer.drain()
+    finally:
+        writer.close()
+
+
+@contextlib.asynccontextmanager
+async def blocker_page(tmp_path):
+    browser = HostBrowser(tmp_path / "profile")
+    site = await asyncio.start_server(serve, "127.0.0.1", 0)
+    try:
+        tab, _ = await browser.open_tab(1, tmp_path, 10)
+        assert await host_page.navigate(browser, tab, f"http://127.0.0.1:{site.sockets[0].getsockname()[1]}/")
+        yield browser, tab
+    finally:
+        await browser.aclose()
+        site.close()
+
+
+async def refs(browser, tab, role):
+    data, _ = await HostComputerTools.page_call(browser, tab, "get_browser_state", {}, "user")
+    return {row["name"]: row["ref"] for row in data["refs"] if row["role"] == role}
+
+
+async def page_value(browser, tab, expression):
+    return (await host_page.evaluate(browser, tab, expression))[0]  # an isolated world: the DOM, not the page's globals
+
+
+@NATIVE
+async def test_native_chrome_chooses_a_labelled_and_an_unlabelled_select_by_ref(tmp_path):
+    async with blocker_page(tmp_path) as (browser, tab):
+        selects = await refs(browser, tab, "combobox")
+        assert set(selects) == {"", "Size"}
+        result, _ = await HostComputerTools.page_call(browser, tab, "browser_select",
+                                                      {"ref": selects[""], "label": "Option 2"}, "user")
+        assert result["status"] == "delivered"
+        selects = await refs(browser, tab, "combobox")
+        result, _ = await HostComputerTools.page_call(browser, tab, "browser_select",
+                                                      {"ref": selects["Size"], "value": "l"}, "user")
+        assert result["status"] == "delivered"
+        assert await page_value(browser, tab, "[document.getElementById('plain').value, "
+                                              "document.getElementById('sized').value]") == ["2", "l"]
+
+
+@NATIVE
+async def test_native_chrome_reports_and_answers_alert_confirm_and_prompt(tmp_path):
+    async with blocker_page(tmp_path) as (browser, tab):
+        async def press(name):
+            buttons = await refs(browser, tab, "button")
+            async with asyncio.timeout(5):
+                data, _ = await HostComputerTools.page_call(browser, tab, "browser_click", {"ref": buttons[name]}, "user")
+            assert data["status"] == "dialog_open", data
+            return data["dialog"]
+
+        async def answer(dialog, action, **extra):
+            data, _ = await HostComputerTools.page_call(
+                browser, tab, "browser_dialog", {"action": action, "dialog_id": dialog["dialog_id"], **extra}, "user")
+            return data["status"]
+
+        alert = await press("Alert")
+        assert (alert["type"], alert["message"]) == ("alert", "Saved")
+        async with asyncio.timeout(3):
+            blocked, _ = await HostComputerTools.page_call(browser, tab, "get_browser_state", {}, "user")
+        assert blocked["status"] == "dialog_open"
+        assert await answer(alert, "accept") == "dialog_accepted"
+        async with asyncio.timeout(5):
+            while await page_value(browser, tab, "document.title") != "after alert":
+                await asyncio.sleep(0.05)
+        confirm = await press("Confirm")
+        assert await answer(confirm, "dismiss") == "dialog_dismissed"
+        assert await page_value(browser, tab, "document.body.dataset.confirmed") == "false"
+        prompt = await press("Prompt")
+        assert prompt["default_prompt"] == "Draft"
+        assert await answer(prompt, "accept", prompt_text="Copy 2") == "dialog_accepted"
+        assert await page_value(browser, tab, "document.body.dataset.answer") == "Copy 2"

@@ -111,6 +111,75 @@ def chrome_executable():
     return None
 
 
+DOWNLOADS = Path(".raphael") / "downloads"  # where a page's download is placed in the member's work folder (#331)
+IGNORE = "# Raphael's own files, such as members' downloads.\n*\n"
+# Where a folder can be opened relative to another, each folder of `.raphael/downloads` is opened from the one before it
+# and never through a link, so nothing can swap a link in between a check and the write (macOS and Linux).
+HANDLES = (hasattr(os, "O_NOFOLLOW") and hasattr(os, "O_DIRECTORY")
+           and {os.open, os.mkdir, os.unlink} <= os.supports_dir_fd)
+FOLDER = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+NEW_FILE = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
+
+
+def place_by_handle(workspace, name, data):
+    folders = [os.open(workspace, FOLDER)]
+    try:
+        for part in DOWNLOADS.parts:
+            with suppress(FileExistsError):
+                os.mkdir(part, dir_fd=folders[-1])
+            folders.append(os.open(part, FOLDER, dir_fd=folders[-1]))  # a link here fails to open (O_NOFOLLOW)
+            if part == DOWNLOADS.parts[0]:
+                with suppress(FileExistsError):
+                    with os.fdopen(os.open(".gitignore", NEW_FILE, 0o644, dir_fd=folders[-1]), "w", encoding="utf-8") as file:
+                        file.write(IGNORE)
+        for index in range(1000):
+            candidate = name if not index else f"{index}-{name}"
+            try:
+                output = os.open(candidate, NEW_FILE, 0o644, dir_fd=folders[-1])
+            except FileExistsError:
+                continue
+            try:
+                with os.fdopen(output, "wb") as file:
+                    shutil.copyfileobj(data, file)
+            except OSError:
+                with suppress(OSError):
+                    os.unlink(candidate, dir_fd=folders[-1])
+                raise
+            return workspace / DOWNLOADS / candidate
+        return None
+    finally:
+        for folder in folders:
+            os.close(folder)
+
+
+def place_by_path(workspace, name, data):
+    """Windows, which opens no folder relative to another: each folder is checked to be no link or junction."""
+    folder = workspace / DOWNLOADS
+    for part in (folder.parent, folder):
+        if part.is_symlink() or part.is_junction():
+            return None
+        part.mkdir(exist_ok=True)
+        if part.resolve() != part:
+            return None
+    with suppress(FileExistsError):
+        with (folder.parent / ".gitignore").open("x", encoding="utf-8") as ignore:
+            ignore.write(IGNORE)
+    for index in range(1000):
+        path = folder / (name if not index else f"{index}-{name}")
+        try:
+            output = path.open("xb")
+        except FileExistsError:
+            continue
+        try:
+            with output:
+                shutil.copyfileobj(data, output)
+        except OSError:
+            path.unlink(missing_ok=True)
+            raise
+        return path
+    return None
+
+
 def headless_chrome():
     """Whether Raphael's Chrome runs with no window at all (#308). Windows hides it on a desktop of its own
     (`DesktopChrome`), where it draws as any shown window does. A Mac has no such desktop: it keeps every window on a
@@ -252,6 +321,11 @@ class Tab:
     main_frame: str = ""
     viewport: tuple = (0, 0)
     document: int = 0
+    # The JavaScript dialog that blocks the page (#336), set while it is open: Chrome holds every script and input of the
+    # page until the dialog is answered, which a headless Chrome never draws.
+    dialog: dict | None = None
+    dialog_text: str = ""  # its whole message, which the safety check reads; `dialog` shows its first 2000 characters
+    dialog_opened: asyncio.Event = field(default_factory=asyncio.Event, repr=False)
 
     @property
     def view(self):
@@ -275,6 +349,7 @@ class HostBrowser:
         self.owner_closed = {}
         self.owner_closed_current = {}
         self.transfers = {}
+        self.placed = {}  # member -> the downloads placed since its last Chrome result (#331)
         self.held = {}
         self.handback = {}
         self.acknowledgements = set()
@@ -531,6 +606,22 @@ class HostBrowser:
                 if tab.session == session:
                     tab.refs.clear()
                     tab.frames.discard(params["frameId"])
+        elif method == "Page.javascriptDialogOpening":
+            for tab in self.tabs.values():
+                if tab.session == session:
+                    kind, message = params.get("type", "alert"), str(params.get("message", ""))
+                    tab.dialog_text = message[:200_000]
+                    tab.dialog = {"dialog_id": secrets.token_hex(6), "type": kind, "message": message[:2000],
+                                  **({"default_prompt": str(params.get("defaultPrompt", ""))[:2000]}
+                                     if kind == "prompt" else {})}
+                    tab.dialog_opened.set()
+                    break
+        elif method == "Page.javascriptDialogClosed":
+            for tab in self.tabs.values():
+                if tab.session == session:
+                    tab.dialog = None
+                    tab.dialog_opened.clear()
+                    break
         elif method == "Browser.downloadWillBegin":
             guid, frame = params["guid"], params["frameId"]
             for tab in self.tabs.values():
@@ -547,6 +638,7 @@ class HostBrowser:
                 task = asyncio.create_task(asyncio.to_thread(self._place_download, guid, workspace, name))
                 self.transfers[task] = member
                 task.add_done_callback(self.transfers.pop)
+                task.add_done_callback(lambda done: self._placed(member, workspace, done))
 
     def _page_target(self, info):
         target = info["targetId"]
@@ -633,35 +725,37 @@ class HostBrowser:
             with suppress(BrowserError, OSError, TimeoutError):
                 await cdp.call("Page.screencastFrameAck", {"sessionId": frame}, session=session)
 
+    def _placed(self, member, workspace, task):
+        if not task.cancelled() and task.exception() is None and (path := task.result()) is not None:
+            self.placed.setdefault(member, []).append(path.relative_to(workspace).as_posix())
+
+    def take_downloads(self, member):
+        """The downloads placed for the member since it was last told, as paths in its work folder."""
+        return self.placed.pop(member, [])
+
     def _place_download(self, guid, workspace, suggested):
+        """Place a finished download in `.raphael/downloads` of the work folder (#331), never at its root: a page can start
+        a download without a click, and a file such as conftest.py or a Makefile at a project's root runs with the
+        project's next test or build. A `.gitignore` there keeps the folder out of git, a link there is never followed,
+        and a name in use gets a numbered name. Returns the placed path, or None."""
         name = re.sub(r'[\x00-\x1f<>:"/\\|?*]', "_", suggested)[:180].strip(" .")
         if not name or re.fullmatch(r"(?i)(CON|PRN|AUX|NUL|COM[0-9¹²³]|LPT[0-9¹²³])(?:\..*)?", name):
             name = "download"
         if not re.fullmatch(r"[0-9a-f-]{36}", guid):
-            return
+            return None
         source = self.staging / guid
         try:
             if workspace.resolve() != workspace or source.is_symlink():
-                return
+                return None
             workspace.mkdir(parents=True, exist_ok=True)
-            for index in range(1000):
-                path = workspace / (name if not index else f"{index}-{name}")
-                with source.open("rb") as data:
-                    try:
-                        output = path.open("xb")
-                    except FileExistsError:
-                        continue
-                    try:
-                        with output:
-                            shutil.copyfileobj(data, output)
-                    except OSError:
-                        path.unlink(missing_ok=True)
-                        raise
+            with source.open("rb") as data:
+                placed = (place_by_handle if HANDLES else place_by_path)(workspace, name, data)
+            if placed is not None:
                 source.unlink()
-                return
+            return placed
         except OSError:
             # Chrome keeps the staged file if it could not be placed in the work folder.
-            return
+            return None
 
     async def _take_startup_target(self):
         url, self.startup_url = self.startup_url, None
