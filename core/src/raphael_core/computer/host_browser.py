@@ -160,6 +160,13 @@ def window_arguments(mac_version):
     return ["--window-position=-32000,-32000"]
 
 
+def startup_pages(startup_url):
+    """The pages Chrome opens at its start: the startup marker, and a blank tab left unowned that keeps a windowed Chrome
+    alive when the last member tab closes, even when that closure comes from the page. Headless Chrome takes one page only
+    (on more it exits at once: "Multiple targets are not supported in headless mode") and stays alive with none."""
+    return [startup_url] if headless_chrome() else [startup_url, "about:blank"]
+
+
 def page_url(value):
     try:
         url = urlsplit(value)
@@ -448,9 +455,7 @@ class HostBrowser:
                 "--window-size=1280,900", "--disable-backgrounding-occluded-windows",
                 "--disable-renderer-backgrounding", "--disable-background-timer-throttling",
             ]
-            # Leave a blank startup tab unowned. It keeps Chrome alive when the
-            # last member tab closes, even when that closure comes from the page.
-            pages = [self.startup_url, "about:blank"]
+            pages = startup_pages(self.startup_url)
             self.mac_version = mac_chrome_version(executable) if headless_chrome() else ""
             if os.name == "nt":
                 self.process = DesktopChrome([*argv, *pages])

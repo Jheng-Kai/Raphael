@@ -18,9 +18,11 @@ asks Raphael for setup in its conversation. The decision stays with the owner.
 Background work reports that it needs a VM and stops. Task installs use the VM.
 Local commands keep their existing approval flow for other owner-PC work.
 
-Raphael runs headed Google Chrome with one shared profile in the machine-local data folder.
-On Windows Chrome lives on a separate desktop with no Explorer taskbar and never takes
-focus on the owner's desktop. Every member owns its tabs across turns and tasks,
+Raphael runs Google Chrome with one shared profile in the machine-local data folder.
+On Windows Chrome is headed and lives on a separate desktop with no Explorer taskbar and
+never takes focus on the owner's desktop. On a Mac it runs in Chrome's headless mode with
+no window at all, and pages still see the ordinary Chrome of a Mac (`RAPHAEL_MAC_HEADED=1`
+brings the window back). Every member owns its tabs across turns and tasks,
 including tabs the owner opens with Add and popups. Every tab has its own action
 lock. The member checks browser_tabs before opening another copy and uses the tab
 shown in the Computer panel by default.

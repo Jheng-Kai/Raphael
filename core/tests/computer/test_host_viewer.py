@@ -831,6 +831,40 @@ def windows_on_desktop(pid, desktop=None):
     return visible, user.GetForegroundWindow()
 
 
+def windows_on_screen(pid):
+    """How many windows macOS shows on a screen for a process. Only each window's owner is read, which needs no screen
+    recording permission."""
+    import ctypes as c
+    import ctypes.util
+
+    foundation = c.CDLL(ctypes.util.find_library("CoreFoundation"))
+    graphics = c.CDLL(ctypes.util.find_library("CoreGraphics"))
+    graphics.CGWindowListCopyWindowInfo.restype = c.c_void_p
+    graphics.CGWindowListCopyWindowInfo.argtypes = [c.c_uint32, c.c_uint32]
+    foundation.CFArrayGetCount.restype = c.c_long
+    foundation.CFArrayGetCount.argtypes = [c.c_void_p]
+    foundation.CFArrayGetValueAtIndex.restype = c.c_void_p
+    foundation.CFArrayGetValueAtIndex.argtypes = [c.c_void_p, c.c_long]
+    foundation.CFDictionaryGetValue.restype = c.c_void_p
+    foundation.CFDictionaryGetValue.argtypes = [c.c_void_p, c.c_void_p]
+    foundation.CFNumberGetValue.restype = c.c_bool
+    foundation.CFNumberGetValue.argtypes = [c.c_void_p, c.c_long, c.c_void_p]  # CFNumberType is a CFIndex
+    foundation.CFRelease.argtypes = [c.c_void_p]
+    owner = c.c_void_p.in_dll(graphics, "kCGWindowOwnerPID").value
+    windows = graphics.CGWindowListCopyWindowInfo(1, 0)  # kCGWindowListOptionOnScreenOnly
+    assert windows
+    try:
+        found = 0
+        for index in range(foundation.CFArrayGetCount(windows)):
+            value = foundation.CFDictionaryGetValue(foundation.CFArrayGetValueAtIndex(windows, index), owner)
+            number = c.c_int64()
+            if value and foundation.CFNumberGetValue(value, 4, c.byref(number)) and number.value == pid:  # SInt64
+                found += 1
+        return found
+    finally:
+        foundation.CFRelease(windows)
+
+
 @pytest.mark.skipif(chrome_executable() is None or bool(os.environ.get("CI")), reason="Google Chrome is unavailable or this is CI")
 async def test_native_headed_chrome_streams_off_the_owner_desktop(tmp_path):
     viewer, browser = host_viewer(tmp_path.resolve())
@@ -862,7 +896,8 @@ async def test_native_headed_chrome_streams_off_the_owner_desktop(tmp_path):
                     assert private and not interactive and foreground not in private
                 elif headless_chrome():
                     # A Mac runs it with no window at all (#308), and the page still sees the ordinary Chrome of a Mac.
-                    assert (await browser.cdp.call("Browser.getVersion"))["product"].startswith("HeadlessChrome/")
+                    # (Chrome's product string says Chrome/ in its headless mode too, so the screen is asked instead.)
+                    assert windows_on_screen(browser.process.pid) == 0
                     brands = await browser.command(tab, "Runtime.evaluate", {
                         "expression": "navigator.userAgentData.brands.map(brand => brand.brand).join()", "returnByValue": True})
                     assert "Headless" not in brands["result"]["value"]

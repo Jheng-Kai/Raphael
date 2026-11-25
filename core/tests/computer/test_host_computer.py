@@ -399,7 +399,9 @@ async def test_first_work_reuses_only_the_marked_chrome_startup_page(tmp_path):
             return {"targetId": "new"}
         if method == "Target.attachToTarget":
             return {"sessionId": params["targetId"]}
-        if method in ("Page.enable", "Emulation.setDeviceMetricsOverride"):
+        # A headless Chrome on a Mac also gets the focus and user-agent emulation on each tab (R-COMP-HOST-02).
+        if method in ("Page.enable", "Emulation.setDeviceMetricsOverride", "Emulation.setFocusEmulationEnabled",
+                      "Emulation.setUserAgentOverride"):
             return {}
         assert method == "Page.getFrameTree"
         return {"frameTree": {"frame": {"id": session}}}
