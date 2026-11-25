@@ -106,7 +106,7 @@ separate acceptance.
 ## Native project folder choice
 
 R-COLLEAGUE-06 uses the native picker from General or the member composer. General lists remembered projects
-and forgets each from its own trash, which asks in the red dialog. Removal resets the selected work folders and leaves project files in place.
+and forgets each from its own ×, which asks in the red dialog. Removal resets the selected work folders and leaves project files in place.
 
 ```powershell
 npm run look -- project-folders-settings project-folder-picker project-folder-picker-cancel project-folder-remove --theme both --width 1120,720,1920x1080

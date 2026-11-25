@@ -1818,7 +1818,7 @@ export function checkRendered(name, context = {}) {
   }
   if (name === "project-folders-settings") {
     const rows = [...document.querySelectorAll('[data-row="project-folder"]')];
-    require(rows.length === 2 && rows.every(row => visible(row.querySelector(".project-path")) && visible(row.querySelector('[data-act="project-remove"].danger svg')) && !row.querySelector('[data-overflow], [data-act="project-menu"]')),
+    require(rows.length === 2 && rows.every(row => visible(row.querySelector(".project-path")) && visible(row.querySelector('[data-act="project-remove"]:not(.danger) svg path[d="M18 6 6 18"]')) && !row.querySelector('[data-overflow], [data-act="project-menu"]')),
       "each remembered project has its own visible path and its trash, no ⋯");
     require(rows[0].querySelector(".project-branch").textContent === "main" && !rows[1].querySelector(".project-branch"), "Git projects show the current branch");
     require(visible(document.querySelector('[data-act="project-add"]')), "the native picker is at the foot");
