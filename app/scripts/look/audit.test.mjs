@@ -291,7 +291,14 @@ describe("rendered look checks", () => {
     const face = member => `<span class="slime-surface" data-slime-still="${member}" data-state="idle"><svg class="slime"><g class="slime-back"><g class="slime-rim"></g></g><path class="slime-body"/><g class="slime-marks"><g class="slime-mark"><g class="slime-crown"><path d="M 0 0 L 1 1"/></g></g></g></svg></span>`;
     browser.document.body.innerHTML = `<div class="look-slime-board">${face(0).repeat(50)}</div>`;
     vi.stubGlobal("document", browser.document);
+    vi.stubGlobal("innerWidth", 720); vi.stubGlobal("innerHeight", 900);
     try {
+      expect(checkRendered("slime-crown")).toEqual({ check: "slime-crown", surfaces: 50 });
+      // a face outside the window is clipped by the board and is not in the screenshot
+      const first = browser.document.querySelector(".slime-surface");
+      first.getBoundingClientRect = () => ({ left: 10, top: 950, right: 50, bottom: 990, width: 40, height: 40 });
+      expect(() => checkRendered("slime-crown")).toThrow("1 of 50 slimes lie outside the 720x900 window");
+      first.getBoundingClientRect = () => ({ left: 10, top: 10, right: 50, bottom: 50, width: 40, height: 40 });
       expect(checkRendered("slime-crown")).toEqual({ check: "slime-crown", surfaces: 50 });
       // a second copy in the rim behind the first
       const rim = browser.document.querySelector(".slime-rim");

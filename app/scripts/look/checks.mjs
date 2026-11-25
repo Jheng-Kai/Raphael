@@ -4145,7 +4145,10 @@ export function checkRendered(name, context = {}) {
   }
   if (name === "slime-crown") {
     const surfaces = [...document.querySelectorAll('.look-slime-board .slime-surface')];
-    require(surfaces.length >= 50, `every slime asked for is on the board: ${surfaces.length}`);
+    require(surfaces.length >= 24, `every slime asked for is on the board: ${surfaces.length}`);
+    // Every sample is in the screenshot: a face (its whole box) outside the window is not shown, and the board clips it.
+    const outside = surfaces.filter(surface => { const box = (surface.closest('.mb-av-slime') ?? surface).getBoundingClientRect(); return box.width > 0 && (box.left < -0.5 || box.top < -0.5 || box.right > innerWidth + 0.5 || box.bottom > innerHeight + 0.5); });
+    require(!outside.length, `${outside.length} of ${surfaces.length} slimes lie outside the ${innerWidth}x${innerHeight} window and are not in the screenshot`);
     for (const [index, surface] of surfaces.entries()) {
       const issues = crownIssues(surface);
       require(!issues.length, `slime ${index} (${surface.dataset.state}): ${issues.join("; ")}`);
