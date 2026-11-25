@@ -108,14 +108,6 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
   const productPattern = phrases.length ? new RegExp(`\\b(?:${phrases.map(name => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\\b`, "gi") : null;
   const keyPattern = /\b([a-z][A-Za-z0-9]*\.[A-Za-z0-9_.-]+)\b/g;
   const seenKeys = new Set();
-  // R-UI-179: a dialog's close stands alone in a column the dialog's body keeps free at its top right. It is drawn there
-  // on purpose, outside the box of its header, so that reach alone is not an overflow; any other overflow still is.
-  const inCloseColumn = (element, box) => {
-    const close = [...element.querySelectorAll(".close-button")].find(button => win.getComputedStyle(button).position === "absolute");
-    if (!close) return false;
-    const reach = close.getBoundingClientRect().right - box.right;
-    return reach > 0 && element.scrollWidth - element.clientWidth <= Math.ceil(reach) + 1;
-  };
   for (const element of doc.body.querySelectorAll("*")) {
     if (!visible(element)) continue;
     const box = element.getBoundingClientRect(), style = win.getComputedStyle(element);
@@ -123,8 +115,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     if (!element.matches(".window-resize") && !clipped(element) && (box.left < -1 || box.top < -1 || box.right > viewport.width + 1 || box.bottom > viewport.height + 1))
       outsideViewport.push({ ...description, bounds: { left: box.left, top: box.top, right: box.right, bottom: box.bottom } });
     // SVG uses viewBox coordinates, so text clientWidth and scrollWidth are not CSS overflow measurements.
-    if (element.namespaceURI !== 'http://www.w3.org/2000/svg' && element.clientWidth > 0 && element.scrollWidth > element.clientWidth + 1 && !/auto|scroll|hidden|clip/.test(style.overflowX || style.overflow)
-      && !inCloseColumn(element, box))
+    if (element.namespaceURI !== 'http://www.w3.org/2000/svg' && element.clientWidth > 0 && element.scrollWidth > element.clientWidth + 1 && !/auto|scroll|hidden|clip/.test(style.overflowX || style.overflow))
       horizontalOverflow.push({ ...description, width: element.clientWidth, scrollWidth: element.scrollWidth });
     if (!onScreen(element)) continue;
     // Not a failure: words that a box cuts off without an ellipsis or a line clamp, for the person reading the pictures to look at.
@@ -566,9 +557,9 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       const grid = style.display.includes("grid");
       const namedRow = row.matches('[role="row"], .row, [data-row]');
       if (row === toggle.parentElement || singleLine || grid || namedRow) {
-        // A dialog's close stands in its own column (R-UI-179), not in the row beside the switch.
+        // A dialog's close ends its header (R-UI-179): it is the dialog's, not one of the row's controls beside the switch.
         const controls = [...row.querySelectorAll(PRESSABLE)].filter(control => !control.contains(toggle) && !toggle.contains(control) && shown(control)
-          && !(control.matches(".close-button") && win.getComputedStyle(control).position === "absolute"));
+          && !control.matches(".close-button"));
         const after = controls.find(control => {
           const rect = control.getBoundingClientRect();
           return centreX(rect) > centreX(box) + 1 && Math.abs(centreY(rect) - centreY(box)) < Math.max(rect.height, box.height) / 2;

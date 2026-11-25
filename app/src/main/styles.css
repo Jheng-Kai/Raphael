@@ -553,11 +553,6 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .modal-body h1:focus { outline: none; }
 .modal-body .core-note { margin-top: var(--sp-4); }
 .set-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); min-height: 36px; }
-/* A dialog's close stands alone in a column at its top right: nothing of the dialog runs under it, so it reads as the
-   whole dialog's close and not a row's. The body keeps that column free; the close sits in it, level with the first row
-   of its header. */
-.modal-body { --close-gutter: calc(36px + var(--sp-5)); padding-right: calc(var(--sp-4) + var(--close-gutter)); }
-.modal-scrim[data-standalone] .modal-body { padding-right: calc(var(--sp-4) + var(--close-gutter)); }
 /* A long page scrolls under its header (R-UI-182): the back button, the title and the close stay where they are, on the
    dialog's own colour, and a hairline shows under them only once something has scrolled beneath. A plugin's skill page
    has its header straight in the page, a package's page and a skill alone inside the package's wrapper. */
@@ -572,11 +567,9 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .modal-body .back-title > :is(h1, h2) { min-width: 0; margin: 0; padding: 0; color: inherit; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .modal-body .btn.icon.back-button.back-link { flex: none; width: auto; min-width: 0; height: 36px; min-height: 36px; padding: 0; margin: 0;
   border-color: transparent; background: transparent; box-shadow: none; color: inherit; }
-.modal-body .set-content:has(> .cs), .modal-body .set-content > .cs { box-sizing: border-box; width: calc(100% + var(--close-gutter)); margin-right: calc(-1 * var(--close-gutter)); padding-right: var(--close-gutter); }
-.mb-dialog:not(.mb-confirm, .model-chooser, .store-dialog, .tpr) { --close-gutter: calc(36px + var(--sp-3)); padding-right: calc(var(--pa-dlg-pad) + var(--close-gutter)); }
-.cs-dialog:not(.pv-editor) { --close-gutter: calc(36px + var(--sp-3)); padding-right: calc(var(--sp-4) + var(--close-gutter)); }
-:where(.modal-body, .mb-dialog:not(.mb-confirm, .model-chooser, .store-dialog, .tpr), .cs-dialog:not(.pv-editor)) :where(.set-head, .cs-top, .cs-head, .cs-dlg-head, .mb-dlg-head):has(> .close-button) { position: relative; }
-:is(.modal-body, .mb-dialog:not(.mb-confirm, .model-chooser, .store-dialog, .tpr), .cs-dialog:not(.pv-editor)) :is(.set-head, .cs-top, .cs-head, .cs-dlg-head, .mb-dlg-head) > .close-button { position: absolute; top: calc(50% - 18px); right: calc(-1 * var(--close-gutter)); margin: 0; }
+/* A dialog's close ends the first row of its header, on the content's own right edge: the content takes the dialog's whole
+   width and keeps no column free for the close (R-UI-179). */
+:is(.modal-body, .mb-dialog:not(.mb-confirm, .model-chooser, .store-dialog, .tpr), .cs-dialog:not(.pv-editor)) :is(.set-head, .cs-top, .cs-head, .cs-dlg-head, .mb-dlg-head) > .close-button { flex: none; margin: 0 0 0 auto; }
 /* A group of settings: a short name, then its rows on one card with hairlines between them. */
 .sgroup { margin-top: var(--sp-5); }
 /* A section whose one control is a button named for what it does: no row repeating its name. */
@@ -619,7 +612,7 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 @media (max-width: 820px) {
   .modal-scrim { --modal-gap: 16px; }
   .modal-scrim { --set-nav: 160px; }
-  .modal-body { --body-top: var(--sp-5); --close-gutter: calc(36px + var(--sp-3)); padding: var(--body-top) calc(var(--sp-3) + var(--close-gutter)) var(--sp-6) var(--sp-5); }
+  .modal-body { --body-top: var(--sp-5); padding: var(--body-top) var(--sp-5) var(--sp-6); }
   .modal-nav { padding: var(--sp-3) var(--sp-2); }
   .modal-nav .nav { padding-inline: var(--sp-2); gap: var(--sp-2); }
   /* A long tab name (Dictation & shortcuts) takes two lines rather than losing its end. */

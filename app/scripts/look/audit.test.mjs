@@ -678,22 +678,6 @@ describe("rendered look checks", () => {
       expect(() => checkRendered('rich-fallback')).toThrow('keeps source');
     } finally { vi.unstubAllGlobals(); window.happyDOM.abort(); }
   });
-  it("allows a dialog close placed in its own column, and nothing more than that reach (R-UI-179)", () => {
-    const window = new Window();
-    window.document.body.innerHTML = '<div class="modal-body"><header class="set-head"><h1>一般</h1><button class="btn icon close-button" style="position:absolute"><svg></svg></button></header></div>';
-    const header = window.document.querySelector('header'), close = window.document.querySelector('.close-button');
-    for (const element of window.document.querySelectorAll('*')) element.getBoundingClientRect = () => ({ left: 10, top: 10, right: 310, bottom: 46, width: 300, height: 36 });
-    close.getBoundingClientRect = () => ({ left: 330, top: 10, right: 366, bottom: 46, width: 36, height: 36 });
-    Object.defineProperty(header, 'clientWidth', { value: 300 });
-    let scroll = 356;
-    Object.defineProperty(header, 'scrollWidth', { get: () => scroll });
-    const overflow = () => auditDocument(window.document, { width: 1120, height: 900 }, []).horizontalOverflow.elements.map(item => item.class);
-    try {
-      expect(overflow()).not.toContain('set-head');
-      scroll = 420;
-      expect(overflow()).toContain('set-head');
-    } finally { window.happyDOM.abort(); }
-  });
   it("measures SVG overflow at its CSS container and allows only rich code's local horizontal scroll", () => {
     const window = new Window();
     window.document.body.innerHTML = '<div class="page-agent"><div class="chat-message"><div class="rich-block message-code"><pre style="overflow-x:auto">long command</pre></div><svg><text>Diagram</text></svg></div></div>';

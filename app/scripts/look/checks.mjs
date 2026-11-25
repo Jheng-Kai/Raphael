@@ -715,13 +715,11 @@ export function checkRendered(name, context = {}) {
         Math.abs(arrow.left - start.left) <= 1 && Math.abs(arrow.top - start.top) <= 1 && titleBox.left > arrow.right &&
         [titleBox, closeBox].every(part => Math.abs(centre(arrow) - centre(part)) <= 1),
         'the way back and the title start at the top left with no skill count, and share a centre line with the close');
-      const body = document.querySelector('.modal-scrim .modal-body').getBoundingClientRect();
-      require(closeBox.left >= start.right + 8 && closeBox.right <= body.right && [...content.querySelectorAll('*')].filter(visible)
-        .every(node => node === close || close.contains(node) || node.getBoundingClientRect().right <= closeBox.left - 8),
-        'the close stands alone in its column at the top right: nothing of the page runs under it');
+      // R-UI-179: the content takes the dialog's whole width; the close ends the header row on the content's right edge.
+      require(Math.abs(closeBox.right - start.right) <= 1, "the close ends the header row on the content's right edge");
       const room = parseFloat(getComputedStyle(actionsRow).paddingInlineEnd) || 0;
-      require(Math.abs(controls.right - (start.right - room)) <= 1 && Math.abs(centre(controls) - centre(titleBox)) <= 2,
-        'the controls stand on the title row at its right end, left of the close column');
+      require(controls.right <= closeBox.left - room + 1 && controls.right >= closeBox.left - room - 24 && Math.abs(centre(controls) - centre(titleBox)) <= 2,
+        'the controls stand on the title row at its right end, just left of the close');
       const actionBoxes = [access, update, toggle].map(control => control.getBoundingClientRect());
       require(actionBoxes[0].right <= actionBoxes[1].left && actionBoxes[1].right <= actionBoxes[2].left,
         'access and the update button are visibly left of the switch');
@@ -6255,13 +6253,10 @@ export function checkRendered(name, context = {}) {
   if (name === "content-width") {
     const settings = document.querySelector('.modal-scrim:not([hidden]) .set-content');
     if (visible(settings)) {
-      // The content's own edge: a pane that reaches into the close column keeps it free with its padding.
-      const outer = settings.getBoundingClientRect(), edge = { left: outer.left, top: outer.top, bottom: outer.bottom,
-        right: outer.right - (parseFloat(getComputedStyle(settings).paddingRight) || 0) };
+      const edge = settings.getBoundingClientRect();
       for (const child of settings.children) {
         if (!visible(child) || ['absolute', 'fixed'].includes(getComputedStyle(child).position)) continue;
-        // A child that reaches into the close column keeps it free with the same padding, so its content edge is compared.
-        const outerBox = child.getBoundingClientRect(), box = { left: outerBox.left, right: outerBox.right - (parseFloat(getComputedStyle(child).paddingRight) || 0) };
+        const box = child.getBoundingClientRect();
         require(box.left >= edge.left - 1 && box.right <= edge.right + 1, `settings content shares one measure: ${child.className}`);
       }
       // Every section's small title stands on its card's left edge, not inset like the card's content, and the controls
@@ -6293,11 +6288,8 @@ export function checkRendered(name, context = {}) {
       const action = settings.querySelector('.set-head > :last-child:not(h1)');
       const form = settings.querySelector('.cs-form .add-grid');
       const contentRight = form ? form.getBoundingClientRect().left + form.clientWidth - parseFloat(getComputedStyle(form).paddingRight) : edge.right;
-      if (visible(action) && action.matches('.close-button')) {
-        // The close stands alone in its column at the top right of the body, right of the content's edge.
-        const box = action.getBoundingClientRect(), body = settings.closest('.modal-body')?.getBoundingClientRect() ?? edge;
-        require(box.left >= contentRight + 8 && box.right <= body.right, "settings close stands in its own column right of the content");
-      } else if (visible(action)) require(Math.abs(action.getBoundingClientRect().right - contentRight) <= 1, "settings header action shares the content right edge");
+      // R-UI-179: the close, or another last action of the header, ends on the content's right edge: no column is kept for it.
+      if (visible(action)) require(Math.abs(action.getBoundingClientRect().right - contentRight) <= 1, "settings header action shares the content right edge");
       for (const selector of ['.cs-apps .cs-chips', '.cs-results']) {
         const control = settings.querySelector(selector);
         if (visible(control)) require(Math.abs(control.getBoundingClientRect().right - edge.right) <= 1, `settings toolbar shares the content right edge: ${selector}`);
