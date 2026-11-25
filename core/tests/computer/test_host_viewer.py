@@ -341,6 +341,38 @@ async def test_idle_screencast_starts_and_restarts_with_a_screenshot(tmp_path):
         await browser.aclose()
 
 
+async def test_the_owner_answers_a_dialog_in_the_view_only_while_holding_the_tab(tmp_path):
+    # A headless Chrome never draws a JavaScript dialog: the view shows it, and the owner answers it under the lease (#336).
+    viewer, browser = host_viewer(tmp_path)
+    cdp = browser.cdp = Cdp(browser)
+    cdp.socket = SimpleNamespace(port=12345)
+    tab = fake_tab(browser, 1, 10)
+    params = {"member_id": 1, "conversation_id": 10}
+    try:
+        opened = await viewer.open(params)
+        base = opened["url"].removesuffix("host.html")
+        origin = {"Origin": viewer.origin}
+        async with httpx.AsyncClient(trust_env=False, timeout=5) as client, host_frames(client, base) as lines:
+            await frame_for(lines, tab)
+            browser._event("Page.javascriptDialogOpening", {"type": "prompt", "message": "Enter the code",
+                                                            "defaultPrompt": ""}, tab.session)
+            reads = len(cdp.calls)
+            dialog = (await client.get(base + "host-browser")).json()["dialog"]
+            assert (dialog["type"], dialog["message"], dialog["default_prompt"]) == ("prompt", "Enter the code", "")
+            assert not any(call[0] == "Page.getNavigationHistory" for call in cdp.calls[reads:])
+            answer = {"action": "dialog", "tab": tab.id, "dialog": dialog["dialog_id"], "accept": True, "text": "482913"}
+            assert (await client.post(base + "host-browser", json=answer, headers=origin)).status_code == 403
+            assert (await viewer.control({**opened, "held": True}))["control"] == "owner"
+            for wrong in ({"dialog": "old"}, {"text": 7}, {"accept": False}):
+                assert (await client.post(base + "host-browser", json={**answer, **wrong}, headers=origin)).status_code == 403
+            assert (await client.post(base + "host-browser", json=answer, headers=origin)).status_code == 204
+            assert ("Page.handleJavaScriptDialog", {"accept": True, "promptText": "482913"}, tab.session) in cdp.calls
+            assert tab.dialog is None and "dialog" not in (await client.get(base + "host-browser")).json()
+    finally:
+        await viewer.aclose()
+        await browser.aclose()
+
+
 async def test_host_browser_toolbar_follows_popups_without_replacing_the_lease(tmp_path, monkeypatch):
     async def snapshot(browser, tab, arguments):
         return {"tab_id": tab.id}, []

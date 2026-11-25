@@ -905,6 +905,15 @@ class HostBrowser:
         if current is None or not self.member_blocked(current) or self.member_blocked(tab):
             self.select(tab)
 
+    async def answer_dialog(self, tab, dialog, accept, text=None):
+        """Answer the JavaScript dialog that blocks the tab (#336): the member's browser_dialog, or the owner in the view."""
+        await self.command(tab, "Page.handleJavaScriptDialog",
+                           {"accept": accept, **({"promptText": text} if text is not None else {})})
+        if tab.dialog is dialog:  # unless Chrome already reported it closed and another opened
+            tab.dialog = None
+            tab.dialog_opened.clear()
+        tab.refs.clear()
+
     async def command(self, tab, method, params=None):
         cdp = self.cdp
         if cdp is None or self.tabs.get(tab.id) is not tab:

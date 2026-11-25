@@ -341,12 +341,7 @@ async def dialog_action(browser, tab, arguments, approver):
             raise BrowserError("browser_action_refused")
         if safety.CONFIRM in verdicts and approver != "user":
             raise BrowserError("browser_owner_approval_required")
-    await browser.command(tab, "Page.handleJavaScriptDialog",
-                          {"accept": action == "accept", **({"promptText": text} if text is not None else {})})
-    if tab.dialog is dialog:  # unless Chrome already reported it closed and another opened
-        tab.dialog = None
-        tab.dialog_opened.clear()
-    tab.refs.clear()
+    await browser.answer_dialog(tab, dialog, action == "accept", text)
     return {**tab_ids(tab), "status": "dialog_accepted" if action == "accept" else "dialog_dismissed"}
 
 

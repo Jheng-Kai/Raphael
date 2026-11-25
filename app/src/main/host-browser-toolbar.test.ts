@@ -71,3 +71,57 @@ it("submits the address for the displayed tab and preserves an in-progress edit 
   button('[data-browser-action="reload"]').click();
   expect(send.mock.calls[1][0]).toEqual({ action: "reload", tab: "page" });
 });
+
+it("shows a page's dialog to a watching owner, who must take control to answer it", () => {
+  const { screen, send, toolbar, model } = setup();
+  const dialog = { dialog_id: "d1", type: "confirm" as const, message: "Delete the draft?\nIt cannot be restored." };
+  toolbar.draw({ ...model, dialog });
+  const card = screen.querySelector<HTMLElement>(".host-browser-dialog")!;
+  expect(card.hidden).toBe(false);
+  expect(screen.hasAttribute("data-host-dialog")).toBe(true);
+  expect(card.getAttribute("role")).toBe("alertdialog");
+  expect(card.hasAttribute("data-readonly")).toBe(true);
+  expect(card.querySelector(".host-browser-dialog-from")?.textContent).toBe(t("browser.dialogFrom", { p0: "sign-in.example.test" }));
+  expect(card.querySelector(".host-browser-dialog-message")?.textContent).toBe(dialog.message);
+  expect(card.querySelector(".host-browser-dialog-hint")?.textContent).toBe(t("browser.dialogTakeOver"));
+  const buttons = [...card.querySelectorAll<HTMLButtonElement>("[data-dialog-answer]")];
+  expect(buttons.map(button => [button.dataset.dialogAnswer, button.disabled])).toEqual([["dismiss", true], ["accept", true]]);
+  buttons[1].click();
+  expect(send).not.toHaveBeenCalled();
+  toolbar.draw(model);
+  expect(card.hidden).toBe(true);
+  expect(screen.hasAttribute("data-host-dialog")).toBe(false);
+});
+
+it("lets the owner holding the tab answer a prompt, an alert and a confirm, once each", () => {
+  const { screen, send, toolbar, model } = setup();
+  const card = () => screen.querySelector<HTMLElement>(".host-browser-dialog")!;
+  toolbar.draw({ ...model, dialog: { dialog_id: "p1", type: "prompt", message: "Enter the code", default_prompt: "000" } }, true);
+  const answer = card().querySelector<HTMLInputElement>(".host-browser-dialog-answer")!;
+  expect(answer.value).toBe("000");
+  expect(document.activeElement).toBe(answer);
+  expect(card().querySelector(".host-browser-dialog-hint")).toBeNull();
+  expect(card().hasAttribute("data-readonly")).toBe(false);
+  answer.value = "482913";
+  answer.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  expect(send).toHaveBeenLastCalledWith({ action: "dialog", tab: "popup", dialog: "p1", accept: true, text: "482913" }, expect.any(Number));
+  const [, id] = send.mock.calls[0];
+  expect(card().querySelector<HTMLButtonElement>('[data-dialog-answer="accept"]')!.disabled).toBe(true);
+  card().querySelector<HTMLButtonElement>('[data-dialog-answer="dismiss"]')!.click();
+  expect(send).toHaveBeenCalledOnce();
+  // Refused (the tab was handed back meanwhile), it can be answered again with what was typed.
+  toolbar.result(id, false);
+  expect(card().querySelector<HTMLInputElement>(".host-browser-dialog-answer")!.value).toBe("482913");
+  const escape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+  card().querySelector<HTMLInputElement>(".host-browser-dialog-answer")!.dispatchEvent(escape);
+  expect(escape.defaultPrevented).toBe(true);
+  expect(send).toHaveBeenLastCalledWith({ action: "dialog", tab: "popup", dialog: "p1", accept: false }, expect.any(Number));
+  send.mockClear();
+  toolbar.draw({ ...model, dialog: { dialog_id: "a1", type: "alert", message: "Saved" } }, true);
+  expect([...card().querySelectorAll<HTMLButtonElement>("[data-dialog-answer]")].map(button => button.dataset.dialogAnswer)).toEqual(["accept"]);
+  card().querySelector<HTMLButtonElement>('[data-dialog-answer="accept"]')!.click();
+  expect(send).toHaveBeenLastCalledWith({ action: "dialog", tab: "popup", dialog: "a1", accept: true }, expect.any(Number));
+  toolbar.draw({ ...model, dialog: { dialog_id: "c1", type: "confirm", message: "Leave the page?" } }, true);
+  card().querySelector<HTMLButtonElement>('[data-dialog-answer="dismiss"]')!.click();
+  expect(send).toHaveBeenLastCalledWith({ action: "dialog", tab: "popup", dialog: "c1", accept: false }, expect.any(Number));
+});

@@ -95,6 +95,26 @@
 .host-browser-address { border-color: var(--line); background: var(--surface-2); color: var(--text); }
 .host-browser-address[aria-invalid] { border-color: var(--err); }
 .host-browser-error { margin: 0 var(--sp-2) var(--sp-2); color: var(--err); font-size: var(--fs-xs); }
+/* A page's JavaScript dialog, which a headless Chrome never draws: over the page, under the toolbar. */
+.host-browser-dialog {
+  grid-area: 2 / 1; align-self: start; justify-self: center; position: relative; z-index: 3;
+  display: flex; flex-direction: column; gap: var(--sp-2);
+  width: min(420px, calc(100% - 2 * var(--sp-3))); max-height: calc(100% - 2 * var(--sp-3)); overflow-x: hidden; overflow-y: auto;
+  margin-top: var(--sp-3); padding: var(--sp-3);
+  --text: var(--host-browser-text); --text-2: var(--host-browser-text-2);
+  color: var(--text); background: var(--dialog); border: 1px solid var(--float-edge); border-radius: var(--r-lg); box-shadow: var(--pop);
+}
+.host-browser-dialog[hidden] { display: none; }
+.host-browser-dialog[data-readonly] { pointer-events: none; }
+/* Short of room (the small panel), the card scrolls; its message and controls never squeeze into each other. */
+.host-browser-dialog > * { flex-shrink: 0; }
+.host-browser-dialog :is(.host-browser-dialog-from, .host-browser-dialog-message, .host-browser-dialog-hint) { margin: 0; overflow-wrap: anywhere; }
+.host-browser-dialog-from, .host-browser-dialog-hint { color: var(--text-2); font-size: var(--fs-xs); }
+.host-browser-dialog-message { font-size: var(--fs-sm); white-space: pre-wrap; max-height: 12lh; overflow-y: auto; }
+.host-browser-dialog-answer {
+  height: var(--h-field); padding: 0 var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-sm);
+  background: var(--surface-2); color: var(--text); font-size: var(--fs-sm);
+}
 @container (max-width: 440px) {
   .host-browser-tab { width: 56px; }
   .host-browser-toolbar .btn.host-browser-tab-button { gap: 0; }

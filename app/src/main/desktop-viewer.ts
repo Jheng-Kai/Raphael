@@ -412,7 +412,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     paintWallpaper(wallpaper);
     // The small picture is a card in the conversation; the larger view and the Computer tab are the stream itself.
     const hostView = state?.transport === "host";
-    browserToolbar.draw(hostView && running ? browserModel : undefined);
+    browserToolbar.draw(hostView && running ? browserModel : undefined, owner);
     askFrames(!!running && connected && !!inline && !expanded && !owner && (hostView || !pending()));
     const preview = lastFrames.get(member());
     const picture = running && !stalled && (!connected || !hostView && inline && !expanded) ? preview : undefined;
@@ -635,7 +635,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     if (event.data?.type !== 'raphael-desktop') return;
     if (event.data.state === "browser" && state?.transport === "host") {
       browserModel = event.data.model;
-      browserToolbar.draw(browserModel);
+      browserToolbar.draw(browserModel, state?.control === "owner");
       return;
     }
     if (event.data.state === "browser-action") {

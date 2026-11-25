@@ -5077,6 +5077,23 @@ export function checkRendered(name, context = {}) {
     }
     return {check:name, width:box.width, height:box.height};
   }
+  if (name === "desktop-host-dialog-watch" || name === "desktop-host-dialog-control") {
+    // A headless Chrome never draws a page's JavaScript dialog: the view shows it over the page (#336).
+    const held = name === "desktop-host-dialog-control";
+    const screen = document.querySelector('.desktop-screen[data-host-browser][data-host-dialog]');
+    const card = screen?.querySelector('.host-browser-dialog'), frame = screen?.querySelector('iframe:not([hidden])');
+    require(visible(card) && visible(frame), 'the page dialog shows over the live page');
+    const box = card.getBoundingClientRect(), page = frame.getBoundingClientRect();
+    require(box.top >= page.top && box.bottom <= page.bottom + 1 && box.left >= page.left && box.right <= page.right,
+      'the dialog stays inside the page, under the toolbar');
+    require(Math.abs(box.left + box.right - page.left - page.right) <= 2, 'the dialog is centered over the page');
+    require(card.querySelector('.host-browser-dialog-message')?.textContent.trim(), 'the dialog shows its message');
+    const controls = [...card.querySelectorAll('[data-dialog-answer], .host-browser-dialog-answer')];
+    require(controls.length === 3 && controls.every(control => control.disabled === !held),
+      held ? 'the owner holding the tab can answer' : 'a watching owner cannot answer');
+    require(Boolean(visible(card.querySelector('.host-browser-dialog-hint'))) === !held, 'only the watching view asks to take control first');
+    return {check:name, width:box.width, height:box.height};
+  }
   if (name.startsWith("desktop-host-tabs-")) {
     const screen = document.querySelector('.desktop-screen[data-host-browser]');
     const toolbar = screen?.querySelector('.host-browser-toolbar');
