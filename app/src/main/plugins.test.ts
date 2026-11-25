@@ -273,12 +273,13 @@ test("failed login restores actions without echoing provider text", async () => 
   expect(vi.mocked(toaster.info).mock.calls.flat().join(" ")).not.toContain("private provider");
 });
 
-test("managed disconnect confirms twice and private Google reconnect uses its own RPC", async () => {
+test("managed disconnect asks in the red dialog and private Google reconnect uses its own RPC", async () => {
   api.connectorsDisconnect.mockResolvedValue({ disconnected: true });
   api.connectorsGoogleConnect.mockResolvedValue({ connected: true });
   const { c, click } = setup(); await c.load();
-  click("disconnect", "composio:notion"); expect(api.connectorsDisconnect).not.toHaveBeenCalled();
   click("disconnect", "composio:notion"); await settle();
+  expect(api.connectorsDisconnect).not.toHaveBeenCalled();
+  document.querySelector<HTMLElement>('.mb-delete [data-dlg="delete"]')!.click(); await settle();
   expect(api.connectorsDisconnect).toHaveBeenCalledWith("composio:notion");
   expect(api.integrationsDisconnect).not.toHaveBeenCalled();
   click("relogin", "google"); await settle(); expect(api.connectorsGoogleConnect).toHaveBeenCalled(); c.reset();

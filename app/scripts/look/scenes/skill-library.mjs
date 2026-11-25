@@ -1,5 +1,5 @@
 // Team skills in Settings: packages, who may use each, and the importer.
-import { scene, click, type, wait, waitGone, settings, scroll, focus, key, check, hover, rightClick, sideButton } from "./steps.mjs";
+import { scene, click, type, wait, waitGone, settings, scroll, focus, key, check, hover, sideButton } from "./steps.mjs";
 import { memberSettingsPage } from "./member-settings.mjs";
 
 const list = [...settings("skills"), wait(".skl-pack")];
@@ -10,8 +10,9 @@ export default [
   scene("skill-library-row-lit", "A plugin's row under the pointer is lit across its whole card, corners and all", [...list, hover('[data-skl="open"][data-key="set:1"]'), check("skill-library-row-lit")]),
   scene("skill-library-doc-alone", "A skill alone opens on its own page: its controls, a quote of its words and where it came from, then its document", [
     ...list, click('[data-skl="open-skill"][data-key="skill:3"]'), wait(".skl-doc-page .skl-doc .ans"), check("skill-library-doc-alone")]),
-  scene("skill-library-right-click", "A right click on a package's row offers 更新 and 刪除; no ⋯ is drawn", [
-    ...list, rightClick('.skl-pack[data-skl-pack="set:1"]'), wait('[data-pick="delete"]'), check("skill-library-right-click")]),
+  // Settings has no right click and no ⋯: a package is deleted from its page's trash, which asks in the red dialog.
+  scene("skill-library-page-remove", "A plugin's page has its trash beside its update button; it asks in the red dialog naming the package", [
+    ...opened, click('.skl-page-actions [data-skl="remove"][data-key="set:1"]'), wait(".mb-dialog.mb-delete"), check("skill-library-page-remove")]),
   scene("skill-library-open", "The way back and the plugin title, then access, the update button and the switch on its row; a quote of its words holds where it came from; each skill row opens its page.", [...opened, check("skill-library-open")]),
   scene("skill-library-skill-page", "A plugin's skill opens on its own page: the way back and its name, its switch, a quote of its words, then its document", [
     ...opened, click('.skl-page [data-skl="open-skill"][data-id="101"]'), wait(".skl-doc-page .skl-doc .ans"), check("skill-library-skill-page")]),

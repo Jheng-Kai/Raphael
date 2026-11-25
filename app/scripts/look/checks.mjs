@@ -668,8 +668,7 @@ export function checkRendered(name, context = {}) {
       for (const row of rows) {
         const r = row.getBoundingClientRect();
         require(r.left >= box.left - 1 && r.right <= box.right + 1, `a package row stays inside the tab (${Math.round(r.left)}-${Math.round(r.right)})`);
-        const more = row.querySelector('[data-skl="more"]');
-        require(row.querySelector('.tg[role="switch"]') && more && !visible(more), 'each package has its switch, and its ⋯ (for the right click) is not drawn');
+        require(row.querySelector('.tg[role="switch"]') && !row.querySelector('[data-skl="more"], [data-skl="remove"], [data-overflow]'), 'each package has its switch, and no ⋯ or trash on its row');
       }
     }
     if (name === 'skill-library') {
@@ -702,10 +701,10 @@ export function checkRendered(name, context = {}) {
       require(title?.textContent.trim().length > 0 && title.scrollWidth <= title.clientWidth + 1, "the package's name is whole");
       const close = head.querySelector('.close-button'), actionsRow = page.querySelector('.skl-page-actions');
       const actions = actionsRow.querySelector('.ctl'), access = actions.querySelector('.skl-access');
-      const update = actions.querySelector('[data-skl="refresh"]'), more = actions.querySelector('[data-skl="more"]'), toggle = actions.querySelector('.tg[role="switch"]');
+      const update = actions.querySelector('[data-skl="refresh"]'), trash = actions.querySelector('[data-skl="remove"]'), toggle = actions.querySelector('.tg[role="switch"]');
       require(visible(close) && page.querySelectorAll('.close-button').length === 1, 'one shared close stands beside the package title');
-      require([access, update, toggle].every(visible) && !visible(more) && access.nextElementSibling === update &&
-        actions.lastElementChild === toggle && actionsRow.parentElement === title.parentElement.parentElement, 'access, the update button and the rightmost switch stand at the end of the title row; no ⋯ is drawn');
+      require([access, update, trash, toggle].every(visible) && !actions.querySelector('[data-skl="more"], [data-overflow]') && access.nextElementSibling === update && update.nextElementSibling === trash &&
+        actions.lastElementChild === toggle && actionsRow.parentElement === title.parentElement.parentElement, 'access, the update button, the trash and the rightmost switch stand at the end of the title row; no ⋯');
       const content = page.closest('.set-content');
       const headings = [...content.querySelectorAll('h1')];
       require(content.firstElementChild === page && page.firstElementChild.firstElementChild === head &&
@@ -748,16 +747,20 @@ export function checkRendered(name, context = {}) {
       require(visible(doc) && doc.querySelector('.ans') && !doc.textContent.includes('description:') && (alone || doc.querySelector('.message-code')), 'its document is drawn as Markdown, without its front matter');
       const left = back.getBoundingClientRect().left;
       for (const part of [quote, doc]) require(Math.abs(part.getBoundingClientRect().left - left) <= 1, 'the quote and the document line up with the way back');
-      // A skill of a plugin has a ⋯ that is not drawn: a right click presses it (R-SKILL-17).
-      require(!visible(page.querySelector('[data-skl="skill-more"]')) && document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, 'no ⋯ drawn, and the window does not scroll sideways');
+      // A skill's page has its trash beside its switch, and no ⋯ (Settings has no right click to reach one).
+      require(visible(page.querySelector('.skl-page-actions [data-skl="skill-remove"], .skl-page-actions [data-skl="remove"]')) && !page.querySelector('[data-skl="skill-more"], [data-skl="more"], [data-overflow]') &&
+        document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, 'its trash and no ⋯, and the window does not scroll sideways');
       // A long document scrolls under the skill's header: the way back, its name and the close stay at the top (R-UI-182).
       const close = head.querySelector('.close-button');
       require(visible(close) && page.querySelectorAll('.close-button').length === 1, "one shared close stands in the skill's header");
       headHoldsOnScroll(document.querySelector('.modal-scrim .modal-body'), close, [back, title]);
     }
-    if (name === 'skill-library-right-click') {
-      const picks = [...document.querySelectorAll('.mb-menu [data-pick]')].map(item => item.dataset.pick);
-      require(picks.join(',') === 'refresh,delete', `the right click offers 更新 and 刪除 only (${picks})`);
+    if (name === 'skill-library-page-remove') {
+      // The package page's trash asks at once in the red dialog naming the package, with no menu before it.
+      const dialog = document.querySelector('.mb-dialog.mb-delete');
+      require(visible(dialog) && dialog.querySelector('h2').textContent === '移除「pstack」？' && !document.querySelector('#app-popover'), 'the red dialog names the package, with no menu before it');
+      require([...dialog.querySelectorAll('.mb-dlg-act .btn')].map(b => b.textContent.trim()).join('|') === '取消|刪除', '取消 then a red 刪除');
+      require(!window.__look.calls.some(call => call.method === 'skills.library.delete'), 'nothing is deleted before the red button');
     }
     if (name === 'skill-library-row-lit') {
       // The lit row is the card itself, never a smaller rounded box inside it.
@@ -792,8 +795,8 @@ export function checkRendered(name, context = {}) {
       for (const row of skills) {
         const label = row.querySelector('.skl-label'), opener = row.querySelector('[data-skl="open-skill"]'), toggle = row.querySelector('.tg');
         require(Math.abs(row.getBoundingClientRect().left - left) <= 1 && label.getBoundingClientRect().left > row.getBoundingClientRect().left + 8, 'each skill row starts at the back button, with its words inside the card');
-        require(opener && Math.abs(opener.getBoundingClientRect().width - row.getBoundingClientRect().width) <= 1 && ![...row.querySelectorAll('[data-skl="skill-more"], [data-skl="more"]')].some(visible) &&
-          row.querySelector('.ctl').lastElementChild === toggle, 'each skill row opens its page across the row, its switch at the right and no ⋯ drawn');
+        require(opener && Math.abs(opener.getBoundingClientRect().width - row.getBoundingClientRect().width) <= 1 && !row.querySelector('[data-skl="skill-more"], [data-skl="more"], [data-skl="skill-remove"], [data-overflow]') &&
+          row.querySelector('.ctl').lastElementChild === toggle, 'each skill row opens its page across the row, its switch at the right, no ⋯ and no trash');
       }
     }
     if (name === 'skill-library-back') {

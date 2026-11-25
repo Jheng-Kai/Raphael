@@ -72,7 +72,7 @@ Every page of the tab (the list, a package's page, a plugin's skill and a skill 
 
 The package page and its row show the existing Updating status while refresh is pending. The owner can return to the list or use other packages. The skill-library-open scene holds the update RPC open. R-PERF-23 and R-PERF-24 use a synthetic 60-member, 58-skill roster and a blocked file writer to check the core's metadata cache and unrelated RPC latency.
 ```powershell
-npm run look -- skill-library skill-library-row-lit skill-library-open skill-library-refresh skill-library-skill-page skill-library-back nav-side-plugin skill-library-access skill-library-doc-alone skill-library-right-click skill-library-import skill-library-imported skill-library-import-failed member-skills-library --theme both --width 1120,720,1920x1080
+npm run look -- skill-library skill-library-row-lit skill-library-open skill-library-refresh skill-library-skill-page skill-library-back nav-side-plugin skill-library-access skill-library-doc-alone skill-library-page-remove skill-library-import skill-library-imported skill-library-import-failed member-skills-library --theme both --width 1120,720,1920x1080
 ```
 
 ```powershell
