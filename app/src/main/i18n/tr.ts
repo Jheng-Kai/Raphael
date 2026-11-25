@@ -14,6 +14,7 @@ export const tr = {
   "browser.dialogCancel": "İptal",
   "browser.dialogAnswer": "Yanıt",
   "browser.dialogTakeOver": "Bu iletişim kutusunu yanıtlamak için denetimi alın.",
+  "browser.dialogOmitted": "İleti uzun: ortasındaki {p0} karakter gösterilmiyor.",
   "memberComputer.switchFailed": "Bilgisayar seçimi üyeye gönderilemedi.",
   "memberComputer.stopFailed": "Bilgisayardaki görev durdurulamadı.",
   "memberComputer.returnFailed": "Bilgisayarın denetimi üyeye geri verilemedi.",

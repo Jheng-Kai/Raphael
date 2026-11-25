@@ -108,8 +108,8 @@
 .host-browser-dialog[data-readonly] { pointer-events: none; }
 /* Short of room (the small panel), the card scrolls; its message and controls never squeeze into each other. */
 .host-browser-dialog > * { flex-shrink: 0; }
-.host-browser-dialog :is(.host-browser-dialog-from, .host-browser-dialog-message, .host-browser-dialog-hint) { margin: 0; overflow-wrap: anywhere; }
-.host-browser-dialog-from, .host-browser-dialog-hint { color: var(--text-2); font-size: var(--fs-xs); }
+.host-browser-dialog :is(.host-browser-dialog-from, .host-browser-dialog-message, .host-browser-dialog-omitted, .host-browser-dialog-hint) { margin: 0; overflow-wrap: anywhere; }
+.host-browser-dialog-from, .host-browser-dialog-omitted, .host-browser-dialog-hint { color: var(--text-2); font-size: var(--fs-xs); }
 .host-browser-dialog-message { font-size: var(--fs-sm); white-space: pre-wrap; max-height: 12lh; overflow-y: auto; }
 .host-browser-dialog-answer {
   height: var(--h-field); padding: 0 var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-sm);

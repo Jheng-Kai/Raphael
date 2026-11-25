@@ -14,6 +14,7 @@ export const zhCN = {
   "browser.dialogCancel": "取消",
   "browser.dialogAnswer": "回答",
   "browser.dialogTakeOver": "点「接手控制」后即可回答此对话框。",
+  "browser.dialogOmitted": "消息太长，中间有 {p0} 个字未显示。",
   "memberComputer.switchFailed": "无法把电脑选择发送给成员。",
   "memberComputer.stopFailed": "无法停止这项电脑任务。",
   "memberComputer.returnFailed": "无法将电脑控制权交还给成员。",

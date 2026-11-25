@@ -14,6 +14,7 @@ export const id = {
   "browser.dialogCancel": "Batal",
   "browser.dialogAnswer": "Jawaban",
   "browser.dialogTakeOver": "Ambil kendali untuk menjawab dialog ini.",
+  "browser.dialogOmitted": "Pesannya panjang: {p0} karakter di tengahnya tidak ditampilkan.",
   "memberComputer.switchFailed": "Pilihan komputer tidak dapat dikirim kepada anggota.",
   "memberComputer.stopFailed": "Tugas komputer tidak dapat dihentikan.",
   "memberComputer.returnFailed": "Kendali komputer tidak dapat dikembalikan kepada anggota.",

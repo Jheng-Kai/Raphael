@@ -14,6 +14,7 @@ export const ko = {
   "browser.dialogCancel": "취소",
   "browser.dialogAnswer": "응답",
   "browser.dialogTakeOver": "제어권을 가져오면 이 대화상자에 응답할 수 있습니다.",
+  "browser.dialogOmitted": "메시지가 길어서 가운데 {p0}자는 표시되지 않습니다.",
   "memberComputer.switchFailed": "컴퓨터 선택을 멤버에게 전달하지 못했습니다.",
   "memberComputer.stopFailed": "컴퓨터 작업을 중지하지 못했습니다.",
   "memberComputer.returnFailed": "컴퓨터 제어를 멤버에게 돌려주지 못했습니다.",

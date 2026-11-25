@@ -17,6 +17,7 @@ export const zhTW = {
   "browser.dialogCancel": "取消",
   "browser.dialogAnswer": "回答",
   "browser.dialogTakeOver": "按「接手控制」後即可回答這個對話框。",
+  "browser.dialogOmitted": "訊息太長，中間有 {p0} 個字沒有顯示。",
   "memberComputer.switchFailed": "無法把電腦選擇傳給成員。",
   "memberComputer.stopFailed": "無法停止這項電腦工作。",
   "memberComputer.returnFailed": "無法將電腦控制權交還給成員。",

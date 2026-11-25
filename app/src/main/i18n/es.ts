@@ -14,6 +14,7 @@ export const es = {
   "browser.dialogCancel": "Cancelar",
   "browser.dialogAnswer": "Respuesta",
   "browser.dialogTakeOver": "Toma el control para responder este cuadro de diálogo.",
+  "browser.dialogOmitted": "El mensaje es largo: no se muestran {p0} caracteres del medio.",
   "memberComputer.switchFailed": "No se pudo comunicar la elección al miembro.",
   "memberComputer.stopFailed": "No se pudo detener la tarea en el ordenador.",
   "memberComputer.returnFailed": "No se pudo devolver el control al miembro.",

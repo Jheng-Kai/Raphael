@@ -180,9 +180,42 @@ def opened_in(file, folder):
     return os.path.normcase(os.path.dirname(final)) == os.path.normcase(str(folder))
 
 
+def remove_made(path, made):
+    """Removes the file this placer created at `path` only while the path still leads to that very file: a link swapped
+    in since would lead it to a file of the project, which stays."""
+    with suppress(OSError):
+        there = os.stat(path)
+        if (there.st_dev, there.st_ino) == (made.st_dev, made.st_ino):
+            os.unlink(path)
+
+
+def create_in(folder, name, write):
+    """A new file `name` in `folder`, by path: True once written whole, False when the name is taken, None when it was
+    created where a link swapped in since leads (removed again, nothing written there). A failed write removes the
+    half-written file, which would otherwise stand for the whole one."""
+    path = folder / name
+    try:
+        file = path.open("xb")
+    except FileExistsError:
+        return False
+    made = os.fstat(file.fileno())
+    try:
+        with file:
+            inside = opened_in(file, folder)
+            if inside:
+                write(file)
+    except OSError:
+        remove_made(path, made)
+        raise
+    if not inside:
+        remove_made(path, made)
+        return None
+    return True
+
+
 def place_by_path(workspace, name, data):
-    """Windows, which opens no folder relative to another: each folder is checked to be no link or junction, and the
-    created file to be in the last one before anything is written."""
+    """Windows, which opens no folder relative to another: each folder is checked to be no link or junction, and each
+    created file to be in its folder before anything is written."""
     folder = workspace / DOWNLOADS
     for part in (folder.parent, folder):
         if part.is_symlink() or part.is_junction():
@@ -190,31 +223,15 @@ def place_by_path(workspace, name, data):
         part.mkdir(exist_ok=True)
         if part.resolve() != part:
             return None
-    ignore = folder.parent / ".gitignore"
-    try:
-        with ignore.open("x", encoding="utf-8") as file:
-            file.write(IGNORE)
-    except FileExistsError:
-        pass
-    except OSError:
-        ignore.unlink(missing_ok=True)
-        raise
+    if create_in(folder.parent, ".gitignore", lambda file: file.write(IGNORE.encode())) is None:
+        return None
     for index in range(1000):
-        path = folder / (name if not index else f"{index}-{name}")
-        try:
-            output = path.open("xb")
-        except FileExistsError:
-            continue
-        if not opened_in(output, folder):
-            output.close()  # created empty where a swapped link led, and nothing written there
+        candidate = name if not index else f"{index}-{name}"
+        placed = create_in(folder, candidate, lambda file: shutil.copyfileobj(data, file))
+        if placed is None:
             return None
-        try:
-            with output:
-                shutil.copyfileobj(data, output)
-        except OSError:
-            path.unlink(missing_ok=True)
-            raise
-        return path
+        if placed:
+            return folder / candidate
     return None
 
 
@@ -265,6 +282,15 @@ def window_arguments(mac_version):
     if headless_chrome():
         return ["--headless=new", *([f"--user-agent={mac_user_agent(mac_version)}"] if mac_version else [])]
     return ["--window-position=-32000,-32000"]
+
+
+def dialog_message(message):
+    """A dialog's message as the member and the owner see it: whole up to 2000 characters, else its first and last
+    thousand around a mark, with how many characters are left out between them, so that no long text pushes what it
+    asks out of sight. The safety check reads the whole message (`Tab.dialog_text`)."""
+    if len(message) <= 2000:
+        return {"message": message}
+    return {"message": f"{message[:1000]}\n…\n{message[-1000:]}", "omitted": len(message) - 2000}
 
 
 def startup_pages(startup_url):
@@ -362,7 +388,7 @@ class Tab:
     # The JavaScript dialog that blocks the page (#336), set while it is open: Chrome holds every script and input of the
     # page until the dialog is answered, which a headless Chrome never draws.
     dialog: dict | None = None
-    dialog_text: str | None = ""  # its whole message for the safety check (None: too long to judge); `dialog` shows 2000
+    dialog_text: str | None = ""  # its whole message for the safety check (None: too long to judge); `dialog` shows its ends
     dialog_opened: asyncio.Event = field(default_factory=asyncio.Event, repr=False)
 
     @property
@@ -649,7 +675,7 @@ class HostBrowser:
                 if tab.session == session:
                     kind, message = params.get("type", "alert"), str(params.get("message", ""))
                     tab.dialog_text = message if len(message) <= 200_000 else None
-                    tab.dialog = {"dialog_id": secrets.token_hex(6), "type": kind, "message": message[:2000],
+                    tab.dialog = {"dialog_id": secrets.token_hex(6), "type": kind, **dialog_message(message),
                                   **({"default_prompt": str(params.get("defaultPrompt", ""))[:2000]}
                                      if kind == "prompt" else {})}
                     tab.dialog_opened.set()

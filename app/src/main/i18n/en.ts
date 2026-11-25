@@ -18,6 +18,7 @@ export const en = {
   "browser.dialogCancel": "Cancel",
   "browser.dialogAnswer": "Answer",
   "browser.dialogTakeOver": "Take control to answer this dialog.",
+  "browser.dialogOmitted": "The message is long: {p0} characters in its middle are not shown.",
   "memberComputer.switchFailed": "Could not send the computer choice to the member.",
   "memberComputer.stopFailed": "Could not stop the computer task.",
   "memberComputer.returnFailed": "Could not return computer control to the member.",

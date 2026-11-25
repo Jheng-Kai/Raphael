@@ -124,6 +124,18 @@ async def test_an_answered_prompt_is_judged_as_pressing_ok_too(tmp_path):
             browser, tab, {"action": "accept", "dialog_id": tab.dialog["dialog_id"], "prompt_text": "Draft"}, "auto")
 
 
+def test_a_long_dialog_shows_both_its_ends_and_says_what_is_left_out(tmp_path):
+    # What a long message asks is often at its end: the owner and the member see both ends and how much is between.
+    browser, tab = dialog_tab(tmp_path)
+    open_dialog(browser, "confirm", "Context. " * 300 + "Pay $40 now?")
+    message = tab.dialog["message"]
+    assert message.startswith("Context. ") and message.endswith("Pay $40 now?") and "\n…\n" in message
+    assert (len(message), tab.dialog["omitted"]) == (2003, 9 * 300 + 12 - 2000)
+    browser._event("Page.javascriptDialogClosed", {"result": False}, "session")
+    open_dialog(browser, "alert", "Saved")
+    assert tab.dialog["message"] == "Saved" and "omitted" not in tab.dialog
+
+
 def test_the_dialog_tool_is_offered_and_asks_like_page_input():
     assert HostComputerTools.base_tier("browser_dialog") == HostComputerTools.base_tier("browser_click")
 
@@ -208,6 +220,9 @@ def test_a_half_written_gitignore_is_removed_so_the_next_download_writes_it(tmp_
         def write(self, text):
             raise OSError("the disk is full")
 
+        def __getattr__(self, name):
+            return getattr(self.file, name)
+
     if by_handle:
         fdopen = os.fdopen
         monkeypatch.setattr(host_browser.os, "fdopen",
@@ -226,6 +241,46 @@ def test_a_half_written_gitignore_is_removed_so_the_next_download_writes_it(tmp_
     monkeypatch.setattr(host_browser, "HANDLES", by_handle)
     assert browser._place_download(GUID, project, "report.txt") is not None
     assert (project / ".raphael" / ".gitignore").read_text().splitlines()[-1] == "*"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="making a symbolic link needs a privilege on Windows")
+@pytest.mark.parametrize("swapped", [".raphael", ".raphael/downloads"])
+def test_a_failed_write_never_removes_the_file_a_link_swapped_in_meanwhile_leads_to(tmp_path, monkeypatch, swapped):
+    # By path, a link swapped in while a file is written would lead the clean-up of the half-written file to the
+    # project's own file of that name.
+    monkeypatch.setattr(host_browser, "HANDLES", False)
+    project = (tmp_path / "project").resolve()
+    project.mkdir()
+    for name in (".gitignore", "report.txt"):
+        (project / name).write_text("# the owner's\n")
+
+    def swap(*args):
+        (project / swapped).rename(project / "moved")
+        (project / swapped).symlink_to(project, target_is_directory=True)
+        raise OSError("the disk is full")
+
+    class Swapping:
+        def __init__(self, file):
+            self.file = file
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *error):
+            self.file.close()
+
+        def __getattr__(self, name):
+            return getattr(self.file, name)
+
+        write = swap
+
+    if swapped == ".raphael":
+        open_path = Path.open
+        monkeypatch.setattr(Path, "open", lambda path, mode="r", **options:
+                            Swapping(open_path(path, mode, **options)) if path.name == ".gitignore" else open_path(path, mode, **options))
+    with pytest.raises(OSError, match="the disk is full"):
+        host_browser.place_by_path(project, "report.txt", SimpleNamespace(read=swap))
+    assert (project / ".gitignore").read_text() == (project / "report.txt").read_text() == "# the owner's\n"
 
 
 def test_a_download_is_placed_the_same_way_where_no_folder_opens_relative_to_another(tmp_path, monkeypatch):

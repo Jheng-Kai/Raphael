@@ -18,6 +18,7 @@ export const ja = {
   "browser.dialogCancel": "キャンセル",
   "browser.dialogAnswer": "回答",
   "browser.dialogTakeOver": "「操作を引き継ぐ」と、このダイアログに回答できます。",
+  "browser.dialogOmitted": "メッセージが長いため、途中の {p0} 文字は表示されていません。",
   "memberComputer.switchFailed": "コンピューターの選択をメンバーに送れませんでした。",
   "memberComputer.stopFailed": "コンピューターでの作業を停止できませんでした。",
   "memberComputer.returnFailed": "操作をメンバーに返せませんでした。",

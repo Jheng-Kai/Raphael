@@ -14,6 +14,7 @@ export const vi = {
   "browser.dialogCancel": "Hủy",
   "browser.dialogAnswer": "Câu trả lời",
   "browser.dialogTakeOver": "Nhận điều khiển để trả lời hộp thoại này.",
+  "browser.dialogOmitted": "Thông báo dài: {p0} ký tự ở giữa không được hiển thị.",
   "memberComputer.switchFailed": "Không gửi được lựa chọn máy tính cho thành viên.",
   "memberComputer.stopFailed": "Không dừng được tác vụ trên máy tính.",
   "memberComputer.returnFailed": "Không trả được quyền điều khiển máy tính cho thành viên.",

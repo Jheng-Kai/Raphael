@@ -106,6 +106,8 @@ export default [
     [...hostExpand, click('[data-desktop="take"]'),
       wait('.desktop-panel[data-interactive="true"] .host-browser-dialog [data-dialog-answer="accept"]:not(:disabled)'),
       type('.host-browser-dialog-answer', '482913'), check("desktop-host-dialog-control")], {...hostTabs, hostDialog:"prompt"}),
+  scene("desktop-host-dialog-long", "A long page dialog shows both its ends over the watched page and says how much is left out between them",
+    [...hostEntry, wait('.host-browser-dialog:not([hidden])'), check("desktop-host-dialog-long")], {...hostTabs, hostDialog:"confirm"}),
   scene("desktop-computer-choice", "Save the member's computer without starting the virtual machine",
     [...entry, check("desktop-computer-choice-host"), click("[data-computer-choice]"), click('.menu [data-value="docker"]'),
       wait('.desktop-panel[data-desktop-state="stopped"]'), check("desktop-computer-choice")],

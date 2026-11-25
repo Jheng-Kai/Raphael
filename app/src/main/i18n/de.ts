@@ -14,6 +14,7 @@ export const de = {
   "browser.dialogCancel": "Abbrechen",
   "browser.dialogAnswer": "Antwort",
   "browser.dialogTakeOver": "Übernimm die Kontrolle, um diesen Dialog zu beantworten.",
+  "browser.dialogOmitted": "Die Nachricht ist lang: {p0} Zeichen in der Mitte werden nicht angezeigt.",
   "memberComputer.switchFailed": "Die Computerauswahl konnte nicht an das Mitglied gesendet werden.",
   "memberComputer.stopFailed": "Die Computeraufgabe konnte nicht gestoppt werden.",
   "memberComputer.returnFailed": "Die Computersteuerung konnte dem Mitglied nicht zurückgegeben werden.",

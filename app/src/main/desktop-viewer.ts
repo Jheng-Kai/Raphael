@@ -811,7 +811,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
       update(next);
       const canInput = held && panel.hasAttribute('data-expanded') && next.control === 'owner';
       send(canInput);
-      if (canInput && visible && document.activeElement !== frame) frame.focus({ preventScroll:true });
+      if (canInput && visible && !browserToolbar.focusDialog() && document.activeElement !== frame) frame.focus({ preventScroll:true });
       if (canInput && !interactive) takeTimer = setTimeout(() => {
         takeTimer = undefined;
         if (session === opened && state?.control === 'owner' && !interactive) void takeFailed(opened);

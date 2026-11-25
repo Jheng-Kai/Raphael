@@ -14,6 +14,7 @@ export const ptBR = {
   "browser.dialogCancel": "Cancelar",
   "browser.dialogAnswer": "Resposta",
   "browser.dialogTakeOver": "Assuma o controle para responder a esta caixa de diálogo.",
+  "browser.dialogOmitted": "A mensagem é longa: {p0} caracteres do meio não são exibidos.",
   "memberComputer.switchFailed": "Não foi possível enviar a escolha ao membro.",
   "memberComputer.stopFailed": "Não foi possível parar a tarefa no computador.",
   "memberComputer.returnFailed": "Não foi possível devolver o controle ao membro.",

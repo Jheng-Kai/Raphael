@@ -3,7 +3,7 @@ import { actionRow, btn, esc, ico, iconButton, patchHTML, type IconName } from "
 
 interface BrowserTab { id: string; title: string; url: string; favicon: string }
 /** A JavaScript dialog that holds the shown page: a headless Chrome never draws it, so the view does (#336). */
-export interface HostDialog { dialog_id: string; type: "alert" | "confirm" | "prompt" | "beforeunload"; message: string; default_prompt?: string }
+export interface HostDialog { dialog_id: string; type: "alert" | "confirm" | "prompt" | "beforeunload"; message: string; omitted?: number; default_prompt?: string }
 export interface HostBrowserModel { tabs: BrowserTab[]; shown: string; back: boolean; forward: boolean; dialog?: HostDialog }
 type Action = "select" | "close" | "new" | "back" | "forward" | "reload" | "navigate" | "dialog";
 export interface HostBrowserAction { action: Action; tab: string; url?: string; dialog?: string; accept?: boolean; text?: string }
@@ -82,6 +82,8 @@ export function mountHostBrowserToolbar(screen: HTMLElement, send: (action: Host
     const off = holding && dialogAction === undefined ? "" : " disabled";
     card.innerHTML = `<p class="host-browser-dialog-from" id="${cardId}-from">${esc(t("browser.dialogFrom", { p0: site }))}</p>` +
       `<p class="host-browser-dialog-message" id="${cardId}-message">${esc(dialog.message)}</p>` +
+      // A long message keeps both its ends; what is left out between them is said, never silently cut.
+      (dialog.omitted ? `<p class="host-browser-dialog-omitted">${esc(t("browser.dialogOmitted", { p0: new Intl.NumberFormat(getLocale()).format(dialog.omitted) }))}</p>` : "") +
       (dialog.type === "prompt" ? `<input class="host-browser-dialog-answer" type="text" maxlength="2000" autocomplete="off" spellcheck="false" aria-label="${esc(t("browser.dialogAnswer"))}"${off}>` : "") +
       (holding ? "" : `<p class="host-browser-dialog-hint">${esc(t("browser.dialogTakeOver"))}</p>`) +
       actionRow({
@@ -205,6 +207,15 @@ export function mountHostBrowserToolbar(screen: HTMLElement, send: (action: Host
 
   return {
     draw,
+    /** With the page's dialog to answer, the owner's keys go to it rather than to the page: whether it took them. */
+    focusDialog(): boolean {
+      if (card.hidden || card.hasAttribute("data-readonly")) return false;
+      if (!card.contains(document.activeElement)) {
+        [...card.querySelectorAll<HTMLInputElement | HTMLButtonElement>('.host-browser-dialog-answer, [data-dialog-answer="accept"]')]
+          .find(control => !control.disabled)?.focus({ preventScroll: true });
+      }
+      return true;
+    },
     result(id: number, ok: boolean): void {
       if (id === dialogAction) {
         // Answered, the next read has no dialog; refused (the tab was handed back meanwhile), it can be answered again.

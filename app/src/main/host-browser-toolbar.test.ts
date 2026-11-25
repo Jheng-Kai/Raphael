@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, expect, it, vi } from "vitest";
 import { mountHostBrowserToolbar, type HostBrowserModel } from "./host-browser-toolbar";
-import { t } from "./i18n";
+import { getLocale, t } from "./i18n";
 
 const tabs = [
   { id: "page", title: "Work page", url: "https://work.example.test", favicon: "" },
@@ -124,4 +124,27 @@ it("lets the owner holding the tab answer a prompt, an alert and a confirm, once
   toolbar.draw({ ...model, dialog: { dialog_id: "c1", type: "confirm", message: "Leave the page?" } }, true);
   card().querySelector<HTMLButtonElement>('[data-dialog-answer="dismiss"]')!.click();
   expect(send).toHaveBeenLastCalledWith({ action: "dialog", tab: "popup", dialog: "c1", accept: false }, expect.any(Number));
+});
+
+it("says how much of a long dialog's message is left out between its two ends", () => {
+  const { screen, toolbar, model } = setup();
+  const card = screen.querySelector<HTMLElement>(".host-browser-dialog")!;
+  toolbar.draw({ ...model, dialog: { dialog_id: "l1", type: "confirm", message: "Context.\n…\nPay $40 now?", omitted: 1712 } });
+  expect(card.querySelector(".host-browser-dialog-omitted")?.textContent).toBe(t("browser.dialogOmitted", { p0: new Intl.NumberFormat(getLocale()).format(1712) }));
+  toolbar.draw({ ...model, dialog: { dialog_id: "s1", type: "confirm", message: "Pay $40 now?" } });
+  expect(card.querySelector(".host-browser-dialog-omitted")).toBeNull();
+});
+
+it("takes the owner's keys into an open dialog once they hold the tab, never while they watch", () => {
+  const { screen, toolbar, model, address } = setup();
+  const dialog = { dialog_id: "p2", type: "prompt" as const, message: "Enter the code" };
+  toolbar.draw({ ...model, dialog });
+  expect(toolbar.focusDialog()).toBe(false);
+  // Taking control focuses the page after drawing: the open dialog keeps the keys, so Enter and Escape answer it.
+  toolbar.draw({ ...model, dialog }, true);
+  address.focus();
+  expect(toolbar.focusDialog()).toBe(true);
+  expect(document.activeElement).toBe(screen.querySelector(".host-browser-dialog-answer"));
+  toolbar.draw(model, true);
+  expect(toolbar.focusDialog()).toBe(false);
 });

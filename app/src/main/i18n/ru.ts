@@ -14,6 +14,7 @@ export const ru = {
   "browser.dialogCancel": "Отмена",
   "browser.dialogAnswer": "Ответ",
   "browser.dialogTakeOver": "Возьмите управление, чтобы ответить на это окно.",
+  "browser.dialogOmitted": "Сообщение длинное: {p0} символов в середине не показаны.",
   "memberComputer.switchFailed": "Не удалось передать участнику выбор компьютера.",
   "memberComputer.stopFailed": "Не удалось остановить задачу на компьютере.",
   "memberComputer.returnFailed": "Не удалось вернуть участнику управление компьютером.",

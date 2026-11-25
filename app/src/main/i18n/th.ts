@@ -14,6 +14,7 @@ export const th = {
   "browser.dialogCancel": "ยกเลิก",
   "browser.dialogAnswer": "คำตอบ",
   "browser.dialogTakeOver": "รับการควบคุมเพื่อตอบกล่องโต้ตอบนี้",
+  "browser.dialogOmitted": "ข้อความยาว: ไม่ได้แสดง {p0} อักขระตรงกลาง",
   "memberComputer.switchFailed": "ส่งตัวเลือกคอมพิวเตอร์ให้สมาชิกไม่ได้",
   "memberComputer.stopFailed": "หยุดงานบนคอมพิวเตอร์ไม่ได้",
   "memberComputer.returnFailed": "คืนการควบคุมคอมพิวเตอร์ให้สมาชิกไม่ได้",

@@ -136,16 +136,18 @@ focused control. A stale ref is refreshed once and retried only for a unique rol
 and name. Sign-in, verification and payment still use the owner's takeover.
 A page's JavaScript dialog, which a headless Chrome never draws, shows over the page in
 the view; a watching owner reads it and is asked to take control, and the owner holding
-the tab answers it there (OK, Cancel and a prompt's answer), Enter and Escape included.
+the tab answers it there (OK, Cancel and a prompt's answer), Enter and Escape included:
+taking control leaves the keys in the dialog, not the page. A message past 2000 characters
+shows its first and last thousand and a line saying how many are left out between them.
 
 Run from `app/`:
 
 ```sh
-npm run look -- desktop-host-tabs-panel desktop-host-tabs-expanded desktop-host-tabs-control desktop-host-tabs-popup desktop-host-dialog-watch desktop-host-dialog-control desktop-host-no-card desktop-host-panel desktop-host-card desktop-host-takeover desktop-host-handback desktop-viewer --theme both --width 1120,720,1920x1080
+npm run look -- desktop-host-tabs-panel desktop-host-tabs-expanded desktop-host-tabs-control desktop-host-tabs-popup desktop-host-dialog-watch desktop-host-dialog-control desktop-host-dialog-long desktop-host-no-card desktop-host-panel desktop-host-card desktop-host-takeover desktop-host-handback desktop-viewer --theme both --width 1120,720,1920x1080
 ```
 
 Inspect the compact favicon strip, the horizontally scrolled strip, the selected tab,
-the address in both modes, the popup, the page dialog in both modes, the card preview and the outer edges of the
+the address in both modes, the popup, the page dialog in both modes and long, the card preview and the outer edges of the
 canvas. The frame checks allow 1% deviation from the 1280:900 page aspect. Compare the
 round controls against the other Computer viewer's controls at the same theme and
 width. The look fixture exercises the app's real toolbar and canvas.
