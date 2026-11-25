@@ -105,6 +105,8 @@ export async function slimeBoard(rows, columns = 1, centered = false) {
     `<span style="display:grid;justify-items:center;gap:2px;flex:none">${cell.icon ? ico("search").replace('<svg ', `<svg style="width:${cell.size}px;height:${cell.size}px" `) : `<span class="av mb-av mb-av-slime" style="--av:${cell.size}px${cell.height ? `;height:${cell.height}px` : ""}">${slimeSVG(cell.slime, { now: cell.hat ? hats : offSeason, state: cell.state, crown: cell.crown, moving: !cell.still })}</span>`}${cell.caption === undefined ? "" : `<small style="height:12px;font-size:10px">${cell.caption}</small>`}</span>`).join("")}</div>`).join("");
   document.body.append(board);
   const svgs = [...board.querySelectorAll("svg.slime")], cells = rows.flatMap(row => row.cells.filter(cell => !cell.icon));
+  // What the board was asked to draw, for the checks that must find exactly that many faces on it.
+  board.dataset.samples = String(cells.length);
   for (const [index, drawn] of svgs.entries()) {
     let svg = drawn;
     const cell = cells[index];

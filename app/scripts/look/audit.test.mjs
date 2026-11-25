@@ -288,18 +288,35 @@ describe("rendered look checks", () => {
   });
   it("requires the chief's crown once on every face, with no transform of its own and none in the rim (issue 327)", () => {
     const browser = new Window();
-    const face = member => `<span class="slime-surface" data-slime-still="${member}" data-state="idle"><svg class="slime"><g class="slime-back"><g class="slime-rim"></g></g><path class="slime-body"/><g class="slime-marks"><g class="slime-mark"><g class="slime-crown"><path d="M 0 0 L 1 1"/></g></g></g></svg></span>`;
-    browser.document.body.innerHTML = `<div class="look-slime-board">${face(0).repeat(50)}</div>`;
+    const face = member => `<span class="mb-av-slime"><span class="slime-surface" data-slime-still="${member}" data-state="idle"><svg class="slime"><g class="slime-back"><g class="slime-rim"></g></g><path class="slime-body"/><g class="slime-marks"><g class="slime-mark"><g class="slime-crown"><path d="M 0 0 L 1 1"/></g></g></g></svg></span></span>`;
+    browser.document.body.innerHTML = `<div class="look-slime-board" data-samples="50">${face(0).repeat(50)}</div>`;
+    const place = (element, box) => { element.getBoundingClientRect = () => box; };
+    const inside = { left: 10, top: 10, right: 50, bottom: 50, width: 40, height: 40 };
+    for (const element of browser.document.querySelectorAll("*")) place(element, inside);
     vi.stubGlobal("document", browser.document);
     vi.stubGlobal("innerWidth", 720); vi.stubGlobal("innerHeight", 900);
+    const board = browser.document.querySelector(".look-slime-board");
     try {
       expect(checkRendered("slime-crown")).toEqual({ check: "slime-crown", surfaces: 50 });
       // a face outside the window is clipped by the board and is not in the screenshot
-      const first = browser.document.querySelector(".slime-surface");
-      first.getBoundingClientRect = () => ({ left: 10, top: 950, right: 50, bottom: 990, width: 40, height: 40 });
+      const container = browser.document.querySelector(".mb-av-slime"), first = container.querySelector(".slime-surface");
+      place(container, { left: 10, top: 950, right: 50, bottom: 990, width: 40, height: 40 });
       expect(() => checkRendered("slime-crown")).toThrow("1 of 50 slimes lie outside the 720x900 window");
-      first.getBoundingClientRect = () => ({ left: 10, top: 10, right: 50, bottom: 50, width: 40, height: 40 });
+      // a container shrunk to nothing is not in it either, wherever it is
+      place(container, { left: 10, top: 950, right: 10, bottom: 950, width: 0, height: 0 });
+      expect(() => checkRendered("slime-crown")).toThrow("1 of 50 slimes have no size");
+      place(container, inside);
+      place(first, { left: 10, top: 10, right: 10, bottom: 10, width: 0, height: 0 });
+      expect(() => checkRendered("slime-crown")).toThrow("1 of 50 slimes have no size");
+      place(first, inside);
       expect(checkRendered("slime-crown")).toEqual({ check: "slime-crown", surfaces: 50 });
+      // a board that lost one of the samples it was asked for, and one that does not say how many it was asked for
+      container.remove();
+      expect(() => checkRendered("slime-crown")).toThrow("the board draws 49 slimes of the 50 it was asked for");
+      board.prepend(container);
+      delete board.dataset.samples;
+      expect(() => checkRendered("slime-crown")).toThrow("of the NaN it was asked for");
+      board.dataset.samples = "50";
       // a second copy in the rim behind the first
       const rim = browser.document.querySelector(".slime-rim");
       rim.innerHTML = '<g class="slime-crown"></g>';
