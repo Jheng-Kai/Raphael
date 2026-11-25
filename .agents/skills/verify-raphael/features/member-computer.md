@@ -25,6 +25,14 @@ no window at all, and pages still see the ordinary Chrome of a Mac (`RAPHAEL_MAC
 brings the window back). A JavaScript dialog that blocks a tab is reported at once, and the member
 answers it with browser_dialog (never with a sign-in, code or payment). A page's download lands in
 `.raphael/downloads` of the work folder, which git ignores, and the next Chrome result names it.
+No one answers a browser prompt there, so none waits: a page's permission requests are settled
+before it runs (storage access granted; notifications, location, camera, microphone, clipboard
+reading and the rest refused), and a passkey or security-key request ends at once with
+NotAllowedError, so the page offers its other ways in. The site's own sign-in prompt (HTTP
+authentication) is reported to the member at once as sign_in_prompt and waits for the owner; a
+proxy's is refused and an unanswered one is cancelled after 5 minutes. A page's file chooser is
+reported as file_chooser: the member answers it with browser_upload (work-folder files only, with
+the owner's approval). On a Mac the headless screen is the Mac's own, never 800 × 600.
 Every member owns its tabs across turns and tasks,
 including tabs the owner opens with Add and popups. Every tab has its own action
 lock. The member checks browser_tabs before opening another copy and uses the tab
@@ -139,15 +147,19 @@ the view; a watching owner reads it and is asked to take control, and the owner 
 the tab answers it there (OK, Cancel and a prompt's answer), Enter and Escape included:
 taking control leaves the keys in the dialog, not the page. A message past 2000 characters
 shows its first and last thousand and a line saying how many are left out between them.
+The site's sign-in prompt shows the same way, with its realm, a user name and a hidden password
+field; the owner holding the tab signs in or cancels there. A page's file chooser shows with
+Choose files…: the owner holding the tab picks their own files, which go through the upload
+store under their own names, or closes it.
 
 Run from `app/`:
 
 ```sh
-npm run look -- desktop-host-tabs-panel desktop-host-tabs-expanded desktop-host-tabs-control desktop-host-tabs-popup desktop-host-dialog-watch desktop-host-dialog-control desktop-host-dialog-long desktop-host-no-card desktop-host-panel desktop-host-card desktop-host-takeover desktop-host-handback desktop-viewer --theme both --width 1120,720,1920x1080
+npm run look -- desktop-host-tabs-panel desktop-host-tabs-expanded desktop-host-tabs-control desktop-host-tabs-popup desktop-host-dialog-watch desktop-host-dialog-control desktop-host-dialog-long desktop-host-auth-control desktop-host-chooser-watch desktop-host-no-card desktop-host-panel desktop-host-card desktop-host-takeover desktop-host-handback desktop-viewer --theme both --width 1120,720,1920x1080
 ```
 
 Inspect the compact favicon strip, the horizontally scrolled strip, the selected tab,
-the address in both modes, the popup, the page dialog in both modes and long, the card preview and the outer edges of the
+the address in both modes, the popup, the page dialog in both modes and long, the sign-in prompt, the file chooser, the card preview and the outer edges of the
 canvas. The frame checks allow 1% deviation from the 1280:900 page aspect. Compare the
 round controls against the other Computer viewer's controls at the same theme and
 width. The look fixture exercises the app's real toolbar and canvas.

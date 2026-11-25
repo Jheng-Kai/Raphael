@@ -311,6 +311,14 @@ def dialog_blocked(tab, *, opened_now):
             "note": note + " Use browser_dialog with its dialog_id to accept or dismiss it."}
 
 
+def auth_blocked(tab):
+    """A tool's result once the site asks for a sign-in in Chrome's own prompt (HTTP authentication). Only the owner
+    answers it, in the view; the navigation that asked waits for that, while the page shown before stays usable."""
+    return {**tab_ids(tab), "status": "sign_in_prompt", "sign_in_prompt": tab.auth,
+            "note": "The site asks for a user name and password in Chrome's own sign-in prompt, which only the owner "
+                    "answers: use request_takeover with reason sign_in. Unanswered, it is cancelled in 5 minutes."}
+
+
 async def dialog_action(browser, tab, arguments, approver):
     """Inspect, accept or dismiss the dialog that blocks the tab, as the Docker browser's browser_dialog does (#336)."""
     dialog, action = tab.dialog, arguments["action"]

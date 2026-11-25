@@ -399,9 +399,11 @@ async def test_first_work_reuses_only_the_marked_chrome_startup_page(tmp_path):
             return {"targetId": "new"}
         if method == "Target.attachToTarget":
             return {"sessionId": params["targetId"]}
-        # A headless Chrome on a Mac also gets the focus and user-agent emulation on each tab (R-COMP-HOST-02).
+        # A headless Chrome on a Mac also gets the focus and user-agent emulation on each tab (R-COMP-HOST-02), and every
+        # tab hands over its file chooser and sign-in prompt and has the authenticator with no passkey.
         if method in ("Page.enable", "Emulation.setDeviceMetricsOverride", "Emulation.setFocusEmulationEnabled",
-                      "Emulation.setUserAgentOverride"):
+                      "Emulation.setUserAgentOverride", "Page.setInterceptFileChooserDialog", "Fetch.enable",
+                      "WebAuthn.enable", "WebAuthn.addVirtualAuthenticator"):
             return {}
         assert method == "Page.getFrameTree"
         return {"frameTree": {"frame": {"id": session}}}

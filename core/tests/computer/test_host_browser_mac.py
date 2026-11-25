@@ -1,6 +1,7 @@
 """Raphael's Chrome on a Mac runs with no window (#308): headless, and still the ordinary Chrome of a Mac to a page."""
 
 import asyncio
+import ctypes
 import os
 import plistlib
 import sys
@@ -40,13 +41,27 @@ def test_a_mac_starts_chrome_headless_with_the_user_agent_of_its_ordinary_chrome
     monkeypatch.delenv("RAPHAEL_MAC_HEADED", raising=False)
     version = mac_chrome_version(mac_app(tmp_path))
     assert version == "136.0.7103.114"
-    arguments = window_arguments(version)
+    arguments = window_arguments(version, (1728, 1117))
     assert arguments[0] == "--headless=new"
-    assert arguments[1] == ("--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    # The Mac's own screen, never headless Chrome's 800 × 600 under a larger window.
+    assert arguments[1] == "--screen-info={0,0 1728x1117}"
+    assert arguments[2] == ("--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
                             "(KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36")
     assert not any("--window-position" in argument for argument in arguments)
     # Without a version it is still headless, and the page-side override is skipped.
-    assert window_arguments("") == ["--headless=new"]
+    assert window_arguments("", (1728, 1117)) == ["--headless=new", "--screen-info={0,0 1728x1117}"]
+
+
+def test_a_mac_screen_smaller_than_the_window_or_unread_is_a_macbooks(monkeypatch):
+    if sys.platform == "darwin":
+        width, height = host_browser.mac_screen()
+        assert width >= 1280 and height >= 960
+
+    def missing(*args, **kwargs):
+        raise OSError("no CoreGraphics")
+
+    monkeypatch.setattr(ctypes, "CDLL", missing)
+    assert host_browser.mac_screen() == (1512, 982)
 
 
 def test_elsewhere_chrome_keeps_its_window_far_off_every_screen(monkeypatch):

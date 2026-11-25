@@ -5077,9 +5077,11 @@ export function checkRendered(name, context = {}) {
     }
     return {check:name, width:box.width, height:box.height};
   }
-  if (name === "desktop-host-dialog-watch" || name === "desktop-host-dialog-control" || name === "desktop-host-dialog-long") {
-    // A headless Chrome never draws a page's JavaScript dialog: the view shows it over the page (#336).
-    const held = name === "desktop-host-dialog-control", long = name === "desktop-host-dialog-long";
+  if (["desktop-host-dialog-watch", "desktop-host-dialog-control", "desktop-host-dialog-long", "desktop-host-auth-control", "desktop-host-chooser-watch"].includes(name)) {
+    // A headless Chrome never draws a page's JavaScript dialog, its sign-in prompt or its file chooser: the view shows them
+    // over the page (#336).
+    const held = name.endsWith("-control"), long = name === "desktop-host-dialog-long", auth = name === "desktop-host-auth-control";
+    const chooser = name === "desktop-host-chooser-watch";
     const screen = document.querySelector('.desktop-screen[data-host-browser][data-host-dialog]');
     const card = screen?.querySelector('.host-browser-dialog'), frame = screen?.querySelector('iframe:not([hidden])');
     require(visible(card) && visible(frame), 'the page dialog shows over the live page');
@@ -5087,7 +5089,7 @@ export function checkRendered(name, context = {}) {
     require(box.top >= page.top && box.bottom <= page.bottom + 1 && box.left >= page.left && box.right <= page.right,
       'the dialog stays inside the page, under the toolbar');
     require(Math.abs(box.left + box.right - page.left - page.right) <= 2, 'the dialog is centered over the page');
-    require(card.querySelector('.host-browser-dialog-message')?.textContent.trim(), 'the dialog shows its message');
+    require(chooser || card.querySelector('.host-browser-dialog-message')?.textContent.trim(), 'the dialog shows its message');
     const message = card.querySelector('.host-browser-dialog-message'), omitted = card.querySelector('.host-browser-dialog-omitted');
     require(Boolean(visible(omitted)) === long, 'only a long message says how much of it is left out');
     if (long) {
@@ -5099,7 +5101,13 @@ export function checkRendered(name, context = {}) {
       }), 'the note and the buttons stay inside the card');
     }
     const controls = [...card.querySelectorAll('[data-dialog-answer], .host-browser-dialog-answer')];
-    require(controls.length === (long ? 2 : 3) && controls.every(control => control.disabled === !held),
+    if (auth) {
+      // The password is typed into a field that hides it.
+      const fields = [...card.querySelectorAll('.host-browser-dialog-answer')];
+      require(fields.map(field => field.type).join() === 'text,password' && fields.every(field => field.value && visible(field)),
+        'the user name and the hidden password are typed over the page');
+    }
+    require(controls.length === (long || chooser ? 2 : auth ? 4 : 3) && controls.every(control => control.disabled === !held),
       held ? 'the owner holding the tab can answer' : 'a watching owner cannot answer');
     require(Boolean(visible(card.querySelector('.host-browser-dialog-hint'))) === !held, 'only the watching view asks to take control first');
     return {check:name, width:box.width, height:box.height};

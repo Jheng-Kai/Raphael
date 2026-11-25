@@ -42,6 +42,14 @@ Upstream: https://github.com/milind-soni/OpenMausBot, revision
 
 Modified ports and adaptations, with upstream file names:
 
+- `core/src/raphael_core/computer/host_browser.py`: the permission table
+  (`PERMISSIONS`, from `server/browser/cdp/targets.ts`, without clipboard-write), the
+  authenticator with no passkey (`NO_PASSKEY`, from `server/browser/cdp/passkeys.ts`)
+  and the handling of HTTP sign-in prompts (Fetch interception of document requests,
+  a proxy's refused, an unanswered one cancelled after 5 minutes, from
+  `server/browser/cdp/auth.ts`), written in Python for Raphael's own CDP client and
+  owner view.
+
 - `core/src/raphael_core/computer/datasets.py` and `dataset_runtime.py` were
   informed by `server/data/tools.ts`: named DuckDB tables, CSV/Excel/Parquet import,
   bounded SQL results and chart-file delivery. Raphael runs its own Python helper

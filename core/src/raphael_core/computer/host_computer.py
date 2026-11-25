@@ -37,7 +37,7 @@ VIEWPORT_TOOLS = {
     "scroll": ("Scroll the page at x,y from the screenshot.", "x y direction amount by", "x y direction"),
 }
 PAGE_ACTIONS = {"browser_click", "browser_type", "browser_select"}
-INPUT_ACTIONS = (VIEWPORT_TOOLS.keys() - {"get_desktop_state"}) | PAGE_ACTIONS | {"browser_dialog"}
+INPUT_ACTIONS = (VIEWPORT_TOOLS.keys() - {"get_desktop_state"}) | PAGE_ACTIONS | {"browser_dialog", "browser_upload"}
 BROWSER_DIALOG = {
     "description": "Inspect, accept or dismiss the JavaScript dialog (alert, confirm, prompt or leave page) that blocks a "
                    "tab. Accept or dismiss needs the dialog_id a result reported.",
@@ -48,6 +48,17 @@ BROWSER_DIALOG = {
         "tab_id": {"type": "string", "description": "Tab ID from browser_tabs. Omit to use the shown tab."},
     }, "required": ["action"], "additionalProperties": False},
 }
+BROWSER_UPLOAD = {
+    "description": "Give a page's open file chooser files from your work folder, as choosing them in Chrome's dialog "
+                   "would. A result reports the chooser and its chooser_id once the page opens one. The owner approves.",
+    "parameters": {"type": "object", "properties": {
+        "chooser_id": {"type": "string", "maxLength": 64},
+        "paths": {"type": "array", "items": {"type": "string", "maxLength": 4096}, "minItems": 1, "maxItems": 20,
+                  "description": "Work folder paths of the files."},
+        "tab_id": {"type": "string", "description": "Tab ID from browser_tabs. Omit to use the shown tab."},
+    }, "required": ["chooser_id", "paths"], "additionalProperties": False},
+}
+UPLOAD_MAX_BYTES = 512 * 1024 * 1024
 HOST_TAKEOVER = {**TAKEOVER["parameters"], "properties": {
     **TAKEOVER["parameters"]["properties"],
     "reason": {"type": "string", "enum": [*REASONS, "certificate"]},
@@ -73,6 +84,10 @@ WORDS = {
     "browser_dialog_text": "prompt_text only answers a prompt dialog that is being accepted.",
     "browser_dialog_private": "This dialog asks for a sign-in, code or payment, which only the owner gives. Dismiss it "
                               "and ask the owner.",
+    "browser_chooser_changed": "No file chooser with this chooser_id is open. Open the page's file control again and "
+                               "use the chooser_id the result reports.",
+    "browser_upload_count": "This file chooser takes one file.",
+    "browser_upload_path": "Upload only files inside your work folder, never a private or system place.",
     "bad_path": "The requested work file path is invalid.",
     "browser_navigation_waiting": "Chrome is still waiting for this page. If a native certificate or key prompt is blocking it, use request_takeover with reason: certificate.",
     "browser_owner_approval_required": "The owner must approve the exact outward action before it can run.",
@@ -130,6 +145,7 @@ class HostComputerTools:
                                  }, "not": {"required": ["show", "close"]},
                              }},
             "browser_dialog": BROWSER_DIALOG,
+            "browser_upload": BROWSER_UPLOAD,
             "request_takeover": {"parameters": HOST_TAKEOVER, "description": TAKEOVER["description"] + " Use certificate for a certificate prompt."},
             **{name: {**DEFINITIONS[name], "description": DEFINITION_WORDS[name]} for name in READS | WRITES},
         })
@@ -396,7 +412,10 @@ class HostComputerTools:
                             note="The owner closed the previous tab. Use the current tab below or open the page again. "
                                  "The requested action was not performed. Read the page before using a ref or coordinates.")
                 return data, blocks, tab, None
-            data, blocks = await self.page_call(browser, tab, name, arguments, approver)
+            if name == "browser_upload":
+                data, blocks = await self.upload(member, browser, tab, arguments), []
+            else:
+                data, blocks = await self.page_call(browser, tab, name, arguments, approver)
             if name == "browser_open":
                 browser.owner_closed_current.pop(member, None)
             # Reading a private page describes the owner step without asking for control.
@@ -420,28 +439,63 @@ class HostComputerTools:
     @staticmethod
     async def guarded(tab, start):
         """Run the page work `start()` makes, unless a JavaScript dialog blocks the tab or opens meanwhile: Chrome answers
-        no script or input of a page until its dialog is answered, so the dialog is reported instead (#336)."""
+        no script or input of a page until its dialog is answered, so the dialog is reported instead (#336). A sign-in
+        prompt that opens meanwhile (HTTP authentication) is reported as well, rather than waited out: the navigation
+        that asked for it waits for the owner. A result also names a sign-in prompt or file chooser left open."""
         if tab.dialog is not None:
             return host_page.dialog_blocked(tab, opened_now=False), []
         work = asyncio.ensure_future(start())
-        opened = asyncio.ensure_future(tab.dialog_opened.wait())
+        events = {asyncio.ensure_future(tab.dialog_opened.wait())}
+        if tab.auth is None:
+            events.add(asyncio.ensure_future(tab.auth_opened.wait()))
         try:
-            await asyncio.wait({work, opened}, return_when=asyncio.FIRST_COMPLETED)
+            await asyncio.wait({work, *events}, return_when=asyncio.FIRST_COMPLETED)
+            if tab.dialog is None and tab.auth is not None and not work.done():
+                # Work on the page shown meanwhile (it stays until the new one loads) still ends; a navigation does not.
+                await asyncio.wait({work}, timeout=0.5)
         except BaseException:
             work.cancel()
             raise
         finally:
-            opened.cancel()
-        if tab.dialog is None:
-            return await work
-        if work.done():
-            if work.exception() is None:
-                data, blocks = work.result()
-                return {**data, "dialog": tab.dialog}, blocks
-        else:
-            # The page answers Chrome's pending commands only once the dialog closes; their replies are then dropped.
+            for event in events:
+                event.cancel()
+        if tab.dialog is not None:
+            if work.done():
+                if work.exception() is None:
+                    data, blocks = work.result()
+                    return {**data, "dialog": tab.dialog}, blocks
+            else:
+                # The page answers Chrome's pending commands only once the dialog closes; their replies are then dropped.
+                work.cancel()
+            return host_page.dialog_blocked(tab, opened_now=True), []
+        if not work.done():
             work.cancel()
-        return host_page.dialog_blocked(tab, opened_now=True), []
+            return host_page.auth_blocked(tab), []
+        data, blocks = work.result()
+        prompts = {**({"sign_in_prompt": tab.auth} if tab.auth is not None and "sign_in_prompt" not in data else {}),
+                   **({"file_chooser": tab.chooser} if tab.chooser is not None else {})}
+        return {**data, **prompts}, blocks
+
+    async def upload(self, member, browser, tab, arguments):
+        """browser_upload: files of the member's work folder for the page's open file chooser. Each is a regular file in
+        the work folder, never a private place, a place of keys or a link out of it; the owner approved the call (T2)."""
+        chooser = tab.chooser
+        if chooser is None or arguments["chooser_id"] != chooser["chooser_id"]:
+            raise BrowserError("browser_chooser_changed")
+        if chooser["mode"] == "single" and len(arguments["paths"]) != 1:
+            raise BrowserError("browser_upload_count")
+        files = []
+        for raw in arguments["paths"]:
+            try:
+                path = self.path(member, raw)
+            except (VmError, OSError, ValueError):
+                raise BrowserError("browser_upload_path") from None
+            if (not self.inside_work(path, member) or self.private_path(path, member) or kept_place(str(path))
+                    or not path.is_file() or path.stat().st_size > UPLOAD_MAX_BYTES):
+                raise BrowserError("browser_upload_path")
+            files.append(path)
+        await browser.choose_files(tab, chooser, files)
+        return {**host_page.tab_ids(tab), "status": "files_chosen", "files": [path.name for path in files]}
 
     @staticmethod
     async def page_work(browser, tab, name, arguments, approver):
