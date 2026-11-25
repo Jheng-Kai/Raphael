@@ -66,7 +66,7 @@ export async function baseline(page, revision) {
   }, code, read("slime.css"));
 }
 
-/** Runs in the page. `rows` are `{ label, cells: [{ size, slime, state, at, then, after, caption, hat, icon }] }`: a cell draws `slime` in `state` held `at` ms into its motion, and with `then` changes state there and is held `after` ms later. */
+/** Runs in the page. `rows` are `{ label, cells: [{ size, slime, state, at, then, after, caption, hat, crown, icon }] }`: a cell draws `slime` (with the chief's crown when `crown`) in `state` held `at` ms into its motion, and with `then` changes state there and is held `after` ms later. */
 export async function slimeBoard(rows, columns = 1, centered = false) {
   const { slimeSVG, handOver, SLIME_GROUPS, slimeGroupName, slimeCharactersHTML } = await import("/src/main/slime.ts");
   // `{ picker: cell }`: a row for each colour of the picker, with the characters the app puts under it, so the board never keeps a list of its own.
@@ -102,7 +102,7 @@ export async function slimeBoard(rows, columns = 1, centered = false) {
   }
   const labelStyle = centered ? "align-self:center;width:34px;font-size:14px;line-height:18px;color:var(--text)" : "width:44px;color:var(--text-2)";
   board.innerHTML = rows.map(({ label, cells, paddingTop = 0 }) => `<div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:6px;padding-top:${paddingTop}px"><span style="flex:none;${labelStyle}">${label ?? ""}</span>${cells.map(cell =>
-    `<span style="display:grid;justify-items:center;gap:2px;flex:none">${cell.icon ? ico("search").replace('<svg ', `<svg style="width:${cell.size}px;height:${cell.size}px" `) : `<span class="av mb-av mb-av-slime" style="--av:${cell.size}px${cell.height ? `;height:${cell.height}px` : ""}">${slimeSVG(cell.slime, { now: cell.hat ? hats : offSeason, state: cell.state, moving: !cell.still })}</span>`}${cell.caption === undefined ? "" : `<small style="height:12px;font-size:10px">${cell.caption}</small>`}</span>`).join("")}</div>`).join("");
+    `<span style="display:grid;justify-items:center;gap:2px;flex:none">${cell.icon ? ico("search").replace('<svg ', `<svg style="width:${cell.size}px;height:${cell.size}px" `) : `<span class="av mb-av mb-av-slime" style="--av:${cell.size}px${cell.height ? `;height:${cell.height}px` : ""}">${slimeSVG(cell.slime, { now: cell.hat ? hats : offSeason, state: cell.state, crown: cell.crown, moving: !cell.still })}</span>`}${cell.caption === undefined ? "" : `<small style="height:12px;font-size:10px">${cell.caption}</small>`}</span>`).join("")}</div>`).join("");
   document.body.append(board);
   const svgs = [...board.querySelectorAll("svg.slime")], cells = rows.flatMap(row => row.cells.filter(cell => !cell.icon));
   for (const [index, drawn] of svgs.entries()) {

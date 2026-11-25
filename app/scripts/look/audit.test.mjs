@@ -286,6 +286,40 @@ describe("rendered look checks", () => {
       expect(() => checkRendered("slime-marks-at-rest")).toThrow("idle has no running animation");
     } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
   });
+  it("requires the chief's crown once on every face, with no transform of its own and none in the rim (issue 327)", () => {
+    const browser = new Window();
+    const face = member => `<span class="slime-surface" data-slime-still="${member}" data-state="idle"><svg class="slime"><g class="slime-back"><g class="slime-rim"></g></g><path class="slime-body"/><g class="slime-marks"><g class="slime-mark"><g class="slime-crown"><path d="M 0 0 L 1 1"/></g></g></g></svg></span>`;
+    browser.document.body.innerHTML = `<div class="look-slime-board">${face(0).repeat(50)}</div>`;
+    vi.stubGlobal("document", browser.document);
+    try {
+      expect(checkRendered("slime-crown")).toEqual({ check: "slime-crown", surfaces: 50 });
+      // a second copy in the rim behind the first
+      const rim = browser.document.querySelector(".slime-rim");
+      rim.innerHTML = '<g class="slime-crown"></g>';
+      expect(() => checkRendered("slime-crown")).toThrow("2 crowns are in the drawing");
+      rim.innerHTML = "";
+      // a transform of its own, read about another origin by an engine, sets the crown down elsewhere
+      const crown = browser.document.querySelector(".slime-crown");
+      crown.setAttribute("transform", "translate(71.6 33.7) rotate(30)");
+      expect(() => checkRendered("slime-crown")).toThrow("transform of its own");
+      crown.removeAttribute("transform");
+      crown.remove();
+      expect(() => checkRendered("slime-crown")).toThrow("0 crowns are painted");
+    } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
+  });
+  it("lets only the chief's faces wear the crown", () => {
+    const browser = new Window();
+    const face = (member, crown) => `<span class="slime-surface" data-slime-still="${member}"><svg class="slime"><path class="slime-body"/><g class="slime-marks">${crown ? '<g class="slime-mark"><g class="slime-crown"><path d="M 0 0 L 1 1"/></g></g>' : ""}</g></svg></span>`;
+    browser.document.body.innerHTML = `<button class="mb-chief">${face(0, true)}</button><div class="mb-list">${face(3, false)}</div>`;
+    for (const element of browser.document.querySelectorAll("*")) element.checkVisibility = () => true;
+    for (const element of browser.document.querySelectorAll("*")) element.getBoundingClientRect = () => ({ left: 0, top: 0, right: 10, bottom: 10, width: 10, height: 10 });
+    vi.stubGlobal("document", browser.document);
+    try {
+      expect(checkRendered("chief-crown")).toEqual({ check: "chief-crown", faces: 1 });
+      browser.document.querySelector(".mb-list .slime-marks").innerHTML = '<g class="slime-mark"><g class="slime-crown"></g></g>';
+      expect(() => checkRendered("chief-crown")).toThrow("1 faces wear a crown that are not the chief's");
+    } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
+  });
   it("requires a rounded square latest button with its own opaque surface, centred just above the composer (R-UI-98, R-UI-105)", () => {
     const browser = new Window();
     browser.document.body.innerHTML = '<div><div class="ra-scroll" style="scrollbar-width:none"></div><button class="conversation-latest" style="border:1px solid gray;border-radius:8px;background:white"></button></div><form class="composer"></form>';
