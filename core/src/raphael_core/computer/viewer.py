@@ -1366,17 +1366,20 @@ class DesktopViewer:
         if tab is None:
             return None
         history = {}
-        try:
-            async with asyncio.timeout(1):
-                history = await browser.command(tab, "Page.getNavigationHistory") or {}
-        except (ValueError, OSError, TimeoutError):
-            pass
+        # A JavaScript dialog holds the page, which then answers nothing; the view shows the dialog instead (#336).
+        if tab.dialog is None:
+            try:
+                async with asyncio.timeout(1):
+                    history = await browser.command(tab, "Page.getNavigationHistory") or {}
+            except (ValueError, OSError, TimeoutError):
+                pass
         if not self.host_current(session) or self.host_selected(session) is not tab:
             return None
         index = history.get("currentIndex", 0)
         return {"shown": tab.id, "back": index > 0, "forward": index + 1 < len(history.get("entries", [])),
                 "tabs": [{"id": other.id, "title": other.title, "url": other.url, "favicon": other.favicon}
-                         for other in browser.member_tabs(tab.member)]}
+                         for other in browser.member_tabs(tab.member)],
+                **({"dialog": tab.dialog} if tab.dialog is not None else {})}
 
     async def host_browser_action(self, token, session, event):
         browser = self.host_browser
@@ -1427,6 +1430,14 @@ class DesktopViewer:
                             await navigate_host_page(browser, new_tab, NEW_TAB_URL)
                 elif action == "navigate" and isinstance(event.get("url"), str) and len(event["url"]) <= 8192:
                     await navigate_host_page(browser, tab, event["url"].strip())
+                elif action == "dialog":
+                    # The owner answers the dialog a headless Chrome never draws, under the lease as any page input (#336).
+                    dialog, text = tab.dialog, event.get("text")
+                    if (not owned or dialog is None or event.get("dialog") != dialog["dialog_id"]
+                            or text is not None and (not isinstance(text, str) or len(text) > 2000
+                                                     or dialog["type"] != "prompt" or event.get("accept") is not True)):
+                        return False
+                    await browser.answer_dialog(tab, dialog, event.get("accept") is True, text)
                 elif action == "reload":
                     await browser.command(tab, "Page.reload")
                 elif action in ("back", "forward"):

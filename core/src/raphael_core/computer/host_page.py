@@ -3,6 +3,7 @@
 import asyncio
 import json
 import secrets
+import unicodedata
 from contextlib import suppress
 from types import SimpleNamespace
 
@@ -23,8 +24,13 @@ ELEMENT_ACTION = r"""function(action, text, replace, identity, matchLabel) {
     if (!this.isConnected || !this.getClientRects().length) return "browser_ref_changed";
     const labelledBy = this.getAttribute("aria-labelledby")?.split(/\s+/).map(
         id => this.ownerDocument.getElementById(id)?.textContent).filter(Boolean).join(" ");
-    const label = labelledBy || this.getAttribute("aria-label") || this.labels?.[0]?.textContent ||
-        this.innerText || (this.matches('input[type="submit"], input[type="button"]') ? this.value : "") ||
+    // A select's accessible name never comes from its options (#329): an unlabelled one is named "", not their text, and
+    // a label around it names it by its own words alone.
+    const around = this.labels?.[0]?.cloneNode(true);
+    around?.querySelectorAll("select, textarea").forEach(control => control.remove());
+    const label = labelledBy || this.getAttribute("aria-label") || around?.textContent ||
+        (this.matches("select") ? "" : this.innerText) ||
+        (this.matches('input[type="submit"], input[type="button"]') ? this.value : "") ||
         this.getAttribute("title") || this.getAttribute("placeholder") || "";
     if (label.trim().replace(/\s+/g, " ") !== identity) return "browser_ref_changed";
     if (this.closest('[disabled], [aria-disabled="true"], [inert]')) return "browser_element_disabled";
@@ -288,6 +294,55 @@ async def act(browser, tab, name, arguments, approver):
             if str(error) != "browser_ref_changed":
                 raise
     return {**fresh, "status": "browser_ref_changed"}, blocks
+
+
+def readable(text):
+    """Text as a reader sees it, for the safety check: compatibility forms folded (fullwidth letters) and invisible
+    characters (zero-width spaces and joiners, soft hyphens, combining marks) removed."""
+    return "".join(char for char in unicodedata.normalize("NFKC", text) if unicodedata.category(char) not in ("Cf", "Mn"))
+
+
+def dialog_blocked(tab, *, opened_now):
+    """A tool's result while a JavaScript dialog blocks the page (#336). Chrome holds the page's scripts and input until
+    the dialog is answered, so the result says so at once instead of waiting for Chrome until the call times out."""
+    note = ("This dialog opened during the request, and the page waits for it." if opened_now else
+            "The page shows this dialog, so the request was not performed.")
+    return {**tab_ids(tab), "status": "dialog_open", "dialog": tab.dialog,
+            "note": note + " Use browser_dialog with its dialog_id to accept or dismiss it."}
+
+
+async def dialog_action(browser, tab, arguments, approver):
+    """Inspect, accept or dismiss the dialog that blocks the tab, as the Docker browser's browser_dialog does (#336)."""
+    dialog, action = tab.dialog, arguments["action"]
+    if dialog is None:
+        return {**tab_ids(tab), "dialog": None, **({"status": "no_dialog"} if action != "inspect" else {})}
+    if action == "inspect":
+        return {**tab_ids(tab), "dialog": dialog}
+    if arguments.get("dialog_id") != dialog["dialog_id"]:
+        raise BrowserError("browser_dialog_changed")
+    text = arguments.get("prompt_text")
+    if text is not None and (action != "accept" or dialog["type"] != "prompt"):
+        raise BrowserError("browser_dialog_text")
+    if action == "accept":
+        # Accepting is pressing the dialog's OK: judged as a click on a button named by its message, and an answer to a
+        # prompt as typing it there too. A headless dialog has no window the owner could answer, so a private answer is
+        # refused. The whole message is judged as it reads (a payment past what the result shows, or split by an
+        # invisible character, must not slip by), and one too long to judge is only dismissed.
+        if tab.dialog_text is None:
+            raise BrowserError("browser_dialog_private")
+        message = readable(tab.dialog_text)
+        verdicts = {safety.judge(action="click", declared_final=False, name=message, role="button")}
+        if text:
+            verdicts.add(safety.judge(action="type", declared_final=False, text=readable(text), focused_name=message,
+                                      focused_role="Edit", focused_actions=("value",)))
+        if safety.HANDOFF in verdicts or safety.handoff_by_name(message):
+            raise BrowserError("browser_dialog_private")
+        if safety.REFUSE in verdicts:
+            raise BrowserError("browser_action_refused")
+        if safety.CONFIRM in verdicts and approver != "user":
+            raise BrowserError("browser_owner_approval_required")
+    await browser.answer_dialog(tab, dialog, action == "accept", text)
+    return {**tab_ids(tab), "status": "dialog_accepted" if action == "accept" else "dialog_dismissed"}
 
 
 def key_event(arguments):
