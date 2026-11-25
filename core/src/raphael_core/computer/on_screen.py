@@ -43,7 +43,7 @@ _RUNDLL = re.compile(r"\b(?:url|shell32|ieframe)\.dll\b|fileprotocolhandler|shel
 _APPLESCRIPT = re.compile(r"\b(?:activate|open location|launch)\b", re.I)
 _WORD = re.compile(rf"{_STRING.pattern}|\S+", re.X)
 _BOUNDARIES = re.compile(rf"{_STRING.pattern}|(?P<boundary>&&|[;&|(){{}}\r\n])", re.X)
-_SHELLS = frozenset({"cmd", "powershell", "pwsh", "bash", "sh", "zsh"})
+_SHELLS = frozenset({"cmd", "powershell", "pwsh", "bash", "sh", "zsh", "dash", "ksh"})
 # What reads a heredoc as commands when it is the program, or a later part of the line, that receives it.
 _RUNNERS = _SHELLS | {"dash", "ksh", "fish", "csh", "tcsh", "eval", "source", ".", "xargs", "ssh", "su"}
 # What takes a heredoc as its own text: an interpreter reads a script, `cat` and `tee` write a file.
@@ -55,6 +55,8 @@ _WRAPPERS = frozenset({"sudo", "env", "exec", "command", "time", "nohup", "uv", 
 _HEREDOC = re.compile(r"""(?<!<)<<(?!<)(?P<tab>-?)[ \t]*(?:'(?P<q1>[^'\r\n]+)'|"(?P<q2>[^"\r\n]+)"|(?P<esc>\\)?(?P<bare>[A-Za-z_]\w*))""")
 # Where the statement a heredoc belongs to ends on its line.
 _STATEMENT_END = re.compile(r";|&&|\r|\n")
+# What separates one command from the next between two heredocs of a line.
+_BOUNDARY = re.compile(r"[;&|\r\n]")
 _FRAGMENT = 80
 # The flag after which a shell's own command follows: cmd /c, powershell -Command, sh -c.
 _RUNS = frozenset({"/c", "/k", "/r", "-c", "-command", "-commandwithargs"})
@@ -193,7 +195,9 @@ def _without_script_bodies(command: str) -> str:
         for number, marker in enumerate(markers):
             # Each heredoc has its own receiver: the words since the last one (or the line's start) and what follows in its
             # statement (a `| sh` would run what the program prints).
-            receiver = _programs(blanked[previous:marker.start()])[-1:] or receiver
+            between = blanked[previous:marker.start()]
+            if not (number and not _BOUNDARY.search(between)):  # heredocs of one command share its receiver
+                receiver = _programs(between)[-1:] or receiver
             rest = blanked[marker.end():markers[number + 1].start() if number + 1 < len(markers) else None]
             after = rest[:stop.start()] if (stop := _STATEMENT_END.search(rest)) else rest
             previous = marker.end()
