@@ -197,6 +197,17 @@ describe("the one view", () => {
     expect(connectionsHTML(view({ configured: null }))).not.toContain("configure-composio");
   });
 
+  test("once a Composio key is saved Connect apps offers no setting for it: it is replaced in Settings › 安全 › 保管箱 (#320)", () => {
+    for (const composioCatalog of [[], "loading", "failed"] as const) {
+      const d = dom(connectionsHTML(view({ configured: true, composioCatalog: composioCatalog as ConnectionsView["composioCatalog"] }), "<h1>連結應用程式</h1>", '<button class="modal-x"></button>'));
+      expect(d.querySelector('[data-conn="configure-composio"], [data-k="cs-key-settings"], .cs-composio-setup')).toBeNull();
+      // The header is the title, the chip of the connected apps and the close, as before.
+      expect([...d.querySelector(".cs-top")!.children].map(child => child.localName === "h1" ? "h1" : child.getAttribute("data-conn") ?? child.className)).toEqual(["h1", "connected", "modal-x"]);
+    }
+    // No key yet: the row at the end of the list still adds the first one.
+    expect(dom(connectionsHTML(view({ configured: false }))).querySelector('.cs-composio-setup [data-conn="configure-composio"]')).not.toBeNull();
+  });
+
   test("the key dialog of Composio stands over the view and over a page, and is the only modal dialog", () => {
     for (const html of [connectionsHTML(view({ keyOpen: true })), connectionsHTML(view({ keyOpen: true, open: { kind: "group", id: "ab12" } }))]) {
       const d = dom(html);
@@ -1122,7 +1133,7 @@ describe("the rules for this dialog", () => {
     connectionsHTML(view({ search: "lin" })),
     connectionsHTML(view({ login: { target: "linear", name: "Linear" } })),
     connectionsHTML(view({ configured: false })),
-    groupPage("ab12", { confirmingDisconnect: "ab12", auditOpen: true }),
+    groupPage("ab12", { auditOpen: true }),
     groupPage("ab12", { toolsOpen: true }),
     groupPage("ab12", { groups: [{ ...notes, status: "error", error: "auth" }] }),
     appPage("linear", { loginError: { target: "linear", kind: "denied" } }),
@@ -1856,6 +1867,162 @@ describe("what the dialog does", () => {
     expect(ownGoogleEntry("google").server_id).toBe("google");
   });
 
+  test("a new key saved over the saved one reads the connections and the catalog again (#320)", async () => {
+    const c = createConnections(host);
+    await c.load();
+    await settle();
+    expect(api.connectorsCatalog).toHaveBeenCalledTimes(1);
+    c.click(button("configure-composio"));
+    expect(c.view().keyOpen).toBe(true);
+    const { document, done } = await mounted(c);
+    try {
+      document.querySelector<HTMLInputElement>("#conn-key")!.value = " comp_new ";
+      api.connectorsSetKey.mockResolvedValueOnce({ configured: true });
+      api.connectorsCatalog.mockResolvedValue({ categories: [], items: [{ slug: "zapapp", name: "Zapapp", description: "", logo: "", categories: [], needs: "sign_in", no_auth: false }] });
+      const reads = api.connectorsStatus.mock.calls.length;
+      c.click(button("save-key"));
+      await settle(); await settle();
+      expect(api.connectorsSetKey).toHaveBeenCalledWith("comp_new");
+      expect(document.querySelector<HTMLInputElement>("#conn-key")!.value).toBe("");
+      // The core forgot the apps of the old key: the connections and the catalog are both read again.
+      expect(api.connectorsStatus.mock.calls.length).toBeGreaterThan(reads);
+      expect(api.connectorsCatalog).toHaveBeenCalledTimes(2);
+      expect(c.view().keyOpen).toBe(false);
+      expect((c.view().composioCatalog as StoreService[]).map(s => s.id)).toEqual(["zapapp"]);
+    } finally { await done(); }
+  });
+
+  test("a read of the catalog still on its way when a new key is saved is of the old key, and the new key's catalog is read (#320)", async () => {
+    let oldCatalog!: (value: unknown) => void;
+    api.connectorsCatalog.mockReturnValueOnce(new Promise((resolve) => { oldCatalog = resolve; }));
+    const c = createConnections(host);
+    void c.load();
+    await settle(); await settle();
+    expect(api.connectorsCatalog).toHaveBeenCalledTimes(1);
+    c.click(button("configure-composio"));
+    const { document, done } = await mounted(c);
+    try {
+      document.querySelector<HTMLInputElement>("#conn-key")!.value = "comp_new";
+      api.connectorsSetKey.mockResolvedValueOnce({ configured: true });
+      api.connectorsCatalog.mockResolvedValue({ categories: [], items: [{ slug: "zapapp", name: "Zapapp", description: "", logo: "", categories: [], needs: "sign_in", no_auth: false }] });
+      let status!: (value: unknown) => void;
+      api.connectorsStatus.mockReturnValueOnce(new Promise((resolve) => { status = resolve; }));
+      c.click(button("save-key"));
+      await settle();
+      // The old key's list arrives after the save and before the connections are read again: it is not taken.
+      oldCatalog({ categories: [], items: [{ slug: "oldapp", name: "Oldapp", description: "", logo: "", categories: [], needs: "sign_in", no_auth: false }] });
+      await settle();
+      status({ connectors: [], composio_configured: true, google_configured: false });
+      await settle(); await settle();
+      expect(api.connectorsCatalog).toHaveBeenCalledTimes(2);
+      expect((c.view().composioCatalog as StoreService[]).map(s => s.id)).toEqual(["zapapp"]);
+    } finally { await done(); }
+  });
+
+  test("a key saved after the dialog was closed and opened again is written after the one still being checked (#320)", async () => {
+    const c = createConnections(host);
+    await c.load();
+    await settle();
+    c.click(button("configure-composio"));
+    const { document, done } = await mounted(c);
+    try {
+      const field = document.querySelector<HTMLInputElement>("#conn-key")!;
+      let first!: (value: unknown) => void;
+      api.connectorsSetKey.mockReturnValueOnce(new Promise((resolve) => { first = resolve; })).mockResolvedValueOnce({ configured: true });
+      field.value = "comp_first";
+      c.click(button("save-key"));
+      await settle();
+      c.click(button("close"));
+      c.click(button("configure-composio"));
+      field.value = "comp_second";
+      c.click(button("save-key"));
+      await settle();
+      // The second waits: the core still checks the first, and would otherwise keep whichever answers last.
+      expect(api.connectorsSetKey.mock.calls.map(call => call[0])).toEqual(["comp_first"]);
+      first({ configured: true });
+      await settle(); await settle(); await settle();
+      expect(api.connectorsSetKey.mock.calls.map(call => call[0])).toEqual(["comp_first", "comp_second"]);
+    } finally { await done(); }
+  });
+
+  test("a key replaced in the vault, with the connections unread, still takes the Composio apps off the page and reads the catalog again (#320)", async () => {
+    const gmail = { id: "composio:gmail", kind: "composio", name: "Gmail", description: "", logo: "", status: "ACTIVE", enabled: true, accounts: [{ id: "a1", status: "ACTIVE" }], enabled_tools: [], disabled_tools: [] };
+    api.connectorsStatus.mockResolvedValue({ connectors: [gmail], composio_configured: true, google_configured: false });
+    const c = createConnections(host);
+    await c.load();
+    await settle();
+    expect(c.view().composioApps).toBe(true);
+    expect(api.connectorsCatalog).toHaveBeenCalledTimes(1);
+    // Settings › 安全 › 保管箱 saved a new key; the list of the connections fails from here on.
+    api.toolsetsList.mockRejectedValue(new Error("network"));
+    api.connectorsStatus.mockResolvedValue({ connectors: [], composio_configured: true, google_configured: false });
+    await c.keyReplaced();
+    await settle();
+    const groups = c.view().groups;
+    expect(Array.isArray(groups) && groups.some(g => g.source === "composio")).toBe(false);
+    expect(c.view().composioApps).toBe(false);
+    expect(api.connectorsCatalog).toHaveBeenCalledTimes(2);
+    // The key removed there: Connect apps knows Composio is no longer set up.
+    api.connectorsStatus.mockResolvedValue({ connectors: [], composio_configured: false, google_configured: false });
+    await c.keyReplaced();
+    expect(c.view().configured).toBe(false);
+  });
+
+  test("a new key saved while its dialog was closed still takes the old apps off the page, and the same key again keeps them (#320)", async () => {
+    const gmail = { id: "composio:gmail", kind: "composio", name: "Gmail", description: "", logo: "", status: "ACTIVE", enabled: true, accounts: [{ id: "a1", status: "ACTIVE" }], enabled_tools: [], disabled_tools: [] };
+    const hasGmail = (c: ReturnType<typeof createConnections>): boolean => { const g = c.view().groups; return Array.isArray(g) && g.some(x => x.id === "composio:gmail"); };
+    api.connectorsStatus.mockResolvedValue({ connectors: [gmail], composio_configured: true, google_configured: false });
+    const c = createConnections(host);
+    await c.load();
+    await settle();
+    expect(hasGmail(c)).toBe(true);
+    api.toolsetsList.mockRejectedValue(new Error("network"));
+    c.click(button("configure-composio"));
+    const { document, done } = await mounted(c);
+    try {
+      const field = document.querySelector<HTMLInputElement>("#conn-key")!;
+      // The same key again: the core keeps its apps, and so does the page.
+      field.value = "comp_same";
+      api.connectorsSetKey.mockResolvedValueOnce({ configured: true });
+      c.click(button("save-key"));
+      await settle(); await settle(); await settle();
+      expect(hasGmail(c)).toBe(true);
+      // Another key, and the dialog closed before the core answers: the old apps still leave the page.
+      c.click(button("configure-composio"));
+      field.value = "comp_other";
+      let answer!: (value: unknown) => void;
+      api.connectorsSetKey.mockReturnValueOnce(new Promise((resolve) => { answer = resolve; }));
+      c.click(button("save-key"));
+      await settle();
+      c.click(button("close"));
+      api.connectorsStatus.mockResolvedValue({ connectors: [], composio_configured: true, google_configured: false });
+      answer({ configured: true });
+      await settle(); await settle(); await settle();
+      expect(hasGmail(c)).toBe(false);
+      expect(c.view().keyOpen).toBe(false);
+    } finally { await done(); }
+  });
+
+  test("a new key whose connections cannot be read again still takes the old apps off the page (#320)", async () => {
+    const gmail = { id: "composio:gmail", kind: "composio", name: "Gmail", description: "", logo: "", status: "ACTIVE", enabled: true, accounts: [{ id: "a1", status: "ACTIVE" }], enabled_tools: [], disabled_tools: [] };
+    api.connectorsStatus.mockResolvedValue({ connectors: [gmail], composio_configured: true, google_configured: false });
+    const c = createConnections(host);
+    await c.load();
+    await settle();
+    c.click(button("configure-composio"));
+    const { document, done } = await mounted(c);
+    try {
+      document.querySelector<HTMLInputElement>("#conn-key")!.value = "comp_new";
+      api.connectorsSetKey.mockResolvedValueOnce({ configured: true });
+      api.connectorsStatus.mockRejectedValue(new Error("network"));
+      c.click(button("save-key"));
+      await settle(); await settle(); await settle();
+      const groups = c.view().groups;
+      expect(Array.isArray(groups) && groups.some(g => g.id === "composio:gmail")).toBe(false);
+      expect(c.view().composioApps).toBe(false);
+    } finally { await done(); }
+  });
+
   test("an app that is already connected is not joined again", async () => {
     const c = createConnections(host);
     await c.load();
@@ -2166,17 +2333,20 @@ describe("what the dialog does", () => {
       c.reset();
     });
 
-    test("the last connected account is the app: removing it asks the app's own disconnect question, not another", async () => {
+    test("the last connected account is the app: removing it asks the app's own disconnect question in the red dialog, not another", async () => {
       const c = await openGmail([{ id: "a1", status: "ACTIVE", label: "Work" }, { id: "a3", status: "INITIATED" }]);
       const { done } = await mounted(c);
       try {
+        vi.mocked(confirmDelete).mockResolvedValueOnce(false);
         c.click(button("account-remove", { id: "composio:gmail", account: "a1" }));
         await settle();
-        expect(confirmDelete).not.toHaveBeenCalled();
+        expect(confirmDelete).toHaveBeenCalledExactlyOnceWith("Gmail", { words: { title: "中斷連線 Gmail？", hint: "重新連線之前，就不能再使用它。", action: "中斷連線" } });
         expect(api.connectorsRemoveAccount).not.toHaveBeenCalled();
-        expect(c.view().confirmingDisconnect).toBe("composio:gmail"); // the app's own two presses
-        c.click(button("disconnect", { id: "composio:gmail" }));
+        expect(api.connectorsDisconnect).not.toHaveBeenCalled(); // Cancel did nothing
+        c.click(button("account-remove", { id: "composio:gmail", account: "a1" }));
         await settle();
+        expect(confirmDelete).toHaveBeenCalledTimes(2);
+        expect(api.connectorsRemoveAccount).not.toHaveBeenCalled();
         expect(api.connectorsDisconnect).toHaveBeenCalledWith("composio:gmail");
       } finally { await done(); c.reset(); }
     });
@@ -2231,28 +2401,24 @@ describe("what the dialog does", () => {
     expect(api.integrationsRefresh).toHaveBeenCalledWith("ab12");
   });
 
-  test("disconnects on the second press without a toast after successful revocation", async () => {
-    vi.useFakeTimers();
-    try {
-      const c = createConnections(host);
-      await c.load();
-      c.click(button("open", { id: "ab12" }));
-      c.click(button("disconnect", { id: "ab12" }));
-      expect(c.view().confirmingDisconnect).toBe("ab12");
-      expect(api.integrationsDisconnect).not.toHaveBeenCalled();
-      vi.advanceTimersByTime(5100);
-      expect(c.view().confirmingDisconnect).toBeNull();
-      api.toolsetsList.mockResolvedValue({ groups: [custom] });
-      c.click(button("disconnect", { id: "ab12" }));
-      c.click(button("disconnect", { id: "ab12" }));
-      await vi.advanceTimersByTimeAsync(0);
-      expect(api.integrationsDisconnect).toHaveBeenCalledTimes(1);
-      expect(api.integrationsDisconnect).toHaveBeenCalledWith("ab12");
-      expect(c.view().open).toBeNull();
-      expect(toaster.info).not.toHaveBeenCalled();
-    } finally {
-      vi.useRealTimers();
-    }
+  test("disconnects only when the red dialog's button is pressed, without a toast after successful revocation", async () => {
+    const c = createConnections(host);
+    await c.load();
+    c.click(button("open", { id: "ab12" }));
+    vi.mocked(confirmDelete).mockClear();
+    vi.mocked(confirmDelete).mockResolvedValueOnce(false);
+    c.click(button("disconnect", { id: "ab12" }));
+    await settle();
+    expect(confirmDelete).toHaveBeenCalledExactlyOnceWith("Notion", { words: { title: "刪除「Notion」？", hint: "此操作無法復原。", action: "刪除" } });
+    expect(api.integrationsDisconnect).not.toHaveBeenCalled(); // Cancel, Escape and the scrim do nothing
+    expect(c.view().open).not.toBeNull();
+    api.toolsetsList.mockResolvedValue({ groups: [custom] });
+    c.click(button("disconnect", { id: "ab12" }));
+    await settle();
+    expect(api.integrationsDisconnect).toHaveBeenCalledTimes(1);
+    expect(api.integrationsDisconnect).toHaveBeenCalledWith("ab12");
+    expect(c.view().open).toBeNull();
+    expect(toaster.info).not.toHaveBeenCalled();
   });
 
   test("says where to revoke access if it was not revoked by the provider", async () => {
@@ -2261,7 +2427,6 @@ describe("what the dialog does", () => {
     const c = createConnections(host);
     await c.load();
     c.click(button("open", { id: "ab12" }));
-    c.click(button("disconnect", { id: "ab12" }));
     c.click(button("disconnect", { id: "ab12" }));
     await settle();
     expect(toaster.info).toHaveBeenCalledExactlyOnceWith(t("conn.revokeInApp", { p0: "Notion" }));
@@ -2365,13 +2530,12 @@ describe("what the dialog does", () => {
     });
   });
 
-  test("leaving the dialog drops the form, the page, the search, the category and a pending disconnect, but not a login that is under way", async () => {
+  test("leaving the dialog drops the form, the page, the search and the category, but not a login that is under way", async () => {
     api.integrationsConnect.mockReturnValue(new Promise(() => undefined));
     const c = createConnections(host);
     await c.load();
     c.click(button("connected"));
     c.click(button("open", { id: "ab12" }));
-    c.click(button("disconnect", { id: "ab12" }));
     c.click(button("join", { id: "linear" }));
     c.menuFor("conn-add")!.pick("custom");
     c.input(input("conn-name", "Half"));
@@ -2379,7 +2543,7 @@ describe("what the dialog does", () => {
     c.input(input("conn-search", "lin"));
     c.click(button("store-group", { id: "finance" }));
     c.reset();
-    expect(c.view()).toMatchObject({ screen: "apps", open: null, toolsOpen: false, auditOpen: false, form: null, confirmingDisconnect: null, search: "", category: "", keyOpen: false });
+    expect(c.view()).toMatchObject({ screen: "apps", open: null, toolsOpen: false, auditOpen: false, form: null, search: "", category: "", keyOpen: false });
     expect(c.view().login).not.toBeNull();
     expect(JSON.stringify(c.view())).not.toContain("TOPSECRET");
   });

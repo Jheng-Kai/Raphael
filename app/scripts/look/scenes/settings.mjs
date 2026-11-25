@@ -13,8 +13,8 @@ const store = [...connections, wait('.cs-card')];
 const setupKey = "zk-look-0123456789";
 const usage = [...settings("usage"), wait('[data-usage-tab="overview"][aria-selected="true"]'), wait('[data-row="raphael-spend"]')];
 const analysis = [...usage, click('[data-usage-tab="analysis"]'), wait('[data-ua-card="cost"]')];
-const cliMenu = [...settings("models"), scroll(".cli-accounts"), click('[data-cli-menu="codex"]')];
-const cliDisconnected = [...cliMenu, click('#app-popover [data-pick="disconnect"]'), wait('[data-cli="codex"]')];
+const cliAsk = [...settings("models"), scroll(".cli-accounts"), click('[data-cli-disconnect="codex"]'), wait(".mb-dialog.mb-delete")];
+const cliDisconnected = [...cliAsk, click('.mb-delete [data-dlg="delete"]'), wait('[data-cli="codex"]')];
 const modelChooser = role => [...settings("models"), click(`.modal-scrim [data-model-picker="${role}"] .mp-trigger`), wait(".model-chooser .mc-row")];
 const localChooser = [...modelChooser("stt"), click('[data-source="local-speech"]'), wait(".lm-main")];
 const downloaded = [
@@ -94,7 +94,7 @@ export default [
   scene("settings-local-stt", "Speech to text on this PC reads SenseVoice · 本機 with no mark of the cloud model kept for later", [...settings("models"), wait('.modal-scrim [data-model-picker="stt"] .mp-trigger'), check("settings-local-stt")], { localSpeech: true }),
   scene("model-choices-local", "Local speech choices keep subtle borders, spacing and readable metadata", [...localChooser, scroll('.lm-row:last-child'), check("model-choice-scroll"), scroll('.lm-row:first-child'), check("model-choice-layout")]),
   scene("model-choices-local-selected", "Preview a local model without downloading and keep keyboard focus visible", [...localChooser, click('.lm-main[data-name="qwen3-asr"]'), key("Tab"), { action: "focus", selector: '.lm-main[data-name="qwen3-asr"]' }, check("model-choice-selection"), check("model-choice-layout")]),
-  scene("model-choices-local-menu", "Deleting a downloaded local model waits in its row's ⋯ and still asks in the row", [...localChooser, click('[data-act="local-menu"][data-name="sensevoice"]'), wait('#app-popover [data-pick="delete"]'), check("local-model-menu"), click('#app-popover [data-pick="delete"]'), wait('.lm-confirm'), check("local-model-asks")], { localModels: downloaded }),
+  scene("model-choices-local-menu", "Deleting a downloaded local model waits in its row's ⋯ and asks in the red dialog", [...localChooser, click('[data-act="local-menu"][data-name="sensevoice"]'), wait('#app-popover [data-pick="delete"]'), check("local-model-menu"), click('#app-popover [data-pick="delete"]'), wait('.mb-delete'), check("local-model-asks")], { localModels: downloaded }),
   scene("context-menu-local-model", "A right click on a downloaded local model's row opens the menu of its ⋯", [...localChooser, rightClick('.lm-row[data-name="sensevoice"]'), wait('#app-popover'), check("context-menu"), rightClick('.lm-row[data-name="sensevoice"]'), wait('#app-popover')], { localModels: downloaded }),
   scene("chatgpt-signed-out", "ChatGPT sign-in is the first subscription account", [...settings("models"), scroll(".cli-accounts"), wait('[data-chatgpt="sign-in"]')]),
   scene("chooser-chatgpt-signed-out", "ChatGPT signed out while it holds the choice is still listed, says what signing in means and has the button for it", [...settings("models"), click('.modal-scrim [data-model-picker="answer"] .mp-trigger'), wait('.model-chooser [data-source="chatgpt"]'), click('.model-chooser [data-source="chatgpt"]'), wait('.mc-signin'), check("chooser-chatgpt")], { quickChatgpt: true }),
@@ -110,10 +110,15 @@ export default [
   scene("composer-model-alias", "A member saved with Claude Code's alias reads the model it is on, with its version, and its row is the one checked", [
     member(3), click('.composer .cmp-model .mp-trigger'), wait('.cb-menu .cb-now'), click('.cb-pick'),
     click('.cb-menu [data-cb-source="cli:claude"]'), wait('.cb-menu [data-model="cli:claude:claude-haiku-5-5"]'), check("composer-claude-alias-row"), check("composer-claude-alias")], { claudeAlias: true }),
-  scene("chatgpt-signed-in", "A signed-in ChatGPT account shows its email and a menu", [...settings("models"), scroll(".cli-accounts"), click('[data-chatgpt="sign-in"]'), wait("[data-chatgpt-menu]")]),
-  scene("cli-account-menu", "Connected CLI account row actions", [...cliMenu, check("cli-account-menu")]),
+  scene("chatgpt-signed-in", "A signed-in ChatGPT account shows its email and its unplug", [...settings("models"), scroll(".cli-accounts"), click('[data-chatgpt="sign-in"]'), wait("[data-chatgpt-disconnect]")]),
+  scene("cli-account-disconnect-ask", "A connected CLI's card has the unplugged plug, no ⋯: it asks in the red dialog before it disconnects", [...cliAsk, check("cli-account-disconnect-ask")]),
+  // Settings has no right click: a CLI's card in 模型 opens its menu only from its ⋯.
+  // Settings has no ⋯: a rule's row has its pencil and its trash, and the trash asks in the red dialog (no 復原 toast).
+  scene("safety-rules-icons", "Each safety rule has a pencil and a trash on its row, never a ⋯", [...settings("safety"), wait(".rules-row"), scroll(".rules"), check("safety-rules-icons")], { safetyRules: true }),
+  scene("safety-rule-delete-dialog", "A rule's trash asks in the red dialog naming the rule; Settings stays open and nothing is deleted yet", [...settings("safety"), wait(".rules-row"), scroll(".rules"), click('.rules-row [data-rule="delete"][data-id="2"]'), wait(".mb-dialog.mb-delete"), check("safety-rule-delete-dialog")], { safetyRules: true }),
+  scene("settings-cli-no-right-click", "A right click on a CLI's card in 模型 opens no menu: 中斷連線 is its unplug", [...settings("models"), scroll(".cli-accounts"), rightClick('.cli-card:has([data-cli-disconnect="codex"]) .nm'), check("no-menu-open")]),
   scene("cli-account-disconnected", "Disconnect only in Raphael and offer reconnection", [...cliDisconnected, check("cli-account-disconnected")]),
-  scene("cli-account-reconnected", "Reconnect a signed-in CLI without starting login", [...cliDisconnected, click('[data-cli="codex"]'), wait('[data-cli-menu="codex"]'), check("cli-account-reconnected")]),
+  scene("cli-account-reconnected", "Reconnect a signed-in CLI without starting login", [...cliDisconnected, click('[data-cli="codex"]'), wait('[data-cli-disconnect="codex"]'), check("cli-account-reconnected")]),
   ...["minimize", "maximize", "close"].map(control => scene(`window-hover-${control}`, `Transparent ${control} caption hover`, [{ action: "window-control", control }])),
   scene("window-hover-restore", "Restore caption keeps its centered glyph and transparent hover", [{ action: "window-control", control: "maximize", restore: true }]),
   scene("window-hover-modal", "Caption hover stays usable while settings dim the window", [...settings("models"), { action: "window-control", control: "close", hoverOnly: true }]),
@@ -200,7 +205,7 @@ export default [
   scene("connections-test", "MCP test result", [...custom, type("#conn-name", "專案筆記"), type("#conn-command", "npx"), type("#conn-args", "-y\nnotes-server\nC:/Work/Team notes"), click('[data-conn="test-draft"]'), scroll(".add-grid [role=status]")]),
   scene("connections-url", "HTTP MCP form", [...custom, click('[data-k="conn-type"]'), click('.menu [data-value="http"]')]),
   scene("connections-edit", "Edit MCP server", [...serverDetail, click('[data-conn="server-menu"][data-id="notes"]'), click('[data-conn="edit-server"]')]),
-  scene("connections-delete", "Custom MCP deletion confirmation in overflow", [...serverDetail, click('[data-conn="server-menu"][data-id="notes"]'), click('[data-conn="disconnect"]')]),
+  scene("connections-delete", "Custom MCP deletion waits in the overflow menu and asks in the red dialog", [...serverDetail, click('[data-conn="server-menu"][data-id="notes"]'), click('[data-conn="disconnect"]'), wait('.mb-delete'), check("connections-delete-ask")]),
   scene("connections-paste", "Paste MCP JSON", [...add, click('.menu [data-value="paste"]')]),
   scene("connections-paste-preview", "Preview MCP JSON", [...add, click('.menu [data-value="paste"]'), type("[data-mcp-json]", '{"mcpServers":{"專案筆記":{"command":"npx","args":["notes-server"]}}}'), click('[data-dlg="preview"]')]),
   scene("connections-discover", "Discover local MCP definitions", [...add, click('.menu [data-value="import"]')]),
@@ -261,5 +266,6 @@ export default [
   scene("onboarding-service-waiting", "A tile waiting for its sign-in keeps its words inside it in every language", [...named, click('[data-ob="next"]'), wait('[data-ob-services] .ob-tile'), click('[data-item="linear"][data-ob="conn-login"]'), wait('[data-item="linear"] [data-ob="conn-cancel"]'), check("onboarding-services")], { onboarding: true, pluginsConnecting: true }),
   scene("onboarding-abilities", "First-run step 4: the abilities as Settings › 工具's rows, each saying what it uses, with its switch", [...named, click('[data-ob="next"]'), click('[data-ob="next"]'), wait('[data-ob-abilities] .svc-item'), click('[data-svc="toggle"][data-id="read"]'), wait('[data-svc="toggle"][data-id="read"][aria-checked="false"]'), check("onboarding-abilities")], { onboarding: true }),
   scene("onboarding-abilities-choice", "First-run step 4: an ability opens its choice of service in the card, as in Settings", [...named, click('[data-ob="next"]'), click('[data-ob="next"]'), wait('[data-ob-abilities] .svc-item'), click('[data-svc="open"][data-id="search"]'), wait('.ob-card #svc-dialog .svc-srv')], { onboarding: true }),
+  scene("onboarding-slime-crown", "First-run step 1: the first slime in a brown headband slime wears one crown on its head, large", [click('[data-ob="next"]'), wait('#ob-first-name'), type('#ob-first-name', '小藍'), click('.ob-first-picker [data-slime-tab="brown"]'), click('.ob-first-picker [data-slime-character="headband-brown"]'), wait('.ob-first-face .slime-surface[style*="#8E7254"]'), check('chief-crown')], { onboarding: true }),
   scene("after-onboarding", "Finishing the guide opens the conversation of the slime the owner named, the app's start", [...named, click('[data-ob="next"]'), click('[data-ob="next"]'), wait('[data-ob-abilities] .svc-item'), click('[data-ob="next"]'), wait(".page-agent:not([hidden]) .conversation-trigger"), check("foot-rest"), check("sidebar-shell"), check("first-slime-named")], { onboarding: true }),
 ];

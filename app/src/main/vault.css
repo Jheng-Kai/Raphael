@@ -20,5 +20,20 @@
 .vault-copy strong, .vault-copy small, .vault-copy p { overflow-wrap: anywhere; margin: 0; }
 .vault-copy small { color: var(--text-3); }
 .vault-copy p { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* An entry's own page, in Safety's place: the way back and its title, its trash, 儲存 and the dialog's close on one row; then each
+   value with its label above it, the private ones masked behind an eye. */
+.vault.vault-page { margin-block: 0; }
+.vault-page-head .sp { flex: 1; }
+.modal-body .vault-page-head .back-title > h1 { min-width: 0; padding: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vault-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); margin-top: var(--sp-5); }
+.vault-form > p { margin: 0; }
+.vault-secret { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }
+.vault-field-label { font-size: var(--fs-sm); color: var(--text-2); }
+.vault-secret .field { width: 100%; }
+.vault-secret-field { padding-right: var(--sp-1); }
+.vault-secret-field input { flex: 1; }
+.vault-secret-field .vault-eye { flex: none; width: 28px; height: 28px; min-height: 28px; }
+.vault-site { margin: 0; font-size: var(--fs-sm); color: var(--text-3); overflow-wrap: anywhere; }
+.vault-form .vault-actions { justify-content: flex-end; }
 /* Narrow, the members stand in one column, so that a long name is read whole rather than cut. */
 @media (max-width: 800px) { .vault-actions { flex-wrap: wrap; } .vault-members { grid-template-columns: minmax(0, 1fr); } }

@@ -4,8 +4,7 @@ import { knownClis, rememberClis } from "./brain-lists";
 import * as api from "./api";
 import { getLocale, t } from "./i18n";
 import { providerMark } from "./provider-marks";
-import { openActions } from "./member-column";
-import { openDialog } from "./member-dialogs";
+import { confirmDelete, openDialog } from "./member-dialogs";
 import type { CatalogModel, ChatGptStatus, CliBrain, CliBrainId, MainEvent } from "./types";
 import { btn, esc, iconButton } from "./ui";
 
@@ -55,6 +54,14 @@ export function cliModels(clis: readonly CliBrain[], availableOnly = true): Cata
     }));
   });
 }
+/**
+ * A connected account's one action, at its card's right: the unplugged plug, never a ⋯ and never a trash, since disconnecting
+ * deletes nothing (the CLI keeps its own login; ChatGPT signs in again). It asks first, in the red dialog.
+ */
+const disconnectButton = (name: string, attrs: string): string => iconButton("unplug", `${t("brains.disconnect")} ${name}`, attrs, "cli-disconnect");
+/** The red dialog that asks before an account is disconnected; true once its red button is pressed. */
+const askDisconnect = (name: string): Promise<boolean> =>
+  confirmDelete(name, { words: { title: t("confirm.disconnectTitle", { p0: name }), hint: t("brains.disconnectHint", { p0: name }), action: t("brains.disconnect") } });
 function chatgptCardHTML(v: CliBrainsView, k = ""): string {
   const account = v.chatgpt;
   const signing = !!account?.signing_in;
@@ -64,7 +71,7 @@ function chatgptCardHTML(v: CliBrainsView, k = ""): string {
     account?.plan_scope_granted === false ? t("brains.chatgptNoPlan") : [t("brains.usingPlan"), account?.email].filter(Boolean).join(" · ");
   const action = v.state !== "ready" ? "" : signing ?
     btn(esc(t("common.cancel")), "", ` data-chatgpt="cancel" data-k="${k}chatgpt:cancel"`) : signedIn && account?.plan_scope_granted !== false ?
-    iconButton("more", t("members.more", { p0: "ChatGPT" }), ` data-chatgpt-menu data-k="${k}chatgpt-menu" aria-haspopup="menu" aria-expanded="false"`) :
+    disconnectButton("ChatGPT", ` data-chatgpt-disconnect data-k="${k}chatgpt-disconnect"`) :
     btn(esc(t("brains.chatgptSignIn")), "", ` data-chatgpt="sign-in" data-k="${k}chatgpt:sign-in"`);
   return `<div class="pv-card cli-card" data-chatgpt-card><span class="ic">${providerMark("openai")}</span><span class="tx"><span class="nm">ChatGPT</span><span class="ds">${esc(status)}</span></span>${action}</div>`;
 }
@@ -91,7 +98,7 @@ function cliCardsHTML(v: CliBrainsView, k = "", only?: readonly string[]): strin
     const version = cli?.available ? cli.version?.match(/\d+(?:\.\d+)+(?:[-+][\w.-]+)?/)?.[0] : null;
     const label = t(cli?.installed ? "brains.connect" : "brains.install");
     const action = v.state !== "ready" ? "" : cli?.available ?
-      iconButton("more", t("members.more", { p0: known.name }), ` data-cli-menu="${known.id}" data-k="${k}cli-menu:${known.id}" aria-haspopup="menu" aria-expanded="false"${v.busy ? " disabled" : ""}`) :
+      disconnectButton(known.name, ` data-cli-disconnect="${known.id}" data-k="${k}cli-disconnect:${known.id}"${v.busy ? " disabled" : ""}`) :
       btn(esc(label), "", ` data-cli="${known.id}" data-k="${k}cli:${known.id}" aria-label="${esc(label + " " + known.name)}"${v.busy ? " disabled" : ""}`);
     return `<div class="pv-card cli-card"><span class="ic">${providerMark(known.mark)}</span><span class="tx"><span class="nm">${esc(known.name)}</span><span class="ds">${esc(status)}${version ? ` · v${esc(version)}` : ""}</span></span>${action}</div>`;
   }).join("");
@@ -150,10 +157,8 @@ export function createCliBrains(host: { visible(): boolean; redraw(): void }) {
     });
   }
   async function chatgptClick(button: HTMLButtonElement): Promise<void> {
-    if (button.dataset.chatgptMenu !== undefined) {
-      openActions(button, [{ id: "sign-out", label: t("brains.disconnect"), icon: "plug" }], () => {
-        void api.chatgptSignOut().catch(() => undefined).then(load);
-      });
+    if (button.dataset.chatgptDisconnect !== undefined) {
+      if (await askDisconnect("ChatGPT")) await api.chatgptSignOut().catch(() => undefined).then(load);
     } else if (button.dataset.chatgpt === "cancel") {
       await api.chatgptCancel().catch(() => undefined);
       value = { ...value, chatgpt: value.chatgpt && { ...value.chatgpt, signing_in: false }, chatgptError: "" };
@@ -174,15 +179,15 @@ export function createCliBrains(host: { visible(): boolean; redraw(): void }) {
     stop() { if (timer) clearInterval(timer); timer = null; generation++; },
     followEvent(event: MainEvent) { if (event.type === "BrainsChanged" && host.visible()) void load(); },
     async click(target: Element): Promise<boolean> {
-      const account = target.closest<HTMLButtonElement>("button[data-chatgpt], button[data-chatgpt-menu]");
+      const account = target.closest<HTMLButtonElement>("button[data-chatgpt], button[data-chatgpt-disconnect]");
       if (account) { await chatgptClick(account); return true; }
-      const button = target.closest<HTMLButtonElement>("button[data-cli], button[data-cli-menu]");
-      const known = CLIS.find((c) => c.id === (button?.dataset.cli ?? button?.dataset.cliMenu));
+      const button = target.closest<HTMLButtonElement>("button[data-cli], button[data-cli-disconnect]");
+      const known = CLIS.find((c) => c.id === (button?.dataset.cli ?? button?.dataset.cliDisconnect));
       if (!known) return false;
       if (value.busy || value.state !== "ready") return true;
       const cli = value.clis.find((c) => c.id === known.id);
-      if (button?.dataset.cliMenu) {
-        if (cli?.available) openActions(button, [{ id: "disconnect", label: t("brains.disconnect"), icon: "plug" }], () => void disconnect(known.id));
+      if (button?.dataset.cliDisconnect) {
+        if (cli?.available && await askDisconnect(known.name)) await disconnect(known.id);
         return true;
       }
       if (cli?.available) return true;

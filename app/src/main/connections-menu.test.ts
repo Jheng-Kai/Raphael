@@ -37,7 +37,11 @@ it.each(navInputs)("opens server actions and retraces the editor and app views w
   control.click(root.querySelector('[data-conn="form-cancel"]')!);
   control.click(root.querySelector('[data-conn="open"]')!);
   control.click(root.querySelector('[data-conn="server-menu"]')!);
+  // 刪除 closes the menu and asks in the red dialog naming the server; 取消 deletes nothing.
   document.querySelector<HTMLButtonElement>('.menu [data-conn="disconnect"]')!.click();
-  expect(document.querySelector('.menu [data-conn="disconnect"]')?.textContent).toContain("確定");
+  await vi.waitFor(() => expect(document.querySelector(".mb-delete h2")?.textContent).toBe("刪除「Workspace」？"));
+  expect(document.querySelector('[role="menu"]')).toBeNull();
+  document.querySelector<HTMLElement>('.mb-delete [data-dlg="cancel"]')!.click();
+  await Promise.resolve();
   expect(api.integrationsDisconnect).not.toHaveBeenCalled();
 });

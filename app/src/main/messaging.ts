@@ -14,9 +14,10 @@ import { describeError } from "./format";
 import { t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
 import { openActions } from "./member-column";
+import { confirmDelete } from "./member-dialogs";
 import { monogram, serviceIconSVG } from "./service-icons";
 import { iconHTML } from "./service-mark";
-import { DISCONNECT_CONFIRM_MS, actionRow, btn, esc, fieldHTML, ico, iconButton, note, row, st, tg, toaster } from "./ui";
+import { actionRow, btn, esc, fieldHTML, ico, iconButton, note, row, st, tg, toaster } from "./ui";
 
 /** How often a connected bot is asked who is waiting to pair. */
 const POLL_MS = 3000;
@@ -49,7 +50,6 @@ export interface MessagingView {
   connecting: boolean;
   /** Why the token was refused, as a message key. */
   tokenError: MessageKey | null;
-  confirmingDisconnect: boolean;
   busy: boolean;
   /** The reader opened or closed the pairing and the people; null: as the state suggests. */
   expanded: boolean | null;
@@ -57,7 +57,7 @@ export interface MessagingView {
 
 /** A view of nothing read yet. */
 export const emptyMessagingView = (): MessagingView => ({
-  status: "loading", token: "", connecting: false, tokenError: null, confirmingDisconnect: false, busy: false, expanded: null,
+  status: "loading", token: "", connecting: false, tokenError: null, busy: false, expanded: null,
 });
 
 const tr = t as unknown as (key: MessageKey) => string;
@@ -154,7 +154,7 @@ export function messagingHTML(v: MessagingView): string {
   const disconnect = row(
     esc(words("msg.tg.disconnectTitle", kind)),
     esc(t("msg.tg.disconnectAbout")),
-    actionRow({ destructive: { label: esc(v.confirmingDisconnect ? t("msg.tg.disconnectConfirm") : t("msg.tg.disconnect")), kind: "sm", attrs: ` data-msg="disconnect"${v.busy ? " disabled" : ""}` } }),
+    actionRow({ destructive: { label: esc(t("msg.tg.disconnect")), kind: "sm", attrs: ` data-msg="disconnect"${v.busy ? " disabled" : ""}` } }),
     {},
   );
   const rows = [head, ...(fault ? [note(st(dot === "err" ? "err" : "warn", label), ' role="alert"')] : []), ...(open ? [...detailRows(v, s), disconnect] : [])];
@@ -259,17 +259,15 @@ function createChannelMessaging(host: MessagingHost, kind: MessagingKind, ops: C
   let token = "";
   let connecting = false;
   let tokenError: MessageKey | null = null;
-  let confirming = false;
   let busy = false;
   let expanded: boolean | null = null;
-  let confirmTimer: ReturnType<typeof setTimeout> | undefined;
   let poller: ReturnType<typeof setInterval> | undefined;
   let loads = 0;
 
   const redraw = (): void => {
     if (host.visible()) host.redraw();
   };
-  const view = (): MessagingView => ({ status, token, connecting, tokenError, confirmingDisconnect: confirming, busy, expanded, ...(ownTokenId ? { tokenId } : {}) });
+  const view = (): MessagingView => ({ status, token, connecting, tokenError, busy, expanded, ...(ownTokenId ? { tokenId } : {}) });
 
   const poll = visibilityGate(() => void refresh(), () => poller !== undefined && host.visible());
 
@@ -403,19 +401,9 @@ function createChannelMessaging(host: MessagingHost, kind: MessagingKind, ops: C
         return true;
       }
       case "disconnect":
-        if (!confirming) {
-          confirming = true;
-          clearTimeout(confirmTimer);
-          confirmTimer = setTimeout(() => {
-            confirming = false;
-            redraw();
-          }, DISCONNECT_CONFIRM_MS);
-          redraw();
-          return true;
-        }
-        clearTimeout(confirmTimer);
-        confirming = false;
-        void act(() => ops.disconnect());
+        // The red dialog asks (R-UI-56); the bot is disconnected only by its red button.
+        void confirmDelete(title(kind), { words: { title: t("confirm.disconnectTitle", { p0: title(kind) }), hint: words("msg.tg.disconnectHint", kind), action: t("msg.tg.disconnect") } })
+          .then(yes => { if (yes) void act(() => ops.disconnect()); });
         return true;
     }
     return false;
@@ -442,10 +430,8 @@ function createChannelMessaging(host: MessagingHost, kind: MessagingKind, ops: C
   }
 
   function reset(): void {
-    clearTimeout(confirmTimer);
     clearInterval(poller);
     poller = undefined;
-    confirming = false;
     token = "";
     tokenError = null;
     expanded = null;

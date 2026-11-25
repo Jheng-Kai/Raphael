@@ -62,7 +62,7 @@ test.each([true, false])("update progress stays visible until the package RPC co
   expect(root.querySelector<HTMLButtonElement>('[data-skl="skill"]')?.disabled).toBe(true);
   press(root, '[data-skl="back"]');
   expect(root.querySelector('[data-skl-pack="set:1"] .skl-refresh-status')).not.toBeNull();
-  expect(root.querySelector<HTMLButtonElement>('[data-skl-pack="pack:2"] [data-skl="more"]')?.disabled).toBe(false);
+  expect(root.querySelector<HTMLButtonElement>('[data-skl-pack="pack:2"] [data-skl="toggle"]')?.disabled).toBe(false);
   if (success) finish({ package: { ...packages()[0], name: "Updated package" } });
   else fail(new Error("update failed"));
   await settle();
@@ -101,18 +101,18 @@ test("one row per package says who may use it, and its name opens its skills on 
   expect(page.querySelector(".skl-page-head .close-button")).not.toBeNull();
   expect(document.activeElement).toBe(page.querySelector('[data-skl="back"]'));
   expect(accessOf(root, "pack:2")).toBe("小晴、小森");
-  // Who may use it, the update button and the switch; the ⋯ is not drawn (a right click presses it).
+  // Who may use it, the update button, its trash and the switch; no ⋯ at all (Settings has no right click to reach one).
   const controls = [...page.querySelectorAll<HTMLElement>(".skl-page-actions .ctl > button")];
-  expect(controls.map(control => control.dataset.skl)).toEqual(["access", "refresh", "more", "toggle"]);
+  expect(controls.map(control => control.dataset.skl)).toEqual(["access", "refresh", "remove", "toggle"]);
   expect(controls.every(control => control.dataset.key === "pack:2")).toBe(true);
-  expect(page.querySelector<HTMLElement>('[data-skl="more"]')!.hidden).toBe(true);
+  expect(page.querySelector<HTMLElement>('[data-skl="remove"]')!.getAttribute("aria-label")).toBe("刪除");
+  expect(root.querySelector("[data-overflow], [data-skl='more'], [data-skl='skill-more']")).toBeNull();
   const rows = [...page.querySelectorAll(".skl-skill")];
   expect(rows.map(row => row.querySelector(".t")?.textContent)).toEqual(["來源核對", "每週摘要"]);
   expect(rows[1].querySelector(".tg")?.getAttribute("aria-checked")).toBe("false");
   for (const row of rows) {
-    // A skill's own ⋯ (刪除) is not drawn: a right click on its row presses it.
-    expect([...row.querySelectorAll<HTMLElement>(".ctl > button")].map(control => control.dataset.skl)).toEqual(["skill-more", "skill"]);
-    expect(row.querySelector<HTMLElement>('[data-skl="skill-more"]')!.hidden).toBe(true);
+    // A skill's row has its switch alone: its trash is on its own page.
+    expect([...row.querySelectorAll<HTMLElement>(".ctl > button")].map(control => control.dataset.skl)).toEqual(["skill"]);
     expect(row.querySelector('[data-skl="open-skill"]')).not.toBeNull();
   }
   // A skill opens on its own page, which reads and shows its document without its front matter.
@@ -124,7 +124,7 @@ test("one row per package says who may use it, and its name opens its skills on 
   expect(doc.textContent).toContain("第 4 個技能的內容");
   expect(doc.textContent).not.toContain("description:");
   expect(root.querySelector(".skl-doc-page .skl-about p")?.textContent).toBe("來源核對 的說明");
-  expect([...root.querySelectorAll<HTMLElement>(".skl-doc-page .skl-page-actions .ctl > button")].map(control => control.dataset.skl)).toEqual(["skill-more", "skill"]);
+  expect([...root.querySelectorAll<HTMLElement>(".skl-doc-page .skl-page-actions .ctl > button")].map(control => control.dataset.skl)).toEqual(["skill-remove", "skill"]);
   press(root, '[data-skl="back"]');
   expect(root.querySelector('.skl-page[data-skl-page="pack:2"]:not(.skl-doc-page)')).not.toBeNull();
   expect(document.activeElement).toBe(root.querySelector('[data-skl="open-skill"][data-id="4"]'));
@@ -141,7 +141,7 @@ test("one row per package says who may use it, and its name opens its skills on 
   await settle();
   expect(root.querySelector(".skl-doc-page h1#set-title")?.textContent).toBe("會議紀錄");
   expect(root.querySelector(".skl-doc")?.textContent).toContain("第 6 個技能的內容");
-  expect([...root.querySelectorAll<HTMLElement>(".skl-doc-page .skl-page-actions .ctl > button")].map(control => control.dataset.skl)).toEqual(["access", "more", "toggle"]);
+  expect([...root.querySelectorAll<HTMLElement>(".skl-doc-page .skl-page-actions .ctl > button")].map(control => control.dataset.skl)).toEqual(["access", "remove", "toggle"]);
   press(root, '[data-skl="back"]');
   expect(root.querySelector(".skl-page")).toBeNull();
   expect(document.activeElement).toBe(root.querySelector('[data-skl="open-skill"][data-key="skill:3"]'));
@@ -220,11 +220,17 @@ test("the back arrow and Esc return to the list where it was left, with the focu
 test("a package deleted from its own page leaves for the list, and a reset starts on the list", async () => {
   const { root, library } = await setup(() => ({ deleted: true }));
   press(root, '[data-skl="open"][data-key="set:1"]');
-  press(root, '.skl-page-actions [data-skl="more"][data-key="set:1"]');
-  // 刪除 asks in its own place: the second press deletes.
-  const remove = () => document.querySelector<HTMLElement>('[data-pick="delete"]')!;
-  remove().click();
-  remove().click();
+  // The page's trash asks in the red dialog naming the package, with no menu first: Cancel deletes nothing, its red button does.
+  press(root, '.skl-page-actions [data-skl="remove"][data-key="set:1"]');
+  expect(document.getElementById("app-popover")).toBeNull();
+  expect(document.querySelector(".mb-delete h2")?.textContent).toBe("移除「pstack」？");
+  expect(document.querySelector(".mb-delete .mb-dlg-body")?.textContent).toBe("移除後就不能再用它，也無法復原。");
+  expect(document.querySelector('.mb-delete [data-dlg="delete"]')?.textContent).toBe("刪除");
+  document.querySelector<HTMLElement>('.mb-delete [data-dlg="cancel"]')!.click();
+  await settle();
+  expect(api.core).not.toHaveBeenCalledWith("skills.library.delete", expect.anything());
+  press(root, '.skl-page-actions [data-skl="remove"][data-key="set:1"]');
+  document.querySelector<HTMLElement>('.mb-delete [data-dlg="delete"]')!.click();
   await settle();
   expect(api.core).toHaveBeenCalledWith("skills.library.delete", { key: "set:1" });
   expect(root.querySelector(".skl-page")).toBeNull();
@@ -339,11 +345,12 @@ test("a cause the core names leads its message and is said in words", async () =
   expect(root.querySelector(".skl-import")).not.toBeNull();
 });
 
-const removeSkill = async (): Promise<void> => {
-  // 刪除 asks in its own place: the second press deletes.
-  const remove = () => document.querySelector<HTMLElement>('[data-pick="delete"]')!;
-  remove().click();
-  remove().click();
+/** Opens a plugin's skill's page and presses its trash: the red dialog asks, and only its red button deletes. */
+const removeSkill = async (root: ParentNode, id: number, name: string): Promise<void> => {
+  if (!root.querySelector(`.skl-doc-page[data-skl-doc="${id}"]`)) press(root, `[data-skl="open-skill"][data-id="${id}"]`);
+  press(root, `.skl-doc-page [data-skl="skill-remove"][data-id="${id}"]`);
+  expect(document.querySelector(".mb-delete h2")?.textContent).toBe(`移除「${name}」？`);
+  document.querySelector<HTMLElement>('.mb-delete [data-dlg="delete"]')!.click();
   await settle();
 };
 
@@ -351,8 +358,7 @@ test("one skill of a plugin is deleted alone, asked as a whole package's delete 
   const left: LibraryPackage = { ...packages()[0], skills: [skill(1, "verify"), skill(3, "judge")] };
   const { root } = await setup(method => method === "skills.library.delete" ? { deleted: true, package: left } : {});
   press(root, '[data-skl="open"][data-key="set:1"]');
-  press(root, '.skl-skill[data-library-skill="2"] [data-skl="skill-more"]');
-  await removeSkill();
+  await removeSkill(root, 2, "look");
   expect(api.core).toHaveBeenCalledWith("skills.library.delete", { key: "set:1", skill: 2 });
   expect(api.core).not.toHaveBeenCalledWith("skills.library.delete", { key: "set:1" });
   expect(root.querySelector('.skl-page[data-skl-page="set:1"]')).not.toBeNull();
@@ -363,16 +369,13 @@ test("a skill deleted from its own page returns to its plugin, and the last skil
   let answer: unknown = { deleted: true, package: { ...packages()[0], skills: [skill(1, "verify"), skill(2, "look")] } };
   const { root } = await setup(method => method === "skills.library.delete" ? answer : {});
   press(root, '[data-skl="open"][data-key="set:1"]');
-  press(root, '[data-skl="open-skill"][data-id="3"]');
-  press(root, '.skl-doc-page [data-skl="skill-more"][data-id="3"]');
-  await removeSkill();
+  await removeSkill(root, 3, "judge");
   expect(api.core).toHaveBeenCalledWith("skills.library.delete", { key: "set:1", skill: 3 });
   expect(root.querySelector(".skl-doc-page")).toBeNull();
   expect(root.querySelector('.skl-page[data-skl-page="set:1"]')).not.toBeNull();
   // The core answers without a package when the skill was its package's last: the package is gone from the list.
   answer = { deleted: true };
-  press(root, '.skl-skill[data-library-skill="2"] [data-skl="skill-more"]');
-  await removeSkill();
+  await removeSkill(root, 2, "look");
   expect(root.querySelector(".skl-page")).toBeNull();
   expect(root.querySelector('.skl-pack[data-skl-pack="set:1"]')).toBeNull();
 });
@@ -381,9 +384,12 @@ test("a refused delete of one skill says why and reloads the library", async () 
   const { root } = await setup(method => { if (method === "skills.library.delete") throw new Error("[-32602] Invalid params: not_found: no such skill in this package"); return {}; });
   const info = vi.spyOn(toaster, "info").mockImplementation(() => {});
   press(root, '[data-skl="open"][data-key="set:1"]');
-  press(root, '.skl-skill[data-library-skill="1"] [data-skl="skill-more"]');
-  await removeSkill();
+  await removeSkill(root, 1, "verify");
   expect(info).toHaveBeenCalledWith("裡面找不到 SKILL.md。");
+  // The skill stays, its page open; its plugin still holds all three.
+  await settle();
+  expect(root.querySelector('.skl-doc-page[data-skl-doc="1"]')).not.toBeNull();
+  press(root, '[data-skl="back"]');
   expect(root.querySelectorAll(".skl-skill")).toHaveLength(3);
 });
 

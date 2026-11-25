@@ -1,4 +1,4 @@
-import { scene, click, wait, waitGone, check, scroll, member, rightClick, settings } from "./steps.mjs";
+import { scene, click, wait, waitGone, check, member, rightClick, settings } from "./steps.mjs";
 
 // R-UI-44: a right click anywhere on a row opens the menu of its ⋯, at the pointer. Each scene presses the real right button,
 // checks that the menu is the one a click on the ⋯ opens (it closes on the way), and presses again so that the picture shows it.
@@ -7,10 +7,6 @@ const rightClicked = (target, steps = []) => [...steps, rightClick(target), wait
 const details = [member(1), { action: "open-details" }];
 const keyed = [{ action: "focus", selector: '.mb-col [data-member="2"]' }, { action: "key", key: "F10", shift: true }, wait("#app-popover")];
 
-// R-UI-56: what destroys waits in a ⋯. The first press of the item asks in its place and destroys nothing; the second does it.
-const item = '#app-popover [data-confirm-item]';
-const asked = more => [click(more), wait(item), check("confirm-menu-label"), click(item), check("confirm-menu-asks")];
-const confirmed = more => [...asked(more), click(item), waitGone("#app-popover")];
 const paired = { messaging: { connected: true, enabled: true, running: true, error: null, bot: { username: "raph_bot" }, allowed: [{ user_id: "42", name: "小晴" }], pending: [] } };
 // Raphael's Telegram is in its panel.
 const raphaelBots = [member(0), { action: "open-details" }, wait('.mb-panel-suggest [data-msg-kind="telegram"] [data-msg="expand"]')];
@@ -22,9 +18,6 @@ export default [
   scene("context-menu-routine", "A direct routine row opens it to read without another menu", [...details, click(".mb-det .mb-rt"), wait(".rv-dialog"), check("level-routine")]),
   scene("context-menu-connection", "A right click on a custom server's header opens the menu of its ⋯: test, edit and delete", rightClicked(".cs-page .cs-head", [
     ...settings("connections"), click('[data-conn="connected"]'), click('[data-conn="open"][data-id="notes"]'), wait(".cs-page .cs-head"),
-  ])),
-  scene("context-menu-cli-account", "A right click on a subscription account's card opens the menu of its ⋯", rightClicked('.cli-card:has([data-cli-menu="codex"])', [
-    ...settings("models"), scroll(".cli-accounts"),
   ])),
   scene("context-menu-message", "A right click on Raphael's answer opens the menu of its ⋯", rightClicked(".ra .chat-message[data-reply]")),
   scene("context-menu-key", "Shift+F10 on a focused member row opens the menu of its ⋯ under that button", [column, ...keyed, check("context-menu-key"), ...keyed]),

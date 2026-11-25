@@ -20,6 +20,7 @@ import { describeError } from "./format";
 import { onLocaleChange, getLocale, t } from "./i18n";
 import { openMemberAvatarMenu } from "./member-avatar-menu";
 import type { MessageKey } from "./i18n/zh-TW";
+import { openConfirmMenu } from "./member-column";
 import { pickPicture, readPicture } from "./member-dialogs";
 import { FIRST_BOT_NAME_MAX, PERSONALITY_MAX, RAPHAEL_ID, ROLE_MAX, cleanName, faceHTML, isMemberNameTaken, memberSlime, stableMember } from "./members";
 import { entryIcon } from "./service-mark";
@@ -29,7 +30,7 @@ import { skillOriginLabel } from "./skill-source";
 import { slimeColorOf } from "./slime";
 import { FIRST_SLIME } from "./first-bot";
 import type { AppContext, LibraryRef, Member, MemberCommand, MemberPatch, MemberSkill, MembersList } from "./types";
-import { type IconName, actionRow, btn, closeMenu, esc, ico, iconBtn, backButton as roundBackButton, iconButton, openConfirmMenu, openMenuOnArrow, openPopover, patchHTML, tg, toaster } from "./ui";
+import { type IconName, actionRow, btn, closeMenu, esc, ico, iconBtn, backButton as roundBackButton, iconButton, openMenuOnArrow, openPopover, patchHTML, tg, toaster } from "./ui";
 
 /** The page's tint: the member's slime colour, the first blue slime keeping the theme's own blue (`--raphael-color`). */
 function memberTint(member: Member): string {
@@ -609,7 +610,8 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
       case "skill-save": void saveSkill(); break;
       case "skill-more": {
         const id = view.kind === "skill" ? view.id : -1;
-        openConfirmMenu(act, { label: t("members.profile.delete"), ask: t("conn.deleteConfirm"), run: () => void api.membersSkillsDelete(member.id, id).then(() => { back(); return reloadSkills(); }).catch(error => toaster.info(describeError(error))) });
+        const name = (skillText !== "loading" && skillText !== null ? skillText.skill.name : Array.isArray(skills) ? skills.find(item => item.id === id)?.name : "") ?? "";
+        openConfirmMenu(act, { label: t("members.profile.delete"), ask: { title: t("confirm.deleteTitle", { p0: name }), hint: t("members.deleteHint"), action: t("members.profile.delete") }, run: () => void api.membersSkillsDelete(member.id, id).then(() => { back(); return reloadSkills(); }).catch(error => toaster.info(describeError(error))) });
         break;
       }
       case "command-add": command = { id: null, name: "", description: "", template: "" }; view = { kind: "command", id: null }; draw(); scroll.scrollTop = 0; break;
@@ -624,7 +626,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
       case "command-more": {
         const id = command.id;
         if (id === null) break;
-        openConfirmMenu(act, { label: t("members.profile.delete"), ask: t("conn.deleteConfirm"), run: () => void api.membersCommandsDelete(member.id, id).then(() => { back(); return reloadCommands(); }).catch(error => toaster.info(describeError(error))) });
+        openConfirmMenu(act, { label: t("members.profile.delete"), ask: { title: t("confirm.deleteTitle", { p0: command.name }), hint: t("members.deleteHint"), action: t("members.profile.delete") }, run: () => void api.membersCommandsDelete(member.id, id).then(() => { back(); return reloadCommands(); }).catch(error => toaster.info(describeError(error))) });
         break;
       }
       case "cat": {

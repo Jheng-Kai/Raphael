@@ -181,3 +181,82 @@ async def test_switch_branch_refuses_repository_filters(conn, repository, driver
         await folders.switch_branch(settings, {"path": str(repository), "branch": "draft"})
     assert folders.head_branch(repository) == "main"
     assert (repository / "tracked.txt").read_text(encoding="utf-8") == "main"
+
+
+def _counting_git(monkeypatch, delay_on=None, delay=0.0):
+    calls = []
+    real = folders._git
+
+    def git(executable, path, deadline, *args):
+        calls.append(args[0])
+        if args[0] == delay_on:
+            import time
+            time.sleep(delay)
+        return real(executable, path, deadline, *args)
+
+    monkeypatch.setattr(folders, "_git", git)
+    return calls
+
+
+async def test_folder_info_lists_and_marks_branches_with_one_git_call(repository, monkeypatch):
+    calls = _counting_git(monkeypatch)
+    found = await folders.folder_info({"path": str(repository)})
+    assert (found["branch"], found["branches"], calls) == ("main", ["draft", "main"], ["for-each-ref"])
+    subprocess.run(["git", "-C", str(repository), "switch", "--detach", "draft"], check=True, capture_output=True)
+    assert (await folders.folder_info({"path": str(repository)}))["branch"] == ""
+    subprocess.run(["git", "-C", str(repository), "switch", "--orphan", "fresh"], check=True, capture_output=True)
+    unborn = await folders.folder_info({"path": str(repository)})
+    assert unborn["branch"] == "fresh" and unborn["branches"] == ["draft", "main"]
+
+
+async def test_a_switch_slower_than_a_read_still_answers_with_what_git_did(conn, repository, monkeypatch):
+    # The owner's PC took seconds to start Git: a switch cut short by the five seconds of a read had often happened
+    # already, and the app said it failed while the folder sat on the new branch.
+    settings = SettingsStore(conn)
+    settings.set("project_folders", [str(repository)])
+    monkeypatch.setattr(folders, "GIT_SECONDS", 0.3)
+    _counting_git(monkeypatch, delay_on="switch", delay=0.6)
+    switched = await folders.switch_branch(settings, {"path": str(repository), "branch": "draft"})
+    assert switched["branch"] == "draft" and folders.head_branch(repository) == "draft"
+
+
+async def test_a_switch_past_its_own_limit_says_so_and_frees_the_next_switch(conn, repository, monkeypatch):
+    settings = SettingsStore(conn)
+    settings.set("project_folders", [str(repository)])
+    monkeypatch.setattr(folders, "SWITCH_SECONDS", 0.3)
+    _counting_git(monkeypatch, delay_on="switch", delay=0.6)
+    with pytest.raises(RpcError, match=folders.SWITCH_SLOW):
+        await folders.switch_branch(settings, {"path": str(repository), "branch": "draft"})
+    assert folders.head_branch(repository) == "main"
+    monkeypatch.setattr(folders, "SWITCH_SECONDS", 30)
+    assert (await folders.switch_branch(settings, {"path": str(repository), "branch": "draft"}))["branch"] == "draft"
+
+
+async def test_a_branch_name_with_a_unicode_line_break_stays_one_branch(repository):
+    name = "feature review"
+    subprocess.run(["git", "-C", str(repository), "branch", name], check=True, capture_output=True)
+    found = await folders.folder_info({"path": str(repository)})
+    assert found["branch"] == "main" and found["branches"] == ["draft", name, "main"]
+
+
+async def test_a_switch_stuck_in_one_repository_never_holds_up_another(conn, repository, tmp_path, monkeypatch):
+    # On Windows a Git killed at its limit can leave a child holding its pipes, and the waiting thread keeps its lock.
+    other = tmp_path / "Other"
+    shutil.copytree(repository, other)
+    settings = SettingsStore(conn)
+    settings.set("project_folders", [str(repository), str(other)])
+    stuck = folders._switch_lock(str(repository))
+    stuck.acquire()
+    try:
+        assert (await folders.switch_branch(settings, {"path": str(other), "branch": "draft"}))["branch"] == "draft"
+        monkeypatch.setattr(folders, "SWITCH_SECONDS", 0.3)
+        with pytest.raises(RpcError, match=folders.SWITCH_SLOW):
+            await folders.switch_branch(settings, {"path": str(repository), "branch": "draft"})
+    finally:
+        stuck.release()
+
+
+def test_two_spellings_of_one_repository_share_its_switch_lock(repository):
+    (repository / "sub").mkdir()
+    assert folders._switch_lock(str(repository)) is folders._switch_lock(str(repository / "sub" / ".."))
+    assert folders._switch_lock(str(repository)) is not folders._switch_lock(str(repository.parent))

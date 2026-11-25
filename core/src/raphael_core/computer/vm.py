@@ -2141,6 +2141,14 @@ print(base64.b64encode(data).decode())
         folders it may write in when it was not asked about; none when the owner said yes to this very change), and with
         no link followed below the project's folder."""
         from . import files_guest
+        ready = LocalVm.project_ready(request, folder, relative)
+        return ready if "action" not in ready else files_guest.handle(ready)
+
+    @staticmethod
+    def project_ready(request, folder, relative):
+        """The request for the guest's helper to write under a project (`project_write`), or the error that refuses it: where it
+        lands is judged here, with no link followed below the project's folder, and nothing is written."""
+        from . import files_guest
         allowed = request.get("allowed")
         if allowed is not None and not any(request["path"] == place or request["path"].startswith(place.rstrip("/") + "/")
                                            for place in allowed):
@@ -2176,16 +2184,23 @@ print(base64.b64encode(data).decode())
             return {"error": "EINVAL"}
         if target == real or not files_guest.under(target, real):
             return {"error": "outside"}
-        return files_guest.handle({**{key: value for key, value in request.items() if key != "allowed"},
-                                   "path": prefix + "/".join(parts), "roots": [root]})
+        return {**{key: value for key, value in request.items() if key not in ("allowed", "refused", "inside")},
+                "path": prefix + "/".join(parts), "roots": [root]}
 
-    async def file_request(self, target, request, *, answer_bytes=0):
+    async def file_request(self, target, request, *, answer_bytes=0, recheck=None):
         """One request to the guest's file helper (`files_guest.py`) for a member's file tools: `read` (a path's kind,
         size, sha256 and first `limit` bytes) or `write` (a whole file, only over what the caller last saw). The request
-        and the file's bytes go over stdin; `answer_bytes` is how many file bytes the answer may carry."""
+        and the file's bytes go over stdin; `answer_bytes` is how many file bytes the answer may carry. `recheck` decides a write
+        under a project once more, on this thread and right before the bytes are written (the owner may have chosen another
+        project while the place was judged): None to go on, or (kind, words) of the refusal, answered as `refused`."""
         from . import files_guest
         if request.get("action") == "write" and (project := self.project_place(target, request.get("path"))) is not None:
-            return await asyncio.to_thread(self.project_write, request, *project)
+            ready = await asyncio.to_thread(self.project_ready, request, *project)
+            if "action" not in ready:
+                return ready
+            if recheck is not None and (verdict := recheck()) is not None:
+                return {"error": "refused", "verdict": verdict}
+            return await asyncio.to_thread(files_guest.handle, ready)
         source = Path(files_guest.__file__).read_text(encoding="utf-8")
         payload = json.dumps({**request, "roots": [GUEST, SHARED, *(guest for guest, _ in target.projects)]}).encode("utf-8")
         args = exec_args(target, ["timeout", "--signal=TERM", "--kill-after=1", "55", "/opt/venv/bin/python", "-c", source],

@@ -3,9 +3,11 @@ import { setLocale } from "./i18n";
 
 const api = vi.hoisted(() => ({ core: vi.fn() }));
 vi.mock("./api", () => api);
+// The red dialog of R-UI-56: answered by each test.
+const dialogs = vi.hoisted(() => ({ confirmDelete: vi.fn(async () => true) }));
+vi.mock("./member-dialogs", () => dialogs);
 
 import { type RulesView, type SafetyRule, createRules, emptyRulesView, ruleProblem, rulesHTML, verdictChoices } from "./safety-rules";
-import type { UndoableAction } from "./undo";
 
 afterEach(() => setLocale("zh-TW"));
 
@@ -39,15 +41,16 @@ describe("the safety rules section", () => {
     expect(html).not.toContain('role="switch"');
   });
 
-  test("the add action is framed and each rule has one named overflow button", () => {
+  test("the add action is framed and each rule has a named pencil and a named trash, never a ⋯", () => {
     const html = rulesHTML(view());
     const tags = buttons(html);
     expect(tags.find((b) => b.includes('data-rule="add"'))).toMatch(/^<button type="button" class="btn pri" data-rule="add"/);
     const icons = tags.filter((b) => /class="btn icon/.test(b));
-    expect(icons).toHaveLength(5);
+    expect(icons).toHaveLength(10);
     for (const tag of icons) expect(tag).toMatch(/aria-label="[^"]+" title="[^"]+"/);
-    expect(html).toContain('aria-label="「刪除檔案」的選項" title="「刪除檔案」的選項"');
-    expect(html).not.toMatch(/data-rule="(?:edit|delete)"/);
+    expect(html).toContain('aria-label="編輯「刪除檔案」" title="編輯「刪除檔案」" data-rule="edit" data-id="2"');
+    expect(html).toContain('class="btn icon danger" aria-label="刪除「刪除檔案」" title="刪除「刪除檔案」" data-rule="delete" data-id="2"');
+    expect(html).not.toMatch(/data-rule="more"|data-overflow/);
   });
 
   test("a rule being changed is its words in a field and its dropdown, with 取消 and 儲存, in its own row", () => {
@@ -73,7 +76,7 @@ describe("the safety rules section", () => {
     expect(ruleProblem("在網路上留言", RULES)).toBeNull();
   });
 
-  test("a rule waiting out its 復原 is not drawn, and with none it says so", () => {
+  test("a rule being deleted is not drawn, and with none it says so", () => {
     expect(rulesHTML(view({ hidden: [1] }))).not.toContain("付款結帳");
     expect(visible(rulesHTML(view({ status: [] })))).toBe("安全規則 先問我 新增 沒有規則");
   });
@@ -100,8 +103,7 @@ describe("the safety rules section", () => {
 
 describe("the controller", () => {
   let redraws = 0;
-  let begin: ReturnType<typeof vi.fn<(action: UndoableAction) => void>>;
-  const make = () => createRules({ visible: () => true, redraw: () => void redraws++, undo: { begin } });
+  const make = () => createRules({ visible: () => true, redraw: () => void redraws++ });
   const click = (c: ReturnType<typeof make>, rule: string, id = "") => {
     const b = { dataset: { rule, id } } as unknown as HTMLElement;
     return c.click({ closest: () => b } as unknown as Element);
@@ -112,7 +114,6 @@ describe("the controller", () => {
 
   beforeEach(() => {
     redraws = 0;
-    begin = vi.fn<(action: UndoableAction) => void>();
     vi.clearAllMocks();
     api.core.mockImplementation(async (method: string) => {
       if (method === "safety.rules.list") return { rules: structuredClone(RULES) };
@@ -199,18 +200,19 @@ describe("the controller", () => {
     expect(api.core).not.toHaveBeenCalledWith("safety.rules.update", expect.anything());
   });
 
-  test("the trash can hides the rule for its 復原 and deletes it when the time is up", async () => {
+  test("the trash asks in the red dialog naming the rule; 取消 keeps it, the red button deletes it at once, with no 復原", async () => {
     const c = make();
     await c.load();
+    dialogs.confirmDelete.mockResolvedValueOnce(false);
     click(c, "delete", "4");
-    expect(c.view().hidden).toEqual([4]);
-    const action = begin.mock.calls[0][0];
-    expect(action.message).toBe("已刪除 1 條規則");
-    await action.commit();
-    expect(api.core).toHaveBeenCalledWith("safety.rules.delete", { id: 4 });
-    expect((c.view().status as SafetyRule[]).map((r) => r.id)).toEqual([1, 2, 3, 5]);
-    click(c, "delete", "5");
-    begin.mock.calls[1][0].restore();
+    await vi.waitFor(() => expect(dialogs.confirmDelete).toHaveBeenCalledTimes(1));
+    expect(dialogs.confirmDelete).toHaveBeenLastCalledWith("在 Notion 新增頁面", { words: { title: "刪除「在 Notion 新增頁面」？", hint: "刪除後，這條規則就不再生效，也無法復原。", action: "刪除" } });
+    await Promise.resolve();
+    expect(api.core).not.toHaveBeenCalledWith("safety.rules.delete", expect.anything());
+    expect(c.view().hidden).toEqual([]);
+    click(c, "delete", "4");
+    await vi.waitFor(() => expect(api.core).toHaveBeenCalledWith("safety.rules.delete", { id: 4 }));
+    await vi.waitFor(() => expect((c.view().status as SafetyRule[]).map((r) => r.id)).toEqual([1, 2, 3, 5]));
     expect(c.view().hidden).toEqual([]);
   });
 });

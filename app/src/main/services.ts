@@ -323,7 +323,7 @@ function subViewHTML(entry: (typeof CAPABILITIES)[number], service: string, v: S
   const idle = v.busy !== null;
   const why = whyOf(entry.kind, service);
   // The button says what it does: 「改用 Brave」, or 「使用中」 once it is the one. The page is short, so the row is
-  // not sticky: inside the dialog's close column a sticky bar stood as a box of another colour above the edge.
+  // not sticky: a sticky bar stood as a box of another colour above the dialog's edge.
   const acts = actionRow({
     cls: "svc-acts",
     primary: { label: esc(inUse ? t("services.inUse") : t("services.useThis", { p0: name })), attrs: ` data-svc="use" data-service="${esc(service)}" data-k="svc-use"${inUse || !row?.usable || idle ? " disabled" : ""}` },

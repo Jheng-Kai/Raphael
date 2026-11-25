@@ -10,6 +10,7 @@ from raphael_core.agent.history import AgentHistory
 from raphael_core.agent.persona import phrase
 from raphael_core.background.run import RunLimits
 from raphael_core.background.service import _prompts
+from raphael_core.background.tasks import Refused
 from raphael_core.brain.settings import SettingsStore
 from raphael_core.protocol import INVALID_PARAMS, NOT_FOUND, RpcError
 
@@ -191,6 +192,177 @@ async def test_a_task_that_did_not_finish_can_be_run_again(make_rig, conn, state
     )  # fmt: skip
     assert turn_row.text == "Second time."  # completed by the report like any other
     assert rig.task(new).text == TASK_TEXT and rig.task(new).session_id == "s1"
+
+
+@pytest.mark.parametrize("state", ["interrupted", "cancelled", "limit", "failed"])
+async def test_the_failed_message_of_a_task_leaves_the_history_when_it_is_run_again(make_rig, conn, state):
+    """The retry icon under a failed hand-off left the failure where it was and drew the new attempt below it: the message
+    of the attempt it replaces is taken out of the stored history, and told as when a turn is deleted."""
+    rig = make_rig()
+    rig.service._closing = True
+    old, old_turn, history = hand_over(rig, conn)
+    rig.service._queue.clear()
+    rig.service._closing = False
+    finish(rig, old, state, "x")
+    rig.client.replies = [report("Second time.")]
+    rig.notifications.clear()
+    new = (await rig.rpc.call("worker.rerun", {"task_id": old}))["task_id"]
+    assert history.get(old_turn) is None
+    assert ("agent.turn", {"turn_id": old_turn, "member_id": 0, "failure": None}) in rig.notifications
+    await rig.wait_for_reports()
+    assert history.get(rig.task(new).turn_id).text == "Second time."
+    assert [row[0] for row in conn.execute("SELECT id FROM agent_turns WHERE session_id='s1'")] == [rig.task(new).turn_id]
+
+
+async def test_a_task_run_again_keeps_everything_the_owner_sent(make_rig, conn):
+    """The new attempt's turn repeated `old.text`, the expanded instruction, with no quote and no files, and once the old turn
+    was gone the conversation could not find the file again: it carries the message as it was sent."""
+    from raphael_core.agent.attachment_inputs import earlier_files
+
+    rig = make_rig()
+    history = AgentHistory(conn, rig.wall)
+    quote = {"text": "the total is wrong", "author": "Raphael"}
+    files = [{"name": "invoice.pdf", "mime": "application/pdf", "id": "stored-invoice", "size": 12}]
+    rig.service._closing = True
+    turn_id = history.add(session_id="s1", question="/review this file", route="delegate", prefix="Understood", text=phrase("en", "handoff"),
+                          status="done", source="app", quote=quote, attachments=files)
+    old = rig.submit("Review the attached file and list what is wrong.")
+    rig.service.attach_turn(old, turn_id)
+    rig.service._queue.clear()
+    rig.service._closing = False
+    finish(rig, old, "failed", "x")
+    rig.client.replies = [report("Again.")]
+    new = (await rig.rpc.call("worker.rerun", {"task_id": old}))["task_id"]
+    row = history.get(rig.task(new).turn_id)
+    assert (row.question, row.quote, row.attachments) == ("/review this file", quote, files)
+    assert earlier_files([row], []) == [{"name": "invoice.pdf", "mime": "application/pdf", "id": "stored-invoice"}]
+    await rig.wait_for_reports()
+
+
+async def test_the_worker_of_a_rerun_receives_the_files_of_the_original_hand_off(make_rig, conn, tmp_path):
+    """Only the screen showed the file again: the new task was handed no attachment, and with the old turn gone nothing else
+    held it, so the worker could not see the file the owner attached."""
+    from raphael_core.services.attachment_store import AttachmentStore
+    from raphael_core.services.attachments import checked
+
+    rig = make_rig()
+    store = AttachmentStore(tmp_path / "attachments")
+    rig.service.use_attachment_store(store)
+    history = AgentHistory(conn, rig.wall)
+    saved = store.save(checked("invoice.txt", "text/plain", b"INVOICE-TOTAL-4242"))
+    rig.service._closing = True
+    turn_id = history.add(session_id="s1", question="review invoice.txt", route="delegate", prefix="Understood", text=phrase("en", "handoff"),
+                          status="done", source="app", attachments=[saved.metadata()])
+    old = rig.submit("review invoice.txt")
+    rig.service.attach_turn(old, turn_id)
+    rig.service._queue.clear()
+    rig.service._closing = False
+    finish(rig, old, "failed", "x")
+    rig.client.replies = [report("Reviewed.")]
+    await rig.rpc.call("worker.rerun", {"task_id": old})
+    await rig.wait_for_reports()
+    assert "INVOICE-TOTAL-4242" in rig.client.chat_calls[0]["messages"][1]["content"]
+
+
+async def test_a_rerun_waiting_for_its_files_starts_nothing_once_the_history_was_cleared(make_rig, conn):
+    rig = make_rig()
+    rig.service._closing = True
+    old, old_turn, history = hand_over(rig, conn)
+    rig.service._queue.clear()
+    rig.service._closing = False
+    finish(rig, old, "failed", "x")
+    reading, release = asyncio.Event(), asyncio.Event()
+
+    async def slow_read(origin):
+        reading.set()
+        await release.wait()
+        return []
+
+    rig.service._original_files = slow_read
+    rig.client.replies = [report("Should never run.")]
+    asked = asyncio.ensure_future(rig.service._rerun({"task_id": old}))
+    await asyncio.wait_for(reading.wait(), 5)
+    history.delete(old_turn)  # what a clear of the history and the tasks leaves
+    rig.service._store.delete(old)
+    release.set()
+    with pytest.raises(RpcError) as error:
+        await asked
+    assert error.value.code == NOT_FOUND
+    assert conn.execute("SELECT COUNT(*) FROM worker_tasks").fetchone()[0] == 0
+    assert conn.execute("SELECT COUNT(*) FROM agent_turns").fetchone()[0] == 0
+    assert rig.client.chat_calls == []
+
+
+async def test_a_rerun_waiting_for_its_files_starts_nothing_for_a_new_task_that_took_the_old_ids(make_rig, conn):
+    """Once the rows were cleared a new task and turn can get the old ids again: they are another message's, not the one asked for."""
+    rig = make_rig()
+    rig.service._closing = True
+    old, old_turn, history = hand_over(rig, conn)
+    rig.service._queue.clear()
+    finish(rig, old, "failed", "x")
+    reading, release = asyncio.Event(), asyncio.Event()
+
+    async def slow_read(origin):
+        reading.set()
+        await release.wait()
+        return []
+
+    rig.service._original_files = slow_read
+    rig.client.replies = [report("Should never run.")]
+    asked = asyncio.ensure_future(rig.service._rerun({"task_id": old}))
+    await asyncio.wait_for(reading.wait(), 5)
+    history.delete(old_turn)
+    rig.service._store.delete(old)
+    reused_turn = history.add(session_id="s2", question="another message", route="delegate", prefix="Understood", text=phrase("en", "handoff"),
+                              status="done", source="voice")
+    reused = rig.submit("another task")
+    rig.service.attach_turn(reused, reused_turn)
+    rig.service._queue.clear()
+    finish(rig, reused, "failed", "x")
+    assert (reused, reused_turn) == (old, old_turn), "the ids were handed out again"
+    rig.service._closing = False
+    release.set()
+    with pytest.raises(RpcError) as error:
+        await asked
+    assert error.value.code == NOT_FOUND
+    assert conn.execute("SELECT COUNT(*) FROM worker_tasks WHERE rerun_of IS NOT NULL").fetchone()[0] == 0
+    assert rig.client.chat_calls == []
+
+
+async def test_a_second_request_to_run_a_failed_task_again_starts_nothing(make_rig, conn):
+    rig = make_rig()
+    rig.service._closing = True
+    old, old_turn, history = hand_over(rig, conn)
+    rig.service._queue.clear()
+    rig.service._closing = False
+    finish(rig, old, "failed", "x")
+    rig.client.replies = [report("Once.")]
+    first = (await rig.rpc.call("worker.rerun", {"task_id": old}))["task_id"]
+    with pytest.raises(RpcError) as error:
+        await rig.rpc.call("worker.rerun", {"task_id": old})
+    assert error.value.code == INVALID_PARAMS
+    assert [row[0] for row in conn.execute("SELECT id FROM worker_tasks WHERE rerun_of=?", (old,))] == [first]
+    assert [row[0] for row in conn.execute("SELECT id FROM agent_turns WHERE session_id='s1'")] == [rig.task(first).turn_id]
+    await rig.wait_for_reports()
+
+
+async def test_a_refused_rerun_keeps_the_failure_it_would_have_replaced(make_rig, conn):
+    rig = make_rig()
+    rig.service._closing = True
+    old, old_turn, history = hand_over(rig, conn)
+    rig.service._queue.clear()
+    rig.service._closing = False
+    finish(rig, old, "failed", "x")
+    original = rig.service.submit
+
+    def refuse(**_):
+        raise Refused("worker_disabled")
+
+    rig.service.submit = refuse
+    with pytest.raises(RpcError):
+        await rig.rpc.call("worker.rerun", {"task_id": old})
+    rig.service.submit = original
+    assert history.get(old_turn) is not None
 
 
 @pytest.mark.parametrize("state", ["done", "queued", "running"])

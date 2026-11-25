@@ -16,7 +16,7 @@ const failureKeys = [
   "languages.003", "languages.unavailable", "local.deleteFailed", "local.failed",
   "mcp.testFailed", "members.nameEmpty", "members.nameTaken", "members.profile.badCommand",
   "members.profile.noRoutines", "members.sourceBad", "msg.tg.codeGone",
-  "onboarding.clipboardEmpty", "page.failed", "page.report.saveFailed", "plugins.connectFailed",
+  "onboarding.clipboardEmpty", "page.failed", "page.report.saveFailed", "plugins.connectFailed", "projectFolders.switchFilters", "projectFolders.switchSlow",
   "rooms.memberCount", "rooms.voiceFailed", "services.urlInvalid", "skillLib.duplicate",
   "skillLib.duplicateIn", "skillLib.failed", "store.notOpen", "store.unavailable", "ui.002", "undo.001",
 ];
@@ -32,7 +32,7 @@ const unseenKeys = [
 // These notices contain a recovery, navigation or undo action.
 const actionKeys = [
   "agent.title", "conn.lost", "conn.relogin", "dictionary.023", "history.020",
-  "keychain.askAgain", "keychain.refused", "models.choose", "reminder.waiting", "rules.deleted", "ui.001",
+  "keychain.askAgain", "keychain.refused", "models.choose", "reminder.waiting", "ui.001",
 ];
 // These existing lookup tables supply details for those failures and notices.
 const lookupKeys = [
@@ -58,7 +58,8 @@ const allowedKeys = new Set([...failureKeys, ...unseenKeys, ...actionKeys, ...lo
 
 // Existing producers for messages whose text depends on a validated error or event.
 const forwarded: Record<string, readonly string[]> = {
-  "composer-folder.ts": ["message"], // Git refuses the branch switch and explains how to recover.
+  // Git refuses the branch switch and explains how to recover; the core's own refusals are localized.
+  "composer-folder.ts": ["message", "switchFailure(message)"],
   "connection-lost.ts": ["connectionLostHTML(lost.name, lost.id)"],
   "connections.ts": ["text", "failureText(result.error)"],
   "conversation-card-actions.ts": ["text"],
@@ -74,6 +75,7 @@ const forwarded: Record<string, readonly string[]> = {
   "undo.ts": ["action.message", "current.action.failure?.(err)"],
 };
 const producers: Record<string, readonly string[]> = {
+  "composer-folder.ts": ["switchFailure"],
   "connection-lost.ts": ["connectionLostHTML"],
   "keychain-refused.ts": ["keychainRefusedHTML"],
   "languages.ts": ["chooseLanguageVariant", "toggleTranscriptionLanguage"],
@@ -134,7 +136,9 @@ test("toast messages use only the allowlisted keys and existing message producer
     }
     function checkMessage(node: ts.Expression): void {
       if (forwarded[file]?.includes(node.getText(source))) return;
-      if (ts.isConditionalExpression(node)) {
+      if (ts.isParenthesizedExpression(node)) {
+        checkMessage(node.expression);
+      } else if (ts.isConditionalExpression(node)) {
         checkMessage(node.whenTrue);
         checkMessage(node.whenFalse);
       } else if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken) {

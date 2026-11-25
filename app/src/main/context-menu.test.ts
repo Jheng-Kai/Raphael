@@ -96,6 +96,27 @@ describe("a right click is the ⋯ of its row", () => {
     expect(document.querySelectorAll("#app-popover")).toHaveLength(1);
   });
 
+  test("in Settings a right click opens nothing, not even on a row that has a ⋯, while the ⋯ itself still opens when pressed", () => {
+    const settings = document.createElement("div");
+    settings.className = "modal-scrim";
+    settings.append(document.getElementById("a")!);
+    document.body.append(settings);
+    for (const target of [document.getElementById("open-a")!, document.querySelector("#a [data-conversation-more]")!, document.getElementById("a")!]) {
+      closeMenu();
+      expect(rightClick(target).defaultPrevented).toBe(true); // nor the browser's own menu
+      expect(popover()).toBeNull();
+      expect(menuKey(target).defaultPrevented).toBe(true);
+      expect(popover()).toBeNull();
+    }
+    document.querySelector<HTMLElement>("#a [data-conversation-more]")!.click();
+    expect(picks()).toEqual(["rename-a", "move-a", "delete-a"]);
+    // Connect apps, drawn in the same window on its own, is not Settings: its rows keep their right click.
+    closeMenu();
+    settings.setAttribute("data-standalone", "");
+    rightClick(document.getElementById("a")!);
+    expect(picks()).toEqual(["rename-a", "move-a", "delete-a"]);
+  });
+
   test("the menu stands at the pointer, and a click on the ⋯ keeps it under the button", () => {
     rightClick(document.getElementById("open-a")!, 300, 200);
     expect([popover()!.style.left, popover()!.style.top]).toEqual(["300px", "204px"]);

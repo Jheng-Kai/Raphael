@@ -37,13 +37,16 @@ alone, or with none chosen its own folder and the team folder. A file tool of th
 computer, of the Docker computer (on a folder bound from the PC), of the owner's file
 tools, or a command that names a file elsewhere asks the owner's yes card in 自動, 手動
 and 計畫, and a no writes nothing; in 全部允許 it is made with no card (R-AG-35); a command's own programs are
-not read. Every project is mounted read-only in the Docker computer (R-COMP-PROJECT-01), so no command there
-writes a project; a file tool's write to the chosen project is made on the PC, to any other project is the owner's
-yes (a link or junction in a project is never followed), and a container of an earlier release that still has a
+not read. A write into another remembered project, one that is not the member's chosen one, is refused in every
+mode and with or without a yes, asks no card (not in 手動 or 計畫 either, in a task or a CLI brain's command), and is not run when a command names such a file. Every project is
+mounted read-only in the Docker computer (R-COMP-PROJECT-01), so no command there writes a project; a file tool's
+write to the chosen project (or one inside it) is made on the PC, to any other project is refused
+(a link or junction in a project is never followed), and a container of an earlier release that still has a
 project read-write is made again read-only at its next idle start. The shared container is every member's: its
 shell can still read every project, and write every member's workspace and the team folder. Core only (no screen
-changes): `core/tests/agent/test_write_boundary.py`, `core/tests/computer/test_shell_writes.py`,
-`core/tests/computer/test_write_boundary_computer.py`.
+changes): `core/tests/agent/test_write_boundary.py`, `core/tests/agent/test_unchosen_project.py`,
+`core/tests/computer/test_shell_writes.py`, `core/tests/computer/test_write_boundary_computer.py`,
+`core/tests/computer/test_unchosen_project_computer.py`, `core/tests/background/test_unchosen_project_background.py`.
 
 Opening a page opens the Computer tab on that same page. The page fills the frame
 under the [host browser toolbar](#host-browser-toolbar). A takeover card appears only while a member waits for the owner for
@@ -1926,7 +1929,11 @@ every turn and task, every source and brain (API, and CLI through its MCP list) 
   does, and no row, label or setting names, shows or opens a member's own folder. Add folder is the native picker.
 - Git branches are visible beside the project and on the separate branch button. Its card checks the current ref
   and lists local branches. If Git is unavailable, a branch read from HEAD has no switch choices. Git's refusal
-  appears in the toast. Core Git calls disable hooks and fsmonitor. Repositories with their own filters
+  appears in the toast. A read is one Git call (`for-each-ref` with `%(HEAD)`) within five seconds; a switch has
+  its own two minutes (`SWITCH_SECONDS`), one at a time per repository, so a slow PC no longer hears "failed" for a
+  switch Git made. A second press while one runs starts nothing; after a failed answer the button re-reads the real
+  branch (a read that fails keeps what was known, so the button stays),
+  and the core's refusals (too slow, own filters) are said in the owner's words. Core Git calls disable hooks and fsmonitor. Repositories with their own filters
   must be switched in the owner's terminal. Migration 99 keeps the valid old paths within the project limit.
 - Local Docker bind-mounts existing local projects under /home/cua/projects. It skips UNC paths and, if launching
   with project mounts fails, tries once with only the workspace and team mounts. The prompt uses the available
@@ -1939,7 +1946,7 @@ Offline checks cover the migration, permissions, prompts, temporary Git reposito
 See [General](settings-appearance.md#project-folders-in-general) for adding, cancelling and removing projects.
 
 ```powershell
-npm run look -- member-no-own-folder composer-folder composer-folder-menu composer-folder-added composer-folder-many composer-branch composer-row-narrow composer-row-language composer-row-owner --theme both --width 1120,720,1920x1080
+npm run look -- member-no-own-folder composer-folder composer-folder-menu composer-folder-added composer-folder-many composer-branch composer-branch-slow composer-row-narrow composer-row-language composer-row-owner --theme both --width 1120,720,1920x1080
 ```
 
 Compare the composer controls with the permission control.

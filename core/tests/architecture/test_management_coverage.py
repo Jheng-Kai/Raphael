@@ -53,12 +53,25 @@ def test_owner_only_rpc_cannot_become_a_direct_tool_by_adding_a_row():
 
 
 def test_vault_rpcs_are_owner_only_without_model_or_private_read_settings():
-    methods = {"vault.list", "vault.add", "vault.update", "vault.remove", "vault.preview", "vault.cancel", "vault.import"}
+    methods = {"vault.list", "vault.add", "vault.update", "vault.reveal", "vault.remove", "vault.preview", "vault.cancel", "vault.import"}
     assert {name for name in OWNER_ONLY if name.startswith("vault.")} == methods
     assert not unclassified(methods)
     assert not methods & ({item.rpc for item in ACTIONS} | READ_ONLY_RPCS | INTERACTION_RPCS.keys())
     assert not any(key.startswith("vault") for key in DEFAULTS)
     assert not any(item.rpc.startswith("vault.") or (item.setting or "").startswith("vault") for item in ACTIONS)
+
+
+def test_revealing_a_private_value_is_owner_only_and_no_model_or_member_tool_reaches_it():
+    methods = {"vault.reveal", "connectors.reveal_key"}
+    assert methods <= OWNER_ONLY.keys() and not unclassified(methods)
+    assert not methods & ({item.rpc for item in ACTIONS} | READ_ONLY_RPCS | INTERACTION_RPCS.keys())
+    assert not any("reveal" in item.name or "reveal" in repr(item.schema) for item in ACTIONS)
+    assert "reveal" not in repr(DEFINITIONS)
+    # Only the management table names them: no tool, prompt or other service calls them by name.
+    source = ROOT / "core/src/raphael_core"
+    named = {path.relative_to(source).as_posix() for path in source.rglob("*.py")
+             if any(method in path.read_text(encoding="utf-8") for method in methods)}
+    assert named == {"management.py"}
 
 
 def test_owner_upload_and_routine_test_do_not_add_model_authority():

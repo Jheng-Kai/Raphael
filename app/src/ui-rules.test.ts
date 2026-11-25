@@ -75,6 +75,13 @@ test("closing is a ×, never a 「關閉」 text button", () => {
   }
 });
 
+test("what destroys asks in the red confirmation dialog, never in its own place (R-UI-56)", () => {
+  // The first press turning an item or a button into its question, and a second press confirming, is gone from the whole app.
+  for (const file of sources) expect(read(file), rel(file)).not.toMatch(/data-asking|data-confirm-item|DISCONNECT_CONFIRM_MS/);
+  const asked = Object.entries(zhTW).filter(([, text]) => /^(?:確定(?:刪除|移除|中斷)|再按一次刪除)/.test(text)).map(([key]) => key);
+  expect(asked).toEqual([]);
+});
+
 describe("action rows", () => {
   test("primary is last, Cancel immediately precedes it, and destruction is first", () => {
     const html = actionRow({
@@ -104,7 +111,7 @@ describe("action rows", () => {
     // Provider/model-picker work is owned by another branch; gold approval cards keep their product order.
     const rows = /<(?:div|span) class="(?:mb-dlg-act|mb-ract|av-crop-act|cs-acts|add-acts|svc-acts|addword-actions|rules-acts)"/;
     expect(sources.filter((f) => !["providers.ts", "model-picker.ts"].includes(rel(f)) && rows.test(read(f))).map(rel)).toEqual([]);
-    for (const file of ["member-dialogs.ts", "avatar-settings.ts", "connections.ts", "services.ts", "messaging.ts", "pages/dictionary.ts", "setup-rows.ts", "onboarding/mount.ts", "safety-rules.ts", "local-models.ts"]) {
+    for (const file of ["member-dialogs.ts", "avatar-settings.ts", "connections.ts", "services.ts", "messaging.ts", "pages/dictionary.ts", "setup-rows.ts", "onboarding/mount.ts", "safety-rules.ts"]) {
       expect(read(join(MAIN, file)), file).toContain("actionRow(");
     }
   });

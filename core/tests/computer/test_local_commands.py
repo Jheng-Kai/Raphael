@@ -145,6 +145,100 @@ def test_on_a_mac_open_and_an_app_brought_to_the_front_show_something(command, s
     assert launches_on_screen(command, "darwin") is shows
 
 
+# R-PC-06, issue #326: the words of a program fed to an interpreter are its code, not commands to this PC's shell.
+READ_FILE_SCRIPT = ("python3 - <<'EOF'\nimport json\ntry:\n    json.load(open(p))\nexcept Exception as e:\n"
+                    "    print(type(e).__name__)\nEOF")
+CODE_IS_NOT_A_COMMAND = [
+    'python3 -c "print(1+1)"', """python3 -c 'echo "open(p)"'""", "python3 - <<'EOF'\nprint(\"heredoc-ok\")\nEOF", READ_FILE_SCRIPT,
+    "python3 - <<'EOF'\nstart = 1\nprint(start)\nwrite(1)\nEOF", "python3 <<EOF\nopen(p).read()\nEOF",
+    "cd /tmp && python3 - <<-'PY'\n\topen(p)\n\tPY\n", "python3 - <<\"EOF\"\r\nopen(p)\r\nEOF\r\n",
+    "uv run python - <<'EOF'\nopen(p)\nEOF", "node - <<'EOF'\nopen(p)\nEOF", "cat > read.py <<'EOF'\nopen(p)\nEOF",
+    "cat <<'EOF' > read.py\nopen(p)\nEOF\npython3 read.py", "python3 - <<'A' <<'B'\nopen(p)\nA\nopen(q)\nB",
+]
+# What still opens something, whatever program text stands beside it.
+CODE_BESIDE_A_COMMAND = [
+    "bash <<'EOF'\nopen -a Calculator\nEOF", "sh -s <<EOF\nopen https://example.com\nEOF", "zsh <<'EOF'\nopen -a Safari\nEOF",
+    "cat <<'EOF' | sh\nopen -a Calculator\nEOF", "cat <<'EOF' | bash -s\nopen -a Calculator\nEOF",
+    "python3 - <<'EOF'\nopen(p)\nEOF\nopen -a Calculator", "python3 - <<'EOF'\nopen(p)\nEOF\ncd x && open -a App",
+    "python3 - <<'EOF'\nprint(1)\nopen -a Calculator",  # never closed: a shell would not take it for data either
+    "python3 -c \"print(1 << 2)\"\nopen -a Calculator", "python3 -c 'x = 1 <<EOF'\nopen -a Calculator\nEOF",
+    "cd x && open -a App", "open -a Calculator", "python3 - <<'EOF' | sh\nopen -a Calculator\nEOF",
+    "python3 - <<'EOF'\nopen(p)\nEOF\nxdg-open https://example.com",
+    # An unquoted delimiter: the shell runs the substitutions in the body before the program gets it.
+    "python3 - <<EOF\nprint(1)\n$(open -a Calculator)\nEOF", "python3 - <<EOF\nprint(1)\n`open -a Calculator`\nEOF",
+    "cat > x.py <<-EOF\n\tprint($(open https://example.com))\n\tEOF", "python3 - <<EOF\nx = $(echo $(open -a Calculator))\nEOF",
+    # Several heredocs on a line: each has its own receiver.
+    "python3 - <<A; bash <<B\nopen(p)\nA\nopen -a Calculator\nB", "python3 - <<'A'; sh <<'B'\nprint(1)\nA\nopen -a Calculator\nB",
+    "cat <<'A' > x.py; zsh <<'B'\nopen(p)\nA\nopen -a Calculator\nB",
+    # A shell's own argument is read like the same command typed on its own.
+    # A pipeline continued over a backslash and a newline is one line: the shell on the next physical line reads the body.
+    "cat <<'EOF' \\\n| bash\nopen -a Calculator\nEOF", "cat <<'EOF' \\\n  | sh -s\nopen https://example.com\nEOF",
+    "python3 - <<'EOF' \\\r\n| bash\r\nopen -a Calculator\r\nEOF\r\n", "cat <<'EOF' \\\n\\\n| bash\nopen -a Calculator\nEOF",
+    "dash -c 'open -a Calculator'", "ksh -c 'open https://example.com'", "dash <<'EOF'\nopen -a Calculator\nEOF",
+    "cat <<'A' | python3 - <<'B' | sh\nx\nA\nopen(p)\nB\nopen -a Calculator",
+    "zsh -c 'bash <<EOF\nopen -a Calculator\nEOF'", "bash -c 'python3 - <<EOF\n$(open -a Calculator)\nEOF'",
+]
+# Program text beside a shell's heredoc or an unquoted delimiter without substitutions is still program text.
+MORE_CODE_IS_NOT_A_COMMAND = [
+    "python3 - <<'EOF' \\\n  --flag\nopen(p)\nEOF", "cat <<'EOF' \\\n  > read.py\nopen(p)\nEOF",
+    "python3 - <<'EOF' \\\r\n  > out.txt\r\nopen(p)\r\nEOF\r\n", "python3 - <<'EOF' \\\\\nopen(p)\nEOF",
+    "cat <<'FIRST' - <<'SECOND'\ntext\nFIRST\nopen(p)\nSECOND", "python3 - <<'A' - <<'B'\nopen(p)\nA\nopen(q)\nB",
+    "dash -c 'ls'", "ksh -c 'echo open'",
+    "python3 - <<EOF\nopen(p)\nprint(\\$(open -a X))\nEOF", "python3 - <<EOF\nprint(1)\nopen(p)\nEOF",
+    "python3 - <<'A'; python3 - <<'B'\nopen(p)\nA\nopen(q)\nB", "python3 - <<'A' <<'B'\nopen(p)\nA\nopen(q)\nB",
+    "zsh -c 'python3 - <<EOF\nopen(p)\nEOF'", "sh -c \"python3 - <<'EOF'\nopen(p)\nEOF\"",
+    "python3 - <<'EOF' > out.txt\nopen(p)\nEOF",
+]
+
+
+@pytest.mark.parametrize("platform", ["darwin", "linux", "win32"])
+@pytest.mark.parametrize("command", CODE_IS_NOT_A_COMMAND + MORE_CODE_IS_NOT_A_COMMAND)
+def test_a_programs_own_code_in_a_heredoc_is_not_taken_for_a_command_that_opens_something(command, platform):
+    from raphael_core.computer.on_screen import launches_on_screen, on_screen_fragment
+    assert not launches_on_screen(command, platform) and on_screen_fragment(command, platform) == ""
+
+
+@pytest.mark.parametrize("command", CODE_BESIDE_A_COMMAND)
+def test_a_heredoc_that_a_shell_reads_or_a_command_beside_one_is_still_taken_for_opening_something(command):
+    from raphael_core.computer.on_screen import launches_on_screen
+    assert launches_on_screen(command, "darwin")
+
+
+def test_a_linux_command_that_opens_a_page_is_refused_beside_code():
+    from raphael_core.computer.on_screen import launches_on_screen
+    assert launches_on_screen("xdg-open https://example.com", "linux")
+    assert launches_on_screen("python3 - <<'EOF'\nopen(p)\nEOF\nxdg-open https://example.com", "linux")
+
+
+@pytest.mark.parametrize("command,fragment,platform", [
+    ("open -a Calculator", "open -a Calculator", "darwin"),
+    ("cd x && open -a App", "open -a App", "darwin"),
+    ("echo hi\nStart-Process https://www.youtube.com\nGet-Date", "Start-Process https://www.youtube.com", "win32"),
+    ('cmd /c "start chrome"', "start chrome", "win32"),
+    ("bash <<'EOF'\nls\nopen -a Safari\nEOF", "open -a Safari", "darwin"),
+    ('[System.Diagnostics.Process]::Start("https://x.test")', "[System.Diagnostics.Process]::Start(", "win32"),
+    ("open " + "x" * 200, "open " + "x" * 75 + "…", "darwin"),
+])
+def test_the_fragment_that_opens_something_is_named_on_one_short_line(command, fragment, platform):
+    from raphael_core.computer.on_screen import on_screen_fragment
+    assert on_screen_fragment(command, platform) == fragment
+
+
+async def test_a_refusal_names_the_fragment_and_a_script_that_reads_a_file_runs(conn):
+    # The member in issue #326 ran the file-reading script above and was refused with no word of what was wrong.
+    host = AsyncMock()
+    host.execute.return_value = {"exit_code": 0, "stdout": "", "stderr": "", "truncated": False}
+    hub = LocalTools(EmptyHub(), conn, host=host)
+    with_mode(hub, "bypass")
+    _, result = await called(hub, CHAT, "echo hi\nStart-Process notepad C:\\notes.txt")
+    assert not result.ok and result.kind == "shows_on_screen"
+    assert "your own computer" in result.text and "`Start-Process notepad C:\\notes.txt`" in result.text
+    host.execute.assert_not_awaited()
+    _, result = await called(hub, CHAT, READ_FILE_SCRIPT.replace("import json", "import json\nstart = 1"))
+    assert result.ok and result.kind != "shows_on_screen"
+    host.execute.assert_awaited_once()
+
+
 @pytest.mark.parametrize("mode", MODES)
 @pytest.mark.parametrize("context", [CHAT, TASK, PHONE], ids=["conversation", "task", "phone"])
 async def test_a_command_that_shows_something_on_the_owners_screen_is_refused_outside_a_quick_question(conn, mode, context):

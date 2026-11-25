@@ -132,6 +132,21 @@ class ToolGate:
             return True
         return not self.full_permission and self.destructive_change(name, arguments)
 
+    def refused_for_call(self, name, arguments) -> str | None:
+        """The words a call is refused in before anything is asked, whatever the owner says (R-FILE-06: a write into a project
+        that is not the member's chosen one), or None. The hub that offers the tool says so (`refused_for_call`); a hub that
+        cannot say, or a call it cannot read, is not refused here (the tool itself still refuses it). Like the data floor's
+        refusal of a write, it is returned before any question is opened, in every place one can be asked."""
+        refuse = getattr(self._plugins, "refused_for_call", None)
+        if not callable(refuse) or not (name.startswith("mcp:") or name == "cli_permission"):
+            return None
+        try:
+            words = refuse(name, arguments)
+        except Exception as exc:
+            logger.warning("Could not tell whether a write is refused: %s", type(exc).__name__)
+            return None
+        return words if isinstance(words, str) and words else None
+
     def destructive_change(self, name, arguments) -> bool:
         """A call that cannot be undone, or that reaches beyond the member's own place: deleting, changing a member's tools,
         importing a local skill, disconnecting, shortening the history kept, a routine's changes to the team, removing a

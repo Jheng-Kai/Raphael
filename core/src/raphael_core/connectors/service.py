@@ -120,6 +120,8 @@ class ConnectorsService:
         # The list of apps outlives a run: `now` is monotonic and means nothing next time, so the file holds `wall` time.
         self._catalog_path, self._wall = directory / CATALOG_FILE, wall
         self._catalog_read = False  # whether the file was looked at since the key last changed
+        # Counts the keys saved: a list fetched with an earlier key is never kept once another key took its place (#320).
+        self._key_generation = 0
         self._catalog_renewal: asyncio.Task | None = None
         self.vault = vault
         self.hub = integrations
@@ -154,7 +156,7 @@ class ConnectorsService:
     def register(self, router) -> None:
         methods = {"catalog": self.catalog, "categories": self.categories, "toolkit": self.toolkit, "connect": self.connect,
                    "status": self.status, "disconnect": self.disconnect, "tools": self.tools,
-                   "set_tools": self.set_tools, "set_key": self.set_key, "label": self.label,
+                   "set_tools": self.set_tools, "set_key": self.set_key, "reveal_key": self.reveal_key, "label": self.label,
                    "remove_account": self.remove_account,
                    "google.configure": self.google_configure, "google.connect": self.google_connect}
         for name, handler in methods.items():
@@ -169,7 +171,7 @@ class ConnectorsService:
             async with asyncio.timeout(budget):
                 # These take the lock themselves, for the steps that need it and never for a wait: a sign-in waits in the browser
                 # for up to ten minutes, and nothing else the owner presses may queue behind it.
-                if name in {"catalog", "categories", "toolkit", "status", "remove_account", "connect", "disconnect",
+                if name in {"catalog", "categories", "toolkit", "status", "remove_account", "connect", "disconnect", "reveal_key",
                             "google.configure", "google.connect"}:
                     return await handler(params)
                 async with self._lock:
@@ -419,6 +421,7 @@ class ConnectorsService:
         return await self._fetch_catalog(before)
 
     async def _fetch_catalog(self, before):
+        generation = self._key_generation
         try:
             items, slugs, cursors = [], set(), set()
             cursor, count, truncated = None, 0, False
@@ -458,11 +461,17 @@ class ConnectorsService:
             result = {"items": items, "categories": categories, "next_cursor": None,
                       "total_items": len(items), "truncated": truncated, "stale": False,
                       "stores_tool_payloads": True, "payload_retention_days": 365}
+            if generation != self._key_generation:
+                # Fetched with the key that was replaced meanwhile: given to the one who asked, never kept or saved.
+                return result
             self._store_catalog = (self.now(), result)
             await asyncio.to_thread(self._save_catalog, result)
+            if generation != self._key_generation:
+                # The key was replaced while the file was written: the old key's list leaves the disk as it left memory.
+                self._catalog_path.unlink(missing_ok=True)
             return result
         except ConnectorFailure:
-            if before:
+            if before and generation == self._key_generation:
                 return {**before[1], "stale": True}
             raise
 
@@ -518,6 +527,11 @@ class ConnectorsService:
     async def categories(self, params):
         return await self.composio.page("/toolkits/categories", cache=True)
 
+    async def reveal_key(self, params):
+        """The saved Composio key, for the owner's Settings to show behind an eye (R-VAULT-07); empty when none is saved.
+        Only the owner's RPC calls this: no model tool does, and nothing here logs or keeps the key."""
+        return {"key": self.vault.get(KEY) or ""}
+
     async def set_key(self, params, *, card_active=None):
         key = _text(params, "key", optional=True)
         if key.startswith("sk-or-"):
@@ -540,6 +554,7 @@ class ConnectorsService:
             if self.vault.filled(KEY):
                 return {"configured": True}
         if key != before:
+            self._key_generation += 1
             self._remove_managed(COMPOSIO_SERVER)
             self.store.session_id, self.store.config_version = "", None
             self._multi_account_session = ""

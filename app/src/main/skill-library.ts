@@ -13,7 +13,7 @@ import { core, membersList, pickOutputFolder } from "./api";
 import { t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
 import { isTopLayer } from "./dismissals";
-import { openActions } from "./member-column";
+import { confirmDelete } from "./member-dialogs";
 import { faceHTML, groupFacesHTML, RAPHAEL_ID } from "./members";
 import { replyContentHTML } from "./message-content";
 import { rememberLayerBack } from "./nav-history";
@@ -64,8 +64,8 @@ export function accessText(access: Access, members: LibraryMember[]): string {
   return names.length <= 2 ? names.join("、") : t("skillLib.people", { count: names.length });
 }
 
-/** A package's controls, on its row and on its page: who may use it and its switch, with an update button on its page when
- *  it has a source. Its ⋯ (更新, 刪除) is not drawn: a right click on the row or the page presses it (context-menu.ts). */
+/** A package's controls, on its row and on its page: who may use it and its switch; on its page also an update button when
+ *  it has a source, and its trash, which asks in the red dialog (Settings has no right click and no ⋯: R-UI-44, R-UI-56). */
 function controlsHTML(p: LibraryPackage, v: SkillLibraryView, page = false): string {
   const busy = v.refreshing.has(p.key) ? " disabled" : "";
   return `<div class="ctl">` +
@@ -73,7 +73,7 @@ function controlsHTML(p: LibraryPackage, v: SkillLibraryView, page = false): str
     `<button type="button" class="sel skl-access" data-skl="access" data-key="${esc(p.key)}" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(t("vault.access"))}"${busy}>` +
     `<span>${esc(accessText(p.access, v.members))}</span>${ico("down")}</button>` +
     (page && p.updatable ? iconBtn("refresh", t("skillLib.update"), ` data-skl="refresh" data-key="${esc(p.key)}"${busy}`) : "") +
-    iconBtn("more", t("members.more", { p0: p.name }), ` data-skl="more" data-key="${esc(p.key)}" aria-haspopup="menu" aria-expanded="false" hidden${busy}`) +
+    (page ? iconBtn("trash", t("skillLib.remove"), ` data-skl="remove" data-key="${esc(p.key)}"${busy}`) : "") +
     tg(p.enabled, `${t("members.profile.enable")} ${p.name}`, ` data-skl="toggle" data-key="${esc(p.key)}"${busy}`) +
     `</div>`;
 }
@@ -108,14 +108,14 @@ function libraryRowHTML(className: string, attrs: string, label: string, control
 const skillToggleHTML = (p: LibraryPackage, skill: LibrarySkill, v: SkillLibraryView): string =>
   tg(skill.enabled, `${t("members.profile.enable")} ${skill.name}`, ` data-skl="skill" data-key="${esc(p.key)}" data-id="${skill.id}"${p.enabled && !v.refreshing.has(p.key) ? "" : " disabled"}`);
 
-/** A skill's own ⋯ (刪除): not drawn, a right click on its row or its page presses it (context-menu.ts). */
-const skillMoreHTML = (p: LibraryPackage, skill: LibrarySkill, v: SkillLibraryView): string =>
-  iconBtn("more", t("members.more", { p0: skill.name }), ` data-skl="skill-more" data-key="${esc(p.key)}" data-id="${skill.id}" aria-haspopup="menu" aria-expanded="false" hidden${v.refreshing.has(p.key) ? " disabled" : ""}`);
+/** A plugin's skill's trash, on its own page: it asks in the red dialog. */
+const skillRemoveHTML = (p: LibraryPackage, skill: LibrarySkill, v: SkillLibraryView): string =>
+  iconBtn("trash", t("skillLib.remove"), ` data-skl="skill-remove" data-key="${esc(p.key)}" data-id="${skill.id}"${v.refreshing.has(p.key) ? " disabled" : ""}`);
 
 /** A skill of a plugin: the whole row opens the skill's page, its switch at the right. */
 function pluginSkillHTML(p: LibraryPackage, skill: LibrarySkill, v: SkillLibraryView): string {
   const label = `<button type="button" class="btn skl-single skl-doc-open" data-skl="open-skill" data-key="${esc(p.key)}" data-id="${skill.id}">${libraryLabelHTML(skill.name, skill.description)}</button>`;
-  return libraryRowHTML("skl-skill", `data-library-skill="${skill.id}"`, label, `<div class="ctl">${skillMoreHTML(p, skill, v)}${skillToggleHTML(p, skill, v)}</div>`);
+  return libraryRowHTML("skl-skill", `data-library-skill="${skill.id}"`, label, `<div class="ctl">${skillToggleHTML(p, skill, v)}</div>`);
 }
 
 function packageSectionHTML(kind: "plugins" | "skills", packages: LibraryPackage[], v: SkillLibraryView): string {
@@ -166,7 +166,7 @@ export const documentBody = (text: string): string => text.replace(/^\uFEFF?---\
  */
 function skillPageHTML(p: LibraryPackage, skill: LibrarySkill, v: SkillLibraryView, headerClose: string, notice: string): string {
   const alone = !isPlugin(p);
-  const head = pageHeadHTML(skill.name, alone ? controlsHTML(p, v, true) : `<div class="ctl">${skillMoreHTML(p, skill, v)}${skillToggleHTML(p, skill, v)}</div>`, headerClose);
+  const head = pageHeadHTML(skill.name, alone ? controlsHTML(p, v, true) : `<div class="ctl">${skillRemoveHTML(p, skill, v)}${skillToggleHTML(p, skill, v)}</div>`, headerClose);
   const doc = v.doc?.id === skill.id ? documentBody(v.doc.text) : null;
   const body = doc !== null ? (doc ? replyContentHTML(doc) : "")
     : v.docFailed ? `<p class="d skl-empty" role="alert">${esc(t("skillLib.failed"))}</p>` : `<p class="d skl-empty">${esc(t("vault.busy"))}</p>`;
@@ -389,23 +389,17 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
       if (access === "all") { closeMenu(); anchor.focus({ preventScroll: true }); }
     });
   };
-  /** The right click's menu on a package's row or page: 更新 when it has a source, and 刪除, asked in place. */
-  const more = (anchor: HTMLElement, key: string): void => {
+  /** A package's trash, on its page: the red dialog asks, and only its red button deletes the package. */
+  const removePackage = async (key: string): Promise<void> => {
     const p = byKey(key);
-    if (!p) return;
-    openActions(anchor, [
-      ...(p.updatable ? [{ id: "refresh", label: t("skillLib.update"), icon: "refresh" as const }] : []),
-      { id: "delete", label: t("skillLib.remove"), icon: "trash", ask: t("skillLib.removeAsk") },
-    ], picked => {
-      if (picked === "refresh") void refresh(key);
-      else void core("skills.library.delete", { key })
-        .then(() => {
-          state.packages = state.packages.filter(other => other.key !== key);
-          // Deleted from its own page: the list comes back, where it was left.
-          if (state.page === key) backToList(); else redraw();
-        })
-        .catch(error => toaster.info(failureText(error)));
-    });
+    if (!p || !(await confirmDelete(p.name, { words: { title: t("confirm.removeTitle", { p0: p.name }), hint: t("skillLib.removeHint"), action: t("skillLib.remove") } }))) return;
+    await core("skills.library.delete", { key })
+      .then(() => {
+        state.packages = state.packages.filter(other => other.key !== key);
+        // Deleted from its own page: the list comes back, where it was left.
+        if (state.page === key) backToList(); else redraw();
+      })
+      .catch(error => toaster.info(failureText(error)));
   };
   /** After a package changed under an open page: a package that is no longer a plugin, or a skill that is gone, leaves its page. */
   const settle = (): void => {
@@ -414,19 +408,18 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
     else if (key && state.skill !== null && !byKey(key)?.skills.some(skill => skill.id === state.skill)) backFromSkill();
     else redraw();
   };
-  /** The right click's menu on a skill of a plugin: 刪除 alone, asked in place, as a whole package's is. The package stays,
-   *  unless it was its last skill. */
-  const moreSkill = (anchor: HTMLElement, key: string, id: number): void => {
-    if (!byKey(key)?.skills.some(skill => skill.id === id)) return;
-    openActions(anchor, [{ id: "delete", label: t("skillLib.remove"), icon: "trash", ask: t("skillLib.removeAsk") }], () => {
-      void core<{ package?: LibraryPackage }>("skills.library.delete", { key, skill: id })
-        .then(answer => {
-          if (answer?.package) replace(answer.package);
-          else state.packages = state.packages.filter(other => other.key !== key);
-          settle();
-        })
-        .catch(error => { toaster.info(failureText(error)); void load(); });
-    });
+  /** A plugin's skill's trash, on the skill's page: the red dialog asks, as a whole package's does. The package stays, unless it
+   *  was its last skill. */
+  const removeSkill = async (key: string, id: number): Promise<void> => {
+    const known = byKey(key)?.skills.find(skill => skill.id === id);
+    if (!known || !(await confirmDelete(known.name, { words: { title: t("confirm.removeTitle", { p0: known.name }), hint: t("skillLib.removeHint"), action: t("skillLib.remove") } }))) return;
+    await core<{ package?: LibraryPackage }>("skills.library.delete", { key, skill: id })
+      .then(answer => {
+        if (answer?.package) replace(answer.package);
+        else state.packages = state.packages.filter(other => other.key !== key);
+        settle();
+      })
+      .catch(error => { toaster.info(failureText(error)); void load(); });
   };
   root.addEventListener("click", event => {
     const target = (event.target as Element).closest<HTMLElement>("[data-skl]");
@@ -448,8 +441,8 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
         break;
       }
       case "access": chooseAccess(target, key); break;
-      case "more": more(target, key); break;
-      case "skill-more": moreSkill(target, key, Number(target.dataset.id)); break;
+      case "remove": void removePackage(key); break;
+      case "skill-remove": void removeSkill(key, Number(target.dataset.id)); break;
       case "import-go": {
         const text = root.querySelector<HTMLTextAreaElement>("#skl-text")?.value ?? "";
         const source = root.querySelector<HTMLInputElement>("#skl-source")?.value.trim() ?? "";

@@ -82,6 +82,45 @@ test("the branch card switches local branches and shows Git's refusal", async ()
   expect(find("#branch").textContent).toBe("draft");
 });
 
+test("a switch whose answer failed shows the branch Git really left the folder on, in the owner's words", async () => {
+  settings.member_work_folder = { "3": repo };
+  await mount();
+  find("#branch").click(); await flush();
+  // Git switched, then the answer timed out: the folder now reads draft.
+  api.folderInfo.mockImplementation(async path => info(path, "draft"));
+  api.switchBranch.mockRejectedValueOnce(new Error("[-32603] Git did not finish switching branches in time"));
+  await choose(0); await flush();
+  expect(document.querySelector(".toast")?.textContent).toContain("Git 太久沒有完成切換");
+  expect(find("#branch").textContent).toBe("draft");
+  find("#branch").click(); await flush();
+  api.switchBranch.mockRejectedValueOnce(new Error("[-32602] This repository runs its own Git filters. Switch branches in your own terminal."));
+  await choose(1); await flush();
+  expect([...document.querySelectorAll(".toast")].map(toast => toast.textContent).join(" ")).toContain("自己的 Git 過濾器");
+});
+
+test("a failed switch whose re-read also fails keeps the branch button to try again", async () => {
+  settings.member_work_folder = { "3": repo };
+  await mount();
+  find("#branch").click(); await flush();
+  api.folderInfo.mockRejectedValue(new Error("[-32603] Git did not respond within five seconds"));
+  api.switchBranch.mockRejectedValueOnce(new Error("[-32603] Git did not finish switching branches in time"));
+  await choose(0); await flush();
+  expect(find("#branch").hidden).toBe(false);
+  expect(find("#branch").textContent).toBe("main");
+});
+
+test("a second branch press while Git still switches starts nothing", async () => {
+  settings.member_work_folder = { "3": repo };
+  await mount();
+  let finish!: (value: FolderInfo) => void;
+  api.switchBranch.mockReturnValueOnce(new Promise<FolderInfo>(resolve => { finish = resolve; }));
+  find("#branch").click(); await flush(); await choose(0);
+  find("#branch").click(); await flush(); await choose(0);
+  expect(api.switchBranch).toHaveBeenCalledTimes(1);
+  finish(info(repo, "draft")); await flush();
+  expect(find("#branch").textContent).toBe("draft");
+});
+
 test("without the Git CLI the composer shows the branch with no choices", async () => {
   settings.member_work_folder = { "3": repo };
   api.folderInfo.mockImplementation(async path => ({ ...info(path), branches: [] }));

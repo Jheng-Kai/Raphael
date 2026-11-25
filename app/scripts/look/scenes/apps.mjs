@@ -121,8 +121,8 @@ export default [
   scene("accounts-remove-waiting", "A sign-in that is still waiting is removed at once, with no question", [
     ...accountsPage, click('[data-conn="account-menu"][data-account="ca_wait"]'), click('#app-popover [data-conn="account-remove"]'), waitGone('[data-account="ca_wait"]'), check("accounts-removed-waiting"),
   ], { managedConnectors: [gmailAccounts()] }),
-  scene("accounts-remove-last", "The last connected account is the app: removing it asks the app's own disconnect question", [
-    ...accountsPage, click('[data-conn="account-menu"][data-account="ca_main"]'), click('#app-popover [data-conn="account-remove"]'), wait('.menu [data-conn="disconnect"]'), check("accounts-remove-last"),
+  scene("accounts-remove-last", "The last connected account is the app: removing it asks the app's own disconnect question in the red dialog", [
+    ...accountsPage, click('[data-conn="account-menu"][data-account="ca_main"]'), click('#app-popover [data-conn="account-remove"]'), wait(".mb-delete"), check("accounts-remove-last"),
   ], { managedConnectors: [gmailAccounts()] }),
   // A sign-in that waits holds no other app back and can be cancelled.
   scene("sign-in-waits", "One managed sign-in waits for the browser: its row says so and has an enabled 取消; every other 連結 stays pressable", [
@@ -157,9 +157,9 @@ export default [
     ...open, wait(".cs-card"), click('[data-conn="join"][data-id="slack"]'), wait('[data-conn="cancel-login"]'), click('[data-conn="cancel-login"]'),
     wait('[data-conn="join"][data-id="slack"]'), check("sign-in-cancelled"),
   ], { composioConfigured: true, pluginsConnecting: true }),
-  scene("connector-uninstalled", "Uninstalling an app on the second press: it leaves the list, and the chip's count goes down with the connected list", [
+  scene("connector-uninstalled", "Uninstalling an app asks in the red dialog first; its red button removes it from the list, and the chip's count goes down with the connected list", [
     ...open, click('[data-conn="connected"]'), click('[data-conn="open"][data-id="composio:notion"]'), click('[data-conn="server-menu"][data-id="composio:notion"]'),
-    click('.menu [data-conn="disconnect"]'), click('.menu [data-conn="disconnect"]'), waitGone('[data-k="cs-open:composio:notion"]'), check("apps-count"),
+    click('.menu [data-conn="disconnect"]'), wait(".mb-delete"), check("connector-uninstall-ask"), click('.mb-delete [data-dlg="delete"]'), waitGone('[data-k="cs-open:composio:notion"]'), check("apps-count"),
   ], {
     managedConnectors: [notion(), google, connector("composio:linear", { name: "Linear", description: "追蹤專案與團隊議題", enabled_tools: ["LINEAR_LIST_ISSUES"] })],
     pluginTools: { ...base.pluginTools, "composio:notion": notionTools },

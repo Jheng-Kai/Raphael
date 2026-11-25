@@ -4,8 +4,8 @@ import { noticeHTML } from "./missing";
 import "./model-picker.css";
 import { getLocale, t } from "./i18n";
 import {
-  type LocalConfirm,
   type LocalView,
+  deleteWords,
   faceTitle,
   localListHTML,
 } from "./local-models";
@@ -842,7 +842,6 @@ class MountedPicker implements ModelPicker {
   private sort: PickerSort = "name";
   private maker = "";
   private localDraft: string | null = null;
-  private confirm: LocalConfirm | null = null;
 
   constructor(container: HTMLElement, options: ModelPickerOptions) {
     this.o = { ...options };
@@ -884,7 +883,7 @@ class MountedPicker implements ModelPicker {
   close(): void { this.dialog?.close(); }
   private selectSource(source: string): void {
     this.source = source;
-    this.query = ""; this.maker = ""; this.confirm = null;
+    this.query = ""; this.maker = "";
     this.paint();
   }
 
@@ -998,7 +997,7 @@ class MountedPicker implements ModelPicker {
     const source = this.selectedSource(), listEl = this.dialog?.el.querySelector(".mc-list");
     if (!listEl || !source) return;
     if (source.id === "local-speech" && this.o.local) {
-      listEl.innerHTML = localListHTML(this.o.local, this.confirm, true);
+      listEl.innerHTML = localListHTML(this.o.local, true);
       listEl.querySelectorAll<HTMLElement>('[data-act="use"]').forEach((row) => {
         const selected = row.dataset.name === this.localDraft;
         row.setAttribute("aria-current", String(selected)); row.setAttribute("aria-checked", String(selected));
@@ -1090,9 +1089,11 @@ class MountedPicker implements ModelPicker {
     const act = target.dataset.act, name = target.dataset.name;
     if (act === "use" && name) { this.localDraft = name; this.paintRows(); }
     if (act === "cancel") this.o.onCancelLocal?.();
-    if (act === "local-menu" && name) openActions(target, [{ id: "delete", label: t("local.deleteLabel", { p0: target.dataset.title ?? name }), icon: "trash" }], () => { this.confirm = { kind: "delete", name }; this.paintRows(); });
-    if (act === "dismiss") { this.confirm = null; this.paintRows(); }
-    if (act === "confirm" && name) { this.confirm = null; this.o.onDeleteLocal?.(name); }
+    if (act === "local-menu" && name) {
+      const local = this.o.local, model = Array.isArray(local?.models) ? local.models.find(item => item.name === name) : undefined;
+      // The red dialog asks (R-UI-56); the model is deleted only by its red button.
+      if (local && model) openActions(target, [{ id: "delete", label: t("local.deleteLabel", { p0: target.dataset.title ?? name }), icon: "trash", ask: deleteWords(model, local) }], () => this.o.onDeleteLocal?.(name));
+    }
   }
   private use(): void {
     if (this.dialog?.el.querySelector<HTMLButtonElement>('[data-dlg="use"]')?.disabled) return;

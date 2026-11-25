@@ -24,7 +24,7 @@ import { serviceIconOf } from "./service-icons";
 import { entryIcon } from "./service-mark";
 export { entryIcon, iconHTML } from "./service-mark";
 import type { AuditEntry, ConnectionGroup, ConnectionTool, MainEvent, NewConnection, StoreService, Words } from "./types";
-import { DISCONNECT_CONFIRM_MS, type Choice, actionRow, btn, closeMenu, esc, fieldHTML, ico, iconBtn, backButton, headerCloseButton, iconButton, openPopover, row, sel, st, tg, toaster } from "./ui";
+import { type Choice, actionRow, btn, closeMenu, esc, fieldHTML, ico, iconBtn, backButton, headerCloseButton, iconButton, openPopover, row, sel, st, tg, toaster } from "./ui";
 
 /** How long the next sign-in waits for the one it cancelled to give its account back before it gives up beginning. */
 const LOGIN_STOP_MS = 600_000;
@@ -112,6 +112,8 @@ export interface ConnectionsView {
   /** Built-in services, loaded independently from the optional managed catalog. */
   catalog: StoreService[] | "loading" | "failed";
   composioCatalog: StoreService[] | "loading" | "failed";
+  /** Apps are connected through Composio, as the core says even when the list of the connections could not be read. */
+  composioApps?: boolean;
   /** The owner's apps as the core counts them: the number on the chip at the top is its count, the one of the sidebar and the roster. */
   inventory: InventoryView;
   /** Which section each row took when this visit first read it. */
@@ -132,7 +134,6 @@ export interface ConnectionsView {
   /** The dialog's latest actions are unfolded. */
   auditOpen: boolean;
   /** The service whose 「中斷連線」 was pressed once. */
-  confirmingDisconnect: string | null;
   /** The services a call is under way for. */
   busy: ReadonlySet<string>;
   login: Login | null;
@@ -156,7 +157,6 @@ export const emptyConnectionsView = (): ConnectionsView => ({
   open: null,
   toolsOpen: false,
   auditOpen: false,
-  confirmingDisconnect: null,
   busy: new Set(),
   login: null,
   loginError: null,
@@ -969,6 +969,8 @@ export interface Connections {
   navView(): string;
   /** Shows the view `navView` named; an app that is gone leaves the list it was in. */
   showNavView(key: string): void;
+  /** The Composio key was replaced or removed in Settings › 安全 › 保管箱: the connections and the catalog are read again. */
+  keyReplaced(): Promise<void>;
 }
 
 export function createConnections(host: ConnectionsHost): Connections {
@@ -977,6 +979,10 @@ export function createConnections(host: ConnectionsHost): Connections {
   let category = "";
   let keyOpen = false;
   let keySaves = 0;
+  /** The latest key sent to the core, so that the next one is written after it. */
+  let keyWrite: Promise<unknown> = Promise.resolve();
+  /** How many times the core's connections were read: a save that reads them again can tell whether it got an answer. */
+  let statusReads = 0;
   let keyBusy = false;
   let keyError: ConnectionsView["keyError"] = "";
   let managed: ManagedConnector[] = [];
@@ -994,8 +1000,6 @@ export function createConnections(host: ConnectionsHost): Connections {
   let open: ConnectionsView["open"] = null;
   let toolsOpen = false;
   let auditOpen = false;
-  let confirming: string | null = null;
-  let confirmTimer: ReturnType<typeof setTimeout> | undefined;
   const busy = new Set<string>();
   let login: Login | null = null;
   let loginError: ConnectionsView["loginError"] = null;
@@ -1042,7 +1046,7 @@ export function createConnections(host: ConnectionsHost): Connections {
 
   const view = (): ConnectionsView => ({
     configured, categories, category, keyOpen, keyBusy, keyError,
-    groups, catalog, composioCatalog, inventory, placed, audit, screen, search, shown, recommendedAll, open, toolsOpen, auditOpen, confirmingDisconnect: confirming, busy, login, loginError, dialogNotice, form, now: Date.now(),
+    groups, catalog, composioCatalog, composioApps: managed.some(c => c.kind === "composio"), inventory, placed, audit, screen, search, shown, recommendedAll, open, toolsOpen, auditOpen, busy, login, loginError, dialogNotice, form, now: Date.now(),
   });
 
   /** The dialog's scrolling list. */
@@ -1092,6 +1096,7 @@ export function createConnections(host: ConnectionsHost): Connections {
     if (status.status === "fulfilled") {
       configured = status.value.composio_configured;
       managed = status.value.connectors;
+      statusReads++;
     }
     const previous = Array.isArray(groups) ? groups : [];
     if (list.status === "fulfilled" && status.status === "fulfilled") groups = [
@@ -1163,18 +1168,44 @@ export function createConnections(host: ConnectionsHost): Connections {
     refresh();
   }
 
+  /** A key in the place of another, saved here or in Settings › 安全 › 保管箱 (#320), or the key removed there: the core
+   *  forgot the apps of an old key and its catalog (the same key again keeps them). A read of the catalog still on its way is
+   *  of the old key; the core's connections then say which apps are left, even when the list of the connections cannot be
+   *  read again. */
+  async function keyReplaced(): Promise<void> {
+    catalogLoads++;
+    composioCatalog = "loading";
+    const reads = statusReads;
+    await load();
+    // Without the core's word the old apps go (a new key is what is saved nearly always; the next read brings back what
+    // the same key kept).
+    if (statusReads === reads) managed = managed.filter(c => c.kind !== "composio");
+    if (Array.isArray(groups)) {
+      const left = groups.filter(g => g.source !== "composio" || managed.some(c => c.id === g.id));
+      if (left.length !== groups.length) { groups = left; refresh(); }
+    }
+  }
+
   async function saveKey(): Promise<void> {
     const input = (host.root ?? document).querySelector<HTMLInputElement>("#conn-key");
     if (!input?.value.trim() || keyBusy) return;
     const mine = ++keySaves;
     let key = input.value.trim();
     input.value = "";
+    const replacing = configured === true;
     keyBusy = true; keyError = ""; redraw();
     try {
-      await api.connectorsSetKey(key);
-      if (mine !== keySaves) return;
-      configured = true; keyOpen = false;
-      await loadCatalog();
+      // One key is written at a time, in the order they were saved: a key saved after the dialog was closed and opened
+      // again waits for the one still being checked, so the last key saved is the one kept.
+      const value = key;
+      const write = keyWrite.catch(() => undefined).then(() => api.connectorsSetKey(value));
+      keyWrite = write;
+      await write;
+      // The key is saved whether or not its dialog is still open: what the page shows follows it either way.
+      configured = true;
+      if (mine === keySaves) keyOpen = false;
+      if (replacing) await keyReplaced();
+      else await loadCatalog();
     } catch (error) {
       if (mine !== keySaves) return;
       const kind = error instanceof Error ? error.message : "";
@@ -1206,8 +1237,6 @@ export function createConnections(host: ConnectionsHost): Connections {
     dialogNotice = null;
     toolsOpen = false;
     auditOpen = false;
-    clearTimeout(confirmTimer);
-    confirming = null;
     redraw();
     const group = openedGroup();
     if (group) void loadTools(group.id);
@@ -1248,14 +1277,11 @@ export function createConnections(host: ConnectionsHost): Connections {
 
   /** Steps back: from an app's page to the view it was opened from, or from the list of the connected apps to the one view. */
   function back(): void {
-    if (confirming !== null) return;
     const key = navView();
     if (key) rememberLayerBack(backToParent, () => showNavView(key));
   }
 
   function backToParent(): void {
-    clearTimeout(confirmTimer);
-    confirming = null;
     loginError = null;
     dialogNotice = null;
     const from = open;
@@ -1271,18 +1297,14 @@ export function createConnections(host: ConnectionsHost): Connections {
     else focusOn('[data-k="cs-have"]');
   }
 
-  function disconnect(id: string): void {
-    clearTimeout(confirmTimer);
-    if (confirming !== id) {
-      confirming = id;
-      confirmTimer = setTimeout(() => {
-        confirming = null;
-        redraw();
-      }, DISCONNECT_CONFIRM_MS);
-      redraw();
-      return;
-    }
-    confirming = null;
+  /** Asks in the red dialog naming the app (R-UI-56); nothing is disconnected or deleted unless its red button is pressed. */
+  async function disconnect(id: string): Promise<void> {
+    const group = groupById(id);
+    const name = group?.name ?? id;
+    const words = group?.source
+      ? { title: t("confirm.disconnectTitle", { p0: name }), hint: t("conn.disconnectHint"), action: t("conn.disconnect") }
+      : { title: t("confirm.deleteTitle", { p0: name }), hint: t("members.deleteHint"), action: t("mcp.delete") };
+    if (!(await confirmDelete(name, { words }))) return;
     disconnectNow(id);
   }
 
@@ -1303,7 +1325,7 @@ export function createConnections(host: ConnectionsHost): Connections {
   /**
    * Removes one account of an app (R-ACCT-01). One that is not connected (waiting, expired, revoked, failed) goes at once; a connected
    * one asks first, in the app's one delete question. The last connected account is the app itself: that is the app's own disconnect,
-   * with its own question (the same two presses the app's menu asks), and the owner's own Google, which has one account, is that too.
+   * with its own question (the red dialog the app's menu asks), and the owner's own Google, which has one account, is that too.
    */
   async function removeAccount(id: string, accountId: string): Promise<void> {
     const group = groupById(id);
@@ -1312,9 +1334,7 @@ export function createConnections(host: ConnectionsHost): Connections {
     const connected = account.status === "ACTIVE";
     if (group.source === "google" || (connected && (group.accounts ?? []).filter((a) => a.status === "ACTIVE").length === 1)) {
       if (!connected) { disconnectNow(id); return; }
-      disconnect(id);
-      const anchor = Array.from((host.root ?? document).querySelectorAll<HTMLElement>('[data-conn="server-menu"]')).find((a) => a.dataset.id === id);
-      if (anchor) { click(anchor); document.querySelector<HTMLButtonElement>('.menu [data-conn="disconnect"]')?.focus(); }
+      await disconnect(id);
       return;
     }
     const name = accountName(account, (group.accounts ?? []).indexOf(account), (group.accounts?.length ?? 0) > 1);
@@ -1485,17 +1505,14 @@ export function createConnections(host: ConnectionsHost): Connections {
         if (!group) return true;
         const panel = openPopover(button, [
           ...(!group.source ? [["test-server", t("mcp.test")], ["edit-server", t("mcp.edit")]] : []),
-          ["disconnect", t(confirming === id ? group.source ? "conn.disconnectConfirm" : "conn.deleteConfirm" : group.source ? "conn.disconnect" : "mcp.delete")],
+          ["disconnect", t(group.source ? "conn.disconnect" : "mcp.delete")],
         ].map(([act, label]) => `<button type="button" role="menuitem"${act === "disconnect" ? ' class="danger"' : ""} data-conn="${act}" data-id="${esc(id)}">${esc(label)}</button>`).join(""), { className: "menu", role: "menu", label: t("mcp.actions") });
         panel.addEventListener("click", event => {
           const action = (event.target as Element).closest("[data-conn]");
           if (action) {
-            const confirm = (action as HTMLElement).dataset.conn === "disconnect" && confirming !== id;
-            closeMenu(); click(action);
-            if (confirm) {
-              const anchor = Array.from((host.root ?? document).querySelectorAll<HTMLElement>('[data-conn="server-menu"]')).find(anchor => anchor.dataset.id === id);
-              if (anchor) { click(anchor); document.querySelector<HTMLButtonElement>('.menu [data-conn="disconnect"]')?.focus(); }
-            }
+            closeMenu();
+            if ((action as HTMLElement).dataset.conn === "disconnect") button.focus({ preventScroll: true });
+            click(action);
           }
         });
         panel.querySelector<HTMLButtonElement>("button")?.focus();
@@ -1587,7 +1604,7 @@ export function createConnections(host: ConnectionsHost): Connections {
         });
         break;
       case "disconnect":
-        disconnect(id);
+        void disconnect(id);
         break;
       case "join": {
         const entry = entryById(id);
@@ -1739,7 +1756,7 @@ export function createConnections(host: ConnectionsHost): Connections {
     const panel = typeof document !== "undefined" ? (host.root ?? document).querySelector<HTMLElement>(".cs") : null;
     if (panel) bindNavLayer(panel, () => { if (form) backFromForm(); else back(); }, {
       active: () => !!form || !!open || screen === "connected",
-      step: () => !!form?.busy || confirming !== null,
+      step: () => !!form?.busy,
     });
     const row = typeof document !== "undefined" ? (host.root ?? document).querySelector<HTMLElement>("[data-cs-chips]") : null;
     if (row) fitChips(row);
@@ -1807,8 +1824,6 @@ export function createConnections(host: ConnectionsHost): Connections {
     category = ""; shown = LIST_STEP; recommendedAll = false;
     keyError = ""; keyOpen = false; keySaves++; keyBusy = false;
     stopOutside?.(); stopOutside = null;
-    clearTimeout(confirmTimer);
-    confirming = null;
     form = null;
     originalForm = "";
     open = null;
@@ -1847,7 +1862,7 @@ export function createConnections(host: ConnectionsHost): Connections {
     if (wanted && open?.kind === wanted.kind && open.id === wanted.id && screen === nextScreen) return;
     screen = nextScreen;
     if (wanted) { if (open?.kind !== wanted.kind || open.id !== wanted.id) { openPage(wanted); return; } }
-    else if (open) { open = null; toolsOpen = false; auditOpen = false; clearTimeout(confirmTimer); confirming = null; loginError = null; dialogNotice = null; }
+    else if (open) { open = null; toolsOpen = false; auditOpen = false; loginError = null; dialogNotice = null; }
     redraw();
   }
 
@@ -1866,5 +1881,5 @@ export function createConnections(host: ConnectionsHost): Connections {
     };
   }
 
-  return { view, load, click, input, key, menuFor, painted, scrolled, followEvent, reset, restoreList, navView, showNavView, relogin };
+  return { view, load, click, input, key, menuFor, painted, scrolled, followEvent, reset, restoreList, navView, showNavView, relogin, keyReplaced };
 }

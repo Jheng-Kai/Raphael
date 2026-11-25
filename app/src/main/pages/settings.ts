@@ -7,7 +7,7 @@
 // Raphael listens) has no switch: it is simply on. Learning from corrections asks the cleanup
 // model, so it is a device setting (`auto_learn`), off until the owner turns it on.
 
-import { editProjectFolders, readProjects, rememberProject } from "../project-folders";
+import { editProjectFolders, folderName, readProjects, rememberProject } from "../project-folders";
 import type { FolderInfo } from "../types";
 import { clearLayerForward, type NavStep } from "../nav-history";
 import { closeLayerBack, bindLayerCancels, bindNavLayer, keepEditedField } from "../nav-layers";
@@ -42,7 +42,7 @@ import {
   toggleTranscriptionLanguage,
 } from "../languages";
 import { openShortcutEditor } from "../shortcut-editor";
-import type { Dialog } from "../member-dialogs";
+import { type Dialog, confirmDelete } from "../member-dialogs";
 import { isTopLayer, registerDismissal } from "../dismissals";
 import { type ModelPicker, type ModelPickerLook, type PickerRole, mountModelPicker, priceHTML, replacementNotices, splitEffort, withFavorite } from "../model-picker";
 import { createServices } from "../services";
@@ -61,7 +61,6 @@ import {
   copyButton,
   esc,
   menuIsOpenFor,
-  openConfirmMenu,
   openMenu,
   openMenuOnArrow,
   openPopover,
@@ -276,8 +275,9 @@ export function createSettings(app: AppContext): SettingsPage {
     askConnect: (slug, name) => { app.go("agent", "raphael"); askInChat(RAPHAEL_ID, `connect-app:${slug}`, name); },
   });
   app.onEvent((event) => connections.followEvent(event));
-  const rules = createRules({ visible: () => visible && pane === "safety", redraw: () => render(), undo: app.undo });
-  const vault = createVault(el, () => { if (visible && pane === "safety") render(); });
+  const rules = createRules({ visible: () => visible && pane === "safety", redraw: () => render() });
+  // A Composio key replaced or removed in the vault: Connect apps reads its connections and catalog again (#320).
+  const vault = createVault(el, () => { if (visible && pane === "safety") render(); }, () => { void connections.keyReplaced(); });
   const skillLibrary = createSkillLibrary(el, () => { if (visible && pane === "skills") render(); }, () => body);
   const services = createServices({ root: el, visible: () => visible && pane === "tools", redraw: () => render(), brain: () => brain, changeSetting: (key, value) => changeBrain(key, value) });
   const cliBrains = createCliBrains({ visible: () => visible, redraw: () => render() });
@@ -475,13 +475,15 @@ export function createSettings(app: AppContext): SettingsPage {
     // Only what changed moves: a list drawn again stands still, a switch that was turned slides.
     // The allowances own their reading; keep that live subtree out of page HTML redraws.
     usageHost.remove();
+    // What a vault entry's page holds is drawn again as it was typed.
+    if (pane === "safety") vault.keep();
     swapHTML(body, `<div class="set-content">${pane !== "about" && loading ? loadingHTML(view()) : paneHTML(view())}</div>`);
     const slot = body.querySelector<HTMLElement>("[data-usage-host]");
     if (slot) {
       slot.replaceWith(usageHost);
       if (usageFocus?.isConnected) usageFocus.focus({ preventScroll: true });
     }
-    bindLayerCancels(body, '[data-vault="cancel"], [data-act="key-cancel"]');
+    bindLayerCancels(body, '[data-act="key-cancel"]');
     const ruleField = body.querySelector<HTMLElement>("#rule-edit");
     if (ruleField) bindNavLayer(ruleField, rules.cancelEdit, { step: direction => { if (direction === "back") ruleField.focus(); return true; } });
     // Before the focus goes back by `data-k`, which the pickers' buttons have too.
@@ -514,6 +516,7 @@ export function createSettings(app: AppContext): SettingsPage {
     // The row of category chips never wraps: those that do not fit are in 更多, so it is fitted to the width the dialog has.
     if (pane === "connections") connections.painted();
     if (pane === "skills") skillLibrary.painted();
+    if (pane === "safety") vault.painted();
   }
 
   // ---------- the tabs ----------
@@ -541,6 +544,8 @@ export function createSettings(app: AppContext): SettingsPage {
 
   function openPane(next: SettingsPane, tab?: UsageTab): void {
     closeMenu();
+    // A vault entry's page with a change not saved asks first; the pane opens once it is saved or left.
+    if (pane === "safety" && canonicalPane(next) !== pane && vault.dirty()) { vault.leave(() => openPane(next, tab)); return; }
     // 用量 opens at 概覽 unless the way in names its view: it never stays on what was looked at last.
     if (tab) usageTab = tab;
     else if (canonicalPane(next) === "usage" && canonicalPane(next) !== pane) usageTab = "overview";
@@ -1064,7 +1069,7 @@ export function createSettings(app: AppContext): SettingsPage {
     }
     if (pane === "usage" && analysis.click(target)) return;
 
-    if (target.closest("[data-cli], [data-cli-menu], [data-chatgpt], [data-chatgpt-menu]")) { void cliBrains.click(target); return; }
+    if (target.closest("[data-cli], [data-cli-disconnect], [data-chatgpt], [data-chatgpt-disconnect]")) { void cliBrains.click(target); return; }
     if (providers.click(target)) return;
     // the vault and the skill library open their own dropdowns' menus (vault.ts, skill-library.ts)
     const choose = target.closest<HTMLElement>(".sel");
@@ -1108,17 +1113,15 @@ export function createSettings(app: AppContext): SettingsPage {
           if (path !== null) changeProjects(current => rememberProject(current, path));
         }).catch(error => toaster.info(describeError(error)));
         break;
-      case "project-menu": {
+      case "project-remove": {
         const button = target.closest<HTMLElement>("[data-project]")!;
         const path = brain?.project_folders?.[Number(button.dataset.project)];
         if (path === undefined) break;
-        if (menuIsOpenFor(button)) { closeMenu(); break; }
-        // A destructive item (R-UI-56): red, the first press asks in its place, the second closes the menu and removes.
-        // As a plain menu action it stayed open over the list after the press, since an action keeps its menu open.
-        openConfirmMenu(button, {
-          label: t("projectFolders.remove"), ask: t("projectFolders.removeConfirm"),
-          run: () => changeProjects(async current => (await api.settingsSet("project_folders",
-            (current.project_folders ?? []).filter(project => project !== path))).settings),
+        // The row's × (R-UI-56): the red dialog asks, and only its red button removes the folder from the list.
+        const name = projectDetails.get(path)?.name ?? folderName(path);
+        void confirmDelete(name, { words: { title: t("confirm.removeTitle", { p0: name }), hint: t("projectFolders.removeHint"), action: t("projectFolders.remove") } }).then(yes => {
+          if (yes) changeProjects(async current => (await api.settingsSet("project_folders",
+            (current.project_folders ?? []).filter(project => project !== path))).settings);
         });
         break;
       }
@@ -1284,6 +1287,9 @@ export function createSettings(app: AppContext): SettingsPage {
   const settingsNavigation = {
     step(direction: NavStep): boolean {
       const panel = el.querySelector<HTMLElement>(".modal")!;
+      // Escape or the close on a vault entry's page with a change not saved: the dialog asks, and Settings closes once it is
+      // saved or left.
+      if (direction === "back" && pane === "safety" && vault.dirty()) { vault.leave(() => closeLayerBack(() => app.closeSettings(), settingsNavigation)); return true; }
       return direction === "back" && keepEditedField(panel, 'input:not([type="search"]):not(#conn-search), textarea, select');
     },
     restore() {
@@ -1403,7 +1409,13 @@ export function createSettings(app: AppContext): SettingsPage {
         } else if (target === "store") {
           await connections.load();
           if (mine !== loads || !visible) return;
-          if (resource === "composio" || resource === "google") el.querySelector<HTMLButtonElement>('[data-conn="configure-composio"]')?.click();
+          const add = el.querySelector<HTMLButtonElement>('[data-conn="configure-composio"]');
+          if (add && (resource === "composio" || resource === "google")) add.click();
+          else if (resource === "composio" && connections.view().configured) {
+            // A saved key that Composio refused is replaced where saved keys are kept: 安全 › 保管箱 (#320).
+            openPane("safety");
+            await vault.editComposio();
+          }
         } else if (target === "relogin") {
           // `repair:relogin:composio:<slug>`: the notice of a lost connection signs in to that app again, on its own page.
           await connections.load();

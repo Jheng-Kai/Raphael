@@ -70,8 +70,11 @@ async def test_native_cli_read_still_opens_a_card_in_allow_all(setup, client, mo
     from raphael_core.worker.loop import Stop
     rig, team = setup
     rig.settings.set("action_mode", "bypass")
-    ordinary = SimpleNamespace(source="app", quick=False, nested=False, declined=False, language="en")
-    ask = SimpleNamespace(source="overlay", quick=True, nested=False, declined=False, language="en")
+    # What a request carries that the command scope reads (the speaker, its turn, what came into it): an owner's own turn.
+    turn = dict(nested=False, declined=False, language="en", memory_untrusted=False, attachments=(), steps=[], speaker=SimpleNamespace(id=0),
+                conversation_id=None, scope=None, session_id=None)
+    ordinary = SimpleNamespace(source="app", quick=False, **turn)
+    ask = SimpleNamespace(source="overlay", quick=True, **turn)
     loop = SimpleNamespace(response=None)
     cards = []
     followup = SimpleNamespace(loop=None)

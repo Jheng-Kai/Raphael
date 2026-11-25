@@ -77,14 +77,19 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     // above it. What has scrolled under the composer's row is covered on purpose, as under the top row; a control of the row itself is not.
     const foot = top.closest?.('.ra-stage.is-page > .ra-dock');
     if (foot && !foot.contains(element)) return null;
+    // R-UI-182: a long Settings page scrolls under its header (the way back, the title, the close), which stays at the top. What has
+    // scrolled under that header is covered on purpose; a control of the header itself is not.
+    const head = top.closest?.('.modal-scrim .modal-body :is(.set-content > .set-head, .cs > .cs-top, .cs-page > .cs-head, .skl-page > .skl-pack, .skl-page > .set-head, .vault-page > .set-head)');
+    if (head && !head.contains(element)) return null;
     const layer = fixedLayer(top);
     return layer && !layer.contains(element) ? null : top;
   };
   // R-UI-56: what clears, deletes or removes waits in a ⋯ and the right click of its row. Keep the places it may stand explicit:
-  // the menu itself; a dialog about that one thing, which confirms or edits it; a local model's inline question; what is being
-  // composed (a message's attachments and quote, Raphael's member drafts); and a favourite's star, which destroys nothing.
+  // the menu itself; a dialog about that one thing, which confirms or edits it (the red confirmation dialog included, never a
+  // question that replaces a row or a button in its own place), and a vault entry's own page, which does the same; what is
+  // being composed (a message's attachments and quote, Raphael's member drafts); and a favourite's star, which destroys nothing.
   const destroyWords = /^(?:確定)?(?:全部)?(?:清除|刪除|移除)|^(?:clear|delete|remove)\b|消去|削除/i;
-  const destroyMayStand = '[role="menu"], .menu, .cs-dialog, .mb-dialog, .lm-confirm, .composer, .draft-panel, .mp-star';
+  const destroyMayStand = '[role="menu"], .menu, .cs-dialog, .mb-dialog, .vault-page, .skl-page, .modal-scrim:not([data-standalone]) :is(.rules-row, [data-row="project-folder"]), .composer, .draft-panel, .mp-star';
   const destroysInTheOpen = button => {
     const name = (button.getAttribute('aria-label') || button.textContent).trim();
     // R-MP-02 names these two counted, confirmed Settings actions explicitly.
@@ -108,14 +113,6 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
   const productPattern = phrases.length ? new RegExp(`\\b(?:${phrases.map(name => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\\b`, "gi") : null;
   const keyPattern = /\b([a-z][A-Za-z0-9]*\.[A-Za-z0-9_.-]+)\b/g;
   const seenKeys = new Set();
-  // R-UI-179: a dialog's close stands alone in a column the dialog's body keeps free at its top right. It is drawn there
-  // on purpose, outside the box of its header, so that reach alone is not an overflow; any other overflow still is.
-  const inCloseColumn = (element, box) => {
-    const close = [...element.querySelectorAll(".close-button")].find(button => win.getComputedStyle(button).position === "absolute");
-    if (!close) return false;
-    const reach = close.getBoundingClientRect().right - box.right;
-    return reach > 0 && element.scrollWidth - element.clientWidth <= Math.ceil(reach) + 1;
-  };
   for (const element of doc.body.querySelectorAll("*")) {
     if (!visible(element)) continue;
     const box = element.getBoundingClientRect(), style = win.getComputedStyle(element);
@@ -123,8 +120,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     if (!element.matches(".window-resize") && !clipped(element) && (box.left < -1 || box.top < -1 || box.right > viewport.width + 1 || box.bottom > viewport.height + 1))
       outsideViewport.push({ ...description, bounds: { left: box.left, top: box.top, right: box.right, bottom: box.bottom } });
     // SVG uses viewBox coordinates, so text clientWidth and scrollWidth are not CSS overflow measurements.
-    if (element.namespaceURI !== 'http://www.w3.org/2000/svg' && element.clientWidth > 0 && element.scrollWidth > element.clientWidth + 1 && !/auto|scroll|hidden|clip/.test(style.overflowX || style.overflow)
-      && !inCloseColumn(element, box))
+    if (element.namespaceURI !== 'http://www.w3.org/2000/svg' && element.clientWidth > 0 && element.scrollWidth > element.clientWidth + 1 && !/auto|scroll|hidden|clip/.test(style.overflowX || style.overflow))
       horizontalOverflow.push({ ...description, width: element.clientWidth, scrollWidth: element.scrollWidth });
     if (!onScreen(element)) continue;
     // Not a failure: words that a box cuts off without an ellipsis or a line clamp, for the person reading the pictures to look at.
@@ -303,7 +299,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       const custom = element.hasAttribute('data-tooltip') || (element.getAttribute('aria-describedby') ?? '').split(/\s+/).some(id => doc.getElementById(id)?.getAttribute('role') === 'tooltip');
       if (custom && (element.hasAttribute('title') || element.querySelector('svg title'))) violation('R-UI-26', 'Custom and native tooltip coexist');
     }
-    if (element.matches('button.danger, button[data-row-action="delete"], button[data-row-action="rename"]') && !element.closest('[role="menu"], .menu, .action-row') && element.closest('.mp-resource, .mb-routine, .mb-tool-row, .au-room-row, .mem-row, .rule-row, .rules-row, .word-row, .wrow, .history-row, .hrow, .mb-rt, .row, [role="listitem"]'))
+    if (element.matches('button.danger, button[data-row-action="delete"], button[data-row-action="rename"]') && !element.closest('[role="menu"], .menu, .action-row, .set-head, .modal-scrim:not([data-standalone]) :is(.rules-row, [data-row="project-folder"])') && element.closest('.mp-resource, .mb-routine, .mb-tool-row, .au-room-row, .mem-row, .rule-row, .rules-row, .word-row, .wrow, .history-row, .hrow, .mb-rt, .row, [role="listitem"]'))
       violation('R-UI-11', 'Visible list-row delete or rename action');
     if (element.matches('button') && destroysInTheOpen(element)) violation('R-UI-56', 'A button that clears, deletes or removes stands open on the page');
     if (element.matches('button.btn')) {
@@ -566,9 +562,9 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       const grid = style.display.includes("grid");
       const namedRow = row.matches('[role="row"], .row, [data-row]');
       if (row === toggle.parentElement || singleLine || grid || namedRow) {
-        // A dialog's close stands in its own column (R-UI-179), not in the row beside the switch.
+        // A dialog's close ends its header (R-UI-179): it is the dialog's, not one of the row's controls beside the switch.
         const controls = [...row.querySelectorAll(PRESSABLE)].filter(control => !control.contains(toggle) && !toggle.contains(control) && shown(control)
-          && !(control.matches(".close-button") && win.getComputedStyle(control).position === "absolute"));
+          && !control.matches(".close-button"));
         const after = controls.find(control => {
           const rect = control.getBoundingClientRect();
           return centreX(rect) > centreX(box) + 1 && Math.abs(centreY(rect) - centreY(box)) < Math.max(rect.height, box.height) / 2;

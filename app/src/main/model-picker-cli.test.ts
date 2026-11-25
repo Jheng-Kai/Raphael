@@ -150,7 +150,7 @@ test("a dialog handed to a replacement settings row keeps its draft and returns 
   expect(document.activeElement).toBe(picker.button);
 });
 
-test("local speech selection waits for confirmation, including downloads; delete still asks first", () => {
+test("local speech selection waits for confirmation, including downloads; delete asks in the red dialog first", async () => {
   const slot = document.createElement("div"); document.body.append(slot);
   const use = vi.fn(), remove = vi.fn(), cancel = vi.fn();
   picker = mountModelPicker(slot, { role: "stt", current: "cloud/speech", catalog: null, label: "Speech", onChoose: vi.fn(),
@@ -162,8 +162,16 @@ test("local speech selection waits for confirmation, including downloads; delete
   expect(use).not.toHaveBeenCalled(); expect(document.querySelector('[data-act="download"]')).toBeNull();
   click('[data-dlg="use"]'); expect(use).toHaveBeenCalledWith("qwen3-asr");
   click('[data-act="local-menu"][data-name="sensevoice"]'); expect(document.querySelector('#app-popover [data-pick="delete"]')?.textContent).toContain("SenseVoice");
-  click('#app-popover [data-pick="delete"]'); expect(remove).not.toHaveBeenCalled();
-  click('[data-act="confirm"][data-name="sensevoice"]'); expect(remove).toHaveBeenCalledWith("sensevoice");
+  const settle = (): Promise<void> => new Promise(resolve => setTimeout(resolve));
+  // The menu closes and the red dialog asks; Cancel does nothing, and only its red button deletes.
+  click('#app-popover [data-pick="delete"]'); expect(document.getElementById("app-popover")).toBeNull();
+  expect(document.querySelector(".mb-dialog.mb-delete h2")?.textContent).toContain("SenseVoice");
+  expect(document.querySelector(".lm-confirm")).toBeNull();
+  click('.mb-delete [data-dlg="cancel"]'); await settle();
+  expect(remove).not.toHaveBeenCalled(); expect(document.querySelector(".mb-delete")).toBeNull();
+  click('[data-act="local-menu"][data-name="sensevoice"]'); click('#app-popover [data-pick="delete"]');
+  click('.mb-delete [data-dlg="delete"]'); await settle();
+  expect(remove).toHaveBeenCalledWith("sensevoice");
 });
 
 test("an inherited member model remains selectable even when every subscription is signed out", () => {

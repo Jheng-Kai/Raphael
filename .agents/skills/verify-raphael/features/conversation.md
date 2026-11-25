@@ -662,7 +662,7 @@ Neither a member's nor a group's top row has a search button; Ctrl+F (⌘F) open
 bar. The title pill draws no dot, and its arrow shows on a hover only while the details panel is closed (R-HEAD-02).
 
 ```powershell
-npm run look -- status-light-idle status-light-list status-light-dot status-light-seen status-light-pill-open top-row-find top-row-room-find conversation-share --theme both --width 1120,720,1920x1080
+npm run look -- status-light-idle status-light-idle-open status-light-list status-light-dot status-light-seen status-light-pill-open top-row-find top-row-room-find conversation-share --theme both --width 1120,720,1920x1080
 ```
 
 ## A waiting card read out of sight
@@ -794,6 +794,18 @@ calm-thread-days requires two date-only headings. Inspect every contact sheet,
 calm-thread light 720 and dark 1120 at full size, plus representative controls.
 Run judge on this same selected evidence. At unit level: targeted Vitest/pytest only;
 the full verify/core run is made on the merged result. Native/live remain separate acceptance.
+
+Run again under a routine's failed run (R-RERUN-01) takes the failure out of the thread: the core (`worker.rerun`) removes the failed
+turn from the stored history and the new attempt stands alone, so only the newest failure, or the run's progress, is drawn.
+The look mock models that answer (`worker.rerun` in mock-ipc.js).
+
+```powershell
+npm run look -- routine-rerun routine-rerun-again calm-thread --theme both --width 1120,720,1920x1080
+```
+
+routine-rerun checks the failed run alone before the press, then the failure gone and only the new progress drawn, with no Run again
+on a run under way; routine-rerun-again checks that a run that fails again leaves exactly one failure, with its Run again. Inspect every
+contact sheet and routine-rerun dark 720 and routine-rerun-again dark 1120 at full size.
 
 A reply that failed on a plan's usage limit leads with 管理用量 under its words (OpenAI's
 guidance asks for Manage usage as the primary action). The turn carries `failure: {kind, provider, resets_at}`
