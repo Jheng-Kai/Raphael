@@ -923,22 +923,23 @@ def test_failed_login_does_not_reconnect_or_launch_an_uninstalled_cli(tmp_path, 
         brains.login("codex")
     assert brains.disconnected("codex")
 
-def antigravity_sign_in(tmp_path, monkeypatch, *, signed_in, item, look_s=0.01):
+def antigravity_sign_in(tmp_path, monkeypatch, *, signed_in, item, look_s=0.01, delay=0.0, window=None, clock=None):
     """Brains whose Antigravity sign-in opens a held fake window on either system (a Terminal window on a Mac, a console on
-    Windows), with a fake `agy` that says whether it is `signed_in` and the stored item in `item`."""
+    Windows), with a fake `agy` that says whether it is `signed_in` (or signed in once a file exists) and the stored item in
+    `item`."""
     from raphael_core.agent.cli import discovery
     from .test_cli_models import fake_agy
 
     made = []
-    window = lambda *args, **kwargs: made.append(SignInProcess()) or made[-1]  # noqa: E731
+    opened = lambda *args, **kwargs: made.append((window or SignInProcess)()) or made[-1]  # noqa: E731
     # Only the sign-in's window is faked: off Windows asyncio starts its processes with Popen too.
     if sys.platform == "darwin":
-        monkeypatch.setattr(discovery, "TerminalSignIn", window)
+        monkeypatch.setattr(discovery, "TerminalSignIn", opened)
     else:
-        monkeypatch.setattr(discovery.subprocess, "Popen", window)
+        monkeypatch.setattr(discovery.subprocess, "Popen", opened)
     monkeypatch.setattr(discovery, "SIGNIN_LOOK_S", look_s)
-    brains = CliBrains(home=tmp_path, environ={}, commands={"gemini": fake_agy(tmp_path, signed_in=signed_in)},
-                       credentials=lambda: item[0])
+    brains = CliBrains(home=tmp_path, environ={}, commands={"gemini": fake_agy(tmp_path, signed_in=signed_in, delay=delay)},
+                       credentials=lambda: item[0], **({"clock": clock} if clock else {}))
     back = []
     brains.on_back.append(back.append)
     return brains, made, back
@@ -952,30 +953,54 @@ async def _settled(brains, name="gemini", seconds=10):
     return brains._signed[name]
 
 
-@pytest.mark.skipif(os.name != "nt" and sys.platform != "darwin", reason="a sign-in window is a Mac's or Windows'")
+WINDOWS_OR_MAC = pytest.mark.skipif(os.name != "nt" and sys.platform != "darwin", reason="a sign-in window is a Mac's or Windows'")
+
+
+@WINDOWS_OR_MAC
 async def test_antigravitys_sign_in_is_found_in_the_system_store_while_its_window_stays_open(tmp_path, monkeypatch):
     """R-CLI-SIGNIN-08: `agy` signs in on its own screen and stays open on its conversation, so the app never waited the
     sign-in out. Its item written anew in the Keychain or Credential Manager is the sign-in, the same on both systems: done,
     the failures it left are cleaned up, and the window is left open to the owner."""
-    item = [None]
-    brains, made, back = antigravity_sign_in(tmp_path, monkeypatch, signed_in=False, item=item)
+    item, marker = [None], tmp_path / "signed-in"
+    brains, made, back = antigravity_sign_in(tmp_path, monkeypatch, signed_in=marker, item=item)
     try:
         assert brains.login("gemini") == {"started": True}
         row = (await brains.list())["clis"][2]
         assert row["signing_in"] is True and row["login_result"] is None
         await asyncio.sleep(0.2)  # agy is asked and says it is not signed in yet: still under way
         assert brains._signing_in("gemini") and made[0].code is None
-        item[0] = "20261125114948Z"  # the owner signed in: agy wrote its item
+        item[0] = "20261125114948Z"  # the owner signed in: agy wrote its item, and now says so itself
+        marker.touch()
         assert await _settled(brains) == "done"
         assert made[0].released and not made[0].stopped and made[0].code is None, "the window is the owner's to close"
         assert back == ["gemini"] and brains.logged_in("gemini") is True
+        await brains.list()
+        if brains._model_refresh:
+            await asyncio.wait_for(brains._model_refresh, 5)  # agy asked again after the sign-in agrees
         row = (await brains.list())["clis"][2]
         assert row["signing_in"] is False and row["login_result"] == "done" and row["available"] is True
     finally:
         await brains.aclose()
 
 
-@pytest.mark.skipif(os.name != "nt" and sys.platform != "darwin", reason="a sign-in window is a Mac's or Windows'")
+@WINDOWS_OR_MAC
+async def test_an_item_already_there_is_no_sign_in_until_it_is_written_anew(tmp_path, monkeypatch):
+    """R-CLI-SIGNIN-08: 重新登入 after a refused sign-in opens the window while the old item is still there; only the item
+    written anew (or agy saying it is signed in) finishes it, so the question is not sent again into the same refusal."""
+    item = ["20261125090000Z"]
+    brains, made, back = antigravity_sign_in(tmp_path, monkeypatch, signed_in=False, item=item)
+    try:
+        assert brains.login("gemini", again=True) == {"started": True}
+        await asyncio.sleep(0.3)  # many looks at the unchanged item, and agy asked: it is not signed in
+        assert brains._signing_in("gemini") and brains._signed.get("gemini") is None and back == []
+        assert brains._verdict["gemini"][0] is False
+        item[0] = "20261125114948Z"  # signed in again: agy rewrote its item
+        assert await _settled(brains) == "done" and back == ["gemini"]
+    finally:
+        await brains.aclose()
+
+
+@WINDOWS_OR_MAC
 async def test_antigravitys_sign_in_kept_where_no_item_says_is_found_by_asking_agy(tmp_path, monkeypatch):
     """R-CLI-SIGNIN-08: a sign-in too large for the system's store is kept in agy's own file, and no item changes; agy
     itself saying it is signed in finds it."""
@@ -989,20 +1014,116 @@ async def test_antigravitys_sign_in_kept_where_no_item_says_is_found_by_asking_a
         await brains.aclose()
 
 
-@pytest.mark.skipif(os.name != "nt" and sys.platform != "darwin", reason="a sign-in window is a Mac's or Windows'")
+@WINDOWS_OR_MAC
+@pytest.mark.parametrize("code", [0, 1])
 @pytest.mark.parametrize("signed", [True, False])
-async def test_antigravitys_window_closed_is_judged_by_its_sign_in_not_its_exit(tmp_path, monkeypatch, signed):
-    """R-CLI-SIGNIN-08: the owner closing agy's window ends it with a failure code whether they signed in or not: a sign-in
-    that is there is done, none is stopped."""
+async def test_antigravitys_window_closed_is_judged_by_its_sign_in_not_its_exit(tmp_path, monkeypatch, signed, code):
+    """R-CLI-SIGNIN-08: agy's window ends with any code whether or not the owner signed in (closed: a failure code; agy's
+    own /exit: 0): a sign-in that is there is done, none is stopped. While that is asked, the sign-in is still under way."""
     item = [None]
-    brains, made, back = antigravity_sign_in(tmp_path, monkeypatch, signed_in=False, item=item, look_s=60)
+    brains, made, back = antigravity_sign_in(tmp_path, monkeypatch, signed_in=False, item=item, look_s=60, delay=0.3)
     try:
         brains.login("gemini")
         if signed:
             item[0] = "20261125114948Z"
-        made[0].finish(1)  # the window was closed
+        made[0].finish(code)
+        if not signed:
+            await asyncio.sleep(0.1)  # agy is being asked
+            row = (await brains.list())["clis"][2]
+            assert row["signing_in"] is True and row["login_result"] is None
         assert await _settled(brains) == ("done" if signed else "stopped")
         assert back == (["gemini"] if signed else [])
+    finally:
+        await brains.aclose()
+
+
+class SlowToEnd(SignInProcess):
+    """A window that a terminate does not end at once, as TerminateProcess returns before the process is gone."""
+
+    def terminate(self):
+        self.stopped = True
+
+
+@WINDOWS_OR_MAC
+async def test_a_window_this_app_ended_is_never_settled_done(tmp_path, monkeypatch):
+    """R-CLI-SIGNIN-08: a cancel that the look overtakes leaves the cancelled window alone, and the next window is judged
+    on its own."""
+    item = [None]
+    brains, made, back = antigravity_sign_in(tmp_path, monkeypatch, signed_in=False, item=item, window=SlowToEnd)
+    try:
+        brains.login("gemini")
+        brains.cancel_login("gemini")
+        item[0] = "20261125114948Z"  # would be found by the next look
+        await asyncio.sleep(0.2)
+        assert brains._signed.get("gemini") is None and back == []
+        made[0].finish(1)  # the cancelled window is gone now, and its end reaches the core
+        deadline = asyncio.get_running_loop().time() + 5
+        while "gemini" in brains._signing:
+            assert asyncio.get_running_loop().time() < deadline
+            await asyncio.sleep(0.01)
+        assert brains._signed.get("gemini") is None and not brains._cancelled, "a cancel tells no failure and stays its own"
+        item[0] = None
+        brains.login("gemini")
+        made[1].finish(1)  # closed without signing in
+        assert await _settled(brains) == "stopped"
+    finally:
+        await brains.aclose()
+
+
+@WINDOWS_OR_MAC
+async def test_a_look_that_fails_after_the_window_closed_still_settles(tmp_path, monkeypatch):
+    """R-CLI-SIGNIN-08: whatever goes wrong while the sign-in is looked for, it ends `stopped` and the app is told."""
+    told = []
+    brains, made, back = antigravity_sign_in(tmp_path, monkeypatch, signed_in=False, item=[None], look_s=60)
+    brains.notify = lambda method, payload: told.append(method)
+
+    async def failing(*args, **kwargs):
+        raise PermissionError("an unreadable folder on PATH")
+
+    monkeypatch.setattr(brains, "_sign_in_there", failing)
+    try:
+        brains.login("gemini")
+        told.clear()
+        made[0].finish(1)
+        assert await _settled(brains) == "stopped" and told == ["brains.changed"]
+    finally:
+        await brains.aclose()
+
+
+@WINDOWS_OR_MAC
+async def test_agy_is_asked_less_often_the_longer_its_window_stays_open(tmp_path, monkeypatch):
+    """R-CLI-SIGNIN-08: agy is asked every 10 s after its last answer for the first five minutes, then once a minute, and no
+    more after half an hour; the stored item is still looked at all along."""
+    from raphael_core.agent.cli import discovery
+
+    now = [0.0]
+    item = [None]
+    brains, made, back = antigravity_sign_in(tmp_path, monkeypatch, signed_in=False, item=item, clock=lambda: now[0])
+    asks = []
+
+    async def ask(command):
+        asks.append(now[0])
+        return None
+
+    monkeypatch.setattr(brains, "_ask_antigravity", ask)
+
+    async def at(moment, expected):
+        now[0] = moment
+        await asyncio.sleep(0.1)
+        assert len(asks) == expected, (moment, asks)
+
+    try:
+        brains.login("gemini")
+        await at(0, 1)
+        await at(discovery.SIGNIN_ASK_S - 1, 1)
+        await at(discovery.SIGNIN_ASK_S, 2)
+        await at(discovery.SIGNIN_ASK_FAST_FOR_S, 3)
+        await at(discovery.SIGNIN_ASK_FAST_FOR_S + discovery.SIGNIN_ASK_S, 3)  # once a minute now
+        await at(discovery.SIGNIN_ASK_FAST_FOR_S + discovery.SIGNIN_ASK_LATER_S, 4)
+        await at(discovery.SIGNIN_ASK_UNTIL_S + 1, 4)
+        await at(discovery.SIGNIN_ASK_UNTIL_S + 10 * discovery.SIGNIN_ASK_LATER_S, 4)  # never again
+        item[0] = "20261125114948Z"  # the item is still looked at
+        assert await _settled(brains) == "done"
     finally:
         await brains.aclose()
 
@@ -1060,6 +1181,22 @@ def test_a_mac_signs_in_in_a_terminal_window_that_reports_how_the_cli_ended(tmp_
     assert sign_in.poll() is None
     (sign_in.folder / "code").write_text("0\n", encoding="utf-8")
     assert sign_in.wait() == 0 and sign_in.poll() == 0 and not sign_in.folder.exists()
+
+
+def test_a_mac_window_closed_by_its_close_button_ends_hung_up(tmp_path):
+    """R-CLI-SIGNIN-08: closing a Terminal window hangs its shell up before the code is written; the script's HUP trap writes
+    129 then, and a shell that is gone with no code counts as hung up, so a closed window never waits out the sign-in time."""
+    from raphael_core.agent.cli.terminal_login import HUNG_UP, TerminalSignIn
+    ok = lambda args, **kwargs: subprocess.CompletedProcess(args, 0)  # noqa: E731
+    window = TerminalSignIn(["agy"], opener=ok, poll_s=0.01)
+    text = (window.folder / "sign-in.command").read_text(encoding="utf-8")
+    assert f"; exit {HUNG_UP}' HUP" in text and text.index("trap ") < text.index("\nagy\n")
+    (window.folder / "pid").write_text(f"{os.getpid()}\n", encoding="utf-8")
+    assert window.poll() is None  # its shell is still there
+    ended = subprocess.Popen([sys.executable, "-c", "pass"])
+    ended.wait()
+    (window.folder / "pid").write_text(f"{ended.pid}\n", encoding="utf-8")
+    assert window.poll() == HUNG_UP and window.wait() == HUNG_UP and not window.folder.exists()
 
 
 def test_a_mac_sign_in_that_is_stopped_or_cannot_open_ends_as_a_failure(tmp_path):

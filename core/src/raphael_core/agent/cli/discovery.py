@@ -100,10 +100,14 @@ SIGNIN_WATCH_S = 10
 # Antigravity that said it has no sign-in is asked again this often while the app is used, and at once when its stored sign-in
 # changes (R-CLI-SIGNIN-07).
 SIGNED_OUT_ASK_S = 5 * 60
-# While the app's sign-in window for Antigravity is open its stored sign-in is looked at this often, and the CLI itself asked at
-# most this often, so the sign-in is found without waiting for the window to end (R-CLI-SIGNIN-08).
+# While the app's sign-in window for Antigravity is open its stored sign-in is looked at this often, so the sign-in is found
+# without waiting for the window to end; agy itself is asked this long after its last answer for the first minutes, then at
+# most once a minute, and no more once the window has been open for half an hour (R-CLI-SIGNIN-08).
 SIGNIN_LOOK_S = 2
 SIGNIN_ASK_S = 10
+SIGNIN_ASK_FAST_FOR_S = 5 * 60
+SIGNIN_ASK_LATER_S = 60
+SIGNIN_ASK_UNTIL_S = 30 * 60
 
 
 def brain_ref(value):
@@ -234,7 +238,8 @@ class CliBrains:
         # ones this app ended itself.
         self._signing = {}
         self._signed = {}
-        self._cancelled = set()
+        self._cancelled = set()  # the windows (processes) this app ended
+        self._closed = False
         # Antigravity's sign-in: the stamp of its stored sign-in when the window opened, the look that finds it while the
         # window is open, and a window that ended whose sign-in is still being asked about (R-CLI-SIGNIN-08).
         self._sign_in_start = {}
@@ -375,6 +380,9 @@ class CliBrains:
         once, when it becomes lost (or its cause changes), not at every refused run."""
         if name not in NAMES or cause not in ("expired", "signed_out"):
             return
+        if name == "gemini":
+            # What agy said before the refusal no longer stands: it is asked again at the next read (R-CLI-SIGNIN-07).
+            self._models_at.pop(name, None)
         before = self._lost.get(name)
         self._lost[name] = (cause, self._clock(), self._credential_stamp(name))
         if before is None or before[0] != cause:
@@ -754,7 +762,7 @@ class CliBrains:
             raise ValueError("cli_unknown")
         process = self._signing.get(name)
         if process is not None and process.poll() is None:
-            self._cancelled.add(name)
+            self._cancelled.add(process)
             process.terminate()
         elif (check := self._checking.pop(name, None)) is not None:
             check.cancel()
@@ -775,17 +783,19 @@ class CliBrains:
         stamp = await asyncio.to_thread(self._store_item, name, fresh=True)
         if stamp is not None and stamp != start:
             return True
-        command = await asyncio.to_thread(self.command, name) if ask else None
-        if not command:
+        if not ask:
             return False
         try:
-            return await self._ask_antigravity(command) is not None
+            command = await asyncio.to_thread(self.command, name)
+            return bool(command) and await self._ask_antigravity(command) is not None
         except (OSError, ValueError, TimeoutError):
             return False
 
     def _look_for_sign_in(self, name, process, start):
         """Antigravity has no sign-in command: `agy` signs in on its own screen and then stays open on its conversation, so
         its window does not end with the sign-in. While the window is open the sign-in is looked for (R-CLI-SIGNIN-08)."""
+        if self._closed:
+            return
         try:
             task = asyncio.get_running_loop().create_task(self._sign_in_look(name, process, start))
         except RuntimeError:
@@ -799,19 +809,23 @@ class CliBrains:
             task.cancel()
 
     async def _sign_in_look(self, name, process, start):
-        """Every SIGNIN_LOOK_S the stored sign-in is looked at, and agy asked at most every SIGNIN_ASK_S. Once it is there the
-        sign-in is done while agy goes on: the app is told, and the window is left to the owner to close."""
-        asked = None
+        """Every SIGNIN_LOOK_S the stored sign-in is looked at, and agy asked now and then (SIGNIN_ASK_S, counted from its last
+        answer so asks never run back to back). Once it is there the sign-in is done while agy goes on: the app is told, and
+        the window is left to the owner to close. A window this app is ending is not settled here."""
+        opened, asked = self._clock(), None
         try:
             while True:
                 await asyncio.sleep(SIGNIN_LOOK_S)
-                if self._signing.get(name) is not process or process.poll() is not None:
+                if self._signing.get(name) is not process or process.poll() is not None or process in self._cancelled:
                     return
-                ask = asked is None or self._clock() - asked >= SIGNIN_ASK_S
+                open_for = self._clock() - opened
+                every = SIGNIN_ASK_S if open_for < SIGNIN_ASK_FAST_FOR_S else SIGNIN_ASK_LATER_S
+                ask = open_for < SIGNIN_ASK_UNTIL_S and (asked is None or self._clock() - asked >= every)
+                found = await self._sign_in_there(name, start, ask=ask)
                 if ask:
                     asked = self._clock()
-                found = await self._sign_in_there(name, start, ask=ask)
-                if found and self._signing.get(name) is process and process.poll() is None:
+                if (found and self._signing.get(name) is process and process.poll() is None
+                        and process not in self._cancelled):
                     del self._signing[name]
                     self._sign_in_start.pop(name, None)
                     release = getattr(process, "release", None)
@@ -824,9 +838,13 @@ class CliBrains:
                 del self._sign_in_watch[name]
 
     async def _check_sign_in(self, name, start):
-        """The window of Antigravity's sign-in ended before its sign-in was found: whether it is there now settles it."""
+        """The window of Antigravity's sign-in ended before its sign-in was found: whether it is there now settles it, and a
+        look that fails settles it `stopped` rather than leave it under way."""
         try:
             found = await self._sign_in_there(name, start)
+        except Exception as error:
+            logger.warning("Looking for Antigravity's sign-in failed: %s", type(error).__name__)
+            found = False
         finally:
             if self._checking.get(name) is asyncio.current_task():
                 del self._checking[name]
@@ -852,13 +870,13 @@ class CliBrains:
         threading.Thread(target=wait, name=f"{name}-sign-in", daemon=True).start()
 
     def _login_ended(self, name, process, code):
-        if self._signing.get(name) is not process:
+        if self._closed or self._signing.get(name) is not process:
             return
         del self._signing[name]
         self._stop_looking(name)
         start = self._sign_in_start.pop(name, None)
-        if name in self._cancelled:
-            self._cancelled.discard(name)
+        if process in self._cancelled:
+            self._cancelled.discard(process)
             self.invalidate(name)
             self._previous = None
             if self.notify:
@@ -904,6 +922,7 @@ class CliBrains:
             self._watcher = None
 
     async def aclose(self):
+        self._closed = True
         tasks = [*self._sign_in_watch.values(), *self._checking.values()]
         self._sign_in_watch.clear()
         self._checking.clear()

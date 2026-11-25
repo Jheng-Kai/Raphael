@@ -2,6 +2,7 @@
 
 import json
 import sys
+from pathlib import Path
 import asyncio
 
 from raphael_core.agent.cli.models import claude_cli_models, claude_models, claude_rows, agy_models, codex_models
@@ -150,11 +151,13 @@ def test_agy_collapses_efforts_and_resolves_display_default(tmp_path, conn):
     assert brains.settings.get("agent_model") == brains.settings.get("quick_model") == "cli:gemini:gemini-4-argon-high"
 
 
-def fake_agy(tmp_path, *, signed_in=True):
-    """A fake `agy`: `models` lists two models when it is signed in, and refuses as agy does when it is not. It checks that it
-    is asked in a private Gemini folder, never the owner's own `~/.gemini`."""
-    script = tmp_path / "agy.py"
-    script.write_text(f"""import os, sys
+def fake_agy(tmp_path, *, signed_in=True, delay=0.0, refuse_code=1, name="agy.py"):
+    """A fake `agy`: `models` lists two models when it is signed in, and refuses as agy does when it is not (exit
+    `refuse_code`). `signed_in` is True, False, or a path: signed in once that file exists, as a sign-in being done.
+    It answers after `delay` seconds, and checks that it is asked in a private Gemini folder, never the owner's own."""
+    marker = str(signed_in) if isinstance(signed_in, Path) else None
+    script = tmp_path / name
+    script.write_text(f"""import os, sys, time
 args = sys.argv[1:]
 if args == ["--version"]:
     print("agy 1.0")
@@ -163,13 +166,14 @@ else:
     folder = args[0].partition("=")[2]
     assert os.path.isdir(folder) and os.path.basename(folder) == ".gemini", folder
     assert os.path.dirname(folder) != {str(tmp_path)!r}, "the owner's own Gemini folder"
-    if {signed_in!r}:
+    time.sleep({delay!r})
+    if (os.path.exists({marker!r}) if {marker!r} else {signed_in is True!r}):
         print("gemini-4-argon-low\\tGemini Argon Low")
         print("claude-opus-5-5-high\\tClaude Opus 5.5 High")
     else:
         print("Fetching available models...", file=sys.stderr)
         print("Error: Please sign in to view available models. Launch the CLI without arguments to sign in.", file=sys.stderr)
-        sys.exit(1)
+        sys.exit({refuse_code!r})
 """, encoding="utf-8")
     return [sys.executable, str(script)]
 
@@ -231,6 +235,48 @@ def test_the_retired_gemini_clis_files_are_no_sign_in_of_antigravity(tmp_path):
     (tmp_path / ".gemini" / "google_accounts.json").write_text("{}")
     brains = CliBrains(home=tmp_path, environ={}, commands={"gemini": ["agy"]})
     assert brains.logged_in("gemini") is False and not brains.available("gemini")
+
+
+async def test_only_models_listed_say_antigravity_is_signed_in(tmp_path):
+    """R-CLI-SIGNIN-07: agy's refusal is its verdict whatever its exit code, and a list with no model says nothing."""
+    from raphael_core.agent.cli.models import antigravity_models
+
+    folder = tmp_path / "private" / ".gemini"
+    folder.mkdir(parents=True)
+    settings = tmp_path / "settings.json"
+    with pytest.raises(ValueError, match="signed_out"):
+        await antigravity_models(fake_agy(tmp_path, signed_in=False, refuse_code=0), {}, settings, gemini_dir=folder)
+    with pytest.raises(ValueError, match="signed_out"):
+        await antigravity_models(fake_agy(tmp_path, signed_in=False), {}, settings, gemini_dir=folder)
+    empty = tmp_path / "empty.py"
+    empty.write_text("print('Fetching available models...')\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="model_list_unavailable"):
+        await antigravity_models([sys.executable, str(empty)], {}, settings, gemini_dir=folder)
+    listed = await antigravity_models(fake_agy(tmp_path), {}, settings, gemini_dir=folder)
+    assert [model["provider"] for model in listed] == ["Google", "Anthropic"]
+
+
+async def test_a_refused_antigravity_run_has_agy_asked_again_at_the_next_read(tmp_path):
+    """R-CLI-SIGNIN-07: agy that listed its models an hour's worth ago is asked again as soon as a run is refused for its
+    sign-in, so a sign-in it can no longer use reads 未登入 at the next read instead of after the hour."""
+    from raphael_core.agent.cli.discovery import CliBrains
+
+    marker = tmp_path / "signed-in"
+    marker.touch()
+    brains = CliBrains(home=tmp_path, environ={}, commands={"gemini": fake_agy(tmp_path, signed_in=marker)})
+    try:
+        await brains.list()
+        await asyncio.wait_for(brains._model_refresh, 5)
+        assert (await brains.list())["clis"][2]["logged_in"] is True and not brains._needs_models("gemini")
+        marker.unlink()  # the token was revoked
+        brains.sign_in_lost("gemini", "expired")
+        assert brains._needs_models("gemini")
+        await brains.list()
+        await asyncio.wait_for(brains._model_refresh, 5)
+        source = (await brains.list())["clis"][2]
+        assert source["logged_in"] is False and not source["available"]
+    finally:
+        await brains.aclose()
 
 
 def test_antigravity_windows_executable_keeps_gemini_id(tmp_path):
