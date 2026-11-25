@@ -1,5 +1,6 @@
-"""What blocked a member on Raphael Chrome in the Mac test of 2026-11-25: a JavaScript dialog that held the page (#336),
-an HTML select a ref could not choose (#329), and a download placed at the root of the owner's project (#331)."""
+"""What blocked a member on Raphael Chrome in the owner's Mac test of the headless Chrome (#308): a JavaScript dialog
+that held the page (#336), an HTML select a ref could not choose (#329), and a download placed at the root of the
+owner's project (#331)."""
 
 import asyncio
 import contextlib
@@ -84,9 +85,12 @@ async def test_browser_dialog_answers_only_the_reported_dialog(tmp_path):
 
 @pytest.mark.parametrize(("kind", "message", "text"), [
     ("prompt", "Enter your password to continue", "hunter2"), ("confirm", "Pay $40 now?", None),
-    # Past the 2000 characters a result shows, the payment is still read.
-    ("confirm", "Context. " * 300 + "Pay $40 now?", None),
-], ids=["password", "payment", "payment-past-what-is-shown"])
+    # Past the 2000 characters a result shows, the payment is still read, and an invisible character does not hide it.
+    ("confirm", "Context. " * 300 + "Pay $40 now?", None), ("confirm", "Pa\u200by $40 now?", None),
+    ("confirm", "Ｐａｙ $40 now?", None),
+    # A message too long to judge is only dismissed.
+    ("alert", "Context. " * 25_000 + "Saved", None),
+], ids=["password", "payment", "payment-past-what-is-shown", "zero-width", "fullwidth", "too-long"])
 async def test_a_dialog_that_asks_for_the_owners_step_is_never_accepted(tmp_path, kind, message, text):
     # A headless dialog has no window the owner could answer: a sign-in or payment answer is refused, and it can be dismissed.
     browser, tab = dialog_tab(tmp_path)
@@ -104,6 +108,20 @@ async def test_a_dialog_that_asks_for_the_owners_step_is_never_accepted(tmp_path
     assert sent == []
     await host_page.dialog_action(browser, tab, {"action": "dismiss", "dialog_id": tab.dialog["dialog_id"]}, "user")
     assert sent == ["Page.handleJavaScriptDialog"]
+
+
+async def test_an_answered_prompt_is_judged_as_pressing_ok_too(tmp_path):
+    # An answer typed into a prompt that deletes still asks the owner first, as pressing OK on it would.
+    browser, tab = dialog_tab(tmp_path)
+
+    async def call(method, params=None, *, session=None):
+        raise AssertionError(method)
+
+    browser.cdp = SimpleNamespace(call=call)
+    open_dialog(browser, "prompt", "Delete the draft? Type its name to confirm")
+    with pytest.raises(BrowserError, match="browser_owner_approval_required"):
+        await host_page.dialog_action(
+            browser, tab, {"action": "accept", "dialog_id": tab.dialog["dialog_id"], "prompt_text": "Draft"}, "auto")
 
 
 def test_the_dialog_tool_is_offered_and_asks_like_page_input():
@@ -150,6 +168,64 @@ def test_a_projects_own_raphael_link_is_never_followed(tmp_path, monkeypatch, li
     staged(browser, GUID)
     assert browser._place_download(GUID, project, "authorized_keys") is None
     assert list(elsewhere.iterdir()) == [] and (browser.staging / GUID).exists()
+
+
+def test_a_file_created_where_a_swapped_link_led_gets_nothing_written(tmp_path, monkeypatch):
+    # By path (Windows), a link swapped in after the folders were checked is seen on the created file's handle.
+    monkeypatch.setattr(host_browser, "HANDLES", False)
+    monkeypatch.setattr(host_browser, "opened_in", lambda file, folder: False)
+    browser = HostBrowser(tmp_path / "profile")
+    project = (tmp_path / "project").resolve()
+    project.mkdir()
+    staged(browser, GUID, b"payload")
+    assert browser._place_download(GUID, project, "conftest.py") is None
+    assert (browser.staging / GUID).read_bytes() == b"payload"
+    assert all(path.stat().st_size == 0 for path in (project / ".raphael" / "downloads").iterdir())
+
+
+def test_the_created_file_is_found_in_its_folder(tmp_path):
+    folder = tmp_path.resolve()
+    with (folder / "report.txt").open("xb") as file:
+        assert host_browser.opened_in(file, folder) and not host_browser.opened_in(file, folder / "other")
+
+
+@pytest.mark.parametrize("by_handle", [True, False], ids=["by-handle", "by-path"])
+def test_a_half_written_gitignore_is_removed_so_the_next_download_writes_it(tmp_path, monkeypatch, by_handle):
+    if by_handle and not host_browser.HANDLES:
+        pytest.skip("this system opens no folder relative to another")
+    monkeypatch.setattr(host_browser, "HANDLES", by_handle)
+
+    class Full:
+        def __init__(self, file):
+            self.file = file
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *error):
+            self.file.close()
+
+        def write(self, text):
+            raise OSError("the disk is full")
+
+    if by_handle:
+        fdopen = os.fdopen
+        monkeypatch.setattr(host_browser.os, "fdopen",
+                            lambda fd, mode, **options: Full(fdopen(fd, mode, **options)) if mode == "w" else fdopen(fd, mode, **options))
+    else:
+        open_path = Path.open
+        monkeypatch.setattr(Path, "open", lambda path, mode="r", **options:
+                            Full(open_path(path, mode, **options)) if path.name == ".gitignore" else open_path(path, mode, **options))
+    browser = HostBrowser(tmp_path / "profile")
+    project = (tmp_path / "project").resolve()
+    project.mkdir()
+    staged(browser, GUID)
+    assert browser._place_download(GUID, project, "report.txt") is None
+    assert not (project / ".raphael" / ".gitignore").exists() and (browser.staging / GUID).exists()
+    monkeypatch.undo()
+    monkeypatch.setattr(host_browser, "HANDLES", by_handle)
+    assert browser._place_download(GUID, project, "report.txt") is not None
+    assert (project / ".raphael" / ".gitignore").read_text().splitlines()[-1] == "*"
 
 
 def test_a_download_is_placed_the_same_way_where_no_folder_opens_relative_to_another(tmp_path, monkeypatch):

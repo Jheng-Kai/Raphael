@@ -129,9 +129,18 @@ def place_by_handle(workspace, name, data):
                 os.mkdir(part, dir_fd=folders[-1])
             folders.append(os.open(part, FOLDER, dir_fd=folders[-1]))  # a link here fails to open (O_NOFOLLOW)
             if part == DOWNLOADS.parts[0]:
-                with suppress(FileExistsError):
-                    with os.fdopen(os.open(".gitignore", NEW_FILE, 0o644, dir_fd=folders[-1]), "w", encoding="utf-8") as file:
+                try:
+                    ignore = os.open(".gitignore", NEW_FILE, 0o644, dir_fd=folders[-1])
+                except FileExistsError:
+                    continue
+                try:
+                    with os.fdopen(ignore, "w", encoding="utf-8") as file:
                         file.write(IGNORE)
+                except OSError:
+                    # Half written, it would stand in for the whole one forever: gone, the next download writes it again.
+                    with suppress(OSError):
+                        os.unlink(".gitignore", dir_fd=folders[-1])
+                    raise
         for index in range(1000):
             candidate = name if not index else f"{index}-{name}"
             try:
@@ -152,8 +161,28 @@ def place_by_handle(workspace, name, data):
             os.close(folder)
 
 
+def opened_in(file, folder):
+    """Whether the file just created is in `folder`, as its open handle says on Windows: a link or junction swapped in
+    after the folders were checked is seen there, before anything is written."""
+    if os.name != "nt":
+        return Path(os.path.realpath(file.name)).parent == folder
+    import ctypes
+    import msvcrt
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.GetFinalPathNameByHandleW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_uint32, ctypes.c_uint32]
+    kernel.GetFinalPathNameByHandleW.restype = ctypes.c_uint32
+    buffer = ctypes.create_unicode_buffer(32768)
+    length = kernel.GetFinalPathNameByHandleW(msvcrt.get_osfhandle(file.fileno()), buffer, len(buffer), 0)
+    if not 0 < length < len(buffer):
+        return False
+    final = buffer.value
+    final = "\\\\" + final[8:] if final.startswith("\\\\?\\UNC\\") else final.removeprefix("\\\\?\\")
+    return os.path.normcase(os.path.dirname(final)) == os.path.normcase(str(folder))
+
+
 def place_by_path(workspace, name, data):
-    """Windows, which opens no folder relative to another: each folder is checked to be no link or junction."""
+    """Windows, which opens no folder relative to another: each folder is checked to be no link or junction, and the
+    created file to be in the last one before anything is written."""
     folder = workspace / DOWNLOADS
     for part in (folder.parent, folder):
         if part.is_symlink() or part.is_junction():
@@ -161,15 +190,24 @@ def place_by_path(workspace, name, data):
         part.mkdir(exist_ok=True)
         if part.resolve() != part:
             return None
-    with suppress(FileExistsError):
-        with (folder.parent / ".gitignore").open("x", encoding="utf-8") as ignore:
-            ignore.write(IGNORE)
+    ignore = folder.parent / ".gitignore"
+    try:
+        with ignore.open("x", encoding="utf-8") as file:
+            file.write(IGNORE)
+    except FileExistsError:
+        pass
+    except OSError:
+        ignore.unlink(missing_ok=True)
+        raise
     for index in range(1000):
         path = folder / (name if not index else f"{index}-{name}")
         try:
             output = path.open("xb")
         except FileExistsError:
             continue
+        if not opened_in(output, folder):
+            output.close()  # created empty where a swapped link led, and nothing written there
+            return None
         try:
             with output:
                 shutil.copyfileobj(data, output)
@@ -324,7 +362,7 @@ class Tab:
     # The JavaScript dialog that blocks the page (#336), set while it is open: Chrome holds every script and input of the
     # page until the dialog is answered, which a headless Chrome never draws.
     dialog: dict | None = None
-    dialog_text: str = ""  # its whole message, which the safety check reads; `dialog` shows its first 2000 characters
+    dialog_text: str | None = ""  # its whole message for the safety check (None: too long to judge); `dialog` shows 2000
     dialog_opened: asyncio.Event = field(default_factory=asyncio.Event, repr=False)
 
     @property
@@ -610,7 +648,7 @@ class HostBrowser:
             for tab in self.tabs.values():
                 if tab.session == session:
                     kind, message = params.get("type", "alert"), str(params.get("message", ""))
-                    tab.dialog_text = message[:200_000]
+                    tab.dialog_text = message if len(message) <= 200_000 else None
                     tab.dialog = {"dialog_id": secrets.token_hex(6), "type": kind, "message": message[:2000],
                                   **({"default_prompt": str(params.get("defaultPrompt", ""))[:2000]}
                                      if kind == "prompt" else {})}

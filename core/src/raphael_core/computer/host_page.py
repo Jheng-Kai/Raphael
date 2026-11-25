@@ -3,6 +3,7 @@
 import asyncio
 import json
 import secrets
+import unicodedata
 from contextlib import suppress
 from types import SimpleNamespace
 
@@ -295,6 +296,12 @@ async def act(browser, tab, name, arguments, approver):
     return {**fresh, "status": "browser_ref_changed"}, blocks
 
 
+def readable(text):
+    """Text as a reader sees it, for the safety check: compatibility forms folded (fullwidth letters) and invisible
+    characters (zero-width spaces and joiners, soft hyphens, combining marks) removed."""
+    return "".join(char for char in unicodedata.normalize("NFKC", text) if unicodedata.category(char) not in ("Cf", "Mn"))
+
+
 def dialog_blocked(tab, *, opened_now):
     """A tool's result while a JavaScript dialog blocks the page (#336). Chrome holds the page's scripts and input until
     the dialog is answered, so the result says so at once instead of waiting for Chrome until the call times out."""
@@ -317,18 +324,22 @@ async def dialog_action(browser, tab, arguments, approver):
     if text is not None and (action != "accept" or dialog["type"] != "prompt"):
         raise BrowserError("browser_dialog_text")
     if action == "accept":
-        # Accepting is pressing the dialog's OK: judged as a click on a button named by its message, or as typing that
-        # message's answer. A headless dialog has no window the owner could answer, so a private answer is refused. The
-        # whole message is judged: a payment past what the result shows must not slip by.
-        message = tab.dialog_text or dialog["message"]
-        verdict = (safety.judge(action="type", declared_final=False, text=text, focused_name=message,
-                                focused_role="Edit", focused_actions=("value",)) if text else
-                   safety.judge(action="click", declared_final=False, name=message, role="button"))
-        if verdict == safety.HANDOFF or safety.handoff_by_name(message):
+        # Accepting is pressing the dialog's OK: judged as a click on a button named by its message, and an answer to a
+        # prompt as typing it there too. A headless dialog has no window the owner could answer, so a private answer is
+        # refused. The whole message is judged as it reads (a payment past what the result shows, or split by an
+        # invisible character, must not slip by), and one too long to judge is only dismissed.
+        if tab.dialog_text is None:
             raise BrowserError("browser_dialog_private")
-        if verdict == safety.REFUSE:
+        message = readable(tab.dialog_text)
+        verdicts = {safety.judge(action="click", declared_final=False, name=message, role="button")}
+        if text:
+            verdicts.add(safety.judge(action="type", declared_final=False, text=readable(text), focused_name=message,
+                                      focused_role="Edit", focused_actions=("value",)))
+        if safety.HANDOFF in verdicts or safety.handoff_by_name(message):
+            raise BrowserError("browser_dialog_private")
+        if safety.REFUSE in verdicts:
             raise BrowserError("browser_action_refused")
-        if verdict == safety.CONFIRM and approver != "user":
+        if safety.CONFIRM in verdicts and approver != "user":
             raise BrowserError("browser_owner_approval_required")
     await browser.command(tab, "Page.handleJavaScriptDialog",
                           {"accept": action == "accept", **({"promptText": text} if text is not None else {})})
