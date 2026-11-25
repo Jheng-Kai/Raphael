@@ -689,6 +689,8 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .menu .mtd .mt { white-space: normal; }
 .menu .mdesc { font-size: var(--fs-xs); line-height: 1.4; color: var(--text-3); text-wrap: pretty; }
 .menu-head { padding: var(--sp-1) var(--sp-2); font-size: var(--fs-xs); color: var(--text-3); text-align: left; border-bottom: 1px solid var(--line); margin-bottom: var(--sp-1); }
+/* A menu with nothing under its heading (「沒有人在工作」) is the heading alone: no line under it. */
+.menu-head:last-child { border-bottom: 0; margin-bottom: 0; }
 .completion-menu { contain: layout; overflow-anchor: none; }
 .completion-menu button.is-active { background: var(--hover); }
 .completion-menu button:hover:not(.is-active) { background: transparent; }
