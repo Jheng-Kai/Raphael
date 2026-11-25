@@ -748,6 +748,20 @@ async def test_unknown_execution_envelopes_fail_closed(tmp_path, conn, arguments
     assert not outcome.ok and len(fake.requests) == before
 
 
+async def test_the_saved_composio_key_is_revealed_to_the_owner_without_waiting_or_logging_it(tmp_path, conn, caplog):
+    router, service, hub, vault = setup_service(tmp_path, conn, lambda request: pytest.fail("no HTTP"))
+    assert await router.call("connectors.reveal_key", {}) == {"key": ""}
+    vault.set("connectors:composio:key", "ak_private")
+    with caplog.at_level(logging.DEBUG):
+        assert await router.call("connectors.reveal_key", {}) == {"key": "ak_private"}
+        # Showing the key never waits behind another connector operation.
+        async with service._lock:
+            assert await asyncio.wait_for(router.call("connectors.reveal_key", {}), 1) == {"key": "ak_private"}
+        await router.call("connectors.set_key", {"key": ""})
+        assert await router.call("connectors.reveal_key", {}) == {"key": ""}
+    assert "ak_private" not in caplog.text
+
+
 async def test_key_clear_and_managed_mutation_guards(tmp_path, conn):
     router, service, hub, vault, fake = await connected(tmp_path, conn)
     for method, args in [("integrations.update", {}), ("integrations.set_enabled", {"enabled": False}),

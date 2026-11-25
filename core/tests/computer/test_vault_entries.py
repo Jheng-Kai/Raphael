@@ -278,6 +278,135 @@ async def test_new_values_are_scrubbed_for_a_reader_already_on_the_computer(conn
     assert entries.redact(7, "tiny new-site-name") == "tiny new-site-name"
 
 
+def owner_handlers(entries):
+    handlers = {}
+    class Router:
+        def register(self, name, handler): handlers[name] = handler
+    entries.register(Router())
+    return handlers
+
+
+async def test_reveal_gives_the_owner_every_kinds_current_values_and_registers_nothing(conn):
+    entries = VaultEntries(Vault(), conn=conn)
+    login = entries.put({"kind": "login", "label": "Shop", "origin": "https://shop.example", "members": [0],
+                         "values": {"username": "private-user", "password": "old-password"}})
+    contact = entries.put({"kind": "contact", "label": "Travel", "values": CONTACT | {"phone": ""}})
+    card = entries.put({"kind": "card", "label": "Company", "values": CARD})
+    secret = entries.put_key(3, "API_KEY", "the API", "secret-key-value")
+    plain = entries.put_key(3, "JIRA_SITE", "the site", "plain-site-name", secret=False)
+    reference = entries.reference(4, "https://example.com/login")
+    entries.save(reference, json.dumps({"username": "card-user", "password": "card-password"}), member=4, site="https://example.com")
+    handlers = owner_handlers(entries)
+    reveal = handlers["vault.reveal"]
+    assert await reveal({"id": login}) == {"values": {"username": "private-user", "password": "old-password"}}
+    assert await reveal({"id": contact}) == {"values": CONTACT | {"phone": ""}}
+    assert await reveal({"id": card}) == {"values": CARD}
+    assert await reveal({"id": secret}) == {"values": {"value": "secret-key-value"}}
+    assert await reveal({"id": plain}) == {"values": {"value": "plain-site-name"}}
+    assert await reveal({"id": reference}) == {"values": {"username": "card-user", "password": "card-password"}}
+    # What is shown is what was last saved, and showing it tells no reader to scrub anything or changes anything.
+    await handlers["vault.update"]({"id": login, "values": {"password": "new-password"}})
+    assert await reveal({"id": login}) == {"values": {"username": "private-user", "password": "new-password"}}
+    after_update = {member: set(seen) for member, seen in entries.values.items()}
+    before = dict(entries.vault.values)
+    await reveal({"id": card})
+    assert entries.vault.values == before and {member: set(seen) for member, seen in entries.values.items()} == after_update
+
+
+async def test_reveal_refuses_an_unknown_entry_and_an_unreadable_credential_without_naming_a_value(conn):
+    from raphael_core.protocol import RpcError
+    entries = VaultEntries(Vault(), conn=conn)
+    contact = entries.put({"kind": "contact", "label": "Travel", "values": CONTACT})
+    reveal = owner_handlers(entries)["vault.reveal"]
+    for target in ("missing", None, 5, ["x"]):
+        with pytest.raises(RpcError) as raised:
+            await reveal({"id": target})
+        assert "vault_values" in repr(raised.value)
+    with pytest.raises(RpcError):
+        await reveal({})
+    credential = "computer-entry:" + contact
+    for broken in ("not json private-phone", json.dumps(["private-phone"]), json.dumps({"name": "private-owner"}),
+                   json.dumps(CONTACT | {"phone": 5}), json.dumps(CONTACT | {"extra": "private-extra"})):
+        entries.vault.values[credential] = broken
+        with pytest.raises(RpcError) as raised:
+            await reveal({"id": contact})
+        assert "vault_values" in repr(raised.value) and "private" not in repr(raised.value)
+    entries.vault.values.pop(credential)
+    with pytest.raises(RpcError):
+        await reveal({"id": contact})
+
+
+async def test_an_exact_update_replaces_the_whole_set_and_an_emptied_field_is_cleared(conn):
+    entries = VaultEntries(Vault(), conn=conn)
+    contact = entries.put({"kind": "contact", "label": "Travel", "values": CONTACT})
+    card = entries.put({"kind": "card", "label": "Company", "values": CARD})
+    login = entries.put({"kind": "login", "label": "Shop", "hint": "Buying", "origin": "https://shop.example", "members": [0],
+                         "values": {"username": "private-user", "password": "old-password"}})
+    secret = entries.put_key(3, "API_KEY", "the API", "old-key-value-1")
+    plain = entries.put_key(3, "JIRA_SITE", "the site", "old", secret=False)
+    update, rows = owner_router(entries), {i: row_of(entries, i) for i in (login, secret, plain)}
+    await update({"id": contact, "values": CONTACT | {"phone": ""}, "exact": True})
+    assert stored(entries, contact) == CONTACT | {"phone": ""}
+    await update({"id": contact, "values": {"name": "", "address": "", "phone": "", "email": "only-email"}, "exact": True})
+    assert stored(entries, contact) == {"name": "", "address": "", "phone": "", "email": "only-email"}
+    await update({"id": card, "values": CARD | {"expiry": "", "cvc": ""}, "exact": True})
+    assert stored(entries, card) == CARD | {"expiry": "", "cvc": ""}
+    entries.preload(7)
+    await update({"id": login, "values": {"username": "other-user", "password": "new-password"}, "exact": True})
+    await update({"id": secret, "values": {"value": "new-key-value-2"}, "exact": True})
+    await update({"id": plain, "values": {"value": "new"}, "exact": True})
+    assert stored(entries, login) == {"username": "other-user", "password": "new-password"}
+    assert entries.key_values(3, ["API_KEY", "JIRA_SITE"]) == ({"API_KEY": "new-key-value-2", "JIRA_SITE": "new"}, [])
+    assert {i: row_of(entries, i) for i in (login, secret, plain)} == rows and rows[plain][4] == "plain"
+    assert entries.redact(7, "a new-password b new-key-value-2 c") == "a [private] b [private] c"
+    # With the metadata in the same call, and the values still exact.
+    await update({"id": contact, "label": "Other", "hint": "two", "members": "all", "values": CONTACT, "exact": True})
+    assert stored(entries, contact) == CONTACT and {r["id"]: r["label"] for r in entries.entries()}[contact] == "Other"
+
+
+async def test_an_exact_update_is_checked_as_a_new_entry_and_changes_nothing_when_refused(conn):
+    from raphael_core.protocol import RpcError
+    entries = VaultEntries(Vault(), conn=conn)
+    login = entries.put({"kind": "login", "label": "Shop", "origin": "https://shop.example", "values": {"username": "u", "password": "p"}})
+    contact = entries.put({"kind": "contact", "label": "Travel", "values": CONTACT})
+    card = entries.put({"kind": "card", "label": "Company", "values": CARD})
+    key = entries.put_key(0, "API_KEY", "the API", "kept-key-value")
+    update, before, rows = owner_router(entries), dict(entries.vault.values), {i: row_of(entries, i) for i in (login, contact, card, key)}
+    empty = {"name": "", "address": "", "phone": "", "email": ""}
+    for target, values in ((login, {"username": "u", "password": ""}), (login, {"username": "", "password": "p"}),
+                           (login, {"username": "u"}), (login, {"password": "private-new"}), (login, {"username": "u", "password": "p", "extra": "x"}),
+                           (login, {"username": "u", "password": "x" * 401}), (login, {"username": "u", "password": 5}),
+                           (contact, empty), (contact, {"phone": "private-new"}), (contact, CONTACT | {"phone": None}),
+                           (contact, {"name": "a" * 400, "address": "b" * 400, "phone": "c" * 400, "email": "d" * 400}),
+                           (card, {"name": "", "number": "", "expiry": "", "cvc": ""}), (card, {"value": "x"}), (card, {"number": "5500000000000004"}),
+                           (key, {"value": ""}), (key, {}), (key, {"value": " padded "}), (key, {"value": "line\nbreak"}),
+                           (key, {"value": "k" * 1100}), (key, {"value": "k", "other": "x"}), (key, {"value": 5}), ("missing", {"value": "x"}),
+                           (contact, "text"), (contact, ["phone"])):
+        with pytest.raises(RpcError) as raised:
+            await update({"id": target, "label": "Changed", "hint": "changed", "members": [0], "values": values, "exact": True})
+        assert "vault_values" in repr(raised.value) and "private-new" not in repr(raised.value)
+    for exact in ("yes", 1, []):
+        with pytest.raises(RpcError):
+            await update({"id": contact, "values": CONTACT | {"phone": ""}, "exact": exact})
+    assert entries.vault.values == before and {i: row_of(entries, i) for i in (login, contact, card, key)} == rows
+    # A credential that cannot be read is refused, never replaced blindly.
+    entries.vault.values["computer-entry:" + contact] = "not json"
+    with pytest.raises(RpcError):
+        await update({"id": contact, "values": CONTACT, "exact": True})
+
+
+async def test_an_update_without_exact_still_merges_and_keeps_an_emptied_field(conn):
+    entries = VaultEntries(Vault(), conn=conn)
+    contact = entries.put({"kind": "contact", "label": "Travel", "values": CONTACT})
+    login = entries.put({"kind": "login", "label": "Shop", "origin": "https://shop.example", "values": {"username": "u", "password": "p"}})
+    update = owner_router(entries)
+    for exact in ({}, {"exact": False}):
+        await update({"id": contact, "values": {"phone": "new-phone", "email": ""}} | exact)
+        assert stored(entries, contact) == CONTACT | {"phone": "new-phone"}
+        await update({"id": login, "values": {"password": ""}} | exact)
+        assert stored(entries, login) == {"username": "u", "password": "p"}
+
+
 async def test_shared_login_revocation_between_fields_stops_before_the_password(desktop, conn, tmp_path):
     vm, target, _ = desktop
     filled = []

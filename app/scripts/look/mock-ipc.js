@@ -1455,6 +1455,14 @@ export function installMock(fixture, config = {}, target = window) {
       }
       case "skills.library.delete": data.skillLibrary = data.skillLibrary.filter(item => item.key !== p.key); return { deleted: true };
       case "vault.list": return { entries: data.vaultEntries };
+      // The owner's page shows an entry's values as saved, masked behind an eye: synthetic values of the entry's kind.
+      case "vault.reveal": {
+        const entry = data.vaultEntries.find(e => e.id === p.id);
+        if (!entry) return { ok: false, error: "vault_values" };
+        return { values: { login: { username: "look@example.test", password: "look-synthetic-password" }, contact: { name: "測試聯絡人", address: "台北市測試路 1 號", phone: "0912000000", email: "contact@example.test" },
+          card: { name: "測試持卡人", number: "4111111111111111", expiry: "12/30", cvc: "123" }, key: { value: "look-synthetic-key" } }[entry.kind] };
+      }
+      case "connectors.reveal_key": return { key: data.composioConfigured ? "look-synthetic-composio-key" : "" };
       case "vault.preview": return data.vaultImportPreview;
       case "vault.cancel": return { cancelled: true };
       case "vault.import": return { saved: p.ids.length, remaining: 0 };

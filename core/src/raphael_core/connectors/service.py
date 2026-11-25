@@ -156,7 +156,7 @@ class ConnectorsService:
     def register(self, router) -> None:
         methods = {"catalog": self.catalog, "categories": self.categories, "toolkit": self.toolkit, "connect": self.connect,
                    "status": self.status, "disconnect": self.disconnect, "tools": self.tools,
-                   "set_tools": self.set_tools, "set_key": self.set_key, "label": self.label,
+                   "set_tools": self.set_tools, "set_key": self.set_key, "reveal_key": self.reveal_key, "label": self.label,
                    "remove_account": self.remove_account,
                    "google.configure": self.google_configure, "google.connect": self.google_connect}
         for name, handler in methods.items():
@@ -171,7 +171,7 @@ class ConnectorsService:
             async with asyncio.timeout(budget):
                 # These take the lock themselves, for the steps that need it and never for a wait: a sign-in waits in the browser
                 # for up to ten minutes, and nothing else the owner presses may queue behind it.
-                if name in {"catalog", "categories", "toolkit", "status", "remove_account", "connect", "disconnect",
+                if name in {"catalog", "categories", "toolkit", "status", "remove_account", "connect", "disconnect", "reveal_key",
                             "google.configure", "google.connect"}:
                     return await handler(params)
                 async with self._lock:
@@ -526,6 +526,11 @@ class ConnectorsService:
 
     async def categories(self, params):
         return await self.composio.page("/toolkits/categories", cache=True)
+
+    async def reveal_key(self, params):
+        """The saved Composio key, for the owner's Settings to show behind an eye (R-VAULT-07); empty when none is saved.
+        Only the owner's RPC calls this: no model tool does, and nothing here logs or keeps the key."""
+        return {"key": self.vault.get(KEY) or ""}
 
     async def set_key(self, params, *, card_active=None):
         key = _text(params, "key", optional=True)

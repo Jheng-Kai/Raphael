@@ -901,29 +901,42 @@ export function checkRendered(name, context = {}) {
       const fields = { login:2, contact:4, card:4 }[name.slice(10)];
       require(vault.querySelectorAll('[id^="vault-value-"][type="password"]').length === fields, 'all private fields are masked');
       if (name === 'vault-new-card') require(vault.textContent.includes('最後的付款或送出由你完成'), 'card entry explains the final owner step');
-    } else if (name === 'vault-menu') require(visible(document.querySelector('#app-popover [data-pick="edit"]')) && visible(document.querySelector('#app-popover [data-pick="remove"]')), 'entry actions use the shared row menu');
-    else if (name === 'vault-remove-ask') {
-      const remove = document.querySelector('#app-popover [data-pick="remove"]');
-      require(visible(remove) && remove.textContent.trim() === '確定移除這筆資料？' && visible(document.querySelector('#app-popover [data-pick="edit"]')), 'the first press asks in the item\'s place, in the same open menu');
-      require(remove.scrollWidth <= remove.clientWidth + 1, 'the question fits its row');
+    } else if (name === 'vault-page') {
+      // An entry's page in Safety's place: the way back and its title, its trash and the dialog's close on one row; its values
+      // as saved, masked, each with its eye; no list, no ⋯, no menu.
+      const head = vault.querySelector('.vault-page-head'), parts = head && [head.querySelector('.back-title'), head.querySelector('[data-vault="remove"]'), head.querySelector('.close-button')];
+      require(parts && parts.every(visible) && !document.querySelector('.vault-list, .rules-row, #app-popover'), 'the page stands alone: way back, title, trash and close');
+      const centre = el => { const box = el.getBoundingClientRect(); return (box.top + box.bottom) / 2; };
+      require(parts.every(part => Math.abs(centre(part) - centre(parts[0])) <= 2), 'the way back, the trash and the close share one row');
+      const fields = [...vault.querySelectorAll('[id^="vault-value-"]')];
+      require(fields.length === 2 && fields.every(input => input.type === 'password' && input.value.length > 0) && !vault.textContent.includes('不變更'), 'the values are there as saved, masked');
+      require(fields.every(input => visible(input.closest('.field').querySelector('[data-vault="reveal"]'))), 'each value has its eye');
+    } else if (name === 'vault-remove-ask') {
+      const ask = vault.querySelector('.vault-page-head [data-vault="remove"][data-asking="true"]');
+      require(visible(ask) && ask.textContent.trim() === '確定移除這筆資料？', 'the first press of the trash asks in its own place');
+      require(ask.scrollWidth <= ask.clientWidth + 1, 'the question fits its button');
       require(!window.__look.calls.some(call => call.method === 'vault.remove'), 'nothing is removed before the second press');
+    } else if (name === 'settings-no-menu') {
+      require(!document.querySelector('#app-popover'), 'a right click in Settings opens no menu');
     }
     else if (name === 'vault-filter') require(vault.querySelectorAll('.vault-row').length === 1 && vault.textContent.includes('公司差旅卡'), 'card filter selects only cards');
     // #320: the Composio key is kept in the vault as the whole team's key; Connect apps keeps no setting for it.
     else if (name === 'vault-composio-key') {
       const rows = [...vault.querySelectorAll('.vault-row')];
       require(rows[0]?.dataset.vaultRow === 'composio' && rows[0].textContent.includes('Composio') && rows[0].textContent.includes('整個團隊'), 'the Composio key is the first row, the whole team\'s');
-      require(visible(rows[0].querySelector('[data-vault="menu"]')), 'its ⋯ is there to change or remove it');
+      require(visible(rows[0].querySelector('[data-vault="edit"]')) && !vault.querySelector('[data-overflow]'), 'its pencil is there to change or remove it, and no row has a ⋯');
     } else if (name === 'vault-composio-edit') {
       const form = vault.querySelector('[data-vault-system="composio"]'), field = form?.querySelector('#vault-value-value');
-      require(visible(form) && visible(field) && field.type === 'password' && field.value === '', "the Composio key's form is open with an empty password field: the saved key is never shown");
+      require(visible(form) && visible(field) && field.type === 'password' && field.value.length > 0, "the Composio key's page shows the saved key, masked");
+      require(visible(form.querySelector('[data-vault="reveal"]')) && visible(form.querySelector('.vault-page-head [data-vault="remove"]')), 'with its eye and its trash');
       require(!form.querySelector('#vault-label, #vault-hint, [data-k="vault-access"]'), 'it has no name, hint or access to change');
       require(visible(form.querySelector('[data-k="vault-composio-note"]')), 'it says first that the apps connected through Composio must be connected again');
       require(document.activeElement === field, 'the field has the focus');
     } else if (name === 'vault-edit-values') {
-      const fields = [...vault.querySelectorAll('.vault-editor [id^="vault-value-"]')];
-      require(fields.length === 2 && fields.every(input => input.type === 'password' && input.value === '' && input.placeholder.includes('不變更就留空')),
-        'an edit shows the private fields empty and masked, each saying that empty keeps what is saved');
+      // The password's eye was pressed: it reads as text, the user name stays masked.
+      const user = vault.querySelector('#vault-value-username'), password = vault.querySelector('#vault-value-password');
+      require(user?.type === 'password' && user.value.length > 0 && password?.type === 'text' && password.value.length > 0, 'the eye shows the value it stands beside, and only that one');
+      require(vault.querySelector('[data-vault="reveal"][data-field="password"]').getAttribute('aria-pressed') === 'true', 'its eye is pressed');
       require(visible(vault.querySelector('#vault-label')) && vault.querySelector('#vault-label').value.length > 0, 'the name is there to change, filled in');
     }
     else if (name === 'vault-sharing') {

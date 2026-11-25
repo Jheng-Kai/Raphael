@@ -218,24 +218,26 @@ class VaultEntries(LoginVault):
     def remember(self, member, values):
         self.values.setdefault(member, set()).update(v for v in values.values() if v)
 
-    def plan_values(self, identifier, values):
+    def plan_values(self, identifier, values, *, exact=False):
         """Check a change of the private values of one entry and return what `apply_values` writes, or None when the change
         names no new value. A field given as a non-empty string replaces that field; an empty string or a field left out
-        keeps the current value. Nothing is written here, and no error carries a value."""
+        keeps the current value. With `exact`, `values` is the entry's complete new set: every field of the kind is
+        given, an empty string clears that field, and the result is checked as a new entry is. Nothing is written
+        here, and no error carries a value."""
         row = self.conn.execute("SELECT kind,origin,credential FROM vault_entries WHERE id=?", (identifier,)).fetchone()
         if row is None:
             raise ValueError("entry_missing")
         kind = row["kind"]
         fields = ("value",) if kind == "key" else FIELDS.get(kind)
         if (fields is None or not isinstance(values, dict) or not set(values) <= set(fields)
-                or any(not isinstance(v, str) for v in values.values())):
+                or any(not isinstance(v, str) for v in values.values()) or exact and set(values) != set(fields)):
             raise ValueError("invalid_values")
-        given = {field: v for field, v in values.items() if v}
+        given = dict(values) if exact else {field: v for field, v in values.items() if v}
         if not given:
             return None
         if kind == "key":
             value = given["value"]
-            if value != value.strip() or any(ord(ch) < 32 or ord(ch) == 127 for ch in value):
+            if exact and not value or value != value.strip() or any(ord(ch) < 32 or ord(ch) == 127 for ch in value):
                 raise ValueError("invalid_key")
         elif any(len(v) > 400 for v in given.values()):
             raise ValueError("invalid_values")
@@ -255,6 +257,22 @@ class VaultEntries(LoginVault):
         # A key marked as no secret is never registered for scrubbing; a short secret key is kept but never scrubbed.
         scrub = row["origin"] != PLAIN and (kind != "key" or redactable_program_key(merged["value"]))
         return {"credential": row["credential"], "previous": raw, "encoded": encoded, "values": merged, "scrub": scrub}
+
+    def reveal(self, identifier):
+        """The entry's current private values, for the owner's Settings to show behind an eye (R-VAULT-07). Only the
+        owner's RPC calls this: nothing reaches a model, no reader is told to scrub them, and no error carries a value."""
+        row = self.conn.execute("SELECT kind,credential FROM vault_entries WHERE id=?", (identifier,)).fetchone()
+        if row is None:
+            raise ValueError("entry_missing")
+        fields = ("value",) if row["kind"] == "key" else FIELDS.get(row["kind"])
+        raw = self.vault.get(row["credential"])
+        try:
+            values = json.loads(raw) if raw else None
+        except (TypeError, ValueError):
+            values = None
+        if fields is None or not isinstance(values, dict) or set(values) != set(fields) or any(not isinstance(v, str) for v in values.values()):
+            raise ValueError("invalid_entry")
+        return {field: values[field] for field in fields}
 
     def apply_values(self, plan):
         """Write a checked change under the entry's own credential name."""
@@ -379,7 +397,10 @@ class VaultEntries(LoginVault):
             plan, metadata = None, True
             if p.get("values") is not None:
                 try:
-                    plan = self.plan_values(p.get("id"), p["values"])
+                    # `exact`: `values` is the entry's complete new set, so an emptied field is cleared; otherwise a subset is merged.
+                    if not isinstance(p.get("exact", False), bool):
+                        raise ValueError("invalid_values")
+                    plan = self.plan_values(p.get("id"), p["values"], exact=p.get("exact", False))
                 except Exception:
                     raise invalid_params("vault_values") from None
                 metadata = any(key in p for key in ("label", "hint", "members"))
@@ -409,6 +430,11 @@ class VaultEntries(LoginVault):
             if plan:
                 self.scrub_values(plan)
             return {"updated": True}
+        async def reveal(p):
+            try:
+                return {"values": self.reveal(p.get("id"))}
+            except Exception:
+                raise invalid_params("vault_values") from None
         async def preview(p):
             try:
                 return self.preview(p.get("csv"))
@@ -431,6 +457,6 @@ class VaultEntries(LoginVault):
                 except Exception:
                     break
             return {"saved": saved, "remaining": len(set(selected)) - saved}
-        for name, handler in {"list": listing, "add": write, "update": update, "remove": remove, "preview": preview,
+        for name, handler in {"list": listing, "add": write, "update": update, "reveal": reveal, "remove": remove, "preview": preview,
                               "cancel": cancel, "import": confirm}.items():
             router.register("vault." + name, handler)

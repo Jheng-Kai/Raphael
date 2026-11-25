@@ -502,6 +502,8 @@ function skillsHTML(v: SettingsView): string {
 
 /** Shared safety rules and local command permissions. */
 function safetyHTML(v: SettingsView): string {
+  // An entry of the vault open is a page of its own, in Safety's place: its header carries the close.
+  if (v.vault?.kind) return coreNote(v) + vaultHTML(v.vault, settingsCloseHTML());
   return settingsHeaderHTML(v) + coreNote(v) + vaultHTML(v.vault ?? emptyVaultView()) + (v.rules ? rulesHTML(v.rules) : "");
 }
 

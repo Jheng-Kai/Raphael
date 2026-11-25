@@ -1,7 +1,9 @@
 // Right click is the ⋯. Every row, card or item that has a ⋯ (overflow) button opens that button's menu when it is
 // right-clicked anywhere on it, at the pointer, and for the focused item from the keyboard (Shift+F10, the Menu
 // key): the very same menu, since the button itself is pressed and its own handler runs. Anywhere else the
-// browser's menu (reload, back, ...) has no place in an app, so nothing opens.
+// browser's menu (reload, back, ...) has no place in an app, so nothing opens. Settings is the one exception: in any of
+// its panes a right click opens nothing (a CLI's 中斷連線 in 模型 included); its ⋯ open only when pressed. Connect apps,
+// drawn in the same window on its own, is not Settings.
 //
 // `OVERFLOW_ROWS` is the one table of them. A ⋯ drawn without a line here fails context-menu.test.ts, and so does a
 // line that no ⋯ uses; look's audit finds any ⋯ in a rendered page that no line covers (R-UI-44).
@@ -29,7 +31,6 @@ export const OVERFLOW_ROWS: readonly OverflowRow[] = [
   { more: '[data-msg="user-menu"]', row: ".msg-sub" },
   { more: '[data-act="local-menu"]', row: ".lm-row" },
   { more: '[data-rule="more"]', row: ".rules-row" },
-  { more: '[data-vault="menu"]', row: ".vault-row" },
   { more: '[data-skl="more"]', row: ".skl-pack" },
   { more: '[data-skl="skill-more"]', row: ".skl-skill" },
   { more: '[data-skl="skill-more"]', row: ".skl-doc-page" },
@@ -93,6 +94,9 @@ export function installContextMenus(doc: Document = document): () => void {
     const pressed = press;
     press = null;
     if (claimed) return;
+    // Settings has no right click: what it sets is pressed, never right-clicked. Connect apps, drawn in the same window on its
+    // own (`data-standalone`), is not Settings and keeps it.
+    if (event.target instanceof Element && event.target.closest(".modal-scrim:not([data-standalone])")) return;
     const found = overflowAt(event.target);
     if (!found) return;
     // What the menu is about: where the right click landed, or what has the focus when the key opens it.

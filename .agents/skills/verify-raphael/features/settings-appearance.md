@@ -443,20 +443,22 @@ stand in two columns, one below 800 px so that a long name is read whole. The
 rows of an imported file's preview are the same, an entry's label over its site, all chosen
 at first. A press chooses where it stands and keeps the private fields typed above it.
 `vault-sharing` presses a member and `vault-import-preview` leaves one entry out, each with
-the pointer moved away, so the pictures show a chosen row as it stays. Removing an entry is three
-presses: ⋯ (or a right click), 移除, which asks 「確定移除這筆資料？」 in its own place in the
-same menu (`ActionItem.ask`), and that item again; no second menu opens.
+the pointer moved away, so the pictures show a chosen row as it stays. Each row has a pencil and no ⋯, and
+Settings has no right click (`settings-no-right-click`). The pencil opens the entry's own page in Safety's place
+(`vault-entry-page`): the way back and its title, its trash and the dialog's close on one row; every value as saved,
+masked, with an eye that shows it and hides it again (`vault-edit-values`); the owner deletes a value, types the new
+one and saves, and the whole set is sent exactly. The trash asks 「確定移除這筆資料？」 in its own place and the second
+press removes (`vault-entry-remove-ask`).
 
-Every entry's 編輯 changes its private values too (R-VAULT-07): the fields start empty and masked,
-each saying that empty keeps what is saved, and only what is typed is sent (`vault-edit-values`). A saved Composio key is
-the vault's first key, the whole team's, and its 編輯 is the key alone (`vault-composio-key`, `vault-composio-edit`,
+Every entry's private values can be changed on its page (R-VAULT-07). A saved Composio key is the vault's first key,
+the whole team's, and its page is the key alone, as saved and masked (`vault-composio-key`, `vault-composio-edit`,
 R-CONNECT-05).
 
 ```powershell
-npm run look -- vault-list vault-filter vault-entry-menu vault-entry-remove-ask vault-new-login vault-new-contact vault-new-card vault-sharing vault-import-preview vault-card-permission vault-edit-values vault-composio-key vault-composio-edit calm-thread --theme both --width 1120,720,1920x1080
+npm run look -- vault-list vault-filter vault-entry-page vault-entry-remove-ask settings-no-right-click vault-new-login vault-new-contact vault-new-card vault-sharing vault-import-preview vault-card-permission vault-edit-values vault-composio-key vault-composio-edit calm-thread --theme both --width 1120,720,1920x1080
 ```
 
-Selected scenes: vault-list, vault-filter, vault-entry-menu, vault-entry-remove-ask, vault-new-login, vault-new-contact,
+Selected scenes: vault-list, vault-filter, vault-entry-page, vault-entry-remove-ask, settings-no-right-click, vault-new-login, vault-new-contact,
 vault-new-card, vault-sharing, vault-import-preview, vault-card-permission,
 calm-thread on the merged thread layout. Run both themes at
 1120,720,1920x1080. Inspect all contact sheets and each new scene at light 720
