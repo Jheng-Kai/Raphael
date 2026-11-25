@@ -1,6 +1,7 @@
 """Raphael's Chrome, with member-owned tabs and tab-local input."""
 
 import asyncio
+import errno
 import json
 import logging
 import os
@@ -180,36 +181,74 @@ def opened_in(file, folder):
     return os.path.normcase(os.path.dirname(final)) == os.path.normcase(str(folder))
 
 
-def remove_made(path, made):
-    """Removes the file this placer created at `path` only while the path still leads to that very file: a link swapped
-    in since would lead it to a file of the project, which stays."""
-    with suppress(OSError):
-        there = os.stat(path)
-        if (there.st_dev, there.st_ino) == (made.st_dev, made.st_ino):
-            os.unlink(path)
+def created(path):
+    """A new file at `path`, open for writing, and how to remove it again. Windows removes it through its own handle, so
+    no link or junction swapped in since can lead the removal to another file. Elsewhere this placer runs only under
+    test (every folder there opens relative to another), and the removal checks the path still leads to the file."""
+    if os.name != "nt":
+        file = path.open("xb")
+        made = os.fstat(file.fileno())
+
+        def remove():
+            with suppress(OSError):
+                there = os.stat(path)
+                if (there.st_dev, there.st_ino) == (made.st_dev, made.st_ino):
+                    os.unlink(path)
+
+        return file, remove
+    import ctypes
+    import msvcrt
+    from ctypes import wintypes
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD,
+                                   wintypes.DWORD, wintypes.HANDLE]
+    kernel.CreateFileW.restype = wintypes.HANDLE
+    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel.SetFileInformationByHandle.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD]
+    kernel.SetFileInformationByHandle.restype = wintypes.BOOL
+    # GENERIC_WRITE | DELETE | FILE_READ_ATTRIBUTES, shared for reading, CREATE_NEW, FILE_ATTRIBUTE_NORMAL.
+    handle = kernel.CreateFileW(str(path), 0x40000000 | 0x00010000 | 0x80, 0x1, None, 1, 0x80, None)
+    if handle is None or handle == ctypes.c_void_p(-1).value:
+        error = ctypes.get_last_error()
+        if error in (80, 183):  # ERROR_FILE_EXISTS, ERROR_ALREADY_EXISTS
+            raise FileExistsError(errno.EEXIST, os.strerror(errno.EEXIST), str(path))
+        raise ctypes.WinError(error)
+    try:
+        descriptor = msvcrt.open_osfhandle(handle, os.O_WRONLY | os.O_BINARY)
+    except OSError:
+        kernel.CloseHandle(handle)
+        raise
+    file = os.fdopen(descriptor, "wb")
+
+    class Disposition(ctypes.Structure):
+        _fields_ = [("DeleteFile", wintypes.BOOLEAN)]
+
+    def remove():
+        # FileDispositionInfo: the file this handle opened goes when the handle closes, wherever its path now leads.
+        kernel.SetFileInformationByHandle(msvcrt.get_osfhandle(file.fileno()), 4, ctypes.byref(Disposition(True)),
+                                          ctypes.sizeof(Disposition))
+
+    return file, remove
 
 
 def create_in(folder, name, write):
     """A new file `name` in `folder`, by path: True once written whole, False when the name is taken, None when it was
     created where a link swapped in since leads (removed again, nothing written there). A failed write removes the
     half-written file, which would otherwise stand for the whole one."""
-    path = folder / name
     try:
-        file = path.open("xb")
+        file, remove = created(folder / name)
     except FileExistsError:
         return False
-    made = os.fstat(file.fileno())
-    try:
-        with file:
-            inside = opened_in(file, folder)
-            if inside:
-                write(file)
-    except OSError:
-        remove_made(path, made)
-        raise
-    if not inside:
-        remove_made(path, made)
-        return None
+    with file:
+        if not opened_in(file, folder):
+            remove()
+            return None
+        try:
+            write(file)
+            file.flush()
+        except OSError:
+            remove()
+            raise
     return True
 
 

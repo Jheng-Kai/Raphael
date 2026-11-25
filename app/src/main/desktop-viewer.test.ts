@@ -935,6 +935,24 @@ test('the host toolbar sends an address from the view-only panel before the firs
   expect(frame().hidden).toBe(true);
 });
 
+test('taking a host tab with a dialog open leaves the keys in the dialog, even once the page focuses itself', async () => {
+  panelOpen = true;
+  api.desktopStatus.mockResolvedValue({...running, transport:'host'});
+  mounted.show(); await flush();
+  message('connected');
+  const dialog = {dialog_id:'p1', type:'prompt', message:'Enter the code'};
+  message('browser', {model:{shown:'work', tabs:[{id:'work', title:'Work', url:'https://example.test', favicon:''}], back:false, forward:false, dialog}});
+  api.desktopControl.mockResolvedValueOnce({...running, transport:'host', control:'owner'});
+  await takeOver();
+  const answer = (): HTMLInputElement | null => panel().querySelector<HTMLInputElement>('.host-browser-dialog-answer');
+  expect(answer()?.disabled).toBe(false);
+  expect(document.activeElement).toBe(answer());
+  // The page confirms the lease and focuses its own input, which would take the keys into the frame.
+  frame().focus();
+  message('interactive', {held:true});
+  expect(document.activeElement).toBe(answer());
+});
+
 test.each(['button', 'escape', ...navInputs] as const)('%s folds a held screen and releases its input lease', async input => {
   panelOpen = true; mounted.show(); await flush(); message('connected');
   api.desktopControl.mockResolvedValueOnce({...running, control:'owner'}).mockResolvedValueOnce(running);

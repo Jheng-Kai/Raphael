@@ -228,9 +228,9 @@ def test_a_half_written_gitignore_is_removed_so_the_next_download_writes_it(tmp_
         monkeypatch.setattr(host_browser.os, "fdopen",
                             lambda fd, mode, **options: Full(fdopen(fd, mode, **options)) if mode == "w" else fdopen(fd, mode, **options))
     else:
-        open_path = Path.open
-        monkeypatch.setattr(Path, "open", lambda path, mode="r", **options:
-                            Full(open_path(path, mode, **options)) if path.name == ".gitignore" else open_path(path, mode, **options))
+        made = host_browser.created
+        monkeypatch.setattr(host_browser, "created", lambda path:
+                            (lambda file, remove: (Full(file), remove))(*made(path)) if path.name == ".gitignore" else made(path))
     browser = HostBrowser(tmp_path / "profile")
     project = (tmp_path / "project").resolve()
     project.mkdir()

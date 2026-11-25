@@ -649,7 +649,8 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     }
     if (event.data.state === 'interactive') {
       interactive = panel.hasAttribute('data-expanded') && !watching && event.data.held === true && state?.control === 'owner';
-      if (interactive) clearTakeTimer();
+      // The page focuses its own input once the lease is confirmed: an open dialog takes the keys back.
+      if (interactive) { clearTakeTimer(); browserToolbar.focusDialog(); }
       if (interactive && clickedAt) panel.dataset.controlLatencyMs = String(performance.now() - clickedAt);
     } else if (event.data.state === 'input-accepted') {
       if (interactive && clickedAt) { panel.dataset.acceptedInputLatencyMs = String(performance.now() - clickedAt); clickedAt = 0; }
