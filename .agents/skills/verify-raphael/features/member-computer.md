@@ -1917,8 +1917,9 @@ every turn and task, every source and brain (API, and CLI through its MCP list) 
 - Git branches are visible beside the project and on the separate branch button. Its card checks the current ref
   and lists local branches. If Git is unavailable, a branch read from HEAD has no switch choices. Git's refusal
   appears in the toast. A read is one Git call (`for-each-ref` with `%(HEAD)`) within five seconds; a switch has
-  its own two minutes (`SWITCH_SECONDS`), one at a time, so a slow PC no longer hears "failed" for a switch Git
-  made. A second press while one runs starts nothing; after a failed answer the button re-reads the real branch,
+  its own two minutes (`SWITCH_SECONDS`), one at a time per repository, so a slow PC no longer hears "failed" for a
+  switch Git made. A second press while one runs starts nothing; after a failed answer the button re-reads the real
+  branch (a read that fails keeps what was known, so the button stays),
   and the core's refusals (too slow, own filters) are said in the owner's words. Core Git calls disable hooks and fsmonitor. Repositories with their own filters
   must be switched in the owner's terminal. Migration 99 keeps the valid old paths within the project limit.
 - Local Docker bind-mounts existing local projects under /home/cua/projects. It skips UNC paths and, if launching

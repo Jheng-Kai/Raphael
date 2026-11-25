@@ -41,7 +41,10 @@ export function mountComposerFolder(
   async function refreshProjects(): Promise<void> {
     const asked = ++generation;
     const result = await readProjects(paths());
-    if (asked === generation) { details = result; draw(); }
+    if (asked !== generation) return;
+    // A read that failed (Git too slow for a moment) keeps what was known, so the branch button stays to try again.
+    for (const path of paths()) if (!result.has(path) && details.has(path)) result.set(path, details.get(path)!);
+    details = result; draw();
   }
 
   function take(next: BrainSettings): void {

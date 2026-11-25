@@ -18,8 +18,16 @@ GIT_SECONDS = 5
 SWITCH_SECONDS = 120
 SWITCH_SLOW = "Git did not finish switching branches in time"
 SWITCH_FILTERS = "This repository runs its own Git filters. Switch branches in your own terminal."
-# One switch at a time: a second one started meanwhile would meet the first one's index lock.
-_switching = threading.Lock()
+# One switch at a time per repository: a second one started meanwhile would meet the first one's index lock. Per
+# repository, because on Windows a Git killed at its limit can leave a child holding its pipes, and the thread waiting on
+# them keeps its lock: that may hold up the same repository (whose index Git may still hold) but never another one.
+_switching: dict[str, threading.Lock] = {}
+_switching_guard = threading.Lock()
+
+
+def _switch_lock(path):
+    with _switching_guard:
+        return _switching.setdefault(path_key(path), threading.Lock())
 PROJECTS = "/home/cua/projects"
 PROJECT_LIMIT = 50
 
@@ -175,7 +183,9 @@ def info(path, deadline):
     local = _git(executable, folder, deadline, "for-each-ref", "--format=%(HEAD)%(refname:short)", "refs/heads")
     if local.returncode:
         return {**result, "branch": head_branch(folder)}
-    lines = [line for line in local.stdout.splitlines() if len(line) > 1]
+    # Git ends each ref with a newline; a branch name may hold other line breaks (U+2028), so split on "\n" alone.
+    lines = [line.removesuffix("\r") for line in local.stdout.split("\n")]
+    lines = [line for line in lines if len(line) > 1]
     current = next((line[1:] for line in lines if line.startswith("*")), "")
     # A detached HEAD and a branch with no commit yet are marked nowhere; HEAD itself names the second.
     return {**result, "branch": current or head_branch(folder), "branches": [line[1:] for line in lines]}
@@ -239,7 +249,8 @@ async def switch_branch(settings, params):
 
 
 def _switch_local(path, branch, deadline):
-    if not _switching.acquire(timeout=max(0.0, deadline - time.monotonic())):
+    lock = _switch_lock(path)
+    if not lock.acquire(timeout=max(0.0, deadline - time.monotonic())):
         raise TimeoutError
     try:
         folder = info(path, deadline)
@@ -247,4 +258,4 @@ def _switch_local(path, branch, deadline):
             raise invalid_params("Choose an available local branch")
         return _switch(path, branch, deadline)
     finally:
-        _switching.release()
+        lock.release()
