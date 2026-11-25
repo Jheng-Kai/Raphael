@@ -988,6 +988,10 @@ class TaskRun:
             return {"ok": False, "kind": "tool_disabled", "content": "The owner disabled this connection for this member. Ask the owner to change the member's tool list.", "truncated": False}, "blocked", None, None
         if self._gate.data_floor.access(ref.key, arguments) == "write":
             return {"ok": False, "kind": "protected_data", "content": WRITE_REFUSAL, "truncated": False}, "blocked", None, None
+        if words := self._gate.refused_for_call(ref.key, arguments):
+            # A write into a project that is not the member's is refused before anything is asked, in every mode (R-FILE-06).
+            self._gate.record_unrun(ref.key, outcome="blocked", task_id=self.task_id)
+            return {"ok": False, "kind": "forbidden", "content": words, "truncated": False}, "blocked", None, None
         now = self._gate.tier_now(ref.key, arguments)
         if ref.key in self._unanswered and not self._gate.reads_only(ref.server, ref.name, arguments):
             self._gate.record_unrun(ref.key, outcome="blocked", task_id=self.task_id)

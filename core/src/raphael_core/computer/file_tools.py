@@ -272,8 +272,11 @@ class Files:
                          "with vm_exec and read that.")
     PDF_TOO_LARGE = "This PDF is {size:,} bytes; read_file reads PDFs of at most 20 MiB. Use vm_exec (pdftotext, python3) for a larger one."
 
-    def __init__(self, vm, target, reads, run, checkpoint, history=None, allowed=None, refused=None):
+    def __init__(self, vm, target, reads, run, checkpoint, history=None, allowed=None, refused=None, guard=None):
         self.vm, self.target, self.reads, self.run, self.checkpoint, self.history = vm, target, reads, run, checkpoint, history
+        # What decides a write immediately before it is made, against what is true then (the owner's choices may change while
+        # the call waits): () -> (None or (kind, words) of a refusal, `allowed`, `refused`). Replaces both when given.
+        self.guard = guard
         # The folders of this PC a write may reach, when it was not asked about (`files_guest.confined`); None: any.
         self.allowed = allowed
         # The folders of this PC no write ever reaches, not even through a link made inside the computer, whatever was said:
@@ -393,10 +396,15 @@ class Files:
 
     async def put(self, path, data, expected):
         await self.checkpoint()
+        allowed, refused = self.allowed, self.refused
+        if self.guard is not None:
+            verdict, allowed, refused = self.guard()
+            if verdict is not None:
+                raise Refused(*verdict)
         answer = await self.vm.file_request(self.target, {"action": "write", "path": path, "expected": expected,
                                                           "data": base64.b64encode(data).decode(),
-                                                          **({} if self.allowed is None else {"allowed": self.allowed}),
-                                                          **({"refused": self.refused} if self.refused else {})})
+                                                          **({} if allowed is None else {"allowed": allowed}),
+                                                          **({"refused": refused} if refused else {})})
         if answer.get("error") == "changed":
             raise Refused("changed_since_read", CHANGED)
         if answer.get("error") == "not_a_file":
@@ -639,12 +647,12 @@ async def grep_files(vm, target, arguments):
     return PluginResult(True, text="\n".join([*page, *([note] if note else [])]))
 
 
-async def call(vm, target, name, arguments, reads, run, checkpoint, history=None, allowed=None, refused=None):
+async def call(vm, target, name, arguments, reads, run, checkpoint, history=None, allowed=None, refused=None, guard=None):
     if name == "glob":
         return await glob_files(vm, target, arguments)
     if name == "grep":
         return await grep_files(vm, target, arguments)
-    files = Files(vm, target, reads, run, checkpoint, history, allowed, refused)
+    files = Files(vm, target, reads, run, checkpoint, history, allowed, refused, guard)
     if name == "file_history":
         return await files.file_history(arguments)
     if name == "read_file":

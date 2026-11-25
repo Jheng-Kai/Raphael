@@ -8,7 +8,7 @@ from ..agent.cli.loop import CliLoop
 from ..clock import wall_clock_ms
 from ..protocol import RpcError
 from ..worker.loop import WRAP_UP, Stop, ToolOutcome
-from ..computer.local_tools import command_of, is_local, on_screen_refusal, BACKGROUND_WAIT_S
+from ..computer.local_tools import command_of, command_scope, is_local, on_screen_refusal, run_context, BACKGROUND_WAIT_S
 from .snapshot import USE_TOOL
 
 # How many calls a task that reached a ceiling may make after being asked to report, before it is ended.
@@ -110,6 +110,11 @@ def member_loop(brains, quota, task, run, spec, *, wait_s, progress, sessions=No
             access = run._gate.data_floor.access(name, arguments)
             if access == "write":
                 return ToolOutcome(False, "protected_data", instruction=WRITE_REFUSAL)
+            with command_scope(run_context(run)):
+                words = run._gate.refused_for_call(name, arguments)
+            if words:
+                # A write into a project that is not the member's is refused before anything is asked, in every mode (R-FILE-06).
+                return ToolOutcome(False, "forbidden", instruction=words)
             if refusal := on_screen_refusal(command_of(arguments)):
                 # A task shows nothing on the owner's screen, 全部允許 or not (R-PC-06).
                 return ToolOutcome(False, "shows_on_screen", instruction=refusal)

@@ -180,7 +180,7 @@ def test_a_command_names_its_files_in_a_project_that_is_not_the_members_apart_fr
     # Moves, deletes and copies name every path that changes; a copy changes its destination only.
     assert told("mv ../other/a.txt b.txt")[0] == ["../other/a.txt"] and told("cp ../other/a.txt b.txt") == ([], [])
     assert told("rm ../other/a.txt")[0] == ["../other/a.txt"] and told("cp b.txt ../other/")[0] == ["../other/"]
-    assert told("Rename-Item ../other/a.txt b.txt")[0] == ["../other/a.txt"]
+    assert told("Rename-Item ../other/a.txt b.txt")[0] == ["../other/a.txt", "../other/b.txt"]  # the new name is in the file's folder
     assert told("Move-Item b.txt ../other/c.txt")[0] == ["../other/c.txt"]
     # In a shell started by the command, after a `cd`, in a pattern: where each leads.
     assert told("cd ../other; echo a > a.txt")[0] == ["a.txt"] and told("cd ../elsewhere; echo a > a.txt") == ([], ["a.txt"])
@@ -192,3 +192,50 @@ def test_a_command_names_its_files_in_a_project_that_is_not_the_members_apart_fr
     settings.values["project_folders"].append(str(inner))
     assert told(f"echo a > {inner.as_posix()}/a.txt") == ([], [])
     assert told(f"echo a > {own.as_posix()}/a.txt") == ([], [f"{own.as_posix()}/a.txt"])
+
+
+# --- review findings: refused before any question, a rename inside the folder of its file --------------------------------
+
+
+def test_the_gate_says_which_host_writes_are_refused_before_any_question(host):
+    gate = ToolGate(host.hub, conn=host.conn)
+    read = next(tool.key for tool in host.tools.offered(1) if tool.name == "read_file")
+    for mode in ("direct", "ask", "plan", "bypass"):
+        host.settings.set("action_mode", mode)
+        assert gate.refused_for_call(host.key, args(host.other / "a.txt")) == work_area.UNCHOSEN_WORDS, mode
+        assert gate.refused_for_call(host.edit, {"path": str(host.other / "a.txt"), "old_string": "a", "new_string": "b"}) == work_area.UNCHOSEN_WORDS
+    for allowed in (host.project / "a.txt", host.elsewhere / "a.txt", host.tools.folders(1)[0] / "a.txt"):
+        assert gate.refused_for_call(host.key, args(allowed)) is None, allowed  # a card for these is asked as before
+    assert gate.refused_for_call(read, {"path": str(host.other / "a.txt")}) is None  # a read is never refused
+    assert gate.refused_for_call("mcp:nothing/anything", {"path": str(host.other / "a.txt")}) is None
+
+
+def test_a_rename_happens_in_the_folder_of_the_file_it_names(tmp_path):
+    from raphael_core.computer.shell_writes import classify
+    project, other, own = (tmp_path / name for name in ("project", "other", "own"))
+    for folder in (project, other, own):
+        folder.mkdir()
+    settings = Settings([project, other], chosen=project)
+
+    def told(command, cwd):
+        reach = lambda path: work_area.reach(settings, 0, path, lambda member: (own, tmp_path / "team"))
+        return classify(command, str(cwd), reach, home=str(tmp_path / "home"))
+
+    here = project.as_posix()
+    # The command runs in another project, and the file it renames is in the chosen one: the new name is there too.
+    for command in (f"Rename-Item {here}/a.txt -NewName b.txt", f"Rename-Item -Path {here}/a.txt -NewName b.txt",
+                    f"Rename-Item -LiteralPath {here}/a.txt -NewName b.txt", f"rni {here}/a.txt -NewName b.txt",
+                    f"Rename-Item {here}/a.txt b.txt", f"ren {here}/a.txt b.txt", f"Rename-Item -NewName b.txt {here}/a.txt"):
+        assert told(command, other) == ([], []), command
+    # The other way round: the file is in another project, wherever the command runs.
+    assert told(f"Rename-Item {other.as_posix()}/a.txt -NewName b.txt", project)[0] == [f"{other.as_posix()}/a.txt", f"{other.as_posix()}/b.txt"]
+    assert told("Rename-Item a.txt -NewName b.txt", project) == ([], [])
+    assert told("Rename-Item a.txt -NewName b.txt", other)[0] == ["a.txt", "b.txt"]
+    assert told("ren a.txt b.txt", own)[1] == ["a.txt", "b.txt"]
+    # A new name with a folder in it is not a name: it is judged from the folder the command runs in, as before.
+    assert told(f"Rename-Item {here}/a.txt -NewName ../other/b.txt", project)[0] == ["../other/b.txt"]
+    assert told(f"Rename-Item {here}/a.txt -NewName $name", project)[1]  # a name it cannot read is asked about, as before
+    # A move and a copy keep the semantics they had: their destination is taken from the folder the command runs in.
+    for command in (f"Move-Item {here}/a.txt b.txt", f"mv {here}/a.txt b.txt", f"Copy-Item {here}/a.txt b.txt", f"cp {here}/a.txt b.txt"):
+        assert told(command, other)[0] == ["b.txt"], command
+        assert told(command, project) == ([], []), command

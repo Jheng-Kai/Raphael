@@ -6,6 +6,7 @@ import os
 import re
 import sys
 import uuid
+from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import wraps
 from pathlib import Path
@@ -198,6 +199,16 @@ def shows_on_screen(key, arguments):
             and not _CONTEXT.get()[4] and launches_on_screen(arguments["command"]))
 
 
+@contextmanager
+def command_scope(context):
+    """The context of a command (`_CONTEXT`) for a judgement made outside a call: who runs it, and for which member."""
+    token = _CONTEXT.set(context)
+    try:
+        yield
+    finally:
+        _CONTEXT.reset(token)
+
+
 def command_context(select):
     def decorate(function):
         @wraps(function)
@@ -307,6 +318,30 @@ class LocalTools:
         return shell_writes.classify(arguments["command"], start,
                                      lambda path: work_area.reach(self.settings, member, path, self.owner_files.member_folders),
                                      home=home)
+
+    def refused_for_call(self, key, arguments):
+        """The words this call is refused in whatever is said (`ToolGate.refused_for_call`): a write of the owner's file tools,
+        or a command, naming a file in a remembered project that is not the member's chosen one (R-FILE-06). A native command
+        of a CLI brain (`cli_permission`) is judged by the files it names the same way."""
+        member = _CONTEXT.get()[5]
+        if (name := owner_file_tool(key)) is not None:
+            schema = OWNER_FILE_DEFINITIONS[name]["parameters"]
+            if name in OWNER_FILE_READS or not Draft202012Validator(schema).is_valid(arguments):
+                return None
+            return work_area.UNCHOSEN_WORDS if self.owner_files.reach(arguments, member) == work_area.PROJECT else None
+        if key == tool_key("local", "local_exec"):
+            if not Draft202012Validator(EXEC_SCHEMA).is_valid(arguments):
+                return None
+            return work_area.UNCHOSEN_WORDS if self.shell_reach(arguments)[0] else None
+        if key == "cli_permission":
+            command = command_of(arguments)
+            cwd = arguments.get("cwd") if isinstance(arguments, dict) else None
+            named = {"command": command, **({"cwd": cwd} if isinstance(cwd, str) and cwd else {})}
+            return work_area.UNCHOSEN_WORDS if command and self.shell_reach(named)[0] else None
+        if is_local(key):
+            return None
+        refuse = getattr(self.delegate, "refused_for_call", None)
+        return refuse(key, arguments) if callable(refuse) else None
 
     def shell_outside(self, arguments):
         """The files this command names that are outside the member's work folder and are no project of the owner's: the

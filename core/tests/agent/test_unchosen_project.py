@@ -291,3 +291,53 @@ def test_the_files_a_command_names_in_an_unchosen_project_are_told_apart_from_th
     # A command that starts in another project names its files there.
     started = place.hub.shell_reach({"command": "echo c > c.txt", "cwd": str(place.other)})
     assert [os.path.basename(path) for path in started[0]] == ["c.txt"] and started[1] == []
+
+
+# --- refused before any question, in every place a question can be asked ---------------------------------------------------
+
+
+def test_the_gate_says_which_calls_are_refused_before_any_question(place):
+    choose(place)
+    gate = ToolGate(place.hub, conn=place.conn)
+    project_command = {"command": f"echo hi > {place.other.as_posix()}/out.txt"}
+    for mode in MODES:
+        place.settings.set("action_mode", mode)
+        assert gate.refused_for_call(WRITE, args(place.other / "a.md")) == work_area.UNCHOSEN_WORDS, mode
+        assert gate.refused_for_call(EDIT, {"path": str(place.other / "a.md"), "old_string": "a", "new_string": "b"}) == work_area.UNCHOSEN_WORDS
+        assert gate.refused_for_call(EXEC, project_command) == work_area.UNCHOSEN_WORDS, mode
+        # A native command of a CLI brain is judged by the same files it names.
+        assert gate.refused_for_call("cli_permission", {"command": project_command["command"]}) == work_area.UNCHOSEN_WORDS
+        assert gate.refused_for_call("cli_permission", {"input": {"command": project_command["command"]}}) == work_area.UNCHOSEN_WORDS
+    # What is asked about as before, or not a write, is not refused.
+    for call, arguments in ((WRITE, args(place.project / "a.md")), (WRITE, args(place.elsewhere / "a.md")),
+                            ("mcp:owner_files/read_file", {"path": str(place.other / "a.md")}),
+                            (EXEC, {"command": "echo hi > out.txt"}), (EXEC, outside_command(place)),
+                            ("cli_permission", {"command": "Get-Process"}), ("mcp:nothing/anything", args(place.other / "a.md"))):
+        assert gate.refused_for_call(call, arguments) is None, (call, arguments)
+
+
+@pytest.mark.parametrize("mode", ["ask", "plan"])
+async def test_a_write_into_an_unchosen_project_is_refused_before_the_owner_is_asked_in_ask_and_plan(make_rig, client, conn, place, mode):
+    choose(place)
+    rig = make_rig(plugins=place.hub, gate=ToolGate(place.hub, conn=conn), permissions=PermissionCards(conn))
+    rig.settings.set("action_mode", mode)
+    target = place.other / "note.md"
+    client.chats = [chat("Saving.", ("owner_files__write_file", args(target, "hello\n"))), chat('{"text":"Not saved."}')]
+    done = await typed(rig, "Save a note")
+    assert done["status"] != "confirm" and not target.exists()
+    # The model is told it is refused, in the words of the rule.
+    told = [message["content"] for message in client.chat_calls[-1]["messages"] if message["role"] == "tool"]
+    assert any("not chosen for you" in text for text in told), told
+
+
+@pytest.mark.parametrize("mode", ["ask", "plan"])
+async def test_a_command_naming_an_unchosen_project_is_refused_before_the_owner_is_asked_in_ask_and_plan(make_rig, client, conn, place, mode):
+    choose(place)
+    place.settings.set("local_commands_mode", "ask")
+    rig = make_rig(plugins=place.hub, gate=ToolGate(place.hub, conn=conn), permissions=PermissionCards(conn))
+    rig.settings.set("action_mode", mode)
+    client.chats = [chat("Saving.", ("local__local_exec", {"command": project_commands(place)[1]})),
+                    chat('{"text":"Not saved."}')]
+    done = await typed(rig, "Save a note")
+    assert done["status"] != "confirm" and place.host.execute.await_count == 0
+    assert not (place.other / "out.txt").exists()

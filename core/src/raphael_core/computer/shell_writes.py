@@ -15,22 +15,24 @@ import re
 
 from ..work_area import PROJECT, PathRefused, inside, resolved
 
-DEST, ALL, COPY = "dest", "all", "copy"
+DEST, ALL, COPY, RENAME = "dest", "all", "copy", "rename"
 # What each command does to the paths it is given: DEST changes the one it names (-Path, -FilePath, -LiteralPath or its
 # first argument), ALL changes every path it is given, COPY writes its destination (-Destination or its last argument).
 WRITERS = {
     **dict.fromkeys(("out-file", "set-content", "add-content", "clear-content", "tee-object", "new-item", "export-csv",
                      "export-clixml", "sc", "ac", "clc", "ni", "start-transcript"), DEST),
-    **dict.fromkeys(("tee", "touch", "mkdir", "md", "remove-item", "ri", "rm", "del", "erase", "rd", "rmdir", "rename-item",
-                     "rni", "ren", "rename", "move-item", "mi", "mv", "move", "chmod", "chown", "chgrp", "truncate",
+    **dict.fromkeys(("tee", "touch", "mkdir", "md", "remove-item", "ri", "rm", "del", "erase", "rd", "rmdir",
+                     "move-item", "mi", "mv", "move", "chmod", "chown", "chgrp", "truncate",
                      "icacls", "attrib", "takeown", "unlink", "shred"), ALL),
+    # A rename changes the file it names and gives it a new name in the folder that file is in, wherever the command runs.
+    **dict.fromkeys(("rename-item", "rni", "ren", "rename"), RENAME),
     **dict.fromkeys(("copy-item", "cpi", "cp", "copy", "xcopy", "robocopy", "install", "ln", "rsync"), COPY),
 }
 # Parameters whose value is a path that is written, wherever the command takes them.
 PATH_PARAMS = {"path", "filepath", "literalpath", "destination", "outfile", "destinationpath", "lp", "pspath", "o",
                "output", "outputfile"}
 # Parameters whose value is not a path, so that it is not taken for one.
-VALUE_PARAMS = {"value", "encoding", "filter", "include", "exclude", "itemtype", "stream", "inputobject", "width",
+VALUE_PARAMS = {"newname", "value", "encoding", "filter", "include", "exclude", "itemtype", "stream", "inputobject", "width",
                 "delimiter", "credential", "type", "name", "headers", "uri", "body", "method", "contenttype", "useragent",
                 "timeoutsec"}
 SHELLS = {"powershell", "pwsh", "cmd", "bash", "sh", "zsh", "wsl", "ksh", "dash"}
@@ -138,6 +140,24 @@ def split(text, windows):
         index += 1
     finish_segment()
     return segments
+
+
+def renamed(positional, named):
+    """The paths a rename changes: the file it names, anything else it is given, and the new name. A new name that is only a
+    name is in the folder of the file (PowerShell and cmd rename it there, whatever folder the command runs in); a name with a
+    folder in it, or one that cannot be read, is judged as it is written, from the folder the command runs in."""
+    paths = [*(named.get("path") or []), *(named.get("literalpath") or [])]
+    source, rest = (paths[:1], list(positional)) if paths else (positional[:1], list(positional[1:]))
+    new, rest = (named["newname"][:1], rest) if named.get("newname") else (rest[:1], rest[1:])
+    found = [*source, *rest]
+    for token in new:
+        text = token.text
+        if source and not token.dynamic and "/" not in text and "\\" not in text:
+            where = source[0].text
+            found.append(Token(where[:max(where.rfind("/"), where.rfind("\\")) + 1] + text, source[0].dynamic))
+        else:
+            found.append(token)
+    return found
 
 
 def name_of(token):
@@ -266,6 +286,8 @@ def classify(command, cwd, reach, *, windows=None, home=None, depth=0):
             found = [*positional, *(item for key in PATH_PARAMS for item in named.get(key, []))]
             if name in ("mkdir", "md") and named.get("name"):
                 found += named["name"]
+        elif kind == RENAME:
+            found = renamed(positional, named)
         elif kind == COPY:
             found = [*(named.get("destination") or [])] or (positional[-1:] if len(positional) > 1 else [Token(".")])
         elif name in ("invoke-webrequest", "iwr", "invoke-restmethod", "irm"):

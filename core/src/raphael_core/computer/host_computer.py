@@ -233,6 +233,21 @@ class HostComputerTools:
                 pass
         return tool.tier
 
+    def refused_for_call(self, key, arguments):
+        """The words a write is refused in whatever is said (`ToolGate.refused_for_call`): its path is in a project that is not
+        the member's chosen one. A private place or a place of keys is refused in its own words by `file_call`."""
+        route = self.routes.get(key)
+        if route is None or route[1].name not in WRITES or not isinstance(arguments, dict):
+            return None
+        member = route[0]
+        try:
+            path = self.path(member, arguments.get("path", ""))
+            if self.private_path(path, member) or kept_place(str(path)):
+                return None
+            return work_area.UNCHOSEN_WORDS if self.write_reach(path, member) == work_area.PROJECT else None
+        except (VmError, OSError, AttributeError, ValueError):
+            return None
+
     def firm_for_call(self, key, arguments):
         route = self.routes.get(key)
         return route is not None and route[1].name in WRITES and self.tier_for_call(key, arguments) == Tier.T3

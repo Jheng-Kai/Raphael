@@ -33,7 +33,7 @@ computer, of the Docker computer (on a folder bound from the PC), of the owner's
 tools, or a command that names a file elsewhere asks the owner's yes card in 自動, 手動
 and 計畫, and a no writes nothing; in 全部允許 it is made with no card (R-AG-35); a command's own programs are
 not read. A write into another remembered project, one that is not the member's chosen one, is refused in every
-mode and with or without a yes, asks no card, and is not run when a command names such a file. Every project is
+mode and with or without a yes, asks no card (not in 手動 or 計畫 either, in a task or a CLI brain's command), and is not run when a command names such a file. Every project is
 mounted read-only in the Docker computer (R-COMP-PROJECT-01), so no command there writes a project; a file tool's
 write to the chosen project (or one inside it) is made on the PC, to any other project is refused
 (a link or junction in a project is never followed), and a container of an earlier release that still has a
@@ -41,7 +41,7 @@ project read-write is made again read-only at its next idle start. The shared co
 shell can still read every project, and write every member's workspace and the team folder. Core only (no screen
 changes): `core/tests/agent/test_write_boundary.py`, `core/tests/agent/test_unchosen_project.py`,
 `core/tests/computer/test_shell_writes.py`, `core/tests/computer/test_write_boundary_computer.py`,
-`core/tests/computer/test_unchosen_project_computer.py`.
+`core/tests/computer/test_unchosen_project_computer.py`, `core/tests/background/test_unchosen_project_background.py`.
 
 Opening a page opens the Computer tab on that same page. The page fills the frame
 under the [host browser toolbar](#host-browser-toolbar). A takeover card appears only while a member waits for the owner for

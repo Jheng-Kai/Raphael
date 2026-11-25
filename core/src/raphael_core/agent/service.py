@@ -119,9 +119,10 @@ answered, a city or a key: only routes, kinds, latencies and costs.
 
 from raphael_core.ui_words import ui_word, with_ui_words
 import asyncio
+import contextlib
 import copy
 from pathlib import Path
-from ..computer.local_tools import INSTALL_IN_VM, ask_context, card_arguments, command_context, command_of, installs_software, is_local, on_screen_refusal
+from ..computer.local_tools import INSTALL_IN_VM, ask_context, card_arguments, command_context, command_of, command_scope, installs_software, is_local, on_screen_refusal
 import hashlib
 import json
 import logging
@@ -3413,6 +3414,10 @@ class AgentService:
         access = self._gate.data_floor.access("cli_permission", args)
         if access == "write":
             return ToolOutcome(False, "protected_data", instruction=WRITE_REFUSAL)
+        with command_scope(ask_context(ask)):
+            words = self._gate.refused_for_call("cli_permission", args)
+        if words:
+            return ToolOutcome(False, "forbidden", instruction=words)
         if not self._gate.full_permission and (ask.source not in _AT_THIS_COMPUTER or ask.nested):
             return ToolOutcome(False, "presence_required")
         if (command := command_of(args)) and not self._owner_screen(ask):
@@ -3677,6 +3682,19 @@ class AgentService:
         """Make the picked calls that need no yes, together, and add their results to `results`.
         If a call needs a yes the answer waits for it: that is the question to return instead, for
         the first such call; any others are not made (one question to a turn)."""
+        if refusing := {index: words for index, call in enumerate(calls)
+                        if (words := self._gate.refused_for_call(call.tool.key, call.arguments))}:
+            # A write into a project that is not the member's is refused before anything is asked, in every mode (R-FILE-06).
+            for index, words in refusing.items():
+                call = calls[index]
+                ask.steps.append(self._step("tool", call.tool.name, call.tool.server, "blocked", time.perf_counter(), "forbidden"))
+                results.append(ToolResult(_label(call), False, None, "forbidden", instruction=words))
+            kept = [index for index in range(len(calls)) if index not in refusing]
+            calls = [calls[index] for index in kept]
+            if screenings is not None:
+                screenings = [screenings[index] for index in kept]
+            if not calls:
+                return results
         if self._drafts is not None and ask.speaker.draft_first and not self._gate.full_permission:
             # This speaker writes mail as a draft for the owner to send (`email_draft`); a call of a tool that
             # sends it is not made, whatever the owner's rules say of sending (they still have the last word
@@ -3808,6 +3826,11 @@ class AgentService:
         access = self._gate.data_floor.access(tool.key, call.arguments)
         if access == "write":
             return Screening(DENY, WRITE_REFUSAL, protected=True)
+        # Refused whatever is said (`_carry_out`), for the member that makes the call: nothing is asked about it.
+        with command_scope(ask_context(ask)) if isinstance(ask, _Ask) else contextlib.nullcontext():
+            refused = self._gate.refused_for_call(tool.key, call.arguments)
+        if refused:
+            return PASS
         if access == "read":
             return Screening(ASK)
         if is_local(tool.key):

@@ -761,6 +761,16 @@ class VmTools:
             return self.host_computer.firm_for_call(key, arguments)
         return self.call_reach(key, arguments) == work_area.OUTSIDE
 
+    def refused_for_call(self, key, arguments):
+        """The words this call is refused in whatever is said (`ToolGate.refused_for_call`): a write of the host computer's
+        file tools, or of the member's own computer's, into a project that is not the member's chosen one (R-FILE-06)."""
+        if self.host_computer and key in self.host_computer.routes:
+            return self.host_computer.refused_for_call(key, arguments)
+        if self.is_computer_tool(key):
+            return work_area.UNCHOSEN_WORDS if self.call_reach(key, arguments) == work_area.PROJECT else None
+        refuse = getattr(self.delegate, "refused_for_call", None)
+        return refuse(key, arguments) if callable(refuse) else None
+
     def call_reach(self, key, arguments):
         """Where a call of the member's own computer's tools lands on the owner's PC (`guest_reach`): "project", "outside" or
         None (not a write onto the PC, or into the work folder)."""
@@ -785,8 +795,9 @@ class VmTools:
         reaching = [GUEST, SHARED, *(guest for guest, _ in target.projects)]
         chosen = choice(self.vm.settings, member) if self.vm.settings is not None else None
         allowed = [self.vm.guest_work_folder(target, member)] if chosen else [self.vm.guest_workspace(target), SHARED]
-        if where is not None and (mount := self.project_mount(target, where)) is not None and self.guest_reach_of(target, member, where) is None:
-            allowed.append(mount[0])
+        if (where is not None and not any(_under(where, folder) for folder in allowed)
+                and self.guest_reach_of(target, member, where) is None and any(_under(where, root) for root in reaching)):
+            allowed.append(where)  # inside the work folder where it is on the PC (a project inside the chosen one), not by its mount
         return reaching, allowed
 
     @staticmethod
@@ -796,6 +807,20 @@ class VmTools:
         for guest, source in target.projects:
             if where == guest or where.startswith(guest + "/"):
                 return guest, source, where[len(guest) + 1:]
+        return None
+
+    @staticmethod
+    def pc_mount(target, where):
+        """(the folder on the PC that `where` is under or is, the path below it) for a path of the computer under any folder
+        bound from the PC: a project, the member's workspace, the team folder. None for the computer's own places, and for a
+        computer on another host, whose folders are volumes and no folder of this PC."""
+        if (found := VmTools.project_mount(target, where)) is not None:
+            return found[1], found[2]
+        if target.remote:
+            return None
+        for guest, folder in ((GUEST, target.workspace), (SHARED, target.shared)):
+            if folder is not None and (where == guest or where.startswith(guest + "/")):
+                return folder, where[len(guest) + 1:]
         return None
 
     def guest_unchosen(self, target, member):
@@ -808,11 +833,12 @@ class VmTools:
         """Where a write at `where` (a path of the computer, `file_tools.guest_path`) lands on the owner's PC: "project" (a
         remembered project that is not the member's chosen one, refused whatever is said, so nothing asks for it), "outside"
         (another folder of the PC that is not the work folder: the owner's yes) or None (the work folder, or the computer's
-        own). A path under a project's mount is judged where it is on the PC (`work_area.reach`: a project inside the chosen
-        one is the work folder); the member's own folder and the team's by their mounts."""
-        found = self.project_mount(target, where)
+        own). A path under any folder bound from the PC (a project, the member's workspace, the team folder) is judged where it
+        is on the PC (`work_area.reach`: a project inside the chosen one is the work folder, and one inside the team folder or
+        the workspace is refused when it is not the chosen one)."""
+        found = self.pc_mount(target, where)
         if found is not None:
-            _, folder, relative = found
+            folder, relative = found
             try:
                 real = work_area.resolved(str(folder))
             except work_area.PathRefused:
@@ -879,7 +905,8 @@ class VmTools:
         if self.audit:
             tool = self.tools[key]
             self.audit.add(server="computer", tool=tool.name, tier=tool.tier.name,
-                approver=approver, outcome=outcome if outcome in ("ok", "timeout", "denied", "expired", "blocked") else "error", task_id=task_id)
+                approver=approver, outcome=outcome if outcome in ("ok", "timeout", "denied", "expired", "blocked")
+                else "blocked" if outcome == "forbidden" else "error", task_id=task_id)
 
     def record_unrun(self, key, *, outcome, task_id=None):
         if self.host_computer and key in self.host_computer.routes and self.audit:
@@ -1347,16 +1374,27 @@ class VmTools:
                     if ((self.host_computer is not None and target.container or target.projects)
                             and tool.name != "file_history"):
                         arguments = {**arguments, "path": self.member_file_path(target, arguments.get("path", "."), member)}
-                    # A write that was not asked about is held to the work folder in the computer too, where a link made
-                    # inside it could lead onto the PC; one the owner said yes to is made where it was asked.
-                    # In 全部允許 the owner said yes to every place already (the door handed "user").
-                    limit = (self.guest_area(target, member, self.guest_where(tool.name, arguments, member, target))[1]
-                             if tool.name in GUEST_WRITES and not outside_write and not self.vm.full_permission() else None)
-                    # Whatever was said, a link made inside the computer never leads a write into a project that is not the member's.
-                    refused = self.guest_unchosen(target, member) if tool.name in GUEST_WRITES else None
+                    def guard():
+                        """What the write may do, decided again against the owner's choices of this moment, immediately before
+                        it is made on the PC: the computer may have taken long to start, and the owner may have chosen another
+                        project meanwhile. (a verdict: refused or asked about again; the folders the computer's own helper holds
+                        an unasked write to, and the ones it never reaches.)"""
+                        now = self.guest_reach(tool.name, arguments, member, target)
+                        if now == work_area.PROJECT:
+                            return ("forbidden", work_area.UNCHOSEN_WORDS), None, None
+                        if now == work_area.OUTSIDE and approver != "user":
+                            return ("approval_required", OUTSIDE_GUEST), None, None
+                        # A write that was not asked about is held to the work folder in the computer too, where a link made
+                        # inside it could lead onto the PC; one the owner said yes to is made where it was asked.
+                        # In 全部允許 the owner said yes to every place already (the door handed "user").
+                        held = (self.guest_area(target, member, self.guest_where(tool.name, arguments, member, target))[1]
+                                if now != work_area.OUTSIDE and not self.vm.full_permission() else None)
+                        # Whatever was said, a link made inside the computer never leads a write into a project that is not the member's.
+                        return None, held, self.guest_unchosen(target, member)
                     result = await file_tools.call(self.vm, target, tool.name, arguments, self.file_reads,
                                                    self._file_run(target, member, owner, turn), checkpoint,
-                                                   history if tool.name == "file_history" else None, allowed=limit, refused=refused)
+                                                   history if tool.name == "file_history" else None,
+                                                   guard=guard if tool.name in GUEST_WRITES else None)
                 elif tool.name == "attach_file":
                     path = arguments["path"]
                     if self.host_computer is not None and target.container or target.projects:
