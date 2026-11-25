@@ -1091,6 +1091,24 @@ async def test_a_store_catalog_fetched_with_a_replaced_key_is_never_kept(tmp_pat
     assert keys.count("new") >= 2  # the probe of the new key, then its own list
 
 
+async def test_a_store_catalog_saved_while_the_key_is_replaced_leaves_no_file(tmp_path, conn):
+    # #320: the key is replaced while the list of the old key is being written to the disk.
+    async def response(request):
+        if request.url.path.endswith("/categories"):
+            return httpx.Response(200, json={"items": []})
+        return httpx.Response(200, json={"items": [{"slug": "old-app", "meta": {}}]})
+    router, service, hub, vault = setup_service(tmp_path, conn, response)
+    vault.set("connectors:composio:key", "old")
+    save = service._save_catalog
+    def save_while_replaced(result):
+        service._key_generation += 1  # what set_key does for another key, while this thread writes
+        service._catalog_path.unlink(missing_ok=True)
+        save(result)
+    service._save_catalog = save_while_replaced
+    await router.call("connectors.catalog")
+    assert not (tmp_path / "connectors-catalog.json").exists()
+
+
 def _catalog_responder(listed, mode, requests, gate=None):
     async def response(request):
         requests.append(request.url.path)

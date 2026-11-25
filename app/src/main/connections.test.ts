@@ -2034,6 +2034,26 @@ describe("what the dialog does", () => {
     } finally { await done(); }
   });
 
+  test("a new key whose connections cannot be read again still takes the old apps off the page (#320)", async () => {
+    const gmail = { id: "composio:gmail", kind: "composio", name: "Gmail", description: "", logo: "", status: "ACTIVE", enabled: true, accounts: [{ id: "a1", status: "ACTIVE" }], enabled_tools: [], disabled_tools: [] };
+    api.connectorsStatus.mockResolvedValue({ connectors: [gmail], composio_configured: true, google_configured: false });
+    const c = createConnections(host);
+    await c.load();
+    await settle();
+    c.click(button("configure-composio"));
+    const { document, done } = await mounted(c);
+    try {
+      document.querySelector<HTMLInputElement>("#conn-key")!.value = "comp_new";
+      api.connectorsSetKey.mockResolvedValueOnce({ configured: true });
+      api.connectorsStatus.mockRejectedValue(new Error("network"));
+      c.click(button("save-key"));
+      await settle(); await settle(); await settle();
+      const groups = c.view().groups;
+      expect(Array.isArray(groups) && groups.some(g => g.id === "composio:gmail")).toBe(false);
+      expect(c.view().composioApps).toBe(false);
+    } finally { await done(); }
+  });
+
   test("an app that is already connected is not joined again", async () => {
     const c = createConnections(host);
     await c.load();

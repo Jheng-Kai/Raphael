@@ -989,6 +989,8 @@ export function createConnections(host: ConnectionsHost): Connections {
   let keySaves = 0;
   /** The latest key sent to the core, so that the next one is written after it. */
   let keyWrite: Promise<unknown> = Promise.resolve();
+  /** How many times the core's connections were read: a save that reads them again can tell whether it got an answer. */
+  let statusReads = 0;
   let keyBusy = false;
   let keyError: ConnectionsView["keyError"] = "";
   let managed: ManagedConnector[] = [];
@@ -1104,6 +1106,7 @@ export function createConnections(host: ConnectionsHost): Connections {
     if (status.status === "fulfilled") {
       configured = status.value.composio_configured;
       managed = status.value.connectors;
+      statusReads++;
     }
     const previous = Array.isArray(groups) ? groups : [];
     if (list.status === "fulfilled" && status.status === "fulfilled") groups = [
@@ -1199,7 +1202,11 @@ export function createConnections(host: ConnectionsHost): Connections {
         // left, even when the list of the connections cannot be read again.
         catalogLoads++;
         composioCatalog = "loading";
+        const reads = statusReads;
         await load();
+        // Without the core's word the old apps go (a new key is what is saved nearly always; the next read brings back
+        // what the same key kept).
+        if (statusReads === reads) managed = managed.filter(c => c.kind !== "composio");
         if (Array.isArray(groups)) {
           const left = groups.filter(g => g.source !== "composio" || managed.some(c => c.id === g.id));
           if (left.length !== groups.length) { groups = left; refresh(); }

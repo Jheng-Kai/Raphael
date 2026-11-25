@@ -466,6 +466,9 @@ class ConnectorsService:
                 return result
             self._store_catalog = (self.now(), result)
             await asyncio.to_thread(self._save_catalog, result)
+            if generation != self._key_generation:
+                # The key was replaced while the file was written: the old key's list leaves the disk as it left memory.
+                self._catalog_path.unlink(missing_ok=True)
             return result
         except ConnectorFailure:
             if before and generation == self._key_generation:
