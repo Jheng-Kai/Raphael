@@ -98,6 +98,10 @@ boot: Raphael's conversation, an empty list with its plus, no crown) and `no-chi
 member 0 with `raphael: true`, the slimes from id 1, the chief in `team_context` (the first slime unless a scene's `primaryMember` says
 another, or null), the quick conversation under member 0 only and rooms of slimes only; every scene begins in Raphael's space (the runner
 enters it through the account menu) unless its fixture says `start: "app"`.
+```powershell
+npm run look -- raphael-entry raphael-space chief-space raphael-route-back no-slimes no-chief --theme both --width 1120,720,1920x1080
+```
+
 The core keeps the same line (R-RAPHAEL-01, R-RAPHAEL-02, R-CHIEF-02; offline tests `core/tests/members/test_raphael_apart.py` and `test_primary.py`): `members.list` flags member 0, lists slimes from id 1,
 and sends `team_context.primary_id` null with no slime; `members.update` (only personality, instructions, tools, notify, draft, cover),
 `members.delete`, `members.set_primary` and `members.set_avatar` refuse id 0 with kind `raphael`. An install from before is upgraded by schema

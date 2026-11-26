@@ -39,7 +39,6 @@ DEFAULTS: dict[str, Any] = {
     "routine_webhook_port": 0,
     "chatgpt.registrations.v1": {},
     "first_bot_profile": {},
-    "chief_pinned": False,
     "raphael_draft_first": True,
     "raphael_computer_mode": "host",
     "raphael_tools": None,

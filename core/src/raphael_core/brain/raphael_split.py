@@ -206,9 +206,10 @@ def separate(conn: sqlite3.Connection) -> None:
                 folders[str(slime)] = folders.pop("0")
                 _put(conn, "member_work_folder", folders)
             # Raphael is back to its factory settings.
-            for key, default in (("first_bot_profile", {}), ("chief_pinned", False), ("raphael_draft_first", True),
+            for key, default in (("first_bot_profile", {}), ("raphael_draft_first", True),
                                  ("raphael_computer_mode", "host"), ("raphael_tools", None), ("raphael_notify", False)):
                 _put(conn, key, default)
+            conn.execute("DELETE FROM settings WHERE key = 'chief_pinned'")  # the pin is the slime's own now (`members.pinned`)
             _put(conn, SPLIT_KEY, {"slime": slime})
             # Nobody else was the chief: the slime that was Raphael is.
             if conn.execute("SELECT 1 FROM members WHERE primary_contact = 1").fetchone() is None:

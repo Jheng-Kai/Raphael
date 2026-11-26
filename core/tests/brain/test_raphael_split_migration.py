@@ -162,7 +162,7 @@ def test_raphael_returns_to_its_factory_settings(old):
     migrate(old)
     assert value_of(old, "first_bot_profile") == {}
     assert value_of(old, "raphael_tools") is None
-    assert (value_of(old, "raphael_notify"), value_of(old, "raphael_draft_first"), value_of(old, "chief_pinned")) == (False, True, False)
+    assert (value_of(old, "raphael_notify"), value_of(old, "raphael_draft_first"), value_of(old, "chief_pinned")) == (False, True, None)
     assert value_of(old, "raphael_computer_mode") == "host"
     assert value_of(old, "agent_model") == "openai/gpt-x"  # the answer model is the app's, Raphael answers on it
     assert value_of(old, "raphael_split") == {"slime": slime_of(old)["id"]}
