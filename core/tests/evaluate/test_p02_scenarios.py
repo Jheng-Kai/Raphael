@@ -305,11 +305,14 @@ class NoPrimary(P02Brain):
 
 
 class PrimaryAsChief(P02Brain):
-    """A stale brain that keeps naming Raphael after the chief capability moves."""
+    """A stale brain that keeps naming the chief it first heard after the chief capability moves."""
 
-    @staticmethod
-    def chief(snapshot, names):
-        return f"幕僚長：{names[0]}"
+    first = None
+
+    def chief(self, snapshot, names):
+        if self.first is None:
+            self.first = names[snapshot['chief_id']]
+        return f"幕僚長：{self.first}"
 
 
 class NoChief(P02Brain):

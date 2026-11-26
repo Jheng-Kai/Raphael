@@ -753,7 +753,7 @@ class RpcDriver:
             {key:message.get(key) for key in ('id','member_id','kind','status','origin_message_id')}
             for message in messages], 'exchanges':[
             dict(row) for row in self.app._conn.execute('SELECT origin_message_id,state,stop_requested,wrapup_sent,reason FROM room_exchanges WHERE room_id=?', (room['id'],))]}))
-        if not messages or messages[-1]['member_id']!=0 or messages[-1]['kind']!='wrapup':
+        if not messages or messages[-1]['member_id']!=self.app.members.primary_id() or messages[-1]['kind']!='wrapup':
             reasons.append('chief_not_last_after_stop')
         self.events.append(('guardian.stop_timings',{'redirect_ms':redirect_ms,'stop_ack_ms':ack_ms,
             'terminal_ms':round((time.perf_counter()-started)*1000)}))
@@ -763,6 +763,8 @@ class RpcDriver:
         ids = await self.seed_team()
         await self.install_fixture()
         reasons, result = [], {}
+        # The first slime made is the chief; the owner starts by choosing the mail assistant, and chooses 行銷 between the rounds.
+        await self.app.call('members.set_primary', {'id':ids[1]})
         for refresh in (False, True):
             if refresh:
                 await self.app.call('members.update', {'id':ids[-1], 'name':'研究員' + self.nonce})
