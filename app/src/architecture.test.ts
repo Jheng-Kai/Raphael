@@ -27,7 +27,7 @@ it("mechanical rules link existing named tests", () => {
     const every = spec.split("\n").filter(line => /^\| (?:R-[A-Z]+(?:-[A-Z]+)*-\d+|A-\d+) \|/.test(line));
     const ids = every.map(row => row.split("|")[1]!.trim());
     expect(ids.filter((id, at) => ids.indexOf(id) !== at)).toEqual([]);
-    const rows = spec.split("\n").filter(line => /^\| (?:R-[A-Z]+-\d+|A-\d+) \|/.test(line));
+    const rows = every; // the named-test check covers every row too, a multi-part ID (R-COMP-HOST-08) included
     expect(rows.length).toBeGreaterThan(10);
     for (const row of rows) {
       const checks = row.split("|")[name === "RULES" ? 4 : 3]!.split(",").map(check => check.trim());
