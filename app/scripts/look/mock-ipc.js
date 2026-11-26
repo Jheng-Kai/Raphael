@@ -2739,6 +2739,9 @@ export function installMock(fixture, config = {}, target = window) {
       if (command === "plugin:window|outer_position") return { x: 0, y: 0 };
       // A full HD screen with a taskbar: room for the guide's whole card.
       if (command === "plugin:window|current_monitor") return { name: "look", size: { width: 1920, height: 1080 }, position: { x: 0, y: 0 }, workArea: { position: { x: 0, y: 0 }, size: { width: 1920, height: 1032 } }, scaleFactor: 1 };
+      // The window zoom's floor follows the screen's scale (R-UI-13): a look's screen is the browser's own pixel ratio,
+      // 1 by default and 1.25 or 1.5 under --scale.
+      if (command === "plugin:window|scale_factor") return window.devicePixelRatio || 1;
       if (["plugin:window|set_size", "plugin:window|set_position", "plugin:window|set_resizable", "plugin:window|set_maximizable", "plugin:window|center", "plugin:window|maximize", "plugin:window|unmaximize"].includes(command)) {
         (state.windowCalls ??= []).push({ command: command.slice("plugin:window|".length), args });
         return;

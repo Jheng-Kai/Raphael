@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { describe, expect, test } from "vitest";
-import { ZOOM_LEVELS, installWindowZoom, nextZoom, zoomAction } from "./window-zoom";
+import { describe, expect, test, vi } from "vitest";
+import { type ScreenScale, ZOOM_LEVELS, installWindowZoom, nextZoom, zoomAction, zoomLevels } from "./window-zoom";
 
 const key = (code: string, init: Partial<KeyboardEventInit> = {}) =>
   new KeyboardEvent("keydown", { code, ctrlKey: true, cancelable: true, ...init });
@@ -9,6 +9,15 @@ function memory(initial?: string) {
   const values = new Map<string, string>(initial === undefined ? [] : [["raphael.zoom", initial]]);
   return { getItem: (k: string) => values.get(k) ?? null, setItem: (k: string, v: string) => void values.set(k, v), values };
 }
+
+/** A screen of `scale`, and `move` to put the window on a screen of another. */
+function screenOf(scale: number) {
+  let listener: ((scale: number) => void) | undefined;
+  const screen: ScreenScale = { read: async () => scale, watch: (heard) => void (listener = heard) };
+  return { screen, move: (next: number) => listener?.(next) };
+}
+
+const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe("window zoom", () => {
   test("three steps either way of 100%, and no further", () => {
@@ -20,6 +29,22 @@ describe("window zoom", () => {
     // A level saved by another version snaps to the nearest step before moving.
     expect(nextZoom(1.25, "in")).toBe(1.3);
     expect(nextZoom(4, "out")).toBe(1.2);
+  });
+
+  test("zooming out stops where a CSS pixel would get less than one of the screen's pixels", () => {
+    // A screen at 100%: a 1080p monitor on Windows, or on a Mac, which has no scale for it between 1x and 2x.
+    expect(zoomLevels(1)).toEqual([1, 1.1, 1.2, 1.3]);
+    expect(zoomLevels(1.25)).toEqual([0.8, 0.9, 1, 1.1, 1.2, 1.3]);
+    expect(zoomLevels(1.5)).toEqual([...ZOOM_LEVELS]);
+    expect(zoomLevels(2)).toEqual([...ZOOM_LEVELS]);
+    // A scale reported a hair off its value keeps its steps.
+    expect(zoomLevels(1.2499999)).toEqual(zoomLevels(1.25));
+    expect(zoomLevels(1.5000000596)).toEqual([...ZOOM_LEVELS]);
+    // A scale that is not a number counts as a screen at 100%.
+    expect(zoomLevels(Number.NaN)).toEqual(zoomLevels(1));
+    expect(zoomLevels(0)).toEqual(zoomLevels(1));
+    expect(nextZoom(1, "out", zoomLevels(1))).toBe(1);
+    expect(nextZoom(0.7, "in", zoomLevels(1))).toBe(1.1);
   });
 
   test("Ctrl with plus, minus or zero on either keyboard row", () => {
@@ -37,26 +62,75 @@ describe("window zoom", () => {
     const target = new EventTarget();
     const applied: number[] = [];
     const storage = memory("1.2");
-    installWindowZoom(target, async (factor) => { applied.push(factor); }, storage);
-    await Promise.resolve();
+    installWindowZoom(target, async (factor) => { applied.push(factor); }, screenOf(2).screen, storage);
+    await settled();
     expect(applied).toEqual([1.2]);
     for (let i = 0; i < 5; i++) {
       const event = key("Equal");
       target.dispatchEvent(event);
       expect(event.defaultPrevented).toBe(true);
     }
-    await Promise.resolve();
     expect(applied[applied.length - 1]).toBe(1.3);
     expect(storage.values.get("raphael.zoom")).toBe("1.3");
     target.dispatchEvent(key("Digit0"));
-    await Promise.resolve();
     expect(applied[applied.length - 1]).toBe(1);
+  });
+
+  test("a screen at 100% stops at 100%, and a level it cannot draw comes back on a screen that can", async () => {
+    const target = new EventTarget();
+    const applied: number[] = [];
+    const storage = memory("0.7");
+    const { screen, move } = screenOf(1);
+    installWindowZoom(target, async (factor) => { applied.push(factor); }, screen, storage);
+    await settled();
+    // Nothing is applied before the screen is read, and then 70% shows as this screen's least.
+    expect(applied).toEqual([1]);
+    move(2);
+    expect(applied[applied.length - 1]).toBe(0.7);
+    move(1);
+    expect(applied[applied.length - 1]).toBe(1);
+    const out = key("Minus");
+    target.dispatchEvent(out);
+    expect(out.defaultPrevented).toBe(true);
+    expect(applied[applied.length - 1]).toBe(1);
+    // A key steps from what shows, and that becomes the remembered level.
+    expect(storage.values.get("raphael.zoom")).toBe("1");
+  });
+
+  test("the screen is first read once its changes are heard, and a change heard first is not undone by that reading", async () => {
+    const applied: number[] = [];
+    let listener: ((scale: number) => void) | undefined;
+    let subscribed: (() => void) | undefined;
+    let answer: ((scale: number) => void) | undefined;
+    const read = vi.fn(() => new Promise<number>((resolve) => { answer = resolve; }));
+    const screen: ScreenScale = { read, watch: (heard) => new Promise<void>((resolve) => { listener = heard; subscribed = resolve; }) };
+    installWindowZoom(new EventTarget(), async (factor) => { applied.push(factor); }, screen, memory("0.7"));
+    await settled();
+    expect(read).not.toHaveBeenCalled();
+    subscribed!();
+    await settled();
+    expect(read).toHaveBeenCalledOnce();
+    // The window moves to a screen at 100% before the reading taken on a Retina screen comes back.
+    listener!(1);
+    answer!(2);
+    await settled();
+    expect(applied).toEqual([1]);
+  });
+
+  test("a screen whose scale cannot be read counts as one at 100%", async () => {
+    const applied: number[] = [];
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const screen: ScreenScale = { read: () => Promise.reject(new Error("no window")), watch: () => {} };
+    installWindowZoom(new EventTarget(), async (factor) => { applied.push(factor); }, screen, memory("0.8"));
+    await settled();
+    expect(applied).toEqual([1]);
+    warn.mockRestore();
   });
 
   test("a missing or broken saved value starts at 100%", async () => {
     const applied: number[] = [];
-    installWindowZoom(new EventTarget(), async (factor) => { applied.push(factor); }, memory("nonsense"));
-    await Promise.resolve();
+    installWindowZoom(new EventTarget(), async (factor) => { applied.push(factor); }, screenOf(2).screen, memory("nonsense"));
+    await settled();
     expect(applied).toEqual([1]);
   });
 });
