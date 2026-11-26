@@ -405,6 +405,20 @@ async def test_in_full_permission_a_child_goes_straight_on_as_its_member_would(m
     assert "<full_permission>" in rig.client.chat_calls[0]["messages"][0]["content"]
 
 
+async def test_in_plan_mode_a_child_is_told_to_change_nothing_and_every_change_still_asks(make_rig, plugins, calls):
+    rig = make_rig()
+    SettingsStore(rig.conn).set("action_mode", "plan")
+    member, source = member_turn(rig)
+    await plugins.connect(note="T1")
+    rig.client.replies.extend([turn("Noting.", [use("Notes__note", {"text": ARGUMENT}, "c1")]), report("A plan, not a change.")])
+    running = asyncio.ensure_future(delegate(rig, member, source, goal="Write the note"))
+    await until(lambda: questions(rig))
+    assert calls == [] and "<plan_mode>" in rig.client.chat_calls[0]["messages"][0]["content"]
+    asked = questions(rig)[-1]
+    rig.service.answer(asked["task_id"], asked["question_id"], False)
+    assert (await running).ok
+
+
 # --- a background task as the parent --------------------------------------------------------------------------------
 
 
@@ -567,6 +581,12 @@ async def test_children_left_over_by_a_restart_are_interrupted_and_never_started
 
 
 # --- the tool, in the team's tools -------------------------------------------------------------------------------------
+
+
+def test_the_find_tool_names_sub_workers_so_a_member_that_wants_to_split_a_job_looks_for_them():
+    from raphael_core.background.snapshot import _DEFINITIONS
+
+    assert "sub-workers" in _DEFINITIONS["find_tools"]["description"]
 
 
 def test_the_tool_is_a_team_tool_found_with_find_tools_and_never_listed_in_the_default_prompt():

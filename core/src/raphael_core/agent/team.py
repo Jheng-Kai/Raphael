@@ -13,6 +13,8 @@
   (「幫我加一個管行程的成員」), through whoever the owner asked, as an alias of `member_create`.
 - `handoff` returns an immediate durable receipt for isolated assigned work. Its task graph has
   its own persisted depth bound, independent of conversational consultation hops.
+- `delegate_task` starts fresh sub-workers of the member's own for the parts of a job and waits for their structured
+  results (`agent.delegate`, run by `background.service`).
 
 Both are T1 in the gate (`gate.TEAM_TOOLS`): they run at once, through the gate like every tool.
 Adding a member changes something, so the owner's safety rules judge it first, as they judge a
@@ -38,6 +40,7 @@ from typing import Any, Protocol
 from .plugins import PluginTool
 from .policy import Tier
 from .capabilities import COORDINATION_TOOLS
+from .delegate import DELEGATE_TASK, definition as delegate_definition
 from .speaker import RAPHAEL_NAMES, Speaker
 from .team_admin import DEFINITIONS as ADMIN_DEFINITIONS
 from .tools import ToolResult
@@ -56,7 +59,10 @@ STOP_WORK = "stop_work"
 _STOP_WORK = re.compile(r"stop|cancel|abort|kill|halt|停|取消|中止|終止|终止|中斷|中断|止め|キャンセル", re.I)
 _MEETING = re.compile(r"meeting|discuss|brainstorm|開會|會議|会议|会議|討論|讨论|商量", re.I)
 _SKILLS = re.compile(r"skill|procedure|學會|技能|技巧|スキル|手順", re.I)
-TEAM_TOOLS = (ASK_MEMBER, CREATE_MEMBER, *SKILL_TOOLS, ROOM_MEETING, *ROOM_TOOLS, HANDOFF, "work_status", STOP_WORK)
+TEAM_TOOLS = (ASK_MEMBER, CREATE_MEMBER, *SKILL_TOOLS, ROOM_MEETING, *ROOM_TOOLS, HANDOFF, "work_status", STOP_WORK, DELEGATE_TASK)
+# The team tools a member finds with find_tools and calls with use_tool instead of having them listed: the default prompt is held
+# to a size budget (R-STOP-02, R-DELEGATE-01), and a member uses each of these seldom.
+FOUND_TEAM_TOOLS = (STOP_WORK, DELEGATE_TASK)
 TEAM_SERVER = "Raphael"
 TEAM_TIER = Tier.T1
 # The most of a request one member hands another, and of the answer that comes back, in characters.
@@ -119,6 +125,8 @@ def _definition(name: str) -> dict[str, Any]:
     if name == "work_status":
         return {"description": "Read the computed status board and decisions of this meeting. Check the existing stage owner before handoff. Read-only; never reads private conversation or approval content.",
                 "parameters": {"type":"object","properties":{},"additionalProperties":False}}
+    if name == DELEGATE_TASK:
+        return delegate_definition()
     if name == STOP_WORK:
         return {"description": "Stop one of your own unfinished background tasks, queued or running: one you handed on or that was handed to you, never another member's or the owner's. Without task_id it lists them (task_id, title, state, member_id); with it that task and the work waiting on it end, and nothing is posted in any conversation.",
                 "parameters": {"type": "object", "properties": {"task_id": {"type": "integer", "minimum": 1}}, "additionalProperties": False}}
@@ -361,6 +369,9 @@ def team_tools_for(
             tools = [SKILL_READ, SKILLS_LIST]
     if team is not None and (always or any(other.id != speaker.id for other in team.named_in(text))):
         tools.append(HANDOFF)
+    # Sub-workers of its own: for a member the owner reached (not one that another assistant asked), where it works with tools.
+    if team is not None and always and speaker.depth == 0:
+        tools.append(DELEGATE_TASK)
     # Listed only for a request about stopping; a worker or CLI brain (`always`) finds it with find_tools (its definition
     # is not in the default prompt, which has a size budget).
     if team is not None and not always and _STOP_WORK.search(text):

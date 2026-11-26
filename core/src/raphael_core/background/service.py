@@ -93,6 +93,7 @@ from pathlib import Path
 from typing import Any
 
 from ..agent.answers import Reply, owner_script, parse_reply, pending_replies
+from ..agent import delegate as delegation
 from ..brain.textnorm import authored_chinese
 from ..languages import chinese_variant
 from ..conversation_language import chat_language, detect_language
@@ -105,6 +106,7 @@ from ..agent.narration import PUBLIC_PROGRESS_RULES
 from ..agent.progress_updates import ProgressUpdates
 from ..agent.persona import (
     FULL_PERMISSION,
+    PLAN_MODE,
     PREFIXES,
     fit_text,
     language_reminder,
@@ -267,6 +269,9 @@ HANDLES_REQUEST = (
 
 # The most pieces one task hands out: it comes back after each round and could otherwise go on for ever.
 MAX_HANDOFFS = 24
+# The most sub-workers (`delegate_task`) one turn may start in all, and how often a call that waits for them looks at them (seconds).
+MAX_DELEGATED = delegation.MAX_PER_TURN
+DELEGATE_HEARTBEAT_S = 5.0
 # The most of the delegated results that a parent is shown, in characters.
 RESULTS_CHARS = 1_000_000
 # Where work that was to leave a file is looked for, and how much of it: folders that are not the member's own
@@ -542,6 +547,9 @@ class BackgroundService:
         self._cleanups: set[asyncio.Task] = set()
         self._cli_loops = {}
         self._handoff_runs = {}
+        # task id -> the future of a sub-worker some call of `delegate_task` waits for, and what its run counted when it ended.
+        self._delegates: dict[int, asyncio.Future] = {}
+        self._delegate_stats: dict[int, dict] = {}
         # turn id of an owner's message handed to a task under way (`steer` with its ticket) -> that task's run and the words,
         # held until its model reads them (`_owner_read`), the owner takes them back (`take_back_words`, `drop_words`) or the
         # task stops running without reading them (`_give_back`). A task that waits for the owner's yes keeps them for when
@@ -1250,7 +1258,7 @@ class BackgroundService:
         # a stopped task is refused as stopped when its hand-off is accepted below.
         if member in waiting and parent is not None and parent.state in ('queued', 'running'):
             return refused('handoff_cycle')
-        if parent is not None and self._metrics_conn.execute('SELECT COUNT(*) FROM worker_tasks WHERE parent_task_id=?',
+        if parent is not None and self._metrics_conn.execute("SELECT COUNT(*) FROM worker_tasks WHERE parent_task_id=? AND mode IS NOT 'delegate'",
                                                              (parent.id,)).fetchone()[0] >= MAX_HANDOFFS:
             return refused('handoff_depth_limit')
         model = getattr(target, 'model', None) or self._settings.get('agent_model')
@@ -1273,6 +1281,168 @@ class BackgroundService:
             'work_turn_id':task.turn_id,'root_task_id':task.root_task_id,'ready_at_ms':task.ready_at_ms,
             'dispatch_policy':'immediate','member_id':member,
             **({'artifact_note': self._artifact_note(task)} if self._artifact_note(task) else {})})
+
+    def _child_model(self, asked: str, default: str) -> str | None:
+        """The model a sub-worker runs on: the member's own (`default`) when it names none, else the one it names, if the owner
+        connected it: a CLI by `claude`, `codex`, `antigravity` or its reference (it must be signed in), an API model by the
+        reference the model menu gives (its provider must be set up). None when it cannot run."""
+        asked = (asked or "").strip()
+        if not asked:
+            return default
+        reference = delegation.named_cli(asked) or asked
+        if reference.startswith("cli:"):
+            from ..agent.cli.discovery import brain_ref
+            found = brain_ref(reference)
+            available = getattr(self._cli_brains, "available", None)
+            return reference if found and available is not None and available(found[0]) else None
+        from ..brain.model_ref import split_api_ref
+        try:
+            split_api_ref(reference)
+        except ValueError:
+            return None
+        router = getattr(self._client, "for_purpose", None)
+        if router is not None:
+            try:
+                if not router("agent").available(reference):
+                    return None
+            except Exception:  # a credential that cannot be read is the child's own failure, not a reason to refuse it
+                logger.info("A sub-worker's provider could not be checked: it is tried")
+        return reference
+
+    async def delegate(self, speaker, arguments, *, source_turn_id, language):
+        """`delegate_task` (agent/delegate.py): start the sub-workers `arguments` ask for as tasks of the member `speaker`, from its
+        turn `source_turn_id`, and wait for them: one structured result for each, in the order they were asked. The call ends
+        when every child has, or after its time (`timeout_seconds`, at most `delegation.CALL_BUDGET_S`: a call of a tool must
+        come back within a task's stall time); one still working then is stopped and told as a timeout. The owner's stop of
+        the turn, or of the task that made the call, ends them too. Refusals are fixed words to the model, never raised."""
+        name = delegation.DELEGATE_TASK
+
+        def refused(kind):
+            logger.info("A delegation was refused: %s", kind)
+            return ToolResult(name, False, None, kind, instruction=delegation.refusal(kind))
+
+        if configured := getattr(self, "owner_language", None):
+            language = configured() or language
+        parsed = delegation.parse(arguments)
+        if isinstance(parsed, str):
+            return refused(parsed)
+        pieces, timeout = parsed
+        if speaker.depth:
+            return refused("nested")
+        if self._host.disabled:
+            return refused("worker_disabled")
+        source = self._history.get(source_turn_id) if source_turn_id else None
+        if source is None or source.member_id != speaker.id or source.scope != "private":
+            return refused("source_unavailable")
+        current = self._speaker(speaker.id)
+        if current is None:
+            return refused("member_unknown_or_removed")
+        parent = self._store.for_turns([source.id]).get(source.id)
+        if parent is not None:
+            if parent.mode == "delegate":
+                return refused("nested")
+            if parent.generation and (parent.id not in self._runs or self._runs[parent.id].generation != parent.generation):
+                return refused("cancelled")
+        if self._store.delegated_from(source.id) + len(pieces) > MAX_DELEGATED:
+            return refused("delegate_limit")
+        default = speaker.model or self._settings.get("agent_model")
+        models = [self._child_model(piece.model, default) for piece in pieces]
+        if any(model is None for model in models):
+            return refused("model_unavailable")
+        ids = self._store.accept_delegates(source=source, parent=parent, member_id=speaker.id, language=language,
+                                           pieces=[(piece.goal, piece.context, model) for piece, model in zip(pieces, models)])
+        loop = asyncio.get_running_loop()
+        for identifier, model in zip(ids, models):
+            self._models[identifier] = model
+            self._delegates[identifier] = loop.create_future()
+            self._queue.append(identifier)
+            self._changed(identifier, QUEUED)
+        self._ensure_pump()
+        results = []
+        try:
+            timed_out = await self._wait_for_delegates(ids, timeout, parent)
+            for index, (identifier, piece) in enumerate(zip(ids, pieces), 1):
+                child = self._store.get(identifier)
+                stats = self._delegate_stats.get(identifier, {})
+                ended = child.finished_at_ms or self._now_ms()
+                results.append(delegation.result_for(
+                    index, piece, status=delegation.status_of(child.state, child.reason, timed_out=identifier in timed_out),
+                    summary="" if child.state == "cancelled" else child.full_report, reason=child.reason,
+                    files=stats.get("files", []), model=child.model_ref or default, tokens=stats.get("tokens", 0),
+                    cost_usd=child.cost_usd, model_calls=child.model_calls, tool_calls=child.tool_calls,
+                    duration_ms=max(0, ended - (child.started_at_ms or child.created_at_ms))))
+        finally:
+            for identifier in ids:
+                self._delegate_stats.pop(identifier, None)
+        return ToolResult(name, True, delegation.results_text(results), untrusted=True)
+
+    async def _wait_for_delegates(self, ids, timeout, parent) -> set[int]:
+        """Wait until each sub-worker of `ids` has ended; the ones that were stopped for working past `timeout` seconds (of
+        their own running: a wait for the owner's yes or for a place is not work) or past the call's time. While it waits it
+        tells the parent's run that it is alive, so that the task that made the call is not taken for stalled."""
+        budget = min(delegation.CALL_BUDGET_S, self._limits.seconds * 5 / 6)
+        limit = min(timeout, budget)
+        began = last = self._clock()
+        worked = dict.fromkeys(ids, 0.0)
+        timed_out: set[int] = set()
+        try:
+            while pending := [self._delegates[identifier] for identifier in ids if not self._delegates[identifier].done()]:
+                await asyncio.wait(pending, timeout=DELEGATE_HEARTBEAT_S, return_when=asyncio.FIRST_COMPLETED)
+                now = self._clock()
+                elapsed, last = now - last, now
+                if parent is not None and (run := self._runs.get(parent.id)) is not None:
+                    run.touch()
+                for identifier in ids:
+                    if self._delegates[identifier].done():
+                        continue
+                    child = self._store.get(identifier)
+                    if child is not None and child.state == RUNNING:
+                        worked[identifier] += elapsed
+                    if worked[identifier] >= limit or now - began >= budget:
+                        timed_out.add(identifier)
+                        await self._cancel({"task_id": identifier})
+        finally:
+            # The member's turn ended (the owner's Stop) while some were still at work: they end with it.
+            for identifier in ids:
+                if not self._delegates[identifier].done():
+                    await self._cancel({"task_id": identifier})
+                    self._delegates[identifier].cancel()
+                self._delegates.pop(identifier, None)
+        return timed_out
+
+    def _delegate_ended(self, task: Task, run: TaskRun | None) -> None:
+        """A task ended: when a call of `delegate_task` waits for it, keep what its run counted (its tokens, its files) and
+        let the call go on."""
+        future = self._delegates.get(task.id)
+        if future is None or future.done():
+            return
+        calls = getattr(getattr(run, "ledger", None), "calls", None) or []
+        self._delegate_stats[task.id] = {"tokens": sum(int(call.get("tokens") or 0) for call in calls),
+                                         "files": list(getattr(run, "files_changed", None) or [])}
+        future.set_result(None)
+
+    def delegate_views_for_turns(self, turn_ids) -> dict[int, list[dict]]:
+        """The sub-workers each of `turn_ids` started, as the conversation shows them: what each was asked, how it stands, the model
+        it runs on and what it has used; its words only once it is done. Never the context the member wrote."""
+        from ..brain.model_ref import cli_name, short_name
+        ids = sorted(set(turn_ids))
+        found: dict[int, list[dict]] = {}
+        for start in range(0, len(ids), 500):
+            chunk = ids[start:start + 500]
+            rows = self._metrics_conn.execute(
+                f"SELECT id FROM worker_tasks WHERE mode='delegate' AND source_turn_id IN ({','.join('?' for _ in chunk)}) ORDER BY id", chunk)
+            for row in rows:
+                task = self._store.get(row[0])
+                model = task.model_ref or ""
+                found.setdefault(task.source_turn_id, []).append({
+                    "task_id": task.id, "source_turn_id": task.source_turn_id, "member_id": task.member_id,
+                    "title": title(task.text), "goal": task.text[:300], "state": task.state, "reason": task.reason,
+                    "model": model, "model_name": cli_name(model) or short_name(model) if model else "",
+                    "model_calls": task.model_calls, "tool_calls": task.tool_calls, "cost_usd": task.cost_usd,
+                    "created_at_ms": task.created_at_ms, "started_at_ms": task.started_at_ms, "finished_at_ms": task.finished_at_ms,
+                    "waiting_owner": int(task.id in self._paused and self._paused[task.id].answer is None),
+                    "result": task.full_report[:600] if task.state == "done" else ""})
+        return found
 
     async def stop_own_work(self, speaker, arguments, *, source_turn_id=None) -> ToolResult:
         """A member's own way to end its unfinished background work (`stop_work`; the owner's Stop does the same from the
@@ -1490,11 +1660,11 @@ class BackgroundService:
     def handoff_views(self, *, room_id=None, thread_id=None, source_turn_id=None):
         branches, params = [], []
         if room_id is not None:
-            branches.append("SELECT id FROM worker_tasks WHERE mode IS NOT NULL AND COALESCE(report_room_id,room_id)=?" +
+            branches.append("SELECT id FROM worker_tasks WHERE mode IS NOT NULL AND mode!='delegate' AND COALESCE(report_room_id,room_id)=?" +
                             (" AND COALESCE(report_thread_id,thread_id)=?" if thread_id is not None else ""))
             params.extend([room_id, thread_id] if thread_id is not None else [room_id])
         if source_turn_id is not None:
-            branches.append("SELECT id FROM worker_tasks WHERE mode IS NOT NULL AND source_turn_id=?")
+            branches.append("SELECT id FROM worker_tasks WHERE mode IS NOT NULL AND mode!='delegate' AND source_turn_id=?")
             params.append(source_turn_id)
         if not branches:
             return []
@@ -1507,7 +1677,7 @@ class BackgroundService:
         for start in range(0, len(ids), 500):
             chunk = ids[start:start + 500]
             rows = self._metrics_conn.execute(
-                f"SELECT id FROM worker_tasks WHERE mode IS NOT NULL AND source_turn_id IN ({','.join('?' for _ in chunk)}) ORDER BY id", chunk)
+                f"SELECT id FROM worker_tasks WHERE mode IS NOT NULL AND mode!='delegate' AND source_turn_id IN ({','.join('?' for _ in chunk)}) ORDER BY id", chunk)
             for view in self._handoff_views(rows):
                 found.setdefault(view['source_turn_id'], []).append(view)
         return found
@@ -1797,9 +1967,12 @@ class BackgroundService:
             return
         active = [self._store.get(identifier) for identifier in self._active]
         speech = sum(task is not None and task.scope == 'room' for task in active)
-        work = len(active)-speech
+        # A sub-worker is no ordinary work: it has its own places (`delegate_parallel`, `delegation.weight`), and it does not
+        # take the one place of the member that started it, whose other work goes on beside it.
+        places = sum(delegation.weight(task.model_ref or '') for task in active if task is not None and task.mode == 'delegate')
+        work = len(active)-speech-sum(task is not None and task.mode == 'delegate' for task in active)
         routines = sum(task is not None and task.scope != 'room' and task.routine_id is not None for task in active)
-        busy = {task.member_id for task in active if task is not None and task.scope != 'room'}
+        busy = {task.member_id for task in active if task is not None and task.scope != 'room' and task.mode != 'delegate'}
         waiting = []
         for task_id in list(self._queue):
             task = self._store.get(task_id)
@@ -1815,7 +1988,12 @@ class BackgroundService:
             task_id = task.id
             room_speech = task.scope == 'room'
             routine = task.routine_id is not None and not room_speech
-            if room_speech:
+            if task.mode == 'delegate':
+                need = delegation.weight(task.model_ref or '')
+                if places and places + need > self._delegate_parallel():
+                    continue  # it waits for a place; a first one always starts, whatever it weighs
+                places += need
+            elif room_speech:
                 if speech >= ROOM_PARALLEL:
                     continue
                 speech += 1
@@ -1832,6 +2010,13 @@ class BackgroundService:
             running = asyncio.ensure_future(self._carry_out(task_id))
             self._active[task_id] = (running, task.member_id)
             running.add_done_callback(lambda _, task_id=task_id: self._over(task_id))
+
+    def _delegate_parallel(self) -> int:
+        """How many places the sub-workers may fill now: the owner's setting, read each time."""
+        try:
+            return max(1, int(self._settings.get("delegate_parallel")))
+        except (TypeError, ValueError):
+            return int(DEFAULTS["delegate_parallel"])
 
     def _cli_stagger(self, task: Task) -> float:
         """How long a routine run on a subscription CLI still waits for the one started before it on the same CLI: a CLI that
@@ -1980,7 +2165,10 @@ class BackgroundService:
         ledger.job = "room" if task.scope == "room" else task.mode if task.mode in ("work", "consult") else "task"
         ledger.member_id = task.member_id
         selected_model = self._models.pop(task.id, task.model_ref or self._settings.get("agent_model"))
-        selected_model = speaker.model or selected_model
+        # A sub-worker runs on the model its member chose for it (`delegate_task`'s own model, else the member's); every
+        # other task runs on the member's own, whatever it was queued with.
+        delegated = task.mode == "delegate"
+        selected_model = selected_model if delegated else speaker.model or selected_model
         if not selected_model:
             self._conclude(task, None, "failed", PREFIXES[language].negative,
                            phrase(language, "no_model"), None, "no_model")
@@ -2006,9 +2194,10 @@ class BackgroundService:
                     logger.warning("An earlier task attachment is unavailable")
         # Private lanes and consultations read their member's own context. Meeting speech
         # reads shared notes only; other assigned exchanges keep their existing shared scope.
-        private = task.scope != "room" and (task.scope == "private" or task.mode == "consult")
-        memory = self._memory_of(task.member_id) if private else self._shared_memory()
-        team = team_tools_for(self._team, speaker, always=True) if self._team_tool else []
+        private = task.scope != "room" and (task.scope == "private" or task.mode == "consult") and not delegated
+        # A sub-worker has no memory, no conversation and no team: only what its member wrote for it.
+        memory = None if delegated else self._memory_of(task.member_id) if private else self._shared_memory()
+        team = team_tools_for(self._team, speaker, always=True) if self._team_tool and not delegated else []
         # Background room coordination keeps its existing boundary; owner-private turns have parity.
         team = [name for name in team if name != "room_meeting" or speaker.is_chief]
         if task.scope == 'room':
@@ -2029,7 +2218,8 @@ class BackgroundService:
             snapshot = take_snapshot(self._gate.plugins,memory=memory is not None,history=private,
                 speaker=speaker,team=team,turned_off=self._tools.turned_off(),
                 max_tier=Tier.T3 if self._gate.full_permission else SNAPSHOT_MAX_TIER,
-                background_management=task.scope == "private", routine=task.routine_id is not None)
+                background_management=task.scope == "private" and not delegated, routine=task.routine_id is not None,
+                child=delegated)
         run = TaskRun(
             task_id=task.id,
             language=language,
@@ -2073,7 +2263,7 @@ class BackgroundService:
         # Work in a member's private conversation tells the owner how it goes (agent/progress_updates.py); a meeting's
         # reply is its post, a routine's owner reads only its last message, and a consultation answers a colleague.
         run.updates = (ProgressUpdates(self._clock)
-                       if task.scope == "private" and task.routine_id is None and task.mode != "consult" else None)
+                       if task.scope == "private" and task.routine_id is None and task.mode not in ("consult", "delegate") else None)
         # A reply's short window is for the model's silence: a tool it waits on has a task's own (`TaskRun._call`).
         run.tool_seconds = self._limits.seconds
         run.action = lambda name, arguments: observed_action(self._history, task.turn_id, language,
@@ -2102,7 +2292,9 @@ class BackgroundService:
             notices.append(skill_failure(name, error))
 
         request, skill_loaded = task.text, False
-        if resolve_async is not None:
+        if delegated:
+            pass  # a goal is plain words: no slash command in it is a skill of the member's
+        elif resolve_async is not None:
             request, skill_loaded = await resolve_async(speaker.id, task.text, on_failure=on_skill_failure)
         elif resolve is not None:
             request, skill_loaded = resolve(speaker.id, task.text, on_failure=on_skill_failure)
@@ -2122,7 +2314,7 @@ class BackgroundService:
             self._earlier_attempt(task),
             memory_snapshot=None if memory is None else await memory.snapshot_async(),
             attachments=files,
-            speaker=speaker,
+            speaker=Speaker(id=-1, name="a sub-worker", instructions=delegation.brief(speaker.name or RAPHAEL_NAMES[language])) if delegated else speaker,
             cli=room_cli,
             paths=self._stored_paths(files),
             placed=await self._place_videos(speaker, files),
@@ -2131,31 +2323,37 @@ class BackgroundService:
         user += "\n" + TASK_LANGUAGE
         from ..agent.card_context import source_text
         user += "\n" + source_text(origin.source if origin else "")
+        if delegated:
+            user += delegation.child_user(task.text, task.done_when, speaker.name or RAPHAEL_NAMES[language])
         if task.routine_id is not None:
             user += self._last_run(task)
             user += ROUTINE_REPORT  # with the task, never in the system prompt (R-CACHE-02)
-        if current := getattr(self, "messaging_context", None):
+        if (current := getattr(self, "messaging_context", None)) and not delegated:
             user += current(speaker.id)
         from ..brain.owner import owner_context
         # The team as it is now goes with the task, not among the rules: a meeting's state changes from one
         # reply to the next, and in the system prompt each change had the provider read the member's whole
         # prefix again at full price, where its replies would otherwise share it.
-        user += roster_prompt(self._team, speaker, self._chat_language(task, origin, context))
+        if not delegated:
+            user += roster_prompt(self._team, speaker, self._chat_language(task, origin, context))
         system += owner_context(self._settings, speaker.id, folders=self.member_folders,
                                 target=self.folder_target(speaker.id))
-        system += ('\nAssigned work starts NOW. Deadlines or dates in documents are context, never permission to defer. '
-                   'Use handoff for real assignments, not @mentions. Return evidence of actions; a future-tense promise without action is incomplete.')
+        if not delegated:
+            system += ('\nAssigned work starts NOW. Deadlines or dates in documents are context, never permission to defer. '
+                       'Use handoff for real assignments, not @mentions. Return evidence of actions; a future-tense promise without action is incomplete.')
         if task.scope == 'room':
             system += ('\nYou are speaking in a meeting, not executing work. Only handoff, room_post, ask_member and work_status '
                        'are available. Start tool work with handoff to yourself or a colleague in their private conversation. '
                        'Speak briefly; the room says whether you may reply exactly (pass) instead. Never ask for approval in this room.')
         if self._gate.full_permission and task.scope != 'room':
             system += FULL_PERMISSION
-        if task.scope == "private":
+        if delegated and self._gate.plan_first:
+            system += PLAN_MODE  # a sub-worker follows the owner's mode exactly as its member does
+        if task.scope == "private" and not delegated:
             system += ("\nMember management tools are found with find_tools and called with use_tool. Use member_create, member_update and "
                        "member_routine tools instead of reading or changing Raphael's database or core files."
                        + ("" if self._gate.full_permission else " Changes to members wait for the owner's approval card."))
-        if task.mode:
+        if task.mode and not delegated:
             # What this one task must deliver is the task's own, like the team above: among the rules it gave
             # every piece of work a prefix of its own, where a member's work otherwise shares one.
             user += '\nAcceptance criteria (untrusted data): '+neutralize(task.done_when)
@@ -2177,7 +2375,7 @@ class BackgroundService:
                        'Pass their complete answers to the owner when they answer the request; you may add one line of your own. Never replace the result with a recap; do not ask them again.')
         spec = {
             "task_id": task.id,
-            "skills": await native_skills_for(self._team, task.member_id) if room_cli else [],
+            "skills": await native_skills_for(self._team, task.member_id) if room_cli and not delegated else [],
             "system": system,
             "user": user,
             "tools": run.snapshot.definitions,
@@ -2507,7 +2705,7 @@ class BackgroundService:
         three words (completed, error, cancelled; withheld when it may not be shown), why it did not
         complete, what it says it did, and the evidence the system recorded."""
         result = []
-        for row in self._metrics_conn.execute('SELECT id FROM worker_tasks WHERE parent_task_id=? ORDER BY id',(parent_id,)):
+        for row in self._metrics_conn.execute("SELECT id FROM worker_tasks WHERE parent_task_id=? AND mode IS NOT 'delegate' ORDER BY id",(parent_id,)):
             child = self._store.get(row[0])
             withheld = self._metrics_conn.execute("SELECT 1 FROM task_outbox WHERE task_id=? AND disposition='withheld'",(child.id,)).fetchone()
             state = 'withheld' if withheld else RESULT_STATE.get(child.state, 'error')
@@ -2956,7 +3154,7 @@ class BackgroundService:
         consultation, those of the asked member's own conversation with the owner. A request of the
         owner's that did not finish is among them, told as one (`unfinished_note`), so that a task
         handed over as "try again" knows what it is to try again."""
-        if task.scope == "room":
+        if task.scope == "room" or task.mode == "delegate":
             return []
         try:
             if task.mode != "consult":
@@ -3093,7 +3291,7 @@ class BackgroundService:
                 wrapup=task.mode is not None or bool(message and message['kind']=='wrapup')
             # A room reads every reply in the app, Raphael's too: its lines stay (live, a wrap-up's headings ran together).
             # Raphael's report in a conversation is read whole there too; its line is what the overlay says.
-            plain = task.member_id!=0 or task.room_id is not None
+            plain = task.member_id!=0 or task.room_id is not None or task.mode == 'delegate'
             report = report_from(str(reply.get('final') or ''),language,plain=plain,long=not plain,
                                  literal=run.model.startswith('cli:'))
             if report:
@@ -3310,7 +3508,14 @@ class BackgroundService:
             kept += keep(Path(path), root)
         return True
 
-    def _conclude(
+    def _conclude(self, task: Task, run: TaskRun | None, *args, **kwargs) -> None:
+        """Write the end of a task (`_conclude_task`), and let the call of `delegate_task` that waits for it go on."""
+        try:
+            self._conclude_task(task, run, *args, **kwargs)
+        finally:
+            self._delegate_ended(task, run)
+
+    def _conclude_task(
         self,
         task: Task,
         run: TaskRun | None,
