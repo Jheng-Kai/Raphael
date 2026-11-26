@@ -2409,6 +2409,18 @@ npm run look -- exchange-mid-work exchange-mid-work-answered bot-message-from-ce
 npm run look -- peer-chat peer-chat-close handoff-group handoff-group-open handoff-group-room centred-system-events bot-ask-centred handoff-centred-line room-workflow-blocked room-workflow-childwork-open room-workflow-file-unreadable room-handoff-result --theme both --width 1120,720,1920x1080
 ```
 
+### Identifiers keep their underscores (R-MSG-WORD-01)
+
+An underscore touching a letter, digit or CJK character is part of the word, so `connections_list` or `COMPOSIO_SEARCH_TOOLS` in a
+reply or in a message handed between members keeps every underscore and nothing turns italic (`inline` in `message-content.ts`);
+`_word_` at a word boundary and `**bold**` still draw. The owner's own words were never Markdown. `message-identifiers` shows the
+owner's bubble and a member's reply with such names, `message-identifiers-peer` the hand-off conversation; both check that no word
+is italic and that the names read as written. `rich-chief`, `rich-member`, `rich-room` and `peer-chat` show that the rest of the Markdown is unchanged.
+
+```powershell
+npm run look -- message-identifiers message-identifiers-peer peer-chat rich-chief rich-member rich-room --theme both --width 1120,720,1920x1080
+```
+
 ### Who each message speaks to
 
 The view between two members must not greet the owner by name (「{name}，…」): what one member says to the other mentions the owner only in the

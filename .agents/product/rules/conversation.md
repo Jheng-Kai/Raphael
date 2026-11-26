@@ -230,6 +230,14 @@ A conversation's next call finds what its last one sent already cached. ARCHITEC
 | R-AG-PARITY-02 | 2026-11-04 | Any private foreground speaker can hand long work to itself through the existing durable lane, retaining the source conversation, chosen model, stage idempotency and cancellation tree. Workers cannot recursively self-handoff. | pytest | hard | core/tests/background/test_private_self_lane.py |
 | R-AG-PARITY-03 | 2026-11-04 | Raphael retains owner instructions in quick/API/CLI/worker/routine prompts, has the same default-on draft preference as members, and receives complete background reports, with a derived short overlay caption only when its notification switch is on. App-typed answers also reach the overlay only with the switch on (R-NOTIFY-01). The former member-length limit is superseded by R-UI-50; receipts in detail never replace visible results. Identity 0 never enters new-member setup when the primary moves. Snapshots retain real roles beside coordination duty. | pytest, vitest, deferred look | hard | core/tests/agent/test_answers.py; core/tests/members/test_service.py; app/src/main/member-details.test.ts; features/speaker-parity.md |
 
+## An underscore inside a word is part of the word
+
+A message with `connections_list your_connections COMPOSIO_SEARCH_TOOLS spreadsheet_id` (no backticks) was drawn `connectionslist`, with the words between two underscores in italics.
+
+| ID | Date | Rule | Check | Gate | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-MSG-WORD-01 | 2026-11-26 | In a message drawn as Markdown (a member's reply, a message handed between members, a group room's reply) an underscore that touches a letter, digit or CJK character on either side, or is part of an underscore run that does, is the word's own character: it is never an emphasis mark, so identifiers (`connections_list`, `COMPOSIO_SEARCH_TOOLS`, `snake__case`) keep every underscore and nothing between two of them turns italic or bold, beside CJK text as well (GFM's rule for `_`). An underscore at a word boundary still emphasises (`_real_`, `__loud__`, `，_重點_，`), `*`, `**`, code spans, links, lists and tables are as before, and the owner's own words are shown as written, with no Markdown at all. | vitest, look | hard | app/src/main/message-content.test.ts::an underscore inside a word is never emphasis: identifiers keep their underscores and nothing turns italic; app/src/main/message-content.test.ts::the owner's own words and a message handed between members show their underscores as written; app/src/main/message-content.test.ts::emphasis between word boundaries still works beside identifiers; message-identifiers; message-identifiers-peer |
+
 ## A model's link to a file it delivered
 
 A routine's message ended with the words `[已查核的部分紀錄](attachment:4e43d6d3fd9d47fab8b552f849c3c48b.md)` shown as they were written.

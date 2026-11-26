@@ -11842,6 +11842,23 @@ export function checkRendered(name, context = {}) {
     require(scroll.scrollWidth <= scroll.clientWidth + 1 && chat.scrollWidth <= chat.clientWidth + 1, "nothing scrolls sideways");
     return { check: name, lines: lines.length };
   }
+  if (name === "message-identifiers-thread" || name === "message-identifiers-peer") {
+    // An underscore inside a word is part of the word: it stays, and nothing between two of them turns italic.
+    const sample = window.__look.data.identifiersSample;
+    const roots = name === "message-identifiers-peer" ? [...document.querySelectorAll('.peer-chat .message-text')]
+      : [...document.querySelectorAll('.tn[data-id="1"] .owner-message .message-text, .tn[data-id="1"] .ra .message-text')];
+    require(roots.length >= 2 && roots.every(visible), `the messages are shown (${roots.length})`);
+    for (const root of roots) {
+      require(!root.querySelector('em'), `no word is italic: ${root.textContent}`);
+    }
+    const said = roots.map(root => root.textContent).join(' ');
+    for (const word of ['connections_list', 'your_connections', 'COMPOSIO_SEARCH_TOOLS', 'spreadsheet_id']) require(said.includes(word), `${word} reads as written`);
+    if (name === "message-identifiers-thread") {
+      const reply = document.querySelector('.tn[data-id="1"] .ra .message-text');
+      require(reply.querySelector('strong')?.textContent === 'COMPOSIO_MULTI_EXECUTE_TOOL', "the reply's own bold still draws");
+    }
+    return { check: name, messages: roots.length };
+  }
   if (name === "peer-chat-closed") {
     const line = document.querySelector('[data-handoff="61"]');
     require(!document.querySelector('.peer-chat') && !document.querySelector('.mb-chat[data-peer-open]'), "Close chat removes the conversation");
