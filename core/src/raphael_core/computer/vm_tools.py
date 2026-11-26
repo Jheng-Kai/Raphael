@@ -181,9 +181,24 @@ ENGINE_FAILURES = {
                       "wait for one to finish, or tell the owner which work is in the way.",
     "incompatible": "This computer was made by an earlier version and must be repaired before it starts. Ask the owner to "
                     "choose 修復 in your computer's ⋯ menu; its files are kept.",
+    "window_list_unavailable": "The computer did not give its list of windows, even when it was asked again, so nothing was sent "
+                               "to the page. Read the tabs again with browser_tabs and use the ids it gives; if that fails "
+                               "too, open the browser again with browser_open. Tab ids from before a restart of the browser "
+                               "are not valid.",
     "start_failed": "The computer did not start. Try once more; if it fails again, tell the owner Docker Desktop may need a "
                     "restart (quit it from its tray or menu bar icon and open it again).",
 }
+
+
+TAB_UNKNOWN = ("This tab or window is not available now: the browser may have been started again, the tab closed or its "
+               "window moved, and tab ids do not last through a restart. Read the tabs again with browser_tabs and use the "
+               "ids it gives, or open the browser again with browser_open.")
+
+
+def tab_unknown(data):
+    """Whether the driver refused a page call because it knows no such tab (`refusal.code`, as measured on both browsers)."""
+    refusal = (data.get("structuredContent") or {}).get("refusal")
+    return isinstance(refusal, dict) and refusal.get("code") == "browser_tab_not_found"
 
 
 @contextmanager
@@ -336,6 +351,7 @@ class VmTools:
     browser_open_s = 300.0
     # How long a window that was moved onto its screen is waited for before it is called outside it.
     window_fit_wait_s = 10.0
+    window_list_retry_s = 0.25
     # How long a launch at a seat waits for a window it opened: one handed to a copy already running, or started on a
     # loaded PC, maps after the driver has answered. The wait ends at the first such window.
     launch_window_wait_s = 10.0
@@ -1542,6 +1558,8 @@ class VmTools:
                     # A page tool says its tabs, refs and what came of a gesture only here; its text is one line about them.
                     if tool.name.startswith(PAGE_TOOLS) and data.get("structuredContent"):
                         text.append(json.dumps(data["structuredContent"], ensure_ascii=False))
+                    if tool.name.startswith(PAGE_TOOLS) and tab_unknown(data):
+                        text.append(TAB_UNKNOWN)
                     combined = "\n".join(text)
                     if self.logins:
                         for identifier in self.logins.values if target.container == "shared" else (member,):
@@ -2086,12 +2104,17 @@ class VmTools:
         return observation
 
     async def _canvas_windows(self, client, session, filters=None, *, owner_observation=False):
-        reply = await call_driver_tool(client, "list_windows", {**(filters or {}), "session": session},
-                                       **({"owner_observation": True} if owner_observation else {}))
-        try:
-            return seat_view.canvas_windows(reply)
-        except (ValueError, KeyError, TypeError):
-            raise VmError("window_list_unavailable") from None
+        # A read, so asking once more is safe: the driver sometimes gives no list the first time, and nothing has been sent
+        # to a page yet when a window is looked up.
+        for attempt in (0, 1):
+            reply = await call_driver_tool(client, "list_windows", {**(filters or {}), "session": session},
+                                           **({"owner_observation": True} if owner_observation else {}))
+            try:
+                return seat_view.canvas_windows(reply)
+            except (ValueError, KeyError, TypeError):
+                if attempt:
+                    raise VmError("window_list_unavailable") from None
+                await asyncio.sleep(self.window_list_retry_s)
 
     async def _shared_browser_window(self, target, client, session):
         # The caller holds the unit native lock across discovery, launcher and attach.
@@ -2185,8 +2208,7 @@ class VmTools:
             fits = [row for row in seat_view.windows(canvas, target.screen, target.screens)["windows"]
                     if row.get("app_name", "").lower() in BROWSER_APPS and args.get("pid", row.get("pid")) == row.get("pid")]
             if len(fits) != 1:
-                return self._seat_error("The bound window is not on this member's screen. Call list_windows and bind an own window again."
-                                        if "target_id" in args else
+                return self._seat_error(TAB_UNKNOWN if "target_id" in args else
                                         "Name one of this member's own windows or a bound target_id; call list_windows.")
             args.pop("target_id", None)
             args.pop("tab_id", None)
@@ -2194,7 +2216,7 @@ class VmTools:
         if "target_id" in args:
             window = await self._bound_window(target, client, args)
             if window is None:
-                return self._seat_error("The bound window is not on this member's screen. Call list_windows and bind an own window again.")
+                return self._seat_error(TAB_UNKNOWN)
         if "window_id" in args or ("pid" in args and name != "list_windows"):
             window = await self._own_window(target, client, session, args.get("window_id"), args.get("pid"))
             if window is None:

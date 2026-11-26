@@ -171,8 +171,8 @@ async def test_a_page_read_that_names_the_browser_or_nothing_reads_the_seats_own
     ([], dict(pid=99), "Name one of this member's own windows"),
     ([(50, 100, 99), (51, 300, 99)], dict(pid=99), "Name one of this member's own windows"),
     ([(50, 100, 99)], dict(pid=77), "Name one of this member's own windows"),
-    ([], dict(target_id="2"), "bind an own window again"),
-    ([(50, 100, 99), (51, 300, 99)], dict(target_id="2", tab_id="2"), "bind an own window again"),
+    ([], dict(target_id="2"), "Read the tabs again with browser_tabs"),
+    ([(50, 100, 99), (51, 300, 99)], dict(target_id="2", tab_id="2"), "Read the tabs again with browser_tabs"),
 ])
 async def test_a_page_read_guesses_no_window_when_the_seat_has_none_or_several(seat_tools, rows, named, words):
     hub, vm, _ = seat_tools

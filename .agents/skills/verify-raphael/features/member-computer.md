@@ -478,6 +478,8 @@ Layer 12 (`image/layer12/`, one Dockerfile step after layer 11's, so a PC that b
   `browser_tabs.py` (the tools' words and the pure reading of tabs), `vm.py` (`restore_window`, `browser_tabs`, layer 11 in
   `known_previous`, image v12), the acceptance (`OLD_IMAGES` with 11, panels with their window list, "shared seat windows").
 
+Page calls and lost tab ids (R-COMP-DRIVER-04): the driver's window list is asked once more when it gave none; a list still missing, a tab or window not known and the driver's `browser_tab_not_found` each say to read the tabs again with `browser_tabs` or open the browser again with `browser_open` (`test_seat_tools.py`, fake driver). The real driver's own tab ids are not changed and not proved here.
+
 Offline: `core/tests/computer/test_seat_windows.py` (scripts read and run without Docker, the tools against fakes), plus the
 updated layer tests in `test_seat_tools.py`, `test_screens.py`, `tests/evaluate/test_computer_acceptance.py`.
 
