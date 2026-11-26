@@ -991,7 +991,12 @@ async def test_an_item_already_there_is_no_sign_in_until_it_is_written_anew(tmp_
     brains, made, back = antigravity_sign_in(tmp_path, monkeypatch, signed_in=False, item=item)
     try:
         assert brains.login("gemini", again=True) == {"started": True}
-        await asyncio.sleep(0.3)  # many looks at the unchanged item, and agy asked: it is not signed in
+        # Many looks at the unchanged item, and agy asked: it is not signed in. A fixed pause was too short on a busy PC.
+        deadline = asyncio.get_running_loop().time() + 10
+        while "gemini" not in brains._verdict:
+            assert asyncio.get_running_loop().time() < deadline, "agy was never asked"
+            await asyncio.sleep(0.01)
+        await asyncio.sleep(0.1)
         assert brains._signing_in("gemini") and brains._signed.get("gemini") is None and back == []
         assert brains._verdict["gemini"][0] is False
         item[0] = "20261125114948Z"  # signed in again: agy rewrote its item
