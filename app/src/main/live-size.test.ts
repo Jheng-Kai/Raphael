@@ -72,3 +72,17 @@ test("holding an edge sets no inherited property on the root: one shield over th
   expect(strip("sidebar.css")).toContain(".edge-shield { position: fixed; inset: 0; z-index: 400; cursor: col-resize; user-select: none; }");
   expect(strip("sidebar.css")).not.toContain(":root[data-resizing]");
 });
+
+test("a centred column lands on whole pixels, so it moves by whole pixels while the pane beside it is dragged", () => {
+  const agent = strip("agent.css");
+  // Centred with `margin: auto` a column sits half a pixel off whenever the pane's width and the column's differ by an odd number,
+  // and moves by half a pixel for each pixel the pane is dragged: its words are drawn a pixel further on every other frame.
+  const block = /@supports \(margin-left: round\(down, 1px, 1px\)\) \{([\s\S]*?)\n\}/.exec(agent)?.[1] ?? "";
+  expect(block).toContain("--pa-lead: max(0px, round(down, calc((100% - var(--pa-colw)) / 2), 1px));");
+  for (const selector of [".ra-col", ".ra-dock > .composer", ".ra-dock > .ask-card", ".ra-dock > .draft-panel", ".peer-thread"]) {
+    expect(block, selector).toContain(`.page-agent ${selector}`);
+  }
+  expect(block).toContain("margin-inline: var(--pa-lead) 0;");
+  // Where the round function is unknown the columns keep the centring they had.
+  expect(agent).toContain(".ra-col { max-width: var(--pa-colw); margin: 0 auto; }");
+});

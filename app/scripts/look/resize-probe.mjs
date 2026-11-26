@@ -188,7 +188,9 @@ export async function resizeProbe(page, { edge, dx, moves = 60, toggle, watch = 
       shake += shakes; fractional += odd; rewraps += wraps;
       return { selector: entry.selector, shakes, fractionalFrames: odd, rewraps: wraps, missing, ...(process.env.LOOK_SERIES ? { changes } : {}) };
     });
-    Object.assign(result, { sampledFrames: rows.length, shake, fractional, rewraps, perText });
+    // The steps of a part of a pixel of the texts that must move by whole pixels (`whole`: the reading column's, centred in its pane).
+    const wholeSteps = perText.reduce((sum, entry, at) => sum + (watch[at].whole ? entry.fractionalFrames : 0), 0);
+    Object.assign(result, { sampledFrames: rows.length, shake, fractional, wholeSteps, rewraps, perText });
   }
   const problems = [];
   for (const [name, limit] of Object.entries(limits)) if (result[name] > limit) problems.push(`${name} ${JSON.stringify(result[name])} > ${limit}`);
