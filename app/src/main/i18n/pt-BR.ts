@@ -1315,7 +1315,6 @@ export const ptBR = {
   "agent.hearing": "Transcrevendo…",
   "agent.loadFailed": "《Aviso. Não foi possível ler as conversas.》",
   "settings.avatar": "Imagem",
-  "settings.avatarReset": "Redefinir",
   "settings.avatarFrame": "Arraste para mover; role ou arraste um canto para ampliar",
   "local.title": "Comandos locais",
   "local.never": "Nunca",

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // 「選擇主要聯絡對象」 (primary-picker.ts): real buttons in a radio group, one chosen at a time, the primary action waiting
-// for a choice, Raphael among the choices, and an answer only for a choice that is shown.
+// for a choice, the slimes among the choices (never Raphael), and an answer only for a choice that is shown.
 import { afterEach, describe, expect, test } from "vitest";
 import { openPrimaryPicker } from "./primary-picker";
 import type { Member } from "./types";
@@ -8,7 +8,7 @@ import type { Member } from "./types";
 const member = (id: number, patch: Partial<Member> = {}): Member => ({
   id, name: `成員${id}`, role: `職責${id}`, instructions: "", avatar: "", group_id: null, model: "", tools: null, position: id, created: 0, unread: false, waiting: false, preview: "", last_at: null, ...patch,
 });
-const MEMBERS = [member(0, { name: "拉斐爾", role: "" }), member(2, { name: "小晴", role: "研究" }), member(3, { name: "小森", role: "文書" })];
+const MEMBERS = [member(1, { name: "阿福", role: "", chief: true }), member(2, { name: "小晴", role: "研究" }), member(3, { name: "小森", role: "文書" })];
 
 const dialog = (): HTMLElement => document.querySelector<HTMLElement>(".mb-primary-picker")!;
 const choice = (id: number): HTMLButtonElement => dialog().querySelector<HTMLButtonElement>(`[data-id="${id}"]`)!;
@@ -24,15 +24,15 @@ describe("the primary contact's window", () => {
     const group = dialog().querySelector('[role="radiogroup"]')!;
     expect(group.getAttribute("aria-label")).toBe("選擇主要聯絡對象");
     const radios = [...group.querySelectorAll<HTMLElement>('[role="radio"]')];
-    expect(radios.map((el) => el.dataset.id)).toEqual(["0", "2", "3"]);
+    expect(radios.map((el) => el.dataset.id)).toEqual(["1", "2", "3"]);
     expect(radios.every((el) => el.tagName === "BUTTON" && el.getAttribute("type") === "button")).toBe(true);
     expect(dialog().querySelector("select, input[type=radio], input[type=checkbox]")).toBeNull();
     expect(checked()).toEqual([]);
     expect(setButton().disabled).toBe(true);
     expect(radios[1].textContent).toContain("小晴");
     expect(radios[1].textContent).toContain("研究");
-    // Raphael uses the same localized role as other member surfaces.
-    expect(radios[0].textContent).toBe("拉斐爾幕僚長");
+    // The chief uses the same localized role as other member surfaces.
+    expect(radios[0].textContent).toBe("阿福幕僚長");
     dialog().querySelector<HTMLElement>('[data-dlg="cancel"]')!.click();
     expect(await answer).toBeNull();
   });
@@ -60,11 +60,11 @@ describe("the primary contact's window", () => {
     expect(await answer).toBe(3);
   });
 
-  test("Raphael can be chosen again, and its id 0 is an answer, not nothing", async () => {
+  test("the chief can be chosen again, and the first id of the list is an answer, not nothing", async () => {
     const answer = openPrimaryPicker({ members: MEMBERS });
-    choice(0).click();
+    choice(1).click();
     setButton().click();
-    expect(await answer).toBe(0);
+    expect(await answer).toBe(1);
   });
 
   test("a member that is not on offer cannot be the answer: a first choice that is not listed chooses nobody", async () => {

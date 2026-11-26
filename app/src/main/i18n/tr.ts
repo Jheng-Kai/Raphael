@@ -1315,7 +1315,6 @@ export const tr = {
   "agent.hearing": "Yazıya dökülüyor…",
   "agent.loadFailed": "《Bildirim. Görüşmeler okunamadı.》",
   "settings.avatar": "Görsel",
-  "settings.avatarReset": "Sıfırla",
   "settings.avatarFrame": "Görseli taşımak için sürükleyin; yakınlaştırmak için kaydırın veya köşesini sürükleyin",
   "local.title": "Yerel komutlar",
   "local.never": "Asla",

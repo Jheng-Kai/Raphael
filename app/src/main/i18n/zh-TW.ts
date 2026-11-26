@@ -1025,7 +1025,6 @@ export const zhTW = {
   "agent.hearing": "正在辨識…",
   "agent.loadFailed": "《告。無法讀取對話。》",
   "settings.avatar": "頭像",
-  "settings.avatarReset": "還原",
   "settings.avatarFrame": "拖曳移動圖片，用滾輪或拉角落縮放",
   "settings.avatarDone": "完成",
   "local.title": "本機指令",

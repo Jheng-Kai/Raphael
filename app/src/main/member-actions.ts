@@ -4,7 +4,7 @@ import * as api from "./api";
 import { describeError } from "./format";
 import { t } from "./i18n";
 import { confirmDelete, groupChoices, groupFromValue, groupValue } from "./member-dialogs";
-import { RAPHAEL_ID, memberOf, orderedMembers, pinReplacements, primaryIdOf } from "./members";
+import { RAPHAEL_ID, fallbackMemberId, memberOf, orderedMembers, pinReplacements, primaryIdOf } from "./members";
 import { openPrimaryPicker } from "./primary-picker";
 import type { Member, MemberPatch, MembersList } from "./types";
 import { openMenu, toaster } from "./ui";
@@ -26,14 +26,11 @@ export function createMemberActions(host: MemberActionHost) {
   }
 
   async function memberAction(id: number, action: string): Promise<void> {
-    const m = memberOf(host.list(), id);
+    // Raphael is not a slime of the list: it cannot be pinned, hidden, grouped, deleted or made the chief.
+    const m = id === RAPHAEL_ID ? undefined : memberOf(host.list(), id);
     if (!m) return;
     if (action === "primary") return choosePrimary();
     if (action === "replace-pinned") return replacePinned(id);
-    if (id === RAPHAEL_ID) {
-      if (action === "pin") { await api.settingsSet("chief_pinned", !m.pinned).catch(error => toaster.info(describeError(error))); await host.load(); }
-      return;
-    }
     if (action === "edit") return editMember(m);
     try {
       // Sharing is the member packaging itself in its conversation, as the panel's share does.
@@ -42,12 +39,12 @@ export function createMemberActions(host: MemberActionHost) {
       else if (action === "hide") {
         // Hidden members wait in the sidebar's hidden folder, where the same item brings them back (R-UI-112).
         await api.membersUpdate(id, {hidden: !m.hidden});
-        if (!m.hidden && host.current() === id) host.select(RAPHAEL_ID);
+        if (!m.hidden && host.current() === id) host.select(fallbackMemberId(host.list(), id));
         await host.load();
       } else if (action === "unread") {
         await api.core("members.unread", {id});
         // Marking the open conversation unread moves away so viewing does not immediately clear it.
-        if (host.current() === id) host.select(RAPHAEL_ID);
+        if (host.current() === id) host.select(fallbackMemberId(host.list(), id));
         await host.load();
       }
     } catch (err) { toaster.info(describeError(err)); }
@@ -78,7 +75,7 @@ export function createMemberActions(host: MemberActionHost) {
    */
   async function replacePinned(id: number): Promise<void> {
     const list = host.list(), old = memberOf(list, id);
-    if (!list || !old?.pinned || id === RAPHAEL_ID) return;
+    if (!list || !old?.pinned) return;
     const chosen = await openPrimaryPicker({ members: pinReplacements(list), title: t("members.sideReplacePrimary"), immediate: true });
     if (chosen === null) return;
     // The roster may have changed while the window was open: the tile must still be this member's.
@@ -105,7 +102,7 @@ export function createMemberActions(host: MemberActionHost) {
 
   async function deleteMember(id: number): Promise<void> {
     const list = host.list();
-    const m = list?.members.find((other) => other.id === id);
+    const m = id === RAPHAEL_ID ? undefined : list?.members.find((other) => other.id === id);
     if (!m) return;
     if (!(await confirmDelete(m.name, { member: true }))) return;
     try {
@@ -115,7 +112,7 @@ export function createMemberActions(host: MemberActionHost) {
       return;
     }
     host.deleted(id);
-    if (host.current() === id) host.select(RAPHAEL_ID);
+    if (host.current() === id) host.select(fallbackMemberId(host.list(), id));
     await host.load();
   }
 

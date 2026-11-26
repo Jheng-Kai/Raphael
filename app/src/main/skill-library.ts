@@ -426,11 +426,11 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
   /**
    * Who may use a package: the whole team, or the characters ticked; the menu stays open while names are ticked. Each row
    * leads with who it names, as the @ menu does: a character's face, and for the whole team the team's own picture (its
-   * first faces in one square, as the sidebar draws the team, Raphael first); the check, when chosen, stands at the right.
+   * first faces in one square, as the sidebar draws the team); the check, when chosen, stands at the right.
    */
   const chooseAccess = (anchor: HTMLElement, key: string): void => {
     const face = (m: LibraryMember): Face => faces.get(m.id) ?? m;
-    const team = (): string => groupFacesHTML([{ id: RAPHAEL_ID, name: "" }, ...state.members.filter(m => m.id !== RAPHAEL_ID)].map(face), 20);
+    const team = (): string => groupFacesHTML(state.members.filter(m => m.id !== RAPHAEL_ID).map(face), 20);
     const parts = (lead: string, name: string, on: boolean): string =>
       `<span class="mlead" aria-hidden="true">${lead}</span><span class="mt">${esc(name)}</span><span class="ck">${on ? ico("check") : ""}</span>`;
     const items = (access: Access): string =>

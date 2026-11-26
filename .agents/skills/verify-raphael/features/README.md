@@ -453,7 +453,7 @@ behavior the fixture cannot prove.
 | [Navigation](navigation.md) | The app's start on Raphael's conversation, the sidebar's foot (the face and the Connections pill), the account menu with its usage submenu, the rail's foot and the shortcuts that used to lead to Home |
 | [Conversation](conversation.md) | Threads, details panel, replies, progress status, search, composer and the cards a task pauses on (an app, a key, the owner's turn at the computer, the owner's yes) and an email draft they edit and send |
 | [Member computer](member-computer.md) | Optional Docker sandbox, curated tools pinned outside the plugin cap, shared/per-bot tools without per-action approval, outward-action approval contract, owner-control lease, side-panel live desktop and native fake-brain journey |
-| [Members](members.md) | Identity, resources, voice, the primary contact's star and its chooser, Raphael's approved sidebar administration, and the right click that opens the ⋯ menu of any row (R-UI-44) |
+| [Members](members.md) | Identity, resources, voice, Raphael apart from the slimes (its account-menu entry and its own space, R-RAPHAEL-UI-01 to R-RAPHAEL-UI-06), the chief of staff and its chooser, and the right click that opens the ⋯ menu of any row (R-UI-44) |
 | [Automations](automations.md) | Day/week calendar opened from the account menu, schedules, advanced options and deletion |
 | [Group chats and folders](team-and-rooms.md) | Sidebar folders, Everyone room, group identity and mentions |
 | [Dictation](dictation.md) | Overview, history, dictionary, shortcuts, microphone and paste |

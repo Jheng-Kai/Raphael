@@ -22,20 +22,18 @@ import { openMemberAvatarMenu } from "./member-avatar-menu";
 import type { MessageKey } from "./i18n/zh-TW";
 import { openConfirmMenu } from "./member-column";
 import { pickPicture, readPicture } from "./member-dialogs";
-import { FIRST_BOT_NAME_MAX, PERSONALITY_MAX, RAPHAEL_ID, ROLE_MAX, cleanName, faceHTML, isMemberNameTaken, memberSlime, stableMember } from "./members";
+import { PERSONALITY_MAX, RAPHAEL_ID, ROLE_MAX, cleanName, faceHTML, isMemberNameTaken, memberSlime, stableMember } from "./members";
 import { entryIcon } from "./service-mark";
 import { rememberAppLogos } from "./app-logos";
 import { connectedApps, toolOn, toolsAfterToggle, type ToolChoices } from "./member-tools";
 import { skillOriginLabel } from "./skill-source";
 import { slimeColorOf } from "./slime";
-import { FIRST_SLIME } from "./first-bot";
 import type { AppContext, LibraryRef, Member, MemberCommand, MemberPatch, MemberSkill, MembersList } from "./types";
 import { type IconName, actionRow, btn, closeMenu, esc, ico, iconBtn, backButton as roundBackButton, iconButton, openMenuOnArrow, openPopover, patchHTML, tg, toaster } from "./ui";
 
-/** The page's tint: the member's slime colour, the first blue slime keeping the theme's own blue (`--raphael-color`). */
+/** The page's tint: the member's slime colour, Raphael's first blue slime keeping the theme's own blue (`--raphael-color`). */
 function memberTint(member: Member): string {
-  const slime = memberSlime(member);
-  return member.id === RAPHAEL_ID && slime === FIRST_SLIME ? "var(--raphael-color)" : slimeColorOf({ id: member.id, avatar: slime });
+  return member.id === RAPHAEL_ID ? "var(--raphael-color)" : slimeColorOf({ id: member.id, avatar: memberSlime(member) });
 }
 
 export interface MemberSettingsHost {
@@ -165,11 +163,11 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     `<div class="ms-row"${key ? ` data-k="${key}"` : ""}><span class="ms-label">${esc(label)}</span>${control}</div>`;
 
   function idHTML(member: Member): string {
+    // Raphael's name and face are fixed: shown, never edited, with no role.
+    if (member.id === RAPHAEL_ID) return `<span class="ms-face">${faceHTML(member, 96)}</span><h1 class="ms-name">${esc(member.name)}</h1>`;
     // A press on the face opens the picker (slimes, 生成) at once, as the panel's does; under the pointer a pencil shows on it.
     const face = `<button type="button" class="btn mb-face-edit ms-face" data-ms="avatar" data-k="ms-face" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(t("members.changeAvatar"))}">${faceHTML(member, 96)}<span class="mb-face-pencil" aria-hidden="true">${ico("pencil")}</span></button>`;
-    const name = `<input class="mb-edit ms-name" id="ms-name" data-member="${member.id}" type="text"${member.id === RAPHAEL_ID ? ` maxlength="${FIRST_BOT_NAME_MAX}"` : ""} value="${esc(member.name)}" aria-label="${esc(t("members.name"))}" autocomplete="off" spellcheck="false">`;
-    // The first member's name is the owner's, as they gave it in the guide; its role is the chief's, never typed.
-    if (member.id === RAPHAEL_ID) return face + name;
+    const name = `<input class="mb-edit ms-name" id="ms-name" data-member="${member.id}" type="text" value="${esc(member.name)}" aria-label="${esc(t("members.name"))}" autocomplete="off" spellcheck="false">`;
     return face + name +
       `<input class="mb-edit ms-role" id="ms-role" data-member="${member.id}" type="text" maxlength="${ROLE_MAX}" value="${esc(member.role)}" placeholder="${esc(t("members.role"))}" aria-label="${esc(t("members.role"))}" autocomplete="off" spellcheck="false">`;
   }
@@ -547,13 +545,13 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
   async function saveField(input: HTMLInputElement | HTMLTextAreaElement): Promise<void> {
     const member = host.list()?.members.find(item => item.id === Number(input.dataset.member)) ?? (host.member().id === Number(input.dataset.member) ? host.member() : null);
     if (!member) return;
-    // The first member's role is not the owner's to type; its name, personality and instructions are, as everyone's.
-    if (member.id === RAPHAEL_ID && input.id === "ms-role") return;
+    // Raphael's name and role are fixed: only its personality and instructions are the owner's to write.
+    if (member.id === RAPHAEL_ID && (input.id === "ms-role" || input.id === "ms-name")) return;
     if (input.id === "ms-name") {
       const value = cleanName(input.value);
       if (value === member.name) { input.value = member.name; return; }
       const others = (host.list()?.members ?? []).filter(other => other.id !== member.id).map(other => other.name);
-      const taken = value !== "" && isMemberNameTaken(value, others, member.id === RAPHAEL_ID);
+      const taken = value !== "" && isMemberNameTaken(value, others);
       if (value === "" || taken) {
         if (taken) toaster.info(t("members.nameTaken", { p0: value }));
         input.value = member.name;
