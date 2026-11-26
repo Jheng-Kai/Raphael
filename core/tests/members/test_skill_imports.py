@@ -1,32 +1,41 @@
 """Skill sources and downloads are constrained to bounded Markdown data."""
 
 import io
-import stat
 import zipfile
 
 import httpx
 import pytest
 
-from raphael_core.members.capabilities import MAX_SKILL_BYTES, download_skill, skill_urls
+from raphael_core.members.capabilities import MAX_SKILL_BYTES
+from raphael_core.members.skill_github import parse
 from raphael_core.members.store import MemberError
+from raphael_core.protocol import RpcError
+from .github_fake import FakeGitHub
+from .test_skill_import_limits import detail
 
 
 @pytest.mark.parametrize("source", ["https://localhost/SKILL.md", "http://github.com/a/b/blob/main/SKILL.md",
                                     "https://github.com/a/b/blob/main/../SKILL.md", "a/../b",
-                                    "https://github.com/a/b/blob/main/install.py",
-                                    "https://raw.githubusercontent.com/a/b/main/SKILL.md?x=1"])
+                                    "https://github.com/a/b/blob/main/install.py", "https://user:pass@github.com/a/b",
+                                    "https://github.com:8443/a/b", "https://github.com/a", "", "   "])
 def test_untrusted_sources_are_rejected_before_fetching(source):
     with pytest.raises(MemberError):
-        skill_urls(source)
+        parse(source)
 
 
-@pytest.mark.parametrize("source,expected", [
-    ("owner/repo", "https://raw.githubusercontent.com/owner/repo/main/SKILL.md"),
-    ("https://github.com/owner/repo/blob/main/skills/write/SKILL.md", "https://raw.githubusercontent.com/owner/repo/main/skills/write/SKILL.md"),
-    ("https://skills.sh/owner/repo/write", "https://raw.githubusercontent.com/owner/repo/main/skills/write/SKILL.md"),
+@pytest.mark.parametrize("source,repo,rest,path", [
+    ("owner/repo", "owner/repo", (), ""),
+    ("owner/repo/skills/write", "owner/repo", (), "skills/write"),
+    ("github.com/owner/repo", "owner/repo", (), ""),
+    ("https://github.com/owner/repo.git", "owner/repo", (), ""),
+    ("https://github.com/owner/repo/blob/main/skills/write/SKILL.md", "owner/repo", ("main", "skills", "write"), ""),
+    ("https://github.com/owner/repo/tree/v1.2/skills", "owner/repo", ("v1.2", "skills"), ""),
+    ("https://raw.githubusercontent.com/owner/repo/refs/heads/main/skills/write/SKILL.md", "owner/repo", ("main", "skills", "write"), ""),
+    ("https://skills.sh/owner/repo/write", "owner/repo", (), ""),
 ])
-def test_sources_resolve_only_to_github_markdown(source, expected):
-    assert skill_urls(source)[1][0] == expected
+def test_sources_resolve_to_a_github_repository_and_where_in_it(source, repo, rest, path):
+    target = parse(source)
+    assert (target.repo, target.rest, target.path) == (repo, rest, path)
 
 
 async def test_imported_document_is_private_toggleable_and_deleted(rig, monkeypatch):
@@ -52,48 +61,18 @@ async def test_imported_document_is_private_toggleable_and_deleted(rig, monkeypa
 
 
 @pytest.mark.parametrize("response", ["oversize", "redirect", "binary"])
-async def test_downloader_refuses_oversize_redirects_and_binary_data(monkeypatch, response):
-    real_client = httpx.AsyncClient
-
-    def handle(request):
-        assert request.url.host == "raw.githubusercontent.com" and request.url.path.endswith("SKILL.md")
-        if response == "redirect":
-            return httpx.Response(302, headers={"Location": "https://localhost/private"})
-        return httpx.Response(200, content=b"x" * (MAX_SKILL_BYTES + 1) if response == "oversize" else b"\x00binary")
-
-    monkeypatch.setattr("raphael_core.members.capabilities.httpx.AsyncClient",
-                        lambda **kwargs: real_client(**kwargs, transport=httpx.MockTransport(handle)))
-    with pytest.raises(MemberError):
-        await download_skill("owner/repo")
-
-
-@pytest.mark.parametrize("source", ["https://github.com/owner/repo",
-                                    "https://github.com/owner/repo/blob/develop/skills/write/SKILL.md",
-                                    "https://skills.sh/owner/repo/write"])
-async def test_remote_import_loads_the_selected_snapshot_and_ignores_root_link(monkeypatch, source):
-    from raphael_core.members.capabilities import download_skills
-
-    real_client = httpx.AsyncClient
-    data = io.BytesIO()
-    with zipfile.ZipFile(data, "w") as archive:
-        archive.writestr("repo-develop/skills/write/SKILL.md", "---\nname: writing\ndescription: Clear writing\n---\nBody")
-        archive.writestr("repo-develop/skills/write/guide.txt", "Guide")
-        invalid = zipfile.ZipInfo("repo-develop/AGENTS.md")
-        invalid.external_attr = (stat.S_IFLNK | 0o777) << 16
-        archive.writestr(invalid, "elsewhere")
-
-    def handle(request):
-        if request.url.host == "api.github.com":
-            return httpx.Response(200, json={"default_branch": "develop"})
-        assert request.url.host == "codeload.github.com"
-        assert request.url.path == "/owner/repo/zip/develop"
-        return httpx.Response(200, content=data.getvalue())
-
-    monkeypatch.setattr("raphael_core.members.capabilities.httpx.AsyncClient",
-                        lambda **kwargs: real_client(**kwargs, transport=httpx.MockTransport(handle)))
-    [(url, files)] = await download_skills(source)
-    assert url == "https://github.com/owner/repo/blob/develop/skills/write/SKILL.md"
-    assert files["guide.txt"] == b"Guide" and "AGENTS.md" not in files
+async def test_a_document_that_is_oversize_redirected_or_binary_is_refused_with_its_cause(rig, monkeypatch, response):
+    github = FakeGitHub(monkeypatch)
+    github.add("owner/repo", {"SKILL.md": b"---\nname: x\ndescription: y\n---\n"})
+    github.repos["owner/repo"]["files"]["SKILL.md"] = b"x" * (MAX_SKILL_BYTES + 1) if response == "oversize" else b"\x00binary"
+    github.add("owner/repo", github.repos["owner/repo"]["files"])
+    if response == "redirect":
+        github.fail["raw.githubusercontent.com"] = httpx.Response(302, headers={"Location": "https://localhost/private"})
+    with pytest.raises(RpcError) as error:
+        await rig.call("skills.library.import", {"source": "owner/repo"})
+    found = detail(error)
+    assert {"oversize": "file", "redirect": "redirect", "binary": "encoding"}[response] == found["reason"]
+    assert github.requests and all("localhost" not in url for url in github.requests)
 
 
 def test_skills_sh_selection_falls_back_to_the_repository_root():
