@@ -38,6 +38,8 @@ export const en = {
   "memberComputer.docker": "Virtual machine",
   "memberComputer.suggestionTitle": "This task needs a virtual machine",
   "memberComputer.suggestionSwitch": "Switch to the virtual machine",
+  "memberComputer.suggestionTitleHost": "This task needs this computer",
+  "memberComputer.suggestionSwitchHost": "Switch to this computer",
   "memberComputer.suggestionInstall": "Ask {p0} for help installing Docker",
   "memberComputer.dockerLocation": "Virtual machine ({p0})",
   "memberComputer.idle": "Idle",

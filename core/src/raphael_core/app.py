@@ -1103,7 +1103,7 @@ class App(Router):
             return scope[0] == "async" and not scope[1].done()
         self.vm_tools.scope_busy = computer_scope_busy
         self.vm_tools.suggestions.notify = self.notify
-        self.vm_tools.suggestions.resume = self.agent.resume_on_vm
+        self.vm_tools.suggestions.resume = self.agent.resume_on_computer
         self.home = HomeOverview(self._conn, self, self.members, calendar_events=ConnectedCalendar(self, self.connectors, notify=self.notify))
         self.home.register()
         self.calendar.shown, self.calendar.zone, self.calendar.google_state = self.home.between, self.home.zone, self.home.google_state

@@ -2,7 +2,7 @@
 
 ## Assigning a computer to a member
 
-R-COMP-CHOICE-01 through R-COMP-CHOICE-03 and R-COMP-HOST-02 through R-COMP-HOST-06.
+R-COMP-CHOICE-01 through R-COMP-CHOICE-04 and R-COMP-HOST-02 through R-COMP-HOST-06.
 The owner assigns the member's computer in the Computer tab. Its one dropdown
 saves the choice without posting in chat, with the local and SSH Docker locations
 in the same menu. New members use Raphael Chrome. The member receives its assigned
@@ -85,10 +85,10 @@ Chrome's profile process tree. The VM keeps its own idle setting.
 
 Run from `app/`:
 ```sh
-npm run look -- member-settings desktop-computer-choice desktop-computer-choice-missing desktop-computer-choice-docker desktop-computer-suggestion-installed desktop-computer-suggestion-missing desktop-panel desktop-host-no-card desktop-host-panel desktop-host-takeover desktop-host-handback desktop-host-skip-idle desktop-quiet-vm --theme both --width 1120,720,1920x1080
+npm run look -- member-settings desktop-computer-choice desktop-computer-choice-missing desktop-computer-choice-docker desktop-computer-suggestion-installed desktop-computer-suggestion-missing desktop-computer-suggestion-this-pc desktop-panel desktop-host-no-card desktop-host-panel desktop-host-takeover desktop-host-handback desktop-host-skip-idle desktop-quiet-vm --theme both --width 1120,720,1920x1080
 ```
 
-Inspect the local and SSH choices, saved switching, both suggestion actions, normal Chrome
+Inspect the local and SSH choices, saved switching, both suggestion actions and the one that comes back to this computer from the virtual machine, normal Chrome
 work opening the Computer tab without a card, the full-frame page, takeover and Done, and
 the idle panels after a skipped Chrome request or unavailable VM.
 Look uses the production canvas with fixture frames. Run `test_host_computer.py` and

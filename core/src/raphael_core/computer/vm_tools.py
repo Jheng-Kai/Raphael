@@ -35,7 +35,7 @@ from .owner_files import KEPT_WORDS, MAC_PRIVATE, kept_place, place as owner_pla
 from .owner_transfer import REMOTE_FILE_MAX, hand_over, safe_name
 from .vm_catalog import DRIVER_TOOLS, FRESH_READS, NATIVE_INPUT_TOOLS, NOTICES, PAGE_TOOLS, READS, SCREEN_READS, SHARED_ARGUMENTS, BROWSER_APPS, definition as driver_definition, offline_catalog, shared_argument_paths, shared_native_input
 from .takeover import TAKEOVER, TAKEOVER_REASON_REQUIRED, owner_waiting_result, takeover_detail
-from .suggestions import ComputerSuggestions, SUGGEST_COMPUTER, SUGGEST_COMPUTER_KEY
+from .suggestions import ComputerSuggestions, OTHER, SUGGEST_COMPUTER, SUGGEST_COMPUTER_KEY, SUGGEST_THIS_PC
 from .browser_tabs import BLANK, BROWSER_TABS, NEW_TAB, new_tab_of, rows as tab_rows, shown_tab
 from . import seat_launch
 from . import seat_view
@@ -680,7 +680,9 @@ class VmTools:
             if self.computer_mode(member_id) == "host":
                 return [*offered, *self.host_computer.offered(member_id), *([SUGGEST_COMPUTER] if self.suggestions else [])]
         target = self.vm.target(member_id)
-        return [*offered, *(self.tools[key] for key in self.catalogs.get(target.key, []) if self.routes[key] == target)]
+        # A member on the VM may propose this PC's Chrome, as one on Chrome may propose the VM.
+        back = [SUGGEST_THIS_PC] if self.host_computer is not None and self.suggestions else []
+        return [*offered, *(self.tools[key] for key in self.catalogs.get(target.key, []) if self.routes[key] == target), *back]
 
     @property
     def enforces_computer_choice(self):
@@ -993,16 +995,16 @@ class VmTools:
         turn_id, private, _ = _TURN.get()
         if self.host_computer is not None:
             chosen = self.computer_mode(member)
-            if chosen != ("host" if host_key or key == SUGGEST_COMPUTER_KEY else "docker"):
+            if key != SUGGEST_COMPUTER_KEY and chosen != ("host" if host_key else "docker"):
                 return PluginResult(False, "computer_changed", "The owner selected a different computer. Use only its tools on the next turn.")
         if key == SUGGEST_COMPUTER_KEY:
             if not self.vm.enabled or self.host_computer is None or self.suggestions is None or approver == "none":
                 return PluginResult(False, "blocked")
             if task_id or not private or not turn_id or not scope or scope[0] != "turn":
-                return PluginResult(False, "vm_required", "Report why the VM is required and stop. A suggestion card is only available in a private app conversation.")
+                return PluginResult(False, "vm_required", "Report why the other computer is required and stop. A suggestion card is only available in a private app conversation.")
             if not Draft202012Validator(SUGGEST_COMPUTER.schema).is_valid(arguments) or not (reason := " ".join(arguments["reason"].split())):
                 return PluginResult(False, "bad_arguments")
-            return await self.suggestions.show(turn_id, member, reason, _NOTE.get()[1])
+            return await self.suggestions.show(turn_id, member, reason, _NOTE.get()[1], OTHER[chosen])
         conversation_id = scope[2] if scope and scope[0] == "turn" else None
         if task_id and self.conn is not None:
             origin = self.private_task_origin(task_id)

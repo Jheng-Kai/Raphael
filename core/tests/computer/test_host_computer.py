@@ -35,6 +35,67 @@ async def host_call(tools, name, arguments, *, member=1, turn_id=1, task_id=None
                             conversation_id=3, private=True, approver=approver, language="en", announce=None)
 
 
+async def test_each_computer_offers_the_other_one_only_in_a_private_chat(tmp_path, conn, monkeypatch):
+    from raphael_core.computer.suggestions import SUGGEST_COMPUTER_KEY
+
+    vm = LocalVm(tmp_path, settings=SettingsStore(conn))
+    vm.desktop = SimpleNamespace(installed=lambda: True)
+    vm.real_transport = False
+    monkeypatch.setattr("raphael_core.computer.host_browser.chrome_executable", lambda: "chrome")
+    tools = VmTools(SimpleNamespace(offered=lambda: []), vm, attachments=None, conn=conn)
+    tools.host_computer = HostComputerTools(vm, conn, BROWSER_OPEN)
+    member = 0
+
+    def suggestion(for_member):
+        return [tool for tool in tools.offered_for(for_member) if tool.key == SUGGEST_COMPUTER_KEY]
+
+    await tools.prepare(member)
+    on_chrome, = suggestion(member)
+    assert "the VM" in on_chrome.description and "this PC" not in on_chrome.description
+    with conn:
+        tools.set_computer_mode(member, "docker")
+    await tools.prepare(member)
+    on_vm, = suggestion(member)
+    assert "this PC" in on_vm.description and "signed-in" in on_vm.description and "company network" in on_vm.description
+    assert on_vm.schema == on_chrome.schema and on_vm.tier == on_chrome.tier
+    assert tools.tier_of(SUGGEST_COMPUTER_KEY) is not None
+
+    # A task, a background run or a chat that is not the owner's private one only reports the need.
+    for kwargs in ({"task_id": 5}, {}):
+        refused = await tools.call(SUGGEST_COMPUTER_KEY, {"reason": "The page needs a signed-in site."}, approver="auto", **kwargs)
+        assert not refused.ok and refused.kind == "vm_required"
+    assert not conn.execute("SELECT 1 FROM computer_suggestions").fetchone()
+    # Nothing is shown without a yes either way: the member can only propose.
+    assert tools.computer_mode(member) == "docker"
+
+
+async def test_a_suggestion_names_the_other_computer_and_is_refused_on_the_wrong_one(tmp_path, conn):
+    vm = LocalVm(tmp_path, settings=SettingsStore(conn))
+    tools = VmTools(SimpleNamespace(offered=lambda: []), vm, attachments=None, conn=conn)
+    tools.host_computer = HostComputerTools(vm, conn, BROWSER_OPEN)
+    member = conn.execute("INSERT INTO members (name, role, position, created_at_ms) VALUES ('M','R',0,1)").lastrowid
+    turn = conn.execute("INSERT INTO agent_turns (created_at_ms, session_id, question, route, prefix, text, status, member_id, scope) "
+                        "VALUES (1, 's', 'q', 'operate', '', '', 'running', ?, 'private')", (member,)).lastrowid
+    suggestions = tools.suggestions
+    # On Raphael Chrome only the VM can be proposed, on the VM only this PC.
+    refused = await suggestions.show(turn, member, "Needs my signed-in site.", "en", "host")
+    assert not refused.ok and refused.kind == "computer_changed"
+    with conn:
+        tools.set_computer_mode(member, "docker")
+    refused = await suggestions.show(turn, member, "Needs a shell.", "en", "docker")
+    assert not refused.ok and refused.kind == "computer_changed"
+    assert not conn.execute("SELECT 1 FROM computer_suggestions").fetchone()
+    shown = await suggestions.show(turn, member, "Needs my signed-in site.", "en", "host")
+    assert shown.ok and suggestions.views([turn])[turn]["target"] == "host"
+    # A card whose computer the owner has already chosen by hand changes nothing and continues nothing.
+    with conn:
+        tools.set_computer_mode(member, "host")
+    suggestions.resume = None
+    with pytest.raises(Exception, match="already"):
+        await suggestions.act({"turn_id": turn, "action": "switch"})
+    assert suggestions.views([turn])[turn]["state"] == "pending"
+
+
 @pytest.mark.parametrize("installed", [False, True])
 async def test_only_the_assigned_computer_is_offered_with_read_only_status(tmp_path, conn, monkeypatch, installed):
     vm = LocalVm(tmp_path, settings=SettingsStore(conn))
@@ -67,7 +128,7 @@ async def test_only_the_assigned_computer_is_offered_with_read_only_status(tmp_p
     await tools.prepare(0)
     offered = tools.offered_for(0)
     assert any(tool.name == "vm_exec" for tool in offered)
-    assert all(tool.name != "suggest_computer" and tool.key != host_open for tool in offered)
+    assert all(tool.key != host_open for tool in offered)
     assert (await tools.call(host_open, {"url": "https://example.invalid"}, approver="auto")).kind == "computer_changed"
     result = await tools.call(COMPUTER_STATUS_KEY, {}, approver="auto")
     assert result.ok

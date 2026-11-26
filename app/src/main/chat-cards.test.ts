@@ -21,7 +21,7 @@ const turn = (over: Partial<AgentTurn>): AgentTurn => ({ id: 1, ...over }) as Ag
 beforeEach(() => { document.body.innerHTML = ""; vi.clearAllMocks(); api.openLink.mockResolvedValue(undefined); });
 
 test.each([true, false])("a virtual-machine suggestion has one close button and the appropriate action (Docker installed: %s)", async (installed) => {
-  const host = dom(chatCardsHTML(turn({ computer_suggestion: { reason: "The package needs a shell.", installed, state: "pending" } })));
+  const host = dom(chatCardsHTML(turn({ computer_suggestion: { reason: "The package needs a shell.", installed, state: "pending", target: "docker" } })));
   expect(host.querySelectorAll(".card-close")).toHaveLength(1);
   expect(host.querySelector(".card-title")!.textContent).toBe(t("memberComputer.suggestionTitle"));
   expect(host.querySelector(".card-body")!.textContent).toBe("The package needs a shell.");
@@ -34,6 +34,30 @@ test.each([true, false])("a virtual-machine suggestion has one close button and 
   await Promise.resolve();
   expect(api.core).toHaveBeenCalledExactlyOnceWith("agent.computer_suggestion", { turn_id: 1, action: installed ? "switch" : "setup" });
   expect(handoff).toHaveBeenCalledTimes(installed ? 0 : 1);
+});
+
+test("a suggestion to come back to this computer names it, has one close button and one switching action", async () => {
+  const reason = "The wiki sits behind the company network.";
+  const host = dom(chatCardsHTML(turn({ computer_suggestion: { reason, installed: true, state: "pending", target: "host" } })));
+  expect(host.querySelectorAll(".card-close")).toHaveLength(1);
+  expect(host.querySelector(".card-title")!.textContent).toBe(t("memberComputer.suggestionTitleHost"));
+  expect(host.querySelector(".card-title")!.textContent).not.toBe(t("memberComputer.suggestionTitle"));
+  expect(host.querySelector(".card-body")!.textContent).toBe(reason);
+  const actions = host.querySelectorAll<HTMLButtonElement>(".card-actions button");
+  expect(actions).toHaveLength(1);
+  expect(actions[0].textContent).toBe(t("memberComputer.suggestionSwitchHost"));
+  api.core.mockResolvedValue({});
+  const handoff = vi.fn();
+  expect(chatCardAction(actions[0], handoff)).toBe(true);
+  await Promise.resolve();
+  expect(api.core).toHaveBeenCalledExactlyOnceWith("agent.computer_suggestion", { turn_id: 1, action: "switch" });
+  expect(handoff).not.toHaveBeenCalled();
+  // Closing declines; a card the owner has answered has no action left.
+  api.core.mockClear();
+  expect(chatCardAction(host.querySelector<HTMLElement>(".card-close")!)).toBe(true);
+  await Promise.resolve();
+  expect(api.core).toHaveBeenCalledExactlyOnceWith("agent.computer_suggestion", { turn_id: 1, action: "dismiss" });
+  expect(dom(chatCardsHTML(turn({ computer_suggestion: { reason, installed: true, state: "switched", target: "host" } }))).querySelector(".card-actions button")).toBeNull();
 });
 
 describe("cards a member shows in its conversation for the panel's buttons", () => {

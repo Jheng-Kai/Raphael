@@ -2469,6 +2469,14 @@ def _project_folders(conn):
 _MIGRATIONS[99] = _project_folders
 
 
+_MIGRATIONS[100] = """
+BEGIN;
+ALTER TABLE computer_suggestions ADD COLUMN target TEXT NOT NULL DEFAULT 'docker' CHECK (target IN ('host', 'docker'));
+PRAGMA user_version = 100;
+COMMIT;
+"""
+
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 

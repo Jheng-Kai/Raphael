@@ -34,6 +34,8 @@ export const th = {
   "memberComputer.docker": "เครื่องเสมือน",
   "memberComputer.suggestionTitle": "งานนี้ต้องใช้เครื่องเสมือน",
   "memberComputer.suggestionSwitch": "เปลี่ยนไปใช้เครื่องเสมือน",
+  "memberComputer.suggestionTitleHost": "งานนี้ต้องใช้คอมพิวเตอร์เครื่องนี้",
+  "memberComputer.suggestionSwitchHost": "เปลี่ยนไปใช้คอมพิวเตอร์เครื่องนี้",
   "memberComputer.suggestionInstall": "ขอให้ {p0} ช่วยติดตั้ง Docker",
   "memberComputer.dockerLocation": "เครื่องเสมือน ({p0})",
   "memberComputer.idle": "รอทำงาน",

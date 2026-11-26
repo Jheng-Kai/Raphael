@@ -34,6 +34,8 @@ export const zhCN = {
   "memberComputer.docker": "虚拟机",
   "memberComputer.suggestionTitle": "这件事需要虚拟机",
   "memberComputer.suggestionSwitch": "改用虚拟机",
+  "memberComputer.suggestionTitleHost": "这件事需要这台电脑",
+  "memberComputer.suggestionSwitchHost": "改用这台电脑",
   "memberComputer.suggestionInstall": "请 {p0} 协助安装",
   "memberComputer.dockerLocation": "虚拟机（{p0}）",
   "memberComputer.idle": "待命",

@@ -37,6 +37,8 @@ export const zhTW = {
   "memberComputer.docker": "虛擬機",
   "memberComputer.suggestionTitle": "這件事需要虛擬機",
   "memberComputer.suggestionSwitch": "改用虛擬機",
+  "memberComputer.suggestionTitleHost": "這件事需要這台電腦",
+  "memberComputer.suggestionSwitchHost": "改用這台電腦",
   "memberComputer.suggestionInstall": "請 {p0} 協助安裝",
   "memberComputer.dockerLocation": "虛擬機（{p0}）",
   "memberComputer.idle": "待命",

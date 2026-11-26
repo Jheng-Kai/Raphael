@@ -38,6 +38,8 @@ export const ja = {
   "memberComputer.docker": "仮想マシン",
   "memberComputer.suggestionTitle": "この作業には仮想マシンが必要です",
   "memberComputer.suggestionSwitch": "仮想マシンに切り替える",
+  "memberComputer.suggestionTitleHost": "この作業にはこのコンピューターが必要です",
+  "memberComputer.suggestionSwitchHost": "このコンピューターに切り替える",
   "memberComputer.suggestionInstall": "{p0} にインストールを手伝ってもらう",
   "memberComputer.dockerLocation": "仮想マシン（{p0}）",
   "memberComputer.idle": "待機中",

@@ -34,6 +34,8 @@ export const ptBR = {
   "memberComputer.docker": "Máquina virtual",
   "memberComputer.suggestionTitle": "Esta tarefa precisa de uma máquina virtual",
   "memberComputer.suggestionSwitch": "Mudar para a máquina virtual",
+  "memberComputer.suggestionTitleHost": "Esta tarefa precisa deste computador",
+  "memberComputer.suggestionSwitchHost": "Mudar para este computador",
   "memberComputer.suggestionInstall": "Pedir ajuda a {p0} para instalar o Docker",
   "memberComputer.dockerLocation": "Máquina virtual ({p0})",
   "memberComputer.idle": "Em espera",
