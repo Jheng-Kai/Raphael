@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import shutil
 from collections import Counter
 from contextlib import suppress
 from pathlib import Path
@@ -527,9 +528,19 @@ class HostComputerTools:
             if not allowed(path) or not path.is_file() or path.stat().st_size > UPLOAD_MAX_BYTES:
                 raise BrowserError("browser_upload_path")
             paths.append(path)
-        # Chrome is given copies read through the files opened here, and judged where those really are: a file swapped
-        # for a link to a private one after the checks above is never what the site gets.
-        files = [await browser.member_upload(path, allowed, UPLOAD_MAX_BYTES) for path in paths]
+        # Chrome is given copies read through the files opened here, never through a link: a file or folder swapped for
+        # a link to a private one after the checks above is never what the site gets. An upload that fails before Chrome
+        # is given them keeps none; once given, they stay for the page to send (until Chrome starts again).
+        files = []
+        try:
+            for path in paths:
+                files.append(await browser.member_upload(path, allowed, UPLOAD_MAX_BYTES))
+            if tab.chooser is not chooser:
+                raise BrowserError("browser_chooser_changed")
+        except BaseException:
+            for file in files:
+                shutil.rmtree(file.parent, ignore_errors=True)
+            raise
         await browser.choose_files(tab, chooser, files)
         return {**host_page.tab_ids(tab), "status": "files_chosen", "files": [path.name for path in files]}
 

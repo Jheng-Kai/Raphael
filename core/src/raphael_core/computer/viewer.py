@@ -13,6 +13,7 @@ import logging
 import os
 import re
 import secrets
+import shutil
 import stat
 import time
 from contextlib import suppress
@@ -28,7 +29,7 @@ from .vm import GUEST, OWNER_IDLE_S, SHARED, VmError
 from .owner_transfer import CLIPBOARD_MAX, clipboard_text, hand_over, safe_name
 from .viewer_relay import Policy, ViewerRelay
 from .host_view import HostInputGate
-from .host_browser import BrowserError
+from .host_browser import BrowserError, made_off_loop
 from .host_page import navigate as navigate_host_page
 from .host_view_script import SCRIPT as HOST_VIEW
 from .viewer_input import FRAME_PRESENTATION
@@ -1458,7 +1459,7 @@ class DesktopViewer:
                             or not isinstance(files, list) or self.stored_path is None
                             or not 1 <= len(files) <= (20 if chooser["mode"] == "multiple" else 1)):
                         return False
-                    paths = []
+                    sources = []
                     for item in files:
                         try:
                             name, source = safe_name(item.get("name")), self.stored_path(item.get("stored_id"))
@@ -1466,7 +1467,19 @@ class DesktopViewer:
                             return False
                         if source is None:
                             return False
-                        paths.append(await asyncio.to_thread(browser.owner_upload, source, name))
+                        sources.append((source, name))
+                    # Copies made for a chooser that is gone by the time they are ready go again; once Chrome is given
+                    # them, they stay for the page to send.
+                    paths = []
+                    try:
+                        for source, name in sources:
+                            paths.append(await made_off_loop(browser.owner_upload, source, name))
+                        if tab.chooser is not chooser:
+                            raise BrowserError("browser_chooser_changed")
+                    except BaseException:
+                        for path in paths:
+                            shutil.rmtree(path.parent, ignore_errors=True)
+                        raise
                     await browser.choose_files(tab, chooser, paths)
                 elif action == "chooser":
                     # The owner closes the chooser without files: the page gets none, as from a cancelled dialog.

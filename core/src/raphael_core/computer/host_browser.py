@@ -15,6 +15,7 @@ import socket
 import stat
 import subprocess
 import sys
+import threading
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -188,20 +189,8 @@ def place_by_handle(workspace, name, data):
 
 
 def opened_path(descriptor):
-    """Where an open file really is, as the system says of the open file itself (F_GETPATH on a Mac, /proc on Linux, its
-    handle's final path on Windows): a link or junction swapped in since its path was checked does not change it. None
-    when the system cannot say."""
-    if sys.platform == "darwin":
-        import fcntl
-        try:
-            return Path(os.fsdecode(fcntl.fcntl(descriptor, fcntl.F_GETPATH, bytes(1024)).split(b"\0", 1)[0]))
-        except OSError:
-            return None
-    if os.name != "nt":
-        try:
-            return Path(os.readlink(f"/proc/self/fd/{descriptor}"))
-        except OSError:
-            return None
+    """Where an open file really is on Windows, as its handle's final path says: a link or junction swapped in since its
+    path was checked does not change it. None when Windows cannot say."""
     import ctypes
     import msvcrt
     kernel = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -213,6 +202,53 @@ def opened_path(descriptor):
         return None
     final = buffer.value
     return Path("\\\\" + final[8:] if final.startswith("\\\\?\\UNC\\") else final.removeprefix("\\\\?\\"))
+
+
+# A folder opened only to pass through it (O_SEARCH on a Mac, O_PATH on Linux): one the owner may cross but not list still
+# opens, as it does for a path.
+PASS_THROUGH = (getattr(os, "O_SEARCH", 0) or getattr(os, "O_PATH", 0) or os.O_RDONLY) | FOLDER
+
+
+def opened_without_links(path):
+    """The file at the resolved `path`, opened for reading with every folder from the file system's root down opened from
+    the one before it and nothing opened through a link (macOS and Linux): no link swapped in anywhere on its way after a
+    check can lead elsewhere."""
+    folder = os.open(path.anchor, PASS_THROUGH)
+    try:
+        for part in path.parts[1:-1]:
+            inner = os.open(part, PASS_THROUGH, dir_fd=folder)
+            os.close(folder)
+            folder = inner
+        return os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=folder)
+    finally:
+        os.close(folder)
+
+
+async def made_off_loop(make, *args):
+    """What `make(*args)` makes in the private profile (a path in a folder of its own), made in a thread. A caller gone
+    first (cancelled, or the core shutting down) leaves the thread to finish, and what it made is removed with its folder:
+    by the caller when the thread was done first, else by the thread itself. One lock hands it over, so it is never both
+    or neither. (Chrome's start also empties the profile's uploads.)"""
+    lock, state = threading.Lock(), {"made": None, "abandoned": False}
+
+    def run():
+        made = make(*args)
+        with lock:
+            state["made"] = made
+            abandoned = state["abandoned"]
+        if abandoned:
+            shutil.rmtree(made.parent, ignore_errors=True)
+        return made
+
+    try:
+        return await asyncio.shield(asyncio.ensure_future(asyncio.to_thread(run)))
+    except asyncio.CancelledError:
+        with lock:
+            state["abandoned"] = True
+            made = state["made"]
+        if made is not None:
+            shutil.rmtree(made.parent, ignore_errors=True)
+        raise
 
 
 def opened_in(file, folder):
@@ -1162,49 +1198,62 @@ class HostBrowser:
         await self.command(tab, "DOM.setFileInputFiles", {"files": [str(path) for path in paths], "backendNodeId": node})
 
     async def member_upload(self, path, allowed, limit):
-        """A copy, in a folder of its own in the private profile, of the member's file at `path` for a page's file chooser,
-        kept until this Chrome starts again. It is read through the file opened there (never through a link at its end),
-        and `allowed` judges where that open file really is: a link swapped in after the path was checked leads to no
-        file outside the work folder (R-COMP-HOST-02). Nothing but a regular file of at most `limit` bytes is copied."""
-        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0)
+        """A copy, in a folder of its own in the private profile, of the member's file at the resolved and checked `path`
+        for a page's file chooser, kept until this Chrome starts again. It is read through the file opened there, never
+        through a link: on a Mac and on Linux every folder on its way is opened from the one before it and nothing opens
+        through a link, and on Windows `allowed` judges where the open file really is (its final path). A link swapped in
+        after the path was checked leads to no file outside the work folder (R-COMP-HOST-02). Nothing but a regular file
+        of at most `limit` bytes is copied."""
         try:
-            descriptor = os.open(path, flags)
-        except OSError:
+            descriptor = (opened_without_links(path) if HANDLES
+                          else os.open(path, os.O_RDONLY | getattr(os, "O_BINARY", 0)))
+        except (OSError, ValueError):
             raise BrowserError("browser_upload_path") from None
-        with os.fdopen(descriptor, "rb") as source:
+        source = os.fdopen(descriptor, "rb")
+        try:
             status = os.fstat(source.fileno())
-            really = opened_path(source.fileno())
-            if not stat.S_ISREG(status.st_mode) or status.st_size > limit or really is None or not allowed(really):
+            if (not stat.S_ISREG(status.st_mode) or status.st_size > limit
+                    or not HANDLES and ((really := opened_path(source.fileno())) is None or not allowed(really))):
                 raise BrowserError("browser_upload_path")
-            return await asyncio.to_thread(self._copy_upload, source, path.name, limit)
+        except BaseException:
+            source.close()
+            raise
+        return await made_off_loop(self._copy_upload, source, path.name, limit)
 
     def _copy_upload(self, source, name, limit):
-        folder = self.profile / "uploads" / secrets.token_hex(8)
-        folder.mkdir(parents=True)
-        target = folder / name
-        try:
-            with target.open("xb") as copy:
-                left = limit
-                while chunk := source.read(min(1 << 20, left + 1)):
-                    left -= len(chunk)
-                    if left < 0:
-                        raise BrowserError("browser_upload_path")  # it grew past the limit while copied
-                    copy.write(chunk)
-        except BaseException:
-            shutil.rmtree(folder, ignore_errors=True)
-            raise
+        """The copy itself, in a thread that owns `source` from here on and closes it."""
+        with source:
+            folder = self.profile / "uploads" / secrets.token_hex(8)
+            folder.mkdir(parents=True)
+            target = folder / name
+            try:
+                with target.open("xb") as copy:
+                    left = limit
+                    while chunk := source.read(min(1 << 20, left + 1)):
+                        left -= len(chunk)
+                        if left < 0:
+                            raise BrowserError("browser_upload_path")  # it grew past the limit while copied
+                        copy.write(chunk)
+            except BaseException:
+                shutil.rmtree(folder, ignore_errors=True)
+                raise
         return target
 
     def owner_upload(self, source, name):
         """A copy of a file the owner chose for a page, under its own name in a folder of its own in the private profile,
-        kept until this Chrome starts again: the page reads the file only when it sends it."""
+        kept until this Chrome starts again: the page reads the file only when it sends it. A copy that fails leaves
+        nothing (a disk full partway, say)."""
         folder = self.profile / "uploads" / secrets.token_hex(8)
         folder.mkdir(parents=True)
         target = folder / name
         try:
-            os.link(source, target)  # the upload store is on the same disk: no second copy of a large file
-        except OSError:
-            shutil.copyfile(source, target)
+            try:
+                os.link(source, target)  # the upload store is on the same disk: no second copy of a large file
+            except OSError:
+                shutil.copyfile(source, target)
+        except BaseException:
+            shutil.rmtree(folder, ignore_errors=True)
+            raise
         return target
 
     async def command(self, tab, method, params=None):

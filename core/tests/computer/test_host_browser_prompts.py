@@ -247,13 +247,211 @@ async def test_browser_upload_never_sends_a_file_swapped_for_a_link_after_its_ch
         (workspace / "docs").rmdir()
         (workspace / "docs").symlink_to(secret)
 
-    for name, swap in (("report.pdf", file_to_link), ("docs/report.pdf", folder_to_link)):
+    # A folder above the work folder itself: its whole path leads into another copy of the same names.
+    other = tmp_path / "other"
+    (other / workspace.relative_to(tmp_path) / "docs").mkdir(parents=True)
+    (other / workspace.relative_to(tmp_path) / "docs" / "report.pdf").write_text("a private key")
+    above = tmp_path / workspace.relative_to(tmp_path).parts[0]
+
+    def above_to_link():
+        above.rename(tmp_path / "moved")
+        above.symlink_to(other / above.name)
+
+    for name, swap in (("report.pdf", file_to_link), ("docs/report.pdf", folder_to_link), ("docs/report.pdf", above_to_link)):
+        if swap is above_to_link:
+            (workspace / "docs").unlink()
+            (workspace / "docs").mkdir()
         (workspace / name).write_text("the member's report")
         browser._event("Page.fileChooserOpened", {"frameId": "frame", "mode": "selectSingle", "backendNodeId": 7}, "session")
         browser.member_upload = swapped(swap)
         with pytest.raises(BrowserError, match="browser_upload_path"):
             await tools.upload(1, browser, tab, {"chooser_id": tab.chooser["chooser_id"], "paths": [name]}, "user")
     assert browser.cdp.calls == [] and not (browser.profile / "uploads").exists()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="links need privileges on Windows")
+async def test_an_upload_that_fails_keeps_none_of_its_copies(tmp_path, conn):
+    """Copies are made one by one before Chrome gets them: a later file refused, or a chooser the page replaced while they
+    were made, leaves none behind in the private profile (Codex review of #348)."""
+    tools = HostComputerTools(LocalVm(tmp_path, settings=SettingsStore(conn)), conn, BROWSER_OPEN)
+    workspace = tools.folders(1)[0]
+    workspace.mkdir(parents=True, exist_ok=True)
+    (workspace / "a.pdf").write_text("a")
+    (workspace / "b.pdf").write_text("b")
+    (tmp_path / "private.txt").write_text("private")
+    browser, tab = prompt_tab(workspace, tools.browser)
+    staged = browser.member_upload
+
+    async def then(path, allowed, limit, after):
+        copy = await staged(path, allowed, limit)
+        after()
+        return copy
+
+    def swap_b():
+        (workspace / "b.pdf").unlink()
+        (workspace / "b.pdf").symlink_to(tmp_path / "private.txt")
+
+    def replace_chooser():
+        browser._event("Page.fileChooserOpened", {"frameId": "frame", "mode": "selectMultiple", "backendNodeId": 8}, "session")
+
+    for after, error in ((swap_b, "browser_upload_path"), (replace_chooser, "browser_chooser_changed")):
+        (workspace / "b.pdf").unlink()
+        (workspace / "b.pdf").write_text("b")
+        browser._event("Page.fileChooserOpened", {"frameId": "frame", "mode": "selectMultiple", "backendNodeId": 7}, "session")
+        chooser_id = tab.chooser["chooser_id"]
+        browser.member_upload = lambda path, allowed, limit, after=after: then(path, allowed, limit, after)
+        with pytest.raises(BrowserError, match=error):
+            await tools.upload(1, browser, tab, {"chooser_id": chooser_id, "paths": ["a.pdf", "b.pdf"]}, "user")
+        assert list((browser.profile / "uploads").iterdir()) == []
+    assert browser.cdp.calls == []
+
+
+async def test_a_copy_whose_upload_was_stopped_meanwhile_is_removed_once_made(tmp_path, conn, monkeypatch):
+    """A copy is made in a thread, which a stopped upload (the member's turn stopped, a timeout) cannot stop: once made it
+    is removed, so no copy stays that Chrome never gets (Codex review of #348)."""
+    import threading
+    tools = HostComputerTools(LocalVm(tmp_path, settings=SettingsStore(conn)), conn, BROWSER_OPEN)
+    workspace = tools.folders(1)[0]
+    workspace.mkdir(parents=True, exist_ok=True)
+    (workspace / "a.pdf").write_text("a")
+    browser, tab = prompt_tab(workspace, tools.browser)
+    browser._event("Page.fileChooserOpened", {"frameId": "frame", "mode": "selectSingle", "backendNodeId": 7}, "session")
+    started, release = threading.Event(), threading.Event()
+    copy = browser._copy_upload
+
+    def slow(*args):
+        made = copy(*args)  # made whole, and the upload is stopped before it is handed back
+        started.set()
+        release.wait(5)
+        return made
+
+    monkeypatch.setattr(browser, "_copy_upload", slow)
+    upload = asyncio.ensure_future(tools.upload(1, browser, tab, {"chooser_id": tab.chooser["chooser_id"], "paths": ["a.pdf"]},
+                                                "user"))
+    await asyncio.to_thread(started.wait, 5)
+    upload.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await upload
+    release.set()
+    for _ in range(200):
+        await asyncio.sleep(0.01)
+        if (browser.profile / "uploads").exists() and not list((browser.profile / "uploads").iterdir()):
+            break
+    assert list((browser.profile / "uploads").iterdir()) == [] and browser.cdp.calls == []
+
+
+@pytest.mark.skipif(os.name == "nt" or os.geteuid() == 0, reason="folder modes; root crosses any folder")
+async def test_a_folder_the_owner_may_cross_but_not_list_still_uploads_its_files(tmp_path, conn):
+    """A folder on the way that may be crossed but not listed (mode 0111) lets the path be read, so the file opened through
+    it uploads too (Codex review of #348)."""
+    tools = HostComputerTools(LocalVm(tmp_path, settings=SettingsStore(conn)), conn, BROWSER_OPEN)
+    workspace = tools.folders(1)[0]
+    (workspace / "docs").mkdir(parents=True)
+    (workspace / "docs" / "report.pdf").write_text("report")
+    browser, tab = prompt_tab(workspace, tools.browser)
+    (browser.profile / "uploads").mkdir(parents=True, exist_ok=True)
+    browser._event("Page.fileChooserOpened", {"frameId": "frame", "mode": "selectSingle", "backendNodeId": 7}, "session")
+    os.chmod(workspace, 0o111)
+    try:
+        result = await tools.upload(1, browser, tab, {"chooser_id": tab.chooser["chooser_id"], "paths": ["docs/report.pdf"]},
+                                    "user")
+    finally:
+        os.chmod(workspace, 0o755)
+    assert result["files"] == ["report.pdf"]
+    [(_, params, _)] = browser.cdp.calls
+    assert Path(params["files"][0]).read_text() == "report"
+
+
+def test_a_copy_still_being_made_when_the_core_shuts_down_is_removed_once_made(tmp_path):
+    """Shutting down cancels every task, the copy's own too, while its thread goes on: the thread removes what it made."""
+    import threading
+    started, release = threading.Event(), threading.Event()
+
+    def make():
+        started.set()
+        release.wait(5)
+        folder = tmp_path / "uploads" / "a1"
+        folder.mkdir(parents=True)
+        (folder / "a.pdf").write_text("a")
+        return folder / "a.pdf"
+
+    async def main():
+        asyncio.ensure_future(host_browser.made_off_loop(make))
+        await asyncio.to_thread(started.wait, 5)
+        threading.Timer(0.1, release.set).start()
+
+    asyncio.run(main())
+    assert release.is_set() and list((tmp_path / "uploads").iterdir()) == []
+
+
+async def test_a_copy_made_just_before_the_core_shuts_down_is_removed_too(tmp_path):
+    """The thread may finish just as shutting down cancels every task, before its result comes back: the copy is removed
+    all the same (Codex review of #348)."""
+    import threading
+    import time
+    started, go = threading.Event(), threading.Event()
+
+    def make():
+        started.set()
+        go.wait(5)
+        folder = tmp_path / "uploads" / "a1"
+        folder.mkdir(parents=True)
+        (folder / "a.pdf").write_text("a")
+        return folder / "a.pdf"
+
+    copy = asyncio.ensure_future(host_browser.made_off_loop(make))
+    await asyncio.to_thread(started.wait, 5)
+    go.set()
+    time.sleep(0.2)  # the thread finishes while the loop is held: its result is not back yet
+    me = asyncio.current_task()
+    for task in asyncio.all_tasks():
+        if task is not me:
+            task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await copy
+    await asyncio.sleep(0.05)
+    assert list((tmp_path / "uploads").iterdir()) == []
+
+
+async def test_copies_chrome_was_given_stay_for_the_page_even_when_the_answer_is_lost(tmp_path, conn):
+    """Once the files are handed to Chrome, the page may send them later whatever became of Chrome's answer: a failed or
+    stopped call after that point keeps them (until Chrome starts again)."""
+    tools = HostComputerTools(LocalVm(tmp_path, settings=SettingsStore(conn)), conn, BROWSER_OPEN)
+    workspace = tools.folders(1)[0]
+    workspace.mkdir(parents=True, exist_ok=True)
+    (workspace / "a.pdf").write_text("a")
+    browser, tab = prompt_tab(workspace, tools.browser)
+    browser._event("Page.fileChooserOpened", {"frameId": "frame", "mode": "selectSingle", "backendNodeId": 7}, "session")
+    recorder = browser.cdp
+
+    async def lost(method, params=None, *, session=None):
+        recorder.calls.append((method, params, session))
+        raise BrowserError("chrome_command_failed")
+
+    recorder.call = lost
+    with pytest.raises(BrowserError, match="chrome_command_failed"):
+        await tools.upload(1, browser, tab, {"chooser_id": tab.chooser["chooser_id"], "paths": ["a.pdf"]}, "user")
+    [(_, params, _)] = recorder.calls
+    assert Path(params["files"][0]).read_text() == "a"
+
+
+@pytest.mark.skipif(sys.platform != "darwin" or not os.path.isdir("/System/Volumes/Data/private"),
+                    reason="a Mac's data volume spells every folder a second way")
+async def test_a_work_folder_spelled_through_the_macs_data_volume_still_uploads(tmp_path, conn):
+    """A Mac reaches one folder as /private/var/… and as /System/Volumes/Data/private/var/…; a work folder kept the second
+    way is the member's all the same, and its files upload (Codex review of #348)."""
+    root = Path("/System/Volumes/Data") / tmp_path.resolve().relative_to("/")
+    tools = HostComputerTools(LocalVm(root, settings=SettingsStore(conn)), conn, BROWSER_OPEN)
+    workspace = tools.folders(1)[0]
+    (workspace / "docs").mkdir(parents=True)
+    (workspace / "docs" / "report.pdf").write_text("report")
+    browser, tab = prompt_tab(workspace, tools.browser)
+    browser._event("Page.fileChooserOpened", {"frameId": "frame", "mode": "selectSingle", "backendNodeId": 7}, "session")
+    result = await tools.upload(1, browser, tab, {"chooser_id": tab.chooser["chooser_id"], "paths": ["docs/report.pdf"]},
+                                "user")
+    assert result["files"] == ["report.pdf"]
+    [(_, params, _)] = browser.cdp.calls
+    assert Path(params["files"][0]).read_text() == "report"
 
 
 async def test_files_made_ready_for_a_chooser_since_replaced_go_to_none(tmp_path):
@@ -280,6 +478,24 @@ async def test_a_file_the_owner_chose_keeps_its_name_in_the_private_profile(tmp_
     placed = browser.owner_upload(stored, "Invoice 11.pdf")
     assert placed.name == "Invoice 11.pdf" and placed.read_bytes() == b"invoice"
     assert placed.is_relative_to(browser.profile / "uploads")
+
+
+async def test_an_owner_copy_that_fails_partway_leaves_nothing(tmp_path, monkeypatch):
+    """Not hard-linked (another disk), the owner's file is copied, and a disk full partway leaves no half file behind."""
+    browser = HostBrowser(tmp_path / "profile")
+    stored = tmp_path / "store" / "a1b2c3"
+    stored.parent.mkdir()
+    stored.write_bytes(b"invoice")
+
+    def full(source, target):
+        Path(target).write_bytes(b"inv")
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(host_browser.os, "link", lambda *args: (_ for _ in ()).throw(OSError(18, "cross-device")))
+    monkeypatch.setattr(host_browser.shutil, "copyfile", full)
+    with pytest.raises(OSError):
+        browser.owner_upload(stored, "Invoice 11.pdf")
+    assert list((browser.profile / "uploads").iterdir()) == []
 
 
 PAGE = b"""<title>Prompts</title>
