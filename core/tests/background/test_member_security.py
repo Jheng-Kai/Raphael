@@ -18,7 +18,7 @@ async def test_background_rechecks_connection_grant_at_execution(rig, allowed):
     server = await rig.plugins.connect(name="Notion", look="T0")
     rig.resnap()
     speaker = Speaker(id=1, tools=allowed)
-    rig.run.tool_allowed = speaker.uses_plugin
+    rig.run.tool_allowed = lambda key, _arguments=None: speaker.uses_plugin(key)
     result = await rig.tool("Notion__look", {"topic": "nothing private"})
     assert result["ok"] == (allowed is None)
     if allowed is not None:
@@ -31,6 +31,26 @@ async def test_background_rechecks_connection_grant_at_execution(rig, allowed):
     assert "ask_owner" in snapshot.refs and "weather" in snapshot.refs
     assert speaker.uses_plugin("mcp:gmail/read")
     assert speaker.uses_plugin(f"mcp:{server}/look") == (allowed is None)
+
+
+def test_a_task_runs_composio_tools_only_of_the_apps_its_member_was_given():
+    """#350: a member given Google Sheets but not Gmail (its list became explicit when one app was switched off) keeps
+    Composio's router in its tasks and routines, and the worker refuses a call of a Gmail tool through it."""
+    from types import SimpleNamespace
+    from raphael_core.background.service import BackgroundService
+    toolkit = {"GOOGLESHEETS": "composio:googlesheets", "GMAIL": "composio:gmail"}
+    hub = SimpleNamespace(connections_of_call=lambda _key, arguments: [
+        frozenset({toolkit[call["tool_slug"].split("_", 1)[0]]}) for call in arguments["tools"]])
+    member = Speaker(id=1, tools=frozenset({"notion", "composio:googlesheets"}))
+    service = SimpleNamespace(_speaker=lambda member_id: member if member_id == 1 else None, _gate=SimpleNamespace(plugins=hub))
+    allows = lambda key, arguments=None: BackgroundService._member_allows(service, 1, key, arguments)
+    execute, search = "mcp:connectors_composio/COMPOSIO_MULTI_EXECUTE_TOOL", "mcp:connectors_composio/COMPOSIO_SEARCH_TOOLS"
+    assert allows(search) and allows(execute) and allows("mcp:notion/update_page")
+    assert allows(execute, {"tools": [{"tool_slug": "GOOGLESHEETS_BATCH_UPDATE", "arguments": {}}]})
+    assert not allows(execute, {"tools": [{"tool_slug": "GMAIL_FETCH_EMAILS", "arguments": {}}]})
+    assert not allows(execute, {"tools": [{"tool_slug": "GOOGLESHEETS_BATCH_UPDATE", "arguments": {}},
+                                          {"tool_slug": "GMAIL_FETCH_EMAILS", "arguments": {}}]})
+    assert not BackgroundService._member_allows(service, 2, search)  # a member that is gone
 
 
 def profile_update_task(rig, tmp_path, mode, routine, replies):

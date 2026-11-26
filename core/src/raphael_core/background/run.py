@@ -330,7 +330,7 @@ class TaskRun:
         self.seen_urls = SeenUrls([request])
         # The task's own words: a tool that names something per language names it in theirs, never the interface's.
         self._request = request
-        self.tool_allowed = lambda _key: True
+        self.tool_allowed = lambda _key, _arguments=None: True
         self.task_id = task_id
         self.language = language
         self.model = model
@@ -984,7 +984,7 @@ class TaskRun:
         self, ref: ToolRef, arguments: dict, alias: str = "", call_id: str = ""
     ) -> tuple[dict, str, str | None, int | None]:
         from ..agent.data_floor import WRITE_REFUSAL
-        if not self.tool_allowed(ref.key):
+        if not self.tool_allowed(ref.key, arguments):
             return {"ok": False, "kind": "tool_disabled", "content": "The owner disabled this connection for this member. Ask the owner to change the member's tool list.", "truncated": False}, "blocked", None, None
         if self._gate.data_floor.access(ref.key, arguments) == "write":
             return {"ok": False, "kind": "protected_data", "content": WRITE_REFUSAL, "truncated": False}, "blocked", None, None
@@ -1125,7 +1125,7 @@ class TaskRun:
             if status is not None:
                 status.update(outcome=outcome, reason=reason_of(outcome, result.error))
             return result_text(waiting.alias, ToolOutcome(result.ok, result.error, content))
-        if not self.tool_allowed(ref.key):
+        if not self.tool_allowed(ref.key, waiting.arguments):
             return result_text(waiting.alias, ToolOutcome(False, "tool_disabled", "The owner disabled this connection for this member."))
         now = self._gate.tier_now(ref.key, waiting.arguments)
         # The yes is for the tier the question was asked at: a tool that has none now, or a higher

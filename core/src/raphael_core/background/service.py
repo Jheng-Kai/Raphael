@@ -117,7 +117,7 @@ from ..agent.plugins import preview
 from ..computer.local_tools import is_local, card_arguments, BACKGROUND_WAIT_S
 from ..agent.policy import UNATTENDED_WAIT_S, Action, Approval, Confirmations, Outcome, Pending, Tier
 from ..agent.safety import asked_with
-from ..agent.speaker import MAX_DEPTH, RAPHAEL, RAPHAEL_NAMES, Speaker
+from ..agent.speaker import MAX_DEPTH, RAPHAEL, RAPHAEL_NAMES, Speaker, call_reaches
 from ..agent.steps import REFUSED_REASONS, step_view as _step_view
 from ..agent.team import CONSULTED, Team, handoff_refused, native_skills_for, team_tools_for, roster_prompt
 from ..agent.tools import ToolResult, Tools, without_internal_ids
@@ -1099,6 +1099,12 @@ class BackgroundService:
         except sqlite3.Error:
             return None
 
+    def _member_allows(self, member_id: int, key: str, arguments=None) -> bool:
+        """Whether the member's own list lets a task call `key` now: its connection, and for an execution through Composio's
+        router every app that call reaches (#350). Without `arguments` (a tool offered, not called) only the connection."""
+        current = self._speaker(member_id)
+        return bool(current and current.uses_plugin(key) and not current.apps_outside(call_reaches(self._gate.plugins, key, arguments)))
+
     def use_member_names(self, name_of: Callable[[int], str | None]) -> None:
         """Name the members in the overlay's notice of a question (`name_of(member_id)`, None for
         one that is not known)."""
@@ -2059,7 +2065,7 @@ class BackgroundService:
         # computer seated, its files read) raised it, and the run then ends before it begins (R-PUMP-02).
         run.generation = task.generation
         from ..agent.actions import observed_action
-        run.tool_allowed = lambda key: bool((current := self._speaker(task.member_id)) and current.uses_plugin(key))
+        run.tool_allowed = lambda key, arguments=None: self._member_allows(task.member_id, key, arguments)
         snapshot.tool_allowed = run.tool_allowed
         run.room_speech = task.scope == "room"
         run.owner_language = self._owner_words(task, speaker)

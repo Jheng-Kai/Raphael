@@ -256,7 +256,7 @@ from .policy import (
     UnknownTool,
 )
 from .routing import OpenAnswer, RouteDecision, Router
-from .speaker import RAPHAEL, RAPHAEL_NAMES, Speaker
+from .speaker import RAPHAEL, RAPHAEL_NAMES, Speaker, call_reaches
 from .permissions import AT_A_CHAT, message_preview, owner_screen as reaches_owner_screen, permission_identity, qualifies as permission_cards_for
 from .safety import ASK, DENY, PASS, Proposed, Screening, asked_with, forbidden, narrow_scope, needs_yes, rule_lead, summarize
 from .steps import Step, reason_of, step_view as _step_view
@@ -4766,6 +4766,10 @@ class AgentService:
         is added to `steps`, whatever came of it."""
         if ask is not None and not ((current := self._speaker(ask.speaker.id)) and current.uses_plugin(call.tool.key)):
             return ToolResult(call.tool.name, False, None, "tool_disabled", instruction="The owner disabled this connection for this member. Ask the owner to change the member's tool list.")
+        if ask is not None and (outside := current.apps_outside(call_reaches(self._plugins, call.tool.key, call.arguments))):
+            return ToolResult(call.tool.name, False, None, "tool_disabled", instruction=(
+                f"The owner has not given this member {', '.join(outside)}. Ask the owner to switch it on for this member "
+                "(its tools, or 應用程式 under the composer's +), or hand this part to a member who has it."))
         action = action or Action(call.tool.key, call.arguments)
         began = time.perf_counter()
         from ..integrations.client import APP_TOOL_CALL

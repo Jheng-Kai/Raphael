@@ -233,6 +233,15 @@ contained slugs use the same read/write classifier as Connections: all enabled
 reads are T1 and run without a permission card; any write is T2 and requires one.
 Production agent/gate/MCP flow is exercised with a fake MCP and synthetic email.
 
+A member's apps (its 工具 tab and the composer's 應用程式 switches, one setting) name a Composio app `composio:<toolkit>`
+and the owner's own Google `google` (R-CONNECT-06). A member given any Composio app keeps the router in conversations,
+tasks and routines. An execution runs only the tools of its own apps: switching Google Sheets off takes Sheets alone away,
+and a Gmail call of a member without Gmail is refused with the app named. A member whose list is null keeps every app.
+
+```powershell
+core\.venv\Scripts\python.exe -m pytest core/tests/test_connectors.py -k "given_composio_apps" core/tests/members/test_connection_floor.py core/tests/background/test_member_security.py
+```
+
 Conversation and routing fallback controls are absent from the UI. Only the chosen
 model is called; hidden legacy agent_fallbacks/router_fallbacks confer no consent.
 Implicit CLEANUP_FALLBACKS are removed from agent, tool-selection, computer and

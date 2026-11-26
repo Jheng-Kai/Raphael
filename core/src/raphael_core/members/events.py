@@ -8,6 +8,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 
 from ..agent.policy import Tier
+from ..agent.speaker import call_reaches
 from ..worker.guards import wrap_untrusted
 from ..ui_languages import normalize_language
 from ..ui_words import NEW_LANGUAGES, ui_word
@@ -155,7 +156,9 @@ class EventPoller:
         connection = next((c for c in service._connections() if c["id"] == app and c.get("enabled", True)), None)
         tools = getattr(self.gate.plugins, "offered_for", lambda member: self.gate.plugins.offered())(routine.member_id) if self.gate.plugins is not None else []
         tool = next((t for t in tools if t.key == event["tool"]), None)
-        allowed = speaker is not None and (tool is not None and speaker.uses_plugin(tool.key))
+        # The member's own list: the connection, and for Composio's router the app the read goes to (#350).
+        allowed = (speaker is not None and tool is not None and speaker.uses_plugin(tool.key)
+                   and not speaker.apps_outside(call_reaches(self.gate.plugins, tool.key, args)))
         belongs = getattr(self.gate.plugins, "event_tool_belongs", lambda a, k, args: k.startswith(f"mcp:{a}/"))(app, event["tool"], args)
         if (connection is None or connection.get("error") in ("auth", "auth_expired") or tool is None or not allowed or not belongs
                 or not self.gate.reads_only(tool.server, tool.name, args)
