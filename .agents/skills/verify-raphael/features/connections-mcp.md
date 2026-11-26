@@ -11,6 +11,10 @@ and capture the actual next-turn prompt with a fake model. In the window every w
 `connector-google-authorizing`, `chat-handback`, `member-draft`, `email-draft-handed-off`, `chat-setup-cards`,
 `chat-pairing-allowed`, `computer-key-card-work`, `room-question-card` and `card-message-deny`.
 
+## A card's sign-in starts like Connect apps, and says when its page cannot open
+
+R-CONNECT-07. A connection card's 連接 calls the same `connectors.connect` Connect apps does and shows 等你在瀏覽器登入 only while the core is setting the page up or waiting in the browser; a page not opened within `START_S` ends the card as `no_answer` (retry), a browser that cannot be opened as `browser`. Core checks only (fake Composio, fake browser), no scene draws a stalled start: the card's words for both causes are those of `connector-card.ts`, drawn by the scenes above.
+
 ## A connector's argument shape, and a failure repeated
 
 Core behaviour only (R-TOOL-01, R-TOOL-02; `tests/background/test_argument_shape.py`). A call of a
