@@ -411,13 +411,13 @@ class SkillPackages:
         part = self.conn.execute("SELECT set_kind,set_key FROM member_skills WHERE id=?", (skill_id,)).fetchone()
         base = home / plugin["folder"]
         if part["set_kind"] != "skill":
-            return home / "skill-sets", base / ".raphael-commands" / part["set_key"], len(skills), []
+            return home / "skills", base / ".raphael-commands" / part["set_key"], len(skills), []
         # A skill may hold another skill's folder (skills/outer/inner/SKILL.md): that one keeps its own files.
         # Paths are compared ignoring case: Windows keeps skills/Outer and skills/outer/inner in one folder tree.
         nested = [base / r["set_key"] for r in self.conn.execute(
             "SELECT set_key FROM member_skills WHERE set_id=? AND set_kind='skill' AND id<>?", (plugin["id"], skill_id))
             if folded_path(r["set_key"]).startswith(folded_path(part["set_key"]) + "/")]
-        return home / "skill-sets", base / part["set_key"], len(skills), nested
+        return home / "skills", base / part["set_key"], len(skills), nested
 
     @staticmethod
     def _own_entries(folder, skip):
@@ -520,7 +520,7 @@ class SkillPackages:
         _, skills, plugin = self._view_inputs(key)
         home = self.cap.homes.home(SHARED)
         if plugin:
-            return home / "skill-sets", [home / plugin["folder"]], plugin["id"]
+            return home / "skills", [home / plugin["folder"]], plugin["id"]
         root = home / "skills"
         return root, [root / str(skill["id"]) for skill in skills], None
 

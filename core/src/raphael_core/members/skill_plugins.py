@@ -12,6 +12,7 @@ import os
 import re
 import shutil
 import tempfile
+from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from urllib.parse import quote, urlsplit
@@ -395,6 +396,28 @@ class PluginSets:
             raise MemberError("not_found", "no such plugin set")
         return self.homes.safe(self.homes.home(SHARED) / row[0])
 
+    def unify_library(self):
+        """Plugins made before the library was one folder lived in `skill-sets` beside `skills`: each moves into `skills`, and
+        its row follows it. A move that stopped half way is finished by the next call; nothing is copied."""
+        library = self.homes.home(SHARED)
+        old, new = library / "skill-sets", library / "skills"
+        if not old.is_dir() or not self.conn.execute("SELECT 1 FROM sqlite_master WHERE name='skill_sets'").fetchone():
+            return
+        new.mkdir(parents=True, exist_ok=True)
+        for row in self.conn.execute("SELECT id,folder FROM skill_sets WHERE folder LIKE 'skill-sets/%'").fetchall():
+            name = row["folder"].split("/", 1)[1]
+            source, target = old / name, new / name
+            if source.is_dir() and not target.exists():
+                try:
+                    self.homes.safe(source).rename(self.homes.safe(target))
+                except OSError:
+                    continue  # something holds the folder now: the plugin stays where it is, and the next start moves it
+            if target.is_dir():
+                with self.conn:
+                    self.conn.execute("UPDATE skill_sets SET folder=? WHERE id=?", (f"skills/{name}", row["id"]))
+        with suppress(OSError):
+            old.rmdir()
+
     def local_plugins(self):
         """Only manifests and skill documents are opened during discovery."""
         result = {}
@@ -584,7 +607,8 @@ class PluginSets:
                              source, marketplace, target, access, mcp_servers(files, manifest), self.skill_revision(), skipped)
 
     def _write_set(self, plan):
-        root = self.homes.safe(self.homes.home(SHARED) / "skill-sets")
+        # A plugin lives in the one folder the library keeps its skills in, so one mount of it shows them all.
+        root = self.homes.safe(self.homes.home(SHARED) / "skills")
         root.mkdir(parents=True, exist_ok=True)
         folder = Path(tempfile.mkdtemp(prefix="set-", dir=root))
         try:

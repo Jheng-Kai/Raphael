@@ -86,6 +86,7 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
         self.homes = SkillHomes(folder.parent)
         self.skill_home = Path.home()
         self.homes.migrate()
+        self.unify_library()
         self._skill_cache = {}
         self._skill_cache_revision = None
         # Triggers cover management, migrations' cascades and direct SQL writes alike.
