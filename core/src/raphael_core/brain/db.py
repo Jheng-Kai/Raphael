@@ -2477,6 +2477,16 @@ COMMIT;
 """
 
 
+def _separate_raphael(conn):
+    from .raphael_split import separate
+
+    separate(conn)
+
+
+# Raphael (member 0) is the app's guide alone; what the owner made of it becomes a slime (raphael_split.py).
+_MIGRATIONS[101] = _separate_raphael
+
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 
