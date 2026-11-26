@@ -50,10 +50,12 @@ def test_prompt_names_host_and_docker_work_folders(conn, tmp_path):
         return json.loads(prompt.split("<owner_context>\n")[1].split("\n</owner_context>")[0])
 
     assert told(4) == {"name": "", "about": "", "work_folder": str(work), "team_folder": str(team),
-                       "project_folders": [str(notes)], "branch": "main"}
+                       "project_folders": [str(notes)], "branch": "main",
+                       "project": {"name": "work", "on_this_pc": str(work), "writable": True}}
     assert told(4, target) == {"name": "", "about": "", "work_folder": "/home/cua/projects/work",
                                "team_folder": "/home/cua/team", "project_folders": ["/home/cua/projects/notes"],
-                               "branch": "main"}
+                               "branch": "main", "project": {"name": "work", "on_this_pc": str(work),
+                                                             "in_docker": "/home/cua/projects/work", "writable": True}}
     assert told(9)["work_folder"] == str(own)
     assert told(9, target)["work_folder"] == "/home/cua/workspace"
 

@@ -58,6 +58,13 @@ changes): `core/tests/agent/test_write_boundary.py`, `core/tests/agent/test_unch
 `core/tests/computer/test_shell_writes.py`, `core/tests/computer/test_write_boundary_computer.py`,
 `core/tests/computer/test_unchosen_project_computer.py`, `core/tests/background/test_unchosen_project_background.py`.
 
+R-COMP-PROJECT-02: the member's prompt names its chosen project (name, path on this PC, path in the Docker computer, writable)
+without the owner saying so. A project chosen or added while the Docker computer runs is not mounted until the computer is made again: the prompt
+says so, the next idle call makes it again by itself, and a call that finds the computer in use says in its result that it ran in the
+workspace. Core only (no screen changes): `core/tests/brain/test_owner.py`, `core/tests/computer/test_vm.py`. Not run here, to check live with Docker: add a
+project while the computer runs and choose it, then ask the member where its project is (it names both paths), run a command and see the project at
+`/home/cua/projects/<name>` after the first idle call; repeat while another member's command runs and see the note.
+
 Opening a page opens the Computer tab on that same page. The page fills the frame
 under the [host browser toolbar](#host-browser-toolbar). A takeover card appears only while a member waits for the owner for
 an owner-only step. The reason stays on the card, while the thread shows the member's own words.
