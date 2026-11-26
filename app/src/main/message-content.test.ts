@@ -2,7 +2,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, vi } from "vitest";
-import { messageHTML, messagePlainText, messageUrls, shortUrl } from "./message-content";
+import { messageHTML, messagePlainText, messageUrls, ownerTextHTML, replyContentHTML, shortUrl } from "./message-content";
+import { peerChatHTML } from "./peer-chat";
+import type { HandoffView } from "./types";
 import { mountMessagePaths } from "./message-paths";
 import { toaster } from "./ui";
 import { t } from "./i18n";
@@ -166,4 +168,44 @@ test("reply markdown renders lists, emphasis, breaks and copyable code without i
   expect(el.querySelectorAll("a")).toHaveLength(1);
   expect(el.querySelector("a")?.dataset.url).toBe("https://example.com/a?x=1&y=2");
   expect(messageUrls('`https://code.example`\n```\nhttps://code.example\n```\n[site](https://example.com)')).toEqual(["https://example.com/"]);
+});
+
+const IDENTIFIERS = "請用 connections_list 查詢，回報 your_connections 與 COMPOSIO_SEARCH_TOOLS、COMPOSIO_MULTI_EXECUTE_TOOL，再讀 GMAIL_GET_PROFILE 和 GOOGLESHEETS_GET_SPREADSHEET_INFO 的 spreadsheet_id";
+
+test("an underscore inside a word is never emphasis: identifiers keep their underscores and nothing turns italic", () => {
+  const el = document.createElement("div");
+  for (const html of [messageHTML(IDENTIFIERS, "", true), replyContentHTML(IDENTIFIERS)]) {
+    el.innerHTML = html;
+    expect(el.querySelector("em, strong")).toBeNull();
+    expect(el.textContent).toBe(IDENTIFIERS);
+  }
+  for (const text of ["connections_list your_connections COMPOSIO_SEARCH_TOOLS spreadsheet_id", "用connections_list查詢，回報your_connections", "中文_list_中文", "a_b_c_d", "snake__case__name and my_module__init__x"]) {
+    el.innerHTML = messageHTML(text, "", true);
+    expect(el.querySelector("em, strong")).toBeNull();
+    expect(el.textContent).toBe(text);
+  }
+});
+
+test("the owner's own words and a message handed between members show their underscores as written", () => {
+  const el = document.createElement("div");
+  el.innerHTML = ownerTextHTML(IDENTIFIERS, "", []);
+  expect(el.querySelector("em")).toBeNull();
+  expect(el.textContent).toBe(IDENTIFIERS);
+  const task = { task_id: 9, source_turn_id: 1, work_turn_id: 2, member_id: 3, member_name: "行銷", from_member_id: 4, stage_id: "s", mode: "work", state: "done", reason: null,
+    created_at_ms: 1000, ready_at_ms: 1000, dispatch_policy: "immediate", request: IDENTIFIERS, result: "已查 connections_list 與 your_connections", evidence: [] } as HandoffView;
+  el.innerHTML = peerChatHTML(4, [task], (id, fallback) => ({ name: fallback || String(id), face: "", accent: "#000" }), 2000);
+  expect(el.querySelector(".peer-thread em")).toBeNull();
+  const said = [...el.querySelectorAll(".message-text")].map(node => node.textContent);
+  expect(said).toEqual([IDENTIFIERS, "已查 connections_list 與 your_connections"]);
+});
+
+test("emphasis between word boundaries still works beside identifiers", () => {
+  const el = document.createElement("div");
+  el.innerHTML = messageHTML("_real_ and **bold** and *star* and __loud__ and 這是，_重點_，也有 snake_case 與 _again_ 以及 **用 your_connections 查**", "", true);
+  expect([...el.querySelectorAll("em")].map(node => node.textContent)).toEqual(["real", "star", "重點", "again"]);
+  expect([...el.querySelectorAll("strong")].map(node => node.textContent)).toEqual(["bold", "loud", "用 your_connections 查"]);
+  expect(el.textContent).toContain("snake_case");
+  el.innerHTML = messageHTML("_one_two_ and (_in parentheses_) and `a_b` and [x_y](https://example.com/a_b_c)", "", true);
+  expect([...el.querySelectorAll("em")].map(node => node.textContent)).toEqual(["one_two", "in parentheses"]);
+  expect(el.querySelector("code")?.textContent).toBe("a_b");
 });
