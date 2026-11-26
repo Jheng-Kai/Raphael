@@ -643,7 +643,7 @@ What the app does now.
   says the same instead of the bare identifier.
 
 ```powershell
-npm run look -- desktop-watch-retake desktop-watch desktop-watch-owner desktop-watch-collapse desktop-owner takeover-bar takeover-handback desktop-takeover-owner desktop-viewer --theme both --width 1120,720,1920x1080
+npm run look -- desktop-watch-retake desktop-watch-leftover-recording desktop-watch desktop-watch-owner desktop-watch-collapse desktop-owner takeover-bar takeover-handback desktop-takeover-owner desktop-viewer --theme both --width 1120,720,1920x1080
 ```
 
 `desktop-watch-retake` reproduces the fault: take control, the screen never confirms (the look's `desktopUnconfirmed`),
