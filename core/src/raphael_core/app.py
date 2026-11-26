@@ -961,6 +961,7 @@ class App(Router):
         local_tools.owner_files.member_folders = self.vm.local_folders
         if self.brain:
             self.brain.member_folders = self.vm.local_folders
+            self.brain.project_folders_changed = self.vm.refresh_mounts_soon
         from .services.generation import Generation
         from .services.generation_tools import GenerationTools
         from .services.fetch import PageFetcher

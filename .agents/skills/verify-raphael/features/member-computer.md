@@ -63,7 +63,12 @@ without the owner saying so. A project chosen or added while the Docker computer
 says so, the next idle call makes it again by itself, and a call that finds the computer in use says in its result that it ran in the
 workspace. Core only (no screen changes): `core/tests/brain/test_owner.py`, `core/tests/computer/test_vm.py`. Not run here, to check live with Docker: add a
 project while the computer runs and choose it, then ask the member where its project is (it names both paths), run a command and see the project at
-`/home/cua/projects/<name>` after the first idle call; repeat while another member's command runs and see the note.
+`/home/cua/projects/<name>`; repeat while another member's command runs and see the note.
+
+R-COMP-PROJECT-03: a project folder added or removed in the folder menu reaches the Docker computer by itself. An idle running computer is
+made again at once with the new mounts (workspace and sign-ins kept); one in use keeps its mounts, is never stopped, and is made again the moment
+it is idle; a sleeping one is not woken and comes up with the folders. Core only (no screen changes):
+`core/tests/computer/test_project_mounts_live.py`. To check live with Docker: make a real container, add a temporary project folder, and see the mount with `docker inspect` and `docker exec ls`, with no other step.
 
 Opening a page opens the Computer tab on that same page. The page fills the frame
 under the [host browser toolbar](#host-browser-toolbar). A takeover card appears only while a member waits for the owner for

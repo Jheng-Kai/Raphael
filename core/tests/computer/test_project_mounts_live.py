@@ -56,7 +56,7 @@ async def settle(vm):
 
 async def test_adding_a_folder_through_the_settings_call_shows_it_in_an_idle_computer_at_once(tmp_path, monkeypatch):
     # The owner's whole path: the settings RPC the composer's folder menu calls, then nothing else.
-    app = App(data_dir=tmp_path, fake_llm=True, load_kit=lambda: SimpleNamespace())
+    app = App(data_dir=tmp_path / "data", fake_llm=True, load_kit=lambda: SimpleNamespace())
     try:
         vm, runtime = app.vm, Runtime()
         vm.enabled, vm.run, vm.real_transport, vm._desktop = True, runtime, False, None

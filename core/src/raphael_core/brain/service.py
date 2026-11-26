@@ -244,6 +244,8 @@ class Brain:
         self._notify = lambda method, params: None
         self._notify_providers = lambda: None
         self._notify_settings = lambda: None
+        # Called when the owner's project folders are saved: the Docker computer shows them without another step.
+        self.project_folders_changed = lambda: None
         from .runs import RunAnalytics
         self._keys = keys
         self._now_ms = now_ms
@@ -905,6 +907,8 @@ class Brain:
             self._notify_action_mode()
         if key == "history_retention_days":
             self._prune_history()
+        if key == "project_folders":
+            self.project_folders_changed()
         self._notify_settings()
         return {"settings": self._settings.all()}
 
