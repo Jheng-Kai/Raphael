@@ -67,6 +67,11 @@ def digest(data: bytes | None) -> str | None:
     return None if data is None else hashlib.sha256(data).hexdigest()
 
 
+class Executable(bytes):
+    """The bytes of a file an archive marked executable: `atomic` writes it with the executable bit, so a script runs on a host
+    whose Docker mount keeps POSIX modes. Windows has no such bit and ignores it."""
+
+
 def atomic(path: Path, data: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + "." + secrets.token_hex(8) + ".part")
@@ -75,6 +80,8 @@ def atomic(path: Path, data: bytes) -> None:
             output.write(data)
             output.flush()
             os.fsync(output.fileno())
+        if isinstance(data, Executable):
+            os.chmod(temporary, stat.S_IMODE(temporary.stat().st_mode) | 0o111)
         for attempt in range(40):
             try:
                 os.replace(temporary, path)

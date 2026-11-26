@@ -327,9 +327,9 @@ def test_an_archive_keeps_which_files_are_executable(tar):
     from raphael_core.bots.homes import Executable
 
     [files] = skill_sources.read_archive("notes.tgz" if tar else "notes.zip", plugin_archive(tar))
-    assert isinstance(files["skills/notes/run.sh"], Executable)
-    assert not isinstance(files["skills/notes/data.txt"], Executable)
-    assert files["skills/notes/run.sh"] == b"#!/bin/sh\necho hi\n"
+    assert isinstance(files["run.sh"], Executable)
+    assert not isinstance(files["data.txt"], Executable)
+    assert files["run.sh"] == b"#!/bin/sh\necho hi\n"
 
 
 def test_writing_an_executable_file_asks_for_the_executable_bit_and_a_plain_one_does_not(tmp_path, monkeypatch):
@@ -344,13 +344,16 @@ def test_writing_an_executable_file_asks_for_the_executable_bit_and_a_plain_one_
     assert (tmp_path / "run.sh").read_bytes() == b"#!/bin/sh\n" and (tmp_path / "data.txt").read_bytes() == b"plain"
 
 
-@pytest.mark.skipif(os.name == "nt", reason="Windows files have no executable bit to read back")
 @pytest.mark.parametrize("tar", [False, True])
-async def test_an_imported_plugin_script_is_executable_on_disk(rig, tmp_path, tar):
+async def test_an_imported_plugin_script_is_executable_on_disk(rig, tmp_path, tar, monkeypatch):
+    asked, real = [], os.chmod
+    monkeypatch.setattr(os, "chmod", lambda path, mode, **kw: (asked.append((os.path.basename(path), mode)), real(path, mode, **kw))[1])
     await rig.call("skills.library.import", upload("notes.tgz" if tar else "notes.zip", plugin_archive(tar)))
+    assert [name.split(".")[0] for name, mode in asked if mode & stat.S_IXUSR] == ["run"]  # the intent, also where Windows drops the bit
     [script] = [path for path in tmp_path.rglob("run.sh")]
     [data] = [path for path in tmp_path.rglob("data.txt")]
-    assert script.stat().st_mode & stat.S_IXUSR and not data.stat().st_mode & stat.S_IXUSR
+    if os.name != "nt":
+        assert script.stat().st_mode & stat.S_IXUSR and not data.stat().st_mode & stat.S_IXUSR
 
 
 async def test_missing_skill_document_is_refused_before_writing(rig):

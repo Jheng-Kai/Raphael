@@ -16,6 +16,7 @@ from collections import OrderedDict
 from contextlib import contextmanager
 from pathlib import Path, PureWindowsPath
 
+from ..bots.homes import Executable
 from .capabilities import MAX_SKILL_BYTES
 from .skill_errors import (front_matter, no_skill, not_utf8, oversized_file, oversized_package, refused_entry, size_text,
                            too_many_files, unreadable_archive, unsafe_path)
@@ -86,11 +87,11 @@ class Snapshot:
         self.size += size
         return name
 
-    def read(self, key, stream, size):
+    def read(self, key, stream, size, executable=False):
         data = stream.read(size + 1)
         if len(data) != size:
             raise refused_entry(self.prefix + key, "not the size its listing says")
-        self.files[key] = data
+        self.files[key] = Executable(data) if executable else data
 
     def finish(self, *, skill=True):
         for key, target in self.links.items():
@@ -249,7 +250,7 @@ def zip_entry(archive, snapshot, name, info):
     key = snapshot.entry(name, directory, info.file_size)
     if not directory:
         with archive.open(info) as stream:
-            snapshot.read(key, stream, info.file_size)
+            snapshot.read(key, stream, info.file_size, bool(info.external_attr >> 16 & 0o111))
 
 
 def tar_entry(archive, snapshot, name, info):
@@ -263,7 +264,7 @@ def tar_entry(archive, snapshot, name, info):
     key = snapshot.entry(name, info.isdir(), info.size)
     if not info.isdir():
         with archive.extractfile(info) as stream:
-            snapshot.read(key, stream, info.size)
+            snapshot.read(key, stream, info.size, bool(info.mode & 0o111))
 
 
 def zip_member(archive):
