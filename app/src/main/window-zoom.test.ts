@@ -97,6 +97,26 @@ describe("window zoom", () => {
     expect(storage.values.get("raphael.zoom")).toBe("1");
   });
 
+  test("the screen is first read once its changes are heard, and a change heard first is not undone by that reading", async () => {
+    const applied: number[] = [];
+    let listener: ((scale: number) => void) | undefined;
+    let subscribed: (() => void) | undefined;
+    let answer: ((scale: number) => void) | undefined;
+    const read = vi.fn(() => new Promise<number>((resolve) => { answer = resolve; }));
+    const screen: ScreenScale = { read, watch: (heard) => new Promise<void>((resolve) => { listener = heard; subscribed = resolve; }) };
+    installWindowZoom(new EventTarget(), async (factor) => { applied.push(factor); }, screen, memory("0.7"));
+    await settled();
+    expect(read).not.toHaveBeenCalled();
+    subscribed!();
+    await settled();
+    expect(read).toHaveBeenCalledOnce();
+    // The window moves to a screen at 100% before the reading taken on a Retina screen comes back.
+    listener!(1);
+    answer!(2);
+    await settled();
+    expect(applied).toEqual([1]);
+  });
+
   test("a screen whose scale cannot be read counts as one at 100%", async () => {
     const applied: number[] = [];
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});

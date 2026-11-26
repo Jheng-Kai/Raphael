@@ -22,10 +22,10 @@ interface ZoomStorage {
 }
 
 /** The scale of the screen the window is on (its device pixels per CSS pixel at 100%), and its changes when the
- *  window moves to another screen. */
+ *  window moves to another screen; `watch` settles once the changes are heard. */
 export interface ScreenScale {
   read(): Promise<number>;
-  watch(listener: (scale: number) => void): void;
+  watch(listener: (scale: number) => void): Promise<unknown> | void;
 }
 
 /** The steps a screen of `scale` can draw: 100% and up always, a smaller step only while a CSS pixel keeps at least
@@ -81,18 +81,26 @@ export function installWindowZoom(
     if (scale === undefined) return;
     void setZoom(nearest(levels(), chosen)).catch((error) => console.warn("window zoom failed", error));
   };
-  let live = true;
+  let live = true, moved = false;
   const heard = (value: number) => {
     if (!live) return;
     scale = value;
     apply();
   };
-  screen.read().then(heard, (error) => {
-    // Unread, the screen counts as one at 100%: the zoom never goes below what such a screen draws.
-    console.warn("window zoom: the screen's scale is unknown", error);
-    heard(1);
-  });
-  screen.watch(heard);
+  // The screen is first read once its changes are heard, so that a move between the two is never missed, and a move
+  // heard before that reading comes back is never undone by it.
+  void Promise.resolve()
+    .then(() => screen.watch((value) => {
+      moved = true;
+      heard(value);
+    }))
+    .catch((error) => console.warn("window zoom: a change of screen is not followed", error))
+    .then(() => screen.read())
+    .then((value) => { if (!moved) heard(value); }, (error) => {
+      // Unread, the screen counts as one at 100%: the zoom never goes below what such a screen draws.
+      console.warn("window zoom: the screen's scale is unknown", error);
+      if (!moved) heard(1);
+    });
   const onKey = (event: Event) => {
     const action = zoomAction(event as KeyboardEvent);
     if (!action) return;

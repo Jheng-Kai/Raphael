@@ -121,7 +121,7 @@ takes `d: var(--eyes)` and eases between shapes; WebKit changes them at once. Th
 The look harness renders in Chromium, so a WebKit change is checked in a WKWebView by hand.
 
 The window's zoom (⌘+ and ⌘-, `window-zoom.ts`, remembered; zooming out stops where a CSS pixel would get less than one
-of the screen's pixels, so a screen at 100 % keeps 100 % as its least and only a 150 % or Retina screen reaches 70 %, R-UI-13)
+of the screen's pixels, so a screen at 100 % keeps 100 % as its least, one at 125 % 80 %, and one at 150 % or a Retina one 70 %, R-UI-13)
 is a page zoom, and WebKit multiplies the lengths of an SVG
 element's CSS `transform` and `transform-origin` by it, while the `transform` attribute and the separate `translate` and
 `scale` properties keep the drawing's units. The eye cels were placed by CSS transforms and the body cels by attributes,

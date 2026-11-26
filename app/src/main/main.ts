@@ -135,8 +135,7 @@ function mountWindowChrome(): void {
     const webview = getCurrentWebview(), frame = getCurrentWindow();
     installWindowZoom(window, (factor) => webview.setZoom(factor), {
       read: () => frame.scaleFactor(),
-      watch: (listener) => void frame.onScaleChanged(({ payload }) => listener(payload.scaleFactor))
-        .catch((error) => console.warn("main: the window zoom does not follow a change of screen", error)),
+      watch: (listener) => frame.onScaleChanged(({ payload }) => listener(payload.scaleFactor)),
     });
   } catch (error) {
     console.warn("main: window zoom is unavailable outside Tauri", error);
