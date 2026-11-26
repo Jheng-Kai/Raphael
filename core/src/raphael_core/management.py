@@ -410,6 +410,7 @@ INTERACTION_RPCS = {
     **dict.fromkeys(("attachments.info", "attachments.upload"),
                    "Owner composer file selection and bounded upload; not model management tools."),
     "routines.run": "Only the owner's explicit routine test starts a manual run through the existing worker.",
+    "skills.library.convert": "The owner's importer follows a conversion it started; a finished one imports the package it made, as the owner's import would.",
     **dict.fromkeys(("members.viewing", "members.greet", "rooms.send", "rooms.transcribe", "agent.history.stop", "agent.history.retract", "agent.history.send_now",
                      "worker.cancel", "worker.rerun", "pages.open", "pages.viewing", "pages.video_base"),
                    "Existing owner conversation, work or presentation entry; not team administration."),
