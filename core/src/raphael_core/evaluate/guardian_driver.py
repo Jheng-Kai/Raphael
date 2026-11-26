@@ -574,7 +574,7 @@ class RpcDriver:
                       f'不要建立例行任務，也不要自己讀信。')
         room_id = None
         if room:
-            room_id = (await self.app.call('rooms.create',{'name':'立即工作驗收','member_ids':[0,target]}))['room']['id']
+            room_id = (await self.app.call('rooms.create',{'name':'立即工作驗收','member_ids':[0,ids[0],target]}))['room']['id']
             await self.app.call('rooms.send',{'room_id':room_id,'request_id':'work-'+self.nonce,
                 'text':'@拉斐爾 '+prompt,'ui_language':'zh-TW'})
             result = {'status':'done','text':''}
@@ -641,7 +641,7 @@ class RpcDriver:
         agenda = (f'請分工處理今天的 Guardian 測試信件（議題代碼 {self.nonce}）。信件助理負責用 Guardian 讀信，回報信中的 nonce；'
                   'PM 負責用 Guardian 讀同一封信，列出要回覆的重點，並附上信中的 nonce。來源文件寫「明早截止、明天中午提交」。'
                   'PM 協助討論分工；大家閱讀全部訊息，自行決定何時發言，不用固定輪次或自動總結。')
-        room_id = (await self.seed_meeting({'member_ids': [0, mail, pm], 'agenda': agenda,
+        room_id = (await self.seed_meeting({'member_ids': [0, ids[0], mail, pm], 'agenda': agenda,
                                           'roles': {str(pm): 'moderator', str(mail): 'participant'}}))['room_id']
 
         async def settled_room():
@@ -697,7 +697,7 @@ class RpcDriver:
         """Hold only external I/O; production loops and tree cancellation stay authoritative."""
         ids=await self.seed_team()
         await self.install_fixture()
-        room=(await self.app.call('rooms.create',{'name':'停止驗收','member_ids':[0,ids[1]]}))['room']
+        room=(await self.app.call('rooms.create',{'name':'停止驗收','member_ids':[0,ids[0],ids[1]]}))['room']
         entered,release=asyncio.Event(),asyncio.Event()
         armed=False
         original=self.recorder.call_tool
