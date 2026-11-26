@@ -3025,6 +3025,19 @@ export function checkRendered(name, context = {}) {
     require(visible(document.querySelector('.ra-body .attachment-file[data-id]')), 'the chart has a stored file action');
     return {check:name};
   }
+  if (name === 'download-card') {
+    // #347: a page's download is the member's file card, found in the conversation, not in a hidden folder.
+    const turn = document.querySelector('.tn[data-id="827"]');
+    const card = turn.querySelector('.attachment-file[data-act="attachment-open"]');
+    require(visible(card) && card.querySelector('.me-file-t').textContent === '銷售報表.csv', 'the download is a card with its own name');
+    require(card.querySelector('.attachment-icon')?.dataset.mark === 'fileText', 'the card wears the mark of a document');
+    const reply = [...turn.querySelectorAll('.chat-message[data-reply]')].find(visible);
+    require(visible(reply) && reply.textContent.includes('銷售報表.csv') && reply.textContent.includes('附在'), 'the words name the file and say it is attached');
+    require(!/\.raphael|git|隱藏|資料夾/i.test(turn.textContent), `neither a folder nor git is mentioned: ${turn.textContent}`);
+    require(card.getBoundingClientRect().bottom <= reply.getBoundingClientRect().top + 1, 'the card stands above the words, as every file a member delivers');
+    require(JSON.stringify(window.__look.openedAttachments) === JSON.stringify([card.dataset.id]), `a press opens that one file: ${JSON.stringify(window.__look.openedAttachments)}`);
+    return { check: name };
+  }
   if (name === 'dataset-table') {
     const table = document.querySelector('.ra-body .message-table');
     require(visible(table) && table.textContent.includes('36') && table.textContent.includes('台北'), 'the continued query renders actual table values');

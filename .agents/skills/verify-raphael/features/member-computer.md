@@ -24,7 +24,8 @@ never takes focus on the owner's desktop. On a Mac it runs in Chrome's headless 
 no window at all, and pages still see the ordinary Chrome of a Mac (`RAPHAEL_MAC_HEADED=1`
 brings the window back). A JavaScript dialog that blocks a tab is reported at once, and the member
 answers it with browser_dialog (never with a sign-in, code or payment). A page's download lands in
-`.raphael/downloads` of the work folder, which git ignores, and the next Chrome result names it.
+`.raphael/downloads` of the work folder, which git ignores, and the next Chrome result names it by its file name and
+attaches it to the conversation (R-COMP-HOST-10), never saying the folder.
 No one answers a browser prompt there, so none waits: a page's permission requests are settled
 before it runs (storage access granted; notifications, location, camera, microphone, clipboard
 reading and the rest refused), and a passkey or security-key request ends at once with
@@ -2478,6 +2479,20 @@ tab from a ref or from_x,from_y to a destination_ref or to_x,to_y, so a slider f
 Both ends are judged as a click is. Offline CDP fakes cover the sequence and the gates; the native
 Chrome test (skipped in CI, run on this PC) drags a slider and drops a card on a drop zone of a local
 page. No screen shows it.
+
+## A download is a file card
+
+R-COMP-HOST-10. A file a member downloads in Raphael Chrome is a card in its turn, opened from the conversation, and
+what the member reads and says names the file and that it is attached, never a folder, a path or git. The core test
+drives a real download event into a member's tab and reads the result, the file card data of the turn and the note;
+the vitest draws the turn's card; the scene `download-card` shows it and presses it.
+
+```powershell
+npm run look -- download-card dataset-chart --theme both --width 1120,720,1920x1080
+```
+
+Not covered: the native open of the stored copy (`open_attachment`), and a real Chrome download followed by a model's
+own words (a model may still word it badly; its result and note give it no path to say).
 
 ## Answers stay in the reply
 

@@ -863,6 +863,11 @@ class TaskRun:
             payload = artifact_payload(reply.get("content", ""), self._attachment_store)
             if payload:
                 self._artifact(payload)
+        elif reply.get("ok") and ref is not None and ref.server == "computer":
+            # The files a page's download left for the owner are cards, as a file the member attached is (#347).
+            from ..services.artifacts import delivered_payloads
+            for payload in delivered_payloads(reply.get("content", ""), self._attachment_store):
+                self._artifact(payload)
         if not reply.get("ok") and ref.server == "media":
             from ..failures import missing_for
             missing = missing_for(reply.get("kind"), ref.name)

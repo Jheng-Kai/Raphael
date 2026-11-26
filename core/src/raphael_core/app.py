@@ -955,7 +955,7 @@ class App(Router):
         if self.vm.enabled:
             from .computer.host_computer import HostComputerTools
             from .computer.vm_tools import BROWSER_OPEN
-            self.vm_tools.host_computer = HostComputerTools(self.vm, self._conn, BROWSER_OPEN)
+            self.vm_tools.host_computer = HostComputerTools(self.vm, self._conn, BROWSER_OPEN, attachments=self.attachment_store)
         self.tool_hub = LocalTools(self.tool_hub, self._conn, enabled=not fake_llm or os.environ.get("RAPHAEL_TEST_NATIVE_LOCAL") == "1")
         local_tools = self.tool_hub
         local_tools.owner_files.member_folders = self.vm.local_folders
