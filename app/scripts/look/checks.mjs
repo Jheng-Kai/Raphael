@@ -661,7 +661,7 @@ export function checkRendered(name, context = {}) {
       require(head.querySelector('h1#set-title')?.textContent.trim() === '團隊技能' &&
         visible(head.querySelector('.close-button')), 'the list keeps its Team skills title and shared close');
       if (name === 'skill-library') headHoldsOnScroll(head.closest('.modal-body'), head.querySelector('.close-button'));
-      require(visible(pane) && pane.querySelectorAll('[data-skl="import-go"]').length === 1 && pane.firstElementChild?.matches('.skl-import'), 'the importer is the first card of the tab, with one 匯入');
+      require(visible(pane) && !pane.querySelector('.skl-import') && !!head.querySelector('[data-skl="import-open"]'), 'the importer is no card of the tab: 匯入 is in its header');
       require(!pane.querySelector('.skl-head, .skl-drop-hint') && !pane.previousElementSibling?.matches?.('p'), 'nothing is written between the tab name and its first card');
       const box = pane.getBoundingClientRect();
       const rows = [...pane.querySelectorAll('.skl-list > .skl-pack')];
@@ -833,24 +833,34 @@ export function checkRendered(name, context = {}) {
     }
     if (['skill-library-import', 'skill-library-import-link', 'skill-library-import-menu'].includes(name)) {
       // One box that takes anything (R-SKILL-26): a field, one way to choose files, one 匯入 and one plain line; nothing else.
-      const panel = document.querySelector('.skl-import'), field = panel.querySelector('#skl-input');
+      const dlg = document.querySelector('.mb-dialog.skl-dlg'), panel = dlg?.querySelector('.skl-import'), field = panel?.querySelector('#skl-input');
+      require(visible(dlg) && dlg.getAttribute('role') === 'dialog' && !document.querySelector('.modal-body .skl-import'), 'the importer is a dialog, and none stands in the page');
       require(visible(panel) && visible(field) && panel.querySelectorAll('textarea, input:not([type="file"])').length === 1, 'the card is one box');
-      require([...panel.querySelectorAll('button')].map(button => button.dataset.skl).join() === 'pick,import-go', 'one way to choose files and one 匯入, no chips');
+      require([...dlg.querySelectorAll('[data-skl]')].map(button => button.dataset.skl).join() === 'pick,import-go', 'one way to choose files and one 匯入, no chips');
       require(panel.querySelector('[data-skl="pick"]').textContent.trim() === '選擇檔案', 'the way to choose is a plain 選擇檔案');
-      const hint = panel.querySelector('.skl-import-hint');
-      require(visible(hint) && hint.textContent.trim() === '把檔案、資料夾或連結丟進來，任何格式都可以。', 'one plain line under the box');
+      require(!panel.querySelector('.skl-import-hint'), 'no separate line under the box: the field says what it takes itself');
+      require(field.placeholder === '把檔案、資料夾或連結丟進來，或貼上文字', 'the field carries its words as its placeholder');
+      const style = getComputedStyle(field), lines = Math.round(field.getBoundingClientRect().height / parseFloat(style.lineHeight));
+      require(style.resize === 'none' && lines >= 2 && lines <= 4, `a compact field with no resize grip (${lines} lines, resize ${style.resize})`);
       require(!/\.zip|\.md|\.tgz|SKILL\.md|GitHub|skills\.sh/.test(panel.textContent), 'no format is named');
       require(panel.querySelector('#skl-file').multiple && !panel.querySelector('#skl-file').accept, 'the file dialog takes any file');
-      const wide = panel.getBoundingClientRect(), box = field.getBoundingClientRect();
-      require(box.left >= wide.left - 1 && box.right <= wide.right + 1 && wide.right <= document.querySelector('.modal-scrim .skl').getBoundingClientRect().right + 1, 'the box fits the card and the card the tab');
-      const rowBox = panel.querySelector('.skl-import-row').getBoundingClientRect();
-      require(rowBox.top >= box.bottom - 1 && Math.abs(panel.querySelector('[data-skl="import-go"]').getBoundingClientRect().right - box.right) <= 1, '匯入 ends the row under the box, flush with its edge');
+      const wide = dlg.getBoundingClientRect(), box = field.getBoundingClientRect(), go = dlg.querySelector('[data-skl="import-go"]').getBoundingClientRect();
+      require(box.left >= wide.left - 1 && box.right <= wide.right + 1 && wide.left >= 0 && wide.right <= innerWidth && wide.bottom <= innerHeight, 'the box fits the dialog and the dialog the window');
+      require(go.top >= box.bottom - 1 && go.right <= wide.right + 1, 'import is the dialog action, under the box');
       if (name === 'skill-library-import-link') require(field.value === 'https://example.com/team-handbook', 'the link stands in the box');
       if (name === 'skill-library-import-menu') {
         const menu = document.querySelector('.skl-pick-menu'), anchor = panel.querySelector('[data-skl="pick"]').getBoundingClientRect(), frame = menu.getBoundingClientRect();
         require([...menu.querySelectorAll('button')].map(button => button.textContent.trim()).join() === '檔案,資料夾', 'the menu offers files or a folder');
         require(frame.left >= 0 && frame.right <= innerWidth && frame.bottom <= innerHeight && (frame.top >= anchor.bottom - 1 || frame.bottom <= anchor.top + 1) && Math.abs(frame.left - anchor.left) <= 2, 'the menu stands against its button, at its left edge, inside the window');
       }
+    }
+    if (['skill-library', 'skill-library-empty'].includes(name)) {
+      // The page starts with its lists; 匯入 is a small button in its header, before the close, as wide as its word.
+      const head = document.querySelector('.modal-body .set-head'), action = head?.querySelector('[data-skl="import-open"]'), close = head?.querySelector('.close-button');
+      require(visible(action) && visible(close) && action.getBoundingClientRect().right <= close.getBoundingClientRect().left + 1, 'import is in the header, before the close');
+      require(action.getBoundingClientRect().width < 90 && action.classList.contains('sm'), 'the header button hugs its word');
+      require(!document.querySelector('.modal-body .skl-import, .modal-body #skl-input'), 'no importer stands in the page');
+      if (name === 'skill-library') require(/skl-pack/.test(document.querySelector('.modal-body .skl').firstElementChild.innerHTML), 'the page starts with its lists');
     }
     if (name === 'skill-library-converting' || name === 'skill-library-converted') {
       const status = document.querySelector('.skl-import .skl-progress[role="status"]');
@@ -883,7 +893,7 @@ export function checkRendered(name, context = {}) {
     }
     if (name === 'skill-library-empty') {
       const pane = document.querySelector('.modal-scrim .skl');
-      require(pane.firstElementChild?.matches('.skl-import') && visible(pane.querySelector('.skl-empty')) && pane.querySelector('.skl-empty').textContent.trim() === '還沒有技能。', 'the importer is first and the empty library says so');
+      require(pane.firstElementChild?.matches('.skl-empty') && visible(pane.querySelector('.skl-empty')) && pane.querySelector('.skl-empty').textContent.trim() === '還沒有技能。', 'the empty library says so, with no importer in the page');
       require(!pane.querySelector('.skl-list, .skl-section'), 'no list is drawn');
     }
     if (name === 'skill-library-importing') {

@@ -2109,7 +2109,7 @@ export const ru = {
   "skillLib.plugins": "Плагины",
   "skillLib.skills": "Навыки",
   "skillLib.folder": "Папка",
-  "skillLib.importHint": "Перетащите сюда файлы, папку или ссылку, в любом формате.",
+  "skillLib.importHint": "Перетащите сюда файлы, папку или ссылку или вставьте текст",
   "skillLib.choose": "Выбрать файлы",
   "skillLib.chooseFiles": "Файлы",
   "skillLib.converting": "{p0} превращает это в навык… ({p1})",

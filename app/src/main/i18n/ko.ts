@@ -2109,7 +2109,7 @@ export const ko = {
   "skillLib.plugins": "플러그인",
   "skillLib.skills": "스킬",
   "skillLib.folder": "폴더",
-  "skillLib.importHint": "파일, 폴더, 링크를 여기에 넣으세요. 어떤 형식이든 괜찮아요.",
+  "skillLib.importHint": "파일, 폴더, 링크를 여기에 넣거나 텍스트를 붙여넣으세요",
   "skillLib.choose": "파일 선택",
   "skillLib.chooseFiles": "파일",
   "skillLib.converting": "{p0}이(가) 스킬로 변환하는 중… ({p1})",

@@ -2109,7 +2109,7 @@ export const th = {
   "skillLib.plugins": "ปลั๊กอิน",
   "skillLib.skills": "ทักษะ",
   "skillLib.folder": "โฟลเดอร์",
-  "skillLib.importHint": "วางไฟล์ โฟลเดอร์ หรือลิงก์ที่นี่ รูปแบบไหนก็ได้",
+  "skillLib.importHint": "วางไฟล์ โฟลเดอร์ หรือลิงก์ที่นี่ หรือวางข้อความ",
   "skillLib.choose": "เลือกไฟล์",
   "skillLib.chooseFiles": "ไฟล์",
   "skillLib.converting": "{p0} กำลังแปลงเป็นทักษะ… ({p1})",

@@ -347,9 +347,11 @@ async def _skill_files(client, listed, own, others=(), *, used):
     return snapshot
 
 
-async def fetch(source):
-    """The skills of a GitHub source as the `(skill link, SkillFiles)` pairs the importer installs."""
+async def fetch(source, *, plugins=False):
+    """The skills of a GitHub source as the `(skill link, SkillFiles)` pairs the importer installs. With `plugins`, a link to a
+    folder that is a plugin of any kind (skill_layouts.py) gives that plugin instead: its whole tree, as a `PluginTree`."""
     from .capabilities import DOWNLOAD_SECONDS, DOWNLOAD_STALL_SECONDS
+    from .skill_layouts import PluginTree, normalized
     from .skill_sources import PLUGIN_MANIFEST
 
     target = parse(source)
@@ -359,6 +361,10 @@ async def fetch(source):
             client = Client(http)
             commit, ref, folder = await resolve(client, target)
             listed = await listing(client, target.repo, commit, folder)
+            if plugins and not target.file and not target.skill and shaped(listed, folder):
+                files = normalized(await _tree(client, listed, folder), target.label)
+                if files is not None:
+                    return PluginTree(files, source.strip(), f"url:{target.repo}:{folder}", target.label)
             if target.file and f"{folder + '/' if folder else ''}SKILL.md" not in listed.files:
                 raise MemberError("not_found", f"{folder + '/' if folder else ''}SKILL.md is not in {target.repo}",
                                   reason="path", repo=target.repo, file=f"{folder + '/' if folder else ''}SKILL.md")
@@ -396,10 +402,48 @@ async def fetch(source):
         raise _network_error(error) from None
 
 
+def shaped(listed, folder):
+    """Whether the folder of a listing is a plugin of any kind (skill_layouts.py)."""
+    from .skill_layouts import is_plugin
+
+    prefix = folder + "/" if folder else ""
+    return is_plugin(path[len(prefix):] for path in listed.files if path.startswith(prefix))
+
+
+async def _tree(client, listed, folder):
+    """Every file of a folder of the commit, `{path: bytes}` from that folder, each checked against its listing; a link or a
+    submodule in it is never followed."""
+    from .skill_layouts import Tree
+
+    prefix = folder + "/" if folder else ""
+    wanted, size, links = [], 0, []
+    for path in sorted(listed.files):
+        if not path.startswith(prefix) or junk(path[len(prefix):]):
+            continue
+        length, sha, mode = listed.files[path]
+        if mode in ("120000", "submodule"):
+            links.append(path[len(prefix):])
+            continue
+        if len(wanted) >= MAX_PACKAGE_FILES:
+            raise too_many_files(len(wanted) + 1, MAX_PACKAGE_FILES, path[len(prefix):])
+        if size + length > MAX_PACKAGE_BYTES:
+            raise oversized_package(path[len(prefix):], size + length, MAX_PACKAGE_BYTES)
+        size += length
+        wanted.append((path, length, sha))
+    gate = asyncio.Semaphore(PARALLEL)
+
+    async def one(path, length, sha):
+        async with gate:
+            return path[len(prefix):], await download(client, listed.repo, listed.commit, path, length, sha)
+
+    return Tree(await asyncio.gather(*(one(*item) for item in wanted)), links)
+
+
 async def fetch_plugin(source):
-    """The files of the plugin a GitHub link names (its folder holds `.claude-plugin/plugin.json`), as `{path: bytes}`
+    """The files of the plugin a GitHub link names (its folder holds a plugin of any kind: skill_layouts.py), as `{path: bytes}`
     from its root, and the identity of that plugin. A link inside it is never followed."""
     from .capabilities import DOWNLOAD_SECONDS, DOWNLOAD_STALL_SECONDS
+    from .skill_layouts import normalized
 
     target = parse(source)
     try:
@@ -408,31 +452,14 @@ async def fetch_plugin(source):
             client = Client(http)
             commit, ref, folder = await resolve(client, target)
             listed = await listing(client, target.repo, commit, folder)
-            prefix = folder + "/" if folder else ""
-            if prefix + ".claude-plugin/plugin.json" not in listed.files:
+            if not shaped(listed, folder):
                 raise MemberError("source", f"{target.repo}{'/' + folder if folder else ''} is not a plugin: it has no "
                                   ".claude-plugin/plugin.json", reason="no_manifest", repo=target.repo, file=folder)
-            wanted, size, links = [], 0, []
-            for path in sorted(listed.files):
-                if not path.startswith(prefix) or junk(path[len(prefix):]):
-                    continue
-                length, sha, mode = listed.files[path]
-                if mode in ("120000", "submodule"):
-                    links.append(path[len(prefix):])
-                    continue
-                if len(wanted) >= MAX_PACKAGE_FILES:
-                    raise too_many_files(len(wanted) + 1, MAX_PACKAGE_FILES, path[len(prefix):])
-                if size + length > MAX_PACKAGE_BYTES:
-                    raise oversized_package(path[len(prefix):], size + length, MAX_PACKAGE_BYTES)
-                size += length
-                wanted.append((path, length, sha))
-            gate = asyncio.Semaphore(PARALLEL)
-
-            async def one(path, length, sha):
-                async with gate:
-                    return path[len(prefix):], await download(client, target.repo, commit, path, length, sha)
-
-            return dict(await asyncio.gather(*(one(*item) for item in wanted))), f"url:{target.repo}:{folder}"
+            files = normalized(await _tree(client, listed, folder), target.label)
+            if files is None:
+                raise MemberError("source", f"{target.repo}{'/' + folder if folder else ''} lists no plugin of its own",
+                                  reason="no_manifest", repo=target.repo, file=folder)
+            return files, f"url:{target.repo}:{folder}"
     except MemberError:
         raise
     except TimeoutError:

@@ -2109,7 +2109,7 @@ export const zhCN = {
   "skillLib.plugins": "插件",
   "skillLib.skills": "技能",
   "skillLib.folder": "文件夹",
-  "skillLib.importHint": "把文件、文件夹或链接拖进来，任何格式都可以。",
+  "skillLib.importHint": "把文件、文件夹或链接拖进来，或粘贴文字",
   "skillLib.choose": "选择文件",
   "skillLib.chooseFiles": "文件",
   "skillLib.converting": "{p0} 正在转换成技能…（{p1}）",

@@ -41,7 +41,7 @@ async def test_imported_document_is_private_toggleable_and_deleted(rig, monkeypa
     other = (await rig.call("members.create", {"name": "Other"}))["member"]["id"]
     text = "---\nname: writing\ndescription: Clear writing\n---\nFull body"
 
-    async def download(source):
+    async def download(source, **_):
         return [(source, {"SKILL.md": text.encode()})]
 
     monkeypatch.setattr("raphael_core.members.service.download_skills", download)

@@ -398,8 +398,6 @@ async def test_an_import_on_a_card_that_leaves_a_linked_file_out_names_it_to_the
     rig, team = setup
     skill = tmp_path / "plugin" / "skills" / "lazy-mode"
     skill.mkdir(parents=True)
-    (tmp_path / "plugin" / ".claude-plugin").mkdir()
-    (tmp_path / "plugin" / ".claude-plugin" / "plugin.json").write_bytes(b"{}")
     (skill / "SKILL.md").write_bytes((LAZY_MODE + "\nRead [it](../../../elsewhere.md).\n").encode())
     others = (publish("member_library_delete", {"key": "pack:missing"}),) if several else ()
     brain(publish("member_library_import", {"source": f"local:{tmp_path / 'plugin'}", "access": []}), *others, then="Imported.")

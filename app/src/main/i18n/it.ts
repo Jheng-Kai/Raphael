@@ -2109,7 +2109,7 @@ export const it = {
   "skillLib.plugins": "Plugin",
   "skillLib.skills": "Competenze",
   "skillLib.folder": "Cartella",
-  "skillLib.importHint": "Trascina qui file, una cartella o un link, in qualsiasi formato.",
+  "skillLib.importHint": "Trascina qui file, una cartella o un link, oppure incolla del testo",
   "skillLib.choose": "Scegli file",
   "skillLib.chooseFiles": "File",
   "skillLib.converting": "{p0} lo sta trasformando in un’abilità… ({p1})",

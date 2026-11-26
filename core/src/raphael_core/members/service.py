@@ -108,6 +108,7 @@ from ..router import Router
 from ..slime_ids import current_avatar
 from ..services.attachments import IMAGE_TYPES, MAX_IMAGE_BYTES, AttachmentError, checked, sniff_ok
 from .capabilities import MemberCapabilities, download_skills
+from .skill_layouts import PluginTree
 from .skill_packages import SkillPackages
 from .skill_convert import Conversions, needs_conversion, routed
 from .skill_paths import as_local
@@ -1000,25 +1001,29 @@ class MembersService:
         # What was left out because its name is taken is named with who holds it (#313): the rest is in the library.
         return {"package": await self.packages.view_async(key), **({"skipped": skipped} if skipped else {})}
 
-    async def _package_documents(self, params):
+    async def _package_documents(self, params, plugins=False):
+        """What a source holds, as the documents to install: `(documents, source, origin, name)`. With `plugins`, a source that is
+        a plugin of any kind (skill_layouts.py) is its `PluginTree` instead, so that the whole of it is kept."""
         if "text" in params:
             text = params["text"]
             if not isinstance(text, str):
                 raise invalid_params("text must be Markdown")
             return [("paste", {"SKILL.md": text.encode()})], "pasted text", "paste", ""
         if "file" in params:
-            files, name = await asyncio.to_thread(skill_sources.uploaded, params["file"])
-            return [("upload", f) for f in files], name, "upload", name
+            files, name = await asyncio.to_thread(skill_sources.uploaded, params["file"], plugins)
+            return files if plugins and isinstance(files, PluginTree) else ([("upload", f) for f in files], name, "upload", name)
         if "files" in params:
-            files, name = await asyncio.to_thread(skill_sources.uploaded_tree, params["files"])
-            return [("upload", f) for f in files], name, "upload", name
+            files, name = await asyncio.to_thread(skill_sources.uploaded_tree, params["files"], plugins)
+            return files if plugins and isinstance(files, PluginTree) else ([("upload", f) for f in files], name, "upload", name)
         source = params["source"]
         if not isinstance(source, str) or not source.strip():
             raise invalid_params("source must be a nonempty string")
         if source.startswith("local:"):
-            files, name = await asyncio.to_thread(skill_sources.local, source)
-            return [(source, f) for f in files], source, "source", name
-        documents = await download_skills(source)
+            files, name = await asyncio.to_thread(skill_sources.local, source, plugins)
+            return files if plugins and isinstance(files, PluginTree) else ([(source, f) for f in files], source, "source", name)
+        documents = await (download_skills(source, plugins=True) if plugins else download_skills(source))
+        if isinstance(documents, PluginTree):
+            return documents
         from .skill_github import label
 
         try:
@@ -1062,14 +1067,19 @@ class MembersService:
                             and identifier is None and "marketplace" not in params):
                         raise
                     as_plugin = False
+            data = None
+            if not as_plugin:
+                if sum(k in params for k in ("source", "text", "file", "files")) != 1:
+                    raise invalid_params("choose exactly one source, text or file")
+                # The one box takes a plugin of any kind whole (skill_layouts.py); `plugin: false` asks for its skills only.
+                data = await self._package_documents(params, plugins=new_package and member == -1 and params.get("plugin") is not False)
+                if isinstance(data, PluginTree):
+                    plugin, as_plugin = await self.capabilities.import_tree(data, access=params.get("access")), True
             if as_plugin:
                 skipped = plugin.pop("skipped", [])
                 key = f"set:{plugin['id']}"
                 ids = [s["id"] for s in (await self.packages.view_async(key))["skills"]]
             else:
-                if sum(k in params for k in ("source", "text", "file", "files")) != 1:
-                    raise invalid_params("choose exactly one source, text or file")
-                data = await self._package_documents(params)
                 key, ids = await self.packages.install(member, *data, access=params.get("access"), name=params.get("name"),
                                                          skipped=skipped)
         except MemberError as error:
@@ -2817,4 +2827,5 @@ class MembersService:
         if polling is not None:
             polling.cancel()
             await asyncio.gather(polling, return_exceptions=True)
+        await self.conversions.close()
         await self.webhooks.close()

@@ -2109,7 +2109,7 @@ export const es = {
   "skillLib.plugins": "Complementos",
   "skillLib.skills": "Habilidades",
   "skillLib.folder": "Carpeta",
-  "skillLib.importHint": "Suelta aquí archivos, una carpeta o un enlace, en cualquier formato.",
+  "skillLib.importHint": "Suelta aquí archivos, una carpeta o un enlace, o pega texto",
   "skillLib.choose": "Elegir archivos",
   "skillLib.chooseFiles": "Archivos",
   "skillLib.converting": "{p0} lo está convirtiendo en una habilidad… ({p1})",

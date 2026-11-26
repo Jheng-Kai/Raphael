@@ -1922,7 +1922,7 @@ export const zhTW = {
   "skillLib.plugins": "外掛",
   "skillLib.skills": "技能",
   "skillLib.folder": "資料夾",
-  "skillLib.importHint": "把檔案、資料夾或連結丟進來，任何格式都可以。",
+  "skillLib.importHint": "把檔案、資料夾或連結丟進來，或貼上文字",
   "skillLib.choose": "選擇檔案",
   "skillLib.chooseFiles": "檔案",
   "skillLib.converting": "{p0} 正在轉換成技能…（{p1}）",

@@ -5,11 +5,12 @@
 // a source, its switch, then its skills, each with its own switch), and the back arrow, Esc or a step back return to the
 // list where it was left. Every skill opens on a page of its own that shows its document. A right click on a package's row
 // or page offers 更新 and 刪除 (its ⋯ is not drawn: context-menu.ts presses it at the pointer).
-// The importer is the tab's first card (a tab is its name, then its sections: R-UI-115): one box that takes anything,
-// whatever is dropped on it (files, a folder, a link) or pasted in it, or chosen with 選擇檔案, and one 匯入 (R-SKILL-26). The
+// The tab starts with its plugins and then its skills; the importer is 匯入 in the page's header, which opens one dialog
+// (member-dialogs.ts): one field that takes anything, whatever is dropped on it (files, a folder, a link) or pasted in it, or
+// chosen with 選擇檔案, and 匯入 (R-SKILL-26). The
 // core does the work: skills.library.* (members/service.py): what is a skill or a plugin imports at once, and what is not
-// is converted by the primary contact while the card says who is writing it and with which model. An import under way says
-// so under the card; a failure says its own cause with the file, size, limit or packages it names (the core's `[[json]]`
+// is converted by the primary contact while the dialog says who is writing it and with which model. An import under way says
+// so in the dialog; a failure says its own cause with the file, size, limit or packages it names (the core's `[[json]]`
 // detail, R-SKILL-21); a skill of a package is renamed from its page (R-SKILL-25) and skills of one name prefix arrive as
 // one plugin (R-SKILL-20), with no question to the owner (#355).
 
@@ -17,12 +18,12 @@ import { core, membersList, pickOutputFolder } from "./api";
 import { t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
 import { isTopLayer } from "./dismissals";
-import { confirmDelete } from "./member-dialogs";
+import { confirmDelete, openDialog, type Dialog } from "./member-dialogs";
 import { faceHTML, groupFacesHTML, RAPHAEL_ID } from "./members";
 import { replyContentHTML } from "./message-content";
 import { rememberLayerBack } from "./nav-history";
 import { bindNavLayer, keepEditedField } from "./nav-layers";
-import { backButton, btn, closeMenu, esc, fieldHTML, ico, iconBtn, openPopover, tg, toaster } from "./ui";
+import { actionRow, backButton, btn, closeMenu, esc, fieldHTML, ico, iconBtn, openPopover, tg, toaster } from "./ui";
 import "./skill-library.css";
 
 export type Access = "all" | number[];
@@ -197,25 +198,32 @@ function skillPageHTML(p: LibraryPackage, skill: LibrarySkill, v: SkillLibraryVi
     aboutHTML(skill.description, alone ? p : undefined) + `<div class="skl-doc">${body}</div></section>`;
 }
 
-/** The one box of the tab: whatever is dropped or pasted in it, or chosen with 選擇檔案, is imported as it is, and what is no
- *  skill yet is converted by the primary contact (core: members/skill_convert.py). Its state is said under it, quietly. */
-function importHTML(v: SkillLibraryView): string {
+/** 匯入, in the page's header beside its close: it opens the importer's dialog. Quiet, and as wide as its word. */
+export const importButtonHTML = (): string => btn(esc(t("skillLib.import")), "sm skl-head-import", ' data-skl="import-open"');
+
+/** The importer's dialog: one field for whatever is dropped or pasted in it, or chosen with 選擇檔案; what is no skill yet is
+ *  converted by the primary contact (core: members/skill_convert.py). What it is doing, and why it failed, are said in it. */
+function importBodyHTML(v: SkillLibraryView): string {
   const working = v.busy || !!v.converting;
   const busy = working ? " disabled" : "";
   const progress = v.converting
     ? t("skillLib.converting", { p0: v.converting.name, p1: v.converting.model })
     : v.busy ? t("skillLib.importing") : "";
   return `<div class="skl-import" data-skl-drop>` +
-    `<textarea id="skl-input" class="mb-fin mb-ta skl-text" rows="3" spellcheck="false" aria-label="${esc(t("skillLib.importHint"))}"${busy}>${esc(v.draft)}</textarea>` +
+    `<textarea id="skl-input" class="mb-fin mb-ta skl-text" rows="2" spellcheck="false" placeholder="${esc(t("skillLib.importHint"))}" aria-label="${esc(t("skillLib.importHint"))}"${busy}>${esc(v.draft)}</textarea>` +
     `<div class="skl-import-row">` +
     btn(ico("file") + esc(t("skillLib.choose")), "sm", ` data-skl="pick" aria-haspopup="menu" aria-expanded="false"${busy}`) +
-    btn(esc(t("skillLib.import")), "pri skl-go", ` data-skl="import-go"${busy}`) +
-    `</div><p class="d skl-import-hint">${esc(t("skillLib.importHint"))}</p>` +
+    `</div>` +
     (progress ? `<p class="d skl-progress" role="status">${esc(progress)}</p>` : "") +
     (!working && v.converted ? `<p class="d skl-progress" role="status">${esc(v.converted)}</p>` : "") +
     (v.error ? `<p class="skl-error" role="alert">${esc(v.error)}</p>` : "") +
     `<input type="file" id="skl-file" multiple hidden></div>`;
 }
+
+const importActions = (v: SkillLibraryView) => ({
+  primary: { label: esc(t("skillLib.import")), attrs: ` data-skl="import-go"${v.busy || v.converting ? " disabled" : ""}` },
+  cls: "mb-dlg-act",
+});
 
 export function skillLibraryHTML(v: SkillLibraryView, { listHeader = "", pageClose = "", notice = "" }:
   { listHeader?: string; pageClose?: string; notice?: string } = {}): string {
@@ -229,7 +237,7 @@ export function skillLibraryHTML(v: SkillLibraryView, { listHeader = "", pageClo
       packageSectionHTML("skills", v.packages.filter(p => !isPlugin(p)), v)
     : `<p class="d skl-empty">${esc(t("skillLib.empty"))}</p>`;
   return listHeader + notice + `<section class="sgroup skl" aria-label="${esc(t("settings.paneSkills"))}">` +
-    importHTML(v) + skippedHTML(v) + list + `</section>`;
+    skippedHTML(v) + list + `</section>`;
 }
 
 const base64 = (bytes: ArrayBuffer): string => {
@@ -349,8 +357,20 @@ async function droppedFiles(data: DataTransfer): Promise<Picked[]> {
 }
 
 /** `scroller` is what scrolls the tab: the list's place in it is kept while a package's page is open. */
-export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroller: () => HTMLElement | null = () => root, pollMs = POLL_MS) {
+export function createSkillLibrary(root: HTMLElement, redrawTab: () => void, scroller: () => HTMLElement | null = () => root, pollMs = POLL_MS) {
   const state = emptySkillLibraryView();
+  /** The importer's dialog while it is open: it is drawn again with the tab, from the same state. */
+  let dlg: Dialog | null = null;
+  const field = (): HTMLTextAreaElement | null => dlg?.el.querySelector<HTMLTextAreaElement>("#skl-input") ?? null;
+  const redraw = (): void => {
+    redrawTab();
+    const el = dlg?.el;
+    if (!el) return;
+    const typing = document.activeElement === field();
+    el.querySelector(".mb-dlg-body")!.innerHTML = importBodyHTML(state);
+    el.querySelector(".mb-dlg-act")!.outerHTML = actionRow(importActions(state));
+    if (typing && !field()?.disabled) field()?.focus({ preventScroll: true });
+  };
   let epoch = 0;
   /** Which watch of a conversion is the current one: leaving the tab or a new one ends the earlier. */
   let watching = 0;
@@ -405,6 +425,8 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
    *  be chosen at once (a large set reaches nobody until then). */
   const arrived = async (made: LibraryPackage, skipped: SkippedSkill[] | undefined): Promise<void> => {
     state.draft = "";
+    // An import that landed closes the dialog: the list is the result. A conversion keeps it open, to say who wrote the skill.
+    if (!state.converted) dlg?.close();
     // Skills whose names were taken are not in the library: the owner is told which, and who holds each name (#313).
     state.skipped = skipped?.length ? { key: made.key, items: skipped } : null;
     await load();
@@ -599,6 +621,7 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
   };
   root.addEventListener("click", event => {
     const target = (event.target as Element).closest<HTMLElement>("[data-skl]");
+    if (target?.dataset.skl === "import-open" && root.contains(target)) { openImport(); return; }
     if (!target?.closest(".skl") || !root.contains(target)) return;
     const key = target.dataset.key ?? "";
     switch (target.dataset.skl) {
@@ -627,14 +650,6 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
         field?.select();
         break;
       }
-      case "import-go": {
-        // The text of the box is sent as it is: the core says whether it is a link, a place on this computer or text.
-        const text = root.querySelector<HTMLTextAreaElement>("#skl-input")?.value ?? "";
-        state.draft = text;
-        if (text.trim()) void bring({ text });
-        break;
-      }
-      case "pick": choose(target); break;
     }
   });
   /** 選擇檔案: files from the system's dialog, or a folder from its own (a folder is read where it is, whatever its size). */
@@ -647,7 +662,7 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
       const pick = (event.target as Element).closest<HTMLElement>("[data-pick]")?.dataset.pick;
       if (!pick) return;
       closeMenu();
-      if (pick === "files") root.querySelector<HTMLInputElement>("#skl-file")?.click();
+      if (pick === "files") dlg?.el.querySelector<HTMLInputElement>("#skl-file")?.click();
       else void pickOutputFolder().then(path => { if (path) void bring({ source: `local:${path}` }); }).catch(error => { state.error = failureText(error); redraw(); });
     });
   };
@@ -672,12 +687,6 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
       else { state.renaming = null; redraw(); root.querySelector<HTMLElement>('[data-skl="skill-rename"]')?.focus({ preventScroll: true }); }
       return;
     }
-    // A link or a path is one line: Enter sends it. Text of several lines keeps its Enter, and Ctrl+Enter sends it.
-    if (input.id === "skl-input" && event.key === "Enter" && !event.isComposing && !event.shiftKey
-        && (event.ctrlKey || event.metaKey || !(input as HTMLTextAreaElement).value.includes("\n"))) {
-      event.preventDefault();
-      root.querySelector<HTMLElement>('[data-skl="import-go"]')?.click();
-    }
     // Esc on a package's page goes back to the list before it closes Settings; a menu open over it takes it first.
     const page = root.querySelector<HTMLElement>(".skl-page");
     const dialog = page?.closest<HTMLElement>(".modal");
@@ -693,30 +702,73 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
       redraw();
     }
   });
-  root.addEventListener("change", event => {
-    const input = event.target as HTMLInputElement;
-    if (input.id !== "skl-file" || !input.files?.length) return;
-    const picked = [...input.files].map(file => ({ path: file.name, file }));
-    input.value = "";
-    void bringPicked(picked);
-  });
-  root.addEventListener("input", event => {
-    if ((event.target as HTMLElement).id === "skl-input") state.draft = (event.target as HTMLTextAreaElement).value;
-  });
-  root.addEventListener("dragover", event => {
-    const types = event.dataTransfer?.types;
-    if ((event.target as Element).closest?.("[data-skl-drop]") && (types?.includes("Files") || types?.includes("text/uri-list") || types?.includes("text/plain"))) event.preventDefault();
-  });
-  root.addEventListener("drop", event => {
-    if (!(event.target as Element).closest?.("[data-skl-drop]") || state.busy || state.converting) return;
-    const data = event.dataTransfer;
-    if (!data) return;
-    // A link dragged from a page or some text dragged from a document goes into the box and is sent: no step between.
-    const words = data.types?.includes("Files") ? "" : (data.getData("text/uri-list") || data.getData("text/plain")).trim();
-    event.preventDefault();
-    if (words) { state.draft = words; void bring({ text: words }); return; }
-    void droppedFiles(data).then(bringPicked);
-  });
+  /** What the dialog's controls do: 匯入 sends the field as it is, 選擇檔案 opens its small menu, a drop is imported whole. */
+  const importEvents = (el: HTMLElement): void => {
+    const zone = (): Element | null => el.querySelector(".skl-import");
+    const lit = (on: boolean): void => { zone()?.classList.toggle("is-over", on); };
+    el.addEventListener("click", event => {
+      const target = (event.target as Element).closest<HTMLElement>("[data-skl]");
+      if (!target || (target as HTMLButtonElement).disabled) return;
+      if (target.dataset.skl === "import-go") {
+        // The text of the box is sent as it is: the core says whether it is a link, a place on this computer or text.
+        const text = field()?.value ?? "";
+        state.draft = text;
+        if (text.trim()) void bring({ text });
+      } else if (target.dataset.skl === "pick") choose(target);
+    });
+    el.addEventListener("keydown", event => {
+      // A link or a path is one line: Enter sends it. Text of several lines keeps its Enter, and Ctrl+Enter sends it.
+      if ((event.target as HTMLElement).id === "skl-input" && event.key === "Enter" && !event.isComposing && !event.shiftKey
+          && (event.ctrlKey || event.metaKey || !(event.target as HTMLTextAreaElement).value.includes("\n"))) {
+        event.preventDefault();
+        el.querySelector<HTMLElement>('[data-skl="import-go"]')?.click();
+      }
+    });
+    el.addEventListener("change", event => {
+      const input = event.target as HTMLInputElement;
+      if (input.id !== "skl-file" || !input.files?.length) return;
+      const picked = [...input.files].map(file => ({ path: file.name, file }));
+      input.value = "";
+      void bringPicked(picked);
+    });
+    el.addEventListener("input", event => {
+      if ((event.target as HTMLElement).id === "skl-input") state.draft = (event.target as HTMLTextAreaElement).value;
+    });
+    // The whole box is lit while something is dragged over it (the row's hover fill), and not a moment after.
+    el.addEventListener("dragover", event => {
+      const types = event.dataTransfer?.types;
+      if ((event.target as Element).closest?.("[data-skl-drop]") && (types?.includes("Files") || types?.includes("text/uri-list") || types?.includes("text/plain"))) {
+        event.preventDefault();
+        if (!state.busy && !state.converting) lit(true);
+      }
+    });
+    el.addEventListener("dragleave", event => {
+      const next = (event as DragEvent).relatedTarget as Node | null;
+      if (!next || !zone()?.contains(next)) lit(false);
+    });
+    el.addEventListener("drop", event => {
+      lit(false);
+      if (!(event.target as Element).closest?.("[data-skl-drop]") || state.busy || state.converting) return;
+      const data = event.dataTransfer;
+      if (!data) return;
+      // A link dragged from a page or some text dragged from a document goes into the box and is sent: no step between.
+      const words = data.types?.includes("Files") ? "" : (data.getData("text/uri-list") || data.getData("text/plain")).trim();
+      event.preventDefault();
+      if (words) { state.draft = words; void bring({ text: words }); return; }
+      void droppedFiles(data).then(bringPicked);
+    });
+  };
+  /** 匯入 in the header: the importer's dialog, over the tab. Closing it (Esc, ×) is one step back; what it was doing goes on. */
+  const openImport = (): void => {
+    if (dlg) return;
+    closeMenu();
+    state.error = ""; if (!state.converting) state.converted = "";
+    dlg = openDialog({
+      title: t("skillLib.import"), body: importBodyHTML(state), actions: importActions(state), cls: "skl-dlg",
+      onAct: () => {}, onClose: () => { dlg = null; },
+    });
+    importEvents(dlg.el);
+  };
   return {
     view: (): SkillLibraryView => state,
     load,
@@ -727,6 +779,7 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
     },
     // A conversion goes on in the core while the tab is away; the next listing picks it up where it stands.
     reset: (): void => {
+      dlg?.close();
       epoch++; watching++; state.skipped = null; state.error = ""; state.converting = null; state.converted = ""; state.draft = "";
       state.page = null; state.skill = null; state.doc = null; state.renaming = null;
     },

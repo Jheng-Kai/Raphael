@@ -431,7 +431,7 @@ async def made_again_once(vm, target, runtime):
     assert [(args[0], args[1] if len(args) > 1 else "") for args, _ in runtime.calls if args[0] in ("stop", "rm", "run")] == [
         ("stop", "--time"), ("rm", target.name), ("run", "-d")]
     run = next(args for args, _ in runtime.calls if args[0] == "run")
-    expected_mounts = [module.mount_arg(held["Source"], held["Destination"]) for held in mounts]
+    expected_mounts = [module.mount_arg(held["Source"], held["Destination"], readonly=held["Destination"] == module.SKILLS) for held in mounts]
     assert [run[index + 1] for index, flag in enumerate(run) if flag == "--mount"] == expected_mounts
     assert all(sentinel.read_text(encoding="utf-8") == "kept" for sentinel in kept)
     runtime.calls.clear()

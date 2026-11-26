@@ -2109,7 +2109,7 @@ export const fr = {
   "skillLib.plugins": "Extensions",
   "skillLib.skills": "Compétences",
   "skillLib.folder": "Dossier",
-  "skillLib.importHint": "Déposez ici des fichiers, un dossier ou un lien, dans n’importe quel format.",
+  "skillLib.importHint": "Déposez ici des fichiers, un dossier ou un lien, ou collez du texte",
   "skillLib.choose": "Choisir des fichiers",
   "skillLib.chooseFiles": "Fichiers",
   "skillLib.converting": "{p0} la convertit en compétence… ({p1})",

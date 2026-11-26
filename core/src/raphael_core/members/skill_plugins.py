@@ -12,6 +12,7 @@ import os
 import re
 import shutil
 import tempfile
+from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from urllib.parse import quote, urlsplit
@@ -57,8 +58,9 @@ def local_files(folder):
     """Bound the entire set, including hidden manifests, without following links."""
     from .skill_sources import folder_snapshot
 
-    return folder_snapshot(folder, byte_limit=MAX_PACKAGE_BYTES, entry_limit=MAX_PACKAGE_FILES,
-                           depth_limit=MAX_DISCOVERY_DEPTH).files
+    # A link inside the plugin to a file of it is that file's copy; any other is named and left out, never followed.
+    return folder_snapshot(folder, byte_limit=MAX_PACKAGE_BYTES, entry_limit=MAX_PACKAGE_FILES, depth_limit=MAX_DISCOVERY_DEPTH,
+                           skill_links=True).finish(skill=False)
 
 
 def local_stamp(folder):
@@ -70,10 +72,12 @@ def local_stamp(folder):
         if count > MAX_ARCHIVE_ENTRIES or len(Path(directory).relative_to(folder).parts) > MAX_DISCOVERY_DEPTH:
             raise MemberError("size", f"{directory} holds more than a plugin can: pick the folder of the plugin itself",
                               reason="scan")
+        # A link is never followed: it is part of the fingerprint by its name, so a link made or removed is a change.
         for name in [*dirs, *names]:
             if linked(Path(directory) / name):
-                shown = (Path(directory) / name).relative_to(folder).as_posix()
-                raise MemberError("source", f"{shown} is a link, and links are not followed", reason="linked", file=shown)
+                entries.append(((Path(directory) / name).relative_to(folder).as_posix() + " ->", 0, 0))
+        dirs[:] = [name for name in dirs if not linked(Path(directory) / name)]
+        names[:] = [name for name in names if not linked(Path(directory) / name)]
         for name in names:
             path = Path(directory) / name
             info = path.stat()
@@ -386,6 +390,7 @@ class PluginInstall:
     servers: list
     revision: tuple
     skipped: list = field(default_factory=list)
+    links: list = field(default_factory=list)
 
 
 class PluginSets:
@@ -394,6 +399,28 @@ class PluginSets:
         if row is None:
             raise MemberError("not_found", "no such plugin set")
         return self.homes.safe(self.homes.home(SHARED) / row[0])
+
+    def unify_library(self):
+        """Plugins made before the library was one folder lived in `skill-sets` beside `skills`: each moves into `skills`, and
+        its row follows it. A move that stopped half way is finished by the next call; nothing is copied."""
+        library = self.homes.home(SHARED)
+        old, new = library / "skill-sets", library / "skills"
+        if not old.is_dir() or not self.conn.execute("SELECT 1 FROM sqlite_master WHERE name='skill_sets'").fetchone():
+            return
+        new.mkdir(parents=True, exist_ok=True)
+        for row in self.conn.execute("SELECT id,folder FROM skill_sets WHERE folder LIKE 'skill-sets/%'").fetchall():
+            name = row["folder"].split("/", 1)[1]
+            source, target = old / name, new / name
+            if source.is_dir() and not target.exists():
+                try:
+                    self.homes.safe(source).rename(self.homes.safe(target))
+                except OSError:
+                    continue  # something holds the folder now: the plugin stays where it is, and the next start moves it
+            if target.is_dir():
+                with self.conn:
+                    self.conn.execute("UPDATE skill_sets SET folder=? WHERE id=?", (f"skills/{name}", row["id"]))
+        with suppress(OSError):
+            old.rmdir()
 
     def local_plugins(self):
         """Only manifests and skill documents are opened during discovery."""
@@ -519,6 +546,7 @@ class PluginSets:
         from .skills import stored_skill_name
 
         manifest = manifest_from(files)
+        links = list(getattr(files, "skipped_links", []))
         if len(files) > MAX_PACKAGE_FILES:
             raise too_many_files(len(files), MAX_PACKAGE_FILES)
         if sum(len(data) for data in files.values()) > MAX_PACKAGE_BYTES:
@@ -581,10 +609,11 @@ class PluginSets:
                 raise MemberError("source", "reserved plugin metadata path")
             checked[path] = data
         return PluginInstall(identity, manifest, previous, old, retained, components, checked,
-                             source, marketplace, target, access, mcp_servers(files, manifest), self.skill_revision(), skipped)
+                             source, marketplace, target, access, mcp_servers(files, manifest), self.skill_revision(), skipped, links)
 
     def _write_set(self, plan):
-        root = self.homes.safe(self.homes.home(SHARED) / "skill-sets")
+        # A plugin lives in the one folder the library keeps its skills in, so one mount of it shows them all.
+        root = self.homes.safe(self.homes.home(SHARED) / "skills")
         root.mkdir(parents=True, exist_ok=True)
         folder = Path(tempfile.mkdtemp(prefix="set-", dir=root))
         try:
@@ -596,6 +625,7 @@ class PluginSets:
                 atomic(self.homes.safe(folder / key), data)
             servers = json.loads(json.dumps(plan.servers).replace("${CLAUDE_PLUGIN_ROOT}", str(folder).replace("\\", "/")))
             info = {"marketplace": plan.marketplace, "target": plan.target, "mcp_servers": servers,
+                    **({"skipped_links": plan.links} if plan.links else {}),
                     "fingerprint": local_stamp(Path(plan.source[6:])) if plan.source.startswith("local:") else None}
             return folder, info
         except BaseException:
@@ -699,9 +729,15 @@ class PluginSets:
             raise MemberError("not_found", "no installed version of that plugin", reason="source", file=str(folder))
         return max(versions, key=lambda p: (version_key(p.name), p.stat().st_mtime_ns))
 
+    async def import_tree(self, tree, *, access=None):
+        """Install a source that is a plugin of any kind (skill_layouts.PluginTree): its whole tree is the set."""
+        return await self._install_set_async(tree.source, tree.files, access=access, require_new=True, identity=tree.identity)
+
     def _local_plugin_snapshot(self, source):
+        from .skill_layouts import folder_is_plugin, normalized
+
         folder = self._newest_version(source)
-        if not (folder / ".claude-plugin/plugin.json").is_file():
+        if not folder_is_plugin(folder):
             raise MemberError("not_found" if not folder.exists() else "source",
                               f"{folder} is not a plugin: it has no .claude-plugin/plugin.json",
                               reason="source" if not folder.exists() else "no_manifest", file=str(folder))
@@ -710,7 +746,10 @@ class PluginSets:
             cached = location(self.skill_home, source)[1].name == "cache"
         except MemberError:
             cached = False
-        return "local:" + str(folder), local_files(folder), None if cached else "local:" + str(folder)
+        files = normalized(local_files(folder), folder.name)
+        if files is None:
+            raise MemberError("source", f"{folder} lists no plugin of its own", reason="no_manifest", file=str(folder))
+        return "local:" + str(folder), files, None if cached else "local:" + str(folder)
 
     async def add_marketplace(self, repo):
         data = await catalog(repo)

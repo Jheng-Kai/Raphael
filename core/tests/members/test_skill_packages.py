@@ -119,7 +119,7 @@ async def test_invalid_packages_leave_the_library_and_files_untouched(rig, monke
 
 
 async def test_a_repository_import_is_one_package_with_no_members_until_granted(rig, monkeypatch):
-    async def download(source):
+    async def download(source, **_):
         return [(source + "/" + slug, {"SKILL.md": document(slug).encode()}) for slug in ("read-notes", "write-notes")]
     monkeypatch.setattr("raphael_core.members.service.download_skills", download)
     package = (await rig.call("skills.library.import", {"source": "owner/notes"}))["package"]
@@ -382,7 +382,7 @@ async def test_the_imported_plugin_skill_reads_its_linked_files_and_the_result_n
         pytest.skip(f"cannot create local symlinks: {error}")
     skill = root / "skills" / "lazy-mode" / "SKILL.md"
     skill.write_bytes(skill.read_bytes() + b"Also [a link](../../actions/linked.md).\n")
-    package = (await rig.call("skills.library.import", {"source": f"local:{root}"}))["package"]
+    package = (await rig.call("skills.library.import", {"source": f"local:{root}", "plugin": False}))["package"]
     named = next(s for s in package["skills"] if s["name"] == "lazy-mode")
     assert package["kind"] == "plugin"
     assert {(item["path"], item["reason"]) for item in package["skipped_references"][str(named["id"])]} == {
