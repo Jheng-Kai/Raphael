@@ -171,8 +171,8 @@ async def test_a_page_read_that_names_the_browser_or_nothing_reads_the_seats_own
     ([], dict(pid=99), "Name one of this member's own windows"),
     ([(50, 100, 99), (51, 300, 99)], dict(pid=99), "Name one of this member's own windows"),
     ([(50, 100, 99)], dict(pid=77), "Name one of this member's own windows"),
-    ([], dict(target_id="2"), "bind an own window again"),
-    ([(50, 100, 99), (51, 300, 99)], dict(target_id="2", tab_id="2"), "bind an own window again"),
+    ([], dict(target_id="2"), "Read the tabs again with browser_tabs"),
+    ([(50, 100, 99), (51, 300, 99)], dict(target_id="2", tab_id="2"), "Read the tabs again with browser_tabs"),
 ])
 async def test_a_page_read_guesses_no_window_when_the_seat_has_none_or_several(seat_tools, rows, named, words):
     hub, vm, _ = seat_tools
@@ -1129,6 +1129,67 @@ async def test_bound_page_is_revoked_when_its_native_window_moves_to_a_peer(seat
     reply = await hub._driver_call(vm.target(2), client, name, dict(target_id="own-target", session=session, **args))
     assert reply["isError"] and (vm.target(2).key, "own-target") not in hub.page_windows
     assert [sent for sent, _ in client.calls] == ["list_windows"]
+
+
+async def bound_page(hub, vm):
+    await call(hub, 2, "get_browser_state", dict(pid=20, window_id=20))
+    return hub.connections[vm.target(2).key]
+
+
+def window_list_fails(client, times):
+    """The driver's window list fails `times` times (None: always) and works after."""
+    original, left = client.request, [times]
+
+    async def request(method, params, **kwargs):
+        if params["name"] == "list_windows" and (left[0] is None or left[0] > 0):
+            left[0] = left[0] if left[0] is None else left[0] - 1
+            return dict(isError=True, content=[dict(type="text", text="the window list could not be read")])
+        return await original(method, params, **kwargs)
+    client.request = request
+
+
+async def test_a_page_call_reads_the_window_list_again_once_when_it_was_not_given(seat_tools):
+    hub, vm, _ = seat_tools
+    hub.window_list_retry_s = 0
+    client, _ = await bound_page(hub, vm)
+    window_list_fails(client, 1)
+    client.calls.clear()
+    result = await call(hub, 2, "browser_navigate", dict(target_id="own-target", tab_id="tab", url="about:blank"))
+    assert result.ok, result.text
+    assert [name for name, _ in client.calls] == ["list_windows", "browser_navigate"]
+
+
+async def test_a_page_call_whose_window_list_stays_unavailable_says_what_to_do(seat_tools):
+    hub, vm, _ = seat_tools
+    hub.window_list_retry_s = 0
+    client, _ = await bound_page(hub, vm)
+    window_list_fails(client, None)
+    client.calls.clear()
+    result = await call(hub, 2, "browser_navigate", dict(target_id="own-target", tab_id="tab", url="about:blank"))
+    assert not result.ok and result.kind == "window_list_unavailable"
+    assert "browser_tabs" in result.text and "browser_open" in result.text
+    assert all(name != "browser_navigate" for name, _ in client.calls)
+
+
+@pytest.mark.parametrize("cause", ["unbound", "driver"])
+async def test_a_tab_id_that_is_no_longer_known_says_to_read_the_tabs_again(seat_tools, cause):
+    hub, vm, _ = seat_tools
+    client, _ = await bound_page(hub, vm)
+    if cause == "unbound":
+        hub.page_windows.clear()  # the browser started again: nothing it bound before is known
+    else:
+        original = client.request
+
+        async def request(method, params, **kwargs):
+            if params["name"] == "browser_navigate":
+                refusal = dict(code="browser_tab_not_found", message="tab tab is not known for target own-target")
+                return dict(isError=True, content=[dict(type="text", text="refused")],
+                            structuredContent=dict(status="refused", refusal=refusal))
+            return await original(method, params, **kwargs)
+        client.request = request
+    result = await call(hub, 2, "browser_navigate", dict(target_id="own-target", tab_id="tab", url="about:blank"))
+    assert not result.ok
+    assert "browser_tabs" in result.text and "browser_open" in result.text
 
 
 @pytest.mark.parametrize("name,args", [("browser_click", dict(ref="button")),

@@ -220,6 +220,20 @@ async def test_glob_and_grep_walk_the_home_but_not_packages_or_kept_places(home,
     assert not bad.ok and bad.kind == "bad_pattern"
 
 
+async def test_glob_and_grep_read_the_members_folders_on_the_loop_not_in_the_walk_thread(conn, home, files, tmp_path):
+    # The members' folders come from the settings store, whose connection belongs to the loop's thread: the walk runs in
+    # another one, so what it needs is read before it starts (a real store here, as the app wires it).
+    from raphael_core.computer.vm import LocalVm
+    vm = LocalVm(tmp_path / "data", settings=SettingsStore(conn))
+    files.owner_files.member_folders = vm.local_folders
+    found = await call(files, "glob", {"pattern": "*.md"})
+    assert found.ok, found.text
+    assert "plan.md" in found.text
+    matched = await call(files, "grep", {"pattern": "ship"})
+    assert matched.ok, matched.text
+    assert "Found 1 file" in matched.text and "plan.md" in matched.text
+
+
 async def test_a_search_for_raphaels_database_by_name_is_made_and_finds_none_of_its_data(conn, home, files, monkeypatch):
     # Through the gate: the data floor reads a search's path as its place, never its pattern.
     data = home / "Raphael Data"
