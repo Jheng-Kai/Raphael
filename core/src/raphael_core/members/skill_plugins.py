@@ -546,14 +546,14 @@ class PluginSets:
             if name.casefold() not in taken:
                 left.append(part)
                 continue
-            message, package = taken_by(self.conn, SHARED, name)
+            error, package = taken_by(self.conn, SHARED, name, manifest["name"])
             if previous:
-                raise MemberError("taken", message)
-            refused = refused or message
+                raise error
+            refused = refused or error
             skipped.append({"name": name, "held_by": package})
             gone.append(part)
         if not left and refused:
-            raise MemberError("taken", refused)
+            raise refused
         if skipped:
             files = without_skipped(files, parts, gone)
             parts = left

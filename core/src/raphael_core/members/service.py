@@ -1067,7 +1067,7 @@ class MembersService:
         return key, ids, plugin, skipped
 
     async def _packages_update(self, params):
-        self._package_fields(params, ("key", "enabled", "access", "skill", "refresh"))
+        self._package_fields(params, ("key", "enabled", "access", "skill", "refresh", "rename"))
         key = params.get("key")
         revision = self.capabilities.skill_revision()
         try:
@@ -1082,6 +1082,10 @@ class MembersService:
             raise invalid_params("refresh must be true")
         if "access" in params:
             self._cap(self.packages.validate_access, params["access"])
+        rename = params.get("rename")
+        if "rename" in params and (not isinstance(rename, dict) or set(rename) != {"id", "name"} or type(rename["id"]) is not int
+                                   or not isinstance(rename["name"], str)):
+            raise invalid_params("give the skill to rename and its new name")
         skill = params.get("skill")
         if "skill" in params:
             if (not isinstance(skill, dict) or set(skill) != {"id", "enabled"} or type(skill["id"]) is not int
@@ -1091,6 +1095,8 @@ class MembersService:
             if revision != self.capabilities.skill_revision():
                 raise MemberError("not_found", "the skill library changed during update")
             changes = {"access": params.get("access"), "enabled": params.get("enabled"), "skill": skill}
+            if rename:
+                self.packages.rename_skill(key, rename["id"], rename["name"])
             if params.get("refresh"):
                 if not package["updatable"]:
                     raise MemberError("source", "this package has no available update source")
@@ -1098,7 +1104,7 @@ class MembersService:
                 if key.startswith("set:"):
                     await self.capabilities.import_plugin(set_id=int(key[4:]), required_skill=required, **changes)
                 else:
-                    data = await self._package_documents({"source": package["source"]})
+                    data = await self._refresh_documents(key, package)
                     if revision != self.capabilities.skill_revision():
                         raise MemberError("not_found", "the skill library changed during refresh")
                     await self.packages.install(-1, *data, key=key, required_skill=required, **changes)
@@ -1112,6 +1118,16 @@ class MembersService:
         self._changed("members.skills.changed", 0)
         self._changed()
         return {"package": await self.packages.view_async(key)}
+
+    async def _refresh_documents(self, key, package):
+        """What a package is made again from: its source, or for a group (skills joined one by one) each skill's own."""
+        if self._conn.execute("SELECT origin FROM skill_packages WHERE key=?", (key,)).fetchone()["origin"] != "group":
+            return await self._package_documents({"source": package["source"]})
+        documents = []
+        for source in dict.fromkeys(row["source"] for row in self._conn.execute(
+                "SELECT source FROM member_skills WHERE package_key=? ORDER BY id", (key,))):
+            documents += (await self._package_documents({"source": source}))[0]
+        return documents, package["source"], "group", package["name"]
 
     async def _packages_delete(self, params):
         self._package_fields(params, ("key", "skill"))
