@@ -1,4 +1,4 @@
-"""A native CLI brain starts in the project chosen for its member (R-CLI-PROJECT-01), as Claude Code starts in the folder it is
+"""A native CLI brain starts in the project chosen for its member (R-CLI-13), as Claude Code starts in the folder it is
 given and so names it as its own working directory. Its private state stays in its private workspace, and nothing is written in
 the project."""
 
