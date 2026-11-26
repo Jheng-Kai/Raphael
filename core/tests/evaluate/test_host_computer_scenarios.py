@@ -205,7 +205,8 @@ async def test_installing_a_package_on_chrome_suggests_the_vm_and_waits_for_the_
             definitions = {tool["function"]["name"] for tool in kwargs["tools"]}
             offers.append(definitions)
             if "computer__vm_exec" in definitions:
-                assert "computer__suggest_computer" not in definitions
+                assert "this PC" in next(tool["function"]["description"] for tool in kwargs["tools"]
+                                         if tool["function"]["name"] == "computer__suggest_computer")
                 assert "The owner switched this member to the virtual machine" in str(kwargs["messages"])
                 assert question in str(kwargs["messages"])
                 self.turns = iter([("I can continue in the virtual machine.", [])])
@@ -266,7 +267,7 @@ async def test_a_member_on_the_vm_suggests_this_pc_and_waits_for_the_owner(tmp_p
             definitions = {tool["function"]["name"]: tool["function"] for tool in kwargs["tools"]}
             offers.append(set(definitions))
             if "computer__vm_exec" not in definitions:
-                assert "The owner switched this member back to this computer's Raphael Chrome" in str(kwargs["messages"])
+                assert "The owner switched this member back to this computer" in str(kwargs["messages"])
                 assert question in str(kwargs["messages"])
                 self.turns = iter([("I can continue in Raphael Chrome.", [])])
             elif any(message["role"] == "tool" for message in kwargs["messages"]):
