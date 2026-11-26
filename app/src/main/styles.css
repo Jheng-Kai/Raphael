@@ -3,6 +3,11 @@
 
 @import "../assets/fonts/inter.css";
 
+/* The widths a pointer drags (live-size.ts). Not inherited: a write restyles the elements that read it and nothing beneath them, where a
+   property inherited from the root would style the whole window again for each move. Unset, the stylesheet's own widths below apply. */
+@property --side-live { syntax: "*"; inherits: false; }
+@property --panel-live { syntax: "*"; inherits: false; }
+
 /* ---------- tokens ---------- */
 :root {
   --card-primary: #ffffff; --card-primary-ink: #171717; --card-primary-edge: #d6d6d6;
@@ -199,7 +204,7 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 
 /* ---------- window: sidebar and content ---------- */
 .window-chrome { position: fixed; inset: 0 0 auto; z-index: 150; display: flex; height: var(--window-controls-height); background: var(--content); user-select: none; }
-:root[data-window-layout="main"] .window-chrome { left: var(--sidebar-width); border-top-left-radius: var(--r-lg); border-top: 0; border-left: 0; }
+:root[data-window-layout="main"] .window-chrome { left: var(--side-live, var(--sidebar-width)); border-top-left-radius: var(--r-lg); border-top: 0; border-left: 0; }
 :root[data-window-modal="true"] .window-chrome { background: transparent; border-color: transparent; }
 /* Over the conversations the caption buttons are drawn into the window itself, with no
    strip of their own; the right panel reaches the window's top under them, and the columns below keep their room. */
@@ -256,7 +261,7 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 :root[data-window-maximized="true"] .window-resize { display: none; }
 /* macOS resizes the window by its own edges (tao has no resize drag there): the strips would only take the clicks at the edges. */
 :root[data-platform="macos"] .window-resize { display: none; }
-.wbody { display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr); height: 100%; min-height: 0; }
+.wbody { display: grid; grid-template-columns: var(--side-live, var(--sidebar-width)) minmax(0, 1fr); height: 100%; min-height: 0; }
 
 .side { display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-2) var(--sp-2) var(--sp-3); min-height: 0; overflow-x: hidden; overflow-y: auto; }
 .app-icon { display: block; width: 40px; height: 40px; flex: none; object-fit: contain; object-position: center; border-radius: 0; background: transparent; user-select: none; }
