@@ -105,6 +105,9 @@ DEFAULTS: dict[str, Any] = {
     "computer_vm_idle_minutes": 15,
     # The most one background task may spend, in US$.
     "worker_cost_cap_usd": 0.20,
+    # How many places the sub-workers a member starts (`delegate_task`) may fill at once: a worker on an API model takes one,
+    # one on a subscription CLI two, since that is a program of its own of a few hundred megabytes (agent/delegate.py).
+    "delegate_parallel": 4,
     # The models the user starred in the pickers, per role (the page's names for them), in the order
     # they were added. The page shows the ones the catalog still has at the top of its list; the
     # others stay here, in case the catalog gets them back.
@@ -198,6 +201,8 @@ _OPTIONAL_AMOUNTS = ("monthly_limit_usd",)
 
 def _allowed(key: str, value: Any) -> Any:
     """`value`, or ValueError if the key has a list of choices and `value` is not on it."""
+    if key == "delegate_parallel" and not 1 <= value <= 64:
+        raise ValueError("Sub-workers at once must be between 1 and 64")
     if key == "worker_cost_cap_usd" and (not 0 < value < float("inf")):
         raise ValueError("Task cost must be a positive finite number")
     if key == "routine_webhook_port" and not 0 <= value <= 65535:

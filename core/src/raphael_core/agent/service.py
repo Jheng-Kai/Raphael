@@ -212,6 +212,8 @@ from .harness_tools import (
 from ..own_calendar import CalendarError, OwnCalendar, means_own_calendar
 from .team_admin import DEFINITIONS as ADMIN_TOOLS, ADMIN_CARD_TOOLS, CONFIRM_TOOLS, LEADERSHIP, BATCH_TOOLS, STAGED_TOOLS, TEAM_READS
 from .local import extract_target, match_command
+from . import delegate as delegation
+from .delegate import DELEGATE_TASK
 from .opening import Opening, clean_target, match_settings, parse_domain, validate_url
 from .whose_computer import MEMBER, whose_computer
 from .persona import (
@@ -5063,7 +5065,7 @@ class AgentService:
         team = self._team
         if team is None or name not in TEAM_TOOLS:
             return ToolResult(name, False, None, "blocked", instruction="This team tool is unavailable here. Answer with the information already available or tell the owner what is missing.")
-        if name not in (*SKILL_TOOLS, "handoff", "work_status", "stop_work", *ROOM_TOOLS) and not speaker.may_ask:
+        if name not in (*SKILL_TOOLS, "handoff", "work_status", "stop_work", DELEGATE_TASK, *ROOM_TOOLS) and not speaker.may_ask:
             return ToolResult(name, False, None, "blocked", instruction="This consultation chain is at its depth limit. Answer with what you have and name what is missing; do not ask another colleague in this chain.")
         current = self._speaker(speaker.id)
         if name in (CREATE_MEMBER, "room_meeting") and (current is None or speaker.depth):
@@ -5078,6 +5080,14 @@ class AgentService:
             if self._background is None:
                 return ToolResult(name, False, None, "unavailable")
             return await self._background.stop_own_work(speaker, dict(arguments), source_turn_id=source_turn_id)
+        if name == DELEGATE_TASK:
+            # Sub-workers of the member's own, whose results come back in this very turn (agent/delegate.py). What the member
+            # was asked by another assistant is no work of its own to split.
+            if speaker.depth:
+                return ToolResult(name, False, None, "nested", instruction=delegation.refusal("nested"))
+            if self._background is None:
+                return ToolResult(name, False, None, "worker_disabled", instruction=delegation.refusal("worker_disabled"))
+            return await self._background.delegate(speaker, dict(arguments), source_turn_id=source_turn_id, language=language)
         if name == "handoff":
             if self._background is None:
                 return handoff_refused("worker_disabled")
@@ -6654,6 +6664,7 @@ class AgentService:
             questions = {turn: [{**item, "created_at_ms": asked_at[item["id"]]} if item["id"] in asked_at else item for item in items]
                          for turn, items in questions.items()}
         handoffs_by_turn = self._background.handoff_views_for_turns(ids)
+        delegates_by_turn = getattr(self._background, "delegate_views_for_turns", lambda turn_ids: {})(ids)
         # An owner's message edited after it was answered: the turn is its newest version, of these many.
         edited = self._history.version_counts(ids)
         work_ids = {int(turn.session_id.removeprefix("handoff:")) for turn in turns
@@ -6711,6 +6722,7 @@ class AgentService:
                     "steps": turn_steps,
                     "task": task,
                     **({"handoffs": handoffs} if handoffs else {}),
+                    **({"delegates": delegates_by_turn[turn.id]} if delegates_by_turn.get(turn.id) else {}),
                     **({"connectors": shown} if shown else {}),
                     **({"resumed_apps": [card["app"] for card in waited]} if waited else {}),
                     **({"resumed_app_names": [card["name"] for card in waited]} if waited else {}),

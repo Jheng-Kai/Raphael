@@ -33,6 +33,10 @@
       "scenario_ids": ["S08.completion"],
       "expected_assertions": ["production_state"]
     },
+    "raphael/core/delegate_task": {
+      "scenario_ids": ["S08.completion"],
+      "expected_assertions": ["production_state"]
+    },
     "raphael/core/approve": {
       "scenario_ids": [
         "S21.settings-quick.approve"

@@ -6863,6 +6863,34 @@ export function checkRendered(name, context = {}) {
     require(document.querySelector('[data-handoff-group] .event-state')?.textContent === "進行中", "the exchanges' line shows the one state of the unfinished exchange (R-UI-72)");
     return { check: name, lines };
   }
+  if (name.startsWith("delegate-")) {
+    // The sub-workers a member started are one centred line with one quiet state, like the exchanges with colleagues (R-DELEGATE-03).
+    const group = [...document.querySelectorAll('[data-delegate-group]')].filter(visible);
+    require(group.length === 1 && group[0].matches('details.handoff-event'), "the sub-workers are one line of the turn");
+    const line = group[0].querySelector('summary .event-line'), box = line.getBoundingClientRect(), column = line.closest('.ra-col').getBoundingClientRect();
+    require(Math.abs(box.left + box.width / 2 - column.left - column.width / 2) < 2, "the line is centred");
+    require(box.left >= column.left - 1 && box.right <= column.right + 1, "the line stays inside the conversation column");
+    const count = name === "delegate-done" ? 3 : 4;
+    require(line.textContent.includes(`${count} 個子工作者`), `the line counts the sub-workers (${line.textContent})`);
+    const state = line.querySelector('.event-state')?.textContent ?? "";
+    require(name === "delegate-done" ? state === "" : state === "等待你回答", `the one quiet state (${state})`);
+    const rows = [...group[0].querySelectorAll('.delegate-child')];
+    require(rows.length === count, `a row for each sub-worker (${rows.length})`);
+    if (name === "delegate-running") {
+      require(group[0].open && rows.every(visible), "pressing the line opens its rows");
+      for (const row of rows) {
+        const frame = row.getBoundingClientRect(), pane = group[0].querySelector('.handoff-detail').getBoundingClientRect();
+        require(frame.left >= pane.left - 1 && frame.right <= pane.right + 1, "a row stays inside its panel");
+      }
+      require(rows[0].textContent.includes("Codex CLI") && rows[0].textContent.includes("已完成") && rows[0].querySelector('.delegate-result'), "a finished one names its model, its state and what it says");
+      require(rows[1].textContent.includes("sample-model") && rows[1].textContent.includes("1 個步驟") && rows[1].textContent.includes("執行中"), "a running one names its model, its step and that it runs");
+      require(rows[2].textContent.includes("已排隊") && !rows[2].querySelector('.delegate-result'), "one that waits for a place says so");
+      require(rows[3].textContent.includes("等待你回答"), "one that waits for the owner's yes says so");
+    } else {
+      require(!group[0].open, "finished sub-workers stay folded");
+    }
+    return { check: name, words: line.textContent, rows: rows.length };
+  }
   if (name.startsWith("handoff-group")) {
     const groups = [...document.querySelectorAll('[data-handoff-group]')].filter(visible);
     require(groups.length === (name === "handoff-group-room" ? 3 : 1), "only consecutive exchanges fold together");

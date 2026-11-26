@@ -64,8 +64,8 @@ from ..agent.gate import ATTACHMENT_TOOLS, MEMORY_READ_TOOLS, WEB_TOOLS
 from ..agent.plugins import Offer, PluginHub, PluginTool, make_offer
 from ..agent.policy import Tier
 from ..agent.speaker import RAPHAEL, Speaker
-from ..agent.team import STOP_WORK, TEAM_TIER, TEAM_TOOLS, team_tool, worker_definition
-from ..agent.harness_tools import CALENDAR_TOOLS, REMOVE_KEY, DEFINITIONS as HARNESS_DEFINITIONS, definitions_for, tool as harness_tool
+from ..agent.team import FOUND_TEAM_TOOLS, TEAM_TIER, TEAM_TOOLS, team_tool, worker_definition
+from ..agent.harness_tools import CALENDAR_LIST, CALENDAR_TOOLS, REMOVE_KEY, DEFINITIONS as HARNESS_DEFINITIONS, definitions_for, tool as harness_tool
 from ..memory.growth import DEFINITIONS as MEMORY_DEFINITIONS
 from ..agent.owner_questions import BACKGROUND_TOOLS
 from ..agent.harness_tools import ROUTINE_TOOLS
@@ -148,7 +148,7 @@ _DEFINITIONS: dict[str, dict[str, Any]] = {
     FIND_TOOLS: {
         "description": (
             "Find a tool that is not in your list, by what it should do or by its name (for example: "
-            "search pages, delete a folder, set the volume). Returns each match's name, description and "
+            "search pages, start sub-workers, set the volume). Returns each match's name, description and "
             "input schema; call it with use_tool. Every member has the same management tools in the "
             "owner's private chat, subject to owner approvals."
         ),
@@ -448,6 +448,7 @@ def take_snapshot(
     background_management: bool = False,
     routine: bool = False,
     owner_screen: bool = False,
+    child: bool = False,
 ) -> Snapshot:
     """The tools a task starting now may use. What is listed follows the member and the kind of work,
     never the request (decision 2, above): with `memory`, the memory's tools that read too (the
@@ -462,7 +463,8 @@ def take_snapshot(
     they are not offered, whatever the task or the speaker. `owner_screen` is true for a quick question and only for it:
     the commands for this computer and the run on the owner's desktop (`computer`) are offered to no other turn, task or
     routine, and what those show on a screen the member's own computer shows. The hidden local commands
-    (`computer.local_tools`) are every turn's and task's."""
+    (`computer.local_tools`) are every turn's and task's. A sub-worker a member started (`child`, `agent.delegate`) has the
+    member's tools without the ones that speak to the owner, start work, write memory or manage members."""
     from ..computer.suggestions import SUGGEST_COMPUTER_KEY
 
     def tool_allowed(key):
@@ -494,21 +496,24 @@ def take_snapshot(
             # The management catalog offers member_create to every owner-private chat.
             # Its legacy team alias must not consume a second native tool slot.
             continue
-        if name == STOP_WORK:
-            # Found, not listed: the default prompt is held to a size budget (R-STOP-02), and a member stops its work seldom.
+        if name in FOUND_TEAM_TOOLS:
+            # Found, not listed: the default prompt is held to a size budget (R-STOP-02, R-DELEGATE-01), and a member uses these seldom.
             snapshot.work[name] = {key: value for key, value in worker_definition(name)["function"].items() if key != "name"}
         elif name in TEAM_TOOLS:
             snapshot.refs[name] = ToolRef(BUILTIN, name, BUILTIN_SERVER, name, TEAM_TIER)
             snapshot.definitions.append(worker_definition(name))
     # What every path has, a task that runs by itself too: the owner's daily routine adds what it finds to today.
-    everywhere = ("self_check", "raphael_help", *CALENDAR_TOOLS, "connections_list",
-                  *((*sorted(BACKGROUND_TOOLS), *sorted(ROUTINE_TOOLS)) if not interactive else ()))
+    # A sub-worker (`child`, R-DELEGATE-02) has the calendar to read and no card, routine, memory or team tool: it never speaks to
+    # the owner by itself and never starts work of its own.
+    everywhere = ((CALENDAR_LIST,) if child else
+                  ("self_check", "raphael_help", *CALENDAR_TOOLS, "connections_list",
+                   *((*sorted(BACKGROUND_TOOLS), *sorted(ROUTINE_TOOLS)) if not interactive else ())))
     for name in everywhere:
         native(name, HARNESS_DEFINITIONS[name])
     # Work that runs by itself reads the team as its member does in the conversation (`team_overview`, `team_work`: reads
     # only, T0): a routine's run lists them, as a conversation does, because its instructions name them (a health check
     # called them and got `unknown_tool`, four times); other background work finds them.
-    for name in () if interactive else sorted(TEAM_READS):
+    for name in () if interactive or child else sorted(TEAM_READS):
         if routine:
             own(name, harness_tool(name).tier, HARNESS_DEFINITIONS[name])
         else:

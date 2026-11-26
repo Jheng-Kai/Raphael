@@ -348,6 +348,8 @@ class TaskRun:
         self.succeeded: set[str] = set()
         # The tools of connected apps whose calls went through and changed something (a page written, a draft saved).
         self.written: set[str] = set()
+        # The files the task wrote with the file tools, in the order it first did (a sub-worker's result names them).
+        self.files_changed: list[str] = []
         # A connected app's call (tool, arguments) -> the digest of the error it last failed with and how many times in a row.
         self._failed_calls: dict[tuple[str, str], tuple[str, int]] = {}
         self._failures_told: dict[tuple[str, str], str] = {}
@@ -829,6 +831,7 @@ class TaskRun:
             reply, outcome, tier, detail = await self._builtin(ref, arguments, name, call_id)
         self._note_result(ref, reply)
         self._note_action(ref, arguments, bool(reply.get("ok")))  # before the limits: the call was made
+        self._note_file(ref, arguments, bool(reply.get("ok")))
         self._check()
         if reply.get("ok") and isinstance(reply.get("content"), str):
             self.seen_urls.add_from(reply["content"])  # what it returned may be read next
@@ -932,6 +935,12 @@ class TaskRun:
             self.acted = True
             if ref.kind == MCP:
                 self.written.add(ref.name)
+
+    def _note_file(self, ref: ToolRef, arguments: dict, ok: bool) -> None:
+        """Write down the path of a file a call of the file tools wrote or edited."""
+        path = arguments.get("path") if ok and ref.name in ("write_file", "edit_file") else None
+        if isinstance(path, str) and path and path not in self.files_changed:
+            self.files_changed.append(path)
 
     def continuation_state(self):
         return {"declined": sorted(self._declined), "unanswered": sorted(self._unanswered), "seen_urls": self.seen_urls.snapshot(), "acted": self.acted,

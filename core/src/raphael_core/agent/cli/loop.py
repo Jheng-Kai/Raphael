@@ -298,7 +298,9 @@ class CliLoop:
         self.system = system + "\n" + CLI_PROGRESS_RULES + language_rule(owner_language) + f"\nUse only {mcp_names} MCP tools for actions and lookups. "
         # The model catalogue gives Codex its own sub-agent tools whatever its feature flags say (0.167: spawn_agent, followup_task);
         # asked to hand work to a colleague, a member reached for them, they refused the colleague's name and nothing was handed on.
-        self.system += "A colleague gets work only through handoff, never spawn_agent, followup_task or another sub-agent tool. "
+        # A part of the member's own job goes to delegate_task (found with find_tools), which runs under the same gate (R-DELEGATE-01).
+        self.system += ("A colleague gets work only through handoff, parts of your job through delegate_task, never "
+                        "spawn_agent, followup_task or another sub-agent tool. ")
         # When a second message is due and how it is marked is MESSAGE_RULES' (in CLI_PROGRESS_RULES above), said once.
         self.system += ("Reply in plain text (Markdown is fine). Preserve the complete answer. Never split one thought or pad to fill. "
                         "Never output a JSON reply envelope.")

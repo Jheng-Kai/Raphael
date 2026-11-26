@@ -1,5 +1,15 @@
 # Conversation
 
+## Sub-workers a member started (R-DELEGATE-01..04)
+
+A member splits a job with the team tool `delegate_task` (found with `find_tools`, never listed in the default prompt): one piece or a batch of up to eight, each a fresh task of the member with only its goal, the context the member wrote and the member's working folder, on the member's own model or one it names (`claude`, `codex`, `antigravity`, or a model reference the owner connected). It follows the owner's permission mode exactly as the member does: a call that asks is asked at the member's own card in its thread. The member's turn waits (at most 25 minutes) and reads one structured result for each (status, summary, files changed, model, tokens, cost); the owner's Stop ends every one of them. `delegate_parallel` (the owner's setting, 4 places: one for an API model, two for a subscription CLI) bounds how many run at once; the rest queue.
+
+What the owner sees (delegate-line.ts, R-DELEGATE-04) is one centred, folded line under the member's answer, 「啟動了 N 個子工作者」, with one quiet state, and under it a row for each: its goal, its model, its steps and its state, and what it said once done. It is drawn from `turn.delegates`, which the core reads from the member's own tasks (`delegate_views_for_turns`); they are not colleagues, so there is no face and no member-to-member conversation. delegate-running opens the line over one done, one running, one queued and one waiting for the owner's yes; delegate-done is three finished sub-workers, which keep the line folded and add no state words. The checks read that the line is one centred `details` line inside the conversation column, its count and its one state, the row of each sub-worker with its model, step count and state words, and that a row stays inside its panel. Core behavior (the tool, the tools a sub-worker is kept from, the places, the stop and the restart) is covered by `core/tests/background/test_delegate.py`; a real CLI or provider run of a sub-worker is not exercised offline.
+
+```powershell
+npm run look -- delegate-running delegate-done handoff-group handoff-group-done --theme both --width 1120,720,1920x1080
+```
+
 ## Owner links and unavailable skills
 
 R-SKILL-18 and R-SKILL-19 cover selected package snapshots and recoverable skill-load notices. A turn that skips a skill still answers, and its localized notice shows under the owner's message. R-LINK-02 covers the safe URL and known skill in the owner bubble and the Team skills destination. Unknown slash words stay plain.
