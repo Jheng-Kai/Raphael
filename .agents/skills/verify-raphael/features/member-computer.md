@@ -103,7 +103,7 @@ page screencast.
 
 ## Owner control in the enlarged view
 
-R-COMP-OWNER-INPUT-01, R-COMP-PREVIEW-01, R-PANEL-03 and R-NAV-04. The Computer
+R-COMP-OWNER-INPUT-02, R-COMP-PREVIEW-01, R-PANEL-03 and R-NAV-04. The Computer
 panel has an Open cover and a view-only page. In the enlarged view, Take control
 or a takeover card acquires page input. Collapse, Escape and Back fold the screen
 and release control. A takeover card stays pending until the owner chooses Done.
