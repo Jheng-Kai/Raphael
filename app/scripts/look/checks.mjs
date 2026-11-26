@@ -3912,8 +3912,8 @@ export function checkRendered(name, context = {}) {
     const listWidth = rail ? 88 : dragged ? Math.min(dragged, Math.max(240, innerWidth - 604)) : Math.min(348, innerWidth - 604);
     require(Math.abs(nav.getBoundingClientRect().width - listWidth) < 1 && Math.abs(main.getBoundingClientRect().left - listWidth) < 1, `the list keeps its width: ${nav.getBoundingClientRect().width} not ${listWidth}`);
     if (compact) require(rail && !nav.inert && !main.inert, "a narrow window shows the rail of faces, and nothing is inert");
-    const chief = column.querySelector('.mb-chief');
-    require(chief && chief.querySelector('b') && chief.querySelector('.av'), "the top member shows its face and name");
+    const chief = column.querySelector('.mb-chief'), top = chief ?? column.querySelector('.mb-row[data-member]');
+    require(!column.querySelector('[data-member]') || (top && top.querySelector('b') && top.querySelector('.av')), "the top member shows its face and name");
     if(chief)require(!document.querySelector('.mb-star'),'no member carries a star');
     if(chief&&!rail&&!chief.matches('.mb-tile'))require(Math.abs(chief.querySelector('.av').getBoundingClientRect().width-40)<1&&chief.querySelector('.mb-row-main'),'an unpinned top member is an ordinary row');
     for(const row of column.querySelectorAll('.mb-row')){
@@ -4297,6 +4297,76 @@ export function checkRendered(name, context = {}) {
       require(!issues.length, `slime ${index} (${surface.dataset.state}): ${issues.join("; ")}`);
     }
     return { check: name, surfaces: surfaces.length };
+  }
+  // ---- Raphael is apart from the slimes (R-RAPHAEL-UI-01 to R-RAPHAEL-UI-06) ----
+  if (name === "raphael-not-in-sidebar") {
+    const column = document.querySelector('.mb-col');
+    require(!column.querySelector('[data-member="0"], [data-member-more="0"], [data-member-item="0"]'), "the sidebar never lists Raphael: no row, no tile, no menu");
+    require(![...document.querySelectorAll('#nav [data-member]')].some(row => row.dataset.member === '0'), "nor does the rail of faces");
+    return { check: name, rows: column.querySelectorAll('[data-member]').length };
+  }
+  if (name === "raphael-entry") {
+    const menu = document.querySelector('#app-popover.account-menu');
+    require(visible(menu), "the account menu is open");
+    const row = menu.querySelector('[data-account="raphael"]');
+    require(visible(row), "it has Raphael's entry");
+    require(row.previousElementSibling?.matches('[role="separator"]') && row.nextElementSibling?.matches('[role="separator"]'), "Raphael stands apart, a hairline on each side");
+    require(row.previousElementSibling.previousElementSibling?.dataset.account === 'calendar' && row.nextElementSibling.nextElementSibling?.dataset.account === 'settings', "after 行事曆 and before 設定");
+    const face = row.querySelector('.ck .slime-surface');
+    require(face && face.style.getPropertyValue('--slime-color').toLowerCase() === '#3db5ff', "it wears the first blue slime");
+    require(!row.querySelector('img'), "never a picture");
+    const words = row.querySelector('.mt').textContent.trim(), others = window.__look.data.members.filter(member => member.id !== 0).map(member => member.name);
+    require(words !== "" && !others.includes(words), `it is called by Raphael's own name: ${words}`);
+    const rows = [...menu.querySelectorAll('[data-account]')].filter(item => visible(item));
+    require(rows.every(item => Math.abs(item.getBoundingClientRect().height - row.getBoundingClientRect().height) < 1), "its row is as tall as the others");
+    const left = item => item.querySelector('.ck').getBoundingClientRect().left;
+    require(rows.every(item => Math.abs(left(item) - left(row)) < 1), "its slime stands where the other rows have their icon");
+    const cell = row.querySelector('.ck').getBoundingClientRect(), box = face.parentElement.getBoundingClientRect();
+    require(box.width <= cell.width + 1 && box.height <= cell.height + 1, "and fits the icon's cell");
+    return { check: name, rows: rows.length };
+  }
+  if (name === "raphael-space") {
+    const data = window.__look.data, column = document.querySelector('.mb-col');
+    require(!column.querySelector('[aria-current="true"]'), "no row of the sidebar is the open one: Raphael is not a row");
+    require(column.querySelector('[data-member]'), "the slimes are still listed");
+    require(document.querySelector('[data-act="share-member"]').hidden, "no share button: Raphael is not shared as a template");
+    const panel = document.querySelector('.mb-det');
+    require(visible(panel), "its panel is open");
+    require(!panel.querySelector('.mb-face-edit, .mb-face-pencil, [data-det="avatar"]') && !panel.querySelector('.mb-panel-identity small'), "its face and name are shown, with nothing to change and no role");
+    const face = panel.querySelector('.mb-panel-identity > .av .slime-surface');
+    require(face && face.style.getPropertyValue('--slime-color').toLowerCase() === '#3db5ff' && !panel.querySelector('.mb-panel-identity img'), "its face is the first blue slime");
+    const slot = panel.querySelector('[data-slot="conversations"]');
+    require(visible(slot), "its panel lists its conversations");
+    const quick = data.conversations.filter(item => item.member_id === 0 && item.kind === 'quick');
+    require(quick.length > 0 && quick.every(item => visible(slot.querySelector(`[data-conversation-open="${item.id}"]`))), "its quick questions are in that list");
+    require(data.conversations.filter(item => item.kind === 'quick').every(item => item.member_id === 0), "and only Raphael's");
+    require(!document.querySelector('.mb-pill .slime-crown'), "it wears no crown");
+    return { check: name, quick: quick.length };
+  }
+  if (name === "chief-space") {
+    const data = window.__look.data, id = data.primaryId, column = document.querySelector('.mb-col');
+    require(id != null && data.members.find(member => member.id === id), "the fixture has a chief slime");
+    const row = column.querySelector(`.mb-chief[data-member="${id}"]`);
+    require(row?.getAttribute('aria-current') === 'true' && column.querySelector('[aria-current="true"]') === row, "the chief's row is the open one");
+    require(row.querySelector('.slime-crown'), "it wears the crown");
+    require([...column.querySelectorAll('.mb-row[data-member] .slime-surface')].filter(surface => surface.querySelector('.slime-crown')).length === 1, "and no other row does");
+    require(!document.querySelector('[data-act="share-member"]').hidden, "it can be shared as a template, like every slime");
+    const panel = document.querySelector('.mb-det');
+    require(visible(panel) && panel.querySelector('.mb-face-edit'), "its panel has a face to change, like every slime's");
+    require(!panel.querySelector('[data-slot="conversations"]'), "and no list of quick questions: the quick ask is Raphael's");
+    require(!document.querySelector('.conversation-caption:not([hidden])'), "its conversation is the one conversation");
+    return { check: name, chief: id };
+  }
+  if (name === "no-slimes" || name === "no-chief") {
+    const data = window.__look.data, column = document.querySelector('.mb-col');
+    require(data.primaryId === null, "the roster names no chief");
+    require(!column.querySelector('.mb-chief, .slime-crown') && !document.querySelector('.slime-crown'), "no row leads and nothing wears a crown");
+    require(!column.querySelector('[data-member="0"]') && !column.querySelector('[aria-current="true"]'), "Raphael's conversation is open and is no row");
+    require(visible(document.querySelector('.page-agent .composer')) && visible(document.querySelector('.conversation-trigger')), "the conversation and its composer are on screen");
+    require(visible(document.querySelector('[data-col="add"]')), "the sidebar keeps its plus for a new member (in the foot on the rail)");
+    const rows = column.querySelectorAll('.mb-row[data-member]').length;
+    require(name === "no-slimes" ? rows === 0 : rows > 0, name === "no-slimes" ? "the list is empty" : "the slimes are listed");
+    return { check: name, rows };
   }
   if (name === "chief-crown") {
     // The chief's faces (the chief slime's, or the first slime the guide is making) wear the one crown on their head, and nobody else's face wears one.
