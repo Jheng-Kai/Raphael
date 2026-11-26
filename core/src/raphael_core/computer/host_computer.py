@@ -35,7 +35,7 @@ VIEWPORT_TOOLS = {
     "click": ("Click at x,y from the shown tab's screenshot.", "x y button count modifier", "x y"),
     "double_click": ("Double-click at x,y from the shown tab's screenshot.", "x y", "x y"),
     "type_text": ("Type into the page's focused field. Leave credentials, codes and payment to the owner.", "text", "text"),
-    "press_key": ("Press a page key, optionally with modifiers.", "key modifiers", "key"),
+    "press_key": ("Press a named page key or a chord (Enter, Tab, arrows, Ctrl+A, Alt+Left to go back); use type_text for letters and digits.", "key modifiers", "key"),
     "scroll": ("Scroll the page at x,y from the screenshot.", "x y direction amount by", "x y direction"),
 }
 PAGE_ACTIONS = {"browser_click", "browser_type", "browser_select"}
@@ -82,6 +82,7 @@ WORDS = {
     "browser_tab_busy": "Another turn or task is using this tab. Try it again shortly or use another tab from browser_tabs.",
     "browser_page_changed": "The page changed after the last read. Read it again for current controls.",
     "browser_action_refused": "Chrome could not perform this action on the selected page element.",
+    "browser_key_is_text": "press_key does not type letters or digits, with or without Shift. Use type_text with the text, capitals included.",
     "browser_field_refused": "Chrome could not type into or select a value in that field.",
     "browser_dialog_changed": "The dialog changed. Use browser_dialog with action inspect for the current one.",
     "browser_dialog_text": "prompt_text only answers a prompt dialog that is being accepted.",

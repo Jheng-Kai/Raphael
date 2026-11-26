@@ -2459,3 +2459,10 @@ answers, and that a paste lands); `npm run verify -- --computer` with Docker run
 the guest's programs, so only a real run shows what the driver's clipboard does).
 
 A computer that cannot start for its setup (R-SETUP-01): self_check's `setup.computer` says `docker_missing` (with Docker Desktop's download page), `docker_stopped`, `running` or a remote host `unreachable`, read without starting anything; raphael_help says how a member helps the owner install or open Docker Desktop in the conversation, and each engine failure (`absent`, `image_missing`, `pull_failed`, `build_failed`, `local_capacity`, `incompatible`, `start_failed`) tells the member what to do. Nothing is drawn over the screen. Core-only: `core/tests/test_setup_facts.py`.
+
+## Host browser keys
+
+R-COMP-HOST-08. press_key on Raphael Chrome refuses letters and digits (also with Shift) with
+words that point to type_text, delivers Shift with Tab and arrows, and moves Alt+Left and
+Alt+Right through the tab's own history. Offline fakes and one native Chrome test
+cover it; no screen shows it.

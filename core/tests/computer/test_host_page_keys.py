@@ -1,12 +1,14 @@
 """press_key on Raphael Chrome (#342): a refused chord says why and what to use, Shift with a key that types no text is
 delivered with Shift down, and Alt+Left / Alt+Right go back and forward in the member's own tab through Chrome's history."""
 
+import asyncio
+import os
 from types import SimpleNamespace
 
 import pytest
 
 from raphael_core.computer import host_page
-from raphael_core.computer.host_browser import BrowserError, HostBrowser, Tab
+from raphael_core.computer.host_browser import BrowserError, HostBrowser, Tab, chrome_executable
 from raphael_core.computer.host_computer import WORDS, HostComputerTools
 
 
@@ -88,3 +90,27 @@ def test_press_key_says_what_it_is_not_for():
     from raphael_core.computer.host_computer import VIEWPORT_TOOLS
 
     assert "type_text" in VIEWPORT_TOOLS["press_key"][0]
+
+
+@pytest.mark.skipif(chrome_executable() is None or bool(os.environ.get("CI")), reason="Google Chrome is unavailable or this is CI")
+async def test_native_chrome_alt_arrows_go_back_and_forward(tmp_path):
+    from .test_host_computer import serve
+
+    site = await asyncio.start_server(serve, "127.0.0.1", 0)
+    url = f"http://127.0.0.1:{site.sockets[0].getsockname()[1]}"
+    browser = HostBrowser(tmp_path / "browser")
+    async with site:
+        try:
+            assert await browser.start()
+            tab = await browser.new_tab(1, tmp_path)
+            assert await host_page.navigate(browser, tab, url)
+            assert await host_page.navigate(browser, tab, url + "/opener")
+            result = await press(browser, tab, "left", ["alt"])
+            assert result["status"] == "delivered"
+            location, _ = await host_page.evaluate(browser, tab, "location.pathname")
+            assert location == "/"
+            result = await press(browser, tab, "right", ["alt"])
+            location, _ = await host_page.evaluate(browser, tab, "location.pathname")
+            assert result["status"] == "delivered" and location == "/opener"
+        finally:
+            await browser.aclose()
