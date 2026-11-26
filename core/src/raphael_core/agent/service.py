@@ -167,7 +167,7 @@ from .attachment_inputs import earlier_files, text_context
 from ..worker.computer_verification import NON_ACTION_RESULTS
 from ..worker.guards import neutralize, wrap_untrusted
 from ..services.attachments import MAX_ATTACHMENTS, Attachment, AttachmentError, from_wire
-from ..services.file_reader import read_window
+from ..services.file_reader import index_refusal, read_window, window_refusal
 from ..services.video import is_video, place_videos, video_notes
 from ..services.urls import urls_in
 from ..services.urls import SeenUrls
@@ -2917,7 +2917,8 @@ class AgentService:
                     elif name == "read_attachment":
                         number = args.get("index")
                         if type(number) is not int or not 1 <= number <= len(ask.attachments) + len(earlier):
-                            return ToolOutcome(False, "bad_arguments")
+                            names = [neutralize(a.name) for a in ask.attachments] + [neutralize(f["name"]) for f in earlier]
+                            return ToolOutcome(False, "bad_arguments", instruction=index_refusal(number, names))
                         if number <= len(ask.attachments):
                             attachment = ask.attachments[number - 1]
                         else:
@@ -2929,7 +2930,7 @@ class AgentService:
                             attachment = Attachment(item["name"], item["mime"], data, item["id"])
                         window = read_window(args)
                         if window is None:
-                            return ToolOutcome(False, "bad_arguments")
+                            return ToolOutcome(False, "bad_arguments", instruction=window_refusal(args))
                         result = await self._tool(ask, self._tools.read_attachment(
                             attachment, str(args.get("question") or ask.text), ledger, number=number, **window
                         ), name)

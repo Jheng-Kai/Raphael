@@ -161,3 +161,16 @@ async def test_cli_empty_final_nudges_same_session_once_without_tools(make_rig, 
     assert task.state == ("done" if completed else "failed")
     assert task.reason == (None if completed else "missing_terminal")
     assert rig.client.chat_calls == []
+
+
+async def test_worker_exception_is_logged_with_our_frames_and_never_its_values(make_rig, monkeypatch, caplog):
+    rig = make_rig()
+    async def broken(*args):
+        raise TypeError("private-value-must-not-be-logged")
+    monkeypatch.setattr(rig.service, "_execute", broken)
+    with caplog.at_level("WARNING", logger="raphael_core.background.service"):
+        rig.submit()
+        await rig.wait_for_reports()
+    [line] = [r.getMessage() for r in caplog.records if "failed unexpectedly" in r.getMessage()]
+    assert "TypeError" in line and "background/service.py:" in line
+    assert "private-value" not in line and "private-value" not in caplog.text

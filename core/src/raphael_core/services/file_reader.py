@@ -7,7 +7,7 @@ import shutil
 import subprocess
 import tempfile
 import zipfile
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
@@ -136,25 +136,52 @@ def _shown(line: str) -> tuple[str, int, bool]:
     return f"{short[:LINE_CHARS]}… [{len(short) - LINE_CHARS} more characters]", left, True
 
 
-def read_window(arguments: dict) -> dict | None:
-    """Where in a file a `read_attachment` call asks to read: in a text file its `offset` (a line, from 1) and `limit`
-    (lines); in a video its `start` and `end` (seconds, `end` after `start`). Empty when it asks for none; None when
-    one is not valid."""
+def _window(arguments: dict) -> tuple[dict | None, str]:
+    """The window of `arguments` and "", or None and what is wrong with it, said to the model."""
     window: dict = {}
     for key in ("offset", "limit"):
         if arguments.get(key) is not None:
             if type(arguments[key]) is not int or arguments[key] < 1:
-                return None
+                return None, f"{key} must be a whole number of 1 or more (a line of a text file); leave it out to read from the start."
             window[key] = arguments[key]
     for key in ("start", "end"):
         if arguments.get(key) is not None:
             value = arguments[key]
             if type(value) not in (int, float) or value != value or value < 0 or value > 24 * 3600:
-                return None
+                return None, f"{key} must be a number of seconds from 0 to 86400 (a place in a video); leave it out to read it whole."
             window[key] = float(value)
     if "start" in window and "end" in window and window["end"] <= window["start"]:
-        return None
-    return window
+        return None, "end must be after start (both in seconds of the video)."
+    return window, ""
+
+
+def read_window(arguments: dict) -> dict | None:
+    """Where in a file a `read_attachment` call asks to read: in a text file its `offset` (a line, from 1) and `limit`
+    (lines); in a video its `start` and `end` (seconds, `end` after `start`). Empty when it asks for none; None when
+    one is not valid (`window_refusal` says what is wrong)."""
+    return _window(arguments)[0]
+
+
+def window_refusal(arguments: dict) -> str:
+    """What a `read_attachment` call with a window that is not valid is told: which part is wrong and what is valid."""
+    return _window(arguments)[1]
+
+
+def index_refusal(index: object, names: Sequence[str], *, handed_on: bool = False) -> str:
+    """What a `read_attachment` call is told when its `index` names no file: whether there are no files, the number is
+    not a whole number or is out of range, with the files it can read (`names`, in order, already neutralized).
+    `handed_on` is for a task another member handed over, whose files are not those of the member's own message."""
+    count = len(names)
+    if not count:
+        return ("This turn has no attachments, so there is nothing for read_attachment to read. Do not call it again; "
+                "say that no file reached you, or ask the owner to attach it again."
+                + (" Files attached to another member's message do not travel with a hand-off:"
+                   " ask that member to put what you need into the request." if handed_on else ""))
+    listing = "; ".join(f"{number}. {name}" for number, name in enumerate(names, 1))
+    available = f"There {'is 1 attachment' if count == 1 else f'are {count} attachments'}, numbered 1 to {count}: {listing}."
+    if type(index) is not int:
+        return f"index must be a whole number, the file's number. {available} Call read_attachment again with one of these numbers."
+    return f"No attachment has the number {index}. {available} Call read_attachment again with one of these numbers."
 
 
 def read_lines(attachment: Attachment, *, number: int | None = None, offset: int | None = None,

@@ -183,6 +183,9 @@ default, `cat -n` numbering, a line over 2000 characters cut with a note (base64
 documents and media keep their readers. Offline evidence: `core/tests/agent/test_raw_attachments.py` (API and CLI brains,
 every text type), `core/tests/agent/test_attachment_read_on.py` (a 100 KB embedded font, long lines, paging, edges, the tool
 call), the room and worker prompts in `core/tests/background/test_attachment_text.py`.
+A refused `read_attachment` (R-ATTACH-RAW-04) says which case it is, the same in a conversation and in the worker: no files in
+this turn, a number out of range with the files it can read, or a window that is not valid; evidence
+`core/tests/agent/test_attachment_refusals.py` and `core/tests/background/test_web_tools.py`.
 Not covered: a real model's use of the source, a native attach in the running app.
 
 ## A video the owner attaches is watched, not only heard (R-ATTACH-VIDEO-01..04)
