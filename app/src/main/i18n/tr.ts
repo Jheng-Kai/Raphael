@@ -38,7 +38,7 @@ export const tr = {
   "memberComputer.dockerLocation": "Sanal makine ({p0})",
   "memberComputer.idle": "Boşta",
   "memberComputer.setup": "Yalıtılmış bilgisayarı (Docker) kurmama yardım et.",
-  "memberComputer.certificate": "{p0} içinde sertifikayı seçin veya onaylayın.",
+  "memberComputer.certificate": "Ekranınızda bir {p0} penceresi açıldı. Sertifikayı orada seçin, ardından “{p1}” düğmesine basın.",
   "memberComputer.verification": "{p0} içinde doğrulama kodunu girin.",
   "conn.connecting": "Bağlanıyor…",
   "agent.thinking": "Düşünüyor…",

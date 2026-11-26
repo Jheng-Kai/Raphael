@@ -42,7 +42,7 @@ export const en = {
   "memberComputer.dockerLocation": "Virtual machine ({p0})",
   "memberComputer.idle": "Idle",
   "memberComputer.setup": "Help me set up the isolated computer (Docker).",
-  "memberComputer.certificate": "Choose or confirm the certificate in {p0}.",
+  "memberComputer.certificate": "A {p0} window opened on your screen. Choose the certificate there, then press “{p1}”.",
   "memberComputer.verification": "Enter the verification code in {p0}.",
   "account.label": "Account label",
   "account.labelHelp": "Name this account so work and personal use are easy to tell apart.",

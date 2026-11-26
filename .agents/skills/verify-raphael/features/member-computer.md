@@ -98,8 +98,8 @@ handback of the same tab, downloads and shutdown. The coordinate journey reads
 a page from the previous turn, checks a 1280×900 screenshot and acts on a control
 that is replaced every animation frame. The production-turn scenario reuses the
 owner's tab after listing it. The owner checks actual Google
-sign-in. Native Chrome and OS prompts, including certificate pickers, sit outside the
-page screencast.
+sign-in. Native Chrome and OS prompts sit outside the page screencast; a certificate picker is
+reached by showing Chrome (see "A page that asks for a certificate").
 
 ## Owner control in the enlarged view
 
@@ -2475,3 +2475,24 @@ cover it; no screen shows it.
 R-COMP-HOST-09. The words a member reads about the Computer panel never replace an answer: the
 reply carries it, and the panel shows a page only when the owner asked to see one. Offline
 text tests and the host Computer scenario cover it; no screen shows it.
+
+## A page that asks for a certificate
+
+R-COMP-CERT-01. Chrome's certificate chooser needs a window, so a certificate step starts Raphael's
+Chrome once more where the owner sees it, keeps every member's tab (same identity, set up and opened
+again, session cookies carried), and leaves that Chrome running with its window out of the way once
+the owner presses Done. It is the background Chrome again only when Chrome starts anew. Core:
+`tests/computer/test_host_certificate.py` (the decision, the rebinding with two members' tabs on the
+Mac and Windows branches, the failure and busy-tab cases, and one native Chrome test that runs on this
+Windows PC: hidden desktop, then a window on the owner's own desktop, then out of the way, then hidden
+again at the next start). App: `computer-card.test.ts`, `desktop-timeline.test.ts`.
+
+```powershell
+npm run look -- desktop-host-certificate-card desktop-host-certificate --theme both --width 1120,720,1920x1080
+```
+
+The card and the larger view say that a Chrome window opened on the screen and name the Done button
+(`memberComputer.certificate`, all fifteen languages; `--locale` shows one). Not proved offline: the
+chooser itself, the window on a Mac's screen and its minimized state (does a minimized Chrome keep
+painting the tabs the Computer view streams), the Windows window coming to the front, and a real site
+that requires a certificate; they need a Mac and such a site.

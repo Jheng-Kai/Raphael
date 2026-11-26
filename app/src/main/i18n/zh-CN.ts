@@ -38,7 +38,7 @@ export const zhCN = {
   "memberComputer.dockerLocation": "虚拟机（{p0}）",
   "memberComputer.idle": "待命",
   "memberComputer.setup": "请帮我设置隔离电脑（Docker）。",
-  "memberComputer.certificate": "请在 {p0} 选择或确认凭证。",
+  "memberComputer.certificate": "屏幕上打开了一个 {p0} 窗口，请在那里选择证书，然后点击“{p1}”。",
   "memberComputer.verification": "请在 {p0} 输入验证码。",
   "conn.connecting": "连接中…",
   "agent.thinking": "思考中…",

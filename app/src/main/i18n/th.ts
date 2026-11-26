@@ -38,7 +38,7 @@ export const th = {
   "memberComputer.dockerLocation": "เครื่องเสมือน ({p0})",
   "memberComputer.idle": "รอทำงาน",
   "memberComputer.setup": "ช่วยตั้งค่าคอมพิวเตอร์แยก (Docker) ให้ฉันหน่อย",
-  "memberComputer.certificate": "เลือกหรือยืนยันใบรับรองใน {p0}",
+  "memberComputer.certificate": "หน้าต่าง {p0} เปิดขึ้นบนหน้าจอของคุณแล้ว เลือกใบรับรองในหน้าต่างนั้น แล้วกด “{p1}”",
   "memberComputer.verification": "ป้อนรหัสยืนยันใน {p0}",
   "conn.connecting": "กำลังเชื่อมต่อ…",
   "agent.thinking": "กำลังคิด…",

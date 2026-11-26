@@ -20,7 +20,7 @@ export interface DesktopWork {
 export function desktopWorkText(work: DesktopWork): string {
   if (work.state === "waiting_control") {
     if (work.detail) return work.detail;
-    if (work.reason === "certificate") return t("memberComputer.certificate", { p0: "Chrome" });
+    if (work.reason === "certificate") return t("memberComputer.certificate", { p0: "Chrome", p1: t("desktop.done") });
     const reasons = { sign_in: "desktop.need.sign_in", password: "desktop.need.password", two_factor: "desktop.need.two_factor",
       captcha: "desktop.need.captcha", payment: "desktop.need.payment", other: "desktop.need.other" } as const;
     return t(reasons[work.reason || "other"]);

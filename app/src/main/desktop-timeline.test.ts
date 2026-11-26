@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, expect, test } from "vitest";
-import { mountDesktopTimeline, type DesktopWork } from "./desktop-timeline";
+import { desktopWorkText, mountDesktopTimeline, type DesktopWork } from "./desktop-timeline";
 import { setLocale } from "./i18n";
 afterEach(()=>document.body.replaceChildren());
 test('a member working at its computer adds nothing to the conversation, and only a handoff the owner must act on is drawn',()=>{
@@ -32,3 +32,11 @@ test.each(['returning', 'running', 'done', 'stopped', 'expired', 'absent'] as co
     expect(document.body.textContent).toBe('');
   },
 );
+
+test('the Computer view says a Chrome window opened for the certificate, and names the button that ends the step (#345)', () => {
+  const work: DesktopWork = {id: 'work', request_id: 'nonce', turn_id: 42, state: 'waiting_control', reason: 'certificate', tool: 'get_browser_state'};
+  setLocale('en');
+  expect(desktopWorkText(work)).toBe('A Chrome window opened on your screen. Choose the certificate there, then press “I'm done”.');
+  setLocale('zh-TW');
+  expect(desktopWorkText(work)).toBe('螢幕上開了一個 Chrome 視窗，請在那裡選擇憑證，再按「我完成了」。');
+});

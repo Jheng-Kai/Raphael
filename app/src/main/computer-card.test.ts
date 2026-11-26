@@ -29,7 +29,10 @@ describe("a computer card", () => {
     expect(html).toContain("data-card-screen");
     setLocale("en");
     expect(visible(computerCardHTML(card({ browser: true, reason: "certificate" }))))
-      .toContain("Choose or confirm the certificate in Google Chrome.");
+      .toContain("A Google Chrome window opened on your screen. Choose the certificate there, then press “I'm done”.");
+    setLocale("zh-TW");
+    expect(visible(computerCardHTML(card({ browser: true, reason: "certificate" }))))
+      .toContain("螢幕上開了一個 Google Chrome 視窗，請在那裡選擇憑證，再按「我完成了」。");
   });
 
   test("names the window to use, says the computer is the owner's and offers 接手 and 我完成了, its × skipping", () => {

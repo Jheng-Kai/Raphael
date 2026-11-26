@@ -5207,6 +5207,18 @@ export function checkRendered(name, context = {}) {
     require(calls.filter(call => call.command === 'plugin:window|start_dragging').length === before.drags + 1, 'the title bar received the outside press');
     return {check:name};
   }
+  if (name === "desktop-host-certificate") {
+    // Chrome's own chooser needs a window, which Raphael's Chrome opens on the owner's screen for this step (#345): the words
+    // say so and name the button, on the card and in the larger view. They are the only words of the step.
+    const request = [...document.querySelectorAll('[data-computer-card] .card-body, .desktop-request, [data-desktop-request]')].filter(visible);
+    require(request.length, 'the certificate step shows its words');
+    for (const node of request) {
+      const text = node.textContent.replace(/\s+/g, ' ').trim();
+      if (document.documentElement.lang === "zh-TW") require(/視窗/.test(text) && /選擇憑證/.test(text) && /「我完成了」/.test(text) && !/選擇或確認/.test(text), `the words say a Chrome window opened and name Done: ${text}`);
+      else require(text && !text.includes("{p"), `the words are whole: ${text}`);
+    }
+    return {check: name, words: request.map(node => node.textContent.trim())};
+  }
   if (name === "desktop-host-frame" || name === "desktop-host-card-frame") {
     const card = name === "desktop-host-card-frame";
     const frame = document.querySelector('.desktop-screen[data-host-browser] iframe[src*="transport=host"]:not([hidden])');

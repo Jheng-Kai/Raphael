@@ -38,7 +38,7 @@ export const vi = {
   "memberComputer.dockerLocation": "Máy ảo ({p0})",
   "memberComputer.idle": "Đang chờ",
   "memberComputer.setup": "Hãy giúp tôi thiết lập máy tính cách ly (Docker).",
-  "memberComputer.certificate": "Chọn hoặc xác nhận chứng chỉ trong {p0}.",
+  "memberComputer.certificate": "Một cửa sổ {p0} đã mở trên màn hình của bạn. Hãy chọn chứng chỉ ở đó, rồi nhấn “{p1}”.",
   "memberComputer.verification": "Nhập mã xác minh trong {p0}.",
   "conn.connecting": "Đang kết nối…",
   "agent.thinking": "Đang suy nghĩ…",
