@@ -2470,6 +2470,15 @@ words that point to type_text, delivers Shift with Tab and arrows, and moves Alt
 Alt+Right through the tab's own history. Offline fakes and one native Chrome test
 cover it; no screen shows it.
 
+## Host browser drag
+
+R-COMP-HOST-DRAG-01. drag on Raphael Chrome presses, moves and releases the pointer in the member's own
+tab from a ref or from_x,from_y to a destination_ref or to_x,to_y, so a slider follows and a page with
+`draggable` gets its dragenter, dragover and drop (Chrome's intercepted drag handed back at the end).
+Both ends are judged as a click is. Offline CDP fakes cover the sequence and the gates; the native
+Chrome test (skipped in CI, run on this PC) drags a slider and drops a card on a drop zone of a local
+page. No screen shows it.
+
 ## Answers stay in the reply
 
 R-COMP-HOST-09. The words a member reads about the Computer panel never replace an answer: the
