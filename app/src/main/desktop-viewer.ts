@@ -397,7 +397,8 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     paint(modePill, "hidden", !expanded);
     paint(modeLabel.dataset, "mode", mode);
     // The owner can take over whenever the pill says 觀看中, whoever the core says holds the lease: a pill that watches always offers the way out of it.
-    paint(take, "textContent", t("desktop.take")); paint(take, "hidden", !expanded || mode !== "watching" || !running || !!demonstration); paint(take, "disabled", changing || !connected);
+    // A demonstration that is not being recorded (an interrupted recording the core recovered from the member's home, a draft nobody reviewed) holds nothing: it never hides the button, and holding the computer shows its Discard and Review.
+    paint(take, "textContent", t("desktop.take")); paint(take, "hidden", !expanded || mode !== "watching" || !running || !!recording); paint(take, "disabled", changing || !connected);
     paint(frame, "hidden", !running || !painted);
     paint(frame.style, "pointerEvents", screenInput ? "auto" : "none");
     paint(frame, "tabIndex", screenInput ? 0 : -1);
