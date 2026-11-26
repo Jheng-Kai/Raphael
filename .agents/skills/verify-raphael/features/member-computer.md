@@ -1931,7 +1931,8 @@ every turn and task, every source and brain (API, and CLI through its MCP list) 
 
 - Reads (T0, kind read, no card): `read_file` (Claude Code's Read through `file_tools.Files` and the guest helper
   `files_guest.handle` run on this computer: numbered lines, pictures as images, PDFs by pages), `glob` and `grep` (Python
-  walks, as ripgrep is not on the owner's computer; newest first, Claude Code's output modes and paging, 30 s bound).
+  walks, as ripgrep is not on the owner's computer; newest first, Claude Code's output modes and paging, 30 s bound; the walk's thread never touches the
+  settings' connection: the member's folders and projects are read before it starts, here and on the host computer).
 - Kept from every read and write, through links too (`owner_files.kept`): SSH, GPG and cloud keys, the keychain and
   Windows' credential stores, browsers' profiles, password managers, `.env` files (not `.env.example`) and private keys.
   Raphael's own data keeps the data floor. Walks skip `Library`, `AppData`, caches, `.git` and `node_modules` unless they

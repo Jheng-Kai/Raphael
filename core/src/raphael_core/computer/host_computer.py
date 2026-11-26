@@ -204,16 +204,21 @@ class HostComputerTools:
         work = work_folder(self.vm.settings, member, self.vm.local_folders) if self.vm.settings else workspace
         return (work / path).resolve() if not path.is_absolute() and not raw.startswith("~") else Path(place(raw))
 
-    def inside_work(self, path, member):
-        if any(path.is_relative_to(folder) and folder.resolve() == folder for folder in self.folders(member)):
+    def inside_work(self, path, member, *, folders=None, projects=None, guard=None):
+        """Whether `path` is in the member's own folder or team's, or in a remembered project that is not Raphael's own data.
+        A walk in another thread passes what the settings hold (`folders`, `projects`, `guard`), read in the loop's thread."""
+        folders = self.folders(member) if folders is None else folders
+        if any(path.is_relative_to(folder) and folder.resolve() == folder for folder in folders):
             return True
-        projects = self.vm.settings.get("project_folders") if self.vm.settings else ()
-        return any(path.is_relative_to(folder) and folder.resolve() == folder for folder in map(Path, projects or ())) and not self.files.guard()(str(path))
+        if projects is None:
+            projects = self.vm.settings.get("project_folders") if self.vm.settings else ()
+        return (any(path.is_relative_to(folder) and folder.resolve() == folder for folder in map(Path, projects or ()))
+                and not (self.files.guard() if guard is None else guard)(str(path)))
 
-    def private_path(self, path, member):
+    def private_path(self, path, member, *, folders=None):
         if path.is_relative_to(self.browser.profile.resolve()):
             return True
-        for root in self.folders(member):
+        for root in self.folders(member) if folders is None else folders:
             if path.is_relative_to(root) and any(part.casefold().startswith((".browser-profiles", ".raphael-"))
                                                  for part in path.relative_to(root).parts):
                 return True
@@ -305,9 +310,15 @@ class HostComputerTools:
                 return PluginResult(False, "approval_required", "This write requires the owner's approval.")
         if name in ("glob", "grep"):
             from .owner_files import glob_files, grep_files
+            # The walk runs in another thread than the settings' connection: what it asks of them is read here.
             guard = self.files.guard()
+            folders = self.folders(member)
+            projects = list(self.vm.settings.get("project_folders") or ()) if self.vm.settings else []
+
             def protected(item):
-                return self.private_path(Path(item), member) or (not inside or not self.inside_work(Path(item), member)) and guard(item)
+                return (self.private_path(Path(item), member, folders=folders)
+                        or (not inside or not self.inside_work(Path(item), member, folders=folders, projects=projects, guard=guard))
+                        and guard(item))
             return await asyncio.to_thread(glob_files if name == "glob" else grep_files, args, protected)
         if inside and name in WRITES:
             path.parent.mkdir(parents=True, exist_ok=True)

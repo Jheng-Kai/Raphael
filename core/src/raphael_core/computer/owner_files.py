@@ -553,10 +553,22 @@ class OwnerFileTools:
 
     def shared_path(self, path, member_id):
         """Allow only ordinary files under this member's own and the team's canonical folders."""
+        return self.shared_in(path, self.shared_folders(member_id))
+
+    def shared_folders(self, member_id):
+        """This member's own and the team's folders. They come from the settings, whose connection belongs to the loop's
+        thread: read them here and hand a walk in another thread the plain list (`shared_in`)."""
+        try:
+            return list(self.member_folders(member_id))
+        except (OSError, RuntimeError, ValueError, VmError):
+            return []
+
+    @staticmethod
+    def shared_in(path, folders):
         from ..paths import local_storage_root
         try:
             resolved = Path(place(path))
-            for folder in self.member_folders(member_id):
+            for folder in folders:
                 root = local_storage_root(folder)
                 if resolved.is_relative_to(root):
                     parts = resolved.relative_to(root).parts
@@ -569,16 +581,19 @@ class OwnerFileTools:
 
     def guard(self, member_id=None):
         """Whether a path is Raphael's own data, as a walk in another thread may ask it: the data floor without its
-        database connection (which stays in this thread), and the folder of each database it has open."""
+        database connection (which stays in this thread), and the folder of each database it has open. Everything it needs
+        from the database is read here, in this thread; the guard it returns holds plain values."""
         from ..agent.data_floor import DataFloor
         floor = DataFloor(None, environ=self.data_floor.environ, core_root=self.data_floor.core_root)
         databases = []
         if self.data_floor.conn is not None:
             databases = [os.path.dirname(row[2]) for row in self.data_floor.conn.execute("PRAGMA database_list") if row[2]]
 
+        folders = [] if member_id is None else self.shared_folders(member_id)
+
         def protected(path):
             try:
-                return ((member_id is None or not self.shared_path(path, member_id))
+                return ((member_id is None or not self.shared_in(path, folders))
                         and (floor.protected(path) or any(_under(os.path.realpath(path), folder) for folder in databases)))
             except (OSError, ValueError):
                 return False
