@@ -396,6 +396,51 @@ async def fetch(source):
         raise _network_error(error) from None
 
 
+async def fetch_plugin(source):
+    """The files of the plugin a GitHub link names (its folder holds `.claude-plugin/plugin.json`), as `{path: bytes}`
+    from its root, and the identity of that plugin. A link inside it is never followed."""
+    from .capabilities import DOWNLOAD_SECONDS, DOWNLOAD_STALL_SECONDS
+
+    target = parse(source)
+    try:
+        async with asyncio.timeout(DOWNLOAD_SECONDS), httpx.AsyncClient(timeout=DOWNLOAD_STALL_SECONDS, follow_redirects=False,
+                                                                       trust_env=False) as http:
+            client = Client(http)
+            commit, ref, folder = await resolve(client, target)
+            listed = await listing(client, target.repo, commit, folder)
+            prefix = folder + "/" if folder else ""
+            if prefix + ".claude-plugin/plugin.json" not in listed.files:
+                raise MemberError("source", f"{target.repo}{'/' + folder if folder else ''} is not a plugin: it has no "
+                                  ".claude-plugin/plugin.json", reason="no_manifest", repo=target.repo, file=folder)
+            wanted, size, links = [], 0, []
+            for path in sorted(listed.files):
+                if not path.startswith(prefix) or junk(path[len(prefix):]):
+                    continue
+                length, sha, mode = listed.files[path]
+                if mode in ("120000", "submodule"):
+                    links.append(path[len(prefix):])
+                    continue
+                if len(wanted) >= MAX_PACKAGE_FILES:
+                    raise too_many_files(len(wanted) + 1, MAX_PACKAGE_FILES, path[len(prefix):])
+                if size + length > MAX_PACKAGE_BYTES:
+                    raise oversized_package(path[len(prefix):], size + length, MAX_PACKAGE_BYTES)
+                size += length
+                wanted.append((path, length, sha))
+            gate = asyncio.Semaphore(PARALLEL)
+
+            async def one(path, length, sha):
+                async with gate:
+                    return path[len(prefix):], await download(client, target.repo, commit, path, length, sha)
+
+            return dict(await asyncio.gather(*(one(*item) for item in wanted))), f"url:{target.repo}:{folder}"
+    except MemberError:
+        raise
+    except TimeoutError:
+        raise _timeout_error() from None
+    except httpx.HTTPError as error:
+        raise _network_error(error) from None
+
+
 def _plugin_root(listed, own):
     """The folder (`""` or `a/b/`) of the plugin a skill sits in: the nearest `.claude-plugin/plugin.json` at its folder or
     above it; None when it sits in none."""

@@ -72,7 +72,8 @@ def local_stamp(folder):
                               reason="scan")
         for name in [*dirs, *names]:
             if linked(Path(directory) / name):
-                raise MemberError("source", "linked plugin packages are not supported")
+                shown = (Path(directory) / name).relative_to(folder).as_posix()
+                raise MemberError("source", f"{shown} is a link, and links are not followed", reason="linked", file=shown)
         for name in names:
             path = Path(directory) / name
             info = path.stat()
@@ -100,8 +101,10 @@ def directories(folder, remaining):
 
 def manifest_from(files):
     data = files.get(".claude-plugin/plugin.json")
-    if data is None or len(data) > MAX_MANIFEST_BYTES:
-        raise MemberError("source", "a plugin needs .claude-plugin/plugin.json")
+    if data is None:
+        raise MemberError("source", "a plugin needs .claude-plugin/plugin.json", reason="no_manifest")
+    if len(data) > MAX_MANIFEST_BYTES:
+        raise oversized_file(".claude-plugin/plugin.json", len(data), MAX_MANIFEST_BYTES)
     manifest = json_object(data)
     if not isinstance(manifest.get("name"), str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,99}", manifest["name"]):
         raise MemberError("source", "invalid plugin name")
@@ -470,14 +473,14 @@ class PluginSets:
         for row, info, latest, counts in inputs:
             if info.get("marketplace"):
                 changed = bool(latest and latest["installable"] and version_key(latest["version"]) > version_key(row["version"]))
-            else:
+            elif row["source"].startswith("local:"):
                 try:
-                    folder, root = location(self.skill_home, row["source"])
-                    versions = directories(folder.parent, [MAX_DISCOVERY_ENTRIES])
-                    latest = max(versions, key=lambda p: (version_key(p.name), p.stat().st_mtime_ns))
-                    changed = local_stamp(latest) != info.get("fingerprint")
+                    changed = local_stamp(self._newest_version(row["source"])) != info.get("fingerprint")
                 except (MemberError, OSError):
                     changed = None
+            else:
+                # A plugin from a GitHub link has no folder to compare: whether it moved on is asked of GitHub on an update.
+                changed = None
             result.append({"id": row["id"], "name": row["name"], "version": row["version"], "description": row["description"],
                            "source": row["source"], "skill_count": counts.get("skill", 0), "command_count": counts.get("command", 0),
                            "source_changed": changed, "marketplace": info.get("marketplace", ""), "mcp_servers": info.get("mcp_servers", [])})
@@ -512,7 +515,7 @@ class PluginSets:
         return {**view, **({"skipped": plan.skipped} if plan.skipped else {})}
 
     def _plan_set(self, source, files, *, marketplace="", target=None, access=None, expected_id=None,
-                  require_new=False, required_skill=None):
+                  require_new=False, required_skill=None, identity=None):
         from .skills import stored_skill_name
 
         manifest = manifest_from(files)
@@ -520,7 +523,7 @@ class PluginSets:
             raise too_many_files(len(files), MAX_PACKAGE_FILES)
         if sum(len(data) for data in files.values()) > MAX_PACKAGE_BYTES:
             raise oversized_package("", sum(len(data) for data in files.values()), MAX_PACKAGE_BYTES)
-        identity = f"github:{marketplace}:{manifest['name']}" if marketplace else "local:" + str(Path(source[6:]).parent)
+        identity = identity or (f"github:{marketplace}:{manifest['name']}" if marketplace else "local:" + str(Path(source[6:]).parent))
         previous = self.conn.execute("SELECT * FROM skill_sets WHERE identity=?", (identity,)).fetchone()
         if previous and require_new:
             raise MemberError("taken", f"a package named {previous['name']} already exists")
@@ -644,7 +647,7 @@ class PluginSets:
     async def import_plugin(self, source=None, *, set_id=None, marketplace=None, name=None, access=None, require_new=False,
                             required_skill=None, enabled=None, skill=None):
         revision = self.skill_revision()
-        target = None
+        target = identity = None
         if set_id is not None:
             previous = self.conn.execute("SELECT * FROM skill_sets WHERE id=?", (set_id,)).fetchone()
             if previous is None:
@@ -667,23 +670,47 @@ class PluginSets:
             if manifest["name"] != plugin["name"] or manifest["version"] != plugin["version"]:
                 raise MemberError("source", "download differs from the listed plugin version")
             source, target = f"github:{marketplace}/{name}", plugin["target"]
+        elif isinstance(source, str) and source.startswith("local:"):
+            source, files, identity = await asyncio.to_thread(self._local_plugin_snapshot, source)
         else:
-            source, files = await asyncio.to_thread(self._local_plugin_snapshot, source)
+            from .skill_github import fetch_plugin
+
+            files, identity = await fetch_plugin(source)
+            source = source.strip()
         if set_id is not None and revision != self.skill_revision():
             raise MemberError("not_found", "the plugin set changed during refresh")
         return await self._install_set_async(source, files, marketplace=marketplace or "", target=target, access=access,
                                              expected_id=set_id, require_new=require_new, required_skill=required_skill,
-                                             enabled=enabled, skill=skill)
+                                             enabled=enabled, skill=skill, identity=identity)
 
-    def _local_plugin_snapshot(self, source):
-        folder, root = location(self.skill_home, source)
+    def _newest_version(self, source):
+        """The folder a local plugin is read from: the newest installed version of a plugin the CLIs cache, or the folder
+        itself when it is anywhere else."""
+        from .skill_sources import local_path
+
+        try:
+            folder, root = location(self.skill_home, source)
+        except MemberError:
+            return local_path(source)
         if root.name != "cache" or len(folder.relative_to(root).parts) != 3:
-            raise MemberError("source", "choose an installed plugin folder")
+            return local_path(source)
         versions = [p for p in directories(folder.parent, [MAX_DISCOVERY_ENTRIES]) if (p / ".claude-plugin/plugin.json").is_file()]
         if not versions:
-            raise MemberError("not_found", "no installed version of that plugin")
-        folder = max(versions, key=lambda p: (version_key(p.name), p.stat().st_mtime_ns))
-        return "local:" + str(folder), local_files(folder)
+            raise MemberError("not_found", "no installed version of that plugin", reason="source", file=str(folder))
+        return max(versions, key=lambda p: (version_key(p.name), p.stat().st_mtime_ns))
+
+    def _local_plugin_snapshot(self, source):
+        folder = self._newest_version(source)
+        if not (folder / ".claude-plugin/plugin.json").is_file():
+            raise MemberError("not_found" if not folder.exists() else "source",
+                              f"{folder} is not a plugin: it has no .claude-plugin/plugin.json",
+                              reason="source" if not folder.exists() else "no_manifest", file=str(folder))
+        # The versions a CLI caches are one plugin; a folder anywhere else is a plugin of its own.
+        try:
+            cached = location(self.skill_home, source)[1].name == "cache"
+        except MemberError:
+            cached = False
+        return "local:" + str(folder), local_files(folder), None if cached else "local:" + str(folder)
 
     async def add_marketplace(self, repo):
         data = await catalog(repo)

@@ -1029,7 +1029,8 @@ class MembersService:
             raise invalid_params("plugin must be true or false")
         plugin, skipped = None, []
         try:
-            if params.get("plugin") or "marketplace" in params or "set_id" in params:
+            as_plugin = bool(params.get("plugin") or "marketplace" in params or "set_id" in params)
+            if as_plugin:
                 if member != -1 or "text" in params or "file" in params:
                     raise invalid_params("a plugin needs a shared plugin source")
                 if (not any(k in params for k in ("set_id", "marketplace", "source"))
@@ -1037,9 +1038,17 @@ class MembersService:
                         or "marketplace" in params and "name" not in params):
                     raise invalid_params("choose one installed plugin, marketplace entry or local source")
                 identifier = _whole(params, "set_id", least=1) if "set_id" in params else None
-                plugin = await self.capabilities.import_plugin(params.get("source"), set_id=identifier,
-                    marketplace=params.get("marketplace"), name=params.get("name"), access=params.get("access"),
-                    require_new=new_package and identifier is None)
+                try:
+                    plugin = await self.capabilities.import_plugin(params.get("source"), set_id=identifier,
+                        marketplace=params.get("marketplace"), name=params.get("name"), access=params.get("access"),
+                        require_new=new_package and identifier is None)
+                except MemberError as error:
+                    # The plugin option on a source that is no plugin (no manifest) imports its skills as a package.
+                    if not (error.detail.get("reason") == "no_manifest" and "source" in params
+                            and identifier is None and "marketplace" not in params):
+                        raise
+                    as_plugin = False
+            if as_plugin:
                 skipped = plugin.pop("skipped", [])
                 key = f"set:{plugin['id']}"
                 ids = [s["id"] for s in (await self.packages.view_async(key))["skills"]]

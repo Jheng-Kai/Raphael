@@ -395,11 +395,9 @@ def local_path(source):
         raise MemberError("source", "choose a file on this computer", reason="path", file=source[6:])
     if not path.is_absolute() or ".." in path.parts:
         raise MemberError("source", f"{path} is not a full path on this computer", reason="path", file=str(path))
-    for each in (path, *path.parents):
-        if linked(each):
-            raise MemberError("source", f"{each} is a link, and links are not followed: pick the folder it leads to",
-                              reason="linked", file=str(each))
-    return path
+    # A folder the owner names may be reached through a link (a synced Documents folder, a junction): it is read where it
+    # leads. A link inside it is never followed (R-SKILL-18).
+    return Path(os.path.realpath(path))
 
 
 def local(source):
