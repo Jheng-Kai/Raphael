@@ -17,7 +17,7 @@ async def test_each_member_decides_on_its_own_model_and_an_address_asks_no_one_e
     await send(rig, room, 'Review the sources')
     await finish(rig, exchange, 'Reviewed')
     assert [(s['member_id'], s['model']) for s in rig.background.submitted] == [
-        (0, 'cli:codex:fixture'), (ids[0], '@chatgpt:gpt-x?effort=high'), (ids[1], 'fake/api')]
+        (rig.lead, 'cli:codex:fixture'), (ids[0], '@chatgpt:gpt-x?effort=high'), (ids[1], 'fake/api')]
     await finish(rig, exchange, '(pass)')
     await finish(rig, exchange, '(pass)')
     await send(rig, room, '@Alice inspect', 'two')
@@ -37,7 +37,7 @@ async def test_a_spaced_address_still_hands_the_turn_to_that_colleague(rig, exch
 async def three(rig):
     room, ids = await team(rig)
     carol = (await rig.call('members.create', {'name':'Carol', 'role':'QA'}))['member']['id']
-    room = (await rig.call('rooms.create', {'name':'Review', 'member_ids':[0, *ids, carol]}))['room']
+    room = (await rig.call('rooms.create', {'name':'Review', 'member_ids':[rig.lead, *ids, carol]}))['room']
     return room, [*ids, carol]
 
 
@@ -101,7 +101,7 @@ async def test_accepted_intents_become_named_blocks(rig, exchange, action, reaso
     if action == 'stop':
         await rig.call('rooms.stop', {'room_id':room['id']})
     elif action == 'remove':
-        await rig.call('rooms.update', {'room_id':room['id'], 'member_ids':[0,ids[0]]})
+        await rig.call('rooms.update', {'room_id':room['id'], 'member_ids':[rig.lead,ids[0]]})
     await finish(rig, exchange, 'Ready', cost=10 if action=='cost' else .001)
     await finish(rig, exchange, 'Ready')
     result = await history(rig, room)
@@ -111,7 +111,7 @@ async def test_accepted_intents_become_named_blocks(rig, exchange, action, reaso
     summaries=[m for m in result['messages'] if m['kind']=='wrapup']
     if reason == 'owner':
         # The owner's Stop is closed in words; a failure is only its status lines.
-        assert len(summaries)==1 and summaries[0]['member_id']==0 and result['messages'][-1]['kind']=='wrapup'
+        assert len(summaries)==1 and summaries[0]['member_id']==rig.lead and result['messages'][-1]['kind']=='wrapup'
         assert summaries[0]['text'].split('\n')[0] == '已停止本次工作，已完成的動作保留。'
     else:
         assert not summaries
@@ -216,7 +216,7 @@ async def test_blocked_wrapup_publication_is_atomic_and_retriable(rig, exchange)
     rig.conn.execute('DROP TRIGGER fail_wrapup')
     await exchange._exchanges.drive(room['id'])
     result=await history(rig,room)
-    assert result['messages'][-1]['member_id']==0 and result['messages'][-1]['kind']=='wrapup'
+    assert result['messages'][-1]['member_id']==rig.lead and result['messages'][-1]['kind']=='wrapup'
     assert 'No verified deliverables' in result['messages'][-1]['text'] or '沒有已驗證的交付成果' in result['messages'][-1]['text']
 
 
@@ -285,7 +285,7 @@ async def test_a_named_moderator_has_no_scheduled_turns_or_conclusion(rig, excha
     await rig.call('rooms.update', {'room_id':room['id'], 'roles':{str(ids[0]):'moderator',str(ids[1]):'con'}})
     await send(rig, room, 'Discuss the evidence')
     # The room's default responder answers first, not the moderator; the moderator then reads it like anyone else.
-    assert [s['member_id'] for s in rig.background.submitted] == [0]
+    assert [s['member_id'] for s in rig.background.submitted] == [rig.lead]
     await finish(rig, exchange, 'The evidence holds.')
     assert 'Otherwise reply with exactly (pass)' in rig.background.submitted[1]['text']
     await finish(rig, exchange, '(pass)')
@@ -298,9 +298,9 @@ async def test_a_named_moderator_has_no_scheduled_turns_or_conclusion(rig, excha
 
 async def test_a_meeting_keeps_every_participant_before_explicit_followup_addresses(rig, exchange):
     room, (alice, bob, carol) = await three(rig)
-    await exchange.meeting({'member_ids':[0,alice,bob,carol], 'agenda':'@Bob review the launch',
+    await exchange.meeting({'member_ids':[rig.lead,alice,bob,carol], 'agenda':'@Bob review the launch',
                             'roles':{str(alice):'moderator',str(bob):'pro',str(carol):'con'}}, 'en', meeting_source(rig, 47))
-    assert [s['member_id'] for s in rig.background.submitted] == [0]
+    assert [s['member_id'] for s in rig.background.submitted] == [rig.lead]
     await finish(rig, exchange, '(pass)')
     assert rig.background.submitted[-1]['member_id'] == alice
     await finish(rig, exchange, 'Evidence reviewed.')
@@ -311,30 +311,30 @@ async def test_a_meeting_keeps_every_participant_before_explicit_followup_addres
     result = await history(rig, room)
     assert result['exchange']['state'] == 'done'
     assert [(m['member_id'],m['kind']) for m in result['messages'] if m['member_id'] is not None] == [
-        (0,'message'),(alice,'message'),(bob,'message'),(carol,'message')]
+        (rig.lead,'message'),(alice,'message'),(bob,'message'),(carol,'message')]
 
 
 async def test_a_meeting_with_no_one_speaking_has_no_automatic_open_or_close(rig, exchange):
     room, ids = await team(rig)
-    await exchange.meeting({'member_ids':[0,*ids], 'agenda':'Thanks everyone',
+    await exchange.meeting({'member_ids':[rig.lead,*ids], 'agenda':'Thanks everyone',
                             'roles':{str(ids[0]):'moderator',str(ids[1]):'con'}}, 'en', meeting_source(rig, 48))
-    for _ in [0,*ids]:
+    for _ in [rig.lead,*ids]:
         await finish(rig, exchange, '(pass)')
-    assert [s['member_id'] for s in rig.background.submitted] == [0,*ids]
+    assert [s['member_id'] for s in rig.background.submitted] == [rig.lead,*ids]
     assert (await history(rig, room))['exchange']['state'] == 'done'
 
 
 async def test_a_reused_meeting_keeps_only_the_roles_the_owner_requested(rig, exchange):
     room, ids = await team(rig)
     await rig.call('rooms.update', {'room_id':room['id'], 'roles':{str(ids[0]):'moderator'}})
-    await exchange.meeting({'member_ids':[0,*ids], 'agenda':'Next release'}, 'en', meeting_source(rig, 49))
+    await exchange.meeting({'member_ids':[rig.lead,*ids], 'agenda':'Next release'}, 'en', meeting_source(rig, 49))
     assert (await rig.call('rooms.list'))['rooms'][0]['roles'] == {}
-    assert rig.background.submitted[0]['member_id'] == 0
+    assert rig.background.submitted[0]['member_id'] == rig.lead
 
 
 async def test_meeting_reuses_exact_members_and_has_one_agenda(rig, exchange):
     room, ids = await team(rig)
-    args = {'member_ids':[0,*ids], 'agenda':'Review evidence'}
+    args = {'member_ids':[rig.lead,*ids], 'agenda':'Review evidence'}
     first = await exchange.meeting(args, 'en', meeting_source(rig, 42))
     second = await exchange.meeting(args, 'en', meeting_source(rig, 42))
     assert first['room_id'] == second['room_id'] == room['id']
@@ -346,7 +346,7 @@ async def test_meeting_reuses_exact_members_and_has_one_agenda(rig, exchange):
 async def test_meeting_roles_accept_names_and_a_supporting_part(rig, exchange):
     # Live, a model keyed roles by name or gave a colleague a part outside the enum, and the meeting never opened.
     room, ids = await team(rig)
-    result = await exchange.meeting({'member_ids':[0,*ids], 'agenda':'Plan the launch',
+    result = await exchange.meeting({'member_ids':[rig.lead,*ids], 'agenda':'Plan the launch',
                                      'roles':{'Alice':'moderator', 'Bob':'social content'}}, 'en', meeting_source(rig, 43))
     assert result['room_id'] == room['id']
     roles = (await rig.call('rooms.list'))['rooms'][0]['roles']
@@ -360,18 +360,18 @@ async def test_meeting_roles_accept_names_and_a_supporting_part(rig, exchange):
 async def test_meeting_roles_understand_the_owners_words(rig, exchange, parts, expected):
     # Live, every part the model named fell outside the four words, so the meeting lost its moderator.
     room, ids = await three(rig)
-    await exchange.meeting({'member_ids':[0,*ids], 'agenda':'Plan the launch', 'roles':parts}, 'zh-TW', meeting_source(rig, 44))
+    await exchange.meeting({'member_ids':[rig.lead,*ids], 'agenda':'Plan the launch', 'roles':parts}, 'zh-TW', meeting_source(rig, 44))
     roles = next(r for r in (await rig.call('rooms.list'))['rooms'] if r['id'] == room['id'])['roles']
     assert [roles[str(i)] for i in ids] == expected
 
 
 async def test_snapshot_schema_is_current_and_secret_free(rig):
     first = rig.service.team_context(0, 'en')
-    assert first['count'] == len(first['members']) == 1 and first['self_id'] == 0
-    assert first['primary_id'] == first['chief_id'] == 0
+    assert first['count'] == len(first['members']) == 0 and first['self_id'] == 0
+    assert first['primary_id'] is None and first['chief_id'] is None
     member = (await rig.call('members.create', {'name':'Alice', 'role':'Researcher'}))['member']
     second = rig.service.team_context(member['id'], 'en')
-    assert second['count'] == 2 and second['revision'] != first['revision']
+    assert second['count'] == 1 and second['revision'] != first['revision']
     rig.service._connections = lambda: [{'id':'one','name':'Mail','enabled':True,'status':'error','error':'auth','token':'never-public'}]
     third = rig.service.team_context(member['id'], 'en')
     assert third['apps'][0]['state'] == 'needs_sign_in'
@@ -391,13 +391,13 @@ async def test_quotes_code_and_plain_names_do_not_create_intents(rig, exchange):
 async def test_a_newer_owner_message_or_stop_leaves_no_one_still_to_read_the_old_one(rig, exchange, action):
     room, ids = await team(rig)
     await send(rig, room, 'Choose a lead')
-    assert [s['member_id'] for s in rig.background.submitted] == [0]
+    assert [s['member_id'] for s in rig.background.submitted] == [rig.lead]
     if action == 'stop':
         await rig.call('rooms.stop', {'room_id':room['id']})
     else:
         await send(rig, room, '@Bob latest question', 'two')
     await finish(rig, exchange, 'Alice should lead.')
-    assert [s['member_id'] for s in rig.background.submitted] == ([0] if action=='stop' else [0, ids[1]])
+    assert [s['member_id'] for s in rig.background.submitted] == ([rig.lead] if action=='stop' else [rig.lead, ids[1]])
 
 
 async def test_reply_target_and_other_explicit_mentions_are_both_accepted(rig, exchange):

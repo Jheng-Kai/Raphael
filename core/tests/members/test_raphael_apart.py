@@ -1,6 +1,8 @@
 """Raphael (member 0) is the app's guide, never a slime: not the chief of staff, not in the roster, and fixed in
 its name and look. The chief is a real member, the first one made, or nobody while there is none."""
 
+import sqlite3
+
 import pytest
 
 from raphael_core.agent.speaker import RAPHAEL_NAMES
@@ -69,6 +71,17 @@ def test_a_slime_cannot_take_raphaels_name_in_any_language(store):
         assert caught.value.kind == "taken"
 
 
+def test_raphaels_persona_is_the_guides_and_never_takes_a_name_from_a_profile():
+    from raphael_core.agent.persona import _raphael_persona
+    from raphael_core.agent.speaker import Speaker
+
+    prompt = _raphael_persona(Speaker(name="Hikari", role="Chief", personality="Warm and quick", instructions="Plan my week"))
+    assert "You are Raphael," in prompt and "guide and keeper of this app" in prompt
+    assert "Hikari" not in prompt and "Chief" not in prompt
+    assert "Warm and quick" in prompt and "Plan my week" in prompt
+    assert "Warm" not in _raphael_persona(Speaker())
+
+
 # --- the service ---------------------------------------------------------------------------------------------------
 
 
@@ -81,6 +94,20 @@ async def refused(rig, method, params):
         await rig.call(method, params)
     assert caught.value.code == INVALID_PARAMS
     return (caught.value.data or {}).get("kind")
+
+
+async def test_the_quick_ask_is_raphaels_alone_and_no_slime_has_a_quick_conversation(rig):
+    from raphael_core.agent.conversations import Conversations
+
+    alice = await make(rig, "Alice")
+    conversations = Conversations(rig.conn)
+    assert [row["kind"] for row in conversations.list(0)] == ["quick", "standard"]
+    assert [row["kind"] for row in conversations.list(alice)] == ["standard"]
+    assert conversations.destination(0, None, quick=True) == conversations.quick()
+    with pytest.raises(RpcError):
+        conversations.destination(alice, None, quick=True)
+    with pytest.raises(sqlite3.IntegrityError):
+        rig.conn.execute("INSERT INTO conversations(member_id,title,created_at_ms,updated_at_ms,is_default,kind) VALUES (?, '', 1, 1, 0, 'quick')", (alice,))
 
 
 async def test_the_roster_lists_slimes_only_and_names_the_chief_or_nobody(rig):

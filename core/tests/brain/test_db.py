@@ -435,7 +435,7 @@ SCHEMA_V27 = {
         "stop_requested INTEGER NOT NULL DEFAULT 0", "wrapup_sent INTEGER NOT NULL DEFAULT 0", "reason TEXT NOT NULL DEFAULT ''",
     ],
 }
-LATEST = 100
+LATEST = 101
 
 
 def test_v59_existing_tasks_default_to_no_artifact_and_keep_their_reports(monkeypatch, tmp_path):
@@ -772,7 +772,7 @@ SCHEMA_V98 = {**SCHEMA_V94, "members": [*SCHEMA_V94["members"], "computer_mode T
 
 SCHEMA_V100 = {**SCHEMA_V98, "computer_suggestions": [*SCHEMA_V98["computer_suggestions"], "target TEXT NOT NULL DEFAULT 'docker'"]}
 
-PENDING_UPGRADES = (63, 64, *range(67, 101))
+PENDING_UPGRADES = (63, 64, *range(67, 102))
 
 
 def test_upgrade_preserves_computer_choice_and_removes_desktop_control(monkeypatch, tmp_path):
@@ -948,7 +948,7 @@ def test_v42_preserves_existing_google_cards_and_adds_compatible_metadata_defaul
     migrated.close()
 
 
-def test_v39_makes_raphael_the_primary_contact_of_every_older_team_and_allows_one_member_at_most(tmp_path):
+def test_v39_allows_one_primary_contact_at_most_and_v101_gives_an_older_team_its_first_slime_as_the_chief(tmp_path):
     path = tmp_path / "v38.db"
     raw = sqlite3.connect(path)
     for version in range(1, 39):
@@ -959,8 +959,7 @@ def test_v39_makes_raphael_the_primary_contact_of_every_older_team_and_allows_on
     raw.close()
     migrated = db.connect(path)
     assert migrated.execute("PRAGMA user_version").fetchone()[0] == LATEST
-    assert [tuple(row) for row in migrated.execute("SELECT id, primary_contact FROM members ORDER BY id")] == [(1, 0), (2, 0)]
-    migrated.execute("UPDATE members SET primary_contact = 1 WHERE id = 1")
+    assert [tuple(row) for row in migrated.execute("SELECT id, primary_contact FROM members ORDER BY id")] == [(1, 1), (2, 0)]
     with pytest.raises(sqlite3.IntegrityError):
         migrated.execute("UPDATE members SET primary_contact = 1 WHERE id = 2")
     with pytest.raises(sqlite3.IntegrityError):

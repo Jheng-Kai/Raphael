@@ -494,13 +494,16 @@ class MembersService:
     def has_members(self) -> bool:
         return self._conn.execute("SELECT 1 FROM members LIMIT 1").fetchone() is not None
 
-    def roster(self) -> list[Speaker]:
-        """Public inventory never carries another member's private persona or brain."""
+    def roster(self, *, with_raphael: bool = False) -> list[Speaker]:
+        """The slimes, in the sidebar's order. Public inventory never carries another member's private persona or brain.
+        Raphael, the app's guide, is no slime and not in it; a group chat that has it as a participant asks for it
+        (`with_raphael`), never as the chief."""
         primary = self.primary_id()
         rows = self._conn.execute("SELECT id,name,role,blurb FROM members ORDER BY pinned DESC,position,id")
-        return [Speaker(id=row["id"], name=row["name"], role=row["role"], blurb=row["blurb"],
-                        capabilities=frozenset({"chief"}) if row["id"] == primary else frozenset())
-                for row in rows]
+        people = [Speaker(id=row["id"], name=row["name"], role=row["role"], blurb=row["blurb"],
+                          capabilities=frozenset({"chief"}) if row["id"] == primary else frozenset())
+                  for row in rows]
+        return [Speaker(id=0, name=RAPHAEL_NAMES[normalize_language(self._language())]), *people] if with_raphael else people
 
     def primary_id(self) -> int:
         """The owner's primary contact, the chief of staff (0 while there is no slime: Raphael is never it): the one place

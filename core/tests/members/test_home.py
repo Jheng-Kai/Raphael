@@ -34,7 +34,7 @@ async def test_empty_overview_has_no_connector_and_asks_no_other_service(home, r
 
 async def test_home_projection_matches_the_full_member_view_without_reading_it(home, rig, monkeypatch):
     member = (await rig.call("members.create", {"name": "Research", "avatar": "slime:blue"}))["member"]["id"]
-    rig.service._settings.set("first_bot_profile", {"name": "Morning"})
+    rig.service._settings.set("first_bot_profile", {"personality": "Calm"})
     add(rig, member)
     rig.service.store.mark_unread(member)
     actual = await rig.call("home.overview", {"ui_language": "ja"})

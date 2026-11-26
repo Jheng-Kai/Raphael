@@ -104,7 +104,7 @@ async def test_own_japanese_language_and_english_progress_survive_other_interfac
     if owner:
         rig.team.members.store.update_member(owner, instructions=instruction)
     else:
-        rig.agent.settings.set("first_bot_profile", {"name": "Raphael", "instructions": instruction})
+        rig.agent.settings.set("first_bot_profile", {"instructions": instruction})
     captured = []
     if brain == "api":
         rig.brain.chats = [chat('{"thinking":"Checking the plan.","progress":"Checking now."}', ("local_time", {})), live_said("日本語で答えます。")]
@@ -266,7 +266,7 @@ async def test_platform_reply_uses_own_language_through_fake_channel(rig, platfo
     if owner:
         rig.team.members.store.update_member(owner, instructions=instruction)
     else:
-        rig.agent.settings.set("first_bot_profile", {"name": "Raphael", "instructions": instruction})
+        rig.agent.settings.set("first_bot_profile", {"instructions": instruction})
     async def ask(session, text, language, source, **options):
         target = session_target(session)
         result = await rig.agent.call("agent.ask", {"session_id": session, "text": text, "member_id": target[0],

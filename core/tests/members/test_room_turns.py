@@ -40,16 +40,16 @@ async def test_a_message_that_names_no_one_starts_one_turn_per_member_and_asks_n
     exchange._exchanges.decision = asked
     await send(rig, room, "What should we do about the launch?")
     # The room's default responder, the chief here, answers first, and no one was asked anything before.
-    assert not asked.calls and speakers(rig) == [0]
+    assert not asked.calls and speakers(rig) == [rig.lead]
     await finish(rig, exchange, "Test it with ten customers first.")
     # Then each colleague reads that answer in a turn of its own.
-    assert speakers(rig) == [0, *ids]
+    assert speakers(rig) == [rig.lead, *ids]
     assert all("Test it with ten customers first." in row["text"] for row in rig.background.submitted[1:])
     await finish(rig, exchange, "(pass)")
     await finish(rig, exchange, "I can run the customer calls.")
     result = await history(rig, room)
     assert result["exchange"]["state"] == "done"
-    assert spoken(result) == [(0, "Test it with ten customers first."), (ids[1], "I can run the customer calls.")]
+    assert spoken(result) == [(rig.lead, "Test it with ten customers first."), (ids[1], "I can run the customer calls.")]
     # One model call for each member for the whole message, where the listener first asked every member.
     assert len(rig.background.submitted) + len(asked.calls) == 3
 
@@ -66,17 +66,17 @@ async def test_the_default_responder_is_told_to_answer_and_the_others_that_they_
 
 
 async def test_a_saved_default_responder_answers_first_and_everyone_else_may_follow(rig, exchange):
-    room, ids = await team(rig, default_responder=f"member:{2}")
+    room, ids = await team(rig, default_responder=f"member:{3}")
     await send(rig, room, "Who has the numbers?")
     assert speakers(rig) == [ids[1]]
     await finish(rig, exchange, "I do; they are in the sheet.")
-    assert speakers(rig) == [ids[1], 0, ids[0]]
+    assert speakers(rig) == [ids[1], rig.lead, ids[0]]
 
 
 async def test_an_everyone_room_has_everyone_answer_at_once(rig, exchange):
     room, ids = await team(rig, default_responder="everyone")
     await send(rig, room, "Status, please")
-    assert speakers(rig) == [0, *ids]
+    assert speakers(rig) == [rig.lead, *ids]
     assert all("names no one" in words(row) for row in rig.background.submitted)
     snapshots = [row["seen_through"] for row in (await history(rig, room))["exchange"]["active_turns"]]
     assert len(set(snapshots)) == 1
@@ -101,7 +101,7 @@ async def test_a_colleague_who_passes_leaves_nothing_in_the_group(rig, exchange,
     await finish(rig, exchange, passed)
     await finish(rig, exchange, passed)
     result = await history(rig, room)
-    assert spoken(result) == [(0, "Yes, if QA signs off.")]
+    assert spoken(result) == [(rig.lead, "Yes, if QA signs off.")]
     [view] = (await rig.call("rooms.list", {}))["rooms"]
     assert view["preview"] == "Yes, if QA signs off."
     # What a colleague reads next has no pass in it either.
@@ -163,7 +163,7 @@ async def test_replying_to_a_member_addresses_it_as_an_at_does(rig, exchange):
 async def test_everyone_the_owner_addresses_answers(rig, exchange):
     room, ids = await team(rig)
     await send(rig, room, "@everyone report")
-    assert speakers(rig) == [0, *ids]
+    assert speakers(rig) == [rig.lead, *ids]
     assert all("The owner addressed you directly" in words(row) for row in rig.background.submitted)
 
 
@@ -201,11 +201,11 @@ async def test_a_lead_reply_that_fails_is_a_status_line_and_the_others_still_rea
     room, ids = await team(rig)
     await send(rig, room, "Plans for today?")
     await end(rig, exchange, "failed", "worker", text="An error occurred.")
-    assert speakers(rig) == [0, *ids]
+    assert speakers(rig) == [rig.lead, *ids]
     await finish(rig, exchange, "Two reviews, then the launch call.")
     await finish(rig, exchange, "(pass)")
     result = await history(rig, room)
-    assert [(i["recipient_id"], i["state"], i["reason"]) for i in result["exchange"]["reply_intents"]] == [(0, "blocked", "worker")]
+    assert [(i["recipient_id"], i["state"], i["reason"]) for i in result["exchange"]["reply_intents"]] == [(rig.lead, "blocked", "worker")]
     assert spoken(result) == [(ids[0], "Two reviews, then the launch call.")]
     assert result["exchange"]["state"] == "stopped"
     assert not [m for m in result["messages"] if m["kind"] == "wrapup"]
@@ -227,7 +227,7 @@ async def test_speech_a_restart_cut_off_is_a_status_line_and_is_not_run_again(ri
     restored.start()
     await restored.wait_idle()
     result = await restored._messages({"room_id": room["id"]})
-    assert [(i["recipient_id"], i["state"], i["reason"]) for i in result["exchange"]["reply_intents"]] == [(0, "blocked", "restart")]
+    assert [(i["recipient_id"], i["state"], i["reason"]) for i in result["exchange"]["reply_intents"]] == [(rig.lead, "blocked", "restart")]
     assert not spoken(result) and not [m for m in result["messages"] if m["kind"] == "wrapup"]
     assert len(rig.background.submitted) == 1
     await restored.aclose()
@@ -239,7 +239,7 @@ async def test_no_monthly_limit_never_stops_a_group_for_cost(rig, exchange):
     exchange._exchanges.spend.record(purpose="agent", model="m", cost_usd=1000.0, prompt_tokens=1, completion_tokens=1)
     assert exchange._settings.get("monthly_limit_usd") is None
     await send(rig, room, "Plans for today?")
-    assert speakers(rig) == [0]
+    assert speakers(rig) == [rig.lead]
     result = await history(rig, room)
     assert "cost" not in [i["reason"] for i in result["exchange"]["reply_intents"]]
 
@@ -251,5 +251,5 @@ async def test_a_budget_stop_before_anyone_spoke_still_says_who_did_not_answer(r
     await send(rig, room, "Plans for today?")
     result = await history(rig, room)
     assert not rig.background.submitted
-    assert [(i["recipient_id"], i["state"], i["reason"]) for i in result["exchange"]["reply_intents"]] == [(0, "blocked", "cost")]
+    assert [(i["recipient_id"], i["state"], i["reason"]) for i in result["exchange"]["reply_intents"]] == [(rig.lead, "blocked", "cost")]
     assert not [m for m in result["messages"] if m["kind"] == "wrapup"]

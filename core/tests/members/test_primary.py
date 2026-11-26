@@ -25,8 +25,9 @@ def flagged(rig):
     return [row[0] for row in rig.conn.execute("SELECT id FROM members WHERE primary_contact = 1 ORDER BY id")]
 
 
-def primary(rig, language="en"):
-    return rig.service.team_context(0, language)["primary_id"]
+def primary(rig):
+    """The chief of staff as the store has it: 0 is nobody (Raphael is never it)."""
+    return rig.service.primary_id()
 
 
 async def refused(rig, params):
@@ -43,29 +44,28 @@ def test_the_method_is_registered(rig):
     assert "members.set_primary" in set(rig.rpc.methods())
 
 
-async def test_raphael_is_the_primary_contact_and_the_chief_of_staff_until_the_owner_chooses_another(rig):
+async def test_nobody_is_the_chief_until_a_slime_is_made_and_then_the_first_one_is_for_everyone(rig):
     alone = rig.service.team_context(0, "en")
-    assert (alone["primary_id"], alone["chief_id"]) == (0, 0)
+    assert (alone["primary_id"], alone["chief_id"]) == (None, None)
     alice = await make(rig, "Alice")
-    assert flagged(rig) == []
-    for who in (0, alice):
+    bob = await make(rig, "Bob")
+    assert flagged(rig) == [alice]
+    for who in (0, alice, bob):
         context = rig.service.team_context(who, "en")
-        assert (context["primary_id"], context["chief_id"]) == (0, 0)
+        assert (context["primary_id"], context["chief_id"]) == (alice, alice)
 
 
 async def test_exactly_one_member_is_the_primary_and_choosing_another_moves_it(rig):
     alice, bob = await make(rig, "Alice"), await make(rig, "Bob")
     before = rig.service.team_context(0, "en")
-    assert await rig.call("members.set_primary", {"id": alice}) == {"primary_id": alice}
-    assert flagged(rig) == [alice] and primary(rig) == alice
-    assert rig.service.team_context(0, "en")["revision"] != before["revision"]
-    await rig.call("members.set_primary", {"id": bob})
+    assert await rig.call("members.set_primary", {"id": bob}) == {"primary_id": bob}
     assert flagged(rig) == [bob] and primary(rig) == bob
-    # Raphael can be chosen again: nobody is flagged then, and it is the primary
-    await rig.call("members.set_primary", {"id": 0})
-    assert flagged(rig) == [] and primary(rig) == 0
-    # the chief of staff is Raphael through every one of those changes
-    assert rig.service.team_context(alice, "en")["chief_id"] == 0
+    assert rig.service.team_context(0, "en")["revision"] != before["revision"]
+    await rig.call("members.set_primary", {"id": alice})
+    assert flagged(rig) == [alice] and primary(rig) == alice
+    # Raphael is never chosen: it is the app's guide, not a slime
+    assert await refused(rig, {"id": 0}) == "raphael"
+    assert flagged(rig) == [alice]
 
 
 async def test_the_window_is_told_the_primary_by_the_list_it_reads_the_roster_from(rig):
@@ -78,19 +78,20 @@ async def test_the_window_is_told_the_primary_by_the_list_it_reads_the_roster_fr
 
 
 async def test_a_change_is_announced_once_and_choosing_the_same_member_again_announces_nothing(rig):
-    alice = await make(rig, "Alice")
+    await make(rig, "Alice")
+    bob = await make(rig, "Bob")
     rig.notes.clear()
-    await rig.call("members.set_primary", {"id": alice})
-    await rig.call("members.set_primary", {"id": alice})
+    await rig.call("members.set_primary", {"id": bob})
+    await rig.call("members.set_primary", {"id": bob})
     assert [method for method, _ in rig.notes].count("members.changed") == 1
 
 
-@pytest.mark.parametrize("params,kind", [({"id": 999}, "not_found"), ({"id": -1}, None), ({"id": "1"}, None),
+@pytest.mark.parametrize("params,kind", [({"id": 999}, "not_found"), ({"id": 0}, "raphael"), ({"id": -1}, None), ({"id": "1"}, None),
                                           ({"id": True}, None), ({"id": 1.0}, None), ({}, None)])
 async def test_only_a_member_that_is_there_can_be_chosen(rig, params, kind):
-    await make(rig, "Alice")
+    alice = await make(rig, "Alice")
     assert await refused(rig, params) == kind
-    assert flagged(rig) == [] and primary(rig) == 0
+    assert flagged(rig) == [alice] and primary(rig) == alice
 
 
 async def test_a_member_hidden_from_the_sidebar_is_not_offered_and_cannot_be_chosen(rig):
@@ -100,24 +101,26 @@ async def test_a_member_hidden_from_the_sidebar_is_not_offered_and_cannot_be_cho
     assert primary(rig) == 0
 
 
-async def test_a_primary_that_is_hidden_is_raphael_again_and_unhiding_does_not_bring_it_back(rig):
-    alice, bob = await make(rig, "Alice"), await make(rig, "Bob")
+async def test_a_primary_that_is_hidden_hands_the_role_on_and_nobody_holds_it_while_all_are_hidden(rig):
+    alice, bob, carol = await make(rig, "Alice"), await make(rig, "Bob"), await make(rig, "Carol")
     await rig.call("members.set_primary", {"id": alice})
     await rig.call("members.update", {"id": bob, "hidden": True})
     assert primary(rig) == alice
     await rig.call("members.update", {"id": alice, "hidden": True})
+    assert flagged(rig) == [carol]
+    await rig.call("members.update", {"id": carol, "hidden": True})
     assert flagged(rig) == [] and primary(rig) == 0
     await rig.call("members.update", {"id": alice, "hidden": False})
-    assert primary(rig) == 0
+    assert primary(rig) == alice
 
 
-async def test_a_primary_that_is_deleted_is_raphael_again_and_a_later_member_is_not_the_primary(rig):
-    alice = await make(rig, "Alice")
+async def test_a_primary_that_is_deleted_hands_the_role_on_and_a_later_member_is_not_the_primary(rig):
+    alice, bob = await make(rig, "Alice"), await make(rig, "Bob")
     await rig.call("members.set_primary", {"id": alice})
     await rig.call("members.delete", {"id": alice})
-    assert flagged(rig) == [] and primary(rig) == 0
+    assert flagged(rig) == [bob]
     newer = await make(rig, "Carol")
-    assert newer != alice and primary(rig) == 0
+    assert newer != alice and primary(rig) == bob
 
 
 async def test_a_copy_of_the_primary_is_not_a_second_primary(rig):
@@ -153,9 +156,10 @@ async def test_the_primary_is_kept_when_the_core_restarts(tmp_path):
 
 async def test_raphaels_team_overview_names_the_primary_too(rig):
     alice = await make(rig, "Alice")
-    assert (await rig.service.admin_tool(0, "team_overview", {}))["primary_id"] == 0
-    await rig.call("members.set_primary", {"id": alice})
-    assert (await rig.service.admin_tool(alice, "team_overview", {}))["primary_id"] == alice
+    assert (await rig.service.admin_tool(0, "team_overview", {}))["primary_id"] == alice
+    bob = await make(rig, "Bob")
+    await rig.call("members.set_primary", {"id": bob})
+    assert (await rig.service.admin_tool(alice, "team_overview", {}))["primary_id"] == bob
 
 
 # --- choosing changes nothing else -----------------------------------------------------------------
@@ -182,7 +186,6 @@ async def test_choosing_a_primary_changes_no_room_task_exchange_conversation_or_
     submitted, state = list(rig.background.submitted), dump(rig)
     await rig.call("members.set_primary", {"id": ids[1]})
     await rig.call("members.set_primary", {"id": ids[0]})
-    await rig.call("members.set_primary", {"id": 0})
     # nothing was handed on, run again, ended or moved: every row of the work, the rooms and the threads is as it was
     assert dump(rig) == state
     assert rig.background.submitted == submitted
@@ -193,22 +196,22 @@ async def test_new_room_membership_requires_the_current_chief(rig, exchange):
     room, ids = await team(rig)
     await rig.call("members.set_primary", {"id": ids[0]})
     listed = (await rig.call("rooms.list"))["rooms"]
-    assert [sorted(r["member_ids"]) for r in listed] == [[0, *ids]] and listed[0]["membership_state"] == "ready"
+    assert [sorted(r["member_ids"]) for r in listed] == [[rig.lead, *ids]] and listed[0]["membership_state"] == "ready"
     await rig.call("rooms.update", {"room_id": room["id"], "member_ids": ids})
     # a room made by the primary's own choice, or by a meeting, has it as well
     with pytest.raises(RpcError):
-        await rig.call("rooms.create", {"name": "No chief", "member_ids": [0, ids[1]]})
-    assert (await exchange.meeting({"member_ids": [0, *ids], "agenda": "Plan"}, "en", meeting_source(rig, 7)))["member_ids"] == [0, *ids]
+        await rig.call("rooms.create", {"name": "No chief", "member_ids": [rig.lead, ids[1]]})
+    assert (await exchange.meeting({"member_ids": [rig.lead, *ids], "agenda": "Plan"}, "en", meeting_source(rig, 7)))["member_ids"] == [rig.lead, *ids]
     # and it is still there once the primary has been deleted
     await rig.call("members.delete", {"id": ids[0]})
-    assert rig.service.primary_id() == 0
+    assert rig.service.primary_id() == rig.lead  # the role went to the next slime in the sidebar's order
     rooms = (await rig.call("rooms.list"))["rooms"]
     assert next(r for r in rooms if r["id"] == room["id"])["membership_state"] == "needs_adjustment"
     assert next(r for r in rooms if r["id"] != room["id"])["membership_state"] == "ready"
 
 
 @pytest.mark.parametrize("switch", ["never", "before the owner speaks", "while the chief frames it", "after the first reply",
-                                    "after the last reply", "back to Raphael"])
+                                    "after the last reply", "back to the lead"])
 async def test_the_exchange_runs_the_same_whenever_the_primary_changes(rig, exchange, switch):
     room, ids = await team(rig)
     alice, bob = ids
@@ -224,15 +227,15 @@ async def test_the_exchange_runs_the_same_whenever_the_primary_changes(rig, exch
     await finish(rig, exchange, "Bob owns release")
     if switch == "after the last reply":
         await rig.call("members.set_primary", {"id": bob})
-    if switch == "back to Raphael":
+    if switch == "back to the lead":
         await rig.call("members.set_primary", {"id": alice})
-        await rig.call("members.set_primary", {"id": 0})
+        await rig.call("members.set_primary", {"id": rig.lead})
     # the same members spoke in the same order, and no one sums up by being the chief
-    assert [turn["member_id"] for turn in rig.background.submitted] == [0, alice, bob]
+    assert [turn["member_id"] for turn in rig.background.submitted] == [rig.lead, alice, bob]
     result = await history(rig, room)
     assert result["exchange"]["state"] == "done"
     assert all(m["kind"] == "message" for m in result["messages"])
-    assert sorted((await rig.call("rooms.list"))["rooms"][0]["member_ids"]) == [0, alice, bob]
+    assert sorted((await rig.call("rooms.list"))["rooms"][0]["member_ids"]) == [rig.lead, alice, bob]
     assert {i["state"] for i in result["exchange"]["reply_intents"]} <= {"done"}
 
 
@@ -286,11 +289,11 @@ async def test_the_roster_names_the_primary_to_each_kind_of_speaker(rig):
     assert not any("administer" in text for text in (for_alice, for_bob, for_raphael))
 
 
-async def test_raphael_is_told_it_is_the_primary_by_default_and_gives_no_second_chief(rig):
+async def test_the_first_slime_is_told_it_is_the_chief_by_default_and_raphael_never_is(rig):
     bob = await make(rig, "Bob")
-    for who, expected in ((0, "do only your own work yourself."), (bob, "")):
+    for who, expected in ((bob, "do only your own work yourself."), (0, "")):
         text = says(roster_prompt(rig.service, rig.service.speaker(who), "en"))
-        assert text.startswith('"Raphael" (id 0).') and (expected in text if expected else "That is you" not in text)
+        assert text.startswith('"Bob" (id %d).' % bob) and (expected in text if expected else "That is you" not in text)
     assert "handoff" in says(roster_prompt(rig.service, rig.service.speaker(0), "en"))
 
 
@@ -333,7 +336,7 @@ async def test_an_api_turn_of_a_member_is_told_the_primary_of_that_moment(setup,
     # The team comes with each turn's message, so the member reads the primary of that moment while its system
     # prompt stays the one the provider cached.
     first, second = (call["messages"][1]["content"] for call in client.chat_calls)
-    assert says(first).startswith('"Raphael" (id 0).') and says(second).startswith('"Coach" (id %d).' % other.id)
+    assert says(first).startswith('"Teacher" (id %d).' % one.id) and says(second).startswith('"Coach" (id %d).' % other.id)
     assert "hand it to the primary contact" in says(second)
     assert client.chat_calls[0]["messages"][0]["content"] == client.chat_calls[1]["messages"][0]["content"]
 
@@ -357,10 +360,11 @@ for line in sys.stdin:
         send({"method":"turn/completed", "params":{"turn":{"status":"completed"}}})
         break
 '''.replace("INPUTS", repr(str(inputs))), name="codex")
+    chief = team.members.store.member(team.members.primary_id())
     await typed(rig, "Who is the primary contact?", teacher.id, language="en")
     team.members.store.set_primary(writer.id)
     await typed(rig, "And now?", teacher.id, language="en")
     first, second = [json.loads(line) for line in inputs.read_text(encoding="utf-8").splitlines()]
-    assert says(first).startswith('"Raphael" (id 0).')
+    assert says(first).startswith('"%s" (id %d).' % (chief.name, chief.id))
     assert 'And now?' in second
     assert says(second).startswith('"Writer" (id %d).' % writer.id)

@@ -56,16 +56,17 @@ async def test_room_creation_retry_is_idempotent_and_owner_can_rename(rig, rooms
 
 async def test_all_room_paths_require_the_chief_and_at_least_two_distinct_members(rig, rooms):
     ids = [(await rig.call("members.create", {"name":f"Peer {i}"}))["member"]["id"] for i in range(6)]
-    for members in ([0], ids, [0,ids[0],ids[0]], [False,ids[0]]):
+    # The chief is the first slime made.
+    for members in ([ids[0]], ids[1:], [ids[0],ids[1],ids[1]], [False,ids[0]]):
         with pytest.raises(RpcError):
             await rig.call("rooms.create", {"member_ids":members})
-    room = (await rig.call("rooms.create", {"member_ids":[0,ids[0]]}))["room"]
-    assert room["name"] and room["member_ids"] == [0,ids[0]]
-    for members in ([0], ids, [0,ids[0],ids[0]]):
+    room = (await rig.call("rooms.create", {"member_ids":[ids[0],ids[1]]}))["room"]
+    assert room["name"] and room["member_ids"] == [ids[0],ids[1]]
+    for members in ([ids[0]], ids[1:], [ids[0],ids[1],ids[1]]):
         with pytest.raises(RpcError):
             await rig.call("rooms.update", {"room_id":room["id"], "member_ids":members})
     with pytest.raises(sqlite3.IntegrityError):
-        rig.conn.execute("DELETE FROM room_members WHERE room_id=? AND member_id=0", (room["id"],))
+        rig.conn.execute("DELETE FROM room_members WHERE room_id=? AND member_id=?", (room["id"], ids[0]))
 
 
 async def test_reply_identity_comes_from_source_and_rejects_self_and_cross_scope(rig, rooms):
@@ -134,7 +135,7 @@ def test_legacy_dev_shapes_keep_room_history_and_remove_ambiguous_private_rows(t
     assert len(records) == 9 and all(json.loads(r['original'])['conversation_id'] == conversation for r in records)
     assert [r[0] for r in conn.execute("SELECT member_id FROM room_members WHERE room_id=3")] == list(range(1,7))
     assert conn.execute("SELECT membership_state FROM rooms WHERE id=3").fetchone()[0] == 'needs_adjustment'
-    assert [r[0] for r in conn.execute("SELECT member_id FROM room_members WHERE room_id=1 ORDER BY member_id")] == [0,1]
+    assert [r[0] for r in conn.execute("SELECT member_id FROM room_members WHERE room_id=1 ORDER BY member_id")] == [1]
     assert not conn.execute("SELECT * FROM conversation_context_summaries").fetchall()
     assert not conn.execute("SELECT * FROM agent_conversation_cli_sessions").fetchall()
     assert len(conn.execute("SELECT * FROM scope_context_archive WHERE kind!='room_messages' AND kind!='conversations'").fetchall()) == 4
