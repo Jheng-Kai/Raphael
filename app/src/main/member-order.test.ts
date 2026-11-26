@@ -66,6 +66,16 @@ describe("a member dropped", () => {
     expect(movedMember(list(), 99, 1)).toBeNull();
   });
 
+  test("before the row that stands for Raphael lands before the primary member whose place it takes", () => {
+    // Member 4 is the primary contact: it leads the column, and Raphael's row stands in its place in folder 2.
+    const withPrimary = (): MembersList => ({ ...list(), team_context: { primary_id: 4 } as MembersList["team_context"] });
+    const moved = movedMember(withPrimary(), 1, 2, 0)!;
+    expect(ids(moved, 2)).toEqual([1, 4, 5]);
+    expect(moved).toEqual(movedMember(withPrimary(), 1, 2, 4));
+    // Raphael as the primary has no row among the members: nothing stands before it.
+    expect(ids(movedMember(list(), 1, 2, 0), 2)).toEqual([4, 5, 1]);
+  });
+
   test("leaves the list it was given as it was", () => {
     const base = list(), before = JSON.stringify(base);
     movedMember(base, 1, 2, 5);

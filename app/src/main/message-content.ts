@@ -213,6 +213,9 @@ export function linkDestination(raw: string): string {
   return value.replace(/\s+(?:"[^"]*"|'[^']*'|\([^()]*\))$/, "");
 }
 
+/** A letter or digit of any script: what an underscore must not sit between to be emphasis. */
+const WORD_CHAR = /[\p{L}\p{N}]/u;
+
 function inline(text: string, query: string, markdown: boolean, urls: Set<string>, depth = 0, mentions: readonly MentionTarget[] = [], files?: KnownFiles): string {
   let out = "", at = 0, plain = "";
   const flush = (): void => { out += mentions.length ? mentionsHTML(plain, mentions, words => highlightHTML(words, query)) : highlightHTML(plain, query); plain = ""; };
@@ -286,7 +289,15 @@ function inline(text: string, query: string, markdown: boolean, urls: Set<string
     if (markdown && depth < 8 && /[*_~]/.test(text[at])) {
       const marker = text[at + 1] === text[at] ? text.slice(at, at + 2) : text[at];
       if (marker === "~") { plain += text[at++]; continue; }
-      const end = text.indexOf(marker, at + marker.length);
+      // An underscore run touching a letter, digit or CJK character is part of the word (GFM): `connections_list` is no emphasis.
+      const intraword = (index: number, step: 1 | -1): boolean => {
+        if (text[at] !== "_") return false;
+        while (text[index] === "_") index += step;
+        return WORD_CHAR.test(text[index] ?? "");
+      };
+      if (intraword(at - 1, -1)) { plain += text[at++]; continue; }
+      let end = text.indexOf(marker, at + marker.length);
+      while (end > at + marker.length && intraword(end + marker.length, 1)) end = text.indexOf(marker, end + marker.length);
       if (end > at + marker.length) {
         flush(); const tag = marker === "~~" ? "del" : marker.length === 2 ? "strong" : "em";
         out += `<${tag}>${inline(text.slice(at + marker.length, end), query, true, urls, depth + 1, mentions, files)}</${tag}>`;

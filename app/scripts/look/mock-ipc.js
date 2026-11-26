@@ -638,6 +638,13 @@ export function installMock(fixture, config = {}, target = window) {
         exchange(62, 2, "小森", turn.created_at_ms - EARLIER + 6_000, sample.otherRequest, sample.otherResult)] });
     turn.handoffs = [exchange(61, 1, "小晴", turn.created_at_ms + 5_000, sample.request, sample.result)];
   }
+  if (variant.identifiers) {
+    // Identifiers with underscores in the owner's words, a member's reply and both sides of a hand-off (never emphasis).
+    const turn = data.turns.find(turn => turn.id === 1), sample = data.identifiersSample;
+    turn.question = sample.owner; turn.text = sample.reply;
+    turn.messages = [{ seq: 1, kind: "reply", text: sample.reply, at_ms: turn.created_at_ms }];
+    if (turn.handoffs?.[0]) Object.assign(turn.handoffs[0], { request: sample.request, result: sample.result });
+  }
   if (variant.handoffGroup) {
     const many = variant.handoffGroup === "many", done = variant.handoffGroup === "done";
     const sample = data.handoffGroupSample, people = variant.handoffGroup === "long" ? sample.longPeople : sample.people;
