@@ -205,3 +205,31 @@ async def test_a_stopped_engine_leaves_it_pending_for_the_monitor_and_the_next_s
     vm.refresh_mounts_soon()
     await settle(vm)
     assert not vm.mounts_pending and mounted(runtime) == ["/home/cua/projects/Repo"]
+
+
+async def test_the_one_shared_computer_shows_a_folder_the_same_way(conn, tmp_path, monkeypatch):
+    # One container is every member's: it is made again once, when no member works in it (any seat's lease counts).
+    monkeypatch.setattr("raphael_core.computer.vm.MOUNTS_RETRY_S", 0.01)
+    monkeypatch.setattr("raphael_core.computer.rfb_view.capture", lambda *args, **kwargs: b"\x89PNG\r\n\x1a\nimage")
+    settings = SettingsStore(conn)
+    settings.set("computer_vm_mode", "shared")
+    runtime = Runtime()
+    vm = LocalVm(tmp_path / "data", settings=settings, runner=runtime, clock=lambda: 0)
+    first, second = await vm.seat(1), await vm.seat(2)
+    runtime.raw = container(vm, first, runtime)
+
+    async def create(created, zone):
+        runtime.raw = container(vm, created, runtime)
+        return Result(0)
+
+    monkeypatch.setattr(vm, "create", create)
+    project = tmp_path / "Repo"
+    project.mkdir()
+    settings.set("project_folders", [str(project)])
+    vm.busy = lambda key: key == second.key  # the second member is working
+    vm.refresh_mounts_soon()
+    await asyncio.sleep(0.2)
+    assert remade(runtime) == [] and mounted(runtime) == []
+    vm.busy = lambda key: False
+    await settle(vm)
+    assert mounted(runtime) == ["/home/cua/projects/Repo"] and remade(runtime) == ["stop", "rm"]
