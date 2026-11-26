@@ -95,6 +95,7 @@ from ..worker.context import CONTEXT_OVERFLOW, is_context_overflow, provider_win
 from ..worker.loop import MORE_ROOM, REPLY_TOKENS, WAITING, WRAP_UP, FINAL_REPORT, ToolOutcome, result_text
 from ..members.activity import current, tool_step
 from ..own_calendar import CalendarError
+from .outcomes import worker_trace
 from .routine_outcome import REFUSED_KINDS
 from .snapshot import BUILTIN, FIND, MCP, NOTHING_FITS, USE, USE_REFUSALS, USE_TOOL, Snapshot, ToolRef
 from .tasks import TaskStore
@@ -686,7 +687,7 @@ class TaskRun:
             self._charge_estimate(request_chars)  # cancelled while the provider was working
             raise
         except Exception as exc:
-            logger.warning("The task's model failed unexpectedly: %s", type(exc).__name__)
+            logger.warning("The task's model failed unexpectedly: %s", worker_trace(exc, frames_kept=12, size=1200))
             self._step(kind="model", outcome="error", ms=_ms(began), reason="error")
             raise stopped("failed", "error") from None
         self.touch()
@@ -1330,7 +1331,7 @@ class TaskRun:
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            logger.warning("The %s lookup failed unexpectedly: %s", name, type(exc).__name__)
+            logger.warning("The %s lookup failed unexpectedly: %s", name, worker_trace(exc, frames_kept=12, size=1200))
             return ToolResult(name, False, None, "error")
 
 

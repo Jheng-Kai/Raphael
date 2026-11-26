@@ -65,8 +65,9 @@ def computer_files(text):
                 yield PurePosixPath(*below)
 
 
-def worker_trace(error):
-    """Keep only our frame locations and exception type, never values or source text."""
+def worker_trace(error, *, frames_kept=3, size=400):
+    """Keep only our frame locations and exception type, never values or source text. The last `frames_kept` frames
+    of ours (all of them for a log line), cut at `size` characters."""
     root = Path(__file__).resolve().parent.parent
     frames = []
     for frame in traceback.extract_tb(error.__traceback__):
@@ -75,4 +76,4 @@ def worker_trace(error):
         except (OSError, ValueError):
             continue
         frames.append(f"{path.as_posix()}:{frame.lineno}")
-    return (type(error).__name__ + ": " + ", ".join(frames[-3:]))[:400]
+    return (type(error).__name__ + ": " + ", ".join(frames[-frames_kept:]))[:size]

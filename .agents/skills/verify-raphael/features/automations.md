@@ -38,6 +38,9 @@ the routine (`last_error`, `last_failed`) and in the member's conversation. The 
 a dot (`routine-view-failed`), and a routine that is running shows the member's working line in its conversation, with no owner
 bubble for its instructions (`routine-running`, R-ROUTINE-08). Existing consumers: `routine-sentence` (a failed run's line and
 the same view), `details-routine-view` (a routine that works has no status line).
+A later good run, also a run started again, clears the reason, and a run that broke in our own code keeps its exception type and
+frame locations in its run record (R-ROUTINE-FAIL-01); offline evidence is `core/tests/members/test_routine_health.py` and
+`core/tests/background/test_outcomes.py`, with no scene (nothing is drawn differently).
 
 A routine's run reads the team without a card (R-ROUTINE-09; a health check that reads many members must not raise a card for each one, or its runs time out and are
 cancelled): `member_manage` reading actions (a member's routines, skills,

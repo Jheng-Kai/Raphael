@@ -1896,7 +1896,7 @@ class BackgroundService:
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # a bug here must not stop the tasks after this one
-            logger.warning("A background task failed unexpectedly: %s", type(exc).__name__)
+            logger.warning("A background task failed unexpectedly: %s", worker_trace(exc, frames_kept=12, size=1200))
             try:
                 current = self._store.get(task.id)
                 if current is None or current.state not in FINAL_STATES:  # an end already written stays

@@ -2370,15 +2370,28 @@ class MembersService:
         turn = self._history.get(turn_id)
         if turn is None or turn.status in ("running", "confirm"):
             return
+        summary = _line(turn.text or turn.detail or "")
+        if turn.status == "error":
+            # A run that broke in our own code says where (an exception type and our frames, never a value), so that the
+            # owner can read it and the next occurrence can be found; any other failure keeps its own words alone.
+            cause = self._conn.execute("SELECT reason, report_detail FROM worker_tasks WHERE turn_id=? ORDER BY id DESC LIMIT 1", (turn_id,)).fetchone()
+            if cause is not None and (cause[0] or "").startswith("worker_") and cause[1]:
+                summary = f"{summary} ({' '.join(cause[1].split())[:160]})"
         with self._conn:
             self._conn.execute(
                 "UPDATE routine_runs SET finished = ?, status = ?, summary = ?, cost = ? WHERE id = ?",
-                (self._now_ms(), turn.status, _line(turn.text or turn.detail or ""), turn.cost_usd, run["id"]),
+                (self._now_ms(), turn.status, summary, turn.cost_usd, run["id"]),
             )
-            if turn.status in ("error", "expired"):
+            # Only the routine's newest run speaks for it: an older one that ends late neither sets a reason over a newer run
+            # nor leaves its own after a newer run worked.
+            newest = self._conn.execute("SELECT 1 FROM routine_runs WHERE routine_id=? AND id>? LIMIT 1", (run["routine_id"], run["id"])).fetchone() is None
+            if newest and turn.status in ("error", "expired"):
                 # The routine says its last run did not work, and why in a sentence: its view shows it.
                 self._conn.execute("UPDATE routines SET last_error=? WHERE id=?",
                                    (_line((turn.text or turn.detail or "").strip().split("\n\n")[0]), run["routine_id"]))
+            elif newest and turn.status == "done":
+                # A run that worked ends what an earlier failure said (a run started again does not clear it when it starts).
+                self._conn.execute("UPDATE routines SET last_error='' WHERE id=?", (run["routine_id"],))
         routine = self.store.routine(run["routine_id"])
         if routine is not None:
             self._changed("routines.changed", routine.member_id)
