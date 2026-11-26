@@ -186,6 +186,16 @@ Upstream: https://github.com/NousResearch/hermes-agent, revision `c419cf7c`.
   `agent/reasoning_timeouts.py`.
 
 
+## Hermes Agent, delegated sub-workers (MIT)
+
+Upstream: https://github.com/NousResearch/hermes-agent, revision `0431192d`. No code is copied.
+`core/src/raphael_core/agent/delegate.py` and the sub-worker path of `background/service.py` follow the design of
+`tools/delegate_tool.py`, `delegate_tool_toolsets.py` and `delegate_tool_child_run.py`: a tool that takes one task or a
+batch, children that get only a goal and context, one level of nesting, a fixed set of tools a child never has
+(delegation, questions to the user, memory writes, messages out, scheduling) and a structured result for each child. Raphael
+runs them on its own background runner, gate and providers, with its own limits.
+The upstream copyright and MIT license are reproduced in `core/packaging/licenses/hermes-agent-MIT.txt`.
+
 ## Hermes Agent, memory files (MIT)
 
 Upstream: https://github.com/NousResearch/hermes-agent, revision `c419cf7c`.
