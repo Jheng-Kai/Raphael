@@ -60,6 +60,7 @@ def _cover(root: Path, slime: int) -> None:
         renamed = f"{slime}-{name[2:]}"
         if (folder / name).is_file() and not (folder / renamed).exists():
             (folder / name).rename(folder / renamed)
+        if (folder / renamed).is_file():  # also when a start that stopped after the rename left the old JSON behind
             document["file"] = renamed
     (folder / f"{slime}.json").write_text(json.dumps(document), encoding="utf-8")
     metadata.unlink()
