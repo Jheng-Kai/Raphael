@@ -8,6 +8,7 @@ import pytest
 from raphael_core.brain.secrets import MemoryKeyStore  # noqa: F401 - the suite's keyring guard is in conftest
 from raphael_core.integrations.vault import MemoryVault
 from raphael_core.members import raphael_files
+from raphael_core.members.covers import Covers
 
 
 @pytest.fixture
@@ -77,6 +78,16 @@ def test_a_picture_that_is_already_under_the_slimes_id_is_left_alone(split):
     split.conn.commit()
     run(split)
     assert (pictures / "7-aaaaaaaaaaaa.png").read_bytes() == b"slime's" and (pictures / "0-aaaaaaaaaaaa.png").is_file()
+
+
+def test_a_cover_whose_image_was_renamed_before_the_process_stopped_still_resolves(split):
+    covers = split.root / "avatars" / "covers"
+    (covers / "0-0123456789ab.png").rename(covers / "7-0123456789ab.png")  # stopped here: the old JSON still names `0-…`
+    run(split)
+    assert json.loads((covers / "7.json").read_text(encoding="utf-8")) == {"kind": "image", "file": "7-0123456789ab.png"}
+    assert (covers / "7-0123456789ab.png").is_file() and not (covers / "0.json").exists()
+    shown = Covers(covers, lambda path: path.read_bytes() if path.is_file() else None, lambda *_: None)
+    assert shown.reference(7) == {"kind": "image", "file": "7-0123456789ab.png"} and shown.picture(7) == b"png"
 
 
 def test_a_second_run_moves_nothing_and_never_takes_what_raphael_has_made_since(split):
