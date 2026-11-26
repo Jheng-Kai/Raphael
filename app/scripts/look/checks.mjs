@@ -7374,9 +7374,11 @@ export function checkRendered(name, context = {}) {
   }
   if (name === "room-responder") {
     const menu = document.querySelector('#app-popover');
-    for (const value of ['auto', 'member:0', 'member:1', 'everyone']) require(visible(menu?.querySelector(`[data-value="${value}"]`)), `${value} is selectable`);
+    const chosen = [...document.querySelectorAll('.mb-dialog [data-dlg="member"][aria-pressed="true"]')].map(row => `member:${row.dataset.member}`);
+    require(chosen.length >= 2 && chosen[0] === `member:${window.__look.data.primaryId}`, "the chief and another slime are chosen, the chief first");
+    for (const value of ['auto', ...chosen, 'everyone']) require(visible(menu?.querySelector(`[data-value="${value}"]`)), `${value} is selectable`);
     const members = [...menu.querySelectorAll('[data-value^="member:"]')].map(row => row.dataset.value);
-    require(members.join() === (window.__look.data.primaryId === 1 ? 'member:1,member:0' : 'member:0,member:1'), "responder choices follow the primary display exchange");
+    require(members.join() === chosen.join() && !members.includes('member:0'), "responder choices are the slimes chosen, the chief first, never Raphael");
     require(!document.querySelector('.mb-dialog select'), "responder uses the app's selector");
     // Each choice shows its full label in its row.
     const words = document.querySelector('[data-responder] .sel > span');
@@ -10495,7 +10497,7 @@ export function checkRendered(name, context = {}) {
       require(title !== "" && dialog.querySelector('[role="group"]').getAttribute('aria-label') === title, "it is titled by the action and its list is named by the title");
       const choices = [...dialog.querySelectorAll('.mb-chat-choice')];
       const ids = choices.map(button => Number(button.dataset.id));
-      require(choices.length >= 3 && choices.every(button => button.tagName === 'BUTTON' && visible(button)), "the members are real buttons");
+      require(choices.length >= 2 && choices.every(button => button.tagName === 'BUTTON' && visible(button)), "the members are real buttons");
       require(ids.every(id => id !== 0 && !data.members.find(member => member.id === id).pinned), "only members that are not pinned are offered, and not Raphael");
       require(!dialog.querySelector('.mb-dlg-act, [role="radio"], .mb-chat-choice svg.i'), "no 設為主要, no radio and no check: one press answers");
       require(visible(dialog.querySelector('[data-primary-search]')), "the search is there");
@@ -10554,7 +10556,7 @@ export function checkRendered(name, context = {}) {
       require(visible(dialog), "the picker window is open");
       require(dialog.querySelector('h2').textContent.trim() !== "" && dialog.querySelector('h2').textContent === dialog.querySelector('[role="radiogroup"]').getAttribute('aria-label'), "it is titled 選擇主要聯絡對象, and its list is named by the title");
       const choices = [...dialog.querySelectorAll('[role="radio"]')];
-      require(choices.length >= 3 && choices.every(button => button.tagName === 'BUTTON' && visible(button)), "the members are real buttons");
+      require(choices.length >= 2 && choices.every(button => button.tagName === 'BUTTON' && visible(button)), "the members are real buttons");
       require(!dialog.querySelector('select, input[type=radio], input[type=checkbox]'), "no native controls");
       require(data.primaryId === 1 && !choices.some(button => button.dataset.id === '0') && !choices.some(button => button.dataset.id === '1'), "小晴 is the chief now and is not offered, and Raphael is never offered");
       const picked = choices.filter(button => button.getAttribute('aria-checked') === 'true');
@@ -10598,7 +10600,7 @@ export function checkRendered(name, context = {}) {
       return { check: name, members: order(rows) };
     }
     if (name === "primary-set") {
-      require(sets.length === 1 && sets[0].params.id === 1 && data.primaryId === 1, "one boundary call chose 小晴 and nothing else");
+      require(sets.length === 1 && sets[0].params.id === 2 && data.primaryId === 2, "one boundary call chose 小森 and nothing else");
       require(!document.querySelector('.mb-dialog'), "the window closed");
       require(!calls.some(call => /^(rooms|routines|worker|agent)\./.test(call.method ?? '') && /(update|create|delete|rerun|cancel|ask|stop)/.test(call.method)), "no room, routine, task or conversation was touched");
       const members = visible(column) ? columnSwap() : [];
@@ -11540,7 +11542,9 @@ export function checkRendered(name, context = {}) {
       const edge = cover.getBoundingClientRect(), mark = face.getBoundingClientRect();
       require(visible(cover) && edge.height >= 96 && /gradient/.test(getComputedStyle(cover).backgroundImage), "a cover with a gradient and its pattern");
       require(visible(face) && mark.top < edge.bottom - 8 && mark.bottom > edge.bottom + 8 && mark.width >= 80, "the face is large and crosses the cover's lower edge");
-      require(face.querySelector(".mb-face-pencil svg.i") && face.getAttribute("aria-haspopup") === "menu", "the face edits with a pencil and opens the picker");
+      // Raphael's face and name are fixed (R-RAPHAEL-UI-03): a face and words; every slime's face edits with a pencil and opens the picker.
+      if (pane.querySelector("h1.ms-name")) require(!face.querySelector(".mb-face-pencil") && !pane.querySelector("#ms-name, #ms-role, [data-ms=\"avatar\"]") && face.querySelector(".slime-surface"), "Raphael's face and name are shown, with nothing to change");
+      else require(face.querySelector(".mb-face-pencil svg.i") && face.getAttribute("aria-haspopup") === "menu", "the face edits with a pencil and opens the picker");
       const change = cover.querySelector('[data-ms="cover"]'), button = change?.getBoundingClientRect();
       require(visible(change) && change.classList.contains("icon") && change.textContent.trim() === "" && change.getAttribute("aria-haspopup") === "menu", "the cover changes from one round icon");
       require(button.right <= edge.right && button.bottom <= edge.bottom && button.left > mark.right, "the cover's icon sits at its lower right, clear of the face");
@@ -11610,9 +11614,9 @@ export function checkRendered(name, context = {}) {
         require(switches.length === 1 && visible(switches[0]), "notifications are one switch");
       }
       if (raphael) {
-        // The first member's name is the owner's, typed in place as every member's; its role is the chief's and has no field.
-        const firstName = pane.querySelector("#ms-name");
-        require(visible(firstName) && !pane.querySelector("#ms-role") && firstName.getBoundingClientRect().left <= face.getBoundingClientRect().left + 8, "the first member's name is in place under the face, with no role field");
+        // Raphael's name is the language's own and fixed: its words stand in place under the face, with no field and no role.
+        const fixedName = pane.querySelector("h1.ms-name");
+        require(visible(fixedName) && !pane.querySelector("#ms-name, #ms-role") && fixedName.getBoundingClientRect().left <= face.getBoundingClientRect().left + 8, "Raphael's name is in place under the face, with no field and no role");
       } else {
         const memberName = pane.querySelector("#ms-name"), role = pane.querySelector("#ms-role");
         require(visible(memberName) && visible(role) && memberName.getBoundingClientRect().left <= face.getBoundingClientRect().left + 8, "the name and the role are in place under the face");

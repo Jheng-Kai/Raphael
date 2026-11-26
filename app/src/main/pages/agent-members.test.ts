@@ -2380,6 +2380,31 @@ describe("Raphael apart from the slimes", () => {
     agent.hide();
   });
 
+  test("Raphael's space is a place of the navigation history: Back returns to the slime that was open, Forward to Raphael", async () => {
+    api.membersList.mockResolvedValue(roster(3)); readConversations();
+    const history = new PlaceHistory();
+    const agent = mount("hold", history);
+    const stop = installNavInput(window, direction => stepPlace(direction, history, {
+      layer: stepOpenLayer,
+      exists: place => place.page === "member" && agent.chatPlaceExists(place),
+      show: place => { if (place.page === "member") agent.showChatPlace(place); },
+    }));
+    try {
+      await flush();
+      const chief = agent.currentChatPlace();
+      await pick(0);
+      const raphael = agent.currentChatPlace();
+      expect(raphael).toMatchObject({ page: "member", member: 0 });
+      expect(raphael).not.toEqual(chief);
+      sendNavInput("mouse", "back"); await flush();
+      expect(agent.currentChatPlace()).toEqual(chief);
+      expect(pillName()).toBe("日文老師");
+      sendNavInput("mouse", "forward"); await flush();
+      expect(agent.currentChatPlace()).toEqual(raphael);
+      expect(pillName()).toBe("拉斐爾");
+    } finally { stop(); agent.hide(); }
+  });
+
   test("a roster that no longer has the open slime moves to the chief, or Raphael when no slime is left", async () => {
     api.membersList.mockResolvedValue(roster(3)); readConversations();
     const agent = mount(); await flush(); await pick(4);

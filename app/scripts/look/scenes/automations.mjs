@@ -135,7 +135,7 @@ export default [
   scene("room-replies", "Named room replies and recipient chips", [room(1), check("room-replies")]),
   scene("room-discussion", "Colleagues disagree and hand off with named reply chips", [room(1), check("room-discussion")], { roomDiscussion: true }),
   scene("room-wrapup", "Raphael's wrap-up with owner decision and named next steps", [room(1), wait(".au-room-wrapup"), check("room-wrapup")], { roomWrapup: true }),
-  scene("new-room-responder", "New room default responder choices", [newRoom(), click('[data-dlg="member"][data-member="1"]'), click('[data-dlg="responder"]'), check("room-responder")]),
+  scene("new-room-responder", "New room default responder choices", [newRoom(), click('[data-dlg="member"][data-member="2"]'), click('[data-dlg="responder"]'), check("room-responder")]),
   scene("room-required-chief", "Raphael is selected and cannot be removed", [newRoom(), check("room-required-chief")]),
   scene("room-generated-name", "Generated room name remains editable", [newRoom(), click('[data-dlg="member"][data-member="1"]'), check("room-generated-name"), type('#room-name', '上線協作'), click('[data-dlg="member"][data-member="2"]'), check("room-edited-name")]),
   scene("room-private-isolation", "Room delivery stays outside private history", [room(1), type('#room-message', 'roomnonce-private-isolation'), key('Enter'), check('room-isolation-send'), { action: "member", id: 1 }, check('room-private-isolation')]),
