@@ -51,3 +51,24 @@ test("the stylesheet reads the dragged widths from properties that are not inher
   // The panel's room is the grid's own width, not the window's less the list's.
   expect(members).not.toMatch(/100vw - var\(--sidebar-width\)/);
 });
+
+test("holding an edge sets no inherited property on the root: one shield over the window keeps the cursor and the press", () => {
+  localStorage.clear();
+  document.documentElement.removeAttribute("data-sidebar-collapsed");
+  document.body.innerHTML = '<div class="window-chrome" id="window-chrome"></div><nav id="nav"></nav><main id="main"></main>';
+  const nav = document.getElementById("nav")!, column = document.createElement("aside");
+  column.innerHTML = '<div class="mb-top"><button data-col="search"></button><button data-col="add"></button></div>';
+  createSidebar(nav, column);
+  const edge = nav.querySelector<HTMLElement>(".side-edge")!;
+  edge.setPointerCapture = vi.fn(); edge.hasPointerCapture = () => true; edge.releasePointerCapture = vi.fn();
+  const rootAttributes = (): string => [...document.documentElement.attributes].map(attribute => attribute.name).sort().join(",");
+  const before = rootAttributes();
+  edge.dispatchEvent(new PointerEvent("pointerdown", { button: 0, pointerId: 1, clientX: 348, bubbles: true }));
+  expect(rootAttributes()).toBe(before);
+  expect(document.querySelectorAll(".edge-shield")).toHaveLength(1);
+  edge.dispatchEvent(new PointerEvent("pointerup", { pointerId: 1, bubbles: true }));
+  expect(document.querySelectorAll(".edge-shield")).toHaveLength(0);
+  expect(rootAttributes()).toBe(before);
+  expect(strip("sidebar.css")).toContain(".edge-shield { position: fixed; inset: 0; z-index: 400; cursor: col-resize; user-select: none; }");
+  expect(strip("sidebar.css")).not.toContain(":root[data-resizing]");
+});
