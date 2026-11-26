@@ -54,8 +54,10 @@ export function installMock(fixture, config = {}, target = window) {
         { id: 716, name: "outline", description: "", enabled: true }] });
   }
   if (variant.skillPackages) {
-    // A library longer than the tab: the way back from a package's page must land where the list was left.
-    const kits = ["寫作工具", "資料分析", "客服回覆", "行銷素材", "財務報表", "招募流程", "產品規格", "設計檢查"];
+    // A library longer than the tab at every size (1920x1080 included): the way back from a package's page must land where the
+    // list was left. Its last kit (pack:45) is out of view until the list is scrolled.
+    const kits = ["寫作工具", "資料分析", "客服回覆", "行銷素材", "財務報表", "招募流程", "產品規格", "設計檢查",
+      "法務審閱", "會議準備", "教育訓練", "採購比價", "專案追蹤", "品質檢查", "社群經營", "翻譯校對"];
     data.skillLibrary = [...data.skillLibrary, ...kits.map((name, at) => ({
       key: `pack:${30 + at}`, name, kind: "pack", source: `example/kit-${at + 1}`, description: "", version: "", enabled: true, access: "all", updatable: true,
       skills: [{ id: 300 + 2 * at, name: `${name}一`, description: `${name}的第一個技能`, enabled: true }, { id: 301 + 2 * at, name: `${name}二`, description: `${name}的第二個技能`, enabled: true }],

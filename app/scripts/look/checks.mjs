@@ -801,8 +801,8 @@ export function checkRendered(name, context = {}) {
       }
     }
     if (name === 'skill-library-back') {
-      const body = document.querySelector('.modal-scrim .modal-body'), opener = document.querySelector('[data-skl="open"][data-key="pack:37"]');
-      require(visible(document.querySelector('.modal-scrim .skl-import')) && document.querySelectorAll('.modal-scrim .skl-pack').length === 11, 'the whole list is back, with the importer');
+      const body = document.querySelector('.modal-scrim .modal-body'), opener = document.querySelector('[data-skl="open"][data-key="pack:45"]');
+      require(visible(document.querySelector('.modal-body .set-head [data-skl="import-open"]')) && document.querySelectorAll('.modal-scrim .skl-pack').length === 19, 'the whole list is back, with 匯入 in the header');
       require(document.activeElement === opener, "the focus is back on the package's row");
       const row = opener.getBoundingClientRect(), view = body.getBoundingClientRect();
       require(body.scrollTop > 0 && row.top >= view.top - 1 && row.bottom <= view.bottom + 1, `the list is where it was left, the package's row in view (scrolled ${Math.round(body.scrollTop)})`);
@@ -816,7 +816,7 @@ export function checkRendered(name, context = {}) {
       require(items.length === 3 && ticked.join('、') === '小晴、小森', `the three characters are listed, those the row names ticked (${items.length}: ${ticked.join('、')})`);
       // R-UI-174: each row leads with who it names, the check (when ticked) at its right edge; never a check on the left.
       const all = menu.querySelector('[data-access="all"]'), rows = [all, ...items];
-      require(all.querySelector(':scope > .mlead > .room-avatar')?.querySelectorAll(':scope > .av').length === 4, "the whole team leads with the team's own picture, its first faces in one square");
+      require(all.querySelector(':scope > .mlead > .room-avatar')?.querySelectorAll(':scope > .av').length === items.length, "the whole team leads with the team's own picture, its slimes' faces in one square (never Raphael's)");
       require(items.every(item => visible(item.querySelector(':scope > .mlead > .av'))), 'each character leads with its face');
       for (const item of rows) {
         const [lead, words, mark] = [':scope > .mlead', ':scope > .mt', ':scope > .ck'].map(part => item.querySelector(part)?.getBoundingClientRect());
@@ -879,7 +879,7 @@ export function checkRendered(name, context = {}) {
       require(r.left >= box.left - 1 && r.right <= box.right + 1, 'the words stay inside the card');
     }
     if (name === 'skill-library-imported') {
-      require(visible(document.querySelector('.skl-import #skl-input')) && document.querySelector('#skl-input').value === '', 'the box is empty again');
+      require(!document.querySelector('.skl-dlg, .skl-import'), 'a direct import closes the importer');
       require(rowOf('pack:13')?.querySelector('.skl-single .d')?.textContent === '依日期整理行程與訂位' && accessOf('pack:13') === '整個團隊', 'the new skill is a row of its own, its words under its name, for the whole team');
       require(!document.querySelector('.toast'), 'the new package is the only success feedback');
       const call = window.__look.calls.find(c => c.method === 'skills.library.import');

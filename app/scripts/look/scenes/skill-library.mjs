@@ -40,7 +40,7 @@ export default [
     ...opened, check("skill-library-open"), click('[data-skl="refresh"][data-key="set:1"]'),
     wait('.skl-refresh-status[role="status"]')], { skillRefreshPending: true }),
   scene("skill-library-back", "Enter opens a package low in a long library, and Esc returns to the list where it was left, the focus on that package's row", [
-    ...list, scroll('[data-skl-pack="pack:37"]'), focus('[data-skl="open"][data-key="pack:37"]'), key("Enter"), wait('.skl-page[data-skl-page="pack:37"]'), check("skill-library-page-top"),
+    ...list, scroll('[data-skl-pack="pack:45"]'), focus('[data-skl="open"][data-key="pack:45"]'), key("Enter"), wait('.skl-page[data-skl-page="pack:45"]'), check("skill-library-page-top"),
     key("Escape"), waitGone(".skl-page"), check("skill-library-back")], { skillPackages: true }),
   scene("skill-library-access", "Who may use a package: the whole team, or the characters ticked, in one menu that stays open while names are ticked; each row leads with a face (the team's own picture for the whole team) and its check stands at the right", [
     ...list, click('[data-skl="access"][data-key="pack:2"]'), wait(".skl-access-menu [data-member]"), check("skill-library-access")]),
@@ -50,7 +50,7 @@ export default [
     ...importing, type("#skl-input", "https://example.com/team-handbook"), check("skill-library-import-link")]),
   scene("skill-library-import-menu", "選擇檔案 opens one small menu: the system's file dialog or its folder dialog", [
     ...importing, click('[data-skl="pick"]'), wait(".skl-pick-menu [data-pick]"), check("skill-library-import-menu")]),
-  scene("skill-library-imported", "Pasted SKILL.md text becomes a package of one for the whole team, and the box is empty again", [
+  scene("skill-library-imported", "Pasted SKILL.md text becomes a package of one for the whole team, and the importer closes", [
     ...importing, type("#skl-input", "---\nname: travel\ndescription: 依日期整理行程與訂位\n---\n# 旅行行程"),
     click('[data-skl="import-go"]'), wait('.skl-pack[data-skl-pack="pack:13"]'), check("skill-library-imported")]),
   scene("skill-library-import-failed", "A source with no SKILL.md says so in the importer and keeps it open", [
