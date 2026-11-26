@@ -8,7 +8,8 @@
 /* A border, not a 1px box: the browser snaps a border to whole device pixels, so the line stays a hairline at any window zoom. */
 .side-edge::after { content: ""; position: absolute; top: 0; right: 0; bottom: 0; width: 0; border-right: 1px solid var(--line); transition: border-color 0.16s ease; }
 .side-edge:hover::after, :root[data-keys] .side-edge:focus-visible::after, .side-edge.is-dragging::after { border-right-color: var(--line-lit); }
-:root[data-resizing] body { cursor: col-resize; user-select: none; }
+/* Over the whole window while an edge is dragged (edge-drag.ts): the pointer keeps its resize cursor and presses nothing beneath it. */
+.edge-shield { position: fixed; inset: 0; z-index: 400; cursor: col-resize; user-select: none; }
 .side .btn.icon:hover:not(:disabled) { background: var(--hover); }
 .side .btn.icon:active:not(:disabled) { background: var(--pressed); }
 .sidebar-conversations { display: flex; flex: 1; min-height: 0; }
