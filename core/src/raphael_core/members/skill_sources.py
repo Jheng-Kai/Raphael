@@ -353,6 +353,48 @@ def read_archive(name, data):
 
 
 def uploaded(file):
+    data = uploaded_bytes(file)
+    return read_archive(file["name"], data), file["name"]
+
+
+def tree_entries(files):
+    """The files of a folder or several files dropped on the window, `[(path, bytes)]`: each `{path, data}` with the path
+    below the dropped folder and its bytes in base64. What the window sends in all is as large as one file it sends."""
+    if not isinstance(files, list) or not files or any(not isinstance(f, dict) or set(f) != {"path", "data"} for f in files):
+        raise MemberError("file", "files needs a list of paths with base64 data")
+    entries, total = [], 0
+    for item in files:
+        path, encoded = item["path"], item["data"]
+        if not isinstance(path, str) or not isinstance(encoded, str):
+            raise MemberError("file", "invalid upload name or data")
+        try:
+            path = relative_path(path.replace("\\", "/"))
+        except MemberError:
+            raise unsafe_path(str(item["path"])[:200]) from None
+        total += len(encoded) // 4 * 3
+        if total > MAX_UPLOAD_BYTES:
+            raise MemberError("size", f"these files are over the {size_text(MAX_UPLOAD_BYTES)} the window sends: "
+                              "pick their folder instead", reason="upload", file=path, size=total, limit=MAX_UPLOAD_BYTES)
+        try:
+            entries.append((path, base64.b64decode(encoded, validate=True)))
+        except (ValueError, binascii.Error):
+            raise MemberError("file", "invalid base64 file data") from None
+    return entries
+
+
+def uploaded_tree(files):
+    """Dropped files as the archive they would have been: the skills in them are read as an archive's are."""
+    entries = tree_entries(files)
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_STORED) as out:
+        for path, data in entries:
+            out.writestr(path, data)
+    tops = {path.split("/")[0] for path, _ in entries}
+    name = tops.pop() if len(tops) == 1 and all("/" in path for path, _ in entries) else "dropped files"
+    return read_archive("dropped.zip", buffer.getvalue()), name
+
+
+def uploaded_bytes(file):
     if not isinstance(file, dict) or set(file) != {"name", "data"}:
         raise MemberError("file", "file needs a name and base64 data")
     name, encoded = file["name"], file["data"]
@@ -366,7 +408,7 @@ def uploaded(file):
         data = base64.b64decode(encoded, validate=True)
     except (ValueError, binascii.Error):
         raise MemberError("file", "invalid base64 file data") from None
-    return read_archive(name, data), name
+    return data
 
 
 def local_path(source):

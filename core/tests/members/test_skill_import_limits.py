@@ -8,7 +8,7 @@ import pytest
 
 from raphael_core.members import skill_library, skill_sources
 from raphael_core.protocol import RpcError
-from .test_skill_packages import archive, document, upload
+from .test_skill_packages import archive, direct, document, upload
 
 NL = chr(10)
 
@@ -122,5 +122,5 @@ async def test_a_skill_document_over_its_limit_names_the_file_its_size_and_the_l
 ])
 async def test_a_document_without_its_description_names_the_problem_and_the_line(rig, text, expected):
     with pytest.raises(RpcError) as error:
-        await rig.call("skills.library.import", {"text": text})
+        await direct(rig, {"text": text})
     assert "skill:" in str(error.value) and detail(error) == {"reason": "front_matter", "file": "SKILL.md", **expected}

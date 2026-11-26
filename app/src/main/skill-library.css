@@ -1,12 +1,10 @@
 /* Team skills (skill-library.ts): one row per package in Settings' list; a package of several opens on a page of its own. */
 .skl-import { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); margin-bottom: var(--sp-4); padding: var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--panel); }
-.skl-import-alt { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); }
-.skl-link { display: flex; align-items: center; gap: var(--sp-2); }
-.skl-link > .field { flex: 1 1 auto; min-width: 0; }
-.skl-go-row { display: flex; justify-content: flex-end; }
-/* 匯入 stands as tall as the link field beside it. */
-.skl .btn.skl-go { flex: none; min-height: var(--h-field); }
-.skl-text { width: 100%; min-height: 112px; resize: vertical; font-family: var(--mono); font-size: var(--fs-sm); }
+/* The box that takes anything: files, a folder or a link dropped on it, text pasted in it; the way to choose files at its
+   left foot and 匯入 at its right, the one line of words under them. */
+.skl-import-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
+.skl .btn.skl-go { flex: none; }
+.skl-text { width: 100%; min-height: 84px; resize: vertical; font-size: var(--fs-sm); }
 .skl-error { margin: 0; color: var(--err); font-size: var(--fs-sm); }
 .skl-skipped { margin: 0 0 var(--sp-4); color: var(--text-2); font-size: var(--fs-sm); }
 .skl-skipped p { margin: 0; }

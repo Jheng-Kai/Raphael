@@ -9,6 +9,7 @@ from raphael_core.members.store import MemberError
 from raphael_core.protocol import RpcError
 from .github_fake import FakeGitHub
 from .test_skill_import_limits import detail
+from .test_skill_packages import direct
 
 
 @pytest.mark.parametrize("source", ["https://localhost/SKILL.md", "http://github.com/a/b/blob/main/SKILL.md",
@@ -66,7 +67,7 @@ async def test_a_document_that_is_oversize_redirected_or_binary_is_refused_with_
     if response == "redirect":
         github.fail["raw.githubusercontent.com"] = httpx.Response(302, headers={"Location": "https://localhost/private"})
     with pytest.raises(RpcError) as error:
-        await rig.call("skills.library.import", {"source": "owner/repo"})
+        await direct(rig, {"source": "owner/repo"})
     found = detail(error)
     assert {"oversize": "file", "redirect": "redirect", "binary": "encoding"}[response] == found["reason"]
     assert github.requests and all("localhost" not in url for url in github.requests)
