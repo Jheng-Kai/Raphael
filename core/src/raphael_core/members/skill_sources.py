@@ -20,7 +20,7 @@ from .skill_errors import (front_matter, no_skill, not_utf8, oversized_file, ove
 from .skill_library import (MAX_ARCHIVE_ENTRIES, MAX_DISCOVERY_DEPTH, MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES, MAX_SCAN_ENTRIES,
                             MAX_UPLOAD_BYTES, junk, linked, walk)
 from .skill_plugins import relative_path
-from .skill_references import attach_shared
+from .skill_references import DiskSource, MemorySource, attach_shared
 from .store import MemberError
 
 
@@ -159,7 +159,9 @@ def skill_roots(names, wanted=None):
 PLUGIN_MANIFEST = ".claude-plugin/plugin.json"
 
 
-def snapshot_entries(entries, read_entry, subpath, *, wanted=None, regular):
+def snapshot_entries(entries, read_entry, subpath, *, wanted=None, regular, member=None):
+    """The skills of an archive's entries. `member` is `(describe, fetch)`: what an entry is (a size, `"linked"`, None for a
+    folder) and its bytes, so that what a skill links to elsewhere in the archive comes with it."""
     entries = [(name, info) for name, info in entries if not junk(name.removeprefix("./"))]
     roots = ([relative_path(subpath) + "/" if subpath else ""] if subpath is not None
              else skill_roots((name for name, _ in entries), wanted))
@@ -168,13 +170,15 @@ def snapshot_entries(entries, read_entry, subpath, *, wanted=None, regular):
         raise refused_entry(roots[0], "a folder named twice, or twice in letters of another case")
     for root, snapshot in zip(roots, snapshots.values()):
         snapshot.prefix = root
-    manifests = set()
-    if subpath is None and wanted is None:
-        manifests = {
-            name.removeprefix("./").removesuffix(PLUGIN_MANIFEST)
-            for name, info in entries
-            if (name == PLUGIN_MANIFEST or name.endswith("/" + PLUGIN_MANIFEST)) and regular(info)
-        }
+    manifests = {
+        name.removeprefix("./").removesuffix(PLUGIN_MANIFEST)
+        for name, info in entries
+        if (name.removeprefix("./") == PLUGIN_MANIFEST or name.removeprefix("./").endswith("/" + PLUGIN_MANIFEST)) and regular(info)
+    }
+    sources = {}
+    # An archive made of one folder (`my-skill/...`, `repo-main/...`) is that folder: a link does not climb out of it.
+    tops = {name.removeprefix("./").split("/")[0] for name, _ in entries}
+    wrapper = next(iter(tops)) + "/" if len(tops) == 1 and all("/" in name.removeprefix("./") for name, _ in entries) else ""
     allocated = count = 0
     for name, info in entries:
         normalized = name.removeprefix("./")
@@ -208,12 +212,23 @@ def snapshot_entries(entries, read_entry, subpath, *, wanted=None, regular):
         files = snapshot.finish()
         files.folder = root
         # Classify a whole import without reading or enabling its plugin configuration.
-        prefix = ""
+        prefix, plugin = "", None
         for part in root.split("/"):
-            if prefix in manifests:
+            if prefix in manifests and (wanted is None and subpath is None):
                 files.plugin_manifest = True
-                break
+                plugin = prefix
             prefix += part + "/"
+        # What the skill links to elsewhere in its plugin, else in the archive, comes with it.
+        base = plugin or (wrapper if root.startswith(wrapper) else "")
+        if member is not None and root != base:
+            if base not in sources:
+                describe, fetch = member
+                index = {name.removeprefix("./").rstrip("/"): info for name, info in entries
+                         if name.removeprefix("./").startswith(base) and name.removeprefix("./").rstrip("/") != base.rstrip("/")}
+                found = {name[len(base):]: describe(info) for name, info in index.items()}
+                sources[base] = MemorySource({name: size for name, size in found.items() if size is not None},
+                                             lambda path, base=base, index=index: fetch(index[base + path]))
+            attach_shared(files, snapshot, root[len(base):].rstrip("/"), sources[base])
         result.append(files)
         allocated += snapshot.size - previous
     return result
@@ -255,6 +270,37 @@ def tar_entry(archive, snapshot, name, info):
     if not info.isdir():
         with archive.extractfile(info) as stream:
             snapshot.read(key, stream, info.size)
+
+
+def zip_member(archive):
+    def describe(info):
+        if info.is_dir():
+            return None
+        kind = stat.S_IFMT(info.external_attr >> 16)
+        if kind == stat.S_IFLNK:
+            return "linked"
+        return info.file_size if kind in (0, stat.S_IFREG) else "unsupported"
+
+    def fetch(info):
+        data = archive.read(info)
+        if len(data) != info.file_size:
+            raise OSError("changed while it was read")
+        return data
+
+    return describe, fetch
+
+
+def tar_member(archive):
+    def describe(info):
+        if info.isdir():
+            return None
+        return "linked" if info.issym() else info.size if info.isfile() else "unsupported"
+
+    def fetch(info):
+        with archive.extractfile(info) as stream:
+            return stream.read()
+
+    return describe, fetch
 
 
 def checked_zip(data):
@@ -303,7 +349,8 @@ def read_archive(name, data, *, subpath=None, repository=False, wanted=None):
                         subpath = ""
                 return snapshot_entries(entries, lambda snapshot, key, info: zip_entry(archive, snapshot, key, info),
                                         subpath, wanted=wanted, regular=lambda info: not info.is_dir() and
-                                        stat.S_IFMT(info.external_attr >> 16) in (0, stat.S_IFREG))
+                                        stat.S_IFMT(info.external_attr >> 16) in (0, stat.S_IFREG),
+                                        member=zip_member(archive))
         if name.endswith((".tgz", ".tar.gz")):
             # Bound decompression even for content outside the selected folders.
             limit = MAX_PACKAGE_BYTES + MAX_ARCHIVE_ENTRIES * 1536 + tarfile.RECORDSIZE
@@ -319,7 +366,7 @@ def read_archive(name, data, *, subpath=None, repository=False, wanted=None):
                     entries.append((info.name, info))
                 return snapshot_entries(entries,
                     lambda snapshot, key, info: tar_entry(archive, snapshot, key, info), subpath,
-                    regular=tarfile.TarInfo.isfile)
+                    regular=tarfile.TarInfo.isfile, member=tar_member(archive))
     except (zipfile.BadZipFile, tarfile.TarError, OSError, EOFError, zlib.error, NotImplementedError, UnicodeError):
         raise unreadable_archive() from None
     raise MemberError("source", "choose a Markdown, ZIP or tar.gz file", reason="file_type", file=name)
@@ -384,15 +431,18 @@ def local(source):
                                        entry_limit=MAX_PACKAGE_FILES - count,
                                        prefix=folder.relative_to(path).as_posix() + "/" if folder != path else "")
             files = snapshot.finish()
+            # What the skill links to elsewhere in its plugin, else in the folder picked, comes with it.
+            root = path
             for parent in (folder, *folder.parents):
                 manifest = parent / PLUGIN_MANIFEST
                 if not linked(manifest.parent) and not linked(manifest) and manifest.is_file():
                     files.plugin_manifest = True
-                    # What the skill links to elsewhere in its plugin comes with it.
-                    attach_shared(files, snapshot, folder, parent)
+                    root = parent
                     break
                 if parent == path:
                     break
+            if folder != root:
+                attach_shared(files, snapshot, folder.relative_to(root).as_posix(), DiskSource(root))
             result.append(files)
             size += snapshot.size
             count += len(snapshot.explicit)

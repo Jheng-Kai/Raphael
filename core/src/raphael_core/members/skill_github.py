@@ -17,6 +17,7 @@ import httpx
 
 from .skill_errors import no_skill, oversized_package, too_many_files
 from .skill_library import MAX_ARCHIVE_ENTRIES, MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES, junk
+from .skill_references import MemorySource, attach_shared
 from .store import MemberError
 
 API = "https://api.github.com"
@@ -343,8 +344,6 @@ async def _skill_files(client, listed, own, others=(), *, used):
             snapshot.links[relative] = body.decode("utf-8", "replace")
         else:
             snapshot.files[relative] = body
-    used[0] += snapshot.size
-    used[1] += len(snapshot.explicit)
     return snapshot
 
 
@@ -370,11 +369,22 @@ async def fetch(source):
                 raise no_skill(f"{target.repo}/{folder}" if folder else target.repo)
             used = [0, 0]
             result = []
+            loop = asyncio.get_running_loop()
+            sources = {}
             for own in folders:
                 snapshot = await _skill_files(client, listed, own, used=used)
                 files = snapshot.finish()
                 files.folder = own
-                files.plugin_manifest = _under_manifest(listed, own, folder)
+                plugin = _plugin_root(listed, own)
+                files.plugin_manifest = plugin is not None
+                # What the skill links to elsewhere in its plugin, else in the repository, comes with it.
+                base = plugin or ""
+                if own != base:
+                    if base not in sources:
+                        sources[base] = _source(client, listed, base, loop)
+                    await asyncio.to_thread(attach_shared, files, snapshot, own[len(base):].rstrip("/"), sources[base])
+                used[0] += snapshot.size
+                used[1] += len(snapshot.explicit)
                 result.append((f"https://github.com/{target.repo}/blob/{quote(ref or 'HEAD', safe='/')}/"
                                f"{quote(own, safe='/')}SKILL.md", files))
             return result
@@ -386,16 +396,29 @@ async def fetch(source):
         raise _network_error(error) from None
 
 
-def _under_manifest(listed, own, root):
-    """Whether the skill sits in a plugin: a `.claude-plugin/plugin.json` at its folder or above it, within the source."""
+def _plugin_root(listed, own):
+    """The folder (`""` or `a/b/`) of the plugin a skill sits in: the nearest `.claude-plugin/plugin.json` at its folder or
+    above it; None when it sits in none."""
     path = own.rstrip("/")
-    floor = len(root.split("/")) if root else 0
     while True:
         if (f"{path}/.claude-plugin/plugin.json" if path else ".claude-plugin/plugin.json") in listed.files:
-            return True
-        if not path or len(path.split("/")) <= floor:
-            return False
+            return path + "/" if path else ""
+        if not path:
+            return None
         path = path.rpartition("/")[0]
+
+
+def _source(client, listed, base, loop):
+    """The files of the commit below `base` as a reference source: what a document links to is downloaded when it is asked
+    for, from the worker thread that follows the links."""
+    files = {path[len(base):]: ("linked" if mode in ("120000", "submodule") else size)
+             for path, (size, sha, mode) in listed.files.items() if path.startswith(base) and not junk(path[len(base):])}
+
+    def fetch(path):
+        size, sha, _ = listed.files[base + path]
+        return asyncio.run_coroutine_threadsafe(download(client, listed.repo, listed.commit, base + path, size, sha), loop).result()
+
+    return MemorySource(files, fetch)
 
 
 async def _named(client, listed, folders, folder, name):
