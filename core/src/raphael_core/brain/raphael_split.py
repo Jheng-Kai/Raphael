@@ -114,7 +114,7 @@ def _create_slime(conn: sqlite3.Connection, settings: dict) -> int:
 
 def _move(conn: sqlite3.Connection, slime: int) -> None:
     quick = [row[0] for row in conn.execute("SELECT id FROM conversations WHERE kind = 'quick'")]
-    quick_sql = ",".join(str(int(cid)) for cid in quick) or "NULL"
+    quick_sql = ",".join(str(int(cid)) for cid in quick) or "0"  # never `NOT IN (NULL)`, which is never true; no row has conversation 0 (a missing one reads as -1)
     quick_turns = f"(SELECT id FROM agent_turns WHERE conversation_id IN ({quick_sql}))"
     # Conversations first: a turn's scope trigger wants its conversation to belong to the member it names.
     conn.execute("UPDATE conversations SET member_id = ? WHERE member_id = 0 AND kind = 'standard'", (slime,))
