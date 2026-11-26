@@ -318,7 +318,7 @@ const dropOn = (root: ParentNode, data: Record<string, unknown>) => {
   return event;
 };
 
-test("the page starts with its lists and has 匯入 in its header; the importer is a dialog: one field, one way to choose files and one 匯入", async () => {
+test("the page starts with its lists and has 匯入 in its header, and the importer is a dialog: one field, one way to choose files and one 匯入", async () => {
   const { root } = await setup();
   // Nothing of the importer stands in the tab: it begins with the plugins, then the skills, and 匯入 is beside the close.
   expect(root.querySelector(".skl-import, #skl-input, .skl-import-hint")).toBeNull();
