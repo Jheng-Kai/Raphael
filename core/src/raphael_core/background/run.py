@@ -67,7 +67,7 @@ from ..agent.harness_tools import CALENDAR_LIST, CALENDAR_TOOLS, CALENDAR_WRITES
 from ..agent.ledger import Ledger
 from ..agent.plugins import SAID_WHOLE, PluginResult
 from ..agent.progress_updates import ProgressUpdates
-from ..worker.guards import argument_limit
+from ..worker.guards import argument_limit, neutralize
 from ..brain.prompt_cache import cache_options
 from ..agent.steps import reason_of
 from ..agent.policy import Action, Approval, NotApproved, Tier, UnknownTool
@@ -89,7 +89,7 @@ from ..integrations.pool import McpPool
 from ..protocol import WORKER_STOPPED, RpcError, invalid_params
 from ..retry_utils import MODEL_SILENCE_S, Outage
 from ..services.attachments import Attachment
-from ..services.file_reader import read_window
+from ..services.file_reader import index_refusal, read_window, window_refusal
 from ..services.urls import SeenUrls
 from ..worker.context import CONTEXT_OVERFLOW, is_context_overflow, provider_window, smaller_output
 from ..worker.loop import MORE_ROOM, REPLY_TOKENS, WAITING, WRAP_UP, FINAL_REPORT, ToolOutcome, result_text
@@ -1352,12 +1352,15 @@ class TaskRun:
         """One of the task's own files, by its number from 1: never anything else."""
         index = arguments.get("index")
         if type(index) is not int or not 1 <= index <= len(self.attachments):
-            return ToolResult("read_attachment", False, None, "bad_arguments")
+            task = self._store.get(self.task_id)
+            handed_on = task is not None and task.source_turn_id is not None and task.mode in ("work", "consult")
+            return ToolResult("read_attachment", False, None, "bad_arguments", instruction=index_refusal(
+                index, [neutralize(file.name) for file in self.attachments], handed_on=handed_on))
         question = arguments.get("question")
         question = question.strip() if isinstance(question, str) and question.strip() else ""
         window = read_window(arguments)
         if window is None:
-            return ToolResult("read_attachment", False, None, "bad_arguments")
+            return ToolResult("read_attachment", False, None, "bad_arguments", instruction=window_refusal(arguments))
         attachment = self.attachments[index - 1]
         return await self._guarded(
             self._tools.read_attachment(

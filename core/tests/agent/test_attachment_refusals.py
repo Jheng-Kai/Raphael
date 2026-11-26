@@ -36,3 +36,11 @@ async def test_a_bad_window_says_what_a_valid_one_is(make_rig, client):
     await rig.call("agent.ask", ask("s", "Read it", [("one.txt", "text/plain", b"first")]))
     shown = refusal(client)
     assert "offset" in shown and "whole number" in shown
+
+
+def test_a_task_handed_over_by_a_colleague_is_told_its_files_did_not_travel():
+    from raphael_core.services.file_reader import index_refusal
+    own = index_refusal(1, [])
+    handed = index_refusal(1, [], handed_on=True)
+    assert "no attachments" in own and "hand-off" not in own
+    assert "no attachments" in handed and "hand-off" in handed and "into the request" in handed

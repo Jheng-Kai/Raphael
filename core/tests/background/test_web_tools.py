@@ -165,7 +165,6 @@ async def test_a_refused_read_of_a_file_says_which_case_it_is(web_rig):
     # The model reads why: no files at all, a number out of range (with the files it can read), or a bad window.
     empty = await web_rig().tool("read_attachment", {"index": 1})
     assert empty["kind"] == "bad_arguments" and "no attachments" in empty["instruction"]
-    assert "hand-off" in empty["instruction"]
     rig = web_rig([checked("photo.png", "image/png", PNG), checked("notes.txt", "text/plain", b"a b")])
     out_of_range = (await rig.tool("read_attachment", {"index": 3}))["instruction"]
     assert "2 attachments" in out_of_range and "1 to 2" in out_of_range
