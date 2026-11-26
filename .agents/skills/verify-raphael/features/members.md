@@ -197,6 +197,12 @@ Both sides are resized by dragging (R-UI-110): there is no fold button and no ha
 npm run look -- sidebar-rail sidebar-rail-dragged-open sidebar-dragged-wider panel-dragged-wider panel-drag-keeps-place panel-close-keeps-place panel-drag-closes --theme both --width 1120,720,1920x1080
 ```
 
+The drags and toggles are measured too (R-PERF-25, R-PERF-26): frames, style work, elements restyled per write and how the words move.
+
+```powershell
+npm run look -- sidebar-resize-smooth sidebar-resize-busy sidebar-toggle-smooth panel-resize-smooth panel-resize-busy panel-toggle-smooth --theme both --width 1120,720,1920x1080
+```
+
 ### Rows, width, rail and foot (R-SIDE-01)
 
 Measured at 1120 x 900: a row is a 54 px highlight with 12 px
