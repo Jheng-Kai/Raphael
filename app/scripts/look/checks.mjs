@@ -4162,6 +4162,18 @@ export function checkRendered(name, context = {}) {
     require(getComputedStyle(dragged).opacity==='0.4'&&Math.abs(dragged.getBoundingClientRect().height-54)<=1,'the dragged row is dimmed and keeps its 54px');
     return {check:name,line:Math.round(l.top)};
   }
+  if(name==='sidebar-drag-nowhere'||name==='sidebar-drag-folder'){
+    const line=document.querySelector('.mb-drop-line'),dragged=document.querySelector('.mb-col .is-dragged');
+    require(dragged&&getComputedStyle(dragged).opacity==='0.4','the dragged row is dimmed');
+    if(name==='sidebar-drag-nowhere'){
+      require(!line||line.hidden||!visible(line),'no line is drawn where the row already stands');
+      return {check:name};
+    }
+    const target=document.querySelector('.mb-col [data-member-item="8"]'),folder=target.closest('.mb-sec'),l=line?.getBoundingClientRect(),t=target.getBoundingClientRect(),f=folder.getBoundingClientRect();
+    require(line&&!line.hidden&&visible(line),'a line is drawn into the other folder');
+    require(Math.abs(l.top+l.height/2-t.top)<=1.5&&l.left>=f.left&&l.right<=f.right&&l.width>100,`the line stands over the row it lands before, inside that folder: ${l.top} ${t.top}`);
+    return {check:name,line:Math.round(l.top)};
+  }
   // The rail's + opens the sidebar's own menu.
   if(name==='sidebar-add-menu'){
     const add=document.querySelector('#nav [data-col="add"]'),menu=document.querySelector('#app-popover');

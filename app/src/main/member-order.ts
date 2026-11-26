@@ -4,6 +4,7 @@
 // will write (the same numbering as members/store.py `_move`), draws that, and sends one request. Pure, so the numbering can be
 // tested against the core's own without a browser.
 
+import { RAPHAEL_ID, primaryIdOf } from "./members";
 import type { Member, MemberGroup, MembersList } from "./types";
 
 const byPlace = (a: { position: number; id: number }, b: { position: number; id: number }): number => a.position - b.position || a.id - b.id;
@@ -33,7 +34,10 @@ export function movedMember(list: MembersList, id: number, groupId: number | nul
   const all = list.members.filter(member => member.id !== 0).sort(byPlace);
   const others = all.filter(member => member.id !== id);
   const last = others.reduce((found, member, index) => (folderOf(member) === groupId ? index : found), -1);
-  let at = beforeId === undefined ? -1 : others.findIndex(member => member.id === beforeId);
+  // The column draws Raphael's row where the primary member stands (memberDisplayList): before that row is before that member.
+  const anchor = beforeId === RAPHAEL_ID ? primaryIdOf(list) : beforeId;
+  if (anchor === id && beforeId === RAPHAEL_ID) return null;
+  let at = anchor === undefined ? -1 : others.findIndex(member => member.id === anchor);
   if (at < 0) at = last < 0 ? others.length : last + 1;
   const order = [...others.slice(0, at), moving, ...others.slice(at)];
   if (folderOf(moving) === groupId && order.map(member => member.id).join() === all.map(member => member.id).join()) return null;

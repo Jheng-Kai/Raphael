@@ -12,6 +12,7 @@ import { DRAFT_EVENT, unsentWords } from "./composer-drafts";
 import { createRoomsSection, openNewGroupChat } from "./group-chats";
 import { t } from "./i18n";
 import { createMessageSearch } from "./message-search";
+import { movedGroup, movedMember } from "./member-order";
 import { lightHTML, lightOf } from "./sidebar-light";
 import { type MemberSection, faceHTML, memberMatches, memberSections, memberDisplayList, memberRole, pinReplacements, plainLine, previewOf, primaryIdOf, raphaelOf } from "./members";
 import type { Member, MembersList } from "./types";
@@ -369,8 +370,21 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
     line.hidden = false;
   };
   const clearDrop = (): void => { line.hidden = true; landing = null; };
-  /** Where the dragged row lands for a pointer at `y`, and the line that says so. */
+  /**
+   * Where the dragged row lands for a pointer at `y`, and the line that says so: only a place the drop changes something at.
+   * The same `movedMember` / `movedGroup` that the drop is saved by decides, so a line is never drawn where nothing would happen
+   * and a drop where one is drawn is what it shows.
+   */
   function landingAt(target: Element, y: number): { group: HTMLElement; before: number | null; lineY: number; box: DOMRect } | null {
+    const next = candidateAt(target, y), list = host.view().list;
+    if (!next || !drag || !list) return null;
+    const moved = drag.kind === "member"
+      ? movedMember(list, drag.id, next.group.dataset.group === "none" ? null : Number(next.group.dataset.group), next.before ?? undefined)
+      : movedGroup(list, drag.id, next.before);
+    return moved ? next : null;
+  }
+  /** The place under the pointer, whether or not the row would move there. */
+  function candidateAt(target: Element, y: number): { group: HTMLElement; before: number | null; lineY: number; box: DOMRect } | null {
     if (!drag) return null;
     if (drag.kind === "member") {
       // Not the hidden folder: a member is hidden by its menu, and no folder of that name takes a drop.

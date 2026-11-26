@@ -241,8 +241,13 @@ The same press has a task of about 350 ms at 4 x (24 ms at 1 x) at its first hov
 Read the report's `assertions` for `dragPhase`, `dropPhase` (script, layout, style and task ms),
 `dragoverMaxMs`, `longTasks`, `orders`, `replaced` and `trace`.
 
+The line is drawn only where the drop changes something (R-SIDE-07): `landingAt` in `member-column.ts` asks `movedMember` / `movedGroup`, the check the drop is saved by,
+so a row over its own place (before the row that follows it, last where it is last) has no line and no allowed drop. `sidebar-drag-nowhere` rests a row over its own place
+and requires no line, `sidebar-drag-folder` carries a row over another folder and requires one line at the row it lands before, inside that folder, and
+`sidebar-reorder-before-primary` drops a row with a real pointer before the row that stands for Raphael when another member is the primary contact (`primaryMember`): it lands there, not last in the folder.
+
 ```powershell
-npm run look -- sidebar-reorder-members sidebar-reorder-across sidebar-reorder-folder sidebar-drag-row --theme both --width 1120,720,1920x1080
+npm run look -- sidebar-reorder-members sidebar-reorder-across sidebar-reorder-folder sidebar-drag-row sidebar-drag-nowhere sidebar-drag-folder sidebar-reorder-before-primary --theme both --width 1120,720,1920x1080
 ```
 
 ### The sidebar's lights: one dot, one meaning (R-SIDE-04)
