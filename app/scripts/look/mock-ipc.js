@@ -640,6 +640,19 @@ export function installMock(fixture, config = {}, target = window) {
         exchange(62, 2, "小森", turn.created_at_ms - EARLIER + 6_000, sample.otherRequest, sample.otherResult)] });
     turn.handoffs = [exchange(61, 1, "小晴", turn.created_at_ms + 5_000, sample.request, sample.result)];
   }
+  // The sub-workers a member started with `delegate_task`: one line under the answer, its rows open to each one's goal, model,
+  // steps and state (R-DELEGATE-03). "running": one is done, one works, one waits for a place, one waits for the owner's yes.
+  if (variant.delegateGroup) {
+    const sample = data.delegateSample, done = variant.delegateGroup === "done", turn = data.turns.find(turn => turn.id === 1);
+    const states = done ? ["done", "done", "done"] : ["done", "running", "queued", "running"];
+    const delegates = states.map((state, i) => ({
+      task_id: 700 + i, source_turn_id: turn.id, member_id: turn.member_id ?? 0, title: sample.goals[i % 3], goal: sample.goals[i % 3],
+      state, reason: null, model: sample.models[i % 3][0], model_name: sample.models[i % 3][1], model_calls: state === "queued" ? 0 : 3 + i,
+      tool_calls: state === "queued" ? 0 : i === 1 ? 1 : 4 + i, cost_usd: 0.002 * i, created_at_ms: turn.created_at_ms + 1_000 + i,
+      started_at_ms: state === "queued" ? null : turn.created_at_ms + 2_000, finished_at_ms: state === "done" ? turn.created_at_ms + 9_000 : null,
+      waiting_owner: !done && i === 3 ? 1 : 0, result: state === "done" ? sample.results[i % 3] : "" }));
+    data.turns = [{ ...turn, question: sample.request, text: sample.answer, messages: [], steps: [], handoffs: [], delegates }];
+  }
   if (variant.identifiers) {
     // Identifiers with underscores in the owner's words, a member's reply and both sides of a hand-off (never emphasis).
     const turn = data.turns.find(turn => turn.id === 1), sample = data.identifiersSample;

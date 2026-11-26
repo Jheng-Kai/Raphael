@@ -130,6 +130,12 @@ div.handoff-event > .event-line { min-width: 0; max-width: 100%; }
 .exchange-detail { gap: var(--sp-3); }
 .exchange-message { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; user-select: text; }
 .exchange-message > b { font-size: var(--pa-sys); font-weight: var(--weight-semibold); color: var(--text-3); }
+/* The sub-workers a member started (delegate-line.ts): each its goal, then its model, steps and state quieter, then what it says. */
+.delegate-detail { gap: var(--sp-3); }
+.delegate-child { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: var(--sp-2); row-gap: 2px; min-width: 0; user-select: text; }
+.delegate-goal { min-width: 0; color: var(--text); }
+.delegate-meta { min-width: 0; font-size: var(--pa-sys); color: var(--text-3); }
+.delegate-result { flex-basis: 100%; margin: 0; color: var(--text-2); }
 .handoff-files { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
 .handoff-files li { display: inline-flex; align-items: center; gap: var(--sp-2); min-width: 0; padding: var(--sp-1) var(--sp-2); border-radius: var(--r-sm); background: var(--panel); color: var(--text); font-size: var(--fs-xs); }
 .au-room-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }

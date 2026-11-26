@@ -4,6 +4,7 @@ import { videoPlayerHTML } from "./media-player";
 import { computerCardsHTML } from "./computer-card";
 import { connectorCardsHTML, resumedLineHTML } from "./connector-card";
 import { NAME, eventLineHTML, eventPeopleHTML } from "./event-line";
+import { delegateGroupHTML } from "./delegate-line";
 import { handoffGroupHTML } from "./handoff-line";
 import { reactionControlHTML, reactionRowHTML, withReactions } from "./message-metadata";
 import { mailCardsHTML, mailHandedLinesHTML } from "./mail-card";
@@ -1138,7 +1139,8 @@ function computerWokeEvent(text: string): string | null {
 
 function turnEventsHTML(turn: AgentTurn, look: TurnLook): string {
   return handoffGroupHTML((turn.handoffs ?? []).map(task => ({ task, face: look.memberFace?.(task.member_id) ?? "",
-    name: look.memberName?.(task.member_id) || task.member_name })));
+    name: look.memberName?.(task.member_id) || task.member_name }))) +
+    delegateGroupHTML(turn.delegates ?? []);
 }
 
 /**
@@ -1362,5 +1364,6 @@ export function updateLiveTimes(root: ParentNode, nowMs = Date.now()): void {
 
 /** A loaded task or handoff belongs to this thread; unknown tasks are polled more slowly. */
 export function hasWorkerTask(turns: readonly AgentTurn[], taskId: number): boolean {
-  return turns.some(turn => turn.task?.id === taskId || turn.handoffs?.some(task => task.task_id === taskId));
+  return turns.some(turn => turn.task?.id === taskId || turn.handoffs?.some(task => task.task_id === taskId)
+    || turn.delegates?.some(task => task.task_id === taskId));
 }

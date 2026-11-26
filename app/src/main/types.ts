@@ -309,6 +309,8 @@ export interface AgentTurn {
   reactions?: Record<string, string[]>;
   routine?: Pick<Routine, "id" | "schedule" | "when" | "app_name">;
   handoffs?: HandoffView[];
+  /** The sub-workers the member started in this turn with `delegate_task` (R-DELEGATE-03), in the order it asked for them. */
+  delegates?: DelegateView[];
   conversation_id?: number;
   quote?: MessageQuote | null;
   /**
@@ -764,6 +766,8 @@ export interface BrainSettings {
   agent_city?: string;
   /** The most one background task may spend, in US$: 0.1, 0.2, 0.5 or 1. */
   worker_cost_cap_usd?: number;
+  /** The places the sub-workers members start may fill at once: one for an API model, two for a subscription CLI. */
+  delegate_parallel?: number;
   /** The models starred in the pickers, per role, in the order they were added. */
   model_favorites?: Partial<Record<ModelRole, string[]>>;
   /** Who looks the web up: `openrouter` (its `web` plugin, today's way), `brave`, `tavily`, `exa` or `searxng`. */
@@ -1180,6 +1184,23 @@ export interface RoomMessage {
   status: string; cost?: number; attachments?: TurnAttachment[];
   scope?: "room"; thread_id?: number;
   reply_reference?: { message_id: number; author_kind?: "owner" | "member"; author_member_id?: number | null; unavailable?: boolean } | null;
+}
+
+/** One sub-worker a member started: what it was asked, how it stands, the model it runs on and what it has used. */
+export interface DelegateView {
+  task_id: number; source_turn_id: number; member_id: number;
+  /** The first words of its goal, and the goal up to 300 characters. The context the member wrote for it is never sent. */
+  title: string; goal: string;
+  state: "queued" | "running" | "waiting" | "done" | "failed" | "limit" | "cancelled" | "interrupted";
+  reason: string | null;
+  /** The model it runs on (a reference), and what the owner calls it: "Codex CLI", "gpt-6-sol". */
+  model: string; model_name: string;
+  model_calls: number; tool_calls: number; cost_usd: number;
+  created_at_ms: number; started_at_ms: number | null; finished_at_ms: number | null;
+  /** 1 while it waits for the owner's yes at the member's own card. */
+  waiting_owner: number;
+  /** What it says it did, once it is done (600 characters at most). */
+  result: string;
 }
 
 export interface HandoffView {
