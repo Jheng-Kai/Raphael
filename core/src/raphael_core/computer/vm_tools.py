@@ -486,10 +486,11 @@ class VmTools:
         """What a call is told when the project chosen for the member is not in its computer: Docker cannot add a folder to a
         running container, so the call went on in the workspace (the computer was in use and kept its mounts, or the mount
         was refused) and the member must not take that place for the project."""
-        chosen = choice(self.vm.settings, member) if self.vm.settings is not None and not target.remote else None
+        wanted = () if target.remote or self.vm.settings is None else self.vm.projects()
+        chosen = choice(self.vm.settings, member) if wanted else None
         if not chosen or any(source == Path(chosen) for _, source in target.projects):
             return None
-        guest = next((guest for guest, source in self.vm.projects() if source == Path(chosen)), None)
+        guest = next((guest for guest, source in wanted if source == Path(chosen)), None)
         return (f"Your chosen project ({chosen}) is not mounted in the Docker computer yet, so this ran in your workspace, not in "
                 "the project. Docker cannot add a folder to a running computer: it is added "
                 f"{f'at {guest} ' if guest else ''}when the computer restarts, which happens by itself at your next call once "
