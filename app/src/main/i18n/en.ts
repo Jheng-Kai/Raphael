@@ -1924,7 +1924,7 @@ export const en = {
   "skillLib.plugins": "Plugins",
   "skillLib.skills": "Skills",
   "skillLib.folder": "Folder",
-  "skillLib.importHint": "Drop files, a folder or a link here, in any format.",
+  "skillLib.importHint": "Drop files, a folder or a link here, or paste text",
   "skillLib.choose": "Choose files",
   "skillLib.chooseFiles": "Files",
   "skillLib.converting": "{p0} is turning it into a skill… ({p1})",

@@ -2110,7 +2110,7 @@ export const de = {
   "skillLib.plugins": "Plugins",
   "skillLib.skills": "Fähigkeiten",
   "skillLib.folder": "Ordner",
-  "skillLib.importHint": "Dateien, einen Ordner oder einen Link hier ablegen, in jedem Format.",
+  "skillLib.importHint": "Dateien, einen Ordner oder einen Link hier ablegen oder Text einfügen",
   "skillLib.choose": "Dateien wählen",
   "skillLib.chooseFiles": "Dateien",
   "skillLib.converting": "{p0} wandelt es in einen Skill um… ({p1})",

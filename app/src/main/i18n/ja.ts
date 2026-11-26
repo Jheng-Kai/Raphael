@@ -1924,7 +1924,7 @@ export const ja = {
   "skillLib.plugins": "プラグイン",
   "skillLib.skills": "スキル",
   "skillLib.folder": "フォルダ",
-  "skillLib.importHint": "ファイル、フォルダ、リンクをここに入れてください。形式は問いません。",
+  "skillLib.importHint": "ファイル、フォルダ、リンクをここに入れるか、テキストを貼り付けてください",
   "skillLib.choose": "ファイルを選ぶ",
   "skillLib.chooseFiles": "ファイル",
   "skillLib.converting": "{p0} がスキルに変換しています…（{p1}）",

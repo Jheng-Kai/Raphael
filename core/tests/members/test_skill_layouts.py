@@ -175,3 +175,19 @@ def test_what_is_a_plugin_and_what_is_not():
     assert not skill_layouts.is_plugin({"skills/a/SKILL.md": b"x", "README.md": b"x"})
     assert not skill_layouts.is_plugin({"docs/commands/a.md": b"x"})
     assert skill_layouts.normalized({"skills/a/SKILL.md": b"x"}, "a") is None
+
+
+async def test_a_plugin_with_a_link_out_of_it_names_the_link_and_keeps_the_rest(rig, tmp_path):
+    folder = write(tmp_path / "kit", claude_plugin())
+    outside = tmp_path / "outside.md"
+    outside.write_bytes(b"not part of the plugin")
+    try:
+        (folder / "docs-link.md").symlink_to(folder / "README.md")
+        (folder / "away.md").symlink_to(outside)
+    except OSError as error:
+        pytest.skip(f"cannot create local symlinks: {error}")
+    package = (await rig.call("skills.library.import", {"source": f"local:{folder}"}))["package"]
+    kept = stored_tree(rig, package)
+    assert kept["docs-link.md"] == b"Deploy kit" and "away.md" not in kept
+    assert package["skipped_links"] == {"plugin": ["away.md"]}
+    assert_whole(rig, package, claude_plugin())

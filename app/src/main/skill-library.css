@@ -4,7 +4,10 @@
    left foot and 匯入 at its right, the one line of words under them. */
 .skl-import-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
 .skl .btn.skl-go { flex: none; }
-.skl-text { width: 100%; min-height: 84px; resize: vertical; font-size: var(--fs-sm); }
+/* A compact field of two or three lines that grows with what is pasted; no grip, the box is what a drop lights. */
+.skl-text { width: 100%; box-sizing: border-box; min-height: calc(2lh + var(--sp-3)); max-height: calc(12lh + var(--sp-3)); resize: none; field-sizing: content; font-size: var(--fs-sm); line-height: 1.5; }
+.skl-import.is-over { background: var(--hover); border-color: var(--line-lit); }
+.skl-import.is-over .skl-text { background: transparent; }
 .skl-error { margin: 0; color: var(--err); font-size: var(--fs-sm); }
 .skl-skipped { margin: 0 0 var(--sp-4); color: var(--text-2); font-size: var(--fs-sm); }
 .skl-skipped p { margin: 0; }
@@ -36,7 +39,6 @@
 .slist > .row.skl-entry > .ctl { position: relative; flex: none; flex-wrap: nowrap; }
 .skl-access { max-width: 200px; }
 .skl-access > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.skl-import-hint { margin: 0; color: var(--text-2); font-size: var(--fs-sm); }
 
 /* A package's page, in the list's place: the back arrow (as an app's page of 連接 has it), the name and the count, its
    controls as on its row, where it came from, then its skills on one card of Settings' rows. */

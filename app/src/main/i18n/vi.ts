@@ -2110,7 +2110,7 @@ export const vi = {
   "skillLib.plugins": "Tiện ích",
   "skillLib.skills": "Kỹ năng",
   "skillLib.folder": "Thư mục",
-  "skillLib.importHint": "Thả tệp, thư mục hoặc liên kết vào đây, định dạng nào cũng được.",
+  "skillLib.importHint": "Thả tệp, thư mục hoặc liên kết vào đây, hoặc dán văn bản",
   "skillLib.choose": "Chọn tệp",
   "skillLib.chooseFiles": "Tệp",
   "skillLib.converting": "{p0} đang chuyển nó thành kỹ năng… ({p1})",

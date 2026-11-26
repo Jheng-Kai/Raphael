@@ -2110,7 +2110,7 @@ export const tr = {
   "skillLib.plugins": "Eklentiler",
   "skillLib.skills": "Beceriler",
   "skillLib.folder": "Klasör",
-  "skillLib.importHint": "Dosyaları, bir klasörü veya bir bağlantıyı buraya bırakın, her biçimde olur.",
+  "skillLib.importHint": "Dosyaları, bir klasörü veya bir bağlantıyı buraya bırakın ya da metin yapıştırın",
   "skillLib.choose": "Dosya seç",
   "skillLib.chooseFiles": "Dosyalar",
   "skillLib.converting": "{p0} bunu beceriye dönüştürüyor… ({p1})",

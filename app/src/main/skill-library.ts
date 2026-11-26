@@ -206,11 +206,11 @@ function importHTML(v: SkillLibraryView): string {
     ? t("skillLib.converting", { p0: v.converting.name, p1: v.converting.model })
     : v.busy ? t("skillLib.importing") : "";
   return `<div class="skl-import" data-skl-drop>` +
-    `<textarea id="skl-input" class="mb-fin mb-ta skl-text" rows="3" spellcheck="false" aria-label="${esc(t("skillLib.importHint"))}"${busy}>${esc(v.draft)}</textarea>` +
+    `<textarea id="skl-input" class="mb-fin mb-ta skl-text" rows="2" spellcheck="false" placeholder="${esc(t("skillLib.importHint"))}" aria-label="${esc(t("skillLib.importHint"))}"${busy}>${esc(v.draft)}</textarea>` +
     `<div class="skl-import-row">` +
     btn(ico("file") + esc(t("skillLib.choose")), "sm", ` data-skl="pick" aria-haspopup="menu" aria-expanded="false"${busy}`) +
     btn(esc(t("skillLib.import")), "pri skl-go", ` data-skl="import-go"${busy}`) +
-    `</div><p class="d skl-import-hint">${esc(t("skillLib.importHint"))}</p>` +
+    `</div>` +
     (progress ? `<p class="d skl-progress" role="status">${esc(progress)}</p>` : "") +
     (!working && v.converted ? `<p class="d skl-progress" role="status">${esc(v.converted)}</p>` : "") +
     (v.error ? `<p class="skl-error" role="alert">${esc(v.error)}</p>` : "") +
@@ -703,11 +703,21 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
   root.addEventListener("input", event => {
     if ((event.target as HTMLElement).id === "skl-input") state.draft = (event.target as HTMLTextAreaElement).value;
   });
+  // The whole box is lit while something is dragged over it (the row's hover fill), and not a moment after.
+  const lit = (on: boolean) => root.querySelector(".skl-import")?.classList.toggle("is-over", on);
   root.addEventListener("dragover", event => {
     const types = event.dataTransfer?.types;
-    if ((event.target as Element).closest?.("[data-skl-drop]") && (types?.includes("Files") || types?.includes("text/uri-list") || types?.includes("text/plain"))) event.preventDefault();
+    if ((event.target as Element).closest?.("[data-skl-drop]") && (types?.includes("Files") || types?.includes("text/uri-list") || types?.includes("text/plain"))) {
+      event.preventDefault();
+      if (!state.busy && !state.converting) lit(true);
+    }
+  });
+  root.addEventListener("dragleave", event => {
+    const next = (event as DragEvent).relatedTarget as Node | null;
+    if (!next || !root.querySelector(".skl-import")?.contains(next)) lit(false);
   });
   root.addEventListener("drop", event => {
+    lit(false);
     if (!(event.target as Element).closest?.("[data-skl-drop]") || state.busy || state.converting) return;
     const data = event.dataTransfer;
     if (!data) return;

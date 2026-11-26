@@ -72,10 +72,12 @@ def local_stamp(folder):
         if count > MAX_ARCHIVE_ENTRIES or len(Path(directory).relative_to(folder).parts) > MAX_DISCOVERY_DEPTH:
             raise MemberError("size", f"{directory} holds more than a plugin can: pick the folder of the plugin itself",
                               reason="scan")
+        # A link is never followed: it is part of the fingerprint by its name, so a link made or removed is a change.
         for name in [*dirs, *names]:
             if linked(Path(directory) / name):
-                shown = (Path(directory) / name).relative_to(folder).as_posix()
-                raise MemberError("source", f"{shown} is a link, and links are not followed", reason="linked", file=shown)
+                entries.append(((Path(directory) / name).relative_to(folder).as_posix() + " ->", 0, 0))
+        dirs[:] = [name for name in dirs if not linked(Path(directory) / name)]
+        names[:] = [name for name in names if not linked(Path(directory) / name)]
         for name in names:
             path = Path(directory) / name
             info = path.stat()

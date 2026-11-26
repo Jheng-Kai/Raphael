@@ -2110,7 +2110,7 @@ export const ptBR = {
   "skillLib.plugins": "Plugins",
   "skillLib.skills": "Habilidades",
   "skillLib.folder": "Pasta",
-  "skillLib.importHint": "Solte aqui arquivos, uma pasta ou um link, em qualquer formato.",
+  "skillLib.importHint": "Solte aqui arquivos, uma pasta ou um link, ou cole um texto",
   "skillLib.choose": "Escolher arquivos",
   "skillLib.chooseFiles": "Arquivos",
   "skillLib.converting": "{p0} está transformando isso em uma habilidade… ({p1})",

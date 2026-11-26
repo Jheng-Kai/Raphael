@@ -837,8 +837,10 @@ export function checkRendered(name, context = {}) {
       require(visible(panel) && visible(field) && panel.querySelectorAll('textarea, input:not([type="file"])').length === 1, 'the card is one box');
       require([...panel.querySelectorAll('button')].map(button => button.dataset.skl).join() === 'pick,import-go', 'one way to choose files and one 匯入, no chips');
       require(panel.querySelector('[data-skl="pick"]').textContent.trim() === '選擇檔案', 'the way to choose is a plain 選擇檔案');
-      const hint = panel.querySelector('.skl-import-hint');
-      require(visible(hint) && hint.textContent.trim() === '把檔案、資料夾或連結丟進來，任何格式都可以。', 'one plain line under the box');
+      require(!panel.querySelector('.skl-import-hint'), 'no separate line under the box: the field says what it takes itself');
+      require(field.placeholder === '把檔案、資料夾或連結丟進來，或貼上文字', 'the field carries its words as its placeholder');
+      const style = getComputedStyle(field), lines = Math.round(field.getBoundingClientRect().height / parseFloat(style.lineHeight));
+      require(style.resize === 'none' && lines >= 2 && lines <= 4, `a compact field with no resize grip (${lines} lines, resize ${style.resize})`);
       require(!/\.zip|\.md|\.tgz|SKILL\.md|GitHub|skills\.sh/.test(panel.textContent), 'no format is named');
       require(panel.querySelector('#skl-file').multiple && !panel.querySelector('#skl-file').accept, 'the file dialog takes any file');
       const wide = panel.getBoundingClientRect(), box = field.getBoundingClientRect();

@@ -2110,7 +2110,7 @@ export const id = {
   "skillLib.plugins": "Plugin",
   "skillLib.skills": "Keahlian",
   "skillLib.folder": "Folder",
-  "skillLib.importHint": "Letakkan file, folder, atau tautan di sini, dalam format apa pun.",
+  "skillLib.importHint": "Letakkan file, folder, atau tautan di sini, atau tempel teks",
   "skillLib.choose": "Pilih file",
   "skillLib.chooseFiles": "File",
   "skillLib.converting": "{p0} sedang mengubahnya menjadi keterampilan… ({p1})",

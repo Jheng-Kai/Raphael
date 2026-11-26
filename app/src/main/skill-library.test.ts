@@ -314,13 +314,15 @@ const dropOn = (root: ParentNode, data: Record<string, unknown>) => {
   return event;
 };
 
-test("the importer is one box: a field, one way to choose files and one 匯入, with one plain line under it", async () => {
+test("the importer is one box: a field that says what it takes in itself, one way to choose files and one 匯入", async () => {
   const { root } = await setupBox();
   const card = root.querySelector(".skl-import")!;
   expect(card.querySelectorAll("textarea, input:not([type=file])")).toHaveLength(1);
   expect([...card.querySelectorAll("button")].map(button => button.dataset.skl)).toEqual(["pick", "import-go"]);
   expect(card.querySelector('[data-skl="pick"]')?.textContent).toBe("選擇檔案");
-  expect(card.querySelector(".skl-import-hint")?.textContent).toBe("把檔案、資料夾或連結丟進來，任何格式都可以。");
+  expect(card.querySelector(".skl-import-hint")).toBeNull();
+  expect(textarea(root).placeholder).toBe("把檔案、資料夾或連結丟進來，或貼上文字");
+  expect(textarea(root).getAttribute("rows")).toBe("2");
   expect(card.textContent).not.toMatch(/\.zip|\.md|SKILL\.md|GitHub/);
   expect(card.querySelector<HTMLInputElement>("#skl-file")?.accept).toBe("");
   expect(card.querySelector<HTMLInputElement>("#skl-file")?.multiple).toBe(true);
@@ -390,6 +392,22 @@ test("a folder dropped on the box goes as a tree with its paths, leaving node_mo
   dropOn(root, { items: [{ webkitGetAsEntry: () => tree }] });
   await settle(); await settle(); await settle();
   imported({ files: [{ path: "notes/a.md", data: btoa("A") }, { path: "notes/sub/b.md", data: btoa("B") }] });
+});
+
+test("the whole box is lit while files are dragged over it, and only then", async () => {
+  const { root } = await setupBox();
+  const card = root.querySelector(".skl-import")!;
+  const over = new Event("dragover", { bubbles: true, cancelable: true });
+  Object.defineProperty(over, "dataTransfer", { value: { types: ["Files"] } });
+  card.querySelector("#skl-input")!.dispatchEvent(over);
+  expect(card.classList.contains("is-over")).toBe(true);
+  const leave = new Event("dragleave", { bubbles: true });
+  Object.defineProperty(leave, "relatedTarget", { value: null });
+  card.dispatchEvent(leave);
+  expect(card.classList.contains("is-over")).toBe(false);
+  card.querySelector("#skl-input")!.dispatchEvent(over);
+  dropOn(root, {});
+  expect(card.classList.contains("is-over")).toBe(false);
 });
 
 test("a link dragged onto the box is sent as the text it is", async () => {
