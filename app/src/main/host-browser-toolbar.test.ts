@@ -126,6 +126,99 @@ it("lets the owner holding the tab answer a prompt, an alert and a confirm, once
   expect(send).toHaveBeenLastCalledWith({ action: "dialog", tab: "popup", dialog: "c1", accept: false }, expect.any(Number));
 });
 
+it("shows the site's sign-in prompt and sends the owner's user name and password only while they hold the tab", () => {
+  const { screen, send, toolbar, model } = setup();
+  const card = () => screen.querySelector<HTMLElement>(".host-browser-dialog")!;
+  const fields = () => [...card().querySelectorAll<HTMLInputElement>(".host-browser-dialog-answer")];
+  const auth = { auth_id: "a1", origin: "https://intranet.example.test", realm: "Staff", scheme: "basic" };
+  toolbar.draw({ ...model, auth });
+  expect(card().hidden).toBe(false);
+  expect(card().querySelector(".host-browser-dialog-from")?.textContent).toBe(t("browser.authFrom", { p0: "intranet.example.test" }));
+  expect(card().querySelector(".host-browser-dialog-message")?.textContent).toBe("Staff");
+  expect(card().querySelector(".host-browser-dialog-hint")?.textContent).toBe(t("browser.authTakeOver"));
+  expect(fields().map(field => [field.dataset.field, field.type, field.disabled])).toEqual([["username", "text", true], ["password", "password", true]]);
+  toolbar.draw({ ...model, auth }, true);
+  expect(document.activeElement).toBe(fields()[0]);
+  fields()[0].value = "staff";
+  fields()[1].value = "s3cret";
+  // A redraw of the same prompt keeps what was typed.
+  toolbar.draw({ ...model, auth, back: false }, true);
+  expect(fields().map(field => field.value)).toEqual(["staff", "s3cret"]);
+  fields()[1].dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  expect(send).toHaveBeenLastCalledWith({ action: "auth", tab: "popup", auth: "a1", accept: true, username: "staff", password: "s3cret" }, expect.any(Number));
+  // Sent to Chrome, the password no longer stays in the card.
+  expect(fields().map(field => field.value)).toEqual(["staff", ""]);
+  // A new prompt starts empty; cancelling it sends no user name or password.
+  toolbar.draw({ ...model, auth: { ...auth, auth_id: "a2" } }, true);
+  expect(fields().map(field => field.value)).toEqual(["", ""]);
+  card().querySelector<HTMLButtonElement>('[data-dialog-answer="dismiss"]')!.click();
+  expect(send).toHaveBeenLastCalledWith({ action: "auth", tab: "popup", auth: "a2", accept: false }, expect.any(Number));
+  // A JavaScript dialog holds the page, so it comes first.
+  toolbar.draw({ ...model, auth, dialog: { dialog_id: "d9", type: "alert", message: "Saved" } }, true);
+  expect(card().querySelector(".host-browser-dialog-message")?.textContent).toBe("Saved");
+  // A prompt gone takes what was typed along.
+  toolbar.draw({ ...model, auth: { ...auth, auth_id: "a3" } }, true);
+  fields()[1].value = "typed";
+  toolbar.draw(model, true);
+  expect(card().hidden).toBe(true);
+  expect(card().querySelectorAll("input")).toHaveLength(0);
+});
+
+it("lets the owner holding the tab choose files for a page's file chooser, or close it", async () => {
+  const screen = document.createElement("div");
+  document.body.append(screen);
+  const send = vi.fn();
+  const store = vi.fn(async (file: File) => `stored-${file.name}`);
+  const toolbar = mountHostBrowserToolbar(screen, send, store);
+  const model: HostBrowserModel = { tabs, shown: "popup", back: true, forward: false };
+  const card = () => screen.querySelector<HTMLElement>(".host-browser-dialog")!;
+  const accept = () => card().querySelector<HTMLButtonElement>('[data-dialog-answer="accept"]')!;
+  const picker = screen.querySelector<HTMLInputElement>(".host-browser-picker")!;
+  const choose = (...files: File[]) => {
+    Object.defineProperty(picker, "files", { configurable: true, value: files });
+    picker.dispatchEvent(new Event("change"));
+  };
+  const opened = vi.spyOn(picker, "click").mockImplementation(() => {});
+  const chooser = { chooser_id: "c1", mode: "multiple" as const };
+  toolbar.draw({ ...model, chooser });
+  expect(card().querySelector(".host-browser-dialog-from")?.textContent).toBe(t("browser.chooserFrom", { p0: "sign-in.example.test" }));
+  expect(card().querySelector(".host-browser-dialog-hint")?.textContent).toBe(t("browser.chooserTakeOver"));
+  expect(accept().disabled).toBe(true);
+  toolbar.draw({ ...model, chooser }, true);
+  expect(picker.multiple).toBe(true);
+  accept().click();
+  expect(opened).toHaveBeenCalledOnce();
+  expect(send).not.toHaveBeenCalled();
+  // Files not stored: the chooser can be answered again.
+  store.mockRejectedValueOnce(new Error("too large"));
+  choose(new File(["a"], "a.pdf"));
+  await vi.waitFor(() => expect(accept().disabled).toBe(false));
+  expect(send).not.toHaveBeenCalled();
+  // Files picked for this chooser go nowhere once the view has left it: another tab's chooser never gets them.
+  accept().click();
+  toolbar.draw({ ...model, shown: "page", chooser: { chooser_id: "c9", mode: "multiple" } }, true);
+  choose(new File(["a"], "a.pdf"));
+  // Nor does the chooser that replaced it on the same tab.
+  toolbar.draw({ ...model, chooser }, true);
+  accept().click();
+  toolbar.draw({ ...model, chooser: { chooser_id: "c7", mode: "multiple" } }, true);
+  choose(new File(["a"], "a.pdf"));
+  await Promise.resolve();
+  expect(store).toHaveBeenCalledOnce();
+  expect(send).not.toHaveBeenCalled();
+  toolbar.draw({ ...model, chooser }, true);
+  accept().click();
+  choose(new File(["a"], "a.pdf"), new File(["b"], "b.pdf"));
+  await vi.waitFor(() => expect(send).toHaveBeenCalled());
+  expect(send).toHaveBeenLastCalledWith({ action: "upload", tab: "popup", chooser: "c1",
+    files: [{ stored_id: "stored-a.pdf", name: "a.pdf" }, { stored_id: "stored-b.pdf", name: "b.pdf" }] }, expect.any(Number));
+  expect(accept().disabled).toBe(true);
+  toolbar.draw({ ...model, chooser: { chooser_id: "c2", mode: "single" } }, true);
+  expect(picker.multiple).toBe(false);
+  card().querySelector<HTMLButtonElement>('[data-dialog-answer="dismiss"]')!.click();
+  expect(send).toHaveBeenLastCalledWith({ action: "chooser", tab: "popup", chooser: "c2" }, expect.any(Number));
+});
+
 it("says how much of a long dialog's message is left out between its two ends", () => {
   const { screen, toolbar, model } = setup();
   const card = screen.querySelector<HTMLElement>(".host-browser-dialog")!;

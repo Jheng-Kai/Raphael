@@ -31,12 +31,15 @@ EXPIRED = [
     ("codex", {"message": "Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again."}),
     # Antigravity.
     ("gemini", "Authentication failed: your session has expired. Please sign in again."),
+    ("gemini", "Authentication expired. Please log back in."),
 ]
 SIGNED_OUT = [
     ("claude", {"error": "Not logged in · Please run /login"}),
     ("claude", "Not logged in"),
     ("codex", "Not logged in. Run `codex login` to sign in."),
     ("gemini", "You are not signed in."),
+    # What agy 1.5 says when it finds no sign-in where it keeps one (live, a Mac run with a private home).
+    ("gemini", "error getting token source: You are not logged into Antigravity."),
 ]
 OTHER = [
     ("claude", {"error": "Prompt is too long"}, "context_overflow"),
@@ -340,7 +343,7 @@ async def test_nothing_looks_at_the_credentials_while_no_sign_in_is_lost(tmp_pat
     brains = CliBrains(home=tmp_path, environ={}, commands={})
     looks = []
     real = brains._credential_stamp
-    brains._credential_stamp = lambda name: looks.append((name, threading.get_ident())) or real(name)
+    brains._credential_stamp = lambda name, **how: looks.append((name, threading.get_ident())) or real(name, **how)
     main = threading.get_ident()
     try:
         await brains.list()
@@ -357,6 +360,99 @@ async def test_nothing_looks_at_the_credentials_while_no_sign_in_is_lost(tmp_pat
         looks.clear()
         await asyncio.sleep(0.1)
         assert looks == [], "it stops when nothing is lost"
+    finally:
+        await brains.aclose()
+
+
+async def test_a_sign_in_done_outside_the_app_shows_within_seconds_while_the_app_is_used(tmp_path, monkeypatch):
+    """R-CLI-SIGNIN-09: while the app is used, a CLI that is installed but not signed in has its credentials looked at every
+    few seconds off the loop, so a sign-in in the owner's own terminal shows at once; a signed-in CLI is not looked at."""
+    import threading
+    monkeypatch.setattr(discovery_module, "SIGNED_OUT_WATCH_S", 0.01)
+    events = []
+    brains = CliBrains(home=tmp_path, environ={}, commands={"codex": ["codex.exe"]},
+                       notify=lambda *event: events.append(event))
+    looks = []
+    real = brains._credential_stamp
+    brains._credential_stamp = lambda name, **how: looks.append((name, threading.get_ident())) or real(name, **how)
+    main = threading.get_ident()
+    try:
+        listed = await brains.list()
+        assert next(item for item in listed["clis"] if item["id"] == "codex")["logged_in"] is False
+        await _until(lambda: len(looks) >= 2)
+        assert {name for name, _ in looks} == {"codex"}, "only the installed CLI that is not signed in"
+        assert all(thread != main for _, thread in looks), "off the event loop"
+        (tmp_path / ".codex").mkdir()
+        (tmp_path / ".codex" / "auth.json").write_text("{}")
+        await _until(lambda: ("brains.changed", {}) in events)
+        assert next(item for item in brains._previous["clis"] if item["id"] == "codex")["logged_in"] is True
+        await asyncio.sleep(0.05)
+        looks.clear()
+        await asyncio.sleep(0.1)
+        assert looks == [], "a signed-in CLI is not looked at"
+    finally:
+        await brains.aclose()
+
+
+async def test_a_read_that_finds_a_cli_newly_signed_out_wakes_the_watch_at_once(tmp_path, monkeypatch):
+    """R-CLI-SIGNIN-09: with every CLI signed in the watch waits a minute; a read that then finds one signed out (the
+    owner signed out in a terminal and opened Settings) has it looked at every few seconds from then on, not after that
+    minute (Codex review of #348)."""
+    monkeypatch.setattr(discovery_module, "SIGNED_OUT_WATCH_S", 0.01)
+    (tmp_path / ".codex").mkdir()
+    auth = tmp_path / ".codex" / "auth.json"
+    auth.write_text("{}")
+    events = []
+    brains = CliBrains(home=tmp_path, environ={}, commands={"codex": ["codex.exe"]},
+                       notify=lambda *event: events.append(event))
+    try:
+        await brains.list()
+        await asyncio.sleep(0.05)  # the watch now waits its minute
+        auth.unlink()
+        listed = await brains.list()
+        assert next(item for item in listed["clis"] if item["id"] == "codex")["logged_in"] is False
+        events.clear()
+        auth.write_text("{}")
+        await _until(lambda: ("brains.changed", {}) in events, seconds=2)
+        assert next(item for item in brains._previous["clis"] if item["id"] == "codex")["logged_in"] is True
+    finally:
+        await brains.aclose()
+
+
+async def test_a_sign_in_finished_while_the_clis_are_read_is_still_seen(tmp_path, monkeypatch):
+    """R-CLI-SIGNIN-09: a read asks whether the CLI is signed in, then its version. A sign-in finished in between is not in
+    what the read says, and the watch compares with the stamp from before that question, so it is still a change
+    (Codex review of #348)."""
+    monkeypatch.setattr(discovery_module, "SIGNED_OUT_WATCH_S", 0.01)
+    events = []
+    brains = CliBrains(home=tmp_path, environ={}, commands={"codex": ["codex.exe"]},
+                       notify=lambda *event: events.append(event))
+
+    async def version(name, command):
+        if not (tmp_path / ".codex").exists():
+            (tmp_path / ".codex").mkdir()
+            (tmp_path / ".codex" / "auth.json").write_text("{}")  # signed in while the read went on
+        return {"version": "codex 1"}
+
+    brains._read_version = version
+    try:
+        listed = await brains.list()
+        assert next(item for item in listed["clis"] if item["id"] == "codex")["logged_in"] is False
+        await _until(lambda: ("brains.changed", {}) in events, seconds=2)
+        assert next(item for item in brains._previous["clis"] if item["id"] == "codex")["logged_in"] is True
+    finally:
+        await brains.aclose()
+
+
+async def test_a_cli_not_signed_in_is_no_longer_looked_at_once_the_app_is_left(tmp_path, monkeypatch):
+    monkeypatch.setattr(discovery_module, "SIGNED_OUT_WATCH_S", 0.01)
+    monkeypatch.setattr(discovery_module, "SIGNED_OUT_WATCH_FOR_S", 0.05)
+    brains = CliBrains(home=tmp_path, environ={}, commands={"codex": ["codex.exe"]})
+    try:
+        await brains.list()
+        assert brains._watcher is not None
+        brains._last_used -= 600  # left for longer than the minute's read is kept up
+        await _until(lambda: brains._watcher is None)
     finally:
         await brains.aclose()
 
@@ -438,30 +534,63 @@ def test_the_keychain_is_asked_for_attributes_alone(monkeypatch):
     assert discovery_module.keychain_stamp() is None
 
 
-def test_antigravitys_sign_in_in_windows_credential_manager_is_a_sign_in(tmp_path):
-    """R-CLI-SIGNIN-05 (#283): Antigravity CLI 1.5 on Windows keeps its Google sign-in in Credential Manager, not in
-    ~/.gemini; the item being there is the sign-in, and its LastWritten time moves the credential stamp."""
-    item = [133_000_000]
-    brains = CliBrains(home=tmp_path, environ={}, commands={"gemini": ["agy"]}, credentials=lambda: item[0])
+@pytest.mark.parametrize("stamp", ['"mdat"<timedate>=0x3230  "20261125114948Z\\000"', 133_000_000],
+                         ids=["mac-keychain", "windows-credential-manager"])
+def test_antigravitys_sign_in_in_the_systems_store_is_a_sign_in(tmp_path, stamp):
+    """R-CLI-SIGNIN-05 (#283): Antigravity CLI 1.5 keeps its Google sign-in in the system's store, the Keychain on a Mac and
+    Credential Manager on Windows, never in ~/.gemini; the item being there is the sign-in, a look stands for KEYCHAIN_TTL_S,
+    and its date moves the credential stamp. The same on both: a signed-in agy reads 未登入 on neither."""
+    now = [100.0]
+    item = [stamp]
+    looks = []
+    def credentials():
+        looks.append(now[0])
+        return item[0]
+    brains = CliBrains(home=tmp_path, environ={}, commands={"gemini": ["agy"]}, clock=lambda: now[0], credentials=credentials)
     assert brains.logged_in("gemini") is True and brains.available("gemini")
+    assert brains.logged_in("gemini") is True and len(looks) == 1  # the look stands
     brains.sign_in_lost("gemini", "expired")
     assert brains.sign_in_missing("gemini") == "expired"
-    item[0] = 133_000_001  # signed in again in a terminal
+    item[0] = f"{stamp} again"  # signed in again in a terminal
     assert brains.sign_in_missing("gemini") is None
     item[0] = None  # signed out
+    now[0] += discovery_module.KEYCHAIN_TTL_S
     assert brains.logged_in("gemini") is False and not brains.available("gemini")
-    # Credential Manager is Antigravity's alone here: the other CLIs keep files.
-    item[0] = 133_000_002
+    # The store holds Antigravity's sign-in alone here: the other CLIs keep files.
+    item[0] = stamp
     assert brains.logged_in("codex") is False
 
 
-def test_only_the_owners_own_home_on_windows_asks_credential_manager(tmp_path, monkeypatch):
+def test_only_the_owners_own_home_asks_the_systems_store_for_antigravity(tmp_path, monkeypatch):
+    """R-CLI-SIGNIN-05: the Keychain on a Mac, Credential Manager on Windows, and nothing for a home that is not the owner's."""
     monkeypatch.setattr(discovery_module.sys, "platform", "win32")
     assert discovery_module.owners_credentials(tmp_path) is None
     assert discovery_module.owners_credentials(None) is discovery_module.credential_stamp
     monkeypatch.setattr(discovery_module.sys, "platform", "darwin")
+    assert discovery_module.owners_credentials(tmp_path) is None
+    assert discovery_module.owners_credentials(None) is discovery_module.antigravity_keychain_stamp
+    assert discovery_module.credential_stamp() is None  # Credential Manager is asked only on Windows
+    monkeypatch.setattr(discovery_module.sys, "platform", "linux")
     assert discovery_module.owners_credentials(None) is None
-    assert discovery_module.credential_stamp() is None
+
+
+def test_the_keychain_is_asked_for_antigravitys_item_by_its_service_and_account_alone(monkeypatch):
+    """R-CLI-SIGNIN-05: agy's item is the password item of service `gemini` and account `antigravity`; its attributes alone
+    are asked for, never its secret (no `-g` or `-w`)."""
+    calls = []
+    class Found:
+        returncode = 0
+        stdout = '    "acct"<blob>="antigravity"\n    "mdat"<timedate>=0x3230  "20261125114948Z\\000"\n    "svce"<blob>="gemini"\n'
+    monkeypatch.setattr(discovery_module.subprocess, "run", lambda args, **kwargs: calls.append(args) or Found())
+    assert "20261125114948Z" in discovery_module.antigravity_keychain_stamp()
+    assert calls == [["/usr/bin/security", "find-generic-password", "-s", "gemini", "-a", "antigravity"]]
+    assert not {"-g", "-w"} & set(calls[0])
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="the Keychain is a Mac's")
+def test_the_keychain_without_the_item_says_none():
+    """Asking for an item nobody wrote finds nothing; only attributes are ever asked for, never a secret."""
+    assert discovery_module.keychain_stamp("raphael-test-no-such-item", "nobody") is None
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Credential Manager is Windows'")

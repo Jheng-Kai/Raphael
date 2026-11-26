@@ -141,7 +141,9 @@ from slime.css's `--eyes` through the generated data; `slime.ts` `slimeSVG`, `en
 takes `d: var(--eyes)` and eases between shapes; WebKit changes them at once. The tests in `slime.test.ts` keep both.
 The look harness renders in Chromium, so a WebKit change is checked in a WKWebView by hand.
 
-The window's zoom (⌘+ and ⌘-, `window-zoom.ts`, remembered) is a page zoom, and WebKit multiplies the lengths of an SVG
+The window's zoom (⌘+ and ⌘-, `window-zoom.ts`, remembered; zooming out stops where a CSS pixel would get less than one
+of the screen's pixels, so a screen at 100 % keeps 100 % as its least, one at 125 % 80 %, and one at 150 % or a Retina one 70 %, R-UI-13)
+is a page zoom, and WebKit multiplies the lengths of an SVG
 element's CSS `transform` and `transform-origin` by it, while the `transform` attribute and the separate `translate` and
 `scale` properties keep the drawing's units. The eye cels were placed by CSS transforms and the body cels by attributes,
 so at 110 % the eyes of cel n stood n tenths of a cel off and a working slime's eyes slid out of its body and back in

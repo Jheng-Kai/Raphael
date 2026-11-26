@@ -12,8 +12,10 @@ import secrets
 import shutil
 import signal
 import socket
+import stat
 import subprocess
 import sys
+import threading
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -112,6 +114,30 @@ def chrome_executable():
     return None
 
 
+# What a page of Raphael's Chrome may do without asking, as a normal profile lets it, and what it is refused: no one
+# answers a permission prompt there (headless on a Mac, a desktop of its own on Windows), so a request would wait for
+# ever. Refusing agrees with what the page reads in Notification.permission. Adapted from OpenMausBot's table, without
+# clipboard-write: on Windows the clipboard is the owner's own.
+PERMISSIONS = (
+    *(({"name": name}, "granted") for name in ("storage-access", "top-level-storage-access", "persistent-storage",
+                                                "background-sync")),
+    *(({"name": name}, "denied") for name in (
+        "notifications", "geolocation", "camera", "microphone", "clipboard-read", "midi", "accelerometer", "gyroscope",
+        "magnetometer", "ambient-light-sensor", "idle-detection", "local-network-access", "window-management",
+        "display-capture", "nfc", "payment-handler")),
+    ({"name": "midi", "sysex": True}, "denied"),
+)
+# A member's Chrome holds no passkey: the owner's passkeys live on their own phone or computer. A Chrome no one sees has
+# nowhere to show its passkey sheet, so a request never ended and the sheet held the tab. This authenticator holds no
+# passkey and verifies no one: every passkey or security-key request (sign-in, conditional, registration) ends at once
+# with NotAllowedError, as a dismissed sheet does, the page offers its other ways in, and no credential is ever made.
+# Adapted from OpenMausBot's.
+NO_PASSKEY = {"protocol": "ctap2", "ctap2Version": "ctap2_1", "transport": "internal", "hasResidentKey": True,
+              "hasUserVerification": True, "isUserVerified": False, "automaticPresenceSimulation": True}
+# Each document request pauses for Chrome's sign-in prompt (HTTP authentication), which no one would see, and goes on at
+# once unchanged; the prompt waits for the owner in the view, and is cancelled when no one answers it in time.
+AUTH_PATTERNS = [{"urlPattern": "*", "resourceType": "Document", "requestStage": "Request"}]
+AUTH_WAIT_S = 300
 DOWNLOADS = Path(".raphael") / "downloads"  # where a page's download is placed in the member's work folder (#331)
 IGNORE = "# Raphael's own files, such as members' downloads.\n*\n"
 # Where a folder can be opened relative to another, each folder of `.raphael/downloads` is opened from the one before it
@@ -162,23 +188,76 @@ def place_by_handle(workspace, name, data):
             os.close(folder)
 
 
-def opened_in(file, folder):
-    """Whether the file just created is in `folder`, as its open handle says on Windows: a link or junction swapped in
-    after the folders were checked is seen there, before anything is written."""
-    if os.name != "nt":
-        return Path(os.path.realpath(file.name)).parent == folder
+def opened_path(descriptor):
+    """Where an open file really is on Windows, as its handle's final path says: a link or junction swapped in since its
+    path was checked does not change it. None when Windows cannot say."""
     import ctypes
     import msvcrt
     kernel = ctypes.WinDLL("kernel32", use_last_error=True)
     kernel.GetFinalPathNameByHandleW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_uint32, ctypes.c_uint32]
     kernel.GetFinalPathNameByHandleW.restype = ctypes.c_uint32
     buffer = ctypes.create_unicode_buffer(32768)
-    length = kernel.GetFinalPathNameByHandleW(msvcrt.get_osfhandle(file.fileno()), buffer, len(buffer), 0)
+    length = kernel.GetFinalPathNameByHandleW(msvcrt.get_osfhandle(descriptor), buffer, len(buffer), 0)
     if not 0 < length < len(buffer):
-        return False
+        return None
     final = buffer.value
-    final = "\\\\" + final[8:] if final.startswith("\\\\?\\UNC\\") else final.removeprefix("\\\\?\\")
-    return os.path.normcase(os.path.dirname(final)) == os.path.normcase(str(folder))
+    return Path("\\\\" + final[8:] if final.startswith("\\\\?\\UNC\\") else final.removeprefix("\\\\?\\"))
+
+
+# A folder opened only to pass through it (O_SEARCH on a Mac, O_PATH on Linux): one the owner may cross but not list still
+# opens, as it does for a path.
+PASS_THROUGH = (getattr(os, "O_SEARCH", 0) or getattr(os, "O_PATH", 0) or os.O_RDONLY) | FOLDER
+
+
+def opened_without_links(path):
+    """The file at the resolved `path`, opened for reading with every folder from the file system's root down opened from
+    the one before it and nothing opened through a link (macOS and Linux): no link swapped in anywhere on its way after a
+    check can lead elsewhere."""
+    folder = os.open(path.anchor, PASS_THROUGH)
+    try:
+        for part in path.parts[1:-1]:
+            inner = os.open(part, PASS_THROUGH, dir_fd=folder)
+            os.close(folder)
+            folder = inner
+        return os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=folder)
+    finally:
+        os.close(folder)
+
+
+async def made_off_loop(make, *args):
+    """What `make(*args)` makes in the private profile (a path in a folder of its own), made in a thread. A caller gone
+    first (cancelled, or the core shutting down) leaves the thread to finish, and what it made is removed with its folder:
+    by the caller when the thread was done first, else by the thread itself. One lock hands it over, so it is never both
+    or neither. (Chrome's start also empties the profile's uploads.)"""
+    lock, state = threading.Lock(), {"made": None, "abandoned": False}
+
+    def run():
+        made = make(*args)
+        with lock:
+            state["made"] = made
+            abandoned = state["abandoned"]
+        if abandoned:
+            shutil.rmtree(made.parent, ignore_errors=True)
+        return made
+
+    try:
+        return await asyncio.shield(asyncio.ensure_future(asyncio.to_thread(run)))
+    except asyncio.CancelledError:
+        with lock:
+            state["abandoned"] = True
+            made = state["made"]
+        if made is not None:
+            shutil.rmtree(made.parent, ignore_errors=True)
+        raise
+
+
+def opened_in(file, folder):
+    """Whether the file just created is in `folder`, as its open handle says on Windows: a link or junction swapped in
+    after the folders were checked is seen there, before anything is written."""
+    if os.name != "nt":
+        return Path(os.path.realpath(file.name)).parent == folder
+    final = opened_path(file.fileno())
+    return final is not None and os.path.normcase(os.path.dirname(final)) == os.path.normcase(str(folder))
 
 
 def created(path):
@@ -213,22 +292,28 @@ def created(path):
         if error in (80, 183):  # ERROR_FILE_EXISTS, ERROR_ALREADY_EXISTS
             raise FileExistsError(errno.EEXIST, os.strerror(errno.EEXIST), str(path))
         raise ctypes.WinError(error)
-    try:
-        descriptor = msvcrt.open_osfhandle(handle, os.O_WRONLY | os.O_BINARY)
-    except OSError:
-        kernel.CloseHandle(handle)
-        raise
-    file = os.fdopen(descriptor, "wb")
 
     class Disposition(ctypes.Structure):
         _fields_ = [("DeleteFile", wintypes.BOOLEAN)]
 
-    def remove():
+    def dispose(opened):
         # FileDispositionInfo: the file this handle opened goes when the handle closes, wherever its path now leads.
-        kernel.SetFileInformationByHandle(msvcrt.get_osfhandle(file.fileno()), 4, ctypes.byref(Disposition(True)),
-                                          ctypes.sizeof(Disposition))
+        kernel.SetFileInformationByHandle(opened, 4, ctypes.byref(Disposition(True)), ctypes.sizeof(Disposition))
 
-    return file, remove
+    try:
+        descriptor = msvcrt.open_osfhandle(handle, os.O_WRONLY | os.O_BINARY)
+    except OSError:
+        # Left empty, the new file would stand for a whole one: a first `.gitignore` would never be written again.
+        dispose(handle)
+        kernel.CloseHandle(handle)
+        raise
+    try:
+        file = os.fdopen(descriptor, "wb")
+    except OSError:
+        dispose(handle)
+        os.close(descriptor)
+        raise
+    return file, lambda: dispose(msvcrt.get_osfhandle(file.fileno()))
 
 
 def create_in(folder, name, write):
@@ -315,11 +400,33 @@ def mac_user_agent_metadata(version):
     }
 
 
-def window_arguments(mac_version):
-    """Where Chrome's window goes off Windows: none in headless (with the Mac's user agent when its version is known),
-    else far off every screen, which Linux keeps."""
+def mac_screen():
+    """The Mac's main display in points, as a page of its ordinary Chrome sees it, or a 14-inch MacBook Pro's when it
+    cannot be read or is smaller than Raphael's 1280 × 900 window: headless Chrome's own 800 × 600 screen, smaller than
+    its window, tells a page it is headless."""
+    try:
+        import ctypes
+
+        class Rect(ctypes.Structure):
+            _fields_ = [(name, ctypes.c_double) for name in ("x", "y", "width", "height")]
+
+        graphics = ctypes.CDLL("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
+        graphics.CGMainDisplayID.restype = ctypes.c_uint32
+        graphics.CGDisplayBounds.argtypes = [ctypes.c_uint32]
+        graphics.CGDisplayBounds.restype = Rect
+        bounds = graphics.CGDisplayBounds(graphics.CGMainDisplayID())
+        size = round(bounds.width), round(bounds.height)
+    except (OSError, AttributeError, ValueError):
+        size = (0, 0)
+    return size if 1280 <= size[0] <= 8192 and 960 <= size[1] <= 8192 else (1512, 982)
+
+
+def window_arguments(mac_version, screen=(1512, 982)):
+    """Where Chrome's window goes off Windows: none in headless (with the Mac's screen, and its user agent when its version
+    is known), else far off every screen, which Linux keeps."""
     if headless_chrome():
-        return ["--headless=new", *([f"--user-agent={mac_user_agent(mac_version)}"] if mac_version else [])]
+        return ["--headless=new", f"--screen-info={{0,0 {screen[0]}x{screen[1]}}}",
+                *([f"--user-agent={mac_user_agent(mac_version)}"] if mac_version else [])]
     return ["--window-position=-32000,-32000"]
 
 
@@ -429,6 +536,14 @@ class Tab:
     dialog: dict | None = None
     dialog_text: str | None = ""  # its whole message for the safety check (None: too long to judge); `dialog` shows its ends
     dialog_opened: asyncio.Event = field(default_factory=asyncio.Event, repr=False)
+    # The site's sign-in prompt (HTTP authentication) waiting for the owner, which Chrome would draw as its own dialog.
+    auth: dict | None = None
+    auth_request: str | None = field(default=None, repr=False)
+    auth_opened: asyncio.Event = field(default_factory=asyncio.Event, repr=False)
+    auth_timer: "asyncio.Task | None" = field(default=None, repr=False)
+    # The page's file chooser, which Chrome hands over instead of drawing: answered with browser_upload or by the owner.
+    chooser: dict | None = None
+    chooser_node: int | None = field(default=None, repr=False)
 
     @property
     def view(self):
@@ -456,6 +571,7 @@ class HostBrowser:
         self.held = {}
         self.handback = {}
         self.acknowledgements = set()
+        self.background = set()  # CDP answers sent from an event, which nothing waits for
         self.popups = {}
         self.icons = {}
         self.changed = asyncio.Event()
@@ -509,6 +625,8 @@ class HostBrowser:
     def _forget_tab(self, tab):
         self.tabs.pop(tab.id, None)
         tab.closed.set()
+        if tab.auth_timer is not None:
+            tab.auth_timer.cancel()
         if task := self.icons.pop(tab.id, None):
             task.cancel()
         if tab.cast is not None:
@@ -603,6 +721,8 @@ class HostBrowser:
             raise BrowserError("chrome_profile")
         owner_only_directory(self.profile)
         self.staging.mkdir(exist_ok=True)
+        # Copies of files the owner chose for pages, kept while this Chrome may still read them (`owner_upload`).
+        shutil.rmtree(self.profile / "uploads", ignore_errors=True)
         # Chrome's ordinary download setting also stays inside the private profile.
         preferences = self.profile / "Default" / "Preferences"
         if not preferences.exists() and not preferences.parent.exists():
@@ -638,8 +758,9 @@ class HostBrowser:
             if os.name == "nt":
                 self.process = DesktopChrome([*argv, *pages])
             else:
+                screen = mac_screen() if headless_chrome() else None
                 self.process = await asyncio.create_subprocess_exec(
-                    *argv, *window_arguments(self.mac_version), *pages, stdin=asyncio.subprocess.DEVNULL,
+                    *argv, *window_arguments(self.mac_version, screen), *pages, stdin=asyncio.subprocess.DEVNULL,
                     stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL, start_new_session=True)
             self.process_tree = ChromeProcessTree(self.process)
             if isinstance(self.process, DesktopChrome):
@@ -653,6 +774,9 @@ class HostBrowser:
                         await asyncio.sleep(0.15)
             await self.cdp.call("Browser.setDownloadBehavior",
                                 {"behavior": "allowAndName", "downloadPath": str(self.staging), "eventsEnabled": True})
+            # A Chrome that does not know a permission keeps its own default for it.
+            await asyncio.gather(*(self.cdp.call("Browser.setPermission", {"permission": permission, "setting": setting})
+                                   for permission, setting in PERMISSIONS), return_exceptions=True)
             await self.cdp.call("Target.setDiscoverTargets", {"discover": True, "filter": [{"type": "page"}]})
             return True
         except BaseException:
@@ -676,6 +800,18 @@ class HostBrowser:
                 if tab.session == session and tab.cast is not None:
                     tab.cast.frame(params)
                     break
+        elif method == "Fetch.requestPaused":
+            self._send(session, "Fetch.continueRequest", {"requestId": params["requestId"]})
+        elif method == "Fetch.authRequired":
+            self._auth_required(params, session)
+        elif method == "Page.fileChooserOpened":
+            for tab in self.tabs.values():
+                if tab.session == session:
+                    tab.chooser = {"chooser_id": secrets.token_hex(6),
+                                   "mode": "multiple" if params.get("mode") == "selectMultiple" else "single"}
+                    tab.chooser_node = params.get("backendNodeId")
+                    self.notify_view()
+                    break
         elif method in ("Target.targetCreated", "Target.targetInfoChanged"):
             info = params["targetInfo"]
             if info["type"] == "page":
@@ -695,6 +831,12 @@ class HostBrowser:
                     if "parentId" not in params["frame"]:
                         tab.document += 1
                         tab.main_frame = params["frame"]["id"]
+                        # A new document: the old one's file input is gone, and a sign-in prompt still open belonged
+                        # to a navigation Chrome left for this one.
+                        if tab.chooser is not None or tab.auth is not None:
+                            tab.chooser = tab.chooser_node = None
+                            self._clear_auth(tab, tab.auth)
+                            self.notify_view()
                         self._update_page(tab, url=params["frame"]["url"])
         elif method in ("Page.loadEventFired", "Page.navigatedWithinDocument"):
             for tab in self.tabs.values():
@@ -923,6 +1065,11 @@ class HostBrowser:
             self._update_page(tab, title=info.get("title"), url=info.get("url"))
         try:
             await self.command(tab, "Page.enable")
+            await self.command(tab, "Page.setInterceptFileChooserDialog", {"enabled": True})
+            await self.command(tab, "Fetch.enable", {"patterns": AUTH_PATTERNS, "handleAuthRequests": True})
+            with suppress(BrowserError):  # a Chrome without the WebAuthn domain leaves passkey requests as they were
+                await self.command(tab, "WebAuthn.enable", {"enableUI": False})
+                await self.command(tab, "WebAuthn.addVirtualAuthenticator", {"options": NO_PASSKEY})
             if headless_chrome():
                 # No window holds the focus in headless: each page is told it has it, and it names itself as the ordinary
                 # Chrome of a Mac in navigator.userAgentData too (the request's user agent is set at the start).
@@ -978,6 +1125,136 @@ class HostBrowser:
             tab.dialog = None
             tab.dialog_opened.clear()
         tab.refs.clear()
+
+    def _send(self, session, method, params):
+        """A CDP command an event answers, which nothing waits for: Chrome may have dropped what it answers meanwhile."""
+        cdp = self.cdp
+        if cdp is None:
+            return
+
+        async def send():
+            with suppress(BrowserError, OSError, TimeoutError):
+                await cdp.call(method, params, session=session)
+
+        task = asyncio.create_task(send())
+        self.background.add(task)
+        task.add_done_callback(self.background.discard)
+
+    def _auth_required(self, params, session):
+        """The site asks for a sign-in in Chrome's own prompt (HTTP authentication), which no one would see. A proxy's is
+        never answered; a site's waits on its tab for the owner, the newest one when another comes."""
+        challenge = params.get("authChallenge") or {}
+        tab = next((tab for tab in self.tabs.values() if tab.session == session), None)
+        if tab is None or challenge.get("source") == "Proxy":
+            self._send(session, "Fetch.continueWithAuth",
+                       {"requestId": params["requestId"], "authChallengeResponse": {"response": "CancelAuth"}})
+            return
+        if tab.auth is not None:
+            self._send(session, "Fetch.continueWithAuth",
+                       {"requestId": tab.auth_request, "authChallengeResponse": {"response": "CancelAuth"}})
+            self._clear_auth(tab, tab.auth)
+        tab.auth = auth = {"auth_id": secrets.token_hex(6), "origin": str(challenge.get("origin", ""))[:300],
+                           "realm": str(challenge.get("realm", ""))[:300],
+                           "scheme": str(challenge.get("scheme", "basic")).lower()[:40]}
+        tab.auth_request = params["requestId"]
+        tab.auth_opened.set()
+
+        async def expire():
+            await asyncio.sleep(AUTH_WAIT_S)
+            if tab.auth is auth:
+                tab.auth_timer = None
+                with suppress(BrowserError, OSError, TimeoutError):
+                    await self.answer_auth(tab, auth, None)
+
+        tab.auth_timer = asyncio.create_task(expire())
+        self.notify_view()
+
+    def _clear_auth(self, tab, auth):
+        if auth is None or tab.auth is not auth:
+            return
+        tab.auth = tab.auth_request = None
+        tab.auth_opened.clear()
+        if tab.auth_timer is not None and tab.auth_timer is not asyncio.current_task():
+            tab.auth_timer.cancel()
+        tab.auth_timer = None
+        self.notify_view()
+
+    async def answer_auth(self, tab, auth, credentials):
+        """Answer the sign-in prompt that waits on the tab: the owner's (user name, password), or None to cancel it."""
+        request = tab.auth_request
+        self._clear_auth(tab, auth)
+        response = ({"response": "ProvideCredentials", "username": credentials[0], "password": credentials[1]}
+                    if credentials is not None else {"response": "CancelAuth"})
+        await self.command(tab, "Fetch.continueWithAuth", {"requestId": request, "authChallengeResponse": response})
+
+    async def choose_files(self, tab, chooser, paths):
+        """Give the page's file chooser these files, as choosing them in Chrome's own dialog would: its input changes. Only
+        the chooser they were chosen for takes them: one gone or replaced while they were made ready takes none."""
+        if tab.chooser is not chooser:
+            raise BrowserError("browser_chooser_changed")
+        node = tab.chooser_node
+        tab.chooser = tab.chooser_node = None
+        self.notify_view()
+        await self.command(tab, "DOM.setFileInputFiles", {"files": [str(path) for path in paths], "backendNodeId": node})
+
+    async def member_upload(self, path, allowed, limit):
+        """A copy, in a folder of its own in the private profile, of the member's file at the resolved and checked `path`
+        for a page's file chooser, kept until this Chrome starts again. It is read through the file opened there, never
+        through a link: on a Mac and on Linux every folder on its way is opened from the one before it and nothing opens
+        through a link, and on Windows `allowed` judges where the open file really is (its final path). A link swapped in
+        after the path was checked leads to no file outside the work folder (R-COMP-HOST-02). Nothing but a regular file
+        of at most `limit` bytes is copied."""
+        try:
+            descriptor = (opened_without_links(path) if HANDLES
+                          else os.open(path, os.O_RDONLY | getattr(os, "O_BINARY", 0)))
+        except (OSError, ValueError):
+            raise BrowserError("browser_upload_path") from None
+        source = os.fdopen(descriptor, "rb")
+        try:
+            status = os.fstat(source.fileno())
+            if (not stat.S_ISREG(status.st_mode) or status.st_size > limit
+                    or not HANDLES and ((really := opened_path(source.fileno())) is None or not allowed(really))):
+                raise BrowserError("browser_upload_path")
+        except BaseException:
+            source.close()
+            raise
+        return await made_off_loop(self._copy_upload, source, path.name, limit)
+
+    def _copy_upload(self, source, name, limit):
+        """The copy itself, in a thread that owns `source` from here on and closes it."""
+        with source:
+            folder = self.profile / "uploads" / secrets.token_hex(8)
+            folder.mkdir(parents=True)
+            target = folder / name
+            try:
+                with target.open("xb") as copy:
+                    left = limit
+                    while chunk := source.read(min(1 << 20, left + 1)):
+                        left -= len(chunk)
+                        if left < 0:
+                            raise BrowserError("browser_upload_path")  # it grew past the limit while copied
+                        copy.write(chunk)
+            except BaseException:
+                shutil.rmtree(folder, ignore_errors=True)
+                raise
+        return target
+
+    def owner_upload(self, source, name):
+        """A copy of a file the owner chose for a page, under its own name in a folder of its own in the private profile,
+        kept until this Chrome starts again: the page reads the file only when it sends it. A copy that fails leaves
+        nothing (a disk full partway, say)."""
+        folder = self.profile / "uploads" / secrets.token_hex(8)
+        folder.mkdir(parents=True)
+        target = folder / name
+        try:
+            try:
+                os.link(source, target)  # the upload store is on the same disk: no second copy of a large file
+            except OSError:
+                shutil.copyfile(source, target)
+        except BaseException:
+            shutil.rmtree(folder, ignore_errors=True)
+            raise
+        return target
 
     async def command(self, tab, method, params=None):
         cdp = self.cdp
@@ -1047,7 +1324,7 @@ class HostBrowser:
         cdp, process, tree = self.cdp, self.process, self.process_tree
         self.cdp = self.process = None
         self.process_tree = None
-        background = [*self.popups.values(), *self.icons.values()]
+        background = [*self.popups.values(), *self.icons.values(), *self.background]
         for task in background:
             task.cancel()
         await asyncio.gather(*background, return_exceptions=True)

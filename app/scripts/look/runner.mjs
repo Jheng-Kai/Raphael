@@ -192,7 +192,10 @@ export async function run(options) {
             ...(scene.fixture.hostDialog === "prompt" ? { message: "請輸入寄到手機的 6 位數驗證碼，完成後頁面會繼續。", default_prompt: "" }
               // Past 2000 characters the core keeps the first and last thousand and says how many are left out.
               : { message: `${"以下是這筆訂單的條款與退貨說明，請閱讀後再繼續。".repeat(50).slice(0, 1000)}\n…\n${
-                (("退貨須在七天內提出申請，運費由買方負擔。").repeat(60) + "確定要付款 NT$1,200 嗎？").slice(-1000)}`, omitted: 1712 }) } } : {}) },
+                (("退貨須在七天內提出申請，運費由買方負擔。").repeat(60) + "確定要付款 NT$1,200 嗎？").slice(-1000)}`, omitted: 1712 }) } } : {}),
+          // The site's sign-in prompt and the page's file chooser, which Chrome hands over instead of drawing them.
+          ...(scene.fixture?.hostAuth ? { auth: { auth_id: "look-auth", origin: "https://intranet.example.invalid", realm: "員工入口網站", scheme: "basic" } } : {}),
+          ...(scene.fixture?.hostChooser ? { chooser: { chooser_id: "look-chooser", mode: scene.fixture.hostChooser } } : {}) },
         responses: new Set(),
       };
       const runtimeErrors = [];
@@ -246,6 +249,8 @@ export async function run(options) {
               const { action, tab, url: address } = JSON.parse(request.postData());
               if (action === "select" || action === "navigate") host.model.shown = tab;
               if (action === "dialog") delete host.model.dialog;
+              if (action === "auth") delete host.model.auth;
+              if (action === "upload" || action === "chooser") delete host.model.chooser;
               if (action === "navigate") host.model.tabs = host.model.tabs.map(row => row.id === tab ? { ...row, url: address } : row);
               if (action === "close") {
                 host.model.tabs = host.model.tabs.filter(row => row.id !== tab);

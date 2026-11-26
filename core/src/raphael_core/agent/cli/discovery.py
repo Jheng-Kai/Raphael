@@ -25,11 +25,11 @@ CLAUDE_KEYCHAIN_SERVICE = "Claude Code-credentials"
 KEYCHAIN_TTL_S = 30
 
 
-def keychain_stamp(service=CLAUDE_KEYCHAIN_SERVICE):
-    """When the Keychain item of `service` last changed, or None without one: `security` prints the item's attributes
-    alone (never its secret, `-g`/`-w` are not given) and asks the owner nothing."""
+def keychain_stamp(service=CLAUDE_KEYCHAIN_SERVICE, account=None):
+    """When the Keychain item of `service` (and `account`, when one is named) last changed, or None without one: `security`
+    prints the item's attributes alone (never its secret, `-g`/`-w` are not given) and asks the owner nothing."""
     try:
-        found = subprocess.run(["/usr/bin/security", "find-generic-password", "-s", service],
+        found = subprocess.run(["/usr/bin/security", "find-generic-password", "-s", service, *(["-a", account] if account else [])],
                                capture_output=True, text=True, errors="replace", timeout=15)
     except (OSError, subprocess.SubprocessError):
         return None
@@ -38,8 +38,16 @@ def keychain_stamp(service=CLAUDE_KEYCHAIN_SERVICE):
     return next((line.strip() for line in found.stdout.splitlines() if '"mdat"' in line), "present")
 
 
-# Antigravity CLI (`agy`) on Windows keeps its Google sign-in in Credential Manager under this target, not in a file (#283).
+# Antigravity CLI (`agy` 1.5 and later) keeps its Google sign-in in the system's own store, never in a file Raphael reads: on a
+# Mac in the login Keychain, as a password item of this service and account, and on Windows in Credential Manager under this
+# target (#283, R-CLI-SIGNIN-05).
+ANTIGRAVITY_KEYCHAIN = ("gemini", "antigravity")
 ANTIGRAVITY_CREDENTIAL = "gemini:antigravity*"
+
+
+def antigravity_keychain_stamp():
+    """When Antigravity's Keychain item last changed on a Mac, or None without one (its attributes alone, as `keychain_stamp`)."""
+    return keychain_stamp(*ANTIGRAVITY_KEYCHAIN)
 
 
 def credential_stamp(target=ANTIGRAVITY_CREDENTIAL):
@@ -89,6 +97,22 @@ SIGNIN_LOST_S = 30 * 60
 # While a CLI's sign-in is lost its credentials are looked at this often, so a sign-in done anywhere ends the notice; nothing
 # is looked at while no sign-in is lost (R-CLI-SIGNIN-06).
 SIGNIN_WATCH_S = 10
+# While the app is used, a CLI that is installed and connected but not signed in has its credentials looked at this often (their
+# modification times and the system store's item, never what they hold), so a sign-in done anywhere, in a terminal of the
+# owner's own or another app, shows at once rather than at the next minute's read; for this long after the app was last used.
+SIGNED_OUT_WATCH_S = 3
+SIGNED_OUT_WATCH_FOR_S = 15 * 60
+# Antigravity that said it has no sign-in is asked again this often while the app is used, and at once when its stored sign-in
+# changes (R-CLI-SIGNIN-07).
+SIGNED_OUT_ASK_S = 5 * 60
+# While the app's sign-in window for Antigravity is open its stored sign-in is looked at this often, so the sign-in is found
+# without waiting for the window to end; agy itself is asked this long after its last answer for the first minutes, then at
+# most once a minute, and no more once the window has been open for half an hour (R-CLI-SIGNIN-08).
+SIGNIN_LOOK_S = 2
+SIGNIN_ASK_S = 10
+SIGNIN_ASK_FAST_FOR_S = 5 * 60
+SIGNIN_ASK_LATER_S = 60
+SIGNIN_ASK_UNTIL_S = 30 * 60
 
 
 def brain_ref(value):
@@ -188,16 +212,25 @@ def owners_keychain(home):
 
 
 def owners_credentials(home):
-    """The Credential Manager look for Antigravity's sign-in: only for the owner's own home (none given) on Windows."""
-    return credential_stamp if home is None and sys.platform == "win32" else None
+    """The look at Antigravity's sign-in in the system's store, only for the owner's own home (none given): the Keychain on a
+    Mac, Credential Manager on Windows (R-CLI-SIGNIN-05)."""
+    if home is not None:
+        return None
+    return {"darwin": antigravity_keychain_stamp, "win32": credential_stamp}.get(sys.platform)
 
 
 class CliBrains:
     def __init__(self, *, home=None, environ=None, commands=None, notify=None, settings=None, clock=time.monotonic, keychain=None,
                  credentials=None):
+        # The looks at the sign-ins kept in the system's store: Claude Code's Keychain item on a Mac (`keychain`) and
+        # Antigravity's Keychain or Credential Manager item (`credentials`); name -> (until when a look stands, its stamp).
         self._keychain = keychain if keychain is not None else owners_keychain(home)
-        self._keychain_seen = None
         self._credentials = credentials if credentials is not None else owners_credentials(home)
+        self._store_seen = {}
+        # What Antigravity itself last said of its sign-in, listing its models the way a run starts it: (signed in, the stamp
+        # of its stored sign-in then). It stands while that stamp does (R-CLI-SIGNIN-07).
+        self._verdict = {}
+        self._agy_lock = asyncio.Lock()
         self.home = Path.home() if home is None else Path(home)
         self.environ = dict(os.environ if environ is None else environ)
         self.commands = commands
@@ -210,7 +243,13 @@ class CliBrains:
         # ones this app ended itself.
         self._signing = {}
         self._signed = {}
-        self._cancelled = set()
+        self._cancelled = set()  # the windows (processes) this app ended
+        self._closed = False
+        # Antigravity's sign-in: the stamp of its stored sign-in when the window opened, the look that finds it while the
+        # window is open, and a window that ended whose sign-in is still being asked about (R-CLI-SIGNIN-08).
+        self._sign_in_start = {}
+        self._sign_in_watch = {}
+        self._checking = {}
         # A CLI that refused its sign-in during a run: name -> (cause, when, credential stamp). The routine gate forgets it after
         # `SIGNIN_LOST_S`; the notice (`sign_in_cause`) stays until something says the sign-in is back.
         self._lost = {}
@@ -221,6 +260,11 @@ class CliBrains:
         self._lock = asyncio.Lock()
         self._watcher = None
         self._last_used = 0.0
+        # Each installed CLI's credential stamp as the last read of it saw it, before it was asked whether it is signed in:
+        # what the watch of R-CLI-SIGNIN-09 compares with, so a sign-in finished while that read went on is still a change.
+        self._read_stamps = {}
+        # Set when a read finds a CLI newly not signed in, so the watch looks at it now rather than after its minute.
+        self._wake = asyncio.Event()
         self._models = {}
         self._fill_after_refresh = set()
         self._model_refresh = None
@@ -247,6 +291,7 @@ class CliBrains:
             for identifier in (NAMES if name is None else (name,)):
                 self._commands_cache.pop(identifier, None)
                 self._versions.pop(identifier, None)
+                self._store_seen.pop(identifier, None)
                 self._discovery_generation[identifier] = self._discovery_generation.get(identifier, 0) + 1
 
     def _find_command(self, name):
@@ -278,11 +323,12 @@ class CliBrains:
     def _credential_files(self, name):
         claude = Path(self.environ.get("CLAUDE_CONFIG_DIR", self.home / ".claude"))
         codex = Path(self.environ.get("CODEX_HOME", self.home / ".codex"))
-        gemini = self.home / ".gemini"
+        # Antigravity keeps no sign-in file: `~/.gemini/oauth_creds.json` and `google_accounts.json` were the retired Gemini
+        # CLI's, and agy reads neither, so they would call an agy that never signed in signed in (R-CLI-SIGNIN-07).
         return {
             "claude": (claude / ".credentials.json", claude / "credentials.json"),
             "codex": (codex / "auth.json",),
-            "gemini": (gemini / "google_accounts.json", gemini / "oauth_creds.json"),
+            "gemini": (),
         }[name]
 
     def logged_in(self, name):
@@ -291,39 +337,52 @@ class CliBrains:
                 return True
         except OSError:
             return None
+        stored = self._store_item(name, fresh=False)
+        if name == "gemini":
+            # Antigravity keeps its sign-in in the system's store, the Keychain on a Mac and Credential Manager on Windows
+            # (R-CLI-SIGNIN-05), and the item being there is the sign-in. What agy itself last said stands over it while the
+            # item is as it was then: a sign-in it keeps elsewhere, or an item it can no longer use (R-CLI-SIGNIN-07).
+            verdict = self._verdict.get(name)
+            return verdict[0] if verdict is not None and verdict[1] == stored else stored is not None
         # Claude Code on a Mac keeps its sign-in in the Keychain (R-CLI-SIGNIN-04): the item being there is the sign-in.
-        if name == "claude" and self._keychain_item(fresh=False) is not None:
-            return True
-        # Antigravity on Windows keeps its sign-in in Credential Manager (#283): the item being there is the sign-in.
-        if name == "gemini" and self._credentials is not None and self._credentials() is not None:
+        if name == "claude" and stored is not None:
             return True
         # Claude also uses OS credential storage. Settings alone do not establish a Google login.
         return None if name == "claude" else False
 
-    def _keychain_item(self, *, fresh):
-        """Claude Code's Keychain item's stamp, or None (none, or no Keychain here); a look stands for KEYCHAIN_TTL_S
-        unless a `fresh` one is asked for."""
-        if self._keychain is None:
+    def _store(self, name):
+        """The look at this CLI's sign-in in the system's store, or None where it keeps none there (or none is asked here)."""
+        return {"claude": self._keychain, "gemini": self._credentials}.get(name)
+
+    def _store_item(self, name, *, fresh):
+        """The stamp of this CLI's sign-in in the system's store, or None (none, or no store here); a look stands for
+        KEYCHAIN_TTL_S unless a `fresh` one is asked for."""
+        look = self._store(name)
+        if look is None:
             return None
-        seen = self._keychain_seen
+        seen = self._store_seen.get(name)
         if fresh or seen is None or self._clock() >= seen[0]:
-            seen = self._keychain_seen = (self._clock() + KEYCHAIN_TTL_S, self._keychain())
+            seen = self._store_seen[name] = (self._clock() + KEYCHAIN_TTL_S, look())
         return seen[1]
 
-    def _credential_stamp(self, name):
-        """When the CLI's credential files last changed (never what they hold): a sign-in done anywhere moves it."""
+    def _store_seen_item(self, name):
+        """The stamp the last look at this CLI's store found, without looking again."""
+        seen = self._store_seen.get(name)
+        return seen[1] if seen else None
+
+    def _credential_stamp(self, name, *, fresh=True):
+        """When the CLI's credential files last changed (never what they hold): a sign-in done anywhere moves it. Not
+        `fresh`, the system store's item is the one the last look within KEYCHAIN_TTL_S found, as `logged_in` sees it."""
         stamp = []
         for path in self._credential_files(name):
             try:
                 stamp.append(path.stat().st_mtime_ns)
             except OSError:
                 stamp.append(None)
-        # On a Mac a sign-in rewrites Claude Code's Keychain item instead of a file; on Windows Antigravity's Credential
-        # Manager item.
-        if name == "claude" and self._keychain is not None:
-            stamp.append(self._keychain_item(fresh=True))
-        if name == "gemini" and self._credentials is not None:
-            stamp.append(self._credentials())
+        # A sign-in rewrites the item in the system's store instead of a file: Claude Code's Keychain item on a Mac, and
+        # Antigravity's Keychain item on a Mac or its Credential Manager item on Windows.
+        if self._store(name) is not None:
+            stamp.append(self._store_item(name, fresh=fresh))
         return tuple(stamp)
 
     def sign_in_lost(self, name, cause):
@@ -332,6 +391,9 @@ class CliBrains:
         once, when it becomes lost (or its cause changes), not at every refused run."""
         if name not in NAMES or cause not in ("expired", "signed_out"):
             return
+        if name == "gemini":
+            # What agy said before the refusal no longer stands: it is asked again at the next read (R-CLI-SIGNIN-07).
+            self._models_at.pop(name, None)
         before = self._lost.get(name)
         self._lost[name] = (cause, self._clock(), self._credential_stamp(name))
         if before is None or before[0] != cause:
@@ -492,6 +554,8 @@ class CliBrains:
 
     async def _one(self, name):
         command = await asyncio.to_thread(self.command, name)
+        if command:
+            self._read_stamps[name] = await asyncio.to_thread(self._credential_stamp, name, fresh=False)
         logged_in = await asyncio.to_thread(self.logged_in, name) if command else False
         disconnected = self.disconnected(name)
         available = cli_available(command, logged_in, disconnected)
@@ -531,6 +595,7 @@ class CliBrains:
     async def list(self, _params=None):
         self._last_used = asyncio.get_running_loop().time()
         async with self._lock:
+            waiting = set(self._signed_out())
             value = {"clis": list(await asyncio.gather(*(self._one(name) for name in NAMES)))}
             before = {item["id"] for item in (self._previous or {}).get("clis", []) if item["available"]}
             for item in value["clis"]:
@@ -542,6 +607,8 @@ class CliBrains:
             if self._previous is not None and self._previous != value and self.notify:
                 self.notify("brains.changed", {})
             self._previous = value
+            if set(self._signed_out()) - waiting:
+                self._wake.set()
         if self._watcher is None:
             self._watcher = asyncio.create_task(self._watch())
         if self._model_refresh is None and any(self._needs_models(name) for name in MODEL_LISTS):
@@ -549,12 +616,56 @@ class CliBrains:
         return value
 
     def _needs_models(self, name):
-        lifetime = 3600 if self._models.get(name) else 60
+        verdict = self._verdict.get(name)
+        if self._models.get(name):
+            lifetime = 3600
+        elif verdict is not None and verdict[0] is False:
+            # Antigravity said it has no sign-in: asked again now when its stored sign-in changed, else now and then.
+            if verdict[1] != self._store_seen_item(name):
+                return True
+            lifetime = SIGNED_OUT_ASK_S
+        else:
+            lifetime = 60
         return name not in self._models_at or self._last_used - self._models_at[name] > lifetime
+
+    def _may_list(self, name, command):
+        """Whether this CLI's models are asked for now: an available CLI's; and Antigravity's whenever it is installed and
+        connected, since its list is also what it says of its own sign-in (R-CLI-SIGNIN-07)."""
+        if name == "gemini":
+            return bool(command) and not self.disconnected(name)
+        return self.available(name, command=command)
+
+    def _antigravity_folder(self):
+        """The private Gemini folder Antigravity is asked in, as a member's run is (drivers.py `antigravity_home`): none of the
+        owner's own agy settings, servers or rules, and the owner's own home, so its sign-in is read where agy keeps it."""
+        return workspace_root(self.home) / "models" / "antigravity" / ".gemini"
+
+    async def _ask_antigravity(self, command):
+        """Antigravity's own verdict on its sign-in, from listing its models the way a member's run starts it: its models when
+        it is signed in, None when it says it is not. Either is remembered with the stamp of the stored sign-in it was given
+        (R-CLI-SIGNIN-07); a list that says neither raises, and the verdict before it stands."""
+        async with self._agy_lock:
+            stamp = await asyncio.to_thread(self._store_item, "gemini", fresh=True)
+            folder = self._antigravity_folder()
+            await asyncio.to_thread(folder.mkdir, parents=True, exist_ok=True)
+            try:
+                models = await antigravity_models(command, self.environ,
+                    self.home / ".gemini" / "antigravity-cli" / "settings.json", gemini_dir=folder, cwd=folder.parent)
+            except ValueError as error:
+                if str(error) != "signed_out":
+                    raise
+                models = None
+            was = self.logged_in("gemini")
+            self._verdict["gemini"] = (models is not None, stamp)
+            if models is None:
+                self._models.pop("gemini", None)
+            if self.logged_in("gemini") != was:
+                self._changed()
+            return models
 
     async def _refresh_one(self, name):
         command = await asyncio.to_thread(self.command, name)
-        if not self._needs_models(name) or not self.available(name, command=command):
+        if not self._needs_models(name) or not self._may_list(name, command):
             return
         try:
             if name == "claude":
@@ -564,8 +675,11 @@ class CliBrains:
                 models = await codex_models(command, self.environ,
                     Path(self.environ.get("CODEX_HOME", self.home / ".codex")) / "config.toml")
             else:
-                models = await antigravity_models(command, self.environ,
-                    self.home / ".gemini" / "antigravity-cli" / "settings.json")
+                models = await self._ask_antigravity(command)
+                if models is None:
+                    # It said it has no sign-in: that is its answer, asked again later or when its stored sign-in changes.
+                    self._models_at[name] = asyncio.get_running_loop().time()
+                    return
             if models != self._models.get(name):
                 self._models[name] = models
                 if self.notify:
@@ -619,7 +733,8 @@ class CliBrains:
         """Start the CLI's own sign-in in a console of its own. A sign-in that ran out leaves its credentials in place, so
         `again` starts it even then (the file proves nothing about the session); without it a CLI that already has them is
         only connected again. Raphael learns how it ended from the process (`signing_in`, `login_result`), never from
-        the CLI's credentials."""
+        the CLI's credentials; Antigravity, which has no sign-in command and stays open after one, from its stored
+        sign-in's date and its own word instead (R-CLI-SIGNIN-08)."""
         if name not in NAMES:
             raise ValueError("cli_unknown")
         self.invalidate(name)
@@ -637,6 +752,9 @@ class CliBrains:
         if os.name != "nt" and sys.platform != "darwin":
             raise ValueError("cli_missing")
         arguments = {"claude": ["auth", "login"], "codex": ["login"], "gemini": []}[name]
+        # Antigravity's sign-in is found by its stored sign-in written anew since the window opened (R-CLI-SIGNIN-08): the look
+        # `logged_in` just took, fresh after `invalidate`.
+        start = self._store_seen_item(name) if name == "gemini" else None
         if sys.platform == "darwin":
             # A Mac signs in in a Terminal window, followed as the console's process is on Windows.
             process = TerminalSignIn([*command, *arguments])
@@ -647,6 +765,9 @@ class CliBrains:
         self._signed.pop(name, None)
         self._reconnect(name)
         self._follow_login(name, process)
+        if name == "gemini":
+            self._sign_in_start[name] = start
+            self._look_for_sign_in(name, process, start)
         if self.notify:
             self.notify("brains.changed", {})
         return {"started": True}
@@ -657,13 +778,93 @@ class CliBrains:
             raise ValueError("cli_unknown")
         process = self._signing.get(name)
         if process is not None and process.poll() is None:
-            self._cancelled.add(name)
+            self._cancelled.add(process)
             process.terminate()
+        elif (check := self._checking.pop(name, None)) is not None:
+            check.cancel()
+            self.invalidate(name)
+            self._previous = None
+            if self.notify:
+                self.notify("brains.changed", {})
         return {"cancelled": True}
 
     def _signing_in(self, name):
         process = self._signing.get(name)
-        return process is not None and process.poll() is None
+        return process is not None and process.poll() is None or name in self._checking
+
+    async def _sign_in_there(self, name, start, *, ask=True):
+        """Whether Antigravity's sign-in is there since its window opened: its stored sign-in written anew (the Keychain on a
+        Mac, Credential Manager on Windows), or, when `ask`, agy itself saying it is signed in, which also finds a sign-in it
+        keeps anywhere else (R-CLI-SIGNIN-07, R-CLI-SIGNIN-08)."""
+        stamp = await asyncio.to_thread(self._store_item, name, fresh=True)
+        if stamp is not None and stamp != start:
+            return True
+        if not ask:
+            return False
+        try:
+            command = await asyncio.to_thread(self.command, name)
+            return bool(command) and await self._ask_antigravity(command) is not None
+        except (OSError, ValueError, TimeoutError):
+            return False
+
+    def _look_for_sign_in(self, name, process, start):
+        """Antigravity has no sign-in command: `agy` signs in on its own screen and then stays open on its conversation, so
+        its window does not end with the sign-in. While the window is open the sign-in is looked for (R-CLI-SIGNIN-08)."""
+        if self._closed:
+            return
+        try:
+            task = asyncio.get_running_loop().create_task(self._sign_in_look(name, process, start))
+        except RuntimeError:
+            return  # no loop (a plain call): the window's end settles it
+        self._stop_looking(name)
+        self._sign_in_watch[name] = task
+
+    def _stop_looking(self, name):
+        task = self._sign_in_watch.pop(name, None)
+        if task is not None and task is not asyncio.current_task():
+            task.cancel()
+
+    async def _sign_in_look(self, name, process, start):
+        """Every SIGNIN_LOOK_S the stored sign-in is looked at, and agy asked now and then (SIGNIN_ASK_S, counted from its last
+        answer so asks never run back to back). Once it is there the sign-in is done while agy goes on: the app is told, and
+        the window is left to the owner to close. A window this app is ending is not settled here."""
+        opened, asked = self._clock(), None
+        try:
+            while True:
+                await asyncio.sleep(SIGNIN_LOOK_S)
+                if self._signing.get(name) is not process or process.poll() is not None or process in self._cancelled:
+                    return
+                open_for = self._clock() - opened
+                every = SIGNIN_ASK_S if open_for < SIGNIN_ASK_FAST_FOR_S else SIGNIN_ASK_LATER_S
+                ask = open_for < SIGNIN_ASK_UNTIL_S and (asked is None or self._clock() - asked >= every)
+                found = await self._sign_in_there(name, start, ask=ask)
+                if ask:
+                    asked = self._clock()
+                if (found and self._signing.get(name) is process and process.poll() is None
+                        and process not in self._cancelled):
+                    del self._signing[name]
+                    self._sign_in_start.pop(name, None)
+                    release = getattr(process, "release", None)
+                    if release is not None:
+                        release()
+                    self._settle_login(name, True)
+                    return
+        finally:
+            if self._sign_in_watch.get(name) is asyncio.current_task():
+                del self._sign_in_watch[name]
+
+    async def _check_sign_in(self, name, start):
+        """The window of Antigravity's sign-in ended before its sign-in was found: whether it is there now settles it, and a
+        look that fails settles it `stopped` rather than leave it under way."""
+        try:
+            found = await self._sign_in_there(name, start)
+        except Exception as error:
+            logger.warning("Looking for Antigravity's sign-in failed: %s", type(error).__name__)
+            found = False
+        finally:
+            if self._checking.get(name) is asyncio.current_task():
+                del self._checking[name]
+        self._settle_login(name, found)
 
     def _follow_login(self, name, process):
         """Wait for the sign-in's process off the loop, and settle it on the loop when it ends."""
@@ -685,20 +886,38 @@ class CliBrains:
         threading.Thread(target=wait, name=f"{name}-sign-in", daemon=True).start()
 
     def _login_ended(self, name, process, code):
-        if self._signing.get(name) is not process:
+        if self._closed or self._signing.get(name) is not process:
             return
         del self._signing[name]
+        self._stop_looking(name)
+        start = self._sign_in_start.pop(name, None)
+        if process in self._cancelled:
+            self._cancelled.discard(process)
+            self.invalidate(name)
+            self._previous = None
+            if self.notify:
+                self.notify("brains.changed", {})
+            return
+        if name != "gemini":
+            # The CLI's own verdict is its exit.
+            self._settle_login(name, code == 0)
+            return
+        # Antigravity's window ends when the owner closes it, signed in or not, so its exit says nothing: the sign-in being
+        # there does (R-CLI-SIGNIN-08). It is asked off the loop, and the sign-in is still under way meanwhile.
+        try:
+            self._checking[name] = asyncio.get_running_loop().create_task(self._check_sign_in(name, start))
+        except RuntimeError:
+            stamp = self._store_item(name, fresh=True)
+            self._settle_login(name, stamp is not None and stamp != start or self.logged_in(name) is True)
+
+    def _settle_login(self, name, done):
+        """How the app's sign-in ended, told once: `done` when the CLI is signed in, else `stopped`."""
         self.invalidate(name)
-        if name in self._cancelled:
-            self._cancelled.discard(name)
-        else:
-            # The CLI's own verdict is its exit; Antigravity has no sign-in command, so it also has to hold a login afterwards.
-            done = code == 0 and (name != "gemini" or self.logged_in(name) is True)
-            self._signed[name] = "done" if done else "stopped"
-            if done:
-                self._came_back(name, always=True)
-                self._reconnect(name)
-                self._fill_models(name)
+        self._signed[name] = "done" if done else "stopped"
+        if done:
+            self._came_back(name, always=True)
+            self._reconnect(name)
+            self._fill_models(name)
         self._previous = None
         if self.notify:
             self.notify("brains.changed", {})
@@ -708,17 +927,51 @@ class CliBrains:
         self._models_at.pop(name, None)
         self._previous = None
 
+    def _signed_out(self):
+        """The CLIs the last read found installed and connected but not signed in: a sign-in of theirs is watched for."""
+        return [item["id"] for item in (self._previous or {}).get("clis", [])
+                if item["installed"] and not item["disconnected"] and item["logged_in"] is not True
+                and not item["signing_in"]]
+
     async def _watch(self):
+        """While the app is used, everything is read again each minute, and a CLI not signed in has its credentials looked
+        at every SIGNED_OUT_WATCH_S: a stamp other than its last read's is a sign-in done somewhere, read and told at once
+        (`brains.changed`). A read that finds a CLI newly not signed in wakes the watch at once."""
+        loop = asyncio.get_running_loop()
         try:
-            while asyncio.get_running_loop().time() - self._last_used < 180:
-                await asyncio.sleep(60)
-                previous = self._last_used
-                await self.list()
-                self._last_used = previous
+            read_at = loop.time()
+            while True:
+                self._wake.clear()
+                idle = loop.time() - self._last_used
+                waiting = self._signed_out() if idle < SIGNED_OUT_WATCH_FOR_S else []
+                if idle >= 180 and not waiting:
+                    break
+                try:
+                    async with asyncio.timeout(SIGNED_OUT_WATCH_S if waiting else 60):
+                        await self._wake.wait()
+                    continue
+                except TimeoutError:
+                    pass
+                changed = False
+                for name in waiting:
+                    stamp = await asyncio.to_thread(self._credential_stamp, name)
+                    changed |= stamp != self._read_stamps.get(name)
+                if changed or idle < 180 and loop.time() - read_at >= 60:
+                    previous = self._last_used
+                    await self.list()
+                    self._last_used = previous
+                    read_at = loop.time()
         finally:
             self._watcher = None
 
     async def aclose(self):
+        self._closed = True
+        tasks = [*self._sign_in_watch.values(), *self._checking.values()]
+        self._sign_in_watch.clear()
+        self._checking.clear()
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
         if self._lost_watch:
             self._lost_watch.cancel()
             await asyncio.gather(self._lost_watch, return_exceptions=True)

@@ -13,6 +13,7 @@ import logging
 import os
 import re
 import secrets
+import shutil
 import stat
 import time
 from contextlib import suppress
@@ -28,7 +29,7 @@ from .vm import GUEST, OWNER_IDLE_S, SHARED, VmError
 from .owner_transfer import CLIPBOARD_MAX, clipboard_text, hand_over, safe_name
 from .viewer_relay import Policy, ViewerRelay
 from .host_view import HostInputGate
-from .host_browser import BrowserError
+from .host_browser import BrowserError, made_off_loop
 from .host_page import navigate as navigate_host_page
 from .host_view_script import SCRIPT as HOST_VIEW
 from .viewer_input import FRAME_PRESENTATION
@@ -1379,7 +1380,10 @@ class DesktopViewer:
         return {"shown": tab.id, "back": index > 0, "forward": index + 1 < len(history.get("entries", [])),
                 "tabs": [{"id": other.id, "title": other.title, "url": other.url, "favicon": other.favicon}
                          for other in browser.member_tabs(tab.member)],
-                **({"dialog": tab.dialog} if tab.dialog is not None else {})}
+                **({"dialog": tab.dialog} if tab.dialog is not None else {}),
+                # The site's sign-in prompt and the page's file chooser, which Chrome hands over instead of drawing.
+                **({"auth": tab.auth} if tab.auth is not None else {}),
+                **({"chooser": tab.chooser} if tab.chooser is not None else {})}
 
     async def host_browser_action(self, token, session, event):
         browser = self.host_browser
@@ -1438,6 +1442,51 @@ class DesktopViewer:
                                                      or dialog["type"] != "prompt" or event.get("accept") is not True)):
                         return False
                     await browser.answer_dialog(tab, dialog, event.get("accept") is True, text)
+                elif action == "auth":
+                    # The owner answers the site's sign-in prompt, which Chrome never draws here, under the lease. The
+                    # user name and password go to Chrome alone: nothing keeps or shows them.
+                    auth, user, password = tab.auth, event.get("username"), event.get("password")
+                    accept = event.get("accept") is True
+                    if (not owned or auth is None or event.get("auth") != auth["auth_id"]
+                            or accept and not (isinstance(user, str) and isinstance(password, str)
+                                               and len(user) <= 1000 and len(password) <= 1000)):
+                        return False
+                    await browser.answer_auth(tab, auth, (user, password) if accept else None)
+                elif action == "upload":
+                    # Files the owner chose for the page's file chooser, from the upload store under their own names.
+                    chooser, files = tab.chooser, event.get("files")
+                    if (not owned or chooser is None or event.get("chooser") != chooser["chooser_id"]
+                            or not isinstance(files, list) or self.stored_path is None
+                            or not 1 <= len(files) <= (20 if chooser["mode"] == "multiple" else 1)):
+                        return False
+                    sources = []
+                    for item in files:
+                        try:
+                            name, source = safe_name(item.get("name")), self.stored_path(item.get("stored_id"))
+                        except (ValueError, OSError, KeyError, TypeError, AttributeError):
+                            return False
+                        if source is None:
+                            return False
+                        sources.append((source, name))
+                    # Copies made for a chooser that is gone by the time they are ready go again; once Chrome is given
+                    # them, they stay for the page to send.
+                    paths = []
+                    try:
+                        for source, name in sources:
+                            paths.append(await made_off_loop(browser.owner_upload, source, name))
+                        if tab.chooser is not chooser:
+                            raise BrowserError("browser_chooser_changed")
+                    except BaseException:
+                        for path in paths:
+                            shutil.rmtree(path.parent, ignore_errors=True)
+                        raise
+                    await browser.choose_files(tab, chooser, paths)
+                elif action == "chooser":
+                    # The owner closes the chooser without files: the page gets none, as from a cancelled dialog.
+                    if not owned or tab.chooser is None or event.get("chooser") != tab.chooser["chooser_id"]:
+                        return False
+                    tab.chooser = tab.chooser_node = None
+                    browser.notify_view()
                 elif action == "reload":
                     await browser.command(tab, "Page.reload")
                 elif action in ("back", "forward"):

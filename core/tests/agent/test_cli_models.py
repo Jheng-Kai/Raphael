@@ -2,6 +2,7 @@
 
 import json
 import sys
+from pathlib import Path
 import asyncio
 
 from raphael_core.agent.cli.models import claude_cli_models, claude_models, claude_rows, agy_models, codex_models
@@ -150,31 +151,130 @@ def test_agy_collapses_efforts_and_resolves_display_default(tmp_path, conn):
     assert brains.settings.get("agent_model") == brains.settings.get("quick_model") == "cli:gemini:gemini-4-argon-high"
 
 
-async def test_antigravity_uses_public_model_command_and_google_account_file(tmp_path):
-    from raphael_core.agent.cli.discovery import CliBrains
-
-    script = tmp_path / "agy.py"
-    script.write_text('''import sys
-if sys.argv[1:] == ["--version"]:
+def fake_agy(tmp_path, *, signed_in=True, delay=0.0, refuse_code=1, name="agy.py"):
+    """A fake `agy`: `models` lists two models when it is signed in, and refuses as agy does when it is not (exit
+    `refuse_code`). `signed_in` is True, False, or a path: signed in once that file exists, as a sign-in being done.
+    It answers after `delay` seconds, and checks that it is asked in a private Gemini folder, never the owner's own."""
+    marker = str(signed_in) if isinstance(signed_in, Path) else None
+    script = tmp_path / name
+    script.write_text(f"""import os, sys, time
+args = sys.argv[1:]
+if args == ["--version"]:
     print("agy 1.0")
 else:
-    assert sys.argv[1:] == ["models"]
-    print("gemini-4-argon-low\\tGemini Argon Low")
-    print("claude-opus-5-5-high\\tClaude Opus 5.5 High")
-''', encoding="utf-8")
+    assert args[0].startswith("--gemini_dir=") and args[1:] == ["models"], args
+    folder = args[0].partition("=")[2]
+    assert os.path.isdir(folder) and os.path.basename(folder) == ".gemini", folder
+    assert os.path.dirname(folder) != {str(tmp_path)!r}, "the owner's own Gemini folder"
+    time.sleep({delay!r})
+    if (os.path.exists({marker!r}) if {marker!r} else {signed_in is True!r}):
+        print("gemini-4-argon-low\\tGemini Argon Low")
+        print("claude-opus-5-5-high\\tClaude Opus 5.5 High")
+    else:
+        print("Fetching available models...", file=sys.stderr)
+        print("Error: Please sign in to view available models. Launch the CLI without arguments to sign in.", file=sys.stderr)
+        sys.exit({refuse_code!r})
+""", encoding="utf-8")
+    return [sys.executable, str(script)]
+
+
+async def test_antigravity_says_its_own_sign_in_and_lists_its_models_in_a_private_folder(tmp_path):
+    """R-CLI-SIGNIN-07: agy may keep its sign-in somewhere no item says (a token too large for the system's store goes to
+    its own file), so what it says listing its models, asked as a member's run starts it, is its sign-in."""
+    from raphael_core.agent.cli.discovery import CliBrains
+
     folder = tmp_path / ".gemini"
     (folder / "antigravity-cli").mkdir(parents=True)
-    (folder / "google_accounts.json").write_text("not credential JSON")
     (folder / "antigravity-cli" / "settings.json").write_text(json.dumps({"model": "Gemini Argon Low"}))
-    brains = CliBrains(home=tmp_path, environ={}, commands={"gemini": [sys.executable, str(script)]})
+    brains = CliBrains(home=tmp_path, environ={}, commands={"gemini": fake_agy(tmp_path)})
     try:
         source = (await brains.list())["clis"][2]
-        assert source["name"] == "Antigravity" and source["logged_in"] is True
+        assert source["name"] == "Antigravity" and source["logged_in"] is False  # nothing has said so yet
         assert source["login_command"] == "agy"
-        await asyncio.wait_for(brains._model_refresh, 3)
+        await asyncio.wait_for(brains._model_refresh, 5)
         source = (await brains.list())["clis"][2]
+        assert source["logged_in"] is True and source["available"] is True
         assert [m["provider"] for m in source["models"]] == ["Google", "Anthropic"]
         assert source["models"][0]["is_default"]
+    finally:
+        await brains.aclose()
+
+
+async def test_antigravity_that_says_it_is_signed_out_is_signed_out_until_its_sign_in_changes(tmp_path):
+    """R-CLI-SIGNIN-07: an item agy can no longer use is no sign-in when agy says so; the item written anew is asked about."""
+    from raphael_core.agent.cli.discovery import CliBrains, SIGNED_OUT_ASK_S
+
+    item = ["stamp 1"]
+    brains = CliBrains(home=tmp_path, environ={}, commands={"gemini": fake_agy(tmp_path, signed_in=False)},
+                       credentials=lambda: item[0])
+    try:
+        assert (await brains.list())["clis"][2]["logged_in"] is True  # the item is there, agy not yet asked
+        await asyncio.wait_for(brains._model_refresh, 5)
+        source = (await brains.list())["clis"][2]
+        assert source["logged_in"] is False and not source["available"] and source["models"] == []
+        assert brains._verdict["gemini"] == (False, "stamp 1")
+        # Asked again now and then, not at every read.
+        assert not brains._needs_models("gemini")
+        brains._last_used += SIGNED_OUT_ASK_S + 1
+        assert brains._needs_models("gemini")
+        brains._last_used -= SIGNED_OUT_ASK_S + 1
+        # A sign-in done in a terminal writes the item anew: it is the sign-in until agy is asked again.
+        item[0] = "stamp 2"
+        brains.invalidate("gemini")
+        assert brains.logged_in("gemini") is True and brains._needs_models("gemini")
+    finally:
+        await brains.aclose()
+
+
+def test_the_retired_gemini_clis_files_are_no_sign_in_of_antigravity(tmp_path):
+    """R-CLI-SIGNIN-07: agy reads neither `oauth_creds.json` nor `google_accounts.json`; they only remain from Gemini CLI."""
+    from raphael_core.agent.cli.discovery import CliBrains
+
+    (tmp_path / ".gemini").mkdir()
+    (tmp_path / ".gemini" / "oauth_creds.json").write_text("{}")
+    (tmp_path / ".gemini" / "google_accounts.json").write_text("{}")
+    brains = CliBrains(home=tmp_path, environ={}, commands={"gemini": ["agy"]})
+    assert brains.logged_in("gemini") is False and not brains.available("gemini")
+
+
+async def test_only_models_listed_say_antigravity_is_signed_in(tmp_path):
+    """R-CLI-SIGNIN-07: agy's refusal is its verdict whatever its exit code, and a list with no model says nothing."""
+    from raphael_core.agent.cli.models import antigravity_models
+
+    folder = tmp_path / "private" / ".gemini"
+    folder.mkdir(parents=True)
+    settings = tmp_path / "settings.json"
+    with pytest.raises(ValueError, match="signed_out"):
+        await antigravity_models(fake_agy(tmp_path, signed_in=False, refuse_code=0), {}, settings, gemini_dir=folder)
+    with pytest.raises(ValueError, match="signed_out"):
+        await antigravity_models(fake_agy(tmp_path, signed_in=False), {}, settings, gemini_dir=folder)
+    empty = tmp_path / "empty.py"
+    empty.write_text("print('Fetching available models...')\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="model_list_unavailable"):
+        await antigravity_models([sys.executable, str(empty)], {}, settings, gemini_dir=folder)
+    listed = await antigravity_models(fake_agy(tmp_path), {}, settings, gemini_dir=folder)
+    assert [model["provider"] for model in listed] == ["Google", "Anthropic"]
+
+
+async def test_a_refused_antigravity_run_has_agy_asked_again_at_the_next_read(tmp_path):
+    """R-CLI-SIGNIN-07: agy that listed its models an hour's worth ago is asked again as soon as a run is refused for its
+    sign-in, so a sign-in it can no longer use reads 未登入 at the next read instead of after the hour."""
+    from raphael_core.agent.cli.discovery import CliBrains
+
+    marker = tmp_path / "signed-in"
+    marker.touch()
+    brains = CliBrains(home=tmp_path, environ={}, commands={"gemini": fake_agy(tmp_path, signed_in=marker)})
+    try:
+        await brains.list()
+        await asyncio.wait_for(brains._model_refresh, 5)
+        assert (await brains.list())["clis"][2]["logged_in"] is True and not brains._needs_models("gemini")
+        marker.unlink()  # the token was revoked
+        brains.sign_in_lost("gemini", "expired")
+        assert brains._needs_models("gemini")
+        await brains.list()
+        await asyncio.wait_for(brains._model_refresh, 5)
+        source = (await brains.list())["clis"][2]
+        assert source["logged_in"] is False and not source["available"]
     finally:
         await brains.aclose()
 

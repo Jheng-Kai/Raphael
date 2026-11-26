@@ -4,13 +4,29 @@ import { actionRow, btn, esc, ico, iconButton, patchHTML, type IconName } from "
 interface BrowserTab { id: string; title: string; url: string; favicon: string }
 /** A JavaScript dialog that holds the shown page: a headless Chrome never draws it, so the view does (#336). */
 export interface HostDialog { dialog_id: string; type: "alert" | "confirm" | "prompt" | "beforeunload"; message: string; omitted?: number; default_prompt?: string }
-export interface HostBrowserModel { tabs: BrowserTab[]; shown: string; back: boolean; forward: boolean; dialog?: HostDialog }
-type Action = "select" | "close" | "new" | "back" | "forward" | "reload" | "navigate" | "dialog";
-export interface HostBrowserAction { action: Action; tab: string; url?: string; dialog?: string; accept?: boolean; text?: string }
+/** The site's sign-in prompt (HTTP authentication), which Chrome hands over instead of drawing; only the owner answers it. */
+export interface HostAuth { auth_id: string; origin: string; realm: string; scheme: string }
+/** The page's file chooser, which Chrome hands over instead of drawing its dialog. */
+export interface HostChooser { chooser_id: string; mode: "single" | "multiple" }
+export interface HostBrowserModel { tabs: BrowserTab[]; shown: string; back: boolean; forward: boolean; dialog?: HostDialog; auth?: HostAuth; chooser?: HostChooser }
+type Action = "select" | "close" | "new" | "back" | "forward" | "reload" | "navigate" | "dialog" | "auth" | "upload" | "chooser";
+export interface HostBrowserAction {
+  action: Action; tab: string; url?: string; dialog?: string; accept?: boolean; text?: string;
+  auth?: string; username?: string; password?: string; chooser?: string; files?: { stored_id: string; name: string }[];
+}
+/** What the card shows over the page: a dialog first, which holds the page, then a sign-in prompt, then a file chooser. */
+type Prompt = { kind: "dialog"; id: string; dialog: HostDialog } | { kind: "auth"; id: string; auth: HostAuth } | { kind: "chooser"; id: string; chooser: HostChooser };
+const promptOf = (model: HostBrowserModel | undefined): Prompt | undefined =>
+  model?.dialog ? { kind: "dialog", id: model.dialog.dialog_id, dialog: model.dialog }
+    : model?.auth ? { kind: "auth", id: model.auth.auth_id, auth: model.auth }
+      : model?.chooser ? { kind: "chooser", id: model.chooser.chooser_id, chooser: model.chooser } : undefined;
+const siteOf = (url: string): string => { try { return new URL(url).host || url; } catch { return url; } };
 
 let dialogIds = 0;
 
-export function mountHostBrowserToolbar(screen: HTMLElement, send: (action: HostBrowserAction, id: number) => void) {
+/** `store` puts a file the owner chose for a page's file chooser in the core's upload store and gives its stored_id. */
+export function mountHostBrowserToolbar(screen: HTMLElement, send: (action: HostBrowserAction, id: number) => void,
+  store?: (file: File) => Promise<string>) {
   const bar = document.createElement("div");
   bar.className = "host-browser-toolbar";
   bar.hidden = true;
@@ -28,7 +44,15 @@ export function mountHostBrowserToolbar(screen: HTMLElement, send: (action: Host
   card.setAttribute("aria-labelledby", `${cardId}-from`);
   card.setAttribute("aria-describedby", `${cardId}-message`);
   screen.append(card);
+  // The owner's own files for a page's file chooser, picked as for any web page.
+  const picker = document.createElement("input");
+  picker.type = "file";
+  picker.hidden = true;
+  picker.className = "host-browser-picker";
+  screen.append(picker);
   let dialogDrawn = "", dialogShown = "", dialogAction: number | undefined, lastHolding = false;
+  // The tab and chooser the owner's file dialog was opened for: files picked there go to that chooser alone.
+  let picking: { tab: string; chooser: string } | undefined;
   const strip = bar.querySelector<HTMLElement>(".host-browser-strip")!;
   const add = bar.querySelector<HTMLElement>(".host-browser-add")!;
   const history = bar.querySelector<HTMLElement>(".host-browser-history")!;
@@ -64,46 +88,106 @@ export function mountHostBrowserToolbar(screen: HTMLElement, send: (action: Host
     failed = show;
   }
 
-  function drawDialog(dialog: HostDialog | undefined, url: string, holding: boolean): void {
-    screen.toggleAttribute("data-host-dialog", !!dialog);
-    card.hidden = !dialog;
+  function drawDialog(prompt: Prompt | undefined, url: string, holding: boolean): void {
+    screen.toggleAttribute("data-host-dialog", !!prompt);
+    card.hidden = !prompt;
     // Watching, it is only read: a press on it is a press on the page, which opens the larger view to take control.
     card.toggleAttribute("data-readonly", !holding);
-    if (!dialog) { dialogDrawn = dialogShown = ""; dialogAction = undefined; return; }
-    const signature = JSON.stringify([dialog, url, holding, getLocale()]);
+    // A prompt gone takes what was typed into it along: a password never stays in the page.
+    if (!prompt) { dialogDrawn = dialogShown = ""; dialogAction = undefined; card.replaceChildren(); return; }
+    const signature = JSON.stringify([prompt, url, holding, getLocale()]);
     if (signature === dialogDrawn) return;
     dialogDrawn = signature;
-    const fresh = dialog.dialog_id !== dialogShown;
-    const typed = fresh ? dialog.default_prompt ?? "" : card.querySelector<HTMLInputElement>(".host-browser-dialog-answer")?.value ?? "";
-    dialogShown = dialog.dialog_id;
-    if (fresh) dialogAction = undefined;
-    let site = url;
-    try { site = new URL(url).host || url; } catch { /* the address as written */ }
+    const key = `${prompt.kind}:${prompt.id}`, fresh = key !== dialogShown;
+    // What the owner typed stays through a redraw of the same prompt; a new prompt starts from its own default.
+    const typed = new Map([...card.querySelectorAll<HTMLInputElement>(".host-browser-dialog-answer")].map(input => [input.dataset.field ?? "", input.value]));
+    dialogShown = key;
+    if (fresh) { dialogAction = undefined; typed.clear(); }
     const off = holding && dialogAction === undefined ? "" : " disabled";
-    card.innerHTML = `<p class="host-browser-dialog-from" id="${cardId}-from">${esc(t("browser.dialogFrom", { p0: site }))}</p>` +
-      `<p class="host-browser-dialog-message" id="${cardId}-message">${esc(dialog.message)}</p>` +
-      // A long message keeps both its ends; what is left out between them is said, never silently cut.
-      (dialog.omitted ? `<p class="host-browser-dialog-omitted">${esc(t("browser.dialogOmitted", { p0: new Intl.NumberFormat(getLocale()).format(dialog.omitted) }))}</p>` : "") +
-      (dialog.type === "prompt" ? `<input class="host-browser-dialog-answer" type="text" maxlength="2000" autocomplete="off" spellcheck="false" aria-label="${esc(t("browser.dialogAnswer"))}"${off}>` : "") +
-      (holding ? "" : `<p class="host-browser-dialog-hint">${esc(t("browser.dialogTakeOver"))}</p>`) +
-      actionRow({
-        secondary: dialog.type === "alert" ? "" : btn(esc(t("browser.dialogCancel")), "", ` data-dialog-answer="dismiss"${off}`),
-        primary: { label: esc(t("browser.dialogOk")), attrs: ` data-dialog-answer="accept"${off}` },
-      });
-    const answer = card.querySelector<HTMLInputElement>(".host-browser-dialog-answer");
-    if (answer) answer.value = typed;
+    const field = (name: string, type: string, label: string, max: number) =>
+      `<input class="host-browser-dialog-answer" data-field="${name}" type="${type}" maxlength="${max}" autocomplete="off" spellcheck="false" aria-label="${esc(label)}" placeholder="${esc(label)}"${off}>`;
+    const cancel = btn(esc(t("browser.dialogCancel")), "", ` data-dialog-answer="dismiss"${off}`);
+    let from: string, body = "", secondary = cancel, primary = t("browser.dialogOk");
+    let takeOver: "browser.dialogTakeOver" | "browser.authTakeOver" | "browser.chooserTakeOver";
+    if (prompt.kind === "dialog") {
+      const dialog = prompt.dialog;
+      from = t("browser.dialogFrom", { p0: siteOf(url) });
+      body = `<p class="host-browser-dialog-message" id="${cardId}-message">${esc(dialog.message)}</p>` +
+        // A long message keeps both its ends; what is left out between them is said, never silently cut.
+        (dialog.omitted ? `<p class="host-browser-dialog-omitted">${esc(t("browser.dialogOmitted", { p0: new Intl.NumberFormat(getLocale()).format(dialog.omitted) }))}</p>` : "") +
+        (dialog.type === "prompt" ? field("text", "text", t("browser.dialogAnswer"), 2000) : "");
+      if (fresh && dialog.type === "prompt") typed.set("text", dialog.default_prompt ?? "");
+      if (dialog.type === "alert") secondary = "";
+      takeOver = "browser.dialogTakeOver";
+    } else if (prompt.kind === "auth") {
+      // The site names its realm; the user name and password go to Chrome alone, never kept here.
+      from = t("browser.authFrom", { p0: siteOf(prompt.auth.origin) });
+      body = (prompt.auth.realm ? `<p class="host-browser-dialog-message" id="${cardId}-message">${esc(prompt.auth.realm)}</p>` : "") +
+        field("username", "text", t("browser.authUser"), 1000) + field("password", "password", t("browser.authPassword"), 1000);
+      primary = t("browser.authSignIn");
+      takeOver = "browser.authTakeOver";
+    } else {
+      from = t("browser.chooserFrom", { p0: siteOf(url) });
+      picker.multiple = prompt.chooser.mode === "multiple";
+      primary = t("browser.chooserPick");
+      takeOver = "browser.chooserTakeOver";
+    }
+    card.innerHTML = `<p class="host-browser-dialog-from" id="${cardId}-from">${esc(from)}</p>` + body +
+      (holding ? "" : `<p class="host-browser-dialog-hint">${esc(t(takeOver))}</p>`) +
+      actionRow({ secondary, primary: { label: esc(primary), attrs: ` data-dialog-answer="accept"${off}` } });
+    for (const input of card.querySelectorAll<HTMLInputElement>(".host-browser-dialog-answer")) input.value = typed.get(input.dataset.field ?? "") ?? "";
     if (holding && !off && (fresh || !card.contains(document.activeElement))) {
-      (answer ?? card.querySelector<HTMLButtonElement>('[data-dialog-answer="accept"]'))?.focus({ preventScroll: true });
+      (card.querySelector<HTMLElement>(".host-browser-dialog-answer") ?? card.querySelector<HTMLButtonElement>('[data-dialog-answer="accept"]'))?.focus({ preventScroll: true });
     }
   }
 
-  function answerDialog(accept: boolean): void {
-    const dialog = model?.dialog;
-    if (!model || !dialog || dialogAction !== undefined || card.querySelector("[data-dialog-answer]:disabled")) return;
-    const text = card.querySelector<HTMLInputElement>(".host-browser-dialog-answer")?.value;
-    dialogAction = ++actionId;
+  function disableCard(): void {
     for (const control of card.querySelectorAll<HTMLButtonElement | HTMLInputElement>("button, input")) control.disabled = true;
-    send({ action: "dialog", tab: model.shown, dialog: dialog.dialog_id, accept, ...(accept && text !== undefined ? { text } : {}) }, dialogAction);
+  }
+
+  function answerDialog(accept: boolean): void {
+    const prompt = promptOf(model);
+    if (!model || !prompt || dialogAction !== undefined || card.querySelector("[data-dialog-answer]:disabled")) return;
+    // Choosing files opens the owner's own file dialog; they are sent once chosen.
+    if (prompt.kind === "chooser" && accept) {
+      if (store) { picking = { tab: model.shown, chooser: prompt.id }; picker.click(); }
+      return;
+    }
+    const value = (name: string) => card.querySelector<HTMLInputElement>(`.host-browser-dialog-answer[data-field="${name}"]`)?.value;
+    dialogAction = ++actionId;
+    disableCard();
+    if (prompt.kind === "dialog") {
+      const text = value("text");
+      send({ action: "dialog", tab: model.shown, dialog: prompt.id, accept, ...(accept && text !== undefined ? { text } : {}) }, dialogAction);
+    } else if (prompt.kind === "auth") {
+      send({ action: "auth", tab: model.shown, auth: prompt.id, accept, ...(accept ? { username: value("username") ?? "", password: value("password") ?? "" } : {}) }, dialogAction);
+      // Sent to Chrome, the password is no longer kept in the card; a refused answer asks for it again.
+      for (const input of card.querySelectorAll<HTMLInputElement>('.host-browser-dialog-answer[data-field="password"]')) input.value = "";
+    } else {
+      send({ action: "chooser", tab: model.shown, chooser: prompt.id }, dialogAction);
+    }
+  }
+
+  picker.addEventListener("change", () => {
+    const files = [...picker.files ?? []], bound = picking;
+    picker.value = "";
+    picking = undefined;
+    const prompt = promptOf(model);
+    // Files picked for a chooser the view has since left (another tab, or another chooser) go nowhere.
+    if (!files.length || !model || !store || !bound || model.shown !== bound.tab || prompt?.kind !== "chooser"
+      || prompt.id !== bound.chooser || dialogAction !== undefined) return;
+    const id = dialogAction = ++actionId;
+    disableCard();
+    void Promise.all(files.slice(0, prompt.chooser.mode === "multiple" ? 20 : 1).map(async file => ({ stored_id: await store(file), name: file.name })))
+      .then(stored => { if (dialogAction === id) send({ action: "upload", tab: bound.tab, chooser: bound.chooser, files: stored }, id); })
+      .catch(() => { if (dialogAction === id) refused(); });
+  });
+
+  /** An answer the core refused (the tab was handed back meanwhile) or files not stored: the prompt can be answered again. */
+  function refused(): void {
+    dialogAction = undefined;
+    dialogDrawn = "";
+    drawDialog(promptOf(model), model?.tabs.find(tab => tab.id === model?.shown)?.url ?? "", lastHolding);
   }
 
   card.addEventListener("click", event => {
@@ -126,7 +210,7 @@ export function mountHostBrowserToolbar(screen: HTMLElement, send: (action: Host
     if (signature === drawn) return;
     drawn = signature;
     lastHolding = holding;
-    drawDialog(shown ? next?.dialog : undefined, shown?.url ?? "", holding);
+    drawDialog(shown ? promptOf(next) : undefined, shown?.url ?? "", holding);
     if (next?.shown !== model?.shown || !shown) {
       editing = false;
       actionId++;
@@ -219,7 +303,7 @@ export function mountHostBrowserToolbar(screen: HTMLElement, send: (action: Host
     result(id: number, ok: boolean): void {
       if (id === dialogAction) {
         // Answered, the next read has no dialog; refused (the tab was handed back meanwhile), it can be answered again.
-        if (!ok) { dialogAction = undefined; dialogDrawn = ""; drawDialog(model?.dialog, model?.tabs.find(tab => tab.id === model?.shown)?.url ?? "", lastHolding); }
+        if (!ok) refused();
         return;
       }
       if (id !== actionId || id !== navigationId) return;

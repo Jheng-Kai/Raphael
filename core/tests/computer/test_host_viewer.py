@@ -5,6 +5,7 @@ import base64
 import json
 import os
 from contextlib import aclosing, asynccontextmanager, suppress
+from pathlib import Path
 from time import perf_counter
 from types import SimpleNamespace
 
@@ -368,6 +369,69 @@ async def test_the_owner_answers_a_dialog_in_the_view_only_while_holding_the_tab
             assert (await client.post(base + "host-browser", json=answer, headers=origin)).status_code == 204
             assert ("Page.handleJavaScriptDialog", {"accept": True, "promptText": "482913"}, tab.session) in cdp.calls
             assert tab.dialog is None and "dialog" not in (await client.get(base + "host-browser")).json()
+    finally:
+        await viewer.aclose()
+        await browser.aclose()
+
+
+async def test_the_owner_signs_in_and_chooses_files_in_the_view_only_while_holding_the_tab(tmp_path):
+    # Chrome hands over the site's sign-in prompt and the page's file chooser instead of drawing them: the view shows
+    # them, and the owner answers them under the lease, the user name and password going to Chrome alone.
+    viewer, browser = host_viewer(tmp_path)
+    cdp = browser.cdp = Cdp(browser)
+    cdp.socket = SimpleNamespace(port=12345)
+    tab = fake_tab(browser, 1, 10)
+    stored = tmp_path / "store" / "a1b2"
+    stored.parent.mkdir()
+    stored.write_bytes(b"invoice")
+    viewer.stored_path = lambda stored_id: stored if stored_id == "a1b2" else None
+    params = {"member_id": 1, "conversation_id": 10}
+    try:
+        opened = await viewer.open(params)
+        base = opened["url"].removesuffix("host.html")
+        origin = {"Origin": viewer.origin}
+        async with httpx.AsyncClient(trust_env=False, timeout=5) as client, host_frames(client, base) as lines:
+            await frame_for(lines, tab)
+
+            async def post(**values):
+                return (await client.post(base + "host-browser", json={"tab": tab.id, **values}, headers=origin)).status_code
+
+            browser._event("Fetch.authRequired", {"requestId": "r", "authChallenge": {
+                "origin": "https://intranet.example.test", "realm": "Staff", "scheme": "Basic", "source": "Server"}},
+                tab.session)
+            browser._event("Page.fileChooserOpened", {"frameId": "f", "mode": "selectSingle", "backendNodeId": 7},
+                           tab.session)
+            model = (await client.get(base + "host-browser")).json()
+            auth, chooser = model["auth"], model["chooser"]
+            assert (auth["origin"], auth["realm"], chooser["mode"]) == ("https://intranet.example.test", "Staff", "single")
+            sign_in = {"action": "auth", "auth": auth["auth_id"], "accept": True, "username": "staff", "password": "s3cret"}
+            # Only a name's last part is kept: a path in it never leads out of the folder the copy goes to.
+            files = {"action": "upload", "chooser": chooser["chooser_id"],
+                     "files": [{"stored_id": "a1b2", "name": "../../Invoice.pdf"}]}
+            assert await post(**sign_in) == 403 and await post(**files) == 403
+            assert (await viewer.control({**opened, "held": True}))["control"] == "owner"
+            for wrong in ({"auth": "old"}, {"username": 7}, {"password": "x" * 1001}):
+                assert await post(**{**sign_in, **wrong}) == 403
+            assert await post(**sign_in) == 204
+            assert ("Fetch.continueWithAuth", {"requestId": "r", "authChallengeResponse": {
+                "response": "ProvideCredentials", "username": "staff", "password": "s3cret"}}, tab.session) in cdp.calls
+            assert tab.auth is None
+            two = [{"stored_id": "a1b2", "name": "a.pdf"}, {"stored_id": "a1b2", "name": "b.pdf"}]
+            for wrong in ({"chooser": "old"}, {"files": two}, {"files": [{"stored_id": "gone", "name": "a.pdf"}]},
+                          {"files": [{"stored_id": "a1b2", "name": 7}]}, {"files": []}, {"files": "a1b2"}):
+                assert await post(**{**files, **wrong}) == 403
+            assert await post(**files) == 204
+            method, chosen, session = cdp.calls[-1]
+            assert (method, chosen["backendNodeId"], session) == ("DOM.setFileInputFiles", 7, tab.session)
+            placed = Path(chosen["files"][0])
+            assert placed.name == "Invoice.pdf" and placed.read_bytes() == b"invoice"
+            assert placed.is_relative_to(browser.profile / "uploads")
+            model = (await client.get(base + "host-browser")).json()
+            assert "auth" not in model and "chooser" not in model
+            # A chooser the owner closes leaves the page without files.
+            browser._event("Page.fileChooserOpened", {"frameId": "f", "mode": "selectMultiple", "backendNodeId": 8},
+                           tab.session)
+            assert await post(action="chooser", chooser=tab.chooser["chooser_id"]) == 204 and tab.chooser is None
     finally:
         await viewer.aclose()
         await browser.aclose()

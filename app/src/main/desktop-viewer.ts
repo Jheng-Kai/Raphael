@@ -177,6 +177,13 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     if (session && state?.transport === "host") {
       frame.contentWindow?.postMessage({ type: "raphael-desktop-browser-action", action, id }, new URL(session.url).origin);
     }
+  }, async file => {
+    // A file the owner chose for a page's file chooser goes through the upload store, as a dropped file does.
+    const held = session;
+    if (!held || file.size > FILE_MAX_BYTES) throw new Error("not stored");
+    const stored = await storeUpload(file, fileMime(file), () => session === held);
+    if (!stored.stored_id) throw new Error("not stored");
+    return stored.stored_id;
   });
   const tabBar = host.querySelector('.mb-tabs');
   if (tabBar) tabBar.after(panel); else (host.querySelector('.mb-det-scroll') ?? host).prepend(panel);
