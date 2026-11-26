@@ -618,3 +618,28 @@ describe("words", () => {
     }
   });
 });
+
+describe("Raphael's page and the chief slime's", () => {
+  test("Raphael's name is shown, not edited, with no role, no picture to change and no way to hide, delete or pin it", async () => {
+    list = { ...LIST, members: LIST.members.map(m => m.id === 0 ? { ...m, raphael: true, avatar: "" } : m) };
+    await open(0);
+    expect($(".ms-name").textContent).toBe("拉斐爾");
+    expect(page.el.querySelector("#ms-name, #ms-role, .ms-role, [data-ms=\"avatar\"]")).toBeNull();
+    expect($(".ms-id .mb-av-slime")).not.toBeNull();
+    expect(page.el.querySelector(".ms-id img")).toBeNull();
+    // Its other settings are the ones every slime has.
+    expect(kinds()).toEqual(["tools", "skills", "soul", "notify"]);
+    await cat("soul");
+    expect(sections()).toEqual(["ms-personality", "ms-instructions"]);
+  });
+
+  test("the chief's page is a normal slime's: its name, role and picture change, and nothing marks it but its label elsewhere", async () => {
+    list = { ...LIST, members: LIST.members.map(m => m.id === 3 ? { ...m, chief: true } : m), team_context: { primary_id: 3 } as MembersList["team_context"] };
+    await open(3);
+    expect($<HTMLInputElement>("#ms-name").value).toBe("日文老師");
+    expect($<HTMLInputElement>("#ms-role").value).toBe("N2 嚴格版");
+    expect($('[data-ms="avatar"]')).not.toBeNull();
+    expect(kinds()).toEqual(["tools", "skills", "soul", "notify"]);
+    list = LIST;
+  });
+});

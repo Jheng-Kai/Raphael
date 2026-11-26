@@ -2317,3 +2317,80 @@ describe("a row or a folder dropped on the sidebar", () => {
     agent.hide();
   });
 });
+
+describe("Raphael apart from the slimes", () => {
+  const roster = (primary: number | null, slimes = [3, 4]): MembersList => ({
+    members: [member(0, { name: "拉斐爾", raphael: true } as Partial<Member>), ...LIST.members.filter(m => slimes.includes(m.id)).map(m => ({ ...m, chief: m.id === primary }))],
+    groups: [], team_context: { primary_id: primary, chief_id: primary, members: slimes.map(id => ({ id, name: `成員${id}`, role: "", blurb: "" })) } as unknown as MembersList["team_context"],
+  });
+  const quick = [{ id: 4, member_id: 0, title: "", kind: "quick", is_default: 0, updated_at_ms: 100 }, { id: 1, member_id: 0, title: "Main", kind: "standard", is_default: 1, updated_at_ms: 1 }];
+  const readConversations = (): void => {
+    api.core.mockImplementation(async (method: string, params: { member_id?: number }) =>
+      method === "conversations.list" ? { conversations: [...quick, { id: 31, member_id: 3, title: "Cobalt", is_default: 1, kind: "standard", updated_at_ms: 1 }].filter(c => c.member_id === (params.member_id ?? 0)) } : { questions: [] });
+  };
+  const pillName = (): string => $(".mb-pill-t").textContent!;
+  const listed = (): string[] => [...document.querySelectorAll<HTMLElement>(".mb-col [data-member]")].map(row => row.dataset.member!);
+
+  test("with a chief the sidebar lists slimes only and the app opens on the chief, whose panel has no quick questions", async () => {
+    api.membersList.mockResolvedValue(roster(3)); readConversations();
+    const agent = mount(); await flush();
+    expect(listed()).toEqual(["3", "4"]);
+    expect($('.mb-col [data-member="3"]').getAttribute("aria-current")).toBe("true");
+    expect(pillName()).toBe("日文老師");
+    expect(api.agentHistoryList).toHaveBeenLastCalledWith(expect.objectContaining({ member_id: 3 }));
+    await openDetails();
+    expect(document.querySelector('.mb-det [data-slot="conversations"]')).toBeNull();
+    agent.hide();
+  });
+
+  test("with no slime at all the app opens on Raphael's conversation, the sidebar is empty and nothing fails", async () => {
+    api.membersList.mockResolvedValue(roster(null, [])); readConversations();
+    const agent = mount(); await flush();
+    expect(listed()).toEqual([]);
+    expect(pillName()).toBe("拉斐爾");
+    expect(api.agentHistoryList).toHaveBeenLastCalledWith(expect.not.objectContaining({ member_id: expect.anything() }));
+    expect($('[data-col="add"]')).not.toBeNull();
+    await openDetails();
+    expect(document.querySelector('.mb-det [data-slot="conversations"]')).not.toBeNull();
+    agent.hide();
+  });
+
+  test("a roster whose chief is null opens on Raphael too, and the slimes stay listed", async () => {
+    api.membersList.mockResolvedValue(roster(null)); readConversations();
+    const agent = mount(); await flush();
+    expect(listed()).toEqual(["3", "4"]);
+    expect(pillName()).toBe("拉斐爾");
+    expect(document.querySelector('.mb-col [aria-current="true"]')).toBeNull();
+    agent.hide();
+  });
+
+  test("the route to Raphael shows its space in the same chat view, with its quick questions and no share button, and a slime row leaves it", async () => {
+    api.membersList.mockResolvedValue(roster(3)); readConversations();
+    const agent = mount(); await flush();
+    agent.show("raphael"); await flush();
+    expect(pillName()).toBe("拉斐爾");
+    expect(listed()).toEqual(["3", "4"]);
+    expect(document.querySelector('.mb-col [aria-current="true"]')).toBeNull();
+    expect(api.agentHistoryList).toHaveBeenLastCalledWith(expect.not.objectContaining({ member_id: expect.anything() }));
+    expect($('[data-act="share-member"]').hidden).toBe(true);
+    await openDetails();
+    expect(document.querySelector('.mb-det [data-slot="conversations"]')).not.toBeNull();
+    expect(document.querySelector(".mb-det .mb-face-edit")).toBeNull();
+    await pick(4);
+    expect(pillName()).toBe("行程管家");
+    expect(document.querySelector('.mb-det [data-slot="conversations"]')).toBeNull();
+    agent.hide();
+  });
+
+  test("a roster that no longer has the open slime moves to the chief, or Raphael when no slime is left", async () => {
+    api.membersList.mockResolvedValue(roster(3)); readConversations();
+    const agent = mount(); await flush(); await pick(4);
+    api.membersList.mockResolvedValue(roster(3, [3]));
+    send({ type: "MembersChanged" } as MainEvent); await flush(); await flush();
+    expect(pillName()).toBe("日文老師");
+    api.membersList.mockResolvedValue(roster(null, []));
+    send({ type: "MembersChanged" } as MainEvent); await flush(); await flush();
+    expect(pillName()).toBe("拉斐爾");
+    agent.hide();
+  });
+});

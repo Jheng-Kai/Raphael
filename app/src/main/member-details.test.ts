@@ -387,3 +387,28 @@ describe("the computer lives in its own tab only", () => {
     expect(panel.el.dataset.detailsTab).toBe('computer');
   });
 });
+
+describe("Raphael's panel and the chief's", () => {
+  const asChief = (): void => { host.list = () => ({ ...LIST, members: LIST.members.map(m => m.id === 3 ? { ...m, chief: true } : m), team_context: { primary_id: 3 } as MembersList["team_context"] }); };
+
+  test("only Raphael has the conversations list (its quick questions); the chief is a normal slime's panel without it", async () => {
+    current = 3;
+    const panel = mount(); await flush();
+    asChief(); panel.draw(); await flush();
+    expect(panel.el.querySelector('[data-slot="conversations"]')).toBeNull();
+    current = 0; panel.showMember(); panel.draw(); await flush();
+    expect(panel.el.querySelector('[data-slot="conversations"]')).not.toBeNull();
+  });
+
+  test("Raphael's face is only a face: no picture to change, no role, and a slime's panel keeps its picker", async () => {
+    current = 0;
+    let panel = mount(); await flush();
+    expect(panel.el.querySelector('[data-det="avatar"], .mb-face-edit, .mb-face-pencil')).toBeNull();
+    expect(panel.el.querySelector(".mb-panel-identity .mb-av-slime svg.slime")).not.toBeNull();
+    expect(panel.el.querySelector(".mb-panel-identity small")).toBeNull();
+    document.body.innerHTML = "";
+    current = 3;
+    panel = mount(); await flush();
+    expect(panel.el.querySelector('[data-det="avatar"]')).not.toBeNull();
+  });
+});

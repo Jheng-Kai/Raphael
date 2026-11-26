@@ -677,3 +677,18 @@ test("empty meetings hide the pinned row and an open board refreshes in place",a
  expect(document.querySelector('#app-popover')).toBeNull();
  view.close();
 });
+
+test("a room is made of slimes: Raphael is not offered, the chief is the required first member, and no chief means no room to make",async()=>{
+ const people=[{id:0,name:"Raphael",avatar:"",raphael:true},{id:1,name:"Alice",avatar:""},{id:2,name:"Bob",avatar:""}] as unknown as Member[];
+ api.membersList.mockResolvedValue({members:people,groups:[],team_context:{primary_id:2,chief_id:2}});
+ await openNewGroupChat();
+ expect([...document.querySelectorAll<HTMLElement>('[data-dlg="member"]')].map(row=>row.dataset.member)).toEqual(['2','1']);
+ const chief=document.querySelector<HTMLButtonElement>('[data-dlg="member"][data-member="2"]')!;
+ expect(chief.disabled).toBe(true);expect(chief.getAttribute('aria-pressed')).toBe('true');
+ expect(document.querySelector<HTMLInputElement>('#room-name')!.value).toBe('Bob');
+ document.querySelector<HTMLElement>('[data-dlg="cancel"]')!.click();
+ api.membersList.mockResolvedValue({members:people.slice(0,1),groups:[],team_context:{primary_id:null,chief_id:null}});
+ await openNewGroupChat();
+ expect(document.querySelector('[data-dlg="member"], #room-name')).toBeNull();
+ expect(api.roomsCreate).not.toHaveBeenCalled();
+});

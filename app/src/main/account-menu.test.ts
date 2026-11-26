@@ -186,3 +186,27 @@ test("a reading that fails keeps what was known of that provider, and the others
   menu()!.querySelector<HTMLElement>('[data-account="usage"]')!.click();
   expect([...document.querySelectorAll(".account-window-name")].map(name => name.textContent)).toEqual(["Codex 每週", "ChatGPT", "OpenRouter 本月"]);
 });
+
+test("Raphael has an entry of its own in the menu: after 行事曆, apart by hairlines, with its blue slime and its name", async () => {
+  const known = document.createElement("div");
+  known.innerHTML = accountMenuHTML([block({})]);
+  expect([...known.querySelectorAll("button")].map(row => row.dataset.account)).toEqual(["usage", "dictation", "calendar", "raphael", "settings"]);
+  expect([...known.children].map(child => child.getAttribute("data-account") ?? "|")).toEqual(["usage", "dictation", "calendar", "|", "raphael", "|", "settings"]);
+  const row = known.querySelector<HTMLElement>('[data-account="raphael"]')!;
+  expect(row.querySelector(".mt")!.textContent).toBe("拉斐爾");
+  expect(row.querySelector(".ck .mb-av-slime")).not.toBeNull();
+  expect(row.innerHTML).toContain("#3DB5FF");
+  expect(row.querySelector("img")).toBeNull();
+  setLocale("en");
+  known.innerHTML = accountMenuHTML([]);
+  expect(known.querySelector('[data-account="raphael"] .mt')!.textContent).toBe("Raphael");
+});
+
+test("choosing Raphael opens its conversation space as the app's ordinary route", async () => {
+  const { anchor, go } = mount(async () => ({ brains: [] }));
+  anchor.click(); await flush();
+  menu()!.querySelector<HTMLElement>('[data-account="raphael"]')!.click();
+  expect(go).toHaveBeenCalledExactlyOnceWith("agent", "raphael");
+  expect(menu()).toBeNull();
+  expect(document.activeElement).toBe(anchor);
+});

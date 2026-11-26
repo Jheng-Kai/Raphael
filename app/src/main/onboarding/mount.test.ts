@@ -26,6 +26,7 @@ const api = vi.hoisted(() => ({
   openExternalUrl: vi.fn(),
   membersList: vi.fn(),
   membersUpdate: vi.fn(),
+  membersCreate: vi.fn(),
 }));
 vi.mock("../api", () => api);
 // The picker of the window's language answers at once with the language the test names.
@@ -126,6 +127,7 @@ beforeEach(() => {
   api.mainWindowForward.mockResolvedValue(undefined);
   api.membersList.mockResolvedValue({ members: [{ id: 0, name: "Raphael", avatar: "" }], groups: [] });
   api.membersUpdate.mockResolvedValue({ member: { id: 0 } });
+  api.membersCreate.mockResolvedValue({ member: { id: 7, chief: true }, routine_offer: null });
 });
 afterEach(() => {
   root.replaceChildren();
@@ -561,5 +563,69 @@ describe("step 3: the abilities", () => {
     expect(root.querySelector('[data-svc-section] [role="alert"]')).not.toBeNull();
     await press('[data-ob="next"]');
     expect(done).toHaveBeenCalledWith({ finished: true });
+  });
+});
+
+describe("the first slime is a real member, and the chief of staff", () => {
+  test("the way on creates it with the name and the slime chosen, and saves nothing as Raphael's", async () => {
+    await open();
+    await press('[data-ob="next"]');
+    await press('.ob-first-picker [data-slime-character="horns-red"]');
+    nameFirst("  Mochi  ");
+    await press('[data-ob="next"]');
+    expect(api.membersCreate).toHaveBeenCalledExactlyOnceWith({ name: "Mochi", avatar: "slime:horns-red" });
+    expect(api.membersUpdate).not.toHaveBeenCalled();
+    expect(root.dataset.step).toBe("tools");
+  });
+
+  test("back and on again with nothing changed sends nothing, and a changed name updates the slime it made instead of making another", async () => {
+    await open();
+    await press('[data-ob="next"]');
+    nameFirst("Mochi");
+    await press('[data-ob="next"]');
+    await press('.ob-foot [data-ob="back"]');
+    await press('[data-ob="next"]');
+    expect(api.membersCreate).toHaveBeenCalledTimes(1);
+    expect(api.membersUpdate).not.toHaveBeenCalled();
+    nameFirst("Kiri");
+    await press('.ob-first-picker [data-slime-character="horns-red"]');
+    await press('[data-ob="next"]');
+    expect(api.membersCreate).toHaveBeenCalledTimes(1);
+    expect(api.membersUpdate).toHaveBeenCalledExactlyOnceWith(7, { name: "Kiri", avatar: "slime:horns-red" });
+  });
+
+  test("a chief slime the owner already has stands in the step and is the one updated; Raphael's own name never is", async () => {
+    api.membersList.mockResolvedValue({ members: [{ id: 0, name: "Raphael", avatar: "", raphael: true }, { id: 4, name: "Mochi", avatar: "slime:horns-red", chief: true }], groups: [], team_context: { primary_id: 4 } });
+    await open();
+    await press('[data-ob="next"]');
+    expect(root.querySelector<HTMLInputElement>("#ob-first-name")!.value).toBe("Mochi");
+    expect(root.querySelector('.ob-first-picker [aria-pressed="true"]')!.getAttribute("data-slime-character")).toBe("horns-red");
+    await press('[data-ob="next"]');
+    expect(api.membersCreate).not.toHaveBeenCalled();
+    expect(api.membersUpdate).not.toHaveBeenCalled();
+    nameFirst("Kiri");
+    await press('.ob-foot [data-ob="back"]');
+    await press('[data-ob="next"]');
+    await press('[data-ob="next"]');
+    expect(api.membersUpdate).toHaveBeenCalledExactlyOnceWith(4, { name: "Kiri", avatar: "slime:horns-red" });
+  });
+
+  test("with no slime yet the field starts empty, though Raphael is in the roster, and the words call it a slime", async () => {
+    api.membersList.mockResolvedValue({ members: [{ id: 0, name: "Raphael", avatar: "", raphael: true }], groups: [], team_context: { primary_id: null } });
+    await open();
+    await press('[data-ob="next"]');
+    expect(root.querySelector<HTMLInputElement>("#ob-first-name")!.value).toBe("");
+    expect(root.querySelector('.ob-first-picker [aria-pressed="true"]')!.getAttribute("data-slime-character")).toBe("blue-plain");
+    expect(text("h2")).toBe("Name your first slime");
+    expect(text(".ob-first").toLowerCase()).not.toContain("raphael");
+  });
+
+  test("a name Raphael bears is refused before the core is asked, and the step stays", async () => {
+    await open();
+    await press('[data-ob="next"]');
+    nameFirst("Raphael");
+    await press('[data-ob="next"]');
+    expect(api.membersCreate).not.toHaveBeenCalled();
+    expect(root.dataset.step).toBe("slime");
   });
 });
