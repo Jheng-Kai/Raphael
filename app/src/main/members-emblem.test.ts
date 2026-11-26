@@ -8,7 +8,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { columnHTML } from "./member-column";
+import { accountMenuHTML } from "./account-menu";
 import { faceHTML, raphaelOf } from "./members";
 import { receivedLineHTML } from "./exchange-line";
 import type { AgentTurn } from "./types";
@@ -77,11 +77,12 @@ describe("Raphael's emblem stands bare", () => {
       expect(html).toContain("#3DB5FF");
       expect(html).not.toContain("app-emblem");
     }
-    const column = document.createElement("div");
-    column.innerHTML = columnHTML({ list: null, current: 0, previews: new Map(), folded: new Set(), fresh: new Set() });
-    const face = column.querySelector(".mb-chief > .av")!;
+    // Its entry in the account menu wears the same slime, small, where the other entries have an icon.
+    const menu = document.createElement("div");
+    menu.innerHTML = accountMenuHTML([]);
+    const face = menu.querySelector('[data-account="raphael"] .ck > .av')!;
     expect(face.classList.contains("mb-av-slime")).toBe(true);
-    expect(face.getAttribute("style")).toBe("--av:40px");
+    expect(face.getAttribute("style")).toBe("--av:16px");
   });
 
   test("on the line of what they asked a member, too", () => {

@@ -1315,7 +1315,6 @@ export const ko = {
   "agent.hearing": "받아쓰는 중…",
   "agent.loadFailed": "《알림. 대화를 읽지 못했습니다.》",
   "settings.avatar": "사진",
-  "settings.avatarReset": "초기화",
   "settings.avatarFrame": "드래그하여 이미지를 이동하고 스크롤하거나 모서리를 끌어 확대하세요",
   "local.title": "로컬 명령",
   "local.never": "허용 안 함",

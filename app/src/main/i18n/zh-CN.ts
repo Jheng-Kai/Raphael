@@ -1315,7 +1315,6 @@ export const zhCN = {
   "agent.hearing": "正在辨识…",
   "agent.loadFailed": "《告。无法读取对话。》",
   "settings.avatar": "头像",
-  "settings.avatarReset": "还原",
   "settings.avatarFrame": "拖曳移动图片，用滚轮或拉角落缩放",
   "local.title": "本机指令",
   "local.never": "永不",

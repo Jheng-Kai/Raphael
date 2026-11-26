@@ -3,7 +3,7 @@ import { rememberAppLogos } from "./app-logos";
 import { RECALL } from "./composer-history";
 import { AT_TRIGGER } from "./completion-trigger";
 import { catalogs, getLocale, t } from "./i18n";
-import { faceHTML, primaryFirst, primaryIdOf, RAPHAEL_ID } from "./members";
+import { chiefFirst, faceHTML, primaryIdOf, raphaelOf, RAPHAEL_ID } from "./members";
 import { bindMentionField, type MentionField } from "./mention-field";
 import type { MentionTarget } from "./mention-text";
 import { serviceIconOf } from "./service-icons";
@@ -24,7 +24,8 @@ const targetRosters = new Map<string, TargetRoster>();
  * it names: a member's face, the app's connection mark, the team icon for everyone and groups.
  */
 export function mentionTargets(list: MembersList, allowed?: number[]): TargetRoster {
-  const people = primaryFirst<{ id: number; name: string }>(list.team_context?.members ?? list.members, primaryIdOf(list));
+  // The team's roster lists the slimes, the chief first. Raphael is not one of them but is still addressed by its names, last.
+  const people = [...chiefFirst<{ id: number; name: string }>(list.team_context?.members ?? list.members, primaryIdOf(list)), raphaelOf(list)];
   // Presence ticks do not change an address. Keep the roster identity shared by composer and finished messages.
   const version = JSON.stringify([getLocale(), people.map(person => [person.id, person.name, list.members.find(member => member.id === person.id)?.avatar]),
     list.groups.map(group => [group.id, group.mention ?? group.name]), list.team_context?.apps, allowed]);

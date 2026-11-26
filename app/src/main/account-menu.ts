@@ -2,10 +2,14 @@
 // the face, left edges together; on the rail it opens to the right of the face. 用量 opens, on a chevron alone, what the app knows of each
 // provider the owner uses: a submenu at its right edge, one block for each (Claude, Codex, Antigravity, the ChatGPT sign-in, OpenRouter:
 // its tightest window and number, or what is truthfully known instead; no reset time) and 管理用量. The row itself carries no number:
-// one provider's figure under the bare word would read as everyone's. 聽寫, 行事曆 (the calendar, on today in a fresh session, R-CAL-04)
-// and, after a hairline, 設定 follow. What each reading means is decided in usage-blocks.ts, which Settings' usage cards use as well.
+// one provider's figure under the bare word would read as everyone's. 聽寫 and 行事曆 (the calendar, on today in a fresh session, R-CAL-04)
+// follow. After a hairline Raphael stands alone with its blue slime (its conversation space, `go("agent", "raphael")`: it is not a
+// slime of the sidebar's list), and after another 設定. What each reading means is decided in usage-blocks.ts, which Settings'
+// usage cards use as well.
 
 import { t } from "./i18n";
+import { RAPHAEL_ID, faceHTML } from "./members";
+import { raphaelName } from "./raphael";
 import type { AppContext, ChatGptStatus, Status } from "./types";
 import { closeMenu, esc, ico, openPopover, placeMenu } from "./ui";
 import type { CliAllowances } from "./usage-analytics-types";
@@ -18,8 +22,11 @@ export function accountMenuHTML(blocks: UsageBlock[]): string {
   const usage = blocks.length
     ? row("usage", "gauge", t("models.usage"), ico("right"), ' aria-haspopup="menu" aria-expanded="false"')
     : row("usage-settings", "gauge", t("models.usage"));
+  // Raphael's own blue slime stands where the other rows have their icon.
+  const raphael = `<button type="button" role="menuitem" tabindex="-1" data-account="raphael"><span class="ck ck-face">${faceHTML({ id: RAPHAEL_ID, name: "" }, 16)}</span><span class="mt">${esc(raphaelName())}</span></button>`;
+  const hairline = `<div class="menu-sep" role="separator"></div>`;
   return usage + row("dictation", "mic", t("nav.dictation")) + row("calendar", "calendar", t("overview.calendar")) +
-    `<div class="menu-sep" role="separator"></div>` + row("settings", "gear", t("nav.settings"));
+    hairline + raphael + hairline + row("settings", "gear", t("nav.settings"));
 }
 
 /** The submenu of 用量: each provider's block (name, words at the right, and OpenRouter's balance under them), then the way to the
@@ -71,6 +78,7 @@ export function openAccountMenu(anchor: HTMLElement, host: AccountMenuHost, side
     else if (id === "dictation") leave(() => host.go("dictation"));
     // No date: a dated link would open the day view and forget the view the owner chose (R-CAL-04); the calendar starts on today in a fresh session.
     else if (id === "calendar") leave(() => host.go("automations"));
+    else if (id === "raphael") leave(() => host.go("agent", "raphael"));
     else if (id === "settings") leave(() => host.go("settings", "general"));
     else if (id === "usage-settings") leave(() => host.go("settings", "usage"));
   });

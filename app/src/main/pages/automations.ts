@@ -8,7 +8,7 @@ import { closePanel, openEventDetail, openEventEditor, panelOpen, type EventDraf
 import { allDayBars, chipClock, chipColor, chipHTML, dayLayout, dismissOffer, entryOfItem, fittedRange, googleMark, googleNoticeHTML, GOOGLE_SOURCE, isAllDayRow, isRunException, memberSource, monthEntries, OWN_SOURCE, routineEntries, type CalendarEntry, type Segment } from "../calendar-view";
 import { describeError, formatClock, formatDate } from "../format";
 import { getLocale, onLocaleChange, t } from "../i18n";
-import { dayName, faceHTML, primaryFirst, primaryIdOf } from "../members";
+import { chiefFirst, dayName, faceHTML, primaryIdOf } from "../members";
 import { openMemberThread } from "../team-navigation";
 import { openRoutineView } from "../routine-view";
 import { dateKey, localDay, monthDays, monthGrid, monthLabel, shiftDay } from "../schedule-picker";
@@ -40,7 +40,8 @@ type Drag =
 
 export function createAutomationsPage(app: AppContext): Page {
   const el = document.createElement("section"); el.className = "au-page";
-  let members: Member[] = [], routines: Routine[] = [];
+  /** The slimes a routine can be dragged onto, the chief first; `everyone` also has Raphael, whose routines still show. */
+  let members: Member[] = [], everyone: Member[] = [], routines: Routine[] = [];
   let items: HomeItem[] = [];
   let google: GoogleCalendarState | undefined;
   let runCounts = new Map<number, number>();
@@ -59,7 +60,7 @@ export function createAutomationsPage(app: AppContext): Page {
   try { for (const key of JSON.parse(localStorage.getItem(HIDDEN_KEY) ?? "[]")) if (typeof key === "string") hidden.add(key); } catch { /* All of it shows when storage is unavailable. */ }
   try { const saved=localStorage.getItem(VIEW_KEY); if(saved==="day" || saved==="week" || saved==="month") period=saved; } catch { /* The default week remains usable without storage. */ }
 
-  const member = (id: number): Member | undefined => members.find(m => m.id === id);
+  const member = (id: number): Member | undefined => everyone.find(m => m.id === id);
   const narrow = (): boolean => el.clientWidth > 0 && el.clientWidth <= NARROW;
   // Before the first grid exists, allow for its 216px border-box rail, margins and borders.
   const calendarWidth = (): number => el.querySelector<HTMLElement>('.au-calendar-main')?.clientWidth ||
@@ -79,7 +80,7 @@ export function createAutomationsPage(app: AppContext): Page {
   }
   /** A routine is read; a new one at a day and time is asked of a member in its conversation, Raphael by default. */
   const edit = (routine?: Routine, memberId?: number, day?: string, time?: string): void => {
-    if (routine) { openRoutineView(routine, members); return; }
+    if (routine) { openRoutineView(routine, everyone); return; }
     openMemberThread(app, memberId ?? 0, undefined, t("auto.askRoutine", { p0: day ? formatDate(day) : "", p1: time ?? "" }));
   };
 
@@ -93,7 +94,7 @@ export function createAutomationsPage(app: AppContext): Page {
       const stamp = JSON.stringify([people, plans, histories, home.calendar_events ?? home.calendar, home.calendar_google]);
       const same = stamp === readStamp && !pending;
       readStamp = stamp;
-      members = primaryFirst(people.members, primaryIdOf(people)); routines = plans.routines;
+      everyone = people.members; members = chiefFirst(people.members, primaryIdOf(people)); routines = plans.routines;
       items = (home.calendar_events ?? home.calendar).filter(item => item.kind === "event" || item.kind === "own");
       google = home.calendar_google;
       logs = new Map(histories.map(([id, h]) => [id, h.runs])); runCounts = new Map(histories.map(([id, h]) => [id, h.total ?? h.runs.length])); pending = false; if (!same) draw();

@@ -25,7 +25,8 @@ const $ = <T extends HTMLElement>(selector: string): T => document.querySelector
 const flush = async () => { for (let i = 0; i < 60; i++) await Promise.resolve(); };
 const refresh = async (event: MainEvent = { type: "MembersChanged" }) => { emit(event); await vi.advanceTimersByTimeAsync(400); await flush(); };
 const choose = async (member: number, conversation: number) => {
-  $(`.mb-col [data-member="${member}"]`).click();
+  // Raphael is not in the sidebar: its space opens from the account menu's route.
+  if (member === 0) agent.show("raphael"); else $(`.mb-col [data-member="${member}"]`).click();
   await flush();
   // A member has one conversation; only Raphael's panel switches between its conversation and the quick questions.
   if (member !== 0) return;

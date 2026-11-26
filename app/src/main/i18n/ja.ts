@@ -1026,7 +1026,6 @@ export const ja = {
   "agent.hearing": "認識中…",
   "agent.loadFailed": "《告。会話を読み込めません。》",
   "settings.avatar": "アイコン",
-  "settings.avatarReset": "元に戻す",
   "settings.avatarFrame": "ドラッグで画像を移動、ホイールか角のドラッグで拡大縮小",
   "settings.avatarDone": "完了",
   "local.title": "ローカルコマンド",

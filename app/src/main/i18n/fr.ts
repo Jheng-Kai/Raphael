@@ -1315,7 +1315,6 @@ export const fr = {
   "agent.hearing": "Transcription…",
   "agent.loadFailed": "《Avis. Impossible de lire les conversations.》",
   "settings.avatar": "Image",
-  "settings.avatarReset": "Réinitialiser",
   "settings.avatarFrame": "Glissez pour déplacer l’image ; faites défiler ou glissez un coin pour zoomer",
   "local.title": "Commandes locales",
   "local.never": "Jamais",

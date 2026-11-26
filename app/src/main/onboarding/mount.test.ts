@@ -279,24 +279,25 @@ describe("the first slime", () => {
     expect(root.querySelector('.ob-first-picker [data-slime-character="horns-red"]')!.getAttribute("aria-pressed")).toBe("true");
   });
 
-  test("the way on keeps the name and the slime as the first member's, the chief of staff, and Enter does the same", async () => {
+  test("Enter does the same as the way on: the first slime is made with the name and the slime chosen", async () => {
     await open();
     await press('[data-ob="next"]');
     await press('.ob-first-picker [data-slime-character="horns-red"]');
     nameFirst("  Mochi  ");
     root.querySelector<HTMLInputElement>("#ob-first-name")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     await flush();
-    expect(api.membersUpdate).toHaveBeenCalledWith(0, { name: "Mochi", avatar: "slime:horns-red" });
+    expect(api.membersCreate).toHaveBeenCalledExactlyOnceWith({ name: "Mochi", avatar: "slime:horns-red" });
     expect(root.dataset.step).toBe("tools");
     // Back and on again with nothing changed sends nothing again.
     await press('.ob-foot [data-ob="back"]');
     await press('[data-ob="next"]');
-    expect(api.membersUpdate).toHaveBeenCalledTimes(1);
+    expect(api.membersCreate).toHaveBeenCalledTimes(1);
+    expect(api.membersUpdate).not.toHaveBeenCalled();
   });
 
   test("a save that ends after the owner went back, and came here again, does not move the new visit on", async () => {
     let saved!: (value: unknown) => void;
-    api.membersUpdate.mockReturnValue(new Promise(resolve => { saved = resolve; }));
+    api.membersCreate.mockReturnValue(new Promise(resolve => { saved = resolve; }));
     await open();
     await press('[data-ob="next"]');
     nameFirst("Mochi");
@@ -305,7 +306,7 @@ describe("the first slime", () => {
     expect(root.dataset.step).toBe("welcome");
     await press('[data-ob="next"]');
     expect(root.dataset.step).toBe("slime");
-    saved({ member: { id: 0 } });
+    saved({ member: { id: 7 }, routine_offer: null });
     await flush();
     expect(root.dataset.step).toBe("slime");
     // The name can be changed again once the save is done.
@@ -320,12 +321,12 @@ describe("the first slime", () => {
     nameFirst("Kiri");
     pressLayer("mouse", "forward");
     await flush();
-    expect(api.membersUpdate).toHaveBeenLastCalledWith(0, { name: "Kiri", avatar: "slime:blue-plain" });
+    expect(api.membersUpdate).toHaveBeenLastCalledWith(7, { name: "Kiri", avatar: "slime:blue-plain" });
     expect(root.dataset.step).toBe("tools");
   });
 
   test("a refused name keeps the step and says why", async () => {
-    api.membersUpdate.mockRejectedValue(new Error("the core is not running"));
+    api.membersCreate.mockRejectedValue(new Error("the core is not running"));
     await open();
     await toTools();
     expect(root.dataset.step).toBe("slime");
@@ -333,13 +334,14 @@ describe("the first slime", () => {
   });
 
   test("a name the owner already gave stands in the field, and its slime in the picker", async () => {
-    api.membersList.mockResolvedValue({ members: [{ id: 0, name: "Mochi", avatar: "slime:horns-red" }], groups: [] });
+    api.membersList.mockResolvedValue({ members: [{ id: 0, name: "Raphael", avatar: "", raphael: true }, { id: 4, name: "Mochi", avatar: "slime:horns-red", chief: true }], groups: [], team_context: { primary_id: 4 } });
     await open();
     await press('[data-ob="next"]');
     expect(root.querySelector<HTMLInputElement>("#ob-first-name")!.value).toBe("Mochi");
     expect(root.querySelector('.ob-first-picker [aria-pressed="true"]')!.getAttribute("data-slime-character")).toBe("horns-red");
     await press('[data-ob="next"]');
     expect(api.membersUpdate).not.toHaveBeenCalled();
+    expect(api.membersCreate).not.toHaveBeenCalled();
     expect(root.dataset.step).toBe("tools");
   });
 });
@@ -587,6 +589,7 @@ describe("the first slime is a real member, and the chief of staff", () => {
     await press('[data-ob="next"]');
     expect(api.membersCreate).toHaveBeenCalledTimes(1);
     expect(api.membersUpdate).not.toHaveBeenCalled();
+    await press('.ob-foot [data-ob="back"]');
     nameFirst("Kiri");
     await press('.ob-first-picker [data-slime-character="horns-red"]');
     await press('[data-ob="next"]');
@@ -603,10 +606,10 @@ describe("the first slime is a real member, and the chief of staff", () => {
     await press('[data-ob="next"]');
     expect(api.membersCreate).not.toHaveBeenCalled();
     expect(api.membersUpdate).not.toHaveBeenCalled();
-    nameFirst("Kiri");
     await press('.ob-foot [data-ob="back"]');
+    nameFirst("Kiri");
     await press('[data-ob="next"]');
-    await press('[data-ob="next"]');
+    expect(api.membersCreate).not.toHaveBeenCalled();
     expect(api.membersUpdate).toHaveBeenCalledExactlyOnceWith(4, { name: "Kiri", avatar: "slime:horns-red" });
   });
 

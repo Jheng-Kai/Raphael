@@ -141,7 +141,7 @@ import { VoiceMode } from "../voice-mode";
 import { mountDesktopViewer } from "../desktop-viewer";
 import "../agent.css";
 import "../members.css";
-import { firstBotName } from "../first-bot";
+import { raphaelName } from "../raphael";
 
 /** How many turns one load brings. */
 const PAGE_SIZE = 50;
@@ -652,7 +652,7 @@ export function createAgent(app: AppContext, places?: {
   askCard.className = "ask-card-host";
   askCard.hidden = true;
   askCard.setAttribute("role", "group");
-  askCard.innerHTML = cardHTML({ title: t("cards.permission", { p0: firstBotName() }), status: "waiting", statusText: cardPromptText("permission"), cls: "ask-card",
+  askCard.innerHTML = cardHTML({ title: t("cards.permission", { p0: raphaelName() }), status: "waiting", statusText: cardPromptText("permission"), cls: "ask-card",
     body: t("perm.title"),
     // A local command is shown itself, never behind a disclosure: the owner allows what they can read.
     content: `<pre class="local-command ask-cmd" hidden></pre>` + cardDisclosureHTML("approval", `<p class="ask-q card-body"></p>`),
@@ -1082,7 +1082,7 @@ export function createAgent(app: AppContext, places?: {
     askCard.dataset.id = q.id;
     askCard.dataset.tier = q.tier;
     askText.textContent = q.text;
-    const asker = inRaphael() ? members.member().name || firstBotName() : members.nameOf(memberId());
+    const asker = inRaphael() ? members.member().name || raphaelName() : members.nameOf(memberId());
     // The core asks a local command as its word (本機指令) and, on the next lines, the command itself.
     const [lead = "", ...rest] = q.text.split("\n");
     const command = lead.trim() === t("local.title") ? rest.join("\n").trim() : "";
@@ -3503,8 +3503,9 @@ export function createAgent(app: AppContext, places?: {
       if (!wasVisible) beginOpening();
       visible = true;
       if (arg === "computer") { if (roomPane.active) roomPane.close(); members.computer(); }
-      // Raphael's own conversation, where an app handed over from the connections is set up (connections.ts askConnect).
-      if (arg === "raphael") { if (roomPane.active) roomPane.close(); if (members.current() !== RAPHAEL_ID) members.select(RAPHAEL_ID); }
+      // Raphael's own conversation space, from the account menu and where an app handed over from the connections is set up
+      // (connections.ts askConnect). Chosen outright, so that a roster still on its way does not take the page to the chief.
+      if (arg === "raphael") { if (roomPane.active) roomPane.close(); members.select(RAPHAEL_ID); }
       // The thread is asked for before anything else on the page: the core answers in order.
       const draft = draftText(arg);
       const refocus = (): void => {

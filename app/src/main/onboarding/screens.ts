@@ -14,7 +14,6 @@ import { type ProvidersView, description, emptyProvidersView, providersAddHTML }
 import type { ProviderKind, StoreService } from "../types";
 import { slimeFaceHTML } from "../slime";
 import { slimePickerHTML } from "../slime-tabs";
-import { FIRST_BOT_NAME_MAX } from "../members";
 import { btn, esc, fieldHTML, ico, st } from "../ui";
 
 export type GuideStep = "welcome" | "slime" | "tools" | "services" | "abilities";
@@ -107,26 +106,29 @@ export function welcomeHTML(): string {
 
 // ---------- the first slime ----------
 
+/** The longest name the guide takes for the first slime. */
+export const FIRST_NAME_MAX = 16;
+
 /** The size of the first slime on its step: larger than any face of the app, it is the one being made. */
 export const FIRST_FACE_PX = 112;
 
 /** The first slime as the step has it: the name typed so far and the slime chosen. */
 export interface FirstSlimeView { name: string; avatar: string; busy: boolean }
 
-/** The face alone, which a press in the picker draws again (wearing the chief's crown: it is id 0, the primary). */
-export const firstFaceHTML = (avatar: string): string => slimeFaceHTML({ id: 0, avatar }, FIRST_FACE_PX);
+/** The face alone, which a press in the picker draws again. It wears the chief's crown: the core makes the first slime the chief. */
+export const firstFaceHTML = (avatar: string): string => slimeFaceHTML({ id: -1, avatar, crowned: true }, FIRST_FACE_PX);
 
 /**
- * The owner's first slime, who is their chief of staff from then on: the slime large, its name under it (the one thing
- * asked: the way on waits for it), and under that the members' own slime picker (slime-tabs.ts), the same one the member
- * settings and 新增角色 open. Its look starts as the first blue slime; nothing about it is Raphael's unless the owner says so.
+ * The owner's first slime, a member of their own who is their chief of staff from then on (Raphael is the app's, not this
+ * slime): the slime large, its name under it (the one thing asked: the way on waits for it), and under that the members' own
+ * slime picker (slime-tabs.ts), the same one the member settings and 新增角色 open. Its look starts as the picker's first.
  */
 export function firstSlimeHTML(v: FirstSlimeView): string {
   return (
     head(t("onboarding.slimeTitle")) +
     `<div class="ob-main ob-first">` +
     `<div class="ob-first-face" data-ob-face>${firstFaceHTML(v.avatar)}</div>` +
-    `<div class="ob-find ob-first-name">${fieldHTML(t("members.name"), v.name, { id: "ob-first-name", max: FIRST_BOT_NAME_MAX, disabled: v.busy })}</div>` +
+    `<div class="ob-find ob-first-name">${fieldHTML(t("members.name"), v.name, { id: "ob-first-name", max: FIRST_NAME_MAX, disabled: v.busy })}</div>` +
     // The picker's rules belong to `.menu.mb-avpop` (slime.css); the step stands it in the column and takes off only the popover's chrome.
     `<div class="menu mb-avpop ob-first-picker" role="group" aria-label="${esc(t("settings.avatar"))}">${slimePickerHTML(v.avatar, esc)}</div>` +
     `</div>`

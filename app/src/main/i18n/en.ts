@@ -1026,7 +1026,6 @@ export const en = {
   "agent.hearing": "Transcribing…",
   "agent.loadFailed": "《Notice. The conversations could not be read.》",
   "settings.avatar": "Picture",
-  "settings.avatarReset": "Reset",
   "settings.avatarFrame": "Drag to move the picture; scroll or drag a corner to zoom",
   "settings.avatarDone": "Done",
   "local.title": "Local commands",

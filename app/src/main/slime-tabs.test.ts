@@ -1,13 +1,10 @@
 // @vitest-environment happy-dom
 // The slime picker of a member's face: the open colour's slimes, and under them a row of colour swatches that choose the
 // colour, in a place whose size a press on a swatch does not change.
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { beforeEach, expect, test, vi } from "vitest";
 
-vi.mock("./api", () => ({ core: vi.fn(), avatarPick: vi.fn(), avatarSave: vi.fn(), avatarClear: vi.fn(), avatarGet: vi.fn() }));
+vi.mock("./api", () => ({ core: vi.fn() }));
 
-import * as api from "./api";
-import { setAvatar, type CustomAvatar } from "./avatar";
-import { changeRaphaelAvatar } from "./avatar-settings";
 import { setLocale } from "./i18n";
 import { openMemberAvatarMenu } from "./member-avatar-menu";
 import { defaultSlimeAvatar, SLIME_GROUPS, slimeGroupName, slimeGroupOf, slimeGroupSwatch } from "./slime";
@@ -153,57 +150,4 @@ test("Up goes from a swatch into the open colour, Up and Down step over its slim
   expect(document.activeElement).toBe(grid[0]);
   key(grid[0]!, "ArrowUp");
   expect(document.activeElement).toBe(tab);
-});
-
-describe("the first member's slime and the owner's picture", () => {
-  const picture = (n: number): CustomAvatar => ({ url: `data:image/png;base64,${n}`, crop: { x: 0, y: 0, zoom: 1 } });
-  const pick = (save: () => Promise<boolean>): void => {
-    const anchor = document.createElement("button");
-    document.body.append(anchor);
-    update = vi.fn(save);
-    openMemberAvatarMenu(anchor, { ...member("slime:blue-plain"), id: 0 }, update);
-    document.getElementById("app-popover")!.querySelector<HTMLElement>("[data-slime-group][data-active] [data-slime-character]")!.click();
-  };
-  const settle = async (): Promise<void> => { for (let i = 0; i < 5; i++) await Promise.resolve(); };
-  beforeEach(() => {
-    vi.mocked(api.avatarClear).mockReset().mockResolvedValue(undefined as never);
-    vi.mocked(api.avatarGet).mockReset().mockResolvedValue(null as never);
-  });
-
-  test("the slime is saved first and the picture goes only once it is", async () => {
-    setAvatar(picture(1));
-    pick(async () => true);
-    await settle();
-    expect(api.avatarClear).toHaveBeenCalledOnce();
-  });
-
-  test("a save that fails keeps the picture", async () => {
-    setAvatar(picture(1));
-    pick(async () => false);
-    await settle();
-    expect(api.avatarClear).not.toHaveBeenCalled();
-  });
-
-  test("a picture chosen while the slime was saving is the newer choice and stays", async () => {
-    setAvatar(picture(1));
-    let saved!: (ok: boolean) => void;
-    pick(() => new Promise<boolean>(resolve => { saved = resolve; }));
-    setAvatar(picture(2));
-    saved(true);
-    await settle();
-    expect(api.avatarClear).not.toHaveBeenCalled();
-    setAvatar(null);
-  });
-
-  test("a picture still being chosen when the slime's save ends is not cleared under it", async () => {
-    setAvatar(picture(1));
-    let saved!: (ok: boolean) => void;
-    pick(() => new Promise<boolean>(resolve => { saved = resolve; }));
-    vi.mocked(api.avatarPick).mockReturnValue(new Promise(() => {}) as never);
-    void changeRaphaelAvatar();
-    saved(true);
-    await settle();
-    expect(api.avatarClear).not.toHaveBeenCalled();
-    setAvatar(null);
-  });
 });

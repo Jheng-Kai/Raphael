@@ -1315,7 +1315,6 @@ export const id = {
   "agent.hearing": "Mentranskripsi…",
   "agent.loadFailed": "《Pemberitahuan. Percakapan tidak dapat dibaca.》",
   "settings.avatar": "Gambar",
-  "settings.avatarReset": "Atur ulang",
   "settings.avatarFrame": "Seret untuk memindahkan; gulir atau seret sudut untuk memperbesar",
   "local.title": "Perintah lokal",
   "local.never": "Jangan pernah",

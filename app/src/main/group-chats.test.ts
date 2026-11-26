@@ -20,7 +20,7 @@ test('an avatar repaint uses the loaded room and roster without IPC reads', asyn
   expect(api.roomMessages).not.toHaveBeenCalled();
 });
 const flush=async():Promise<void>=>{for(let i=0;i<24;i++)await Promise.resolve();};
-const room={id:1,name:"Launch",member_ids:[0,1],group_id:null,created:1,is_team:0};
+const room={id:1,name:"Launch",member_ids:[1,2],group_id:null,created:1,is_team:0};
 let event:(e:any)=>void;
 let app:AppContext;
 const pane=async()=>{const view=createRoomPane(app,vi.fn());document.body.append(view.el);await view.open(1);return view;};
@@ -286,25 +286,25 @@ test("the sidebar offers no everyone group: an empty former team room is gone, o
  expect(await rows([room,{...room,id:2,is_team:1,last_at:5}])).toEqual(["Launch","Everyone"]);
  expect(api.roomsCreate).not.toHaveBeenCalled();
 });
-beforeEach(()=>{ localStorage.clear();document.body.innerHTML="";vi.clearAllMocks();setLocale("en");const members=[0,1].map(id=>({id,name:id?"Alice":"Raphael",avatar:""} as Member));api.membersList.mockResolvedValue({members,groups:[]});api.roomsCreate.mockResolvedValue({room});api.roomsList.mockResolvedValue({rooms:[room]});api.roomMessages.mockResolvedValue({messages:[]});api.roomSend.mockResolvedValue({message_id:1,duplicate:false});app={go:vi.fn(),onEvent:(fn:any)=>{event=fn;return()=>{};}} as unknown as AppContext;clearRoomSelection();configureRooms(app);api.roomsUpdate.mockResolvedValue({room});});
+beforeEach(()=>{ localStorage.clear();document.body.innerHTML="";vi.clearAllMocks();setLocale("en");const members=[{id:0,name:"Raphael",avatar:"",raphael:true},{id:1,name:"Alice",avatar:""},{id:2,name:"Bob",avatar:""}] as unknown as Member[];api.membersList.mockResolvedValue({members,groups:[],team_context:{primary_id:1,chief_id:1}});api.roomsCreate.mockResolvedValue({room});api.roomsList.mockResolvedValue({rooms:[room]});api.roomMessages.mockResolvedValue({messages:[]});api.roomSend.mockResolvedValue({message_id:1,duplicate:false});app={go:vi.fn(),onEvent:(fn:any)=>{event=fn;return()=>{};}} as unknown as AppContext;clearRoomSelection();configureRooms(app);api.roomsUpdate.mockResolvedValue({room});});
 test("a primary changes room picker order and becomes the required chief", async () => {
  const { members } = await api.membersList();
- api.membersList.mockResolvedValue({ members, groups: [], team_context: { primary_id: 1 } });
+ api.membersList.mockResolvedValue({ members, groups: [], team_context: { primary_id: 2 } });
  await openNewGroupChat();
- expect([...document.querySelectorAll<HTMLElement>('[data-dlg="member"]')].map(row=>row.dataset.member)).toEqual(['1','0']);
- const chief=document.querySelector<HTMLButtonElement>('[data-dlg="member"][data-member="1"]')!;
+ expect([...document.querySelectorAll<HTMLElement>('[data-dlg="member"]')].map(row=>row.dataset.member)).toEqual(['2','1']);
+ const chief=document.querySelector<HTMLButtonElement>('[data-dlg="member"][data-member="2"]')!;
  expect(chief.disabled).toBe(true); expect(chief.getAttribute('aria-pressed')).toBe('true');
- expect(document.querySelector('[data-dlg="member"][data-member="0"]')!.getAttribute('aria-pressed')).toBe('false');
- document.querySelector<HTMLElement>('[data-dlg="member"][data-member="0"]')!.click();
+ expect(document.querySelector('[data-dlg="member"][data-member="1"]')!.getAttribute('aria-pressed')).toBe('false');
+ document.querySelector<HTMLElement>('[data-dlg="member"][data-member="1"]')!.click();
  // The rows' own checks say who takes part: no second line of picked names.
- expect([...document.querySelectorAll<HTMLElement>('[data-dlg="member"][aria-pressed="true"]')].map(row=>row.querySelector('.room-row-name')!.textContent)).toEqual(['Alice','Raphael']);
+ expect([...document.querySelectorAll<HTMLElement>('[data-dlg="member"][aria-pressed="true"]')].map(row=>row.querySelector('.room-row-name')!.textContent)).toEqual(['Bob','Alice']);
  expect(document.querySelector('[data-picked]')).toBeNull();
  expect(api.roomsCreate).not.toHaveBeenCalled();
  document.querySelector<HTMLElement>('[data-dlg="cancel"]')!.click();
 });
 
 test("new group requires members and saves checked identities",async()=>{
- await openNewGroupChat();document.querySelector<HTMLInputElement>('#room-name')!.value="Launch";document.querySelector("#room-name")!.dispatchEvent(new Event("input"));document.querySelector<HTMLElement>('[data-dlg="create"]')!.click();await flush();expect(api.roomsCreate).not.toHaveBeenCalled();expect(document.querySelector('input[type="checkbox"]')).toBeNull();expect(document.querySelector<HTMLInputElement>('#room-name')!.placeholder).toBeTruthy();document.querySelector<HTMLElement>('[data-member="1"]')!.click();expect(document.querySelector('[data-member="1"]')!.getAttribute('aria-pressed')).toBe('true');document.querySelector<HTMLElement>('[data-dlg="member"][data-member="0"]')!.click();document.querySelector<HTMLElement>('[data-dlg="create"]')!.click();await flush();expect(api.roomsCreate).toHaveBeenCalledWith({name:"Launch",member_ids:[0,1],group_id:null,default_responder:"auto",request_id:expect.any(String)});expect(app.go).toHaveBeenCalledWith('agent');expect(document.querySelector('.au-room-dialog')).toBeNull();
+ await openNewGroupChat();document.querySelector<HTMLInputElement>('#room-name')!.value="Launch";document.querySelector("#room-name")!.dispatchEvent(new Event("input"));document.querySelector<HTMLElement>('[data-dlg="create"]')!.click();await flush();expect(api.roomsCreate).not.toHaveBeenCalled();expect(document.querySelector('input[type="checkbox"]')).toBeNull();expect(document.querySelector<HTMLInputElement>('#room-name')!.placeholder).toBeTruthy();document.querySelector<HTMLElement>('[data-member="1"]')!.click();expect(document.querySelector('[data-member="1"]')!.getAttribute('aria-pressed')).toBe('true');document.querySelector<HTMLElement>('[data-dlg="member"][data-member="2"]')!.click();document.querySelector<HTMLElement>('[data-dlg="create"]')!.click();await flush();expect(api.roomsCreate).toHaveBeenCalledWith({name:"Launch",member_ids:[1,2],group_id:null,default_responder:"auto",request_id:expect.any(String)});expect(app.go).toHaveBeenCalledWith('agent');expect(document.querySelector('.au-room-dialog')).toBeNull();
 });
 test("failed send retains the draft and reuses its idempotency key on retry",async()=>{
  api.roomSend.mockRejectedValueOnce(new Error("offline"));await pane();const input=draft("@Alice hello");document.querySelector<HTMLElement>('.cmp-send')!.click();await flush();const id=api.roomSend.mock.calls[0][2];expect(input.value).toBe("@Alice hello");document.querySelector<HTMLElement>('.cmp-send')!.click();await flush();expect(api.roomSend.mock.calls[1][2]).toBe(id);expect(input.value).toBe("");
@@ -326,10 +326,10 @@ test("Stop during send acknowledgement also cancels the exchange once accepted",
 test("generated room names preserve owner edits and creation retries reuse the request",async()=>{
  api.roomsCreate.mockRejectedValueOnce(new Error("offline"));
  await openNewGroupChat();
- expect(document.querySelector<HTMLButtonElement>('[data-dlg="member"][data-member="0"]')!.disabled).toBe(true);
- document.querySelector<HTMLElement>('[data-dlg="member"][data-member="1"]')!.click();
+ expect(document.querySelector<HTMLButtonElement>('[data-dlg="member"][data-member="1"]')!.disabled).toBe(true);
+ document.querySelector<HTMLElement>('[data-dlg="member"][data-member="2"]')!.click();
  const input=document.querySelector<HTMLInputElement>('#room-name')!;
- expect(input.value).toBe('Raphael · Alice');input.value='Owner name';input.dispatchEvent(new Event('input'));
+ expect(input.value).toBe('Alice · Bob');input.value='Owner name';input.dispatchEvent(new Event('input'));
  document.querySelector<HTMLElement>('[data-dlg="create"]')!.click();await flush();
  document.querySelector<HTMLElement>('[data-dlg="create"]')!.click();await flush();
  expect(api.roomsCreate.mock.calls[0][0]).toEqual(api.roomsCreate.mock.calls[1][0]);
@@ -403,7 +403,7 @@ test("room thread uses owner bubbles and keeps room turns out of private navigat
 test("room header members menu saves selected identities",async()=>{
  await pane();document.querySelector<HTMLElement>('[data-room-menu]')!.click();document.querySelector<HTMLElement>('#app-popover [data-pick="members"]')!.click();
  await flush();
- document.querySelector<HTMLElement>('[data-dlg="member"][data-member="0"]')!.click();document.querySelector<HTMLElement>('[data-dlg="save"]')!.click();await flush();expect(api.roomsUpdate).toHaveBeenCalledWith(1,{member_ids:[0,1],default_responder:"auto"});
+ document.querySelector<HTMLElement>('[data-dlg="member"][data-member="1"]')!.click();document.querySelector<HTMLElement>('[data-dlg="save"]')!.click();await flush();expect(api.roomsUpdate).toHaveBeenCalledWith(1,{member_ids:[1,2],default_responder:"auto"});
 });
 
 test("room rows expose rename, membership and confirmed deletion through more",async()=>{
@@ -455,15 +455,15 @@ test("each working member has a live action row which disappears when completed"
 
 test("new room saves a selected default responder and resets it when that member leaves",async()=>{
  await openNewGroupChat();document.querySelector<HTMLInputElement>('#room-name')!.value='Plans';document.querySelector('#room-name')!.dispatchEvent(new Event('input'));
- for(const id of [0,1])document.querySelector<HTMLElement>(`[data-dlg="member"][data-member="${id}"]`)!.click();
+ for(const id of [1,2])document.querySelector<HTMLElement>(`[data-dlg="member"][data-member="${id}"]`)!.click();
  document.querySelector<HTMLElement>('[data-dlg="responder"]')!.click();
- document.querySelector<HTMLElement>('#app-popover [data-value="member:1"]')!.click();
+ document.querySelector<HTMLElement>('#app-popover [data-value="member:2"]')!.click();
  document.querySelector<HTMLElement>('[data-dlg="create"]')!.click();await flush();
- expect(api.roomsCreate).toHaveBeenCalledWith({name:'Plans',member_ids:[0,1],group_id:null,default_responder:'member:1',request_id:expect.any(String)});
+ expect(api.roomsCreate).toHaveBeenCalledWith({name:'Plans',member_ids:[1,2],group_id:null,default_responder:'member:2',request_id:expect.any(String)});
  await openNewGroupChat();
- for(const id of [0,1])document.querySelector<HTMLElement>(`[data-dlg="member"][data-member="${id}"]`)!.click();
- document.querySelector<HTMLElement>('[data-dlg="responder"]')!.click();document.querySelector<HTMLElement>('#app-popover [data-value="member:1"]')!.click();
- document.querySelector<HTMLElement>('[data-dlg="member"][data-member="1"]')!.click();
+ for(const id of [1,2])document.querySelector<HTMLElement>(`[data-dlg="member"][data-member="${id}"]`)!.click();
+ document.querySelector<HTMLElement>('[data-dlg="responder"]')!.click();document.querySelector<HTMLElement>('#app-popover [data-value="member:2"]')!.click();
+ document.querySelector<HTMLElement>('[data-dlg="member"][data-member="2"]')!.click();
  expect(document.querySelector('[data-dlg="responder"]')!.textContent).toContain('Everyone decides');
 });
 
@@ -477,12 +477,12 @@ test("reply controls target a member message and can be cancelled",async()=>{
  expect((document.querySelector('.cmp-quote') as HTMLElement).hidden).toBe(true);
 });
 
-test("active exchanges expose stop, and Raphael's wrap-up is its ordinary message",async()=>{
+test("active exchanges expose stop, and the chief's wrap-up is its ordinary message",async()=>{
  api.roomStop.mockResolvedValue({stopped:true});
- api.roomMessages.mockResolvedValue({messages:[{id:12,member_id:0,text:'Alice owns testing',kind:'wrapup',created:1,status:'done'}],exchange:{state:'running',stop_requested:0}});
+ api.roomMessages.mockResolvedValue({messages:[{id:12,member_id:1,text:'Bob owns testing',kind:'wrapup',created:1,status:'done'}],exchange:{state:'running',stop_requested:0}});
  await pane();
  const wrapup=document.querySelector('.au-room-wrapup')!;
- expect(wrapup.querySelector('.au-room-author')!.textContent).toBe('Raphael');
+ expect(wrapup.querySelector('.au-room-author')!.textContent).toBe('Alice');
  expect(wrapup.textContent).not.toContain('Wrap-up');
  expect(wrapup.querySelector('h3')).toBeNull();
  expect(document.querySelector('.au-room-crown')!.getAttribute('aria-label')).toBe('Chief of staff');

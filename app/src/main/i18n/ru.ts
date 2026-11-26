@@ -1315,7 +1315,6 @@ export const ru = {
   "agent.hearing": "Расшифровка…",
   "agent.loadFailed": "《Уведомление. Не удалось прочесть разговоры.》",
   "settings.avatar": "Изображение",
-  "settings.avatarReset": "Сбросить",
   "settings.avatarFrame": "Перетащите для перемещения; прокрутите или потяните угол для масштаба",
   "local.title": "Локальные команды",
   "local.never": "Никогда",

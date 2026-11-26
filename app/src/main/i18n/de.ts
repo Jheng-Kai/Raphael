@@ -1315,7 +1315,6 @@ export const de = {
   "agent.hearing": "Wird transkribiert…",
   "agent.loadFailed": "《Hinweis. Gespräche konnten nicht gelesen werden.》",
   "settings.avatar": "Bild",
-  "settings.avatarReset": "Zurücksetzen",
   "settings.avatarFrame": "Bild durch Ziehen bewegen; scrollen oder Ecke ziehen zum Zoomen",
   "local.title": "Lokale Befehle",
   "local.never": "Nie",

@@ -48,7 +48,6 @@ import { createAgent } from "./agent";
 import { openDialog } from "../member-dialogs";
 import { openGroupChat } from "../group-chats";
 import { closeMenu } from "../ui";
-import { setAvatar } from "../avatar";
 import { resetAsks } from "../chat-ask";
 import { describeError } from "../format";
 import { clearLayerForward } from "../nav-history";
@@ -68,6 +67,12 @@ const LIST: MembersList = {
   ],
   groups: [],
 };
+/** The same roster with a chief of staff, who is a slime (Raphael is member 0 and never one), as the core lists it. */
+const withChief = (primary: number | null): MembersList => ({
+  ...structuredClone(LIST),
+  members: LIST.members.map(m => ({ ...m, ...(m.id === 0 ? { raphael: true as const } : {}), chief: m.id === primary })),
+  team_context: { primary_id: primary, chief_id: primary, members: LIST.members.filter(m => m.id !== 0).map(m => ({ id: m.id, name: m.name, role: m.role, blurb: "" })) } as unknown as MembersList["team_context"],
+});
 const turn = (id: number, more: Partial<AgentTurn> = {}): AgentTurn => ({
   id, created_at_ms: Date.parse("2026-10-20T10:00:00+08:00") + id * 1000, question: `問題 ${id}`, route: "chat",
   prefix: "答", text: `回答 ${id}`, detail: null, status: "done", source: "app", ...more,
@@ -103,13 +108,16 @@ function mount(mode: "hold" | "toggle" = "hold", history?: PlaceHistory) {
   agent.el.hidden=false;
   agent.show();
   notePlace();
+  opened = agent;
   return agent;
 }
 const $ = <T extends HTMLElement>(q: string) => document.querySelector<T>(q)!;
 /** Edit and Cancel live in a message's ⋯ menu (agent.ts messageMenu), not beside it. */
 const pickMessage = (scope: string, pick: "edit" | "cancel"): void => { $(`${scope} [data-act="more-message"]`).click(); $(`#app-popover [data-pick="${pick}"]`).click(); };
+let opened: ReturnType<typeof createAgent> | undefined;
+/** Opens a conversation: a slime's from the sidebar, Raphael's by the account menu's route (it is no row of the sidebar). */
 const pick = async (id: number) => {
-  $(`.mb-col [data-member="${id}"]`).click();
+  if (id === 0) opened!.show("raphael"); else $(`.mb-col [data-member="${id}"]`).click();
   await flush();
 };
 
@@ -277,18 +285,6 @@ test.each(["member", "page", "room"])("the first unseen turn has its own stable 
   if (leave === "page") { agent.hide(); agent.show(); await flush(); }
   if (leave === "room") { await openGroupChat(1); await flush(); await pick(3); }
   expect(document.querySelector('.thread-new')).toBeNull();
-  agent.hide();
-});
-
-test("the owner's picture coming or going draws the first member's face again where the roster did not change", async () => {
-  api.membersList.mockImplementation(async () => structuredClone(LIST));
-  const agent = mount(); await flush();
-  const face = (): Element | null => document.querySelector('.mb-row[data-member="0"] .av-custom');
-  expect(face()).toBeNull();
-  setAvatar({ url: "data:image/png;base64,AAAA", crop: { x: 0, y: 0, zoom: 1 } }); await flush();
-  expect(face()).not.toBeNull();
-  setAvatar(null); await flush();
-  expect(face()).toBeNull();
   agent.hide();
 });
 
@@ -689,6 +685,7 @@ test("returning from a room refreshes the same member without clearing retained 
 });
 
 test("showing unchanged members restores the current destination without replacing faces", async () => {
+  api.membersList.mockResolvedValue(withChief(3));
   const agent = mount(); await flush();
   const row = $('.mb-chief'), face = row.querySelector('.av');
   agent.hide(); await agent.loadSidebar();
@@ -699,20 +696,20 @@ test("showing unchanged members restores the current destination without replaci
   expect(document.querySelector('[data-member="4"] .is-unread')).not.toBeNull();
   await openGroupChat(1); await flush();
   expect($('.mb-chief').getAttribute('aria-current')).toBe('false');
-  await pick(3);
-  expect($('[data-member="3"]').getAttribute('aria-current')).toBe('true');
+  await pick(4);
+  expect($('[data-member="4"]').getAttribute('aria-current')).toBe('true');
   expect($('.mb-chief .av')).toBe(face);
   agent.hide();
 });
 
-test("sidebar pin and hide update only their target and hiding the open member returns to Raphael", async () => {
+test("sidebar pin and hide update only their target and hiding the open member opens the next slime", async () => {
   const agent = mount(); await flush(); await pick(3);
   api.membersUpdate.mockResolvedValue({});
   $('[data-member-more="3"]').click(); $('[data-pick="pin"]').click(); await flush();
   expect(api.membersUpdate).toHaveBeenCalledWith(3, {pinned: true});
   $('[data-member-more="3"]').click(); $('[data-pick="hide"]').click(); await flush();
   expect(api.membersUpdate).toHaveBeenCalledWith(3, {hidden: true});
-  expect(document.querySelector('.mb-chief[aria-current="true"]')).not.toBeNull();
+  expect(document.querySelector('.mb-col [data-member="4"][aria-current="true"]')).not.toBeNull();
   agent.hide();
 });
 
@@ -748,14 +745,14 @@ test("a fresh window opens the member's one conversation, never the quick questi
   expect($<HTMLElement>(".conversation-caption").hidden).toBe(true);agent.hide();
 });
 
-test("a member is deleted from its ⋯ menu only after the confirmation, and its open thread returns to Raphael", async () => {
+test("a member is deleted from its ⋯ menu only after the confirmation, and its open thread moves to the next slime", async () => {
   api.membersDelete.mockResolvedValue({ deleted: true });
   const agent = mount(); await flush(); await pick(3);
   $('[data-member-more="3"]').click(); $('[data-pick="delete"]').click(); await flush();
   expect(api.membersDelete).not.toHaveBeenCalled();
   $('[data-dlg="delete"]').click(); await flush();
   expect(api.membersDelete).toHaveBeenCalledWith(3);
-  expect(document.querySelector('.mb-chief[aria-current="true"]')).not.toBeNull();
+  expect(document.querySelector('.mb-col [data-member="4"][aria-current="true"]')).not.toBeNull();
   agent.hide();
 });
 
@@ -773,16 +770,17 @@ test("nobody makes a conversation: neither the sidebar's plus nor a member's det
   agent.hide();
 });
 
-test.each([undefined, 0, 4])("primary %s swaps the member picker without changing the open thread", async primary_id => {
-  api.membersList.mockResolvedValue({ ...LIST, team_context: { primary_id } });
+test.each([undefined, 0, 4])("primary %s: the member picker lists slimes only, the chief first, and the app opens on the chief or Raphael", async primary_id => {
+  api.membersList.mockResolvedValue({ ...withChief(null), team_context: { primary_id, members: [] } as unknown as MembersList["team_context"] });
   const agent = mount(); await flush();
-  const expected = primary_id === 4 ? ['4', '3', '0'] : ['0', '3', '4'];
+  const expected = primary_id === 4 ? ['4', '3'] : ['3', '4'];
   const historyCalls = api.agentHistoryList.mock.calls.length;
   $('.mb-pick').click();
   expect([...document.querySelectorAll<HTMLElement>('#app-popover [data-value]')].slice(0, 3).map(row => row.dataset.value)).toEqual(expected);
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   expect(api.agentHistoryList).toHaveBeenCalledTimes(historyCalls);
-  expect(document.querySelector('.mb-col [data-member="0"][aria-current="true"]')).not.toBeNull();
+  expect(document.querySelector('.mb-col [aria-current="true"]')?.getAttribute('data-member') ?? null).toBe(primary_id === 4 ? '4' : null);
+  expect($('.mb-pill-t').textContent).toBe(primary_id === 4 ? '行程管家' : '拉斐爾');
   agent.hide();
 });
 
@@ -1385,7 +1383,7 @@ describe("Raphael's thread", () => {
   test("the member column lists the members, each with the last line of its thread from the list", async () => {
     mount();
     await flush();
-    expect([...document.querySelectorAll(".mb-col .mb-list .mb-row b")].map((b) => b.textContent)).toEqual(["拉斐爾", "日文老師", "行程管家"]);
+    expect([...document.querySelectorAll(".mb-col .mb-list .mb-row b")].map((b) => b.textContent)).toEqual(["日文老師", "行程管家"]);
     expect($('.mb-col [data-member="3"] .mb-row-p').textContent).toBe("今天的單字");
     // no thread but the open one is read
     expect(api.agentHistoryList.mock.calls.every(([q]) => q.member_id === undefined)).toBe(true);
@@ -1880,12 +1878,12 @@ describe("the details panel", () => {
   });
 });
 
-test("a core without the members: Raphael alone, and the page works as before", async () => {
+test("a core without the members: Raphael's conversation alone, and the page works as before", async () => {
   api.membersList.mockRejectedValue("mock: members.list");
   mount();
   await flush();
-  expect(document.querySelectorAll(".mb-col .mb-list .mb-row")).toHaveLength(1);
-  expect($(".mb-col .mb-chief b").textContent).toBe("拉斐爾");
+  expect(document.querySelectorAll(".mb-col .mb-list .mb-row")).toHaveLength(0);
+  expect($(".mb-pill-t").textContent).toBe("拉斐爾");
   expect($(".thread").textContent).toContain("回答 2");
 });
 
@@ -2388,6 +2386,8 @@ describe("Raphael apart from the slimes", () => {
     api.membersList.mockResolvedValue(roster(3, [3]));
     send({ type: "MembersChanged" } as MainEvent); await flush(); await flush();
     expect(pillName()).toBe("日文老師");
+    // The core's events are read at most once in 300 ms.
+    await new Promise(resolve => setTimeout(resolve, 350));
     api.membersList.mockResolvedValue(roster(null, []));
     send({ type: "MembersChanged" } as MainEvent); await flush(); await flush();
     expect(pillName()).toBe("拉斐爾");

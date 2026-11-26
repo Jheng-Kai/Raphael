@@ -1315,7 +1315,6 @@ export const th = {
   "agent.hearing": "กำลังถอดเสียง…",
   "agent.loadFailed": "《แจ้งให้ทราบ. อ่านการสนทนาไม่ได้》",
   "settings.avatar": "รูปภาพ",
-  "settings.avatarReset": "รีเซ็ต",
   "settings.avatarFrame": "ลากเพื่อย้ายภาพ เลื่อนหรือลากมุมเพื่อซูม",
   "local.title": "คำสั่งภายใน",
   "local.never": "ไม่เลย",

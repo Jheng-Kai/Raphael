@@ -1315,7 +1315,6 @@ export const vi = {
   "agent.hearing": "Đang chép lời…",
   "agent.loadFailed": "《Thông báo. Không đọc được các cuộc trò chuyện.》",
   "settings.avatar": "Ảnh",
-  "settings.avatarReset": "Đặt lại",
   "settings.avatarFrame": "Kéo để di chuyển; cuộn hoặc kéo góc để thu phóng",
   "local.title": "Lệnh cục bộ",
   "local.never": "Không bao giờ",
