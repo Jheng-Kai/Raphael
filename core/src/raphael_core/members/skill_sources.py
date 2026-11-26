@@ -127,25 +127,16 @@ class Snapshot:
         return self.files
 
 
-def skill_roots(names, wanted=None):
+def skill_roots(names):
     roots = set()
-    root_skill = False
     for name in names:
         name = name.removeprefix("./")
-        if wanted is not None:
-            if name == "SKILL.md":
-                root_skill = True
-                continue
-            if not name.endswith(f"/{wanted}/SKILL.md") and name != f"{wanted}/SKILL.md":
-                continue
         if name == "SKILL.md" or name.endswith("/SKILL.md"):
             try:
                 clean = relative_path(name)
             except MemberError:
                 raise unsafe_path(name) from None
             roots.add(clean.removesuffix("SKILL.md"))
-    if not roots and root_skill:
-        return [""]
     if not roots:
         raise no_skill()
     # A skill owns its whole folder: a SKILL.md inside it (a template, an example) is one of its files, not another skill.
@@ -159,12 +150,11 @@ def skill_roots(names, wanted=None):
 PLUGIN_MANIFEST = ".claude-plugin/plugin.json"
 
 
-def snapshot_entries(entries, read_entry, subpath, *, wanted=None, regular, member=None):
+def snapshot_entries(entries, read_entry, *, regular, member=None):
     """The skills of an archive's entries. `member` is `(describe, fetch)`: what an entry is (a size, `"linked"`, None for a
     folder) and its bytes, so that what a skill links to elsewhere in the archive comes with it."""
     entries = [(name, info) for name, info in entries if not junk(name.removeprefix("./"))]
-    roots = ([relative_path(subpath) + "/" if subpath else ""] if subpath is not None
-             else skill_roots((name for name, _ in entries), wanted))
+    roots = skill_roots(name for name, _ in entries)
     snapshots = {root.casefold(): Snapshot() for root in roots}
     if len(snapshots) != len(roots):
         raise refused_entry(roots[0], "a folder named twice, or twice in letters of another case")
@@ -214,7 +204,7 @@ def snapshot_entries(entries, read_entry, subpath, *, wanted=None, regular, memb
         # Classify a whole import without reading or enabling its plugin configuration.
         prefix, plugin = "", None
         for part in root.split("/"):
-            if prefix in manifests and (wanted is None and subpath is None):
+            if prefix in manifests:
                 files.plugin_manifest = True
                 plugin = prefix
             prefix += part + "/"
@@ -326,7 +316,7 @@ def checked_zip(data):
     return zipfile.ZipFile(stream)
 
 
-def read_archive(name, data, *, subpath=None, repository=False, wanted=None):
+def read_archive(name, data):
     if len(data) > MAX_PACKAGE_BYTES:
         raise oversized_package(name, len(data), MAX_PACKAGE_BYTES)
     name = name.lower()
@@ -338,17 +328,8 @@ def read_archive(name, data, *, subpath=None, repository=False, wanted=None):
         if name.endswith(".zip"):
             with checked_zip(data) as archive:
                 entries = [(info.orig_filename, info) for info in archive.infolist()]
-                if repository:
-                    wrappers = {name.split("/", 1)[0] for name, _ in entries}
-                    if len(wrappers) != 1:
-                        raise unreadable_archive()
-                    entries = [(name.partition("/")[2], info) for name, info in entries if name.partition("/")[2]]
-                    if subpath is None and wanted is None and any(
-                            name == "SKILL.md" and stat.S_IFMT(info.external_attr >> 16) in (0, stat.S_IFREG)
-                            for name, info in entries):
-                        subpath = ""
                 return snapshot_entries(entries, lambda snapshot, key, info: zip_entry(archive, snapshot, key, info),
-                                        subpath, wanted=wanted, regular=lambda info: not info.is_dir() and
+                                        regular=lambda info: not info.is_dir() and
                                         stat.S_IFMT(info.external_attr >> 16) in (0, stat.S_IFREG),
                                         member=zip_member(archive))
         if name.endswith((".tgz", ".tar.gz")):
@@ -364,9 +345,8 @@ def read_archive(name, data, *, subpath=None, repository=False, wanted=None):
                     if len(entries) >= MAX_ARCHIVE_ENTRIES:
                         raise too_many_files(len(entries) + 1, MAX_ARCHIVE_ENTRIES)
                     entries.append((info.name, info))
-                return snapshot_entries(entries,
-                    lambda snapshot, key, info: tar_entry(archive, snapshot, key, info), subpath,
-                    regular=tarfile.TarInfo.isfile, member=tar_member(archive))
+                return snapshot_entries(entries, lambda snapshot, key, info: tar_entry(archive, snapshot, key, info),
+                                        regular=tarfile.TarInfo.isfile, member=tar_member(archive))
     except (zipfile.BadZipFile, tarfile.TarError, OSError, EOFError, zlib.error, NotImplementedError, UnicodeError):
         raise unreadable_archive() from None
     raise MemberError("source", "choose a Markdown, ZIP or tar.gz file", reason="file_type", file=name)

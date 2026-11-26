@@ -1,8 +1,5 @@
 """Skill sources and downloads are constrained to bounded Markdown data."""
 
-import io
-import zipfile
-
 import httpx
 import pytest
 
@@ -74,12 +71,3 @@ async def test_a_document_that_is_oversize_redirected_or_binary_is_refused_with_
     assert {"oversize": "file", "redirect": "redirect", "binary": "encoding"}[response] == found["reason"]
     assert github.requests and all("localhost" not in url for url in github.requests)
 
-
-def test_skills_sh_selection_falls_back_to_the_repository_root():
-    from raphael_core.members.skill_sources import read_archive
-
-    data = io.BytesIO()
-    with zipfile.ZipFile(data, "w") as archive:
-        archive.writestr("repo-main/SKILL.md", "Root skill")
-    [files] = read_archive("repo.zip", data.getvalue(), repository=True, wanted="write")
-    assert files.folder == "" and files["SKILL.md"] == b"Root skill"

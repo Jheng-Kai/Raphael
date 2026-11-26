@@ -274,7 +274,7 @@ async def test_only_selected_skill_links_are_resolved_and_external_links_are_not
                 output.writestr(entry, target)
     data = buffer.getvalue()
     name = "notes.tgz" if tar else "notes.zip"
-    [files] = skill_sources.read_archive(name, data, subpath="notes")
+    [files] = skill_sources.read_archive(name, data)
     assert files["deep/read.txt"] == b"read this"
     assert "external.txt" not in files and "AGENTS.md" not in files
     assert files.skipped_links == ["external.txt"]
