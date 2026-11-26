@@ -40,7 +40,7 @@ export const ru = {
   "memberComputer.dockerLocation": "Виртуальная машина ({p0})",
   "memberComputer.idle": "Ожидание",
   "memberComputer.setup": "Помоги мне настроить изолированный компьютер (Docker).",
-  "memberComputer.certificate": "Выберите или подтвердите сертификат в {p0}.",
+  "memberComputer.certificate": "На экране открылось окно {p0}. Выберите в нём сертификат, затем нажмите «{p1}».",
   "memberComputer.verification": "Введите код подтверждения в {p0}.",
   "conn.connecting": "Подключение…",
   "agent.thinking": "Думает…",

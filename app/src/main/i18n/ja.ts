@@ -44,7 +44,7 @@ export const ja = {
   "memberComputer.dockerLocation": "仮想マシン（{p0}）",
   "memberComputer.idle": "待機中",
   "memberComputer.setup": "分離されたコンピューター（Docker）の設定を手伝ってください。",
-  "memberComputer.certificate": "{p0} で証明書を選択または確認してください。",
+  "memberComputer.certificate": "画面に {p0} のウィンドウが開きました。そこで証明書を選択し、「{p1}」を押してください。",
   "memberComputer.verification": "{p0} に確認コードを入力してください。",
   "account.label": "アカウント名",
   "account.labelHelp": "このアカウントに名前を付けると、仕事用と個人用を区別しやすくなります。",

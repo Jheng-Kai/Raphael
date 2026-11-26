@@ -138,6 +138,9 @@ NO_PASSKEY = {"protocol": "ctap2", "ctap2Version": "ctap2_1", "transport": "inte
 # once unchanged; the prompt waits for the owner in the view, and is cancelled when no one answers it in time.
 AUTH_PATTERNS = [{"urlPattern": "*", "resourceType": "Document", "requestStage": "Request"}]
 AUTH_WAIT_S = 300
+# What of a cookie Chrome is given again (`Storage.setCookies`) when it carries a session's over to another Chrome.
+COOKIE_FIELDS = ("name", "value", "domain", "path", "secure", "httpOnly", "sameSite", "priority", "sourceScheme",
+                 "sourcePort", "partitionKey")
 DOWNLOADS = Path(".raphael") / "downloads"  # where a page's download is placed in the member's work folder (#331)
 IGNORE = "# Raphael's own files, such as members' downloads.\n*\n"
 # Where a folder can be opened relative to another, each folder of `.raphael/downloads` is opened from the one before it
@@ -359,13 +362,14 @@ def place_by_path(workspace, name, data):
     return None
 
 
-def headless_chrome():
+def headless_chrome(shown=False):
     """Whether Raphael's Chrome runs with no window at all (#308). Windows hides it on a desktop of its own
     (`DesktopChrome`), where it draws as any shown window does. A Mac has no such desktop: it keeps every window on a
     screen and a Chrome it starts takes the front, so there Chrome runs in its own headless mode, the whole Chrome with no
     window, as OpenMausBot runs its browser. The view streams it as before (`Screencast`) and the owner works it there.
-    RAPHAEL_MAC_HEADED=1 brings the old window back, to compare on a Mac."""
-    return sys.platform == "darwin" and os.environ.get("RAPHAEL_MAC_HEADED") != "1"
+    RAPHAEL_MAC_HEADED=1 brings the old window back, to compare on a Mac. A Chrome started to be seen (`shown`, for a
+    certificate the owner chooses in Chrome's own window, #345) is never headless."""
+    return not shown and sys.platform == "darwin" and os.environ.get("RAPHAEL_MAC_HEADED") != "1"
 
 
 def mac_chrome_version(executable):
@@ -421,9 +425,11 @@ def mac_screen():
     return size if 1280 <= size[0] <= 8192 and 960 <= size[1] <= 8192 else (1512, 982)
 
 
-def window_arguments(mac_version, screen=(1512, 982)):
+def window_arguments(mac_version, screen=(1512, 982), shown=False):
     """Where Chrome's window goes off Windows: none in headless (with the Mac's screen, and its user agent when its version
-    is known), else far off every screen, which Linux keeps."""
+    is known), else far off every screen, which Linux keeps. A Chrome started to be seen has its window where Chrome puts it."""
+    if shown:
+        return []
     if headless_chrome():
         return ["--headless=new", f"--screen-info={{0,0 {screen[0]}x{screen[1]}}}",
                 *([f"--user-agent={mac_user_agent(mac_version)}"] if mac_version else [])]
@@ -439,11 +445,11 @@ def dialog_message(message):
     return {"message": f"{message[:1000]}\n…\n{message[-1000:]}", "omitted": len(message) - 2000}
 
 
-def startup_pages(startup_url):
+def startup_pages(startup_url, shown=False):
     """The pages Chrome opens at its start: the startup marker, and a blank tab left unowned that keeps a windowed Chrome
     alive when the last member tab closes, even when that closure comes from the page. Headless Chrome takes one page only
     (on more it exits at once: "Multiple targets are not supported in headless mode") and stays alive with none."""
-    return [startup_url] if headless_chrome() else [startup_url, "about:blank"]
+    return [startup_url] if headless_chrome(shown) else [startup_url, "about:blank"]
 
 
 def page_url(value):
@@ -528,6 +534,8 @@ class Tab:
     url: str = "about:blank"
     favicon: str = ""
     ready: bool = True
+    # Where the last navigation was going while it has not arrived (it asked for a certificate, or is still waiting for one).
+    requested: str = ""
     main_frame: str = ""
     viewport: tuple = (0, 0)
     document: int = 0
@@ -553,6 +561,9 @@ class Tab:
 
 
 class HostBrowser:
+    # How long a change of Chrome waits for the actions in flight on its tabs.
+    SWAP_WAIT_S = 15
+
     def __init__(self, profile):
         self.profile = Path(profile)
         self.staging = self.profile / "downloads"
@@ -565,6 +576,9 @@ class HostBrowser:
         self.owned_targets = {}
         self.startup_url = None
         self.mac_version = ""  # the installed Chrome's version where it runs headless (`headless_chrome`)
+        # Chrome was started to be seen, for a certificate the owner chooses in its own window (`show_for_owner`). Only until
+        # it stops: the next start is the background one again.
+        self.shown = False
         self.current = {}
         self.owner_closed = {}
         self.owner_closed_current = {}
@@ -755,14 +769,15 @@ class HostBrowser:
                 "--window-size=1280,900", "--disable-backgrounding-occluded-windows",
                 "--disable-renderer-backgrounding", "--disable-background-timer-throttling",
             ]
-            pages = startup_pages(self.startup_url)
-            self.mac_version = mac_chrome_version(executable) if headless_chrome() else ""
+            pages = startup_pages(self.startup_url, self.shown)
+            headless = headless_chrome(self.shown)
+            self.mac_version = mac_chrome_version(executable) if headless else ""
             if os.name == "nt":
-                self.process = DesktopChrome([*argv, *pages])
+                self.process = DesktopChrome([*argv, *pages], visible=self.shown)
             else:
-                screen = mac_screen() if headless_chrome() else None
+                screen = mac_screen() if headless else None
                 self.process = await asyncio.create_subprocess_exec(
-                    *argv, *window_arguments(self.mac_version, screen), *pages, stdin=asyncio.subprocess.DEVNULL,
+                    *argv, *window_arguments(self.mac_version, screen, self.shown), *pages, stdin=asyncio.subprocess.DEVNULL,
                     stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL, start_new_session=True)
             self.process_tree = ChromeProcessTree(self.process)
             if isinstance(self.process, DesktopChrome):
@@ -1038,9 +1053,134 @@ class HostBrowser:
             async with self.lock:
                 await self.start()
 
+    async def show_for_owner(self, tab):
+        """A page asked for a client certificate (#345). Chrome draws its chooser in a window, which a Chrome no one sees
+        has none, so Chrome is started once more where the owner sees it, with every member's tab bound to it again
+        (`_start_shown`), and the tab's window comes to the front. It stays so, the window out of the way once the owner is
+        done (`tuck_away`): the certificate they chose is kept in the memory of that Chrome only. It is the background
+        Chrome again only when Chrome starts anew (`_stop`), whether it idled out, quit or crashed."""
+        async with self.lock:
+            if not self.live(tab):
+                raise BrowserError("browser_tab_changed")
+            fresh = not self.shown
+            if fresh:
+                await self._start_shown(tab)
+            await self._present(tab, fresh)
+
+    async def _start_shown(self, first):
+        """Stop Chrome and start it again to be seen, called under lock. Each tab keeps its identity (what the viewer, the
+        owner's hold and a waiting card refer to) and is bound to a target of the new Chrome, given its setup again and
+        opened at its page again; session cookies, which no Chrome keeps once it stops, are carried over. What a page held in
+        memory is lost, as when Chrome starts anew. The tabs' locks are taken first, so no action runs on a tab meanwhile and
+        one in flight is waited for; a tab still held after `SWAP_WAIT_S` leaves everything as it was."""
+        held = []
+        try:
+            try:
+                async with asyncio.timeout(self.SWAP_WAIT_S):
+                    for item in list(self.tabs.values()):
+                        await item.lock.acquire()
+                        held.append(item)
+            except TimeoutError:
+                raise BrowserError("browser_tab_busy") from None
+            tabs = [first, *(item for item in self.tabs.values() if item is not first and item.ready)]
+            urls = {item.id: self._reopen_url(item) for item in tabs}
+            cookies = await self._session_cookies()
+            await self._stop(keep_tabs=True)
+            self.shown = True
+            try:
+                await self.start()
+                await self._restore_cookies(cookies)
+                for item in tabs:
+                    await self._rebind(item, first=item is first)
+                for item in list(self.tabs.values()):
+                    if item not in tabs:
+                        self._forget_tab(item)  # it was being opened as Chrome stopped: nothing of it is left
+            except BaseException:
+                await self._stop()  # no tab is left bound to a Chrome that is gone
+                raise
+            for item in tabs:
+                if urls[item.id]:
+                    self._send(item.session, "Page.navigate", {"url": urls[item.id]})
+            self.notify_view()
+        finally:
+            for item in held:
+                item.lock.release()
+
+    @staticmethod
+    def _openable(url):
+        """The page to open for `url`: none for a blank page or an address Chrome would not be sent to."""
+        try:
+            url = page_url(url)
+        except BrowserError:
+            return ""
+        return "" if url == "about:blank" else url
+
+    def _reopen_url(self, tab):
+        """Where a tab goes again in another Chrome: where its last navigation was going, else the page it shows."""
+        return self._openable(tab.requested or tab.url)
+
+    async def _session_cookies(self):
+        """The cookies of this Chrome that end with it (a session's). The profile keeps the others."""
+        try:
+            listing = await self.cdp.call("Storage.getCookies")
+        except (BrowserError, OSError, TimeoutError):
+            return []
+        return [{key: cookie[key] for key in COOKIE_FIELDS if key in cookie}
+                for cookie in listing.get("cookies", []) if cookie.get("session")]
+
+    async def _restore_cookies(self, cookies):
+        if not cookies:
+            return
+        try:
+            await self.cdp.call("Storage.setCookies", {"cookies": cookies})
+        except BrowserError:
+            for cookie in cookies:  # one the new Chrome refuses must not cost the others
+                with suppress(BrowserError):
+                    await self.cdp.call("Storage.setCookies", {"cookies": [cookie]})
+
+    async def _rebind(self, tab, *, first):
+        """Bind the tab to a target of the Chrome just started: the window Chrome started with for the tab that asked for
+        the certificate (the owner's screen), a window far off every screen for the others."""
+        target = await self._take_startup_target() if first else None
+        if target is None:
+            target = await self._create_target()
+        self.owned_targets[target] = tab.member
+        session = (await self.cdp.call("Target.attachToTarget", {"targetId": target, "flatten": True}))["sessionId"]
+        tab.target, tab.session = target, session
+        tab.refs.clear()
+        tab.frames.clear()
+        tab.viewport = (0, 0)
+        tab.chooser = tab.chooser_node = None
+        tab.dialog, tab.dialog_text = None, ""
+        tab.dialog_opened.clear()
+        self._clear_auth(tab, tab.auth)
+        tab.ready = False
+        await self._set_up_tab(tab)
+        await tab.cast.restart()
+
+    async def _window(self, tab, bounds):
+        window = (await self.cdp.call("Browser.getWindowForTarget", {"targetId": tab.target}))["windowId"]
+        await self.cdp.call("Browser.setWindowBounds", {"windowId": window, "bounds": bounds})
+
+    async def _present(self, tab, fresh):
+        """The tab's window on the owner's screen, in front. A Chrome shown before may have it out of the way, and the page
+        still waiting for its certificate is asked for again, as the chooser the owner left may be gone."""
+        if not fresh:
+            await self._window(tab, {"windowState": "normal", "left": 60, "top": 60})
+            if url := self._openable(tab.requested):
+                self._send(tab.session, "Page.navigate", {"url": url})
+        await self.command(tab, "Page.bringToFront")
+
+    async def tuck_away(self, tab):
+        """The owner is done choosing: Chrome keeps running, and its window goes out of the way (minimized on a Mac, far off
+        the screen on Windows). Only a Chrome shown for a certificate has anything to tuck away."""
+        if self.shown and self.live(tab):
+            await self._window(tab, {"windowState": "minimized"} if sys.platform == "darwin"
+                               else {"left": -32000, "top": -32000})
+
     async def _create_target(self):
         # Each tab has its own compositor surface even while a peer's tab is shown.
-        bounds = {"left": -32000, "top": -32000} if os.name != "nt" else {}
+        bounds = {"left": -32000, "top": -32000} if os.name != "nt" or self.shown else {}
         return (await self.cdp.call("Target.createTarget", {"url": "about:blank", "newWindow": True,
                                                             "background": True, **bounds}))["targetId"]
 
@@ -1071,31 +1211,35 @@ class HostBrowser:
         if info:
             self._update_page(tab, title=info.get("title"), url=info.get("url"))
         try:
-            await self.command(tab, "Page.enable")
-            await self.command(tab, "Page.setInterceptFileChooserDialog", {"enabled": True})
-            await self.command(tab, "Fetch.enable", {"patterns": AUTH_PATTERNS, "handleAuthRequests": True})
-            with suppress(BrowserError):  # a Chrome without the WebAuthn domain leaves passkey requests as they were
-                await self.command(tab, "WebAuthn.enable", {"enableUI": False})
-                await self.command(tab, "WebAuthn.addVirtualAuthenticator", {"options": NO_PASSKEY})
-            if headless_chrome():
-                # No window holds the focus in headless: each page is told it has it, and it names itself as the ordinary
-                # Chrome of a Mac in navigator.userAgentData too (the request's user agent is set at the start).
-                await self.command(tab, "Emulation.setFocusEmulationEnabled", {"enabled": True})
-                if self.mac_version:
-                    await self.command(tab, "Emulation.setUserAgentOverride", {
-                        "userAgent": mac_user_agent(self.mac_version),
-                        "userAgentMetadata": mac_user_agent_metadata(self.mac_version)})
-            await self.resize(tab, *VIEWPORT)
-            tree = await self.command(tab, "Page.getFrameTree")
-            frame = tree["frameTree"]["frame"]
-            tab.main_frame = frame["id"]
-            tab.frames.add(tab.main_frame)
-            tab.ready = True
-            self._refresh_icon(tab)
+            await self._set_up_tab(tab)
             return tab
         except BaseException:
             self._forget_tab(tab)
             raise
+
+    async def _set_up_tab(self, tab):
+        """What each tab is given on the Chrome it is bound to: again for the same tab when it is bound to another Chrome."""
+        await self.command(tab, "Page.enable")
+        await self.command(tab, "Page.setInterceptFileChooserDialog", {"enabled": True})
+        await self.command(tab, "Fetch.enable", {"patterns": AUTH_PATTERNS, "handleAuthRequests": True})
+        with suppress(BrowserError):  # a Chrome without the WebAuthn domain leaves passkey requests as they were
+            await self.command(tab, "WebAuthn.enable", {"enableUI": False})
+            await self.command(tab, "WebAuthn.addVirtualAuthenticator", {"options": NO_PASSKEY})
+        if headless_chrome(self.shown):
+            # No window holds the focus in headless: each page is told it has it, and it names itself as the ordinary
+            # Chrome of a Mac in navigator.userAgentData too (the request's user agent is set at the start).
+            await self.command(tab, "Emulation.setFocusEmulationEnabled", {"enabled": True})
+            if self.mac_version:
+                await self.command(tab, "Emulation.setUserAgentOverride", {
+                    "userAgent": mac_user_agent(self.mac_version),
+                    "userAgentMetadata": mac_user_agent_metadata(self.mac_version)})
+        await self.resize(tab, *VIEWPORT)
+        tree = await self.command(tab, "Page.getFrameTree")
+        frame = tree["frameTree"]["frame"]
+        tab.main_frame = frame["id"]
+        tab.frames.add(tab.main_frame)
+        tab.ready = True
+        self._refresh_icon(tab)
 
     async def resize(self, tab, width, height):
         async with tab.cast.lock:
@@ -1327,21 +1471,27 @@ class HostBrowser:
             if self.cdp is cdp and cdp.reader.done():
                 self.owned_targets.clear()
 
-    async def _stop(self):
+    async def _stop(self, *, keep_tabs=False):
+        """Stop Chrome. With `keep_tabs` the tabs, and what refers to them, stay for `show_for_owner` to bind them to the
+        next Chrome; nothing else may use them meanwhile."""
         cdp, process, tree = self.cdp, self.process, self.process_tree
         self.cdp = self.process = None
         self.process_tree = None
+        if keep_tabs and cdp is not None:
+            cdp.event = lambda *args: None  # the old Chrome's targets going away forget no tab
         background = [*self.popups.values(), *self.icons.values(), *self.background]
         for task in background:
             task.cancel()
         await asyncio.gather(*background, return_exceptions=True)
-        for tab in list(self.tabs.values()):
-            self._forget_tab(tab)
+        if not keep_tabs:
+            self.shown = False  # the next Chrome is the background one again
+            for tab in list(self.tabs.values()):
+                self._forget_tab(tab)
+            self.current.clear()
+            self.held.clear()
+            self.handback.clear()
         self.owned_targets.clear()
         self.startup_url = None
-        self.current.clear()
-        self.held.clear()
-        self.handback.clear()
         self.downloads.clear()
         try:
             if cdp is not None:

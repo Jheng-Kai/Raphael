@@ -16,7 +16,7 @@ function reasonText(reason: string, window: string): string {
     case "password": return t("card.pcPassword", { p0: window });
     case "payment": return t("card.pcPayment", { p0: window });
     case "two_factor": return t("memberComputer.verification", { p0: window });
-    case "certificate": return t("memberComputer.certificate", { p0: window });
+    case "certificate": return t("memberComputer.certificate", { p0: window, p1: t("card.pcDone") });
     case "captcha": return t("card.pcCaptcha", { p0: window });
     default: return t("card.pcOther", { p0: window });
   }

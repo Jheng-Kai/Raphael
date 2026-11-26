@@ -180,12 +180,16 @@ async def navigate(browser, tab, url):
     tab.refs.clear()
     try:
         async with asyncio.timeout(12):
-            result = await browser.command(tab, "Page.navigate", {"url": browser.checked_url(url)})
+            # Where it was going is kept while a certificate may still be what it waits for (`HostBrowser.show_for_owner`).
+            tab.requested = browser.checked_url(url)
+            result = await browser.command(tab, "Page.navigate", {"url": tab.requested})
             if result.get("errorText", "").startswith("net::ERR_SSL_CLIENT_AUTH_"):
                 raise BrowserError("browser_certificate_needed")
             if result.get("errorText") and not result.get("isDownload"):
+                tab.requested = ""
                 raise BrowserError("browser_navigation_failed")
             if result.get("isDownload"):
+                tab.requested = ""
                 return False
             # Ready after commit, before inspecting the new document. Sites may leave network requests open.
             while url != "about:blank":
@@ -196,6 +200,7 @@ async def navigate(browser, tab, url):
                 await asyncio.sleep(0.08)
     except TimeoutError:
         raise BrowserError("browser_navigation_waiting") from None
+    tab.requested = ""
     return True
 
 

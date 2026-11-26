@@ -785,6 +785,7 @@ export function installMock(fixture, config = {}, target = window) {
   if (variant.computerCard) {
     const turn = structuredClone(data.computerTurns[variant.computerCard]);
     if (variant.browserHandback) Object.assign(turn.computers[0], { browser: true, app: "Chrome", note: variant.desktop.host_request.detail });
+    if (variant.computerReason) turn.computers[0].reason = variant.computerReason;
     data.turns.push(turn);
   }
   if (variant.composioResults) {

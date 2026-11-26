@@ -40,7 +40,7 @@ export const ko = {
   "memberComputer.dockerLocation": "가상 머신({p0})",
   "memberComputer.idle": "대기 중",
   "memberComputer.setup": "격리된 컴퓨터(Docker)를 설정하도록 도와주세요.",
-  "memberComputer.certificate": "{p0}에서 인증서를 선택하거나 확인하세요.",
+  "memberComputer.certificate": "화면에 {p0} 창이 열렸습니다. 그 창에서 인증서를 선택한 뒤 “{p1}”을(를) 누르세요.",
   "memberComputer.verification": "{p0}에 인증 코드를 입력하세요.",
   "conn.connecting": "연결 중…",
   "agent.thinking": "생각 중…",

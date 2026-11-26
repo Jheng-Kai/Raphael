@@ -40,7 +40,7 @@ export const de = {
   "memberComputer.dockerLocation": "Virtuelle Maschine ({p0})",
   "memberComputer.idle": "Bereit",
   "memberComputer.setup": "Hilf mir, den isolierten Computer (Docker) einzurichten.",
-  "memberComputer.certificate": "Wähle oder bestätige das Zertifikat in {p0}.",
+  "memberComputer.certificate": "Auf deinem Bildschirm hat sich ein {p0}-Fenster geöffnet. Wähle dort das Zertifikat aus und klicke dann auf „{p1}“.",
   "memberComputer.verification": "Gib den Bestätigungscode in {p0} ein.",
   "conn.connecting": "Verbindung wird hergestellt…",
   "agent.thinking": "Denkt nach…",

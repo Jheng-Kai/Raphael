@@ -40,7 +40,7 @@ export const ptBR = {
   "memberComputer.dockerLocation": "Máquina virtual ({p0})",
   "memberComputer.idle": "Em espera",
   "memberComputer.setup": "Ajude-me a configurar o computador isolado (Docker).",
-  "memberComputer.certificate": "Selecione ou confirme o certificado no {p0}.",
+  "memberComputer.certificate": "Uma janela do {p0} foi aberta na sua tela. Escolha o certificado nela e depois clique em “{p1}”.",
   "memberComputer.verification": "Digite o código de verificação em {p0}.",
   "conn.connecting": "Conectando…",
   "agent.thinking": "Pensando…",

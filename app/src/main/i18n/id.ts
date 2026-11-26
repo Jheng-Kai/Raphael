@@ -40,7 +40,7 @@ export const id = {
   "memberComputer.dockerLocation": "Mesin virtual ({p0})",
   "memberComputer.idle": "Siaga",
   "memberComputer.setup": "Bantu saya menyiapkan komputer terisolasi (Docker).",
-  "memberComputer.certificate": "Pilih atau konfirmasi sertifikat di {p0}.",
+  "memberComputer.certificate": "Jendela {p0} terbuka di layar. Pilih sertifikat di sana, lalu tekan “{p1}”.",
   "memberComputer.verification": "Masukkan kode verifikasi di {p0}.",
   "conn.connecting": "Menghubungkan…",
   "agent.thinking": "Berpikir…",

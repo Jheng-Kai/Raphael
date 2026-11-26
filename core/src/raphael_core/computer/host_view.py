@@ -58,6 +58,14 @@ class Screencast:
                 raise
         return queue
 
+    async def restart(self):
+        """The tab is bound to another Chrome: a picture asked for is streamed from the page it shows there."""
+        async with self.lock:
+            self.latest = None
+            if self.watchers:
+                with suppress(ValueError, OSError, TimeoutError):
+                    await self.browser.command(self.tab, "Page.startScreencast", {"format": "jpeg", "quality": 75})
+
     async def unwatch(self, queue):
         async with self.lock:
             await self._unwatch(queue)

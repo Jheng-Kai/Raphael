@@ -40,7 +40,7 @@ export const es = {
   "memberComputer.dockerLocation": "Máquina virtual ({p0})",
   "memberComputer.idle": "En espera",
   "memberComputer.setup": "Ayúdame a configurar el equipo aislado (Docker).",
-  "memberComputer.certificate": "Selecciona o confirma el certificado en {p0}.",
+  "memberComputer.certificate": "Se abrió una ventana de {p0} en tu pantalla. Selecciona allí el certificado y pulsa «{p1}».",
   "memberComputer.verification": "Introduce el código de verificación en {p0}.",
   "conn.connecting": "Conectando…",
   "agent.thinking": "Pensando…",

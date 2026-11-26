@@ -43,7 +43,7 @@ export const zhTW = {
   "memberComputer.dockerLocation": "虛擬機（{p0}）",
   "memberComputer.idle": "待命",
   "memberComputer.setup": "請幫我設定隔離電腦（Docker）。",
-  "memberComputer.certificate": "請在 {p0} 選擇或確認憑證。",
+  "memberComputer.certificate": "螢幕上開了一個 {p0} 視窗，請在那裡選擇憑證，再按「{p1}」。",
   "memberComputer.verification": "請在 {p0} 輸入驗證碼。",
   "account.label": "帳號名稱",
   "account.labelHelp": "為這個帳號命名，方便分辨工作與私人用途。",
