@@ -35,7 +35,7 @@ VIEWPORT_TOOLS = {
     "click": ("Click at x,y from the shown tab's screenshot.", "x y button count modifier", "x y"),
     "double_click": ("Double-click at x,y from the shown tab's screenshot.", "x y", "x y"),
     "type_text": ("Type into the page's focused field. Leave credentials, codes and payment to the owner.", "text", "text"),
-    "press_key": ("Press a page key, optionally with modifiers.", "key modifiers", "key"),
+    "press_key": ("Press a named page key or a chord (Enter, Tab, arrows, Ctrl+A, Alt+Left to go back); use type_text for letters and digits.", "key modifiers", "key"),
     "scroll": ("Scroll the page at x,y from the screenshot.", "x y direction amount by", "x y direction"),
 }
 PAGE_ACTIONS = {"browser_click", "browser_type", "browser_select"}
@@ -82,6 +82,7 @@ WORDS = {
     "browser_tab_busy": "Another turn or task is using this tab. Try it again shortly or use another tab from browser_tabs.",
     "browser_page_changed": "The page changed after the last read. Read it again for current controls.",
     "browser_action_refused": "Chrome could not perform this action on the selected page element.",
+    "browser_key_is_text": "press_key does not type letters or digits, with or without Shift. Use type_text with the text, capitals included.",
     "browser_field_refused": "Chrome could not type into or select a value in that field.",
     "browser_dialog_changed": "The dialog changed. Use browser_dialog with action inspect for the current one.",
     "browser_dialog_text": "prompt_text only answers a prompt dialog that is being accepted.",
@@ -100,7 +101,7 @@ WORDS = {
     "browser_current_ref_required": "Read the tab again for current references or use screenshot coordinates for a click.",
     "browser_dom_input_required": "Use screenshot coordinates for native page input or omit input_route for a ref click.",
     "browser_coordinates": "Use x and y inside the current 1280 × 900 tab screenshot.",
-    "browser_background_only": "The owner can watch this tab in the app's Computer panel.",
+    "browser_background_only": "Raphael Chrome works in the background; leave delivery_mode out.",
     "host_tool_unavailable": "This tool requires the isolated Docker computer. Use the browser or work folder on this computer.",
 }
 
@@ -137,7 +138,7 @@ class HostComputerTools:
             }}
         self.definitions.update({
             "browser_open": {**open_definition, "description": "Open an HTTP or HTTPS URL in your own background Chrome tab. "
-                             "The owner sees it in the app's Computer panel. When asked to show a page, open it and say where to look. "
+                             "The Computer panel shows it only to an owner who asked to see a page; answer in your reply. "
                              "Check browser_tabs first. Use new_tab to keep the current page. " + HOST_CONTRACT},
             "browser_tabs": {"description": "List your Chrome tabs across turns and tasks, including tabs the owner opened "
                              "and popups. Check before opening a duplicate. The shown tab is the default. Pass show or close "
@@ -578,7 +579,7 @@ class HostComputerTools:
         if name in VIEWPORT_TOOLS:
             return await host_page.viewport_action(browser, tab, name, arguments, approver), []
         data, blocks = await host_page.snapshot(browser, tab, arguments)
-        data["view"] = "The owner can see this page in the app's Computer panel."
+        data["view"] = "The Computer panel shows this page, but your reply is the answer."
         return data, blocks
 
 

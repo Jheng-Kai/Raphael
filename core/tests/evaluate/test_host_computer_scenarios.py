@@ -29,10 +29,10 @@ async def test_showing_youtube_opens_the_live_host_panel_without_a_link_or_takeo
             messages = kwargs["messages"]
             replies = [message for message in messages if message["role"] == "tool"]
             if replies:
-                assert "The owner can see this page in the app's Computer panel." in str(replies[-1]["content"])
+                assert "The Computer panel shows this page, but your reply is the answer." in str(replies[-1]["content"])
                 self.turns = iter([(answer, [])])
             else:
-                assert "To show a page, open it and say where to look" in messages[0]["content"]
+                assert "Only when the owner asked to see a page, open it" in messages[0]["content"]
                 definitions = [tool["function"] for tool in kwargs["tools"]]
                 chrome_open = next(tool for tool in definitions if "your own background Chrome tab" in tool.get("description", ""))
                 self.turns = iter([("", [(chrome_open["name"], {"url": url})])])

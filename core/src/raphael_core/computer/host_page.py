@@ -361,8 +361,8 @@ def key_event(arguments):
         return (key,), {"key": key, "code": code, "text": key, "windowsVirtualKeyCode": ord(key.upper())}
     try:
         chord = safety.parse_chord("+".join([*mods, key]))
-    except safety.KeysRefused:
-        raise BrowserError("browser_action_refused") from None
+    except safety.KeysRefused as refused:
+        raise BrowserError("browser_key_is_text" if refused.why == "typing" else "browser_action_refused") from None
     *modifiers, key = chord
     code, virtual = KEYS.get(key, ("Key" + key.upper() if key.isalpha() else "Digit" + key, ord(key[0].upper())))
     args = {"key": " " if key == "space" else code if key in KEYS else key, "code": code,
@@ -372,6 +372,28 @@ def key_event(arguments):
     if not modifiers and key == "enter":
         args["text"] = "\r"
     return chord, args
+
+
+HISTORY_STEPS = {("alt", "left"): -1, ("alt", "right"): 1}
+
+
+async def history_step(browser, tab, step):
+    """Back or forward in this tab's own history, as the browser's Alt+Left and Alt+Right do. A headless page never
+    handles those keys, so they are never sent to it; the target must be a page `navigate` may open."""
+    history = await browser.command(tab, "Page.getNavigationHistory")
+    index = history["currentIndex"] + step
+    if not 0 <= index < len(history["entries"]):
+        return {**tab_ids(tab), "status": "no_history",
+                "note": f"This tab has no {'earlier' if step < 0 else 'later'} page to go to. Use browser_navigate to open a URL."}
+    entry = history["entries"][index]
+    browser.checked_url(entry["url"])
+    tab.refs.clear()
+    await browser.command(tab, "Page.navigateToHistoryEntry", {"entryId": entry["id"]})
+    with suppress(TimeoutError):
+        async with asyncio.timeout(5):
+            while (await browser.command(tab, "Page.getNavigationHistory"))["currentIndex"] != index:
+                await asyncio.sleep(0.05)
+    return {**tab_ids(tab), "status": "delivered"}
 
 
 async def viewport_action(browser, tab, name, arguments, approver):
@@ -387,6 +409,8 @@ async def viewport_action(browser, tab, name, arguments, approver):
     if reason := await private_form(browser, tab):
         return {**tab_ids(tab), "owner_needed": reason}
     chord, keys = key_event(arguments) if name == "press_key" else (None, None)
+    if chord in HISTORY_STEPS:
+        return await history_step(browser, tab, HISTORY_STEPS[chord])
     if name != "scroll":
         check_submit = chord is not None and chord[-1] == "enter"
         target, _ = await evaluate(browser, tab, f"({INPUT_TARGET})({json.dumps(point)}, {json.dumps(check_submit)})")
