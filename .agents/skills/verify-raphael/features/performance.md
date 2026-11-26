@@ -29,6 +29,17 @@ Rich content retains its MutationObserver code list and finds nearby blocks by
 halving; disclosure changes rebuild it. The overlay emblem caps animation-loop
 updates at 60 per second while its simulation uses elapsed time.
 
+R-PERF-25 and R-PERF-26 cover the two edges the owner drags and the panes they open and close. The list's width and the details
+panel's are written for each pointer move as `--side-live` and `--panel-live` (`live-size.ts`), custom properties registered as not
+inherited and set only on the grid of the panes, the caption strip, a scrim, the panel and its page. They were `--sidebar-width` on the
+root and `--pa-det` on the page, which every element beneath inherits: each move restyled the whole window (1,000 to 1,500 elements,
+25 to 45 ms), the layout of the panes was 1 ms, and two frames in three were late. Holding the edge puts one `.edge-shield` over the
+window for its cursor and its press (`edge-drag.ts`); it no longer sets `cursor` and `user-select` on the root. `resize-probe`
+(`scripts/look/resize-probe.mjs`) drags an edge out and back, or toggles a pane, and reports frames, style and layout work, the
+elements each write restyled (`recalcElementsPerWrite`), ResizeObserver runs and how the words moved (read where the owner sees
+them, after the app's own observers). `LOOK_RESIZE_THROTTLE=4` runs it with a CPU four times slower, `LOOK_INVALIDATIONS=1` names
+what invalidated the styles and `LOOK_SERIES=1` lists each word's jumps.
+
 ## Selected rendered verification
 
 The existing Members, Conversation, Navigation, Automations, Dictation and Settings
@@ -37,6 +48,9 @@ maps supply these representative consumers. Use both themes and all three sizes:
 ```powershell
 npm run look -- slime-states slime-gallery slime-liquid-sheet slime-liquid-still slime-parts slime-motion-idle slime-motion-busy slime-motion-moments slime-motion-change slime-characters-at-rest slime-sizes slime-pointer presence-states-sidebar busy-team-thread busy-team-room busy-team-typing busy-team-follow busy-team-anchor thread-new-divider-stays rich-code rich-diagram conversation-chief-up conversation-member-up conversation-room-up automations-calendar dictation-overview dictation-notice cli-account-disconnect-ask overlay-confirm-short-120 overlay-confirm-long-150 --theme both --width 1120,720,1920x1080
 ```
+
+Pane drags and toggles: `npm run look -- sidebar-resize-smooth sidebar-resize-busy sidebar-toggle-smooth panel-resize-smooth panel-resize-busy panel-toggle-smooth --theme both --width 1120,720,1920x1080`.
+The list's scenes skip below 860 px, where it is the rail with no edge. Each scene's report carries the frames and the work behind them.
 
 Run judge against that same selected run. The implementation brief delegates look
 and judge to the integrator; unit tests do not establish rendered acceptance.

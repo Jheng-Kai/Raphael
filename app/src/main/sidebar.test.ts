@@ -12,7 +12,7 @@ import { ownerFaceHTML, ownerName, setOwnerProfile } from "./owner-avatar";
 import { roomAvatarHTML } from "./group-chats";
 import type { Member } from "./types";
 
-// R-PERF-09: the width a pointer drags is written to the grid that holds the panes, not to the root every element inherits from.
+// R-PERF-25: the width a pointer drags is written to the grid that holds the panes, not to the root every element inherits from.
 const live = (): string => document.body.style.getPropertyValue("--side-live");
 
 test("the foot is one row, the owner's face and the Connections pill, and refreshes only changed app marks", async () => {

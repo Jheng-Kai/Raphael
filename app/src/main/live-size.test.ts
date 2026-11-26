@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { expect, test, vi } from "vitest";
 import { createSidebar } from "./sidebar";
 
-// R-PERF-09: a pane dragged by its edge restyles the few elements that use its width, never the whole window.
+// R-PERF-25: a pane dragged by its edge restyles the few elements that use its width, never the whole window.
 
 const strip = (file: string): string => readFileSync(`src/main/${file}`, "utf8").replace(/\r\n/g, "\n").replace(/\/\*[\s\S]*?\*\//g, "");
 

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { summarizeTrace } from "./drag-probe.mjs";
 
 /**
- * A pane's edge dragged as the owner's hand does (R-PERF-09): a real pointer takes the edge, goes `dx` across in `moves`
+ * A pane's edge dragged as the owner's hand does (R-PERF-25): a real pointer takes the edge, goes `dx` across in `moves`
  * steps a frame apart and back, and what the owner feels is measured, not guessed:
  *
  *  - the frame the page draws between two moves (`frameGapMax`, `framesOver25`: a frame later than 25 ms is a dropped one at 60 Hz);
@@ -24,6 +24,12 @@ export async function resizeProbe(page, { edge, dx, moves = 60, toggle, watch = 
     const now = performance.now(), calls = window.__look.calls.filter(call => call.command === "core_call");
     return calls.every(call => call.t1 !== undefined) && now - Math.max(0, ...calls.map(call => call.t1)) > 800;
   }, { timeout: 15000, polling: 100 });
+  // The page has drawn what it opens with: thirty frames in a row on time (a window that is still building itself is not the drag's to answer for).
+  await page.waitForFunction(() => new Promise(resolve => {
+    let last = performance.now(), good = 0;
+    const tick = now => { good = now - last < 25 ? good + 1 : 0; last = now; if (good >= 30) resolve(true); else requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+  }), { timeout: 20000 });
   const client = await page.createCDPSession();
   await client.send("Performance.enable");
   if (throttle > 1) await client.send("Emulation.setCPUThrottlingRate", { rate: throttle });
@@ -32,6 +38,17 @@ export async function resizeProbe(page, { edge, dx, moves = 60, toggle, watch = 
 
   /** One pass: the press and the moves out and back (or the toggle twice), the frames and what was drawn. */
   const pass = async sampled => {
+    // Starting the trace stalls the page for a moment: it is started, and left to settle, before the frames are counted.
+    if (!sampled) await page.tracing.start({ path: join(directory, traceFile), categories: ["toplevel", "devtools.timeline", "blink.user_timing", "v8.execute", ...(process.env.LOOK_INVALIDATIONS ? ["disabled-by-default-devtools.timeline.invalidationTracking"] : [])] });
+    if (!sampled) await new Promise(resolve => setTimeout(resolve, 500));
+    // The pointer comes to the edge before the frames are counted: its first crossing of a busy window is a hover of its own, not the drag's.
+    let grip = null;
+    if (edge) {
+      const handle = await (await page.$(edge)).boundingBox();
+      grip = { x: handle.x + handle.width / 2, y: handle.y + handle.height / 2 };
+      await page.mouse.move(grip.x, grip.y);
+      await new Promise(resolve => setTimeout(resolve, 400));
+    }
     await page.evaluate((sampled, watch) => {
       const seen = window.__resize = { frames: [], loaf: [], longTasks: [], writes: 0, observerRuns: 0, samples: [], marks: [] };
       seen.tasks = new PerformanceObserver(list => { for (const entry of list.getEntries()) seen.longTasks.push(Math.round(entry.duration)); });
@@ -77,7 +94,6 @@ export async function resizeProbe(page, { edge, dx, moves = 60, toggle, watch = 
     }, sampled, watch);
 
     const before = await read();
-    if (!sampled) await page.tracing.start({ path: join(directory, traceFile), categories: ["toplevel", "devtools.timeline", "blink.user_timing", "v8.execute", ...(process.env.LOOK_INVALIDATIONS ? ["disabled-by-default-devtools.timeline.invalidationTracking"] : [])] });
     if (toggle) {
       // Open or close as the owner does (a key, a click) and let the pane settle: twice, so it ends where it began.
       for (let round = 0; round < 2; round++) {
@@ -85,9 +101,7 @@ export async function resizeProbe(page, { edge, dx, moves = 60, toggle, watch = 
         await new Promise(resolve => setTimeout(resolve, 700));
       }
     } else {
-      const handle = await (await page.$(edge)).boundingBox();
-      const x = handle.x + handle.width / 2, y = handle.y + handle.height / 2;
-      await page.mouse.move(x, y);
+      const { x, y } = grip;
       await page.evaluate(() => window.__resize.marks.push(window.__resize.frames.length));
       await page.mouse.down();
       // A hand: a frame between two moves; out by `dx`, and back to where it began.
