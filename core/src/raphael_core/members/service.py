@@ -182,7 +182,20 @@ def _library_error(error: MemberError) -> RpcError:
     """A refusal of the team skill library: its kind leads the message too, since the shell passes the window the message
     and not the data, and the window says each kind in words (skill-library.ts `failureText`). `library` tells the
     agent that the kind is the library's own answer (taken, not_found, ...) and not a wrong argument of its call."""
-    return RpcError(INVALID_PARAMS, f"Invalid params: {error.kind}: {error}", {"kind": error.kind, "library": True})
+    text = f"Invalid params: {error.kind}: {error}"
+    # What the window needs to say the cause in the owner's language rides at the end of the message, as the window reads
+    # only the message: a file, a size, a limit, a line (skill-library.ts `failureText`).
+    if getattr(error, "detail", None):
+        text += " [[" + json.dumps(error.detail, ensure_ascii=False, separators=(",", ":")) + "]]"
+    return RpcError(INVALID_PARAMS, text, {"kind": error.kind, "library": True})
+
+
+def _io_error(error: BaseException, what: str) -> MemberError:
+    """A disk that would not read or write a skill's file, with the file and the system's own words (a path too long for
+    Windows, a full disk, a file another program holds)."""
+    name = os.path.basename(str(getattr(error, "filename", "") or ""))
+    why = str(getattr(error, "strerror", "") or error)
+    return MemberError("io", f"could not {what}{f' ({name})' if name else ''}: {why}", reason="disk", file=name, why=why)
 
 
 def _uploaded_picture(params, kind):
@@ -940,7 +953,7 @@ class MembersService:
             except MemberError as error:
                 raise _rpc_error(error) from None
             except (OSError, UnicodeError) as error:
-                raise _rpc_error(MemberError("io", "could not read or keep skill files")) from error
+                raise _rpc_error(_io_error(error, "read or keep the skill files")) from error
         _, ids, plugin, skipped = await self._import_package(member_id, args)
         left_out = {"skipped": skipped} if skipped else {}
         if plugin:
@@ -1033,7 +1046,7 @@ class MembersService:
         except MemberError as error:
             raise (_library_error if member == -1 else _rpc_error)(error) from None
         except (OSError, UnicodeError) as error:
-            raise (_library_error if member == -1 else _rpc_error)(MemberError("io", "could not read or keep skill files")) from error
+            raise (_library_error if member == -1 else _rpc_error)(_io_error(error, "read or keep the skill files")) from error
         self._changed("members.skills.changed", max(member, 0))
         self._changed()
         return key, ids, plugin, skipped
@@ -1080,7 +1093,7 @@ class MembersService:
         except MemberError as error:
             raise _library_error(error) from None
         except (OSError, UnicodeError) as error:
-            raise _library_error(MemberError("io", "could not refresh skill files")) from error
+            raise _library_error(_io_error(error, "refresh the skill files")) from error
         self._changed("members.skills.changed", 0)
         self._changed()
         return {"package": await self.packages.view_async(key)}
@@ -1097,7 +1110,7 @@ class MembersService:
         except MemberError as error:
             raise _library_error(error) from None
         except OSError as error:
-            raise _library_error(MemberError("io", "could not remove the skill files")) from error
+            raise _library_error(_io_error(error, "remove the skill files")) from error
         self._changed("members.skills.changed", 0)
         self._changed()
         return {"deleted": True, **({"package": package} if package else {})}

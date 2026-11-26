@@ -12,6 +12,7 @@ from pathlib import Path
 
 from ..bots.homes import atomic, redact_secrets
 from .capabilities import MAX_SKILL_BYTES, skill_metadata, skill_urls
+from .skill_errors import not_utf8, oversized_file
 from .skill_library import SHARED, stage_files
 from .skill_plugins import folded_path, inside_folder
 from .skill_sources import validate_files
@@ -177,25 +178,26 @@ class SkillPackages:
             plugin_manifest |= getattr(files, "plugin_manifest", False)
             skipped_links = getattr(files, "skipped_links", [])
             skipped_references = getattr(files, "skipped_references", [])
+            shown = getattr(files, "folder", "") + "SKILL.md"
             files = validate_files(files)
             raw = files["SKILL.md"]
             if len(raw) > MAX_SKILL_BYTES:
-                raise MemberError("size", "skill document is too large")
+                raise oversized_file(shown, len(raw), MAX_SKILL_BYTES)
             try:
                 text = redact_secrets(raw.decode("utf-8-sig"))
             except UnicodeError:
-                raise MemberError("skill", "skill must be UTF-8 Markdown") from None
+                raise not_utf8(shown) from None
             if "\x00" in text:
-                raise MemberError("skill", "skill must be UTF-8 Markdown")
+                raise not_utf8(shown)
             previous_slug = None
             if old:
-                slug, _ = skill_metadata(text)
+                slug, _ = skill_metadata(text, path=shown)
                 previous = stored_skill_name(slug, skill_plugin(text, skill_source)).casefold()
                 if previous in old:
                     previous_slug = old[previous]["name"].rsplit(":", 1)[-1]
                 elif local:
                     previous_slug = local["previous"]["name"].rsplit(":", 1)[-1]
-            slug, desc = skill_metadata(text, writing=True, previous_name=previous_slug)
+            slug, desc = skill_metadata(text, writing=True, previous_name=previous_slug, path=shown)
             stored = stored_skill_name(slug, skill_plugin(text, skill_source))
             if stored.casefold() in taken:
                 if slug == skill_metadata(text)[0]:

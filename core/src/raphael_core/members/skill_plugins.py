@@ -20,11 +20,13 @@ import httpx
 
 from ..bots.homes import atomic
 from .store import MemberError
-from .skill_library import (SHARED, MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES, MAX_DISCOVERY_ENTRIES,
-                            linked, location, roots, stage_files, version_key, walk)
+from .skill_errors import oversized_file, oversized_package, too_many_files
+from .skill_library import (SHARED, MAX_ARCHIVE_ENTRIES, MAX_DISCOVERY_DEPTH, MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES,
+                            MAX_DISCOVERY_ENTRIES, junk, linked, location, roots, stage_files, version_key, walk)
 
-MAX_MANIFEST_BYTES = 256 * 1024
-MAX_TREE_BYTES = 4 * 1024 * 1024
+# A manifest or a tree listing is JSON read whole: these only keep a reply that is no manifest from filling memory.
+MAX_MANIFEST_BYTES = 4 * 1024 * 1024
+MAX_TREE_BYTES = 64 * 1024 * 1024
 REPO = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 SHA = re.compile(r"[a-fA-F0-9]{40}")
 
@@ -55,15 +57,19 @@ def local_files(folder):
     """Bound the entire set, including hidden manifests, without following links."""
     from .skill_sources import folder_snapshot
 
-    return folder_snapshot(folder, byte_limit=MAX_PACKAGE_BYTES, entry_limit=MAX_PACKAGE_FILES, depth_limit=12).files
+    return folder_snapshot(folder, byte_limit=MAX_PACKAGE_BYTES, entry_limit=MAX_PACKAGE_FILES,
+                           depth_limit=MAX_DISCOVERY_DEPTH).files
 
 
 def local_stamp(folder):
     entries, size, count = [], 0, 0
     for directory, dirs, names in os.walk(folder, followlinks=False):
+        dirs[:] = [name for name in dirs if not junk(name)]
+        names[:] = [name for name in names if not junk(name)]
         count += len(dirs) + len(names)
-        if count > MAX_DISCOVERY_ENTRIES or len(Path(directory).relative_to(folder).parts) > 12:
-            raise MemberError("size", "plugin scan limit reached")
+        if count > MAX_ARCHIVE_ENTRIES or len(Path(directory).relative_to(folder).parts) > MAX_DISCOVERY_DEPTH:
+            raise MemberError("size", f"{directory} holds more than a plugin can: pick the folder of the plugin itself",
+                              reason="scan")
         for name in [*dirs, *names]:
             if linked(Path(directory) / name):
                 raise MemberError("source", "linked plugin packages are not supported")
@@ -72,8 +78,10 @@ def local_stamp(folder):
             info = path.stat()
             size += info.st_size
             entries.append((path.relative_to(folder).as_posix(), info.st_size, info.st_mtime_ns))
-            if size > MAX_PACKAGE_BYTES or len(entries) > MAX_PACKAGE_FILES:
-                raise MemberError("size", "plugin package is too large")
+            if size > MAX_PACKAGE_BYTES:
+                raise oversized_package(entries[-1][0], size, MAX_PACKAGE_BYTES)
+            if len(entries) > MAX_PACKAGE_FILES:
+                raise too_many_files(len(entries), MAX_PACKAGE_FILES, entries[-1][0])
     return hashlib.sha256(json.dumps(sorted(entries)).encode()).hexdigest()
 
 
@@ -97,8 +105,10 @@ def manifest_from(files):
     manifest = json_object(data)
     if not isinstance(manifest.get("name"), str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,99}", manifest["name"]):
         raise MemberError("source", "invalid plugin name")
-    if not isinstance(manifest.get("version"), str) or not manifest["version"] or len(manifest["version"]) > 100:
-        raise MemberError("source", "a plugin needs a version")
+    # A manifest need not name a version (Claude's own does not): such a plugin has none.
+    if not isinstance(manifest.get("version", ""), str) or len(manifest.get("version", "")) > 100:
+        raise MemberError("source", "the version of a plugin must be text of at most 100 characters")
+    manifest.setdefault("version", "")
     return manifest
 
 
@@ -156,7 +166,7 @@ def plugin_parts(files, *, existing_names=None):
         if kind is None:
             continue
         if len(data) > MAX_SKILL_BYTES:
-            raise MemberError("size", "skill document is too large")
+            raise oversized_file(path, len(data), MAX_SKILL_BYTES)
         try:
             text = data.decode("utf-8-sig")
         except UnicodeError:
@@ -318,8 +328,8 @@ async def download_plugin(target):
             repo, sha, prefix = target["repo"], target["commit"], target["path"]
             tree = json_object(await get_bytes(client, f"https://api.github.com/repos/{repo}/git/trees/{sha}?recursive=1", MAX_TREE_BYTES))
             entries = tree.get("tree")
-            if tree.get("truncated") or not isinstance(entries, list) or len(entries) > MAX_DISCOVERY_ENTRIES:
-                raise MemberError("size", "plugin tree is incomplete or too large")
+            if tree.get("truncated") or not isinstance(entries, list) or len(entries) > MAX_ARCHIVE_ENTRIES:
+                raise MemberError("size", "GitHub lists this plugin only in part: it holds too many files", reason="listing")
             files, size, folded = {}, 0, set()
             for entry in entries:
                 if not isinstance(entry, dict) or not isinstance(entry.get("path"), str):
@@ -333,10 +343,17 @@ async def download_plugin(target):
                     raise MemberError("source", "linked plugin packages are not supported")
                 key = relative_path(path[len(prefix) + 1:] if prefix else path)
                 declared = entry.get("size")
-                if type(declared) is not int or declared < 0 or declared > MAX_PACKAGE_BYTES - size or len(files) >= MAX_PACKAGE_FILES:
-                    raise MemberError("size", "plugin package is too large")
-                if key.casefold() in folded or len(key.split("/")) > 13:
-                    raise MemberError("source", "ambiguous or deeply nested plugin path")
+                if junk(key):
+                    continue
+                if type(declared) is not int or declared < 0:
+                    raise MemberError("source", f"GitHub gave no size for {key}")
+                if declared > MAX_PACKAGE_BYTES - size:
+                    raise oversized_package(key, size + declared, MAX_PACKAGE_BYTES)
+                if len(files) >= MAX_PACKAGE_FILES:
+                    raise too_many_files(len(files) + 1, MAX_PACKAGE_FILES, key)
+                if key.casefold() in folded or len(key.split("/")) > MAX_DISCOVERY_DEPTH + 1:
+                    raise MemberError("archive", f"{key} is named twice, or twice in letters of another case, or nested too deep",
+                                      reason="path", file=key)
                 folded.add(key.casefold())
                 data = await get_bytes(client, f"https://raw.githubusercontent.com/{repo}/{sha}/{quote(path, safe='/')}", MAX_PACKAGE_BYTES - size)
                 if len(data) != declared:
@@ -499,8 +516,10 @@ class PluginSets:
         from .skills import stored_skill_name
 
         manifest = manifest_from(files)
-        if len(files) > MAX_PACKAGE_FILES or sum(len(data) for data in files.values()) > MAX_PACKAGE_BYTES:
-            raise MemberError("size", "plugin package is too large")
+        if len(files) > MAX_PACKAGE_FILES:
+            raise too_many_files(len(files), MAX_PACKAGE_FILES)
+        if sum(len(data) for data in files.values()) > MAX_PACKAGE_BYTES:
+            raise oversized_package("", sum(len(data) for data in files.values()), MAX_PACKAGE_BYTES)
         identity = f"github:{marketplace}:{manifest['name']}" if marketplace else "local:" + str(Path(source[6:]).parent)
         previous = self.conn.execute("SELECT * FROM skill_sets WHERE identity=?", (identity,)).fetchone()
         if previous and require_new:

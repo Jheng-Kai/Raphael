@@ -289,7 +289,7 @@ async def test_only_selected_skill_links_are_resolved_and_external_links_are_not
     from pathlib import Path
 
     folder = Path(native["path"]).parent
-    with pytest.raises(MemberError, match="invalid skill package"):
+    with pytest.raises(MemberError, match="not a path a skill may hold"):
         load_package(folder)
     assert load_package(folder, installed=True)["deep/read.txt"] == b"read this"
 

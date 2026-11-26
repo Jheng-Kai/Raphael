@@ -19,12 +19,12 @@ def detail(error):
     return json.loads(found[1]) if found else {}
 
 
-def skill_folder(root, name="big", **files):
+def skill_folder(root, name="big", files=None):
     folder = root / name
     folder.mkdir(parents=True)
     (folder / "SKILL.md").write_text(document(name), encoding="utf-8")
-    for relative, data in files.items():
-        path = folder / relative.replace("__", "/")
+    for relative, data in (files or {}).items():
+        path = folder / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data if isinstance(data, bytes) else data.encode())
     return folder
@@ -33,11 +33,12 @@ def skill_folder(root, name="big", **files):
 async def stored(rig, package):
     shared = rig.service.capabilities.homes.home(-1) / "skills"
     return {path.relative_to(shared / str(skill["id"])).as_posix(): path.stat().st_size
-            for skill in package["skills"] for path in (shared / str(skill["id"])).rglob("*") if path.is_file()}
+            for skill in package["skills"] for path in (shared / str(skill["id"])).rglob("*")
+            if path.is_file() and path.name != ".raphael-source.json"}
 
 
 async def test_a_skill_folder_beyond_the_old_limits_comes_whole(rig, tmp_path):
-    folder = skill_folder(tmp_path, "heavy", assets__model__weights=b"\0" * (40 * 1024 * 1024))
+    folder = skill_folder(tmp_path, "heavy", {"assets/model/weights": b"\0" * (40 * 1024 * 1024)})
     for number in range(2500):
         (folder / "references").mkdir(exist_ok=True)
         (folder / "references" / f"note-{number}.md").write_text("n", encoding="utf-8")
@@ -47,7 +48,7 @@ async def test_a_skill_folder_beyond_the_old_limits_comes_whole(rig, tmp_path):
 
 
 async def test_a_zip_with_a_large_file_and_deep_folders_comes_whole(rig):
-    deep = "/".join(f"d{number}" for number in range(30)) + "/leaf.txt"
+    deep = "/".join(f"d{number}" for number in range(14)) + "/leaf.txt"
     data = archive([("big/SKILL.md", document("big").encode()), ("big/assets/video.bin", b"\0" * (40 * 1024 * 1024)),
                     (f"big/{deep}", b"leaf")])
     package = (await rig.call("skills.library.import", upload("big.zip", data)))["package"]
@@ -66,7 +67,7 @@ async def test_generated_and_system_folders_are_not_part_of_a_skill(rig, tmp_pat
     junk = {"node_modules/pkg/index.js": b"x", ".git/HEAD": b"ref", "__pycache__/a.pyc": b"x", ".DS_Store": b"x",
             "scripts/__pycache__/b.pyc": b"x", "scripts/run.py": b"print(1)"}
     if kind == "folder":
-        source = {"source": f"local:{skill_folder(tmp_path, 'tidy', **{k.replace('/', '__'): v for k, v in junk.items()})}"}
+        source = {"source": f"local:{skill_folder(tmp_path, 'tidy', junk)}"}
     else:
         source = upload("tidy.zip", archive([("tidy/SKILL.md", document("tidy").encode()),
                                               ("__MACOSX/tidy/._SKILL.md", b"x"), *[(f"tidy/{k}", v) for k, v in junk.items()]]))
@@ -98,7 +99,7 @@ async def test_a_skill_inside_another_skills_folder_is_a_skill_of_its_own(rig, t
 async def test_the_one_guard_names_the_file_its_size_and_the_limit(rig, tmp_path, monkeypatch):
     monkeypatch.setattr(skill_sources, "MAX_PACKAGE_BYTES", 5000)
     monkeypatch.setattr(skill_library, "MAX_PACKAGE_BYTES", 5000)
-    folder = skill_folder(tmp_path, "huge", assets__movie=b"\0" * 20000)
+    folder = skill_folder(tmp_path, "huge", {"assets/movie": b"\0" * 20000})
     with pytest.raises(RpcError) as error:
         await rig.call("skills.library.import", {"source": f"local:{folder}"})
     assert "size:" in str(error.value)
@@ -124,4 +125,4 @@ async def test_a_skill_document_over_its_limit_names_the_file_its_size_and_the_l
 async def test_a_document_without_its_description_names_the_problem_and_the_line(rig, text, expected):
     with pytest.raises(RpcError) as error:
         await rig.call("skills.library.import", {"text": text})
-    assert "skill:" in str(error.value) and detail(error) == {"reason": "front_matter", **expected}
+    assert "skill:" in str(error.value) and detail(error) == {"reason": "front_matter", "file": "SKILL.md", **expected}

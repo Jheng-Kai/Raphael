@@ -94,9 +94,12 @@ class MemberError(ValueError):
     "instructions", "group", "model", "tools", "avatar", "title", "prompt", "schedule", "sources",
     "full", "not_found", "raphael", "primary", "hidden"), and `str()` names the field: never what the owner wrote."""
 
-    def __init__(self, kind: str, message: str) -> None:
+    def __init__(self, kind: str, message: str, **detail: object) -> None:
         super().__init__(message)
         self.kind = kind
+        # What the window needs to say the cause in the owner's language (a file, a size, a limit, a line): the library's
+        # refusals carry it (`reason` first), every other refusal has none.
+        self.detail = detail
 
 
 @dataclass(frozen=True)

@@ -163,14 +163,18 @@ async def download_skills(source: object) -> list[tuple[str, dict]]:
         raise MemberError("download", "could not download the GitHub skill package") from None
 
 
-def skill_metadata(text: str, *, writing=False, previous_name=None) -> tuple[str, str]:
-    """Read only plain metadata; YAML tags and object constructors are never interpreted."""
+def skill_metadata(text: str, *, writing=False, previous_name=None, path="") -> tuple[str, str]:
+    """Read only plain metadata; YAML tags and object constructors are never interpreted. A document whose description
+    cannot be read is refused with the line to look at (`path` names its file when it has one)."""
     lines = text.splitlines()
     values: dict[str, str] = {}
+    at: dict[str, int] = {}
+    closing = 0
     if lines and lines[0].strip() == "---":
         field = None
-        for line in lines[1:]:
+        for number, line in enumerate(lines[1:], 2):
             if line.strip() == "---":
+                closing = number
                 break
             if field and line[:1].isspace():
                 values[field] += " " + line.strip()
@@ -178,6 +182,7 @@ def skill_metadata(text: str, *, writing=False, previous_name=None) -> tuple[str
             field = None
             key, sep, value = line.partition(":")
             if sep and key in ("name", "description"):
+                at[key] = number
                 value = value.strip()
                 if value in ("|", ">", "|-", ">-"):
                     values[key] = ""
@@ -190,7 +195,13 @@ def skill_metadata(text: str, *, writing=False, previous_name=None) -> tuple[str
         name = normalize_skill_name(raw_name)
     else:
         name = raw_name or normalize_skill_name(raw_name)
-    description = _text(values.get("description", ""), "description", 1000, blank=False)
+    description = " ".join(values.get("description", "").split())
+    if not description:
+        from .skill_errors import front_matter
+        problem = "none" if not lines or lines[0].strip() != "---" else "unclosed" if not closing else "no_description"
+        raise front_matter(problem, at.get("description") or closing or 1, path)
+    # A long description is cut to what a list can hold, never a reason to refuse a skill someone else wrote.
+    description = _text(description if len(description) <= 1000 else description[:999].rstrip() + "…", "description", 1000, blank=False)
     return name, description
 
 

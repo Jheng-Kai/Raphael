@@ -236,7 +236,7 @@ async def test_download_bounds_and_listed_version_mismatch_are_fail_closed(rig, 
     assert not data["plugins"][0]["installable"]
     assert "version differs" in data["plugins"][0]["reason"]
     monkeypatch.setattr(plugins, "MAX_PACKAGE_BYTES", 4)
-    with pytest.raises(MemberError, match="too large"):
+    with pytest.raises(MemberError, match="more than 4 B"):
         await plugins.download_plugin({"repo": "owner/repo", "commit": SHA, "path": "plugins/desk"})
     assert rig.service.capabilities.plugin_sets() == []
 

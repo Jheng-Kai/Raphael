@@ -15,18 +15,17 @@ from collections import OrderedDict
 from pathlib import Path, PureWindowsPath
 
 from .capabilities import MAX_SKILL_BYTES
-from .skill_library import MAX_DISCOVERY_DEPTH, MAX_DISCOVERY_ENTRIES, MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES, linked, walk
+from .skill_errors import (front_matter, no_skill, not_utf8, oversized_file, oversized_package, refused_entry, size_text,
+                           too_many_files, unreadable_archive, unsafe_path)
+from .skill_library import (MAX_ARCHIVE_ENTRIES, MAX_DISCOVERY_DEPTH, MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES, MAX_SCAN_ENTRIES,
+                            MAX_UPLOAD_BYTES, junk, linked, walk)
 from .skill_plugins import relative_path
 from .skill_references import attach_shared
 from .store import MemberError
 
 
 def invalid():
-    return MemberError("archive", "invalid skill package")
-
-
-def oversized():
-    return MemberError("size", "skill package exceeds the size or entry limit")
+    return unreadable_archive()
 
 
 class SkillFiles(dict):
@@ -47,41 +46,48 @@ class Snapshot:
         self.files = SkillFiles()
         self.links = {}
         self.size = 0
+        # Where this skill's folder is in its source: what an error says of a file inside it names it from there.
+        self.prefix = ""
 
     def entry(self, name, directory, size):
+        shown = self.prefix + name
         if size < 0:
-            raise invalid()
-        if len(self.explicit) >= self.entry_limit or size > self.byte_limit - self.size:
-            raise oversized()
+            raise unreadable_archive()
+        if len(self.explicit) >= self.entry_limit:
+            raise too_many_files(len(self.explicit) + 1, MAX_PACKAGE_FILES, shown)
+        if size > self.byte_limit - self.size:
+            used = MAX_PACKAGE_BYTES - (self.byte_limit - self.size)
+            raise oversized_package(shown, used + size, MAX_PACKAGE_BYTES)
         try:
             name = relative_path(name)
         except MemberError:
-            raise invalid() from None
+            raise unsafe_path(shown) from None
+        shown = self.prefix + name
         if len(name) > 4096:
-            raise invalid()
+            raise unsafe_path(shown)
         parts = name.split("/")
         if any(len(part) > 255 or PureWindowsPath(part).is_reserved() for part in parts):
-            raise invalid()
+            raise unsafe_path(shown)
         if any(p.casefold().startswith(".raphael") for p in parts):
-            raise invalid()
+            raise unsafe_path(shown)
         if parts[-1] == "SKILL.md" and size > MAX_SKILL_BYTES:
-            raise oversized()
+            raise oversized_file(shown, size, MAX_SKILL_BYTES)
         key = name.casefold()
         if key in self.explicit or (directory and size):
-            raise invalid()
+            raise refused_entry(shown, "named twice, or twice in letters of another case")
         self.explicit.add(key)
         for index in range(len(parts)):
             prefix = "/".join(parts[:index + 1])
             expected = (prefix, index + 1 < len(parts) or directory)
             if self.paths.setdefault(prefix.casefold(), expected) != expected:
-                raise invalid()
+                raise refused_entry(shown, "both a file and a folder")
         self.size += size
         return name
 
     def read(self, key, stream, size):
         data = stream.read(size + 1)
         if len(data) != size:
-            raise invalid()
+            raise refused_entry(self.prefix + key, "not the size its listing says")
         self.files[key] = data
 
     def finish(self):
@@ -98,20 +104,26 @@ class Snapshot:
                 else:
                     data = self.files.get("/".join(parts))
                     if data is not None:
-                        if len(data) > self.byte_limit - self.size or key.endswith("SKILL.md") and len(data) > MAX_SKILL_BYTES:
-                            raise oversized()
+                        if key.endswith("SKILL.md") and len(data) > MAX_SKILL_BYTES:
+                            raise oversized_file(self.prefix + key, len(data), MAX_SKILL_BYTES)
+                        if len(data) > self.byte_limit - self.size:
+                            used = MAX_PACKAGE_BYTES - (self.byte_limit - self.size)
+                            raise oversized_package(self.prefix + key, used + len(data), MAX_PACKAGE_BYTES)
                         self.files[key] = data
                         self.size += len(data)
                         continue
             self.files.skipped_links.append(key)
         if "SKILL.md" not in self.files:
-            raise MemberError("not_found", "no readable SKILL.md found in the package")
+            raise no_skill(self.prefix.rstrip("/"))
+        shown = self.prefix + "SKILL.md"
         try:
             text = self.files["SKILL.md"].decode("utf-8-sig")
         except UnicodeError:
-            raise MemberError("skill", "skill must be UTF-8 Markdown") from None
-        if not text.strip() or "\x00" in text:
-            raise MemberError("skill", "skill must be UTF-8 Markdown")
+            raise not_utf8(shown) from None
+        if not text.strip():
+            raise front_matter("none", 1, shown)
+        if "\x00" in text:
+            raise not_utf8(shown)
         return self.files
 
 
@@ -130,27 +142,28 @@ def skill_roots(names, wanted=None):
             try:
                 clean = relative_path(name)
             except MemberError:
-                raise invalid() from None
+                raise unsafe_path(name) from None
             roots.add(clean.removesuffix("SKILL.md"))
     if not roots and root_skill:
         return [""]
     if not roots:
-        raise MemberError("not_found", "no SKILL.md found in the package")
-    ordered = sorted(roots)
-    if any(right.startswith(left) for left, right in zip(ordered, ordered[1:])):
-        raise invalid()
-    return ordered
+        raise no_skill()
+    # A skill may hold another skill's folder: each is a skill, and a file belongs to the deepest one that holds it.
+    return sorted(roots)
 
 
 PLUGIN_MANIFEST = ".claude-plugin/plugin.json"
 
 
 def snapshot_entries(entries, read_entry, subpath, *, wanted=None, regular):
+    entries = [(name, info) for name, info in entries if not junk(name.removeprefix("./"))]
     roots = ([relative_path(subpath) + "/" if subpath else ""] if subpath is not None
              else skill_roots((name for name, _ in entries), wanted))
     snapshots = {root.casefold(): Snapshot() for root in roots}
     if len(snapshots) != len(roots):
-        raise invalid()
+        raise refused_entry(roots[0], "a folder named twice, or twice in letters of another case")
+    for root, snapshot in zip(roots, snapshots.values()):
+        snapshot.prefix = root
     manifests = set()
     if subpath is None and wanted is None:
         manifests = {
@@ -162,7 +175,8 @@ def snapshot_entries(entries, read_entry, subpath, *, wanted=None, regular):
     for name, info in entries:
         normalized = name.removeprefix("./")
         parts = normalized.replace("\\", "/").split("/")
-        for length in range(len(parts)):
+        # The deepest skill folder that holds the entry owns it.
+        for length in range(len(parts) - 1, -1, -1):
             root = "/".join(parts[:length]) + "/" if length else ""
             snapshot = snapshots.get(root.casefold())
             if snapshot is None:
@@ -170,12 +184,12 @@ def snapshot_entries(entries, read_entry, subpath, *, wanted=None, regular):
             if normalized in (".", "./") or normalized == root:
                 break
             if root not in roots:
-                raise invalid()
+                raise refused_entry(normalized, "inside a folder spelled in two ways")
             # Validate the selected entry's full spelling before stripping the prefix.
             try:
                 relative_path(name)
             except MemberError:
-                raise invalid() from None
+                raise unsafe_path(name) from None
             snapshot.byte_limit = snapshot.size + MAX_PACKAGE_BYTES - allocated
             snapshot.entry_limit = len(snapshot.explicit) + MAX_PACKAGE_FILES - count
             previous = snapshot.size
@@ -205,18 +219,21 @@ def snapshot_entries(entries, read_entry, subpath, *, wanted=None, regular):
 def zip_entry(archive, snapshot, name, info):
     directory = info.is_dir()
     kind = stat.S_IFMT(info.external_attr >> 16)
-    if (info.compress_type not in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED)
-            or info.flag_bits & 1 or info.external_attr & 0x400):
-        raise invalid()
+    if info.compress_type not in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED):
+        raise refused_entry(snapshot.prefix + name, "compressed in a way this import does not read")
+    if info.flag_bits & 1:
+        raise refused_entry(snapshot.prefix + name, "encrypted")
+    if info.external_attr & 0x400:
+        raise refused_entry(snapshot.prefix + name, "a special file")
     if kind == stat.S_IFLNK and not directory:
         key = snapshot.entry(name, False, info.file_size)
         if info.file_size > 4096:
-            raise oversized()
+            raise refused_entry(snapshot.prefix + name, "a link whose target is longer than a path can be")
         with archive.open(info) as stream:
             snapshot.links[key] = stream.read(4097).decode("utf-8")
         return
     if kind not in (0, stat.S_IFDIR if directory else stat.S_IFREG):
-        raise invalid()
+        raise refused_entry(snapshot.prefix + name, "a device or another file that is not a plain file")
     key = snapshot.entry(name, directory, info.file_size)
     if not directory:
         with archive.open(info) as stream:
@@ -226,11 +243,11 @@ def zip_entry(archive, snapshot, name, info):
 def tar_entry(archive, snapshot, name, info):
     if info.issym():
         if len(info.linkname) > 4096:
-            raise oversized()
+            raise refused_entry(snapshot.prefix + name, "a link whose target is longer than a path can be")
         snapshot.links[snapshot.entry(name, False, info.size)] = info.linkname
         return
     if info.type not in (tarfile.REGTYPE, tarfile.AREGTYPE, tarfile.DIRTYPE) or info.sparse:
-        raise invalid()
+        raise refused_entry(snapshot.prefix + name, "a device or another file that is not a plain file")
     key = snapshot.entry(name, info.isdir(), info.size)
     if not info.isdir():
         with archive.extractfile(info) as stream:
@@ -243,30 +260,30 @@ def checked_zip(data):
     stream = io.BytesIO(data)
     end = zipfile._EndRecData(stream)
     if not end:
-        raise invalid()
+        raise unreadable_archive()
     stop = end[zipfile._ECD_LOCATION]
     position = stop - end[zipfile._ECD_SIZE]
     count = 0
     while position < stop:
         if position < 0 or data[position:position + 4] != zipfile.stringCentralDir or position + 46 > stop:
-            raise invalid()
+            raise unreadable_archive()
         count += 1
-        if count > MAX_DISCOVERY_ENTRIES:
-            raise oversized()
+        if count > MAX_ARCHIVE_ENTRIES:
+            raise too_many_files(count, MAX_ARCHIVE_ENTRIES)
         lengths = struct.unpack_from("<HHH", data, position + 28)
         position += 46 + sum(lengths)
     if position != stop or count != end[zipfile._ECD_ENTRIES_TOTAL]:
-        raise invalid()
+        raise unreadable_archive()
     return zipfile.ZipFile(stream)
 
 
 def read_archive(name, data, *, subpath=None, repository=False, wanted=None):
     if len(data) > MAX_PACKAGE_BYTES:
-        raise oversized()
+        raise oversized_package(name, len(data), MAX_PACKAGE_BYTES)
     name = name.lower()
     if name.endswith(".md"):
         if len(data) > MAX_SKILL_BYTES:
-            raise oversized()
+            raise oversized_file(name, len(data), MAX_SKILL_BYTES)
         return [{"SKILL.md": data}]
     try:
         if name.endswith(".zip"):
@@ -275,7 +292,7 @@ def read_archive(name, data, *, subpath=None, repository=False, wanted=None):
                 if repository:
                     wrappers = {name.split("/", 1)[0] for name, _ in entries}
                     if len(wrappers) != 1:
-                        raise invalid()
+                        raise unreadable_archive()
                     entries = [(name.partition("/")[2], info) for name, info in entries if name.partition("/")[2]]
                     if subpath is None and wanted is None and any(
                             name == "SKILL.md" and stat.S_IFMT(info.external_attr >> 16) in (0, stat.S_IFREG)
@@ -286,23 +303,23 @@ def read_archive(name, data, *, subpath=None, repository=False, wanted=None):
                                         stat.S_IFMT(info.external_attr >> 16) in (0, stat.S_IFREG))
         if name.endswith((".tgz", ".tar.gz")):
             # Bound decompression even for content outside the selected folders.
-            limit = MAX_PACKAGE_BYTES + MAX_DISCOVERY_ENTRIES * 1536 + tarfile.RECORDSIZE
+            limit = MAX_PACKAGE_BYTES + MAX_ARCHIVE_ENTRIES * 1536 + tarfile.RECORDSIZE
             with gzip.GzipFile(fileobj=io.BytesIO(data)) as compressed:
                 raw = compressed.read(limit + 1)
             if len(raw) > limit:
-                raise oversized()
+                raise oversized_package(name, len(raw), limit)
             with tarfile.open(fileobj=io.BytesIO(raw), mode="r:") as archive:
                 entries = []
                 for info in archive:
-                    if len(entries) >= MAX_DISCOVERY_ENTRIES:
-                        raise oversized()
+                    if len(entries) >= MAX_ARCHIVE_ENTRIES:
+                        raise too_many_files(len(entries) + 1, MAX_ARCHIVE_ENTRIES)
                     entries.append((info.name, info))
                 return snapshot_entries(entries,
                     lambda snapshot, key, info: tar_entry(archive, snapshot, key, info), subpath,
                     regular=tarfile.TarInfo.isfile)
     except (zipfile.BadZipFile, tarfile.TarError, OSError, EOFError, zlib.error, NotImplementedError, UnicodeError):
-        raise invalid() from None
-    raise MemberError("source", "choose a Markdown, ZIP or tar.gz file")
+        raise unreadable_archive() from None
+    raise MemberError("source", "choose a Markdown, ZIP or tar.gz file", reason="file_type", file=name)
 
 
 def uploaded(file):
@@ -311,8 +328,10 @@ def uploaded(file):
     name, encoded = file["name"], file["data"]
     if not isinstance(name, str) or not name or any(c in name for c in "/\\:\x00") or not isinstance(encoded, str):
         raise MemberError("file", "invalid upload name or data")
-    if len(encoded) > ((MAX_PACKAGE_BYTES + 2) // 3) * 4:
-        raise oversized()
+    if len(encoded) > ((MAX_UPLOAD_BYTES + 2) // 3) * 4:
+        size = len(encoded) // 4 * 3
+        raise MemberError("size", f"{name} is {size_text(size)}, over the {size_text(MAX_UPLOAD_BYTES)} the window sends: "
+                          "pick its folder instead", reason="upload", file=name, size=size, limit=MAX_UPLOAD_BYTES)
     try:
         data = base64.b64decode(encoded, validate=True)
     except (ValueError, binascii.Error):
@@ -323,9 +342,13 @@ def uploaded(file):
 def local_path(source):
     path = Path(source[6:])
     if path.drive.startswith(("\\", "//")) or "\x00" in source:
-        raise MemberError("source", "choose a file on this computer")
-    if not path.is_absolute() or ".." in path.parts or any(linked(p) for p in (path, *path.parents)):
-        raise MemberError("source", "choose an absolute, unlinked local path")
+        raise MemberError("source", "choose a file on this computer", reason="path", file=source[6:])
+    if not path.is_absolute() or ".." in path.parts:
+        raise MemberError("source", f"{path} is not a full path on this computer", reason="path", file=str(path))
+    for each in (path, *path.parents):
+        if linked(each):
+            raise MemberError("source", f"{each} is a link, and links are not followed: pick the folder it leads to",
+                              reason="linked", file=str(each))
     return path
 
 
@@ -333,26 +356,31 @@ def local(source):
     path = local_path(source)
     if path.is_file():
         if path.stat().st_nlink > 1:
-            raise invalid()
+            raise refused_entry(str(path), "a hard link")
         with path.open("rb") as stream:
             return read_archive(path.name, stream.read(MAX_PACKAGE_BYTES + 1)), path.name
+    if not path.exists():
+        raise MemberError("not_found", f"{path} does not exist on this computer", reason="source", file=str(path))
     if not path.is_dir():
-        raise MemberError("source", "local skill source does not exist")
-    remaining = [MAX_DISCOVERY_ENTRIES]
+        raise MemberError("source", f"{path} is neither a folder nor a file", reason="path", file=str(path))
+    remaining = [MAX_SCAN_ENTRIES]
     folders = []
     try:
-        for folder, dirs, _ in walk(path, remaining):
+        for folder, dirs, _ in walk(path, remaining, hidden=True):
             if os.path.lexists(folder / "SKILL.md"):
                 folders.append(folder)
-                dirs.clear()
             elif len(folder.relative_to(path).parts) == MAX_DISCOVERY_DEPTH and dirs:
-                raise oversized()
+                raise MemberError("size", f"{folder} is nested deeper than {MAX_DISCOVERY_DEPTH} folders", reason="depth",
+                                  file=str(folder), limit=MAX_DISCOVERY_DEPTH)
         if not folders:
-            raise MemberError("not_found", "no SKILL.md found in the package")
+            raise no_skill(str(path))
         result, size, count = [], 0, 0
         for folder in sorted(folders):
+            # What another skill's folder holds inside this one is that skill's own.
+            nested = {f.relative_to(folder).as_posix() for f in folders if f != folder and f.is_relative_to(folder)}
             snapshot = folder_snapshot(folder, skill_links=True, byte_limit=MAX_PACKAGE_BYTES - size,
-                                       entry_limit=MAX_PACKAGE_FILES - count)
+                                       entry_limit=MAX_PACKAGE_FILES - count, exclude=nested,
+                                       prefix=folder.relative_to(path).as_posix() + "/" if folder != path else "")
             files = snapshot.finish()
             for parent in (folder, *folder.parents):
                 manifest = parent / PLUGIN_MANIFEST
@@ -367,8 +395,9 @@ def local(source):
             size += snapshot.size
             count += len(snapshot.explicit)
         return result, path.name
-    except OSError:
-        raise invalid() from None
+    except OSError as error:
+        raise MemberError("source", f"{error.filename or path} could not be read: {error.strerror or error}",
+                          reason="unreadable", file=str(error.filename or path)) from None
 
 
 def _file_revision(info):
@@ -395,7 +424,7 @@ def _read_files(entries):
 
 
 # Keep room for many small skills without retaining an unbounded set of file bodies.
-_PACKAGE_CACHE_BYTES = 2 * MAX_PACKAGE_BYTES
+_PACKAGE_CACHE_BYTES = 64 * 1024 * 1024
 _PACKAGE_CACHE_ENTRIES = 64
 _package_cache = OrderedDict()
 _package_cache_lock = threading.Lock()
@@ -418,10 +447,12 @@ def _cached_files(path, entries, size):
     return files
 
 
-def folder_snapshot(path, *, byte_limit=None, entry_limit=None, depth_limit=None, installed=False, skill_links=False, cached=False):
+def folder_snapshot(path, *, byte_limit=None, entry_limit=None, depth_limit=None, installed=False, skill_links=False, cached=False,
+                    exclude=(), prefix=""):
     if any(linked(p) for p in (path, *path.parents)):
         raise invalid()
     snapshot = Snapshot(byte_limit, entry_limit)
+    snapshot.prefix = prefix
     regular = []
     pending = [path]
     while pending:
@@ -433,10 +464,14 @@ def folder_snapshot(path, *, byte_limit=None, entry_limit=None, depth_limit=None
                 child = Path(entry.path)
                 if installed and directory_path == path and child.name == ".raphael-source.json":
                     continue
+                relative = child.relative_to(path).as_posix()
+                if not installed and junk(relative):
+                    continue
+                if relative in exclude:
+                    continue
                 # DirEntry.stat on Windows omits the hard-link count.
                 info = child.stat(follow_symlinks=False)
                 directory = stat.S_ISDIR(info.st_mode)
-                relative = child.relative_to(path).as_posix()
                 if skill_links and child.is_symlink():
                     target = child.readlink()
                     # Windows readlink returns an extended-length path for absolute file links.
@@ -447,11 +482,12 @@ def folder_snapshot(path, *, byte_limit=None, entry_limit=None, depth_limit=None
                     snapshot.links[snapshot.entry(relative, False, 0)] = target.as_posix()
                     continue
                 if linked(child) or not (directory or stat.S_ISREG(info.st_mode) and info.st_nlink == 1):
-                    raise invalid()
+                    raise refused_entry(prefix + relative, "a link, a device or a file with another name for the same data")
                 key = snapshot.entry(relative, directory, 0 if directory else info.st_size)
                 if directory:
                     if depth_limit is not None and len(child.relative_to(path).parts) > depth_limit:
-                        raise oversized()
+                        raise MemberError("size", f"{prefix + relative} is nested deeper than {depth_limit} folders",
+                                          reason="depth", file=prefix + relative, limit=depth_limit)
                     pending.append(child)
                 else:
                     if cached:
@@ -460,7 +496,7 @@ def folder_snapshot(path, *, byte_limit=None, entry_limit=None, depth_limit=None
                         with child.open("rb") as stream:
                             opened = os.fstat(stream.fileno())
                             if not os.path.samestat(info, opened) or opened.st_nlink != 1:
-                                raise invalid()
+                                raise refused_entry(prefix + relative, "changed while it was read")
                             snapshot.read(key, stream, info.st_size)
     if cached:
         snapshot.files.update(_cached_files(path, tuple(regular), snapshot.size))
