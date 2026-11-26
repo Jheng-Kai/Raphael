@@ -34,6 +34,8 @@ export const it = {
   "memberComputer.docker": "Macchina virtuale",
   "memberComputer.suggestionTitle": "Questa attività richiede una macchina virtuale",
   "memberComputer.suggestionSwitch": "Passa alla macchina virtuale",
+  "memberComputer.suggestionTitleHost": "Questa attività richiede questo computer",
+  "memberComputer.suggestionSwitchHost": "Passa a questo computer",
   "memberComputer.suggestionInstall": "Chiedi a {p0} di aiutarti a installare Docker",
   "memberComputer.dockerLocation": "Macchina virtuale ({p0})",
   "memberComputer.idle": "In attesa",

@@ -1450,10 +1450,12 @@ export function checkRendered(name, context = {}) {
   if (name.startsWith('computer-suggestion-')) {
     const card = document.querySelector('.computer-suggestion-card'), button = card.querySelector('.computer-suggestion-action');
     const style = getComputedStyle(button), footer = button.parentElement.getBoundingClientRect();
-    require(card.querySelector('.card-title').textContent === '這件事需要虛擬機' && card.querySelector('.card-body').textContent.includes('終端機'), 'the card names the step that needs the virtual machine');
+    const back = name.endsWith('this-pc');
+    require(card.querySelector('.card-title').textContent === (back ? '這件事需要這台電腦' : '這件事需要虛擬機') && card.querySelector('.card-body').textContent.includes(back ? '登入' : '終端機'),
+      back ? 'the card names what needs this computer' : 'the card names the step that needs the virtual machine');
     require(card.querySelectorAll('.card-close').length === 1 && card.querySelectorAll('.card-actions button').length === 1, 'one close and one action');
     // The install is asked of the first member, the chief of staff, by the name the owner gave it.
-    require(shownText(button) === (name.endsWith('installed') ? '改用虛擬機' : `請 ${window.__look.data.members.find(member => member.id === 0).name} 協助安裝`), 'the action matches Docker availability');
+    require(shownText(button) === (back ? '改用這台電腦' : name.endsWith('installed') ? '改用虛擬機' : `請 ${window.__look.data.members.find(member => member.id === 0).name} 協助安裝`), 'the action matches the computer proposed and Docker availability');
     require(button.matches(':hover') && style.backgroundColor !== 'rgba(0, 0, 0, 0)' && Math.abs(button.getBoundingClientRect().width - footer.width) <= 1, 'the whole action row lights up');
     return { check: name, action: shownText(button) };
   }

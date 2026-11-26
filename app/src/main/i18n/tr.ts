@@ -34,6 +34,8 @@ export const tr = {
   "memberComputer.docker": "Sanal makine",
   "memberComputer.suggestionTitle": "Bu görev sanal makine gerektiriyor",
   "memberComputer.suggestionSwitch": "Sanal makineye geç",
+  "memberComputer.suggestionTitleHost": "Bu görev bu bilgisayarı gerektiriyor",
+  "memberComputer.suggestionSwitchHost": "Bu bilgisayara geç",
   "memberComputer.suggestionInstall": "Docker kurulumu için {p0} adlı üyeden yardım iste",
   "memberComputer.dockerLocation": "Sanal makine ({p0})",
   "memberComputer.idle": "Boşta",

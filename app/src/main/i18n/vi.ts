@@ -34,6 +34,8 @@ export const vi = {
   "memberComputer.docker": "Máy ảo",
   "memberComputer.suggestionTitle": "Công việc này cần máy ảo",
   "memberComputer.suggestionSwitch": "Chuyển sang máy ảo",
+  "memberComputer.suggestionTitleHost": "Công việc này cần máy tính này",
+  "memberComputer.suggestionSwitchHost": "Chuyển sang máy tính này",
   "memberComputer.suggestionInstall": "Nhờ {p0} hỗ trợ cài đặt Docker",
   "memberComputer.dockerLocation": "Máy ảo ({p0})",
   "memberComputer.idle": "Đang chờ",

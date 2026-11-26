@@ -34,6 +34,8 @@ export const ru = {
   "memberComputer.docker": "Виртуальная машина",
   "memberComputer.suggestionTitle": "Для этой задачи нужна виртуальная машина",
   "memberComputer.suggestionSwitch": "Перейти на виртуальную машину",
+  "memberComputer.suggestionTitleHost": "Для этой задачи нужен этот компьютер",
+  "memberComputer.suggestionSwitchHost": "Перейти на этот компьютер",
   "memberComputer.suggestionInstall": "Попросить {p0} помочь с установкой Docker",
   "memberComputer.dockerLocation": "Виртуальная машина ({p0})",
   "memberComputer.idle": "Ожидание",

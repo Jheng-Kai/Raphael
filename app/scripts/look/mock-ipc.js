@@ -4,9 +4,10 @@ export function installMock(fixture, config = {}, target = window) {
   const variant = config.fixture ?? {};
   if (variant.computerSuggestion) {
     const turn = data.turns.find(turn => turn.id === 2);
-    const reason = "安裝套件需要執行終端機指令。";
-    Object.assign(turn, { question: "請安裝並執行這個套件。", text: reason, status: "done",
-      computer_suggestion: { reason, installed: variant.computerSuggestion === "installed", state: "pending" },
+    const toHost = variant.computerSuggestion === "this-pc";
+    const reason = toHost ? "公司內部網站要用你在這台電腦上已登入的帳號和公司網路才打得開。" : "安裝套件需要執行終端機指令。";
+    Object.assign(turn, { question: toHost ? "請整理公司內部網站的新人指南。" : "請安裝並執行這個套件。", text: reason, status: "done",
+      computer_suggestion: { reason, installed: toHost || variant.computerSuggestion === "installed", state: "pending", target: toHost ? "host" : "docker" },
       messages: [{ seq: 1, kind: "reply", text: reason, at_ms: turn.created_at_ms + 500 }] });
   }
   if (variant.typingPerformance) {

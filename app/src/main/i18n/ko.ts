@@ -34,6 +34,8 @@ export const ko = {
   "memberComputer.docker": "가상 머신",
   "memberComputer.suggestionTitle": "이 작업에는 가상 머신이 필요해요",
   "memberComputer.suggestionSwitch": "가상 머신으로 전환",
+  "memberComputer.suggestionTitleHost": "이 작업에는 이 컴퓨터가 필요해요",
+  "memberComputer.suggestionSwitchHost": "이 컴퓨터로 전환",
   "memberComputer.suggestionInstall": "{p0}에게 설치 도움 요청",
   "memberComputer.dockerLocation": "가상 머신({p0})",
   "memberComputer.idle": "대기 중",

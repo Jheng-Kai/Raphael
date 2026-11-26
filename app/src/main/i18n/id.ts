@@ -34,6 +34,8 @@ export const id = {
   "memberComputer.docker": "Mesin virtual",
   "memberComputer.suggestionTitle": "Tugas ini memerlukan mesin virtual",
   "memberComputer.suggestionSwitch": "Beralih ke mesin virtual",
+  "memberComputer.suggestionTitleHost": "Tugas ini memerlukan komputer ini",
+  "memberComputer.suggestionSwitchHost": "Beralih ke komputer ini",
   "memberComputer.suggestionInstall": "Minta bantuan {p0} untuk memasang Docker",
   "memberComputer.dockerLocation": "Mesin virtual ({p0})",
   "memberComputer.idle": "Siaga",

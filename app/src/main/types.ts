@@ -376,7 +376,7 @@ export interface AgentTurn {
   connection_proposals?: ConnectionProposal[];
   /** The cards of the owner's turn at the computer this turn's task is paused on (`computer.handback`). */
   computers?: ComputerCard[];
-  computer_suggestion?: { reason: string; installed: boolean; state: "pending" | "switched" };
+  computer_suggestion?: { reason: string; installed: boolean; state: "pending" | "switched"; target: "host" | "docker" };
   /** For a turn that resumed a task once its keys were saved: the connections they are for. */
   resumed_secrets?: string[];
   /** For a turn that resumed a task once the owner gave the computer back: the apps they used. */

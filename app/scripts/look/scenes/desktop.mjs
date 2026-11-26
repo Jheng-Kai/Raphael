@@ -126,8 +126,9 @@ export default [
   scene("desktop-computer-choice-docker", "The single computer dropdown includes Docker's local and SSH locations",
     [...entry, ...openComputerMenu, wait('.menu [data-value="docker-remote"][aria-checked="true"]'), check("desktop-computer-choice-docker")],
     {computerHost:"studio-mini", desktop:{transport:"docker",host:"studio-mini",state:"running",ready:true,control:"member"}}),
-  ...["installed", "missing"].map(docker => scene(`desktop-computer-suggestion-${docker}`,
-    "The member explains why a task needs a virtual machine and offers one owner action",
+  ...["installed", "missing", "this-pc"].map(docker => scene(`desktop-computer-suggestion-${docker}`,
+    docker === "this-pc" ? "A member on the virtual machine explains what needs this computer and offers one action to switch back"
+      : "The member explains why a task needs a virtual machine and offers one owner action",
     [member(1), wait(".computer-suggestion-card"), hover(".computer-suggestion-action"), check(`computer-suggestion-${docker}`)],
     {computerSuggestion: docker})),
   scene("desktop-takeover", "A private sign-in need opens the side panel with its request above the live screen", [member(1),wait('[data-card-desktop-screen] iframe:not([hidden])'),check("computer-takeover")],computer("waiting_control")),
