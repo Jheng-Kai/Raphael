@@ -544,6 +544,8 @@ class Tab:
     # The page's file chooser, which Chrome hands over instead of drawing: answered with browser_upload or by the owner.
     chooser: dict | None = None
     chooser_node: int | None = field(default=None, repr=False)
+    # The HTML5 drag Chrome reports while a member's drag intercepts them: what the page put in the drag, to drop it with.
+    drag: dict | None = field(default=None, repr=False)
 
     @property
     def view(self):
@@ -811,6 +813,11 @@ class HostBrowser:
                                    "mode": "multiple" if params.get("mode") == "selectMultiple" else "single"}
                     tab.chooser_node = params.get("backendNodeId")
                     self.notify_view()
+                    break
+        elif method == "Input.dragIntercepted":
+            for tab in self.tabs.values():
+                if tab.session == session:
+                    tab.drag = params["data"]
                     break
         elif method in ("Target.targetCreated", "Target.targetInfoChanged"):
             info = params["targetInfo"]

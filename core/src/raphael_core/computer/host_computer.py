@@ -37,6 +37,9 @@ VIEWPORT_TOOLS = {
     "type_text": ("Type into the page's focused field. Leave credentials, codes and payment to the owner.", "text", "text"),
     "press_key": ("Press a named page key or a chord (Enter, Tab, arrows, Ctrl+A, Alt+Left to go back); use type_text for letters and digits.", "key modifiers", "key"),
     "scroll": ("Scroll the page at x,y from the screenshot.", "x y direction amount by", "x y direction"),
+    "drag": ("Press, move and release the pointer from a ref or from_x,from_y to a ref or to_x,to_y: a slider, a reordered "
+             "list, an HTML5 drop. Read the page after.",
+             "ref destination_ref from_x from_y to_x to_y modifier steps duration_ms", ""),
 }
 PAGE_ACTIONS = {"browser_click", "browser_type", "browser_select"}
 INPUT_ACTIONS = (VIEWPORT_TOOLS.keys() - {"get_desktop_state"}) | PAGE_ACTIONS | {"browser_dialog", "browser_upload"}
@@ -81,6 +84,9 @@ WORDS = {
     "browser_tab_changed": "The Chrome tab closed or changed. Use browser_tabs to find a live tab.",
     "browser_tab_busy": "Another turn or task is using this tab. Try it again shortly or use another tab from browser_tabs.",
     "browser_page_changed": "The page changed after the last read. Read it again for current controls.",
+    "browser_ref_changed": "That element is gone or changed. Read the page again for current references.",
+    "browser_drag_points": "Start the drag with one ref or from_x and from_y, and end it with one destination_ref or to_x and to_y.",
+    "browser_drag_offscreen": "That element is outside the visible page. Scroll it into view, then read the page again.",
     "browser_action_refused": "Chrome could not perform this action on the selected page element.",
     "browser_key_is_text": "press_key does not type letters or digits, with or without Shift. Use type_text with the text, capitals included.",
     "browser_field_refused": "Chrome could not type into or select a value in that field.",
@@ -128,10 +134,16 @@ class HostComputerTools:
                 for key in ("parameters", "validation")
             }}
         for name, (description, fields, required) in VIEWPORT_TOOLS.items():
-            source = definitions[name]["parameters"]["properties"]
+            source = {**definitions["browser_pointer"]["parameters"]["properties"],
+                      **definitions[name]["parameters"]["properties"]}
             properties = {field: {**source[field]} for field in fields.split()}
-            for field in properties.keys() & {"x", "y"}:
-                properties[field]["description"] = f"{field.upper()} in the 1280 × 900 Chrome page screenshot."
+            for field in properties.keys() & {"x", "y", "from_x", "from_y", "to_x", "to_y"}:
+                properties[field]["description"] = (
+                    f"{field.replace('_', ' ').capitalize()} in the 1280 × 900 Chrome page screenshot.")
+            if name == "drag":
+                properties["ref"]["description"] = "Page ref to start the drag at. Alternative to from_x and from_y."
+                properties["destination_ref"]["description"] = "Page ref to end the drag at. Alternative to to_x and to_y."
+                properties["steps"]["description"] = "Pointer moves between press and release. Default: 20."
             self.definitions[name] = {"description": description, "parameters": {
                 "type": "object", "properties": {**properties, "tab_id": tab_id}, "required": required.split(),
                 "additionalProperties": False,
@@ -576,6 +588,8 @@ class HostComputerTools:
             return await host_page.act(browser, tab, name, arguments, approver)
         if name == "get_desktop_state":
             return await host_page.screenshot(browser, tab)
+        if name == "drag":
+            return await host_page.drag(browser, tab, arguments, approver), []
         if name in VIEWPORT_TOOLS:
             return await host_page.viewport_action(browser, tab, name, arguments, approver), []
         data, blocks = await host_page.snapshot(browser, tab, arguments)

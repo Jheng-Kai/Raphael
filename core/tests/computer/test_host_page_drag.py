@@ -155,7 +155,7 @@ async def test_an_element_outside_the_visible_page_asks_to_scroll_first(tmp_path
     tab.refs["thumb"] = (7, {"name": "Volume", "role": "slider", "actions": ["drag"]})
     with pytest.raises(BrowserError, match="browser_drag_offscreen"):
         await drag(browser, tab, {"ref": "thumb", "to_x": 5, "to_y": 5})
-    assert "scroll" in WORDS["browser_drag_offscreen"] and "Input.dispatchMouseEvent" not in [name for name, _ in sent]
+    assert "scroll" in WORDS["browser_drag_offscreen"].lower() and "Input.dispatchMouseEvent" not in [name for name, _ in sent]
 
 
 async def test_a_ref_that_changed_is_never_dragged(tmp_path, monkeypatch):
@@ -313,8 +313,7 @@ async def dataset(browser, tab, name):
 async def test_native_chrome_drags_a_slider_and_drops_a_card_on_a_drop_zone(tmp_path):
     async with drag_page(tmp_path) as (browser, tab):
         state, _ = await HostComputerTools.page_call(browser, tab, "get_browser_state", {}, "user")
-        refs = {row["name"]: row["ref"] for row in state["refs"] if row.get("ref")}
-        assert set(refs) >= {"Volume", "Card", "Done"}
+        assert {row["name"] for row in state["refs"] if "drag" in row["actions"]} >= {"Volume", "Card", "Done"}
 
         # A pointer drag: the thumb at the left end to three quarters of the track (x 400 of 100..500).
         slid, _ = await HostComputerTools.page_call(
@@ -325,9 +324,10 @@ async def test_native_chrome_drags_a_slider_and_drops_a_card_on_a_drop_zone(tmp_
 
         # An HTML5 drag from a ref to a ref.
         state, _ = await HostComputerTools.page_call(browser, tab, "get_browser_state", {}, "user")
-        refs = {row["name"]: row["ref"] for row in state["refs"] if row.get("ref")}
+        # A card with no role of its own is read as the text it holds: dragging that text drags the card.
+        refs = {row["name"]: row["ref"] for row in state["refs"] if row["role"] in ("StaticText", "group")}
         dropped, _ = await HostComputerTools.page_call(
-            browser, tab, "drag", {"ref": refs["Card"], "destination_ref": refs["Done"], "steps": 6, "duration_ms": 60}, "user")
+            browser, tab, "drag", {"ref": refs["Card"], "destination_ref": refs["Done"]}, "user")
         assert dropped["status"] == "delivered" and dropped["drag"] == "html5"
         events = (await dataset(browser, tab, "events")).split(",")
         assert events[0] == "start" and events[-1] == "drop" and "enter" in events
