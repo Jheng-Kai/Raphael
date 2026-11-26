@@ -234,7 +234,8 @@ async def test_receipt_dedupe_stage_conflict_and_removed_member(make_rig):
     assert task.scope=='private' and task.report_room_id==source.room_id and task.model_ref=='fake/model' and task.root_task_id==task.id
     assert json.loads(task.schedule_provenance)['source_turn_id']==source.id
     assert rig.service.handoff(RAPHAEL,args(target,request='Different work'),source_turn_id=source.id,language='zh-TW').error=='stage_conflict'
-    with rig.conn:
+    with rig.conn:  # the first member made is the chief, and a chief cannot leave a room: hand the chair back first
+        rig.conn.execute('UPDATE members SET primary_contact=0')
         rig.conn.execute('DELETE FROM room_members WHERE room_id=? AND member_id=?',(source.room_id,target.id))
     assert rig.service.handoff(RAPHAEL,args(target,stage_id='next'),source_turn_id=source.id,language='zh-TW').error=='member_removed_from_room'
     await until(lambda:rig.task(task.id).state=='failed')

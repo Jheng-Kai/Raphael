@@ -479,6 +479,8 @@ export function installMock(fixture, config = {}, target = window) {
   // position, and a `position` written to a member is a place in the order of all of them, numbered again from 0.
   if (variant.pinnedTiles) for (const id of variant.pinnedTiles) data.members.find(member => member.id === id).pinned = true;
   if (variant.onlyRaphael || variant.onboarding) data.members = data.members.filter(member => member.id === 0);
+  // With no slime there is no folder of slimes and no group chat of them either.
+  if (variant.onlyRaphael) { data.groups = []; data.rooms = []; }
   if (variant.chatgptSignedIn) {
     data.chatgpt = { signed_in: true, email: "owner@example.test", plan_scope_granted: true };
     data.settings.agent_model = "@chatgpt:gpt-6-sol?effort=medium";

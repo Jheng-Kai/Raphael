@@ -98,6 +98,12 @@ boot: Raphael's conversation, an empty list with its plus, no crown) and `no-chi
 member 0 with `raphael: true`, the slimes from id 1, the chief in `team_context` (the first slime unless a scene's `primaryMember` says
 another, or null), the quick conversation under member 0 only and rooms of slimes only; every scene begins in Raphael's space (the runner
 enters it through the account menu) unless its fixture says `start: "app"`.
+The core keeps the same line (R-RAPHAEL-01, R-RAPHAEL-02, R-CHIEF-02; offline tests `core/tests/members/test_raphael_apart.py` and `test_primary.py`): `members.list` flags member 0, lists slimes from id 1,
+and sends `team_context.primary_id` null with no slime; `members.update` (only personality, instructions, tools, notify, draft, cover),
+`members.delete`, `members.set_primary` and `members.set_avatar` refuse id 0 with kind `raphael`. An install from before is upgraded by schema
+101 (R-RAPHAEL-03; `core/tests/brain/test_raphael_split_migration.py`, `core/tests/members/test_raphael_files.py`): the member 0 the owner
+made their own becomes a new slime with its conversations, routines, memory, bot and computer folders, and Raphael starts again beside it; older
+builds cannot open that data.
 `member-settings-raphael-slime` opens the chief's settings, presses its face and the red horned slime, and checks
 (`member-settings-raphael-restyled`) that the core kept it and that the settings face and the sidebar row wear it.
 
