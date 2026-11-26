@@ -44,18 +44,22 @@ def local(cap, tmp_path, version="1.0.0", **kwargs):
 
 
 async def test_downloads_allow_a_full_hour_and_wait_two_minutes_for_data(monkeypatch):
-    from raphael_core.members.capabilities import DOWNLOAD_SECONDS, download_skill
+    from raphael_core.members.capabilities import DOWNLOAD_SECONDS, download_skills
+    from .github_fake import FakeGitHub
 
+    github = FakeGitHub(monkeypatch)
+    github.add("owner/skills", {"SKILL.md": b"---\nname: x\ndescription: y\n---\nBody"})
     timeouts = []
-    original = httpx.AsyncClient
+    patched = httpx.AsyncClient
+
     def http(**kwargs):
         timeouts.append(kwargs["timeout"])
-        return original(transport=httpx.MockTransport(lambda request: httpx.Response(200, text="Skill document")), **kwargs)
+        return patched(**kwargs)
 
     monkeypatch.setattr(httpx, "AsyncClient", http)
     assert DOWNLOAD_SECONDS == 3600
-    assert await download_skill("owner/skills") == ("owner/skills", "Skill document")
-    assert timeouts == [120]
+    [(url, files)] = await download_skills("owner/skills")
+    assert files["SKILL.md"].startswith(b"---") and timeouts == [120]
 
 
 async def test_a_plugin_imports_one_hundred_twenty_skills(rig, tmp_path):
@@ -236,7 +240,7 @@ async def test_download_bounds_and_listed_version_mismatch_are_fail_closed(rig, 
     assert not data["plugins"][0]["installable"]
     assert "version differs" in data["plugins"][0]["reason"]
     monkeypatch.setattr(plugins, "MAX_PACKAGE_BYTES", 4)
-    with pytest.raises(MemberError, match="too large"):
+    with pytest.raises(MemberError, match="more than 4 B"):
         await plugins.download_plugin({"repo": "owner/repo", "commit": SHA, "path": "plugins/desk"})
     assert rig.service.capabilities.plugin_sets() == []
 

@@ -182,7 +182,20 @@ def _library_error(error: MemberError) -> RpcError:
     """A refusal of the team skill library: its kind leads the message too, since the shell passes the window the message
     and not the data, and the window says each kind in words (skill-library.ts `failureText`). `library` tells the
     agent that the kind is the library's own answer (taken, not_found, ...) and not a wrong argument of its call."""
-    return RpcError(INVALID_PARAMS, f"Invalid params: {error.kind}: {error}", {"kind": error.kind, "library": True})
+    text = f"Invalid params: {error.kind}: {error}"
+    # What the window needs to say the cause in the owner's language rides at the end of the message, as the window reads
+    # only the message: a file, a size, a limit, a line (skill-library.ts `failureText`).
+    if getattr(error, "detail", None):
+        text += " [[" + json.dumps(error.detail, ensure_ascii=False, separators=(",", ":")) + "]]"
+    return RpcError(INVALID_PARAMS, text, {"kind": error.kind, "library": True})
+
+
+def _io_error(error: BaseException, what: str) -> MemberError:
+    """A disk that would not read or write a skill's file, with the file and the system's own words (a path too long for
+    Windows, a full disk, a file another program holds)."""
+    name = os.path.basename(str(getattr(error, "filename", "") or ""))
+    why = str(getattr(error, "strerror", "") or error)
+    return MemberError("io", f"could not {what}{f' ({name})' if name else ''}: {why}", reason="disk", file=name, why=why)
 
 
 def _uploaded_picture(params, kind):
@@ -940,7 +953,7 @@ class MembersService:
             except MemberError as error:
                 raise _rpc_error(error) from None
             except (OSError, UnicodeError) as error:
-                raise _rpc_error(MemberError("io", "could not read or keep skill files")) from error
+                raise _rpc_error(_io_error(error, "read or keep the skill files")) from error
         _, ids, plugin, skipped = await self._import_package(member_id, args)
         left_out = {"skipped": skipped} if skipped else {}
         if plugin:
@@ -995,7 +1008,13 @@ class MembersService:
             files, name = await asyncio.to_thread(skill_sources.local, source)
             return [(source, f) for f in files], source, "source", name
         documents = await download_skills(source)
-        return documents, source, "source", source.rstrip("/").split("/")[-1]
+        from .skill_github import label
+
+        try:
+            name = label(source)
+        except MemberError:
+            name = source.rstrip("/").split("/")[-1]
+        return documents, source, "source", name
 
     async def _import_package(self, member, params, *, new_package=False):
         self._package_fields(params, ("source", "text", "file", "access", "name", "plugin", "set_id", "marketplace"))
@@ -1010,7 +1029,8 @@ class MembersService:
             raise invalid_params("plugin must be true or false")
         plugin, skipped = None, []
         try:
-            if params.get("plugin") or "marketplace" in params or "set_id" in params:
+            as_plugin = bool(params.get("plugin") or "marketplace" in params or "set_id" in params)
+            if as_plugin:
                 if member != -1 or "text" in params or "file" in params:
                     raise invalid_params("a plugin needs a shared plugin source")
                 if (not any(k in params for k in ("set_id", "marketplace", "source"))
@@ -1018,9 +1038,17 @@ class MembersService:
                         or "marketplace" in params and "name" not in params):
                     raise invalid_params("choose one installed plugin, marketplace entry or local source")
                 identifier = _whole(params, "set_id", least=1) if "set_id" in params else None
-                plugin = await self.capabilities.import_plugin(params.get("source"), set_id=identifier,
-                    marketplace=params.get("marketplace"), name=params.get("name"), access=params.get("access"),
-                    require_new=new_package and identifier is None)
+                try:
+                    plugin = await self.capabilities.import_plugin(params.get("source"), set_id=identifier,
+                        marketplace=params.get("marketplace"), name=params.get("name"), access=params.get("access"),
+                        require_new=new_package and identifier is None)
+                except MemberError as error:
+                    # The plugin option on a source that is no plugin (no manifest) imports its skills as a package.
+                    if not (error.detail.get("reason") == "no_manifest" and "source" in params
+                            and identifier is None and "marketplace" not in params):
+                        raise
+                    as_plugin = False
+            if as_plugin:
                 skipped = plugin.pop("skipped", [])
                 key = f"set:{plugin['id']}"
                 ids = [s["id"] for s in (await self.packages.view_async(key))["skills"]]
@@ -1033,13 +1061,13 @@ class MembersService:
         except MemberError as error:
             raise (_library_error if member == -1 else _rpc_error)(error) from None
         except (OSError, UnicodeError) as error:
-            raise (_library_error if member == -1 else _rpc_error)(MemberError("io", "could not read or keep skill files")) from error
+            raise (_library_error if member == -1 else _rpc_error)(_io_error(error, "read or keep the skill files")) from error
         self._changed("members.skills.changed", max(member, 0))
         self._changed()
         return key, ids, plugin, skipped
 
     async def _packages_update(self, params):
-        self._package_fields(params, ("key", "enabled", "access", "skill", "refresh"))
+        self._package_fields(params, ("key", "enabled", "access", "skill", "refresh", "rename"))
         key = params.get("key")
         revision = self.capabilities.skill_revision()
         try:
@@ -1054,6 +1082,10 @@ class MembersService:
             raise invalid_params("refresh must be true")
         if "access" in params:
             self._cap(self.packages.validate_access, params["access"])
+        rename = params.get("rename")
+        if "rename" in params and (not isinstance(rename, dict) or set(rename) != {"id", "name"} or type(rename["id"]) is not int
+                                   or not isinstance(rename["name"], str)):
+            raise invalid_params("give the skill to rename and its new name")
         skill = params.get("skill")
         if "skill" in params:
             if (not isinstance(skill, dict) or set(skill) != {"id", "enabled"} or type(skill["id"]) is not int
@@ -1063,6 +1095,8 @@ class MembersService:
             if revision != self.capabilities.skill_revision():
                 raise MemberError("not_found", "the skill library changed during update")
             changes = {"access": params.get("access"), "enabled": params.get("enabled"), "skill": skill}
+            if rename:
+                self.packages.rename_skill(key, rename["id"], rename["name"])
             if params.get("refresh"):
                 if not package["updatable"]:
                     raise MemberError("source", "this package has no available update source")
@@ -1070,7 +1104,7 @@ class MembersService:
                 if key.startswith("set:"):
                     await self.capabilities.import_plugin(set_id=int(key[4:]), required_skill=required, **changes)
                 else:
-                    data = await self._package_documents({"source": package["source"]})
+                    data = await self._refresh_documents(key, package)
                     if revision != self.capabilities.skill_revision():
                         raise MemberError("not_found", "the skill library changed during refresh")
                     await self.packages.install(-1, *data, key=key, required_skill=required, **changes)
@@ -1080,10 +1114,20 @@ class MembersService:
         except MemberError as error:
             raise _library_error(error) from None
         except (OSError, UnicodeError) as error:
-            raise _library_error(MemberError("io", "could not refresh skill files")) from error
+            raise _library_error(_io_error(error, "refresh the skill files")) from error
         self._changed("members.skills.changed", 0)
         self._changed()
         return {"package": await self.packages.view_async(key)}
+
+    async def _refresh_documents(self, key, package):
+        """What a package is made again from: its source, or for a group (skills joined one by one) each skill's own."""
+        if self._conn.execute("SELECT origin FROM skill_packages WHERE key=?", (key,)).fetchone()["origin"] != "group":
+            return await self._package_documents({"source": package["source"]})
+        documents = []
+        for source in dict.fromkeys(row["source"] for row in self._conn.execute(
+                "SELECT source FROM member_skills WHERE package_key=? ORDER BY id", (key,))):
+            documents += (await self._package_documents({"source": source}))[0]
+        return documents, package["source"], "group", package["name"]
 
     async def _packages_delete(self, params):
         self._package_fields(params, ("key", "skill"))
@@ -1097,7 +1141,7 @@ class MembersService:
         except MemberError as error:
             raise _library_error(error) from None
         except OSError as error:
-            raise _library_error(MemberError("io", "could not remove the skill files")) from error
+            raise _library_error(_io_error(error, "remove the skill files")) from error
         self._changed("members.skills.changed", 0)
         self._changed()
         return {"deleted": True, **({"package": package} if package else {})}

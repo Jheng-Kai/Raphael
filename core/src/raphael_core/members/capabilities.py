@@ -9,9 +9,6 @@ import json
 import re
 import sqlite3
 from pathlib import Path
-from urllib.parse import quote, unquote, urlsplit
-
-import httpx
 
 from .store import MemberError, MemberStore, _text
 from ..bots.homes import HomeError, digest, redact_secrets
@@ -29,148 +26,25 @@ _COMMAND = re.compile(r"[a-z][a-z0-9_-]{0,31}")
 _SLASH_WORD = re.compile(r"(?<!\S)/(\S+)")
 
 
-def safe_source_part(part: str) -> bool:
-    return bool(part and part not in (".", "..") and not any(
-        char in "/\\" or ord(char) < 32 or ord(char) == 127 for char in part
-    ))
-
-
-def skill_urls(source: object) -> tuple[str, list[str]]:
-    """Normalize a supported source without permitting arbitrary network destinations."""
-    if not isinstance(source, str):
-        raise MemberError("source", "a skill needs a GitHub repository or SKILL.md URL")
-    source = source.strip()
-    parts = source.split("/")
-    if "://" in source:
-        try:
-            url = urlsplit(source)
-        except ValueError:
-            raise MemberError("source", "invalid skill source URL") from None
-        try:
-            port = url.port
-        except ValueError:
-            raise MemberError("source", "invalid skill source port") from None
-        if url.scheme != "https" or url.username or url.password or port or url.query or url.fragment:
-            raise MemberError("source", "skill URLs must be plain HTTPS URLs")
-        parts = [unquote(part) for part in url.path.strip("/").split("/")]
-        if url.hostname in ("github.com", "www.github.com"):
-            if len(parts) == 2:
-                parts[1] = parts[1].removesuffix(".git")
-                paths = ["main/SKILL.md", "master/SKILL.md"]
-            else:
-                if len(parts) < 5 or parts[2] not in ("blob", "raw") or parts[-1] != "SKILL.md":
-                    raise MemberError("source", "the GitHub URL must name a repository or SKILL.md file")
-                parts = parts[:2] + parts[3:]
-                paths = ["/".join(parts[2:])]
-        elif url.hostname == "raw.githubusercontent.com":
-            if len(parts) < 4 or parts[-1] != "SKILL.md":
-                raise MemberError("source", "the URL must name a SKILL.md file")
-            paths = ["/".join(parts[2:])]
-        elif url.hostname in ("skills.sh", "www.skills.sh") and len(parts) == 3:
-            skill = parts[2]
-            paths = [f"{branch}/{folder}SKILL.md" for branch in ("main", "master")
-                     for folder in (f"skills/{skill}/", f"{skill}/", "")]
-        else:
-            raise MemberError("source", "only GitHub and skills.sh skill sources are supported")
-    else:
-        if len(parts) != 2:
-            raise MemberError("source", "a repository is owner/repo")
-        paths = ["main/SKILL.md", "master/SKILL.md"]
-    if not all(safe_source_part(part) for part in parts):
-        raise MemberError("source", "invalid skill source path")
-    repo = "/".join(quote(part, safe="") for part in parts[:2])
-    return source, [f"https://raw.githubusercontent.com/{repo}/{quote(path, safe='/')}" for path in paths]
-
-
-async def download_skill(source: object) -> tuple[str, str]:
-    return await _download_skill(source, asyncio.get_running_loop().time() + DOWNLOAD_SECONDS)
-
-
-async def _download_skill(source: object, deadline: float) -> tuple[str, str]:
-    source, urls = skill_urls(source)
-    try:
-        async with asyncio.timeout_at(deadline), httpx.AsyncClient(timeout=DOWNLOAD_STALL_SECONDS, follow_redirects=False, trust_env=False) as client:
-            for url in urls:
-                async with client.stream("GET", url, headers={"Accept": "text/plain"}) as response:
-                    if response.status_code == 404:
-                        continue
-                    response.raise_for_status()
-                    if response.is_redirect:
-                        raise MemberError("source", "skill redirects are not accepted")
-                    data = bytearray()
-                    async for chunk in response.aiter_bytes():
-                        data.extend(chunk)
-                        if len(data) > MAX_SKILL_BYTES:
-                            raise MemberError("size", "skill document is too large")
-                    text = bytes(data).decode("utf-8-sig")
-                    if not text.strip() or "\x00" in text:
-                        raise MemberError("skill", "skill must be a UTF-8 Markdown document")
-                    return source, text
-    except MemberError:
-        raise
-    except (httpx.HTTPError, UnicodeError, ValueError, TimeoutError):
-        raise MemberError("download", "could not download the skill Markdown document") from None
-    raise MemberError("not_found", "no SKILL.md found at that source")
-
-
-async def _bounded_get(client: httpx.AsyncClient, url: str, limit: int) -> bytes:
-    async with client.stream("GET", url) as response:
-        response.raise_for_status()
-        if response.is_redirect:
-            raise MemberError("source", "skill redirects are not accepted")
-        data = bytearray()
-        async for chunk in response.aiter_bytes():
-            data.extend(chunk)
-            if len(data) > limit:
-                raise MemberError("size", "skill source is too large")
-        return bytes(data)
-
-
 async def download_skills(source: object) -> list[tuple[str, dict]]:
-    """Download one bounded GitHub snapshot, then open only the selected skill folders."""
-    from .skill_library import MAX_PACKAGE_BYTES
-    from .skill_sources import read_archive
+    """The skills of a GitHub or skills.sh source, each with its folder (members/skill_github.py)."""
+    from .skill_github import fetch
 
-    normalized, candidates = skill_urls(source)
-    parsed = urlsplit(normalized)
-    segments = urlsplit(candidates[0]).path.strip("/").split("/")
-    repo = "/".join(segments[:2])
-    explicit = parsed.path.rstrip("/").endswith("/SKILL.md")
-    wanted = unquote(parsed.path.strip("/").split("/")[-1]) if parsed.hostname in ("skills.sh", "www.skills.sh") else None
-    try:
-        async with asyncio.timeout(DOWNLOAD_SECONDS), httpx.AsyncClient(timeout=DOWNLOAD_STALL_SECONDS, follow_redirects=False, trust_env=False) as client:
-            if explicit:
-                ref = unquote(segments[2])
-                folder = "/".join(unquote(part) for part in segments[3:-1])
-            else:
-                metadata = json.loads(await _bounded_get(client, f"https://api.github.com/repos/{repo}", 128 * 1024))
-                ref = metadata.get("default_branch") if isinstance(metadata, dict) else None
-                folder = None
-            if not isinstance(ref, str) or not all(safe_source_part(part) for part in ref.split("/")):
-                raise MemberError("source", "invalid repository branch metadata")
-            branch = quote(ref, safe="")
-            raw = await _bounded_get(client, f"https://codeload.github.com/{repo}/zip/{branch}", MAX_PACKAGE_BYTES)
-            files = await asyncio.to_thread(read_archive, "repository.zip", raw, subpath=folder, repository=True, wanted=wanted)
-            return [(f"https://github.com/{repo}/blob/{branch}/{quote(skill.folder, safe='/')}SKILL.md", skill)
-                    for skill in files]
-    except MemberError:
-        raise
-    except httpx.HTTPStatusError as error:
-        if error.response.status_code == 404:
-            raise MemberError("not_found", "no skill at that GitHub source") from None
-        raise MemberError("download", "could not download the GitHub skill package") from None
-    except (httpx.HTTPError, UnicodeError, ValueError, TimeoutError):
-        raise MemberError("download", "could not download the GitHub skill package") from None
+    return await fetch(source)
 
 
-def skill_metadata(text: str, *, writing=False, previous_name=None) -> tuple[str, str]:
-    """Read only plain metadata; YAML tags and object constructors are never interpreted."""
+def skill_metadata(text: str, *, writing=False, previous_name=None, path="") -> tuple[str, str]:
+    """Read only plain metadata; YAML tags and object constructors are never interpreted. A document whose description
+    cannot be read is refused with the line to look at (`path` names its file when it has one)."""
     lines = text.splitlines()
     values: dict[str, str] = {}
+    at: dict[str, int] = {}
+    closing = 0
     if lines and lines[0].strip() == "---":
         field = None
-        for line in lines[1:]:
+        for number, line in enumerate(lines[1:], 2):
             if line.strip() == "---":
+                closing = number
                 break
             if field and line[:1].isspace():
                 values[field] += " " + line.strip()
@@ -178,6 +52,7 @@ def skill_metadata(text: str, *, writing=False, previous_name=None) -> tuple[str
             field = None
             key, sep, value = line.partition(":")
             if sep and key in ("name", "description"):
+                at[key] = number
                 value = value.strip()
                 if value in ("|", ">", "|-", ">-"):
                     values[key] = ""
@@ -190,7 +65,13 @@ def skill_metadata(text: str, *, writing=False, previous_name=None) -> tuple[str
         name = normalize_skill_name(raw_name)
     else:
         name = raw_name or normalize_skill_name(raw_name)
-    description = _text(values.get("description", ""), "description", 1000, blank=False)
+    description = " ".join(values.get("description", "").split())
+    if not description:
+        from .skill_errors import front_matter
+        problem = "none" if not lines or lines[0].strip() != "---" else "unclosed" if not closing else "no_description"
+        raise front_matter(problem, at.get("description") or closing or 1, path)
+    # A long description is cut to what a list can hold, never a reason to refuse a skill someone else wrote.
+    description = _text(description if len(description) <= 1000 else description[:999].rstrip() + "…", "description", 1000, blank=False)
     return name, description
 
 

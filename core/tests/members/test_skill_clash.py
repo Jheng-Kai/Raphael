@@ -24,10 +24,10 @@ async def packages(rig):
 
 async def test_a_taken_name_says_which_package_holds_it_and_whether_it_is_switched_off(rig):
     held = (await rig.call("skills.library.import", pack("tdd", "review")))["package"]
-    with pytest.raises(RpcError, match=r'taken: a skill named tdd already exists in the package "tools.zip"$'):
+    with pytest.raises(RpcError, match=r'taken: a skill named tdd already exists in the package "tools.zip" \[\['):
         await rig.call("skills.library.import", {"text": document("tdd")})
     await rig.call("skills.library.update", {"key": held["key"], "skill": {"id": skill_id(held, "tdd"), "enabled": False}})
-    with pytest.raises(RpcError, match=r'in the package "tools.zip" \(switched off\)$'):
+    with pytest.raises(RpcError, match=r'in the package "tools.zip" \(switched off\) \[\['):
         await rig.call("skills.library.import", {"text": document("tdd")})
     assert len(await packages(rig)) == 1
 

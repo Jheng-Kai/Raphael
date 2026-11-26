@@ -61,6 +61,7 @@ export function installMock(fixture, config = {}, target = window) {
       skills: [{ id: 300 + 2 * at, name: `${name}一`, description: `${name}的第一個技能`, enabled: true }, { id: 301 + 2 * at, name: `${name}二`, description: `${name}的第二個技能`, enabled: true }],
     }))];
   }
+  if (variant.skillLibraryEmpty) data.skillLibrary = [];
   if (variant.hiddenMember) {
     // One member and one group chat taken off the list: they wait in the sidebar's hidden folder.
     const member = data.members.find(item => item.id === 2), room = data.rooms.find(item => item.id === 1);
@@ -1451,10 +1452,24 @@ export function installMock(fixture, config = {}, target = window) {
         if ("enabled" in p) pack.enabled = p.enabled;
         if ("access" in p) pack.access = p.access;
         if (p.skill) pack.skills.find(skill => skill.id === p.skill.id).enabled = p.skill.enabled;
+        if (p.rename) pack.skills.find(skill => skill.id === p.rename.id).name = p.rename.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-");
         return { package: pack };
       }
       case "skills.library.import": {
         if (p.source === "nothing/here") throw new Error("[-32602] Invalid params: not_found: no SKILL.md found");
+        // A cause the core names (members/skill_errors.py): its kind leads the message and its detail rides at the end. The
+        // scene's fixture holds the refusal of each source it fails.
+        const refusal = variant.importRefusal?.[p.source];
+        if (refusal) throw new Error(`[-32602] Invalid params: ${refusal[0]}: the core's own words [[${JSON.stringify({ reason: refusal[1], ...refusal[2] })}]]`);
+        if (variant.skillImportPending) return new Promise(() => {});
+        if (variant.importMade?.[p.source]) {
+          // What the import makes (a plugin of skills that share a name prefix, or a package that left some out), by source.
+          const made = variant.importMade[p.source];
+          const kit = { key: made.key, name: made.name, kind: made.kind, source: p.source, description: "", version: "", enabled: true, access: [], updatable: true,
+            skills: made.skills.map((name, at) => ({ id: made.id + at, name, description: `${name} 的說明`, enabled: true })) };
+          data.skillLibrary = [...data.skillLibrary, kit].sort((a, b) => a.name.localeCompare(b.name));
+          return { package: kit, ...(made.skipped ? { skipped: made.skipped } : {}) };
+        }
         const skills = p.text ? [{ id: 401, name: "旅行行程", description: "依日期整理行程與訂位", enabled: true }]
           : [{ id: 402, name: "簡報大綱", description: "把資料整理成簡報大綱", enabled: true }, { id: 403, name: "講稿", description: "依大綱寫講稿", enabled: true }];
         const pack = { key: `pack:${data.skillLibrary.length + 10}`, name: p.text ? "旅行行程" : "簡報工具", kind: skills.length > 1 ? "pack" : "single",

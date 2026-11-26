@@ -274,7 +274,7 @@ async def test_only_selected_skill_links_are_resolved_and_external_links_are_not
                 output.writestr(entry, target)
     data = buffer.getvalue()
     name = "notes.tgz" if tar else "notes.zip"
-    [files] = skill_sources.read_archive(name, data, subpath="notes")
+    [files] = skill_sources.read_archive(name, data)
     assert files["deep/read.txt"] == b"read this"
     assert "external.txt" not in files and "AGENTS.md" not in files
     assert files.skipped_links == ["external.txt"]
@@ -289,7 +289,7 @@ async def test_only_selected_skill_links_are_resolved_and_external_links_are_not
     from pathlib import Path
 
     folder = Path(native["path"]).parent
-    with pytest.raises(MemberError, match="invalid skill package"):
+    with pytest.raises(MemberError, match="not a path a skill may hold"):
         load_package(folder)
     assert load_package(folder, installed=True)["deep/read.txt"] == b"read this"
 
@@ -399,7 +399,7 @@ async def test_the_imported_plugin_skill_reads_its_linked_files_and_the_result_n
     assert not (folder.parent / "actions").exists()
 
 
-def test_a_skill_outside_a_plugin_or_beside_its_files_is_imported_as_it_is(tmp_path):
+def test_a_skill_outside_a_plugin_takes_the_files_it_links_to_from_the_folder_picked(tmp_path):
     root = tmp_path / "loose"
     (root / "skills" / "notes").mkdir(parents=True)
     (root / "actions").mkdir()
@@ -407,7 +407,8 @@ def test_a_skill_outside_a_plugin_or_beside_its_files_is_imported_as_it_is(tmp_p
     text = document("notes") + "\nRead ../../actions/report.md.\n"
     (root / "skills" / "notes" / "SKILL.md").write_bytes(text.encode())
     [files], _ = skill_sources.local(f"local:{root}")
-    assert files["SKILL.md"] == text.encode() and list(files) == ["SKILL.md"] and not files.skipped_references
+    assert files["SKILL.md"] == text.replace("../../actions/report.md", "_plugin/actions/report.md").encode()
+    assert files["_plugin/actions/report.md"] == b"report" and not files.skipped_references and not files.plugin_manifest
     # A plugin skill whose folder already uses the shared name copies nothing and says why.
     (root / ".claude-plugin").mkdir()
     (root / ".claude-plugin" / "plugin.json").write_bytes(b"{}")

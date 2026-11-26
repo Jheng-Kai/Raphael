@@ -7,7 +7,10 @@
 // or page offers 更新 and 刪除 (its ⋯ is not drawn: context-menu.ts presses it at the pointer).
 // The importer is the tab's first card (a tab is its name, then its sections: R-UI-115): a skills.sh or GitHub link or
 // owner/repo, or pasted SKILL.md text in its place, a .zip, .tar.gz or .md file picked or dropped on the card, or a folder
-// picked in the system's dialog, and one 匯入 (#249). The core does the work: skills.library.* (members/service.py).
+// picked in the system's dialog, and one 匯入 (#249). The core does the work: skills.library.* (members/service.py). An import
+// under way says so under the card; a failure says its own cause with the file, size, limit or packages it names (the core's
+// `[[json]]` detail, R-SKILL-21); a skill of a package is renamed from its page (R-SKILL-25) and skills of one name prefix
+// arrive as one plugin (R-SKILL-20), with no question to the owner (#355).
 
 import { core, membersList, pickOutputFolder } from "./api";
 import { t } from "./i18n";
@@ -40,10 +43,12 @@ export interface SkillLibraryView {
   skill: number | null; doc: { id: number; text: string } | null; docFailed: boolean;
   /** What the last import left out for the package it made (#313): said under the importer or on that package's page. */
   skipped: { key: string; items: SkippedSkill[] } | null;
+  /** The skill whose name is being edited on its page, in place of its title. */
+  renaming: number | null;
 }
 export const emptySkillLibraryView = (): SkillLibraryView => ({
   packages: [], members: [], loaded: false, failed: false, page: null, pasting: false, busy: false, refreshing: new Set(), error: "",
-  skill: null, doc: null, docFailed: false, skipped: null,
+  skill: null, doc: null, docFailed: false, skipped: null, renaming: null,
 });
 
 /** The causes the core names (the `MemberError` kind that leads its message, members/service.py `_library_error`), in
@@ -52,8 +57,8 @@ const CAUSES = {
   archive: "skillLib.badArchive", file: "skillLib.badArchive", size: "skillLib.tooLarge", not_found: "skillLib.noSkill",
   name: "skillLib.badName", skill: "skillLib.invalidDocument", source: "skillLib.unsupported", unsupported: "skillLib.unsupported",
 } as const satisfies Record<string, MessageKey>;
-/** The largest file read here: the core's own package limit (MAX_PACKAGE_BYTES). */
-const MAX_FILE = 32 * 1024 * 1024;
+/** The largest file the window reads and sends: the core's own upload limit (MAX_UPLOAD_BYTES). A folder has none. */
+const MAX_FILE = 128 * 1024 * 1024;
 const ACCEPT = ".zip,.tar.gz,.tgz,.md";
 
 /** Who may use a package, in a few words: the whole team, nobody yet, the names of one or two, or how many. */
@@ -108,6 +113,10 @@ function libraryRowHTML(className: string, attrs: string, label: string, control
 const skillToggleHTML = (p: LibraryPackage, skill: LibrarySkill, v: SkillLibraryView): string =>
   tg(skill.enabled, `${t("members.profile.enable")} ${skill.name}`, ` data-skl="skill" data-key="${esc(p.key)}" data-id="${skill.id}"${p.enabled && !v.refreshing.has(p.key) ? "" : " disabled"}`);
 
+/** A pack's skill's pencil, on its own page: its title becomes a field. A plugin's own skills keep the plugin's names. */
+const skillRenameHTML = (p: LibraryPackage, skill: LibrarySkill, v: SkillLibraryView): string =>
+  p.key.startsWith("set:") ? "" : iconBtn("pencil", t("skillLib.rename"), ` data-skl="skill-rename" data-key="${esc(p.key)}" data-id="${skill.id}"${v.refreshing.has(p.key) ? " disabled" : ""}`);
+
 /** A plugin's skill's trash, on its own page: it asks in the red dialog. */
 const skillRemoveHTML = (p: LibraryPackage, skill: LibrarySkill, v: SkillLibraryView): string =>
   iconBtn("trash", t("skillLib.remove"), ` data-skl="skill-remove" data-key="${esc(p.key)}" data-id="${skill.id}"${v.refreshing.has(p.key) ? " disabled" : ""}`);
@@ -125,11 +134,14 @@ function packageSectionHTML(kind: "plugins" | "skills", packages: LibraryPackage
     '<div class="slist skl-list">' + packages.map(p => packageHTML(p, v)).join("") + '</div></section>';
 }
 
-/** A page's header: the way back and the title (both go back), its controls at the right end, then the shared close. */
-const pageHeadHTML = (title: string, controls: string, headerClose: string): string =>
+/** A page's header: the way back and the title (both go back, or the field the title becomes while it is renamed), its
+ *  controls at the right end, then the shared close. */
+const pageHeadHTML = (title: string, controls: string, headerClose: string, renaming = false): string =>
   `<header class="set-head skl-page-head"><div class="skl-page-title"><span class="back-title">` +
   backButton(t("chooser.back"), ' data-skl="back" data-k="skl-back"', "back-link") +
-  `<h1 class="skl-page-name" id="set-title" tabindex="-1" data-title-back>${esc(title)}</h1></span>` +
+  (renaming
+    ? `<span class="skl-rename" id="set-title">${fieldHTML(t("skillLib.rename"), title, { id: "skl-rename", max: 100 })}</span>`
+    : `<h1 class="skl-page-name" id="set-title" tabindex="-1" data-title-back>${esc(title)}</h1>`) + `</span>` +
   `<div class="skl-page-actions">${controls}</div></div>${headerClose}</header>`;
 
 /** The words set off as a quote under a page's title: what it is, then where it came from and its version. */
@@ -166,7 +178,8 @@ export const documentBody = (text: string): string => text.replace(/^\uFEFF?---\
  */
 function skillPageHTML(p: LibraryPackage, skill: LibrarySkill, v: SkillLibraryView, headerClose: string, notice: string): string {
   const alone = !isPlugin(p);
-  const head = pageHeadHTML(skill.name, alone ? controlsHTML(p, v, true) : `<div class="ctl">${skillRemoveHTML(p, skill, v)}${skillToggleHTML(p, skill, v)}</div>`, headerClose);
+  const head = pageHeadHTML(skill.name, alone ? controlsHTML(p, v, true)
+    : `<div class="ctl">${skillRenameHTML(p, skill, v)}${skillRemoveHTML(p, skill, v)}${skillToggleHTML(p, skill, v)}</div>`, headerClose, !alone && v.renaming === skill.id);
   const doc = v.doc?.id === skill.id ? documentBody(v.doc.text) : null;
   const body = doc !== null ? (doc ? replyContentHTML(doc) : "")
     : v.docFailed ? `<p class="d skl-empty" role="alert">${esc(t("skillLib.failed"))}</p>` : `<p class="d skl-empty">${esc(t("vault.busy"))}</p>`;
@@ -187,7 +200,7 @@ function importHTML(v: SkillLibraryView): string {
     btn(ico("file") + esc(t("skillLib.file")), "sm", ` data-skl="pick-file"${busy}`) +
     btn(ico("folder") + esc(t("skillLib.folder")), "sm", ` data-skl="pick-folder"${busy}`) +
     btn(ico("pencil") + esc(t("skillLib.paste")), "sm", ` data-skl="paste" aria-expanded="${v.pasting}" aria-controls="skl-text"${busy}`) +
-    `</div>${input}<p class="d skl-import-hint">${esc(t("skillLib.importHint"))}</p>${v.error ? `<p class="skl-error" role="alert">${esc(v.error)}</p>` : ""}<input type="file" id="skl-file" accept="${ACCEPT}" hidden></div>`;
+    `</div>${input}${v.busy ? `<p class="d skl-progress" role="status">${esc(t("skillLib.importing"))}</p>` : ""}<p class="d skl-import-hint">${esc(t("skillLib.importHint"))}</p>${v.error ? `<p class="skl-error" role="alert">${esc(v.error)}</p>` : ""}<input type="file" id="skl-file" accept="${ACCEPT}" hidden></div>`;
 }
 
 export function skillLibraryHTML(v: SkillLibraryView, { listHeader = "", pageClose = "", notice = "" }:
@@ -212,15 +225,75 @@ const base64 = (bytes: ArrayBuffer): string => {
   return btoa(binary);
 };
 
+/** What the core says of a cause besides its kind (members/service.py `_library_error`): the file, the size, the limit, the line. */
+interface Detail {
+  reason?: string; file?: string; size?: number; limit?: number; line?: number; status?: number; repo?: string; name?: string;
+  host?: string; skill?: string; held_by?: string; incoming?: string; why?: string;
+}
+
+const bytesText = (bytes = 0): string => {
+  const units = ["B", "KB", "MB", "GB"];
+  let value = bytes, unit = 0;
+  while (value >= 1024 && unit < units.length - 1) { value /= 1024; unit++; }
+  return `${unit ? value.toFixed(1) : value} ${units[unit]}`;
+};
+
+/** A cause the core names with its reason, in words; null when the kind alone says it. */
+function reasonText(kind: string, d: Detail): string | null {
+  const file = d.file ?? "";
+  switch (`${kind}.${d.reason ?? ""}`) {
+    case "size.file": return t("skillLib.sizeFile", { p0: file || "SKILL.md", p1: bytesText(d.size), p2: bytesText(d.limit) });
+    case "size.package": return t("skillLib.sizePackage", { p0: file, p2: bytesText(d.limit) });
+    case "size.files": return t("skillLib.sizeFiles", { p0: String(d.limit ?? "") });
+    case "size.upload": return t("skillLib.sizeUpload", { p0: file, p1: bytesText(d.size), p2: bytesText(d.limit) });
+    case "size.listing": case "size.scan": case "size.depth": return t("skillLib.sizeListing");
+    case "download.network": return t("skillLib.downNetwork");
+    case "download.timeout": return t("skillLib.downTimeout");
+    case "download.rate_limit": return t("skillLib.downLimit");
+    case "download.status": return t("skillLib.downStatus", { p0: String(d.status || "?") });
+    case "download.changed": return t("skillLib.downChanged", { p0: file });
+    case "not_found.repo": return t("skillLib.notFoundRepo", { p0: d.repo ?? "" });
+    case "not_found.no_skill": return t("skillLib.noSkill");
+    case "not_found.ref": case "not_found.path": case "not_found.source": case "not_found.skill":
+      return t("skillLib.notFoundPath", { p0: d.name ?? file });
+    case "skill.front_matter": return t("skillLib.frontMatter", { p0: file || "SKILL.md", p1: String(d.line ?? 1) });
+    case "skill.encoding": return t("skillLib.encoding", { p0: file || "SKILL.md" });
+    case "archive.path": case "archive.entry": return t("skillLib.badEntry", { p0: file });
+    case "archive.unreadable": return t("skillLib.badArchive");
+    case "source.host": return t("skillLib.sourceHost", { p0: d.host ?? "" });
+    case "source.linked": return t("skillLib.linkRefused", { p0: file });
+    case "source.path": case "source.unreadable": case "io.disk": return t("skillLib.unreadable", { p0: file });
+    case "source.redirect": case "source.insecure": case "source.invalid": case "source.empty": case "source.not_skill_file":
+    case "source.file_type": return t("skillLib.unsupported");
+    default: return null;
+  }
+}
+
 /** Why an import or a change failed, in the owner's words. */
 export function failureText(error: unknown): string {
   const raw = error instanceof Error ? error.message : String(error ?? "");
   const kind = /Invalid params: ([a-z_]+): (.*)$/s.exec(raw);
+  let detail: Detail = {};
+  let message = kind?.[2] ?? "";
+  const tail = /\s*\[\[(\{.*\})\]\]\s*$/s.exec(message);
+  if (tail) {
+    message = message.slice(0, tail.index);
+    try { detail = JSON.parse(tail[1]!) as Detail; } catch { /* the kind alone says it */ }
+  }
   if (kind?.[1] === "taken") {
-    // The core names the skill and the package that holds it: `a skill named tdd already exists in the package "A" (switched off)`.
-    const held = /named (\S+) already exists in the package "(.*)"(?: \(switched off\))?$/s.exec(kind[2]);
+    // The core names the skill and the package that holds it, and the package that brings the other when it has one:
+    // `a skill named tdd already exists in the package "A" (switched off)`.
+    if (detail.reason === "clash" && detail.held_by) {
+      const names = { p0: detail.skill ?? "", p1: detail.held_by };
+      return detail.incoming ? t("skillLib.duplicateBoth", { ...names, p2: detail.incoming }) : t("skillLib.duplicateIn", names);
+    }
+    const held = /named (\S+) already exists in the package "(.*)"(?: \(switched off\))?$/s.exec(message);
     if (held) return t("skillLib.duplicateIn", { p0: held[1], p1: held[2] });
-    return t("skillLib.duplicate", { p0: /named (\S+)/.exec(kind[2])?.[1] ?? kind[2] });
+    return t("skillLib.duplicate", { p0: /named (\S+)/.exec(message)?.[1] ?? message });
+  }
+  if (kind) {
+    const cause = reasonText(kind[1]!, detail);
+    if (cause) return cause;
   }
   return kind && kind[1] in CAUSES ? t(CAUSES[kind[1] as keyof typeof CAUSES]) : t("skillLib.failed");
 }
@@ -408,6 +481,14 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
     else if (key && state.skill !== null && !byKey(key)?.skills.some(skill => skill.id === state.skill)) backFromSkill();
     else redraw();
   };
+  /** A pack skill's new name from its page's field: the core keeps it through the package's updates. A taken name says who holds it. */
+  const renameSkill = async (key: string, id: number, name: string): Promise<void> => {
+    const known = byKey(key)?.skills.find(skill => skill.id === id);
+    state.renaming = null;
+    if (!known || !name.trim() || name.trim() === known.name) { redraw(); return; }
+    await change({ key, rename: { id, name: name.trim() } });
+    root.querySelector<HTMLElement>('[data-skl="skill-rename"]')?.focus({ preventScroll: true });
+  };
   /** A plugin's skill's trash, on the skill's page: the red dialog asks, as a whole package's does. The package stays, unless it
    *  was its last skill. */
   const removeSkill = async (key: string, id: number): Promise<void> => {
@@ -443,6 +524,14 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
       case "access": chooseAccess(target, key); break;
       case "remove": void removePackage(key); break;
       case "skill-remove": void removeSkill(key, Number(target.dataset.id)); break;
+      case "skill-rename": {
+        state.renaming = Number(target.dataset.id);
+        redraw();
+        const field = root.querySelector<HTMLInputElement>("#skl-rename");
+        field?.focus();
+        field?.select();
+        break;
+      }
       case "import-go": {
         const text = root.querySelector<HTMLTextAreaElement>("#skl-text")?.value ?? "";
         const source = root.querySelector<HTMLInputElement>("#skl-source")?.value.trim() ?? "";
@@ -461,6 +550,14 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
   });
   root.addEventListener("keydown", event => {
     const input = event.target as HTMLElement;
+    if (input.id === "skl-rename" && !event.isComposing && (event.key === "Enter" || event.key === "Escape")) {
+      event.preventDefault();
+      const page = root.querySelector<HTMLElement>("[data-skl-doc]");
+      const key = page?.dataset.sklPage ?? "", id = Number(page?.dataset.sklDoc);
+      if (event.key === "Enter") void renameSkill(key, id, (input as HTMLInputElement).value);
+      else { state.renaming = null; redraw(); root.querySelector<HTMLElement>('[data-skl="skill-rename"]')?.focus({ preventScroll: true }); }
+      return;
+    }
     if (input.id === "skl-source" && event.key === "Enter" && !event.isComposing) {
       event.preventDefault();
       root.querySelector<HTMLElement>('[data-skl="import-go"]')?.click();
@@ -471,6 +568,13 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
     if (event.key === "Escape" && page && !event.defaultPrevented && (!dialog || isTopLayer(dialog))) {
       event.preventDefault();
       back();
+    }
+  });
+  root.addEventListener("focusout", event => {
+    // A name left half-typed is dropped, as a field of Settings that was not confirmed.
+    if ((event.target as HTMLElement).id === "skl-rename" && state.renaming !== null && root.contains(event.target as Node)) {
+      state.renaming = null;
+      redraw();
     }
   });
   root.addEventListener("change", event => {
@@ -498,6 +602,6 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
       const page = root.querySelector<HTMLElement>(".skl-page");
       if (page) bindNavLayer(page, back, { step: direction => state.busy || direction === "back" && keepEditedField(page) });
     },
-    reset: (): void => { epoch++; state.skipped = null; state.pasting = false; state.error = ""; state.page = null; state.skill = null; state.doc = null; },
+    reset: (): void => { epoch++; state.skipped = null; state.pasting = false; state.error = ""; state.page = null; state.skill = null; state.doc = null; state.renaming = null; },
   };
 }

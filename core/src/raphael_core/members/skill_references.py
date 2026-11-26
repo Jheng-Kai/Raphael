@@ -1,9 +1,11 @@
-"""Files a plugin's skill links to outside its own folder.
+"""Files a skill links to outside its own folder.
 
-A skill of a plugin may say "read ../../actions/report.md". The library keeps one skill per folder, so the
-linked files of the same plugin are copied into that folder under `_plugin/` and the skill document points
-there. The copy stays inside the plugin root, follows no links and shares the package's size and file limits.
-What cannot be copied is named in `skipped_references`, never dropped without a word.
+A skill may say "read ../../actions/report.md". The library keeps one skill per folder, so the linked files of the
+same source (the plugin, the repository, the folder or the archive it came in) are copied into that folder under
+`_plugin/` and the skill document points there. The copy stays inside the source root, follows no links and shares
+the package's size and file limits. What cannot be copied is named in `skipped_references`, never dropped without a word.
+
+A source says what is at a path (`look`) and gives it (`read`): a folder on disk, an archive, a GitHub listing.
 """
 
 import os
@@ -53,10 +55,68 @@ def _targets(text, *, links):
     return list(dict.fromkeys(found))
 
 
+class DiskSource:
+    """A folder on this computer: nothing under a link, nothing but plain files with one name."""
+
+    def __init__(self, root):
+        self.root = root
+
+    def look(self, path):
+        """None when nothing is there, a reason (`linked`, `folder`, `unsupported`, `unreadable`) when it cannot be taken,
+        else the file's size."""
+        target = self.root.joinpath(*path.split("/"))
+        try:
+            info = target.lstat()
+            if any(linked(p) for p in (target, *target.parents)):
+                return "linked"
+        except (FileNotFoundError, NotADirectoryError):
+            return None
+        except OSError:
+            return "unreadable"
+        if stat.S_ISDIR(info.st_mode):
+            return "folder"
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            return "unsupported"
+        return info.st_size
+
+    def read(self, path):
+        target = self.root.joinpath(*path.split("/"))
+        with target.open("rb") as stream:
+            info = target.lstat()
+            if not os.path.samestat(info, os.fstat(stream.fileno())):
+                raise OSError("changed while it was read")
+            data = stream.read(info.st_size + 1)
+        if len(data) != info.st_size:
+            raise OSError("changed while it was read")
+        return data
+
+
+class MemorySource:
+    """The files of an archive or a listing: `files` maps a path to its size (or `"linked"`), `fetch` gives its bytes."""
+
+    def __init__(self, files, fetch):
+        self.files, self.fetch = files, fetch
+        self.folders = {path.rpartition("/")[0] for path in files}
+        self.folders |= {"/".join(folder.split("/")[:count]) for folder in self.folders for count in range(1, len(folder.split("/")))}
+
+    def look(self, path):
+        if path in self.files:
+            return self.files[path]
+        if path in self.folders:
+            return "folder"
+        for parent in ("/".join(path.split("/")[:count]) for count in range(1, len(path.split("/")))):
+            if self.files.get(parent) == "linked":
+                return "linked"
+        return None
+
+    def read(self, path):
+        return self.fetch(path)
+
+
 class _Shared:
-    def __init__(self, files, snapshot, folder, root):
-        self.files, self.snapshot, self.root = files, snapshot, root
-        self.inside = folder.relative_to(root).as_posix()
+    def __init__(self, files, snapshot, inside, source):
+        self.files, self.snapshot, self.source = files, snapshot, source
+        self.inside = inside
         self.stored = {}
         self.skipped = {}
 
@@ -72,28 +132,18 @@ class _Shared:
         key = path.casefold()
         if key in self.stored:
             return None
-        target = self.root.joinpath(*path.split("/"))
         snapshot = self.snapshot
+        found = self.source.look(path)
+        if found is None:
+            return None
+        if isinstance(found, str):
+            self.skip(path, found)
+            return False
+        if found > snapshot.byte_limit - snapshot.size or len(snapshot.explicit) >= snapshot.entry_limit:
+            self.skip(path, "too_large")
+            return False
         try:
-            info = target.lstat()
-            if any(linked(p) for p in (target, *target.parents)):
-                self.skip(path, "linked")
-                return False
-            if stat.S_ISDIR(info.st_mode):
-                self.skip(path, "folder")
-                return False
-            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
-                self.skip(path, "unsupported")
-                return False
-            if info.st_size > snapshot.byte_limit - snapshot.size or len(snapshot.explicit) >= snapshot.entry_limit:
-                self.skip(path, "too_large")
-                return False
-            with target.open("rb") as stream:
-                if not os.path.samestat(info, os.fstat(stream.fileno())):
-                    raise OSError("changed while it was read")
-                data = stream.read(info.st_size + 1)
-            if len(data) != info.st_size:
-                raise OSError("changed while it was read")
+            data = self.source.read(path)
         except (FileNotFoundError, NotADirectoryError):
             return None
         except OSError:
@@ -166,12 +216,13 @@ class _Shared:
         return _CLIMBING.sub(move, text)
 
 
-def attach_shared(files, snapshot, folder, root):
-    """Add to a skill's `files` what its document links to elsewhere in its plugin (`root`); `snapshot` holds the limits."""
-    if folder == root:
+def attach_shared(files, snapshot, inside, source):
+    """Add to a skill's `files` what its document links to elsewhere in its source (`source`, whose root holds the skill's
+    folder `inside`, as a path from that root); `snapshot` holds the limits."""
+    if not inside:
         return
     text = files["SKILL.md"].decode("utf-8-sig")
-    shared = _Shared(files, snapshot, folder, root)
+    shared = _Shared(files, snapshot, inside, source)
     if SHARED_FOLDER in snapshot.paths:
         # The skill's own folder uses the name already: nothing is copied, and every link outside it is said.
         for target in _targets(text, links=False):

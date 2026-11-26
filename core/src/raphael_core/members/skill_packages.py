@@ -11,7 +11,9 @@ from datetime import datetime
 from pathlib import Path
 
 from ..bots.homes import atomic, redact_secrets
-from .capabilities import MAX_SKILL_BYTES, skill_metadata, skill_urls
+from .capabilities import MAX_SKILL_BYTES, skill_metadata
+from .skill_errors import not_utf8, oversized_file
+from .skill_names import family, with_name
 from .skill_library import SHARED, stage_files
 from .skill_plugins import folded_path, inside_folder
 from .skill_sources import validate_files
@@ -24,11 +26,17 @@ def refetchable(origin, source):
         return False
     if source.startswith("local:"):
         return Path(source[6:]).exists()
-    try:
-        skill_urls(source)
-    except MemberError:
-        return False
-    return True
+    from .skill_github import refetchable as github
+
+    return github(source)
+
+
+def refreshable(origin, source, skills):
+    """Whether a package can be read again from where it came. A group (skills joined one by one, R-SKILL-20) is read from
+    the source of each skill."""
+    if origin == "group":
+        return bool(skills) and all(refetchable("source", skill["_source"]) for skill in skills)
+    return refetchable(origin, source)
 
 
 def restore_file(backup, path):
@@ -36,20 +44,24 @@ def restore_file(backup, path):
     backup.rename(path)
 
 
-def taken_by(conn, member, stored):
-    """A name that is taken, in words, and the package that holds it. A switched-off skill keeps its name (#313), so the
-    owner is told where it is and that it is off, to remove that one skill."""
+def taken_by(conn, member, stored, incoming=""):
+    """A name that is taken, as a refusal, and the package that holds it. A switched-off skill keeps its name (#313), so the
+    owner is told where it is and that it is off, to remove that one skill. `incoming` is the package that brings the
+    other skill of that name, when it has one of its own: both sides are named."""
     row = conn.execute(
         "SELECT s.enabled, p.enabled AS package_enabled, COALESCE(t.name,p.name) AS package FROM member_skills s "
         "LEFT JOIN skill_packages p ON p.key=s.package_key LEFT JOIN skill_sets t ON t.id=s.set_id "
         "WHERE s.member_id=? AND s.name=? COLLATE NOCASE", (member, stored)).fetchone()
     text = f"a skill named {stored} already exists"
     package = row["package"] if row and row["package"] else ""
+    off = bool(package and (not row["enabled"] or row["package_enabled"] == 0))
     if package:
         text += f' in the package "{package}"'
-        if not row["enabled"] or row["package_enabled"] == 0:
+        if off:
             text += " (switched off)"
-    return text, package
+    if incoming:
+        text += f', and the package "{incoming}" has one too'
+    return MemberError("taken", text, reason="clash", skill=stored, held_by=package, off=off, incoming=incoming), package
 
 
 class SkillPackages:
@@ -76,7 +88,7 @@ class SkillPackages:
     def _view_inputs(self, key):
         row = self.row(key)
         skills = [{"id": s["id"], "name": s["name"].rsplit(":", 1)[-1], "description": s["description"],
-                   "enabled": bool(s["enabled"])} for s in self.conn.execute(
+                   "enabled": bool(s["enabled"]), "_source": s["source"]} for s in self.conn.execute(
                        "SELECT * FROM member_skills WHERE package_key=? ORDER BY id", (key,))]
         plugin = self.conn.execute("SELECT * FROM skill_sets WHERE id=?", (key[4:],)).fetchone() if key.startswith("set:") else None
         return row, skills, plugin
@@ -89,7 +101,8 @@ class SkillPackages:
 
     def _view(self, row, skills, plugin):
         key = row["key"]
-        name, source = row["name"], row["source"]
+        # A group's skills each come from their own source: it has none of its own to show.
+        name, source = row["name"], "" if row["origin"] == "group" else row["source"]
         skipped_links, skipped_references = {}, {}
         plugin_manifest = False
         if plugin is None:
@@ -102,7 +115,8 @@ class SkillPackages:
                 if info.get("skipped_references"):
                     skipped_references[str(skill["id"])] = info["skipped_references"]
         version = description = ""
-        updatable = refetchable(row["origin"], source)
+        updatable = refreshable(row["origin"], source, skills)
+        skills = [{key: value for key, value in skill.items() if key != "_source"} for skill in skills]
         if plugin is not None:
             name, version, source, description = (plugin[k] for k in ("name", "version", "source", "description"))
             updatable = bool(json.loads(plugin["metadata"]).get("marketplace")) or refetchable("source", source)
@@ -157,10 +171,18 @@ class SkillPackages:
         if access is not None:
             self.validate_access(access)
         old = {}
+        aliases = {}
+        incoming = name or (label if len(documents) > 1 else "")
         if key is not None:
-            self.row(key)
+            incoming = self.row(key)["name"]
             old = {r["name"].casefold(): r for r in self.conn.execute(
                 "SELECT id,name FROM member_skills WHERE package_key=?", (key,))}
+            # A skill the owner renamed is still the skill its source calls by the name it had (see rename_skill).
+            home = self.cap.homes.home(SHARED) / "skills"
+            for row in old.values():
+                upstream = self.cap._package_info_at(home / str(row["id"]) / "SKILL.md").get("upstream_name")
+                if isinstance(upstream, str) and upstream:
+                    aliases[upstream.casefold()] = row["name"].rsplit(":", 1)[-1]
         elif local and local.get("previous"):
             previous = local["previous"]
             old[previous["name"].casefold()] = previous
@@ -177,32 +199,38 @@ class SkillPackages:
             plugin_manifest |= getattr(files, "plugin_manifest", False)
             skipped_links = getattr(files, "skipped_links", [])
             skipped_references = getattr(files, "skipped_references", [])
+            shown = getattr(files, "folder", "") + "SKILL.md"
             files = validate_files(files)
             raw = files["SKILL.md"]
             if len(raw) > MAX_SKILL_BYTES:
-                raise MemberError("size", "skill document is too large")
+                raise oversized_file(shown, len(raw), MAX_SKILL_BYTES)
             try:
                 text = redact_secrets(raw.decode("utf-8-sig"))
             except UnicodeError:
-                raise MemberError("skill", "skill must be UTF-8 Markdown") from None
+                raise not_utf8(shown) from None
             if "\x00" in text:
-                raise MemberError("skill", "skill must be UTF-8 Markdown")
+                raise not_utf8(shown)
+            upstream = None
+            if aliases:
+                slug, _ = skill_metadata(text, path=shown)
+                if slug.casefold() in aliases:
+                    upstream, text = slug, with_name(text, aliases[slug.casefold()])
             previous_slug = None
             if old:
-                slug, _ = skill_metadata(text)
+                slug, _ = skill_metadata(text, path=shown)
                 previous = stored_skill_name(slug, skill_plugin(text, skill_source)).casefold()
                 if previous in old:
                     previous_slug = old[previous]["name"].rsplit(":", 1)[-1]
                 elif local:
                     previous_slug = local["previous"]["name"].rsplit(":", 1)[-1]
-            slug, desc = skill_metadata(text, writing=True, previous_name=previous_slug)
+            slug, desc = skill_metadata(text, writing=True, previous_name=previous_slug, path=shown)
             stored = stored_skill_name(slug, skill_plugin(text, skill_source))
             if stored.casefold() in taken:
                 if slug == skill_metadata(text)[0]:
-                    message, package = taken_by(self.conn, member, stored)
+                    error, package = taken_by(self.conn, member, stored, incoming)
                     if not skipping:
-                        raise MemberError("taken", message)
-                    refused = refused or message
+                        raise error
+                    refused = refused or error
                     if skipped is not None:
                         skipped.append({"name": stored, "held_by": package})
                     continue
@@ -212,6 +240,8 @@ class SkillPackages:
                 stored = stored_skill_name(slug, plugin)
             taken.add(stored.casefold())
             metadata = {"source": source, "origin": origin, "files": [p for p in files if p != "SKILL.md"]}
+            if upstream:
+                metadata["upstream_name"] = upstream
             if plugin_manifest:
                 metadata["plugin_manifest"] = True
             if local:
@@ -227,9 +257,11 @@ class SkillPackages:
                 old[name.casefold()]["id"] == required_skill for name, *_ in prepared if name.casefold() in old):
             raise MemberError("not_found", "the refreshed package no longer has that skill")
         if not prepared and refused:
-            raise MemberError("taken", refused)
+            raise refused
         if not prepared:
             raise MemberError("not_found", "no SKILL.md found")
+        # A skill imported alone whose name begins as another's does joins it: one plugin, not two loose skills (R-SKILL-20).
+        join = self._group_for(member, key, local, documents, origin, prepared)
         revision = self.cap.skill_revision()
         root = self.cap.homes.home(member) / "skills"
         temp = await stage_files(self._write, root, prepared, local, discard=shutil.rmtree)
@@ -239,13 +271,34 @@ class SkillPackages:
                 raise MemberError("not_found", "the skill library changed during import")
             if access is not None:
                 self.validate_access(access)
-            key, ids = self._publish(member, source, origin, label, access, name, key, old, prepared, root, temp, local,
-                                     enabled, skill, skill_switches, len(documents) == 1)
+            key, ids = self._publish(member, source, origin, label, access, name, join[0] if join else key, old, prepared, root,
+                                     temp, local, enabled, skill, skill_switches, len(documents) == 1,
+                                     regroup=join[1] if join else None)
         finally:
             await asyncio.to_thread(shutil.rmtree, temp)
         stamp = datetime.now().isoformat()
         await self.cap._mirror_async(member, {i: {"updated_at": stamp} for i in ids})
         return key, ids
+
+    def _group_for(self, member, key, local, documents, origin, prepared):
+        """`(package key, new name)` of the package a lone new shared skill joins, else None. It joins a package that is one
+        skill from a source, pasted or uploaded, or a group, that holds a skill of its name's family (skill_names.family):
+        the first becomes a group named by the family, and keeps who may use it. A package of an import of several skills,
+        a plugin set and a skill refreshed in place are never joined."""
+        if member != SHARED or key is not None or local or len(documents) != 1 or len(prepared) != 1 or origin not in ("source", "paste", "upload"):
+            return None
+        wanted = family(prepared[0][0])
+        if not wanted:
+            return None
+        held = {}
+        for row in self.conn.execute(
+                "SELECT s.name,p.key,p.origin FROM member_skills s JOIN skill_packages p ON p.key=s.package_key "
+                "WHERE s.member_id=? AND s.set_id IS NULL AND p.key NOT LIKE 'set:%' ORDER BY p.name COLLATE NOCASE,s.id", (SHARED,)):
+            held.setdefault((row["key"], row["origin"]), []).append(row["name"])
+        for (package, kind), names in held.items():
+            if (kind == "group" or len(names) == 1 and kind in ("source", "paste", "upload")) and any(family(n) == wanted for n in names):
+                return package, None if kind == "group" else wanted
+        return None
 
     def _write(self, root, prepared, local):
         temp = self._make_staging(root)
@@ -266,7 +319,7 @@ class SkillPackages:
             raise
 
     def _publish(self, member, source, origin, label, access, name, key, old, prepared, root, temp, local,
-                 enabled, skill, skill_switches, single=None):
+                 enabled, skill, skill_switches, single=None, regroup=None):
         # What was imported decides a new package's defaults (a single skill is open to all, a package is not), never what
         # is left of it after a taken name was skipped (#313).
         single = len(prepared) == 1 if single is None else single
@@ -301,6 +354,8 @@ class SkillPackages:
                 for row in old.values():
                     self._backup(self.cap.homes.safe(root / str(row["id"])), temp, rollback)
                     self.conn.execute("DELETE FROM member_skills WHERE id=?", (row["id"],))
+                if regroup:
+                    self.conn.execute("UPDATE skill_packages SET name=?,origin='group' WHERE key=?", (regroup, key))
                 if key is not None:
                     self.apply_changes(key, access=access, enabled=enabled, skill=skill)
             rollback.pop_all()
@@ -404,6 +459,35 @@ class SkillPackages:
                 parent.rmdir()
             except OSError:
                 pass
+
+    def rename_skill(self, key, skill_id, name):
+        """Give one skill of a package another name (its document and its row), and keep the name its source calls it by, so
+        that an update of the package finds it again and leaves it renamed. A plugin's skills keep the plugin's names."""
+        from .skill_names import normalize_skill_name, with_name
+
+        row, skills, plugin = self._view_inputs(key)
+        if plugin is not None:
+            raise MemberError("scope", "a plugin keeps the names of its skills: delete a skill to free its name", reason="plugin")
+        current = next((s for s in skills if s["id"] == skill_id), None)
+        if type(skill_id) is not int or current is None:
+            raise MemberError("not_found", "no such skill in this package")
+        if not isinstance(name, str) or not name.strip():
+            raise MemberError("name", "give the skill a name")
+        slug = normalize_skill_name(name)
+        if slug.casefold() == current["name"].casefold():
+            return self.view(key)
+        held = self.conn.execute("SELECT id FROM member_skills WHERE member_id=? AND name=? COLLATE NOCASE AND id<>?",
+                                 (SHARED, stored_skill_name(slug, ""), skill_id)).fetchone()
+        if held:
+            raise taken_by(self.conn, SHARED, slug, row["name"])[0]
+        _, text = self.cap.document(SHARED, skill_id)
+        path = self.cap.homes.home(SHARED) / "skills" / str(skill_id) / "SKILL.md"
+        info = self.cap._package_info_at(path)
+        self.cap.rewrite_skill(SHARED, skill_id, with_name(text, slug))
+        if info:
+            atomic(self.cap.homes.safe(path.parent / ".raphael-source.json"),
+                   json.dumps({**info, "upstream_name": info.get("upstream_name") or current["name"]}).encode())
+        return self.view(key)
 
     async def delete_skill_async(self, key, skill_id):
         """Remove one skill of a package (its files too) and leave the others; the package's view is returned, or None
