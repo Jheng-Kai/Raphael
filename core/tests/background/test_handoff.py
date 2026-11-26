@@ -887,7 +887,7 @@ async def test_batched_handoffs_preserve_literal_views_order_and_room_scoping(ma
     finally:
         rig.conn.set_trace_callback(None)
     assert json.dumps(actual, sort_keys=True) == json.dumps(expected, sort_keys=True)
-    assert len([sql for sql in statements if 'mode IS NOT NULL AND source_turn_id IN' in sql]) == 1
+    assert len([sql for sql in statements if "mode IS NOT NULL AND mode!='delegate' AND source_turn_id IN" in sql]) == 1
     scoped = rig.service.handoff_views(room_id=room.room_id, thread_id=room.thread_id)
     assert [view['task_id'] for view in scoped] == [view['task_id'] for view in expected[room.id]]
     assert all(len(view['result']) <= 600 for view in scoped if view['mode'] == 'consult')

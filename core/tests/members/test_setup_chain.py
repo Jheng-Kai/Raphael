@@ -36,6 +36,8 @@ async def chain(conn, tmp_path, client, plugins):
     background.service.use_owner_tools(rig.service.background_owner_tool)
     background.service.owner_questions.on_cancel = rig.service.cancel_owner_card
     team.members.register(rig.rpc)
+    # The first member made is the chief of staff, which has no job to ask for: the members set up here come after it.
+    team.members.store.create_member(name="Lead", role="Chief of staff")
     rig.background, rig.team = background, team
     yield rig
     await rig.aclose()

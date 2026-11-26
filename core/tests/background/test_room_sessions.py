@@ -121,6 +121,7 @@ async def test_a_member_who_leaves_the_room_takes_its_sessions_with_it(meeting, 
     play(monkeypatch, [])
     await ask(rooms, room, "@Alice hello", "one")
     bob = members.store.create_member(name="Bob", role="CTO")
+    members.store.set_primary(bob.id)  # the chief cannot leave a room: Bob takes the chair before Alice leaves
     await rooms._update({"room_id": room["id"], "member_ids": [0, bob.id]})
     assert rig.conn.execute("SELECT COUNT(*) FROM room_cli_sessions").fetchone()[0] == 0
 
