@@ -12,6 +12,7 @@ import secrets
 import shutil
 import signal
 import socket
+import stat
 import subprocess
 import sys
 from contextlib import asynccontextmanager, suppress
@@ -186,23 +187,41 @@ def place_by_handle(workspace, name, data):
             os.close(folder)
 
 
-def opened_in(file, folder):
-    """Whether the file just created is in `folder`, as its open handle says on Windows: a link or junction swapped in
-    after the folders were checked is seen there, before anything is written."""
+def opened_path(descriptor):
+    """Where an open file really is, as the system says of the open file itself (F_GETPATH on a Mac, /proc on Linux, its
+    handle's final path on Windows): a link or junction swapped in since its path was checked does not change it. None
+    when the system cannot say."""
+    if sys.platform == "darwin":
+        import fcntl
+        try:
+            return Path(os.fsdecode(fcntl.fcntl(descriptor, fcntl.F_GETPATH, bytes(1024)).split(b"\0", 1)[0]))
+        except OSError:
+            return None
     if os.name != "nt":
-        return Path(os.path.realpath(file.name)).parent == folder
+        try:
+            return Path(os.readlink(f"/proc/self/fd/{descriptor}"))
+        except OSError:
+            return None
     import ctypes
     import msvcrt
     kernel = ctypes.WinDLL("kernel32", use_last_error=True)
     kernel.GetFinalPathNameByHandleW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_uint32, ctypes.c_uint32]
     kernel.GetFinalPathNameByHandleW.restype = ctypes.c_uint32
     buffer = ctypes.create_unicode_buffer(32768)
-    length = kernel.GetFinalPathNameByHandleW(msvcrt.get_osfhandle(file.fileno()), buffer, len(buffer), 0)
+    length = kernel.GetFinalPathNameByHandleW(msvcrt.get_osfhandle(descriptor), buffer, len(buffer), 0)
     if not 0 < length < len(buffer):
-        return False
+        return None
     final = buffer.value
-    final = "\\\\" + final[8:] if final.startswith("\\\\?\\UNC\\") else final.removeprefix("\\\\?\\")
-    return os.path.normcase(os.path.dirname(final)) == os.path.normcase(str(folder))
+    return Path("\\\\" + final[8:] if final.startswith("\\\\?\\UNC\\") else final.removeprefix("\\\\?\\"))
+
+
+def opened_in(file, folder):
+    """Whether the file just created is in `folder`, as its open handle says on Windows: a link or junction swapped in
+    after the folders were checked is seen there, before anything is written."""
+    if os.name != "nt":
+        return Path(os.path.realpath(file.name)).parent == folder
+    final = opened_path(file.fileno())
+    return final is not None and os.path.normcase(os.path.dirname(final)) == os.path.normcase(str(folder))
 
 
 def created(path):
@@ -237,22 +256,28 @@ def created(path):
         if error in (80, 183):  # ERROR_FILE_EXISTS, ERROR_ALREADY_EXISTS
             raise FileExistsError(errno.EEXIST, os.strerror(errno.EEXIST), str(path))
         raise ctypes.WinError(error)
-    try:
-        descriptor = msvcrt.open_osfhandle(handle, os.O_WRONLY | os.O_BINARY)
-    except OSError:
-        kernel.CloseHandle(handle)
-        raise
-    file = os.fdopen(descriptor, "wb")
 
     class Disposition(ctypes.Structure):
         _fields_ = [("DeleteFile", wintypes.BOOLEAN)]
 
-    def remove():
+    def dispose(opened):
         # FileDispositionInfo: the file this handle opened goes when the handle closes, wherever its path now leads.
-        kernel.SetFileInformationByHandle(msvcrt.get_osfhandle(file.fileno()), 4, ctypes.byref(Disposition(True)),
-                                          ctypes.sizeof(Disposition))
+        kernel.SetFileInformationByHandle(opened, 4, ctypes.byref(Disposition(True)), ctypes.sizeof(Disposition))
 
-    return file, remove
+    try:
+        descriptor = msvcrt.open_osfhandle(handle, os.O_WRONLY | os.O_BINARY)
+    except OSError:
+        # Left empty, the new file would stand for a whole one: a first `.gitignore` would never be written again.
+        dispose(handle)
+        kernel.CloseHandle(handle)
+        raise
+    try:
+        file = os.fdopen(descriptor, "wb")
+    except OSError:
+        dispose(handle)
+        os.close(descriptor)
+        raise
+    return file, lambda: dispose(msvcrt.get_osfhandle(file.fileno()))
 
 
 def create_in(folder, name, write):
@@ -1127,12 +1152,48 @@ class HostBrowser:
         await self.command(tab, "Fetch.continueWithAuth", {"requestId": request, "authChallengeResponse": response})
 
     async def choose_files(self, tab, chooser, paths):
-        """Give the page's file chooser these files, as choosing them in Chrome's own dialog would: its input changes."""
+        """Give the page's file chooser these files, as choosing them in Chrome's own dialog would: its input changes. Only
+        the chooser they were chosen for takes them: one gone or replaced while they were made ready takes none."""
+        if tab.chooser is not chooser:
+            raise BrowserError("browser_chooser_changed")
         node = tab.chooser_node
-        if tab.chooser is chooser:
-            tab.chooser = tab.chooser_node = None
-            self.notify_view()
+        tab.chooser = tab.chooser_node = None
+        self.notify_view()
         await self.command(tab, "DOM.setFileInputFiles", {"files": [str(path) for path in paths], "backendNodeId": node})
+
+    async def member_upload(self, path, allowed, limit):
+        """A copy, in a folder of its own in the private profile, of the member's file at `path` for a page's file chooser,
+        kept until this Chrome starts again. It is read through the file opened there (never through a link at its end),
+        and `allowed` judges where that open file really is: a link swapped in after the path was checked leads to no
+        file outside the work folder (R-COMP-HOST-02). Nothing but a regular file of at most `limit` bytes is copied."""
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0)
+        try:
+            descriptor = os.open(path, flags)
+        except OSError:
+            raise BrowserError("browser_upload_path") from None
+        with os.fdopen(descriptor, "rb") as source:
+            status = os.fstat(source.fileno())
+            really = opened_path(source.fileno())
+            if not stat.S_ISREG(status.st_mode) or status.st_size > limit or really is None or not allowed(really):
+                raise BrowserError("browser_upload_path")
+            return await asyncio.to_thread(self._copy_upload, source, path.name, limit)
+
+    def _copy_upload(self, source, name, limit):
+        folder = self.profile / "uploads" / secrets.token_hex(8)
+        folder.mkdir(parents=True)
+        target = folder / name
+        try:
+            with target.open("xb") as copy:
+                left = limit
+                while chunk := source.read(min(1 << 20, left + 1)):
+                    left -= len(chunk)
+                    if left < 0:
+                        raise BrowserError("browser_upload_path")  # it grew past the limit while copied
+                    copy.write(chunk)
+        except BaseException:
+            shutil.rmtree(folder, ignore_errors=True)
+            raise
+        return target
 
     def owner_upload(self, source, name):
         """A copy of a file the owner chose for a page, under its own name in a folder of its own in the private profile,

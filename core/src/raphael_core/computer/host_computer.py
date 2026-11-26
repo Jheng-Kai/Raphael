@@ -494,16 +494,21 @@ class HostComputerTools:
             raise BrowserError("browser_chooser_changed")
         if chooser["mode"] == "single" and len(arguments["paths"]) != 1:
             raise BrowserError("browser_upload_count")
-        files = []
+        def allowed(path):
+            return self.inside_work(path, member) and not self.private_path(path, member) and not kept_place(str(path))
+
+        paths = []
         for raw in arguments["paths"]:
             try:
                 path = self.path(member, raw)
             except (VmError, OSError, ValueError):
                 raise BrowserError("browser_upload_path") from None
-            if (not self.inside_work(path, member) or self.private_path(path, member) or kept_place(str(path))
-                    or not path.is_file() or path.stat().st_size > UPLOAD_MAX_BYTES):
+            if not allowed(path) or not path.is_file() or path.stat().st_size > UPLOAD_MAX_BYTES:
                 raise BrowserError("browser_upload_path")
-            files.append(path)
+            paths.append(path)
+        # Chrome is given copies read through the files opened here, and judged where those really are: a file swapped
+        # for a link to a private one after the checks above is never what the site gets.
+        files = [await browser.member_upload(path, allowed, UPLOAD_MAX_BYTES) for path in paths]
         await browser.choose_files(tab, chooser, files)
         return {**host_page.tab_ids(tab), "status": "files_chosen", "files": [path.name for path in files]}
 

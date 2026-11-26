@@ -8,6 +8,7 @@ import base64
 import contextlib
 import os
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -208,11 +209,67 @@ async def test_browser_upload_gives_the_chooser_work_files_only(tmp_path, conn):
     assert browser.cdp.calls == []
     result = await upload("report.pdf")
     assert (result["status"], result["files"]) == ("files_chosen", ["report.pdf"])
-    assert browser.cdp.calls == [("DOM.setFileInputFiles", {"files": [str((workspace / "report.pdf").resolve())],
-                                                            "backendNodeId": 7}, "session")]
+    # Chrome gets a copy in the private profile, read through the file opened in the work folder.
+    [(method, params, session)] = browser.cdp.calls
+    copy = Path(params["files"][0])
+    assert (method, params["backendNodeId"], session) == ("DOM.setFileInputFiles", 7, "session")
+    assert copy.name == "report.pdf" and copy.read_bytes() == b"%PDF" and copy.is_relative_to(browser.profile / "uploads")
     assert tab.chooser is None
     with pytest.raises(BrowserError, match="browser_chooser_changed"):
         await upload("report.pdf")
+
+
+@pytest.mark.skipif(os.name == "nt", reason="links need privileges on Windows; its open handle's final path is the same check")
+async def test_browser_upload_never_sends_a_file_swapped_for_a_link_after_its_checks(tmp_path, conn):
+    """The member's own commands can change its work folder while browser_upload runs: a file, or a folder on its path,
+    swapped for a link to a private file once the checks passed must not reach the site (Codex review of #348)."""
+    tools = HostComputerTools(LocalVm(tmp_path, settings=SettingsStore(conn)), conn, BROWSER_OPEN)
+    workspace = tools.folders(1)[0]
+    (workspace / "docs").mkdir(parents=True)
+    secret = tmp_path / "keys"
+    secret.mkdir()
+    (secret / "report.pdf").write_text("a private key")
+    browser, tab = prompt_tab(workspace, tools.browser)
+    staged = browser.member_upload
+
+    def swapped(swap):
+        async def member_upload(path, allowed, limit):
+            swap()
+            return await staged(path, allowed, limit)
+        return member_upload
+
+    def file_to_link():
+        (workspace / "report.pdf").unlink()
+        (workspace / "report.pdf").symlink_to(secret / "report.pdf")
+
+    def folder_to_link():
+        (workspace / "docs" / "report.pdf").unlink()
+        (workspace / "docs").rmdir()
+        (workspace / "docs").symlink_to(secret)
+
+    for name, swap in (("report.pdf", file_to_link), ("docs/report.pdf", folder_to_link)):
+        (workspace / name).write_text("the member's report")
+        browser._event("Page.fileChooserOpened", {"frameId": "frame", "mode": "selectSingle", "backendNodeId": 7}, "session")
+        browser.member_upload = swapped(swap)
+        with pytest.raises(BrowserError, match="browser_upload_path"):
+            await tools.upload(1, browser, tab, {"chooser_id": tab.chooser["chooser_id"], "paths": [name]}, "user")
+    assert browser.cdp.calls == [] and not (browser.profile / "uploads").exists()
+
+
+async def test_files_made_ready_for_a_chooser_since_replaced_go_to_none(tmp_path):
+    """The owner's files are stored and copied before they are given: a chooser the page opened meanwhile, or one gone,
+    gets none of them, and its own element is never given another chooser's files (Codex review of #348)."""
+    browser, tab = prompt_tab(tmp_path)
+    browser._event("Page.fileChooserOpened", {"frameId": "frame", "mode": "selectSingle", "backendNodeId": 7}, "session")
+    first = tab.chooser
+    browser._event("Page.fileChooserOpened", {"frameId": "frame", "mode": "selectSingle", "backendNodeId": 8}, "session")
+    with pytest.raises(BrowserError, match="browser_chooser_changed"):
+        await browser.choose_files(tab, first, [tmp_path / "a.txt"])
+    assert browser.cdp.calls == [] and tab.chooser is not None and tab.chooser_node == 8
+    second, tab.chooser = tab.chooser, None
+    with pytest.raises(BrowserError, match="browser_chooser_changed"):
+        await browser.choose_files(tab, second, [tmp_path / "a.txt"])
+    assert browser.cdp.calls == []
 
 
 async def test_a_file_the_owner_chose_keeps_its_name_in_the_private_profile(tmp_path):

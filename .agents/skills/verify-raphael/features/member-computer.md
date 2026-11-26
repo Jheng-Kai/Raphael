@@ -32,7 +32,8 @@ NotAllowedError, so the page offers its other ways in. The site's own sign-in pr
 authentication) is reported to the member at once as sign_in_prompt and waits for the owner; a
 proxy's is refused and an unanswered one is cancelled after 5 minutes. A page's file chooser is
 reported as file_chooser: the member answers it with browser_upload (work-folder files only, with
-the owner's yes for each upload). On a Mac the headless screen is the Mac's own, never 800 × 600.
+the owner's yes for each upload; Chrome gets a copy read through the opened file, so a link swapped
+in after the checks gives nothing). On a Mac the headless screen is the Mac's own, never 800 × 600.
 Every member owns its tabs across turns and tasks,
 including tabs the owner opens with Add and popups. Every tab has its own action
 lock. The member checks browser_tabs before opening another copy and uses the tab
@@ -150,7 +151,8 @@ shows its first and last thousand and a line saying how many are left out betwee
 The site's sign-in prompt shows the same way, with its realm, a user name and a hidden password
 field; the owner holding the tab signs in or cancels there. A page's file chooser shows with
 Choose files…: the owner holding the tab picks their own files, which go through the upload
-store under their own names, or closes it.
+store under their own names, or closes it. Files picked go only to that tab's chooser as it was
+when the picker opened, and a sent password does not stay in the card.
 
 Run from `app/`:
 

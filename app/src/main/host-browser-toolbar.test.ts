@@ -146,6 +146,8 @@ it("shows the site's sign-in prompt and sends the owner's user name and password
   expect(fields().map(field => field.value)).toEqual(["staff", "s3cret"]);
   fields()[1].dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
   expect(send).toHaveBeenLastCalledWith({ action: "auth", tab: "popup", auth: "a1", accept: true, username: "staff", password: "s3cret" }, expect.any(Number));
+  // Sent to Chrome, the password no longer stays in the card.
+  expect(fields().map(field => field.value)).toEqual(["staff", ""]);
   // A new prompt starts empty; cancelling it sends no user name or password.
   toolbar.draw({ ...model, auth: { ...auth, auth_id: "a2" } }, true);
   expect(fields().map(field => field.value)).toEqual(["", ""]);
@@ -154,6 +156,12 @@ it("shows the site's sign-in prompt and sends the owner's user name and password
   // A JavaScript dialog holds the page, so it comes first.
   toolbar.draw({ ...model, auth, dialog: { dialog_id: "d9", type: "alert", message: "Saved" } }, true);
   expect(card().querySelector(".host-browser-dialog-message")?.textContent).toBe("Saved");
+  // A prompt gone takes what was typed along.
+  toolbar.draw({ ...model, auth: { ...auth, auth_id: "a3" } }, true);
+  fields()[1].value = "typed";
+  toolbar.draw(model, true);
+  expect(card().hidden).toBe(true);
+  expect(card().querySelectorAll("input")).toHaveLength(0);
 });
 
 it("lets the owner holding the tab choose files for a page's file chooser, or close it", async () => {
@@ -186,6 +194,20 @@ it("lets the owner holding the tab choose files for a page's file chooser, or cl
   choose(new File(["a"], "a.pdf"));
   await vi.waitFor(() => expect(accept().disabled).toBe(false));
   expect(send).not.toHaveBeenCalled();
+  // Files picked for this chooser go nowhere once the view has left it: another tab's chooser never gets them.
+  accept().click();
+  toolbar.draw({ ...model, shown: "page", chooser: { chooser_id: "c9", mode: "multiple" } }, true);
+  choose(new File(["a"], "a.pdf"));
+  // Nor does the chooser that replaced it on the same tab.
+  toolbar.draw({ ...model, chooser }, true);
+  accept().click();
+  toolbar.draw({ ...model, chooser: { chooser_id: "c7", mode: "multiple" } }, true);
+  choose(new File(["a"], "a.pdf"));
+  await Promise.resolve();
+  expect(store).toHaveBeenCalledOnce();
+  expect(send).not.toHaveBeenCalled();
+  toolbar.draw({ ...model, chooser }, true);
+  accept().click();
   choose(new File(["a"], "a.pdf"), new File(["b"], "b.pdf"));
   await vi.waitFor(() => expect(send).toHaveBeenCalled());
   expect(send).toHaveBeenLastCalledWith({ action: "upload", tab: "popup", chooser: "c1",

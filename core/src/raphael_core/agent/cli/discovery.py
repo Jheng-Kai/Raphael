@@ -260,6 +260,11 @@ class CliBrains:
         self._lock = asyncio.Lock()
         self._watcher = None
         self._last_used = 0.0
+        # Each installed CLI's credential stamp as the last read of it saw it, before it was asked whether it is signed in:
+        # what the watch of R-CLI-SIGNIN-09 compares with, so a sign-in finished while that read went on is still a change.
+        self._read_stamps = {}
+        # Set when a read finds a CLI newly not signed in, so the watch looks at it now rather than after its minute.
+        self._wake = asyncio.Event()
         self._models = {}
         self._fill_after_refresh = set()
         self._model_refresh = None
@@ -365,8 +370,9 @@ class CliBrains:
         seen = self._store_seen.get(name)
         return seen[1] if seen else None
 
-    def _credential_stamp(self, name):
-        """When the CLI's credential files last changed (never what they hold): a sign-in done anywhere moves it."""
+    def _credential_stamp(self, name, *, fresh=True):
+        """When the CLI's credential files last changed (never what they hold): a sign-in done anywhere moves it. Not
+        `fresh`, the system store's item is the one the last look within KEYCHAIN_TTL_S found, as `logged_in` sees it."""
         stamp = []
         for path in self._credential_files(name):
             try:
@@ -376,7 +382,7 @@ class CliBrains:
         # A sign-in rewrites the item in the system's store instead of a file: Claude Code's Keychain item on a Mac, and
         # Antigravity's Keychain item on a Mac or its Credential Manager item on Windows.
         if self._store(name) is not None:
-            stamp.append(self._store_item(name, fresh=True))
+            stamp.append(self._store_item(name, fresh=fresh))
         return tuple(stamp)
 
     def sign_in_lost(self, name, cause):
@@ -548,6 +554,8 @@ class CliBrains:
 
     async def _one(self, name):
         command = await asyncio.to_thread(self.command, name)
+        if command:
+            self._read_stamps[name] = await asyncio.to_thread(self._credential_stamp, name, fresh=False)
         logged_in = await asyncio.to_thread(self.logged_in, name) if command else False
         disconnected = self.disconnected(name)
         available = cli_available(command, logged_in, disconnected)
@@ -587,6 +595,7 @@ class CliBrains:
     async def list(self, _params=None):
         self._last_used = asyncio.get_running_loop().time()
         async with self._lock:
+            waiting = set(self._signed_out())
             value = {"clis": list(await asyncio.gather(*(self._one(name) for name in NAMES)))}
             before = {item["id"] for item in (self._previous or {}).get("clis", []) if item["available"]}
             for item in value["clis"]:
@@ -598,6 +607,8 @@ class CliBrains:
             if self._previous is not None and self._previous != value and self.notify:
                 self.notify("brains.changed", {})
             self._previous = value
+            if set(self._signed_out()) - waiting:
+                self._wake.set()
         if self._watcher is None:
             self._watcher = asyncio.create_task(self._watch())
         if self._model_refresh is None and any(self._needs_models(name) for name in MODEL_LISTS):
@@ -924,26 +935,27 @@ class CliBrains:
 
     async def _watch(self):
         """While the app is used, everything is read again each minute, and a CLI not signed in has its credentials looked
-        at every SIGNED_OUT_WATCH_S: a changed stamp is a sign-in done somewhere, read and told at once (`brains.changed`)."""
+        at every SIGNED_OUT_WATCH_S: a stamp other than its last read's is a sign-in done somewhere, read and told at once
+        (`brains.changed`). A read that finds a CLI newly not signed in wakes the watch at once."""
         loop = asyncio.get_running_loop()
         try:
-            read_at, stamps = loop.time(), {}
+            read_at = loop.time()
             while True:
+                self._wake.clear()
                 idle = loop.time() - self._last_used
                 waiting = self._signed_out() if idle < SIGNED_OUT_WATCH_FOR_S else []
                 if idle >= 180 and not waiting:
                     break
-                for name in [name for name in stamps if name not in waiting]:
-                    del stamps[name]
-                for name in waiting:
-                    if name not in stamps:
-                        stamps[name] = await asyncio.to_thread(self._credential_stamp, name)
-                await asyncio.sleep(SIGNED_OUT_WATCH_S if waiting else 60)
+                try:
+                    async with asyncio.timeout(SIGNED_OUT_WATCH_S if waiting else 60):
+                        await self._wake.wait()
+                    continue
+                except TimeoutError:
+                    pass
                 changed = False
                 for name in waiting:
                     stamp = await asyncio.to_thread(self._credential_stamp, name)
-                    changed |= stamp != stamps.get(name)
-                    stamps[name] = stamp
+                    changed |= stamp != self._read_stamps.get(name)
                 if changed or idle < 180 and loop.time() - read_at >= 60:
                     previous = self._last_used
                     await self.list()

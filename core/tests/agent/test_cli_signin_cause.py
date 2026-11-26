@@ -343,7 +343,7 @@ async def test_nothing_looks_at_the_credentials_while_no_sign_in_is_lost(tmp_pat
     brains = CliBrains(home=tmp_path, environ={}, commands={})
     looks = []
     real = brains._credential_stamp
-    brains._credential_stamp = lambda name: looks.append((name, threading.get_ident())) or real(name)
+    brains._credential_stamp = lambda name, **how: looks.append((name, threading.get_ident())) or real(name, **how)
     main = threading.get_ident()
     try:
         await brains.list()
@@ -374,7 +374,7 @@ async def test_a_sign_in_done_outside_the_app_shows_within_seconds_while_the_app
                        notify=lambda *event: events.append(event))
     looks = []
     real = brains._credential_stamp
-    brains._credential_stamp = lambda name: looks.append((name, threading.get_ident())) or real(name)
+    brains._credential_stamp = lambda name, **how: looks.append((name, threading.get_ident())) or real(name, **how)
     main = threading.get_ident()
     try:
         listed = await brains.list()
@@ -390,6 +390,56 @@ async def test_a_sign_in_done_outside_the_app_shows_within_seconds_while_the_app
         looks.clear()
         await asyncio.sleep(0.1)
         assert looks == [], "a signed-in CLI is not looked at"
+    finally:
+        await brains.aclose()
+
+
+async def test_a_read_that_finds_a_cli_newly_signed_out_wakes_the_watch_at_once(tmp_path, monkeypatch):
+    """R-CLI-SIGNIN-09: with every CLI signed in the watch waits a minute; a read that then finds one signed out (the
+    owner signed out in a terminal and opened Settings) has it looked at every few seconds from then on, not after that
+    minute (Codex review of #348)."""
+    monkeypatch.setattr(discovery_module, "SIGNED_OUT_WATCH_S", 0.01)
+    (tmp_path / ".codex").mkdir()
+    auth = tmp_path / ".codex" / "auth.json"
+    auth.write_text("{}")
+    events = []
+    brains = CliBrains(home=tmp_path, environ={}, commands={"codex": ["codex.exe"]},
+                       notify=lambda *event: events.append(event))
+    try:
+        await brains.list()
+        await asyncio.sleep(0.05)  # the watch now waits its minute
+        auth.unlink()
+        listed = await brains.list()
+        assert next(item for item in listed["clis"] if item["id"] == "codex")["logged_in"] is False
+        events.clear()
+        auth.write_text("{}")
+        await _until(lambda: ("brains.changed", {}) in events, seconds=2)
+        assert next(item for item in brains._previous["clis"] if item["id"] == "codex")["logged_in"] is True
+    finally:
+        await brains.aclose()
+
+
+async def test_a_sign_in_finished_while_the_clis_are_read_is_still_seen(tmp_path, monkeypatch):
+    """R-CLI-SIGNIN-09: a read asks whether the CLI is signed in, then its version. A sign-in finished in between is not in
+    what the read says, and the watch compares with the stamp from before that question, so it is still a change
+    (Codex review of #348)."""
+    monkeypatch.setattr(discovery_module, "SIGNED_OUT_WATCH_S", 0.01)
+    events = []
+    brains = CliBrains(home=tmp_path, environ={}, commands={"codex": ["codex.exe"]},
+                       notify=lambda *event: events.append(event))
+
+    async def version(name, command):
+        if not (tmp_path / ".codex").exists():
+            (tmp_path / ".codex").mkdir()
+            (tmp_path / ".codex" / "auth.json").write_text("{}")  # signed in while the read went on
+        return {"version": "codex 1"}
+
+    brains._read_version = version
+    try:
+        listed = await brains.list()
+        assert next(item for item in listed["clis"] if item["id"] == "codex")["logged_in"] is False
+        await _until(lambda: ("brains.changed", {}) in events, seconds=2)
+        assert next(item for item in brains._previous["clis"] if item["id"] == "codex")["logged_in"] is True
     finally:
         await brains.aclose()
 

@@ -51,6 +51,8 @@ export function mountHostBrowserToolbar(screen: HTMLElement, send: (action: Host
   picker.className = "host-browser-picker";
   screen.append(picker);
   let dialogDrawn = "", dialogShown = "", dialogAction: number | undefined, lastHolding = false;
+  // The tab and chooser the owner's file dialog was opened for: files picked there go to that chooser alone.
+  let picking: { tab: string; chooser: string } | undefined;
   const strip = bar.querySelector<HTMLElement>(".host-browser-strip")!;
   const add = bar.querySelector<HTMLElement>(".host-browser-add")!;
   const history = bar.querySelector<HTMLElement>(".host-browser-history")!;
@@ -91,7 +93,8 @@ export function mountHostBrowserToolbar(screen: HTMLElement, send: (action: Host
     card.hidden = !prompt;
     // Watching, it is only read: a press on it is a press on the page, which opens the larger view to take control.
     card.toggleAttribute("data-readonly", !holding);
-    if (!prompt) { dialogDrawn = dialogShown = ""; dialogAction = undefined; return; }
+    // A prompt gone takes what was typed into it along: a password never stays in the page.
+    if (!prompt) { dialogDrawn = dialogShown = ""; dialogAction = undefined; card.replaceChildren(); return; }
     const signature = JSON.stringify([prompt, url, holding, getLocale()]);
     if (signature === dialogDrawn) return;
     dialogDrawn = signature;
@@ -146,7 +149,10 @@ export function mountHostBrowserToolbar(screen: HTMLElement, send: (action: Host
     const prompt = promptOf(model);
     if (!model || !prompt || dialogAction !== undefined || card.querySelector("[data-dialog-answer]:disabled")) return;
     // Choosing files opens the owner's own file dialog; they are sent once chosen.
-    if (prompt.kind === "chooser" && accept) { if (store) picker.click(); return; }
+    if (prompt.kind === "chooser" && accept) {
+      if (store) { picking = { tab: model.shown, chooser: prompt.id }; picker.click(); }
+      return;
+    }
     const value = (name: string) => card.querySelector<HTMLInputElement>(`.host-browser-dialog-answer[data-field="${name}"]`)?.value;
     dialogAction = ++actionId;
     disableCard();
@@ -155,20 +161,25 @@ export function mountHostBrowserToolbar(screen: HTMLElement, send: (action: Host
       send({ action: "dialog", tab: model.shown, dialog: prompt.id, accept, ...(accept && text !== undefined ? { text } : {}) }, dialogAction);
     } else if (prompt.kind === "auth") {
       send({ action: "auth", tab: model.shown, auth: prompt.id, accept, ...(accept ? { username: value("username") ?? "", password: value("password") ?? "" } : {}) }, dialogAction);
+      // Sent to Chrome, the password is no longer kept in the card; a refused answer asks for it again.
+      for (const input of card.querySelectorAll<HTMLInputElement>('.host-browser-dialog-answer[data-field="password"]')) input.value = "";
     } else {
       send({ action: "chooser", tab: model.shown, chooser: prompt.id }, dialogAction);
     }
   }
 
   picker.addEventListener("change", () => {
-    const files = [...picker.files ?? []];
+    const files = [...picker.files ?? []], bound = picking;
     picker.value = "";
+    picking = undefined;
     const prompt = promptOf(model);
-    if (!files.length || !model || !store || prompt?.kind !== "chooser" || dialogAction !== undefined) return;
-    const id = dialogAction = ++actionId, tab = model.shown;
+    // Files picked for a chooser the view has since left (another tab, or another chooser) go nowhere.
+    if (!files.length || !model || !store || !bound || model.shown !== bound.tab || prompt?.kind !== "chooser"
+      || prompt.id !== bound.chooser || dialogAction !== undefined) return;
+    const id = dialogAction = ++actionId;
     disableCard();
     void Promise.all(files.slice(0, prompt.chooser.mode === "multiple" ? 20 : 1).map(async file => ({ stored_id: await store(file), name: file.name })))
-      .then(stored => { if (dialogAction === id) send({ action: "upload", tab, chooser: prompt.id, files: stored }, id); })
+      .then(stored => { if (dialogAction === id) send({ action: "upload", tab: bound.tab, chooser: bound.chooser, files: stored }, id); })
       .catch(() => { if (dialogAction === id) refused(); });
   });
 
