@@ -65,6 +65,12 @@ workspace. Core only (no screen changes): `core/tests/brain/test_owner.py`, `cor
 project while the computer runs and choose it, then ask the member where its project is (it names both paths), run a command and see the project at
 `/home/cua/projects/<name>`; repeat while another member's command runs and see the note.
 
+R-COMP-PROJECT-04: a member with a chosen project is told in one sentence which folder it works in (name, path on this PC, path in the
+computer) and to start there, and works in it: commands in the Docker computer start in the project's mount, relative paths of its file tools and a
+search that names no folder start there, and its own workspace stays for notes and downloads. No folder rule changes. Core only (no screen
+changes): `core/tests/brain/test_owner.py`, `core/tests/computer/test_project_defaults.py`, `core/tests/agent/test_owner_files.py`. To check live with
+Docker: choose a project for a member and send a first message; its first command prints the project's path.
+
 R-COMP-PROJECT-03: a project folder added or removed in the folder menu reaches the Docker computer by itself. An idle running computer is
 made again at once with the new mounts (workspace and sign-ins kept); one in use keeps its mounts, is never stopped, and is made again the moment
 it is idle; a sleeping one is not woken and comes up with the folders. Core only (no screen changes):

@@ -5,6 +5,7 @@ import logging
 import os
 import re
 import shutil
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -220,6 +221,17 @@ def owners_credentials(home):
 
 
 class CliBrains:
+    def work_folder(self, member_id):
+        """The project chosen for a member, when it is there: the folder its native CLI starts in, as Claude Code starts in the
+        folder it is given."""
+        if self.settings is None:
+            return None
+        from ...folders import choice
+        try:
+            return choice(self.settings, member_id)
+        except (KeyError, TypeError, ValueError, sqlite3.Error):
+            return None
+
     def __init__(self, *, home=None, environ=None, commands=None, notify=None, settings=None, clock=time.monotonic, keychain=None,
                  credentials=None):
         # The looks at the sign-ins kept in the system's store: Claude Code's Keychain item on a Mac (`keychain`) and

@@ -128,3 +128,28 @@ def test_a_removed_project_falls_back_to_the_members_own_folder(conn, tmp_path):
 def test_project_paths_must_be_absolute(conn, path):
     with pytest.raises(ValueError, match="absolute path"):
         SettingsStore(conn).set("project_folders", [path])
+
+
+def test_the_prompt_says_plainly_which_folder_the_member_works_in_and_to_start_there(conn, tmp_path):
+    # Data inside the profile block is read as data: the assignment is a sentence outside it, in few words.
+    settings = SettingsStore(conn)
+    work, team, own = (tmp_path / name for name in ("work", "team", "own"))
+    for path in (work, team, own):
+        path.mkdir()
+    settings.set("project_folders", [str(work)])
+    settings.set("member_work_folder", {"4": str(work)})
+    mounted = Target("4", "synthetic", own, team, projects=project_mounts(settings.get("project_folders")))
+    waiting = Target("4", "synthetic", own, team)
+
+    def says(member, computer=None):
+        return owner_context(settings, member, folders=lambda _: (own, team), target=computer).split("<owner_context>")[0]
+
+    on_pc = says(4)
+    assert f"Your working folder is work at {work}." in on_pc and "Start there" in on_pc and "README" in on_pc
+    assert "in the computer" not in on_pc and f"your own workspace ({own})" in on_pc
+    here = says(4, mounted)
+    assert f"Your working folder is work at {work} (/home/cua/projects/work in the computer)." in here
+    assert "Start there" in here and "your own workspace (/home/cua/workspace)" in here
+    assert "not in the computer yet" in says(4, waiting) and "Start there" in says(4, waiting)
+    assert "working folder" not in says(9) and "working folder" not in says(9, mounted)  # no project chosen: nothing said
+    assert len(here.split()) < 110
