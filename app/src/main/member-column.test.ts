@@ -463,6 +463,72 @@ describe("the column, used", () => {
   });
 });
 
+describe("the line that says where a dragged row lands", () => {
+  let host: ColumnHost & Record<string, ReturnType<typeof vi.fn>>;
+  let stopContextMenus: () => void;
+  beforeEach(() => {
+    stopContextMenus = installContextMenus(document);
+    document.body.innerHTML = "";
+    localStorage.clear();
+    host = {
+      view: () => ({ list: LIST, current: 0, previews, fresh: new Set() }),
+      select: vi.fn(), newMember: vi.fn(), newGroup: vi.fn(), moveMember: vi.fn(), deleteMember: vi.fn(),
+      renameGroup: vi.fn(), editSources: vi.fn(), deleteGroup: vi.fn(), memberAction: vi.fn(),
+      dropMember: vi.fn().mockResolvedValue(undefined), reorderGroup: vi.fn().mockResolvedValue(undefined),
+    } as never;
+  });
+  afterEach(() => stopContextMenus());
+  const mount = () => {
+    const column = createMemberColumn(host);
+    document.body.append(column.el);
+    column.draw();
+    // The rows and folders where the window draws them: a heading 30 px high, rows 40 px each, folders 10 px apart.
+    const place = (selector: string, top: number, height: number): void => {
+      column.el.querySelector<HTMLElement>(selector)!.getBoundingClientRect = () => ({ top, bottom: top + height, height, left: 0, right: 240, width: 240, x: 0, y: top, toJSON: () => ({}) }) as DOMRect;
+    };
+    place('[data-group="10"]', 60, 110); place('[data-group="10"] [data-member-item="1"]', 90, 40); place('[data-group="10"] [data-member-item="2"]', 130, 40);
+    place('[data-group="20"]', 180, 70); place('[data-group="20"] [data-member-item="3"]', 210, 40);
+    place('[data-group="none"]', 260, 70); place('[data-group="none"] [data-member-item="4"]', 290, 40);
+    return column;
+  };
+  /** The pointer takes `source` and rests over `destination` at `clientY`: whether the page draws a line and allows the drop, then lets go. */
+  const carry = (column: ReturnType<typeof mount>, source: string, destination: string, clientY: number) => {
+    column.el.querySelector(source)!.dispatchEvent(new Event("dragstart", { bubbles: true, cancelable: true }));
+    const over = new MouseEvent("dragover", { bubbles: true, cancelable: true, clientY });
+    column.el.querySelector(destination)!.dispatchEvent(over);
+    const line = column.el.querySelector<HTMLElement>(".mb-drop-line");
+    const shown = !!line && !line.hidden;
+    column.el.querySelector(destination)!.dispatchEvent(new MouseEvent("drop", { bubbles: true, cancelable: true, clientY }));
+    return { shown, allowed: over.defaultPrevented };
+  };
+
+  test("is drawn only where a drop changes something: the row's own place draws none and lets nothing land", () => {
+    const column = mount();
+    // Member 1 already stands before member 2, and last in folder 10 is after member 2: only the second is somewhere else.
+    expect(carry(column, '[data-member-item="1"]', '[data-group="10"] [data-member-item="2"]', 135)).toEqual({ shown: false, allowed: false });
+    expect(host.dropMember).not.toHaveBeenCalled();
+    expect(carry(column, '[data-member-item="1"]', '[data-group="10"] [data-member-item="2"]', 165)).toEqual({ shown: true, allowed: true });
+    expect(host.dropMember).toHaveBeenCalledWith(1, 10, undefined);
+  });
+
+  test("is drawn wherever a member goes to another folder, and the drop there is the one the line shows", () => {
+    const column = mount();
+    expect(carry(column, '[data-member-item="1"]', '[data-group="20"] [data-member-item="3"]', 215)).toEqual({ shown: true, allowed: true });
+    expect(host.dropMember).toHaveBeenLastCalledWith(1, 20, 3);
+    expect(carry(column, '[data-member-item="2"]', '[data-group="none"] [data-member-item="4"]', 330)).toEqual({ shown: true, allowed: true });
+    expect(host.dropMember).toHaveBeenLastCalledWith(2, null, undefined);
+  });
+
+  test("a folder is drawn a line only where it would stand elsewhere", () => {
+    const column = mount();
+    // Folder 10 is first: before folder 20 is where it stands, and last is not.
+    expect(carry(column, '[data-group="10"] .mb-gname', '[data-group="20"]', 185)).toEqual({ shown: false, allowed: false });
+    expect(host.reorderGroup).not.toHaveBeenCalled();
+    expect(carry(column, '[data-group="10"] .mb-gname', '[data-group="20"]', 240)).toEqual({ shown: true, allowed: true });
+    expect(host.reorderGroup).toHaveBeenCalledWith(10, null);
+  });
+});
+
 describe("words not yet sent (R-SIDE-05)", () => {
   beforeEach(() => { localStorage.clear(); setLocale("zh-TW"); });
 
