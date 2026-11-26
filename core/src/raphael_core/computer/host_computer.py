@@ -101,7 +101,7 @@ WORDS = {
     "browser_current_ref_required": "Read the tab again for current references or use screenshot coordinates for a click.",
     "browser_dom_input_required": "Use screenshot coordinates for native page input or omit input_route for a ref click.",
     "browser_coordinates": "Use x and y inside the current 1280 × 900 tab screenshot.",
-    "browser_background_only": "The owner can watch this tab in the app's Computer panel.",
+    "browser_background_only": "Raphael Chrome works in the background; leave delivery_mode out.",
     "host_tool_unavailable": "This tool requires the isolated Docker computer. Use the browser or work folder on this computer.",
 }
 
@@ -138,7 +138,7 @@ class HostComputerTools:
             }}
         self.definitions.update({
             "browser_open": {**open_definition, "description": "Open an HTTP or HTTPS URL in your own background Chrome tab. "
-                             "The owner sees it in the app's Computer panel. When asked to show a page, open it and say where to look. "
+                             "The Computer panel shows it only to an owner who asked to see a page; answer in your reply. "
                              "Check browser_tabs first. Use new_tab to keep the current page. " + HOST_CONTRACT},
             "browser_tabs": {"description": "List your Chrome tabs across turns and tasks, including tabs the owner opened "
                              "and popups. Check before opening a duplicate. The shown tab is the default. Pass show or close "
@@ -568,7 +568,7 @@ class HostComputerTools:
         if name in VIEWPORT_TOOLS:
             return await host_page.viewport_action(browser, tab, name, arguments, approver), []
         data, blocks = await host_page.snapshot(browser, tab, arguments)
-        data["view"] = "The owner can see this page in the app's Computer panel."
+        data["view"] = "The Computer panel shows this page, but your reply is the answer."
         return data, blocks
 
 

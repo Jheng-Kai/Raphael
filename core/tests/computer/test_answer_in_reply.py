@@ -51,4 +51,4 @@ async def test_no_text_the_member_reads_sends_the_owner_to_the_panel_instead_of_
 async def test_the_contract_says_the_answer_goes_in_the_reply_and_the_panel_only_shows_a_page_asked_for(tmp_path, conn):
     contract = (await member_texts(tmp_path, conn))["contract"]
     assert "Always answer in your reply" in contract
-    assert "only when the owner asked to see" in contract
+    assert "Only when the owner asked to see a page" in contract

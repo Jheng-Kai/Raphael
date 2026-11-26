@@ -2466,3 +2466,9 @@ R-COMP-HOST-08. press_key on Raphael Chrome refuses letters and digits (also wit
 words that point to type_text, delivers Shift with Tab and arrows, and moves Alt+Left and
 Alt+Right through the tab's own history. Offline fakes and one native Chrome test
 cover it; no screen shows it.
+
+## Answers stay in the reply
+
+R-COMP-HOST-09. The words a member reads about the Computer panel never replace an answer: the
+reply carries it, and the panel shows a page only when the owner asked to see one. Offline
+text tests and the host Computer scenario cover it; no screen shows it.
