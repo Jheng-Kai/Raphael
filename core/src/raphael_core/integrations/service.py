@@ -936,6 +936,21 @@ class IntegrationsService:
                         and isinstance(calls[0], dict) and calls[0].get("tool_slug") in ready)
         return server == app
 
+    def connections_of_call(self, key: str, arguments: Any) -> list[frozenset[str]]:
+        """For one execution through Composio's router, the connections each of its calls goes to: the toolkits
+        (`composio:<toolkit>`) whose tools include the one it names, as the router's own check finds them. Empty for any
+        other tool, which reaches only its own server, and for an envelope that is not one (the router refuses it)."""
+        parsed = _parse_key(key)
+        if self.managed is None or parsed is None or not isinstance(arguments, Mapping):
+            return []
+        from ..connectors.service import COMPOSIO_SERVER, META_EXECUTE
+        calls = arguments.get("tools")
+        if parsed != (COMPOSIO_SERVER, META_EXECUTE) or not isinstance(calls, list):
+            return []
+        toolkits = [entry for entry in self.managed.store.connectors.values() if entry.kind == "composio"]
+        return [frozenset(entry.id for entry in toolkits if isinstance(call, Mapping) and call.get("tool_slug") in entry.enabled_tools)
+                for call in calls]
+
     def tier_for_call(self, key: str, arguments: Mapping[str, Any]) -> Tier | None:
         usable = self._usable(key)
         if usable is None:

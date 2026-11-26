@@ -29,6 +29,31 @@ async def test_api_dispatch_rechecks_live_member_connections(setup, client, tool
         assert result.ok and len(hub.calls) == 1
 
 
+@pytest.mark.parametrize("slug, given", [("GOOGLESHEETS_BATCH_UPDATE", True), ("GMAIL_SEND_EMAIL", False)])
+async def test_api_dispatch_runs_composio_tools_only_of_the_members_apps(setup, client, slug, given):
+    """#350: a member given Google Sheets in the composer's 應用程式 calls Composio's router; a call of a tool of an app it was
+    not given is refused with the app named, and nothing is sent."""
+    rig, team = setup
+    member = team.members.store.create_member(name="Sheets", role="Write", tools=["composio:googlesheets"])
+    from agent.test_gate import FakeHub
+    from raphael_core.agent.gate import ToolGate
+    key = "mcp:connectors_composio/COMPOSIO_MULTI_EXECUTE_TOOL"
+    hub = FakeHub()
+    hub.tiers = {key: Tier.T1}
+    rig.service._gate = ToolGate(hub, conn=rig.conn)
+    toolkit = {"GOOGLESHEETS": "composio:googlesheets", "GMAIL": "composio:gmail"}
+    rig.service._plugins = SimpleNamespace(connections_of_call=lambda _key, arguments: [
+        frozenset({toolkit[call["tool_slug"].split("_", 1)[0]]}) for call in arguments["tools"]])
+    tool = PluginTool(key, "Composio", "COMPOSIO_MULTI_EXECUTE_TOOL", "Execute", {}, Tier.T1)
+    arguments = {"tools": [{"tool_slug": slug, "arguments": {}}]}
+    result = await rig.service._plugin_call(PlannedCall(tool, arguments), None, steps=[],
+                                          ask=SimpleNamespace(speaker=Speaker(id=member.id), page_call=False))
+    if given:
+        assert result.ok and len(hub.calls) == 1
+    else:
+        assert result.error == "tool_disabled" and "gmail" in result.instruction and not hub.calls
+
+
 @pytest.mark.parametrize("brain", ["api", "cli"])
 async def test_actual_brain_offers_filter_connections_without_removing_harness(setup, client, monkeypatch, brain):
     from raphael_core.agent.cli.loop import CliLoop

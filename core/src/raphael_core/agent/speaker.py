@@ -48,6 +48,19 @@ def plugin_server(key: str) -> str | None:
     return server if sep and server else None
 
 
+# The connections Raphael manages share one server each, so a member's list names them by connection, not by server: every
+# Composio toolkit (`composio:<toolkit>`) is reached through Composio's router, and the owner's own Google (`google`) through
+# its own server (#350).
+MANAGED_SERVERS = {"connectors_composio": lambda item: item.startswith("composio:"), "connectors_google": lambda item: item == "google"}
+
+
+def call_reaches(plugins, key: str, arguments) -> list[frozenset[str]]:
+    """What one call reaches beyond its server, by the tool hub (`connections_of_call`): for each call of an execution through
+    Composio's router, the connections that hold the tool it names. Empty for any other tool, or a hub that cannot tell."""
+    reach = getattr(plugins, "connections_of_call", None)
+    return reach(key, arguments) if reach is not None and arguments is not None else []
+
+
 @dataclass(frozen=True)
 class Speaker:
     """Who answers a request, and with what (see the module). The default is Raphael."""
@@ -98,7 +111,16 @@ class Speaker:
         if self.tools is None or server is None or server in {"local", "owner_files", "computer", "media"} or server.startswith("computer-"):
             return True
         allowed = {(plugin_server(item) or item).casefold() for item in self.tools}
-        return server.casefold() in allowed
+        names = MANAGED_SERVERS.get(server.casefold())
+        return server.casefold() in allowed or bool(names and any(names(item) for item in allowed))
+
+    def apps_outside(self, reached) -> list[str]:
+        """The apps of one call this member was not given: of each call `reached` lists (the connections that hold its tool,
+        `call_reaches`), the toolkit of one whose connections are none of the member's. Empty while the list is null."""
+        if self.tools is None:
+            return []
+        allowed = {item.casefold() for item in self.tools}
+        return sorted({min(ids).removeprefix("composio:") for ids in reached if ids and not {item.casefold() for item in ids} & allowed})
 
     @property
     def may_ask(self) -> bool:
