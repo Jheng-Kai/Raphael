@@ -5,12 +5,13 @@
 // a source, its switch, then its skills, each with its own switch), and the back arrow, Esc or a step back return to the
 // list where it was left. Every skill opens on a page of its own that shows its document. A right click on a package's row
 // or page offers 更新 and 刪除 (its ⋯ is not drawn: context-menu.ts presses it at the pointer).
-// The importer is the tab's first card (a tab is its name, then its sections: R-UI-115): a skills.sh or GitHub link or
-// owner/repo, or pasted SKILL.md text in its place, a .zip, .tar.gz or .md file picked or dropped on the card, or a folder
-// picked in the system's dialog, and one 匯入 (#249). The core does the work: skills.library.* (members/service.py). An import
-// under way says so under the card; a failure says its own cause with the file, size, limit or packages it names (the core's
-// `[[json]]` detail, R-SKILL-21); a skill of a package is renamed from its page (R-SKILL-25) and skills of one name prefix
-// arrive as one plugin (R-SKILL-20), with no question to the owner (#355).
+// The importer is the tab's first card (a tab is its name, then its sections: R-UI-115): one box that takes anything,
+// whatever is dropped on it (files, a folder, a link) or pasted in it, or chosen with 選擇檔案, and one 匯入 (R-SKILL-26). The
+// core does the work: skills.library.* (members/service.py): what is a skill or a plugin imports at once, and what is not
+// is converted by the primary contact while the card says who is writing it and with which model. An import under way says
+// so under the card; a failure says its own cause with the file, size, limit or packages it names (the core's `[[json]]`
+// detail, R-SKILL-21); a skill of a package is renamed from its page (R-SKILL-25) and skills of one name prefix arrive as
+// one plugin (R-SKILL-20), with no question to the owner (#355).
 
 import { core, membersList, pickOutputFolder } from "./api";
 import { t } from "./i18n";
@@ -38,7 +39,11 @@ type Face = Parameters<typeof faceHTML>[0];
 export interface SkillLibraryView {
   packages: LibraryPackage[]; members: LibraryMember[]; loaded: boolean; failed: boolean;
   /** The package whose page is open in the list's place, or null for the list. */
-  page: string | null; pasting: boolean; busy: boolean; refreshing: Set<string>; error: string;
+  page: string | null; busy: boolean; refreshing: Set<string>; error: string;
+  /** What is typed or pasted in the importer's box, kept while the card is drawn again. */
+  draft: string;
+  /** A conversion under way: the slime that writes the skill and the model it uses; the words of the one that just ended well. */
+  converting: { task: number; name: string; model: string } | null; converted: string;
   /** The skill whose page is open (in its package's place), its document once read, or whether reading it failed. */
   skill: number | null; doc: { id: number; text: string } | null; docFailed: boolean;
   /** What the last import left out for the package it made (#313): said under the importer or on that package's page. */
@@ -47,7 +52,8 @@ export interface SkillLibraryView {
   renaming: number | null;
 }
 export const emptySkillLibraryView = (): SkillLibraryView => ({
-  packages: [], members: [], loaded: false, failed: false, page: null, pasting: false, busy: false, refreshing: new Set(), error: "",
+  packages: [], members: [], loaded: false, failed: false, page: null, busy: false, refreshing: new Set(), error: "",
+  draft: "", converting: null, converted: "",
   skill: null, doc: null, docFailed: false, skipped: null, renaming: null,
 });
 
@@ -59,7 +65,10 @@ const CAUSES = {
 } as const satisfies Record<string, MessageKey>;
 /** The largest file the window reads and sends: the core's own upload limit (MAX_UPLOAD_BYTES). A folder has none. */
 const MAX_FILE = 128 * 1024 * 1024;
-const ACCEPT = ".zip,.tar.gz,.tgz,.md";
+/** What a folder dropped on the card leaves behind: no part of a skill, and often the largest part of a folder. */
+const SKIPPED_FOLDERS = new Set(["node_modules", ".git", "__pycache__", "__MACOSX"]);
+/** How often a conversion under way is asked how it stands. */
+const POLL_MS = 1500;
 
 /** Who may use a package, in a few words: the whole team, nobody yet, the names of one or two, or how many. */
 export function accessText(access: Access, members: LibraryMember[]): string {
@@ -188,19 +197,24 @@ function skillPageHTML(p: LibraryPackage, skill: LibrarySkill, v: SkillLibraryVi
     aboutHTML(skill.description, alone ? p : undefined) + `<div class="skl-doc">${body}</div></section>`;
 }
 
+/** The one box of the tab: whatever is dropped or pasted in it, or chosen with 選擇檔案, is imported as it is, and what is no
+ *  skill yet is converted by the primary contact (core: members/skill_convert.py). Its state is said under it, quietly. */
 function importHTML(v: SkillLibraryView): string {
-  const busy = v.busy ? " disabled" : "";
-  // The ways in stand first, so that 貼上文字 stays put when the text takes the link's place under them; one 匯入 sends
-  // whichever is on the card, beside the link or under the text.
-  const go = btn(esc(t("skillLib.import")), "pri skl-go", ` data-skl="import-go"${busy}`);
-  const input = v.pasting
-    ? `<textarea id="skl-text" class="mb-fin mb-ta skl-text" rows="5" spellcheck="false" placeholder="${esc(t("skillLib.pasteHint"))}" aria-label="${esc(t("skillLib.pasteHint"))}"${busy}></textarea><div class="skl-go-row">${go}</div>`
-    : `<div class="skl-link">${fieldHTML(t("members.profile.source"), "", { id: "skl-source", disabled: v.busy })}${go}</div>`;
-  return `<div class="skl-import" data-skl-drop><div class="skl-import-alt">` +
-    btn(ico("file") + esc(t("skillLib.file")), "sm", ` data-skl="pick-file"${busy}`) +
-    btn(ico("folder") + esc(t("skillLib.folder")), "sm", ` data-skl="pick-folder"${busy}`) +
-    btn(ico("pencil") + esc(t("skillLib.paste")), "sm", ` data-skl="paste" aria-expanded="${v.pasting}" aria-controls="skl-text"${busy}`) +
-    `</div>${input}${v.busy ? `<p class="d skl-progress" role="status">${esc(t("skillLib.importing"))}</p>` : ""}<p class="d skl-import-hint">${esc(t("skillLib.importHint"))}</p>${v.error ? `<p class="skl-error" role="alert">${esc(v.error)}</p>` : ""}<input type="file" id="skl-file" accept="${ACCEPT}" hidden></div>`;
+  const working = v.busy || !!v.converting;
+  const busy = working ? " disabled" : "";
+  const progress = v.converting
+    ? t("skillLib.converting", { p0: v.converting.name, p1: v.converting.model })
+    : v.busy ? t("skillLib.importing") : "";
+  return `<div class="skl-import" data-skl-drop>` +
+    `<textarea id="skl-input" class="mb-fin mb-ta skl-text" rows="3" spellcheck="false" aria-label="${esc(t("skillLib.importHint"))}"${busy}>${esc(v.draft)}</textarea>` +
+    `<div class="skl-import-row">` +
+    btn(ico("file") + esc(t("skillLib.choose")), "sm", ` data-skl="pick" aria-haspopup="menu" aria-expanded="false"${busy}`) +
+    btn(esc(t("skillLib.import")), "pri skl-go", ` data-skl="import-go"${busy}`) +
+    `</div><p class="d skl-import-hint">${esc(t("skillLib.importHint"))}</p>` +
+    (progress ? `<p class="d skl-progress" role="status">${esc(progress)}</p>` : "") +
+    (!working && v.converted ? `<p class="d skl-progress" role="status">${esc(v.converted)}</p>` : "") +
+    (v.error ? `<p class="skl-error" role="alert">${esc(v.error)}</p>` : "") +
+    `<input type="file" id="skl-file" multiple hidden></div>`;
 }
 
 export function skillLibraryHTML(v: SkillLibraryView, { listHeader = "", pageClose = "", notice = "" }:
@@ -263,6 +277,13 @@ function reasonText(kind: string, d: Detail): string | null {
     case "source.host": return t("skillLib.sourceHost", { p0: d.host ?? "" });
     case "source.linked": return t("skillLib.linkRefused", { p0: file });
     case "source.path": case "source.unreadable": case "io.disk": return t("skillLib.unreadable", { p0: file });
+    case "convert.no_model": return t("skillLib.noModel", { p0: t("providers.title") });
+    case "convert.empty": return t("skillLib.convertEmpty");
+    case "convert.no_skill": return d.why ? t("skillLib.convertNoSkill", { p0: d.why }) : t("skillLib.convertNoSkillPlain");
+    case "convert.unusable": return t("skillLib.convertUnusable");
+    case "convert.stopped": return t("skillLib.convertStopped");
+    case "convert.unavailable": return t("skillLib.convertUnavailable");
+    case "convert.failed": return t("skillLib.convertFailed");
     case "source.redirect": case "source.insecure": case "source.invalid": case "source.empty": case "source.not_skill_file":
     case "source.file_type": return t("skillLib.unsupported");
     default: return null;
@@ -298,10 +319,41 @@ export function failureText(error: unknown): string {
   return kind && kind[1] in CAUSES ? t(CAUSES[kind[1] as keyof typeof CAUSES]) : t("skillLib.failed");
 }
 
+/** A file or a file of a folder, with its path below the folder that was dropped (a lone file's is its name). */
+interface Picked { path: string; file: File }
+
+/** The model a conversion runs on, as its name alone (`openrouter/vendor/model` is `model`, `cli:codex` is `codex`). */
+const shortModel = (model: string): string => model.slice(Math.max(model.lastIndexOf("/"), model.lastIndexOf(":")) + 1) || model;
+
+/** What a drop holds: its files, and for a folder every file below it (without what a folder leaves behind), each with its
+ *  path from the folder. A browser that cannot walk a folder gives its files as they come. */
+async function droppedFiles(data: DataTransfer): Promise<Picked[]> {
+  const entries = [...(data.items ?? [])].map(item => item.webkitGetAsEntry?.() ?? null);
+  if (!entries.length || entries.some(entry => !entry)) return [...(data.files ?? [])].map(file => ({ path: file.name, file }));
+  const found: Picked[] = [];
+  const read = async (entry: FileSystemEntry, base: string): Promise<void> => {
+    if (entry.isFile) {
+      const file = await new Promise<File>((resolve, reject) => (entry as FileSystemFileEntry).file(resolve, reject));
+      found.push({ path: base + entry.name, file });
+    } else if (entry.isDirectory && !SKIPPED_FOLDERS.has(entry.name)) {
+      const reader = (entry as FileSystemDirectoryEntry).createReader();
+      for (;;) {
+        const batch = await new Promise<FileSystemEntry[]>((resolve, reject) => reader.readEntries(resolve, reject));
+        if (!batch.length) break;
+        for (const child of batch) await read(child, base + entry.name + "/");
+      }
+    }
+  };
+  for (const entry of entries) await read(entry!, "");
+  return found;
+}
+
 /** `scroller` is what scrolls the tab: the list's place in it is kept while a package's page is open. */
-export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroller: () => HTMLElement | null = () => root) {
+export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroller: () => HTMLElement | null = () => root, pollMs = POLL_MS) {
   const state = emptySkillLibraryView();
   let epoch = 0;
+  /** Which watch of a conversion is the current one: leaving the tab or a new one ends the earlier. */
+  let watching = 0;
   /** How far the list was scrolled when a package's page took its place, and the package's page when a skill's did. */
   let listScroll = 0, pageScroll = 0;
   /** The members' faces by id, from the roster the rest of the window draws them from; without it a face is its id's own colour. */
@@ -310,10 +362,16 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
     const request = ++epoch;
     const roster = Promise.resolve().then(() => membersList()).then(list => list.members, () => null);
     try {
-      const result = await core<{ packages: LibraryPackage[]; members: LibraryMember[] }>("skills.library.list", {});
+      const result = await core<{ packages: LibraryPackage[]; members: LibraryMember[]; converting?: { task_id: number; member: { name: string }; model: string }[] }>("skills.library.list", {});
       const team = await roster;
       if (request !== epoch) return;
       state.packages = result.packages; state.members = result.members; state.loaded = true; state.failed = false;
+      // A conversion that was under way when the tab was left is picked up again where it stands.
+      const resumed = result.converting?.[0];
+      if (resumed && !state.converting && !state.busy) {
+        state.converting = { task: resumed.task_id, name: resumed.member.name, model: shortModel(resumed.model) };
+        void watch(resumed.task_id);
+      }
       if (team) faces = new Map(team.map(member => [member.id, member]));
     } catch { if (request === epoch) state.failed = true; }
     if (request !== epoch) return;
@@ -343,17 +401,54 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
     catch (error) { toaster.info(failureText(error)); }
     finally { state.refreshing.delete(key); redraw(); }
   };
+  /** A package the library now holds, as an import or a conversion made it: a plugin opens on its page, so whom it is for can
+   *  be chosen at once (a large set reaches nobody until then). */
+  const arrived = async (made: LibraryPackage, skipped: SkippedSkill[] | undefined): Promise<void> => {
+    state.draft = "";
+    // Skills whose names were taken are not in the library: the owner is told which, and who holds each name (#313).
+    state.skipped = skipped?.length ? { key: made.key, items: skipped } : null;
+    await load();
+    state.busy = false; state.converting = null;
+    if (hasPage(byKey(made.key))) open(made.key); else redraw();
+  };
+  /** Asks how a conversion stands until it ends: the package it made lands like any import, or its cause is said under the card. */
+  const watch = async (task: number): Promise<void> => {
+    const turn = ++watching;
+    while (turn === watching) {
+      await new Promise(resolve => setTimeout(resolve, pollMs));
+      if (turn !== watching) return;
+      try {
+        const answer = await core<{ state: string; package?: LibraryPackage; skipped?: SkippedSkill[]; error?: string }>("skills.library.convert", { task_id: task });
+        if (turn !== watching || answer.state === "working") continue;
+        const slime = state.converting?.name ?? "";
+        watching++;
+        if (answer.state === "done" && answer.package) {
+          state.converted = t("skillLib.converted", { p0: slime, p1: answer.package.name });
+          await arrived(answer.package, answer.skipped);
+        } else {
+          state.converting = null; state.error = failureText(new Error(answer.error ?? "")); redraw();
+        }
+        return;
+      } catch (error) {
+        if (turn !== watching) return;
+        watching++; state.converting = null; state.error = failureText(error); redraw();
+        return;
+      }
+    }
+  };
   const bring = async (params: Record<string, unknown>): Promise<void> => {
-    state.busy = true; state.error = ""; state.skipped = null; redraw();
+    state.busy = true; state.error = ""; state.converted = ""; state.skipped = null; redraw();
     try {
-      const { package: made, skipped } = await core<{ package: LibraryPackage; skipped?: SkippedSkill[] }>("skills.library.import", params);
-      state.pasting = false;
-      // Skills whose names were taken are not in the library: the owner is told which, and who holds each name (#313).
-      state.skipped = skipped?.length ? { key: made.key, items: skipped } : null;
-      await load();
-      // A plugin opens on its page, so whom it is for can be chosen at once: a large set reaches nobody until then.
-      state.busy = false;
-      if (hasPage(byKey(made.key))) open(made.key); else redraw();
+      const answer = await core<{ package?: LibraryPackage; skipped?: SkippedSkill[]; converting?: { task_id: number; member: { name: string }; model: string } }>("skills.library.import", params);
+      if (answer.converting) {
+        // Not a skill yet: a slime converts it, and the card says which slime and with what model, in place.
+        state.busy = false;
+        state.converting = { task: answer.converting.task_id, name: answer.converting.member.name, model: shortModel(answer.converting.model) };
+        redraw();
+        void watch(answer.converting.task_id);
+        return;
+      }
+      await arrived(answer.package!, answer.skipped);
     } catch (error) { state.error = failureText(error); state.busy = false; redraw(); }
   };
   /** A package's page takes the list's place, from its top; the list's place is kept for the way back. */
@@ -533,21 +628,40 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
         break;
       }
       case "import-go": {
-        const text = root.querySelector<HTMLTextAreaElement>("#skl-text")?.value ?? "";
-        const source = root.querySelector<HTMLInputElement>("#skl-source")?.value.trim() ?? "";
-        if (state.pasting ? text.trim() : source) void bring(state.pasting ? { text } : { source });
+        // The text of the box is sent as it is: the core says whether it is a link, a place on this computer or text.
+        const text = root.querySelector<HTMLTextAreaElement>("#skl-input")?.value ?? "";
+        state.draft = text;
+        if (text.trim()) void bring({ text });
         break;
       }
-      case "paste":
-        state.pasting = !state.pasting; state.error = ""; redraw();
-        root.querySelector<HTMLElement>(state.pasting ? "#skl-text" : "#skl-source")?.focus();
-        break;
-      case "pick-file": root.querySelector<HTMLInputElement>("#skl-file")?.click(); break;
-      case "pick-folder":
-        void pickOutputFolder().then(path => { if (path) void bring({ source: `local:${path}` }); }).catch(error => toaster.info(failureText(error)));
-        break;
+      case "pick": choose(target); break;
     }
   });
+  /** 選擇檔案: files from the system's dialog, or a folder from its own (a folder is read where it is, whatever its size). */
+  const choose = (anchor: HTMLElement): void => {
+    const menu = openPopover(anchor,
+      `<button type="button" role="menuitem" tabindex="-1" data-pick="files"><span class="mlead" aria-hidden="true">${ico("file")}</span><span class="mt">${esc(t("skillLib.chooseFiles"))}</span></button>` +
+      `<button type="button" role="menuitem" tabindex="-1" data-pick="folder"><span class="mlead" aria-hidden="true">${ico("folder")}</span><span class="mt">${esc(t("skillLib.folder"))}</span></button>`,
+      { className: "menu skl-pick-menu", role: "menu", label: t("skillLib.choose"), placement: "start" });
+    menu.addEventListener("click", event => {
+      const pick = (event.target as Element).closest<HTMLElement>("[data-pick]")?.dataset.pick;
+      if (!pick) return;
+      closeMenu();
+      if (pick === "files") root.querySelector<HTMLInputElement>("#skl-file")?.click();
+      else void pickOutputFolder().then(path => { if (path) void bring({ source: `local:${path}` }); }).catch(error => { state.error = failureText(error); redraw(); });
+    });
+  };
+  /** What was dropped or chosen goes to the core whole: one file as the file it is, several files or a folder as a tree. */
+  const bringPicked = async (picked: Picked[]): Promise<void> => {
+    if (!picked.length) return;
+    if (picked.reduce((sum, item) => sum + item.file.size, 0) > MAX_FILE) { state.error = t("skillLib.tooLarge"); redraw(); return; }
+    if (picked.length === 1 && !picked[0]!.path.includes("/")) { await bringFile(picked[0]!.file); return; }
+    state.busy = true; state.error = ""; redraw();
+    try {
+      const files = await Promise.all(picked.map(async item => ({ path: item.path, data: base64(await item.file.arrayBuffer()) })));
+      await bring({ files });
+    } catch (error) { state.error = failureText(error); state.busy = false; redraw(); }
+  };
   root.addEventListener("keydown", event => {
     const input = event.target as HTMLElement;
     if (input.id === "skl-rename" && !event.isComposing && (event.key === "Enter" || event.key === "Escape")) {
@@ -558,7 +672,9 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
       else { state.renaming = null; redraw(); root.querySelector<HTMLElement>('[data-skl="skill-rename"]')?.focus({ preventScroll: true }); }
       return;
     }
-    if (input.id === "skl-source" && event.key === "Enter" && !event.isComposing) {
+    // A link or a path is one line: Enter sends it. Text of several lines keeps its Enter, and Ctrl+Enter sends it.
+    if (input.id === "skl-input" && event.key === "Enter" && !event.isComposing && !event.shiftKey
+        && (event.ctrlKey || event.metaKey || !(input as HTMLTextAreaElement).value.includes("\n"))) {
       event.preventDefault();
       root.querySelector<HTMLElement>('[data-skl="import-go"]')?.click();
     }
@@ -579,20 +695,27 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
   });
   root.addEventListener("change", event => {
     const input = event.target as HTMLInputElement;
-    if (input.id !== "skl-file" || !input.files?.[0]) return;
-    const file = input.files[0];
+    if (input.id !== "skl-file" || !input.files?.length) return;
+    const picked = [...input.files].map(file => ({ path: file.name, file }));
     input.value = "";
-    void bringFile(file);
+    void bringPicked(picked);
+  });
+  root.addEventListener("input", event => {
+    if ((event.target as HTMLElement).id === "skl-input") state.draft = (event.target as HTMLTextAreaElement).value;
   });
   root.addEventListener("dragover", event => {
-    if ((event.target as Element).closest?.("[data-skl-drop]") && event.dataTransfer?.types.includes("Files")) event.preventDefault();
+    const types = event.dataTransfer?.types;
+    if ((event.target as Element).closest?.("[data-skl-drop]") && (types?.includes("Files") || types?.includes("text/uri-list") || types?.includes("text/plain"))) event.preventDefault();
   });
   root.addEventListener("drop", event => {
-    if (!(event.target as Element).closest?.("[data-skl-drop]")) return;
-    const file = event.dataTransfer?.files?.[0];
-    if (!file) return;
+    if (!(event.target as Element).closest?.("[data-skl-drop]") || state.busy || state.converting) return;
+    const data = event.dataTransfer;
+    if (!data) return;
+    // A link dragged from a page or some text dragged from a document goes into the box and is sent: no step between.
+    const words = data.types?.includes("Files") ? "" : (data.getData("text/uri-list") || data.getData("text/plain")).trim();
     event.preventDefault();
-    void bringFile(file);
+    if (words) { state.draft = words; void bring({ text: words }); return; }
+    void droppedFiles(data).then(bringPicked);
   });
   return {
     view: (): SkillLibraryView => state,
@@ -602,6 +725,10 @@ export function createSkillLibrary(root: HTMLElement, redraw: () => void, scroll
       const page = root.querySelector<HTMLElement>(".skl-page");
       if (page) bindNavLayer(page, back, { step: direction => state.busy || direction === "back" && keepEditedField(page) });
     },
-    reset: (): void => { epoch++; state.skipped = null; state.pasting = false; state.error = ""; state.page = null; state.skill = null; state.doc = null; state.renaming = null; },
+    // A conversion goes on in the core while the tab is away; the next listing picks it up where it stands.
+    reset: (): void => {
+      epoch++; watching++; state.skipped = null; state.error = ""; state.converting = null; state.converted = ""; state.draft = "";
+      state.page = null; state.skill = null; state.doc = null; state.renaming = null;
+    },
   };
 }

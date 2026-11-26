@@ -831,17 +831,45 @@ export function checkRendered(name, context = {}) {
       const anchor = rowOf('pack:2').querySelector('.skl-access').getBoundingClientRect(), frame = menu.getBoundingClientRect();
       require(frame.top >= anchor.bottom - 1 && frame.bottom <= innerHeight + 1, 'the menu stands under its button, inside the window');
     }
-    if (name === 'skill-library-import') {
-      const panel = document.querySelector('.skl-import');
-      require(visible(panel) && !panel.querySelector('#skl-source') && visible(panel.querySelector('#skl-text')), 'the pasted text stands in the link\'s place');
-      require(['pick-file', 'pick-folder', 'paste'].every(act => visible(panel.querySelector(`[data-skl="${act}"]`))), 'a file, a folder, or pasted text');
-      require(visible(panel.querySelector('.skl-import-hint')) && panel.querySelector('.skl-import-hint').textContent.includes('GitHub'), "the hint names accepted sources");
-      require(panel.querySelector('[data-skl="pick-file"]').textContent.includes('.zip') && panel.querySelector('[data-skl="paste"]').textContent.includes('SKILL.md'), "the choices name the formats");
-      require(panel.querySelector('#skl-file').accept === '.zip,.tar.gz,.tgz,.md', 'the file picker takes archives and Markdown');
-      require(panel.getBoundingClientRect().right <= document.querySelector('.modal-scrim .skl').getBoundingClientRect().right + 1, 'the importer fits the tab');
+    if (['skill-library-import', 'skill-library-import-link', 'skill-library-import-menu'].includes(name)) {
+      // One box that takes anything (R-SKILL-26): a field, one way to choose files, one 匯入 and one plain line; nothing else.
+      const panel = document.querySelector('.skl-import'), field = panel.querySelector('#skl-input');
+      require(visible(panel) && visible(field) && panel.querySelectorAll('textarea, input:not([type="file"])').length === 1, 'the card is one box');
+      require([...panel.querySelectorAll('button')].map(button => button.dataset.skl).join() === 'pick,import-go', 'one way to choose files and one 匯入, no chips');
+      require(panel.querySelector('[data-skl="pick"]').textContent.trim() === '選擇檔案', 'the way to choose is a plain 選擇檔案');
+      const hint = panel.querySelector('.skl-import-hint');
+      require(visible(hint) && hint.textContent.trim() === '把檔案、資料夾或連結丟進來，任何格式都可以。', 'one plain line under the box');
+      require(!/\.zip|\.md|\.tgz|SKILL\.md|GitHub|skills\.sh/.test(panel.textContent), 'no format is named');
+      require(panel.querySelector('#skl-file').multiple && !panel.querySelector('#skl-file').accept, 'the file dialog takes any file');
+      const wide = panel.getBoundingClientRect(), box = field.getBoundingClientRect();
+      require(box.left >= wide.left - 1 && box.right <= wide.right + 1 && wide.right <= document.querySelector('.modal-scrim .skl').getBoundingClientRect().right + 1, 'the box fits the card and the card the tab');
+      const rowBox = panel.querySelector('.skl-import-row').getBoundingClientRect();
+      require(rowBox.top >= box.bottom - 1 && Math.abs(panel.querySelector('[data-skl="import-go"]').getBoundingClientRect().right - box.right) <= 1, '匯入 ends the row under the box, flush with its edge');
+      if (name === 'skill-library-import-link') require(field.value === 'https://example.com/team-handbook', 'the link stands in the box');
+      if (name === 'skill-library-import-menu') {
+        const menu = document.querySelector('.skl-pick-menu'), anchor = panel.querySelector('[data-skl="pick"]').getBoundingClientRect(), frame = menu.getBoundingClientRect();
+        require([...menu.querySelectorAll('button')].map(button => button.textContent.trim()).join() === '檔案,資料夾', 'the menu offers files or a folder');
+        require(frame.left >= 0 && frame.right <= innerWidth && frame.bottom <= innerHeight && (frame.top >= anchor.bottom - 1 || frame.bottom <= anchor.top + 1) && Math.abs(frame.left - anchor.left) <= 2, 'the menu stands against its button, at its left edge, inside the window');
+      }
+    }
+    if (name === 'skill-library-converting' || name === 'skill-library-converted') {
+      const status = document.querySelector('.skl-import .skl-progress[role="status"]');
+      if (name === 'skill-library-converting') {
+        require(visible(status) && status.textContent.trim() === '拉斐爾 正在轉換成技能…（claude-sonnet-5）', `the card says which slime writes the skill and with which model (${status?.textContent})`);
+        require(document.querySelector('[data-skl="import-go"]').disabled && document.querySelector('#skl-input').disabled && document.querySelector('[data-skl="pick"]').disabled, 'the card holds still while it works');
+        require(!document.querySelector('.skl-error, .toast'), 'nothing else is said while it works');
+        const call = window.__look.calls.find(c => c.method === 'skills.library.import');
+        require(call?.params.file?.name === 'team-handbook.pdf', 'the dropped file went to the core whole, whatever its kind');
+      } else {
+        require(visible(status) && status.textContent.trim() === '拉斐爾 已轉換成「weekly-report」，請先看過內容再讓大家用。', `the card says who made the skill (${status?.textContent})`);
+        require(rowOf('skill:weekly')?.querySelector('.skl-single .d')?.textContent === '整理每週進度並寫成報告' && accessOf('skill:weekly') === '整個團隊', 'the skill is a row of its own, in the list');
+        require(!document.querySelector('.skl-error, .toast') && !document.querySelector('[data-skl="import-go"]').disabled, 'the box is free again and nothing else is said');
+      }
+      const box = document.querySelector('.skl-import').getBoundingClientRect(), r = status.getBoundingClientRect();
+      require(r.left >= box.left - 1 && r.right <= box.right + 1, 'the words stay inside the card');
     }
     if (name === 'skill-library-imported') {
-      require(visible(document.querySelector('.skl-import #skl-source')) && !document.querySelector('#skl-text'), 'the card is back to the link');
+      require(visible(document.querySelector('.skl-import #skl-input')) && document.querySelector('#skl-input').value === '', 'the box is empty again');
       require(rowOf('pack:13')?.querySelector('.skl-single .d')?.textContent === '依日期整理行程與訂位' && accessOf('pack:13') === '整個團隊', 'the new skill is a row of its own, its words under its name, for the whole team');
       require(!document.querySelector('.toast'), 'the new package is the only success feedback');
       const call = window.__look.calls.find(c => c.method === 'skills.library.import');
@@ -861,7 +889,7 @@ export function checkRendered(name, context = {}) {
     if (name === 'skill-library-importing') {
       const status = document.querySelector('.skl-import .skl-progress');
       require(visible(status) && status.textContent.trim() === '匯入中…' && status.getAttribute('role') === 'status', 'the importer says it is importing');
-      require(document.querySelector('[data-skl="import-go"]').disabled && document.querySelector('#skl-source').disabled, 'the card holds still while it works');
+      require(document.querySelector('[data-skl="import-go"]').disabled && document.querySelector('#skl-input').disabled, 'the card holds still while it works');
       require(!document.querySelector('.skl-error, .toast'), 'nothing else is said while it works');
     }
     if (name === 'skill-library-plugin-imported') {
@@ -882,9 +910,10 @@ export function checkRendered(name, context = {}) {
       const expected = {
         'clash-single': ['pdf-read', 'pdf', '重新命名或刪除'], 'clash-package': ['tdd', 'pstack', 'office-kit', '重新命名或刪除'],
         'size': ['assets/demo-video.mp4', '256.0 MB'], 'repo': ['owner/missing'], 'network': ['GitHub', '網路'], 'document': ['skills/bad/SKILL.md', '第 4 行'],
+        'no-model': ['還沒有連上模型', '「模型」', '再匯入一次'], 'no-skill': ['做不成技能', '這是一份菜單'],
       }[name.slice('skill-library-failed-'.length)];
       require(visible(said) && expected.every(part => words.includes(part)), `the cause is said with what it names (${words})`);
-      require(visible(document.querySelector('.skl-import #skl-source')) && !document.querySelector('.toast'), 'the importer stays open and nothing else is said');
+      require(visible(document.querySelector('.skl-import #skl-input')) && document.querySelector('#skl-input').value && !document.querySelector('.toast'), 'the importer stays open with what was put in it, and nothing else is said');
       const box = document.querySelector('.skl-import').getBoundingClientRect(), r = said.getBoundingClientRect();
       require(r.left >= box.left - 1 && r.right <= box.right + 1, 'the words stay inside the card');
     }
