@@ -138,6 +138,8 @@ PREVIEW_CHARS = 80
 # The folders of the pictures, in the app's local folder.
 AVATARS_DIR = "avatars"
 SLIME = "slime:"
+# What of a profile Raphael keeps: its name is the language's own and its look the first blue slime, fixed.
+RAPHAEL_PROFILE_FIELDS = ("personality", "instructions")
 MEMBERS_DIR = "members"
 # Raphael's own picture, kept by the shell (app/src-tauri/src/avatar.rs): read here, never written.
 RAPHAEL_AVATAR_DIR = "avatar"
@@ -453,10 +455,11 @@ class MembersService:
     def speaker(self, member_id: int) -> Speaker | None:
         if member_id == 0:
             tools = self._settings.get("raphael_tools")
-            profile = {field: text for field, text in self.first_bot_profile().items() if field != "avatar"}
+            # Raphael is the guide, not a slime: its name and look are fixed (`speaker.RAPHAEL_NAMES`), it keeps a personality
+            # and instructions, and it is never the chief of staff.
+            profile = {field: text for field, text in self.first_bot_profile().items() if field in RAPHAEL_PROFILE_FIELDS}
             return Speaker(**profile, draft_first=self._settings.get("raphael_draft_first"),
-                           tools=None if tools is None else frozenset(tools),
-                           capabilities=frozenset({"chief"}) if self.store.is_chief(member_id) else frozenset())
+                           tools=None if tools is None else frozenset(tools))
         return self.store.speaker(member_id)
 
     def _chief_pinned(self) -> bool:
@@ -472,7 +475,7 @@ class MembersService:
     def find(self, name: str) -> Speaker | None:
         if not isinstance(name, str) or not name.strip():
             return None
-        if is_raphael_name(name) or name.casefold() == self.first_bot_profile().get("name", "").casefold():
+        if is_raphael_name(name):
             return self.speaker(0)
         member = self.store.by_name(name)
         return None if member is None else self.speaker(member.id)
@@ -484,9 +487,8 @@ class MembersService:
         if not folded:
             return []
         found = []
-        # The first Bot by the name the owner gave it (its built-in names are `names_raphael`'s).
-        first = self.first_bot_profile().get("name", "")
-        for member_id, name in ([(0, first)] if first else []) + [(member.id, member.name) for member in self.store.members()]:
+        # Raphael is reached by its own names (`names_raphael`), not by a name in the roster.
+        for member_id, name in [(member.id, member.name) for member in self.store.members()]:
             name = name.casefold()
             if _ASCII_WORD.fullmatch(name):
                 hit = re.search(rf"(?<![a-z0-9]){re.escape(name)}(?![a-z0-9])", folded)
@@ -502,15 +504,14 @@ class MembersService:
     def roster(self) -> list[Speaker]:
         """Public inventory never carries another member's private persona or brain."""
         primary = self.primary_id()
-        first = self.first_bot_profile()
-        rows = [{"id": 0, **{field: first.get(field, "") for field in ("name", "role", "blurb")}}]
-        rows.extend(self._conn.execute("SELECT id,name,role,blurb FROM members ORDER BY pinned DESC,position,id"))
+        rows = self._conn.execute("SELECT id,name,role,blurb FROM members ORDER BY pinned DESC,position,id")
         return [Speaker(id=row["id"], name=row["name"], role=row["role"], blurb=row["blurb"],
                         capabilities=frozenset({"chief"}) if row["id"] == primary else frozenset())
                 for row in rows]
 
     def primary_id(self) -> int:
-        """The owner's primary contact (0 for Raphael): the one place the roster, the window and the prompts read it from."""
+        """The owner's primary contact, the chief of staff (0 while there is no slime: Raphael is never it): the one place
+        the roster, the window and the prompts read it from."""
         return self.store.primary_id()
 
     def team_context(self, self_id=0, language="zh-TW", room_member_ids=None):
@@ -770,10 +771,10 @@ class MembersService:
         last = latest.get(0)
         activity, activity_label = self.activity.describe(0, waiting, tasks=tasks)
         view: dict[str, Any] = {
-            "blurb": "", "reply_style": "full",
-            "notify": self._settings.get("raphael_notify"), "ask_before_members": False, "pinned": self._chief_pinned(), "hidden": False, "draft_first": self._settings.get("raphael_draft_first"),
+            "blurb": "", "reply_style": "full", "raphael": True,
+            "notify": self._settings.get("raphael_notify"), "ask_before_members": False, "pinned": False, "hidden": False, "draft_first": self._settings.get("raphael_draft_first"),
             "id": 0,
-            "chief": self.store.is_chief(0),
+            "chief": False,
             "name": RAPHAEL_NAMES[language],
             "role": "",
             "personality": "",
@@ -793,12 +794,7 @@ class MembersService:
             "preview": "" if last is None else _preview(last, self._said(latest) if said is None else said),
             "last_at": None if last is None else last.created_at_ms,
         }
-        picture = self._raphael_picture()
-        profile = self.first_bot_profile()
-        view.update(profile)
-        view["profile_ready"] = bool(profile)
-        if picture is not None:
-            view["avatar_rev"], view["avatar_crop"] = picture[0].rev, picture[1]
+        view.update({field: text for field, text in self.first_bot_profile().items() if field in RAPHAEL_PROFILE_FIELDS})
         if cover := self._covers.view(0):
             view["cover"] = cover
         return view
@@ -1416,7 +1412,7 @@ class MembersService:
             cover = self._covers.reposition(member_id, params["cover_position"])
         return cover
 
-    def _update_raphael(self, params: dict, *, profile_fields=("name", "avatar", "personality", "instructions")) -> dict:
+    def _update_raphael(self, params: dict, *, profile_fields=RAPHAEL_PROFILE_FIELDS) -> dict:
         from ..brain.settings import checked
 
         preferences = {"tools": "raphael_tools", "notify": "raphael_notify", "draft_first": "raphael_draft_first"}
@@ -1428,8 +1424,6 @@ class MembersService:
         try:
             if changes:
                 key, profile = checked("first_bot_profile", {**self.first_bot_profile(), **changes})
-                if profile.get("name") and any(member.name.casefold() == profile["name"].casefold() for member in self.store.members()):
-                    raise invalid_params("duplicate first Bot name")
                 values[key] = profile
             for field, setting in preferences.items():
                 if field in params:
@@ -1572,8 +1566,7 @@ class MembersService:
         if kind == "cover":
             picture = self._covers.picture(member_id)
         elif member is None:
-            found = self._raphael_picture()
-            picture = None if found is None else found[0]
+            picture = None  # Raphael's look is fixed: the first blue slime, never a picture
         else:
             picture = self._avatar_picture(member.avatar)
         return {"rev": None, "url": None} if picture is None else {"rev": picture.rev, "url": picture.url}
@@ -1605,23 +1598,8 @@ class MembersService:
 
     async def _set_avatar(self, params: dict) -> dict:
         member_id = _whole(params, "id")
-        if member_id:
-            self._member_id(params)
+        self._member_id(params)  # Raphael's look is fixed: 0 is refused here
         picture = _uploaded_picture(params, "avatar")
-        if member_id == 0:
-            def write_first_picture():
-                self._raphael_avatar.mkdir(parents=True, exist_ok=True)
-                for filename, content in (("picture", picture.data), ("picture.json", json.dumps({
-                        "mime": picture.mime, "crop": {"x": 0.5, "y": 0.5, "zoom": 1}}).encode("utf-8"))):
-                    pending = self._raphael_avatar / (filename + ".part")
-                    pending.write_bytes(content)
-                    pending.replace(self._raphael_avatar / filename)
-            try:
-                await asyncio.to_thread(write_first_picture)
-            except OSError:
-                raise invalid_params("avatar (io)") from None
-            self._changed()
-            return {"member": self._raphael_view(self._language(), {}, set(), {})}
         folder = self._avatars / MEMBERS_DIR
         stored = f"{member_id}-{secrets.token_hex(6)}.{_EXTENSIONS[picture.mime]}"
 
@@ -2059,7 +2037,8 @@ class MembersService:
                     current = SimpleNamespace(name=RAPHAEL_NAMES[self._language()], role="", personality="", instructions="",
                                               blurb="", avatar="", group_id=None)
                     for field, value in self.first_bot_profile().items():
-                        setattr(current, field, value)
+                        if field in RAPHAEL_PROFILE_FIELDS:
+                            setattr(current, field, value)
                 current_group = self.store.group(current.group_id) if current and current.group_id else None
                 group_val = arguments.get("group", current_group.name if current_group else "")
                 group_name = group_val.strip() if isinstance(group_val, str) else ""
@@ -2317,22 +2296,19 @@ class MembersService:
             if name == "member_update" and params.get("id") == 0:
                 from ..brain.settings import checked
 
-                preferences = {"model": "agent_model", "pinned": "chief_pinned"}
+                preferences = {"model": "agent_model"}
                 # Profile drafts include these empty fields for ordinary members.
                 for field in ("blurb", "group", "avatar_preset"):
                     if params.get(field) == "":
                         params.pop(field)
-                # The first Bot wears a slime as every member does, kept in its profile.
-                if "avatar_preset" in params:
-                    params["avatar"] = params.pop("avatar_preset")
-                if set(params) - {"id", "name", "role", "personality", "instructions", "avatar", "cover", "cover_position", "tools", "notify", "draft_first", *preferences}:
-                    raise invalid_params("This field is not editable for the first Bot")
+                if set(params) - {"id", "personality", "instructions", "cover", "cover_position", "tools", "notify", "draft_first", *preferences}:
+                    raise RpcError(INVALID_PARAMS, "This field is not editable for Raphael", {"kind": "raphael"})
                 # Validate the whole request before any profile/preference write.
                 for field, setting in preferences.items():
                     if field in params:
                         checked(setting, params[field])
                 self._update_raphael({key: value for key, value in params.items() if key not in preferences},
-                                     profile_fields=("name", "role", "personality", "instructions", "avatar"))
+                                     profile_fields=RAPHAEL_PROFILE_FIELDS)
                 for field, setting in preferences.items():
                     if field in params:
                         await self._management_rpc("settings.set", {"key": setting, "value": params[field]})
