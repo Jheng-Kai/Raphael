@@ -10509,13 +10509,13 @@ export function checkRendered(name, context = {}) {
       }
       // With more characters than the list shows at once, the rows keep their height and the list scrolls (R-UI-181).
       rowsWhole(choices);
-      require(writes.length === 0 && tiles().join() === "0,3,1", "nothing is written before a member is pressed");
+      require(writes.length === 0 && tiles().join() === "3,1", "nothing is written before a member is pressed");
       return { check: name, choices: choices.length };
     }
     require(!document.querySelector('.mb-primary-picker, .mb-dialog'), "the picker closed on the press, with no question");
     require(writes.length === 2 && writes[0].params.id === 4 && writes[0].params.pinned === true && writes[1].params.id === 3 && writes[1].params.pinned === false, "the member chosen is pinned, then the old one is unpinned");
     require(!("group_id" in writes[1].params) && !("position" in writes[1].params), "the old member's folder and place are not touched");
-    require(tiles().join() === "0,4,1", `the member chosen stands exactly in the old tile's place: ${tiles()}`);
+    require(tiles().join() === "4,1", `the member chosen stands exactly in the old tile's place: ${tiles()}`);
     require(document.querySelector('.mb-sec [data-member="3"]') && !document.querySelector('.mb-pinned [data-member="3"]'), "the old member is back in its folder as a row");
     require(document.querySelector('.mb-pinned [data-member="4"].mb-tile') && !document.querySelector('.mb-sec [data-member="4"]'), "the new member is a tile and no longer a row");
     return { check: name, tiles: tiles() };
@@ -12487,7 +12487,7 @@ export function checkRendered(name, context = {}) {
       const behind = document.querySelector('.mb-col [data-member="1"]');
       const current = document.querySelector('.mb-col [data-member][aria-current="true"]')?.dataset.member;
       if (name !== "press-through-scrim-model-chooser") {
-        require(current === '0', `the member behind the scrim was not opened: the open one is ${current}`);
+        require(current === undefined, `the member behind the scrim was not opened: the open one is ${current} (Raphael's space has no row open)`);
         require(!behind || (document.activeElement !== behind && !behind.contains(document.activeElement)), "the member behind the scrim did not take the focus");
         require(!document.querySelector('.modal-scrim:not([hidden]), .cr-dialog, .mb-dialog, .cs-scrim'), "the dialog closed with the press");
         require(!document.querySelector('#app-popover'), "the control behind the scrim did not open its menu or card");

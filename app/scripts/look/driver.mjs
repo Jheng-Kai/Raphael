@@ -1276,7 +1276,11 @@ export async function perform(page, step, evidenceDirectory) {
       finally { await element.dispose(); }
       break;
     }
-    case "member": await click(`.mb-col [data-member="${step.id}"]`); break;
+    // Raphael (member 0) is no row of the sidebar: its space is the account menu's own entry.
+    case "member":
+      if (step.id === 0) { await click('#nav .sidebar-account'); await visible('#app-popover.account-menu'); await click('#app-popover.account-menu [data-account="raphael"]'); }
+      else await click(`.mb-col [data-member="${step.id}"]`);
+      break;
     case "room": await click(`[data-room="${step.id}"]`); break;
     case "new-room": await click('[data-col="add"]'); await click('#app-popover [data-pick="group-chat"]'); break;
     // A room's row draws no ⋯ (R-UI-44): its menu opens the way the owner opens it, with a right click on the row.

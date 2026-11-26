@@ -464,7 +464,7 @@ export function installMock(fixture, config = {}, target = window) {
       member.unread_threads = member.unread ? [{ conversation_id: member.main_conversation_id, from: null, kind: member.unread_kind }] : [];
     }
     // What the scene's check expects, said here by the owner's rule and not read back from the app: thinking is no light, a question is orange.
-    data.expectedLights = { members: Object.fromEntries(data.members.map(member => [member.id, { thinking: null, message: "message", done: "done", failed: "failed", waiting: "waiting" }[variant.sidebarLights[member.id]] ?? null])), rooms: {} };
+    data.expectedLights = { members: Object.fromEntries(data.members.filter(member => member.id !== 0).map(member => [member.id, { thinking: null, message: "message", done: "done", failed: "failed", waiting: "waiting" }[variant.sidebarLights[member.id]] ?? null])), rooms: {} };
   }
   // The group chats of the same sidebar: room 1 has a message (the fixture's own), room 2 a meeting that ended, room 3 a question that waits.
   if (variant.sidebarLightRooms) {
@@ -492,8 +492,11 @@ export function installMock(fixture, config = {}, target = window) {
   if (variant.claudeAlias) data.members.find(member => member.id === 3).model = "cli:claude:haiku";
   if (variant.waitingMember !== undefined) data.members.find(member => member.id === variant.waitingMember).waiting = true;
   // The owner's chief of staff: a slime, the first one ever made unless `primaryMember` seeds another (null: nobody, as with no slime
-  // at all). Raphael is never the chief. The roster says it, as the core does.
-  data.primaryId = variant.primaryMember === undefined ? (data.members.find(member => member.id !== 0 && !member.hidden)?.id ?? null) : variant.primaryMember;
+  // at all). Raphael is never the chief. The roster says it, as the core does. The app opens on the chief's conversation, which reads it,
+  // so the default is the first slime with nothing unread, waited for or running that a scene is about to look at.
+  const quiet = member => !member.unread && !member.waiting && !member.activity && !member.unread_threads?.length;
+  const slimes = data.members.filter(member => member.id !== 0 && !member.hidden);
+  data.primaryId = variant.primaryMember === undefined ? ((slimes.find(quiet) ?? slimes[0])?.id ?? null) : variant.primaryMember;
   data.roomWrapupMessage.member_id = data.primaryId;
   if (variant.problem) data.status.openrouter.state = "no_key";
   // The dictation days moved on to end on another day (`statsUntil`, YYYY-MM-DD): the first days of a month put its name
