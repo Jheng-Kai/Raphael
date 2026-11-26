@@ -115,7 +115,15 @@ def normalized(files, label):
         return None
     links = getattr(files, "skipped_links", [])
     if CLAUDE in files:
-        return Tree(files, links)
+        try:
+            made = _object(files[CLAUDE])
+        except MemberError:
+            return None  # a manifest nobody can read makes no plugin: its skills are imported as skills
+        if isinstance(made.get("name"), str) and _NAME.fullmatch(made["name"]):
+            return Tree(files, links)
+        # A manifest that names no plugin (or names it oddly) is read as a plugin of the folder's own name.
+        made["name"] = _name(made.get("name"), label)
+        return Tree({**files, CLAUDE: json.dumps(made, ensure_ascii=False).encode()}, links)
     declared = {}
     for path in OTHER_MANIFESTS:
         if path in files:

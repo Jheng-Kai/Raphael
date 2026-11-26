@@ -17,7 +17,8 @@ const REFUSALS = {
 };
 const list = [...settings("skills"), wait(".skl-pack")];
 const opened = [...list, click('[data-skl="open"][data-key="set:1"]'), wait('.skl-page .skl-skills .skl-skill')];
-const importing = [...list, wait("#skl-input")];
+// 匯入 is in the page's header and opens the importer's dialog.
+const importing = [...list, click('[data-skl="import-open"]'), wait(".skl-dlg #skl-input")];
 export default [
   scene("skill-library", "Plugins and standalone skills have separate sections and equal rows", [...list, check("skill-library")]),
   scene("skill-library-row-lit", "A plugin's row under the pointer is lit across its whole card, corners and all", [...list, hover('[data-skl="open"][data-key="set:1"]'), check("skill-library-row-lit")]),
@@ -43,7 +44,7 @@ export default [
     key("Escape"), waitGone(".skl-page"), check("skill-library-back")], { skillPackages: true }),
   scene("skill-library-access", "Who may use a package: the whole team, or the characters ticked, in one menu that stays open while names are ticked; each row leads with a face (the team's own picture for the whole team) and its check stands at the right", [
     ...list, click('[data-skl="access"][data-key="pack:2"]'), wait(".skl-access-menu [data-member]"), check("skill-library-access")]),
-  scene("skill-library-import", "The importer is the tab's first card: one box that takes anything, a way to choose files, one 匯入 and one plain line", [
+  scene("skill-library-import", "匯入 in the page's header opens one dialog: a field that takes anything, a way to choose files and 匯入", [
     ...importing, check("skill-library-import")]),
   scene("skill-library-import-link", "A link pasted in the box waits for 匯入, the box holding it as it was pasted", [
     ...importing, type("#skl-input", "https://example.com/team-handbook"), check("skill-library-import-link")]),
@@ -64,7 +65,7 @@ export default [
     wait('.skl-pack[data-skl-pack="skill:weekly"]', 12000), check("skill-library-converted")],
     { skillConvert: { match: "team-handbook.pdf", ends: "done", task: { task_id: 31, member: { id: 0, name: "拉斐爾" }, model: "openrouter/anthropic/claude-sonnet-5" } } }),
   // Importing: the progress, the plugin it makes, what it leaves out, an empty library and each failure in its own words.
-  scene("skill-library-empty", "A library with nothing in it keeps the importer first and says so under it", [
+  scene("skill-library-empty", "A library with nothing in it says so, and 匯入 stays in the header", [
     ...settings("skills"), wait(".skl-empty"), check("skill-library-empty")], { skillLibraryEmpty: true }),
   scene("skill-library-importing", "An import under way says so under the card, quietly, and holds the importer still", [
     ...importing, type("#skl-input", "owner/slow-import"), click('[data-skl="import-go"]'), wait('.skl-progress[role="status"]'), check("skill-library-importing")],

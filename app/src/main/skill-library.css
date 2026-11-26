@@ -1,13 +1,14 @@
 /* Team skills (skill-library.ts): one row per package in Settings' list; a package of several opens on a page of its own. */
-.skl-import { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); margin-bottom: var(--sp-4); padding: var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--panel); }
-/* The box that takes anything: files, a folder or a link dropped on it, text pasted in it; the way to choose files at its
-   left foot and 匯入 at its right, the one line of words under them. */
+/* 匯入 sits in the page's header before the close, as wide as its word (the small button's tokens); it opens the importer's dialog. */
+.modal-body .set-head > .skl-head-import { flex: none; margin-left: auto; }
+.modal-body .set-head > .skl-head-import + .btn.close-button { margin-left: 0; }
+/* The importer's dialog: one box that takes anything, files, a folder or a link dropped on it, text pasted in it, and the way
+   to choose files at its foot; 匯入 is the dialog's own action. What it is doing and why it failed are said under the field. */
+.skl-dlg .skl-import { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); }
 .skl-import-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
-.skl .btn.skl-go { flex: none; }
 /* A compact field of two or three lines that grows with what is pasted; no grip, the box is what a drop lights. */
 .skl-text { width: 100%; box-sizing: border-box; min-height: calc(2lh + var(--sp-3)); max-height: calc(12lh + var(--sp-3)); resize: none; field-sizing: content; font-size: var(--fs-sm); line-height: 1.5; }
-.skl-import.is-over { background: var(--hover); border-color: var(--line-lit); }
-.skl-import.is-over .skl-text { background: transparent; }
+.skl-import.is-over .skl-text { background: var(--hover); border-color: var(--line-lit); }
 .skl-error { margin: 0; color: var(--err); font-size: var(--fs-sm); }
 .skl-skipped { margin: 0 0 var(--sp-4); color: var(--text-2); font-size: var(--fs-sm); }
 .skl-skipped p { margin: 0; }
