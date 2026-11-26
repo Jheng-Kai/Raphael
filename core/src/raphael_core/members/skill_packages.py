@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 
 from ..bots.homes import atomic, redact_secrets
-from .capabilities import MAX_SKILL_BYTES, skill_metadata, skill_urls
+from .capabilities import MAX_SKILL_BYTES, skill_metadata
 from .skill_errors import not_utf8, oversized_file
 from .skill_library import SHARED, stage_files
 from .skill_plugins import folded_path, inside_folder
@@ -25,11 +25,9 @@ def refetchable(origin, source):
         return False
     if source.startswith("local:"):
         return Path(source[6:]).exists()
-    try:
-        skill_urls(source)
-    except MemberError:
-        return False
-    return True
+    from .skill_github import refetchable as github
+
+    return github(source)
 
 
 def restore_file(backup, path):

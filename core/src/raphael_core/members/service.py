@@ -1008,7 +1008,13 @@ class MembersService:
             files, name = await asyncio.to_thread(skill_sources.local, source)
             return [(source, f) for f in files], source, "source", name
         documents = await download_skills(source)
-        return documents, source, "source", source.rstrip("/").split("/")[-1]
+        from .skill_github import label
+
+        try:
+            name = label(source)
+        except MemberError:
+            name = source.rstrip("/").split("/")[-1]
+        return documents, source, "source", name
 
     async def _import_package(self, member, params, *, new_package=False):
         self._package_fields(params, ("source", "text", "file", "access", "name", "plugin", "set_id", "marketplace"))
