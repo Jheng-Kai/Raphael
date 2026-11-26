@@ -2975,6 +2975,11 @@ class AgentService:
                     payload = artifact_payload(result.content, self._attachment_store)
                     if payload:
                         self._message(ask, "media", json.dumps(payload, ensure_ascii=False))
+                elif result.ok and ref is not None and ref.server == "computer":
+                    # The files a page's download left for the owner are cards, as a file the member attached is (#347).
+                    from ..services.artifacts import delivered_payloads
+                    for payload in delivered_payloads(result.content, self._attachment_store):
+                        self._message(ask, "media", json.dumps(payload, ensure_ascii=False))
                 elif ref is not None and ref.server == "media":
                     from ..failures import missing_for
                     missing = missing_for(result.kind, ref.name)

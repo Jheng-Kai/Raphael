@@ -632,7 +632,7 @@ async def test_chrome_has_scoped_tabs_page_input_private_forms_and_downloads(tmp
                 await asyncio.gather(*browser.transfers)
             assert placed.read_text() == "download contents" and not (root / "two" / "report.txt").exists()
             assert (root / "two" / ".raphael" / ".gitignore").read_text().splitlines()[-1] == "*"
-            assert browser.take_downloads(2) == [".raphael/downloads/report.txt"] and browser.take_downloads(2) == []
+            assert browser.take_downloads(2) == [placed] and browser.take_downloads(2) == []
             await browser.close_tab(one)
             listing = await browser.cdp.call("Target.getTargets")
             targets = {item["targetId"] for item in listing["targetInfos"] if item["type"] == "page"}

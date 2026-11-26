@@ -300,7 +300,7 @@ async def test_a_member_is_told_where_each_download_was_placed(tmp_path):
     browser._event("Browser.downloadProgress", {"guid": GUID, "state": "completed"}, None)
     await asyncio.gather(*browser.transfers)
     await asyncio.sleep(0)
-    assert browser.take_downloads(3) == [".raphael/downloads/report.txt"] and browser.take_downloads(3) == []
+    assert browser.take_downloads(3) == [project / ".raphael" / "downloads" / "report.txt"] and browser.take_downloads(3) == []
 
 
 PAGE = b"""<title>Blockers</title>

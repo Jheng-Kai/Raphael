@@ -567,7 +567,7 @@ class HostBrowser:
         self.owner_closed = {}
         self.owner_closed_current = {}
         self.transfers = {}
-        self.placed = {}  # member -> the downloads placed since its last Chrome result (#331)
+        self.placed = {}  # member -> the downloads placed since its last Chrome result (#331, #347)
         self.held = {}
         self.handback = {}
         self.acknowledgements = set()
@@ -883,7 +883,7 @@ class HostBrowser:
                 task = asyncio.create_task(asyncio.to_thread(self._place_download, guid, workspace, name))
                 self.transfers[task] = member
                 task.add_done_callback(self.transfers.pop)
-                task.add_done_callback(lambda done: self._placed(member, workspace, done))
+                task.add_done_callback(lambda done: self._placed(member, done))
 
     def _page_target(self, info):
         target = info["targetId"]
@@ -970,12 +970,12 @@ class HostBrowser:
             with suppress(BrowserError, OSError, TimeoutError):
                 await cdp.call("Page.screencastFrameAck", {"sessionId": frame}, session=session)
 
-    def _placed(self, member, workspace, task):
+    def _placed(self, member, task):
         if not task.cancelled() and task.exception() is None and (path := task.result()) is not None:
-            self.placed.setdefault(member, []).append(path.relative_to(workspace).as_posix())
+            self.placed.setdefault(member, []).append(path)
 
     def take_downloads(self, member):
-        """The downloads placed for the member since it was last told, as paths in its work folder."""
+        """The downloads placed for the member since it was last told, as the paths they were placed at."""
         return self.placed.pop(member, [])
 
     def _place_download(self, guid, workspace, suggested):

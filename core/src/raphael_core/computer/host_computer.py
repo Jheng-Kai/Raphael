@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import mimetypes
 import shutil
 from collections import Counter
 from contextlib import suppress
@@ -13,6 +14,8 @@ from ..agent.data_floor import DataFloor, WRITE_REFUSAL
 from ..agent.plugins import PluginResult, PluginTool, tool_key
 from ..agent.policy import Tier
 from .. import work_area
+from ..protocol import RpcError
+from ..services.attachments import MAX_FILE_BYTES, Attachment
 from . import host_page
 from .browser_tabs import BROWSER_TABS
 from .file_tools import Refused, _refusal
@@ -107,8 +110,9 @@ WORDS = {
 
 
 class HostComputerTools:
-    def __init__(self, vm, conn, open_definition):
+    def __init__(self, vm, conn, open_definition, attachments=None):
         self.vm = vm
+        self.attachments = attachments  # where a download is also kept, for its card in the conversation (#347)
         self.browser = HostBrowser(vm.machine / "browser")
         self.browser.download_to = self.download_folder  # a download goes where the member works when it completes
         self.cards = None
@@ -230,6 +234,21 @@ class HostComputerTools:
         project alone, else its own folder and the team's), in a remembered "project" that is not its own (never written),
         or "outside" it, where only the owner's yes on a card lets it be made (R-FILE-06)."""
         return work_area.reach(self.vm.settings, member, str(path), self.vm.local_folders)
+
+    def attach_downloads(self, placed):
+        """What the member is told of the downloads placed for it (#347): each file's name, type and size and the ID it is
+        attached to the conversation by, where the owner opens it from its card. The place it was put at stays Raphael's own."""
+        told = []
+        for path in placed:
+            try:
+                if self.attachments is None or path.stat().st_size > MAX_FILE_BYTES:
+                    raise OSError
+                saved = self.attachments.save(Attachment(path.name, mimetypes.guess_type(path.name)[0] or "application/octet-stream",
+                                                         path.read_bytes()))
+                told.append({**saved.metadata(), "attached": True})
+            except (OSError, RpcError):
+                told.append({"name": path.name, "attached": False})
+        return told
 
     def download_folder(self, member):
         """The work folder whose `.raphael/downloads` takes a page's download: the chosen project, else the member's own
@@ -369,7 +388,7 @@ class HostComputerTools:
                 else:
                     data["status"] = "owner_finished"
             if placed := browser.take_downloads(member):
-                data = {**data, "downloads": placed}
+                data = {**data, "downloads": await asyncio.to_thread(self.attach_downloads, placed)}
             return PluginResult(True, "tab_closed" if data.get("status") == "tab_closed" else None,
                                 text=json.dumps(data, ensure_ascii=False), blocks=blocks)
         except (BrowserError, VmError) as error:
@@ -569,7 +588,7 @@ class HostComputerTools:
                 return {"target_id": tab.id, "tab_id": tab.id, "owner_needed": "certificate"}, []
             if not navigated:
                 return {"status": "download_started", "target_id": tab.id, "tab_id": tab.id,
-                        "note": "Chrome saves it in .raphael/downloads in your work folder; a later result names the file."}, []
+                        "note": "Chrome saves the file and it is attached to the conversation under its name; a later result names it. Tell the owner the name and that it is attached."}, []
         if name == "browser_click" and ("x" in arguments or "y" in arguments):
             return await host_page.viewport_action(browser, tab, "click", arguments, approver), []
         if name in PAGE_ACTIONS:
