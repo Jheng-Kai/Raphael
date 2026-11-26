@@ -83,6 +83,12 @@ Modified ports and adaptations, with upstream file names:
   captured from the driver in Raphael's computer image (Cua Driver, MIT, below). Which
   tools are offered follows OpenMausBot's selection.
 
+- `core/src/raphael_core/members/skill_github.py`: the way a skill source is read as the files of one pinned commit,
+  written in Python after `server/skill-fetch.ts` and `server/skill-folder.ts` (a commit named first, a folder listing,
+  each file downloaded from the raw host and checked against the hash the listing names, the `tree`, `blob` and raw link
+  forms, skills.sh pages matched to a skill by the slug of its folder or of the name in its document, generated folders
+  left out), with Raphael's own refusals, causes and reference handling.
+
 - `core/src/raphael_core/computer/vm_tools.py`: Python adaptation of the desktop
   lease and workspace-file tool contracts from `server/local-vm-lease.ts` and
   `server/drivers/agents-catalog.ts`, integrated with Raphael's tool gate.

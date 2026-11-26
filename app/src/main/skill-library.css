@@ -69,3 +69,11 @@
   .skl-pack { --skl-control-space: calc(140px + 2 * var(--h-ctl) + 3 * var(--sp-2)); }
   .skl-access { max-width: 140px; }
 }
+
+/* An import under way says so under the card, quietly (a status, no spinner). */
+.skl-progress { margin: 0; color: var(--text-2); font-size: var(--fs-sm); }
+/* The title becomes a field in the same place and type while a skill of a pack is renamed. */
+.modal-body .back-title > .skl-rename { display: block; flex: 1 1 auto; min-width: 0; }
+.skl-rename .field { width: 100%; }
+/* What an import left out stands a little below the header it follows, on the package's page. */
+.skl-page .skl-skipped { margin-top: var(--sp-3); }

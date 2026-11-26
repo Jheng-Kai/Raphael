@@ -101,7 +101,8 @@ class SkillPackages:
 
     def _view(self, row, skills, plugin):
         key = row["key"]
-        name, source = row["name"], row["source"]
+        # A group's skills each come from their own source: it has none of its own to show.
+        name, source = row["name"], "" if row["origin"] == "group" else row["source"]
         skipped_links, skipped_references = {}, {}
         plugin_manifest = False
         if plugin is None:

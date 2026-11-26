@@ -746,8 +746,13 @@ FLOOR_AGAIN = (" This is the second refusal: do not try another command or path.
 # words and, where one is clear, the next step. Such an answer is a state of the library, never a wrong argument.
 _LIBRARY_NEXT = {
     "taken": (" A skill with this name is already in the library, possibly switched off; the answer names the package that "
-              "holds it. Read member_library_list, then remove that one skill or that package (member_library_delete) or "
+              "holds it (and the package that brings the other). Read member_library_list, then rename one of the two skills "
+              "(member_library_update with rename), remove that one skill or that package (member_library_delete) or "
               "refresh the package (member_library_update) instead of importing it again."),
+    "size": (" The answer names the file, its size and the limit. Tell the owner which file it is; do not retry the same "
+             "import, and offer to import the folder without that file."),
+    "download": (" The answer names the cause (the connection, GitHub's request limit, a timeout or a status). Tell the owner "
+                 "in one sentence and offer to try again later; do not retry at once."),
 }
 
 
