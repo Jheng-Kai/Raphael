@@ -182,6 +182,28 @@ async def test_host_files_use_the_same_local_workspace_and_team_as_docker(tmp_pa
         assert routes.member_file_path(target, "doc.txt") == vm.guest_workspace(target) + "/doc.txt"
 
 
+@pytest.mark.parametrize("project", [False, True])
+async def test_host_glob_and_grep_read_the_settings_on_the_loop_not_in_the_walk_thread(tmp_path, conn, project):
+    # The walk runs in another thread than the settings store's connection: the folders and the projects it checks each
+    # path against are read before it starts.
+    settings = SettingsStore(conn)
+    kept = tmp_path / "project"
+    kept.mkdir()
+    if project:
+        settings.set("project_folders", [str(kept)])
+    tools = HostComputerTools(LocalVm(tmp_path / "data", settings=settings), conn, BROWSER_OPEN)
+    folder = kept if project else tools.folders(1)[0]
+    (folder / "sub").mkdir(parents=True, exist_ok=True)
+    (folder / "sub" / "note.txt").write_text("find me\n", encoding="utf-8")
+    work = ("turn", 1, 2)
+    found = await tools.file_call(1, "glob", {"pattern": "**/*.txt", "path": str(folder)}, "auto", work)
+    assert found.ok, found.text
+    assert "note.txt" in found.text
+    matched = await tools.file_call(1, "grep", {"pattern": "find me", "path": str(folder)}, "auto", work)
+    assert matched.ok, matched.text
+    assert "note.txt" in matched.text
+
+
 async def test_host_writes_use_work_roots_and_need_an_explicit_yes_elsewhere(tmp_path, conn):
     machine = LocalVm(tmp_path / "data", settings=SettingsStore(conn))
     tools = HostComputerTools(machine, conn, BROWSER_OPEN)
