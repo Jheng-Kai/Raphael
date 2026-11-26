@@ -70,7 +70,11 @@ class TerminalSignIn:
             self._finish(1)
 
     def _shell_gone(self) -> bool:
-        """Whether the script's shell, named by its pid file, has ended; False while it has not started or says nothing."""
+        """Whether the script's shell, named by its pid file, has ended; False while it has not started or says nothing.
+        Only a Mac has Terminal windows: on Windows `os.kill(pid, 0)` is no look at all but CTRL_C_EVENT, sent to every
+        process of the console (the core's own included), so it is never asked there."""
+        if os.name == "nt":
+            return False
         try:
             pid = int(self._pid_file.read_text(encoding="utf-8").strip())
         except (OSError, ValueError):
@@ -103,11 +107,12 @@ class TerminalSignIn:
     def terminate(self) -> None:
         if self.returncode is not None:
             return
-        try:
-            pid = int(self._pid_file.read_text(encoding="utf-8").strip())
-            os.kill(pid, signal.SIGHUP)
-        except (OSError, ValueError):
-            pass
+        if os.name != "nt":  # Windows has neither Terminal windows nor SIGHUP
+            try:
+                pid = int(self._pid_file.read_text(encoding="utf-8").strip())
+                os.kill(pid, signal.SIGHUP)
+            except (OSError, ValueError):
+                pass
         self._finish(1)
 
     def _finish(self, code: int) -> None:

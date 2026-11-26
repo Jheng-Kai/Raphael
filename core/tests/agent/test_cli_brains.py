@@ -1183,6 +1183,7 @@ def test_a_mac_signs_in_in_a_terminal_window_that_reports_how_the_cli_ended(tmp_
     assert sign_in.wait() == 0 and sign_in.poll() == 0 and not sign_in.folder.exists()
 
 
+@pytest.mark.skipif(os.name == "nt", reason="a Mac's Terminal window; on Windows os.kill(pid, 0) sends CTRL_C_EVENT to the console")
 def test_a_mac_window_closed_by_its_close_button_ends_hung_up(tmp_path):
     """R-CLI-SIGNIN-08: closing a Terminal window hangs its shell up before the code is written; the script's HUP trap writes
     129 then, and a shell that is gone with no code counts as hung up, so a closed window never waits out the sign-in time."""
@@ -1197,6 +1198,22 @@ def test_a_mac_window_closed_by_its_close_button_ends_hung_up(tmp_path):
     ended.wait()
     (window.folder / "pid").write_text(f"{ended.pid}\n", encoding="utf-8")
     assert window.poll() == HUNG_UP and window.wait() == HUNG_UP and not window.folder.exists()
+
+
+def test_a_terminal_window_is_never_looked_at_through_os_kill_on_windows(tmp_path, monkeypatch):
+    """On Windows signal 0 is CTRL_C_EVENT: `os.kill(pid, 0)` interrupts every process of the console, the core's own
+    included (it stopped a CI run with KeyboardInterrupt). Terminal windows are a Mac's, so Windows never sends it."""
+    from raphael_core.agent.cli import terminal_login
+    from raphael_core.agent.cli.terminal_login import TerminalSignIn
+    ok = lambda args, **kwargs: subprocess.CompletedProcess(args, 0)  # noqa: E731
+    window = TerminalSignIn(["agy"], opener=ok, poll_s=0.01)
+    (window.folder / "pid").write_text(f"{os.getpid()}\n", encoding="utf-8")
+    sent = []
+    monkeypatch.setattr(terminal_login.os, "name", "nt")
+    monkeypatch.setattr(terminal_login.os, "kill", lambda *args: sent.append(args))
+    assert window.poll() is None
+    window.terminate()
+    assert sent == [] and window.wait() == 1
 
 
 def test_a_mac_sign_in_that_is_stopped_or_cannot_open_ends_as_a_failure(tmp_path):
