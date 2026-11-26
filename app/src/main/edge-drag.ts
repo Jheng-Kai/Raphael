@@ -27,12 +27,16 @@ export function mountEdge(edge: HTMLElement, o: EdgeOptions): () => void {
   edge.setAttribute("aria-label", o.label);
   edge.tabIndex = 0;
   let pointer: number | null = null;
+  // The window keeps the resize cursor and selects no text while the edge moves: one element over it says so. The same words set as
+  // inherited properties on the root (`cursor`, `user-select`) styled every element of the window again, when the pointer went down and again
+  // when it came up.
+  let shield: HTMLElement | null = null;
   const end = (): void => {
     if (pointer === null) return;
     if (edge.hasPointerCapture(pointer)) edge.releasePointerCapture(pointer);
     pointer = null;
     edge.classList.remove("is-dragging");
-    document.documentElement.removeAttribute("data-resizing");
+    shield?.remove(); shield = null;
     o.done();
   };
   const down = (event: PointerEvent): void => {
@@ -41,8 +45,10 @@ export function mountEdge(edge: HTMLElement, o: EdgeOptions): () => void {
     pointer = event.pointerId;
     edge.setPointerCapture(event.pointerId);
     edge.classList.add("is-dragging");
-    // The whole window keeps the resize cursor and selects no text while the edge moves.
-    document.documentElement.setAttribute("data-resizing", "");
+    shield = document.createElement("div");
+    shield.className = "edge-shield";
+    shield.setAttribute("aria-hidden", "true");
+    document.body.append(shield);
   };
   const move = (event: PointerEvent): void => {
     if (pointer !== event.pointerId) return;

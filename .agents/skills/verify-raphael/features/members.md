@@ -191,10 +191,16 @@ The owner's primary contact (P15b-1, the last section) takes the top display slo
 
 The fixed sidebar is present on every page. Its chief uses the same compact row as colleagues. Folders preserve their collapsed state; drag members between folders or reorder folders. Below 860px the list is not hidden behind a menu button or a drawer: it is the 88px rail of faces (see Rows, width, rail and foot below). No separate Team page remains.
 
-Both sides are resized by dragging (R-UI-110): there is no fold button and no handle is drawn, only the cursor changes over the edge and a thin line shows while it moves. The list's right edge drags it from 240 to 400 px; narrower than 176 px it folds to the 88 px rail, and the rail dragged out opens it at the width it was let go. The details panel's left edge drags it from 300 to 720 px; narrower than 240 px it closes, and the header's name opens it again at its kept width. Widths and the fold are kept in the browser's storage. Each edge is a keyboard separator (arrows; Enter folds the list or closes the panel); Ctrl+B still folds the list.
+Both sides are resized by dragging (R-UI-110): there is no fold button and no handle is drawn, only the cursor changes over the edge and a thin line shows while it moves. The list's right edge drags it from 240 to 400 px; narrower than 176 px it folds to the 88 px rail, and the rail dragged out opens it at the width it was let go. Both edges write their width as a property that is not inherited, on the elements that read it (R-PERF-25), and hold the window's cursor with one shield element (R-PERF-26); `sidebar-resize-smooth` and `panel-resize-smooth` drag them with a real pointer and measure the frames. The details panel's left edge drags it from 300 to 720 px; narrower than 240 px it closes, and the header's name opens it again at its kept width. Widths and the fold are kept in the browser's storage. Each edge is a keyboard separator (arrows; Enter folds the list or closes the panel); Ctrl+B still folds the list.
 
 ```powershell
 npm run look -- sidebar-rail sidebar-rail-dragged-open sidebar-dragged-wider panel-dragged-wider panel-drag-keeps-place panel-close-keeps-place panel-drag-closes --theme both --width 1120,720,1920x1080
+```
+
+The drags and toggles are measured too (R-PERF-25, R-PERF-26): frames, style work, elements restyled per write and how the words move.
+
+```powershell
+npm run look -- sidebar-resize-smooth sidebar-resize-busy sidebar-toggle-smooth panel-resize-smooth panel-resize-busy panel-toggle-smooth --theme both --width 1120,720,1920x1080
 ```
 
 ### Rows, width, rail and foot (R-SIDE-01)

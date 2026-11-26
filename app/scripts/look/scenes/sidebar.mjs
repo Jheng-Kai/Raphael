@@ -68,6 +68,29 @@ export default [
   scene("sidebar-rail", "Dragged narrow by its edge (or on a window under 860px), the list is a rail of faces, with search and plus above the owner", [{ action: "member-column", collapsed: false }, drag('.side-edge', -240, { wide: true }), check("sidebar-rail"), check("sidebar-selection")]),
   scene("sidebar-rail-dragged-open", "The rail dragged out by its edge opens the list again at the width it was let go", [{ action: "member-column", collapsed: false }, drag('.side-edge', -240, { wide: true }), drag('.side-edge', 300, { wide: true }), check("sidebar-width")]),
   scene("sidebar-dragged-wider", "The list's edge drags it wider: no handle and no button", [{ action: "member-column", collapsed: false }, drag('.side-edge', 90, { wide: true }), check("sidebar-width")]),
+  // R-PERF-25: the edges are dragged and the panes opened and closed as the owner does it, and the frames, the work behind them and the text are measured.
+  // The words each pane shows, read each frame: the list's own rows (they stand still), and the reading column's (they move with its left edge).
+  ...(() => {
+    const words = [{ selector: '.side .mb-row[data-member="1"] .mb-row-t b' }, { selector: '.side .mb-row[data-member="2"] .mb-row-p' }, { selector: ".side .sidebar-apps .nav-t" },
+      { selector: ".page-agent .ra-col", ref: ".page-agent .ra-col", whole: true },
+      { selector: ".page-agent .thread > li:nth-child(8) .ra-body .message-text", ref: ".page-agent .ra-col", lines: true, whole: true },
+      { selector: ".page-agent .thread > li:nth-child(8) .me .message-text", ref: ".page-agent .ra-col", refEdge: "right", lines: true, whole: true }];
+    const detailsWords = [...words, { selector: ".mb-det .mb-det-head", ref: ".mb-det" }];
+    const ready = [member(1), wait('.page-agent .thread > li:nth-child(8)')];
+    // What a drag may cost (R-PERF-25): a style write restyles the elements that read the width, a hundred or so, where the width held on
+    // the root or the page restyled the whole window (1,000 to 1,500 elements) for each move; and no more than a few frames are later than 50 ms.
+    const probe = step => ({ action: "resize-probe", limits: step.edge ? { recalcElementsPerWrite: 300, framesOver50: 8, wholeSteps: 0 } : {}, ...step });
+    return [
+      scene("sidebar-resize-smooth", "Dragging the list's edge draws every frame and no word shakes", [...ready, wide(probe({ edge: ".side-edge", dx: -100, moves: 100, watch: words }))], { longThread: true }),
+      // The same drags over the busy conversation of the typing scene (hundreds of long turns, the last of them drawn): what a width change
+      // costs the thread grows with the words in it, and the frames must still be drawn.
+      scene("sidebar-resize-busy", "Dragging the list's edge over a long, busy conversation draws every frame", [{ action: "wait", selector: '.page-agent:not([hidden]) .thread [data-id="10399"]' }, wide(probe({ edge: ".side-edge", dx: 120 }))], { typingPerformance: "Analyst" }),
+      scene("panel-resize-busy", "Dragging the details panel's edge over a long, busy conversation draws every frame", [{ action: "wait", selector: '.page-agent:not([hidden]) .thread [data-id="10399"]' }, { action: "open-details" }, probe({ edge: ".page-agent .det-edge", dx: -140 })], { typingPerformance: "Analyst" }),
+      scene("sidebar-toggle-smooth", "Folding the list to its rail and back draws every frame", [...ready, wide(probe({ toggle: "sidebar", watch: words }))], { longThread: true }),
+      scene("panel-resize-smooth", "Dragging the details panel's edge draws every frame and no word shakes", [...ready, { action: "open-details" }, probe({ edge: ".page-agent .det-edge", dx: -140, moves: 140, watch: detailsWords })], { longThread: true }),
+      scene("panel-toggle-smooth", "Opening and closing the details panel draws every frame", [...ready, { action: "close-details-if-open" }, probe({ toggle: ".conversation-trigger", watch: words })], { longThread: true }),
+    ];
+  })(),
   scene("panel-dragged-wider", "The details panel's left edge drags it wider and the conversation gives way", [{ action: "open-details" }, drag('.page-agent .det-edge', -140), check("panel-width"), check("composer-row-fits")]),
   scene("panel-drag-keeps-place", "Dragging the details panel wider leaves the conversation's reading place where it was", [member(1), wait('.page-agent .thread > li:nth-child(8)'), { action: "open-details" }, { action: "scroll", selector: '.page-agent .thread > li:nth-child(5)', block: "start" }, check("reading-place-before"), drag('.page-agent .det-edge', -140), check("reading-place-kept"), check("composer-row-fits")], { longThread: true }),
   scene("panel-close-keeps-place", "Closing the details panel leaves the conversation's reading place where it was, not at the newest message", [member(1), wait('.page-agent .thread > li:nth-child(8)'), { action: "wheel", selector: '.page-agent .ra-scroll', deltaY: -900 }, { action: "wheel", selector: '.page-agent .ra-scroll', deltaY: -900 }, { action: "open-details" }, check("reading-place-before"), click('.page-agent .mb-det [data-det="close"]'), waitGone('.page-agent .mb-det:not([hidden])'), check("reading-place-kept")], { longThread: 60 }),

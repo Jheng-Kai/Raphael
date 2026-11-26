@@ -291,6 +291,14 @@ export async function run(options) {
         if (cpuSlowdown > 1) await storage.send("Emulation.setCPUThrottlingRate", { rate: cpuSlowdown });
         // Keep the emulation session attached until page.close() ends the stress run.
         if (cpuSlowdown === 1) await storage.detach();
+        // A scene that measures a pane's resize counts every ResizeObserver callback of the page (`window.__resizeRuns`, resize-probe.mjs).
+        if (scene.steps.some(step => step.action === "resize-probe")) {
+          await page.evaluateOnNewDocument(() => {
+            const Real = window.ResizeObserver;
+            window.__resizeRuns = 0;
+            window.ResizeObserver = class extends Real { constructor(callback) { super((entries, observer) => { window.__resizeRuns++; callback(entries, observer); }); } };
+          });
+        }
         if (scene.steps.some(step => step.measure)) {
           await page.evaluateOnNewDocument(() => {
             window.__lookLongTasks = [];

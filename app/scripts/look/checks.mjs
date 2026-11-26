@@ -4373,7 +4373,7 @@ export function checkRendered(name, context = {}) {
     if (matchMedia('(max-width: 859px)').matches) return {check:name,compact:true};
     const nav = document.querySelector('#nav'), width = nav.getBoundingClientRect().width, stored = Number(localStorage.getItem('raphael.sidebar.width'));
     require(!document.documentElement.hasAttribute('data-sidebar-collapsed') && width >= 240 && width <= 400, "the list is open, between 240 and 400 px");
-    require(Math.abs(width - stored) <= 1 && Math.abs(width - parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-width'))) <= 1, "the width the edge was let go at is the list's, and is kept");
+    require(Math.abs(width - stored) <= 1 && Math.abs(width - parseFloat(document.querySelector('.wbody').style.getPropertyValue('--side-live'))) <= 1, "the width the edge was let go at is the list's, and is kept");
     require(width > 348, "the list is wider than its default");
     const main = document.querySelector('#main').getBoundingClientRect();
     require(Math.abs(main.left - width) <= 2, "the conversation starts where the list ends");
@@ -4516,11 +4516,11 @@ export function checkRendered(name, context = {}) {
       return {check:name};
     }
     require(visible(panel) && !panel.hidden, "the panel is open");
-    const width = panel.getBoundingClientRect().width, set = parseFloat(page.style.getPropertyValue('--pa-det'));
+    const width = panel.getBoundingClientRect().width, set = parseFloat(page.style.getPropertyValue('--panel-live'));
     require(Math.abs(width - set) <= 1 && Number(localStorage.getItem('raphael.panel.width')) === Math.round(set), "the panel takes the width it was dragged to, and keeps it");
     require(width >= 300 && width <= Math.min(720, innerWidth * 0.6) + 1, "within its range");
     const edge = panel.querySelector(':scope > .det-edge'), box = edge.getBoundingClientRect();
-    require(edge.getAttribute('role') === 'separator' && Math.abs(box.left - panel.getBoundingClientRect().left) < 1 && getComputedStyle(edge, '::after').content === 'none', "its left edge drags it, with no handle drawn");
+    require(edge.getAttribute('role') === 'separator' && Math.abs(box.left - panel.getBoundingClientRect().left) < 1 && parseFloat(getComputedStyle(edge, '::after').width) === 0, "its left edge drags it, with no handle drawn (only a hairline border)");
     return {check:name, width:Math.round(width)};
   }
   if (name === "reading-place-before" || name === "reading-place-kept") {

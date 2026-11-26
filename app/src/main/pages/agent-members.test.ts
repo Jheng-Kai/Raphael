@@ -595,12 +595,12 @@ test("the details panel has no fold button: its left edge drags it, narrower tha
     edge.dispatchEvent(new PointerEvent("pointerup", { pointerId: 1, bubbles: true }));
   };
   drag(700, 600);
-  expect(page.style.getPropertyValue("--pa-det")).toBe("520px");
+  expect(page.style.getPropertyValue("--panel-live")).toBe("520px");
   expect(localStorage.getItem("raphael.panel.width")).toBe("520");
   drag(600, 1000);
   await vi.waitFor(() => expect(panel.hidden).toBe(true));
   await openDetails();
-  expect(page.style.getPropertyValue("--pa-det")).toBe("520px");
+  expect(page.style.getPropertyValue("--panel-live")).toBe("520px");
   localStorage.removeItem("raphael.panel.width");
   agent.hide();
 });

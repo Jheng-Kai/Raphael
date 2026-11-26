@@ -29,6 +29,7 @@ import { createMemberActions } from "./member-actions";
 import { createMemberColumn } from "./member-column";
 import { createDetails, type DetailsTab } from "./member-details";
 import { createMemberSettings, type MemberSettings } from "./member-settings";
+import { setLive, useLive } from "./live-size";
 import { mountEdge, savedWidth, saveWidth } from "./edge-drag";
 
 /** The details panel's widths (px): it opens at about 453 and drags to about 685; narrower than PANEL_CLOSE it closes. */
@@ -239,10 +240,12 @@ export function createMembers(host: MembersHost): MembersShell {
   const panelEdge = document.createElement("div");
   panelEdge.className = "det-edge";
   details.el.prepend(panelEdge);
+  // The width is read by the page's grid and by the panel itself, and by nothing else (live-size.ts): written as `--pa-det` on the page,
+  // every element of the conversation would be styled again for each move of the pointer.
   const placePanel = (): void => {
-    const page = details.el.parentElement;
-    if (panelWidth === null) page?.style.removeProperty("--pa-det");
-    else page?.style.setProperty("--pa-det", `${panelWidth}px`);
+    useLive("--panel-live", details.el.parentElement);
+    useLive("--panel-live", details.el);
+    setLive("--panel-live", panelWidth === null ? null : `${panelWidth}px`);
   };
   mountEdge(panelEdge, {
     label: t("nav.panelWidth"),

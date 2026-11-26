@@ -36,7 +36,7 @@ describe("the page's responsive sizes", () => {
     expect(read("styles.css")).toContain("--sidebar-width: min(348px, calc(100vw - 604px));");
     expect(block![2]).toContain("--pa-det: clamp(300px, 24vw, 460px);");
     expect(members).toContain(".page.page-agent { position: relative; max-width: none; height: 100%; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr);");
-    expect(members).toContain('.page.page-agent[data-det="open"]:not(.is-room) { grid-template-columns: minmax(0, 1fr) max(300px, min(var(--pa-det), calc(100vw - var(--sidebar-width) - var(--pa-conv-min)))); }');
+    expect(members).toContain('.page.page-agent[data-det="open"]:not(.is-room) { grid-template-columns: minmax(0, 1fr) max(300px, min(var(--panel-live, var(--pa-det)), calc(100% - var(--pa-conv-min)))); }');
     expect(block![2]).toContain("--pa-conv-min: 386px;");
   });
 
@@ -83,7 +83,7 @@ describe("the page's responsive sizes", () => {
   });
 
   test("the panel overlays compact chat and the sidebar becomes an 88 px rail of faces under 860 px", () => {
-    expect(members).toMatch(/@media \(max-width: 1119px\) \{[^@]*\.mb-det \{ position: absolute;[^}]*width: var\(--pa-det\)/);
+    expect(members).toMatch(/@media \(max-width: 1119px\) \{[^@]*\.mb-det \{ position: absolute;[^}]*width: var\(--panel-live, var\(--pa-det\)\)/);
     expect(read("sidebar.css")).toContain("@media (max-width: 859px) { :root { --sidebar-width: 88px; } }");
     expect(read("sidebar.css")).not.toContain("translateX(-100%)");
   });
