@@ -26,11 +26,12 @@ _COMMAND = re.compile(r"[a-z][a-z0-9_-]{0,31}")
 _SLASH_WORD = re.compile(r"(?<!\S)/(\S+)")
 
 
-async def download_skills(source: object) -> list[tuple[str, dict]]:
-    """The skills of a GitHub or skills.sh source, each with its folder (members/skill_github.py)."""
+async def download_skills(source: object, *, plugins=False):
+    """The skills of a GitHub or skills.sh source, each with its folder (members/skill_github.py); with `plugins`, the whole plugin
+    when the source is one (skill_layouts.PluginTree)."""
     from .skill_github import fetch
 
-    return await fetch(source)
+    return await fetch(source, plugins=plugins)
 
 
 def skill_metadata(text: str, *, writing=False, previous_name=None, path="") -> tuple[str, str]:
@@ -87,6 +88,9 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
         self.skill_home = Path.home()
         self.homes.migrate()
         self.unify_library()
+        # Where the library is in the computer a member works in (`guest_library`: its guest path for a Docker computer that
+        # mounts the library, None for this PC): the app sets it, and a skill tells the path its commands can run (R-SKILL-29).
+        self.guest_library = None
         self._skill_cache = {}
         self._skill_cache_revision = None
         # Triggers cover management, migrations' cascades and direct SQL writes alike.
@@ -97,8 +101,26 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
                              f"AFTER {action} ON main.{table} BEGIN "
                              "UPDATE skill_cache_revision SET revision=revision+1; END")
 
+    def library_folder(self) -> Path:
+        """The one folder the team's skills and plugins are kept in, which the Docker computers mount as it is."""
+        return self.homes.home(SHARED) / "skills"
+
+    def where(self, member_id, path) -> str:
+        """`path` as the commands of `member_id` reach it: below the mounted library when its computer is a Docker one that mounts
+        it (the guest path), else the path on this PC, always written with `/`."""
+        path = Path(path)
+        guest = self.guest_library(member_id) if self.guest_library is not None and member_id is not None else None
+        if guest:
+            try:
+                relative = path.relative_to(self.library_folder()).as_posix()
+            except ValueError:
+                relative = None
+            if relative is not None:
+                return guest if relative == "." else guest + "/" + relative
+        return str(path).replace("\\", "/")
+
     def skill_revision(self):
-        version = self.conn.execute("PRAGMA data_version").fetchone()[0]
+        version =self.conn.execute("PRAGMA data_version").fetchone()[0]
         revision = self.conn.execute("SELECT revision FROM skill_cache_revision").fetchone()[0]
         return version, revision
 
@@ -359,20 +381,38 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
         self._mirror(member_id)
         return bool(cursor.rowcount)
 
+    def _reference_target(self, member_id, inputs, reference):
+        """`(its parts, the folder they are in)` for a file a skill's document names: a path in the skill's own folder, `plugin:` and a
+        path in its plugin, or the whole path the document gave (on this PC or in the member's computer)."""
+        _, _, path, plugin = inputs
+        folder, root = path.parent, (Path(plugin["root"]) if plugin else None)
+        text = reference.strip().replace("\\", "/") if isinstance(reference, str) else reference
+        if isinstance(text, str) and text.startswith("plugin:"):
+            if root is None:
+                raise MemberError("reference", "this skill belongs to no plugin: give a path in the skill's own folder")
+            return self._reference_parts(text[7:]), root
+        if isinstance(text, str):
+            shown = [(self.where(member_id, real), real) for real in (folder, root) if real is not None]
+            shown += [(str(real).replace("\\", "/"), real) for real in (folder, root) if real is not None]
+            for prefix, real in sorted(shown, key=lambda item: -len(item[0])):
+                if text.startswith(prefix + "/"):
+                    return self._reference_parts(text[len(prefix) + 1:]), real
+        return self._reference_parts(reference), folder
+
     def read_skill_file(self, member_id: int, name: object, reference: object) -> str:
         """A text file that lies in the folder of an enabled skill (a page template, a data file, a script's source) by
         its path in that folder: what a run reads to do what the skill says, through the tool meant for it
         (`skill_read`) and not through a command, which the data floor does not let touch Raphael's own folders.
         The folder of ONE skill, UTF-8 text only, no secret-looking name, no link out: the database, the vault, keys and
         `.env` are never in it, and a path that leaves it is refused. MemberError names what is wrong."""
-        parts, inputs = self._named_reference(member_id, name, reference)
-        return self._read_reference(parts, inputs[2].parent)
+        parts, folder = self._named_reference(member_id, name, reference)
+        return self._read_reference(parts, folder)
 
     async def read_skill_file_async(self, member_id, name, reference):
         while True:
             revision = self.skill_revision()
-            parts, inputs = self._named_reference(member_id, name, reference)
-            text = await asyncio.to_thread(self._read_reference, parts, inputs[2].parent)
+            parts, folder = self._named_reference(member_id, name, reference)
+            text = await asyncio.to_thread(self._read_reference, parts, folder)
             if revision == self.skill_revision():
                 return text
 
@@ -382,7 +422,7 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
         inputs = self._named_skill(member_id, name)
         if inputs is None:
             raise MemberError("not_found", "no enabled skill has that name")
-        return self._reference_parts(reference), inputs
+        return self._reference_target(member_id, inputs, reference)
 
     def _read_reference(self, parts, folder):
         target = folder.joinpath(*parts)
@@ -403,7 +443,8 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
         try:
             text = target.read_text(encoding="utf-8")
         except UnicodeError:
-            raise MemberError("skill", "that file is not UTF-8 text") from None
+            raise MemberError("skill", "that file is not UTF-8 text, so it cannot be read here: a program or a binary is run by its "
+                                       "path with the command tool, never read") from None
         except (FileNotFoundError, NotADirectoryError):
             raise MemberError("not_found", "the skill's folder has no such file") from None
         except OSError:
@@ -433,7 +474,7 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
 
     def read_skill(self, member_id: int, name: object) -> str | None:
         inputs = self._named_skill(member_id, name) if isinstance(name, str) else None
-        return self._read_skill_text(inputs) if inputs else None
+        return self._read_skill_text(inputs, member_id) if inputs else None
 
     async def read_skill_async(self, member_id, name):
         if not isinstance(name, str):
@@ -443,18 +484,27 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
             inputs = self._named_skill(member_id, name)
             if inputs is None:
                 return None
-            text = await asyncio.to_thread(self._read_skill_text, inputs)
+            text = await asyncio.to_thread(self._read_skill_text, inputs, member_id)
             if revision == self.skill_revision():
                 return text
 
-    def _read_skill_text(self, inputs):
+    def _read_skill_text(self, inputs, member_id=None):
+        """The skill's document with what a model needs to reach the rest of it: where its folder is in the member's own computer,
+        the references that are short, and the other files by name and size (skill_index.py)."""
+        from .skill_index import plugin_entry_points, skill_files
+
         owner, skill, path, plugin = inputs
         path = self.homes.safe(path)
         if path.stat().st_size > MAX_SKILL_BYTES:
             return None
         text = path.read_text(encoding="utf-8")
+        here = self.where(member_id, path.parent)
+        root = self.where(member_id, self.homes.safe(plugin["root"])) if plugin else None
+        for variable in ("${CLAUDE_SKILL_DIR}", "${SKILL_DIR}", "${HERMES_SKILL_DIR}"):
+            text = text.replace(variable, here)
         if plugin:
-            text = text.replace("${CLAUDE_PLUGIN_ROOT}", str(self.homes.safe(plugin["root"])).replace("\\", "/"))
+            text = text.replace("${CLAUDE_PLUGIN_ROOT}", root)
+        inlined = []
         for reference in sorted((path.parent / "references").rglob("*")):
             if not reference.is_file() or reference.suffix not in (".md", ".txt", ".json"):
                 continue
@@ -466,8 +516,21 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
                     continue
                 relative = reference.relative_to(self.homes.home(owner)).as_posix()
                 text += "\n\n<reference name=" + json.dumps(relative) + ">\n" + content + "\n</reference>"
-        if skill["source"].startswith("local:") or skill["source"] == "upload" or plugin:
-            text += "\n\nSkill folder: " + str(path.parent) + "\nRead the other files of this folder (a page template, data) with skill_read and reference, not with a command. Run scripts only through the local command tool and its ordinary approval rules. Import and guidance grant no execution permission."
+                inlined.append(reference.relative_to(path.parent).as_posix())
+        files = skill_files(path.parent, inlined)
+        if files or skill["source"].startswith("local:") or skill["source"] == "upload" or plugin:
+            runs = ("vm_exec in your Docker computer" if self.guest_library is not None and member_id is not None
+                    and self.guest_library(member_id) and here.startswith(self.guest_library(member_id)) else "the local command tool")
+            text += "\n\nSkill folder: " + here
+            if files:
+                text += "\nFiles of this skill (a binary is run, never read):\n" + "\n".join(files)
+            if plugin:
+                text += (f'\n\nThis skill belongs to the plugin "{plugin["plugin"]}", whose folder is {root}. What else it holds:\n'
+                         + "\n".join(plugin_entry_points(self.homes.safe(plugin["root"])))
+                         + '\nRead a text file of the plugin with skill_read and reference "plugin:<path>" (such as plugin:actions/run.md).')
+            text += ("\nRead the other text files of the skill (a page template, data) with skill_read and reference, not with a command. "
+                     f"Run scripts and programs by their path through {runs} and its ordinary approval rules. "
+                     "Import and guidance grant no execution permission.")
         return text
 
     def commands(self, member_id: int) -> list[dict]:
@@ -508,7 +571,7 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
         request, inputs = self._plan_slash(member_id, text)
         if inputs is None:
             return request, False
-        result, error = self._load_slash(request, inputs)
+        result, error = self._load_slash(request, inputs, member_id)
         if on_failure is not None and error is not None:
             on_failure(inputs[1]["slash_name"], error)
         return result, error is None
@@ -519,7 +582,7 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
             if inputs is None:
                 return request, False
             revision = self.skill_revision()
-            result, error = await asyncio.to_thread(self._load_slash, request, inputs)
+            result, error = await asyncio.to_thread(self._load_slash, request, inputs, member_id)
             if revision == self.skill_revision():
                 if on_failure is not None and error is not None:
                     on_failure(inputs[1]["slash_name"], error)
@@ -564,13 +627,14 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
             return rest, inputs
         return text, None
 
-    def _load_slash(self, request, inputs):
-        from .skill_library import package
+    def _load_slash(self, request, inputs, member_id=None):
+        from .skill_library import fingerprint
 
         _, skill, path, _ = inputs
         try:
-            package(self.homes.safe(path).parent, installed=True)
-            document = self._read_skill_text(inputs)
+            # The folder is looked at, not read: a skill with large assets costs no more to call than one without.
+            fingerprint(self.homes.safe(path).parent)
+            document = self._read_skill_text(inputs, member_id)
             if document is None:
                 raise MemberError("not_found", "skill document is unavailable")
         except (MemberError, HomeError, OSError, UnicodeError) as error:

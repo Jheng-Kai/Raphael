@@ -29,7 +29,7 @@ from ..services.attachments import Attachment, MAX_FILE_BYTES, sniff_ok
 from ..agent.data_floor import DataFloor
 from .. import work_area
 from ..folders import choice, path_key
-from .vm import GUEST, SHARED, VmError, engine_start_allowed
+from .vm import GUEST, SHARED, SKILLS, VmError, engine_start_allowed
 from .vm_bridge import CuaBridge, call_driver_tool
 from .owner_files import KEPT_WORDS, MAC_PRIVATE, kept_place, place as owner_place
 from .owner_transfer import REMOTE_FILE_MAX, hand_over, safe_name
@@ -720,6 +720,13 @@ class VmTools:
             return self.vm.settings.get("raphael_computer_mode")
         row = self.conn.execute("SELECT computer_mode FROM members WHERE id=?", (member,)).fetchone() if self.conn else None
         return row[0] if row else "host"
+
+    def library_path(self, member):
+        """Where the team's skill library is for `member`'s commands: its guest path (`SKILLS`) when the member works in a Docker
+        computer that mounts the library, None when it works on this PC (the library's own path is then the one to run)."""
+        if not self.vm.enabled or self.vm.remote or self.host_computer is not None and self.computer_mode(member) == "host":
+            return None
+        return SKILLS if self.vm.mounted_target(self.vm.target(member)).library is not None else None
 
     def member_exists(self, member):
         return member == 0 or self.conn is not None and self.conn.execute("SELECT 1 FROM members WHERE id=?", (member,)).fetchone() is not None

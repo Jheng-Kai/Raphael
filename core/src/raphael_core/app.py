@@ -1033,6 +1033,10 @@ class App(Router):
             connections=self.integrations.connections,
             vault=self.vault,
         )
+        # The Docker computers mount the library's own folder, read-only: a skill's script runs there by its path, with no copy of
+        # the skills anywhere (R-SKILL-29). A member told where a skill is is told the path in its own computer.
+        self.vm.library = self.members.capabilities.library_folder()
+        self.members.capabilities.guest_library = self.vm_tools.library_path
         if self.vm_tools.host_computer is not None:
             self.vm_tools.host_computer.cards = self.handbacks
             host = self.vm_tools.host_computer

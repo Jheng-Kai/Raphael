@@ -119,8 +119,11 @@ class SkillPackages:
         skills = [{key: value for key, value in skill.items() if key != "_source"} for skill in skills]
         if plugin is not None:
             name, version, source, description = (plugin[k] for k in ("name", "version", "source", "description"))
-            updatable = bool(json.loads(plugin["metadata"]).get("marketplace")) or refetchable("source", source)
+            info = json.loads(plugin["metadata"])
+            updatable = bool(info.get("marketplace")) or refetchable("source", source)
             kind = "plugin"
+            if info.get("skipped_links"):
+                skipped_links["plugin"] = info["skipped_links"]
         else:
             kind = "single" if len(skills) == 1 else "pack"
             if kind == "single":

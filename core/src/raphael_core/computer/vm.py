@@ -43,6 +43,9 @@ REPOSITORY = IMAGE.split(":", 1)[0]
 IMAGE_CLEAN_S = 86_400
 GUEST = "/home/cua/workspace"
 SHARED = "/home/cua/team"
+# The team's skill library, the one folder of this PC that holds every shared skill and plugin: the computer mounts that
+# same folder, read-only, so a script of a skill runs there by its path with no copy of it anywhere (R-SKILL-29).
+SKILLS = "/home/cua/skills"
 MEMORY_GB = 3
 # The shared computer is sized from the engine it runs on (`sized`, `LocalVm.machine_size`). SHARED_SIZE is what it
 # keeps when the engine cannot be asked (what every layer before 13 was made with); the bounds are what any size stays in.
@@ -204,6 +207,8 @@ class Target:
     # The guest paths of the project mounts that are writable. By design none is (R-COMP-PROJECT-01): this only records what a
     # container of an earlier release still has, until it is made again at an idle start.
     writable: tuple = field(default=(), compare=False)
+    # The skill library's folder on this PC, mounted read-only at SKILLS; none for a computer on another host.
+    library: Path | None = field(default=None, compare=False)
 
     @property
     def unit(self):
@@ -299,6 +304,8 @@ def run_args(target, owner, password, *, tz=None, size=None):
         "--cap-drop", "ALL", "--cap-add", "SETUID", "--cap-add", "SETGID", "--shm-size", "512m",
         "--mount", mount_arg(target.workspace, remote=bool(target.remote)),
         *(["--mount", mount_arg(target.shared, SHARED, remote=bool(target.remote))] if target.shared else []),
+        # The library is the same folder the app keeps the skills in: read-only, since a skill changes only through the library.
+        *(["--mount", mount_arg(target.library, SKILLS, readonly=True)] if target.library and not target.remote else []),
         # A project is read-only in the computer, whoever runs a command there (R-COMP-PROJECT-01): the one container is every
         # member's, so a mount that one member may write is one every member's command may write.
         *(arg for destination, source in target.projects
@@ -393,7 +400,8 @@ def compatible(raw, target, owner, image_id):
 
 
 def mounts_match(mounts, configured, target):
-    expected = {GUEST: target.workspace, **({SHARED: target.shared} if target.shared else {}), **dict(target.projects)}
+    expected = {GUEST: target.workspace, **({SHARED: target.shared} if target.shared else {}),
+                **({SKILLS: target.library} if target.library and not target.remote else {}), **dict(target.projects)}
     if len(mounts) != len(expected) or len(configured) != len(expected):
         return False
     projects = dict(target.projects)
@@ -403,7 +411,7 @@ def mounts_match(mounts, configured, target):
         kind = "volume" if target.remote else "bind"
         if actual.get("Type") != kind or request.get("Type") != kind:
             return False
-        if destination in projects and destination not in target.writable:
+        if destination == SKILLS or destination in projects and destination not in target.writable:
             if actual.get("RW") is not False or request.get("ReadOnly", True) is not True:
                 return False
         elif actual.get("RW") is not True or request.get("ReadOnly"):
@@ -425,11 +433,14 @@ def previous_mounts(raw, target):
     configured = host.get("Mounts", raw.get("Mounts", []))
     if not isinstance(configured, list):
         return target
-    projects, writable = [], []
+    projects, writable, library = [], [], None
     for mount in configured:
         if not isinstance(mount, dict):
             return target
         guest = mount.get("Target", mount.get("Destination", ""))
+        if guest == SKILLS and isinstance(mount.get("Source"), str) and Path(mount["Source"]).is_absolute() and not target.remote:
+            library = Path(mount["Source"])  # what the computer has: a computer made before the library was mounted has none
+            continue
         if not isinstance(guest, str) or not guest.startswith(PROJECTS + "/"):
             continue
         name = guest[len(PROJECTS) + 1:]
@@ -442,7 +453,17 @@ def previous_mounts(raw, target):
         projects.append((guest, source))
         if mount.get("ReadOnly") is not True and mount.get("RW") is not False:
             writable.append(guest)
-    return replace(target, projects=tuple(projects), writable=tuple(writable))
+    return replace(target, projects=tuple(projects), writable=tuple(writable), library=library)
+
+
+def same_folder(one, other):
+    """Whether two folders (or two absences of one) are the same place, as the engine would see them."""
+    if one is None or other is None:
+        return one is other
+    try:
+        return one == other or one.resolve() == other.resolve()
+    except (OSError, RuntimeError):
+        return False
 
 
 def known_previous(raw, target, owner):
@@ -490,6 +511,9 @@ class LocalVm:
         # someone else's.
         self.machine = self.root if machine_dir is None else Path(machine_dir).resolve()
         self.homes, self.team = self.placed(HOMES), self.placed(TEAM)
+        # The folder the app keeps the team's skills and plugins in (members/skill_library.py, shared/skills). The computers mount
+        # this very folder: the app sets it when it makes the library elsewhere.
+        self.library = self.machine / "shared" / "skills"
         self.relocation = None
         self.host_work_busy = lambda: False
         self.enabled = enabled
@@ -527,6 +551,7 @@ class LocalVm:
         self.status_engines = {}
         self.running = {}
         self.mounted_projects = {}
+        self.mounted_libraries = {}  # the library folder each computer was made with (none: before the library was mounted)
         self.dropped_project_mounts = {}
         self._installed = None
         self.engine_lock, self.build_lock = asyncio.Lock(), asyncio.Lock()
@@ -909,7 +934,7 @@ class LocalVm:
         return Target(key, name,
                       PurePosixPath(name + "-workspace") if host else self.homes / key,
                       PurePosixPath(f"raphael-computer-{self.owner}-team") if host else self.team,
-                      host, projects=self.projects() if not host else ())
+                      host, projects=self.projects() if not host else (), library=None if host else self.library)
 
     def projects(self):
         projects = self.settings.get("project_folders") if self.settings is not None else None
@@ -928,7 +953,8 @@ class LocalVm:
                      if allowed(source))
 
     def mounted_target(self, target):
-        return replace(target, projects=self.mounted_projects.get(target.physical, target.projects))
+        return replace(target, projects=self.mounted_projects.get(target.physical, target.projects),
+                       library=self.mounted_libraries.get(target.physical, target.library))
 
     def local_folders(self, member):
         target = (self.shared_target("", member, 0) if self.mode == "shared" and not self.remote
@@ -1247,17 +1273,21 @@ class LocalVm:
             # A failed inspect can mean the engine or image changed outside Raphael.
             self.invalidate(target)
             self.mounted_projects.pop(target.physical, None)
+            self.mounted_libraries.pop(target.physical, None)
             image_id = await self.image(target)
             return {"state": "missing", "image": bool(image_id), "ready": False}
         mounted = previous_mounts(raw, target)
         if not image_id or not compatible(raw, mounted, self.owner, image_id):
             self.invalidate(target)
             self.mounted_projects.pop(target.physical, None)
+            self.mounted_libraries.pop(target.physical, None)
             return {"state": "incompatible", "ready": False}
         self.mounted_projects[target.physical] = mounted.projects
+        self.mounted_libraries[target.physical] = mounted.library
         dropped = self.dropped_project_mounts.get(target.physical)
         mounts_stale = dict(mounted.projects) != dict(target.projects) and (
             mounted.projects or dropped != dict(target.projects)) or set(mounted.writable) != set(target.writable)
+        mounts_stale = mounts_stale or not same_folder(mounted.library, target.library)
         running = raw.get("State", {}).get("Running") is True
         ready = False
         screens_pending = False
@@ -1604,6 +1634,8 @@ class LocalVm:
             if not target.remote:
                 bound_folder(target.workspace)
                 bound_folder(target.shared)
+                if target.library:
+                    bound_folder(target.library)
             self.validate_storage(target)
             self.data.made(target)  # before the engine makes it: a computer unrecorded could never be removed
             result = await self.create(target, zone)
@@ -1656,7 +1688,8 @@ class LocalVm:
             return None
         previous = previous_mounts(raw, target)
         image_id = await self.image(target)
-        if ((previous.projects != target.projects or set(previous.writable) != set(target.writable))
+        if ((previous.projects != target.projects or set(previous.writable) != set(target.writable)
+             or not same_folder(previous.library, target.library))
                 and image_id and compatible(raw, previous, self.owner, image_id)):
             return previous
         return None
@@ -1674,7 +1707,8 @@ class LocalVm:
             host["PortBindings"] = {"6901/tcp": [{"HostIp": "127.0.0.1", "HostPort": ""}]}
         # `previous` carries the remote binding repair, so an old remote computer of a previous layer still upgrades.
         prior = previous_mounts(previous, target)
-        mounts_changed = dict(prior.projects) != dict(target.projects) or set(prior.writable) != set(target.writable)
+        mounts_changed = (dict(prior.projects) != dict(target.projects) or set(prior.writable) != set(target.writable)
+                          or not same_folder(prior.library, target.library))
         mount_upgrade = mounts_changed and compatible(previous, prior, self.owner, image_id)
         image_upgrade = known_previous(previous, prior, self.owner) and (raw.get("Image") != image_id or target.container == "shared")
         if (not raw or not image_id or not (mount_upgrade or image_upgrade or legacy_remote and raw.get("Image") == image_id

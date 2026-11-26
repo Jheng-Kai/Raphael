@@ -1054,8 +1054,13 @@ member_skills; rooms 60 and grants 61 remain unchanged. skill_plugins.py owns
 manifest parsing, bounded HTTPS reads, commit pinning and shared set lifecycle.
 The existing members.skills.list/import/delete RPCs carry these operations through
 api.ts. There is no new native allowlist, model loop, worker or settings registry.
-A fully validated generation is staged under shared/skill-sets before one database
-transaction replaces its pointers. Stable component paths retain IDs and grants;
+A fully validated generation is staged under shared/skills (the one folder of the library, where single
+skills and plugin sets sit side by side; a set kept in the older shared/skill-sets moves in once at start)
+before one database transaction replaces its pointers. skill_layouts.py reads a plugin of any maker (Claude Code,
+Codex, Cursor, a marketplace or a bare layout of commands and agents) as the same set and keeps its whole tree;
+skill_index.py tells a model the files of a skill by name and size (R-SKILL-29 to R-SKILL-31). The Docker
+computers bind that same folder, read-only, at /home/cua/skills (computer/vm.py `SKILLS`), so no copy of a skill
+exists between this PC and the computer. Stable component paths retain IDs and grants;
 removed components trigger the existing grant cleanup. Existing local single-skill
 imports remain available and plugin components are edited through whole-set refresh.
 Commands become documents in that same store, preserving slash discovery, skill_read

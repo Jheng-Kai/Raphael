@@ -58,8 +58,9 @@ def local_files(folder):
     """Bound the entire set, including hidden manifests, without following links."""
     from .skill_sources import folder_snapshot
 
-    return folder_snapshot(folder, byte_limit=MAX_PACKAGE_BYTES, entry_limit=MAX_PACKAGE_FILES,
-                           depth_limit=MAX_DISCOVERY_DEPTH).files
+    # A link inside the plugin to a file of it is that file's copy; any other is named and left out, never followed.
+    return folder_snapshot(folder, byte_limit=MAX_PACKAGE_BYTES, entry_limit=MAX_PACKAGE_FILES, depth_limit=MAX_DISCOVERY_DEPTH,
+                           skill_links=True).finish(skill=False)
 
 
 def local_stamp(folder):
@@ -387,6 +388,7 @@ class PluginInstall:
     servers: list
     revision: tuple
     skipped: list = field(default_factory=list)
+    links: list = field(default_factory=list)
 
 
 class PluginSets:
@@ -542,6 +544,7 @@ class PluginSets:
         from .skills import stored_skill_name
 
         manifest = manifest_from(files)
+        links = list(getattr(files, "skipped_links", []))
         if len(files) > MAX_PACKAGE_FILES:
             raise too_many_files(len(files), MAX_PACKAGE_FILES)
         if sum(len(data) for data in files.values()) > MAX_PACKAGE_BYTES:
@@ -604,7 +607,7 @@ class PluginSets:
                 raise MemberError("source", "reserved plugin metadata path")
             checked[path] = data
         return PluginInstall(identity, manifest, previous, old, retained, components, checked,
-                             source, marketplace, target, access, mcp_servers(files, manifest), self.skill_revision(), skipped)
+                             source, marketplace, target, access, mcp_servers(files, manifest), self.skill_revision(), skipped, links)
 
     def _write_set(self, plan):
         # A plugin lives in the one folder the library keeps its skills in, so one mount of it shows them all.
@@ -620,6 +623,7 @@ class PluginSets:
                 atomic(self.homes.safe(folder / key), data)
             servers = json.loads(json.dumps(plan.servers).replace("${CLAUDE_PLUGIN_ROOT}", str(folder).replace("\\", "/")))
             info = {"marketplace": plan.marketplace, "target": plan.target, "mcp_servers": servers,
+                    **({"skipped_links": plan.links} if plan.links else {}),
                     "fingerprint": local_stamp(Path(plan.source[6:])) if plan.source.startswith("local:") else None}
             return folder, info
         except BaseException:
@@ -723,9 +727,15 @@ class PluginSets:
             raise MemberError("not_found", "no installed version of that plugin", reason="source", file=str(folder))
         return max(versions, key=lambda p: (version_key(p.name), p.stat().st_mtime_ns))
 
+    async def import_tree(self, tree, *, access=None):
+        """Install a source that is a plugin of any kind (skill_layouts.PluginTree): its whole tree is the set."""
+        return await self._install_set_async(tree.source, tree.files, access=access, require_new=True, identity=tree.identity)
+
     def _local_plugin_snapshot(self, source):
+        from .skill_layouts import folder_is_plugin, normalized
+
         folder = self._newest_version(source)
-        if not (folder / ".claude-plugin/plugin.json").is_file():
+        if not folder_is_plugin(folder):
             raise MemberError("not_found" if not folder.exists() else "source",
                               f"{folder} is not a plugin: it has no .claude-plugin/plugin.json",
                               reason="source" if not folder.exists() else "no_manifest", file=str(folder))
@@ -734,7 +744,10 @@ class PluginSets:
             cached = location(self.skill_home, source)[1].name == "cache"
         except MemberError:
             cached = False
-        return "local:" + str(folder), local_files(folder), None if cached else "local:" + str(folder)
+        files = normalized(local_files(folder), folder.name)
+        if files is None:
+            raise MemberError("source", f"{folder} lists no plugin of its own", reason="no_manifest", file=str(folder))
+        return "local:" + str(folder), files, None if cached else "local:" + str(folder)
 
     async def add_marketplace(self, repo):
         data = await catalog(repo)

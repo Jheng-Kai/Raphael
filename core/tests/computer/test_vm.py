@@ -19,7 +19,7 @@ from raphael_core.agent.policy import Tier
 from raphael_core.background.snapshot import take_snapshot
 from raphael_core.brain.owner import owner_context
 from raphael_core.brain.settings import SettingsStore, checked
-from raphael_core.computer.vm import BASE, DRIVER, IMAGE, IMAGE_LABELS, LABEL, GUEST, LocalVm, Result, VmError, compatible, exec_args, healthy, mounts_match, run_args
+from raphael_core.computer.vm import BASE, DRIVER, IMAGE, IMAGE_LABELS, LABEL, GUEST, SKILLS, LocalVm, Result, VmError, compatible, exec_args, healthy, mounts_match, run_args
 from raphael_core.computer.vm_bridge import CuaBridge, normalize_schema
 from raphael_core.computer.vm_tools import VmTools, vm_scope
 from raphael_core.services.attachment_store import AttachmentStore
@@ -85,6 +85,8 @@ def container(vm, target, runtime):
         "NetworkSettings": {"Ports": {"6901/tcp": [{"HostIp": "127.0.0.1", "HostPort": "6080"}]}}}
     if target.shared:
         raw["Mounts"].append({"Type": "bind", "Source": str(target.shared), "Destination": "/home/cua/team", "RW": True})
+    if target.library and not target.remote:
+        raw["Mounts"].append({"Type": "bind", "Source": str(target.library), "Destination": SKILLS, "RW": False})
     for guest, source in target.projects:
         raw["Mounts"].append({"Type": "bind", "Source": str(source), "Destination": guest, "RW": guest in target.writable})
     if target.remote:

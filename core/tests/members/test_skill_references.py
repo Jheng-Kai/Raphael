@@ -44,7 +44,8 @@ def arguments(kind, tmp_path, monkeypatch, files):
 @pytest.mark.parametrize("kind", ["folder", "zip", "tgz", "github", "skill-link"])
 async def test_a_skill_takes_the_files_its_document_links_to_inside_its_source(rig, tmp_path, monkeypatch, kind, manifest):
     args, github = arguments(kind, tmp_path, monkeypatch, layout(manifest=manifest))
-    package = (await rig.call("skills.library.import", args))["package"]
+    # The skills alone: a plugin imported whole keeps its files where the plugin has them (test_skill_layouts.py).
+    package = (await rig.call("skills.library.import", {**args, "plugin": False}))["package"]
     notes = next(s for s in package["skills"] if s["name"] == "notes")
     files = await stored(rig, {"skills": [notes]})
     assert {"SKILL.md", "references/own.md", "_plugin/actions/report.md", "_plugin/actions/_common.md", "_plugin/README.md"} <= set(files)

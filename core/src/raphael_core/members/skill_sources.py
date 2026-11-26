@@ -5,6 +5,7 @@ import binascii
 import gzip
 import io
 import os
+import re
 import stat
 import struct
 import tarfile
@@ -12,6 +13,7 @@ import threading
 import zipfile
 import zlib
 from collections import OrderedDict
+from contextlib import contextmanager
 from pathlib import Path, PureWindowsPath
 
 from .capabilities import MAX_SKILL_BYTES
@@ -90,7 +92,7 @@ class Snapshot:
             raise refused_entry(self.prefix + key, "not the size its listing says")
         self.files[key] = data
 
-    def finish(self):
+    def finish(self, *, skill=True):
         for key, target in self.links.items():
             parts = key.split("/")[:-1]
             if target and not any(char in target for char in ":\\\x00") and not target.startswith("/"):
@@ -113,6 +115,8 @@ class Snapshot:
                         self.size += len(data)
                         continue
             self.files.skipped_links.append(key)
+        if not skill:
+            return self.files
         if "SKILL.md" not in self.files:
             raise no_skill(self.prefix.rstrip("/"))
         shown = self.prefix + "SKILL.md"
@@ -352,8 +356,86 @@ def read_archive(name, data):
     raise MemberError("source", "choose a Markdown, ZIP or tar.gz file", reason="file_type", file=name)
 
 
-def uploaded(file):
+@contextmanager
+def _open_archive(name, data):
+    """The entries of a ZIP or tar.gz as `(entries, read_entry, regular)`, bounded as `read_archive` bounds them; None when the
+    name is neither."""
+    if len(data) > MAX_PACKAGE_BYTES:
+        raise oversized_package(name, len(data), MAX_PACKAGE_BYTES)
+    lower = name.lower()
+    try:
+        if lower.endswith(".zip"):
+            with checked_zip(data) as archive:
+                yield ([(info.orig_filename, info) for info in archive.infolist()],
+                       lambda snapshot, key, info: zip_entry(archive, snapshot, key, info),
+                       lambda info: not info.is_dir() and stat.S_IFMT(info.external_attr >> 16) in (0, stat.S_IFREG))
+        elif lower.endswith((".tgz", ".tar.gz")):
+            limit = MAX_PACKAGE_BYTES + MAX_ARCHIVE_ENTRIES * 1536 + tarfile.RECORDSIZE
+            with gzip.GzipFile(fileobj=io.BytesIO(data)) as compressed:
+                raw = compressed.read(limit + 1)
+            if len(raw) > limit:
+                raise oversized_package(name, len(raw), limit)
+            with tarfile.open(fileobj=io.BytesIO(raw), mode="r:") as archive:
+                entries = []
+                for info in archive:
+                    if len(entries) >= MAX_ARCHIVE_ENTRIES:
+                        raise too_many_files(len(entries) + 1, MAX_ARCHIVE_ENTRIES)
+                    entries.append((info.name, info))
+                yield entries, lambda snapshot, key, info: tar_entry(archive, snapshot, key, info), tarfile.TarInfo.isfile
+        else:
+            yield None
+    except (zipfile.BadZipFile, tarfile.TarError, OSError, EOFError, zlib.error, NotImplementedError, UnicodeError):
+        raise unreadable_archive() from None
+
+
+def _wrapper(names):
+    """`top/` when every entry of an archive is inside one folder (`repo-main/...`): that folder is the source."""
+    tops = {name.split("/")[0] for name in names}
+    return next(iter(tops)) + "/" if len(tops) == 1 and all("/" in name for name in names) else ""
+
+
+def archive_plugin(name, data):
+    """The whole tree of an archive that is a plugin of any kind (skill_layouts.py), `{path: bytes}` from the plugin's own root,
+    or None when it is not one. The names are looked at first: an archive that is no plugin is not read whole."""
+    from .skill_layouts import is_plugin
+
+    with _open_archive(name, data) as opened:
+        if opened is None:
+            return None
+        entries, read_entry, regular = opened
+        entries = [(entry, info) for entry, info in entries if not junk(entry.removeprefix("./"))]
+        names = [entry.removeprefix("./").replace("\\", "/") for entry, _ in entries]
+        wrapper = _wrapper([n for n in names if n not in (".", "")])
+        if not is_plugin(n[len(wrapper):] for n, (_, info) in zip(names, entries) if n.startswith(wrapper) and regular(info)):
+            return None
+        snapshot = Snapshot()
+        for entry, (original, info) in zip(names, entries):
+            if entry in (".", "") or entry.rstrip("/") == wrapper.rstrip("/"):
+                continue
+            try:
+                relative_path(original)
+            except MemberError:
+                raise unsafe_path(original) from None
+            read_entry(snapshot, entry[len(wrapper):], info)
+        return snapshot.finish(skill=False)
+
+
+def plugin_of_archive(name, data, label=None):
+    """The plugin an archive is (a `PluginTree`), or None when it is none: its whole tree is kept, every file. `label` names a
+    plugin whose manifest does not (the archive's own name by default)."""
+    from .skill_layouts import PluginTree, normalized
+
+    tree = archive_plugin(name, data)
+    label = label or re.sub(r"\.(?:zip|tar\.gz|tgz)$", "", name, flags=re.I)
+    files = normalized(tree, label) if tree is not None else None
+    return PluginTree(files, f"upload:{name}", f"upload:{name}", label) if files is not None else None
+
+
+def uploaded(file, plugins=False):
+    """The skills of an uploaded file; with `plugins`, a file that is a plugin of any kind is that plugin, whole."""
     data = uploaded_bytes(file)
+    if plugins and (found := plugin_of_archive(file["name"], data)) is not None:
+        return found, file["name"]
     return read_archive(file["name"], data), file["name"]
 
 
@@ -382,8 +464,9 @@ def tree_entries(files):
     return entries
 
 
-def uploaded_tree(files):
-    """Dropped files as the archive they would have been: the skills in them are read as an archive's are."""
+def uploaded_tree(files, plugins=False):
+    """Dropped files as the archive they would have been: the skills in them are read as an archive's are, and with `plugins` a
+    tree that is a plugin of any kind is that plugin, whole."""
     entries = tree_entries(files)
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_STORED) as out:
@@ -391,6 +474,8 @@ def uploaded_tree(files):
             out.writestr(path, data)
     tops = {path.split("/")[0] for path, _ in entries}
     name = tops.pop() if len(tops) == 1 and all("/" in path for path, _ in entries) else "dropped files"
+    if plugins and (found := plugin_of_archive("dropped.zip", buffer.getvalue(), name)) is not None:
+        return found, name
     return read_archive("dropped.zip", buffer.getvalue()), name
 
 
@@ -422,17 +507,30 @@ def local_path(source):
     return Path(os.path.realpath(path))
 
 
-def local(source):
+def local(source, plugins=False):
+    """The skills of a folder or file on this computer; with `plugins`, a folder or archive that is a plugin of any kind
+    (skill_layouts.py) is that plugin, whole, as a `PluginTree`."""
     path = local_path(source)
     if path.is_file():
         if path.stat().st_nlink > 1:
             raise refused_entry(str(path), "a hard link")
         with path.open("rb") as stream:
-            return read_archive(path.name, stream.read(MAX_PACKAGE_BYTES + 1)), path.name
+            data = stream.read(MAX_PACKAGE_BYTES + 1)
+        if plugins and (found := plugin_of_archive(path.name, data)) is not None:
+            return found, path.name
+        return read_archive(path.name, data), path.name
     if not path.exists():
         raise MemberError("not_found", f"{path} does not exist on this computer", reason="source", file=str(path))
     if not path.is_dir():
         raise MemberError("source", f"{path} is neither a folder nor a file", reason="path", file=str(path))
+    if plugins:
+        from .skill_layouts import PluginTree, folder_is_plugin, normalized
+        from .skill_plugins import local_files
+
+        if folder_is_plugin(path):
+            files = normalized(local_files(path), path.name)
+            if files is not None:
+                return PluginTree(files, "local:" + str(path), "local:" + str(path), path.name), path.name
     remaining = [MAX_SCAN_ENTRIES]
     folders = []
     try:
