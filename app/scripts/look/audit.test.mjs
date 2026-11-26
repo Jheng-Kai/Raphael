@@ -334,10 +334,11 @@ describe("rendered look checks", () => {
   it("lets only the chief's faces wear the crown", () => {
     const browser = new Window();
     const face = (member, crown) => `<span class="slime-surface" data-slime-still="${member}"><svg class="slime"><path class="slime-body"/><g class="slime-marks">${crown ? '<g class="slime-mark"><g class="slime-crown"><path d="M 0 0 L 1 1"/></g></g>' : ""}</g></svg></span>`;
-    browser.document.body.innerHTML = `<button class="mb-chief">${face(0, true)}</button><div class="mb-list">${face(3, false)}</div>`;
+    browser.document.body.innerHTML = `<button class="mb-chief">${face(3, true)}</button><div class="mb-list">${face(4, false)}</div>`;
     for (const element of browser.document.querySelectorAll("*")) element.checkVisibility = () => true;
     for (const element of browser.document.querySelectorAll("*")) element.getBoundingClientRect = () => ({ left: 0, top: 0, right: 10, bottom: 10, width: 10, height: 10 });
     vi.stubGlobal("document", browser.document);
+    vi.stubGlobal("window", { __look: { data: { primaryId: 3 } } });
     try {
       expect(checkRendered("chief-crown")).toEqual({ check: "chief-crown", faces: 1 });
       browser.document.querySelector(".mb-list .slime-marks").innerHTML = '<g class="slime-mark"><g class="slime-crown"></g></g>';
@@ -986,17 +987,17 @@ describe("rendered look checks", () => {
     window.document.querySelector('.ans').remove();
     expect(audit().productRules).toEqual([]);
   });
-  it("checks visible primary calendar choices without counting the hidden responsive copy", () => {
+  it("checks visible primary calendar choices (slimes only, the chief first) without counting the hidden responsive copy", () => {
     const window = new Window();
-    window.document.body.innerHTML = '<nav id="nav"><button class="mb-chief"></button></nav><aside hidden><button data-drag-member="0"></button><button data-drag-member="1"></button></aside><div><button data-drag-member="1"></button><button data-drag-member="0"></button></div>';
+    window.document.body.innerHTML = '<nav id="nav"><button class="mb-chief"></button></nav><aside hidden><button data-drag-member="1"></button><button data-drag-member="2"></button></aside><div><button data-drag-member="2"></button><button data-drag-member="1"></button></div>';
     for (const element of window.document.querySelectorAll('div button')) element.getBoundingClientRect = () => ({ width: 100, height: 30 });
-    window.__look = { data: { primaryId: 1, members: [{ id: 0 }, { id: 1 }] }, calls: [] };
+    window.__look = { data: { primaryId: 2, members: [{ id: 0 }, { id: 1 }, { id: 2 }] }, calls: [] };
     vi.stubGlobal('document', window.document); vi.stubGlobal('window', window);
     try {
-      expect(checkRendered('primary-calendar').members).toEqual([1, 0]);
-      window.document.querySelector('div').innerHTML = '<button data-drag-member="0"></button><button data-drag-member="1"></button>';
+      expect(checkRendered('primary-calendar').members).toEqual([2, 1]);
+      window.document.querySelector('div').innerHTML = '<button data-drag-member="1"></button><button data-drag-member="2"></button>';
       for (const element of window.document.querySelectorAll('div button')) element.getBoundingClientRect = () => ({ width: 100, height: 30 });
-      expect(() => checkRendered('primary-calendar')).toThrow(/exchange/);
+      expect(() => checkRendered('primary-calendar')).toThrow(/chief first/);
     } finally { vi.unstubAllGlobals(); }
   });
   it("rejects mismatched adjacent import heights and schedule widths (R-UI-17)", () => {

@@ -2,7 +2,7 @@ import { scene, click, hover, check, page, room, settings, wait, waitGone, drag,
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 const fixture = JSON.parse(readFileSync(join(import.meta.dirname, "../fixture.json"), "utf8"));
-const pinnedTiles = { sidebarMany: true, pinnedTiles: [0, 3, 1] };
+const pinnedTiles = { sidebarMany: true, pinnedTiles: [3, 1] };
 // The one light of a row: 1 and 6 only think, 2 has a message, 3 a task that ended, 4 work that failed, 5 a question that waits
 // (and a message too, which it outranks); the group chats have a message, a meeting that ended and a question.
 const lights = { sidebarMany: true, sidebarLights: { 1: "thinking", 2: "message", 3: "done", 4: "failed", 5: "waiting", 6: "thinking" }, sidebarLightRooms: true };

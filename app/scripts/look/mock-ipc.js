@@ -475,10 +475,10 @@ export function installMock(fixture, config = {}, target = window) {
     data.messages.push({ ...spoken, id: next, room_id: 2, text: "會議結束，結論已整理好" }, { ...spoken, id: next + 1, room_id: 3, text: "要先確認預算嗎？" });
     Object.assign(data.expectedLights.rooms, { 1: "message", 2: "done", 3: "waiting" });
   }
-  // Pinned tiles (`pinnedTiles`: member ids, 0 is Raphael, who is pinned by its own setting): the core lists the pinned first, then by
+  // Pinned tiles (`pinnedTiles`: slime ids; Raphael is never pinned): the core lists the pinned first, then by
   // position, and a `position` written to a member is a place in the order of all of them, numbered again from 0.
-  if (variant.pinnedTiles) for (const id of variant.pinnedTiles) { if (id === 0) data.settings.chief_pinned = true; else data.members.find(member => member.id === id).pinned = true; }
-  if (variant.onlyRaphael) data.members = data.members.filter(member => member.id === 0);
+  if (variant.pinnedTiles) for (const id of variant.pinnedTiles) data.members.find(member => member.id === id).pinned = true;
+  if (variant.onlyRaphael || variant.onboarding) data.members = data.members.filter(member => member.id === 0);
   if (variant.chatgptSignedIn) {
     data.chatgpt = { signed_in: true, email: "owner@example.test", plan_scope_granted: true };
     data.settings.agent_model = "@chatgpt:gpt-6-sol?effort=medium";
@@ -491,8 +491,9 @@ export function installMock(fixture, config = {}, target = window) {
   // A member saved before Claude Code's list named exact models: it holds the alias the CLI takes for its newest Haiku.
   if (variant.claudeAlias) data.members.find(member => member.id === 3).model = "cli:claude:haiku";
   if (variant.waitingMember !== undefined) data.members.find(member => member.id === variant.waitingMember).waiting = true;
-  // The owner's primary contact: Raphael until another member is chosen (`primaryMember` seeds it). The roster says it, as the core does.
-  data.primaryId = variant.primaryMember ?? 0;
+  // The owner's chief of staff: a slime, the first one ever made unless `primaryMember` seeds another (null: nobody, as with no slime
+  // at all). Raphael is never the chief. The roster says it, as the core does.
+  data.primaryId = variant.primaryMember === undefined ? (data.members.find(member => member.id !== 0 && !member.hidden)?.id ?? null) : variant.primaryMember;
   data.roomWrapupMessage.member_id = data.primaryId;
   if (variant.problem) data.status.openrouter.state = "no_key";
   // The dictation days moved on to end on another day (`statsUntil`, YYYY-MM-DD): the first days of a month put its name
@@ -503,8 +504,9 @@ export function installMock(fixture, config = {}, target = window) {
   }
   let adminQuestion = variant.adminApproval ? data.adminQuestions[variant.adminApproval] : null;
   let adminTurn = adminQuestion ? data.turns.find(turn => turn.id === adminQuestion.turn_id) : null;
+  // No slime and nothing said yet: the app opens on Raphael's conversation, empty.
   if (variant.unconfiguredRaphael) {
-    data.members = [{ ...data.members[0], profile_ready: false }];
+    data.members = [data.members[0]];
     data.groups = [];
     data.turns = [];
     adminQuestion = adminTurn = null;
@@ -1738,15 +1740,19 @@ export function installMock(fixture, config = {}, target = window) {
         }
         // the roster of every model carries the same inventory and the same count as the sidebar and the connections page
         const counted = inventory();
-        const roster = data.members.map(m => ({ ...m, chief: m.id === data.primaryId, pinned: m.id === 0 ? !!data.settings.chief_pinned : m.pinned }));
+        // Raphael is member 0, flagged: its name is the language's own, it has no role, no picture, no place, no folder and no pin.
+        const raphaelName = { en: "Raphael", ja: "ラファエル" }[p.ui_language];
+        const raphael = ({ avatar_url: _picture, avatar_rev: _rev, avatar_crop: _crop, ...m }) => ({ ...m, ...(raphaelName ? { name: raphaelName } : {}),
+          raphael: true, role: "", avatar: "", chief: false, pinned: false, hidden: false, group_id: null, position: -1, model: "" });
+        const roster = data.members.map(m => m.id === 0 ? raphael(m) : { ...m, chief: m.id === data.primaryId });
         if (variant.pinnedTiles) roster.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || a.position - b.position || a.id - b.id);
         // The core lists Raphael first, then the others by place (pinned first), and the folders by place.
         if (variant.sidebarDrag) roster.sort((a, b) => (a.id === 0 ? -1 : b.id === 0 ? 1 : (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || a.position - b.position || a.id - b.id));
         const folders = variant.sidebarDrag ? [...data.groups].sort((a, b) => a.position - b.position || a.id - b.id) : data.groups;
         return { members: roster, groups: folders, team_context: {
-          schema_version: 1, revision: "fixture", self_id: 0, count: data.members.length, primary_id: data.primaryId, chief_id: data.primaryId,
+          schema_version: 1, revision: "fixture", self_id: 0, count: data.members.length - 1, primary_id: data.primaryId, chief_id: data.primaryId,
           inventory_state: counted.state, room_member_ids: null,
-          members: data.members.map(m => ({ id: m.id, name: m.name, role: m.role, blurb: m.blurb ?? "" })),
+          members: data.members.filter(m => m.id !== 0).map(m => ({ id: m.id, name: m.name, role: m.role, blurb: m.blurb ?? "" })),
           apps: counted.apps, connected: counted.count,
         } };
       }
@@ -1766,6 +1772,8 @@ export function installMock(fixture, config = {}, target = window) {
         ? [...data.servers, ...data.managedConnectors.map(c => ({ id: c.id, name: c.name || (c.kind === "google" ? "Google" : c.id), enabled: c.enabled, ...(c.logo ? { logo: c.logo } : {}) }))]
         : data.servers };
       case "members.update": {
+        // As the core: Raphael takes only its words and settings; its name, role, look, place and folder are fixed.
+        if (p.id === 0 && Object.keys(p).some(key => ["name", "role", "avatar", "pinned", "hidden", "group_id", "position"].includes(key))) throw '[1001] Raphael is fixed {"kind":"raphael"}';
         const member = update(data.members, p.id, p);
         if (variant.pinnedTiles && p.position !== undefined) {
           const order = data.members.filter(other => other.id !== p.id).sort((a, b) => a.position - b.position || a.id - b.id);
@@ -1774,7 +1782,8 @@ export function installMock(fixture, config = {}, target = window) {
         }
         // As store.py `_move`: a place is among all the members but Raphael, and every place is numbered again from 0.
         if (variant.sidebarDrag && p.position !== undefined) moveInto(data.members.filter(other => other.id !== 0), member, p.position);
-        if (p.hidden && p.id === data.primaryId) data.primaryId = 0;
+        // The chief hidden hands the role to the next visible slime, or to nobody.
+        if (p.hidden && p.id === data.primaryId) data.primaryId = data.members.find(other => other.id !== 0 && other.id !== p.id && !other.hidden)?.id ?? null;
         notify("MembersChanged", { member_id: p.id });
         return { member };
       }
@@ -1798,8 +1807,9 @@ export function installMock(fixture, config = {}, target = window) {
         return { member };
       }
       case "members.set_primary": {
-        // as the core: Raphael or a member that is there and not hidden from the sidebar; only the choice changes
-        if (p.id !== 0 && !data.members.some(member => member.id === p.id && !member.hidden)) throw new Error("Invalid params: no such member");
+        // as the core: a slime that is there and not hidden from the sidebar (Raphael is refused); only the choice changes
+        if (p.id === 0) throw '[1001] Raphael cannot be the chief {"kind":"raphael"}';
+        if (!data.members.some(member => member.id === p.id && !member.hidden)) throw new Error("Invalid params: no such member");
         data.primaryId = p.id; notify("MembersChanged", { member_id: p.id }); return { primary_id: p.id };
       }
       case "members.template": {
@@ -1823,11 +1833,13 @@ export function installMock(fixture, config = {}, target = window) {
         throw new Error("Unknown template action");
       }
       case "members.create": {
-        const member = { ...data.members[1], role: "", blurb: "", ...p, id: nextId(data.members) };
+        const member = { ...(data.members.find(other => other.id !== 0) ?? {}), role: "", blurb: "", ...p, id: nextId(data.members) };
         data.members.push(member);
+        // The first slime ever made is the chief of staff.
+        if (data.primaryId == null) data.primaryId = member.id;
         if (p.greet) greet(member);
         notify("MembersChanged", { member_id: member.id });
-        return { member, routine_offer: variant.routineOffer ? {title:"範例摘要",prompt:"整理範例資料。",schedule:{kind:"daily",time:"09:00"}} : null };
+        return { member: { ...member, chief: member.id === data.primaryId }, routine_offer: variant.routineOffer ? {title:"範例摘要",prompt:"整理範例資料。",schedule:{kind:"daily",time:"09:00"}} : null };
       }
       case "members.greet": {
         // As the core: only while the owner has written nothing to the member and no greeting runs.
@@ -1839,7 +1851,7 @@ export function installMock(fixture, config = {}, target = window) {
         for (let at = data.turns.length - 1; at >= 0; at--) if (data.turns[at].member_id === p.id && data.turns[at].route === "greeting" && data.turns[at].status === "error") data.turns.splice(at, 1);
         return { turn_id: greet(member).id };
       }
-      case "members.delete": if (Object.keys(p).some(key => key !== "id")) throw new Error("Invalid params: members.delete takes only the member's id"); data.members =data.members.filter(item => item.id !== p.id); if (p.id === data.primaryId) data.primaryId = 0; notify("MembersChanged", { member_id: p.id }); return { deleted: true };
+      case "members.delete": if (Object.keys(p).some(key => key !== "id")) throw new Error("Invalid params: members.delete takes only the member's id"); if (p.id === 0) throw '[1001] Raphael cannot be deleted {"kind":"raphael"}'; data.members =data.members.filter(item => item.id !== p.id); if (p.id === data.primaryId) data.primaryId = data.members.find(other => other.id !== 0 && !other.hidden)?.id ?? null; notify("MembersChanged", { member_id: p.id }); return { deleted: true };
       case "members.skills.list": {
         if (variant.ownerSkillLinks && p.member_id === 1) return {
           skills: [{ id: 715, name: "code-review", slash_name: "code-review", enabled: true, shared: true }], sets: [], library: [],
@@ -2172,7 +2184,7 @@ export function installMock(fixture, config = {}, target = window) {
         const messages = data.messages.filter(item => item.room_id === p.room_id && (!variant.chatMetadata || (item.thread_id ?? 1) === (p.thread_id ?? 1)));
         return { parent: p.thread_id ? data.messages.find(item=>item.room_id===p.room_id && item.reply_thread_id===p.thread_id) : null, messages: messages.filter(item => !p.before || item.id < p.before).sort((a,b)=>a.id-b.id).slice(-100), decisions: messages.filter(item => item.kind === "decision"), pending_questions: messages.flatMap(item => item.turn?.owner_questions ?? []).filter(question => question.kind === "ask_owner" && question.state === "asked"), exchange: data.roomExchanges.filter(item => item.room_id === p.room_id).at(-1) ?? null, handoffs: data.roomHandoffs };
       }
-      case "rooms.create": { const room = { ...p, member_ids: p.is_team ? data.members.map(m => m.id) : p.member_ids, id: nextId(data.rooms), created: data.now, group_id: p.group_id ?? null, is_team: Number(p.is_team ?? false), default_responder: p.default_responder ?? "auto" }; data.rooms.push(room); return { room }; }
+      case "rooms.create": { const room = { ...p, member_ids: p.is_team ? data.members.filter(m => m.id !== 0).map(m => m.id) : p.member_ids, id: nextId(data.rooms), created: data.now, group_id: p.group_id ?? null, is_team: Number(p.is_team ?? false), default_responder: p.default_responder ?? "auto" }; data.rooms.push(room); return { room }; }
       case "rooms.update": {
         const room = data.rooms.find(room => room.id === p.room_id), previous = room.read_message_id ?? 0;
         update(data.rooms, p.room_id, p);

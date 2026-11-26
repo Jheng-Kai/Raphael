@@ -124,7 +124,7 @@ export default [
   scene("automations-tools-month", "Calendar tools navigate mini months", [...tools, click('[data-au="month-next"]'), check("calendar-tools")]),
   scene("automations-tools-date", "Calendar tools select a date and return to the grid", [...tools, click('[data-mini-date="2026-10-28"]'), wait('.au-day-col[data-day="2026-10-28"]'), check("calendar-shell")]),
   scene("automations-tools-awake", "Calendar tools preserve the keep-awake switch", [...tools, click('[data-au="awake"]'), wait('[data-au="awake"][aria-checked="true"]'), check("calendar-tools-awake")]),
-  scene("primary-room-picker", "Room choices require the current chief after the display swap", [newRoom(), check("primary-room-picker"), click('[data-dlg="member"][data-member="0"]'), check("primary-room-picker"), click('[data-dlg="responder"]'), check("room-responder")], { primaryMember: 1 }),
+  scene("primary-room-picker", "Room choices require the current chief, list the slimes only and never offer Raphael", [newRoom(), check("primary-room-picker"), click('[data-dlg="member"][data-member="2"]'), check("primary-room-picker"), click('[data-dlg="responder"]'), check("room-responder")], { primaryMember: 1 }),
   scene("primary-room-members", "Room membership editor keeps the current chief required", [room(1), click('[data-room-menu]'), click('[data-pick="members"]'), check("primary-room-picker")], { primaryMember: 1 }),
   scene("primary-calendar-members", "Calendar member tools use primary display order", [...tools, check("primary-calendar")], { primaryMember: 1 }),
   scene("compact-rooms", "Rooms in the compact picker", [{ action: "rooms-menu" }]),

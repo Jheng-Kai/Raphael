@@ -14,8 +14,8 @@ export default [
   { ...scene("start-newer-data", "A database from a newer Raphael offers the update from the startup screen",
     [check("start-newer-data"), click("[data-startup-update]"), wait(".startup-update-result:not([hidden])"), check("start-newer-data-current")],
     { newerDatabase: true }), ready: ".startup-failed .missing-note" },
-  scene("start-conversation", "The app opens on Raphael's conversation, the top row of the sidebar selected, with no Home and no page button in the foot",
-    [wait(".page-agent:not([hidden]) .conversation-trigger"), wait('.mb-chief[aria-current="true"]'), check("foot-rest"), check("sidebar-shell"), check("sidebar-selection")]),
+  scene("start-conversation", "The app opens on the chief of staff's conversation, the top row of the sidebar selected, with no Home and no page button in the foot",
+    [wait(".page-agent:not([hidden]) .conversation-trigger"), wait('.mb-chief[aria-current="true"]'), check("foot-rest"), check("sidebar-shell"), check("sidebar-selection")], { start: "app" }),
   // At start-up the first view (the roster and the rooms) is answered before the model, app and settings reads start, and those never overlap (R-START-02).
   scene("start-startup-order", "At start-up the roster and the rooms are answered before the model, app and settings reads start, and those never overlap",
     [wait(".page-agent:not([hidden]) .conversation-trigger"), { action: "startup-order", firstView: ["members.list", "rooms.list"], heavy: ["models.catalog", "brains.cli"] }], { coreLatencyMs: 60 }),

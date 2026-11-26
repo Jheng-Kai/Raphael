@@ -46,8 +46,8 @@ export const pressOpener = selector => ({ action: "press-opener", selector });
 // The owner's face at the sidebar's foot opens the account menu (R-SIDE-01); `item` presses one of its rows: dictation, calendar, settings, or
 // usage (when no subscription window is known). The face is the same button in the list and on the rail.
 export const accountMenu = item => ({ action: "account-menu", ...(item ? { item } : {}) });
-// The conversation is the member's row; every other page is a row of the account menu (the calendar opens on today).
-export const page = name => name === "agent" ? click(".mb-chief") : accountMenu(name === "automations" ? "calendar" : name);
+// Raphael's conversation and every other page are rows of the account menu (the calendar opens on today).
+export const page = name => name === "agent" ? accountMenu("raphael") : accountMenu(name === "automations" ? "calendar" : name);
 // 連結應用程式 is no tab of Settings: its one way in is the sidebar's button, which opens it as a dialog of its own (R-UI-111).
 // Appearance is a section of 一般 (the six settings tabs): its scenes open 一般 at that section. Messaging has no section
 // there any more: the bots are set up in each member's panel and conversation, so no scene opens it in Settings.
