@@ -2,6 +2,7 @@
 import { beforeEach, expect, test, vi } from "vitest";
 import { previewTemplate, previewTemplateFile, starterTemplate, templateContents } from "./member-templates";
 import { openMemberStore } from "./member-store";
+import { setLive } from "./live-size";
 import type { Member } from "./types";
 import { catalogs, t } from "./i18n";
 
@@ -9,6 +10,16 @@ const api = vi.hoisted(() => ({core: vi.fn(), memberTemplateFile: vi.fn(), conne
 vi.mock("./api", () => api);
 beforeEach(() => {document.body.innerHTML = ""; vi.clearAllMocks(); api.core.mockImplementation(async (_method, params) => params.action === "catalog" ? {entries: [], offline: false} : {template: params.template});});
 const catalogOnly = (): boolean => api.core.mock.calls.every(([, params]) => params.action === "catalog");
+
+test("the store's scrim starts where the list ends, wherever the list was dragged to", () => {
+  setLive("--side-live", "320px");
+  const store = openMemberStore({groupId: null, create: vi.fn()});
+  expect(store.el.closest<HTMLElement>(".mb-scrim")!.style.getPropertyValue("--side-live")).toBe("320px");
+  setLive("--side-live", "260px");
+  expect(store.el.closest<HTMLElement>(".mb-scrim")!.style.getPropertyValue("--side-live")).toBe("260px");
+  setLive("--side-live", null);
+  expect(store.el.closest<HTMLElement>(".mb-scrim")!.style.getPropertyValue("--side-live")).toBe("");
+});
 
 test("the store's template button opens eight local slime recipes without installing anything", () => {
   const create = vi.fn();

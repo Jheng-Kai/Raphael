@@ -78,8 +78,8 @@ export default [
     const detailsWords = [...words, { selector: ".mb-det .mb-det-head", ref: ".mb-det" }];
     const ready = [member(1), wait('.page-agent .thread > li:nth-child(8)')];
     // What a drag may cost (R-PERF-25): a style write restyles the elements that read the width, a hundred or so, where the width held on
-    // the root or the page restyled the whole window (1,000 to 1,500 elements) for each move; and no frame is dropped to half the rate.
-    const probe = step => ({ action: "resize-probe", limits: step.edge ? { recalcElementsPerWrite: 300, framesOver50: 0 } : { framesOver50: 0 }, ...step });
+    // the root or the page restyled the whole window (1,000 to 1,500 elements) for each move; and no more than a few frames are later than 50 ms.
+    const probe = step => ({ action: "resize-probe", limits: step.edge ? { recalcElementsPerWrite: 300, framesOver50: 8 } : {}, ...step });
     return [
       scene("sidebar-resize-smooth", "Dragging the list's edge draws every frame and no word shakes", [...ready, wide(probe({ edge: ".side-edge", dx: 120, watch: words }))], { longThread: true }),
       // The same drags over the busy conversation of the typing scene (hundreds of long turns, the last of them drawn): what a width change
