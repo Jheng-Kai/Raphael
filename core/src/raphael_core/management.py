@@ -13,6 +13,7 @@ from typing import Any
 
 from .agent.policy import Tier
 from .members.skill_names import SKILL_NAME_RULE
+from .members.skill_paths import as_local
 
 # Trusted execution context, never an RPC/model argument. Clearing the very chat
 # that requested a change must not cancel or await its own executing tool.
@@ -347,7 +348,7 @@ def destructive(name, arguments, retention=None):
             return False
     if item is None:
         return False
-    if item.name == "member_skill_import" and str(arguments.get("source", "")).startswith("local:"):
+    if item.name == "member_skill_import" and str(as_local(arguments.get("source", ""))).startswith("local:"):
         return True
     if item.destructive or name == "manage_connection" and arguments.get("operation") == "disconnect":
         return True

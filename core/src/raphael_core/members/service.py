@@ -109,6 +109,7 @@ from ..slime_ids import current_avatar
 from ..services.attachments import IMAGE_TYPES, MAX_IMAGE_BYTES, AttachmentError, checked, sniff_ok
 from .capabilities import MemberCapabilities, download_skills
 from .skill_packages import SkillPackages
+from .skill_paths import as_local
 from . import skill_sources
 from .schedule import Schedule, first_eligible_slot, next_run
 from .covers import Covers, selection as cover_selection
@@ -942,6 +943,8 @@ class MembersService:
     async def _skills_import(self, params: dict) -> dict:
         member_id = self._skill_scope(params)
         args = {k: v for k, v in params.items() if k not in ("shared", "member_id")}
+        if "source" in args:
+            args["source"] = as_local(args["source"])
         if member_id != -1 and set(args) == {"source"} and isinstance(args["source"], str) and args["source"].startswith("local:"):
             # Keep version discovery and reimport semantics of an installed private skill.
             try:
@@ -1018,6 +1021,9 @@ class MembersService:
 
     async def _import_package(self, member, params, *, new_package=False):
         self._package_fields(params, ("source", "text", "file", "access", "name", "plugin", "set_id", "marketplace"))
+        if "source" in params:
+            # A path written any way is a folder on this computer, never a GitHub source.
+            params = {**params, "source": as_local(params["source"])}
         if "access" in params:
             if member != -1:
                 raise invalid_params("access is for shared packages")

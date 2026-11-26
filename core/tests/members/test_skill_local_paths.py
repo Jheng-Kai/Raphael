@@ -32,6 +32,15 @@ async def test_a_folder_written_as_a_path_imports_and_is_updated_from_where_it_i
     assert updated["key"] == package["key"]
 
 
+def test_a_local_path_in_any_form_asks_the_owner_before_a_member_imports_it():
+    from raphael_core.management import destructive
+
+    for source in (WINDOWS_CACHE, WINDOWS_SLASHES, "local:/tmp/skills", "~/skills"):
+        assert destructive("member_skill_import", {"member_id": 0, "source": source}) is True
+    assert not destructive("member_skill_import", {"member_id": 0, "source": "owner/repo"})
+    assert not destructive("member_skill_import", {"member_id": 0, "source": "https://github.com/owner/repo"})
+
+
 async def test_a_member_imports_a_folder_by_its_path_as_a_plugin_too(rig, tmp_path):
     folder = skill_folder(tmp_path / "desk", "tidy")
     made = await rig.call("members.skills.import", {"member_id": 0, "shared": True, "plugin": True, "source": str(folder)})
