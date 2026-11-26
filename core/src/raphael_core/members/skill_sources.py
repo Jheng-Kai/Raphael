@@ -148,8 +148,12 @@ def skill_roots(names, wanted=None):
         return [""]
     if not roots:
         raise no_skill()
-    # A skill may hold another skill's folder: each is a skill, and a file belongs to the deepest one that holds it.
-    return sorted(roots)
+    # A skill owns its whole folder: a SKILL.md inside it (a template, an example) is one of its files, not another skill.
+    ordered = []
+    for root in sorted(roots):
+        if not ordered or not root.startswith(ordered[-1]):
+            ordered.append(root)
+    return ordered
 
 
 PLUGIN_MANIFEST = ".claude-plugin/plugin.json"
@@ -175,8 +179,7 @@ def snapshot_entries(entries, read_entry, subpath, *, wanted=None, regular):
     for name, info in entries:
         normalized = name.removeprefix("./")
         parts = normalized.replace("\\", "/").split("/")
-        # The deepest skill folder that holds the entry owns it.
-        for length in range(len(parts) - 1, -1, -1):
+        for length in range(len(parts)):
             root = "/".join(parts[:length]) + "/" if length else ""
             snapshot = snapshots.get(root.casefold())
             if snapshot is None:
@@ -369,6 +372,7 @@ def local(source):
         for folder, dirs, _ in walk(path, remaining, hidden=True):
             if os.path.lexists(folder / "SKILL.md"):
                 folders.append(folder)
+                dirs.clear()
             elif len(folder.relative_to(path).parts) == MAX_DISCOVERY_DEPTH and dirs:
                 raise MemberError("size", f"{folder} is nested deeper than {MAX_DISCOVERY_DEPTH} folders", reason="depth",
                                   file=str(folder), limit=MAX_DISCOVERY_DEPTH)
@@ -376,10 +380,8 @@ def local(source):
             raise no_skill(str(path))
         result, size, count = [], 0, 0
         for folder in sorted(folders):
-            # What another skill's folder holds inside this one is that skill's own.
-            nested = {f.relative_to(folder).as_posix() for f in folders if f != folder and f.is_relative_to(folder)}
             snapshot = folder_snapshot(folder, skill_links=True, byte_limit=MAX_PACKAGE_BYTES - size,
-                                       entry_limit=MAX_PACKAGE_FILES - count, exclude=nested,
+                                       entry_limit=MAX_PACKAGE_FILES - count,
                                        prefix=folder.relative_to(path).as_posix() + "/" if folder != path else "")
             files = snapshot.finish()
             for parent in (folder, *folder.parents):
@@ -448,7 +450,7 @@ def _cached_files(path, entries, size):
 
 
 def folder_snapshot(path, *, byte_limit=None, entry_limit=None, depth_limit=None, installed=False, skill_links=False, cached=False,
-                    exclude=(), prefix=""):
+                    prefix=""):
     if any(linked(p) for p in (path, *path.parents)):
         raise invalid()
     snapshot = Snapshot(byte_limit, entry_limit)
@@ -466,8 +468,6 @@ def folder_snapshot(path, *, byte_limit=None, entry_limit=None, depth_limit=None
                     continue
                 relative = child.relative_to(path).as_posix()
                 if not installed and junk(relative):
-                    continue
-                if relative in exclude:
                     continue
                 # DirEntry.stat on Windows omits the hard-link count.
                 info = child.stat(follow_symlinks=False)

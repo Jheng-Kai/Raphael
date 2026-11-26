@@ -76,24 +76,22 @@ async def test_generated_and_system_folders_are_not_part_of_a_skill(rig, tmp_pat
 
 
 @pytest.mark.parametrize("kind", ["folder", "zip", "tgz"])
-async def test_a_skill_inside_another_skills_folder_is_a_skill_of_its_own(rig, tmp_path, kind):
+async def test_a_skill_document_inside_a_skills_folder_is_one_of_its_files_not_another_skill(rig, tmp_path, kind):
     entries = [("outer/SKILL.md", document("outer").encode()), ("outer/notes.md", b"outer notes"),
-               ("outer/examples/inner/SKILL.md", document("inner").encode()), ("outer/examples/inner/a.md", b"inner file")]
+               ("outer/templates/new/SKILL.md", b"---\nname: {{name}}\n---\nA template"), ("outer/templates/new/a.md", b"inner file"),
+               ("other/SKILL.md", document("other").encode())]
     if kind == "folder":
         for name, data in entries:
             path = tmp_path / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(data)
-        source = {"source": f"local:{tmp_path / 'outer'}"}
+        source = {"source": f"local:{tmp_path}"}
     else:
         source = upload(f"pair.{kind}", archive(entries, kind == "tgz"))
     package = (await rig.call("skills.library.import", source))["package"]
-    assert sorted(s["name"] for s in package["skills"]) == ["inner", "outer"]
-    shared = rig.service.capabilities.homes.home(-1) / "skills"
-    by_name = {s["name"]: sorted(p.relative_to(shared / str(s["id"])).as_posix()
-                                 for p in (shared / str(s["id"])).rglob("*") if p.is_file() and p.name != ".raphael-source.json")
-               for s in package["skills"]}
-    assert by_name == {"outer": ["SKILL.md", "notes.md"], "inner": ["SKILL.md", "a.md"]}
+    assert sorted(s["name"] for s in package["skills"]) == ["other", "outer"]
+    files = await stored(rig, {"skills": [s for s in package["skills"] if s["name"] == "outer"]})
+    assert sorted(files) == ["SKILL.md", "notes.md", "templates/new/SKILL.md", "templates/new/a.md"]
 
 
 async def test_the_one_guard_names_the_file_its_size_and_the_limit(rig, tmp_path, monkeypatch):
