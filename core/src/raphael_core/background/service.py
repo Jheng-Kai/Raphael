@@ -3657,7 +3657,7 @@ class BackgroundService:
             "SELECT id, member_id, state, (EXISTS (SELECT 1 FROM worker_questions q WHERE q.task_id=worker_tasks.id AND q.state='waiting') "
             "OR EXISTS (SELECT 1 FROM owner_questions q WHERE q.task_id=worker_tasks.id AND q.result IS NULL)) AS waiting_owner, "
             "(SELECT members.name FROM worker_tasks child JOIN members ON members.id=child.member_id "
-            "WHERE child.parent_task_id=worker_tasks.id AND child.state IN ('queued','running','waiting') ORDER BY child.id LIMIT 1) AS waiting_for "
+            "WHERE child.parent_task_id=worker_tasks.id AND child.mode IS NOT 'delegate' AND child.state IN ('queued','running','waiting') ORDER BY child.id LIMIT 1) AS waiting_for "
             f"FROM worker_tasks WHERE member_id IN ({','.join('?' for _ in chunk)}) AND state IN ('queued','running','waiting') ORDER BY id", chunk)]
             for task in tasks:
                 if task['waiting_for'] is None:

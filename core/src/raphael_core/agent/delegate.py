@@ -27,7 +27,6 @@ megabytes (`weight`). The children wait their turn in the queue and are never re
 Nothing here logs a goal, a context or a result.
 """
 
-import json
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -224,6 +223,3 @@ def results_text(results: list[dict[str, Any]]) -> dict[str, Any]:
         counts[item["status"]] = counts.get(item["status"], 0) + 1
     return {"note": RESULTS_NOTE, "counts": counts, "results": results}
 
-
-def as_json(data: Any) -> str:
-    return json.dumps(data, ensure_ascii=False)
