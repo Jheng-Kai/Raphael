@@ -974,3 +974,11 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .room-thread-dock { padding: var(--sp-3) var(--sp-5); }
 .room-side-thread .chat-message { max-width: 100%; }
 @media (min-width: 1100px) { .au-room-pane.has-side-thread > .ra-stage, .au-room-pane.has-side-thread > .page-head { margin-right: 440px; } }
+/* A column centred with `margin: auto` sits half a pixel off whenever the pane's width and the column's differ by an odd number, and
+   moves by half a pixel for each pixel the pane is dragged: its words are drawn a pixel further on every other frame. Its lead is the
+   same space rounded down to a whole pixel (the resting layout differs by under half a pixel). Where `round()` is unknown the
+   columns keep `margin: auto`. */
+@supports (margin-left: round(down, 1px, 1px)) {
+  .page-agent { --col-lead: max(0px, round(down, calc((100% - var(--pa-colw)) / 2), 1px)); }
+  .page-agent .ra-col, .page-agent .ra-dock > .composer, .page-agent .ra-dock > .ask-card, .page-agent .ra-dock > .draft-panel, .page-agent .peer-thread { margin-inline: var(--col-lead) 0; }
+}

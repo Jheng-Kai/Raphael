@@ -78,11 +78,11 @@ test("a centred column lands on whole pixels, so it moves by whole pixels while 
   // Centred with `margin: auto` a column sits half a pixel off whenever the pane's width and the column's differ by an odd number,
   // and moves by half a pixel for each pixel the pane is dragged: its words are drawn a pixel further on every other frame.
   const block = /@supports \(margin-left: round\(down, 1px, 1px\)\) \{([\s\S]*?)\n\}/.exec(agent)?.[1] ?? "";
-  expect(block).toContain("--pa-lead: max(0px, round(down, calc((100% - var(--pa-colw)) / 2), 1px));");
+  expect(block).toContain("--col-lead: max(0px, round(down, calc((100% - var(--pa-colw)) / 2), 1px));");
   for (const selector of [".ra-col", ".ra-dock > .composer", ".ra-dock > .ask-card", ".ra-dock > .draft-panel", ".peer-thread"]) {
     expect(block, selector).toContain(`.page-agent ${selector}`);
   }
-  expect(block).toContain("margin-inline: var(--pa-lead) 0;");
+  expect(block).toContain("margin-inline: var(--col-lead) 0;");
   // Where the round function is unknown the columns keep the centring they had.
   expect(agent).toContain(".ra-col { max-width: var(--pa-colw); margin: 0 auto; }");
 });

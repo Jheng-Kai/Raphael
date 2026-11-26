@@ -33,7 +33,7 @@ R-PERF-25 and R-PERF-26 cover the two edges the owner drags and the panes they o
 panel's are written for each pointer move as `--side-live` and `--panel-live` (`live-size.ts`), custom properties registered as not
 inherited and set only on the grid of the panes, the caption strip, a scrim, the panel and its page. They were `--sidebar-width` on the
 root and `--pa-det` on the page, which every element beneath inherits: each move restyled the whole window (1,000 to 1,500 elements,
-25 to 45 ms), the layout of the panes was 1 ms, and two frames in three were late. Holding the edge puts one `.edge-shield` over the
+25 to 45 ms), the layout of the panes was 1 ms, and two frames in three were late. Centred columns of the conversation (`.ra-col`, the composer, ask and draft cards) take a lead rounded down to a whole pixel (`--col-lead`), so they move by whole pixels while a pane is dragged; the centred words of the list's Connections pill still move by half pixels. Holding the edge puts one `.edge-shield` over the
 window for its cursor and its press (`edge-drag.ts`); it no longer sets `cursor` and `user-select` on the root. `resize-probe`
 (`scripts/look/resize-probe.mjs`) drags an edge out and back, or toggles a pane, and reports frames, style and layout work, the
 elements each write restyled (`recalcElementsPerWrite`), ResizeObserver runs and how the words moved (read where the owner sees
