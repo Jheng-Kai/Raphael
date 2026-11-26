@@ -63,6 +63,23 @@ describe("a verify run of only what changed (--changed)", () => {
     expect(core.args).toEqual(expect.arrayContaining(["-W", "error", "tests/members"]));
     expect(core.cwd).toBe(resolve(app, "../core"));
   });
+  it("runs the core tests that read a changed app file as text, such as the boundary test the shell's method list feeds", () => {
+    const { coreTargets } = verifyModule;
+    const exists = path => path.startsWith("tests/architecture/");
+    expect(coreTargets(["app/src-tauri/src/commands.rs"], exists)).toEqual(["tests/architecture/test_boundaries.py", "tests/architecture/test_management_coverage.py"]);
+    expect(coreTargets(["app/src/main/api.ts", "core/src/raphael_core/management.py"], exists)).toEqual(["tests/architecture/test_management_coverage.py"]);
+    expect(of(["app/src-tauri/src/commands.rs"], "core").args).toEqual(expect.arrayContaining(["tests/architecture/test_management_coverage.py"]));
+  });
+  it("knows every app file a core test reads as text", () => {
+    const { READ_BY_CORE_TESTS } = verifyModule;
+    const core = resolve(app, "../core"), listing = spawnSync("git", ["ls-files", "tests/**/*.py"], { cwd: core, encoding: "utf8" });
+    const reads = [];
+    for (const test of listing.stdout.split("\n").filter(Boolean)) {
+      for (const match of readFileSync(join(core, test), "utf8").matchAll(/\/ "(app\/[^"]+\.(?:ts|rs|mjs))"\)\.read_text/g)) reads.push([match[1], test]);
+    }
+    expect(reads.length).toBeGreaterThan(3);
+    for (const [file, test] of reads) expect(READ_BY_CORE_TESTS[file] ?? [], `${test} reads ${file}`).toContain(test);
+  });
   it("checks contrast only when CSS changed and Rust formatting only when Rust changed", () => {
     expect(run(["app/src/main/agent.ts"]).map(check => check.name)).not.toContain("contrast");
     expect(run(["app/src/main/agent.css"]).map(check => check.name)).toContain("contrast");
