@@ -32,10 +32,12 @@ EXEC = "mcp:local/local_exec"
 
 @pytest.fixture
 def place(conn, tmp_path, monkeypatch):
-    """The owner's home with a project, another folder, and a member's own folder and the team's."""
+    """The owner's home with two projects (`project`, `other`), a folder that is no project (`elsewhere`), and a member's own
+    folder and the team's."""
     home = tmp_path / "home"
-    paths = SimpleNamespace(home=home, project=home / "project", other=home / "other", own=home / "own", team=home / "team")
-    for folder in (paths.project / "sub", paths.other, paths.own, paths.team):
+    paths = SimpleNamespace(home=home, project=home / "project", other=home / "other", elsewhere=home / "elsewhere",
+                            own=home / "own", team=home / "team")
+    for folder in (paths.project / "sub", paths.other, paths.elsewhere, paths.own, paths.team):
         folder.mkdir(parents=True)
     monkeypatch.setattr(owner_files, "_home", lambda: home)
     hub, host = local_hub(conn)
@@ -70,16 +72,19 @@ def test_with_no_project_chosen_a_member_writes_its_own_folder_and_the_team_fold
     place.settings.set("project_folders", [str(place.project)])
     for folder in (place.own, place.team):
         assert tier(place, folder / "a.md") == Tier.T2 and not place.hub.firm_for_call(WRITE, args(folder / "a.md"))
-    for elsewhere in (place.project, place.other, place.home):
+    for elsewhere in (place.other, place.home):
         assert tier(place, elsewhere / "a.md") == Tier.T3 and place.hub.firm_for_call(WRITE, args(elsewhere / "a.md")), elsewhere
+    # A remembered project is none of the member's: it is never written, so nothing asks for it (R-FILE-06).
+    assert tier(place, place.project / "a.md") == Tier.T0 and not place.hub.firm_for_call(WRITE, args(place.project / "a.md"))
 
 
 def test_with_a_project_chosen_a_member_writes_that_project_alone(place):
     choose(place)
     assert tier(place, place.project / "sub" / "a.md") == Tier.T2
     assert not place.hub.firm_for_call(WRITE, args(place.project / "a.md"))
-    for elsewhere in (place.own, place.team, place.other, place.home):
+    for elsewhere in (place.own, place.team, place.elsewhere, place.home):
         assert tier(place, elsewhere / "a.md") == Tier.T3 and place.hub.firm_for_call(WRITE, args(elsewhere / "a.md")), elsewhere
+    assert tier(place, place.other / "a.md") == Tier.T0 and not place.hub.firm_for_call(WRITE, args(place.other / "a.md"))
 
 
 def test_a_project_that_is_gone_from_the_disk_is_no_choice(place):
@@ -87,14 +92,17 @@ def test_a_project_that_is_gone_from_the_disk_is_no_choice(place):
     choose(place, place.other)
     assert tier(place, place.other / "a.md") == Tier.T2
     shutil.rmtree(place.other)
-    assert tier(place, place.own / "a.md") == Tier.T2 and tier(place, place.project / "a.md") == Tier.T3
+    # Taken off the disk it is still a remembered project, and none is chosen: the member's own folder is its work folder.
+    assert tier(place, place.own / "a.md") == Tier.T2 and tier(place, place.project / "a.md") == Tier.T0
+    assert tier(place, place.elsewhere / "a.md") == Tier.T3
 
 
 def test_dot_dot_and_the_name_of_a_parent_do_not_leave_the_work_folder_unseen(place):
     choose(place)
     assert tier(place, place.project / "sub" / ".." / "a.md") == Tier.T2
-    assert tier(place, place.project / ".." / "other" / "a.md") == Tier.T3
-    assert place.hub.tier_for_call(WRITE, args("~/project/../other/a.md")) == Tier.T3
+    assert tier(place, place.project / ".." / "elsewhere" / "a.md") == Tier.T3
+    assert place.hub.tier_for_call(WRITE, args("~/project/../elsewhere/a.md")) == Tier.T3
+    assert tier(place, place.project / ".." / "other" / "a.md") == Tier.T0  # another project: never written
     assert place.hub.tier_for_call(WRITE, args("project/sub/../a.md")) == Tier.T2  # a relative name is taken from the home
     assert tier(place, place.home) == Tier.T3 and tier(place, place.project.with_name("project-two") / "a.md") == Tier.T3
 
@@ -104,23 +112,23 @@ def test_another_case_of_the_project_is_the_same_folder_where_the_disk_does_not_
     choose(place)
     shouted = str(place.project / "a.md").swapcase()
     assert tier(place, shouted) == Tier.T2
-    assert tier(place, str(place.other / "a.md").swapcase()) == Tier.T3
+    assert tier(place, str(place.elsewhere / "a.md").swapcase()) == Tier.T3
 
 
 def test_a_link_inside_the_project_that_leads_out_is_outside(place):
     choose(place)
-    _link_folder(place.project / "door", place.other)
+    _link_folder(place.project / "door", place.elsewhere)
     assert tier(place, place.project / "door" / "a.md") == Tier.T3
     assert place.hub.firm_for_call(WRITE, args(place.project / "door" / "a.md"))
 
 
 async def test_a_write_through_a_link_that_leads_out_is_not_made_without_a_yes_and_lands_where_it_leads_with_one(place):
     choose(place)
-    _link_folder(place.project / "door", place.other)
+    _link_folder(place.project / "door", place.elsewhere)
     refused = await write(place, place.project / "door" / "a.md")
-    assert refused.kind == "approval_required" and not (place.other / "a.md").exists()
+    assert refused.kind == "approval_required" and not (place.elsewhere / "a.md").exists()
     made = await write(place, place.project / "door" / "a.md", approver="user")
-    assert made.ok and (place.other / "a.md").read_text() == "x"
+    assert made.ok and (place.elsewhere / "a.md").read_text() == "x"
 
 
 def test_a_link_from_elsewhere_into_the_project_is_the_project(place):
@@ -133,11 +141,11 @@ async def test_a_dangling_link_inside_the_project_is_judged_by_where_it_points(p
     choose(place)
     link = place.project / "dangling.md"
     try:
-        link.symlink_to(place.other / "missing.md")
+        link.symlink_to(place.elsewhere / "missing.md")
     except OSError:
         pytest.skip("this account may not make file links")
     assert tier(place, link) == Tier.T3
-    assert (await write(place, link)).kind == "approval_required" and not (place.other / "missing.md").exists()
+    assert (await write(place, link)).kind == "approval_required" and not (place.elsewhere / "missing.md").exists()
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows' own path forms")
@@ -145,7 +153,8 @@ def test_windows_long_and_device_forms_name_the_place_they_reach_and_a_device_is
     choose(place)
     assert tier(place, "\\\\?\\" + str(place.project / "a.md")) == Tier.T2
     assert tier(place, "\\\\.\\" + str(place.project / "a.md")) == Tier.T2
-    assert tier(place, "\\\\?\\" + str(place.other / "a.md")) == Tier.T3
+    assert tier(place, "\\\\?\\" + str(place.elsewhere / "a.md")) == Tier.T3
+    assert tier(place, "\\\\?\\" + str(place.other / "a.md")) == Tier.T0  # a remembered project that is not the member's
     assert tier(place, str(place.project / "a.md").replace("\\", "/")) == Tier.T2
     assert tier(place, "\\\\?\\UNC\\server\\share\\a.md") == Tier.T3 and tier(place, "\\\\server\\share\\a.md") == Tier.T3
     for device in ("\\\\.\\pipe\\x", "\\\\?\\GLOBALROOT\\Device\\x", "\\\\.\\PhysicalDrive0", str(place.project / "NUL"),
@@ -176,7 +185,7 @@ def test_a_short_8_3_name_of_the_project_is_the_project(place):
     place.settings.set("project_folders", [str(folder)])
     place.settings.set("member_work_folder", {"0": str(folder)})
     assert tier(place, buffer.value + "\\a.md") == Tier.T2
-    assert tier(place, str(place.other / "a.md")) == Tier.T3
+    assert tier(place, str(place.elsewhere / "a.md")) == Tier.T3
 
 
 # --- what the owner is asked, in every mode but 全部允許 --------------------------------------------------------------------
@@ -187,12 +196,12 @@ def test_a_write_outside_the_work_folder_is_asked_in_every_permission_mode_but_a
     choose(place)
     place.settings.set("action_mode", mode)
     gate = ToolGate(place.hub, conn=place.conn)
-    outside = args(place.other / "a.md")
+    outside = args(place.elsewhere / "a.md")
     assert gate.tier(WRITE, outside) == Tier.T3 and not gate.waived(Action(WRITE, outside))
     # 全部允許 is the owner's yes to leaving the folder: nothing asks. Every other mode asks, firmly (no Always waives it).
     assert gate.needs_confirmation(WRITE, outside) is (mode != "bypass")
     assert gate.firm_confirmation(WRITE, outside) is (mode != "bypass")
-    assert gate.needs_confirmation(WRITE, args(place.project / "a.md")) is (mode != "bypass")
+    assert not gate.needs_confirmation(WRITE, args(place.other / "a.md"))  # an unchosen project asks nothing: it is refused
 
 
 @pytest.mark.parametrize("mode", ASKING)
@@ -200,21 +209,21 @@ async def test_the_door_refuses_an_outside_write_that_came_without_the_owners_ye
     choose(place)
     place.settings.set("action_mode", mode)
     gate = ToolGate(place.hub, conn=place.conn)
-    outside = args(place.other / "a.md")
+    outside = args(place.elsewhere / "a.md")
     refused = await gate.call_plugin(WRITE, outside)
-    assert refused.kind == "approval_required" and not (place.other / "a.md").exists()
+    assert refused.kind == "approval_required" and not (place.elsewhere / "a.md").exists()
     # A yes for another change is no yes for this one, and a no is no yes.
     confirmations = Confirmations()
-    other = Action(WRITE, args(place.other / "b.md"))
+    other = Action(WRITE, args(place.elsewhere / "b.md"))
     yes = confirmations.resolve(confirmations.open("s", 1, other, Tier.T3, "en").id, True).approval
     assert (await gate.call_plugin(WRITE, outside, approval=yes, action=other)).kind == "approval_required"
     action = Action(WRITE, outside)
     no = confirmations.resolve(confirmations.open("s", 1, action, Tier.T3, "en").id, False)
     assert no.approval is None and (await gate.call_plugin(WRITE, outside, action=action)).kind == "approval_required"
-    assert not (place.other / "a.md").exists() and not (place.other / "b.md").exists()
+    assert not (place.elsewhere / "a.md").exists() and not (place.elsewhere / "b.md").exists()
     yes = confirmations.resolve(confirmations.open("s", 1, action, Tier.T3, "en").id, True).approval
     made = await gate.call_plugin(WRITE, outside, approval=yes, action=action)
-    assert made.ok and (place.other / "a.md").read_text() == "x"
+    assert made.ok and (place.elsewhere / "a.md").read_text() == "x"
 
 
 async def test_allow_all_still_writes_inside_the_work_folder_without_a_card(make_rig, client, conn, place):
@@ -231,7 +240,7 @@ async def test_allow_all_writes_outside_the_work_folder_without_a_card(make_rig,
     choose(place)
     rig = make_rig(plugins=place.hub, gate=ToolGate(place.hub, conn=conn), permissions=PermissionCards(conn))
     rig.settings.set("action_mode", "bypass")
-    target = place.other / "note.md"
+    target = place.elsewhere / "note.md"
     client.chats = [chat("Saving.", ("owner_files__write_file", args(target, "hello\n"))), chat('{"text":"Saved."}')]
     done = await typed(rig, "Save a note")
     assert done["status"] != "confirm" and target.read_text() == "hello\n"
@@ -242,7 +251,7 @@ async def test_a_write_outside_the_work_folder_asks_before_it_is_made_and_not_a_
     choose(place)
     rig = make_rig(plugins=place.hub, gate=ToolGate(place.hub, conn=conn), permissions=PermissionCards(conn))
     rig.settings.set("action_mode", mode)
-    target = place.other / "note.md"
+    target = place.elsewhere / "note.md"
     client.chats = [chat("Saving.", ("owner_files__write_file", args(target, "hello\n"))), chat('{"text":"Not saved."}')]
     asked = await typed(rig, "Save a note")
     assert asked["status"] == "confirm" and asked["confirm"]["tier"] == "T3"
@@ -272,12 +281,12 @@ async def test_a_command_runs_in_the_work_folder_unless_it_says_another(place):
     token = {"command": "Get-Location"}
     assert (await place.hub.call(EXEC, token, approver="user")).ok
     assert place.host.execute.await_args.kwargs["cwd"] == str(place.project)
-    assert (await place.hub.call(EXEC, {**token, "cwd": str(place.other)}, approver="user")).ok
-    assert place.host.execute.await_args.kwargs["cwd"] == str(place.other)
+    assert (await place.hub.call(EXEC, {**token, "cwd": str(place.elsewhere)}, approver="user")).ok
+    assert place.host.execute.await_args.kwargs["cwd"] == str(place.elsewhere)
 
 
 def outside_command(place):
-    return {"command": f"Set-Content -Path '{(place.other / 'a.txt').as_posix()}' -Value hello"}
+    return {"command": f"Set-Content -Path '{(place.elsewhere / 'a.txt').as_posix()}' -Value hello"}
 
 
 @pytest.mark.parametrize("commands", ["ask", "always"])
@@ -357,10 +366,10 @@ async def test_allow_all_runs_a_command_outside_the_work_folder_where_no_card_ca
 def test_a_relative_target_is_taken_from_the_folder_the_command_runs_in(place):
     choose(place)
     assert not place.hub.shell_outside({"command": "echo hi > out.txt"})
-    assert place.hub.shell_outside({"command": "echo hi > ../other/out.txt"})
-    assert place.hub.shell_outside({"command": "echo hi > out.txt", "cwd": str(place.other)})
+    assert place.hub.shell_outside({"command": "echo hi > ../elsewhere/out.txt"})
+    assert place.hub.shell_outside({"command": "echo hi > out.txt", "cwd": str(place.elsewhere)})
     assert place.hub.shell_outside({"command": "echo hi > out.txt", "cwd": "relative/folder"})  # not a place it can name
-    assert not place.hub.shell_outside({"command": "Get-ChildItem", "cwd": str(place.other)})  # a read names no file
+    assert not place.hub.shell_outside({"command": "Get-ChildItem", "cwd": str(place.elsewhere)})  # a read names no file
 
 
 def test_the_work_area_names_the_folders_of_the_member(place):

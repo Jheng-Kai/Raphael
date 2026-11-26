@@ -651,14 +651,27 @@ class BackgroundService:
             "SELECT 1 FROM worker_tasks WHERE routine_id=? AND id>? AND state IN ('queued','running','waiting','done') LIMIT 1",
             (task.routine_id, task.id)).fetchone() is not None
 
-    def _remove_failed_turn(self, task: Task, turn: Turn) -> None:
-        """Take one finished failed run's turn out of the history, and the app is told as when a turn is deleted."""
+    def _is_latest_run(self, turn_id: int, routine_id: int) -> bool:
+        """Whether the routine's run that has this turn is its newest, by the routine's own run rows: a run refused before a worker
+        took it has a row and no task, and is still a newer run. A run whose row is gone (a recovery already cleaned it) is never
+        the latest."""
+        row = self._metrics_conn.execute("SELECT MAX(id) FROM routine_runs WHERE routine_id=? AND turn_id=?", (routine_id, turn_id)).fetchone()
+        if row is None or row[0] is None:
+            return False
+        return self._metrics_conn.execute("SELECT 1 FROM routine_runs WHERE routine_id=? AND id>? LIMIT 1", (routine_id, row[0])).fetchone() is None
+
+    def _remove_failed_turn(self, task: Task, turn: Turn, latest: bool | None = None) -> None:
+        """Take one finished failed run's turn out of the history, and the app is told as when a turn is deleted. `latest` says
+        whether the run was its routine's newest (`_is_latest_run`), worked out here when not given."""
         try:
+            if task.routine_id is not None and latest is None:
+                latest = self._is_latest_run(turn.id, task.routine_id)
             with self._metrics_conn:
                 self._metrics_conn.execute("DELETE FROM routine_runs WHERE turn_id=?", (turn.id,))
-                if task.routine_id is not None:
+                if task.routine_id is not None and latest:
                     from ..members.service import _line
                     said = _line((turn.text or turn.detail or "").strip().split("\n\n")[0])
+                    # Only the routine's latest run says its error: an older failure's words never clear a newer one's.
                     self._metrics_conn.execute("UPDATE routines SET last_error='' WHERE id=? AND last_error=?", (task.routine_id, said))
             deleted = self._history.delete(turn.id)
         except sqlite3.Error as exc:
@@ -3463,6 +3476,20 @@ class BackgroundService:
 
     # --- the methods of the app -----------------------------------------------------------------
 
+    async def _original_files(self, origin: Turn) -> list[Attachment]:
+        """The files the owner handed over with the message of `origin`, read from the store as the original hand-off had them
+        in memory; one that is gone is left out."""
+        files: list[Attachment] = []
+        if not origin.attachments or self._attachment_store is None:
+            return files
+        for metadata in origin.attachments:
+            try:
+                data = await asyncio.to_thread(self._attachment_store.path(metadata.get("id")).read_bytes)
+                files.append(Attachment(metadata["name"], metadata["mime"], data, metadata["id"]))
+            except (RpcError, OSError, KeyError):
+                logger.warning("A rerun's attachment is unavailable")
+        return files
+
     async def _rerun(self, params: dict) -> dict:
         """Run a task that did not finish again, as a new task, with a new turn in the history that
         is the same as the first (its source too). Nothing stops the new attempt from repeating
@@ -3475,6 +3502,10 @@ class BackgroundService:
             raise RpcError(NOT_FOUND, "There is no such task")
         if old.state not in RERUNNABLE or not old.text.strip():
             raise invalid_params("only a task that did not finish can run again")
+        if self._metrics_conn.execute("SELECT 1 FROM worker_tasks WHERE rerun_of=? LIMIT 1", (old.id,)).fetchone():
+            # A second request for the same failure (a double press, a retry of the call) starts nothing: the first one's
+            # attempt is the one to run again, and the failed turn it replaced is gone.
+            raise invalid_params("this task was already run again")
         earlier = self._history.get(old.turn_id) if old.turn_id else None
         if old.scope != "private" and earlier is None:
             raise invalid_params("the scoped task source is unavailable")
@@ -3482,6 +3513,22 @@ class BackgroundService:
         if speaker is None:
             raise RpcError(NOT_FOUND, "The member of that task is gone")
         model = self._text_setting("agent_model")
+        files = await self._original_files(earlier) if earlier is not None and old.mode is None else []
+        # Everything is looked at again once the files are read: the history or the tasks may have been cleared, the member
+        # deleted, or a second request may have come in meanwhile. Nothing is started for what is gone.
+        # A cleared database can hand an id to a different row, so the rows are compared by what identifies them, not by their ids.
+        current = self._store.get(old.id)
+        again = self._history.get(earlier.id) if earlier is not None else None
+        if (current is None or current.state not in RERUNNABLE
+                or (current.created_at_ms, current.session_id, current.text, current.turn_id, current.member_id, current.routine_id)
+                != (old.created_at_ms, old.session_id, old.text, old.turn_id, old.member_id, old.routine_id)
+                or earlier is not None and (again is None or (again.created_at_ms, again.session_id, again.question, again.member_id, again.conversation_id)
+                                            != (earlier.created_at_ms, earlier.session_id, earlier.question, earlier.member_id, earlier.conversation_id))):
+            raise RpcError(NOT_FOUND, "There is no such task")
+        if self._speaker(old.member_id) is None:
+            raise RpcError(NOT_FOUND, "The member of that task is gone")
+        if self._metrics_conn.execute("SELECT 1 FROM worker_tasks WHERE rerun_of=? LIMIT 1", (old.id,)).fetchone():
+            raise invalid_params("this task was already run again")  # a second request came in while the files were read
         try:
             new_id = self.submit(
                 session_id=old.session_id,
@@ -3489,6 +3536,7 @@ class BackgroundService:
                 language=old.language,
                 model=model,
                 rerun_of=old.id,
+                attachments=files,
                 member_id=old.member_id,
                 routine_id=old.routine_id,
             )
@@ -3506,9 +3554,11 @@ class BackgroundService:
             # A routine's run started again is still the routine's run: its words are the routine's (the member's instructions
             # written by whoever made it), never the owner's message in the member's conversation.
             routine_run = old.routine_id is not None and earlier is not None and earlier.route == "routine"
+            latest = self._is_latest_run(earlier.id, old.routine_id) if routine_run else None  # before the new run has its row
             turn_id = history.add(
                 session_id=f'work:{new_id}' if old.mode == 'work' else old.session_id,
-                question=earlier.question if routine_run else '' if old.mode == 'work' else old.text,
+                # The owner's message stands as it was sent (what it said, not the instruction it expanded to), with its quote and files.
+                question=earlier.question if routine_run or earlier is not None and old.mode != 'work' else '' if old.mode == 'work' else old.text,
                 route="routine" if routine_run else "worker" if old.mode == "work" else "delegate",
                 prefix=PREFIXES[old.language].understood if speaker.is_raphael and not routine_run else "",
                 text="" if routine_run or old.mode == "work" else phrase(old.language, "handoff"),
@@ -3522,6 +3572,7 @@ class BackgroundService:
                 room_id=earlier.room_id if earlier is not None else None,
                 thread_id=earlier.thread_id if earlier is not None else None,
                 source_turn_id=earlier.source_turn_id if earlier is not None else None,
+                **({"quote": earlier.quote, "attachments": earlier.attachments or ()} if earlier is not None and not routine_run and old.mode != 'work' else {}),
             )
             self._store.attach_turn(new_id, turn_id)
             if routine_run:
@@ -3533,6 +3584,10 @@ class BackgroundService:
             if exchange_id is not None:
                 with self._metrics_conn:
                     self._metrics_conn.execute('UPDATE agent_turns SET session_id=? WHERE id=?',(f'handoff:{turn_id}',exchange_id))
+            # The new attempt stands in the place of the one it repeats: the failure it answers leaves the history (a reload
+            # must not bring it back), so the owner reads the newest attempt alone, and if that fails too, only its failure.
+            if earlier is not None and old.mode is None and earlier.scope == "private" and old.scope == "private":
+                self._remove_failed_turn(old, earlier, latest)
         except sqlite3.Error as exc:
             logger.warning("Could not write the turn of a rerun: %s", type(exc).__name__)
         self._changed(new_id, QUEUED)

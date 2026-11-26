@@ -286,6 +286,64 @@ describe("rendered look checks", () => {
       expect(() => checkRendered("slime-marks-at-rest")).toThrow("idle has no running animation");
     } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
   });
+  it("requires the chief's crown once on every face, with no transform of its own and none in the rim (issue 327)", () => {
+    const browser = new Window();
+    const face = member => `<span class="mb-av-slime"><span class="slime-surface" data-slime-still="${member}" data-state="idle"><svg class="slime"><g class="slime-back"><g class="slime-rim"></g></g><path class="slime-body"/><g class="slime-marks"><g class="slime-mark"><g class="slime-crown"><path d="M 0 0 L 1 1"/></g></g></g></svg></span></span>`;
+    browser.document.body.innerHTML = `<div class="look-slime-board" data-samples="50">${face(0).repeat(50)}</div>`;
+    const place = (element, box) => { element.getBoundingClientRect = () => box; };
+    const inside = { left: 10, top: 10, right: 50, bottom: 50, width: 40, height: 40 };
+    for (const element of browser.document.querySelectorAll("*")) place(element, inside);
+    vi.stubGlobal("document", browser.document);
+    vi.stubGlobal("innerWidth", 720); vi.stubGlobal("innerHeight", 900);
+    const board = browser.document.querySelector(".look-slime-board");
+    try {
+      expect(checkRendered("slime-crown")).toEqual({ check: "slime-crown", surfaces: 50 });
+      // a face outside the window is clipped by the board and is not in the screenshot
+      const container = browser.document.querySelector(".mb-av-slime"), first = container.querySelector(".slime-surface");
+      place(container, { left: 10, top: 950, right: 50, bottom: 990, width: 40, height: 40 });
+      expect(() => checkRendered("slime-crown")).toThrow("1 of 50 slimes lie outside the 720x900 window");
+      // a container shrunk to nothing is not in it either, wherever it is
+      place(container, { left: 10, top: 950, right: 10, bottom: 950, width: 0, height: 0 });
+      expect(() => checkRendered("slime-crown")).toThrow("1 of 50 slimes have no size");
+      place(container, inside);
+      place(first, { left: 10, top: 10, right: 10, bottom: 10, width: 0, height: 0 });
+      expect(() => checkRendered("slime-crown")).toThrow("1 of 50 slimes have no size");
+      place(first, inside);
+      expect(checkRendered("slime-crown")).toEqual({ check: "slime-crown", surfaces: 50 });
+      // a board that lost one of the samples it was asked for, and one that does not say how many it was asked for
+      container.remove();
+      expect(() => checkRendered("slime-crown")).toThrow("the board draws 49 slimes of the 50 it was asked for");
+      board.prepend(container);
+      delete board.dataset.samples;
+      expect(() => checkRendered("slime-crown")).toThrow("of the NaN it was asked for");
+      board.dataset.samples = "50";
+      // a second copy in the rim behind the first
+      const rim = browser.document.querySelector(".slime-rim");
+      rim.innerHTML = '<g class="slime-crown"></g>';
+      expect(() => checkRendered("slime-crown")).toThrow("2 crowns are in the drawing");
+      rim.innerHTML = "";
+      // a transform of its own, read about another origin by an engine, sets the crown down elsewhere
+      const crown = browser.document.querySelector(".slime-crown");
+      crown.setAttribute("transform", "translate(71.6 33.7) rotate(30)");
+      expect(() => checkRendered("slime-crown")).toThrow("transform of its own");
+      crown.removeAttribute("transform");
+      crown.remove();
+      expect(() => checkRendered("slime-crown")).toThrow("0 crowns are painted");
+    } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
+  });
+  it("lets only the chief's faces wear the crown", () => {
+    const browser = new Window();
+    const face = (member, crown) => `<span class="slime-surface" data-slime-still="${member}"><svg class="slime"><path class="slime-body"/><g class="slime-marks">${crown ? '<g class="slime-mark"><g class="slime-crown"><path d="M 0 0 L 1 1"/></g></g>' : ""}</g></svg></span>`;
+    browser.document.body.innerHTML = `<button class="mb-chief">${face(0, true)}</button><div class="mb-list">${face(3, false)}</div>`;
+    for (const element of browser.document.querySelectorAll("*")) element.checkVisibility = () => true;
+    for (const element of browser.document.querySelectorAll("*")) element.getBoundingClientRect = () => ({ left: 0, top: 0, right: 10, bottom: 10, width: 10, height: 10 });
+    vi.stubGlobal("document", browser.document);
+    try {
+      expect(checkRendered("chief-crown")).toEqual({ check: "chief-crown", faces: 1 });
+      browser.document.querySelector(".mb-list .slime-marks").innerHTML = '<g class="slime-mark"><g class="slime-crown"></g></g>';
+      expect(() => checkRendered("chief-crown")).toThrow("1 faces wear a crown that are not the chief's");
+    } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
+  });
   it("requires a rounded square latest button with its own opaque surface, centred just above the composer (R-UI-98, R-UI-105)", () => {
     const browser = new Window();
     browser.document.body.innerHTML = '<div><div class="ra-scroll" style="scrollbar-width:none"></div><button class="conversation-latest" style="border:1px solid gray;border-radius:8px;background:white"></button></div><form class="composer"></form>';
@@ -619,22 +677,6 @@ describe("rendered look checks", () => {
       window.document.querySelector('.diagram-view').innerHTML = '<svg></svg>';
       expect(() => checkRendered('rich-fallback')).toThrow('keeps source');
     } finally { vi.unstubAllGlobals(); window.happyDOM.abort(); }
-  });
-  it("allows a dialog close placed in its own column, and nothing more than that reach (R-UI-179)", () => {
-    const window = new Window();
-    window.document.body.innerHTML = '<div class="modal-body"><header class="set-head"><h1>一般</h1><button class="btn icon close-button" style="position:absolute"><svg></svg></button></header></div>';
-    const header = window.document.querySelector('header'), close = window.document.querySelector('.close-button');
-    for (const element of window.document.querySelectorAll('*')) element.getBoundingClientRect = () => ({ left: 10, top: 10, right: 310, bottom: 46, width: 300, height: 36 });
-    close.getBoundingClientRect = () => ({ left: 330, top: 10, right: 366, bottom: 46, width: 36, height: 36 });
-    Object.defineProperty(header, 'clientWidth', { value: 300 });
-    let scroll = 356;
-    Object.defineProperty(header, 'scrollWidth', { get: () => scroll });
-    const overflow = () => auditDocument(window.document, { width: 1120, height: 900 }, []).horizontalOverflow.elements.map(item => item.class);
-    try {
-      expect(overflow()).not.toContain('set-head');
-      scroll = 420;
-      expect(overflow()).toContain('set-head');
-    } finally { window.happyDOM.abort(); }
   });
   it("measures SVG overflow at its CSS container and allows only rich code's local horizontal scroll", () => {
     const window = new Window();
@@ -1087,11 +1129,12 @@ describe("rendered look checks", () => {
     // The ⋯ and the menu it opens are where they belong, and the Settings window is still a page.
     expect(rule('<div class="row"><button class="btn icon" data-overflow aria-label="「共同記憶」的選項"></button></div><div class="menu" role="menu"><button role="menuitem" class="danger">全部清除</button></div>')).toEqual([]);
     expect(rule('<div class="modal" role="dialog"><div class="row"><button class="btn danger">清除</button></div></div>')).toEqual(['清除']);
-    // A dialog about one thing, a model's own question, what is being composed, and words that destroy nothing.
+    // A question that replaces a row in its own place is no dialog: the red confirmation dialog asks instead.
+    expect(rule('<div class="lm-row"><div class="lm-confirm"><button class="btn danger">刪除</button></div></div>')).toEqual(['刪除']);
+    // A dialog about one thing, what is being composed, and words that destroy nothing.
     for (const allowed of [
       '<div class="mb-dialog" role="dialog"><button class="btn danger">刪除例行任務</button></div>',
       '<div class="cs-dialog" role="dialog"><button class="btn danger">移除</button></div>',
-      '<div class="lm-row"><div class="lm-confirm"><button class="btn danger">刪除</button></div></div>',
       '<div class="composer"><button class="chip-x" aria-label="移除檔案"></button></div>',
       '<section class="draft-panel"><button class="btn icon" aria-label="移除 小葵"></button></section>',
       '<button class="mp-star" aria-label="Remove from favourites: Luna"></button>',

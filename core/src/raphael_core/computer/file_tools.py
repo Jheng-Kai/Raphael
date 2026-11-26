@@ -23,6 +23,7 @@ from ..agent.plugins import PluginResult
 from ..services.attachments import Attachment, sniff_ok
 from ..services.file_reader import decoded as decoded_text
 from ..services.lines import read_lines
+from ..work_area import UNCHOSEN_WORDS
 from .vm import GUEST, VmError, exec_args
 
 # How the model of the call that reads an image takes it: (whether it reads images itself, what describes them when it
@@ -149,11 +150,12 @@ BINARY = ("This file is not text, a picture or a PDF ({size:,} bytes), so read_f
 NOT_A_FILE = {"directory": "This path is a folder, not a file.",
               "link": "This path is a link. Use the path it points to.",
               "other": "This path is not a regular file."}
-GUEST_ERRORS = {"outside": "outside_work_area", "EACCES": "permission_denied", "EPERM": "permission_denied", "ELOOP": "link", "ENOTDIR": "not_a_folder",
+GUEST_ERRORS = {"outside": "outside_work_area", "unchosen": "forbidden", "EACCES": "permission_denied", "EPERM": "permission_denied", "ELOOP": "link", "ENOTDIR": "not_a_folder",
                 "EISDIR": "not_a_file", "ENOSPC": "disk_full", "EROFS": "read_only", "EINVAL": "bad_path",
                 "ENAMETOOLONG": "bad_path"}
 GUEST_WORDS = {"outside_work_area": "This path leads out of your work folder onto the owner's PC (a link in the computer does), "
                                      "so it was not written. Write at the path it leads to: the owner is asked about that.",
+               "forbidden": UNCHOSEN_WORDS,
                "permission_denied": "Permission denied: the computer's user cannot open this path.",
                "link": "A folder on this path is a link, which is not followed inside the workspace or the team folder.",
                "not_a_folder": "A part of this path is a file, not a folder.",
@@ -270,10 +272,16 @@ class Files:
                          "with vm_exec and read that.")
     PDF_TOO_LARGE = "This PDF is {size:,} bytes; read_file reads PDFs of at most 20 MiB. Use vm_exec (pdftotext, python3) for a larger one."
 
-    def __init__(self, vm, target, reads, run, checkpoint, history=None, allowed=None):
+    def __init__(self, vm, target, reads, run, checkpoint, history=None, allowed=None, refused=None, guard=None):
         self.vm, self.target, self.reads, self.run, self.checkpoint, self.history = vm, target, reads, run, checkpoint, history
+        # What decides a write immediately before it is made, against what is true then (the owner's choices may change while
+        # the call waits): () -> (None or (kind, words) of a refusal, `allowed`, `refused`). Replaces both when given.
+        self.guard = guard
         # The folders of this PC a write may reach, when it was not asked about (`files_guest.confined`); None: any.
         self.allowed = allowed
+        # The folders of this PC no write ever reaches, not even through a link made inside the computer, whatever was said:
+        # the mounts of the owner's projects that are not the member's (`files_guest.confined`); None: none.
+        self.refused = refused
 
     async def look(self, path, limit=0, line=1):
         return await self.vm.file_request(self.target, {"action": "read", "path": path, "limit": limit, "line": line},
@@ -387,10 +395,24 @@ class Files:
             raise Refused("changed_since_read", CHANGED)
 
     async def put(self, path, data, expected):
+        allowed, refused = self.allowed, self.refused
+        if self.guard is not None and (verdict := self.guard()[0]) is not None:
+            raise Refused(*verdict)  # a refused call makes no checkpoint (R-FILE-03)
         await self.checkpoint()
+        inside = None
+        if self.guard is not None:
+            # Decided again against what is true now (the checkpoint takes time), and once more on the PC itself just before
+            # the bytes are written (`LocalVm.file_request`).
+            verdict, allowed, refused, inside = self.guard()
+            if verdict is not None:
+                raise Refused(*verdict)
         answer = await self.vm.file_request(self.target, {"action": "write", "path": path, "expected": expected,
                                                           "data": base64.b64encode(data).decode(),
-                                                          **({} if self.allowed is None else {"allowed": self.allowed})})
+                                                          **({} if allowed is None else {"allowed": allowed}),
+                                                          **({"refused": refused, "inside": inside or []} if refused else {})},
+                                            **({} if self.guard is None else {"recheck": lambda: self.guard()[0]}))
+        if answer.get("error") == "refused":
+            raise Refused(*answer["verdict"])
         if answer.get("error") == "changed":
             raise Refused("changed_since_read", CHANGED)
         if answer.get("error") == "not_a_file":
@@ -633,12 +655,12 @@ async def grep_files(vm, target, arguments):
     return PluginResult(True, text="\n".join([*page, *([note] if note else [])]))
 
 
-async def call(vm, target, name, arguments, reads, run, checkpoint, history=None, allowed=None):
+async def call(vm, target, name, arguments, reads, run, checkpoint, history=None, allowed=None, refused=None, guard=None):
     if name == "glob":
         return await glob_files(vm, target, arguments)
     if name == "grep":
         return await grep_files(vm, target, arguments)
-    files = Files(vm, target, reads, run, checkpoint, history, allowed)
+    files = Files(vm, target, reads, run, checkpoint, history, allowed, refused, guard)
     if name == "file_history":
         return await files.file_history(arguments)
     if name == "read_file":

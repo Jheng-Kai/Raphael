@@ -7,7 +7,7 @@ import { GAZE_ROWS, PROP_ROWS, celCount, eyePath, gazeRows, loopState } from "./
 import { crownedId, crownPrimary } from "./crown";
 import { catalogs, getLocale, setLocale } from "./i18n";
 import { defaultSlimeAvatar, followSlimeRoster, GAZE_REACH, gazeToward, isDark, handOver, isSlimeAvatar, newMemberSlime, parseSlime, pickSlime, seasonalHat, setSlimeState, SLIME_GROUPS, slimeCharactersHTML, slimeFaceHTML, slimeGroupName, slimeGroupOf, slimeGroupSwatch, slimePickerHTML, slimeSVG, type SlimeState } from "./slime";
-import type { SlimeCharacter, SlimeGroup } from "./slime";
+import type { Slime, SlimeCharacter, SlimeGroup } from "./slime";
 
 const css = readFileSync(resolve(__dirname, "slime.css"), "utf8");
 const keyframes = css.split("@keyframes ").slice(1).map(chunk => {
@@ -170,20 +170,94 @@ test("no two characters share both their colour and their complete costume", () 
   }
 });
 
+/** The crown's outline as drawn, in the drawing's units: the seven corners of its base and its points, in order. */
+function crownPoints(html: string): [number, number][] {
+  const host = document.createElement("div");
+  host.innerHTML = html;
+  const shape = host.querySelector(".slime-crown path")!;
+  const numbers = shape.getAttribute("d")!.match(/-?\d+(?:\.\d+)?/g)!.map(Number);
+  // M and six L commands, then Q (control, then the point it returns to)
+  return Array.from({ length: 7 }, (_, index) => [numbers[index * 2]!, numbers[index * 2 + 1]!]);
+}
+/** Points along the body's outline: its four cubic curves, as `slimeSVG` draws it. */
+function bodyOutline(html: string): [number, number][] {
+  const host = document.createElement("div");
+  host.innerHTML = html;
+  const n = host.querySelector(".slime-body")!.getAttribute("d")!.match(/-?\d+(?:\.\d+)?/g)!.map(Number);
+  const points: [number, number][] = [];
+  for (let at = 2; at + 5 < n.length; at += 6) {
+    const [x0, y0] = at === 2 ? [n[0]!, n[1]!] : [n[at - 2]!, n[at - 1]!];
+    const [x1, y1, x2, y2, x3, y3] = n.slice(at, at + 6) as [number, number, number, number, number, number];
+    for (let step = 0; step <= 60; step++) {
+      const u = step / 60, v = 1 - u;
+      points.push([v ** 3 * x0 + 3 * v * v * u * x1 + 3 * v * u * u * x2 + u ** 3 * x3, v ** 3 * y0 + 3 * v * v * u * y1 + 3 * v * u * u * y2 + u ** 3 * y3]);
+    }
+  }
+  return points;
+}
+const crownSample = { ...plain, crown: true };
+
 test("the primary member's slime wears the gold crown on its edge, in place of a season's hat; nobody else's does", () => {
   crownPrimary({ members: [{ id: 3 }, { id: 4 }], team_context: { primary_id: 3 } });
   const crowned = slimeFaceHTML({ id: 3, avatar: "slime:color:teal" }, 40), other = slimeFaceHTML({ id: 4, avatar: "slime:color:teal" }, 40);
   expect(crowned).toContain('fill="#F6C141"');
-  expect(crowned).toContain("rotate(30)");
   expect(other).not.toContain("#F6C141");
-  // two horns hold it upright between them
-  expect(slimeSVG({ character: "horns-red" }, { ...plain, crown: true })).toContain("translate(50 27.8) rotate(0)");
+  // on a plain slime it is tilted down the slope of the dome's upper right; between two horns it stands upright
+  const tilt = (html: string): number => { const [left, , , , , , right] = crownPoints(html); return Math.round(Math.atan2(right![1] - left![1], right![0] - left![0]) * 180 / Math.PI); };
+  expect(tilt(crowned)).toBe(30);
+  expect(tilt(slimeSVG({ character: "horns-red" }, { ...plain, crown: true }))).toBe(0);
   // a plain slime gives its hat up for the crown
   expect(slimeSVG({ color: "teal" }, { ...witch, crown: true })).not.toContain("#554177");
   // a primary the roster does not have is Raphael's again
   crownPrimary({ members: [{ id: 4 }], team_context: { primary_id: 9 } });
   expect(crownedId()).toBe(0);
   expect(faceHTML({ id: 0, name: "Raphael" }, 40)).toContain("#F6C141");
+});
+
+test("the crown is one set of plain coordinates on every character, drawn once and never again in the dark rim", () => {
+  for (const id of catalogIds) {
+    for (const now of [plain.now, witch.now]) {
+      const crowned = slimeSVG({ character: id }, { ...crownSample, now });
+      const host = document.createElement("div");
+      host.innerHTML = crowned;
+      const svg = host.querySelector("svg.slime")!;
+      // one crown: the same gold shapes are not in the rim that stands behind dark slimes and dark marks, nor anywhere else
+      expect(svg.querySelectorAll(".slime-crown"), id).toHaveLength(1);
+      expect(svg.querySelectorAll('[fill="#F6C141"]'), id).toHaveLength(4);
+      expect(svg.querySelector(".slime-rim .slime-crown, .slime-back .slime-crown"), id).toBeNull();
+      // no transform of its own: a nested transform read about the wrong origin put it beside the body
+      expect(svg.querySelector(".slime-crown")!.matches("[transform]") || svg.querySelector(".slime-crown [transform]") !== null, id).toBe(false);
+      expect(svg.querySelectorAll('.slime-rim [fill="#F6C141"]'), id).toHaveLength(0);
+      expect(slimeSVG({ character: id }, { ...plain, now })).not.toContain("slime-crown");
+    }
+  }
+  // dark body (rim round the body) and a bright body that wears something dark (rim round what it wears) both have a rim
+  for (const slime of [{ character: "panda" as const }, { character: "headband-brown" as const }]) {
+    const host = document.createElement("div");
+    host.innerHTML = slimeSVG(slime, crownSample);
+    expect(host.querySelector(".slime-rim"), JSON.stringify(slime)).not.toBeNull();
+    expect(host.querySelectorAll(".slime-crown")).toHaveLength(1);
+  }
+});
+
+test("the crown stands on the head of every character: its base on the outline of the dome, its points up and away from it", () => {
+  const kinds: Slime[] = [...catalogIds.map(character => ({ character })), { color: "sky" }, { color: "charcoal" }];
+  for (const slime of kinds) {
+    const html = slimeSVG(slime, crownSample), label = JSON.stringify(slime);
+    const points = crownPoints(html), outline = bodyOutline(html);
+    const [left, , , , , , right] = points as [number, number][];
+    const middle: [number, number] = [(left![0] + right![0]) / 2, (left![1] + right![1]) / 2];
+    // the base touches the outline of the body (within the width of its own stroke), neither inside it nor floating off it
+    const gap = Math.min(...outline.map(([x, y]) => Math.hypot(x - middle[0], y - middle[1])));
+    expect(gap, `${label} base ${middle.map(Math.round)} is ${gap.toFixed(1)} from the outline`).toBeLessThanOrEqual(3.5);
+    // on the upper half of the dome, inside the drawing's box
+    expect(middle[1], label).toBeLessThan(50);
+    for (const [x, y] of points) {
+      expect(x, label).toBeGreaterThan(4);
+      expect(x, label).toBeLessThan(96);
+      expect(y, label).toBeGreaterThan(11);
+    }
+  }
 });
 
 test('sampled eyes share pixel fitting instead of fitting every hidden pose separately', () => {

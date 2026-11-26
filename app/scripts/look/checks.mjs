@@ -2,6 +2,27 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.checkVisibility() && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  // The chief's crown (issue 327): one crown on the head of the slime that is painted, whichever engine draws it. `painted` is the drawing
+  // that is seen (the vector, or the cel a strip shows), so a second crown in the dark rim or in a hidden drawing is not counted away.
+  const crownIssues = surface => {
+    const svg = surface.querySelector('svg.slime');
+    if (!svg) return ['no slime is drawn'];
+    const painted = globalThis.__lookPaintedSlime?.(svg) ?? { body: svg.querySelector('.slime-body'), marks: [...svg.querySelectorAll('.slime-marks .slime-mark')] };
+    const crowns = painted.marks.flatMap(mark => [...mark.querySelectorAll('.slime-crown')]);
+    const issues = [];
+    if (crowns.length !== 1) issues.push(`${crowns.length} crowns are painted`);
+    if (svg.querySelectorAll('.slime-crown').length !== 1) issues.push(`${svg.querySelectorAll('.slime-crown').length} crowns are in the drawing`);
+    const crown = crowns[0];
+    if (!crown) return issues;
+    if (crown.matches('[transform]') || crown.querySelector('[transform]')) issues.push('the crown carries a transform of its own');
+    const body = painted.body?.getBoundingClientRect(), mark = crown.getBoundingClientRect();
+    if (body && body.width > 0 && mark.width > 0) {
+      const slack = body.width * 0.12;
+      if (mark.left < body.left - slack || mark.right > body.right + slack) issues.push(`the crown is off the body's width (${Math.round(mark.left - body.left)}..${Math.round(mark.right - body.left)} of ${Math.round(body.width)})`);
+      if (mark.bottom < body.top || mark.top > body.top + body.height * 0.5) issues.push(`the crown is not on the head (${Math.round(mark.top - body.top)}..${Math.round(mark.bottom - body.top)} of ${Math.round(body.height)} down)`);
+    }
+    return issues;
+  };
   // R-UI-182: a dialog's page scrolls under its header, which holds the close (and the way back) at the top of the body and
   // keeps them pressable at its bottom. A page too short to scroll gets a tall spacer under its header for the test, so a
   // header that would scroll away fails on every page and not only on the ones a fixture makes long. A page whose height is
@@ -481,9 +502,12 @@ export function checkRendered(name, context = {}) {
       require(!document.querySelector(".mb-delete") && rows.length === 1, "no question was asked and one row is left");
     }
     if (name === "accounts-remove-last") {
-      require(made("connectors.remove_account").length === 0 && !document.querySelector(".mb-delete"), "the last connected account asks the app's own question, not another");
-      const confirm = document.querySelector('.menu [data-conn="disconnect"]');
-      require(visible(confirm) && confirm.textContent === "確定中斷？", "the app's menu asks 確定中斷？");
+      const dialog = document.querySelector(".mb-delete");
+      require(visible(dialog) && inside(dialog, document.documentElement), "the question is whole in the window");
+      require(made("connectors.remove_account").length === 0 && made("connectors.disconnect").length === 0, "nothing is removed or disconnected before the answer");
+      require(dialog.querySelector("h2, .mb-dlg-title, [id*=title]")?.textContent === "中斷連線 Gmail？", "the dialog asks the app's own disconnect question, 中斷連線 Gmail？, not an account's");
+      const buttons = [...dialog.querySelectorAll(".mb-dlg-act .btn, .action-row .btn")];
+      require(buttons.map(button => button.textContent).join("|") === "取消|中斷連線" && !document.querySelector('.menu [data-conn="disconnect"]'), "the buttons are 取消 and 中斷連線, and no menu asks in its own place");
     }
     if (name === "sign-in-waits") {
       const cancel = document.querySelector('[data-conn="cancel-login"]'), joins = [...document.querySelectorAll('[data-conn="join"]')];
@@ -628,7 +652,7 @@ export function checkRendered(name, context = {}) {
     const rowOf = key => document.querySelector(`.skl-pack[data-skl-pack="${key}"]`);
     const accessOf = key => rowOf(key)?.querySelector('.skl-access span')?.textContent.trim();
     // A package's page stands in the list's place (R-SKILL-17): it has no importer of its own.
-    const onPage = ['skill-library-open', 'skill-library-page-top', 'skill-library-skill-page', 'skill-library-doc-alone'].includes(name);
+    const onPage = ['skill-library-open', 'skill-library-page-top', 'skill-library-skill-page', 'skill-library-doc-alone', 'skill-library-page-remove'].includes(name);
     if (name !== 'member-skills-library' && !onPage) {
       const pane = document.querySelector('.modal-scrim .skl');
       require(pane?.getAttribute('aria-label') === '團隊技能', 'the Settings section names Team skills');
@@ -644,8 +668,7 @@ export function checkRendered(name, context = {}) {
       for (const row of rows) {
         const r = row.getBoundingClientRect();
         require(r.left >= box.left - 1 && r.right <= box.right + 1, `a package row stays inside the tab (${Math.round(r.left)}-${Math.round(r.right)})`);
-        const more = row.querySelector('[data-skl="more"]');
-        require(row.querySelector('.tg[role="switch"]') && more && !visible(more), 'each package has its switch, and its ⋯ (for the right click) is not drawn');
+        require(row.querySelector('.tg[role="switch"]') && !row.querySelector('[data-skl="more"], [data-skl="remove"], [data-overflow]'), 'each package has its switch, and no ⋯ or trash on its row');
       }
     }
     if (name === 'skill-library') {
@@ -678,10 +701,10 @@ export function checkRendered(name, context = {}) {
       require(title?.textContent.trim().length > 0 && title.scrollWidth <= title.clientWidth + 1, "the package's name is whole");
       const close = head.querySelector('.close-button'), actionsRow = page.querySelector('.skl-page-actions');
       const actions = actionsRow.querySelector('.ctl'), access = actions.querySelector('.skl-access');
-      const update = actions.querySelector('[data-skl="refresh"]'), more = actions.querySelector('[data-skl="more"]'), toggle = actions.querySelector('.tg[role="switch"]');
+      const update = actions.querySelector('[data-skl="refresh"]'), trash = actions.querySelector('[data-skl="remove"]'), toggle = actions.querySelector('.tg[role="switch"]');
       require(visible(close) && page.querySelectorAll('.close-button').length === 1, 'one shared close stands beside the package title');
-      require([access, update, toggle].every(visible) && !visible(more) && access.nextElementSibling === update &&
-        actions.lastElementChild === toggle && actionsRow.parentElement === title.parentElement.parentElement, 'access, the update button and the rightmost switch stand at the end of the title row; no ⋯ is drawn');
+      require([access, update, trash, toggle].every(visible) && !actions.querySelector('[data-skl="more"], [data-overflow]') && access.nextElementSibling === update && update.nextElementSibling === trash &&
+        actions.lastElementChild === toggle && actionsRow.parentElement === title.parentElement.parentElement, 'access, the update button, the trash and the rightmost switch stand at the end of the title row; no ⋯');
       const content = page.closest('.set-content');
       const headings = [...content.querySelectorAll('h1')];
       require(content.firstElementChild === page && page.firstElementChild.firstElementChild === head &&
@@ -694,13 +717,11 @@ export function checkRendered(name, context = {}) {
         Math.abs(arrow.left - start.left) <= 1 && Math.abs(arrow.top - start.top) <= 1 && titleBox.left > arrow.right &&
         [titleBox, closeBox].every(part => Math.abs(centre(arrow) - centre(part)) <= 1),
         'the way back and the title start at the top left with no skill count, and share a centre line with the close');
-      const body = document.querySelector('.modal-scrim .modal-body').getBoundingClientRect();
-      require(closeBox.left >= start.right + 8 && closeBox.right <= body.right && [...content.querySelectorAll('*')].filter(visible)
-        .every(node => node === close || close.contains(node) || node.getBoundingClientRect().right <= closeBox.left - 8),
-        'the close stands alone in its column at the top right: nothing of the page runs under it');
+      // R-UI-179: the content takes the dialog's whole width; the close ends the header row on the content's right edge.
+      require(Math.abs(closeBox.right - start.right) <= 1, "the close ends the header row on the content's right edge");
       const room = parseFloat(getComputedStyle(actionsRow).paddingInlineEnd) || 0;
-      require(Math.abs(controls.right - (start.right - room)) <= 1 && Math.abs(centre(controls) - centre(titleBox)) <= 2,
-        'the controls stand on the title row at its right end, left of the close column');
+      require(controls.right <= closeBox.left - room + 1 && controls.right >= closeBox.left - room - 24 && Math.abs(centre(controls) - centre(titleBox)) <= 2,
+        'the controls stand on the title row at its right end, just left of the close');
       const actionBoxes = [access, update, toggle].map(control => control.getBoundingClientRect());
       require(actionBoxes[0].right <= actionBoxes[1].left && actionBoxes[1].right <= actionBoxes[2].left,
         'access and the update button are visibly left of the switch');
@@ -720,22 +741,26 @@ export function checkRendered(name, context = {}) {
       const back = head.querySelector('[data-skl="back"]'), title = head.querySelector('h1#set-title');
       require(back.matches('.back-link') && document.activeElement === back && title?.textContent.trim() === (alone ? '會議紀錄' : 'poteto-mode'), "the way back has the focus, beside the skill's name");
       const controls = [...head.querySelectorAll('.skl-page-actions .ctl > button')].filter(visible).map(control => control.dataset.skl);
-      require(controls.join(',') === (alone ? 'access,toggle' : 'skill'), `its controls: its own switch, or a skill alone its package's (${controls})`);
+      require(controls.join(',') === (alone ? 'access,remove,toggle' : 'skill-remove,skill'), `its controls: its trash and its own switch, or a skill alone its package's (${controls})`);
       const quote = page.querySelector('.skl-about'), doc = page.querySelector('.skl-doc');
       require(visible(quote) && quote.querySelector('p')?.textContent.length > 10 && (!alone || quote.querySelector('.skl-source')), 'a quote of its words, with where it came from for a skill alone');
       require(visible(doc) && doc.querySelector('.ans') && !doc.textContent.includes('description:') && (alone || doc.querySelector('.message-code')), 'its document is drawn as Markdown, without its front matter');
       const left = back.getBoundingClientRect().left;
       for (const part of [quote, doc]) require(Math.abs(part.getBoundingClientRect().left - left) <= 1, 'the quote and the document line up with the way back');
-      // A skill of a plugin has a ⋯ that is not drawn: a right click presses it (R-SKILL-17).
-      require(!visible(page.querySelector('[data-skl="skill-more"]')) && document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, 'no ⋯ drawn, and the window does not scroll sideways');
+      // A skill's page has its trash beside its switch, and no ⋯ (Settings has no right click to reach one).
+      require(visible(page.querySelector('.skl-page-actions [data-skl="skill-remove"], .skl-page-actions [data-skl="remove"]')) && !page.querySelector('[data-skl="skill-more"], [data-skl="more"], [data-overflow]') &&
+        document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, 'its trash and no ⋯, and the window does not scroll sideways');
       // A long document scrolls under the skill's header: the way back, its name and the close stay at the top (R-UI-182).
       const close = head.querySelector('.close-button');
       require(visible(close) && page.querySelectorAll('.close-button').length === 1, "one shared close stands in the skill's header");
       headHoldsOnScroll(document.querySelector('.modal-scrim .modal-body'), close, [back, title]);
     }
-    if (name === 'skill-library-right-click') {
-      const picks = [...document.querySelectorAll('.mb-menu [data-pick]')].map(item => item.dataset.pick);
-      require(picks.join(',') === 'refresh,delete', `the right click offers 更新 and 刪除 only (${picks})`);
+    if (name === 'skill-library-page-remove') {
+      // The package page's trash asks at once in the red dialog naming the package, with no menu before it.
+      const dialog = document.querySelector('.mb-dialog.mb-delete');
+      require(visible(dialog) && dialog.querySelector('h2').textContent === '移除「pstack」？' && !document.querySelector('#app-popover'), 'the red dialog names the package, with no menu before it');
+      require([...dialog.querySelectorAll('.mb-dlg-act .btn')].map(b => b.textContent.trim()).join('|') === '取消|刪除', '取消 then a red 刪除');
+      require(!window.__look.calls.some(call => call.method === 'skills.library.delete'), 'nothing is deleted before the red button');
     }
     if (name === 'skill-library-row-lit') {
       // The lit row is the card itself, never a smaller rounded box inside it.
@@ -770,8 +795,8 @@ export function checkRendered(name, context = {}) {
       for (const row of skills) {
         const label = row.querySelector('.skl-label'), opener = row.querySelector('[data-skl="open-skill"]'), toggle = row.querySelector('.tg');
         require(Math.abs(row.getBoundingClientRect().left - left) <= 1 && label.getBoundingClientRect().left > row.getBoundingClientRect().left + 8, 'each skill row starts at the back button, with its words inside the card');
-        require(opener && Math.abs(opener.getBoundingClientRect().width - row.getBoundingClientRect().width) <= 1 && ![...row.querySelectorAll('[data-skl="skill-more"], [data-skl="more"]')].some(visible) &&
-          row.querySelector('.ctl').lastElementChild === toggle, 'each skill row opens its page across the row, its switch at the right and no ⋯ drawn');
+        require(opener && Math.abs(opener.getBoundingClientRect().width - row.getBoundingClientRect().width) <= 1 && !row.querySelector('[data-skl="skill-more"], [data-skl="more"], [data-skl="skill-remove"], [data-overflow]') &&
+          row.querySelector('.ctl').lastElementChild === toggle, 'each skill row opens its page across the row, its switch at the right, no ⋯ and no trash');
       }
     }
     if (name === 'skill-library-back') {
@@ -882,21 +907,68 @@ export function checkRendered(name, context = {}) {
       const fields = { login:2, contact:4, card:4 }[name.slice(10)];
       require(vault.querySelectorAll('[id^="vault-value-"][type="password"]').length === fields, 'all private fields are masked');
       if (name === 'vault-new-card') require(vault.textContent.includes('最後的付款或送出由你完成'), 'card entry explains the final owner step');
-    } else if (name === 'vault-menu') require(visible(document.querySelector('#app-popover [data-pick="edit"]')) && visible(document.querySelector('#app-popover [data-pick="remove"]')), 'entry actions use the shared row menu');
-    else if (name === 'vault-remove-ask') {
-      const remove = document.querySelector('#app-popover [data-pick="remove"]');
-      require(visible(remove) && remove.textContent.trim() === '確定移除這筆資料？' && visible(document.querySelector('#app-popover [data-pick="edit"]')), 'the first press asks in the item\'s place, in the same open menu');
-      require(remove.scrollWidth <= remove.clientWidth + 1, 'the question fits its row');
-      require(!window.__look.calls.some(call => call.method === 'vault.remove'), 'nothing is removed before the second press');
+    } else if (name === 'vault-page') {
+      // An entry's page in Safety's place: the way back and its title, its trash, 儲存 and the dialog's close on one row; its
+      // values as saved, masked, each with its eye; no list, no ⋯, no menu, and nothing under the fields to press.
+      const head = vault.querySelector('.vault-page-head'), parts = head && [head.querySelector('.back-title'), head.querySelector('[data-vault="remove"]'), head.querySelector('[data-vault="save"]'), head.querySelector('.close-button')];
+      require(parts && parts.every(visible) && !document.querySelector('.vault-list, .rules-row, #app-popover'), 'the page stands alone: way back, title, trash, 儲存 and close');
+      const centre = el => { const box = el.getBoundingClientRect(); return (box.top + box.bottom) / 2; };
+      require(parts.every(part => Math.abs(centre(part) - centre(parts[0])) <= 2), 'the way back, the trash, 儲存 and the close share one row');
+      require(parts[2].textContent.trim() === '儲存' && parts[1].getBoundingClientRect().right <= parts[2].getBoundingClientRect().left && parts[2].getBoundingClientRect().right <= parts[3].getBoundingClientRect().left, '儲存 stands between the trash and the close');
+      require(getComputedStyle(head).position === 'sticky' && !vault.querySelector('.vault-form .vault-actions, .vault-form [data-vault="save"]'), 'the header stays at the top, and nothing waits under the fields');
+      const fields = [...vault.querySelectorAll('[id^="vault-value-"]')];
+      require(fields.length === 2 && fields.every(input => input.type === 'password' && input.value.length > 0) && !vault.textContent.includes('不變更'), 'the values are there as saved, masked');
+      require(fields.every(input => visible(input.closest('.field').querySelector('[data-vault="reveal"]'))), 'each value has its eye');
+    } else if (name === 'vault-remove-dialog') {
+      // The red dialog of deleting a member: the entry named, what goes, 取消 then a red 移除; the trash stays a trash.
+      const dialog = document.querySelector('.mb-dialog.mb-delete');
+      require(visible(dialog) && dialog.querySelector('h2').textContent === '移除「範例差旅網站」？', 'the red dialog names the entry');
+      require(dialog.querySelector('.mb-dlg-body').textContent.includes('無法復原'), 'it says what goes, for good');
+      require([...dialog.querySelectorAll('.mb-dlg-act .btn')].map(b => b.textContent.trim()).join('|') === '取消|移除', '取消 then 移除');
+      require(!vault.querySelector('[data-asking]') && visible(vault.querySelector('.vault-page-head [data-vault="remove"] svg')), 'the trash asks nothing in its own place');
+      require(!window.__look.calls.some(call => call.method === 'vault.remove'), 'nothing is removed before the red button');
+    } else if (name === 'vault-save-in-sight') {
+      const head = vault.querySelector('.vault-page-head'), save = head?.querySelector('[data-vault="save"]'), body = head?.closest('.modal-body');
+      const box = save?.getBoundingClientRect(), frame = body?.getBoundingClientRect();
+      require(visible(save) && box.top >= frame.top - 1 && box.bottom <= frame.bottom + 1, '儲存 is in sight at the top of the scrolled page');
+      require(visible(vault.querySelector('.vault-members > :last-child')), 'the page was scrolled to its last member');
+    } else if (name === 'vault-unsaved') {
+      const dialog = document.querySelector('.mb-dialog.vault-unsaved');
+      require(visible(dialog) && dialog.querySelector('h2').textContent === '要儲存變更嗎？', 'the dialog asks whether to save');
+      require([...dialog.querySelectorAll('.mb-dlg-act .btn')].map(b => b.textContent.trim()).join('|') === '不儲存|儲存', '不儲存 then 儲存');
+      require(vault.querySelector('#vault-value-password')?.value.endsWith('-changed'), 'the page and what was typed stay behind it');
+      require(!window.__look.calls.some(call => call.method === 'vault.update'), 'nothing is saved before 儲存 is pressed');
     }
     else if (name === 'vault-filter') require(vault.querySelectorAll('.vault-row').length === 1 && vault.textContent.includes('公司差旅卡'), 'card filter selects only cards');
+    // #320: the Composio key is kept in the vault as the whole team's key; Connect apps keeps no setting for it.
+    else if (name === 'vault-composio-key') {
+      const rows = [...vault.querySelectorAll('.vault-row')];
+      require(rows[0]?.dataset.vaultRow === 'composio' && rows[0].textContent.includes('Composio') && rows[0].textContent.includes('整個團隊'), 'the Composio key is the first row, the whole team\'s');
+      require(visible(rows[0].querySelector('[data-vault="edit"]')) && !vault.querySelector('[data-overflow]'), 'its pencil is there to change or remove it, and no row has a ⋯');
+    } else if (name === 'vault-composio-edit') {
+      // The page itself carries the mark (it is the vault's section).
+      const form = vault.closest('[data-vault-system="composio"]') ?? vault.querySelector('[data-vault-system="composio"]'), field = form?.querySelector('#vault-value-value');
+      require(visible(form) && visible(field) && field.type === 'password' && field.value.length > 0, "the Composio key's page shows the saved key, masked");
+      require(visible(form.querySelector('[data-vault="reveal"]')) && visible(form.querySelector('.vault-page-head [data-vault="remove"]')), 'with its eye and its trash');
+      require(!form.querySelector('#vault-label, #vault-hint, [data-k="vault-access"]'), 'it has no name, hint or access to change');
+      require(visible(form.querySelector('[data-k="vault-composio-note"]')), 'it says first that the apps connected through Composio must be connected again');
+      require(document.activeElement === field, 'the field has the focus');
+    } else if (name === 'vault-edit-values') {
+      // The password's eye was pressed: it reads as text, the user name stays masked.
+      const user = vault.querySelector('#vault-value-username'), password = vault.querySelector('#vault-value-password');
+      require(user?.type === 'password' && user.value.length > 0 && password?.type === 'text' && password.value.length > 0, 'the eye shows the value it stands beside, and only that one');
+      require(vault.querySelector('[data-vault="reveal"][data-field="password"]').getAttribute('aria-pressed') === 'true', 'its eye is pressed');
+      require(visible(vault.querySelector('#vault-label')) && vault.querySelector('#vault-label').value.length > 0, 'the name is there to change, filled in');
+    }
     else if (name === 'vault-sharing') {
       require(vault.querySelectorAll('[data-vault-member]').length >= 2 && vault.querySelector('#vault-label').value === '出差聯絡資料', 'sharing preserves form input');
       const chosen = vaultPicks('.vault-members', true);
       require(chosen.length === 1 && chosen[0].dataset.vaultMember === '1', `the member pressed is the one chosen (${chosen.map(row => row.dataset.vaultMember).join(',')})`);
     }
     else {
-      require(vault.querySelectorAll('.vault-row').length === 3 && vault.textContent.includes('出差用公司卡'), 'all kinds and hints appear');
+      // Three entries of the fixture, and the Composio key first while one is saved (#320).
+      const rows = vault.querySelectorAll('.vault-row').length, composio = window.__look.data.composioConfigured ? 1 : 0;
+      require(rows === 3 + composio && vault.textContent.includes('出差用公司卡'), `all kinds and hints appear (${rows} rows)`);
       const about = vault.querySelector(':scope > p.dim'), lines = new Map();
       for (let offset = 0; offset < about.firstChild.textContent.length; offset++) {
         if (!about.firstChild.textContent[offset].trim()) continue;
@@ -1314,6 +1386,28 @@ export function checkRendered(name, context = {}) {
     require(getComputedStyle(thread.querySelector('[data-id="8102"] .message-actions:has(.rerun)')).opacity === '1', 'latest failed action is visible without hover');
     return {check:name,...count};
   }
+  if (name.startsWith('routine-rerun')) {
+    const failure = 'Codex CLI 在回答完成前停止了。', progress = '先查近 3 小時的收件匣';
+    const turns = [...document.querySelectorAll('.tn[data-id]')];
+    const shown = turns.map(turn => turn.textContent).join('\n');
+    const reruns = window.__look.calls.filter(call => call.method === 'worker.rerun');
+    if (name === 'routine-rerun-before') {
+      require(turns.length === 1 && shown.includes(failure) && turns[0].querySelector('.rerun'), 'the failed routine run stands alone with its Run again');
+      return {check:name};
+    }
+    require(reruns.length === 1, 'Run again asks the core once');
+    require(!turns.some(turn => turn.dataset.id === '8101'), 'the failed run is no longer drawn');
+    require(turns.length === 1, `one run is drawn, the newest: ${turns.map(turn => turn.dataset.id)}`);
+    if (name === 'routine-rerun') {
+      require(shown.includes(progress) && !shown.includes(failure), 'the new attempt shows its progress and the old failure is gone');
+      require(!document.querySelector('.tn .rerun'), 'a run under way has no Run again');
+    } else {
+      require(shown.split(failure).length === 2, 'only the newest failure is drawn, once');
+      require(turns[0].querySelector('.rerun'), 'the newest failure keeps its Run again');
+      require(!shown.includes(progress), 'the progress of the first attempt is not left behind');
+    }
+    return {check:name, drawn:turns.map(turn => turn.dataset.id)};
+  }
   if (name === 'computer-header-layout' || name.startsWith('desktop-computer-choice')) {
     const header = document.querySelector('.desktop-location-header');
     require(visible(header), 'the member panel header is visible');
@@ -1609,6 +1703,11 @@ export function checkRendered(name, context = {}) {
     if (name === "composer-branch-switched") require(window.__look.calls.some(call => call.method === "folders.switch_branch" && call.params.branch === "draft"), "the branch choice reached the core");
     return {check:name};
   }
+  if (name === "composer-branch-slow") {
+    require(document.querySelector(".toast")?.textContent.includes("Git 太久沒有完成切換"), "a switch answered too late is said in the owner's words");
+    require(document.querySelector(".page-agent .composer .cmp-branch")?.textContent.trim() === "draft", "the button shows the branch the folder is really on");
+    return {check:name};
+  }
   if (name.startsWith("composer-plus-")) {
     // R-UI-166: the composer's + opens one menu of what can be added; its apps and skills are submenus of switches that are the member's own settings.
     const box = element => element.getBoundingClientRect(), plus = document.querySelector('.page-agent .composer .cmp-attach');
@@ -1701,10 +1800,26 @@ export function checkRendered(name, context = {}) {
     }
     return {check: name, switches: switches.length};
   }
+  if (name === "safety-rules-icons") {
+    const rows = [...document.querySelectorAll('.rules-row')];
+    require(rows.length === 3 && rows.every(row => visible(row.querySelector('[data-rule="edit"] svg')) && visible(row.querySelector('[data-rule="delete"].danger svg')) && !row.querySelector('[data-rule="more"], [data-overflow]')),
+      "each rule has its pencil and its red trash on its row, and no ⋯");
+    const tools = rows.map(row => row.querySelector('.rules-tools').getBoundingClientRect());
+    require(tools.every(box => Math.abs(box.right - tools[0].right) <= 1), "the icons end on one line at the right of the rows");
+    return {check:name};
+  }
+  if (name === "safety-rule-delete-dialog") {
+    const dialog = document.querySelector('.mb-dialog.mb-delete');
+    require(visible(dialog) && dialog.querySelector('h2').textContent === '刪除「刪除檔案」？', "the red dialog names the rule");
+    require([...dialog.querySelectorAll('.mb-dlg-act .btn')].map(b => b.textContent.trim()).join('|') === '取消|刪除', "取消 then a red 刪除");
+    require(!document.querySelector('#app-popover') && visible(document.querySelector('.modal-scrim .rules')), "no menu came first, and Settings stays open behind it");
+    require(!window.__look.calls.some(call => call.method === 'safety.rules.delete'), "nothing is deleted before the red button");
+    return {check:name};
+  }
   if (name === "project-folders-settings") {
     const rows = [...document.querySelectorAll('[data-row="project-folder"]')];
-    require(rows.length === 2 && rows.every(row => visible(row.querySelector(".project-path")) && visible(row.querySelector('[data-act="project-menu"]'))),
-      "each remembered project has its own visible path and menu");
+    require(rows.length === 2 && rows.every(row => visible(row.querySelector(".project-path")) && visible(row.querySelector('[data-act="project-remove"]:not(.danger) svg path[d="M18 6 6 18"]')) && !row.querySelector('[data-overflow], [data-act="project-menu"]')),
+      "each remembered project has its own visible path and its trash, no ⋯");
     require(rows[0].querySelector(".project-branch").textContent === "main" && !rows[1].querySelector(".project-branch"), "Git projects show the current branch");
     require(visible(document.querySelector('[data-act="project-add"]')), "the native picker is at the foot");
     return {check:name};
@@ -4095,6 +4210,36 @@ export function checkRendered(name, context = {}) {
     require(visible(add)&&add.getBoundingClientRect().bottom<=box.bottom+1&&add.getBoundingClientRect().top>=rows.at(-1).getBoundingClientRect().top,'新增角色 stands at the foot of the card');
     return {check:name,width:Math.round(box.width),rows:rows.length};
   }
+  if (name === "slime-crown") {
+    const surfaces = [...document.querySelectorAll('.look-slime-board .slime-surface')], asked = Number(document.querySelector('.look-slime-board')?.dataset.samples);
+    // Exactly the faces the scene drew its board with (the board counts its own cells), every one of them in the screenshot: a face whose box is empty, or
+    // that lies outside the window, is not shown (the board clips it).
+    require(asked > 0 && surfaces.length === asked, `the board draws ${surfaces.length} slimes of the ${asked} it was asked for`);
+    const boxes = surfaces.map(surface => (surface.closest('.mb-av-slime') ?? surface).getBoundingClientRect());
+    const empty = [...boxes, ...surfaces.map(surface => surface.getBoundingClientRect())].filter(box => !(box.width > 0 && box.height > 0));
+    require(!empty.length, `${empty.length} of ${surfaces.length} slimes have no size`);
+    const outside = boxes.filter(box => box.left < -0.5 || box.top < -0.5 || box.right > innerWidth + 0.5 || box.bottom > innerHeight + 0.5);
+    require(!outside.length, `${outside.length} of ${surfaces.length} slimes lie outside the ${innerWidth}x${innerHeight} window and are not in the screenshot`);
+    for (const [index, surface] of surfaces.entries()) {
+      const issues = crownIssues(surface);
+      require(!issues.length, `slime ${index} (${surface.dataset.state}): ${issues.join("; ")}`);
+    }
+    return { check: name, surfaces: surfaces.length };
+  }
+  if (name === "chief-crown") {
+    // The chief's faces (member 0) wear the one crown on their head, and nobody else's face wears one.
+    const chief = ['.mb-chief', '.mb-pinned .mb-tile[data-member="0"]', '.ms-pane .ms-face', '.ob-first-face', '.mb-panel-identity'];
+    const faces = [...document.querySelectorAll(chief.map(place => `${place} .slime-surface`).join(', '))].filter(visible);
+    require(faces.length >= (document.querySelector('.ms-pane .ms-face .slime-surface') ? 2 : 1), `the chief's faces are on screen: ${faces.length}`);
+    for (const [index, surface] of faces.entries()) {
+      const issues = crownIssues(surface);
+      require(!issues.length, `the chief's face ${index} (${surface.closest('[class]')?.className}): ${issues.join("; ")}`);
+    }
+    const memberOf = surface => surface.dataset.slimeStill ?? surface.querySelector('svg.slime')?.dataset.slimeMember;
+    const others = [...document.querySelectorAll('.slime-surface')].filter(surface => surface.querySelector('.slime-crown') && memberOf(surface) !== '0');
+    require(!others.length, `${others.length} faces wear a crown that are not the chief's`);
+    return { check: name, faces: faces.length };
+  }
   if (name === "slime-marks-at-rest") {
     const surfaces = [...document.querySelectorAll('.look-slime-board .slime-surface[data-state="idle"]')].filter(visible);
     require(surfaces.length >= 24, `every character is on the board: ${surfaces.length}`);
@@ -5203,23 +5348,13 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name === "skill-deleted-final") {
-    // The delete asked twice, went through the
+    // The delete asked in the red dialog, went through the
     // same owner boundary, and nothing in the list offers to bring the skill back.
     const pane = document.querySelector('.ms-pane'), calls = window.__look.calls;
     require(calls.some(c => c.method === "members.skills.delete" && c.params.id === 31), "Raphael deletes the skill through the same owner boundary");
     require(!calls.some(c => c.method === "members.skills.update" && "undo" in c.params), "no call asks the core to restore a skill");
     require(!pane.querySelector('[data-ms="skill-open"][data-id="31"]') && pane.querySelector('[data-ms="skill-open"][data-id="32"]'), "the deleted skill is gone and the shared one stays");
     require(!pane.querySelector('[data-ms="skill-undo"]') && !/復原|undo/i.test(pane.textContent), "the list has no way to bring the skill back");
-    return { check: name };
-  }
-  if (name === "confirm-menu-label" || name === "confirm-menu-asks") {
-    // R-UI-56: the item in the ⋯ names what it destroys, and its first press only asks.
-    const item = document.querySelector('#app-popover [data-confirm-item]');
-    require(visible(item) && item.classList.contains("danger"), "the ⋯ opens a danger item");
-    require(document.querySelector('[data-overflow][aria-expanded="true"]'), "the menu belongs to a ⋯ button");
-    require(/^確定/.test(item.textContent.trim()) === (name === "confirm-menu-asks"), `the item says ${item.textContent.trim()}`);
-    const destroying = ["secrets.clear_openrouter_key", "history.clear", "agent.history.clear"];
-    require(!window.__look.calls.some(call => destroying.includes(call.method)), "nothing is destroyed before the second press");
     return { check: name };
   }
   if (name === "messaging-user-removed") {
@@ -5234,8 +5369,17 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name === "local-model-asks") {
-    require(visible(document.querySelector('.lm-row[data-name="sensevoice"] .lm-confirm')), "the row asks before anything is deleted");
+    const dialog = document.querySelector(".mb-dialog.mb-delete");
+    require(visible(dialog) && /SenseVoice/.test(dialog.querySelector("h2")?.textContent ?? ""), "the red dialog asks about that model before anything is deleted");
+    require(!document.querySelector(".lm-confirm") && !document.querySelector("#app-popover"), "no row asks in its own place");
     require(!window.__look.calls.some(call => call.method === "models.delete"), "nothing is deleted before the answer");
+    return { check: name };
+  }
+  if (name === "connections-delete-ask") {
+    const dialog = document.querySelector(".mb-dialog.mb-delete");
+    require(visible(dialog) && dialog.querySelector("h2")?.textContent.startsWith("刪除「"), "the red dialog asks about that one server");
+    require(!document.querySelector('.menu [data-conn="disconnect"]'), "no menu asks in its own place");
+    require(!window.__look.calls.some(call => call.method === "integrations.disconnect"), "nothing is deleted before the red button");
     return { check: name };
   }
 
@@ -6212,13 +6356,10 @@ export function checkRendered(name, context = {}) {
   if (name === "content-width") {
     const settings = document.querySelector('.modal-scrim:not([hidden]) .set-content');
     if (visible(settings)) {
-      // The content's own edge: a pane that reaches into the close column keeps it free with its padding.
-      const outer = settings.getBoundingClientRect(), edge = { left: outer.left, top: outer.top, bottom: outer.bottom,
-        right: outer.right - (parseFloat(getComputedStyle(settings).paddingRight) || 0) };
+      const edge = settings.getBoundingClientRect();
       for (const child of settings.children) {
         if (!visible(child) || ['absolute', 'fixed'].includes(getComputedStyle(child).position)) continue;
-        // A child that reaches into the close column keeps it free with the same padding, so its content edge is compared.
-        const outerBox = child.getBoundingClientRect(), box = { left: outerBox.left, right: outerBox.right - (parseFloat(getComputedStyle(child).paddingRight) || 0) };
+        const box = child.getBoundingClientRect();
         require(box.left >= edge.left - 1 && box.right <= edge.right + 1, `settings content shares one measure: ${child.className}`);
       }
       // Every section's small title stands on its card's left edge, not inset like the card's content, and the controls
@@ -6250,11 +6391,8 @@ export function checkRendered(name, context = {}) {
       const action = settings.querySelector('.set-head > :last-child:not(h1)');
       const form = settings.querySelector('.cs-form .add-grid');
       const contentRight = form ? form.getBoundingClientRect().left + form.clientWidth - parseFloat(getComputedStyle(form).paddingRight) : edge.right;
-      if (visible(action) && action.matches('.close-button')) {
-        // The close stands alone in its column at the top right of the body, right of the content's edge.
-        const box = action.getBoundingClientRect(), body = settings.closest('.modal-body')?.getBoundingClientRect() ?? edge;
-        require(box.left >= contentRight + 8 && box.right <= body.right, "settings close stands in its own column right of the content");
-      } else if (visible(action)) require(Math.abs(action.getBoundingClientRect().right - contentRight) <= 1, "settings header action shares the content right edge");
+      // R-UI-179: the close, or another last action of the header, ends on the content's right edge: no column is kept for it.
+      if (visible(action)) require(Math.abs(action.getBoundingClientRect().right - contentRight) <= 1, "settings header action shares the content right edge");
       for (const selector of ['.cs-apps .cs-chips', '.cs-results']) {
         const control = settings.querySelector(selector);
         if (visible(control)) require(Math.abs(control.getBoundingClientRect().right - edge.right) <= 1, `settings toolbar shares the content right edge: ${selector}`);
@@ -7000,22 +7138,26 @@ export function checkRendered(name, context = {}) {
       sentenceToButtons: cancel.top - sentences[0].getBoundingClientRect().bottom, buttonHeight: cancel.height, cancelWidth: cancel.width, deleteWidth: remove.width, gap: remove.left - cancel.right };
   }
   if (name.startsWith("cli-account-")) {
-    const row = document.querySelector('[data-cli-menu="codex"], [data-cli="codex"]')?.closest('.cli-card');
+    const row = document.querySelector('[data-cli-disconnect="codex"], [data-cli="codex"]')?.closest('.cli-card');
     require(visible(row), "the Codex card is visible");
     const calls = window.__look.calls;
-    if (name === "cli-account-menu") {
-      require(visible(document.querySelector('#app-popover.mb-menu [data-pick="disconnect"]')), "disconnect uses the shared row menu");
-      require(!document.querySelector('select'), "no native select is introduced");
+    if (name === "cli-account-disconnect-ask") {
+      // The card's one action is the unplugged plug (no ⋯, no trash); it asks in the red dialog, and nothing is disconnected yet.
+      const dialog = document.querySelector('.mb-dialog.mb-delete');
+      require(visible(dialog) && dialog.querySelector('h2').textContent === '中斷連線 Codex？', "the red dialog names the account");
+      require([...dialog.querySelectorAll('.mb-dlg-act .btn')].map(b => b.textContent.trim()).join('|') === '取消|中斷連線', "取消 then 中斷連線");
+      require(visible(row.querySelector('[data-cli-disconnect="codex"] svg')) && !row.querySelector('[data-overflow], .btn.icon.danger'), "the card has its unplug, no ⋯ and no trash");
+      require(!calls.some(call => call.method === 'brains.cli_disconnect'), "nothing is disconnected before the red button");
     } else {
-      require(calls.filter(call => call.method === 'brains.cli_disconnect' && call.params.id === 'codex').length === 1, "one menu choice disconnects exactly once without confirmation");
+      require(calls.filter(call => call.method === 'brains.cli_disconnect' && call.params.id === 'codex').length === 1, "the red button disconnects exactly once");
       const cli = window.__look.data.clis.find(cli => cli.id === 'codex');
       require(cli.logged_in === true, "the CLI's own login remains intact");
       if (name === "cli-account-disconnected") {
         require(cli.disconnected && !cli.available && cli.models.length === 0, "disconnected CLI supplies no runnable models");
         require(visible(row.querySelector('[data-cli="codex"]')), "reconnection stays on the card");
-        require(!row.querySelector('[data-cli-menu]'), "a disconnected card has no connected menu");
+        require(!row.querySelector('[data-cli-disconnect]'), "a disconnected card has no unplug");
       } else {
-        require(row.querySelector('[data-cli-menu="codex"]') && cli.available && !cli.disconnected, "reconnection restores the connected card, whose menu a right click opens");
+        require(row.querySelector('[data-cli-disconnect="codex"]') && cli.available && !cli.disconnected, "reconnection restores the connected card and its unplug");
         require(calls.filter(call => call.method === 'brains.cli_login' && call.params.id === 'codex').length === 1, "connect reaches the core once");
       }
     }
@@ -8855,7 +8997,7 @@ export function checkRendered(name, context = {}) {
     // Connected from speech to text: only the kinds that turn speech into text, no subscription, and the reason said.
     const dialog = document.querySelector("#pv-dialog");
     require(dialog.querySelector(".pv-for")?.textContent.includes("語音轉文字"), "the dialog says what it is for");
-    require(!dialog.querySelector("[data-chatgpt], [data-cli], [data-cli-menu]"), "no subscription is offered: none turns speech into text");
+    require(!dialog.querySelector("[data-chatgpt], [data-cli], [data-cli-disconnect]"), "no subscription is offered: none turns speech into text");
     const ids = [...dialog.querySelectorAll('[data-pv="add"]')].map(button => button.dataset.id);
     require(ids.length >= 1 && ids.every(id => ["openrouter", "openai", "groq"].includes(id)), `only the kinds that turn speech into text: ${ids}`);
     require(dialog.querySelector(".pv-scroll > .note")?.textContent.includes("訂閱帳號都沒有"), "and it says why the subscriptions are not there");
@@ -9727,6 +9869,17 @@ export function checkRendered(name, context = {}) {
     require(!/技能|Skills|スキル/.test(text), `no word of skills in the dialog: ${text.slice(0, 80)}`);
     return { check: name, rows: body.querySelectorAll('.cs-linked').length };
   }
+  if (name === "connector-uninstall-ask") {
+    // R-UI-56: the app's menu closed and the red dialog asks, naming the app; nothing is disconnected before its red button.
+    const dialog = document.querySelector(".mb-dialog.mb-delete");
+    require(visible(dialog), "the red dialog asks");
+    require(dialog.querySelector("h2")?.textContent === "中斷連線 Notion？", `the title asks about that one app: ${dialog.querySelector("h2")?.textContent}`);
+    const buttons = [...dialog.querySelectorAll(".mb-dlg-act .btn, .action-row .btn")];
+    require(buttons.map(button => button.textContent).join("|") === "取消|中斷連線", "the buttons are 取消 and 中斷連線");
+    require(!document.querySelector('.menu [data-conn="disconnect"]'), "no menu asks in its own place");
+    require(!window.__look.calls.some(call => call.method === "connectors.disconnect"), "nothing is disconnected before the red button");
+    return { check: name };
+  }
   if (name === "apps-count") {
     // The one number is the core's, on the chip at the top right of the view (the list of the connected is behind it): the roster's and the rows' agree.
     const rows = document.querySelectorAll('.modal-scrim .cs-body > .cs-sec:first-child .cs-linked, .modal-scrim .cs-body > .cs-grid > .cs-linked').length;
@@ -10448,6 +10601,21 @@ export function checkRendered(name, context = {}) {
       require(reach === null || reach >= -1, `at the end of the list its last row is above the Composio row (${reach}px apart)`);
     }
     return { check: name, row: where(frame), lines: lines.length, reach };
+  }
+  // #320: once a Composio key is saved, a gear in the header (after the chip, before the close button) opens its form. The
+  // view under it is as it was: no row of Composio at the end of the list.
+  // Settings has no right click: after one, no menu is open.
+  if (name === "no-menu-open") {
+    require(!document.querySelector("#app-popover, .menu"), "a right click in Settings opens no menu");
+    return { check: name };
+  }
+  // A menu with nothing under its heading draws the heading alone: no line, no gap under it.
+  if (name === "menu-head-alone") {
+    const menu = document.querySelector(".menu"), head = menu?.querySelector(".menu-head");
+    require(visible(head) && !menu.querySelector(".menu-choice, .menu-action, .menu-sep"), "the menu holds its heading alone");
+    const style = getComputedStyle(head);
+    require(parseFloat(style.borderBottomWidth) === 0 && parseFloat(style.marginBottom) === 0, `no line under the heading (${style.borderBottomWidth} ${style.borderBottomStyle})`);
+    return { check: name, words: head.textContent.trim() };
   }
   // A price is made of parts joined by 「 · 」, each one a number with its unit ("輸入 $2.00 / 輸出 $12 約每百萬字"). A part is never broken
   // across lines while a line of the row could hold it: a line ends between parts, so no number is parted from its unit and no line

@@ -13,6 +13,7 @@ import os
 
 import pytest
 
+from raphael_core import work_area
 from raphael_core.brain.settings import SettingsStore
 from raphael_core.agent.gate import ToolGate
 from raphael_core.agent.policy import Action, Tier
@@ -82,8 +83,9 @@ def tiers(hub, *paths, name="write_file"):
 async def test_with_no_project_chosen_the_computers_own_folder_and_the_team_are_the_work_folder(computer):
     hub, runtime, settings, project, guest = computer
     assert tiers(hub, f"{GUEST}/a.txt", "a.txt", f"{SHARED}/a.txt", "/tmp/a.txt", "/home/cua/elsewhere/a.txt") == [Tier.T0] * 5
-    assert tiers(hub, f"{guest}/a.txt", f"{guest}/sub/../a.txt") == [Tier.T3] * 2
-    assert hub.firm_for_call(key_of(hub, "write_file"), {"path": f"{guest}/a.txt", "content": "x"})
+    # A project is none of its work folder, and no one's to write: refused, so nothing asks (the tests of the refusal follow).
+    assert tiers(hub, f"{guest}/a.txt", f"{guest}/sub/../a.txt") == [Tier.T0] * 2
+    assert not hub.firm_for_call(key_of(hub, "write_file"), {"path": f"{guest}/a.txt", "content": "x"})
     assert not hub.firm_for_call(key_of(hub, "write_file"), {"path": "a.txt", "content": "x"})
 
 
@@ -197,6 +199,15 @@ async def test_an_outside_write_the_computer_finds_through_a_link_is_not_made_an
     assert not refused.ok and refused.kind == "outside_work_area" and not (project / "a.txt").exists()
 
 
+async def test_a_refused_project_the_computer_finds_through_a_link_is_not_made_and_says_so(computer, monkeypatch):
+    hub, runtime, settings, project, guest = computer
+    settings.set("member_work_folder", {"0": str(project)})
+    monkeypatch.setattr(files_guest, "refusing", lambda request: True)
+    refused = await call(hub, "write_file", "user", path=f"{GUEST}/a.txt", content="x")  # the owner's yes changes nothing
+    assert not refused.ok and refused.kind == "forbidden" and work_area.UNCHOSEN_WORDS in refused.text
+    assert not (runtime.folders[GUEST] / "a.txt").exists()
+
+
 # --- the host computer, as the same member's tools ---------------------------------------------------------------------
 
 
@@ -247,37 +258,42 @@ async def test_a_chosen_project_is_written_on_the_pc_and_the_computers_own_helpe
     assert guest_writes(runtime) == []  # the mount is read-only: nothing was sent for the computer to write
 
 
-async def test_a_project_the_member_did_not_choose_is_written_only_on_the_owners_yes_in_every_case(two_projects):
+async def test_a_project_the_member_did_not_choose_is_never_written_with_or_without_a_yes(two_projects):
     hub, runtime, settings, (first, second), (first_guest, second_guest) = two_projects
     settings.set("member_work_folder", {"0": str(first)})
     assert tiers(hub, f"{first_guest}/a.txt") == [Tier.T0]
-    assert tiers(hub, f"{second_guest}/a.txt", f"{second_guest}/sub/../a.txt") == [Tier.T3] * 2
-    assert hub.firm_for_call(key_of(hub, "write_file"), {"path": f"{second_guest}/a.txt", "content": "x"})
-    refused = await call(hub, "write_file", "auto", path=f"{second_guest}/a.txt", content="x")
-    assert refused.kind == "approval_required" and not (second / "a.txt").exists()
-    edit_refused = await call(hub, "edit_file", "auto", path=f"{second_guest}/a.txt", old_string="", new_string="x")
-    assert edit_refused.kind == "approval_required" and not (second / "a.txt").exists()
-    made = await call(hub, "write_file", "user", path=f"{second_guest}/a.txt", content="x")
-    assert made.ok and (second / "a.txt").read_text() == "x"
+    # Nothing asks for it: it is refused by the tool whatever is said (R-FILE-06).
+    assert tiers(hub, f"{second_guest}/a.txt", f"{second_guest}/sub/../a.txt") == [Tier.T0] * 2
+    assert not hub.firm_for_call(key_of(hub, "write_file"), {"path": f"{second_guest}/a.txt", "content": "x"})
+    for approver in ("auto", "user"):
+        refused = await call(hub, "write_file", approver, path=f"{second_guest}/a.txt", content="x")
+        assert refused.kind == "forbidden" and work_area.UNCHOSEN_WORDS in refused.text and not (second / "a.txt").exists()
+        edit_refused = await call(hub, "edit_file", approver, path=f"{second_guest}/a.txt", old_string="", new_string="x")
+        assert edit_refused.kind == "forbidden" and not (second / "a.txt").exists()
     assert guest_writes(runtime) == []
 
 
-async def test_with_no_project_chosen_every_project_is_asked_about(two_projects):
+async def test_with_no_project_chosen_every_project_is_refused(two_projects):
     hub, runtime, settings, (first, second), (first_guest, second_guest) = two_projects
-    assert tiers(hub, f"{first_guest}/a.txt", f"{second_guest}/a.txt") == [Tier.T3] * 2
+    assert tiers(hub, f"{first_guest}/a.txt", f"{second_guest}/a.txt") == [Tier.T0] * 2
     for guest, folder in ((first_guest, first), (second_guest, second)):
-        refused = await call(hub, "write_file", "auto", path=f"{guest}/a.txt", content="x")
-        assert refused.kind == "approval_required" and not (folder / "a.txt").exists()
+        for approver in ("auto", "user"):
+            refused = await call(hub, "write_file", approver, path=f"{guest}/a.txt", content="x")
+            assert refused.kind == "forbidden" and not (folder / "a.txt").exists()
+    # The member's own folder is its work folder then, and is written.
+    assert (await call(hub, "write_file", "auto", path="a.txt", content="x")).ok
 
 
 async def test_a_project_taken_off_the_list_leaves_the_member_choosing_nothing(two_projects):
     # Issue 312: a work folder that is not a remembered project is no work folder, so the listed one is not either.
     hub, runtime, settings, (first, second), (first_guest, second_guest) = two_projects
     settings.set("member_work_folder", {"0": str(first)})
-    assert tiers(hub, f"{first_guest}/a.txt", f"{second_guest}/a.txt") == [Tier.T0, Tier.T3]
+    assert (await call(hub, "write_file", "auto", path=f"{first_guest}/a.txt", content="x")).ok
+    assert (await call(hub, "write_file", "user", path=f"{second_guest}/a.txt", content="x")).kind == "forbidden"
     settings.set("project_folders", [str(second)])
     assert settings.get("member_work_folder") == {}
-    assert tiers(hub, f"{second_guest}/a.txt") == [Tier.T3]
+    assert (await call(hub, "write_file", "user", path=f"{second_guest}/a.txt", content="x")).kind == "forbidden"
+    assert not (second / "a.txt").exists()
 
 
 async def test_a_link_inside_a_project_is_never_followed_by_a_write_on_the_pc(two_projects, tmp_path):
@@ -290,21 +306,20 @@ async def test_a_link_inside_a_project_is_never_followed_by_a_write_on_the_pc(tw
     assert not (second / "a.txt").exists()
 
 
-async def test_the_owners_yes_to_a_project_write_is_the_door_in_allow_all_only(two_projects, conn):
+@pytest.mark.parametrize("mode", ["direct", "ask", "plan", "bypass"])
+async def test_the_door_never_asks_about_a_project_the_member_did_not_choose_and_the_tool_refuses_it_in_every_mode(two_projects, conn, mode):
     hub, runtime, settings, (first, second), (first_guest, second_guest) = two_projects
     settings.set("member_work_folder", {"0": str(first)})
+    settings.set("action_mode", mode)
     key = key_of(hub, "write_file")
     other = {"path": f"{second_guest}/a.txt", "content": "x"}
-    for mode in ("direct", "ask", "plan"):
-        settings.set("action_mode", mode)
-        gate = ToolGate(hub, conn=conn)
-        assert gate.needs_confirmation(key, other) and gate.firm_confirmation(key, other)
-    settings.set("action_mode", "bypass")
     gate = ToolGate(hub, conn=conn)
-    assert not gate.firm_confirmation(key, other)
+    assert not gate.needs_confirmation(key, other) and not gate.firm_confirmation(key, other)
     with vm_scope(("turn", 0, 1), turn_id=7):
-        made = await gate.call_plugin(key, other)
-    assert made.ok and (second / "a.txt").read_text() == "x"
+        refused = await gate.call_plugin(key, other)
+        near = await gate.call_plugin(key, {"path": f"{first_guest}/a.txt", "content": "y"})
+    assert refused.kind == "forbidden" and not (second / "a.txt").exists()
+    assert near.ok and (first / "a.txt").read_text() == "y"
 
 
 def _files(*folders):
@@ -414,3 +429,313 @@ def test_a_drive_root_chosen_as_a_project_stays_the_drive_root(monkeypatch):
     seen["helper"].clear()
     assert LocalVm.project_write(request, Chosen("D:\\work\\p"), "x.txt") == {"ok": True}
     assert seen["helper"][0]["roots"] == ["D:/work/p"] and seen["helper"][0]["path"] == "D:/work/p/x.txt"
+
+
+# --- a project that is not the member's chosen one is never written, wherever its mount is (issue 325) -----------------------
+
+
+@pytest.fixture
+async def nested_projects(tmp_path, conn):
+    """A member's own computer with a project (`outer`), another inside it (`inner`) and one beside them (`third`), all bound
+    read-only into it, none chosen yet."""
+    settings = SettingsStore(conn)
+    settings.set("computer_vm_mode", "per-bot")
+    outer, third = tmp_path / "outer", tmp_path / "third"
+    inner = outer / "sub" / "inner"
+    for folder in (inner, third):
+        folder.mkdir(parents=True)
+    settings.set("project_folders", [str(outer), str(inner), str(third)])
+    runtime = GuestRuntime(tmp_path / "guest")
+    vm = LocalVm(tmp_path / "data", settings=settings, runner=runtime, clock=lambda: 0)
+    target = await vm.seat()
+    guests = {source: guest for guest, source in target.projects}
+    for source, guest in guests.items():
+        runtime.folders[guest] = source
+    runtime.raw = container(vm, target, runtime)
+    hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path / "attachments"), bridge=Bridge)
+    await hub.prepare()
+    return hub, runtime, settings, (outer, inner, third), (guests[outer], guests[inner], guests[third])
+
+
+async def test_a_project_inside_the_chosen_one_is_written_through_either_mount_and_the_one_that_holds_it_is_not(nested_projects):
+    hub, runtime, settings, (outer, inner, third), (outer_guest, inner_guest, third_guest) = nested_projects
+    settings.set("member_work_folder", {"0": str(outer)})
+    assert tiers(hub, f"{outer_guest}/a.txt", f"{inner_guest}/a.txt", f"{outer_guest}/sub/inner/b.txt") == [Tier.T0] * 3
+    for path, folder in ((f"{outer_guest}/a.txt", outer / "a.txt"), (f"{inner_guest}/a.txt", inner / "a.txt"),
+                         (f"{outer_guest}/sub/inner/b.txt", inner / "b.txt")):
+        assert (await call(hub, "write_file", "auto", path=path, content="x")).ok and folder.read_text() == "x", path
+    assert (await call(hub, "write_file", "user", path=f"{third_guest}/a.txt", content="x")).kind == "forbidden"
+    # Chosen the inner one, the project that holds it is another's, and what lands in the inner one is its own.
+    settings.set("member_work_folder", {"0": str(inner)})
+    for path in (f"{outer_guest}/a.txt", f"{outer_guest}/sub/a.txt", f"{third_guest}/a.txt"):
+        for approver in ("auto", "user"):
+            assert (await call(hub, "write_file", approver, path=path, content="y")).kind == "forbidden", path
+    assert (await call(hub, "write_file", "auto", path=f"{outer_guest}/sub/inner/c.txt", content="y")).ok
+    assert (inner / "c.txt").read_text() == "y" and not (outer / "sub" / "a.txt").exists()
+    assert (outer / "a.txt").read_text() == "x"  # what it wrote while the outer project was its own, and not again
+    assert guest_writes(runtime) == []
+
+
+async def test_a_download_into_an_unchosen_project_is_refused_and_nothing_asks_for_it(two_projects):
+    hub, runtime, settings, (first, second), (first_guest, second_guest) = two_projects
+    settings.set("member_work_folder", {"0": str(first)})
+    key = key_of(hub, "browser_download")
+    target = hub.vm.mounted_target(hub.vm.target(0))
+    other = {"destination_root": f"{second_guest}/downloads", "ref": "p0:1", "target_id": "t1", "tab_id": "t1"}
+    own = {"destination_root": f"{first_guest}/downloads", "ref": "p0:1", "target_id": "t1", "tab_id": "t1"}
+    assert hub.guest_reach("browser_download", other, 0, target) == "project"
+    assert hub.guest_reach("browser_download", own, 0, target) is None
+    assert not hub.firm_for_call(key, other) and not hub.firm_for_call(key, own)
+    # A relative or a `..` folder is taken where it leads.
+    assert hub.guest_reach("browser_download", {**other, "destination_root": f"{first_guest}/../{second_guest.rsplit('/', 1)[1]}"},
+                           0, target) == "project"
+    for approver in ("auto", "user"):
+        refused = await call(hub, "browser_download", approver, **other)
+        assert refused.kind == "forbidden" and work_area.UNCHOSEN_WORDS in refused.text
+
+
+async def test_with_no_project_chosen_a_download_into_any_project_is_refused(two_projects):
+    hub, runtime, settings, (first, second), (first_guest, second_guest) = two_projects
+    target = hub.vm.mounted_target(hub.vm.target(0))
+    for guest in (first_guest, second_guest):
+        assert hub.guest_reach("browser_download", {"destination_root": guest, "ref": "p0:1", "target_id": "t1", "tab_id": "t1"}, 0, target) == "project"
+
+
+def test_a_link_made_inside_the_computer_never_leads_a_write_into_a_refused_project_whatever_was_said(tmp_path):
+    from agent.test_owner_files import _link_folder
+    workspace, project, elsewhere = tmp_path / "workspace", tmp_path / "project", tmp_path / "elsewhere"
+    for folder in (workspace, project, elsewhere):
+        folder.mkdir()
+    _link_folder(elsewhere / "door", project)
+    request = {"action": "write", "path": str(elsewhere / "door" / "a.txt"), "expected": "absent", "data": base64.b64encode(b"x").decode(),
+               "roots": [str(workspace), str(project)]}
+    # The owner's yes (no `allowed`) leads anywhere but there.
+    assert files_guest.confined(request) and not files_guest.refusing(request)
+    assert files_guest.handle({**request, "refused": [str(project)]}) == {"error": "unchosen"} and not (project / "a.txt").exists()
+    assert files_guest.refusing({**request, "refused": [str(project)]}) and not files_guest.refusing(request)
+    # What does not lead there is not held, and a request that names no refused folder is as it was.
+    assert not files_guest.refusing({**request, "refused": [str(project)], "path": str(workspace / "a.txt")})
+    assert not files_guest.refusing({**request, "refused": [str(project)], "allowed": [str(workspace)], "path": str(workspace / "a.txt")})
+
+
+async def test_the_helper_is_told_which_mounts_are_refused_on_every_write_and_is_not_asked_to_write_a_project(two_projects):
+    hub, runtime, settings, (first, second), (first_guest, second_guest) = two_projects
+    settings.set("member_work_folder", {"0": str(first)})
+    settings.set("action_mode", "bypass")
+    assert (await call(hub, "write_file", "user", path=f"{GUEST}/b.txt", content="y")).ok
+    held = guest_writes(runtime)
+    assert held and all(request.get("refused") == [second_guest] for request in held), held
+    settings.set("member_work_folder", {})
+    assert (await call(hub, "write_file", "user", path=f"{GUEST}/c.txt", content="y")).ok
+    assert sorted(guest_writes(runtime)[-1]["refused"]) == sorted([first_guest, second_guest])
+
+
+# --- review findings: the PC folders of the computer, a choice that changes while Docker starts, the audit -------------------
+
+
+async def test_a_project_inside_the_team_folder_or_the_own_workspace_is_refused_through_their_mounts(computer, conn):
+    hub, runtime, settings, project, guest = computer
+    target = hub.vm.mounted_target(hub.vm.target(0))
+    in_team, in_workspace = target.shared / "inner", hub.vm.member_workspace(target) / "inner"
+    for folder in (in_team, in_workspace):
+        folder.mkdir(parents=True)
+    settings.set("project_folders", [str(project), str(in_team), str(in_workspace)])
+    settings.set("member_work_folder", {"0": str(project)})
+    key = key_of(hub, "write_file")
+    for path in (f"{SHARED}/inner/a.txt", f"{GUEST}/inner/a.txt", f"{SHARED}/inner/sub/../a.txt"):
+        arguments = {"path": path, "content": "x"}
+        assert hub.guest_reach("write_file", arguments, 0, target) == "project", path
+        assert hub.tier_for_call(key, arguments) == Tier.T0 and not hub.firm_for_call(key, arguments), path
+        assert hub.refused_for_call(key, arguments) == work_area.UNCHOSEN_WORDS, path
+        for approver in ("auto", "user"):
+            refused = await call(hub, "write_file", approver, path=path, content="x")
+            assert refused.kind == "forbidden" and work_area.UNCHOSEN_WORDS in refused.text, path
+    # The rest of the team folder and of the workspace is outside the chosen project, as it was: the owner's yes.
+    assert tiers(hub, f"{SHARED}/a.txt", f"{GUEST}/a.txt") == [Tier.T3] * 2
+    # In 全部允許 too, and nothing was written.
+    settings.set("action_mode", "bypass")
+    gate = ToolGate(hub, conn=conn)
+    with vm_scope(("turn", 0, 1), turn_id=7):
+        for path in (f"{SHARED}/inner/b.txt", f"{GUEST}/inner/b.txt"):
+            assert (await gate.call_plugin(key, {"path": path, "content": "x"})).kind == "forbidden", path
+    assert not [request for request in guest_writes(runtime) if "inner" in request["path"]]
+
+
+async def test_with_no_project_chosen_a_project_inside_the_team_folder_is_inside_the_work_folder(computer):
+    hub, runtime, settings, project, guest = computer
+    target = hub.vm.mounted_target(hub.vm.target(0))
+    in_team = target.shared / "inner"
+    in_team.mkdir(parents=True)
+    settings.set("project_folders", [str(project), str(in_team)])
+    assert hub.guest_reach("write_file", {"path": f"{SHARED}/inner/a.txt", "content": "x"}, 0, target) is None
+    assert (await call(hub, "write_file", "auto", path=f"{SHARED}/inner/a.txt", content="x")).ok
+
+
+async def test_a_choice_changed_while_the_computer_starts_decides_the_write_and_not_the_choice_it_was_asked_under(two_projects, monkeypatch):
+    hub, runtime, settings, (first, second), (first_guest, second_guest) = two_projects
+    settings.set("member_work_folder", {"0": str(first)})
+    settings.set("action_mode", "bypass")
+    changed = []
+
+    async def starting(*arguments):
+        # The owner chooses the other project between the check of the call and the write on the PC.
+        settings.set("member_work_folder", {"0": str(second)})
+        changed.append(True)
+
+    monkeypatch.setattr(hub, "_checkpoint", starting)
+    refused = await call(hub, "write_file", "user", path=f"{first_guest}/a.txt", content="x")
+    assert changed and refused.kind == "forbidden" and work_area.UNCHOSEN_WORDS in refused.text
+    assert not (first / "a.txt").exists() and guest_writes(runtime) == []
+    # An edit meets the same check.
+    (first / "plan.txt").write_text("old", encoding="utf-8")
+    settings.set("member_work_folder", {"0": str(first)})
+    assert (await call(hub, "read_file", "auto", path=f"{first_guest}/plan.txt")).ok
+    edited = await call(hub, "edit_file", "user", path=f"{first_guest}/plan.txt", old_string="old", new_string="new")
+    assert edited.kind == "forbidden" and (first / "plan.txt").read_text(encoding="utf-8") == "old"
+
+
+async def test_a_choice_changed_while_the_computer_starts_asks_again_when_the_place_is_now_outside(two_projects, monkeypatch):
+    hub, runtime, settings, (first, second), (first_guest, second_guest) = two_projects
+
+    async def starting(*arguments):
+        settings.set("member_work_folder", {"0": str(second)})
+
+    # Nothing chosen: the computer's own folder is the work folder and is written without asking. A choice made while the
+    # computer starts makes it outside the work folder, which only the owner's yes writes.
+    monkeypatch.setattr(hub, "_checkpoint", starting)
+    refused = await call(hub, "write_file", "auto", path=f"{GUEST}/b.txt", content="x")
+    assert refused.kind == "approval_required" and not (runtime.folders[GUEST] / "b.txt").exists()
+
+
+async def test_the_audit_of_a_refused_project_write_in_the_computer_is_blocked_and_not_an_error(two_projects, conn, monkeypatch):
+    from raphael_core.integrations.audit import AuditLog
+    hub, runtime, settings, (first, second), (first_guest, second_guest) = two_projects
+    hub.audit = AuditLog(conn)
+    settings.set("member_work_folder", {"0": str(first)})
+    assert (await call(hub, "write_file", "user", path=f"{second_guest}/a.txt", content="x")).kind == "forbidden"
+    # The refusal that comes back from the computer's own helper (a link made inside it) is the same refusal.
+    monkeypatch.setattr(files_guest, "refusing", lambda request: True)
+    assert (await call(hub, "write_file", "user", path=f"{GUEST}/b.txt", content="x")).kind == "forbidden"
+    rows = conn.execute("SELECT outcome FROM tool_audit WHERE server='computer' AND tool='write_file'").fetchall()
+    assert [row[0] for row in rows] == ["blocked", "blocked"]
+
+
+# --- round two --------------------------------------------------------------------------------------------------------------
+
+
+async def test_the_helper_is_told_the_refused_projects_inside_the_workspace_and_the_team_folder_as_guest_paths(computer):
+    hub, runtime, settings, project, guest = computer
+    target = hub.vm.mounted_target(hub.vm.target(0))
+    in_team, in_workspace = target.shared / "inner", hub.vm.member_workspace(target) / "deep" / "inner"
+    for folder in (in_team, in_workspace):
+        folder.mkdir(parents=True)
+    settings.set("project_folders", [str(project), str(in_team), str(in_workspace)])
+    settings.set("member_work_folder", {"0": str(project)})
+    refused, inside = hub.guest_unchosen(target, 0)
+    assert f"{SHARED}/inner" in refused and f"{GUEST}/deep/inner" in refused
+    settings.set("action_mode", "bypass")
+    assert (await call(hub, "write_file", "user", path=f"{GUEST}/b.txt", content="y")).ok
+    assert {f"{SHARED}/inner", f"{GUEST}/deep/inner"} <= set(guest_writes(runtime)[-1]["refused"])
+    # With none chosen they are inside the work folder, as they are where they are on the PC: not refused.
+    settings.set("member_work_folder", {})
+    refused, inside = hub.guest_unchosen(target, 0)
+    assert f"{SHARED}/inner" not in refused and f"{GUEST}/deep/inner" not in refused and guest in refused
+
+
+async def test_a_choice_changed_while_the_place_is_prepared_on_the_pc_decides_the_write(two_projects, monkeypatch):
+    import asyncio
+    hub, runtime, settings, (first, second), (first_guest, second_guest) = two_projects
+    settings.set("member_work_folder", {"0": str(first)})
+    settings.set("action_mode", "bypass")
+    thread, changed = asyncio.to_thread, []
+
+    async def to_thread(function, *arguments, **keywords):
+        result = await thread(function, *arguments, **keywords)
+        if getattr(function, "__name__", "") in ("project_ready", "project_write") and not changed:
+            changed.append(True)  # the owner chooses the other project while the write is being prepared on the PC
+            settings.set("member_work_folder", {"0": str(second)})
+        return result
+
+    monkeypatch.setattr(asyncio, "to_thread", to_thread)
+    refused = await call(hub, "write_file", "user", path=f"{first_guest}/a.txt", content="x")
+    assert changed and refused.kind == "forbidden" and work_area.UNCHOSEN_WORDS in refused.text
+    assert not (first / "a.txt").exists()
+
+
+async def test_a_refused_write_makes_no_checkpoint(two_projects, monkeypatch):
+    hub, runtime, settings, (first, second), (first_guest, second_guest) = two_projects
+    settings.set("member_work_folder", {"0": str(first)})
+    settings.set("action_mode", "bypass")
+    started, checkpoints = hub._started, []
+
+    async def starting(*arguments, **keywords):
+        settings.set("member_work_folder", {"0": str(second)})  # chosen while the computer starts
+        return await started(*arguments, **keywords)
+
+    async def checkpoint(*arguments):
+        checkpoints.append(arguments)
+
+    monkeypatch.setattr(hub, "_started", starting)
+    monkeypatch.setattr(hub, "_checkpoint", checkpoint)
+    refused = await call(hub, "write_file", "user", path=f"{first_guest}/a.txt", content="x")
+    assert refused.kind == "forbidden" and checkpoints == [] and not (first / "a.txt").exists()
+
+
+# --- round three -----------------------------------------------------------------------------------------------------------
+
+
+async def test_a_chosen_project_inside_an_unchosen_one_is_written_through_the_team_mount_and_its_siblings_are_not(computer):
+    from agent.test_owner_files import _link_folder
+    hub, runtime, settings, project, guest = computer
+    target = hub.vm.mounted_target(hub.vm.target(0))
+    parent = target.shared / "parent"
+    for folder in (parent / "chosen", parent / "sibling"):
+        folder.mkdir(parents=True)
+    settings.set("project_folders", [str(project), str(parent), str(parent / "chosen")])
+    settings.set("member_work_folder", {"0": str(parent / "chosen")})
+    made = await call(hub, "write_file", "auto", path=f"{SHARED}/parent/chosen/note.txt", content="x")
+    assert made.ok and (runtime.folders[SHARED] / "parent" / "chosen" / "note.txt").read_text() == "x"
+    # A sibling under the unchosen parent is refused where it is written, and through a link made inside the chosen project.
+    for approver in ("auto", "user"):
+        assert (await call(hub, "write_file", approver, path=f"{SHARED}/parent/sibling/x.txt", content="x")).kind == "forbidden"
+    sibling = runtime.folders[SHARED] / "parent" / "sibling"
+    sibling.mkdir(parents=True, exist_ok=True)
+    _link_folder(runtime.folders[SHARED] / "parent" / "chosen" / "door", sibling)
+    through = await call(hub, "write_file", "user", path=f"{SHARED}/parent/chosen/door/x.txt", content="x")
+    assert not through.ok and not (sibling / "x.txt").exists()  # the computer's helper does not follow a link there either
+
+
+async def test_a_mount_that_lies_inside_an_unchosen_project_is_refused_to_the_helper_unless_the_work_folder_is_there(computer):
+    hub, runtime, settings, project, guest = computer
+    target = hub.vm.mounted_target(hub.vm.target(0))
+    above = target.shared.parent
+    assert not os.path.commonpath([str(above), str(project)]) == str(above)  # the chosen project is not inside it
+    settings.set("project_folders", [str(project), str(above)])
+    settings.set("member_work_folder", {"0": str(project)})
+    refused, inside = hub.guest_unchosen(target, 0)
+    assert SHARED in refused and SHARED not in inside
+    for approver in ("auto", "user"):
+        assert (await call(hub, "write_file", approver, path=f"{SHARED}/x.txt", content="x")).kind == "forbidden"
+    # With none chosen the team folder is the work folder, inside the unchosen project as it is on the PC: it wins.
+    settings.set("member_work_folder", {})
+    refused, inside = hub.guest_unchosen(target, 0)
+    assert SHARED in refused and SHARED in inside
+    assert (await call(hub, "write_file", "auto", path=f"{SHARED}/x.txt", content="x")).ok
+
+
+def test_the_helper_refuses_a_link_into_an_unchosen_project_but_never_a_place_inside_the_work_folder(tmp_path):
+    from agent.test_owner_files import _link_folder
+    team = tmp_path / "team"
+    chosen, sibling = team / "parent" / "chosen", team / "parent" / "sibling"
+    for folder in (chosen, sibling):
+        folder.mkdir(parents=True)
+    _link_folder(chosen / "door", sibling)
+    request = {"action": "write", "expected": "absent", "data": base64.b64encode(b"x").decode(), "roots": [str(team)],
+               "refused": [str(team / "parent")], "inside": [str(chosen)]}
+    # The unchosen parent holds the chosen project: what is inside the chosen project is not refused, whatever holds it.
+    assert not files_guest.refusing({**request, "path": str(chosen / "note.txt")})
+    assert files_guest.refusing({**request, "path": str(sibling / "x.txt")})
+    assert files_guest.refusing({**request, "path": str(chosen / "door" / "x.txt")})  # a link that leads out of it
+    assert files_guest.refusing({**request, "path": str(team / "parent" / "x.txt")})
+    assert not files_guest.refusing({**request, "path": str(team / "elsewhere.txt")})
+    assert not files_guest.refusing({k: v for k, v in request.items() if k != "refused"} | {"path": str(sibling / "x.txt")})

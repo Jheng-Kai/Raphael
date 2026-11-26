@@ -146,7 +146,8 @@ export function installMock(fixture, config = {}, target = window) {
     const first = make(8101, start.getTime()), last = make(8102, start.getTime() + (variant.calmThread === "days" ? 86400000 : 3600000));
     first.source = "routine"; first.question = sample.routine; first.messages = []; first.routine = {...data.routines.find(routine => routine.member_id === 1),title:sample.routine};
     last.task = null;
-    data.turns = data.turns.filter(turn => turn.member_id !== 1).concat(first, last);
+    // A routine's failed run alone, for the Run again that replaces it (`worker.rerun`).
+    data.turns = data.turns.filter(turn => turn.member_id !== 1).concat(variant.routineRerun ? [first] : [first, last]);
   }
   // A member's latest reply failed on ChatGPT's usage limit: the reply leads with Manage usage.
   if (variant.usageLimit) {
@@ -443,6 +444,8 @@ export function installMock(fixture, config = {}, target = window) {
     data.members[1].last_at = data.now;
     data.messages.push({ ...data.messages.at(-1), id: Math.max(...data.messages.map(message => message.id)) + 1, room_id: data.rooms[0].id, text: "週五計畫已準備完成", created: data.now, status: "done" });
   }
+  // `noNews`: nobody works, waits or has finished anything unread, so the status list is empty (「沒有人在工作」).
+  if (variant.noNews) for (const member of data.members) Object.assign(member, { unread: false, unread_kind: null, unread_threads: [], waiting: false, waiting_cards: [], activity: null });
   // The one light of a row (sidebar-light.ts): `sidebarLights` maps a member id to what that member is in. A member that
   // thinks has said nothing, so it has no news; one that waits for the owner has news too, which its orange question outranks.
   if (variant.sidebarLights) {
@@ -1452,6 +1455,13 @@ export function installMock(fixture, config = {}, target = window) {
       }
       case "skills.library.delete": data.skillLibrary = data.skillLibrary.filter(item => item.key !== p.key); return { deleted: true };
       case "vault.list": return { entries: data.vaultEntries };
+      // The owner's page shows an entry's values as saved, masked behind an eye: synthetic values of the entry's kind.
+      case "vault.reveal": {
+        const entry = data.vaultEntries.find(e => e.id === p.id);
+        if (!entry) return { ok: false, error: "vault_values" };
+        return { values: { login: { username: "look@example.test", password: "look-synthetic-password" }, contact: { name: "測試聯絡人", address: "台北市測試路 1 號", phone: "0912000000", email: "contact@example.test" },
+          card: { name: "測試持卡人", number: "4111111111111111", expiry: "12/30", cvc: "123" }, key: { value: "look-synthetic-key" } }[entry.kind] };
+      }
       case "vault.preview": return data.vaultImportPreview;
       case "vault.cancel": return { cancelled: true };
       case "vault.import": return { saved: p.ids.length, remaining: 0 };
@@ -1586,6 +1596,8 @@ export function installMock(fixture, config = {}, target = window) {
       case "folders.switch_branch":
         projectBranch = p.branch;
         notify("SettingsChanged");
+        // Git switched, then the answer came too late (a slow PC): the button must re-read the branch the folder is on.
+        if (variant.branchSwitchSlow) throw new Error("[-32603] Git did not finish switching branches in time");
         return { path: p.path, name: p.path.split("\\").pop(), exists: true, git: true, branch: projectBranch, branches: ["draft", "main"] };
       case "settings.get": return { settings: data.settings };
       // A question opening later is not there at the first read, as one that opens while the owner is elsewhere.
@@ -1973,6 +1985,21 @@ export function installMock(fixture, config = {}, target = window) {
         notify("WorkerChanged");
         return { cancelled: true };
       }
+      // Run again, as the core answers it: the failed turn leaves the history and the new attempt takes a turn of its own,
+      // a routine's run still the routine's. `routineRerun` makes the new attempt fail again, to show that one failure alone.
+      case "worker.rerun": {
+        const old = data.turns.find(item => item.task?.id === p.task_id);
+        if (!old) throw new Error("There is no such task");
+        const id = Math.max(...data.turns.map(item => item.id)) + 1, at = data.now + 1000;
+        const failed = variant.routineRerun === "again";
+        data.turns = data.turns.filter(item => item !== old).concat({ ...structuredClone(old), id, session_id: `rerun-${id}`, created_at_ms: at, status: failed ? "error" : "running",
+          text: failed ? data.calmSample.failure : "", messages: failed ? [] : [{ seq: 1, kind: "progress", text: data.calmSample.retry, at_ms: at }], steps: [],
+          task: { id: id + 100, state: failed ? "failed" : "running", started_at_ms: at, finished_at_ms: failed ? at + 1000 : null } });
+        notify("AgentTurn", { turn_id: old.id, member_id: old.member_id });
+        notify("AgentTurn", { turn_id: id, member_id: old.member_id });
+        notify("WorkerChanged");
+        return { task_id: id + 100 };
+      }
       case "agent.react": {
         const turn = data.turns.find(item=>item.id===p.turn_id && (item.member_id ?? 0)===(p.member_id ?? 0));
         if (!turn) throw new Error('Unknown private message');
@@ -2046,7 +2073,12 @@ export function installMock(fixture, config = {}, target = window) {
       case "memory.update": data.memoryFiles = { ...data.memoryFiles, [memoryFile(p)]: p.text }; return memoryDocument(p);
       case "memory.clear": data.memoryFiles = { ...data.memoryFiles, [memoryFile(p)]: "" }; return { cleared: true };
       case "memory.summary_clear": data.memorySummary = null; return { cleared: true };
-      case "safety.rules.list": return { rules: data.safetyRules };
+      case "safety.rules.list": {
+        // `safetyRules`: three of the owner's rules, so that their rows (a pencil, a trash) are seen.
+        if (variant.safetyRules && !data.safetyRules.length) data.safetyRules = [{ id: 1, action: "付款結帳", verdict: "ask", position: 1 }, { id: 2, action: "刪除檔案", verdict: "ask", position: 2 }, { id: 3, action: "在社群網站發文", verdict: "deny", position: 3 }];
+        return { rules: data.safetyRules };
+      }
+      case "safety.rules.delete": data.safetyRules = data.safetyRules.filter(rule => rule.id !== p.id); return { deleted: true };
       case "routines.list": {
         if (variant.missingRoutines) throw new Error("Synthetic routines read failure");
         const events=routineEventChoices;
@@ -2181,6 +2213,8 @@ export function installMock(fixture, config = {}, target = window) {
         // A sign-in given up leaves no account (R-ACCT-01): the core gives back a waiting one older than ten minutes when the list is read.
         for (const c of data.managedConnectors) c.accounts = c.accounts?.filter(a => !a.stale);
         return { connectors: data.managedConnectors, composio_configured: data.composioConfigured, google_configured: true };
+      // The vault's page shows the saved Composio key masked behind an eye: a synthetic one.
+      case "connectors.reveal_key": return { key: data.composioConfigured ? "look-synthetic-composio-key" : "" };
       case "connectors.remove_account": {
         const entry = data.managedConnectors.find(c => c.id === p.id);
         const account = entry?.accounts.find(a => a.id === p.account_id);
@@ -2192,6 +2226,8 @@ export function installMock(fixture, config = {}, target = window) {
       }
       case "connectors.catalog": {
         if (!data.composioConfigured) return { ok: false, error: "missing_key" };
+        // `composioKeyRefused`: Composio refuses the saved key (revoked) until a new one is saved (#320).
+        if (variant.composioKeyRefused && !state.composioKeyReplaced) return { ok: false, error: "auth" };
         return { items: data.pluginCatalog, categories: data.pluginCategories, next_cursor: null };
       }
       case "connectors.categories": return { items: data.pluginCategories };
@@ -2203,6 +2239,8 @@ export function installMock(fixture, config = {}, target = window) {
       case "connectors.set_key": {
         if (p.key.startsWith("sk-or-")) return { ok: false, error: "openrouter_key" };
         if (p.key.startsWith("ck_")) return { ok: false, error: "consumer_key" };
+        // A key in the place of another: the core forgets the apps connected through the old one (ConnectorsService.set_key).
+        if (data.composioConfigured) { data.managedConnectors = data.managedConnectors.filter(c => c.kind !== "composio"); state.composioKeyReplaced = true; }
         data.composioConfigured = true; return { configured: true };
       }
       case "connectors.set_tools": {

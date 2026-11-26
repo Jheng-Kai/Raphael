@@ -55,7 +55,7 @@ messaging) is not here. The kinds are the same for every member and for Raphael,
 (memory is not among them, see [No memory on screen](#no-memory-on-screen)): 工具 (each
 connected app with its own mark and a switch over the member's `tools` list, then the drafts switch under them),
 技能與指令 (skills as names with switches, a press opens the skill's own view, a plus adds one from a link, delete
-waits in a ⋯ behind a second press; commands), 個性與指示 (personality and instructions, R-PANEL-07: two quiet rows of
+waits in a ⋯ and asks in the red dialog; commands), 個性與指示 (personality and instructions, R-PANEL-07: two quiet rows of
 their words, whole, each with a pencil; a press opens a field in the row's place that is as tall as its words, Enter on
 one line, Ctrl+Enter or leaving it saves without a word (a spinner for the pencil meanwhile), Escape restores; nothing written is one quiet line of
 what could stand there; Raphael's too), 通知 (one switch, R-NOTIFY-01). The model is chosen at the composer
@@ -83,6 +83,27 @@ chips. Raphael stays the app's and the voice's name (dictation, the bottom-right
 own messages), and Raphael's names still reach member 0. An install from before keeps Raphael, name and blue slime.
 `member-settings-raphael-slime` opens member 0's settings, presses its face and the red horned slime, and checks
 (`member-settings-raphael-restyled`) that the core kept it and that the settings face and the sidebar row wear it.
+
+The chief's slime wears one gold crown, drawn once on its head wherever its face is drawn (`crownMark` in `slime.ts`). Its points
+are worked out into the drawing's own units and written as plain coordinates inside `.slime-crown`, which carries no `transform`
+of its own. On a Mac the marker once floated to the right of a brown headband slime while the dark rim's copy of it stayed on
+the head, so the slime seemed to wear two; a nested rotated and scaled transform is the one thing the crown had that no other
+mark has, and it is gone. The crown is no longer part of the dark rim either, so there is one copy to place. A character with no crown of its own takes the crown
+where its spot says (`CROWN_SPOTS`); no character draws a crown as part of its art, so none is replaced. Scenes: `slime-crown`
+(every character at 72 px, a row for each colour of the picker), `slime-crown-small` (every character at 40 and 28 px),
+`slime-crown-states`, `slime-crown-states-more` and `slime-crown-states-last` (five characters at 96 and 40 px in each state), `slime-crown-moves` and
+`slime-crown-moves-more` (a headband slime at 56 px through the motion of each state) and `slime-crown-change` (each change of state);
+each board fits the window at every width, and the check `slime-crown` fails unless the board holds exactly the faces it was asked for (`data-samples`), each with a size and inside the window, `member-settings-raphael-crown`
+(the settings face and the sidebar row after the chief is dressed in the brown headband slime) and `onboarding-slime-crown`
+(the guide's large first slime); the checks `slime-crown` and `chief-crown` require exactly one crown on the painted drawing, no
+transform of its own, none in the rim, its middle within the body's width and on its upper half, and no crown on a face that is
+not member 0's. The look harness draws in Chromium, which never showed the displacement: the cause is reasoned from the
+owner's screenshot (the crown moved by what a rotation and scale about the middle of the drawing would give), and the placement
+has to be looked at once in a WKWebView.
+
+```powershell
+npm run look -- slime-crown slime-crown-small slime-crown-states slime-crown-states-more slime-crown-states-last slime-crown-moves slime-crown-moves-more slime-crown-change member-settings-raphael-crown onboarding-slime-crown --theme both --width 1120,720,1920x1080
+```
 
 ```powershell
 npm run look -- member-settings-skill-row-hover member-settings-switch-hover member-settings member-settings-raphael member-settings-raphael-slime member-settings-skills member-settings-tools member-settings-notify member-settings-field member-persona-empty member-persona-filled member-persona-mixed member-persona-long member-persona-editing member-persona-editing-long member-persona-saved member-persona-escape member-settings-skill member-settings-command member-settings-cover member-settings-cover-picture member-settings-back-hover member-settings-back member-settings-back-bottom member-settings-back-kept details member-panel-library member-face-hover --theme both --width 1120,720,1920x1080
@@ -519,12 +540,15 @@ npm run look -- context-menu-member context-menu-conversation context-menu-routi
 Clear, clear all, delete and remove never stand open on a page. They wait in the ⋯ of the row or section title they
 act on, and its right click: the clears of Settings › 資料 in their rows (所有聽寫紀錄,
 所有對話紀錄), a person's removal in their Telegram row and a downloaded local model's deletion in its row of the chooser.
-`openConfirmMenu` (app/src/main/ui.ts) keeps the second press the buttons had: the first press asks in the item's place for five seconds, and closing the menu forgets
-it. A local model still asks in its row, and a clear of 資料 still gives its ten seconds of 復原.
+Every item that destroys or disconnects (`ask` of `openActions`, `openConfirmMenu`, both in app/src/main/member-column.ts) closes its menu on a press and opens the red
+confirmation dialog of a member's deletion (`confirmDelete`, app/src/main/member-dialogs.ts): a title that asks about that one thing and names it, a sentence of what
+happens, 取消 and a red button with the item's own word. Nothing is done until the red button; 取消, Escape and the scrim do nothing, and the focus goes back to the ⋯.
+No item, button or row turns into a question in its own place: a downloaded local model, an app's 中斷連線, Telegram's 中斷連線, a provider's 移除, a calendar event,
+a project folder and a skill or command all ask in that dialog. A clear of 資料 still gives its ten seconds of 復原.
 
 The audit of every look scene (`R-UI-56`) fails a button named for clearing, deleting or removing, in any of the three languages, unless it stands in a menu, in a
-dialog about that one thing (`.mb-dialog`, `.cs-dialog`), in a local model's inline question, or in what is being composed (`.composer`, `.draft-panel`). The Settings window is a page: it is
-not excepted. Telegram's 中斷連線, a pending person's reject and a mail draft's 捨棄 use other words and stay where they are.
+dialog about that one thing (`.mb-dialog`, `.cs-dialog`), or in what is being composed (`.composer`, `.draft-panel`); a question that replaces a row in its own place is rejected. The Settings window is a page: it is
+not excepted. Telegram's 中斷連線 (a row of its card that opens the red dialog), a pending person's reject and a mail draft's 捨棄 use other words and stay where they are.
 
 ```powershell
 npm run look -- dictation messaging-paired-aligned messaging-user-menu messaging-user-removed model-choices-local-menu context-menu-local-model --theme both --width 1120,720,1920x1080

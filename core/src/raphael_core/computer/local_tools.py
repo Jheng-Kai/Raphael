@@ -6,6 +6,7 @@ import os
 import re
 import sys
 import uuid
+from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import wraps
 from pathlib import Path
@@ -24,7 +25,7 @@ from . import shell_writes
 from .local_host import LocalHost, Output
 from .local_patterns import DANGEROUS_PATTERNS, MAC_DANGEROUS_PATTERNS
 from .file_tools import VmError
-from .on_screen import launches_on_screen
+from .on_screen import launches_on_screen, on_screen_fragment
 from .owner_files import DEFINITIONS as OWNER_FILE_DEFINITIONS, READS as OWNER_FILE_READS, SERVER as OWNER_FILES, OwnerFileTools
 from .owner_files import WRITES as OWNER_FILE_WRITES, place as owner_place
 from . import owner_files as owner_module
@@ -40,6 +41,14 @@ _CONTEXT = ContextVar("local_command_context", default=(None, True, False, "", F
 ON_SCREEN = ("Nothing was run: this command would show something on the owner's screen, and only a quick question shows "
              "anything there. Open pages, programs and files on your own computer with its tools. To run a program and "
              "read what it prints, run it directly, without opening a window.")
+
+
+def on_screen_refusal(command):
+    """The refusal of a command that would show something on the owner's screen, naming the fragment that did it (R-PC-06),
+    or None when it would not."""
+    return f"{ON_SCREEN} The part that looks like opening something: `{fragment}`." if (fragment := on_screen_fragment(command)) else None
+
+
 OUTSIDE_COMMAND = ("Nothing was run: this command writes outside your work folder, which needs the owner's yes on a card "
                    "for this exact command, and none was given or this conversation cannot show one. Write inside your work "
                    "folder, or tell the owner plainly.")
@@ -190,6 +199,16 @@ def shows_on_screen(key, arguments):
             and not _CONTEXT.get()[4] and launches_on_screen(arguments["command"]))
 
 
+@contextmanager
+def command_scope(context):
+    """The context of a command (`_CONTEXT`) for a judgement made outside a call: who runs it, and for which member."""
+    token = _CONTEXT.set(context)
+    try:
+        yield
+    finally:
+        _CONTEXT.reset(token)
+
+
 def command_context(select):
     def decorate(function):
         @wraps(function)
@@ -248,7 +267,8 @@ class LocalTools:
         if (name := owner_file_tool(key)) is not None:
             # A read asks nothing. A write inside the member's work folder asks as any change does (T2); one outside it
             # is T3 and firm (`firm_for_call`): the owner is asked in every mode but 全部允許, and no Always for the tool
-            # waives it (R-FILE-06). A path that cannot be written at all (a device, a place of keys) is refused in `call`.
+            # waives it (R-FILE-06). A path that cannot be written at all (a device, a place of keys, a project that is not
+            # the member's) is refused in `call` whatever is said, so nothing asks for it.
             schema = OWNER_FILE_DEFINITIONS[name]["parameters"]
             if name in OWNER_FILE_READS or not Draft202012Validator(schema).is_valid(arguments):
                 return Tier.T0
@@ -263,7 +283,10 @@ class LocalTools:
                 or not _CONTEXT.get()[2] or shows_on_screen(key, arguments)
                 or self._task_install(arguments)):
             return Tier.T0
-        if self.shell_outside(arguments):
+        project, outside = self.shell_reach(arguments)
+        if project:
+            return Tier.T0  # refused by `call` whatever is said (R-FILE-06), so nothing asks for it
+        if outside:
             return Tier.T3
         return Tier.T2 if self.requires_approval(arguments) else Tier.T0
 
@@ -276,14 +299,14 @@ class LocalTools:
         firm = getattr(self.delegate, "firm_for_call", None)
         return callable(firm) and firm(key, arguments) is True
 
-    def shell_outside(self, arguments):
-        """The files this command names that are outside the member's work folder (`shell_writes`): none for a command
-        that names none, whatever else the program it starts may write. It runs in the folder the owner chose for the
-        member unless it says another, and a relative target is taken from there."""
+    def shell_reach(self, arguments):
+        """(the files this command names in a remembered project that is not the member's, the files it names elsewhere
+        outside the member's work folder) (`shell_writes`): none for a command that names none, whatever else the program it
+        starts may write. It runs in the folder the owner chose for the member unless it says another, and a relative target
+        is taken from there."""
         if not isinstance(arguments.get("command"), str):
-            return []
+            return [], []
         member, home = _CONTEXT.get()[5], owner_module._home()
-        roots = work_area.area(self.settings, member, self.owner_files.member_folders)
         cwd = arguments.get("cwd")
         try:
             if cwd is None:
@@ -292,7 +315,38 @@ class LocalTools:
                 start = work_area.resolved(cwd, None, home) if isinstance(cwd, str) and (os.path.isabs(cwd) or cwd.startswith("~")) else None
         except work_area.PathRefused:
             start = None
-        return shell_writes.writes(arguments["command"], start, roots, home=home)
+        return shell_writes.classify(arguments["command"], start,
+                                     lambda path: work_area.reach(self.settings, member, path, self.owner_files.member_folders),
+                                     home=home)
+
+    def refused_for_call(self, key, arguments):
+        """The words this call is refused in whatever is said (`ToolGate.refused_for_call`): a write of the owner's file tools,
+        or a command, naming a file in a remembered project that is not the member's chosen one (R-FILE-06). A native command
+        of a CLI brain (`cli_permission`) is judged by the files it names the same way."""
+        member = _CONTEXT.get()[5]
+        if (name := owner_file_tool(key)) is not None:
+            schema = OWNER_FILE_DEFINITIONS[name]["parameters"]
+            if name in OWNER_FILE_READS or not Draft202012Validator(schema).is_valid(arguments):
+                return None
+            return work_area.UNCHOSEN_WORDS if self.owner_files.reach(arguments, member) == work_area.PROJECT else None
+        if key == tool_key("local", "local_exec"):
+            if not Draft202012Validator(EXEC_SCHEMA).is_valid(arguments):
+                return None
+            return work_area.UNCHOSEN_WORDS if self.shell_reach(arguments)[0] else None
+        if key == "cli_permission":
+            command = command_of(arguments)
+            cwd = arguments.get("cwd") if isinstance(arguments, dict) else None
+            named = {"command": command, **({"cwd": cwd} if isinstance(cwd, str) and cwd else {})}
+            return work_area.UNCHOSEN_WORDS if command and self.shell_reach(named)[0] else None
+        if is_local(key):
+            return None
+        refuse = getattr(self.delegate, "refused_for_call", None)
+        return refuse(key, arguments) if callable(refuse) else None
+
+    def shell_outside(self, arguments):
+        """The files this command names that are outside the member's work folder and are no project of the owner's: the
+        owner's yes is asked for them (a project that is not the member's is refused, `shell_reach`)."""
+        return self.shell_reach(arguments)[1]
 
     def kind_of(self, server, name):
         if server == OWNER_FILES:
@@ -331,10 +385,13 @@ class LocalTools:
                 return PluginResult(False, "assigned_computer_required", INSTALL_IN_VM)
             if shows_on_screen(key, arguments):
                 # Whatever the permission mode, 全部允許 included: what is seen is shown on the member's own computer.
-                return PluginResult(False, "shows_on_screen", ON_SCREEN)
+                return PluginResult(False, "shows_on_screen", on_screen_refusal(arguments["command"]) or ON_SCREEN)
             access = self.data_floor.access(key, arguments)
             if access == "write":
                 return PluginResult(False, "protected_data", WRITE_REFUSAL)
+            # A file in a project that is not the member's is never written: not on a yes, not in 全部允許, not from a task.
+            if key.endswith("/local_exec") and self.shell_reach(arguments)[0]:
+                return PluginResult(False, "forbidden", work_area.UNCHOSEN_WORDS)
             if (not present and not self._full_permission()) or owner is None:
                 return PluginResult(False, "presence_required", NO_CARD)
             if key.endswith("/local_job"):
@@ -357,7 +414,7 @@ class LocalTools:
                 return PluginResult(False, "disabled", "Local commands are disabled in this test environment.")
             # Only the owner's yes of this very command reaches a file outside the work folder: 全部允許 is that yes, present
             # or not (the door hands "user"); in every other mode a call with no one to ask was refused above.
-            if self.shell_outside(arguments) and approver != "user":
+            if self.shell_reach(arguments)[1] and approver != "user":
                 return PluginResult(False, "approval_required", OUTSIDE_COMMAND)
             if approver == "none" or self.requires_approval(arguments) and approver != "user":
                 return result
@@ -400,7 +457,7 @@ class LocalTools:
                                              member_id=_CONTEXT.get()[5])
         self.audit.add(server=OWNER_FILES, tool=name, tier=self.tier_of(key).name, approver=approver,
                        outcome="ok" if result.ok else "blocked" if result.kind in ("kept", "approval_required",
-                                                                                     "protected_data") else "error", task_id=task_id)
+                                                                                     "protected_data", "forbidden") else "error", task_id=task_id)
         return result
 
     async def _execute(self, command, *, audit=None, **params):

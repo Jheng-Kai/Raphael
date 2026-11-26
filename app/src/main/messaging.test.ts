@@ -12,8 +12,10 @@ const api = vi.hoisted(() => ({
   openLink: vi.fn(),
 }));
 vi.mock("./api", () => api);
+vi.mock("./member-dialogs", () => ({ confirmDelete: vi.fn(async () => true), openDialog: vi.fn() }));
 vi.mock("./ui", async (original) => ({ ...(await original<typeof import("./ui")>()), toaster: { info: vi.fn() } }));
 
+import { confirmDelete } from "./member-dialogs";
 import { type MessagingView, type TelegramStatus, createMessaging, emptyMessagingView, messagingHTML } from "./messaging";
 
 afterEach(() => setLocale("zh-TW"));
@@ -193,13 +195,15 @@ describe("the controller", () => {
     expect(c.view().expanded).toBeNull();
   });
 
-  test("disconnect needs a second press", async () => {
+  test("disconnect asks in the red dialog and happens only by its red button", async () => {
     api.telegramStatus.mockResolvedValue(status());
     const c = make();
     await c.load();
+    vi.mocked(confirmDelete).mockResolvedValueOnce(false);
     click(c, "disconnect");
-    expect(api.telegramDisconnect).not.toHaveBeenCalled();
-    expect(c.view().confirmingDisconnect).toBe(true);
+    expect(confirmDelete).toHaveBeenCalledExactlyOnceWith("Telegram", { words: { title: "中斷連線 Telegram？", hint: t("msg.tg.disconnectHint"), action: "中斷連線" } });
+    await new Promise(resolve => setTimeout(resolve));
+    expect(api.telegramDisconnect).not.toHaveBeenCalled(); // Cancel, Escape and the scrim do nothing
     api.telegramDisconnect.mockResolvedValue(status({ connected: false, bot: null }));
     click(c, "disconnect");
     await vi.waitFor(() => expect(api.telegramDisconnect).toHaveBeenCalled());

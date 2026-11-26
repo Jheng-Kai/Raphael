@@ -499,6 +499,7 @@ const ALLOWED_METHODS: &[&str] = &[
     "connectors.tools",
     "connectors.set_tools",
     "connectors.set_key",
+    "connectors.reveal_key",
     "connectors.google.configure",
     "connectors.google.connect",
     "audio.devices",
@@ -563,6 +564,7 @@ const ALLOWED_METHODS: &[&str] = &[
     "vault.list",
     "vault.add",
     "vault.update",
+    "vault.reveal",
     "vault.remove",
     "vault.preview",
     "vault.cancel",
@@ -3203,11 +3205,14 @@ mod tests {
     }
 
     #[test]
-    fn vault_owner_methods_never_expose_private_value_reads_or_exports() {
+    // The owner's Settings reads one entry's values to show them masked behind an eye (vault.reveal); nothing lists or
+    // exports values in bulk.
+    fn vault_owner_methods_reveal_one_entry_and_never_export_values() {
         for method in [
             "vault.list",
             "vault.add",
             "vault.update",
+            "vault.reveal",
             "vault.remove",
             "vault.preview",
             "vault.cancel",
@@ -3739,6 +3744,7 @@ mod tests {
             "connectors.tools",
             "connectors.set_tools",
             "connectors.set_key",
+            "connectors.reveal_key",
             "connectors.google.configure",
             "connectors.google.connect",
             "history.list",

@@ -15,7 +15,8 @@ import { createMessageSearch } from "./message-search";
 import { lightHTML, lightOf } from "./sidebar-light";
 import { type MemberSection, faceHTML, memberMatches, memberSections, memberDisplayList, memberRole, pinReplacements, plainLine, previewOf, primaryIdOf, raphaelOf } from "./members";
 import type { Member, MembersList } from "./types";
-import { DISCONNECT_CONFIRM_MS, closeMenu, esc, ico, iconButton, openPopover, placeMenu } from "./ui";
+import { type ConfirmWords, confirmDelete } from "./member-dialogs";
+import { closeMenu, esc, ico, iconButton, openPopover } from "./ui";
 import { shortcutText } from "./keys";
 
 /** What the column is drawn from. */
@@ -144,8 +145,9 @@ export interface MemberColumn {
   menu(id: number, anchor: HTMLElement): void;
 }
 
-/** `ask`: the item destroys something; its first press asks this in its own place and only the second picks it (R-UI-56). */
-export interface ActionItem { id: string; label: string; icon?: Parameters<typeof ico>[0]; submenu?: boolean; ask?: string }
+/** `ask`: the item destroys something; picking it closes the menu and opens the red confirmation dialog with these words,
+ *  and only the dialog's red button picks the item (R-UI-56). */
+export interface ActionItem { id: string; label: string; icon?: Parameters<typeof ico>[0]; submenu?: boolean; ask?: ConfirmWords }
 /** A hairline between groups of row-menu items. */
 export const SEP = "-";
 
@@ -158,12 +160,12 @@ export function openActions(anchor: HTMLElement, items: readonly (ActionItem | t
     (lead?.html ?? "") + items
       .map(
         (item) => item === SEP ? `<div class="menu-sep" role="separator"></div>` :
-          `<button type="button" role="menuitem"${item.icon === "trash" ? ' class="danger"' : ""} tabindex="-1" data-pick="${esc(item.id)}"${item.ask ? ` data-ask="${esc(item.ask)}"` : ""}${item.submenu ? ' aria-haspopup="menu" aria-expanded="false"' : ""}>` +
+          `<button type="button" role="menuitem"${item.icon === "trash" ? ' class="danger"' : ""} tabindex="-1" data-pick="${esc(item.id)}"${item.ask ? " data-confirm" : ""}${item.submenu ? ' aria-haspopup="menu" aria-expanded="false"' : ""}>` +
           `<span class="ck">${item.icon ? ico(item.icon) : ""}</span><span class="mt">${esc(item.label)}</span>${item.submenu ? ico("right") : ""}</button>`,
       )
       .join(""),
     { className: "menu mb-menu", role: "menu", label: anchor.getAttribute("aria-label") ?? undefined,
-      navigation: { step: direction => direction === "forward" || !!el.querySelector('[data-asking="true"]') } },
+      navigation: { step: direction => direction === "forward" } },
   );
   el.addEventListener("click", (e) => {
     const led = lead && (e.target as Element).closest<HTMLElement>("[data-lead]");
@@ -171,11 +173,12 @@ export function openActions(anchor: HTMLElement, items: readonly (ActionItem | t
     const pick = (e.target as Element).closest<HTMLElement>("[data-pick]");
     if (!pick) return;
     const id = pick.dataset.pick ?? "";
-    // A destroying item asks in its own place first; the menu stays open for the second press, and forgets the first after a while.
-    if (pick.dataset.ask && pick.dataset.asking !== "true") {
-      const label = pick.querySelector<HTMLElement>(".mt")!, before = label.textContent ?? "";
-      pick.dataset.asking = "true"; label.textContent = pick.dataset.ask; placeMenu();
-      setTimeout(() => { if (pick.isConnected) { delete pick.dataset.asking; label.textContent = before; placeMenu(); } }, DISCONNECT_CONFIRM_MS);
+    // A destroying item closes the menu and asks in the red dialog; nothing is done unless its red button is pressed.
+    const words = items.find((item): item is ActionItem => item !== SEP && item.id === id)?.ask;
+    if (pick.hasAttribute("data-confirm") && words) {
+      closeMenu();
+      anchor.focus({ preventScroll: true });
+      void confirmDelete("", { words }).then(yes => { if (yes) onPick(id, pick); });
       return;
     }
     if (!pick.hasAttribute("aria-haspopup")) {
@@ -185,6 +188,14 @@ export function openActions(anchor: HTMLElement, items: readonly (ActionItem | t
     onPick(id, pick);
   });
   el.querySelector<HTMLElement>("button")?.focus();
+}
+
+/**
+ * The menu of a ⋯ whose one item destroys something (R-UI-56): picking it closes the menu and opens the red confirmation
+ * dialog with `ask`'s words; only the dialog's red button does `run`.
+ */
+export function openConfirmMenu(anchor: HTMLElement, o: { label: string; ask: ConfirmWords; run(): void }): void {
+  openActions(anchor, [{ id: "confirm", label: o.label, icon: "trash", ask: o.ask }], () => o.run());
 }
 
 /**

@@ -424,7 +424,7 @@ describe("skills and commands", () => {
     expect(page.el.dataset.view).toBe("main");
   });
 
-  test("Team skills are read-only here with a link to Settings; deleting a private skill waits for a second press", async () => {
+  test("Team skills are read-only here with a link to Settings; deleting a private skill asks in the red dialog", async () => {
     api.membersSkillsList.mockResolvedValue({ skills: SKILLS, library: [{ key: "pack:2", name: "研究工具", skills: 2 }, { key: "skill:3", name: "會議紀錄", skills: 1 }] });
     await open();
     await cat("skills");
@@ -439,10 +439,16 @@ describe("skills and commands", () => {
     expect(appGo).toHaveBeenCalledWith("settings", "skills");
     await press('[data-ms="skill-open"][data-id="1"]');
     await press('[data-ms="skill-more"]');
-    const item = document.querySelector<HTMLElement>("#app-popover [data-confirm-item]")!;
-    item.click();
+    document.querySelector<HTMLElement>("#app-popover [data-pick]")!.click();
+    expect(document.getElementById("app-popover")).toBeNull();
+    expect(document.querySelector(".mb-delete h2")?.textContent).toBe(`刪除「${SKILLS[0].name}」？`);
+    expect(document.querySelector('.mb-delete [data-dlg="delete"]')?.textContent).toBe("刪除");
     expect(api.membersSkillsDelete).not.toHaveBeenCalled();
-    item.click(); await flush();
+    document.querySelector<HTMLElement>('.mb-delete [data-dlg="cancel"]')!.click(); await flush();
+    expect(api.membersSkillsDelete).not.toHaveBeenCalled();
+    await press('[data-ms="skill-more"]');
+    document.querySelector<HTMLElement>("#app-popover [data-pick]")!.click();
+    document.querySelector<HTMLElement>('.mb-delete [data-dlg="delete"]')!.click(); await flush();
     expect(api.membersSkillsDelete).toHaveBeenCalledWith(3, 1);
   });
 

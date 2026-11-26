@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 // The member column (member-column.ts): Raphael at the top, the groups and 未分組, the search, and
 // how a row shows a question that waits and a thread with news.
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { type ColumnHost, columnHTML, createMemberColumn, memberRowHTML } from "./member-column";
+import { type Mock, afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { type ColumnHost, columnHTML, createMemberColumn, memberRowHTML, openActions, openConfirmMenu } from "./member-column";
 import { openNewGroupChat } from "./group-chats";
 import { installContextMenus } from "./context-menu";
 import { setLocale, t } from "./i18n";
@@ -501,5 +501,97 @@ describe("words not yet sent (R-SIDE-05)", () => {
     writeDraftWords("member:1:main");
     expect(row.querySelector(".mb-row-p")!.textContent).toBe("第 17 號工單已開");
     column.el.remove();
+  });
+});
+
+// R-UI-56: an item that destroys something asks in the red dialog; nothing is done until its red button is pressed.
+describe("a menu item that destroys", () => {
+  const settle = (): Promise<void> => new Promise(resolve => setTimeout(resolve));
+  const words = { title: "移除「pstack」？", hint: "移除後就不能再用它，也無法復原。", action: "移除" };
+  const opened = (): { anchor: HTMLButtonElement; picked: Mock<(id: string, row: HTMLElement) => void> } => {
+    const anchor = document.createElement("button");
+    anchor.setAttribute("aria-label", "更多");
+    document.body.append(anchor);
+    anchor.focus();
+    const picked = vi.fn<(id: string, row: HTMLElement) => void>();
+    openActions(anchor, [{ id: "refresh", label: "更新" }, { id: "delete", label: "移除", icon: "trash", ask: words }], picked);
+    return { anchor, picked };
+  };
+  const item = (id: string): HTMLElement => document.querySelector<HTMLElement>(`#app-popover [data-pick="${id}"]`)!;
+  const dialog = (): HTMLElement | null => document.querySelector<HTMLElement>(".mb-dialog.mb-delete");
+  afterEach(() => { closeMenu(); document.body.innerHTML = ""; });
+
+  test("its press closes the menu and opens the red dialog, asks nowhere in the menu and does nothing yet", () => {
+    const { picked } = opened();
+    expect(item("delete").textContent).toBe("移除");
+    item("delete").click();
+    expect(document.getElementById("app-popover")).toBeNull();
+    expect(dialog()?.querySelector("h2")?.textContent).toBe("移除「pstack」？");
+    expect(dialog()?.querySelector(".mb-dlg-body")?.textContent).toBe("移除後就不能再用它，也無法復原。");
+    expect(dialog()?.querySelector('[data-dlg="delete"]')?.textContent).toBe("移除");
+    expect(dialog()?.querySelector('[data-dlg="cancel"]')?.textContent).toBe("取消");
+    expect(document.querySelector("[data-asking], [data-ask]")).toBeNull();
+    expect(picked).not.toHaveBeenCalled();
+  });
+
+  test("Cancel and Escape leave everything as it was, and the focus goes back to what opened the menu", async () => {
+    const { anchor, picked } = opened();
+    item("delete").click();
+    dialog()!.querySelector<HTMLElement>('[data-dlg="cancel"]')!.click();
+    await settle();
+    expect(dialog()).toBeNull();
+    expect(picked).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(anchor);
+    openActions(anchor, [{ id: "delete", label: "移除", icon: "trash", ask: words }], picked);
+    item("delete").click();
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    await settle();
+    expect(dialog()).toBeNull();
+    expect(picked).not.toHaveBeenCalled();
+  });
+
+  test("only the red button picks the item, once", async () => {
+    const { picked } = opened();
+    item("delete").click();
+    dialog()!.querySelector<HTMLElement>('[data-dlg="delete"]')!.click();
+    await settle();
+    expect(picked).toHaveBeenCalledTimes(1);
+    expect(picked.mock.calls[0]![0]).toBe("delete");
+    expect(dialog()).toBeNull();
+  });
+
+  test("an item without words is picked by its own press, as before", () => {
+    const { picked } = opened();
+    item("refresh").click();
+    expect(picked).toHaveBeenCalledTimes(1);
+    expect(picked.mock.calls[0]![0]).toBe("refresh");
+    expect(dialog()).toBeNull();
+  });
+});
+
+describe("openConfirmMenu", () => {
+  const settle = (): Promise<void> => new Promise(resolve => setTimeout(resolve));
+  afterEach(() => { closeMenu(); document.body.innerHTML = ""; });
+
+  test("is one red item whose press opens the red dialog, and only that dialog's red button runs", async () => {
+    const anchor = document.createElement("button");
+    document.body.append(anchor);
+    const run = vi.fn();
+    openConfirmMenu(anchor, { label: "刪除", ask: { title: "刪除「午餐」？", hint: "此操作無法復原。", action: "刪除" }, run });
+    const item = document.querySelector<HTMLElement>("#app-popover [data-pick]")!;
+    expect(item.textContent).toBe("刪除");
+    expect(item.classList.contains("danger")).toBe(true);
+    item.click();
+    expect(document.getElementById("app-popover")).toBeNull();
+    expect(document.querySelector(".mb-delete h2")?.textContent).toBe("刪除「午餐」？");
+    expect(run).not.toHaveBeenCalled();
+    document.querySelector<HTMLElement>('.mb-delete [data-dlg="cancel"]')!.click();
+    await settle();
+    expect(run).not.toHaveBeenCalled();
+    openConfirmMenu(anchor, { label: "刪除", ask: { title: "刪除「午餐」？", hint: "此操作無法復原。", action: "刪除" }, run });
+    document.querySelector<HTMLElement>("#app-popover [data-pick]")!.click();
+    document.querySelector<HTMLElement>('.mb-delete [data-dlg="delete"]')!.click();
+    await settle();
+    expect(run).toHaveBeenCalledTimes(1);
   });
 });

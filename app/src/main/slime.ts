@@ -418,10 +418,16 @@ export type SlimeCharacter = keyof typeof CHARACTERS;
 
 // ---------- the crown of the primary member ----------
 
-/** One gold shape, no gem and no shine, drawn with its base's middle at (50, 30). */
+/**
+ * One gold shape, no gem and no shine, drawn once on a slime. Its points are worked out into the drawing's own units
+ * (crownMark below) and written as plain coordinates: the crown carries no `transform` of its own, since an engine that
+ * reads a nested transform about the wrong origin set the crown down far from the head, beside the body.
+ */
 const CROWN_GOLD = "#F6C141";
-const CROWN = fill("M 37 32.4 L 36.2 18 L 43.6 23.8 L 50 14.2 L 56.4 23.8 L 63.8 18 L 63 32.4 Q 50 28 37 32.4 Z", CROWN_GOLD).replace("/>", ` stroke="${CROWN_GOLD}" stroke-width="1.8" stroke-linejoin="round"/>`) +
-  `<circle cx="36.2" cy="17.2" r="2.4" fill="${CROWN_GOLD}"/><circle cx="50" cy="13.2" r="2.6" fill="${CROWN_GOLD}"/><circle cx="63.8" cy="17.2" r="2.4" fill="${CROWN_GOLD}"/>`;
+/** The crown as drawn upright with its base's middle at (50, 30): the outline, with the points at its tips. */
+const CROWN_OUTLINE = [[37, 32.4], [36.2, 18], [43.6, 23.8], [50, 14.2], [56.4, 23.8], [63.8, 18], [63, 32.4]] as const;
+const CROWN_BASE_CONTROL = [50, 28] as const;
+const CROWN_TIPS = [[36.2, 17.2, 2.4], [50, 13.2, 2.6], [63.8, 17.2, 2.4]] as const;
 type CrownSpot = readonly [x: number, y: number, turn: number, size: number];
 /**
  * Stuck on the outline from outside, not worn: its base sits square to the edge line without sinking into the body, on the upper right where the dome slopes 30 degrees. Each spot is a point of the outline
@@ -444,9 +450,23 @@ const CROWN_SPOTS: Partial<Record<SlimeCharacter, CrownSpot>> = {
   "ranger-hood": [81.7, 42.6, 50, 0.55], "dragon-ember": [81.7, 42.6, 50, 0.55], "fairy-wings": [81.7, 42.6, 50, 0.55],
   "autumn-leaf": [28.4, 32.9, -32, 0.6], "cherry-blossom": [28.4, 32.9, -32, 0.6],
 };
+/** Where the crown of `slime` stands on its drawing. */
+export const crownSpotOf = (slime: Slime): CrownSpot => ("character" in slime && CROWN_SPOTS[slime.character]) || CROWN_EDGE;
+const unit = (value: number): string => String(+value.toFixed(2));
+/**
+ * The crown, placed on its spot in the drawing's units. It swings a moment after the body about its base like horns do
+ * (`loose`), and it is not part of the dark rim: gold stands out from any page on its own, and a second copy of it
+ * behind the first showed as a second crown wherever the two were not drawn alike.
+ */
 function crownMark(slime: Slime): string {
-  const [x, y, turn, size] = ("character" in slime && CROWN_SPOTS[slime.character]) || CROWN_EDGE;
-  return loose(`<g transform="translate(${x} ${y}) rotate(${turn}) scale(${size}) translate(-50 -30)">${CROWN}</g>`, x, y, 0.6);
+  const [x, y, turn, size] = crownSpotOf(slime);
+  const cos = Math.cos(turn * Math.PI / 180) * size, sin = Math.sin(turn * Math.PI / 180) * size;
+  const at = (px: number, py: number): [number, number] => [x + cos * (px - 50) - sin * (py - 30), y + sin * (px - 50) + cos * (py - 30)];
+  const point = (px: number, py: number): string => at(px, py).map(unit).join(" ");
+  const outline = CROWN_OUTLINE.map(([px, py], index) => `${index ? "L" : "M"} ${point(px, py)}`).join(" ");
+  const shape = `<path d="${outline} Q ${point(...CROWN_BASE_CONTROL)} ${point(...CROWN_OUTLINE[0])} Z" fill="${CROWN_GOLD}" stroke="${CROWN_GOLD}" stroke-width="${unit(1.8 * size)}" stroke-linejoin="round"/>`;
+  const tips = CROWN_TIPS.map(([px, py, r]) => { const [cx, cy] = at(px, py); return `<circle cx="${unit(cx)}" cy="${unit(cy)}" r="${unit(r * size)}" fill="${CROWN_GOLD}"/>`; }).join("");
+  return loose(`<g class="slime-crown">${shape}${tips}</g>`, x, y, 0.6);
 }
 
 const CHARACTER_IDS = Object.keys(CHARACTERS) as SlimeCharacter[];
@@ -525,15 +545,17 @@ export function slimeSVG(slime: Slime, { now = new Date(), state = "idle", delay
   const look: Pick<Face, "color" | "back" | "marks" | "masked"> = "character" in slime ? CHARACTERS[slime.character] : { color: COLORS[slime.color] };
   // The primary member wears the crown in any season: a plain slime's hat gives way to it.
   const hat = "character" in slime || crown ? null : seasonalHat(now);
-  const worn = (look.marks ?? "") + (hat ? loose(`<g transform="translate(0 ${HAT_LIFT})">${HATS[hat]}</g>`, 50, 30, 0.6) : "") + (crown ? crownMark(slime) : "");
+  const dressed = (look.marks ?? "") + (hat ? loose(`<g transform="translate(0 ${HAT_LIFT})">${HATS[hat]}</g>`, 50, 30, 0.6) : "");
+  const worn = dressed + (crown ? crownMark(slime) : "");
   const maskAttribute = (look.masked ? ' data-slime-mask=""' : "") + (isDark(look.color) ? ' data-slime-dark=""' : "");
   // A dark slime stands on a light silhouette of itself (its body, hair, horns, wings and hat) one stroke wider all round, drawn
   // first and shown only in the dark theme (slime.css `.slime-rim`): the rim is its whole outline, and no filter is needed.
   // A brighter slime that wears something dark (black horns, dark wings, a dark band) gets the same rim round what it wears
   // alone: behind the body, only what stands out of it shows the line.
-  const darkBody = isDark(look.color), darkWear = !darkBody && wearsDark(`${look.back ?? ''}${worn}`);
-  const rim = darkBody ? `<g class="slime-rim">${look.back ?? ''}${correction(`<path d="${BODY}"/>`)}${worn}</g>`
-    : darkWear ? `<g class="slime-rim">${look.back ?? ''}${worn}</g>` : '';
+  const darkBody = isDark(look.color), darkWear = !darkBody && wearsDark(`${look.back ?? ''}${dressed}`);
+  // The crown is left out of it: it is the marker of the chief and is drawn once.
+  const rim = darkBody ? `<g class="slime-rim">${look.back ?? ''}${correction(`<path d="${BODY}"/>`)}${dressed}</g>`
+    : darkWear ? `<g class="slime-rim">${look.back ?? ''}${dressed}</g>` : '';
   // The rim is in the resting picture only: in the strips of a moving slime it would be drawn again in every cel (R-PERF-01),
   // so there a dark body keeps a stroke of its own instead (slime.css `.slime-cel-body`).
   const back = rim + (look.back ?? '');

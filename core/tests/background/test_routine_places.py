@@ -299,6 +299,36 @@ async def test_a_sign_in_finished_in_the_console_cleans_up_although_no_record_is
     assert len(reruns(rig)) == 3
 
 
+async def test_the_clean_up_after_a_rerun_never_clears_the_error_of_a_newer_refused_run(make_rig, conn):
+    """The rerun deletes the old run's row; the sign-in recovery then removes the old turn it had collected, and with no row the
+    old run looked like the routine's latest, so the newer refused run's error (the same words) was wiped."""
+    from .conftest import report
+    rig = make_rig()
+    history = AgentHistory(rig.conn)
+    with conn:
+        conn.execute("INSERT INTO routines(member_id,title,prompt,schedule,created_at_ms) VALUES (0,'Inbox','Look','{}',0)")
+    routine_id = conn.execute("SELECT MAX(id) FROM routines").fetchone()[0]
+    failure = {"kind": "auth_expired", "provider": "cli:claude", "cause": "expired"}
+    words = "Claude Code's sign-in has expired."
+    rig.service._closing = True
+    first = history.add(session_id=f"routine:{routine_id}", question="Inbox", route="routine", prefix="", text=words, status="error",
+                        source="routine", failure=failure)
+    task = rig.service.submit(session_id=f"routine:{routine_id}", text="Look", language="en", model="cli:claude", routine_id=routine_id)
+    rig.service.attach_turn(task, first)
+    rig.service._queue.clear()
+    rig.service._closing = False
+    rig.service._store.finish(task, "failed", prefix="", text=words, detail=None, reason="cli_login_expired")
+    newer = history.add(session_id=f"routine:{routine_id}", question="Inbox", route="routine", prefix="", text=words, status="error", source="routine")
+    with conn:
+        conn.execute("INSERT INTO routine_runs(routine_id,started,status,turn_id,trigger_json) VALUES (?,?,'error',?,'{}')", (routine_id, 1, first))
+        conn.execute("INSERT INTO routine_runs(routine_id,started,status,turn_id,trigger_json) VALUES (?,?,'error',?,'{}')", (routine_id, 2, newer))
+        conn.execute("UPDATE routines SET last_error=? WHERE id=?", (words, routine_id))
+    rig.client.replies = [report("Done.")]
+    await rig.service._clean_sign_in_failures("claude")
+    assert history.get(first) is None and history.get(newer) is not None
+    assert conn.execute("SELECT last_error FROM routines WHERE id=?", (routine_id,)).fetchone()[0] == words
+
+
 async def test_a_routine_that_has_run_well_since_is_not_run_again_and_its_failure_still_leaves(make_rig, monkeypatch, tmp_path):
     rig = make_rig()
     brains = claude_brains(tmp_path)

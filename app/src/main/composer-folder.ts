@@ -5,12 +5,20 @@ import { branchLabel, chooseProject, editProjectFolders, folderName, readProject
 import type { BrainSettings, FolderInfo, MainEvent } from "./types";
 import { closeMenu, esc, ico, openPopover, patchHTML, toaster } from "./ui";
 
+/** The core's own words for a switch it refused or could not finish (`SWITCH_SLOW`, `SWITCH_FILTERS` in folders.py). */
+function switchFailure(message: string): string | null {
+  if (message === "Git did not finish switching branches in time") return t("projectFolders.switchSlow");
+  if (message === "This repository runs its own Git filters. Switch branches in your own terminal.") return t("projectFolders.switchFilters");
+  return null;
+}
+
 export function mountComposerFolder(
   button: HTMLElement, branch: HTMLElement, member: () => { id: number; name: string },
   host: { onEvent?(handler: (event: MainEvent) => void): void } = {},
 ): { draw(): void; add(): void; shown(): boolean } {
   let settings: BrainSettings | null = null, generation = 0, menu: HTMLElement | null = null;
   let details = new Map<string, FolderInfo>();
+  const switching = new Set<string>();
   const paths = (): string[] => settings?.project_folders ?? [];
   const selected = (): string | null => {
     const chosen = settings?.member_work_folder?.[member().id];
@@ -33,7 +41,10 @@ export function mountComposerFolder(
   async function refreshProjects(): Promise<void> {
     const asked = ++generation;
     const result = await readProjects(paths());
-    if (asked === generation) { details = result; draw(); }
+    if (asked !== generation) return;
+    // A read that failed (Git too slow for a moment) keeps what was known, so the branch button stays to try again.
+    for (const path of paths()) if (!result.has(path) && details.has(path)) result.set(path, details.get(path)!);
+    details = result; draw();
   }
 
   function take(next: BrainSettings): void {
@@ -110,12 +121,17 @@ export function mountComposerFolder(
     const html = (): string => card(title, info?.branches.map((name, index) => pickRow(index, name, name === info?.branch)).join("") ?? "");
     const popover = open(branch, title, html(), index => {
       const next = info?.branches[index];
-      if (!next || next === info?.branch) return;
+      // One switch at a time per folder: a second press while Git still works would race the first.
+      if (!next || next === info?.branch || switching.has(path)) return;
+      switching.add(path);
       void api.switchBranch(path, next).then(result => { details.set(path, result); draw(); })
         .catch(error => {
           const message = (error instanceof Error ? error.message : String(error)).replace(/^\[-?\d+\] /, "");
-          toaster.info(/^(error|fatal): /.test(message) ? message : describeError(error));
-        });
+          toaster.info(switchFailure(message) ?? (/^(error|fatal): /.test(message) ? message : describeError(error)));
+          // Git may have switched before the answer failed: show the branch the folder is really on.
+          void refreshProjects();
+        })
+        .finally(() => switching.delete(path));
     });
     void refreshProjects().then(() => {
       if (!popover.isConnected || path !== selected()) return;

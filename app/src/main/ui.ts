@@ -211,9 +211,6 @@ export function tabs(items: TabItem[], selected: string, o: { label: string; kin
   return `<div class="${cls}${o.className ? ` ${o.className}` : ""}" role="${nav ? "tablist" : "group"}" aria-label="${esc(o.label)}"${o.attrs ?? ""}>${items.map(one).join("")}</div>`;
 }
 
-/** How long 「中斷連線」 (of a connection or a messaging app) waits for its second press. */
-export const DISCONNECT_CONFIRM_MS = 5000;
-
 export const btn = (label: string, kind = "", attrs = ""): string =>
   `<button type="button" class="btn${kind ? " " + kind : ""}"${attrs}>${label}</button>`;
 
@@ -781,41 +778,6 @@ export function openPopover(anchor: HTMLElement, html: string, o: PopoverOptions
   if (!o.deferPlacement) placeMenu();
   listenForSubmenus(menu);
   return el;
-}
-
-/**
- * The menu of a ⋯ whose one item destroys something (R-UI-56). The first press asks in the item's place, for
- * `DISCONNECT_CONFIRM_MS`; the second closes the menu and does `run`. Closing the menu forgets the first press.
- */
-export function openConfirmMenu(anchor: HTMLElement, o: { label: string; ask: string; run(): void }): void {
-  let asking = false;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const el = openPopover(
-    anchor,
-    `<button type="button" role="menuitem" class="danger" tabindex="-1" data-confirm-item><span class="ck">${ico("trash")}</span><span class="mt">${esc(o.label)}</span></button>`,
-    { className: "menu mb-menu", role: "menu", label: anchor.getAttribute("aria-label") ?? undefined,
-      navigation: { step: direction => asking || direction === "forward" }, onClose: () => clearTimeout(timer) },
-  );
-  const item = el.querySelector<HTMLElement>("[data-confirm-item]")!;
-  const say = (text: string): void => {
-    item.querySelector<HTMLElement>(".mt")!.textContent = text;
-    placeMenu();
-  };
-  item.addEventListener("click", () => {
-    if (asking) {
-      closeMenu();
-      anchor.focus({ preventScroll: true });
-      o.run();
-      return;
-    }
-    asking = true;
-    say(o.ask);
-    timer = setTimeout(() => {
-      asking = false;
-      say(o.label);
-    }, DISCONNECT_CONFIRM_MS);
-  });
-  item.focus();
 }
 
 function menuRootAnchor(): HTMLElement | undefined {
