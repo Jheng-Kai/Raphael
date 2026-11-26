@@ -696,6 +696,46 @@ async def test_projects_mount_read_only_and_rebuild_only_at_idle_start(conn, tmp
     assert reopened.target().projects == ((second_guest, two),)
 
 
+async def test_a_busy_computer_says_the_chosen_project_is_not_mounted_and_is_made_again_when_idle(conn, tmp_path, monkeypatch):
+    # Docker cannot add a folder to a running container. A call that finds the computer in use keeps its mounts and says, in
+    # the result the member reads, that the project is not there yet and what brings it; the first idle call makes the
+    # computer again by itself and says nothing more.
+    settings = SettingsStore(conn)
+    settings.set("computer_vm_mode", "per-bot")
+    runtime = Runtime()
+    vm = LocalVm(tmp_path / "data", settings=settings, runner=runtime)
+    original = vm.target()
+    original.workspace.mkdir(parents=True)
+    runtime.raw = container(vm, original, runtime)
+    assert (await vm.start(original))["ready"]
+    hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Bridge)
+    await hub.prepare()
+    command = next(tool for tool in hub.offered() if tool.name == "vm_exec")
+    project = tmp_path / "Repo"
+    project.mkdir()
+    settings.set("project_folders", [str(project)])
+    settings.set("member_work_folder", {"0": str(project)})
+
+    vm.busy = lambda key: True
+    runtime.calls.clear()
+    kept = await hub.call(command.key, {"command": "pwd"}, approver="auto")
+    assert kept.ok and not any(args[0] in ("stop", "rm") for args, _ in runtime.calls)
+    note = json.loads(kept.text)["note"]
+    assert "/home/cua/projects/Repo" in note and "not mounted" in note and "restart" in note and "workspace" in note
+
+    async def create(created, zone):
+        runtime.raw = container(vm, created, runtime)
+        return Result(0)
+    monkeypatch.setattr(vm, "create", create)
+    vm.busy = lambda key: False
+    idle = await hub.call(command.key, {"command": "pwd"}, approver="auto")
+    assert idle.ok and "note" not in json.loads(idle.text)
+    assert [args[0] for args, _ in runtime.calls if args[0] in ("stop", "rm")] == ["stop", "rm"]
+    # A member with no project chosen is told nothing of the folder.
+    settings.set("member_work_folder", {})
+    assert "note" not in json.loads((await hub.call(command.key, {"command": "pwd"}, approver="auto")).text)
+
+
 async def test_a_container_that_still_mounts_a_project_writable_is_made_again_only_when_idle(conn, tmp_path, monkeypatch):
     # An earlier release bound every project read-write (issues 312 and 315). It is no incompatible computer, and it is not
     # made again under a member's running command: it keeps working until the next idle start, which makes it read-only.

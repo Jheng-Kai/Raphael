@@ -18,7 +18,7 @@ import sys
 import time
 from contextlib import asynccontextmanager, contextmanager
 from contextvars import ContextVar
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
 from jsonschema import Draft202012Validator
 
@@ -146,6 +146,19 @@ CHECKPOINT_WAIT_S = checkpoint_store.GUEST_SECONDS + 3
 COMPUTER_FAULT = "computer_fault"
 COMPUTER_FAULT_NOTE = ("Raphael's own computer layer failed on this call ({kind}), not the computer or the page; whether "
                        "anything was done is unknown. Read the current window or page before the next action.")
+
+
+def _noted(result, note):
+    """`result` with `note` said in it: a key of a JSON answer, else a last line."""
+    try:
+        data = json.loads(result.text)
+    except ValueError:
+        data = None
+    if isinstance(data, dict):
+        result.text = json.dumps({**data, "note": f"{data['note']} {note}" if data.get("note") else note}, ensure_ascii=False)
+    else:
+        result.text = (result.text + "\n" if result.text else "") + note
+    return result
 
 
 def _raised_at(error):
@@ -468,6 +481,20 @@ class VmTools:
         publish(with_ui_words({"zh-TW": f"電腦磁碟快滿了。最大的資料夾：{names}。要我清理哪些？刪除前會先徵求你的同意。",
             "ja": f"ディスクの空き容量が少なくなっています。大きいフォルダー：{names}。削除する前に確認します。どれを整理しますか？", "en": f"The computer disk is nearly full. Largest folders: {names}. Which should I clean up? I will ask before deleting anything."}, lambda _ui_language: ui_word('The computer disk is nearly full. Largest folders: {p0}. Which should I clean up? I will ask before deleting anything.', _ui_language).format(p0=names)).get(language,
             f"The computer disk is nearly full. Largest folders: {names}. Which should I clean up? I will ask before deleting anything."))
+
+    def _project_note(self, target, member):
+        """What a call is told when the project chosen for the member is not in its computer: Docker cannot add a folder to a
+        running container, so the call went on in the workspace (the computer was in use and kept its mounts, or the mount
+        was refused) and the member must not take that place for the project."""
+        wanted = () if target.remote or self.vm.settings is None else self.vm.projects()
+        chosen = choice(self.vm.settings, member) if wanted else None
+        if not chosen or any(source == Path(chosen) for _, source in target.projects):
+            return None
+        guest = next((guest for guest, source in wanted if source == Path(chosen)), None)
+        return (f"Your chosen project ({chosen}) is not mounted in the Docker computer yet, so this ran in your workspace, not in "
+                "the project. Docker cannot add a folder to a running computer: it is added "
+                f"{f'at {guest} ' if guest else ''}when the computer restarts, which happens by itself at your next call once "
+                "nothing else is working in it. If the task needs the project now, say so plainly to the owner.")
 
     def _rebuild_notice(self, target):
         progress, language = _NOTE.get()
@@ -1358,6 +1385,7 @@ class VmTools:
                         return self._busy(target, None, self.busy_wait_s)
                 else:
                     await lock.acquire()
+            project_note = None
             self.vm.active[target.key] = self.vm.active.get(target.key, 0) + 1
             self.vm.physical_active[target.physical] = self.vm.physical_active.get(target.physical, 0) + 1
             # Not input at the screen: the owner's press to take control does not wait for these.
@@ -1377,6 +1405,7 @@ class VmTools:
                         target = kept
                         await self._started(target, member, tool.name)
                     target = self.vm.mounted_target(target)
+                    project_note = self._project_note(target, member)
                 finally:
                     self.mount_start.reset(start)
                 await self._disk_notice(target)
@@ -1586,6 +1615,8 @@ class VmTools:
                 if lock is not None:
                     self.lease_used[target.key] = self.vm.clock()
                     lock.release()
+            if project_note and tool.name in ("vm_exec", "attach_file", *FILE_TOOLS):
+                result = _noted(result, project_note)
             return result
         except asyncio.CancelledError:
             self.vm.invalidate(target)
