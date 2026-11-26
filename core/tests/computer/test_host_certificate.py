@@ -3,6 +3,7 @@ Chrome is started once more where the owner sees it, every member's tab bound to
 once the owner is done (the choice lives in that Chrome's memory), until Chrome would start again anyway."""
 
 import asyncio
+import contextlib
 import json
 import os
 import sys
@@ -31,11 +32,12 @@ class Launch:
         self.closed = False
         self.cookies = []
         self.startup = f"startup-{number}"
+        self.startup_url = f"http://127.0.0.1:1/{number}"
 
     async def call(self, method, params=None, *, session=None):
         self.calls.append((method, params, session))
         if method == "Target.getTargets":
-            return {"targetInfos": [{"type": "page", "url": self.browser.startup_url, "targetId": self.startup}]}
+            return {"targetInfos": [{"type": "page", "url": self.startup_url, "targetId": self.startup}]}
         if method == "Target.createTarget":
             self.sequence += 1
             return {"targetId": f"target-{self.number}-{self.sequence}"}
@@ -77,8 +79,7 @@ class Machine:
             self.fail_next = False
             self.browser.cdp = None
             raise BrowserError("chrome_start_failed")
-        self.browser.startup_url = f"http://127.0.0.1:1/{len(self.launches) + 1}"
-        self.begin()
+        self.browser.startup_url = self.begin().startup_url
         return True
 
     @property
@@ -418,3 +419,94 @@ async def test_on_windows_the_chrome_made_to_be_seen_is_started_on_the_owners_de
         with pytest.raises(BrowserError, match="chrome_start_failed"):
             await browser.start()
     assert seen == [False, True]
+
+
+NATIVE = pytest.mark.skipif(host_browser.chrome_executable() is None or bool(os.environ.get("CI")),
+                            reason="Google Chrome is unavailable or this is CI")
+SITE = b"<title>Staff area</title>Hello"
+
+
+async def serve(reader, writer):
+    try:
+        with contextlib.suppress(asyncio.IncompleteReadError, ConnectionError):
+            await reader.readuntil(b"\r\n\r\n")
+            writer.write(b"HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Type: text/html\r\n"
+                         b"Content-Length: %d\r\n\r\n" % len(SITE) + SITE)
+            await writer.drain()
+    finally:
+        writer.close()
+
+
+def visible_windows(pid):
+    """The windows of the process on the desktop the owner works on that are on the screen (Windows): shown, not minimized
+    and not placed far off it."""
+    import ctypes
+    from ctypes import wintypes
+    user = ctypes.WinDLL("user32")
+    found = []
+
+    @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    def each(window, _):
+        owner = wintypes.DWORD()
+        user.GetWindowThreadProcessId(window, ctypes.byref(owner))
+        rect = wintypes.RECT()
+        user.GetWindowRect(window, ctypes.byref(rect))
+        if owner.value == pid and user.IsWindowVisible(window) and not user.IsIconic(window) and rect.left > -10000:
+            found.append(window)
+        return True
+
+    user.EnumWindows(each, 0)
+    return found
+
+
+async def bounds_of(browser, tab):
+    cdp = browser.cdp
+    window = (await cdp.call("Browser.getWindowForTarget", {"targetId": tab.target}))["windowId"]
+    return (await cdp.call("Browser.getWindowBounds", {"windowId": window}))["bounds"]
+
+
+@NATIVE
+async def test_native_chrome_shown_for_a_certificate_keeps_the_pages_and_the_session_and_goes_back_when_it_starts_anew(tmp_path):
+    site = await asyncio.start_server(serve, "127.0.0.1", 0)
+    base = f"http://localhost:{site.sockets[0].getsockname()[1]}"
+    browser = HostBrowser(tmp_path / "profile")
+    try:
+        gate, _ = await browser.open_tab(1, tmp_path, 10)
+        other = await browser.new_tab(2, tmp_path, 11)
+        assert await host_page.navigate(browser, gate, base + "/gate")
+        assert await host_page.navigate(browser, other, base + "/inbox")
+        await host_page.evaluate(browser, other, "document.cookie = 'carried=1; path=/'")
+        assert not browser.shown
+        if os.name == "nt":
+            assert not visible_windows(browser.process.pid)  # on a desktop of its own
+        ids = (gate.id, other.id)
+        await browser.show_for_owner(gate)
+        assert browser.shown and (gate.id, other.id) == ids and browser.tabs[gate.id] is gate and browser.live(other)
+        async with asyncio.timeout(15):
+            while not (gate.url.endswith("/gate") and other.url.endswith("/inbox")):
+                await asyncio.sleep(0.1)
+        assert (await host_page.evaluate(browser, gate, "document.title"))[0] == "Staff area"
+        assert "carried=1" in (await host_page.evaluate(browser, other, "document.cookie"))[0]
+        assert (await bounds_of(browser, gate))["windowState"] == "normal" and (await bounds_of(browser, gate))["left"] > -1000
+        assert (await bounds_of(browser, other))["left"] == -32000
+        if os.name == "nt":
+            assert visible_windows(browser.process.pid)  # the owner's own desktop
+        shown_process = browser.process
+        await browser.tuck_away(gate)
+        bounds = await bounds_of(browser, gate)
+        assert (bounds["windowState"] == "minimized") if sys.platform == "darwin" else (bounds["left"] == -32000)
+        if os.name == "nt":
+            assert not visible_windows(shown_process.pid)
+        # Chrome stays the shown one, working: the pages of every member load as before.
+        assert browser.shown and await host_page.navigate(browser, other, base + "/again")
+        assert (await host_page.evaluate(browser, gate, "document.title"))[0] == "Staff area"
+        await browser._stop()
+        assert not browser.shown
+        tab, started = await browser.open_tab(1, tmp_path, 10)
+        assert started and not browser.shown
+        if os.name == "nt":
+            assert not visible_windows(browser.process.pid)
+        assert await host_page.navigate(browser, tab, base + "/back")
+    finally:
+        await browser.aclose()
+        site.close()

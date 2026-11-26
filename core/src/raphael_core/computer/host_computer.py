@@ -93,7 +93,7 @@ WORDS = {
     "browser_upload_count": "This file chooser takes one file.",
     "browser_upload_path": "Upload only files inside your work folder, never a private or system place.",
     "bad_path": "The requested work file path is invalid.",
-    "browser_navigation_waiting": "Chrome is still waiting for this page. If a native certificate or key prompt is blocking it, use request_takeover with reason: certificate.",
+    "browser_navigation_waiting": "Chrome is still waiting for this page. If it asks for a client certificate, use request_takeover with reason: certificate; Chrome then opens a window on the owner's screen to choose it.",
     "browser_owner_approval_required": "The owner must approve the exact outward action before it can run.",
     "browser_handback_stopped": "The owner stopped the handback. End this task without retrying the action.",
     "browser_handback_expired": "The owner did not return this tab in time. End this task without retrying the action.",
@@ -150,7 +150,7 @@ class HostComputerTools:
                              }},
             "browser_dialog": BROWSER_DIALOG,
             "browser_upload": BROWSER_UPLOAD,
-            "request_takeover": {"parameters": HOST_TAKEOVER, "description": TAKEOVER["description"] + " Use certificate for a certificate prompt."},
+            "request_takeover": {"parameters": HOST_TAKEOVER, "description": TAKEOVER["description"] + " Use certificate when a page asks for a client certificate: Chrome opens a window on the owner's screen, where they choose it and then press Done."},
             **{name: {**DEFINITIONS[name], "description": DEFINITION_WORDS[name]} for name in READS | WRITES},
         })
 
@@ -351,6 +351,9 @@ class HostComputerTools:
                 name, arguments, approver, member, work, conversation_id, announce, can_hand_back=can_hand_back)
             if reason:
                 try:
+                    if reason == "certificate":
+                        # Chrome's own chooser needs a window: Chrome is shown to the owner for this step (#345).
+                        await browser.show_for_owner(tab)
                     detail = data.get("detail", "")
                     await self.cards.wait_for_browser(turn_id=turn_id, member_id=member, conversation_id=conversation_id,
                                                       language=language, reason=reason, tab=tab, detail=detail, browser=browser)
@@ -364,6 +367,10 @@ class HostComputerTools:
                 finally:
                     if browser.handback.get(member) is tab:
                         browser.handback.pop(member)
+                    if reason == "certificate":
+                        # The choice stays valid only in this Chrome, so it keeps running; its window steps aside.
+                        with suppress(BrowserError, OSError, TimeoutError, KeyError):
+                            await browser.tuck_away(tab)
                 if data.get("owner_needed"):
                     data["status"] = "owner_step_still_needed"
                 else:

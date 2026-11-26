@@ -298,6 +298,11 @@ async def test_certificate_handoff_keeps_the_origin_and_tab_for_an_existing_priv
         assert active is tab
         return {"tab_id": "original"}, []
 
+    async def unchanged(shown):
+        assert shown is tab  # Chrome's change to a visible one has its own tests (test_host_certificate.py)
+
+    monkeypatch.setattr(browser, "show_for_owner", unchanged)
+    monkeypatch.setattr(browser, "tuck_away", unchanged)
     monkeypatch.setattr(host_page, "snapshot", snapshot)
     tools.cards = SimpleNamespace(wait_for_browser=wait)
     result = await tools.call(key, {"reason": "certificate"}, member=1, scope=("task", 5), turn_id=2,
