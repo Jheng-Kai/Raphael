@@ -1001,7 +1001,7 @@ class VmTools:
             if not self.vm.enabled or self.host_computer is None or self.suggestions is None or approver == "none":
                 return PluginResult(False, "blocked")
             if task_id or not private or not turn_id or not scope or scope[0] != "turn":
-                return PluginResult(False, "vm_required", "Report why the VM is required and stop. A suggestion card is only available in a private app conversation.")
+                return PluginResult(False, "vm_required", "Report why the other computer is required and stop. A suggestion card is only available in a private app conversation.")
             if not Draft202012Validator(SUGGEST_COMPUTER.schema).is_valid(arguments) or not (reason := " ".join(arguments["reason"].split())):
                 return PluginResult(False, "bad_arguments")
             return await self.suggestions.show(turn_id, member, reason, _NOTE.get()[1], OTHER[chosen])
