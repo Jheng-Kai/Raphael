@@ -395,3 +395,62 @@ async def test_an_app_composio_no_longer_connects_gets_its_card_even_while_the_l
                                    source="app", member_id=0)
     again = rig.cards.show(turn_id=later, member_id=0, conversation_id=None, app=APPS["gmail"], language="zh-TW")
     assert again is not None and again.state == "pending"
+
+
+def _stalled_on(path_end, platform, release):
+    """A Composio that answers everything but the request for the sign-in link, which it never answers."""
+    async def transport(request):
+        if request.url.path.endswith(path_end):
+            await release.wait()
+        return platform(request)
+    return httpx.MockTransport(transport)
+
+
+async def test_a_card_whose_sign_in_page_cannot_be_made_fails_instead_of_waiting_for_a_browser_that_never_opens(tmp_path, conn):
+    """#354: the card said 等你在瀏覽器登入 while the core was still asking Composio for the page, and nothing ever opened."""
+    opened, release = [], asyncio.Event()
+
+    async def browser(url):
+        opened.append(url)
+    rig = Rig(tmp_path, conn, GoogleFixture("n0nce"), transport=_stalled_on("/link", Platform(), release), browser=browser)
+    rig.vault.set("connectors:composio:key", "ak_test")
+    rig.cards._start_s = 0.2
+    card = rig.card()
+    started = await rig.router.call("integrations.card_connect", {"id": card.id})
+    assert started["started"] and started["card"]["state"] == "authorizing"
+    try:
+        await asyncio.wait_for(rig.cards.idle(), 5)
+    finally:
+        release.set()
+    card = rig.cards.store.get(card.id)
+    assert (card.state, card.error) == ("failed", "no_answer") and not opened and not rig.resumed
+    assert not rig.connectors.login_pending
+    # Pressing again signs in once Composio answers: the same card, the same page Connect apps opens.
+    _, again = await rig.connect(card)
+    assert again.state == "connected" and opened == ["https://connect.composio.dev/link/lt_private"]
+
+
+async def test_a_card_and_connect_apps_open_the_same_sign_in_page(tmp_path, conn):
+    opened = []
+
+    async def browser(url):
+        opened.append(url)
+    rig = Rig(tmp_path, conn, GoogleFixture("n0nce"), transport=httpx.MockTransport(Platform()), browser=browser)
+    rig.vault.set("connectors:composio:key", "ak_test")
+    from_apps = await rig.router.call("connectors.connect", {"toolkit": "gmail"})
+    assert from_apps["connected"]
+    turn = AgentHistory(conn).add(session_id="again", question="Reconnect Gmail", route="answer", prefix="", text="", status="running", source="app")
+    card = rig.cards.show(turn_id=turn, member_id=0, conversation_id=None, app=APPS["gmail"], language="zh-TW", reconnect=True)
+    _, card = await rig.connect(card)
+    assert card.state == "connected" and len(opened) == 2 and opened[0] == opened[1]
+
+
+async def test_a_card_says_why_when_the_browser_cannot_be_opened(tmp_path, conn):
+    async def browser(url):
+        raise OSError("no browser")
+    rig = Rig(tmp_path, conn, GoogleFixture("n0nce"), transport=httpx.MockTransport(Platform()), browser=browser)
+    rig.vault.set("connectors:composio:key", "ak_test")
+    _, card = await rig.connect(rig.card())
+    assert (card.state, card.error) == ("failed", "browser") and not rig.resumed
+    view = rig.cards.view(card)
+    assert (view["error"], view["retry"]) == ("browser", True)

@@ -132,6 +132,9 @@ class ConnectorsService:
         self._lock = asyncio.Lock()
         self._multi_account_session = ""
         self._connect_task: asyncio.Task | None = None
+        # Set when the sign-in page of the sign-in under way has been opened for the owner (a card tells a sign-in that is
+        # still being set up from one that waits in the browser).
+        self.page_opened = asyncio.Event()
         # The accounts a sign-in of this run is waiting for: a read of the list never gives these up before the wait ends.
         self._signing_in: set[str] = set()
         self._tool_catalog: dict[str, list[dict]] = {}
@@ -184,6 +187,7 @@ class ConnectorsService:
                 builtin = self.hub._login
                 if self.login_pending or self._lock.locked() or (builtin is not None and not builtin.done()):
                     raise ConnectorFailure("busy")
+                self.page_opened.clear()
                 task = asyncio.create_task(operation(params))
                 self._connect_task = task
                 try:
@@ -218,6 +222,7 @@ class ConnectorsService:
             raise
         except Exception:
             raise ConnectorFailure("browser") from None
+        self.page_opened.set()
 
     @property
     def login_pending(self):
