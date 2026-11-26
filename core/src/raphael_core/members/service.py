@@ -109,6 +109,7 @@ from ..slime_ids import current_avatar
 from ..services.attachments import IMAGE_TYPES, MAX_IMAGE_BYTES, AttachmentError, checked, sniff_ok
 from .capabilities import MemberCapabilities, download_skills
 from .skill_packages import SkillPackages
+from .skill_convert import Conversions, needs_conversion, routed
 from .skill_paths import as_local
 from . import skill_sources
 from .schedule import Schedule, first_eligible_slot, next_run
@@ -172,6 +173,10 @@ def unread_kind(turns: Sequence[tuple]) -> str:
     failed = any(status in FAILED_TURNS or task in FAILED_TASKS for status, _source, _routine, task in turns)
     done = any(status == "done" and (routine or source == "routine" or task == "done") for status, source, routine, task in turns)
     return "failed" if failed else "done" if done else "message"
+
+
+class ConvertInstead(Exception):
+    """The direct import found material that is no skill yet: a slime converts it (skill_convert.py)."""
 
 
 def _rpc_error(error: MemberError) -> RpcError:
@@ -332,6 +337,8 @@ class MembersService:
         self.store = MemberStore(conn, now_ms)
         self.capabilities = MemberCapabilities(conn, local_dir / "member-skills", self.store)
         self.packages = SkillPackages(self.capabilities)
+        self.attachments = None  # where the material of a conversion is kept (use_attachment_store)
+        self.conversions = Conversions(self)
         self.greeting = None  # Bound by the interactive AgentService, never the routine worker.
         self._delivered: set[tuple[int, int, str]] = set()
         self._conn = conn
@@ -407,6 +414,7 @@ class MembersService:
         methods = {
             "skills.library.list": self._packages_list,
             "skills.library.import": self._packages_import,
+            "skills.library.convert": self.conversions.status,
             "skills.library.update": self._packages_update,
             "skills.library.delete": self._packages_delete,
             "members.skills.list": self._skills_list,
@@ -988,10 +996,28 @@ class MembersService:
 
     async def _packages_list(self, params):
         self._package_fields(params, ())
-        return {"packages": await self.packages.list_async(), "members": [{"id": m.id, "name": m.name} for m in self.store.members()]}
+        # A conversion that ended while the window was elsewhere is imported now, so that its work is never lost.
+        await self.conversions.settle()
+        return {"packages": await self.packages.list_async(), "members": [{"id": m.id, "name": m.name} for m in self.store.members()],
+                "converting": self.conversions.waiting()}
+
+    def use_attachment_store(self, store) -> None:
+        """Keep the material of a conversion where a conversation keeps what the owner attaches (app.py)."""
+        self.attachments = store
 
     async def _packages_import(self, params):
-        key, _, _, skipped = await self._import_package(-1, params, new_package=True)
+        """The one box of Team skills: whatever is a skill or a plugin imports directly, with no model; what is not in a
+        skill's format because of its format is converted by the primary contact (skill_convert.py)."""
+        params = routed(params)
+        if "files" in params:
+            self._package_fields(params, ("files", "access", "name"))
+        try:
+            key, _, _, skipped = await self._import_package(-1, params, new_package=True)
+        except ConvertInstead:
+            try:
+                return await self.conversions.start(params)
+            except MemberError as error:
+                raise _library_error(error) from None
         # What was left out because its name is taken is named with who holds it (#313): the rest is in the library.
         return {"package": await self.packages.view_async(key), **({"skipped": skipped} if skipped else {})}
 
@@ -1003,6 +1029,9 @@ class MembersService:
             return [("paste", {"SKILL.md": text.encode()})], "pasted text", "paste", ""
         if "file" in params:
             files, name = await asyncio.to_thread(skill_sources.uploaded, params["file"])
+            return [("upload", f) for f in files], name, "upload", name
+        if "files" in params:
+            files, name = await asyncio.to_thread(skill_sources.uploaded_tree, params["files"])
             return [("upload", f) for f in files], name, "upload", name
         source = params["source"]
         if not isinstance(source, str) or not source.strip():
@@ -1020,7 +1049,7 @@ class MembersService:
         return documents, source, "source", name
 
     async def _import_package(self, member, params, *, new_package=False):
-        self._package_fields(params, ("source", "text", "file", "access", "name", "plugin", "set_id", "marketplace"))
+        self._package_fields(params, ("source", "text", "file", "files", "access", "name", "plugin", "set_id", "marketplace"))
         if "source" in params:
             # A path written any way is a folder on this computer, never a GitHub source.
             params = {**params, "source": as_local(params["source"])}
@@ -1037,7 +1066,7 @@ class MembersService:
         try:
             as_plugin = bool(params.get("plugin") or "marketplace" in params or "set_id" in params)
             if as_plugin:
-                if member != -1 or "text" in params or "file" in params:
+                if member != -1 or "text" in params or "file" in params or "files" in params:
                     raise invalid_params("a plugin needs a shared plugin source")
                 if (not any(k in params for k in ("set_id", "marketplace", "source"))
                         or "set_id" in params and "marketplace" in params
@@ -1059,12 +1088,14 @@ class MembersService:
                 key = f"set:{plugin['id']}"
                 ids = [s["id"] for s in (await self.packages.view_async(key))["skills"]]
             else:
-                if sum(k in params for k in ("source", "text", "file")) != 1:
+                if sum(k in params for k in ("source", "text", "file", "files")) != 1:
                     raise invalid_params("choose exactly one source, text or file")
                 data = await self._package_documents(params)
                 key, ids = await self.packages.install(member, *data, access=params.get("access"), name=params.get("name"),
                                                          skipped=skipped)
         except MemberError as error:
+            if new_package and member == -1 and "plugin" not in params and needs_conversion(error):
+                raise ConvertInstead from None
             raise (_library_error if member == -1 else _rpc_error)(error) from None
         except (OSError, UnicodeError) as error:
             raise (_library_error if member == -1 else _rpc_error)(_io_error(error, "read or keep the skill files")) from error

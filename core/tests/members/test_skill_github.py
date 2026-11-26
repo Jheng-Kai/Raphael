@@ -7,7 +7,7 @@ from raphael_core.members import skill_github
 from raphael_core.protocol import RpcError
 from .github_fake import FakeGitHub
 from .test_skill_import_limits import detail, stored
-from .test_skill_packages import document
+from .test_skill_packages import direct, document
 
 
 @pytest.fixture
@@ -110,7 +110,7 @@ async def test_a_source_that_fails_says_its_cause(rig, github, name):
     github.add("owner/docs", {"README.md": b"no skills here"})
     source, kind, expected = FAILURES[name]
     with pytest.raises(RpcError) as error:
-        await imported(rig, source)
+        await direct(rig, {"source": source})
     assert error.value.message.startswith(f"Invalid params: {kind}: ")
     assert expected.items() <= detail(error).items()
     assert not (await rig.call("skills.library.list", {}))["packages"]
@@ -143,7 +143,7 @@ async def test_a_raw_file_that_fails_names_the_file(rig, github):
 async def test_a_document_that_is_not_a_skill_names_its_file_and_line(rig, github):
     github.add("owner/skills", {"skills/bad/SKILL.md": b"---\nname: bad\n---\nNo description", **repository()})
     with pytest.raises(RpcError) as error:
-        await imported(rig, "owner/skills")
+        await direct(rig, {"source": "owner/skills"})
     assert detail(error) == {"reason": "front_matter", "problem": "no_description", "line": 3, "file": "skills/bad/SKILL.md"}
 
 

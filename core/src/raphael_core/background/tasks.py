@@ -172,7 +172,9 @@ class Task:
     def quiet(self) -> bool:
         """Whether its report stays in its thread: a member's task, or a routine's run, is never
         said on the overlay (the owner reads it in the app)."""
-        return self.member_id != 0 or self.routine_id is not None or self.scope != "private" or self.report_room_id is not None or self.mode == "work"
+        # A conversion of the library's import box (members/skill_convert.py) answers the window that asked, never the overlay.
+        return (self.member_id != 0 or self.routine_id is not None or self.scope != "private" or self.report_room_id is not None
+                or self.mode == "work" or self.session_id.startswith("skills:convert:"))
 
 
 @dataclass

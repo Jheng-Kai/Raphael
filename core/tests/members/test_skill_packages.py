@@ -18,6 +18,11 @@ def document(name):
     return f"---\nname: {name}\ndescription: Guide to {name}\n---\nBody for {name}."
 
 
+async def direct(rig, params):
+    """The importer without the conversion: what the library says of a source, with no slime to turn it into a skill."""
+    return await rig.service._import_package(-1, params)
+
+
 def upload(name, data):
     return {"file": {"name": name, "data": base64.b64encode(data).decode()}}
 
@@ -105,7 +110,7 @@ async def test_invalid_packages_leave_the_library_and_files_untouched(rig, monke
         monkeypatch.setattr(skill_sources, "MAX_PACKAGE_BYTES", 1024 if problem == "expanded" else 16)
         entries.append(("notes/help.txt", b"x" * 2000))
     with pytest.raises(RpcError) as error:
-        await rig.call("skills.library.import", upload("notes.zip", archive(entries)))
+        await direct(rig, upload("notes.zip", archive(entries)))
     assert error.value.data["kind"] == kind
     # The window reads the kind from the message, which is all the shell passes it (skill-library.ts failureText).
     assert error.value.message.startswith(f"Invalid params: {kind}: ")
@@ -297,7 +302,7 @@ async def test_only_selected_skill_links_are_resolved_and_external_links_are_not
 async def test_missing_skill_document_is_refused_before_writing(rig):
     data = archive([("notes/SKILL.md", b"\x00invalid")])
     with pytest.raises(RpcError, match="UTF-8 Markdown"):
-        await rig.call("skills.library.import", upload("notes.zip", data))
+        await direct(rig, upload("notes.zip", data))
     assert not rig.service.packages.list()
 
 
