@@ -1001,6 +1001,36 @@ async def test_service_switch_preserves_tools_and_updates_offers_without_restart
     await assert_brain_offers(True)
 
 
+async def test_a_member_given_composio_apps_is_offered_the_router_and_runs_only_their_tools(tmp_path, conn):
+    """#350: a member's switches in its 工具 and the composer's 應用程式 name a Composio app `composio:<toolkit>` and the
+    owner's Google `google`, while their tools share the servers connectors_composio and connectors_google. A member given
+    an app is offered that server's tools, and one execution through Composio reaches only the apps the member was given."""
+    from raphael_core.agent.speaker import Speaker
+    from raphael_core.background.snapshot import take_snapshot
+
+    router, service, hub, vault, fake = await connected(tmp_path, conn)
+    composio, execute = tool_key("connectors_composio", ""), tool_key("connectors_composio", "COMPOSIO_MULTI_EXECUTE_TOOL")
+    gmail = Speaker(id=8, tools=frozenset({"web_search", "composio:gmail"}))
+    sheets = Speaker(id=9, tools=frozenset({"composio:googlesheets"}))
+    neither = Speaker(id=10, tools=frozenset({"web_search"}))
+    for speaker, offered in ((gmail, True), (sheets, True), (neither, False)):
+        snapshot = take_snapshot(hub, speaker=speaker, interactive=True, max_tier=Tier.T3)
+        reachable = [tool for tool in (snapshot.pool.by_alias.values() if snapshot.pool else ()) if tool.key.startswith(composio)]
+        assert bool(reachable) is offered and speaker.uses_plugin(execute) is offered
+    slug = service.store.connectors["composio:gmail"].enabled_tools[0]
+    reaches = hub.connections_of_call(execute, {"tools": [{"tool_slug": slug, "arguments": {}}]})
+    assert reaches == [frozenset({"composio:gmail"})]
+    assert gmail.apps_outside(reaches) == [] and Speaker(id=11).apps_outside(reaches) == []
+    assert sheets.apps_outside(reaches) == ["gmail"]
+    # Any other tool reaches only its own server, which `uses_plugin` already judged.
+    assert hub.connections_of_call(tool_key("connectors_composio", "COMPOSIO_SEARCH_TOOLS"), {"queries": []}) == []
+    assert hub.connections_of_call(tool_key("notion", "update_page"), {"tools": [{"tool_slug": slug}]}) == []
+    # The owner's own Google is one connection, `google`, on its own server.
+    google = tool_key("connectors_google", "gmail_send_email")
+    assert Speaker(id=12, tools=frozenset({"google"})).uses_plugin(google) and not gmail.uses_plugin(google)
+    assert not Speaker(id=12, tools=frozenset({"google"})).uses_plugin(execute)
+
+
 async def test_failed_remote_switch_never_reenables_local_service(tmp_path, conn):
     router, service, hub, vault, fake = await connected(tmp_path, conn)
 
