@@ -652,7 +652,8 @@ export function checkRendered(name, context = {}) {
     const rowOf = key => document.querySelector(`.skl-pack[data-skl-pack="${key}"]`);
     const accessOf = key => rowOf(key)?.querySelector('.skl-access span')?.textContent.trim();
     // A package's page stands in the list's place (R-SKILL-17): it has no importer of its own.
-    const onPage = ['skill-library-open', 'skill-library-page-top', 'skill-library-skill-page', 'skill-library-doc-alone', 'skill-library-page-remove'].includes(name);
+    const onPage = ['skill-library-open', 'skill-library-page-top', 'skill-library-skill-page', 'skill-library-doc-alone', 'skill-library-page-remove',
+      'skill-library-plugin-imported', 'skill-library-skipped', 'skill-library-rename'].includes(name);
     if (name !== 'member-skills-library' && !onPage) {
       const pane = document.querySelector('.modal-scrim .skl');
       require(pane?.getAttribute('aria-label') === '團隊技能', 'the Settings section names Team skills');
@@ -664,7 +665,7 @@ export function checkRendered(name, context = {}) {
       require(!pane.querySelector('.skl-head, .skl-drop-hint') && !pane.previousElementSibling?.matches?.('p'), 'nothing is written between the tab name and its first card');
       const box = pane.getBoundingClientRect();
       const rows = [...pane.querySelectorAll('.skl-list > .skl-pack')];
-      require(rows.length > 0 && Math.max(...rows.map(row => row.offsetHeight)) === Math.min(...rows.map(row => row.offsetHeight)), "plugin and skill rows all have the same height");
+      require(name === 'skill-library-empty' ? rows.length === 0 : rows.length > 0 && Math.max(...rows.map(row => row.offsetHeight)) === Math.min(...rows.map(row => row.offsetHeight)), "plugin and skill rows all have the same height");
       for (const row of rows) {
         const r = row.getBoundingClientRect();
         require(r.left >= box.left - 1 && r.right <= box.right + 1, `a package row stays inside the tab (${Math.round(r.left)}-${Math.round(r.right)})`);
@@ -851,6 +852,50 @@ export function checkRendered(name, context = {}) {
       const probe = document.createElement('i'); probe.style.color = 'var(--err)'; said?.parentElement?.append(probe);
       const err = getComputedStyle(probe).color; probe.remove();
       require(said?.textContent.trim() === '裡面找不到 SKILL.md。' && getComputedStyle(said).color === err, `the cause is said inside the importer, in the error colour (${said && getComputedStyle(said).color} against ${err})`);
+    }
+    if (name === 'skill-library-empty') {
+      const pane = document.querySelector('.modal-scrim .skl');
+      require(pane.firstElementChild?.matches('.skl-import') && visible(pane.querySelector('.skl-empty')) && pane.querySelector('.skl-empty').textContent.trim() === '還沒有技能。', 'the importer is first and the empty library says so');
+      require(!pane.querySelector('.skl-list, .skl-section'), 'no list is drawn');
+    }
+    if (name === 'skill-library-importing') {
+      const status = document.querySelector('.skl-import .skl-progress');
+      require(visible(status) && status.textContent.trim() === '匯入中…' && status.getAttribute('role') === 'status', 'the importer says it is importing');
+      require(document.querySelector('[data-skl="import-go"]').disabled && document.querySelector('#skl-source').disabled, 'the card holds still while it works');
+      require(!document.querySelector('.skl-error, .toast'), 'nothing else is said while it works');
+    }
+    if (name === 'skill-library-plugin-imported') {
+      const page = document.querySelector('.skl-page[data-skl-page="pack:desk"]');
+      require(visible(page) && page.querySelector('h1.skl-page-name')?.textContent.trim() === 'desk-kit', 'the new plugin opens on its page');
+      const names = [...page.querySelectorAll('.skl-skill .t')].map(el => el.textContent.trim());
+      require(names.join('、') === 'pdf-read、pdf-fill、pdf-merge、docx-read', `its skills are its rows (${names.join('、')})`);
+      require(page.querySelector('.skl-access span')?.textContent.trim() === '還沒給任何人' && !document.querySelector('.toast'), 'a plugin is for nobody until chosen, and says nothing more');
+    }
+    if (name === 'skill-library-skipped') {
+      const page = document.querySelector('.skl-page[data-skl-page="pack:left"]'), said = page.querySelector('.skl-skipped');
+      const items = [...said.querySelectorAll('li')].map(el => el.textContent.trim());
+      require(visible(said) && said.getAttribute('role') === 'status' && items.join('|') === 'tdd（已在「pstack」）|review（已在「研究工具」）', `the left-out skills are listed with who holds each (${items.join('|')})`);
+      require(page.querySelectorAll('.skl-skill').length === 2, 'the two that came are its rows');
+    }
+    if (name.startsWith('skill-library-failed-')) {
+      const said = document.querySelector('.skl-import .skl-error'), words = said?.textContent.trim() ?? '';
+      const expected = {
+        'clash-single': ['pdf-read', 'pdf', '重新命名或刪除'], 'clash-package': ['tdd', 'pstack', 'office-kit', '重新命名或刪除'],
+        'size': ['assets/demo-video.mp4', '256.0 MB'], 'repo': ['owner/missing'], 'network': ['GitHub', '網路'], 'document': ['skills/bad/SKILL.md', '第 4 行'],
+      }[name.slice('skill-library-failed-'.length)];
+      require(visible(said) && expected.every(part => words.includes(part)), `the cause is said with what it names (${words})`);
+      require(visible(document.querySelector('.skl-import #skl-source')) && !document.querySelector('.toast'), 'the importer stays open and nothing else is said');
+      const box = document.querySelector('.skl-import').getBoundingClientRect(), r = said.getBoundingClientRect();
+      require(r.left >= box.left - 1 && r.right <= box.right + 1, 'the words stay inside the card');
+    }
+    if (name === 'skill-library-rename') {
+      const page = document.querySelector('.skl-doc-page'), field = page.querySelector('#skl-rename');
+      require(visible(field) && field.value === '來源核對' && document.activeElement === field, 'the title is a field with the name, focused');
+      require(!page.querySelector('h1.skl-page-name'), 'the title is not drawn twice');
+      const actions = [...page.querySelectorAll('.skl-page-actions .ctl > *')].map(el => el.dataset.skl);
+      require(actions.join(',') === 'skill-rename,skill-remove,skill', `the pencil stands beside the trash and the switch (${actions.join(',')})`);
+      const head = page.querySelector('.skl-page-head').getBoundingClientRect(), box = field.getBoundingClientRect();
+      require(box.right <= head.right + 1 && box.left >= head.left - 1 && box.height <= 40, 'the field stays inside the header, one row high');
     }
     if (name === 'member-skills-library') {
       roundBack(document.querySelector('[data-ms="back"]'));

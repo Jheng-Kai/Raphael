@@ -124,7 +124,8 @@ test("one row per package says who may use it, and its name opens its skills on 
   expect(doc.textContent).toContain("第 4 個技能的內容");
   expect(doc.textContent).not.toContain("description:");
   expect(root.querySelector(".skl-doc-page .skl-about p")?.textContent).toBe("來源核對 的說明");
-  expect([...root.querySelectorAll<HTMLElement>(".skl-doc-page .skl-page-actions .ctl > button")].map(control => control.dataset.skl)).toEqual(["skill-remove", "skill"]);
+  // A skill of a pack carries its pencil, trash and switch.
+  expect([...root.querySelectorAll<HTMLElement>(".skl-doc-page .skl-page-actions .ctl > button")].map(control => control.dataset.skl)).toEqual(["skill-rename", "skill-remove", "skill"]);
   press(root, '[data-skl="back"]');
   expect(root.querySelector('.skl-page[data-skl-page="pack:2"]:not(.skl-doc-page)')).not.toBeNull();
   expect(document.activeElement).toBe(root.querySelector('[data-skl="open-skill"][data-id="4"]'));
@@ -395,7 +396,7 @@ test("a refused delete of one skill says why and reloads the library", async () 
 
 test("a name that is taken says which package holds it, and an import that left skills out lists them with their holders", async () => {
   expect(failureText(new Error('[-32602] Invalid params: taken: a skill named tdd already exists in the package "pstack" (switched off)')))
-    .toBe("「pstack」裡已有同名的「tdd」（可能已停用）。請先在團隊技能中把它刪除。");
+    .toBe("「pstack」裡已有同名的「tdd」（可能已停用）。請先在團隊技能中重新命名或刪除那個技能。");
   expect(failureText(new Error('[-32602] Invalid params: taken: a skill named tdd already exists in the package "my "own" pack"')))
     .toContain("my \"own\" pack");
   const made = { ...packages()[1], key: "pack:9", name: "新套件", skills: [skill(9, "lint")] };
@@ -408,4 +409,105 @@ test("a name that is taken says which package holds it, and an import that left 
   expect(note.getAttribute("role")).toBe("status");
   expect(note.querySelector("p")?.textContent).toBe("有 2 個技能的名稱已被占用，沒有匯入：");
   expect([...note.querySelectorAll("li")].map(item => item.textContent)).toEqual(["tdd（已在「pstack」）", "plan"]);
+});
+
+const refused = (kind: string, reason: string, detail: Record<string, unknown> = {}): Error =>
+  new Error(`[-32602] Invalid params: ${kind}: the core's own english words [[${JSON.stringify({ reason, ...detail })}]]`);
+
+test.each([
+  [refused("size", "file", { file: "skills/big/SKILL.md", size: 300 * 1024, limit: 128 * 1024 }), "skills/big/SKILL.md 有 300.0 KB，超過技能文件 128.0 KB 的上限。"],
+  [refused("size", "package", { file: "assets/movie.mp4", size: 300 * 1024 * 1024, limit: 256 * 1024 * 1024 }), "這次匯入的檔案合計超過 256.0 MB，在 assets/movie.mp4 超出。請匯入較小的資料夾。"],
+  [refused("size", "files", { limit: 100000 }), "這次匯入的檔案超過 100000 個。"],
+  [refused("size", "upload", { file: "big.zip", size: 200 * 1024 * 1024, limit: 128 * 1024 * 1024 }), "big.zip 有 200.0 MB，視窗最多送出 128.0 MB。請改選它所在的資料夾。"],
+  [refused("size", "listing"), "這個來源太大，無法搜尋。請改貼或選擇放技能的資料夾。"],
+  [refused("download", "network"), "連不上 GitHub。請檢查網路後再試。"],
+  [refused("download", "timeout"), "GitHub 沒有及時回應，請再試一次。"],
+  [refused("download", "rate_limit"), "GitHub 暫時限制了請求次數，請稍後再試。"],
+  [refused("download", "status", { status: 503 }), "GitHub 回應 503，請稍後再試。"],
+  [refused("download", "changed", { file: "a.md" }), "a.md 在讀取時被改動，請重新匯入。"],
+  [refused("not_found", "repo", { repo: "owner/missing" }), "GitHub 上找不到儲存庫「owner/missing」，或它是私人的。"],
+  [refused("not_found", "no_skill"), "裡面找不到 SKILL.md。"],
+  [refused("not_found", "skill", { name: "ghost" }), "找不到 ghost。"],
+  [refused("not_found", "source", { file: "D:\\gone" }), "找不到 D:\\gone。"],
+  [refused("skill", "front_matter", { file: "skills/bad/SKILL.md", line: 4 }), "skills/bad/SKILL.md 第 4 行：文件開頭要有兩條 --- 之間的名稱與說明。"],
+  [refused("skill", "encoding", { file: "SKILL.md" }), "SKILL.md 不是 UTF-8 的 Markdown。"],
+  [refused("archive", "path", { file: "../x" }), "無法取用 ../x：技能內不允許它的名稱或類型。"],
+  [refused("archive", "unreadable"), "這個壓縮檔打不開，或裡面有不允許的檔案。"],
+  [refused("source", "host", { host: "example.com" }), "example.com 不是可用的來源。請用 GitHub 或 skills.sh 連結、owner/repo、資料夾，或 .zip、.tar.gz、.md 檔。"],
+  [refused("source", "linked", { file: "D:\\skills\\link" }), "D:\\skills\\link 是連結，系統不會跟著連結走。"],
+  [refused("io", "disk", { file: "SKILL.md", why: "disk full" }), "無法讀取或寫入 SKILL.md。"],
+  [refused("source", "insecure"), "不支援這個來源。"],
+])("an import that fails says its own cause: %#", (error, words) => {
+  expect(failureText(error)).toBe(words);
+});
+
+test("a clash names the skill and the package on both sides", () => {
+  expect(failureText(refused("taken", "clash", { skill: "tdd", held_by: "tools.zip", off: true, incoming: "" })))
+    .toBe("「tools.zip」裡已有同名的「tdd」（可能已停用）。請先在團隊技能中重新命名或刪除那個技能。");
+  expect(failureText(refused("taken", "clash", { skill: "tdd", held_by: "tools.zip", off: false, incoming: "more.zip" })))
+    .toBe("「tools.zip」裡已有名為「tdd」的技能，「more.zip」也帶來一個同名的。請在團隊技能中重新命名或刪除其中一個。");
+});
+
+test("an import under way says so under the card, and a file over the window's limit is not sent", async () => {
+  let finish: (value: unknown) => void = () => {};
+  const { root } = await setup(method => method === "skills.library.import" ? new Promise(resolve => { finish = resolve; }) : {});
+  root.querySelector<HTMLInputElement>("#skl-source")!.value = "owner/skills";
+  press(root, '[data-skl="import-go"]');
+  expect(root.querySelector('.skl-import .skl-progress[role="status"]')?.textContent).toBe("匯入中…");
+  expect(root.querySelector<HTMLButtonElement>('[data-skl="import-go"]')?.disabled).toBe(true);
+  finish({ package: { ...packages()[2], key: "skill:9", name: "owner" } });
+  await settle(); await settle();
+  expect(root.querySelector(".skl-progress")).toBeNull();
+  const input = root.querySelector<HTMLInputElement>("#skl-file")!;
+  Object.defineProperty(input, "files", { configurable: true, value: [{ name: "huge.zip", size: 129 * 1024 * 1024 }] });
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+  await settle();
+  expect(api.core).not.toHaveBeenCalledWith("skills.library.import", expect.objectContaining({ file: expect.anything() }));
+  expect(root.querySelector(".skl-error")?.textContent).toBe("檔案太大了。");
+});
+
+/** A pack's skill's page, where its title can become a field. */
+const openPackSkill = (root: ParentNode, id: number): void => {
+  press(root, '[data-skl="open"][data-key="pack:2"]');
+  press(root, `[data-skl="open-skill"][data-id="${id}"]`);
+};
+
+test("a skill of a pack is renamed from its page, and a plugin's skill is not", async () => {
+  const renamed: LibraryPackage = { ...packages()[1], skills: [skill(4, "my-source-check"), skill(5, "每週摘要", false)] };
+  const { root } = await setup(method => method === "skills.library.update" ? { package: renamed } : {});
+  press(root, '[data-skl="open"][data-key="set:1"]');
+  press(root, '[data-skl="open-skill"][data-id="1"]');
+  expect(root.querySelector('[data-skl="skill-rename"]')).toBeNull();
+  press(root, '[data-skl="back"]'); press(root, '[data-skl="back"]');
+  openPackSkill(root, 4);
+  press(root, '[data-skl="skill-rename"][data-id="4"]');
+  const field = root.querySelector<HTMLInputElement>("#skl-rename")!;
+  expect(field.value).toBe("來源核對");
+  field.value = "my-source-check";
+  field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+  await settle(); await settle();
+  expect(api.core).toHaveBeenCalledWith("skills.library.update", { key: "pack:2", rename: { id: 4, name: "my-source-check" } });
+  expect(root.querySelector("#skl-rename")).toBeNull();
+  expect(root.querySelector("h1.skl-page-name")?.textContent).toBe("my-source-check");
+});
+
+test("a rename that is taken says who holds the name, and Esc or leaving the field drops the edit", async () => {
+  const { root } = await setup(method => {
+    if (method === "skills.library.update") throw refused("taken", "clash", { skill: "review", held_by: "tools.zip", off: false, incoming: "" });
+    return {};
+  });
+  const info = vi.spyOn(toaster, "info").mockImplementation(() => {});
+  openPackSkill(root, 4);
+  press(root, '[data-skl="skill-rename"][data-id="4"]');
+  root.querySelector<HTMLInputElement>("#skl-rename")!.value = "review";
+  root.querySelector<HTMLInputElement>("#skl-rename")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+  await settle(); await settle();
+  expect(info).toHaveBeenCalledWith("「tools.zip」裡已有同名的「review」（可能已停用）。請先在團隊技能中重新命名或刪除那個技能。");
+  press(root, '[data-skl="skill-rename"][data-id="4"]');
+  root.querySelector("#skl-rename")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+  expect(root.querySelector("#skl-rename")).toBeNull();
+  expect(root.querySelector(".skl-doc-page")).not.toBeNull();
+  press(root, '[data-skl="skill-rename"][data-id="4"]');
+  root.querySelector("#skl-rename")!.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+  expect(root.querySelector("#skl-rename")).toBeNull();
 });
