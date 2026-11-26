@@ -64,7 +64,7 @@ DEFINITIONS = {
     "glob": {
         "description": f"Find files by name on {WHERE.replace('path absolute', 'path a folder, absolute')}, as Claude Code's "
                        "Glob: pattern such as **/*.pdf or Documents/**/*.{docx,xlsx} (one without / matches at any depth), "
-                       "under path (the owner's home by default). Newest first, 100 at most. Skips app data, caches and "
+                       "under path (your working folder when one is chosen for you, else the owner's home). Newest first, 100 at most. Skips app data, caches and "
                        "where keys are kept unless path is inside them; a narrow path is faster.",
         "parameters": {"type": "object", "properties": {
             "pattern": {"type": "string", "minLength": 1, "maxLength": 1000},
@@ -72,8 +72,8 @@ DEFINITIONS = {
             "required": ["pattern"], "additionalProperties": False}},
     "grep": {
         "description": f"Search file contents on {WHERE.replace('path absolute', 'path a file or folder, absolute')}, as "
-                       "Claude Code's Grep: pattern is a regular expression, path a file or folder (the owner's home by "
-                       "default); glob (e.g. *.{md,txt}) or type (e.g. py) picks files; ignore_case; multiline lets . match "
+                       "Claude Code's Grep: pattern is a regular expression, path a file or folder (your working folder when one is chosen for you, "
+                       "else the owner's home); glob (e.g. *.{md,txt}) or type (e.g. py) picks files; ignore_case; multiline lets . match "
                        "newlines. output_mode: files_with_matches (default, newest first), content (matching lines; "
                        "line_numbers on by default; after, before or context lines) or count. head_limit (default 250, 0 "
                        "for all) and offset page the results. Text files only; a narrow path is faster.",
@@ -551,6 +551,14 @@ class OwnerFileTools:
         self.member_folders = default_folders
         self.reads = FileReads()
 
+    def work_project(self, member_id):
+        """The project chosen for this member, when it is there."""
+        from ..folders import choice
+        try:
+            return choice(self.settings, member_id)
+        except (KeyError, TypeError, ValueError):
+            return None
+
     def shared_path(self, path, member_id):
         """Allow only ordinary files under this member's own and the team's canonical folders."""
         return self.shared_in(path, self.shared_folders(member_id))
@@ -630,6 +638,9 @@ class OwnerFileTools:
                 # one is not made.
                 if self.reach(arguments, member_id) == "outside" and approver != "user":
                     return PluginResult(False, "approval_required", OUTSIDE_WORDS)
+            if name in ("glob", "grep") and not arguments.get("path") and (project := self.work_project(member_id)):
+                # A search that names no folder starts in the member's project, as Claude Code searches its working directory.
+                arguments = {**arguments, "path": project}
             path = arguments.get("path")
             if name != "glob" and name != "grep" or path:
                 if kept_place(path or "~"):

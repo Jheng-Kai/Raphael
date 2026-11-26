@@ -146,6 +146,7 @@ class Driver:
         self.environ = environ
         self.home = home
         self.child = None
+        self.work_cwd = None  # the project a Codex thread is told it works in (it runs in its private workspace)
         self.session = None
         self.turn = None
         self.quota = quota
@@ -226,7 +227,7 @@ class Driver:
             await self.child.kill()
         self._close_steers()
 
-    async def run(self, *, user, system, endpoint, token, session=None, permission, cwd=None, images=(), computer_endpoint=None, structured=None, skills=(), no_tools=False, fresh_context=None):
+    async def run(self, *, user, system, endpoint, token, session=None, permission, cwd=None, project=None, images=(), computer_endpoint=None, structured=None, skills=(), no_tools=False, fresh_context=None):
         files = PrivateFiles()
         codex_auth = None
         self._diagnostic_secrets = [token]
@@ -242,6 +243,9 @@ class Driver:
             command = list(self.command)
             environ = dict(os.environ if self.environ is None else self.environ)
             child_cwd = cwd or str(files.path)
+            # The member's chosen project, when it has one: the folder the CLI is started in, so it names it as its own working
+            # directory (Claude Code does this for the folder it is given). `cwd` stays the private place its own state is kept.
+            work = project or None
             # Only Raphael's enabled packages enter native discovery. No plugin hooks/config are copied.
             loaded_skills = []
             skill_paths = []
@@ -265,6 +269,7 @@ class Driver:
                             "--mcp-config", config, "--strict-mcp-config", "--tools", "Skill" if skill_paths else "",
                             "--allowedTools", ("Skill," if skill_paths else "") + ("mcp__raphael__*,mcp__computer__*" if computer_endpoint else "mcp__raphael__*")]
                 environ["MCP_TOOL_TIMEOUT"] = str(MCP_TOOL_S * 1000)
+                child_cwd = work or child_cwd
                 if skill_paths:
                     command += ["--plugin-dir", str(plugin), "--settings", '{"disableAllHooks":true}']
                 else:
@@ -291,6 +296,7 @@ class Driver:
                     with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
                         json.dump(auth, stream)
                 child_cwd = str(home / "workspace")
+                self.work_cwd = work
                 # Only sessions issued by the isolated driver may cross this boundary.
                 if session and not session.startswith(CODEX_SESSION_PREFIX) and fresh_context is not None:
                     user = fresh_context()
@@ -324,6 +330,7 @@ class Driver:
                     command += ["--model", self.model]
                 if session:
                     command += ["--conversation", session]
+                child_cwd = work or child_cwd
             else:
                 raise ValueError("unknown_cli")
             if self.name == "codex":
@@ -588,7 +595,7 @@ class Driver:
                 if label == "initialize":
                     await self.child.send({"jsonrpc": "2.0", "method": "initialized", "params": {}})
                     arguments = {"developerInstructions": system, "approvalPolicy": "untrusted",
-                                 "sandbox": "read-only", "cwd": self.child.cwd,
+                                 "sandbox": "read-only", "cwd": self.work_cwd or self.child.cwd,
                                  "config": {"features.shell_tool": False, "features.apply_patch_freeform": False}}
                     if self.model:
                         arguments["model"] = self.model

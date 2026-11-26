@@ -10,6 +10,15 @@ from .settings import SettingsStore
 PROJECT_WAITS = "not mounted yet: it is added when the Docker computer restarts, which happens by itself once nothing is working in it"
 
 
+def _working_folder(picked, work, own, target, mounted_here):
+    """The member's assignment in plain words, outside the data block: the folder it works in, and that it looks there first."""
+    where = f"{Path(picked).name or picked} at {picked}"
+    if target is not None and not target.remote:
+        where += f" ({work} in the computer)" if mounted_here else " (not in the computer yet: it is added by itself once nothing works in it)"
+    return (f"\nYour working folder is {where}. Start there: look at it first (files, Git state, README), and run commands there. "
+            f"Notes and downloads go in your own workspace ({own}).")
+
+
 def owner_context(settings: SettingsStore, member_id: int = 0, *, folders=default_folders, target=None,
                   include_folders=True) -> str:
     profile = {"name": settings.get("owner_name"), "about": settings.get("owner_about")}
@@ -20,6 +29,7 @@ def owner_context(settings: SettingsStore, member_id: int = 0, *, folders=defaul
         projects = settings.get("project_folders")
         unmounted, mounted_here = {}, False
         work = chosen or str(member)
+        workspace = str(member)
         if target is not None:
             from ..computer.vm import GUEST, SHARED
             mounted = {path_key(source): guest for guest, source in target.projects} if not target.remote else {}
@@ -48,6 +58,8 @@ def owner_context(settings: SettingsStore, member_id: int = 0, *, folders=defaul
             instructions = (f"\nSave deliverables to work_folder with {tools}, or export and attach. work_folder is read-only "
                             "to commands in your computer: change its files with the file tools, and run Git there with the "
                             "local command tool.")
+        if picked:
+            instructions = _working_folder(picked, work, workspace, target, mounted_here) + instructions
     elif not any(profile.values()):
         return ""
     data = json.dumps(profile, ensure_ascii=False, separators=(",", ":")).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")

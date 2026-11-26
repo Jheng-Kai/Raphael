@@ -2257,6 +2257,9 @@ fixed 16,000 characters. The request, file names, additions, note and records ar
 alone outgrow the window; the rest is filled with memory and team sections, the summary, the owner's own recent words and
 then recent turns, newest first. Covered offline by `core/tests/agent/test_cli_context.py`.
 
+R-CLI-13: a native CLI brain (Claude Code, Codex, Antigravity) of a member with a chosen project starts in it (Codex's thread is told
+it), keeping its private state in the member's private workspace. Core only (no screen changes): `core/tests/agent/test_cli_project_cwd.py`.
+
 R-CLI-11: a subscription CLI waits for one call to our MCP tools as long as the loop gives a call in flight (2 hours:
 Claude Code `MCP_TOOL_TIMEOUT`, Codex `tool_timeout_sec`), not the vendors' 60 s, and each MCP call is recorded under the
 server's, endpoint's and request's ids so `/mcp` and `/computer` never overwrite each other's tool events. Covered offline

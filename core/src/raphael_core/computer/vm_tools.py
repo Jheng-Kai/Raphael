@@ -493,7 +493,7 @@ class VmTools:
         guest = next((guest for guest, source in wanted if source == Path(chosen)), None)
         return (f"Your chosen project ({chosen}) is not mounted in the Docker computer yet, so this ran in your workspace, not in "
                 "the project. Docker cannot add a folder to a running computer: it is added "
-                f"{f'at {guest} ' if guest else ''}when the computer restarts, which happens by itself at your next call once "
+                f"{f'at {guest} ' if guest else ''}when the computer restarts, which happens by itself as soon as "
                 "nothing else is working in it. If the task needs the project now, say so plainly to the owner.")
 
     def _rebuild_notice(self, target):

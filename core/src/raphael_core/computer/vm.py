@@ -63,6 +63,9 @@ JOB_LOG_MAX = 256 * 1024  # bytes of combined stdout and stderr kept per detache
 # The owner's hold of a screen ends by itself after this long without a click or a key of theirs (a sign-in request that
 # waits for them and a recording are held until they say so): a lease nobody uses blocks every member.
 OWNER_IDLE_S = 300
+# How often a computer in use is looked at again, in memory only, for the moment it is idle and the owner's project
+# folders can be mounted (`refresh_mounts`).
+MOUNTS_RETRY_S = 3
 # The longest a command may be waited for, and the longest a job started in the background may run.
 FOREGROUND_S = 1800
 BACKGROUND_S = 21_600
@@ -504,6 +507,9 @@ class LocalVm:
         self.input_busy = lambda target: bool(self.active.get(target.key))
         self.timezone = lambda: None
         self.timezone_pending = False
+        # The owner's project folders changed and a computer may not show them yet (`refresh_mounts_soon`): `version` counts
+        # the changes, so one that comes while a pass is under way is never lost.
+        self.mounts_pending, self.mounts_version, self.mounts_task = False, 0, None
         from .desktop_host import DockerDesktop
         # Injected Docker runners never launch a real host application in tests.
         self._desktop = DockerDesktop() if runner is None else None
@@ -1897,6 +1903,73 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
                         self.timezone_pending = True
                         continue  # Home remains usable while Docker is unavailable.
 
+    def refresh_mounts_soon(self):
+        """The owner added or removed a project folder: every running computer of this PC is made again with the new mounts,
+        in the background, as soon as nothing works in it (Docker cannot change the mounts of a running container). One pass
+        at a time: a change that comes while it runs is read by its next round."""
+        self.mounts_pending = True
+        self.mounts_version += 1
+        if self.mounts_task is None or self.mounts_task.done():
+            self.mounts_task = asyncio.create_task(self._refresh_mounts_task())
+        return self.mounts_task
+
+    async def _refresh_mounts_task(self):
+        waiting = None
+        while self.mounts_pending:
+            version = self.mounts_version
+            if waiting is None:
+                try:
+                    await self.recover()  # a computer made by an earlier run of the app is known now
+                except (VmError, OSError, TimeoutError):
+                    pass
+            blocked, failed = await self.refresh_mounts(waiting)
+            if version != self.mounts_version:
+                waiting = None  # the folders changed again: look at every computer once more
+                continue
+            if failed:
+                return  # still pending: the monitor tries again, and so does the next start of a computer
+            if not blocked:
+                self.mounts_pending = False
+                return
+            waiting = blocked
+            await asyncio.sleep(MOUNTS_RETRY_S)
+
+    async def refresh_mounts(self, only=None):
+        """Make each running computer of this PC again where its mounts are not the owner's project folders and nothing works in
+        it: no running task, no command in the background, no call, no hold of the owner. It goes through `start`, so the
+        locks that keep two makings (and a member's own start) from racing are the ones every start takes. A sleeping computer
+        is left alone and comes up with the folders at its next start; a computer in use keeps its mounts and is returned as
+        blocked, to be looked at again (`only` names those, so nothing but memory is asked while they wait). Returns (the state
+        keys of the computers still waiting for idle, whether the engine or the making failed)."""
+        blocked, failed = set(), False
+        if self.remote or not self.enabled:
+            return blocked, failed
+        projects = self.projects()
+        for unit in list(self.units()):
+            key = unit.state_key
+            if unit.remote or only is not None and key not in only:
+                continue
+            target = replace(unit, projects=projects)
+            try:
+                if only is None:
+                    state = await self.status(target, probe=False)
+                    if state["state"] == "unavailable":
+                        failed = True  # no engine to ask: it stays pending, and the monitor asks again
+                    if state["state"] != "running" or not state.get("mounts_stale"):
+                        continue
+                if self.unit_active(target) or self.unit_held(target) or self.mount_busy(target):
+                    blocked.add(key)
+                    continue
+                await self.start(target)
+            except VmError as error:
+                if str(error) == "busy":
+                    blocked.add(key)
+                else:
+                    failed = True
+            except (OSError, TimeoutError):
+                failed = True
+        return blocked, failed
+
     async def stop(self, target, *, remove=False, captured_image=None):
         async with self.locks.setdefault(target.state_key, asyncio.Lock()):
             if self.unit_active(target) or self.unit_held(target):
@@ -2268,6 +2341,8 @@ print(base64.b64encode(data).decode())
                 await asyncio.sleep(30)
                 if self.timezone_pending:
                     await self.refresh_timezone()
+                if self.mounts_pending and (self.mounts_task is None or self.mounts_task.done()):
+                    self.refresh_mounts_soon()
                 await self.sweep()
                 self.data.settle_soon()
         except (OSError, TimeoutError, VmError):
@@ -2293,6 +2368,10 @@ print(base64.b64encode(data).decode())
             pending.cancel()
         await asyncio.gather(*self.image_tasks.values(), return_exceptions=True)
         self.image_tasks.clear()
+        if self.mounts_task is not None:
+            self.mounts_task.cancel()
+            await asyncio.gather(self.mounts_task, return_exceptions=True)
+            self.mounts_task = None
         if self.task:
             self.task.cancel()
             await asyncio.gather(self.task, return_exceptions=True)

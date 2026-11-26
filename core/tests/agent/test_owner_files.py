@@ -471,3 +471,21 @@ def test_the_walk_skips_app_data_unless_it_starts_there(home):
     assert not [path for path in walked if "Library" in path]
     inside = list(owner_files.Walk(os.path.realpath(library), lambda path: False, home=home).files())
     assert [os.path.basename(path) for path in inside] == ["notes.md"]
+
+
+async def test_a_search_that_names_no_folder_starts_in_the_members_project(conn, home, files):
+    # As Claude Code searches its working directory: with a project chosen, glob and grep start there, not in the owner's home.
+    settings = SettingsStore(conn)
+    (home / "Documents" / "notes" / "plan.md").write_text("# Plan\nship it\n", encoding="utf-8")
+    (home / "elsewhere").mkdir()
+    (home / "elsewhere" / "other.md").write_text("ship elsewhere\n", encoding="utf-8")
+    everywhere = await call(files, "glob", {"pattern": "**/*.md"})
+    assert "other.md" in everywhere.text
+    settings.set("project_folders", [str(home / "Documents")])
+    settings.set("member_work_folder", {"0": str(home / "Documents")})
+    found = await call(files, "glob", {"pattern": "**/*.md"})
+    assert found.ok and "plan.md" in found.text and "other.md" not in found.text
+    matched = await call(files, "grep", {"pattern": "ship"})
+    assert matched.ok and "plan.md" in matched.text and "other.md" not in matched.text
+    named = await call(files, "grep", {"pattern": "ship", "path": "~/elsewhere"})
+    assert "other.md" in named.text  # a folder that is named is the one searched
