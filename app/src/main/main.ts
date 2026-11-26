@@ -132,8 +132,12 @@ function mountWindowChrome(): void {
     console.warn("main: window controls are unavailable outside Tauri", error);
   }
   try {
-    const webview = getCurrentWebview();
-    installWindowZoom(window, (factor) => webview.setZoom(factor));
+    const webview = getCurrentWebview(), frame = getCurrentWindow();
+    installWindowZoom(window, (factor) => webview.setZoom(factor), {
+      read: () => frame.scaleFactor(),
+      watch: (listener) => void frame.onScaleChanged(({ payload }) => listener(payload.scaleFactor))
+        .catch((error) => console.warn("main: the window zoom does not follow a change of screen", error)),
+    });
   } catch (error) {
     console.warn("main: window zoom is unavailable outside Tauri", error);
   }
