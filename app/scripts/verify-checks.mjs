@@ -14,13 +14,24 @@ export const CORE_CONTRACT = ["tests/evaluate", "tests/members/test_management_d
 // them whatever changed, as Vitest filters.
 export const RULE_TESTS = ["src/architecture", "guardian-contract", "feature-map", "src/design-tokens", "src/focus-rings", "src/layout.test", "src/main/nav-layer-rule.test", "src/ui-rules", "src/main/ui.test", "i18n/i18n.test", "scripts/repo-clean", "src/main/settings-paths"];
 
+// Core tests that read a file outside their package as text (the shell's method list, the app's types): a change to that
+// file runs them too. A new reading of an app file must be added here (verify.test.mjs finds every one).
+export const READ_BY_CORE_TESTS = {
+  "app/src-tauri/src/commands.rs": ["tests/architecture/test_boundaries.py", "tests/architecture/test_management_coverage.py"],
+  "app/src/main/api.ts": ["tests/architecture/test_management_coverage.py"],
+  "app/src/main/types.ts": ["tests/agent/test_self_diagnosis.py"],
+  "app/src/main/slime-ids.ts": ["tests/members/test_slime_ids.py"],
+  "core/src/raphael_core/management.py": ["tests/architecture/test_management_coverage.py"],
+};
+
 /** The core tests --changed runs for the files a change touched, from the core folder: the test folder of each core
  *  package it changed (`raphael_core/members/…` → `tests/members`), the test file of a changed top-level module
- *  (`raphael_core/app.py` → `tests/test_app.py`) and each changed test file; a file inside a folder that runs is not
- *  named again. */
+ *  (`raphael_core/app.py` → `tests/test_app.py`), each changed test file and the tests that read a changed file as text
+ *  (READ_BY_CORE_TESTS); a file inside a folder that runs is not named again. */
 export function coreTargets(changed, exists = path => existsSync(join(root, "core", path))) {
   const targets = new Set();
   for (const file of changed) {
+    for (const reader of READ_BY_CORE_TESTS[file] ?? []) if (exists(reader)) targets.add(reader);
     const inPackage = /^core\/src\/raphael_core\/([^/]+)\//.exec(file), module = /^core\/src\/raphael_core\/([^/]+)\.py$/.exec(file);
     const test = /^core\/(tests\/.+\.py)$/.exec(file);
     if (inPackage && exists(`tests/${inPackage[1]}`)) targets.add(`tests/${inPackage[1]}`);
