@@ -1006,7 +1006,7 @@ test("a face in the member list looks at the pointer while the pointer is on its
   expect(css).toContain('.slime-surface[data-slime-gazing] .slime[data-state="idle"] .slime-follow { translate: var(--slime-gaze-x, 0px) var(--slime-gaze-y, 0px); }');
 });
 
-test("a picker's choice looks only while the pointer is on it; a face anywhere else follows the pointer wherever it is", () => {
+test("a picker's choice looks only while the pointer is on it, and a face anywhere else follows the pointer wherever it is", () => {
   vi.useFakeTimers({ toFake: ["requestAnimationFrame"] });
   try {
     document.body.innerHTML = `<div class="mb-slime-characters">${slimeCharactersHTML(null, same, "", "red")}</div><div id="elsewhere">${slimeSVG({ character: "horns-red" }, { now: plain.now })}</div><p id="away">外面</p>`;

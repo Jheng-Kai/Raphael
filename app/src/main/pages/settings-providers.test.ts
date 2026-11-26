@@ -1013,3 +1013,27 @@ test("General removes only the selected project and adds a picked folder", async
   expect(api.settingsSet).toHaveBeenLastCalledWith("project_folders", [notes, added]);
   expect(page.el.querySelectorAll('[data-row="project-folder"]')).toHaveLength(2);
 });
+
+test("a Mac's microphone is not opened by the meter until macOS allows it: 測試麥克風 asks once, a refusal leads to its pane (R-PRIV-MIC-01)", async () => {
+  const opened = () => api.audioMonitor.mock.calls.filter(call => call[0] === true).length;
+  api.microphonePermission.mockResolvedValue("undecided");
+  await mount("dictation");
+  const ask = page.el.querySelector<HTMLButtonElement>('.missing-note [data-act="mic-ask"]');
+  expect(ask?.textContent?.trim()).toBe(t("settings.micAsk"));
+  expect(opened()).toBe(0);
+  // The owner's own press asks macOS once; the answer is read again, and an allowed microphone opens the meter.
+  api.microphoneAsk.mockResolvedValue(true);
+  api.microphonePermission.mockResolvedValue("allowed");
+  ask!.click(); await flush();
+  expect(api.microphoneAsk).toHaveBeenCalledOnce();
+  expect(page.el.querySelector('[data-act="mic-ask"]')).toBeNull();
+  expect(opened()).toBe(1);
+  // A refused microphone is not asked again from the page: its note says so (and, on a Mac, opens the Microphone pane).
+  page.hide(); document.body.innerHTML = ""; api.audioMonitor.mockClear(); api.microphoneAsk.mockClear();
+  api.microphonePermission.mockResolvedValue("denied");
+  await mount("dictation");
+  expect(page.el.querySelector('[data-act="mic-ask"]')).toBeNull();
+  expect(page.el.querySelector(".missing-note")?.textContent).toContain(t("missing.microphone"));
+  expect(opened()).toBe(0);
+  expect(api.microphoneAsk).not.toHaveBeenCalled();
+});
