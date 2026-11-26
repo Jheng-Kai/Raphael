@@ -39,8 +39,9 @@ export function createMemberActions(host: MemberActionHost) {
       else if (action === "hide") {
         // Hidden members wait in the sidebar's hidden folder, where the same item brings them back (R-UI-112).
         await api.membersUpdate(id, {hidden: !m.hidden});
-        if (!m.hidden && host.current() === id) host.select(fallbackMemberId(host.list(), id));
+        // The core hands the chief's chair on (R-CHIEF-02): the roster read back says to whom, so the choice waits for it.
         await host.load();
+        if (!m.hidden && host.current() === id) host.select(fallbackMemberId(host.list(), id));
       } else if (action === "unread") {
         await api.core("members.unread", {id});
         // Marking the open conversation unread moves away so viewing does not immediately clear it.
@@ -112,8 +113,8 @@ export function createMemberActions(host: MemberActionHost) {
       return;
     }
     host.deleted(id);
+    await host.load();  // the roster read back names the chief the core chose (R-CHIEF-02)
     if (host.current() === id) host.select(fallbackMemberId(host.list(), id));
-    await host.load();
   }
 
   return { editMember, memberAction, moveMember, deleteMember, update: host.update };

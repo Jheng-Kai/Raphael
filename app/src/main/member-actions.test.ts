@@ -165,6 +165,29 @@ describe("where the open conversation goes when its member leaves", () => {
     expect(step.select).toHaveBeenCalledExactlyOnceWith(2);
   });
 
+  test("the chief it opens is the one the core chose when the roster was read again, not its own guess from the old roster", async () => {
+    api.membersDelete.mockResolvedValue({ deleted: true });
+    // The sidebar lists the folder 專案 (1, 2) before 學習 (3, 4), but the core promotes by pinned, position, id: member 3.
+    const stale = () => roster(2, { 3: { position: 0 } });
+    const fresh = (gone: "hidden" | "deleted") => {
+      const next = roster(3, { 3: { position: 0 } });
+      return gone === "hidden" ? { ...next, members: next.members.map(m => m.id === 2 ? { ...m, hidden: true } : m) } : { ...next, members: next.members.filter(m => m.id !== 2) };
+    };
+    for (const gone of ["hidden", "deleted"] as const) {
+      current = stale();
+      const step = leaving(2);
+      load.mockImplementationOnce(async () => { current = fresh(gone); });
+      if (gone === "hidden") await step.actions.memberAction(2, "hide");
+      else {
+        const done = step.actions.deleteMember(2);
+        await flush();
+        document.querySelector<HTMLElement>('[data-dlg="delete"]')!.click();
+        await done;
+      }
+      expect(step.select).toHaveBeenCalledExactlyOnceWith(3);
+    }
+  });
+
   test("Raphael cannot be pinned, hidden, deleted or made chief from here", async () => {
     current = roster(2);
     const step = leaving(0);

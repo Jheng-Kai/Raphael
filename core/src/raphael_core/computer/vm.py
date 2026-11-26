@@ -1994,6 +1994,11 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
                 if self.unit_active(target) or self.unit_held(target) or self.mount_busy(target):
                     blocked.add(key)
                     continue
+                if only is not None:
+                    state = (await self.status(target, probe=False))["state"]
+                    failed = failed or state == "unavailable"
+                    if state != "running":
+                        continue  # put to sleep (or gone) while it waited: `start` would wake it, and it comes up with the folders anyway
                 await self.start(target)
             except VmError as error:
                 if str(error) == "busy":

@@ -171,6 +171,24 @@ async def test_a_sleeping_computer_is_not_woken_for_a_folder(rig):
     assert mounted(runtime) == ["/home/cua/projects/Repo"]
 
 
+async def test_a_computer_the_owner_stopped_while_it_was_busy_is_not_woken_by_the_retry(rig):
+    vm, settings, runtime = rig.vm, rig.settings, rig.runtime
+    vm.busy = lambda key: True
+    settings.set("project_folders", [rig.folders[0]])
+    vm.refresh_mounts_soon()
+    await asyncio.sleep(0.1)
+    assert not vm.mounts_task.done() and remade(runtime) == []
+    runtime.raw["State"]["Running"] = False  # the owner put it to sleep between two rounds
+    runtime.calls.clear()
+    vm.busy = lambda key: False
+    await settle(vm)
+    assert not any(args[0] in ("run", "start", "stop", "rm", "create") for args, _ in runtime.calls)
+    assert runtime.raw["State"]["Running"] is False and mounted(runtime) == []
+    # What the next call that needs it does anyway: it comes up with the folder.
+    assert (await vm.start(vm.target()))["ready"]
+    assert mounted(runtime) == ["/home/cua/projects/Repo"]
+
+
 async def test_two_changes_in_a_row_end_with_the_last_set_and_one_task(rig):
     vm, settings, runtime = rig.vm, rig.settings, rig.runtime
     settings.set("project_folders", [rig.folders[0]])

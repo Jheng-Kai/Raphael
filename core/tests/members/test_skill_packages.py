@@ -2,6 +2,7 @@
 
 import base64
 import io
+import os
 import shutil
 import stat
 import tarfile
@@ -297,6 +298,62 @@ async def test_only_selected_skill_links_are_resolved_and_external_links_are_not
     with pytest.raises(MemberError, match="not a path a skill may hold"):
         load_package(folder)
     assert load_package(folder, installed=True)["deep/read.txt"] == b"read this"
+
+
+def plugin_archive(tar):
+    """A plugin whose skill ships a script marked executable and a plain data file."""
+    entries = [(".claude-plugin/plugin.json", b'{"name":"notes","version":"1.0.0"}', 0o644),
+               ("skills/notes/SKILL.md", document("read-notes").encode(), 0o644),
+               ("skills/notes/run.sh", b"#!/bin/sh\necho hi\n", 0o755), ("skills/notes/data.txt", b"plain", 0o644)]
+    buffer = io.BytesIO()
+    if tar:
+        with tarfile.open(fileobj=buffer, mode="w:gz") as out:
+            for name, data, mode in entries:
+                info = tarfile.TarInfo(name)
+                info.size, info.mode = len(data), mode
+                out.addfile(info, io.BytesIO(data))
+    else:
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as out:
+            for name, data, mode in entries:
+                info = zipfile.ZipInfo(name)
+                info.create_system = 3
+                info.external_attr = (stat.S_IFREG | mode) << 16
+                out.writestr(info, data)
+    return buffer.getvalue()
+
+
+@pytest.mark.parametrize("tar", [False, True])
+def test_an_archive_keeps_which_files_are_executable(tar):
+    from raphael_core.bots.homes import Executable
+
+    [files] = skill_sources.read_archive("notes.tgz" if tar else "notes.zip", plugin_archive(tar))
+    assert isinstance(files["run.sh"], Executable)
+    assert not isinstance(files["data.txt"], Executable)
+    assert files["run.sh"] == b"#!/bin/sh\necho hi\n"
+
+
+def test_writing_an_executable_file_asks_for_the_executable_bit_and_a_plain_one_does_not(tmp_path, monkeypatch):
+    from raphael_core.bots.homes import Executable, atomic
+
+    asked = []
+    real = os.chmod
+    monkeypatch.setattr(os, "chmod", lambda path, mode, **kw: (asked.append((os.path.basename(path), mode)), real(path, mode, **kw))[1])
+    atomic(tmp_path / "run.sh", Executable(b"#!/bin/sh\n"))
+    atomic(tmp_path / "data.txt", b"plain")
+    assert [name.split(".")[0] for name, mode in asked if mode & stat.S_IXUSR] == ["run"]
+    assert (tmp_path / "run.sh").read_bytes() == b"#!/bin/sh\n" and (tmp_path / "data.txt").read_bytes() == b"plain"
+
+
+@pytest.mark.parametrize("tar", [False, True])
+async def test_an_imported_plugin_script_is_executable_on_disk(rig, tmp_path, tar, monkeypatch):
+    asked, real = [], os.chmod
+    monkeypatch.setattr(os, "chmod", lambda path, mode, **kw: (asked.append((os.path.basename(path), mode)), real(path, mode, **kw))[1])
+    await rig.call("skills.library.import", upload("notes.tgz" if tar else "notes.zip", plugin_archive(tar)))
+    assert [name.split(".")[0] for name, mode in asked if mode & stat.S_IXUSR] == ["run"]  # the intent, also where Windows drops the bit
+    [script] = [path for path in tmp_path.rglob("run.sh")]
+    [data] = [path for path in tmp_path.rglob("data.txt")]
+    if os.name != "nt":
+        assert script.stat().st_mode & stat.S_IXUSR and not data.stat().st_mode & stat.S_IXUSR
 
 
 async def test_missing_skill_document_is_refused_before_writing(rig):
