@@ -3,7 +3,7 @@
 The migration moves rows; this moves the things next to them, once, at start-up and before anything reads them:
 
 - the notes and skills of its memory (`bots/0`, `bot-state/0` -> `bots/N`, `bot-state/N`);
-- its cover (`avatars/covers/0.*` -> `N.*`);
+- its cover (`avatars/covers/0.*` -> `N.*`) and the picture the owner uploaded (`avatars/members/0-*` -> `N-*`);
 - its messaging bot (`messaging.json` and the vault's secrets: the account `telegram` -> `member:N:telegram`);
 - its own computer's workspace on this PC and its own folder in the shared computer's workspace.
 
@@ -65,6 +65,15 @@ def _cover(root: Path, slime: int) -> None:
     metadata.unlink()
 
 
+def _picture(conn, root: Path, slime: int) -> None:
+    """The picture the owner uploaded for member 0: schema 101 named it `file:<slime>-<rest>`, its file is `0-<rest>`."""
+    row = conn.execute("SELECT avatar FROM members WHERE id = ?", (slime,)).fetchone()
+    kind, _, name = (row[0] if row else "").partition(":")
+    if kind == "file" and name.startswith(f"{slime}-"):
+        folder = root / "avatars" / "members"
+        _rename(folder / f"0-{name[len(str(slime)) + 1:]}", folder / name)
+
+
 def _messaging(data_dir: Path, vault, slime: int) -> None:
     path = data_dir / "messaging.json"
     if not path.is_file() or vault is None:
@@ -109,6 +118,7 @@ def adopt(conn, *, root: Path, data_dir: Path, vault=None, vm=None) -> None:
         return
     failed = False
     for name, step in (("memory", lambda: _homes(root, slime)), ("cover", lambda: _cover(root, slime)),
+                       ("picture", lambda: _picture(conn, root, slime)),
                        ("messaging", lambda: _messaging(data_dir, vault, slime)),
                        ("computer", lambda: _computer(vm, slime) if vm is not None else None)):
         try:

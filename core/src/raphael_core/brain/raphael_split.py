@@ -19,11 +19,13 @@ A database migrated here cannot be opened by an older build.
 """
 
 import json
+import re
 import sqlite3
 
 SPLIT_KEY = "raphael_split"
 PROFILE_KEYS = ("name", "role", "personality", "instructions", "avatar")
 FIRST_SLIME = "slime:blue-plain"
+PICTURE = re.compile(r"file:0-([a-f0-9]{12}\.(?:png|jpg|webp|gif))")
 # The name of a slime made from a member 0 that never had one of its own (or kept one of Raphael's).
 FALLBACK_NAMES = {"zh": "小史萊姆", "ja": "スライム", "ko": "슬라임"}
 RAPHAEL_NAMES = {"拉斐爾", "raphael", "ラファエル", "拉斐尔", "라파엘", "рафаэль", "ราฟาเอล"}
@@ -94,7 +96,8 @@ def _name(conn: sqlite3.Connection, wanted, settings: dict) -> str:
 def _create_slime(conn: sqlite3.Connection, settings: dict) -> int:
     profile = settings.get("first_bot_profile") if isinstance(settings.get("first_bot_profile"), dict) else {}
     text = lambda key: profile.get(key) if isinstance(profile.get(key), str) else ""  # noqa: E731
-    avatar = text("avatar") if text("avatar").startswith("slime:") else FIRST_SLIME
+    picture = PICTURE.fullmatch(text("avatar"))  # an uploaded picture is `file:0-<hex>.<ext>`: the slime's id replaces the 0
+    avatar = text("avatar") if text("avatar").startswith("slime:") or picture else FIRST_SLIME
     tools = settings.get("raphael_tools")
     model = settings.get("agent_model")
     mode = settings.get("raphael_computer_mode")
@@ -109,7 +112,10 @@ def _create_slime(conn: sqlite3.Connection, settings: dict) -> int:
          int(bool(settings.get("raphael_notify"))), int(settings.get("chief_pinned") is True),
          0 if settings.get("raphael_draft_first") is False else 1, mode if mode in ("host", "docker") else "host"),
     )
-    return int(cursor.lastrowid)
+    slime = int(cursor.lastrowid)
+    if picture:  # the file follows at the files step (`members/raphael_files.py`), under the same new name
+        conn.execute("UPDATE members SET avatar = ? WHERE id = ?", (f"file:{slime}-{picture.group(1)}", slime))
+    return slime
 
 
 def _move(conn: sqlite3.Connection, slime: int) -> None:
