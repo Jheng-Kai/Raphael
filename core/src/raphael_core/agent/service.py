@@ -2316,8 +2316,8 @@ class AgentService:
         index = memory if memory is not None else "" if self._memory is None else self._memory.snapshot(speaker.id)
         if isinstance(index, MemorySnapshot):  # USER.md, then the speaker's own file
             index = "\n".join(part for part in (index.shared, index.own) if part)
-        persona = "" if speaker.is_raphael and not any((speaker.name, speaker.role, speaker.personality, speaker.instructions)) else (
-            f"Speaker: {speaker.name}\nRole: {speaker.role}\n"
+        persona = "" if speaker.is_raphael and not any((speaker.personality, speaker.instructions)) else (
+            f"Speaker: {speaker.name or RAPHAEL_NAMES[self._last_language]}\nRole: {speaker.role}\n"
             f"Personality: {speaker.personality}\n"
             f"Owner's instructions: {speaker.instructions}\n\n"
         )
@@ -5348,7 +5348,6 @@ class AgentService:
                     if screening.verdict == DENY:
                         raise NotApproved(operation["name"])
                 self._gate.check_admin_batch(pending.action, approval)
-                chief_before = self._team.speaker(0).name
                 with activity_step("team_admin_batch"):
                     results = await self._team.admin_batch(
                         followup.ask.speaker.id, operations, drafts=drafts, groups=groups,
@@ -5411,9 +5410,6 @@ class AgentService:
             else:
                 text = with_ui_words({"en": "Applied: ", "zh-TW": "已套用：", "ja": "適用済み："}).get(language, "Applied: ") + ", ".join(names)
             detail = "\n".join(detail_lines) if detail_lines else None
-            chief_after = self._team.speaker(0).name
-            if chief_after and chief_after != chief_before:
-                text = with_ui_words({"en": "Renamed to ", "zh-TW": "已重新命名為 ", "ja": "名前を変更："}).get(language, "Renamed to ") + chief_after
             if followup.carry is not None:
                 return await self._go_on_after_admin(followup, step, made, text, detail, ledger)
             return self._outcome(pending, "understood", text, "done", detail=detail, cost_usd=ledger.total)

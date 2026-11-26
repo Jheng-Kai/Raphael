@@ -10,7 +10,7 @@ import { iconHTML } from "./service-mark";
 import { serviceIconOf } from "./service-icons";
 import { ownerFaceHTML, ownerName, setOwnerProfile } from "./owner-avatar";
 import { roomAvatarHTML } from "./group-chats";
-import type { Member } from "./types";
+import type { Member, MembersList } from "./types";
 
 // R-PERF-25: the width a pointer drags is written to the grid that holds the panes, not to the root every element inherits from.
 const live = (): string => document.body.style.getPropertyValue("--side-live");
@@ -130,16 +130,18 @@ test("the pill always shows three marks: the connected apps' own first, the star
 
 test("the chief is an ordinary row until it is pinned, then a larger centered face above its name", () => {
   const el = document.createElement("div");
-  el.innerHTML = columnHTML({ list: null, current: 0, folded: new Set(), fresh: new Set(), previews: new Map([[0, "Latest report"]]) });
+  const roster = (pinned: boolean) => ({ members: [{ id: 0, name: "Raphael", raphael: true }, { id: 4, name: "Mochi", chief: true, pinned, preview: "Latest report" }] as Member[], groups: [], team_context: { primary_id: 4, members: [] } as unknown as MembersList["team_context"] });
+  el.innerHTML = columnHTML({ list: roster(false), current: 4, folded: new Set(), fresh: new Set(), previews: new Map([[4, "Latest report"]]) });
   expect(el.querySelector('.mb-chief .mb-row-p')?.textContent).toBe("Latest report");
   expect(el.querySelector('.mb-chief > .av')?.getAttribute("style")).toBe("--av:40px");
   expect(el.querySelector('.mb-pinned')).toBeNull();
-  const chief = { id: 0, name: "Raphael", pinned: true } as Member;
-  el.innerHTML = columnHTML({ list: { members: [chief], groups: [] }, current: 0, folded: new Set(), fresh: new Set(), previews: new Map([[0, "Latest report"]]) });
+  el.innerHTML = columnHTML({ list: roster(true), current: 4, folded: new Set(), fresh: new Set(), previews: new Map([[4, "Latest report"]]) });
   expect(el.querySelector('.mb-pinned .mb-tile.mb-chief > .av')?.getAttribute("style")).toBe("--av:64px");
-  expect(el.querySelector('.mb-tile > b')?.textContent).toBe("Raphael");
+  expect(el.querySelector('.mb-tile > b')?.textContent).toBe("Mochi");
   expect(el.querySelector('.mb-tile .mb-row-p')).toBeNull();
-  expect(el.querySelectorAll('[data-member="0"]')).toHaveLength(1);
+  expect(el.querySelectorAll('[data-member="4"]')).toHaveLength(1);
+  // Raphael is in neither drawing.
+  expect(el.querySelector('[data-member="0"]')).toBeNull();
 });
 
 test("the sidebar has no brand and no fold button, names its face by the owner in each language, and its edge drags it to a rail and back", () => {

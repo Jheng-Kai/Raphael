@@ -121,17 +121,17 @@ async def test_nonprimary_self_delete_still_shows_yes_card_in_direct_mode(setup,
     assert team.members.capabilities.commands(own.id) == []
 
 
-async def test_raphael_can_change_own_picture_after_primary_moves(setup):
+async def test_raphaels_picture_is_not_the_owners_to_change(setup):
     import base64
     rig, team = setup
     team.members.register(rig.rpc)
     peer = member(team)
     team.members.store.set_primary(peer.id)
     image = base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16).decode()
-    result = await team.members.admin_tool(0, "member_avatar", {"id": 0, "name": "fixture.png", "mime": "image/png", "data": image}, interactive=True)
-    assert result["member"]["avatar_rev"] and "avatar_url" not in result["member"]
-    assert (await team.members._picture_of({"id": 0, "kind": "avatar"}))["url"].startswith("data:image/png;base64,")
-    assert team.members._raphael_picture()[1] == {"x": .5, "y": .5, "zoom": 1}
+    with pytest.raises(RpcError) as caught:
+        await team.members.admin_tool(0, "member_avatar", {"id": 0, "name": "fixture.png", "mime": "image/png", "data": image}, interactive=True)
+    assert caught.value.data["kind"] == "raphael"
+    assert (await team.members._picture_of({"id": 0, "kind": "avatar"})) == {"rev": None, "url": None}
 
 
 @pytest.mark.parametrize("other", [False, True])

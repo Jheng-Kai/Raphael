@@ -37,12 +37,12 @@ async def test_raphael_is_first_in_the_list_in_the_language_asked(rig):
     (raphael,) = listed["members"]
     main = rig.conn.execute("SELECT id FROM conversations WHERE member_id=0 AND kind='standard'").fetchone()[0]
     assert raphael == {
-        "blurb": "", "reply_style": "full",
+        "blurb": "", "reply_style": "full", "raphael": True,
         "notify": False, "ask_before_members": False, "pinned": False, "hidden": False, "draft_first": True,
         "id": 0, "name": "Raphael", "role": "", "personality": "", "instructions": "", "avatar": "", "group_id": None,
         "model": "", "tools": None, "position": -1, "created": 0, "unread": False, "unread_from": None,
         "main_conversation_id": main, "unread_threads": [], "waiting_cards": [],
-        "unread_kind": None, "waiting": False, "activity": "idle", "activity_label": "", "preview": "", "last_at": None, "profile_ready": False, "chief": True,
+        "unread_kind": None, "waiting": False, "activity": "idle", "activity_label": "", "preview": "", "last_at": None, "chief": False,
     }  # fmt: skip
     rig.language = "ja"
     assert (await rig.call("members.list"))["members"][0]["name"] == "ラファエル"
@@ -76,17 +76,14 @@ async def test_primary_coordination_keeps_the_real_role(rig):
     assert not rig.service.speaker(0).has_no_job
 
 
-async def test_raphaels_own_picture_is_read_from_the_shells_copy(rig):
+async def test_raphaels_look_is_the_first_blue_slime_whatever_picture_the_shell_holds(rig):
     folder = rig.local / "avatar"
     folder.mkdir(parents=True)
     (folder / "picture").write_bytes(PNG)
     (folder / "picture.json").write_text(json.dumps({"mime": "image/png", "crop": {"x": 0.5, "y": 0.4, "zoom": 1.5}}))
     raphael = (await rig.call("members.list"))["members"][0]
-    assert "avatar_url" not in raphael and raphael["avatar_rev"]
-    assert await rig.call("members.picture", {"id": 0, "kind": "avatar"}) == {
-        "rev": raphael["avatar_rev"], "url": "data:image/png;base64," + base64.b64encode(PNG).decode()}
-    assert raphael["avatar_crop"] == {"x": 0.5, "y": 0.4, "zoom": 1.5}
-
+    assert not {"avatar_rev", "avatar_crop", "avatar_url"} & set(raphael) and raphael["avatar"] == ""
+    assert await rig.call("members.picture", {"id": 0, "kind": "avatar"}) == {"rev": None, "url": None}
 
 async def test_a_member_is_made_listed_changed_and_deleted(rig, caplog):
     caplog.set_level(logging.DEBUG)

@@ -342,8 +342,7 @@ class HomeOverview:
         """Only the identity and unread fields Home consumes, without private profiles or activity."""
         language = self.members._ui_language(params)
         unread = self.members.store.unread_from()
-        profile = self.members.first_bot_profile()
-        people = {0: {"id": 0, "name": profile.get("name", RAPHAEL_NAMES[language]), "avatar": profile.get("avatar", ""), "unread": 0 in unread}}
+        people = {0: {"id": 0, "name": RAPHAEL_NAMES[language], "avatar": "", "unread": 0 in unread}}
         for row in self.conn.execute("SELECT id,name,avatar FROM members ORDER BY pinned DESC,position,id"):
             people[row["id"]] = {**dict(row), "unread": row["id"] in unread}
         return people

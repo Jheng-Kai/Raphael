@@ -128,3 +128,52 @@ describe("deleting a member", () => {
     expect(api.membersDelete).not.toHaveBeenCalled();
   });
 });
+
+describe("where the open conversation goes when its member leaves", () => {
+  const roster = (primary: number | null, patch: Record<number, Partial<Member>> = {}): MembersList => list(patch, { team_context: { primary_id: primary } } as Partial<MembersList>);
+  const leaving = (open: number) => { const select = vi.fn(); return { select, actions: createMemberActions({ list: () => current, current: () => open, select, load, update: vi.fn(async () => true), deleted: vi.fn() }) }; };
+
+  test("hiding the open member opens the chief, or the next slime when the chief is the one hidden, or Raphael when none is left", async () => {
+    current = roster(2);
+    let step = leaving(4);
+    await step.actions.memberAction(4, "hide");
+    expect(step.select).toHaveBeenCalledExactlyOnceWith(2);
+    current = roster(2);
+    step = leaving(2);
+    await step.actions.memberAction(2, "hide");
+    expect(step.select).toHaveBeenCalledExactlyOnceWith(1);
+    current = roster(null, { 1: { hidden: true }, 2: { hidden: true }, 3: { hidden: true }, 4: { hidden: true } });
+    step = leaving(5);
+    await step.actions.memberAction(5, "hide");
+    expect(step.select).toHaveBeenCalledExactlyOnceWith(0);
+  });
+
+  test("deleting the open member does the same, and marking the open one unread moves off it likewise", async () => {
+    api.membersDelete.mockResolvedValue({ deleted: true });
+    for (const [primary, open, to] of [[2, 4, 2], [2, 2, 1], [null, 5, 1]] as const) {
+      current = roster(primary);
+      const step = leaving(open);
+      const done = step.actions.deleteMember(open);
+      await flush();
+      document.querySelector<HTMLElement>('[data-dlg="delete"]')!.click();
+      await done;
+      expect(step.select).toHaveBeenCalledExactlyOnceWith(to);
+    }
+    current = roster(2);
+    const step = leaving(4);
+    await step.actions.memberAction(4, "unread");
+    expect(step.select).toHaveBeenCalledExactlyOnceWith(2);
+  });
+
+  test("Raphael cannot be pinned, hidden, deleted or made chief from here", async () => {
+    current = roster(2);
+    const step = leaving(0);
+    for (const action of ["pin", "hide", "unread", "primary", "edit"]) await step.actions.memberAction(0, action);
+    await step.actions.deleteMember(0);
+    expect(document.querySelector(".mb-dialog, .mb-primary-picker")).toBeNull();
+    expect(api.settingsSet).not.toHaveBeenCalled();
+    expect(api.membersUpdate).not.toHaveBeenCalled();
+    expect(api.membersDelete).not.toHaveBeenCalled();
+    expect(api.membersSetPrimary).not.toHaveBeenCalled();
+  });
+});

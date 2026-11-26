@@ -574,7 +574,7 @@ class RpcDriver:
                       f'不要建立例行任務，也不要自己讀信。')
         room_id = None
         if room:
-            room_id = (await self.app.call('rooms.create',{'name':'立即工作驗收','member_ids':[0,target]}))['room']['id']
+            room_id = (await self.app.call('rooms.create',{'name':'立即工作驗收','member_ids':[0,ids[0],target]}))['room']['id']
             await self.app.call('rooms.send',{'room_id':room_id,'request_id':'work-'+self.nonce,
                 'text':'@拉斐爾 '+prompt,'ui_language':'zh-TW'})
             result = {'status':'done','text':''}
@@ -641,7 +641,7 @@ class RpcDriver:
         agenda = (f'請分工處理今天的 Guardian 測試信件（議題代碼 {self.nonce}）。信件助理負責用 Guardian 讀信，回報信中的 nonce；'
                   'PM 負責用 Guardian 讀同一封信，列出要回覆的重點，並附上信中的 nonce。來源文件寫「明早截止、明天中午提交」。'
                   'PM 協助討論分工；大家閱讀全部訊息，自行決定何時發言，不用固定輪次或自動總結。')
-        room_id = (await self.seed_meeting({'member_ids': [0, mail, pm], 'agenda': agenda,
+        room_id = (await self.seed_meeting({'member_ids': [0, ids[0], mail, pm], 'agenda': agenda,
                                           'roles': {str(pm): 'moderator', str(mail): 'participant'}}))['room_id']
 
         async def settled_room():
@@ -697,7 +697,7 @@ class RpcDriver:
         """Hold only external I/O; production loops and tree cancellation stay authoritative."""
         ids=await self.seed_team()
         await self.install_fixture()
-        room=(await self.app.call('rooms.create',{'name':'停止驗收','member_ids':[0,ids[1]]}))['room']
+        room=(await self.app.call('rooms.create',{'name':'停止驗收','member_ids':[0,ids[0],ids[1]]}))['room']
         entered,release=asyncio.Event(),asyncio.Event()
         armed=False
         original=self.recorder.call_tool
@@ -753,7 +753,7 @@ class RpcDriver:
             {key:message.get(key) for key in ('id','member_id','kind','status','origin_message_id')}
             for message in messages], 'exchanges':[
             dict(row) for row in self.app._conn.execute('SELECT origin_message_id,state,stop_requested,wrapup_sent,reason FROM room_exchanges WHERE room_id=?', (room['id'],))]}))
-        if not messages or messages[-1]['member_id']!=0 or messages[-1]['kind']!='wrapup':
+        if not messages or messages[-1]['member_id']!=self.app.members.primary_id() or messages[-1]['kind']!='wrapup':
             reasons.append('chief_not_last_after_stop')
         self.events.append(('guardian.stop_timings',{'redirect_ms':redirect_ms,'stop_ack_ms':ack_ms,
             'terminal_ms':round((time.perf_counter()-started)*1000)}))
@@ -763,6 +763,8 @@ class RpcDriver:
         ids = await self.seed_team()
         await self.install_fixture()
         reasons, result = [], {}
+        # The first slime made is the chief; the owner starts by choosing the mail assistant, and chooses 行銷 between the rounds.
+        await self.app.call('members.set_primary', {'id':ids[1]})
         for refresh in (False, True):
             if refresh:
                 await self.app.call('members.update', {'id':ids[-1], 'name':'研究員' + self.nonce})

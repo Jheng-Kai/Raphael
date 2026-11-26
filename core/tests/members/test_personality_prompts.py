@@ -28,8 +28,8 @@ async def test_narrated_prompt_contains_only_its_own_persona_and_thread(setup, c
         if who is None or person.id != who.id:
             assert person.name in team_now and person.role in team_now
     if who:
-        # Raphael is named in the language of the owner's words here (English), not the interface's.
-        assert '"name": "Raphael"' in team_now and "拉斐爾" not in team_now and '"coordination_duty": "primary_contact"' in team_now
+        # Raphael is the guide, not a slime: the roster lists the slimes only.
+        assert '"name": "Raphael"' not in team_now and "拉斐爾" not in team_now and '"coordination_duty": "primary_contact"' in team_now
     assert "ask_member" in system and "another member's thread" in system
     assert "The interface language never selects" in system
     assert "By default use" not in system

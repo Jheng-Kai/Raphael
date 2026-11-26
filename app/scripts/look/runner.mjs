@@ -318,6 +318,13 @@ export async function run(options) {
         // for unrelated polling and reloads, which do not establish readiness.
         await page.goto(`${origin}/${scene.entry ?? ""}`, { waitUntil: "domcontentloaded", timeout: 20000 });
         await page.waitForSelector(scene.ready ?? (scene.entry === "overlay.html" ? "#progress:not([hidden])" : scene.fixture.onboarding ? '#ob:not([hidden]) [data-ob="next"]' : '.page-agent:not([hidden]) .conversation-trigger'), { visible: true, timeout: 10000 });
+        // The app opens on its chief of staff's conversation (Raphael's own when no slime exists yet). Scenes begin in Raphael's
+        // space, where the fixture's conversation and its quick questions are, reached as the owner reaches it: the account menu's
+        // entry. A scene that must see the app's own start says `start: "app"` in its fixture.
+        if (!scene.entry && !scene.fixture.onboarding && scene.fixture.start !== "app") {
+          await perform(page, { action: "account-menu", item: "raphael" }, directory);
+          await page.waitForFunction(() => !document.querySelector('.mb-col [aria-current="true"]'), { timeout: 10000 });
+        }
         for (const step of scene.steps) {
           const trace = process.env.LOOK_TRACE === "1" && step.measure
             ? `${scene.name}-${theme}-${width}-${step.measure.name}.trace.json` : null;

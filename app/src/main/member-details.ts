@@ -118,7 +118,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   const conversationHost = document.createElement("div");
   let conversationMember: number | null = null;
   let conversationList: ReturnType<typeof mountConversationList> | null = null;
-  /** Only Raphael has a choice of conversation: its main one and its quick questions. */
+  /** Only Raphael has a choice of conversation: its main one and its quick questions. The chief of staff is a slime like the others. */
   function drawConversations(): void {
     const memberId = host.member().id;
     if (conversationMember !== memberId) {
@@ -139,6 +139,8 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   // ---------- drawing ----------
 
   function whoHTML(member: Member): string {
+    // Raphael's face and name are fixed: a face and a name, with nothing to change.
+    if (member.id === RAPHAEL_ID) return `<span class="mb-panel-identity">${faceHTML(member, 64)}<b>${esc(member.name)}</b></span>`;
     // A press on the face opens the picker (slimes, 生成) at once; under the pointer a pencil shows on the
     // face as on the owner's own photo in Settings, no words and no dialog in between.
     return `<span class="mb-panel-identity"><button type="button" class="btn mb-face-edit" data-det="avatar" data-k="det-face-edit" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(t("members.changeAvatar"))}">${faceHTML(member, 64)}<span class="mb-face-pencil" aria-hidden="true">${ico("pencil")}</span></button><b>${esc(member.name)}</b>${member.role ? `<small>${esc(member.role)}</small>` : ''}</span>`;
@@ -213,11 +215,11 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     patchHTML(tabBar, tabs(['details', 'library', 'computer'].map(id => ({id, label:t(({details:'members.panelTab.details', library:'members.panelTab.library', computer:'members.panelTab.computer'} as const)[id as DetailsTab]), attrs:` id="member-tab-${id}" data-det="tab" data-tab="${id}" aria-controls="${id === 'computer' ? 'member-computer-panel' : 'member-panel-body'}" tabindex="${tab === id ? 0 : -1}"`})), tab, {kind:'nav', plain:true, label:t('members.panel')}));
     body.setAttribute('aria-labelledby', `member-tab-${tab}`);
     if (tab === "details") {
-      const chief = member.id === RAPHAEL_ID;
-      if (!body.querySelector('.mb-panel-routines') || !!body.querySelector('[data-slot="conversations"]') !== chief) {
+      const isRaphael = member.id === RAPHAEL_ID;
+      if (!body.querySelector('.mb-panel-routines') || !!body.querySelector('[data-slot="conversations"]') !== isRaphael) {
         conversationHost.remove();
         patchHTML(body, `<section class="mb-panel-routines" data-k="panel-routines"></section>` +
-          (chief ? `<section><div class="mb-dh"><span data-panel-conversations-heading>${esc(t('members.panelConversations'))}</span></div><div data-slot="conversations" data-k="panel-conversations"></div></section>` : "") +
+          (isRaphael ? `<section><div class="mb-dh"><span data-panel-conversations-heading>${esc(t('members.panelConversations'))}</span></div><div data-slot="conversations" data-k="panel-conversations"></div></section>` : "") +
           `<section class="mb-panel-suggest" data-k="panel-suggest"></section>`);
       }
       // The skeleton is kept across draws, so its heading follows a language change here.

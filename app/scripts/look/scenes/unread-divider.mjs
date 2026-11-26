@@ -1,7 +1,8 @@
 import { scene, member, wait, check, click, waitScrollEnd } from "./steps.mjs";
 
 const open = [member(1), wait('.thread-new')];
-const raphael = (run, more = {}) => ({ unreadDivider: run, unreadMember: 0, rosterDelay: 500, scrollTimeline: true, ...more });
+// With no chief the app opens on Raphael's conversation, before the roster is there to say so.
+const raphael = (run, more = {}) => ({ unreadDivider: run, unreadMember: 0, rosterDelay: 500, scrollTimeline: true, start: "app", primaryMember: null, ...more });
 export default [
   scene("thread-new-divider", "A long unread run opens at its first unseen turn, across history pages", [...open, check("thread-new-divider")], { unreadDivider: "long" }),
   scene("thread-new-divider-short", "A short unread run after long seen history opens at the bottom", [...open, check("thread-new-divider-short")], { unreadDivider: "short", unreadSeenLong: true }),

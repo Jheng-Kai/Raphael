@@ -271,7 +271,7 @@ class RoomsService:
         if self._conn.execute("SELECT COUNT(*) FROM rooms").fetchone()[0] >= 100:
             raise invalid_params("room limit reached")
         ids = self._validated_ids(params.get("member_ids", []), team=team)
-        generated = " · ".join((s.name or "Raphael") for s in self._members.roster() if s.id in ids)[:24]
+        generated = " · ".join((s.name or "Raphael") for s in self._members.roster(with_raphael=True) if s.id in ids)[:24]
         try:
             name = clean_group_name(params.get("name") or generated)
         except MemberError as error:
@@ -338,7 +338,7 @@ class RoomsService:
         part (「HiKari 從社群內容補充」)."""
         if not isinstance(roles, dict):
             return roles
-        names = {(s.name or '').casefold(): s.id for s in self._members.roster() if s.id in ids and s.name}
+        names = {(s.name or '').casefold(): s.id for s in self._members.roster(with_raphael=True) if s.id in ids and s.name}
         names.update({'raphael': 0, '拉斐爾': 0, 'ラファエル': 0})
         return {str(names.get(str(key).strip().casefold(), key)): _role_part(role) for key, role in roles.items()}
 
@@ -659,7 +659,7 @@ class RoomsService:
             if turn.status == 'done':
                 from ..background.final import validate_terminal
                 room = dict(self._conn.execute('SELECT * FROM rooms WHERE id=?',(message['room_id'],)).fetchone())
-                names = [s.name for s in self._members.roster() if s.id in self._ids(room)] + ['Raphael','拉斐爾','ラファエル','everyone','所有人','全員']
+                names = [s.name for s in self._members.roster(with_raphael=True) if s.id in self._ids(room)] + ['Raphael','拉斐爾','ラファエル','everyone','所有人','全員']
                 names += [row[0] for row in self._conn.execute('SELECT recipient_name FROM room_reply_intents WHERE source_message_id=?',(message['id'],))]
                 terminal = validate_terminal(message['text'], names=names, wrapup=message['kind']=='wrapup')
                 if terminal.reason and not is_pass(message['text']):
@@ -789,7 +789,7 @@ class RoomsService:
                       lambda match: ' ' * len(match.group()), text)
         allowed = self._ids(room)
         candidates = [(name, allowed) for name in ("everyone", "所有人", "全員")]
-        for speaker in self._members.roster():
+        for speaker in self._members.roster(with_raphael=True):
             if speaker.id in allowed:
                 names = [speaker.name] if speaker.id else ["Raphael", "拉斐爾", "ラファエル"]
                 candidates.extend((name, [speaker.id]) for name in names if name)
@@ -910,7 +910,7 @@ class RoomsService:
         cursor = self._conn.execute('SELECT seen_message_id FROM room_member_cursor WHERE room_id=? AND thread_id=? AND member_id=?',
                                     (room['id'],thread_id,member_id)).fetchone()
         transcript = self._exchanges.transcript(room,thread_id,since=cursor[0] if cursor else 0,through=seen)
-        roster = [{"id":s.id,"name":s.name,"role":s.role} for s in self._members.roster() if s.id in self._ids(room)]
+        roster = [{"id":s.id,"name":s.name,"role":s.role} for s in self._members.roster(with_raphael=True) if s.id in self._ids(room)]
         prompt = ("You are in a group chat with the owner and your colleagues. Everyone reads every message and decides for "
             "themselves whether to say something. Read the new messages; when you speak, say it the way you would to people "
             "you work with, in your own voice and the language the owner writes in. Answer what is actually being discussed: disagree when you disagree, ask when "

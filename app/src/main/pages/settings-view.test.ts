@@ -168,7 +168,7 @@ test("Tools contains five shared service rows", () => {
   const picker = tab("agent", { services: { ...emptyServicesView(), open: { kind: "vision", service: "model" } }, brain: { ...brain, vision_model: "anthropic/claude-haiku-5.5" } });
   expect(picker).toMatch(/<span class="mp-slot" data-model-picker="vision"><button type="button" class="sel mp-trigger"[^>]*data-k="svc-vision">/);
   expect(picker).toContain('<strong class="mp-tname">Claude Haiku 5.5</strong>');
-  expect(tab("agent", { services: { ...emptyServicesView(), open: { kind: "vision", service: "model" } } })).toContain('<strong class="mp-tname">與拉斐爾相同</strong>');
+  expect(tab("agent", { services: { ...emptyServicesView(), open: { kind: "vision", service: "model" } } })).toContain('<strong class="mp-tname">與回答模型相同</strong>');
   for (const id of ["general", "dictation", "connections", "usage", "about"] as const) {
     expect(tab(id, { services: emptyServicesView() })).not.toContain("data-svc");
   }

@@ -47,7 +47,7 @@ the owner's picture (`members.set_cover`, `members.update {cover}`), changed fro
 icon at the cover's lower right whose menu shows the patterns as small covers and 從電腦選…; the picture
 stays put under the pointer and cannot be dragged out of the window, as no picture in the app can (R-UI-119); then the
 face large across the cover's lower edge with the panel's dim-and-pencil edit (the same picker), the
-name and the role typed in place (the first member's name is typed too, at most 16 characters; its role is the chief's and has no field). Under them the settings are kinds in a
+name and the role typed in place (Raphael's name is the language's own and its face the first blue slime: shown, not typed, with no role and no picture to change, R-RAPHAEL-UI-03). Under them the settings are kinds in a
 column on the left, as Settings' own, each an icon and a name, and only the chosen kind is shown beside
 it; a page narrower than 680 px puts the
 kinds in a row of small pills that wrap above it. What the panel beside the page shows (routines,
@@ -61,8 +61,8 @@ one line, Ctrl+Enter or leaving it saves without a word (a spinner for the penci
 what could stand there; Raphael's too), 通知 (one switch, R-NOTIFY-01). The model is chosen at the composer
 alone, members have no voice (the release has none), and the group is the sidebar's. A cover picture moves up and
 down: 調整位置 in the cover's menu, then the picture follows the pointer and 取消 / 儲存位置
-stand where the change icon was (`members.update {cover_position}`, 0 to 100, 50 by default). The first member's
-role is not typed. A kind with one section has no name over its list. There is no 編輯 button anywhere: edits are
+stand where the change icon was (`members.update {cover_position}`, 0 to 100, 50 by default). Raphael's
+name and role are not typed. A kind with one section has no name over its list. There is no 編輯 button anywhere: edits are
 pencils, adds are pluses.
 
 Inspect every contact sheet and, at light 720 and dark 1120, the full images of member-settings,
@@ -72,16 +72,43 @@ face edit with the panel's. The old scene names are kept and now drive the page:
 details-commands, details-notify, raphael-skills, member-edit, speaker-draft-member,
 speaker-draft-chief, member-draft-switch and primary-contact-set.
 
-## The chief of staff's own name and slime (R-CHIEF-01)
+## Raphael is apart from the slimes; the chief of staff is a slime (R-CHIEF-01, R-RAPHAEL-UI-01 to R-RAPHAEL-UI-07)
 
-Member 0 is the owner's first slime, named and dressed in the first-run guide ([onboarding](onboarding.md)): its chief of staff
-from then on. Its name and slime are the owner's as every member's are (`first_bot_profile` in the core: `name`, `avatar`):
-its panel and settings page open the members' slime picker on the slime it wears (with 從電腦選… for the owner's own picture,
-which a chosen slime replaces), and its name is typed in place. Every place that knows only the id names and draws it from
-the last roster (first-bot.ts, remembered by `membersList`): cards, reminders, lines between members, usage, calendar
-chips. Raphael stays the app's and the voice's name (dictation, the bottom-right voice and quick question, hotkeys, the app's
-own messages), and Raphael's names still reach member 0. An install from before keeps Raphael, name and blue slime.
-`member-settings-raphael-slime` opens member 0's settings, presses its face and the red horned slime, and checks
+Member 0 is Raphael only: the app's guide and keeper. Its name is the language's own (`agent.title`, raphael.ts `raphaelName`) and
+its look the first blue slime (`RAPHAEL_SLIME`), never a picture and never the owner's own photo; the roster flags it `raphael: true`
+and sends it no role, picture, place or folder. It is not a row of the sidebar (no row, tile, hidden-folder entry or menu), not a
+choice of any picker (the narrow dropdown, the command palette's numbers, the search card, the chief's hand-over, a pinned tile's
+replacement, the calendar's members, a group chat's) and not a room member. It has an entry of its own in the account menu
+([navigation](navigation.md#the-account-menu)) that opens its conversation space in the same chat view (`go("agent", "raphael")`): the
+details panel lists its conversations, its quick questions among them (the quick ask is Raphael's: no slime has a quick list), the
+share button is hidden, and its face and name in the panel and on its settings page are shown, not edited. Its settings page keeps
+tools, skills and commands, personality and instructions, notifications and the cover. Raphael stays the app's and the voice's name
+(dictation, the bottom-right voice and quick question, hotkeys, the app's own messages), and its names still reach it by @ (last
+among the people the menu offers).
+
+The chief of staff is a slime of the owner's like the others: the first slime ever made, or the one handed the role (`members.set_primary`),
+or nobody when there is no slime (`team_context.primary_id` null). Its row leads the sidebar with the crown; its panel and page are
+every slime's, except that its role is labelled 幕僚長 (`rooms.chief`) where the owner's text would stand. The app opens on the chief's
+conversation, and on Raphael's when there is none; the conversation of a slime that goes (hidden, deleted) is replaced by the chief's, else
+the next slime's, else Raphael's.
+Scenes: `raphael-entry` (the menu entry), `raphael-space` (Raphael's space with its quick questions and nothing to change),
+`chief-space` and `raphael-route-back` (the chief's view without a quick list, the crown, the share button), `no-slimes` (the empty
+boot: Raphael's conversation, an empty list with its plus, no crown) and `no-chief` (slimes without a chief: none leads); the checks
+`raphael-not-in-sidebar`, `raphael-entry`, `raphael-space`, `chief-space`, `no-slimes` and `no-chief`. The fixture lists Raphael as
+member 0 with `raphael: true`, the slimes from id 1, the chief in `team_context` (the first slime unless a scene's `primaryMember` says
+another, or null), the quick conversation under member 0 only and rooms of slimes only; every scene begins in Raphael's space (the runner
+enters it through the account menu) unless its fixture says `start: "app"`.
+```powershell
+npm run look -- raphael-entry raphael-space chief-space raphael-route-back no-slimes no-chief --theme both --width 1120,720,1920x1080
+```
+
+The core keeps the same line (R-RAPHAEL-01, R-RAPHAEL-02, R-CHIEF-02; offline tests `core/tests/members/test_raphael_apart.py` and `test_primary.py`): `members.list` flags member 0, lists slimes from id 1,
+and sends `team_context.primary_id` null with no slime; `members.update` (only personality, instructions, tools, notify, draft, cover),
+`members.delete`, `members.set_primary` and `members.set_avatar` refuse id 0 with kind `raphael`. An install from before is upgraded by schema
+101 (R-RAPHAEL-03; `core/tests/brain/test_raphael_split_migration.py`, `core/tests/members/test_raphael_files.py`): the member 0 the owner
+made their own becomes a new slime with its conversations, routines, memory, bot and computer folders, and Raphael starts again beside it; older
+builds cannot open that data.
+`member-settings-raphael-slime` opens the chief's settings, presses its face and the red horned slime, and checks
 (`member-settings-raphael-restyled`) that the core kept it and that the settings face and the sidebar row wear it.
 
 The chief's slime wears one gold crown, drawn once on its head wherever its face is drawn (`crownMark` in `slime.ts`). Its points
@@ -173,8 +200,7 @@ conversation row, folders and group chats. No face strip or separate Team page.
 Folders support add/rename/delete, persistent collapse, member drag/drop and folder
 drag reorder using existing groups/members position fields. Member brain selection
 stays in details. The plus opens the existing member profile and group chat creation.
-Chief swap remains the bot-home primary contact rule. Existing protected Raphael
-identity, row actions and context menus remain authoritative.
+The chief of staff leads the list and keeps the member's own menu; Raphael is not in the list (R-RAPHAEL-UI-01).
 Selection follows the visible page, independently of the remembered conversation.
 Hiding the conversation clears member and room selection immediately; opening it
 restores only its active member or room. Away from the conversation no row is selected.
@@ -185,7 +211,7 @@ restores only its active member or room. Away from the conversation no row is se
 Persistent folder collapse, the shared chief conversation row, identity/personality, profile editing, avatar selection, memory, routines, skills,
 commands and voice settings, and the Permissions tab's two switches: ask before contacting colleagues, and write mail as a draft for the owner to send
 (`draft_first`, on by default; see the P08c section of [Conversation](conversation.md)). Members have independent conversations.
-The owner's primary contact (P15b-1, the last section) takes the top display slot in place of Raphael, with the chief role and sidebar star. Details and pickers remain badge-free. `memberRole` uses the single three-language `rooms.chief` key for the current chief in the sidebar, pickers, participant tooltips and member usage; ordinary profiles retain their role text. This does not write profile data; the unique primary contact also holds the chief capability and coordinates rooms.
+The owner's primary contact (P15b-1, the last section) takes the top display slot, with the chief role. Details and pickers remain badge-free. `memberRole` uses the single three-language `rooms.chief` key for the current chief in the sidebar, pickers, participant tooltips and member usage; ordinary profiles retain their role text. This does not write profile data; the unique primary contact also holds the chief capability and coordinates rooms.
 
 ## How to get to it (user POV)
 
@@ -250,7 +276,7 @@ Read the report's `assertions` for `dragPhase`, `dropPhase` (script, layout, sty
 The line is drawn only where the drop changes something (R-SIDE-07): `landingAt` in `member-column.ts` asks `movedMember` / `movedGroup`, the check the drop is saved by,
 so a row over its own place (before the row that follows it, last where it is last) has no line and no allowed drop. `sidebar-drag-nowhere` rests a row over its own place
 and requires no line, `sidebar-drag-folder` carries a row over another folder and requires one line at the row it lands before, inside that folder, and
-`sidebar-reorder-before-primary` drops a row with a real pointer before the row that stands for Raphael when another member is the primary contact (`primaryMember`): it lands there, not last in the folder.
+`sidebar-reorder-before-primary` drops a row with a real pointer before a row of the chief's folder when another member is the chief (`primaryMember`; the chief leads outside the folders): it lands there, not last in the folder.
 
 ```powershell
 npm run look -- sidebar-reorder-members sidebar-reorder-across sidebar-reorder-folder sidebar-drag-row sidebar-drag-nowhere sidebar-drag-folder sidebar-reorder-before-primary --theme both --width 1120,720,1920x1080
@@ -379,7 +405,7 @@ behavior remains in the shared editors and controllers.
 
 ## Gotchas
 
-Fixture member 1 is 小晴 with conversation 11; member 0 (拉斐爾 in the fixture) wears the first blue slime until a scene dresses it.
+Fixture member 1 is 小晴 with conversation 11, the chief of staff unless a scene says otherwise; member 0 (拉斐爾 in the fixture) is Raphael, flagged, wearing the first blue slime always.
 Skills/commands/voices have empty fixture collections. Seed resources before claiming
 populated-resource flows. Native avatar picking/cropping, files, audio output and
 provider behavior need native evidence. A dialog screenshot does not prove saving.
@@ -467,19 +493,18 @@ core/tests/background/test_room_cli.py and core/tests/members/test_cli_brains.py
 ## The primary contact (P15b-1)
 
 The owner chooses which member is their primary contact, the Bot that new work is brought to and that hands it to the colleague it belongs to.
-Raphael is the primary until another is chosen, and exactly one is at a time. As R-UI-107 says, only the primary's own menu (the
-row's more button or a right click; Raphael's while it is the primary) hands it on: its last item, after a hairline, is 換成其他角色 (the arrows icon). It opens 「選擇主要聯絡對象」,
-a list of real buttons (Raphael and the other visible members, not the primary now) with nothing chosen, 取消 and the primary 設為主要, which waits for a
+The first slime ever made is the primary until another is chosen, and exactly one is at a time (nobody while there is no slime; Raphael never is). As R-UI-107 says, only the primary's own menu (the
+row's more button or a right click) hands it on: its last item, after a hairline, is 換成其他角色 (the arrows icon), offered while another slime exists. It opens 「選擇主要聯絡對象」,
+a list of real buttons (the other visible slimes, not the primary now, never Raphael) with nothing chosen, 取消 and the primary 設為主要, which waits for a
 choice. Position alone identifies the primary: no star badge is drawn in the column, face strip or details, and the menu uses the arrows icon instead of a star.
 
 A member's row menu is grouped, with hairlines between the groups: 釘選, 移到分組 ▸, 標為未讀 | 編輯 | 分享為範本 | 隱藏, 刪除 (red, last).
-The primary sits in the top slot, so its menu has no 移到分組 and no 刪除: 釘選, 標為未讀 | 編輯 | 分享為範本 | 隱藏, 換成其他角色. Raphael's row has 釘選 only,
-and 換成其他角色 while it is the primary. Clearing a member's conversation, duplicating a member and marking every member read are not in the menu
+The primary sits in the top slot, so its menu has no 移到分組: 釘選, 標為未讀 | 編輯 | 分享為範本 | 隱藏, 刪除 | 換成其他角色 (the core hands the role to the next slime when it is hidden or deleted). Raphael has no row and no menu. Clearing a member's conversation, duplicating a member and marking every member read are not in the menu
 (one conversation per member, R-UI-103; fewer choices).
-The primary takes Raphael's large top slot in the member column, collapsed strip and sidebar board; Raphael takes the primary's former group/pinned position and keeps its emblem. The same identity swap orders member/conversation pickers, mentions, room membership/responder choices, room participant faces/role choices, and calendar/routine choices. It never mutates stored groups, pins, identities, current conversation, default recipient or the core roster.
+The primary takes the large top slot in the member column, collapsed strip and sidebar board. The same chief-first order lists member/conversation pickers, mentions (Raphael last), room membership/responder choices, room participant faces/role choices, and calendar/routine choices, all of slimes only. It never mutates stored groups, pins, identities, current conversation, default recipient or the core roster.
 A pinned tile (the large faces at the top; R-UI-122) has the same family of menu, each row with a Lucide icon: 取消釘選 (unpinned pin), 標為未讀 | 編輯 | 分享為範本 | 隱藏, 刪除 (red) | 換成其他角色, which is offered only while a member that is not pinned remains. There is no 移到分組 on a tile (its folder is where it returns to). 換成其他角色 opens the same window as the primary's, under its own title and without 設為主要: one press on a member (not Raphael, nobody hidden, not the primary) writes that member as pinned at the tile's `position` and then unpins the old one, so the new face stands exactly in the old tile's place and the old member is a row of its own folder again. `sidebar-tile-menu`, `sidebar-tile-picker` and `sidebar-tile-replaced` (fixture `pinnedTiles` over the long roster; the IPC double lists the pinned first and numbers positions again as the core does) assert the menu's shape, hairlines, icons and red 刪除, the picker's candidates and buttons, and the end state with exactly two writes. Not covered: the owner's real roster order and a live core. Unit proof: member-actions.test.ts, member-column.test.ts, primary-picker.test.ts.
 
-Raphael's row has no destructive menu wherever it moves; an ordinary primary keeps its member menu at the top. Raphael can be chosen again from another member's primary picker. The primary holds the chief capability, is required in new or edited rooms and writes their single wrap-up. Existing rooms missing a newly selected chief require membership adjustment; in-flight work is not replayed. Opening the Conversation page and Alt+Space quick questions retain their existing thread behavior; this change only exchanges display positions.
+The primary holds the chief capability, is required in new or edited rooms and writes their single wrap-up; with no chief there is no room to make. Existing rooms missing a newly selected chief require membership adjustment; in-flight work is not replayed. Opening the Conversation page and Alt+Space quick questions retain their existing thread behavior; the quick ask always goes to Raphael.
 
 ```powershell
 npm run look -- members-expanded sidebar-folders member-row-menu sidebar-tile-menu sidebar-tile-picker sidebar-tile-replaced primary-contact-column primary-contact-menu primary-contact-picker primary-contact-picker-long primary-contact-set primary-room-picker primary-room-members primary-calendar-members primary-room-chief --theme both --width 1120,720,1920x1080
@@ -1092,7 +1117,7 @@ app/scripts/look/mock-ipc.test.mjs (scene fixture source propagation).
 > Retired: Connect apps lists connectors only, so the Connections skills section, its import dialog, library rows, grants dialog and plugin sets are gone from the app, together with the scenes connected-apps-skills, skill-private-detail, skills-installed-sources, skills-import-shared, skills-member-grants, skills-source-changed, skills-plugin-entry, skills-marketplace, skills-plugin-set, skills-plugin-update and skills-plugin-details (connected-apps-only and its `connectors-only` check replace the first). Skills belong to each member and are managed in that member's right panel (details-skills, raphael-skills). The core capability and its pytest evidence stay. What follows is the history of the retired dialog.
 
 Connections keeps one library row per shared skill regardless of member count.
-Its existing document dialog lists every member, Raphael first, with the same tg
+Its existing document dialog lists every slime, with the same tg
 switch as private skill rows and member details. A grant refresh updates the count
 without closing the dialog or changing the library original. The library's global
 switch remains in the document header; individual member controls are in its list.

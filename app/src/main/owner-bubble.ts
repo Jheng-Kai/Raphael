@@ -1,4 +1,4 @@
-import { firstBotSlime } from "./first-bot";
+import { RAPHAEL_SLIME } from "./raphael";
 import { slimeColorOf } from "./slime";
 const channels = (hex: string): number[] => [1, 3, 5].map(at => parseInt(hex.slice(at, at + 2), 16));
 const hexOf = (rgb: number[]): string => `#${rgb.map(value => value.toString(16).padStart(2, "0")).join("")}`;
@@ -29,9 +29,9 @@ export function ownerBubble(color: string): { fill: string; words: "light" | "da
   return { fill: hexOf(rgb), words: "light" };
 }
 
-/** A member's colour, the first member's being that of the slime the owner dressed it in (the first blue slime's until then). */
+/** A member's colour, Raphael's being the first blue slime's. */
 export const memberColor = (member: { id: number; avatar?: string | null }): string =>
-  slimeColorOf(member.id === 0 ? { id: 0, avatar: firstBotSlime(member.avatar) } : member);
+  slimeColorOf(member.id === 0 ? { id: 0, avatar: RAPHAEL_SLIME } : member);
 
 /**
  * The member's colour on the controls of its conversation (send, stop, its computer): darkened on the white

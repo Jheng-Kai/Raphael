@@ -17,7 +17,7 @@ async def test_production_turns_offer_every_speaker_the_same_abilities(setup, cl
     ordinary = team.members.store.create_member(name="Writer", role="Writer", model="")
     primary = team.members.store.create_member(name="Teacher", role="Teacher", model="")
     team.members.store.set_primary(primary.id)
-    rig.settings.set("first_bot_profile", {"name": "Raphael", "instructions": "OWNER-WORK-CONTRACT"})
+    rig.settings.set("first_bot_profile", {"instructions": "OWNER-WORK-CONTRACT"})
     captured = []
     if brain == "cli":
         rig.settings.set("agent_model", "cli:codex:test")

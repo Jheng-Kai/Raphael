@@ -199,7 +199,7 @@ elif operation == "init":
                                        [(room, member) for member in people])
     voice = len(sys.argv) > 3 and sys.argv[3] in ("voice-conversation", "voice-keys")
     settings = {"stt_engine": "local" if voice else "cloud", "stt_local_model": "qwen3-asr" if voice else None,
-                "first_bot_profile": {"name": "Raphael", "personality": "Calm", "instructions": "Help with the current request."}}
+                "first_bot_profile": {"personality": "Calm", "instructions": "Help with the current request."}}
     if len(sys.argv) > 3 and sys.argv[3] == "gmail-connect":
         from raphael_core.native_journeys import native_codex_model
         settings["agent_model"] = native_codex_model()

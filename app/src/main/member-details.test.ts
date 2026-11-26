@@ -125,13 +125,13 @@ describe("a member's panel", () => {
     panel.el.querySelector<HTMLElement>('[data-panel-file="page:abc"]')!.click();
     expect(openTurn).toHaveBeenCalledExactlyOnceWith(3, 12, 41);
   });
-  test("Raphael's face follows the current custom avatar on redraw", async () => {
+  test("Raphael's face is the first blue slime, whatever picture the owner has for the voice", async () => {
     current=0; const panel=mount(); await flush();
-    const avatar={url:'data:image/png;base64,c2FtcGxl',crop:{x:.5,y:.5,zoom:1}};
-    setAvatar(avatar); panel.draw();
-    expect(panel.el.querySelector<HTMLImageElement>('.mb-who img')?.getAttribute('src')).toBe(avatar.url);
+    setAvatar({url:'data:image/png;base64,c2FtcGxl',crop:{x:.5,y:.5,zoom:1}}); panel.draw();
+    expect(panel.el.querySelector('.mb-who img')).toBeNull();
+    expect(panel.el.querySelector('.mb-who .mb-av-slime svg.slime')).not.toBeNull();
     setAvatar(null); panel.draw();
-    expect(panel.el.querySelector('.mb-who img')?.getAttribute('src')).not.toBe(avatar.url);
+    expect(panel.el.querySelector('.mb-who .mb-av-slime svg.slime')).not.toBeNull();
   });
 
   test("the first view has the routines before conversations, and the three tabs", async () => {
@@ -234,28 +234,29 @@ describe("Raphael's panel", () => {
     await flush();
     expect(panel.el.querySelector("input, textarea")).toBeNull();
     expect(panel.el.querySelector(".mb-panel-identity > b")!.textContent).toBe("拉斐爾");
-    // The first blue slime: its emblem shows only in voice.
-    expect(panel.el.querySelector(".mb-face-edit .av.mb-av-slime svg.slime")).not.toBeNull();
+    // The first blue slime: its emblem shows only in voice. It is a face, not a button: nothing of it is changed here.
+    expect(panel.el.querySelector(".mb-panel-identity > .av.mb-av-slime svg.slime")).not.toBeNull();
+    expect(panel.el.querySelector(".mb-face-edit")).toBeNull();
     expect(panel.el.querySelector('[data-det="group"]')).toBeNull();
     expect(api.routinesList).toHaveBeenCalledWith(0);
   });
 
-  test("its picture is changed here: the members' slimes, the one it wears pressed, and a picture from the PC", async () => {
+  test("its picture is not changed here: no picker opens, and a slime's still does", async () => {
     current = 0;
-    const panel = mount();
+    let panel = mount();
+    await flush();
+    expect(panel.el.querySelector('[data-det="avatar"]')).toBeNull();
+    expect(document.getElementById("app-popover")).toBeNull();
+    expect(host.update).not.toHaveBeenCalled();
+    document.body.innerHTML = "";
+    current = 3;
+    panel = mount();
     await flush();
     panel.el.querySelector<HTMLElement>('[data-det="avatar"]')!.click();
-    // The first member is dressed as every member is: it wears the first blue slime until the owner chose another.
-    expect(document.querySelector('#app-popover [data-slime-character="blue-plain"]')!.getAttribute("aria-pressed")).toBe("true");
     document.querySelector<HTMLElement>('#app-popover [data-slime-character="horns-red"]')!.click();
     await flush();
-    expect(host.update).toHaveBeenCalledWith(0, { avatar: "slime:horns-red" });
-    const fromPc = [...document.querySelectorAll<HTMLElement>("#app-popover .menu-action")];
-    expect(fromPc.map((b) => b.textContent)).toEqual(["從電腦選…"]);
-    api.avatarPick.mockResolvedValue(null);
-    fromPc[0]!.click();
-    await flush();
-    expect(api.avatarPick).toHaveBeenCalled();
+    expect(host.update).toHaveBeenCalledWith(3, { avatar: "slime:horns-red" });
+    expect([...document.querySelectorAll("#app-popover .menu-action")].map((b) => b.textContent)).toEqual([]);
   });
 });
 
@@ -355,14 +356,14 @@ test("a routine's switch turns it on or off from the row without opening the edi
 });
 
 describe("primary changes do not add face badges", () => {
-  const withPrimary = (primary_id: number): MembersList => ({ ...LIST, team_context: { primary_id } as MembersList["team_context"] });
+  const withPrimary = (primary_id: number | null): MembersList => ({ ...LIST, team_context: { primary_id } as MembersList["team_context"] });
   test.each([0, 3])("member %s keeps its picture without a primary star", async id => {
     current = id;
     const panel = mount(); await flush();
-    for (const primary of [id, 4, 0]) {
+    for (const primary of [id, 4, null]) {
       host.list = () => withPrimary(primary); panel.draw();
       expect(panel.el.querySelector('.mb-star')).toBeNull();
-      expect(panel.el.querySelector('.mb-panel-identity .mb-face-edit .av')).not.toBeNull();
+      expect(panel.el.querySelector(id === 0 ? '.mb-panel-identity > .av' : '.mb-panel-identity .mb-face-edit .av')).not.toBeNull();
     }
     if (id === 0) expect(panel.el.querySelector('.mb-panel-identity .mb-av-slime svg.slime')).not.toBeNull();
   });
@@ -385,5 +386,30 @@ describe("the computer lives in its own tab only", () => {
     expect([...panel.el.querySelectorAll<HTMLElement>('[data-det="tab"]')].map(tab => tab.dataset.tab)).toEqual(['details', 'library', 'computer']);
     panel.el.querySelector<HTMLElement>('[data-det="tab"][data-tab="computer"]')!.click();
     expect(panel.el.dataset.detailsTab).toBe('computer');
+  });
+});
+
+describe("Raphael's panel and the chief's", () => {
+  const asChief = (): void => { host.list = () => ({ ...LIST, members: LIST.members.map(m => m.id === 3 ? { ...m, chief: true } : m), team_context: { primary_id: 3 } as MembersList["team_context"] }); };
+
+  test("only Raphael has the conversations list, its quick questions, and the chief is a normal slime's panel without it", async () => {
+    current = 3;
+    const panel = mount(); await flush();
+    asChief(); panel.draw(); await flush();
+    expect(panel.el.querySelector('[data-slot="conversations"]')).toBeNull();
+    current = 0; panel.showMember(); panel.draw(); await flush();
+    expect(panel.el.querySelector('[data-slot="conversations"]')).not.toBeNull();
+  });
+
+  test("Raphael's face is only a face: no picture to change, no role, and a slime's panel keeps its picker", async () => {
+    current = 0;
+    let panel = mount(); await flush();
+    expect(panel.el.querySelector('[data-det="avatar"], .mb-face-edit, .mb-face-pencil')).toBeNull();
+    expect(panel.el.querySelector(".mb-panel-identity .mb-av-slime svg.slime")).not.toBeNull();
+    expect(panel.el.querySelector(".mb-panel-identity small")).toBeNull();
+    document.body.innerHTML = "";
+    current = 3;
+    panel = mount(); await flush();
+    expect(panel.el.querySelector('[data-det="avatar"]')).not.toBeNull();
   });
 });

@@ -268,8 +268,8 @@ test("each row of the access menu leads with who it names, a face or the team's 
   // No check on the left any more: the face, the name, then the check's place at the right edge, on every row.
   expect(rows.map(row => [...row.children].map(part => part.className))).toEqual(rows.map(() => ["mlead", "mt", "ck"]));
   const all = menu.querySelector('[data-access="all"]')!;
-  // The whole team is drawn as the sidebar draws it: its first faces in one square, Raphael first.
-  expect([...all.querySelectorAll(".mlead > .room-avatar > .av")].map(face => face.getAttribute("data-presence-member"))).toEqual(["0", "1", "2", "3"]);
+  // The whole team is drawn as the sidebar draws it: its first faces in one square (slimes only, Raphael is not among them).
+  expect([...all.querySelectorAll(".mlead > .room-avatar > .av")].map(face => face.getAttribute("data-presence-member"))).toEqual(["1", "2", "3"]);
   // Each character's own face, from the roster: 小森's picture, the others their slimes.
   expect([...menu.querySelectorAll("[data-member] .mlead > .av")].map(face => face.getAttribute("data-presence-member"))).toEqual(["1", "2", "3"]);
   expect(menu.querySelector('[data-member="2"] .mlead .mb-av-pic img')?.getAttribute("src")).toBe(PICTURE);
@@ -288,7 +288,7 @@ test("the access menu still opens with a face on every row when the roster canno
   press(root, '[data-skl="access"][data-key="pack:2"]');
   const menu = document.querySelector(".skl-access-menu")!;
   expect(menu.querySelectorAll("[data-member] .mlead > .av")).toHaveLength(3);
-  expect(menu.querySelector('[data-access="all"] .mlead > .room-avatar')?.getAttribute("data-faces")).toBe("4");
+  expect(menu.querySelector('[data-access="all"] .mlead > .room-avatar')?.getAttribute("data-faces")).toBe("3");
 });
 
 const made: LibraryPackage = { key: "pack:9", name: "簡報工具", kind: "pack", source: "owner/slides", description: "", version: "", enabled: true, access: [], updatable: true,

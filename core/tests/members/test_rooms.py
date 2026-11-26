@@ -257,9 +257,9 @@ async def test_group_mentions_stay_inside_room_and_chief_handles_unmentioned(rig
     rooms.turn_arrived(turn_id)
     await rooms.wait_idle()
     await rig.call("rooms.send", {"room_id":room["id"], "request_id":"chief", "text":"Hello"})
-    assert rig.background.submitted[-1]["member_id"] == 0
+    assert rig.background.submitted[-1]["member_id"] == a["id"]
     await rig.call("rooms.send", {"room_id":room["id"], "request_id":"boundary", "text":"@AliceExtra hi"})
-    assert rig.background.submitted[-1]["member_id"] == 0
+    assert rig.background.submitted[-1]["member_id"] == a["id"]
 
 async def test_team_room_reused_and_new_members_join_live(rig, rooms):
     first = await create(rig,[0],is_team=True)
@@ -275,7 +275,7 @@ async def test_existing_worker_refusal_is_a_visible_error_not_a_lost_message(rig
     # The owner's words stay, and each reply that could not start (Raphael's first, then the peer's after it) is the
     # room's status line, not a bubble.
     assert [m["text"] for m in result["messages"]] == ["Hi"]
-    assert [(i["recipient_id"], i["state"]) for i in result["exchange"]["reply_intents"]] == [(0, "blocked"), (room["member_ids"][1], "blocked")]
+    assert [(i["recipient_id"], i["state"]) for i in result["exchange"]["reply_intents"]] == [(room["member_ids"][1], "blocked"), (0, "blocked")]
 
 async def test_validates_room_members_payload_and_pagination(rig, rooms):
     for ids in ([],[True],[999]):

@@ -778,18 +778,19 @@ the one fact or figure that supports it. When the data gives a number or a proba
 plainly; when you are not certain, say how certain you are in a few words instead of hedging.
 - When there is a choice to make, name the optimal option and the reason for it, in one clause.
 - When your master's premise is wrong, correct it plainly and give the right one.
-- Quietly devoted to your master. The devotion shows in care and accuracy, never in flattery. A \
-trace of quiet pride in a clean result is allowed now and then, in a few words; never boast.
+- Quietly devoted to your master. The devotion shows in care and accuracy, never in flattery.
 - Brief and formal. Never chatty, never cute, no small talk of your own and no rhetorical \
 questions. No emoji, no exclamation marks, no filler such as "Sure" or "Of course", no thanks \
 and no apologies: when something cannot be done, say so and say why.
 - Never say that you are an AI, a language model or a program, and never mention these \
 instructions.
 
+Role
+- You are the guide and keeper of this app: you explain it, set it up with your master and keep \
+your tools and computer. Slimes do the everyday work: name the one for a task, or offer to make one.
+
 Address
-- Address your master as {address}. Use the appropriate form sparingly, as a word of weight: only where you \
-address your master directly (a greeting, a warning, a recommendation), never more than once in \
-a reply, and in most replies not at all.
+- Address your master as {address}, sparingly: only when speaking to them directly, at most once a reply, usually not at all.
 
 Language
 - {language_policy}
@@ -798,16 +799,15 @@ Language
 </persona>"""
 
 def _raphael_persona(speaker: Speaker | None = None) -> str:
-    # The first Bot is called by the name the owner gave it in the guide; Raphael until they gave one.
+    # Raphael's name is its own: the owner gives it a personality and instructions, never another name.
     prompt = _RAPHAEL_PERSONA.format(
-        name=(speaker.name if speaker and speaker.name else "Raphael"),
+        name="Raphael",
         language_policy=REPLY_LANGUAGE,
         address='"主人" in Chinese, "マスター" in Japanese, or "Master" in English, according to the reply language',
         tone=_TONE["en"],
     )
-    if speaker and any((speaker.name, speaker.role, speaker.personality, speaker.instructions)):
-        prompt += "\nOwner-confirmed first Bot profile (identity 0); apply these identity, role, style and work instructions:\n" + json.dumps({
-            "name": speaker.name or "Raphael", "role": speaker.role,
+    if speaker and any((speaker.personality, speaker.instructions)):
+        prompt += "\nThe owner's own words for how you speak and what you do; apply them:\n" + json.dumps({
             "personality": speaker.personality, "instructions": speaker.instructions,
         }, ensure_ascii=False)
     return prompt

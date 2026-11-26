@@ -730,7 +730,6 @@ export interface BrainSettings {
   video_model?: string;
   computer_ssh_alias?: string;
   computer_vm_idle_minutes?: number;
-  chief_pinned?: boolean;
   owner_name?: string;
   owner_about?: string;
   project_folders?: string[];
@@ -1010,16 +1009,15 @@ export interface GroupDraft {
 }
 
 /**
- * A member as `members.list` lists it, Raphael first as member 0 (it is no row of the core).
- * `avatar_url` is a picture the page may show as it is (a `data:image/...` URL), absent for a member
- * with none; Raphael's is the owner's picture of it with its `avatar_crop`, absent while it is its
- * emblem. `unread`: a turn arrived while the owner was not reading its thread (until
+ * A member as `members.list` lists it: Raphael first as member 0 (`raphael: true`, the app's guide and keeper, no slime
+ * of the owner's list), then the slimes. `avatar_url` is a picture the page may show as it is (a `data:image/...` URL),
+ * absent for a member with none; Raphael never has one, its look is the first blue slime. `unread`: a turn arrived while the owner was not reading its thread (until
  * `members.read`); `waiting`: a question waits for the owner there. `preview` is the last line of
  * its thread (the core cuts it to one line), `last_at` when it was said.
  */
 export interface Member {
-  /** Whether the owner has confirmed the first Bot's profile (identity 0). */
-  profile_ready?: boolean;
+  /** Set on member 0 only: Raphael, who is not one of the owner's slimes. */
+  raphael?: true;
   id: number;
   name: string;
   role: string;
@@ -1037,10 +1035,8 @@ export interface Member {
   /** `""`, `"preset:<stem>"` or `"file:<stored name>"`. */
   avatar: string;
   avatar_url?: string;
-  /** What the picture is named by; the roster carries no picture, and `api.ts` fills `avatar_url` from `members.picture` (member-pictures.ts). */
+  /** What the picture is named by; the roster carries no picture, and `api.ts` fills `avatar_url` from `members.picture` (member-pictures.ts). Never on Raphael. */
   avatar_rev?: string;
-  /** Raphael's only: the cut of the owner's picture of it (avatar.ts `AvatarCrop`). */
-  avatar_crop?: { x: number; y: number; zoom: number };
   /** The cover of the member settings page: one of the window's patterns or the owner's picture; none is the dotted band. */
   /** A picture's `position` is how far down it is shown, in percent (50 when the owner never moved it). */
   cover?: { kind: "pattern"; id: string } | { kind: "image"; url: string; rev?: string; position?: number };
@@ -1093,7 +1089,8 @@ export interface MembersList {
 
 export interface TeamContextSnapshot {
   schema_version: number; revision: string; self_id: number; count: number;
-  primary_id: number; chief_id: number; inventory_state: string; room_member_ids: number[] | null;
+  /** The chief slime's id, or null when there is no slime (never 0, Raphael). */
+  primary_id: number | null; chief_id: number | null; inventory_state: string; room_member_ids: number[] | null;
   members: { id: number; name: string; role: string; blurb: string }[];
   /** The apps of the owner, as `integrations.inventory` lists them: the roster, the sidebar and the connections page read one inventory. */
   apps: InventoryApp[];
