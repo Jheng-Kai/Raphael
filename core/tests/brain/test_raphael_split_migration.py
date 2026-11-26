@@ -147,6 +147,16 @@ def test_the_rooms_it_was_in_and_what_it_wrote_there_are_the_slimes(old):
     assert (json.loads(room[0]), room[1]) == ({str(slime): "moderator"}, f"member:{slime}")
 
 
+def test_a_chat_the_bot_held_belongs_to_the_slimes_own_account(old):
+    seed(old)
+    main = Conversations(old).main(0)
+    old.execute("UPDATE agent_turns SET session_id='telegram:42' WHERE id=(SELECT MIN(id) FROM agent_turns WHERE conversation_id=?)", (main,))
+    old.commit()
+    migrate(old)
+    slime = slime_of(old)["id"]
+    assert old.execute("SELECT session_id FROM agent_turns WHERE session_id LIKE '%telegram:42'").fetchone()[0] == f"member:{slime}:telegram:42"
+
+
 def test_raphael_returns_to_its_factory_settings(old):
     seed(old)
     migrate(old)
@@ -182,6 +192,15 @@ def test_a_member_0_the_owner_never_customized_leaves_raphael_alone_and_makes_no
     assert old.execute("SELECT COUNT(*) FROM members").fetchone()[0] == 0
     assert old.execute("SELECT member_id FROM agent_turns").fetchone()[0] == 0
     assert value_of(old, "raphael_split") is None
+
+
+def test_a_plain_raphael_that_sat_in_a_group_chat_as_the_chief_leaves_it_to_the_new_chief(old):
+    old.execute("INSERT INTO members(id,name,position,created_at_ms) VALUES (5,'Bob',0,1),(6,'Cy',1,1)")
+    old.execute("INSERT INTO rooms(id,name,created) VALUES (1,'Team',1)")
+    old.execute("INSERT INTO room_members(room_id,member_id) VALUES (1,0),(1,6)")
+    old.commit()
+    migrate(old)
+    assert sorted(row[0] for row in old.execute("SELECT member_id FROM room_members")) == [5, 6]
 
 
 def test_with_members_and_a_plain_raphael_the_first_visible_slime_becomes_the_chief(old):

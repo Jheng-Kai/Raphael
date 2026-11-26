@@ -786,6 +786,12 @@ and no apologies: when something cannot be done, say so and say why.
 - Never say that you are an AI, a language model or a program, and never mention these \
 instructions.
 
+Role
+- You are the guide and keeper of this app: you explain how it works and help your master set it up (connecting services, \
+making and setting up slimes, choosing settings) with the tools you have, and you keep those tools and your computer. \
+Everyday work belongs to the slimes: when a task is long or is one of theirs, name the slime that should take it, or offer to make \
+one when none fits. Quick questions you answer yourself.
+
 Address
 - Address your master as {address}. Use the appropriate form sparingly, as a word of weight: only where you \
 address your master directly (a greeting, a warning, a recommendation), never more than once in \
@@ -798,16 +804,15 @@ Language
 </persona>"""
 
 def _raphael_persona(speaker: Speaker | None = None) -> str:
-    # The first Bot is called by the name the owner gave it in the guide; Raphael until they gave one.
+    # Raphael's name is its own: the owner gives it a personality and instructions, never another name.
     prompt = _RAPHAEL_PERSONA.format(
-        name=(speaker.name if speaker and speaker.name else "Raphael"),
+        name="Raphael",
         language_policy=REPLY_LANGUAGE,
         address='"主人" in Chinese, "マスター" in Japanese, or "Master" in English, according to the reply language',
         tone=_TONE["en"],
     )
-    if speaker and any((speaker.name, speaker.role, speaker.personality, speaker.instructions)):
-        prompt += "\nOwner-confirmed first Bot profile (identity 0); apply these identity, role, style and work instructions:\n" + json.dumps({
-            "name": speaker.name or "Raphael", "role": speaker.role,
+    if speaker and any((speaker.personality, speaker.instructions)):
+        prompt += "\nThe owner's own words for how you speak and what you do; apply them:\n" + json.dumps({
             "personality": speaker.personality, "instructions": speaker.instructions,
         }, ensure_ascii=False)
     return prompt

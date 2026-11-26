@@ -201,9 +201,9 @@ class RoomsService:
 
     def _validated_ids(self, ids, *, team=False):
         if (not isinstance(ids, list) or any(type(i) is not int or not self._members.member_exists(i) for i in ids)
-                or len(set(ids)) != len(ids)
+                or len(set(ids)) != len(ids) or 0 in ids
                 or (not team and (self._members.primary_id() not in ids or len(ids) < 2))):
-            raise invalid_params("ordinary rooms require the chief and at least 2 distinct members")
+            raise invalid_params("ordinary rooms require the chief and at least 2 distinct slimes (Raphael is not one)")
         return ids
 
     def _thread(self, room, thread_id=None):

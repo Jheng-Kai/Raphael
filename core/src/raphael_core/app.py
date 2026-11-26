@@ -1017,6 +1017,9 @@ class App(Router):
         # Raphael's memory: the notes on this PC, the summary of the conversation, the reflection.
         memory_root = paths.memory_dir(data_dir) if memory_dir is None else memory_dir
         paths.owner_only_directory(memory_root)
+        # Schema 101 made what the owner made of member 0 a slime; its notes, cover, bot and computer folders follow it, once.
+        from .members import raphael_files
+        raphael_files.adopt(self._conn, root=memory_root.parent, data_dir=Path(data_dir), vault=self.vault, vm=self.vm)
         self.memory = MemoryService(self._conn, memory_root, self.client, self.keys, notify=self.notify,
                                     event_index=self._event_index)
         self.memory.register(self)

@@ -188,9 +188,8 @@ ACTIONS = (
           ("image_model", TEXT, "Set the image model only when explicitly requested by the owner."),
           ("video_model", TEXT, "Set the video model only when explicitly requested by the owner."),
           ("model_favorites", {"type": "object", "properties": {key: STRINGS for key in ("cleanup", "answer", "stt")}, "additionalProperties": False}, "Set starred models only at the owner's request."),
-          ("first_bot_profile", obj({key: TEXT for key in ("name", "role", "personality", "instructions")}), "Edit the first Bot's profile."),
-          ("raphael_draft_first", BOOL, "Set the first Bot's mail draft preference."),
-          ("chief_pinned", BOOL, "Pin/unpin the primary contact."),
+          ("first_bot_profile", obj({key: TEXT for key in ("personality", "instructions")}), "Edit Raphael's personality and instructions."),
+          ("raphael_draft_first", BOOL, "Set Raphael's mail draft preference."),
           *((key, TEXT, "Choose this model only when the owner explicitly requests it; never recover a failure by changing it.")
             for key in ("cleanup_model", "stt_cloud_model", "assistant_model", "router_model", "memory_model", "pdf_model", "vision_model")),
           *((key, STRINGS, "Edit the model fallback list only when explicitly requested by the owner.")

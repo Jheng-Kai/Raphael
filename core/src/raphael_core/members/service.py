@@ -142,7 +142,6 @@ SLIME = "slime:"
 RAPHAEL_PROFILE_FIELDS = ("personality", "instructions")
 MEMBERS_DIR = "members"
 # Raphael's own picture, kept by the shell (app/src-tauri/src/avatar.rs): read here, never written.
-RAPHAEL_AVATAR_DIR = "avatar"
 _EXTENSIONS = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif"}
 # The template of the routine offered to a member of a group with places to look.
 TEMPLATE_TIME = "09:00"
@@ -359,7 +358,6 @@ class MembersService:
         self._tz = tz
         self._tick_s = tick_s
         self._avatars = local_dir / AVATARS_DIR
-        self._raphael_avatar = local_dir / RAPHAEL_AVATAR_DIR
         self._pictures: dict[Path, _Picture] = {}
         self._covers = Covers(self._avatars / "covers", self._picture, self._pictures.pop)
         self._viewing: int | None = None
@@ -461,11 +459,6 @@ class MembersService:
             return Speaker(**profile, draft_first=self._settings.get("raphael_draft_first"),
                            tools=None if tools is None else frozenset(tools))
         return self.store.speaker(member_id)
-
-    def _chief_pinned(self) -> bool:
-        from ..brain.settings import SettingsStore
-
-        return bool(SettingsStore(self._conn).get("chief_pinned"))
 
     def first_bot_profile(self) -> dict:
         from ..brain.settings import SettingsStore
@@ -698,19 +691,6 @@ class MembersService:
         default silhouette)."""
         kind, _, name = avatar.partition(":")
         return self._picture(self._avatars / MEMBERS_DIR / name) if kind == "file" and name else None
-
-    def _raphael_picture(self) -> tuple[_Picture, dict] | None:
-        """Raphael's picture of the owner's own and its crop, as the shell keeps them; None while it
-        is its emblem."""
-        try:
-            meta = json.loads((self._raphael_avatar / "picture.json").read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            return None
-        picture = self._picture(self._raphael_avatar / "picture")
-        crop = meta.get("crop") if isinstance(meta, dict) else None
-        if picture is None or not isinstance(crop, dict):
-            return None
-        return picture, {key: crop.get(key) for key in ("x", "y", "zoom")}
 
     def _remove_picture(self, avatar: str) -> None:
         kind, _, name = avatar.partition(":")

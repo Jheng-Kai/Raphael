@@ -132,6 +132,13 @@ def _move(conn: sqlite3.Connection, slime: int) -> None:
     for table, column in _BY_TURN:
         if _has(conn, table, "member_id"):
             conn.execute(f"UPDATE {table} SET member_id = ? WHERE member_id = 0 AND COALESCE({column}, -1) NOT IN {quick_turns}", (slime,))
+    # What the slime's bot says and hears is the slime's own account now (`messaging.service.member_account`).
+    for table in ("agent_turns", "worker_tasks"):
+        for platform in ("telegram", "slack", "discord"):
+            conn.execute(f"UPDATE {table} SET session_id = ? || session_id WHERE member_id = ? AND session_id LIKE ?",
+                         (f"member:{slime}:", slime, f"{platform}:%"))
+    conn.execute("UPDATE messaging_pairing_cards SET account = 'member:' || member_id || ':' || account"
+                 " WHERE member_id = ? AND account IN ('telegram', 'slack', 'discord')", (slime,))
     # A message written as a reply in a room is checked against its thread when its writer changes: the relabel keeps every
     # pair of writers apart, so the check is lifted for the one statement and put back as it was.
     trigger = conn.execute("SELECT sql FROM sqlite_master WHERE type='trigger' AND name='room_message_scope_update'").fetchone()
@@ -176,6 +183,17 @@ def _move(conn: sqlite3.Connection, slime: int) -> None:
             conn.execute("UPDATE vault_entries SET members = ? WHERE id = ?", (json.dumps([*allowed, slime]), entry))
 
 
+def _leave_rooms(conn: sqlite3.Connection) -> None:
+    """Raphael, never a slime, does not sit in a group chat: where it did as the chief, the chief takes its seat."""
+    chief = conn.execute("SELECT id FROM members WHERE primary_contact = 1").fetchone()
+    if chief is None:
+        return
+    rooms = [row[0] for row in conn.execute("SELECT room_id FROM room_members WHERE member_id = 0")]
+    for room in rooms:
+        conn.execute("INSERT OR IGNORE INTO room_members (room_id, member_id) VALUES (?, ?)", (room, chief[0]))
+    conn.execute("DELETE FROM room_members WHERE member_id = 0")
+
+
 def separate(conn: sqlite3.Connection) -> None:
     settings = _settings(conn)
     with conn:
@@ -200,4 +218,5 @@ def separate(conn: sqlite3.Connection) -> None:
             row = conn.execute("SELECT id FROM members WHERE hidden = 0 ORDER BY pinned DESC, position, id LIMIT 1").fetchone()
             if row is not None:
                 conn.execute("UPDATE members SET primary_contact = 1 WHERE id = ?", (row[0],))
+        _leave_rooms(conn)
         conn.execute("PRAGMA user_version = 101")
