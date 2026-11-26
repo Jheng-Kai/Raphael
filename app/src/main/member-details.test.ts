@@ -392,7 +392,7 @@ describe("the computer lives in its own tab only", () => {
 describe("Raphael's panel and the chief's", () => {
   const asChief = (): void => { host.list = () => ({ ...LIST, members: LIST.members.map(m => m.id === 3 ? { ...m, chief: true } : m), team_context: { primary_id: 3 } as MembersList["team_context"] }); };
 
-  test("only Raphael has the conversations list (its quick questions); the chief is a normal slime's panel without it", async () => {
+  test("only Raphael has the conversations list, its quick questions, and the chief is a normal slime's panel without it", async () => {
     current = 3;
     const panel = mount(); await flush();
     asChief(); panel.draw(); await flush();

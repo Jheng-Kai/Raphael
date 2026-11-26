@@ -89,7 +89,7 @@ describe("the sidebar never lists Raphael", () => {
     expect(el.querySelector(".mb-hidden")?.hasAttribute("data-empty")).toBe(true);
   });
 
-  test("with no chief nobody leads and no row wears a crown; with no slime the column is empty", () => {
+  test("with no chief nobody leads and no row wears a crown, and with no slime the column is empty", () => {
     const el = dom(columnHTML(view(roster(null))));
     expect(el.querySelector(".mb-chief")).toBeNull();
     expect(rows(el)).toEqual([3, 5, 4]);

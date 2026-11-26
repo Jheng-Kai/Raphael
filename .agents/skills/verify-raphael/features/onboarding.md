@@ -39,14 +39,15 @@ Settings has no 導覽 entry any more;
    answer in its manner (告。/解。/否。) fades in under it, then the ask is deleted and the next typed (six
    pairs, `onboarding.demo*`); with reduced motion the first pair stands; a reader hears one sentence
    (`onboarding.demoSummary`). Then one pill, 開始.
-1. **The first slime** (`onboarding-slime`, checks `onboarding-slime-waits` and `onboarding-slime`, R-CHIEF-01): the owner's
-   first slime, their chief of staff from then on, is not made to be Raphael. Its slime stands large in the middle (112 px,
+1. **The first slime** (`onboarding-slime`, checks `onboarding-slime-waits` and `onboarding-slime`, R-CHIEF-01, R-RAPHAEL-UI-06): the owner's
+   first slime, their chief of staff from then on, is a slime of their own, not Raphael. Its slime stands large in the middle (112 px,
    wearing the chief's crown), under it its name in the guide's own pill field (at most 16 characters, centred), and under
    that the members' own slime picker (slime-tabs.ts, the one 新增角色 and the member settings open) without the popover's
    chrome; its look starts as the first blue slime and a press dresses it at once. The name is the one thing the guide asks
    of everyone: the built-in name is never put in the field, and the way on (and Enter in the field) waits for a name. The
-   way on keeps both as member 0's (`members.update {id: 0, name, avatar}`); a refusal is said and the step stays; going
-   back and on again with nothing changed sends nothing. A name the owner already gave stands in the field. No floating
+   way on makes the slime (`members.create {name, avatar}`: a real member, which the core makes the chief of staff) and writes nothing as Raphael's; a refusal is said and the step stays
+   (so does Raphael's own name, which no slime bears); going back and on again with nothing changed sends nothing, a changed name or look updates the slime it made (`members.update {id, name, avatar}`) and never makes another. A chief slime the owner already has (the guide shown again)
+   stands in the field and is the one updated. No floating
    slimes on this step: the slime being made is the picture.
 2. **AI tools** (`onboarding-tools`): a store (every
    tool equal, never ordered by what one owner set up). A search box (typos forgiven, R-FIND-01),
@@ -103,7 +104,7 @@ npm run look -- onboarding onboarding-slime onboarding-tools onboarding-back-hov
 
 Keep the welcome and each step's PNGs, the contact sheet and the report. Each scene presses the
 real Next button from the welcome and names the first slime 小藍 in the red horned slime on the way (`after-onboarding`
-checks `first-slime-named`: the core kept both and the sidebar's first row wears them); `onboarding-services` signs in to Gmail through the managed
+checks `first-slime-named`: one `members.create` kept both in a new member, the chief of staff, Raphael is as it was, and the sidebar's first row wears them); `onboarding-services` signs in to Gmail through the managed
 connector and `onboarding-abilities` switches reading web pages off, so the rendered checks see a
 changed state. The Composio scenes start without a key: `onboarding-composio-key` types a consumer
 key (refused beside its field), `onboarding-composio-saved` a project key (the card goes and

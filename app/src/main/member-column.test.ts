@@ -329,7 +329,7 @@ describe("the column, used", () => {
     expect(host.moveMember).toHaveBeenCalledWith(1, null, document.querySelector('#app-popover [data-pick="move"]'));
   });
 
-  test("only the chief's menu hands the role on, with 換成其他角色 last; it is a slime's menu otherwise, and Raphael has none", () => {
+  test("only the chief's menu hands the role on, with 換成其他角色 last, it is a slime's menu otherwise, and Raphael has none", () => {
     const shape = () => [...document.querySelector("#app-popover")!.children].map(node => node.matches('[role="separator"]') ? "|" : (node as HTMLElement).dataset.pick);
     host.view = () => ({ list: { ...LIST, team_context: { primary_id: 1 } } as MembersList, current: 1, previews, fresh: new Set() });
     const column = mount();

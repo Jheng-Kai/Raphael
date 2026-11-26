@@ -38,7 +38,7 @@ pill; dictation and the calendar sit beside it in the account menu, and the pill
 
 ## How to get to it (user POV)
 
-Open the app: Raphael's conversation. Press the round face at the bottom left (the bottom of the rail): 聽寫, 行事曆, 設定, 用量. The
+Open the app: the chief of staff's conversation (Raphael's when there is no slime). Press the round face at the bottom left (the bottom of the rail): 用量, 聽寫, 行事曆, Raphael, 設定. The
 pill beside it is 連結應用程式.
 
 ## Driving it with look
@@ -54,8 +54,8 @@ starter stands once), foot-apps-two has Slack and GitHub (github, slack, gmail) 
 there are no marks.
 start-conversation and foot-rest measure the foot at rest in both shapes (the list's one row: face 32px, pill 36px and round on
 `--surface-2`, 8px between, the pill to the foot's right edge, one row of two, words whole; the rail's column with the 36px icon button
-and the face) and fail on any Home, house, microphone or page button; foot-account-menu measures the menu (four rows with distinct Lucide
-icons, one hairline before 設定, placement above the face or right of it on the rail, inside the window, the chevron at the
+and the face) and fail on any Home, house, microphone or page button; foot-account-menu measures the menu (five rows with distinct Lucide
+icons, Raphael's own slime on its row, a hairline each side of Raphael, placement above the face or right of it on the rail, inside the window, the chevron at the
 right and no number, menu tokens); foot-usage-submenu and foot-usage-two the submenu (its place at the menu's edge and level with its row, one block per
 provider of the mock (the subscriptions in its order, the ChatGPT sign-in when signed in, OpenRouter with a key), in a stable order, each with name and its words (a number with no reset line, 已重置, 無法讀取 or OpenRouter's spend), then a hairline and 管理用量; the first with Claude, Codex and Antigravity (the fixture's Gemini CLI) and OpenRouter, the second with the two the owner has connected and OpenRouter;
 foot-usage-owner the owner's own mix (Codex live at 65% used, Claude whose reported window has reset, the ChatGPT sign-in, OpenRouter with its own spend: exactly those four blocks, in that order, Claude with no number);

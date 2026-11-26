@@ -3961,11 +3961,11 @@ export function checkRendered(name, context = {}) {
     require(menu&&menu.classList.contains('account-menu')&&menu.getAttribute('role')==='menu'&&visible(menu),'the account menu is open');
     require(account.getAttribute('aria-expanded')==='true'&&account.getAttribute('aria-controls')==='app-popover','the face says it holds the menu open');
     const rows=[...menu.querySelectorAll('button[role="menuitem"]')],m=footBox(menu),a=footBox(account);
-    require(rows.length===4&&rows.map(row=>row.dataset.account.replace('usage-settings','usage')).join()==='usage,dictation,calendar,settings','four rows: 用量, 聽寫, 行事曆, 設定');
+    require(rows.length===5&&rows.map(row=>row.dataset.account.replace('usage-settings','usage')).join()==='usage,dictation,calendar,raphael,settings','five rows: 用量, 聽寫, 行事曆, Raphael, 設定');
     const icons=rows.map(row=>row.querySelector('.ck svg')?.innerHTML??'');
-    require(icons.every(Boolean)&&new Set(icons).size===4,'a Lucide icon on every row, and no two rows share one');
+    require(icons.every(Boolean)&&new Set(icons).size===5,'a Lucide icon on every row (Raphael wears its own slime), and no two rows share one');
     const sep=[...menu.querySelectorAll('.menu-sep')];
-    require(sep.length===1&&sep[0].previousElementSibling===rows[2]&&sep[0].nextElementSibling===rows[3]&&footBox(sep[0]).height<=1.5,'one hairline, between 行事曆 and 設定');
+    require(sep.length===2&&sep[0].previousElementSibling===rows[2]&&sep[0].nextElementSibling===rows[3]&&sep[1].previousElementSibling===rows[3]&&sep[1].nextElementSibling===rows[4]&&sep.every(line=>footBox(line).height<=1.5),'two hairlines: Raphael stands between 行事曆 and 設定');
     require(rows.every(row=>visible(row)&&row.querySelector('.mt').scrollWidth<=row.querySelector('.mt').clientWidth+1&&!row.hasAttribute('title')),'every row\'s words show whole, with no tooltip');
     require(m.left>=0&&m.right<=innerWidth&&m.top>=0&&m.bottom<=innerHeight,'the menu lies inside the window');
     if(footRail()){

@@ -597,7 +597,7 @@ describe("the first slime is a real member, and the chief of staff", () => {
     expect(api.membersUpdate).toHaveBeenCalledExactlyOnceWith(7, { name: "Kiri", avatar: "slime:horns-red" });
   });
 
-  test("a chief slime the owner already has stands in the step and is the one updated; Raphael's own name never is", async () => {
+  test("a chief slime the owner already has stands in the step and is the one updated, and Raphael's own name never is", async () => {
     api.membersList.mockResolvedValue({ members: [{ id: 0, name: "Raphael", avatar: "", raphael: true }, { id: 4, name: "Mochi", avatar: "slime:horns-red", chief: true }], groups: [], team_context: { primary_id: 4 } });
     await open();
     await press('[data-ob="next"]');
