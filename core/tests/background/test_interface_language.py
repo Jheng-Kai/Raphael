@@ -46,7 +46,8 @@ async def test_a_routine_written_in_chinese_is_told_nothing_of_a_japanese_interf
             assert hint not in system and hint not in task
         # The task says which language with no language named: the owner's words, else the task's own text.
         assert TASK_LANGUAGE in task and ROUTINE in task
-        assert "拉斐爾" in task and "ラファエル" not in task
+        # Raphael is the guide, not on the team roster: the Japanese interface's name for it is told nowhere either.
+        assert "ラファエル" not in task
         assert sent["ja"] == sent["en"]
         # What the app draws of the run (its notices, its waiting line) keeps the interface language.
         assert languages == {"ja": "ja", "en": "en"}

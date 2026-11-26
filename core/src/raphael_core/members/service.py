@@ -2328,9 +2328,12 @@ class MembersService:
 
                 preferences = {"model": "agent_model"}
                 # Profile drafts include these empty fields for ordinary members.
-                for field in ("blurb", "group", "avatar_preset"):
+                for field in ("blurb", "group", "avatar_preset", "role"):
                     if params.get(field) == "":
                         params.pop(field)
+                # ...and Raphael's own name, which the draft shows and cannot change.
+                if isinstance(params.get("name"), str) and is_raphael_name(params["name"]):
+                    params.pop("name")
                 if set(params) - {"id", "personality", "instructions", "cover", "cover_position", "tools", "notify", "draft_first", *preferences}:
                     raise RpcError(INVALID_PARAMS, "This field is not editable for Raphael", {"kind": "raphael"})
                 # Validate the whole request before any profile/preference write.

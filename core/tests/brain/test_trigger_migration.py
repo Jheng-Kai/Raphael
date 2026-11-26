@@ -11,7 +11,7 @@ def test_v55_leaves_existing_routines_and_runs_intact(tmp_path):
     for version in range(1, 55):
         step = db._MIGRATIONS[version]
         step(conn) if callable(step) else conn.executescript(step)
-    conn.execute("INSERT INTO routines(member_id,title,prompt,schedule,enabled,created_at_ms,next_run_ms) VALUES(0,'Sample','Review','{\"kind\":\"every\",\"hours\":3}',1,1,900)")
+    conn.execute("INSERT INTO routines(member_id,title,prompt,schedule,enabled,created_at_ms,next_run_ms) VALUES(1,'Sample','Review','{\"kind\":\"every\",\"hours\":3}',1,1,900)")
     conn.execute("INSERT INTO routine_runs(routine_id,started,status) VALUES(1,2,'done')")
     conn.commit()
     cursor = conn.execute("SELECT * FROM routines")

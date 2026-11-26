@@ -76,7 +76,7 @@ def test_raphaels_persona_is_the_guides_and_never_takes_a_name_from_a_profile():
     from raphael_core.agent.speaker import Speaker
 
     prompt = _raphael_persona(Speaker(name="Hikari", role="Chief", personality="Warm and quick", instructions="Plan my week"))
-    assert "You are Raphael," in prompt and "guide and keeper of this app" in prompt
+    assert "You are Raphael," in prompt and "the app's guide and keeper" in prompt
     assert "Hikari" not in prompt and "Chief" not in prompt
     assert "Warm and quick" in prompt and "Plan my week" in prompt
     assert "Warm" not in _raphael_persona(Speaker())

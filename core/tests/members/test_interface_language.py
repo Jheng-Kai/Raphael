@@ -50,7 +50,8 @@ async def test_a_member_is_told_nothing_of_a_japanese_interface_when_the_owner_w
     assert persona.REPLY_LANGUAGE in system and persona.REPLY_LANGUAGE in user
     assert CHINESE in user
     # The team snapshot names Raphael in the language the owner writes in, not the window's.
-    assert "拉斐爾" in user and "ラファエル" not in user
+    # Raphael is the guide, not on the team roster: the Japanese interface's name for it is told nowhere either.
+    assert "ラファエル" not in user
     # The rules and the tools are the same whatever the interface.
     assert prompts["ja"][0] == prompts["zh-TW"][0] == prompts["en"][0]
     assert prompts["ja"][2] == prompts["zh-TW"][2] == prompts["en"][2]
