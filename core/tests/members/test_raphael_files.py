@@ -58,6 +58,27 @@ def test_the_memory_the_cover_the_bot_and_the_computer_follow_the_slime(split):
     assert json.loads(split.conn.execute("SELECT value FROM settings WHERE key='raphael_split_files'").fetchone()[0]) is True
 
 
+def test_the_picture_the_owner_uploaded_follows_the_slime_and_resolves_under_its_id(split):
+    pictures = split.root / "avatars" / "members"
+    pictures.mkdir(parents=True)
+    (pictures / "0-aaaaaaaaaaaa.png").write_bytes(b"picture")
+    split.conn.execute("INSERT INTO members(id,name,position,created_at_ms,avatar) VALUES (7,'Hikari',0,1,'file:7-aaaaaaaaaaaa.png')")
+    split.conn.commit()
+    run(split)
+    assert (pictures / "7-aaaaaaaaaaaa.png").read_bytes() == b"picture" and not (pictures / "0-aaaaaaaaaaaa.png").exists()
+
+
+def test_a_picture_that_is_already_under_the_slimes_id_is_left_alone(split):
+    pictures = split.root / "avatars" / "members"
+    pictures.mkdir(parents=True)
+    (pictures / "7-aaaaaaaaaaaa.png").write_bytes(b"slime's")
+    (pictures / "0-aaaaaaaaaaaa.png").write_bytes(b"raphael's")
+    split.conn.execute("INSERT INTO members(id,name,position,created_at_ms,avatar) VALUES (7,'Hikari',0,1,'file:7-aaaaaaaaaaaa.png')")
+    split.conn.commit()
+    run(split)
+    assert (pictures / "7-aaaaaaaaaaaa.png").read_bytes() == b"slime's" and (pictures / "0-aaaaaaaaaaaa.png").is_file()
+
+
 def test_a_second_run_moves_nothing_and_never_takes_what_raphael_has_made_since(split):
     run(split)
     (split.root / "bots" / "0").mkdir()

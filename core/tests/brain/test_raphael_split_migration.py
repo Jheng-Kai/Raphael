@@ -138,6 +138,15 @@ def test_a_database_with_no_quick_conversation_still_moves_every_row_of_the_stan
     assert [tuple(row) for row in old.execute("SELECT member_id, conversation_id FROM member_unread")] == [(slime, main)]
 
 
+def test_a_picture_the_owner_uploaded_stays_the_slimes_under_the_slimes_own_id(old):
+    customize(old)
+    setting(old, "first_bot_profile", {"name": "Hikari", "role": "Chief of staff", "avatar": "file:0-0123456789ab.png"})
+    old.commit()
+    migrate(old)
+    slime = slime_of(old)
+    assert slime["avatar"] == f"file:{slime['id']}-0123456789ab.png"
+
+
 def test_the_routines_skills_memory_summary_spend_and_calendar_follow_the_slime(old):
     seed(old)
     migrate(old)
