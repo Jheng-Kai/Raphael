@@ -14,7 +14,7 @@ from raphael_core.services.artifacts import delivered_payloads
 from raphael_core.services.attachment_store import AttachmentStore
 
 from .test_host_computer import add_tab, host_call
-from .test_host_page_blockers import GUID, staged
+from .test_host_page_blockers import GUID, downloads_placed, staged
 
 INTERNAL = (".raphael", "git", "hidden", "folder")
 
@@ -37,8 +37,7 @@ async def downloaded(tmp_path, conn, monkeypatch, name="report.txt", data=b"down
     staged(browser, GUID, data)
     browser._event("Browser.downloadWillBegin", {"guid": GUID, "frameId": "frame", "suggestedFilename": name}, None)
     browser._event("Browser.downloadProgress", {"guid": GUID, "state": "completed"}, None)
-    await asyncio.gather(*browser.transfers)
-    await asyncio.sleep(0)
+    await downloads_placed(browser)
     return tools, store, project
 
 

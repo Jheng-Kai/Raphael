@@ -18,6 +18,8 @@ from raphael_core.computer.vm import LocalVm
 from raphael_core.computer.vm_tools import BROWSER_OPEN, COMPUTER_STATUS_KEY, VmTools, vm_scope
 from raphael_core.brain.settings import SettingsStore
 
+from .test_host_page_blockers import downloads_placed
+
 
 def add_tab(browser, identifier, member, root, *, shown=True):
     tab = Tab(identifier, "target-" + identifier, "session-" + identifier, member, root)
@@ -690,7 +692,7 @@ async def test_chrome_has_scoped_tabs_page_input_private_forms_and_downloads(tmp
             async with asyncio.timeout(10):
                 while not placed.is_file():
                     await asyncio.sleep(0.05)
-                await asyncio.gather(*browser.transfers)
+            await downloads_placed(browser)
             assert placed.read_text() == "download contents" and not (root / "two" / "report.txt").exists()
             assert (root / "two" / ".raphael" / ".gitignore").read_text().splitlines()[-1] == "*"
             assert browser.take_downloads(2) == [placed] and browser.take_downloads(2) == []
