@@ -426,6 +426,26 @@ test('watching always offers Take control, whoever the core says holds the lease
   expect(label()).toBe(t('desktop.operating')); expect(take().hidden).toBe(true);
 });
 
+test.each(['interrupted', 'stopped', 'draft'])('a %s demonstration left on the computer never takes Take control away from a pill that watches', async leftOver => {
+  // The core recovers every unfinished recording from the member's home and reports it with each status, long after
+  // the window that made it is gone (a recording the app was closed on, a draft nobody reviewed).
+  const status = { ...running, teach_available: true, teaching: { id: 'old', state: leftOver, text: '', conversation_id: 11 } };
+  api.desktopStatus.mockResolvedValue(status); api.desktopRenew.mockResolvedValue(status);
+  panelOpen=true; mounted.show(); await flush(); message('connected');
+  enlarge().click(); await flush();
+  const label = (): string => panel().querySelector('.desktop-mode-label')!.textContent!.trim();
+  expect(label()).toBe(t('desktop.watching'));
+  expect(take().hidden).toBe(false); expect(take().disabled).toBe(false);
+  api.desktopControl.mockResolvedValue({ ...status, control:'owner' });
+  take().click(); await flush();
+  expect(api.desktopControl).toHaveBeenLastCalledWith('one', true);
+  expect(label()).toBe(t('desktop.taking'));
+  message('interactive', { held:true }); await flush();
+  expect(label()).toBe(t('desktop.operating'));
+  // Holding the computer, the leftover can be discarded from the same pill's foot.
+  expect(host.querySelector<HTMLElement>('[data-desktop="discard-teach"]')!.hidden).toBe(false);
+});
+
 test('a take the core is still deciding reads 正在接手…, and one it refuses leaves Take control to press again', async () => {
   panelOpen=true; mounted.show(); await flush(); message('connected');
   enlarge().click(); await flush();

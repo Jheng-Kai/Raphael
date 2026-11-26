@@ -643,13 +643,15 @@ What the app does now.
   says the same instead of the bare identifier.
 
 ```powershell
-npm run look -- desktop-watch-retake desktop-watch desktop-watch-owner desktop-watch-collapse desktop-owner takeover-bar takeover-handback desktop-takeover-owner desktop-viewer --theme both --width 1120,720,1920x1080
+npm run look -- desktop-watch-retake desktop-watch-leftover-recording desktop-watch desktop-watch-owner desktop-watch-collapse desktop-owner takeover-bar takeover-handback desktop-takeover-owner desktop-viewer --theme both --width 1120,720,1920x1080
 ```
 
 `desktop-watch-retake` reproduces the fault: take control, the screen never confirms (the look's `desktopUnconfirmed`),
 the give-back fails (`releaseFails`), 6 s later the view watches with the failure line under the screen, the core still
 holds the lease (`data-desktop-state="owner"`) and 接手控制 is shown and enabled. The check `desktop-watch` no longer skips
 the button when the lease is the owner's. Native, not run: the owner's own real take-over of a seat after a failed one.
+
+R-COMP-TAKE-02. `desktop-watch-leftover-recording` is the first member's (the chief of staff's) Docker computer with a recording the core recovered from its home (`teaching` of state `interrupted` in the status, the look's `desktop` fixture): the larger view watches and 接手控制 is shown and enabled, the same `desktop-watch` and `computer-foot-layout` checks as any watch. Run it with `npm run look -- desktop-watch-leftover-recording desktop-watch --theme both --width 1120,720,1920x1080`. Native, not run: a real interrupted recording on a real member's computer.
 
 ## Ending control is not ending watching; a running computer's preview is never a black frame
 
