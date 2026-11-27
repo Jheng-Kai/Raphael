@@ -4166,6 +4166,15 @@ export function checkRendered(name, context = {}) {
     require(off(b.left)<0.02&&off(b.top)<0.02&&Math.abs(b.width*ratio-canvas.width)<0.02,`the emblem's canvas lies on whole screen pixels at its own size, so its letters are never resampled (at ${device(b.left)}, ${device(b.top)}, ${device(b.width)} device px for a ${canvas.width} px bitmap)`);
     return {check:name,canvas:Math.round(b.width),at:[device(b.left),device(b.top)]};
   }
+  if(name==='voice-flyer-above-composer'){
+    // Empty or not, the flyer lands centred across the stage just above the composer (voice-mode.ts flightPath).
+    const flyer=document.querySelector('.ra-flyer'),composer=document.querySelector('.ra-dock .composer'),stage=flyer?.closest('.ra-stage');
+    require(visible(flyer)&&visible(composer)&&stage,'the flyer and the docked composer are shown');
+    const a=flyer.getBoundingClientRect(),b=composer.getBoundingClientRect(),s=stage.getBoundingClientRect();
+    require(a.bottom<=b.top+1&&b.top-a.bottom<=24,`the flyer stands just above the composer (${Math.round(b.top-a.bottom)}px)`);
+    require(Math.abs((a.left+a.right)/2-(s.left+s.right)/2)<=2,'centred across the stage');
+    return {check:name};
+  }
   if(name==='messaging-paired-aligned'){
     const card=document.querySelector('[data-msg-kind="telegram"]'),mark=card?.querySelector('.msg-head .msg-mark'),face=card?.querySelector('.msg-sub .msg-avatar'),title=[...(card?.querySelectorAll('.row:not(.msg-head):not(.msg-sub) > .lbl')??[])].find(visible);
     require(visible(mark)&&visible(face)&&title,'the bot, a paired person and 中斷 Telegram are shown');

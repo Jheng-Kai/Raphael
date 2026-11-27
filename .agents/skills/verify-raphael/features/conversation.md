@@ -1478,12 +1478,12 @@ composer (no emblem to land on). Deleting messages until none is left leaves thi
 conversation in Settings; the tour or the greeting is asked once for each time the conversation became empty after it had words.
 
 ```powershell
-npm run look -- empty member-empty raphael-no-model empty-conversation-recording empty-conversation-hearing no-naming start-conversation no-slimes no-chief --theme both --width 1120,720,1920x1080
+npm run look -- empty member-empty raphael-no-model voice-flyer-empty empty-conversation-recording empty-conversation-hearing no-naming start-conversation no-slimes no-chief --theme both --width 1120,720,1920x1080
 ```
 
 `empty` (Raphael, no turns) and `member-empty` (a slime whose greeting did not come, `greetRefused`) run `conversation-empty`: no `.ra-empty`, `.ra-hero`,
 `.ra-hi`, `.ra-slot` or `.ra-notice`, an empty thread, and the composer in the lower half of the stage, on its column, with its bottom at the stage's
-bottom; `raphael-no-model` adds the one line just above it. Unit evidence: pages/raphael-conversation.test.ts and agent-members.test.ts (the layout, the
+bottom; `raphael-no-model` adds the one line just above it; `voice-flyer-empty` (`voice-flyer-above-composer`) that the voice flyer lands centred just above the docked composer. Unit evidence: pages/raphael-conversation.test.ts and agent-members.test.ts (the layout, the
 no-model line, the read failure, the tour, the removed ⋯, the greeting asked again after deletions).
 
 ## Connecting an app from the chat (P08a)
