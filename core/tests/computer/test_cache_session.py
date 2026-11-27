@@ -62,7 +62,7 @@ async def test_a_run_begun_in_a_typed_quick_conversation_is_named_after_it(opera
         *PRESS_SEVEN,
         chat(json.dumps({"prefix": "Answer", "text": "已按下「七」。", "detail": ""})),
     ])  # fmt: skip
-    main = operating.service.conversations.quick()
+    main = operating.service.conversations.main(0)
     asked = await operating.call("agent.ask", {"session_id": "s1", "text": "在小算盤按七", "ui_language": "zh-TW",
                                                "source": "app", "destination": "quick", "conversation_id": main})  # fmt: skip
     assert asked["status"] == "confirm"
@@ -80,7 +80,7 @@ async def test_a_spoken_quick_request_names_the_quick_conversation(operating, cl
     asked = await operating.ask("在小算盤按七")
     done = await operating.confirm(asked["confirm"]["id"])
     assert done["status"] == "done"
-    quick = operating.service.conversations.quick()
+    quick = operating.service.conversations.main(0)
     assert cached(client.chat_calls) == [(f"raphael-computer-0-{quick}", "1h")] * len(PRESS_SEVEN)
 
 

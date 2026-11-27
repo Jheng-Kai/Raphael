@@ -72,8 +72,8 @@ that hold the words in the whole history (the search of the memory, `AgentHistor
 gives them in the same shape. `agent.turn {turn_id}` tells the app a turn was written or
 completed. `agent.ask` takes an optional `source`, where the request came from ("voice", the
 default; "app", typed in the conversation page of the app; or a chat app such as "telegram"), and
-`destination: "quick"` (Alt+Space) for Raphael's quick conversation and the quick model. A spoken
-question to Raphael names that or a thread's `conversation_id`; an ID of the other kind is refused.
+`destination: "quick"` (Alt+Space) for the quick model: Raphael keeps one conversation, and a quick
+question is written to it like any other, answered the quick way (`_read_settings`).
 
 The services of the tools (`raphael_core.services`, chosen by the owner) come in three ways. A web
 search uses the search service chosen: "openrouter" as before, or a search engine whose results the
@@ -1313,7 +1313,7 @@ class AgentService:
         if destination not in (None, QUICK):
             raise invalid_params("destination must be quick or absent")
         quick = destination == QUICK
-        conversation_id = self._destination(member_id, _opt_int(params, "conversation_id"), params.get("source"), quick=quick)
+        conversation_id = self._destination(member_id, _opt_int(params, "conversation_id"), quick=quick)
         if quote is not None and params.get("source") not in (None, TYPED, VOICE):
             raise invalid_params("quotes are supported for composer requests")
         replacement = _opt_int(params, "replace_turn_id")
@@ -1346,12 +1346,9 @@ class AgentService:
             replacing_session=old.session_id if old else None,
         )
 
-    def _destination(self, member_id: int, conversation_id: int | None, source: object, *, quick: bool) -> int:
-        """The conversation a request is written to (`Conversations.destination`). A spoken question
-        to Raphael names its own (the quick one, or a thread's ID): a default either way could put a
-        quick question in a formal thread or the reverse, so a missing one is refused."""
-        if member_id == 0 and not quick and conversation_id is None and (source is None or source in _QUICK_SOURCES):
-            raise invalid_params("a spoken question to Raphael must name its destination")
+    def _destination(self, member_id: int, conversation_id: int | None, *, quick: bool) -> int:
+        """The conversation a request is written to (`Conversations.destination`): the one it names, or the
+        member's own. Raphael has only one, so a spoken question needs to name nothing."""
         return self.conversations.destination(member_id, conversation_id, quick=quick)
 
     def _stored_path(self, key: str | None) -> dict[str, str]:
@@ -1421,15 +1418,15 @@ class AgentService:
         (`services.attachments.Attachment`, at most MAX_ATTACHMENTS), saved on typed admission; with
         files and no words, the request asks 「看這個」 in its language. `member_id` is who it is
         for: Raphael (0), or a member of the team addressed by its thread's composer, in writing
-        or by voice. The global voice hotkey and chat apps default to Raphael. `quick` sends it to
-        Raphael's quick conversation, answered by the quick model (`_destination`). `resumption`
+        or by voice. The global voice hotkey and chat apps default to Raphael. `quick` has the quick model
+        answer it and gives it the owner's screen (Raphael's one conversation keeps it). `resumption`
         carries on a task whose connector cards were connected (`resume_turn`)."""
         async with self._history_clear_lock:
             generation = self._history_generation
         speaker = self._speaker(member_id)
         if speaker is None:
             raise invalid_params("there is no such member")
-        conversation_id = self._destination(member_id, conversation_id, source, quick=quick)
+        conversation_id = self._destination(member_id, conversation_id, quick=quick)
         # A typed request is about the page the owner had open when it arrived.
         viewing = self.pages.viewed_by(speaker.id, conversation_id) if source == TYPED and not quick else None
         original_text = None
@@ -1882,7 +1879,7 @@ class AgentService:
                                     Ledger(self._spend), status="cancelled")
             return self._done(0, ask.language, "understood", phrase(ask.language, "denied"), silent=True)
         # The questions that ran out are expired, and a new request replaces those that still wait
-        # in its conversation: a quick question leaves a formal one waiting, and the other way round.
+        # in its conversation (Raphael's quick question is one of its conversation's turns like any other).
         self._expire(self._confirmations.sweep())
         for cards, identifier in self._waiting_cards_before(ask):
             if (card := cards.store.get(identifier)) and (closed := self._close_card(cards, card, error="skipped")):
@@ -1957,7 +1954,7 @@ class AgentService:
         try:
             return await asyncio.wait_for(self._answer(ask), VOICE_TURN_TIMEOUT_S)
         except TimeoutError:
-            model = self._read_settings(ask.speaker, ask.conversation_id).model
+            model = self._ask_settings(ask).model
             return self._failed(ask, "answer", AgentFailure("timeout", model=model), ask.ledger or Ledger(self._spend))
 
     @member_turn(lambda self, ask: ask.speaker.id,
@@ -1974,7 +1971,7 @@ class AgentService:
         if off is not None:
             # A file of a kind the owner turned off is refused in one line, before any model is asked.
             return self._finish(ask, "chat", "negative", phrase(ask.language, off), ledger)
-        settings = self._read_settings(ask.speaker, ask.conversation_id)
+        settings = self._ask_settings(ask)
         blocked = self._blocked(settings)
         # Only a quick question is routed by the fast router, which can pick a command for this PC or a run on its
         # desktop; a conversation, spoken into or typed, goes to the narrated harness, which has no such tool (R-PC-01).
@@ -2111,7 +2108,7 @@ class AgentService:
         with what was found. AgentFailure as `Voice.reply` raises it. A member of the team reads
         its own conversation and memory, and speaks as itself."""
         member_id = ask.speaker.id
-        context = self._memory_context(ask.speaker, ask.conversation_id, omit_cards=ask.skipped_cards)
+        context = self._memory_context(ask.speaker, ask.conversation_id, quick=ask.quick, omit_cards=ask.skipped_cards)
         memory = None if self._memory is None else await self._memory.snapshot_async(member_id)
 
         async def word(results: list[ToolResult], looked_up: bool) -> Reply:
@@ -2619,7 +2616,7 @@ class AgentService:
             prepare = getattr(self._plugins, "prepare", None)
             if prepare is not None:
                 await prepare(ask.speaker.id)
-            context = self._memory_context(ask.speaker, ask.conversation_id, omit_cards=ask.skipped_cards)
+            context = self._memory_context(ask.speaker, ask.conversation_id, quick=ask.quick, omit_cards=ask.skipped_cards)
             memory = None if self._memory is None else await self._memory.snapshot_async(ask.speaker.id)
             # The system prompt says who the speaker is and how it works, and is the same turn after turn: a
             # change in it has the provider read the whole conversation again at full price. What holds for
@@ -3919,7 +3916,7 @@ class AgentService:
         """Whether the model answering `ask` reads a picture itself: a CLI brain does; an API model as OpenRouter's list
         says, and one the list does not know is sent the picture, as a computer's screenshots are."""
         try:
-            model = self._read_settings(ask.speaker, ask.conversation_id).model
+            model = self._ask_settings(ask).model
             if brain_ref(model):
                 return True
             services = self._tools.services
@@ -4968,9 +4965,9 @@ class AgentService:
             ask.steps.append(self._step("tool", "session_search", BUILTIN_SERVER, "ok", time.perf_counter(), None, "external_content"))
         return text
 
-    def _memory_context(self, speaker, conversation_id, *, omit_cards=()):
+    def _memory_context(self, speaker, conversation_id, *, quick=False, omit_cards=()):
         conversation = self._conversation_of(speaker.id, conversation_id)
-        model = self._read_settings(speaker, conversation_id).model
+        model = self._read_settings(speaker, quick=quick).model
         catalog = self._tool_support._catalog() or []
         conversation.context_window = context_window(catalog, model) or DEFAULT_CONTEXT_WINDOW
         entry = find(catalog, LLM, model)
@@ -5254,7 +5251,7 @@ class AgentService:
             cost_base=ledger.total,
             call_base=len(ledger.calls),
         )
-        settings = self._read_settings(ask.speaker, ask.conversation_id)
+        settings = self._ask_settings(ask)
         failure = self._blocked(settings)
         result: dict | None = None
         if failure is None:
@@ -5313,7 +5310,7 @@ class AgentService:
         if isinstance(loop, NarratedLoop):
             loop.go_on(ask.resumption.note())
         try:
-            return await self._narrated(ask, self._read_settings(ask.speaker, ask.conversation_id), ledger,
+            return await self._narrated(ask, self._ask_settings(ask), ledger,
                                         loop if isinstance(loop, NarratedLoop) else None)
         except AgentFailure as error:
             return self._failed(ask, "answer", error, ledger)
@@ -5463,7 +5460,7 @@ class AgentService:
             self._record(followup.ask, "answer", "", "", "running", None, ledger)
             try:
                 return await self._narrated(
-                    followup.ask, self._read_settings(followup.ask.speaker, followup.ask.conversation_id), ledger, loop
+                    followup.ask, self._ask_settings(followup.ask), ledger, loop
                 )
             except AgentFailure as error:
                 return self._failed(followup.ask, "answer", error, ledger)
@@ -5478,7 +5475,7 @@ class AgentService:
             return self._outcome(pending, "negative", text, "error")
         if not result.ok and result.error != "tool_error":
             return self._outcome(pending, "negative", phrase(language, "failed"), "error")
-        settings = self._read_settings(followup.ask.speaker, followup.ask.conversation_id)
+        settings = self._ask_settings(followup.ask)
         try:
             if self._blocked(settings) is not None:
                 raise AgentFailure("error")
@@ -5882,7 +5879,7 @@ class AgentService:
             loop.continue_with(self._computer_result(loop, result))
             self._record(ask, "answer", "", "", "running", None, run.ledger)
             try:
-                return await self._narrated(ask, self._read_settings(ask.speaker, ask.conversation_id), run.ledger, loop)
+                return await self._narrated(ask, self._ask_settings(ask), run.ledger, loop)
             except AgentFailure as error:
                 return self._failed(ask, "answer", error, run.ledger)
             except Exception as error:
@@ -6289,7 +6286,7 @@ class AgentService:
         its own on its own model. It sees the emoji, its reply and what was said around it, as data, and either says
         something short in its own voice or decides that no words are needed, and then nothing of the turn is left. The
         turn shows as the member's usual presence while it thinks. Nothing starts where the reply is not the member's own
-        finished one, in a quick conversation, or where it is itself the member's answer to a reaction. A member that is
+        finished one, or where it is itself the member's answer to a reaction. A member that is
         working for the owner starts none: the owner's own turn comes first, it already shows the member at work, and an
         answer to a reaction would come after it, out of its place; the reaction is then not recorded, so it is analysed
         when given again."""
@@ -6302,11 +6299,6 @@ class AgentService:
         sent = _sent_file(reacted["text"]) if reacted is not None and reacted["kind"] == "media" else ""
         if (turn is None or speaker is None or turn.scope != "private" or turn.status != "done" or turn.source == "reaction"
                 or not (turn.text or turn.detail or sent) or self._closing):
-            return False
-        try:
-            if self.conversations.get(turn.conversation_id, turn.member_id)["kind"] == "quick":
-                return False
-        except RpcError:
             return False
         scope = (turn.member_id, turn.conversation_id)
         if self._busy_with_owner(scope):
@@ -6885,11 +6877,14 @@ class AgentService:
 
     # --- the parts every reply uses -------------------------------------------------------------
 
-    def _read_settings(self, speaker: Speaker = RAPHAEL, conversation_id: int | None = None) -> _Settings:
-        """The member's selected brain, with the global answer brain as fallback."""
+    def _ask_settings(self, ask: _Ask) -> _Settings:
+        """The brain that answers `ask`: the quick model for a quick question, the member's own otherwise."""
+        return self._read_settings(ask.speaker, quick=ask.quick)
+
+    def _read_settings(self, speaker: Speaker = RAPHAEL, *, quick: bool = False) -> _Settings:
+        """The member's selected brain, with the global answer brain as fallback; a quick question's is the quick model."""
         model = speaker.model or self._settings.get("agent_model")
         effort = split_api_ref(model)[1] or "none"
-        quick = bool(conversation_id and self.conversations.get(conversation_id, speaker.id)["kind"] == "quick")
         if quick:
             model = self._settings.get("quick_model")
             effort = self._settings.get("quick_effort")
@@ -6968,7 +6963,7 @@ class AgentService:
                                               or diagnostic is not None and diagnostic.kind == "auth_expired" and diagnostic.missing is None):
             # The key of an API model was refused: its provider's card is where it is put right (the 開啟設定 button), not "sign in".
             diagnostic = Failure("auth_expired", "Provider refused the credentials", missing=Missing(provider_of(model), "provider", "broken", "models"))
-        failure = turn_failure(kind, model or self._read_settings(ask.speaker, ask.conversation_id).model, diagnostic)
+        failure = turn_failure(kind, model or self._ask_settings(ask).model, diagnostic)
         if diagnostic is not None and diagnostic.missing is not None:
             missing = diagnostic.missing
             reason = (diagnostic.kind if diagnostic.kind.startswith("chatgpt_") else "provider_" + missing.state)
@@ -7159,7 +7154,7 @@ class AgentService:
         if self._memory is not None and not ask.nested and ask.source not in _NO_OWNER_WORDS and status not in ("running", "confirm"):
             try:
                 # The fold and, for Raphael's, the reflection pass, in the background.
-                model = self._read_settings(ask.speaker, ask.conversation_id).model
+                model = self._ask_settings(ask).model
                 if ask.conversation_id != self.conversations.main(member_id) and (self._memory.may_spend(member_id) or self._memory.summary_model(model) != model):
                     conversation = self._conversation_of(member_id, ask.conversation_id)
                     self._memory.configure_conversation(conversation)

@@ -105,7 +105,7 @@ async def test_written_cli_reply_boundary_on_every_foreground_route(make_rig, mo
     rig = make_rig(cli_brains=brains)
     rig.settings.set("agent_model", "cli:codex:test")
     rig.settings.set("quick_model", "cli:codex:test")
-    conversation = rig.service.conversations.quick() if route == "quick" else rig.service.conversations.main()
+    conversation = rig.service.conversations.main(0) if route == "quick" else rig.service.conversations.main()
     if route in ("resumed", "failure"):
         origin = rig.history.add(session_id="source", question="Read Gmail", route="answer", prefix="", text="Connect Gmail",
                                  status="done", source="app", conversation_id=conversation)

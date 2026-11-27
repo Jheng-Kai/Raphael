@@ -121,7 +121,7 @@ async def test_relaying_a_lesson_preserves_the_owner_as_the_japanese_quotes_spea
     assert f"owner: {question}" in str(tool)
     scope = {"member_id": 0}
     if source == "voice":
-        scope["conversation_id"] = rig.service.conversations.quick()
+        scope["conversation_id"] = rig.service.conversations.main(0)
     assert not any(t["route"] == "exchange" for t in (await rig.call("agent.history.list", scope))["turns"])
     # Both sides keep the exchange: the asked member's chat holds the question it was asked.
     taught = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]

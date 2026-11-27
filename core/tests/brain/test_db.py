@@ -435,7 +435,7 @@ SCHEMA_V27 = {
         "stop_requested INTEGER NOT NULL DEFAULT 0", "wrapup_sent INTEGER NOT NULL DEFAULT 0", "reason TEXT NOT NULL DEFAULT ''",
     ],
 }
-LATEST = 101
+LATEST = 102
 
 
 def test_v59_existing_tasks_default_to_no_artifact_and_keep_their_reports(monkeypatch, tmp_path):
@@ -772,7 +772,7 @@ SCHEMA_V98 = {**SCHEMA_V94, "members": [*SCHEMA_V94["members"], "computer_mode T
 
 SCHEMA_V100 = {**SCHEMA_V98, "computer_suggestions": [*SCHEMA_V98["computer_suggestions"], "target TEXT NOT NULL DEFAULT 'docker'"]}
 
-PENDING_UPGRADES = (63, 64, *range(67, 102))
+PENDING_UPGRADES = (63, 64, *range(67, 103))
 
 
 def test_upgrade_preserves_computer_choice_and_removes_desktop_control(monkeypatch, tmp_path):
@@ -1048,8 +1048,8 @@ def test_unread_migration_keeps_turn_and_manual_marks_after_read_only_preflight(
     with monkeypatch.context() as old:
         old.setattr(db, "LATEST_VERSION", 93)
         with closing(db.connect(path)) as conn:
-            quick = Conversations(conn).quick()
-            turn = AgentHistory(conn).add(session_id="quick", question="Question", route="answer", prefix="",
+            quick = Conversations(conn).main(0)
+            turn = AgentHistory(conn).add(session_id="raphael", question="Question", route="answer", prefix="",
                                           text="Reply", status="done", conversation_id=quick, member_id=0)
             missing_turn = turn + 1
             with conn:

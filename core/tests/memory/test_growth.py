@@ -6,6 +6,7 @@ from raphael_core.agent.conversations import Conversations
 from raphael_core.agent.harness_tools import DEFINITIONS
 from raphael_core.brain.secrets import MemoryKeyStore
 from raphael_core.memory.service import MemoryService
+from second_conversation import another_conversation
 
 from .conftest import FakeModel, add_turn
 
@@ -90,7 +91,7 @@ async def test_room_reads_exclude_own_private_facts_and_tool_body_is_bounded(gro
 async def test_recall_stays_in_current_thread_while_explicit_search_can_find_own_other_threads(growing, history, conn):
     memory, events = growing
     conversations = Conversations(conn)
-    formal, quick = conversations.main(), conversations.quick()
+    formal, quick = conversations.main(), another_conversation(conn)
     history.add(session_id="formal", member_id=0, conversation_id=formal, question="Formal amber code", prefix="", text="Amber", route="chat", status="done")
     events.clear()
     assert memory.recall_result(0, "amber", conversation_id=quick)[0] == ""

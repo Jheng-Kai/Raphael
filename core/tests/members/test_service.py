@@ -9,6 +9,7 @@ import pytest
 
 from raphael_core.agent.history import AgentHistory
 from raphael_core.protocol import INVALID_PARAMS, RpcError
+from second_conversation import another_conversation
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\0" * 32
 WEBP = b"RIFF\x10\0\0\0WEBPVP8 " + b"\0" * 16
@@ -229,7 +230,8 @@ async def test_reading_one_conversation_leaves_the_other_conversations_news(rig,
     from raphael_core.agent.conversations import Conversations
 
     conversations = Conversations(conn)
-    main, quick = conversations.main(), conversations.quick()
+    # Only a database made before schema 102 holds a second conversation for Raphael; the machinery still keeps their news apart.
+    main, quick = conversations.main(), another_conversation(conn)
     history = AgentHistory(conn)
 
     def arrive(conversation):

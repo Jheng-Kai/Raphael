@@ -255,21 +255,15 @@ async def test_composer_voice_stays_in_main_with_or_without_an_id(setup, client,
     who = 0 if raphael else person.id
     default = rig.service.conversations.main(who)
     selected = default if explicit else None
-    quick = rig.service.conversations.quick()
+    other = rig.service.conversations.main(person.id if raphael else 0)
     client.decisions.append(decision("unclear"))
     client.chats.append(live_said("The selected conversation's answer."))
-    if raphael and not explicit:
-        # The hotkey must explicitly select quick; a composer's spoken question names main.
-        with pytest.raises(RpcError, match="must name its destination"):
-            await rig.call("agent.ask", {"session_id": "composer-voice", "text": "Review this", "source": "voice", "ui_language": "en"})
-        assert not client.chat_calls
-        return
     result = await rig.call("agent.ask", {"session_id": "composer-voice", "text": "Review this", "source": "voice",
         "ui_language": "en", "member_id": who, "conversation_id": selected})
     assert result["status"] == "done"
     turns = (await rig.call("agent.history.list", {"member_id": who, "conversation_id": selected}))["turns"]
     assert [(turn["conversation_id"], turn["source"]) for turn in turns] == [(default, "voice")]
-    assert (await rig.call("agent.history.list", {"conversation_id": quick}))["turns"] == []
+    assert (await rig.call("agent.history.list", {"member_id": person.id if raphael else 0, "conversation_id": other}))["turns"] == []
 
 
 async def test_member_conversation_list_returns_its_one_main(setup):
