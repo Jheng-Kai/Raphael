@@ -153,8 +153,14 @@ export function createView(on: (pressed: Pressed) => void): TourView {
   };
 }
 
-/** Each sentence on a line of its own, so that a line never breaks in the middle of a phrase where a sentence ends (the text itself is unchanged). */
-const sentences = (text: string): string => esc(text).replace(/([。！？])(?!$)/g, "$1<br>").replace(/([.!?])\s+/g, "$1 <br>");
+/**
+ * Each sentence on a line of its own, and a long Chinese or Japanese sentence broken after its comma, so that a line never breaks in the middle
+ * of a phrase (the text itself is unchanged: the break is drawn, not typed).
+ */
+function sentences(text: string): string {
+  const lines = esc(text).replace(/([。！？])(?!$)/g, "$1\n").replace(/([.!?])\s+/g, "$1 \n").split("\n");
+  return lines.map(line => line.length > 16 ? line.replace(/([，、])(?!$)/g, "$1<br>") : line).join("<br>");
+}
 
 /** A hop from `from` to `to`: up in an arc, a squash on landing. Only transform moves (the box already stands at `to`). */
 function moveSlime(slime: HTMLElement, from: Box, to: Box): void {
