@@ -574,7 +574,7 @@ class PluginSets:
             if name.casefold() not in taken:
                 left.append(part)
                 continue
-            error, package = taken_by(self.conn, SHARED, name, manifest["name"])
+            error, package = taken_by(self.conn, SHARED, name, manifest["name"], incoming_version=manifest["version"], incoming_source=source)
             if previous:
                 raise error
             refused = refused or error
