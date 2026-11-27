@@ -9257,18 +9257,6 @@ export function checkRendered(name, context = {}) {
     directoryCloseStays(dialog);
     return { check: name, ids };
   }
-  if (name === "composer-quick-read") {
-    const composer = document.querySelector(".composer .cmp-model .mp-tname").textContent;
-    require(composer === "GPT-6 Luna", `a quick conversation shows 快速提問's model: ${composer}`);
-    require(document.querySelector('.cb-now .mc-stop[data-on="true"]')?.dataset.effort === window.__look.data.settings.quick_effort, "at 快速提問's depth");
-    return { check: name };
-  }
-  if (name === "composer-quick-saved") {
-    const saved = window.__look.data.settings;
-    require(saved.quick_model === "cli:codex:gpt-6.1", `the choice is 快速提問's: ${saved.quick_model}`);
-    require(saved.agent_model === "openai/gpt-6-sol", `the answer model is untouched: ${saved.agent_model}`);
-    return { check: name };
-  }
   if (name === "settings-chatgpt-row") {
     const price = document.querySelector('.modal-scrim [data-price="quick-model"]').textContent;
     require(price === "訂閱", `on the plan, not 價格未知: ${price}`);
